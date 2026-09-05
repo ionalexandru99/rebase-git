@@ -4,314 +4,399 @@ import type {
   RepositoryCatalogEntry,
   RepositoryFreshness,
 } from "@rebase/contracts";
-import type { GitCommandRunner } from "@rebase/server/domain/git-command.contract";
-import type { RepositoryCatalog } from "@rebase/server/domain/repository-catalog.contract";
-import type { RepositoryFreshnessService } from "@rebase/server/domain/repository-freshness.contract";
+import {
+  GitCommandError,
+  type GitCommandRunner,
+  GitCommands,
+} from "@rebase/server/domain/git-command.contract";
+import { RepositoryCatalogAccess } from "@rebase/server/domain/repository-catalog.contract";
+import {
+  type RepositoryFreshnessService,
+  RepositoryFreshnessState,
+} from "@rebase/server/domain/repository-freshness.contract";
+import { RepositoryWatching } from "@rebase/server/domain/repository-watcher.contract";
 import { acquireRepositoryFreshnessSession } from "@rebase/server/features/environment-connection/websocket/repository-freshness-session";
-import { acquireRepositoryFreshnessService } from "@rebase/server/features/repository-history/freshness/repository-freshness";
-import { Effect, Fiber } from "effect";
-import { afterEach, describe, expect, it, vi } from "vite-plus/test";
+import { repositoryFreshnessLayer } from "@rebase/server/features/repository-history/freshness/repository-freshness";
+import {
+  Context,
+  Deferred,
+  Effect,
+  Exit,
+  Fiber,
+  FiberSet,
+  Layer,
+  type Scope,
+} from "effect";
+import { TestClock } from "effect/testing";
+import { describe, expect, it, vi } from "vite-plus/test";
 
 const repositoryId = "00000000-0000-4000-8000-000000000001";
 const linkedId = "00000000-0000-4000-8000-000000000002";
-
-afterEach(() => vi.useRealTimers());
+const writer = { automaticFetch: true };
 
 describe("repository freshness", () => {
-  it("releases explicit fetch ownership when the caller is interrupted", async () => {
-    const aborted = vi.fn();
-    const states: RepositoryFreshness[] = [];
-    const fetch = vi.fn(() =>
-      Effect.callback<ReturnType<typeof output>>(() => Effect.sync(aborted)),
-    );
-    await withService({ fetch }, async (service, watch) => {
-      await Effect.runPromise(
-        service.subscribe(repositoryId, (state) => states.push(state)),
-      );
-      const manual = Effect.runFork(service.fetch(repositoryId));
-      await vi.waitFor(() => expect(fetch).toHaveBeenCalledOnce());
-      const closeWriter = await Effect.runPromise(
-        service.subscribe(linkedId, () => {}, { automaticFetch: true }),
-      );
-      closeWriter();
-      expect(aborted).not.toHaveBeenCalled();
-      await Effect.runPromise(Fiber.interrupt(manual));
-      expect(aborted).toHaveBeenCalledOnce();
-      expect(watch.close).not.toHaveBeenCalled();
-      await vi.waitFor(() => expect(states.at(-1)?.fetching).toBe(false));
-      expect(states.at(-1)?.stale).toBe(false);
-      expect(states.at(-1)?.failure).toBeUndefined();
-    });
-  });
-
-  it("interrupts automatic fetch when the last writer leaves a read-only observer", async () => {
-    const aborted = vi.fn();
-    const states: RepositoryFreshness[] = [];
-    const fetch = vi.fn(() =>
-      Effect.callback<ReturnType<typeof output>>(() => Effect.sync(aborted)),
-    );
-    await withService({ fetch }, async (service, watch) => {
-      await Effect.runPromise(
-        service.subscribe(repositoryId, (state) => states.push(state)),
-      );
-      const closeWriter = await Effect.runPromise(
-        service.subscribe(linkedId, () => {}, { automaticFetch: true }),
-      );
-      await vi.waitFor(() => expect(fetch).toHaveBeenCalledOnce());
-      closeWriter();
-      await vi.waitFor(() => expect(aborted).toHaveBeenCalledOnce());
-      expect(watch.close).not.toHaveBeenCalled();
-      await vi.waitFor(() => expect(states.at(-1)?.fetching).toBe(false));
-      expect(states.at(-1)?.stale).toBe(false);
-      expect(states.at(-1)?.failure).toBeUndefined();
-    });
-  });
-
-  it("preserves a shared fetch while an explicit caller still owns it", async () => {
-    const aborted = vi.fn();
-    let finish: (() => void) | undefined;
-    const fetch = vi.fn(() =>
-      Effect.callback<ReturnType<typeof output>>((resume) => {
-        finish = () => resume(Effect.succeed(output()));
-        return Effect.sync(aborted);
-      }),
-    );
-    await withService({ fetch }, async (service) => {
-      await Effect.runPromise(service.subscribe(repositoryId, () => {}));
-      const manual = Effect.runPromise(service.fetch(repositoryId));
-      await vi.waitFor(() => expect(fetch).toHaveBeenCalledOnce());
-      const closeWriter = await Effect.runPromise(
-        service.subscribe(linkedId, () => {}, { automaticFetch: true }),
-      );
-      closeWriter();
-      expect(aborted).not.toHaveBeenCalled();
-      finish?.();
-      expect(await manual).toMatchObject({ stale: false, fetching: false });
-    });
-  });
-
-  it("keeps read-only sessions observing while automatic fetch belongs to subscribed writers", async () => {
-    vi.useFakeTimers();
+  it("keeps read-only sessions observing while automatic fetch belongs to subscribed writers", () => {
     const fetch = vi.fn(() => Effect.succeed(output()));
     const messages: EnvironmentServerMessage[] = [];
-    await withService({ fetch }, async (service, watch) => {
-      await withSession(
-        service,
-        ["repository.read"],
-        messages,
-        async (reader) => {
-          await Effect.runPromise(
-            reader({
-              _tag: "SubscribeRepositoryHistory",
-              repositoryId,
-              requestId: repositoryId,
-            }),
-          );
-          await vi.advanceTimersByTimeAsync(300_000);
-          expect(fetch).not.toHaveBeenCalled();
-          watch.change();
-          await vi.advanceTimersByTimeAsync(50);
-          expect(messages.at(-1)).toMatchObject({ freshness: { revision: 1 } });
-          await withSession(
+    return withService({ fetch }, (service, watch) =>
+      Effect.gen(function* () {
+        const reader = yield* openSession(
+          service,
+          ["repository.read"],
+          messages,
+        );
+        yield* reader({
+          _tag: "SubscribeRepositoryHistory",
+          repositoryId,
+          requestId: repositoryId,
+        });
+        yield* TestClock.adjust(300_000);
+        expect(fetch).not.toHaveBeenCalled();
+        watch.change();
+        yield* TestClock.adjust(50);
+        expect(messages.at(-1)).toMatchObject({ freshness: { revision: 1 } });
+        yield* Effect.gen(function* () {
+          const handle = yield* openSession(
             service,
             ["repository.read", "repository.write"],
             [],
-            async (writer) => {
-              await Effect.runPromise(
-                writer({
-                  _tag: "SubscribeRepositoryHistory",
-                  repositoryId,
-                  requestId: linkedId,
-                }),
-              );
-              await vi.advanceTimersByTimeAsync(0);
-              expect(fetch).toHaveBeenCalledTimes(1);
-              await Effect.runPromise(
-                writer({
-                  _tag: "FetchRepositoryHistory",
-                  repositoryId,
-                  requestId: linkedId,
-                }),
-              );
-              await vi.advanceTimersByTimeAsync(0);
-              expect(fetch).toHaveBeenCalledTimes(2);
-              await vi.advanceTimersByTimeAsync(300_000);
-              expect(fetch).toHaveBeenCalledTimes(3);
-            },
           );
-          await vi.advanceTimersByTimeAsync(600_000);
+          yield* handle({
+            _tag: "SubscribeRepositoryHistory",
+            repositoryId,
+            requestId: linkedId,
+          });
+          yield* TestClock.adjust(0);
+          expect(fetch).toHaveBeenCalledTimes(1);
+          yield* handle({
+            _tag: "FetchRepositoryHistory",
+            repositoryId,
+            requestId: linkedId,
+          });
+          yield* TestClock.adjust(0);
+          expect(fetch).toHaveBeenCalledTimes(2);
+          yield* TestClock.adjust(300_000);
           expect(fetch).toHaveBeenCalledTimes(3);
-          expect(watch.close).not.toHaveBeenCalled();
-          watch.change();
-          await vi.advanceTimersByTimeAsync(50);
-          expect(messages.at(-1)).toMatchObject({ freshness: { revision: 5 } });
-        },
-      );
-      expect(watch.close).toHaveBeenCalledOnce();
-    });
-  });
-
-  it("clears a defective manual fetch so it can be retried with automatic fetch disabled", async () => {
-    const fetch = vi
-      .fn()
-      .mockImplementationOnce(() =>
-        Effect.die(new Error("Unexpected runner defect")),
-      )
-      .mockImplementation(() => Effect.succeed(output()));
-    const states: RepositoryFreshness[] = [];
-    await withService({ fetch, setting: "0" }, async (service) => {
-      await Effect.runPromise(
-        service.subscribe(repositoryId, (state) => states.push(state)),
-      );
-      expect(
-        await Effect.runPromise(service.fetch(repositoryId)),
-      ).toMatchObject({
-        fetching: false,
-        stale: true,
-        failure: { _tag: "FetchFailed" },
-      });
-      expect(states.at(-1)?.fetching).toBe(false);
-      expect(
-        await Effect.runPromise(service.fetch(repositoryId)),
-      ).toMatchObject({ fetching: false, stale: false });
-    });
-  });
-
-  it("fetches through a surviving worktree after the original subscriber leaves", async () => {
-    let removed = false;
-    const fetch = vi.fn((command: Parameters<GitCommandRunner["run"]>[0]) =>
-      Effect.succeed(output(removed && command.directory === "/repo" ? 1 : 0)),
+        }).pipe(Effect.scoped);
+        yield* TestClock.adjust(600_000);
+        expect(fetch).toHaveBeenCalledTimes(3);
+        expect(watch.close).not.toHaveBeenCalled();
+        watch.change();
+        yield* TestClock.adjust(50);
+        expect(messages.at(-1)).toMatchObject({ freshness: { revision: 5 } });
+        yield* reader({ _tag: "UnsubscribeRepositoryHistory", repositoryId });
+        expect(watch.close).toHaveBeenCalledOnce();
+      }),
     );
-    await withService({ fetch, setting: "0" }, async (service) => {
-      const closeFirst = await Effect.runPromise(
-        service.subscribe(repositoryId, () => {}),
-      );
-      await Effect.runPromise(service.subscribe(linkedId, () => {}));
-      closeFirst();
-      removed = true;
-      expect(await Effect.runPromise(service.fetch(linkedId))).toMatchObject({
-        stale: false,
-        fetching: false,
-      });
-      expect(fetch).toHaveBeenCalledWith(
-        expect.objectContaining({ directory: "/linked" }),
-      );
-    });
   });
 
-  it("shares an immediate fetch across linked worktrees, subscriptions and manual requests", async () => {
-    let finish: (() => void) | undefined;
+  it("interrupts automatic fetch only after its final writer leaves", () => {
+    const interrupted = vi.fn();
     const fetch = vi.fn(() =>
-      Effect.promise(
-        () =>
-          new Promise<void>((resolve) => {
-            finish = resolve;
-          }),
-      ).pipe(Effect.as(output())),
+      Effect.never.pipe(Effect.ensuring(Effect.sync(interrupted))),
     );
-    const states: RepositoryFreshness[] = [];
-    await withService({ fetch }, async (service, watch) => {
-      const [closeFirst, closeSecond] = await Promise.all([
-        Effect.runPromise(
-          service.subscribe(repositoryId, (state) => states.push(state), {
-            automaticFetch: true,
-          }),
-        ),
-        Effect.runPromise(service.subscribe(linkedId, () => {})),
-      ]);
-      const manual = Effect.runPromise(service.fetch(linkedId));
-      await vi.waitFor(() => expect(fetch).toHaveBeenCalledTimes(1));
-      expect(states.at(-1)?.fetching).toBe(true);
-      expect(watch.close).not.toHaveBeenCalled();
-      finish?.();
-      expect(await manual).toMatchObject({ fetching: false, stale: false });
-      closeFirst();
-      expect(watch.close).not.toHaveBeenCalled();
-      closeSecond();
-      expect(watch.close).toHaveBeenCalledTimes(1);
-    });
+    return withService({ fetch }, (service, watch) =>
+      Effect.gen(function* () {
+        yield* service.subscribe(repositoryId, () => {});
+        const first = yield* service.subscribe(repositoryId, () => {}, writer);
+        const second = yield* service.subscribe(linkedId, () => {}, writer);
+        yield* TestClock.adjust(0);
+        expect(fetch).toHaveBeenCalledOnce();
+        yield* first;
+        expect(interrupted).not.toHaveBeenCalled();
+        yield* second;
+        expect(interrupted).toHaveBeenCalledOnce();
+        expect(watch.close).not.toHaveBeenCalled();
+        yield* TestClock.adjust(600_000);
+        expect(fetch).toHaveBeenCalledOnce();
+      }),
+    );
   });
 
-  it("retries failed fetches on the next interval and resets that interval after manual completion", async () => {
-    vi.useFakeTimers();
-    const fetch = vi
-      .fn()
-      .mockImplementationOnce(() => Effect.succeed(output(1)))
-      .mockImplementation(() => Effect.succeed(output()));
-    const states: RepositoryFreshness[] = [];
-    await withService({ fetch, setting: "0" }, async (service) => {
-      await Effect.runPromise(
-        service.subscribe(repositoryId, (state) => states.push(state), {
-          automaticFetch: true,
-        }),
-      );
-      expect(fetch).not.toHaveBeenCalled();
-      await Effect.runPromise(
-        service.configure(repositoryId, { _tag: "Interval", seconds: 10 }),
-      );
-      await vi.advanceTimersByTimeAsync(10_000);
-      expect(states.at(-1)).toMatchObject({
-        fetching: false,
-        stale: true,
-        failure: { _tag: "FetchFailed" },
-      });
-      await vi.advanceTimersByTimeAsync(10_000);
-      expect(fetch).toHaveBeenCalledTimes(2);
-      expect(states.at(-1)).toMatchObject({ fetching: false, stale: false });
-      expect(states.at(-1)?.failure).toBeUndefined();
-      await vi.advanceTimersByTimeAsync(9_000);
-      await Effect.runPromise(service.fetch(repositoryId));
-      await vi.advanceTimersByTimeAsync(1_000);
-      expect(fetch).toHaveBeenCalledTimes(3);
-      await vi.advanceTimersByTimeAsync(9_000);
-      expect(fetch).toHaveBeenCalledTimes(4);
-      await Effect.runPromise(
-        service.configure(repositoryId, { _tag: "Disabled" }),
-      );
-      await vi.advanceTimersByTimeAsync(30_000);
-      expect(fetch).toHaveBeenCalledTimes(4);
-    });
+  it("shares fetch callers and preserves work when one caller or automatic owner leaves", () => {
+    return withService({}, (service, _watch, git) =>
+      Effect.gen(function* () {
+        const finish = yield* Deferred.make<void>();
+        const interrupted = vi.fn();
+        git.fetch.mockImplementation(() =>
+          Deferred.await(finish).pipe(
+            Effect.as(output()),
+            Effect.onInterrupt(() => Effect.sync(interrupted)),
+          ),
+        );
+        yield* service.subscribe(repositoryId, () => {});
+        const closeWriter = yield* service.subscribe(
+          linkedId,
+          () => {},
+          writer,
+        );
+        const first = yield* service.fetch(repositoryId).pipe(Effect.forkChild);
+        const second = yield* service.fetch(linkedId).pipe(Effect.forkChild);
+        yield* TestClock.adjust(0);
+        expect(git.fetch).toHaveBeenCalledOnce();
+        yield* closeWriter;
+        yield* Fiber.interrupt(first);
+        expect(interrupted).not.toHaveBeenCalled();
+        yield* Deferred.succeed(finish, undefined);
+        expect(yield* Fiber.join(second)).toMatchObject({
+          fetching: false,
+          stale: false,
+        });
+      }),
+    );
   });
 
-  it("publishes local changes independently of automatic fetch and releases the last subscription", async () => {
-    vi.useFakeTimers();
-    const fetch = vi.fn(() => Effect.succeed(output()));
-    const states: RepositoryFreshness[] = [];
-    await withService({ fetch, setting: "0" }, async (service, watch) => {
-      const close = await Effect.runPromise(
-        service.subscribe(repositoryId, (state) => states.push(state)),
-      );
-      watch.change();
-      watch.change();
-      await vi.advanceTimersByTimeAsync(50);
-      expect(states.at(-1)?.revision).toBe(1);
-      expect(fetch).not.toHaveBeenCalled();
-      close();
-      watch.change();
-      await vi.advanceTimersByTimeAsync(300_000);
-      expect(states).toHaveLength(2);
-      expect(watch.close).toHaveBeenCalledOnce();
-    });
-  });
+  it("interrupts an explicit fetch once every caller leaves", () =>
+    withService({}, (service, _watch, git) =>
+      Effect.gen(function* () {
+        const interrupted = vi.fn();
+        git.fetch.mockImplementation(() =>
+          Effect.never.pipe(Effect.ensuring(Effect.sync(interrupted))),
+        );
+        yield* service.subscribe(repositoryId, () => {});
+        const caller = yield* service
+          .fetch(repositoryId)
+          .pipe(Effect.forkChild);
+        yield* TestClock.adjust(0);
+        yield* Fiber.interrupt(caller);
+        expect(interrupted).toHaveBeenCalledOnce();
+      }),
+    ));
 
-  it("cancels an in-flight fetch when the final browser leaves", async () => {
-    const aborted = vi.fn();
+  it("recovers after typed failure and runner defects", () =>
+    withService({ setting: "0" }, (service, _watch, git) =>
+      Effect.gen(function* () {
+        git.fetch
+          .mockImplementationOnce(() =>
+            Effect.die(new Error("Unexpected runner defect")),
+          )
+          .mockImplementationOnce(() =>
+            Effect.fail(new GitCommandError({ reason: "Timeout" })),
+          );
+        yield* service.subscribe(repositoryId, () => {});
+        expect(yield* service.fetch(repositoryId)).toMatchObject({
+          stale: true,
+          fetching: false,
+          failure: { _tag: "FetchFailed" },
+        });
+        expect(yield* service.fetch(repositoryId)).toMatchObject({
+          stale: true,
+          fetching: false,
+          failure: { _tag: "FetchFailed", reason: "Timeout" },
+        });
+        expect(yield* service.fetch(repositoryId)).toMatchObject({
+          stale: false,
+          fetching: false,
+        });
+      }),
+    ));
+
+  it("replaces schedules and starts the next interval after fetch completion", () =>
+    withService({ setting: "0" }, (service, _watch, git) =>
+      Effect.gen(function* () {
+        yield* service.subscribe(repositoryId, () => {}, writer);
+        yield* service.configure(repositoryId, {
+          _tag: "Interval",
+          seconds: 10,
+        });
+        yield* TestClock.adjust(5_000);
+        yield* service.configure(repositoryId, {
+          _tag: "Interval",
+          seconds: 20,
+        });
+        yield* TestClock.adjust(19_000);
+        expect(git.fetch).not.toHaveBeenCalled();
+        yield* TestClock.adjust(1_000);
+        expect(git.fetch).toHaveBeenCalledTimes(1);
+        yield* TestClock.adjust(19_000);
+        yield* service.fetch(repositoryId);
+        yield* TestClock.adjust(1_000);
+        expect(git.fetch).toHaveBeenCalledTimes(2);
+        yield* TestClock.adjust(19_000);
+        expect(git.fetch).toHaveBeenCalledTimes(3);
+        yield* service.configure(repositoryId, { _tag: "Disabled" });
+        yield* TestClock.adjust(60_000);
+        expect(git.fetch).toHaveBeenCalledTimes(3);
+      }),
+    ));
+
+  it("discards an expired schedule while replacement configuration is being written", () =>
+    withService({ setting: "10" }, (service, _watch, git) =>
+      Effect.gen(function* () {
+        yield* service.subscribe(repositoryId, () => {}, writer);
+        yield* TestClock.adjust(5_000);
+        const configured = yield* Deferred.make<void>();
+        git.initialize = Deferred.await(configured);
+        const configuring = yield* service
+          .configure(repositoryId, { _tag: "Disabled" })
+          .pipe(Effect.forkChild);
+        yield* TestClock.adjust(10_000);
+        yield* Deferred.succeed(configured, undefined);
+        yield* Fiber.join(configuring);
+        yield* TestClock.adjust(60_000);
+        expect(git.fetch).toHaveBeenCalledOnce();
+      }),
+    ));
+
+  it("retries automatic fetch after failure and honors configuration changed during fetch", () =>
+    withService({ setting: "10" }, (service, _watch, git) =>
+      Effect.gen(function* () {
+        git.fetch.mockImplementationOnce(() => Effect.succeed(output(1)));
+        const states: RepositoryFreshness[] = [];
+        yield* service.subscribe(
+          repositoryId,
+          (state) => states.push(state),
+          writer,
+        );
+        yield* TestClock.adjust(0);
+        expect(states.at(-1)).toMatchObject({ stale: true });
+        const finish = yield* Deferred.make<void>();
+        git.fetch.mockImplementationOnce(() =>
+          Deferred.await(finish).pipe(Effect.as(output())),
+        );
+        yield* TestClock.adjust(10_000);
+        expect(git.fetch).toHaveBeenCalledTimes(2);
+        yield* service.configure(repositoryId, { _tag: "Disabled" });
+        yield* Deferred.succeed(finish, undefined);
+        yield* TestClock.adjust(60_000);
+        expect(states.at(-1)).toMatchObject({
+          stale: false,
+          fetching: false,
+          setting: { _tag: "Disabled" },
+        });
+        expect(git.fetch).toHaveBeenCalledTimes(2);
+      }),
+    ));
+
+  it("shares linked worktree watching and fetches through a surviving path", () =>
+    withService({ setting: "0" }, (service, watch, git) =>
+      Effect.gen(function* () {
+        const publish = vi.fn();
+        const first = yield* service.subscribe(repositoryId, publish);
+        const second = yield* service.subscribe(linkedId, publish);
+        expect(watch.open).toHaveBeenCalledOnce();
+        yield* first;
+        expect(watch.close).not.toHaveBeenCalled();
+        yield* service.fetch(linkedId);
+        expect(git.fetch).toHaveBeenCalledWith(
+          expect.objectContaining({ directory: "/linked" }),
+        );
+        yield* second;
+        expect(watch.close).toHaveBeenCalledOnce();
+        const published = publish.mock.calls.length;
+        watch.change();
+        yield* TestClock.adjust(60_000);
+        expect(publish).toHaveBeenCalledTimes(published);
+      }),
+    ));
+
+  it("leaves shared initialization running when one subscriber is interrupted", () =>
+    withService({}, (service, watch, git) =>
+      Effect.gen(function* () {
+        const initialize = yield* Deferred.make<void>();
+        git.initialize = Deferred.await(initialize);
+        const first = yield* service
+          .subscribe(repositoryId, () => {})
+          .pipe(Effect.forkChild);
+        const second = yield* service
+          .subscribe(linkedId, () => {})
+          .pipe(Effect.forkChild);
+        yield* TestClock.adjust(0);
+        yield* Fiber.interrupt(first);
+        yield* Deferred.succeed(initialize, undefined);
+        const release = yield* Fiber.join(second);
+        expect(watch.open).toHaveBeenCalledOnce();
+        yield* release;
+        expect(watch.close).toHaveBeenCalledOnce();
+      }),
+    ));
+
+  it("interrupts abandoned initialization and permits a later subscription", () =>
+    withService({}, (service, watch, git) =>
+      Effect.gen(function* () {
+        const interrupted = vi.fn();
+        git.initialize = Effect.never.pipe(
+          Effect.ensuring(Effect.sync(interrupted)),
+        );
+        const opening = yield* service
+          .subscribe(repositoryId, () => {})
+          .pipe(Effect.forkChild);
+        yield* TestClock.adjust(0);
+        yield* Fiber.interrupt(opening);
+        expect(interrupted).toHaveBeenCalledOnce();
+        git.initialize = Effect.void;
+        const release = yield* service.subscribe(repositoryId, () => {});
+        yield* release;
+        expect(watch.close).toHaveBeenCalledOnce();
+      }),
+    ));
+
+  it("starts one immediate fetch for concurrently initialized writer subscriptions", () =>
+    withService({}, (service, _watch, git) =>
+      Effect.gen(function* () {
+        const initialize = yield* Deferred.make<void>();
+        git.initialize = Deferred.await(initialize);
+        const first = yield* service
+          .subscribe(repositoryId, () => {}, writer)
+          .pipe(Effect.forkChild);
+        const second = yield* service
+          .subscribe(linkedId, () => {}, writer)
+          .pipe(Effect.forkChild);
+        yield* TestClock.adjust(0);
+        yield* Deferred.succeed(initialize, undefined);
+        yield* Fiber.join(first);
+        yield* Fiber.join(second);
+        yield* TestClock.adjust(0);
+        expect(git.fetch).toHaveBeenCalledOnce();
+      }),
+    ));
+
+  it("does not postpone scheduled fetch when a reader leaves", () =>
+    withService({ setting: "10" }, (service, _watch, git) =>
+      Effect.gen(function* () {
+        yield* service.subscribe(repositoryId, () => {}, writer);
+        const reader = yield* service.subscribe(linkedId, () => {});
+        yield* TestClock.adjust(5_000);
+        yield* reader;
+        yield* TestClock.adjust(5_000);
+        expect(git.fetch).toHaveBeenCalledTimes(2);
+      }),
+    ));
+
+  it("interrupts configuration when its repository lifetime ends", () =>
+    withService({}, (service, watch, git) =>
+      Effect.gen(function* () {
+        const release = yield* service.subscribe(repositoryId, () => {});
+        const interrupted = vi.fn();
+        git.initialize = Effect.never.pipe(
+          Effect.ensuring(Effect.sync(interrupted)),
+        );
+        const configuring = yield* service
+          .configure(repositoryId, { _tag: "Disabled" })
+          .pipe(Effect.forkChild);
+        yield* TestClock.adjust(0);
+        yield* release;
+        expect(Exit.isFailure(yield* Fiber.await(configuring))).toBe(true);
+        expect(interrupted).toHaveBeenCalledOnce();
+        expect(watch.close).toHaveBeenCalledOnce();
+      }),
+    ));
+
+  it("closes watching and interrupts work when the service scope ends", async () => {
+    const interrupted = vi.fn();
     const fetch = vi.fn(() =>
-      Effect.promise<void>(
-        (signal) =>
-          new Promise(() => {
-            signal.addEventListener("abort", aborted);
-          }),
-      ).pipe(Effect.as(output())),
+      Effect.never.pipe(Effect.ensuring(Effect.sync(interrupted))),
     );
-    await withService({ fetch }, async (service) => {
-      const close = await Effect.runPromise(
-        service.subscribe(repositoryId, () => {}, { automaticFetch: true }),
-      );
-      await vi.waitFor(() => expect(fetch).toHaveBeenCalledOnce());
-      close();
-      await vi.waitFor(() => expect(aborted).toHaveBeenCalledOnce());
-    });
+    let watchClosed: ReturnType<typeof vi.fn> | undefined;
+    await withService({ fetch }, (service, watch) =>
+      Effect.gen(function* () {
+        watchClosed = watch.close;
+        yield* service.subscribe(repositoryId, () => {}, writer);
+        yield* TestClock.adjust(0);
+      }),
+    );
+    expect(interrupted).toHaveBeenCalledOnce();
+    expect(watchClosed).toHaveBeenCalledOnce();
   });
 });
 
@@ -319,50 +404,45 @@ function output(exitCode = 0, stdout = "") {
   return { exitCode, stdout, stderr: "" };
 }
 
-function withSession(
+function openSession(
   service: RepositoryFreshnessService,
   access: readonly EnvironmentAccessCapability[],
   messages: EnvironmentServerMessage[],
-  use: (
-    handle: Effect.Success<
-      ReturnType<typeof acquireRepositoryFreshnessSession>
-    >,
-  ) => Promise<void>,
 ) {
-  const jobs: Promise<void>[] = [];
-  return Effect.runPromise(
-    Effect.gen(function* () {
-      const handle = yield* acquireRepositoryFreshnessSession(
-        service,
-        {
-          send: (message) =>
-            Effect.sync(() => {
-              messages.push(message);
-            }),
-        },
-        new Map([["repository-history-freshness", 1]]),
-        new Set(access),
-        (effect) => {
-          jobs.push(Effect.runPromise(effect));
-        },
-      );
-      yield* Effect.promise(() => use(handle));
-      yield* Effect.promise(() => Promise.all(jobs));
-    }).pipe(Effect.scoped),
-  );
+  return Effect.gen(function* () {
+    const run = yield* FiberSet.makeRuntime<never, void, never>();
+    return yield* acquireRepositoryFreshnessSession(
+      service,
+      {
+        send: (message) =>
+          Effect.sync(() => {
+            messages.push(message);
+          }),
+      },
+      new Map([["repository-history-freshness", 1]]),
+      new Set(access),
+      run,
+    );
+  });
 }
 
 function withService(
   options: {
-    readonly fetch: (
-      command: Parameters<GitCommandRunner["run"]>[0],
-    ) => ReturnType<GitCommandRunner["run"]>;
+    readonly fetch?: GitCommandRunner["run"];
     readonly setting?: string;
   },
   test: (
     service: RepositoryFreshnessService,
-    watch: { close: ReturnType<typeof vi.fn>; change: () => void },
-  ) => Promise<void>,
+    watch: {
+      open: ReturnType<typeof vi.fn>;
+      close: ReturnType<typeof vi.fn>;
+      change: () => void;
+    },
+    git: {
+      fetch: ReturnType<typeof vi.fn<GitCommandRunner["run"]>>;
+      initialize: Effect.Effect<void>;
+    },
+  ) => Effect.Effect<void, unknown, Scope.Scope>,
 ) {
   const entry: RepositoryCatalogEntry = {
     id: repositoryId,
@@ -372,48 +452,50 @@ function withService(
     addedAt: "2026-09-04T00:00:00.000Z",
     lastOpenedAt: "2026-09-04T00:00:00.000Z",
   };
-  const catalog: RepositoryCatalog = {
-    find: (id) =>
-      Effect.succeed({
-        ...entry,
-        id,
-        path: id === linkedId ? "/linked" : entry.path,
-      }),
-    list: () => Effect.succeed([entry]),
-    recordOpened: () => Effect.succeed(entry),
-    remember: () => Effect.succeed(entry),
-    remove: (id) => Effect.succeed({ repositoryId: id }),
+  const git = {
+    fetch: vi.fn<GitCommandRunner["run"]>(
+      options.fetch ?? (() => Effect.succeed(output())),
+    ),
+    initialize: Effect.void,
   };
-  const git: GitCommandRunner = {
-    run: (command) => {
-      if (command.arguments[0] === "fetch") {
-        expect(command.arguments).toEqual(["fetch"]);
-        return options.fetch(command);
-      }
-      return Effect.succeed(
-        output(
-          0,
-          command.arguments[0] === "rev-parse"
-            ? "/repo/.git"
-            : (options.setting ?? "inherit"),
-        ),
-      );
-    },
-  };
-  const watch = { close: vi.fn(), change: () => {} };
+  const watch = { open: vi.fn(), close: vi.fn(), change: () => {} };
   return Effect.runPromise(
     Effect.gen(function* () {
-      const service = yield* acquireRepositoryFreshnessService({
-        catalog,
-        git,
-        watcher: {
-          watch: (_, change) => {
-            watch.change = change;
-            return Effect.succeed({ close: watch.close });
-          },
-        },
-      });
-      yield* Effect.promise(() => test(service, watch));
-    }).pipe(Effect.scoped),
+      const context = yield* Layer.build(
+        repositoryFreshnessLayer.pipe(
+          Layer.provide(
+            Layer.mergeAll(
+              Layer.succeed(RepositoryCatalogAccess, {
+                find: (id) =>
+                  Effect.succeed({
+                    ...entry,
+                    id,
+                    path: id === linkedId ? "/linked" : entry.path,
+                  }),
+              }),
+              Layer.succeed(GitCommands, {
+                run: (command) =>
+                  command.arguments[0] === "fetch"
+                    ? git.fetch(command)
+                    : command.arguments[0] === "rev-parse"
+                      ? Effect.succeed(output(0, "/repo/.git"))
+                      : git.initialize.pipe(
+                          Effect.as(output(0, options.setting ?? "inherit")),
+                        ),
+              }),
+              Layer.succeed(RepositoryWatching, {
+                watch: (_, change) =>
+                  Effect.sync(() => {
+                    watch.open();
+                    watch.change = change;
+                    return { close: watch.close };
+                  }),
+              }),
+            ),
+          ),
+        ),
+      );
+      yield* test(Context.get(context, RepositoryFreshnessState), watch, git);
+    }).pipe(Effect.scoped, Effect.provide(TestClock.layer())),
   );
 }

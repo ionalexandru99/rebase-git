@@ -1,362 +1,147 @@
-import type {
-  RepositoryCatalogEntry,
-  RepositoryFetchSetting,
-  RepositoryFreshness,
-} from "@rebase/contracts";
-import { Effect } from "effect";
-import type { GitCommandRunner } from "#server/domain/git-command.contract";
-import type { RepositoryCatalog } from "#server/domain/repository-catalog.contract";
-import type { RepositoryFreshnessService } from "#server/domain/repository-freshness.contract";
-import { RepositoryHistoryError } from "#server/domain/repository-history.contract";
-import type {
-  RepositoryWatcher,
-  RepositoryWatchHandle,
-} from "#server/domain/repository-watcher.contract";
+import { Effect, Exit, Fiber, Layer, Scope } from "effect";
+import { GitCommands } from "#server/domain/git-command.contract";
+import { RepositoryCatalogAccess } from "#server/domain/repository-catalog.contract";
 import {
-  readRepositoryFetchSetting,
-  writeRepositoryFetchSetting,
-} from "#server/features/repository-history/freshness/repository-fetch-settings";
+  type RepositoryFreshnessService,
+  RepositoryFreshnessState,
+} from "#server/domain/repository-freshness.contract";
+import { RepositoryHistoryError } from "#server/domain/repository-history.contract";
+import { RepositoryWatching } from "#server/domain/repository-watcher.contract";
+import { acquireWatchedRepository } from "#server/features/repository-history/freshness/watched-repository";
+import type { FreshnessSubscription } from "#server/features/repository-history/freshness/watched-repository.contract";
 
-interface WatchedRepository {
-  readonly controller: AbortController;
-  path: string;
-  readonly subscribers: Map<(freshness: RepositoryFreshness) => void, string>;
-  readonly fetchOwners: Set<(freshness: RepositoryFreshness) => void>;
-  freshness: RepositoryFreshness;
-  fetch?: Promise<RepositoryFreshness>;
-  fetchController?: AbortController;
-  manualFetchOwners: number;
-  timer?: ReturnType<typeof setTimeout>;
-  changeTimer?: ReturnType<typeof setTimeout>;
-  watch?: RepositoryWatchHandle;
+interface RepositoryLifetime {
+  readonly releaseOwnership: Effect.Effect<void>;
+  readonly scope: Scope.Closeable;
+  readonly subscribers: Set<FreshnessSubscription>;
+  readonly repository: Fiber.Fiber<
+    Effect.Success<ReturnType<typeof acquireWatchedRepository>>,
+    RepositoryHistoryError
+  >;
 }
 
-interface RepositorySubscriptions {
-  readonly repository: Promise<WatchedRepository>;
-  count: number;
-}
-
-export function acquireRepositoryFreshnessService(dependencies: {
-  readonly catalog: RepositoryCatalog;
-  readonly git: GitCommandRunner;
-  readonly watcher: RepositoryWatcher;
-  readonly defaultIntervalSeconds?: number;
-}) {
-  return Effect.acquireRelease(
-    Effect.sync(() => createRepositoryFreshnessService(dependencies)),
-    (service) => Effect.promise(service.close),
-  );
-}
-
-function createRepositoryFreshnessService(dependencies: {
-  readonly catalog: RepositoryCatalog;
-  readonly git: GitCommandRunner;
-  readonly watcher: RepositoryWatcher;
-  readonly defaultIntervalSeconds?: number;
-}): RepositoryFreshnessService & { readonly close: () => Promise<void> } {
-  const repositories = new Map<string, RepositorySubscriptions>();
-  const aliases = new Map<string, string>();
-  const lifecycle = new AbortController();
-  let closed = false;
-
-  const publish = (repository: WatchedRepository) => {
-    for (const subscriber of repository.subscribers.keys())
-      subscriber(repository.freshness);
-  };
-  const completeFetch = (
-    repository: WatchedRepository,
-    failure: RepositoryFreshness["failure"],
-  ) => {
-    const { failure: previousFailure, ...freshness } = repository.freshness;
-    repository.freshness = {
-      ...freshness,
-      fetching: false,
-      stale: failure !== undefined,
-      revision: freshness.revision + 1,
-      ...(failure === undefined ? {} : { failure }),
-    };
-    publish(repository);
-    return repository.freshness;
-  };
-  const stop = (repository: WatchedRepository) => {
-    clearTimeout(repository.timer);
-    clearTimeout(repository.changeTimer);
-    repository.watch?.close();
-    repository.controller.abort();
-    repository.subscribers.clear();
-  };
-  const cancelFetch = (repository: WatchedRepository) => {
-    repository.freshness = { ...repository.freshness, fetching: false };
-    publish(repository);
-    return repository.freshness;
-  };
-  const schedule = (repository: WatchedRepository) => {
-    clearTimeout(repository.timer);
-    if (
-      repository.controller.signal.aborted ||
-      repository.fetchOwners.size === 0
-    )
-      return;
-    const setting = repository.freshness.setting;
-    if (setting._tag === "Disabled") return;
-    const seconds =
-      setting._tag === "Interval"
-        ? setting.seconds
-        : repository.freshness.defaultIntervalSeconds;
-    repository.timer = setTimeout(() => {
-      void fetch(repository);
-    }, seconds * 1_000);
-    repository.timer.unref();
-  };
-  const fetch = (
-    repository: WatchedRepository,
-  ): Promise<RepositoryFreshness> => {
-    if (repository.fetch !== undefined) return repository.fetch;
-    clearTimeout(repository.timer);
-    repository.freshness = { ...repository.freshness, fetching: true };
-    repository.fetchController = new AbortController();
-    publish(repository);
-    repository.fetch = Effect.runPromise(
-      dependencies.git
-        .run({
-          directory: repository.path,
-          arguments: ["fetch"],
-          timeoutMilliseconds: 120_000,
-        })
-        .pipe(
-          Effect.map((output): RepositoryFreshness["failure"] =>
-            output.exitCode === 0
-              ? undefined
-              : { _tag: "FetchFailed", reason: "Failed" },
-          ),
-          Effect.catch((error) =>
-            Effect.succeed({
-              _tag: "FetchFailed",
-              reason: error.reason,
-            } as const),
-          ),
-        ),
-      {
-        signal: AbortSignal.any([
-          repository.controller.signal,
-          repository.fetchController.signal,
-        ]),
-      },
-    )
-      .then(
-        (failure) => completeFetch(repository, failure),
-        () =>
-          repository.fetchController?.signal.aborted
-            ? cancelFetch(repository)
-            : completeFetch(repository, {
-                _tag: "FetchFailed",
-                reason: "Failed",
-              }),
-      )
-      .finally(() => {
-        delete repository.fetch;
-        delete repository.fetchController;
-        schedule(repository);
-      });
-    return repository.fetch;
-  };
-  const changed = (repository: WatchedRepository) => {
-    if (
-      repository.controller.signal.aborted ||
-      repository.changeTimer !== undefined
-    )
-      return;
-    repository.changeTimer = setTimeout(() => {
-      delete repository.changeTimer;
-      repository.freshness = {
-        ...repository.freshness,
-        revision: repository.freshness.revision + 1,
-      };
-      publish(repository);
-    }, 50);
-    repository.changeTimer.unref();
-  };
-  const initialize = (entry: RepositoryCatalogEntry) =>
-    Effect.runPromise(
-      Effect.gen(function* () {
-        const setting = yield* readRepositoryFetchSetting(
-          dependencies.git,
-          entry.path,
-        );
-        const directory = yield* dependencies.git.run({
-          directory: entry.path,
-          arguments: [
-            "rev-parse",
-            "--path-format=absolute",
-            "--git-common-dir",
-          ],
-        });
-        if (directory.exitCode !== 0 || directory.stdout.trim() === "")
-          return yield* Effect.fail(missingRepository(entry.id));
-        const repository: WatchedRepository = {
-          controller: new AbortController(),
-          path: entry.path,
-          subscribers: new Map(),
-          fetchOwners: new Set(),
-          manualFetchOwners: 0,
-          freshness: {
-            fetching: false,
-            stale: false,
-            revision: 0,
-            defaultIntervalSeconds: dependencies.defaultIntervalSeconds ?? 300,
-            setting,
-          },
-        };
-        repository.watch = yield* dependencies.watcher.watch(
-          directory.stdout.trim(),
-          () => changed(repository),
-        );
-        if (closed) stop(repository);
-        return repository;
+export const repositoryFreshnessLayer = Layer.effect(
+  RepositoryFreshnessState,
+  Effect.gen(function* () {
+    const catalog = yield* RepositoryCatalogAccess;
+    const git = yield* GitCommands;
+    const watcher = yield* RepositoryWatching;
+    const scope = yield* Effect.scope;
+    const repositories = new Map<string, RepositoryLifetime>();
+    const aliases = new Map<string, string>();
+    let closed = false;
+    yield* Effect.addFinalizer(() =>
+      Effect.sync(() => {
+        closed = true;
+        repositories.clear();
+        aliases.clear();
       }),
-      { signal: lifecycle.signal },
     );
-  const active = async (repositoryId: string) => {
-    const repository = await repositories.get(
-      aliases.get(repositoryId) ?? repositoryId,
-    )?.repository;
-    if (repository === undefined || repository.controller.signal.aborted)
-      throw missingRepository(repositoryId);
-    return repository;
-  };
 
-  return {
-    subscribe: (repositoryId, subscriber, authorization) =>
-      Effect.tryPromise({
-        try: async (signal) => {
-          if (closed) throw missingRepository(repositoryId);
-          const entry = await Effect.runPromise(
-            dependencies.catalog.find(repositoryId),
-            { signal },
-          );
-          if (entry === undefined || closed)
-            throw missingRepository(repositoryId);
-          const key = entry.logicalRepositoryId ?? repositoryId;
-          aliases.set(repositoryId, key);
-          let pending = repositories.get(key);
-          if (pending === undefined) {
-            pending = { repository: initialize(entry), count: 0 };
-            repositories.set(key, pending);
-          }
-          pending.count += 1;
-          let repository: WatchedRepository;
-          try {
-            repository = await pending.repository;
-          } catch (error) {
-            if (repositories.get(key) === pending) repositories.delete(key);
-            throw error;
-          }
-          let released = false;
-          const release = () => {
-            if (released) return;
-            released = true;
-            signal.removeEventListener("abort", release);
-            pending.count -= 1;
-            repository.subscribers.delete(subscriber);
-            repository.fetchOwners.delete(subscriber);
-            if (repository.fetchOwners.size === 0) {
-              clearTimeout(repository.timer);
-              if (repository.manualFetchOwners === 0)
-                repository.fetchController?.abort();
+    const release = (
+      key: string,
+      lifetime: RepositoryLifetime,
+      subscription: FreshnessSubscription,
+    ) =>
+      Effect.gen(function* () {
+        if (!lifetime.subscribers.delete(subscription)) return;
+        if (lifetime.subscribers.size > 0) {
+          yield* lifetime.releaseOwnership;
+          return;
+        }
+        if (repositories.get(key) === lifetime) repositories.delete(key);
+        for (const [alias, logicalId] of aliases)
+          if (logicalId === key) aliases.delete(alias);
+        yield* Scope.close(lifetime.scope, Exit.void);
+      }).pipe(Effect.uninterruptible);
+
+    const subscribe: RepositoryFreshnessService["subscribe"] = (
+      repositoryId,
+      publish,
+      authorization,
+    ) =>
+      Effect.gen(function* () {
+        if (closed) return yield* Effect.fail(missingRepository(repositoryId));
+        const entry = yield* catalog
+          .find(repositoryId)
+          .pipe(Effect.mapError(historyError));
+        if (entry === undefined || closed)
+          return yield* Effect.fail(missingRepository(repositoryId));
+        const key = entry.logicalRepositoryId ?? repositoryId;
+        const subscription: FreshnessSubscription = {
+          path: entry.path,
+          publish,
+          automaticFetch: authorization?.automaticFetch ?? false,
+        };
+        return yield* Effect.uninterruptibleMask((restore) =>
+          Effect.gen(function* () {
+            let lifetime = repositories.get(key);
+            if (lifetime === undefined) {
+              let releaseOwnership = Effect.void;
+              const repositoryScope = yield* Scope.fork(scope);
+              const subscribers = new Set<FreshnessSubscription>();
+              const repository = yield* acquireWatchedRepository(
+                entry,
+                subscribers,
+                git,
+                watcher,
+              ).pipe(
+                Effect.tap((repository) =>
+                  Effect.sync(() => {
+                    releaseOwnership = repository.releaseOwnership;
+                  }),
+                ),
+                Effect.provideService(Scope.Scope, repositoryScope),
+                Effect.forkIn(repositoryScope),
+              );
+              lifetime = {
+                scope: repositoryScope,
+                subscribers,
+                repository,
+                releaseOwnership: Effect.suspend(() => releaseOwnership),
+              };
+              repositories.set(key, lifetime);
             }
-            const survivingPath = repository.subscribers.values().next().value;
-            if (survivingPath !== undefined) repository.path = survivingPath;
-            if (pending.count !== 0) return;
-            if (repositories.get(key) === pending) repositories.delete(key);
-            for (const [alias, logicalId] of aliases)
-              if (logicalId === key) aliases.delete(alias);
-            stop(repository);
-          };
-          if (signal.aborted || repository.controller.signal.aborted) {
-            release();
-            throw missingRepository(repositoryId);
-          }
-          if (repository.subscribers.size === 0) repository.path = entry.path;
-          repository.subscribers.set(subscriber, entry.path);
-          if (authorization?.automaticFetch)
-            repository.fetchOwners.add(subscriber);
-          signal.addEventListener("abort", release, { once: true });
-          subscriber(repository.freshness);
-          if (
-            authorization?.automaticFetch &&
-            repository.fetchOwners.size === 1 &&
-            repository.freshness.setting._tag !== "Disabled"
-          )
-            void fetch(repository);
-          return release;
-        },
-        catch: historyError,
-      }),
-    fetch: (repositoryId) =>
-      Effect.tryPromise({
-        try: () => active(repositoryId),
-        catch: historyError,
-      }).pipe(
-        Effect.flatMap((repository) =>
-          Effect.acquireUseRelease(
-            Effect.sync(() => {
-              repository.manualFetchOwners += 1;
-            }),
-            () =>
-              Effect.tryPromise({
-                try: () => fetch(repository),
-                catch: historyError,
+            aliases.set(repositoryId, key);
+            lifetime.subscribers.add(subscription);
+            const unsubscribe = release(key, lifetime, subscription);
+            return yield* restore(
+              Effect.gen(function* () {
+                const repository = yield* Fiber.join(lifetime.repository);
+                yield* repository.observe(subscription);
+                return unsubscribe;
               }),
-            () =>
-              Effect.sync(() => {
-                repository.manualFetchOwners -= 1;
-                if (
-                  repository.manualFetchOwners === 0 &&
-                  repository.fetchOwners.size === 0
-                )
-                  repository.fetchController?.abort();
-              }),
-          ),
+            ).pipe(
+              Effect.onExit((exit) =>
+                Exit.isFailure(exit) ? unsubscribe : Effect.void,
+              ),
+            );
+          }),
+        );
+      });
+
+    const active = (repositoryId: string) =>
+      Effect.gen(function* () {
+        const lifetime = repositories.get(
+          aliases.get(repositoryId) ?? repositoryId,
+        );
+        if (closed || lifetime === undefined)
+          return yield* Effect.fail(missingRepository(repositoryId));
+        return yield* Fiber.join(lifetime.repository);
+      });
+    return {
+      subscribe,
+      fetch: (repositoryId) =>
+        active(repositoryId).pipe(
+          Effect.flatMap((repository) => repository.fetch),
         ),
-      ),
-    configure: (repositoryId, setting: RepositoryFetchSetting) =>
-      Effect.tryPromise({
-        try: async () => {
-          const repository = await active(repositoryId);
-          await Effect.runPromise(
-            writeRepositoryFetchSetting(
-              dependencies.git,
-              repository.path,
-              setting,
-            ),
-            { signal: repository.controller.signal },
-          );
-          repository.freshness = { ...repository.freshness, setting };
-          publish(repository);
-          if (repository.fetch === undefined) schedule(repository);
-          return repository.freshness;
-        },
-        catch: historyError,
-      }),
-    close: async () => {
-      closed = true;
-      lifecycle.abort();
-      await Promise.all(
-        [...repositories.values()].map(({ repository }) =>
-          repository.then(
-            async (state) => {
-              stop(state);
-              await state.fetch;
-            },
-            () => {},
-          ),
+      configure: (repositoryId, setting) =>
+        active(repositoryId).pipe(
+          Effect.flatMap((repository) => repository.configure(setting)),
         ),
-      );
-      repositories.clear();
-      aliases.clear();
-    },
-  };
-}
+    } satisfies RepositoryFreshnessService;
+  }),
+);
 
 function missingRepository(repositoryId: string) {
   return new RepositoryHistoryError({
@@ -365,10 +150,8 @@ function missingRepository(repositoryId: string) {
 }
 
 function historyError(cause: unknown) {
-  return cause instanceof RepositoryHistoryError
-    ? cause
-    : new RepositoryHistoryError({
-        cause,
-        failure: { _tag: "GitFailed", reason: "Failed" },
-      });
+  return new RepositoryHistoryError({
+    cause,
+    failure: { _tag: "GitFailed", reason: "Failed" },
+  });
 }

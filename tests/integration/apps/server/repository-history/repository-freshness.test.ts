@@ -13,14 +13,22 @@ import {
 } from "@rebase/contracts";
 import { createLocalGitCommandRunner } from "@rebase/server/adapters/local-git/local-git-command-runner";
 import { createLocalRepositoryWatcher } from "@rebase/server/adapters/local-git/local-repository-watcher";
-import type { RepositoryCatalog } from "@rebase/server/domain/repository-catalog.contract";
-import type { RepositoryFreshnessService } from "@rebase/server/domain/repository-freshness.contract";
+import { GitCommands } from "@rebase/server/domain/git-command.contract";
+import {
+  type RepositoryCatalog,
+  RepositoryCatalogAccess,
+} from "@rebase/server/domain/repository-catalog.contract";
+import {
+  type RepositoryFreshnessService,
+  RepositoryFreshnessState,
+} from "@rebase/server/domain/repository-freshness.contract";
+import { RepositoryWatching } from "@rebase/server/domain/repository-watcher.contract";
 import type { EnvironmentAuthorization } from "@rebase/server/features/environment-authorization/environment-authorization.contract";
 import { createEnvironmentEventPublisher } from "@rebase/server/features/environment-connection/events/environment-event-publisher";
 import { acquireEnvironmentListener } from "@rebase/server/features/environment-server/server/environment-listener";
-import { acquireRepositoryFreshnessService } from "@rebase/server/features/repository-history/freshness/repository-freshness";
+import { repositoryFreshnessLayer } from "@rebase/server/features/repository-history/freshness/repository-freshness";
 import { createRepositoryHistoryService } from "@rebase/server/features/repository-history/repository-history";
-import { Effect } from "effect";
+import { Context, Effect, Layer } from "effect";
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 
 const exec = promisify(execFile);
@@ -238,11 +246,8 @@ describe("repository freshness with real Git", { timeout: 30_000 }, () => {
     await Effect.runPromise(
       Effect.gen(function* () {
         const runner = createLocalGitCommandRunner();
-        const freshness = yield* acquireRepositoryFreshnessService({
-          catalog: fixture.catalog,
-          git: runner,
-          watcher: createLocalRepositoryWatcher(),
-        });
+        const context = yield* Layer.build(freshnessLayer(fixture.catalog));
+        const freshness = Context.get(context, RepositoryFreshnessState);
         const listener = yield* acquireEnvironmentListener({
           authorization: testAuthorization(),
           environmentId: repositoryId,
@@ -390,13 +395,22 @@ function withService(
 ) {
   return Effect.runPromise(
     Effect.gen(function* () {
-      const service = yield* acquireRepositoryFreshnessService({
-        catalog: fixture.catalog,
-        git: createLocalGitCommandRunner(),
-        watcher: createLocalRepositoryWatcher(),
-      });
+      const context = yield* Layer.build(freshnessLayer(fixture.catalog));
+      const service = Context.get(context, RepositoryFreshnessState);
       yield* Effect.promise(() => use(service));
     }).pipe(Effect.scoped),
+  );
+}
+
+function freshnessLayer(catalog: RepositoryCatalog) {
+  return repositoryFreshnessLayer.pipe(
+    Layer.provide(
+      Layer.mergeAll(
+        Layer.succeed(RepositoryCatalogAccess, catalog),
+        Layer.succeed(GitCommands, createLocalGitCommandRunner()),
+        Layer.succeed(RepositoryWatching, createLocalRepositoryWatcher()),
+      ),
+    ),
   );
 }
 

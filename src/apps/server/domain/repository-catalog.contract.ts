@@ -2,7 +2,7 @@ import type {
   RepositoryCatalogEntry,
   RepositoryCatalogOperationFailure,
 } from "@rebase/contracts";
-import { Data, type Effect } from "effect";
+import { Context, Data, type Effect } from "effect";
 import type { EnvironmentStorageError } from "#server/domain/environment-storage-error.contract";
 
 export interface RepositoryCatalog {
@@ -42,3 +42,8 @@ export class RepositoryCatalogError extends Data.TaggedError(
   readonly cause?: unknown;
   readonly failure: RepositoryCatalogOperationFailure;
 }> {}
+
+export class RepositoryCatalogAccess extends Context.Service<
+  RepositoryCatalogAccess,
+  Pick<RepositoryCatalog, "find">
+>()("RepositoryCatalogAccess") {}

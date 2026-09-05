@@ -1,9 +1,13 @@
 import { and } from "drizzle-orm";
-import { Effect, type Scope } from "effect";
+import { Context, Effect, Layer, type Scope } from "effect";
 import { createLocalGitCommandRunner } from "#server/adapters/local-git/local-git-command-runner";
 import { createLocalRepositoryWatcher } from "#server/adapters/local-git/local-repository-watcher";
 import type { Environment } from "#server/domain/environment-state.contract";
 import type { EnvironmentStorageError } from "#server/domain/environment-storage-error.contract";
+import { GitCommands } from "#server/domain/git-command.contract";
+import { RepositoryCatalogAccess } from "#server/domain/repository-catalog.contract";
+import { RepositoryFreshnessState } from "#server/domain/repository-freshness.contract";
+import { RepositoryWatching } from "#server/domain/repository-watcher.contract";
 import { createEnvironmentAuthorization } from "#server/features/environment-authorization/environment-authorization";
 import { createEnvironmentEventPublisher } from "#server/features/environment-connection/events/environment-event-publisher";
 import { createEnvironmentFilesystem } from "#server/features/environment-filesystem/environment-filesystem";
@@ -26,7 +30,7 @@ import type {
 } from "#server/features/environment-server/server/environment-server.contract";
 import type { EnvironmentServerStartError } from "#server/features/environment-server/server/environment-server-error.contract";
 import { createRepositoryCatalog } from "#server/features/repository-catalog/repository-catalog";
-import { acquireRepositoryFreshnessService } from "#server/features/repository-history/freshness/repository-freshness";
+import { repositoryFreshnessLayer } from "#server/features/repository-history/freshness/repository-freshness";
 import { createRepositoryHistoryService } from "#server/features/repository-history/repository-history";
 import { acquireRepositoryChangePublisher } from "#server/features/repository-refs/repository-change-publisher";
 import { createRepositoryRefsService } from "#server/features/repository-refs/repository-refs";
@@ -62,6 +66,17 @@ export function startEnvironmentServer(
       : options.port;
     const events = createEnvironmentEventPublisher();
     const git = createLocalGitCommandRunner();
+    const freshness = yield* Layer.build(
+      repositoryFreshnessLayer.pipe(
+        Layer.provide(
+          Layer.mergeAll(
+            Layer.succeed(GitCommands, git),
+            Layer.succeed(RepositoryCatalogAccess, catalog),
+            Layer.succeed(RepositoryWatching, createLocalRepositoryWatcher()),
+          ),
+        ),
+      ),
+    );
     const refs = createRepositoryRefsService({
       catalog,
       changes: yield* acquireRepositoryChangePublisher(
@@ -81,11 +96,7 @@ export function startEnvironmentServer(
       events,
       filesystem: createEnvironmentFilesystem(),
       history: createRepositoryHistoryService({ catalog, git }),
-      freshness: yield* acquireRepositoryFreshnessService({
-        catalog,
-        git,
-        watcher: createLocalRepositoryWatcher(),
-      }),
+      freshness: Context.get(freshness, RepositoryFreshnessState),
       ...(options.host === undefined ? {} : { host: options.host }),
       port: requestedPort,
       productVersion,
