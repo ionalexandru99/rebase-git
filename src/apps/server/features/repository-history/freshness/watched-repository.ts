@@ -50,7 +50,12 @@ export function acquireWatchedRepository(
       defaultIntervalSeconds: 300,
       setting,
     };
-    let fetching: Fiber.Fiber<RepositoryFreshness> | undefined;
+    let fetching:
+      | {
+          readonly identity: symbol;
+          readonly fiber: Fiber.Fiber<RepositoryFreshness>;
+        }
+      | undefined;
     let scheduled: Fiber.Fiber<void> | undefined;
     let manualOwners = 0;
     let closed = false;
@@ -99,53 +104,64 @@ export function acquireWatchedRepository(
       publish();
       return freshness;
     };
-    const performFetch = Effect.suspend(() =>
-      git.run({
-        directory: path(),
-        arguments: ["fetch"],
-        timeoutMilliseconds: 120_000,
-      }),
-    ).pipe(
-      Effect.map((output): RepositoryFreshness["failure"] =>
-        output.exitCode === 0
-          ? undefined
-          : { _tag: "FetchFailed", reason: "Failed" },
-      ),
-      Effect.catchCause((cause) => {
-        if (Cause.hasInterrupts(cause))
-          return Effect.failCause(Cause.interrupt());
-        const error = Cause.findErrorOption(cause);
-        return Effect.succeed({
-          _tag: "FetchFailed",
-          reason: Option.isSome(error) ? error.value.reason : "Failed",
-        } as const);
-      }),
-      Effect.map(completeFetch),
-      Effect.ensuring(
-        Effect.gen(function* () {
-          fetching = undefined;
-          if (freshness.fetching) {
-            freshness = { ...freshness, fetching: false };
-            if (!closed) publish();
-          }
-          yield* reschedule;
-        }).pipe(Semaphore.withPermit(mutex)),
-      ),
-    );
+    const performFetch = (identity: symbol) =>
+      Effect.suspend(() =>
+        git.run({
+          directory: path(),
+          arguments: ["fetch"],
+          timeoutMilliseconds: 120_000,
+        }),
+      ).pipe(
+        Effect.map((output): RepositoryFreshness["failure"] =>
+          output.exitCode === 0
+            ? undefined
+            : { _tag: "FetchFailed", reason: "Failed" },
+        ),
+        Effect.catchCause((cause) => {
+          if (Cause.hasInterrupts(cause))
+            return Effect.failCause(Cause.interrupt());
+          const error = Cause.findErrorOption(cause);
+          return Effect.succeed({
+            _tag: "FetchFailed",
+            reason: Option.isSome(error) ? error.value.reason : "Failed",
+          } as const);
+        }),
+        Effect.map((failure) =>
+          fetching?.identity === identity ? completeFetch(failure) : freshness,
+        ),
+        Effect.ensuring(
+          Effect.gen(function* () {
+            if (fetching?.identity !== identity) return;
+            fetching = undefined;
+            if (freshness.fetching) {
+              freshness = { ...freshness, fetching: false };
+              if (!closed) publish();
+            }
+            yield* reschedule;
+          }).pipe(Semaphore.withPermit(mutex)),
+        ),
+      );
     const beginFetch = Effect.gen(function* () {
-      if (fetching !== undefined) return fetching;
+      if (fetching !== undefined) return fetching.fiber;
       yield* stopSchedule;
       freshness = { ...freshness, fetching: true };
       publish();
-      fetching = yield* performFetch.pipe(Effect.forkIn(scope));
-      return fetching;
+      const identity = Symbol();
+      const fiber = yield* performFetch(identity).pipe(Effect.forkIn(scope));
+      fetching = { identity, fiber };
+      return fiber;
     });
     const startFetch = beginFetch.pipe(Semaphore.withPermit(mutex));
     const releaseOwnership = Effect.gen(function* () {
       const abandoned = yield* Effect.gen(function* () {
         if (authorized()) return undefined;
         yield* stopSchedule;
-        return manualOwners === 0 ? fetching : undefined;
+        if (manualOwners !== 0 || fetching === undefined) return undefined;
+        const abandoned = fetching.fiber;
+        fetching = undefined;
+        freshness = { ...freshness, fetching: false };
+        if (!closed) publish();
+        return abandoned;
       }).pipe(Semaphore.withPermit(mutex));
       if (abandoned !== undefined) yield* Fiber.interrupt(abandoned);
     });
