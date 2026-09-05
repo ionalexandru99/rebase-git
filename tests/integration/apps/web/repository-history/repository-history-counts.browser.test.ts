@@ -5,8 +5,7 @@ import {
 } from "@rebase/contracts";
 import { describe, expect, it, vi } from "vitest";
 import { createBrowserRepositoryHistoryReader } from "#web/features/repository-history/browser-repository-history-reader";
-import { readRepositoryCommits } from "#web/features/repository-history/repository-history-query";
-import type { RepositoryHistoryGateway } from "#web/features/repository-history/repository-history-reader.contract";
+import { readRepositoryCommits } from "#web/features/repository-history/query/repository-history-query";
 import {
   beginRepositoryHistorySynchronization,
   completeStoredRepositoryHistory,
@@ -14,7 +13,8 @@ import {
   restartRepositoryHistorySynchronization,
   storeRepositoryHistoryBatch,
   storeRepositoryHistoryPage,
-} from "#web/features/repository-history/repository-history-store";
+} from "#web/features/repository-history/replica/repository-history-store";
+import type { RepositoryHistoryGateway } from "#web/features/repository-history/repository-history-reader.contract";
 
 describe("durable history counts", () => {
   it("counts stored OIDs after resetting and restoring a tip without changing resume offsets", async () => {

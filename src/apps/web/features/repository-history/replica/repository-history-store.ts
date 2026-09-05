@@ -1,48 +1,33 @@
 import type {
-  RepositoryCommit,
   RepositoryHistoryBatch,
   RepositoryHistoryPage,
-  RepositoryHistoryRefTarget,
-  RepositoryHistorySnapshot,
   SynchronizeRepositoryHistory,
 } from "@rebase/contracts";
 import {
+  historyOrderScopeKey,
+  normalizedOids,
+} from "#web/features/repository-history/query/repository-history-query";
+import {
   acceptRepositoryHistoryBatch,
   completeRepositoryHistory,
-} from "#web/features/repository-history/repository-history-completion";
-import type {
-  RepositoryHistoryCompletionBasis,
-  RepositoryHistorySynchronizationProgress,
-} from "#web/features/repository-history/repository-history-completion.contract";
-import {
-  commitKey,
-  commitStoreName,
-  emptyStoredRepository,
-  repositoryCommitRange,
-  repositoryKey,
-  repositoryStoreName,
-  requestResult,
-  storedCommit,
-  transactionCompleted,
-  withRepositoryHistoryDatabase,
-} from "#web/features/repository-history/repository-history-database";
+} from "#web/features/repository-history/replica/repository-history-completion";
+import type { StoredRepositoryHistoryState } from "#web/features/repository-history/replica/repository-history-state.contract";
+import type { RepositoryHistoryQuery } from "#web/features/repository-history/repository-history-reader.contract";
 import type {
   StoredCommit,
   StoredRepository,
-} from "#web/features/repository-history/repository-history-database.contract";
+} from "#web/persistence/repository-history/repository-history-database.contract";
 import {
-  historyOrderScopeKey,
-  normalizedOids,
-} from "#web/features/repository-history/repository-history-query";
-import type { RepositoryHistoryQuery } from "#web/features/repository-history/repository-history-reader.contract";
-
-export interface StoredRepositoryHistoryState {
-  readonly completion?: RepositoryHistoryCompletionBasis;
-  readonly objectFormat: "sha1" | "sha256";
-  readonly refTargets: readonly RepositoryHistoryRefTarget[];
-  readonly progress: RepositoryHistorySynchronizationProgress;
-  readonly pendingSnapshot?: RepositoryHistorySnapshot;
-}
+  commitKey,
+  emptyStoredRepository,
+  repositoryKey,
+  storedCommit,
+} from "#web/persistence/repository-history/repository-history-records";
+import {
+  readStoredRepository,
+  updateStoredHistory,
+  updateStoredRepository,
+} from "#web/persistence/repository-history/repository-history-transactions";
 
 type SynchronizationBasis = NonNullable<SynchronizeRepositoryHistory["basis"]>;
 
@@ -53,27 +38,19 @@ export function storeRepositoryHistoryPage(
   query: RepositoryHistoryQuery,
   indexedDB: IDBFactory | undefined = globalThis.indexedDB,
 ) {
-  return withRepositoryHistoryDatabase(indexedDB, async (database) => {
-    const transaction = database.transaction(
-      [commitStoreName, repositoryStoreName],
-      "readwrite",
-    );
-    const completed = transactionCompleted(transaction);
-    const commits = transaction.objectStore(commitStoreName);
-    const repositories = transaction.objectStore(repositoryStoreName);
+  return updateStoredHistory(indexedDB, async (transaction) => {
+    const { completed } = transaction;
     const key = repositoryKey(environmentId, repositoryId);
-    const current = await requestResult<StoredRepository | undefined>(
-      repositories.get(key),
-    );
+    const current = await transaction.readRepository(key);
     const existingCommits = await Promise.all(
       page.commits.map((commit) =>
-        requestResult<StoredCommit | undefined>(
-          commits.get(commitKey(environmentId, repositoryId, commit.oid)),
+        transaction.readCommit(
+          commitKey(environmentId, repositoryId, commit.oid),
         ),
       ),
     );
     for (const [index, commit] of page.commits.entries()) {
-      commits.put(
+      transaction.storeCommit(
         storedCommit(
           environmentId,
           repositoryId,
@@ -82,7 +59,7 @@ export function storeRepositoryHistoryPage(
         ),
       );
     }
-    repositories.put({
+    transaction.storeRepository({
       ...emptyStoredRepository(environmentId, repositoryId, page.objectFormat),
       ...current,
       ...cacheForegroundHistoryPage(current, page, query),
@@ -132,14 +109,10 @@ export function beginRepositoryHistorySynchronization(
   repositoryId: string,
   indexedDB: IDBFactory | undefined = globalThis.indexedDB,
 ) {
-  return withRepositoryHistoryDatabase(indexedDB, async (database) => {
-    const transaction = database.transaction(repositoryStoreName, "readwrite");
-    const completed = transactionCompleted(transaction);
-    const repositories = transaction.objectStore(repositoryStoreName);
+  return updateStoredRepository(indexedDB, async (transaction) => {
+    const { completed } = transaction;
     const key = repositoryKey(environmentId, repositoryId);
-    const current = await requestResult<StoredRepository | undefined>(
-      repositories.get(key),
-    );
+    const current = await transaction.readRepository(key);
     if (current === undefined) {
       throw new Error("Repository history has no initial page");
     }
@@ -150,7 +123,7 @@ export function beginRepositoryHistorySynchronization(
       pendingTopologicalOrder: ___,
       ...withoutPendingSynchronization
     } = current;
-    repositories.put(
+    transaction.storeRepository(
       basis?._tag === "Incomplete"
         ? current
         : ({
@@ -172,14 +145,10 @@ export function restartRepositoryHistorySynchronization(
   repositoryId: string,
   indexedDB: IDBFactory | undefined = globalThis.indexedDB,
 ) {
-  return withRepositoryHistoryDatabase(indexedDB, async (database) => {
-    const transaction = database.transaction(repositoryStoreName, "readwrite");
-    const completed = transactionCompleted(transaction);
-    const repositories = transaction.objectStore(repositoryStoreName);
+  return updateStoredRepository(indexedDB, async (transaction) => {
+    const { completed } = transaction;
     const key = repositoryKey(environmentId, repositoryId);
-    const current = await requestResult<StoredRepository | undefined>(
-      repositories.get(key),
-    );
+    const current = await transaction.readRepository(key);
     if (current === undefined) {
       throw new Error("Repository history has no synchronization state");
     }
@@ -190,7 +159,7 @@ export function restartRepositoryHistorySynchronization(
       pendingTopologicalOrder: ____,
       ...withoutSynchronizationBasis
     } = current;
-    repositories.put({
+    transaction.storeRepository({
       ...withoutSynchronizationBasis,
       progress: { committedCommitCount: 0, nextBatchSequence: 0 },
     } satisfies StoredRepository);
@@ -204,18 +173,10 @@ export function storeRepositoryHistoryBatch(
   batch: RepositoryHistoryBatch,
   indexedDB: IDBFactory | undefined = globalThis.indexedDB,
 ) {
-  return withRepositoryHistoryDatabase(indexedDB, async (database) => {
-    const transaction = database.transaction(
-      [commitStoreName, repositoryStoreName],
-      "readwrite",
-    );
-    const completed = transactionCompleted(transaction);
-    const commits = transaction.objectStore(commitStoreName);
-    const repositories = transaction.objectStore(repositoryStoreName);
+  return updateStoredHistory(indexedDB, async (transaction) => {
+    const { completed } = transaction;
     const key = repositoryKey(environmentId, repositoryId);
-    const current = await requestResult<StoredRepository | undefined>(
-      repositories.get(key),
-    );
+    const current = await transaction.readRepository(key);
     if (current === undefined) {
       throw new Error("Repository history has no synchronization state");
     }
@@ -236,8 +197,8 @@ export function storeRepositoryHistoryBatch(
           : 0;
       const existingCommits = await Promise.all(
         batch.commits.map((commit) =>
-          requestResult<StoredCommit | undefined>(
-            commits.get(commitKey(environmentId, repositoryId, commit.oid)),
+          transaction.readCommit(
+            commitKey(environmentId, repositoryId, commit.oid),
           ),
         ),
       );
@@ -247,7 +208,7 @@ export function storeRepositoryHistoryBatch(
           (batch.snapshot ?? current.pendingSnapshot)?.resumable === true
             ? undefined
             : topologicalPosition(existing);
-        commits.put({
+        transaction.storeCommit({
           ...existing,
           ...storedCommit(
             environmentId,
@@ -260,7 +221,7 @@ export function storeRepositoryHistoryBatch(
           ),
         });
       }
-      repositories.put({
+      transaction.storeRepository({
         ...current,
         objectFormat: batch.objectFormat,
         ...(batch.snapshot === undefined
@@ -286,17 +247,10 @@ export function completeStoredRepositoryHistory(
   reportedCommitCount: number,
   indexedDB: IDBFactory | undefined = globalThis.indexedDB,
 ) {
-  return withRepositoryHistoryDatabase(indexedDB, async (database) => {
-    const transaction = database.transaction(
-      [commitStoreName, repositoryStoreName],
-      "readwrite",
-    );
-    const completed = transactionCompleted(transaction);
-    const repositories = transaction.objectStore(repositoryStoreName);
+  return updateStoredHistory(indexedDB, async (transaction) => {
+    const { completed } = transaction;
     const key = repositoryKey(environmentId, repositoryId);
-    const current = await requestResult<StoredRepository | undefined>(
-      repositories.get(key),
-    );
+    const current = await transaction.readRepository(key);
     if (current === undefined) {
       throw new Error("Repository history has no synchronization state");
     }
@@ -307,11 +261,7 @@ export function completeStoredRepositoryHistory(
         reportedCommitCount,
         snapshot,
       ),
-      commitCount: await requestResult(
-        transaction
-          .objectStore(commitStoreName)
-          .count(repositoryCommitRange(key)),
-      ),
+      commitCount: await transaction.countCommits(key),
     };
     const {
       pendingSnapshot: _,
@@ -321,7 +271,7 @@ export function completeStoredRepositoryHistory(
       cachedPage,
       ...withoutPendingSynchronization
     } = current;
-    repositories.put({
+    transaction.storeRepository({
       ...withoutPendingSynchronization,
       completion,
       ...(cachedPage === undefined
@@ -345,30 +295,24 @@ export function readStoredRepositoryHistoryState(
   repositoryId: string,
   indexedDB: IDBFactory | undefined = globalThis.indexedDB,
 ): Promise<StoredRepositoryHistoryState | undefined> {
-  return withRepositoryHistoryDatabase(indexedDB, async (database) => {
-    const transaction = database.transaction(repositoryStoreName, "readonly");
-    const completed = transactionCompleted(transaction);
-    const repository = await requestResult<StoredRepository | undefined>(
-      transaction
-        .objectStore(repositoryStoreName)
-        .get(repositoryKey(environmentId, repositoryId)),
-    );
-    await completed;
-    if (repository === undefined) {
-      return undefined;
-    }
-    return {
-      ...(repository.completion === undefined
-        ? {}
-        : { completion: repository.completion }),
-      objectFormat: repository.objectFormat,
-      ...(repository.pendingSnapshot === undefined
-        ? {}
-        : { pendingSnapshot: repository.pendingSnapshot }),
-      progress: repository.progress,
-      refTargets: repository.refTargets,
-    };
-  });
+  return readStoredRepository(environmentId, repositoryId, indexedDB).then(
+    (repository) => {
+      if (repository === undefined) {
+        return undefined;
+      }
+      return {
+        ...(repository.completion === undefined
+          ? {}
+          : { completion: repository.completion }),
+        objectFormat: repository.objectFormat,
+        ...(repository.pendingSnapshot === undefined
+          ? {}
+          : { pendingSnapshot: repository.pendingSnapshot }),
+        progress: repository.progress,
+        refTargets: repository.refTargets,
+      };
+    },
+  );
 }
 
 function synchronizationBasis(
@@ -400,23 +344,6 @@ function synchronizationBasis(
           : { shallowOids: snapshot.shallowOids }),
         snapshotId: snapshot.id,
       };
-}
-
-export function storeRepositoryCommits(
-  environmentId: string,
-  repositoryId: string,
-  commits: readonly RepositoryCommit[],
-  indexedDB: IDBFactory | undefined = globalThis.indexedDB,
-) {
-  return withRepositoryHistoryDatabase(indexedDB, async (database) => {
-    const transaction = database.transaction(commitStoreName, "readwrite");
-    const completed = transactionCompleted(transaction);
-    const store = transaction.objectStore(commitStoreName);
-    for (const commit of commits) {
-      store.put(storedCommit(environmentId, repositoryId, commit));
-    }
-    await completed;
-  });
 }
 
 function topologicalPosition(commit: StoredCommit | undefined) {

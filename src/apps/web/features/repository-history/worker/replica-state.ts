@@ -1,12 +1,12 @@
 import { RepositoryHistoryStorageUnavailable } from "#web/features/repository-history/repository-history-reader.contract";
 import type {
-  RepositoryHistoryWorkerFailure,
-  RepositoryHistoryWorkerResponse,
-} from "#web/features/repository-history/repository-history-worker.contract";
-import type {
   ConnectedReader,
   RepositoryReplica,
 } from "#web/features/repository-history/worker/history-worker.contract";
+import type {
+  RepositoryHistoryWorkerFailure,
+  RepositoryHistoryWorkerResponse,
+} from "#web/features/repository-history/worker/repository-history-worker.contract";
 
 export function publishSnapshot(replica: RepositoryReplica) {
   for (const reader of replica.readers) {

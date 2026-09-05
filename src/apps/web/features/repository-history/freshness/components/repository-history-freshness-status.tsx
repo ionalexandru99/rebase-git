@@ -1,7 +1,7 @@
 import type { RepositoryFetchAction } from "#web/features/repository-history/freshness/repository-fetch-action.contract";
 import type { RepositoryHistorySnapshot } from "#web/features/repository-history/repository-history-reader.contract";
 import { Button } from "#web-ui/components/ui/button";
-import { formatFetchInterval } from "#web-ui/features/repository-history/freshness/repository-fetch-settings";
+import { formatFetchInterval } from "#web-ui/features/repository-history/freshness/components/repository-fetch-settings";
 
 export function RepositoryHistoryFreshnessStatus({
   snapshot,

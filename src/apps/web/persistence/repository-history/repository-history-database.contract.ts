@@ -6,8 +6,7 @@ import type {
 import type {
   RepositoryHistoryCompletionBasis,
   RepositoryHistorySynchronizationProgress,
-} from "#web/features/repository-history/repository-history-completion.contract";
-import type { RepositoryHistoryQuery } from "#web/features/repository-history/repository-history-reader.contract";
+} from "#web/domain/repository-history/repository-history-completion.contract";
 
 export interface StoredCommit {
   readonly commit: RepositoryCommit;
@@ -23,7 +22,7 @@ export interface StoredHistoryPage {
   readonly exhausted?: boolean;
   readonly scopeKey?: string;
   readonly oids: readonly string[];
-  readonly order: RepositoryHistoryQuery["order"];
+  readonly order: "topological" | "chronological";
   readonly requestedLimit: number;
   readonly rootOids: readonly string[];
 }

@@ -1,14 +1,13 @@
-import { createRepositoryHistoryRequestId } from "#web/features/repository-history/repository-history-request-id";
 import {
   clearHistoryCache,
   describeHistoryCaches,
-  readHistoryCacheRecords,
-} from "#web/features/repository-history/repository-history-storage";
+} from "#web/features/repository-history/cache/repository-history-storage";
+import { queueHistoryStorageWrite as queueStorageWrite } from "#web/features/repository-history/cache/repository-history-storage-maintenance";
 import type {
   RepositoryHistoryCacheAction,
   RepositoryHistoryStorageDiagnostics,
 } from "#web/features/repository-history/repository-history-storage.contract";
-import { queueHistoryStorageWrite as queueStorageWrite } from "#web/features/repository-history/repository-history-storage-maintenance";
+import { createRepositoryHistoryRequestId } from "#web/features/repository-history/transport/repository-history-request-id";
 import { readHistory } from "#web/features/repository-history/worker/history-pages";
 import type {
   ConnectedReader,
@@ -23,6 +22,7 @@ import {
 } from "#web/features/repository-history/worker/replica-state";
 import { repositories } from "#web/features/repository-history/worker/repository-replicas";
 import { cancelSynchronization } from "#web/features/repository-history/worker/synchronization";
+import { readHistoryCacheRecords } from "#web/persistence/repository-history/repository-history-cache-records";
 
 export function scheduleCacheManagement(
   reader: ConnectedReader,

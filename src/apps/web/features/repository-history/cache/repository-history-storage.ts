@@ -1,34 +1,21 @@
-import {
-  commitKey,
-  commitStoreName,
-  emptyStoredRepository,
-  repositoryCommitRange,
-  repositoryKey,
-  repositoryStoreName,
-  requestResult,
-  transactionCompleted,
-  withRepositoryHistoryDatabase,
-} from "#web/features/repository-history/repository-history-database";
-import type {
-  StoredCommit,
-  StoredRepository,
-} from "#web/features/repository-history/repository-history-database.contract";
 import type { RepositoryHistoryCacheDiagnostics } from "#web/features/repository-history/repository-history-storage.contract";
+import {
+  readHistoryCacheRecords,
+  visitHistoryCacheCommits,
+} from "#web/persistence/repository-history/repository-history-cache-records";
+import type { StoredRepository } from "#web/persistence/repository-history/repository-history-database.contract";
+import {
+  emptyStoredRepository,
+  repositoryKey,
+} from "#web/persistence/repository-history/repository-history-records";
+import {
+  readStoredCommits,
+  updateStoredHistory,
+  updateStoredRepository,
+} from "#web/persistence/repository-history/repository-history-transactions";
 
 const batchSize = 256;
 const encoder = new TextEncoder();
-
-export function readHistoryCacheRecords(indexedDB = globalThis.indexedDB) {
-  return withRepositoryHistoryDatabase(indexedDB, async (database) => {
-    const transaction = database.transaction(repositoryStoreName, "readonly");
-    const completed = transactionCompleted(transaction);
-    const records = await requestResult<StoredRepository[]>(
-      transaction.objectStore(repositoryStoreName).getAll(),
-    );
-    await completed;
-    return records;
-  });
-}
 
 export async function describeHistoryCaches(
   isOpen: (key: string) => boolean,
@@ -40,7 +27,7 @@ export async function describeHistoryCaches(
     let commitCount = 0;
     let estimatedBytes = 0;
     await visitHistoryCacheCommits(
-      record,
+      record.key,
       (commit) => {
         commitCount += 1;
         estimatedBytes += encoder.encode(JSON.stringify(commit)).byteLength;
@@ -93,15 +80,13 @@ export function markHistoryCacheOpened(
   repositoryId: string,
   indexedDB = globalThis.indexedDB,
 ) {
-  return withRepositoryHistoryDatabase(indexedDB, async (database) => {
-    const transaction = database.transaction(repositoryStoreName, "readwrite");
-    const completed = transactionCompleted(transaction);
-    const store = transaction.objectStore(repositoryStoreName);
-    const record = await requestResult<StoredRepository | undefined>(
-      store.get(repositoryKey(environmentId, repositoryId)),
+  return updateStoredRepository(indexedDB, async (transaction) => {
+    const { completed } = transaction;
+    const record = await transaction.readRepository(
+      repositoryKey(environmentId, repositoryId),
     );
     if (record !== undefined && isCompatibleHistoryCache(record)) {
-      store.put({
+      transaction.storeRepository({
         ...record,
         lastOpenedAt: Date.now(),
       } satisfies StoredRepository);
@@ -118,26 +103,19 @@ export function clearHistoryCache(
   indexedDB = globalThis.indexedDB,
   isOpen?: (key: string) => boolean,
 ) {
-  return withRepositoryHistoryDatabase(indexedDB, async (database) => {
-    const transaction = database.transaction(
-      [repositoryStoreName, commitStoreName],
-      "readwrite",
-    );
-    const completed = transactionCompleted(transaction);
-    const repositories = transaction.objectStore(repositoryStoreName);
+  return updateStoredHistory(indexedDB, async (transaction) => {
+    const { completed } = transaction;
     const key = repositoryKey(environmentId, repositoryId);
-    const record = await requestResult<StoredRepository | undefined>(
-      repositories.get(key),
-    );
+    const record = await transaction.readRepository(key);
     if (isOpen?.(key)) {
       await completed;
       return false;
     }
-    transaction.objectStore(commitStoreName).delete(repositoryCommitRange(key));
+    transaction.deleteRepositoryCommits(key);
     if (remove || record === undefined) {
-      repositories.delete(key);
+      transaction.deleteRepository(key);
     } else {
-      repositories.put({
+      transaction.storeRepository({
         ...emptyStoredRepository(
           environmentId,
           repositoryId,
@@ -176,7 +154,12 @@ export async function pruneHistoryCache(
       .splice(-batchSize)
       .filter((oid) => !reachable.has(oid));
     for (const oid of oids) reachable.add(oid);
-    const commits = await readReachableBatch(record, oids, indexedDB);
+    const commits = await readStoredCommits(
+      record.environmentId,
+      record.repositoryId,
+      oids,
+      indexedDB,
+    );
     for (const commit of commits) {
       if (commit !== undefined)
         pending.push(
@@ -196,22 +179,16 @@ async function pruneUnreachableHistoryCommits(
   let after: string | undefined;
   let commitCount: number | undefined;
   while (!isOpen(record.key)) {
-    const lastKey = await withRepositoryHistoryDatabase(
+    const lastKey = await updateStoredHistory(
       indexedDB,
-      async (database) => {
-        const transaction = database.transaction(
-          [commitStoreName, repositoryStoreName],
-          "readwrite",
+      async (transaction) => {
+        const { completed } = transaction;
+        const records = await transaction.readCommitChunk(
+          record.key,
+          after,
+          batchSize,
         );
-        const completed = transactionCompleted(transaction);
-        const commits = transaction.objectStore(commitStoreName);
-        const repositories = transaction.objectStore(repositoryStoreName);
-        const records = await requestResult<StoredCommit[]>(
-          commits.getAll(repositoryCommitRange(record.key, after), batchSize),
-        );
-        const current = await requestResult<StoredRepository | undefined>(
-          repositories.get(record.key),
-        );
+        const current = await transaction.readRepository(record.key);
         if (
           isOpen(record.key) ||
           current?.completion === undefined ||
@@ -224,21 +201,20 @@ async function pruneUnreachableHistoryCommits(
           (commit) => !reachable.has(commit.commit.oid),
         );
         if (unreachable.length > 0) {
-          commitCount ??= await requestResult(
-            commits.count(repositoryCommitRange(record.key)),
-          );
+          commitCount ??= await transaction.countCommits(record.key);
           if (isOpen(record.key)) {
             await completed;
             return undefined;
           }
           commitCount -= unreachable.length;
-          for (const commit of unreachable) commits.delete(commit.key);
+          for (const commit of unreachable)
+            transaction.deleteCommit(commit.key);
           const {
             cachedPage: _,
             foregroundPages: _foregroundPages,
             ...withoutPage
           } = current;
-          repositories.put({
+          transaction.storeRepository({
             ...withoutPage,
             completion: { ...current.completion, commitCount },
             progress: {
@@ -247,53 +223,6 @@ async function pruneUnreachableHistoryCommits(
             },
           } satisfies StoredRepository);
         }
-        await completed;
-        return records.length === batchSize ? records.at(-1)?.key : undefined;
-      },
-    );
-    if (lastKey === undefined) return;
-    after = lastKey;
-  }
-}
-
-function readReachableBatch(
-  record: StoredRepository,
-  oids: readonly string[],
-  indexedDB: IDBFactory,
-) {
-  return withRepositoryHistoryDatabase(indexedDB, async (database) => {
-    const transaction = database.transaction(commitStoreName, "readonly");
-    const completed = transactionCompleted(transaction);
-    const store = transaction.objectStore(commitStoreName);
-    const commits = await Promise.all(
-      oids.map((oid) =>
-        requestResult<StoredCommit | undefined>(
-          store.get(commitKey(record.environmentId, record.repositoryId, oid)),
-        ),
-      ),
-    );
-    await completed;
-    return commits;
-  });
-}
-
-async function visitHistoryCacheCommits(
-  record: StoredRepository,
-  visit: (commit: StoredCommit) => void,
-  indexedDB: IDBFactory,
-) {
-  let after: string | undefined;
-  for (;;) {
-    const lastKey = await withRepositoryHistoryDatabase(
-      indexedDB,
-      async (database) => {
-        const transaction = database.transaction(commitStoreName, "readonly");
-        const completed = transactionCompleted(transaction);
-        const store = transaction.objectStore(commitStoreName);
-        const records = await requestResult<StoredCommit[]>(
-          store.getAll(repositoryCommitRange(record.key, after), batchSize),
-        );
-        for (const commit of records) visit(commit);
         await completed;
         return records.length === batchSize ? records.at(-1)?.key : undefined;
       },

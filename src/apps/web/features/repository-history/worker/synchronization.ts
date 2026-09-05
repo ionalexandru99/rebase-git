@@ -1,14 +1,13 @@
 import { decodeRepositoryHistoryBatch } from "@rebase/contracts";
-import { prepareRepositoryHistoryOrder } from "#web/features/repository-history/repository-history-query";
-import { createRepositoryHistoryRequestId } from "#web/features/repository-history/repository-history-request-id";
-import { queueHistoryStorageWrite as queueStorageWrite } from "#web/features/repository-history/repository-history-storage-maintenance";
+import { queueHistoryStorageWrite as queueStorageWrite } from "#web/features/repository-history/cache/repository-history-storage-maintenance";
+import { prepareRepositoryHistoryOrder } from "#web/features/repository-history/query/repository-history-query";
 import {
   beginRepositoryHistorySynchronization,
   completeStoredRepositoryHistory,
   restartRepositoryHistorySynchronization,
   storeRepositoryHistoryBatch,
-} from "#web/features/repository-history/repository-history-store";
-import type { RepositoryHistoryWorkerRequest } from "#web/features/repository-history/repository-history-worker.contract";
+} from "#web/features/repository-history/replica/repository-history-store";
+import { createRepositoryHistoryRequestId } from "#web/features/repository-history/transport/repository-history-request-id";
 import type {
   ConnectedReader,
   RepositoryReplica,
@@ -18,6 +17,7 @@ import {
   post,
   publishSnapshot,
 } from "#web/features/repository-history/worker/replica-state";
+import type { RepositoryHistoryWorkerRequest } from "#web/features/repository-history/worker/repository-history-worker.contract";
 import { writeStoredHistory } from "#web/features/repository-history/worker/repository-replicas";
 import {
   activeSynchronization,

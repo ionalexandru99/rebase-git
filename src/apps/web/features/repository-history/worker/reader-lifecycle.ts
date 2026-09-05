@@ -1,11 +1,7 @@
 import { Effect, Exit, Scope } from "effect";
-import { RepositoryHistoryEpoch } from "#web/features/repository-history/repository-history-epoch";
-import { watchRepositoryHistoryReaderLease } from "#web/features/repository-history/repository-history-reader-lease";
-import { isHistoryStorageQuotaError } from "#web/features/repository-history/repository-history-storage-policy";
-import type {
-  ConnectRepositoryHistoryReader,
-  RepositoryHistoryWorkerRequest,
-} from "#web/features/repository-history/repository-history-worker.contract";
+import { isHistoryStorageQuotaError } from "#web/features/repository-history/cache/repository-history-storage-policy";
+import { RepositoryHistoryEpoch } from "#web/features/repository-history/reader/repository-history-epoch";
+import { watchRepositoryHistoryReaderLease } from "#web/features/repository-history/reader/repository-history-reader-lease";
 import {
   assignFreshnessOwner,
   closeFreshness,
@@ -21,6 +17,10 @@ import {
   publishSnapshot,
   workerFailure,
 } from "#web/features/repository-history/worker/replica-state";
+import type {
+  ConnectRepositoryHistoryReader,
+  RepositoryHistoryWorkerRequest,
+} from "#web/features/repository-history/worker/repository-history-worker.contract";
 import {
   createReplica,
   repositories,

@@ -1,7 +1,3 @@
-import type {
-  ConnectRepositoryHistoryReader,
-  RepositoryHistoryWorkerResponse,
-} from "#web/features/repository-history/repository-history-worker.contract";
 import { clearingAllCaches } from "#web/features/repository-history/worker/cache-lifecycle";
 import {
   closeReader,
@@ -9,6 +5,10 @@ import {
 } from "#web/features/repository-history/worker/reader-lifecycle";
 import { handleReaderMessage } from "#web/features/repository-history/worker/reader-messages";
 import { post } from "#web/features/repository-history/worker/replica-state";
+import type {
+  ConnectRepositoryHistoryReader,
+  RepositoryHistoryWorkerResponse,
+} from "#web/features/repository-history/worker/repository-history-worker.contract";
 import { repositories } from "#web/features/repository-history/worker/repository-replicas";
 
 const pendingConnections = new Set<ConnectRepositoryHistoryReader>();

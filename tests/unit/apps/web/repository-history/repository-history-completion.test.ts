@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   acceptRepositoryHistoryBatch,
   completeRepositoryHistory,
-} from "#web/features/repository-history/repository-history-completion";
+} from "#web/features/repository-history/replica/repository-history-completion";
 
 const snapshot = {
   id: "a".repeat(64),

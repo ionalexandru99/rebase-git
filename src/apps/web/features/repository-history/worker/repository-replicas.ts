@@ -1,10 +1,10 @@
-import { prepareRepositoryHistoryOrder } from "#web/features/repository-history/repository-history-query";
 import {
   clearHistoryCache,
   markHistoryCacheOpened,
-} from "#web/features/repository-history/repository-history-storage";
-import { writeHistoryUnderPressure } from "#web/features/repository-history/repository-history-storage-maintenance";
-import { readStoredRepositoryHistoryState } from "#web/features/repository-history/repository-history-store";
+} from "#web/features/repository-history/cache/repository-history-storage";
+import { writeHistoryUnderPressure } from "#web/features/repository-history/cache/repository-history-storage-maintenance";
+import { prepareRepositoryHistoryOrder } from "#web/features/repository-history/query/repository-history-query";
+import { readStoredRepositoryHistoryState } from "#web/features/repository-history/replica/repository-history-store";
 import type { RepositoryReplica } from "#web/features/repository-history/worker/history-worker.contract";
 import {
   invalidateStoredHistory,

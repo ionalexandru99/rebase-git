@@ -29,13 +29,13 @@ import { useCommitGraphCommands } from "#web/features/commit-graph/hooks/use-com
 import { useCommitGraphPages } from "#web/features/commit-graph/hooks/use-commit-graph-pages";
 import { useCommitGraphSelection } from "#web/features/commit-graph/hooks/use-commit-graph-selection";
 import { useCommitGraphViewport } from "#web/features/commit-graph/hooks/use-commit-graph-viewport";
-import type { RepositoryHistoryCacheDialogProps } from "#web/features/repository-history/diagnostics/repository-history-cache-dialog.contract";
-import { useRepositoryHistoryFetch } from "#web/features/repository-history/freshness/use-repository-history-fetch";
+import type { RepositoryHistoryCacheDialogProps } from "#web/features/repository-history/diagnostics/components/repository-history-cache-dialog.contract";
+import { useRepositoryHistoryFetch } from "#web/features/repository-history/freshness/hooks/use-repository-history-fetch";
 import type {
   RepositoryHistoryQuery,
   RepositoryHistoryReader,
 } from "#web/features/repository-history/repository-history-reader.contract";
-import type { RepositoryHistorySearchActions } from "#web/features/repository-history/search/repository-history-search-controls.contract";
+import type { RepositoryHistorySearchActions } from "#web/features/repository-history/search/components/repository-history-search-controls.contract";
 import { Button } from "#web-ui/components/ui/button";
 import { CommitCommandMenu } from "#web-ui/features/commit-commands/commit-command-menu";
 import {
@@ -53,8 +53,8 @@ import { CommitGraphToolbar } from "#web-ui/features/commit-graph/components/com
 import { CommitGraphToolbarDialogs } from "#web-ui/features/commit-graph/components/commit-graph-toolbar-dialogs";
 import { CommitGraphVirtualWindow } from "#web-ui/features/commit-graph/components/commit-graph-virtual-window";
 import { HistoryScopeStrip } from "#web-ui/features/commit-graph/components/history-scope-strip";
-import { RepositoryHistoryFreshnessStatus } from "#web-ui/features/repository-history/freshness/repository-history-freshness-status";
-import { RepositoryHistorySearchControls } from "#web-ui/features/repository-history/search/repository-history-search-controls";
+import { RepositoryHistoryFreshnessStatus } from "#web-ui/features/repository-history/freshness/components/repository-history-freshness-status";
+import { RepositoryHistorySearchControls } from "#web-ui/features/repository-history/search/components/repository-history-search-controls";
 
 const emptyRefLabels: readonly RepositoryHistoryRefTarget[] = [];
 

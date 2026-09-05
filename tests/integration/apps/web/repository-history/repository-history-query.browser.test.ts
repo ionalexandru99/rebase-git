@@ -1,26 +1,26 @@
 import type { RepositoryCommit } from "@rebase/contracts";
 import { describe, expect, it, vi } from "vitest";
-import type { HistoryOrderCache } from "#web/features/repository-history/history-order.contract";
-import { readCurrentRepositoryHistory } from "#web/features/repository-history/read-current-repository-history";
-import {
-  repositoryKey,
-  repositoryStoreName,
-  requestResult,
-  transactionCompleted,
-  withRepositoryHistoryDatabase,
-} from "#web/features/repository-history/repository-history-database";
-import type { StoredRepository } from "#web/features/repository-history/repository-history-database.contract";
+import type { HistoryOrderCache } from "#web/features/repository-history/query/history-order.contract";
+import { readCurrentRepositoryHistory } from "#web/features/repository-history/query/read-current-repository-history";
 import {
   historyOrderScopeKey,
   locateRepositoryHistoryCommits,
   prepareRepositoryHistoryOrder,
   readRepositoryHistory,
-} from "#web/features/repository-history/repository-history-query";
+} from "#web/features/repository-history/query/repository-history-query";
 import {
   completeStoredRepositoryHistory,
   storeRepositoryHistoryBatch,
   storeRepositoryHistoryPage,
-} from "#web/features/repository-history/repository-history-store";
+} from "#web/features/repository-history/replica/repository-history-store";
+import {
+  repositoryStoreName,
+  requestResult,
+  transactionCompleted,
+  withRepositoryHistoryDatabase,
+} from "#web/persistence/repository-history/repository-history-database";
+import type { StoredRepository } from "#web/persistence/repository-history/repository-history-database.contract";
+import { repositoryKey } from "#web/persistence/repository-history/repository-history-records";
 
 describe("local ordered history pages", () => {
   it.each([false, true])(

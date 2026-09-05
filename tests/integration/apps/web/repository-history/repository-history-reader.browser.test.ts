@@ -5,18 +5,10 @@ import {
 } from "@rebase/contracts";
 import { describe, expect, it, vi } from "vitest";
 import { createBrowserRepositoryHistoryReader } from "#web/features/repository-history/browser-repository-history-reader";
-import { withRepositoryHistoryDatabase } from "#web/features/repository-history/repository-history-database";
 import {
   readRepositoryCommits,
   readRepositoryHistory,
-} from "#web/features/repository-history/repository-history-query";
-import type { RepositoryHistoryGateway } from "#web/features/repository-history/repository-history-reader.contract";
-import {
-  RepositoryHistoryOffline,
-  RepositoryHistoryRejected,
-  RepositoryHistoryStorageUnavailable,
-  RepositoryHistoryUnavailable,
-} from "#web/features/repository-history/repository-history-reader.contract";
+} from "#web/features/repository-history/query/repository-history-query";
 import {
   beginRepositoryHistorySynchronization,
   completeStoredRepositoryHistory,
@@ -24,7 +16,15 @@ import {
   restartRepositoryHistorySynchronization,
   storeRepositoryHistoryBatch,
   storeRepositoryHistoryPage,
-} from "#web/features/repository-history/repository-history-store";
+} from "#web/features/repository-history/replica/repository-history-store";
+import type { RepositoryHistoryGateway } from "#web/features/repository-history/repository-history-reader.contract";
+import {
+  RepositoryHistoryOffline,
+  RepositoryHistoryRejected,
+  RepositoryHistoryStorageUnavailable,
+  RepositoryHistoryUnavailable,
+} from "#web/features/repository-history/repository-history-reader.contract";
+import { withRepositoryHistoryDatabase } from "#web/persistence/repository-history/repository-history-database";
 
 describe("browser repository history reader", () => {
   it("rejects oversized navigation requests without failing linked readers", async () => {

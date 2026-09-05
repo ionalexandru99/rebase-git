@@ -1,3 +1,7 @@
+import type { RepositoryHistoryStorageUnavailable } from "#web/persistence/repository-history/repository-history-storage.contract";
+
+export { RepositoryHistoryStorageUnavailable } from "#web/persistence/repository-history/repository-history-storage.contract";
+
 import type {
   ReadRepositoryHistory,
   RepositoryCommit,
@@ -12,13 +16,13 @@ import type { EnvironmentConnectionFailure } from "#web/features/environment-con
 import type {
   HistoryAncestryRoute,
   HistoryParentEdge,
-} from "#web/features/repository-history/history-order.contract";
+} from "#web/features/repository-history/query/history-order.contract";
+import type { RepositoryHistoryCacheManagement } from "#web/features/repository-history/repository-history-storage.contract";
+import type { RepositoryHistorySearch } from "#web/features/repository-history/search/repository-history-search.contract";
 import type {
   RepositoryFreshnessGateway,
   RepositoryFreshnessTransport,
-} from "#web/features/repository-history/repository-freshness.contract";
-import type { RepositoryHistoryCacheManagement } from "#web/features/repository-history/repository-history-storage.contract";
-import type { RepositoryHistorySearch } from "#web/features/repository-history/search/repository-history-search.contract";
+} from "#web/features/repository-history/transport/repository-freshness.contract";
 
 export type { RepositoryHistoryRefTarget } from "@rebase/contracts";
 
@@ -91,14 +95,6 @@ export class RepositoryHistoryUnavailable extends Data.TaggedError(
 export class RepositoryHistoryOffline extends Data.TaggedError(
   "RepositoryHistoryOffline",
 ) {}
-
-export class RepositoryHistoryStorageUnavailable extends Data.TaggedError(
-  "RepositoryHistoryStorageUnavailable",
-)<{ readonly cause?: unknown }> {
-  constructor(options: { readonly cause?: unknown } = {}) {
-    super(options);
-  }
-}
 
 export type RepositoryHistoryReaderError =
   | RepositoryHistoryOffline

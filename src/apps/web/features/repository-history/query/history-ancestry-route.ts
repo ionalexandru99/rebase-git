@@ -2,7 +2,7 @@ import type {
   HistoryAncestryIndex,
   HistoryAncestryRoute,
   HistoryParentEdge,
-} from "#web/features/repository-history/history-order.contract";
+} from "#web/features/repository-history/query/history-order.contract";
 
 export function findHistoryAncestryRoute(
   index: HistoryAncestryIndex,

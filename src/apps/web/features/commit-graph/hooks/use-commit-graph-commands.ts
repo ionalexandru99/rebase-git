@@ -19,7 +19,7 @@ import type {
   RepositoryHistoryReader,
   RepositoryHistorySnapshot,
 } from "#web/features/repository-history/repository-history-reader.contract";
-import type { RepositoryHistorySearchActions } from "#web/features/repository-history/search/repository-history-search-controls.contract";
+import type { RepositoryHistorySearchActions } from "#web/features/repository-history/search/components/repository-history-search-controls.contract";
 import { historyLabelTarget } from "#web-ui/features/commit-graph/components/commit-ref-labels";
 
 export function useCommitGraphCommands({

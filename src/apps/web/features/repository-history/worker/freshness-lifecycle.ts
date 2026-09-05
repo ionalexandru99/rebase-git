@@ -1,5 +1,4 @@
 import type { RepositoryFreshness } from "@rebase/contracts";
-import type { RepositoryHistoryWorkerRequest } from "#web/features/repository-history/repository-history-worker.contract";
 import type {
   ConnectedReader,
   RepositoryReplica,
@@ -9,6 +8,7 @@ import {
   publishSnapshot,
   workerFailure,
 } from "#web/features/repository-history/worker/replica-state";
+import type { RepositoryHistoryWorkerRequest } from "#web/features/repository-history/worker/repository-history-worker.contract";
 import { startSynchronization } from "#web/features/repository-history/worker/synchronization";
 
 export function requestFreshnessCommand(

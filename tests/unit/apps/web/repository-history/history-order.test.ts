@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { HistoryOrderIndex } from "#web/features/repository-history/history-order";
-import type { HistoryOrderNode } from "#web/features/repository-history/history-order.contract";
-import { historyOrderScopeKey } from "#web/features/repository-history/repository-history-query";
+import { HistoryOrderIndex } from "#web/features/repository-history/query/history-order";
+import type { HistoryOrderNode } from "#web/features/repository-history/query/history-order.contract";
+import { historyOrderScopeKey } from "#web/features/repository-history/query/repository-history-query";
 
 function orderHistory(
   nodes: readonly HistoryOrderNode[],

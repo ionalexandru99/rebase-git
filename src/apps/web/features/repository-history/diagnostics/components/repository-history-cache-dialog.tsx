@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
-import type { RepositoryHistoryCacheDialogProps } from "#web/features/repository-history/diagnostics/repository-history-cache-dialog.contract";
+import type { RepositoryHistoryCacheDialogProps } from "#web/features/repository-history/diagnostics/components/repository-history-cache-dialog.contract";
 import type {
   RepositoryHistoryCacheAction,
   RepositoryHistoryStorageDiagnostics,
@@ -21,7 +21,7 @@ import {
   DialogDescription,
   DialogTitle,
 } from "#web-ui/components/ui/dialog";
-import { RepositoryHistoryCacheList } from "#web-ui/features/repository-history/diagnostics/repository-history-cache-list";
+import { RepositoryHistoryCacheList } from "#web-ui/features/repository-history/diagnostics/components/repository-history-cache-list";
 
 const actions: Record<
   RepositoryHistoryCacheAction,

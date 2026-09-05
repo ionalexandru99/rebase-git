@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vite-plus/test";
-import { RepositoryHistoryEpoch } from "#web/features/repository-history/repository-history-epoch";
+import { RepositoryHistoryEpoch } from "#web/features/repository-history/reader/repository-history-epoch";
 
 describe("repository history epoch", () => {
   it("rejects stale results after a request is superseded", () => {

@@ -1,13 +1,13 @@
 import type { RepositoryCommit } from "@rebase/contracts";
 import { expect, it } from "vitest";
-import type { HistoryOrderCache } from "#web/features/repository-history/history-order.contract";
-import { readRepositoryHistory } from "#web/features/repository-history/repository-history-query";
+import type { HistoryOrderCache } from "#web/features/repository-history/query/history-order.contract";
+import { readRepositoryHistory } from "#web/features/repository-history/query/repository-history-query";
 import {
   beginRepositoryHistorySynchronization,
   completeStoredRepositoryHistory,
   storeRepositoryHistoryBatch,
   storeRepositoryHistoryPage,
-} from "#web/features/repository-history/repository-history-store";
+} from "#web/features/repository-history/replica/repository-history-store";
 
 it("reuses full foreground windows after older batches while retaining the first page", async () => {
   const environmentId = crypto.randomUUID();

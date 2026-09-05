@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { createRepositoryHistoryRequestId } from "#web/features/repository-history/repository-history-request-id";
+import { createRepositoryHistoryRequestId } from "#web/features/repository-history/transport/repository-history-request-id";
 
 afterEach(() => vi.unstubAllGlobals());
 

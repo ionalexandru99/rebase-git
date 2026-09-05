@@ -1,29 +1,27 @@
 import type { RepositoryCommit } from "@rebase/contracts";
-import { HistoryOrderIndex } from "#web/features/repository-history/history-order";
+import { HistoryOrderIndex } from "#web/features/repository-history/query/history-order";
 import type {
   HistoryOrderCache,
   HistoryOrderNode,
-} from "#web/features/repository-history/history-order.contract";
-import { selectHistoryPage } from "#web/features/repository-history/history-page-selection";
-import {
-  commitKey,
-  commitStoreName,
-  repositoryCommitRange,
-  repositoryKey,
-  repositoryStoreName,
-  requestResult,
-  transactionCompleted,
-  withRepositoryHistoryDatabase,
-} from "#web/features/repository-history/repository-history-database";
-import type {
-  StoredCommit,
-  StoredRepository,
-} from "#web/features/repository-history/repository-history-database.contract";
+} from "#web/features/repository-history/query/history-order.contract";
+import { selectHistoryPage } from "#web/features/repository-history/query/history-page-selection";
+import { readStoredRepositoryHistoryState } from "#web/features/repository-history/replica/repository-history-store";
 import type {
   RepositoryHistoryPosition,
   RepositoryHistoryQuery,
 } from "#web/features/repository-history/repository-history-reader.contract";
-import { readStoredRepositoryHistoryState } from "#web/features/repository-history/repository-history-store";
+import type { StoredCommit } from "#web/persistence/repository-history/repository-history-database.contract";
+import {
+  commitKey,
+  repositoryKey,
+} from "#web/persistence/repository-history/repository-history-records";
+import type { RepositoryHistoryReadTransaction } from "#web/persistence/repository-history/repository-history-transaction.contract";
+import {
+  readStoredCommitChunk,
+  readStoredCommits,
+  readStoredHistory,
+  readStoredRepository,
+} from "#web/persistence/repository-history/repository-history-transactions";
 
 export async function locateRepositoryHistoryCommit(
   environmentId: string,
@@ -87,17 +85,8 @@ async function locateCachedHistoryPrefix(
   scopeKey: string,
   oids: readonly string[],
 ) {
-  return withRepositoryHistoryDatabase(
-    globalThis.indexedDB,
-    async (database) => {
-      const transaction = database.transaction(repositoryStoreName, "readonly");
-      const completed = transactionCompleted(transaction);
-      const repository = await requestResult<StoredRepository | undefined>(
-        transaction
-          .objectStore(repositoryStoreName)
-          .get(repositoryKey(environmentId, repositoryId)),
-      );
-      await completed;
+  return readStoredRepository(environmentId, repositoryId).then(
+    (repository) => {
       const page = repository?.cachedPage;
       if (
         page?.offset !== 0 ||
@@ -198,17 +187,10 @@ export function readRepositoryHistory(
       new Error("History query is outside the supported range"),
     );
   }
-  return withRepositoryHistoryDatabase(indexedDB, async (database) => {
-    const transaction = database.transaction(
-      [commitStoreName, repositoryStoreName],
-      "readonly",
-    );
-    const completed = transactionCompleted(transaction);
-    const commits = transaction.objectStore(commitStoreName);
-    const repository = await requestResult<StoredRepository | undefined>(
-      transaction
-        .objectStore(repositoryStoreName)
-        .get(repositoryKey(environmentId, repositoryId)),
+  return readStoredHistory(indexedDB, async (transaction) => {
+    const { completed } = transaction;
+    const repository = await transaction.readRepository(
+      repositoryKey(environmentId, repositoryId),
     );
     if (repository === undefined) {
       await completed;
@@ -217,9 +199,7 @@ export function readRepositoryHistory(
     const roots = normalizedOids(query.roots.map((root) => root.oid));
     const storedRoots = await Promise.all(
       roots.map((oid) =>
-        requestResult<StoredCommit | undefined>(
-          commits.get(commitKey(environmentId, repositoryId, oid)),
-        ),
+        transaction.readCommit(commitKey(environmentId, repositoryId, oid)),
       ),
     );
     if (storedRoots.some((root) => root === undefined)) {
@@ -260,7 +240,7 @@ export function readRepositoryHistory(
         relativeOffset + query.limit,
       );
       const result = await readCommitsByOid(
-        commits,
+        transaction,
         environmentId,
         repositoryId,
         cachedOids,
@@ -347,7 +327,7 @@ export function readRepositoryHistory(
       return orderCache.revision === revision ? result : undefined;
     }
     const result = await readCommitsByOid(
-      commits,
+      transaction,
       environmentId,
       repositoryId,
       ordered.slice(offset, offset + query.limit),
@@ -366,31 +346,23 @@ export function readRepositoryCommits(
   if (oids.length > 1_000) {
     return Promise.reject(new Error("Query is too large"));
   }
-  return withRepositoryHistoryDatabase(indexedDB, async (database) => {
-    const transaction = database.transaction(commitStoreName, "readonly");
-    const completed = transactionCompleted(transaction);
-    const records = await readCommitsByOid(
-      transaction.objectStore(commitStoreName),
-      environmentId,
-      repositoryId,
-      oids,
-    );
-    await completed;
-    return records;
-  });
+  return readStoredCommits(environmentId, repositoryId, oids, indexedDB).then(
+    (records) =>
+      records.flatMap((record) =>
+        record === undefined ? [] : [record.commit],
+      ),
+  );
 }
 
 function readCommitsByOid(
-  store: IDBObjectStore,
+  transaction: RepositoryHistoryReadTransaction,
   environmentId: string,
   repositoryId: string,
   oids: readonly string[],
 ) {
   return Promise.all(
     oids.map((oid) =>
-      requestResult<StoredCommit | undefined>(
-        store.get(commitKey(environmentId, repositoryId, oid)),
-      ),
+      transaction.readCommit(commitKey(environmentId, repositoryId, oid)),
     ),
   ).then((records) =>
     records.flatMap((record) => (record === undefined ? [] : [record.commit])),
@@ -398,15 +370,12 @@ function readCommitsByOid(
 }
 
 async function readHistoryOrderNodes(
-  readChunk: (range: IDBKeyRange) => Promise<StoredCommit[]>,
-  environmentId: string,
-  repositoryId: string,
+  readChunk: (after: string | undefined) => Promise<StoredCommit[]>,
 ) {
-  const key = repositoryKey(environmentId, repositoryId);
   let after: string | undefined;
   const result: (HistoryOrderNode & { epoch: number; order: number })[] = [];
   while (true) {
-    const records = await readChunk(repositoryCommitRange(key, after));
+    const records = await readChunk(after);
     for (const record of records) {
       const epoch = record.topologicalEpoch;
       const order = record.topologicalOrder;
@@ -467,20 +436,14 @@ async function buildRepositoryHistoryOrder(
   revision: number,
   indexedDB: IDBFactory | undefined,
 ) {
-  const nodes = await readHistoryOrderNodes(
-    (range) =>
-      withRepositoryHistoryDatabase(indexedDB, async (database) => {
-        if (revision !== cache.revision) return [];
-        const transaction = database.transaction(commitStoreName, "readonly");
-        const completed = transactionCompleted(transaction);
-        const nodes = await requestResult<StoredCommit[]>(
-          transaction.objectStore(commitStoreName).getAll(range, 2_048),
-        );
-        await completed;
-        return nodes;
-      }),
-    environmentId,
-    repositoryId,
+  const nodes = await readHistoryOrderNodes((after) =>
+    readStoredCommitChunk(
+      repositoryKey(environmentId, repositoryId),
+      after,
+      2_048,
+      indexedDB,
+      () => revision === cache.revision,
+    ),
   );
   if (revision === cache.revision) cache.index = new HistoryOrderIndex(nodes);
 }

@@ -1,10 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
-import { RepositoryHistoryStorageUnavailable } from "#web/features/repository-history/repository-history-reader.contract";
-import type { RepositoryHistoryCacheDiagnostics } from "#web/features/repository-history/repository-history-storage.contract";
 import {
   historyCacheCleanupCandidates,
   writeHistoryWithCleanup,
-} from "#web/features/repository-history/repository-history-storage-policy";
+} from "#web/features/repository-history/cache/repository-history-storage-policy";
+import { RepositoryHistoryStorageUnavailable } from "#web/features/repository-history/repository-history-reader.contract";
+import type { RepositoryHistoryCacheDiagnostics } from "#web/features/repository-history/repository-history-storage.contract";
 
 describe("history cache cleanup", () => {
   it("evicts complete closed repositories in last-opened order across environments", () => {

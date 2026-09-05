@@ -5,15 +5,15 @@ import {
 } from "@rebase/contracts";
 import { Deferred, Effect } from "effect";
 import { sendEnvironmentSocketMessage } from "#web/features/environment-connection/websocket/environment-socket";
-import type {
-  RepositoryFreshnessFailure,
-  RepositoryFreshnessTransportRuntime,
-} from "#web/features/repository-history/repository-freshness.contract";
 import {
   RepositoryHistoryRejected,
   RepositoryHistoryUnavailable,
 } from "#web/features/repository-history/repository-history-reader.contract";
-import { createRepositoryHistoryRequestId } from "#web/features/repository-history/repository-history-request-id";
+import type {
+  RepositoryFreshnessFailure,
+  RepositoryFreshnessTransportRuntime,
+} from "#web/features/repository-history/transport/repository-freshness.contract";
+import { createRepositoryHistoryRequestId } from "#web/features/repository-history/transport/repository-history-request-id";
 
 interface PendingCommand {
   readonly repositoryId: string;

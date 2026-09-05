@@ -1,6 +1,6 @@
 import type { RepositoryRefs } from "@rebase/contracts";
 import { describe, expect, it } from "vite-plus/test";
-import { resolveAutomaticHistoryRoots } from "#web/features/repository-history/automatic-history-roots";
+import { resolveAutomaticHistoryRoots } from "#web/features/repository-history/replica/automatic-history-roots";
 
 const repositoryId = "00000000-0000-4000-8000-000000000001";
 const commits = Array.from({ length: 8 }, (_, index) =>

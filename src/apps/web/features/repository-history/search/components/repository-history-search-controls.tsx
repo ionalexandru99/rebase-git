@@ -14,13 +14,13 @@ import {
   useState,
 } from "react";
 import type { RepositoryHistorySnapshot } from "#web/features/repository-history/repository-history-reader.contract";
-import { historySearchPageSize } from "#web/features/repository-history/search/read-next-history-search-page";
-import type { RepositoryHistorySearch } from "#web/features/repository-history/search/repository-history-search.contract";
 import type {
   RepositoryHistorySearchActions,
   RepositoryHistorySearchBindings,
-} from "#web/features/repository-history/search/repository-history-search-controls.contract";
-import { useRepositoryHistorySearch } from "#web/features/repository-history/search/use-repository-history-search";
+} from "#web/features/repository-history/search/components/repository-history-search-controls.contract";
+import { useRepositoryHistorySearch } from "#web/features/repository-history/search/hooks/use-repository-history-search";
+import { historySearchPageSize } from "#web/features/repository-history/search/read-next-history-search-page";
+import type { RepositoryHistorySearch } from "#web/features/repository-history/search/repository-history-search.contract";
 import { Button } from "#web-ui/components/ui/button";
 import { Input } from "#web-ui/components/ui/input";
 

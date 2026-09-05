@@ -2,9 +2,9 @@ import type { RepositoryFreshness } from "@rebase/contracts";
 import { Effect, Fiber } from "effect";
 import { describe, expect, it, vi } from "vite-plus/test";
 import { environmentResponseError } from "#web/features/environment-connection/environment-connection-errors";
-import { createRepositoryFreshnessTransport } from "#web/features/repository-history/repository-freshness-transport";
-import { createRepositoryHistoryGateway } from "#web/features/repository-history/repository-history-gateway";
 import type { RepositoryHistoryTransport } from "#web/features/repository-history/repository-history-reader.contract";
+import { createRepositoryFreshnessTransport } from "#web/features/repository-history/transport/repository-freshness-transport";
+import { createRepositoryHistoryGateway } from "#web/features/repository-history/transport/repository-history-gateway";
 
 const repositoryId = "00000000-0000-4000-8000-000000000001";
 const state: RepositoryFreshness = {

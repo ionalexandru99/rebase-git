@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { HistoryOrderIndex } from "#web/features/repository-history/history-order";
+import { HistoryOrderIndex } from "#web/features/repository-history/query/history-order";
 
 const node = (oid: string, parents: readonly string[] = []) => ({
   oid,

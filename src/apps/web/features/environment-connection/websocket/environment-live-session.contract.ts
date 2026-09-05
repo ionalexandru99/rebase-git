@@ -4,7 +4,7 @@ import type { EnvironmentConnectionFailure } from "#web/features/environment-con
 import type { NegotiatedEnvironment } from "#web/features/environment-connection/environment-protocol-connection.contract";
 import type { EnvironmentConnectionState } from "#web/features/environment-connection/websocket/environment-connection-state";
 import type { EnvironmentSocketEvent } from "#web/features/environment-connection/websocket/environment-socket.contract";
-import type { RepositoryHistoryTransportRuntime } from "#web/features/repository-history/repository-history-transport.contract";
+import type { RepositoryHistoryTransportRuntime } from "#web/features/repository-history/transport/repository-history-transport.contract";
 
 export interface EnvironmentLiveSession {
   readonly credential: string;

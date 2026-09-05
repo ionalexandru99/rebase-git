@@ -2,16 +2,16 @@ import type { RepositoryCommit } from "@rebase/contracts";
 import { describe, expect, it, vi } from "vitest";
 import { createBrowserRepositoryHistoryReader } from "#web/features/repository-history/browser-repository-history-reader";
 import {
-  emptyStoredRepository,
-  storedCommit,
-} from "#web/features/repository-history/repository-history-database";
-import { RepositoryHistoryOffline } from "#web/features/repository-history/repository-history-reader.contract";
-import {
   completeStoredRepositoryHistory,
   storeRepositoryHistoryBatch,
   storeRepositoryHistoryPage,
-} from "#web/features/repository-history/repository-history-store";
+} from "#web/features/repository-history/replica/repository-history-store";
+import { RepositoryHistoryOffline } from "#web/features/repository-history/repository-history-reader.contract";
 import { searchStoredRepositoryHistory } from "#web/features/repository-history/search/repository-history-search";
+import {
+  emptyStoredRepository,
+  storedCommit,
+} from "#web/persistence/repository-history/repository-history-records";
 
 describe("browser metadata search", () => {
   it("stops before another bulk chunk when cancellation arrives during a read", async () => {

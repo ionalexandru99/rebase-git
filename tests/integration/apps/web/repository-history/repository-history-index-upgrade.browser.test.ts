@@ -1,17 +1,19 @@
 import type { RepositoryCommit } from "@rebase/contracts";
 import { expect, it } from "vitest";
-import type { HistoryOrderCache } from "#web/features/repository-history/history-order.contract";
+import type { HistoryOrderCache } from "#web/features/repository-history/query/history-order.contract";
+import { prepareRepositoryHistoryOrder } from "#web/features/repository-history/query/repository-history-query";
 import {
   commitStoreName,
-  emptyStoredRepository,
   repositoryStoreName,
   requestResult,
-  storedCommit,
   transactionCompleted,
   withRepositoryHistoryDatabase,
-} from "#web/features/repository-history/repository-history-database";
-import type { StoredCommit } from "#web/features/repository-history/repository-history-database.contract";
-import { prepareRepositoryHistoryOrder } from "#web/features/repository-history/repository-history-query";
+} from "#web/persistence/repository-history/repository-history-database";
+import type { StoredCommit } from "#web/persistence/repository-history/repository-history-database.contract";
+import {
+  emptyStoredRepository,
+  storedCommit,
+} from "#web/persistence/repository-history/repository-history-records";
 
 it.each([2, 4])(
   "preserves history and ordering when upgrading a version-%i cache",

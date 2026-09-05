@@ -1,19 +1,5 @@
 import type { RepositoryCommit } from "@rebase/contracts";
 import {
-  commitKey,
-  commitStoreName,
-  repositoryCommitRange,
-  repositoryKey,
-  repositoryStoreName,
-  requestResult,
-  transactionCompleted,
-  withRepositoryHistoryDatabase,
-} from "#web/features/repository-history/repository-history-database";
-import type {
-  StoredCommit,
-  StoredRepository,
-} from "#web/features/repository-history/repository-history-database.contract";
-import {
   matchingHistoryMetadata,
   normalizeHistorySearch,
 } from "#web/features/repository-history/search/history-metadata-search";
@@ -25,6 +11,8 @@ import type {
   RepositoryHistorySearchQuery,
   RepositoryHistorySearchResult,
 } from "#web/features/repository-history/search/repository-history-search.contract";
+import { withHistorySearchRecords } from "#web/persistence/repository-history/repository-history-search-records";
+import type { RepositoryHistorySearchRecords } from "#web/persistence/repository-history/repository-history-transaction.contract";
 
 const maximumScannedCommits = 4_096;
 const chunkSize = 256;
@@ -45,8 +33,12 @@ export async function searchStoredRepositoryHistory(
     throw new Error("History search query exceeds its limits");
   signal?.throwIfAborted();
   try {
-    return await withRepositoryHistoryDatabase(indexedDB, (database) =>
-      searchHistoryPage(environmentId, repositoryId, query, database, signal),
+    return await withHistorySearchRecords(
+      environmentId,
+      repositoryId,
+      indexedDB,
+      (records) =>
+        searchHistoryPage(environmentId, repositoryId, query, records, signal),
     );
   } catch (error) {
     signal?.throwIfAborted();
@@ -58,7 +50,7 @@ async function searchHistoryPage(
   environmentId: string,
   repositoryId: string,
   query: RepositoryHistorySearchQuery,
-  database: IDBDatabase,
+  records: RepositoryHistorySearchRecords,
   signal?: AbortSignal,
 ): Promise<RepositoryHistorySearchResult> {
   let after = decodeHistorySearchCursor(
@@ -67,7 +59,7 @@ async function searchHistoryPage(
     query.text,
     query.cursor,
   );
-  const state = await readSearchState(environmentId, repositoryId, database);
+  const state = await records.readRepository();
   signal?.throwIfAborted();
   const result = {
     replicaComplete:
@@ -81,12 +73,7 @@ async function searchHistoryPage(
   let scanned = 0;
   while (scanned < maximumScannedCommits && commits.length < query.limit) {
     signal?.throwIfAborted();
-    const chunk = await readSearchChunk(
-      environmentId,
-      repositoryId,
-      after,
-      database,
-    );
+    const chunk = await records.readChunk(after, chunkSize);
     signal?.throwIfAborted();
     if (chunk.length === 0) return { ...result, commits };
     for (const record of chunk) {
@@ -112,41 +99,4 @@ async function searchHistoryPage(
           ),
         }),
   };
-}
-
-async function readSearchState(
-  environmentId: string,
-  repositoryId: string,
-  database: IDBDatabase,
-) {
-  const transaction = database.transaction(repositoryStoreName, "readonly");
-  const completed = transactionCompleted(transaction);
-  const state = await requestResult<StoredRepository | undefined>(
-    transaction
-      .objectStore(repositoryStoreName)
-      .get(repositoryKey(environmentId, repositoryId)),
-  );
-  await completed;
-  return state;
-}
-
-async function readSearchChunk(
-  environmentId: string,
-  repositoryId: string,
-  after: string | undefined,
-  database: IDBDatabase,
-) {
-  const transaction = database.transaction(commitStoreName, "readonly");
-  const completed = transactionCompleted(transaction);
-  const range = repositoryCommitRange(
-    repositoryKey(environmentId, repositoryId),
-    after === undefined
-      ? undefined
-      : commitKey(environmentId, repositoryId, after),
-  );
-  const records = await requestResult<StoredCommit[]>(
-    transaction.objectStore(commitStoreName).getAll(range, chunkSize),
-  );
-  await completed;
-  return records;
 }

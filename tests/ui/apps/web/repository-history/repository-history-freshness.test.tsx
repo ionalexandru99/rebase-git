@@ -6,8 +6,8 @@ import {
   CommitGraphToolbarProvider,
   useCommitGraphToolbarModel,
 } from "#web/features/commit-graph/index";
-import type { RepositoryHistoryCacheReader } from "#web/features/repository-history/diagnostics/repository-history-cache-dialog.contract";
-import { useRepositoryHistoryFetch } from "#web/features/repository-history/freshness/use-repository-history-fetch";
+import type { RepositoryHistoryCacheReader } from "#web/features/repository-history/diagnostics/components/repository-history-cache-dialog.contract";
+import { useRepositoryHistoryFetch } from "#web/features/repository-history/freshness/hooks/use-repository-history-fetch";
 import {
   RepositoryHistoryOffline,
   type RepositoryHistoryReader,
@@ -17,8 +17,8 @@ import {
 import type { RepositoryHistorySearch } from "#web/features/repository-history/search/repository-history-search.contract";
 import { CommitGraphToolbar } from "#web-ui/features/commit-graph/components/commit-graph-toolbar";
 import { CommitGraphToolbarDialogs } from "#web-ui/features/commit-graph/components/commit-graph-toolbar-dialogs";
-import { RepositoryHistoryFreshnessStatus } from "#web-ui/features/repository-history/freshness/repository-history-freshness-status";
-import { RepositoryHistorySearchControls } from "#web-ui/features/repository-history/search/repository-history-search-controls";
+import { RepositoryHistoryFreshnessStatus } from "#web-ui/features/repository-history/freshness/components/repository-history-freshness-status";
+import { RepositoryHistorySearchControls } from "#web-ui/features/repository-history/search/components/repository-history-search-controls";
 
 const fresh: RepositoryFreshness = {
   defaultIntervalSeconds: 300,

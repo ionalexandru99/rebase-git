@@ -1,9 +1,9 @@
-import "#web/features/repository-history/repository-history-worker";
+import "#web/features/repository-history/worker/repository-history-worker";
+import { queueHistoryStorageWrite } from "#web/features/repository-history/cache/repository-history-storage-maintenance";
 import {
   commitStoreName,
   repositoryStoreName,
-} from "#web/features/repository-history/repository-history-database";
-import { queueHistoryStorageWrite } from "#web/features/repository-history/repository-history-storage-maintenance";
+} from "#web/persistence/repository-history/repository-history-database";
 
 const control = new BroadcastChannel(
   `history-clear-${(self as unknown as { name: string }).name}`,

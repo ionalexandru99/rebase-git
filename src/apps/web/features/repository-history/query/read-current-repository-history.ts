@@ -1,5 +1,5 @@
-import type { HistoryOrderCache } from "#web/features/repository-history/history-order.contract";
-import { readRepositoryHistory } from "#web/features/repository-history/repository-history-query";
+import type { HistoryOrderCache } from "#web/features/repository-history/query/history-order.contract";
+import { readRepositoryHistory } from "#web/features/repository-history/query/repository-history-query";
 import type { RepositoryHistoryQuery } from "#web/features/repository-history/repository-history-reader.contract";
 
 export async function readCurrentRepositoryHistory(

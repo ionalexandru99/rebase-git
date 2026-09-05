@@ -1,4 +1,4 @@
-import "#web/features/repository-history/repository-history-worker";
+import "#web/features/repository-history/worker/repository-history-worker";
 
 const worker = self as unknown as {
   onconnect: ((event: MessageEvent) => void) | null;

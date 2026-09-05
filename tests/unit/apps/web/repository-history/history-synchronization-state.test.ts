@@ -1,6 +1,6 @@
 import { Scope } from "effect";
 import { describe, expect, it } from "vitest";
-import { RepositoryHistoryEpoch } from "#web/features/repository-history/repository-history-epoch";
+import { RepositoryHistoryEpoch } from "#web/features/repository-history/reader/repository-history-epoch";
 import type {
   ConnectedReader,
   HistorySynchronizationState,

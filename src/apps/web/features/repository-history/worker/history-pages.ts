@@ -1,9 +1,8 @@
 import { decodeRepositoryHistoryPage } from "@rebase/contracts";
-import { readCurrentRepositoryHistory } from "#web/features/repository-history/read-current-repository-history";
-import { readRepositoryCommits } from "#web/features/repository-history/repository-history-query";
-import { isHistoryStorageQuotaError } from "#web/features/repository-history/repository-history-storage-policy";
-import { storeRepositoryHistoryPage } from "#web/features/repository-history/repository-history-store";
-import type { RepositoryHistoryWorkerRequest } from "#web/features/repository-history/repository-history-worker.contract";
+import { isHistoryStorageQuotaError } from "#web/features/repository-history/cache/repository-history-storage-policy";
+import { readCurrentRepositoryHistory } from "#web/features/repository-history/query/read-current-repository-history";
+import { readRepositoryCommits } from "#web/features/repository-history/query/repository-history-query";
+import { storeRepositoryHistoryPage } from "#web/features/repository-history/replica/repository-history-store";
 import type {
   ConnectedReader,
   RepositoryReplica,
@@ -14,6 +13,7 @@ import {
   publishSnapshot,
   workerFailure,
 } from "#web/features/repository-history/worker/replica-state";
+import type { RepositoryHistoryWorkerRequest } from "#web/features/repository-history/worker/repository-history-worker.contract";
 import { writeStoredHistory } from "#web/features/repository-history/worker/repository-replicas";
 import { startSynchronization } from "#web/features/repository-history/worker/synchronization";
 

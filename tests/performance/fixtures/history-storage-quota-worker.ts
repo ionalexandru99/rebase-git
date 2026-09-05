@@ -1,5 +1,5 @@
-import "#web/features/repository-history/repository-history-worker";
-import { commitStoreName } from "#web/features/repository-history/repository-history-database";
+import "#web/features/repository-history/worker/repository-history-worker";
+import { commitStoreName } from "#web/persistence/repository-history/repository-history-database";
 
 const channelName = new URL(globalThis.location.href).searchParams.get(
   "channel",

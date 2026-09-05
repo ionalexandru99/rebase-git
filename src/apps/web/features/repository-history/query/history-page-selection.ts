@@ -1,5 +1,5 @@
 import type { RepositoryCommit } from "@rebase/contracts";
-import { HistoryOrderIndex } from "#web/features/repository-history/history-order";
+import { HistoryOrderIndex } from "#web/features/repository-history/query/history-order";
 import type { RepositoryHistoryQuery } from "#web/features/repository-history/repository-history-reader.contract";
 
 export function selectHistoryPage(

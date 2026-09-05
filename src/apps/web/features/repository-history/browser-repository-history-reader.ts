@@ -3,7 +3,9 @@ import type {
   RepositoryFetchSetting,
   RepositoryFreshness,
 } from "@rebase/contracts";
-import type { HistoryAncestryRoute } from "#web/features/repository-history/history-order.contract";
+import type { HistoryAncestryRoute } from "#web/features/repository-history/query/history-order.contract";
+import { holdRepositoryHistoryReaderLease } from "#web/features/repository-history/reader/repository-history-reader-lease";
+import { maintainRepositoryHistoryReader } from "#web/features/repository-history/reader/repository-history-reader-lifecycle";
 import type {
   RepositoryHistoryGateway,
   RepositoryHistoryPosition,
@@ -18,17 +20,15 @@ import {
   RepositoryHistoryStorageUnavailable,
   RepositoryHistoryUnavailable,
 } from "#web/features/repository-history/repository-history-reader.contract";
-import { holdRepositoryHistoryReaderLease } from "#web/features/repository-history/repository-history-reader-lease";
-import { maintainRepositoryHistoryReader } from "#web/features/repository-history/repository-history-reader-lifecycle";
-import { createRepositoryHistoryRequestId } from "#web/features/repository-history/repository-history-request-id";
 import type { RepositoryHistoryStorageDiagnostics } from "#web/features/repository-history/repository-history-storage.contract";
+import type { RepositoryHistorySearchResult } from "#web/features/repository-history/search/repository-history-search.contract";
+import { createRepositoryHistoryRequestId } from "#web/features/repository-history/transport/repository-history-request-id";
 import type {
   ConnectRepositoryHistoryReader,
   RepositoryHistoryWorkerFailure,
   RepositoryHistoryWorkerRequest,
   RepositoryHistoryWorkerResponse,
-} from "#web/features/repository-history/repository-history-worker.contract";
-import type { RepositoryHistorySearchResult } from "#web/features/repository-history/search/repository-history-search.contract";
+} from "#web/features/repository-history/worker/repository-history-worker.contract";
 
 let sharedWorker: SharedWorker | undefined;
 let persistenceRequested = false;
@@ -569,7 +569,7 @@ function connectBrowserRepositoryHistoryReader(
 
 function acquireSharedWorker() {
   sharedWorker ??= new SharedWorker(
-    new URL("./repository-history-worker.ts", import.meta.url),
+    new URL("./worker/repository-history-worker.ts", import.meta.url),
     { name: "rebase-repository-history", type: "module" },
   );
   return sharedWorker;
