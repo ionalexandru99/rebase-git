@@ -12,7 +12,7 @@ import type {
   LocalEnvironmentSessionState,
 } from "#web/features/local-environment-session/local-environment-session.contract";
 import { createRepositoryCatalogController } from "#web/features/repository-catalog/repository-catalog-controller";
-import { createRepositoryHistoryGateway } from "#web/features/repository-history/repository-history-gateway";
+import { createRepositoryHistoryGateway } from "#web/features/repository-history/transport/repository-history-gateway";
 import { createRepositoryRefsController } from "#web/features/repository-refs/repository-refs-controller";
 
 export function createLocalEnvironmentSession(

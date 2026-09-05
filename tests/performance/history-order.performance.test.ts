@@ -23,12 +23,12 @@ test("cached order changes on 250,000 merge-heavy commits", async ({
     await page.goto(url);
     const measurements = await page.evaluate(async () => {
       const storePath =
-        "/features/repository-history/repository-history-store.ts";
-      const store: typeof import("#web/features/repository-history/repository-history-store") =
+        "/features/repository-history/replica/repository-history-store.ts";
+      const store: typeof import("#web/features/repository-history/replica/repository-history-store") =
         await import(storePath);
       const queryPath =
-        "/features/repository-history/repository-history-query.ts";
-      const queries: typeof import("#web/features/repository-history/repository-history-query") =
+        "/features/repository-history/query/repository-history-query.ts";
+      const queries: typeof import("#web/features/repository-history/query/repository-history-query") =
         await import(queryPath);
       const environmentId = crypto.randomUUID();
       const repositoryId = crypto.randomUUID();
@@ -93,7 +93,7 @@ test("cached order changes on 250,000 merge-heavy commits", async ({
         count,
       );
       console.log("history-order: preparing compact index");
-      const cache: import("#web/features/repository-history/history-order.contract").HistoryOrderCache =
+      const cache: import("#web/features/repository-history/query/history-order.contract").HistoryOrderCache =
         { queries: new Map(), revision: 0 };
       const indexStarted = performance.now();
       await queries.prepareRepositoryHistoryOrder(

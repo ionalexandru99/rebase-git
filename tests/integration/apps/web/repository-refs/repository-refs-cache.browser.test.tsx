@@ -6,8 +6,8 @@ import { createBrowserHistoryFilterStore } from "#web/features/commit-graph/scop
 import { resolveHistoryScope } from "#web/features/commit-graph/scope/history-scope";
 import { browserKeyboardShortcutHost } from "#web/features/keyboard-shortcuts/browser-keyboard-shortcut-host";
 import { createKeyboardShortcutStore } from "#web/features/keyboard-shortcuts/keyboard-shortcut-store";
+import { storeRepositoryHistoryPage } from "#web/features/repository-history/replica/repository-history-store";
 import { RepositoryHistoryOffline } from "#web/features/repository-history/repository-history-reader.contract";
-import { storeRepositoryHistoryPage } from "#web/features/repository-history/repository-history-store";
 import {
   cacheRepositoryRefs,
   readCachedRepositoryRefs,

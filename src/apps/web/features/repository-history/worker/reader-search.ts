@@ -1,11 +1,11 @@
 import { Effect, Fiber } from "effect";
-import type { RepositoryHistoryWorkerRequest } from "#web/features/repository-history/repository-history-worker.contract";
 import { searchStoredRepositoryHistory } from "#web/features/repository-history/search/repository-history-search";
 import type { ConnectedReader } from "#web/features/repository-history/worker/history-worker.contract";
 import {
   post,
   workerFailure,
 } from "#web/features/repository-history/worker/replica-state";
+import type { RepositoryHistoryWorkerRequest } from "#web/features/repository-history/worker/repository-history-worker.contract";
 
 export function cancelReaderSearch(reader: ConnectedReader) {
   if (reader.search !== undefined)

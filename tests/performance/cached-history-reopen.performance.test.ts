@@ -24,8 +24,8 @@ test("completed offline history reopens within its timing budget", async ({
     await page.goto(`${url}__history_reopen__`);
     const metrics = await page.evaluate(async () => {
       const storePath =
-        "/features/repository-history/repository-history-store.ts";
-      const store: typeof import("#web/features/repository-history/repository-history-store") =
+        "/features/repository-history/replica/repository-history-store.ts";
+      const store: typeof import("#web/features/repository-history/replica/repository-history-store") =
         await import(storePath);
       const readerPath =
         "/features/repository-history/browser-repository-history-reader.ts";

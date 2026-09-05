@@ -2,7 +2,7 @@ import { maximumRepositoryHistorySequence } from "@rebase/contracts/repository-h
 import type {
   RepositoryHistoryCompletionBasis,
   RepositoryHistorySynchronizationProgress,
-} from "#web/features/repository-history/repository-history-completion.contract";
+} from "#web/domain/repository-history/repository-history-completion.contract";
 
 export function completeRepositoryHistory(
   progress: RepositoryHistorySynchronizationProgress,

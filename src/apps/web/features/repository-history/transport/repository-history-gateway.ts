@@ -1,14 +1,14 @@
 import { Effect } from "effect";
-import type {
-  RepositoryFreshnessGateway,
-  RepositoryFreshnessTransport,
-} from "#web/features/repository-history/repository-freshness.contract";
 import {
   type RepositoryHistoryGateway,
   RepositoryHistoryOffline,
   type RepositoryHistoryTransport,
   RepositoryHistoryUnavailable,
 } from "#web/features/repository-history/repository-history-reader.contract";
+import type {
+  RepositoryFreshnessGateway,
+  RepositoryFreshnessTransport,
+} from "#web/features/repository-history/transport/repository-freshness.contract";
 
 export function createRepositoryHistoryGateway() {
   let transport: RepositoryHistoryTransport | undefined;

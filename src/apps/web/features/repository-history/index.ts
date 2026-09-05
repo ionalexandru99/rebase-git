@@ -11,8 +11,8 @@ export type {
   RepositoryHistoryCacheDiagnostics,
   RepositoryHistoryStorageDiagnostics,
 } from "#web/features/repository-history/repository-history-storage.contract";
-export type { RepositoryHistoryTransportRuntime } from "#web/features/repository-history/repository-history-transport.contract";
 export type {
   RepositoryHistorySearchQuery,
   RepositoryHistorySearchResult,
 } from "#web/features/repository-history/search/repository-history-search.contract";
+export type { RepositoryHistoryTransportRuntime } from "#web/features/repository-history/transport/repository-history-transport.contract";

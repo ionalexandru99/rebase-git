@@ -1,14 +1,14 @@
 import type { RepositoryFreshness } from "@rebase/contracts";
 import type { Fiber, Scope } from "effect";
-import type { HistoryOrderCache } from "#web/features/repository-history/history-order.contract";
-import type { RepositoryHistoryEpoch } from "#web/features/repository-history/repository-history-epoch";
+import type { HistoryOrderCache } from "#web/features/repository-history/query/history-order.contract";
+import type { RepositoryHistoryEpoch } from "#web/features/repository-history/reader/repository-history-epoch";
 import type { RepositoryHistoryQuery } from "#web/features/repository-history/repository-history-reader.contract";
 import type {
   ConnectRepositoryHistoryReader,
   RepositoryHistoryWorkerFailure,
   RepositoryHistoryWorkerRequest,
   RepositoryHistoryWorkerResponse,
-} from "#web/features/repository-history/repository-history-worker.contract";
+} from "#web/features/repository-history/worker/repository-history-worker.contract";
 
 export interface ConnectedReader {
   stopWatchingLease: () => void;

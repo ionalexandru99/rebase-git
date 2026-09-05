@@ -3,12 +3,12 @@ import { act, createRef } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { render } from "vitest-browser-react";
+import type { RepositoryHistorySearchActions } from "#web/features/repository-history/search/components/repository-history-search-controls.contract";
 import type {
   RepositoryHistorySearch,
   RepositoryHistorySearchResult,
 } from "#web/features/repository-history/search/repository-history-search.contract";
-import type { RepositoryHistorySearchActions } from "#web/features/repository-history/search/repository-history-search-controls.contract";
-import { RepositoryHistorySearchControls } from "#web-ui/features/repository-history/search/repository-history-search-controls";
+import { RepositoryHistorySearchControls } from "#web-ui/features/repository-history/search/components/repository-history-search-controls";
 
 const snapshot = {
   historyRevision: 1,

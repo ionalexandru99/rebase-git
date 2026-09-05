@@ -30,7 +30,7 @@ import {
   acquireEnvironmentSocketEvents,
   readEnvironmentHelloResult,
 } from "#web/features/environment-connection/websocket/environment-socket";
-import { createRepositoryHistoryTransport } from "#web/features/repository-history/repository-history-transport";
+import { createRepositoryHistoryTransport } from "#web/features/repository-history/transport/repository-history-transport";
 
 export {
   EnvironmentAuthorizationRejected,

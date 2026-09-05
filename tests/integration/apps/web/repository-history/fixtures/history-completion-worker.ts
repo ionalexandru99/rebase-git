@@ -1,5 +1,5 @@
-import "#web/features/repository-history/repository-history-worker";
-import { queueHistoryStorageWrite } from "#web/features/repository-history/repository-history-storage-maintenance";
+import "#web/features/repository-history/worker/repository-history-worker";
+import { queueHistoryStorageWrite } from "#web/features/repository-history/cache/repository-history-storage-maintenance";
 
 const control = new BroadcastChannel(
   `history-completion-${(self as unknown as { name: string }).name}`,

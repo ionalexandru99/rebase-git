@@ -1,13 +1,13 @@
-import { repositoryKey } from "#web/features/repository-history/repository-history-database";
 import {
   clearHistoryCache,
   pruneHistoryCache,
-  readHistoryCacheRecords,
-} from "#web/features/repository-history/repository-history-storage";
+} from "#web/features/repository-history/cache/repository-history-storage";
 import {
   historyCacheCleanupCandidates,
   writeHistoryWithCleanup,
-} from "#web/features/repository-history/repository-history-storage-policy";
+} from "#web/features/repository-history/cache/repository-history-storage-policy";
+import { readHistoryCacheRecords } from "#web/persistence/repository-history/repository-history-cache-records";
+import { repositoryKey } from "#web/persistence/repository-history/repository-history-records";
 
 let storageWrites: Promise<unknown> = Promise.resolve();
 

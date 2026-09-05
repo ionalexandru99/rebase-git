@@ -4,7 +4,7 @@ import {
 } from "@rebase/contracts";
 import { Effect, Fiber } from "effect";
 import { describe, expect, it, vi } from "vite-plus/test";
-import { createRepositoryHistoryTransport } from "#web/features/repository-history/repository-history-transport";
+import { createRepositoryHistoryTransport } from "#web/features/repository-history/transport/repository-history-transport";
 
 describe("repository history transport", () => {
   it.each([

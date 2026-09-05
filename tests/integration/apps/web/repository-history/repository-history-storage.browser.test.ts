@@ -7,34 +7,34 @@ import {
 import { describe, expect, it, vi } from "vitest";
 import { createBrowserRepositoryHistoryReader } from "#web/features/repository-history/browser-repository-history-reader";
 import {
-  repositoryKey,
-  repositoryStoreName,
-  requestResult,
-  transactionCompleted,
-  withRepositoryHistoryDatabase,
-} from "#web/features/repository-history/repository-history-database";
-import type { StoredRepository } from "#web/features/repository-history/repository-history-database.contract";
-import { readRepositoryCommits } from "#web/features/repository-history/repository-history-query";
+  clearHistoryCache,
+  describeHistoryCaches,
+  markHistoryCacheOpened,
+  pruneHistoryCache,
+} from "#web/features/repository-history/cache/repository-history-storage";
+import { writeHistoryUnderPressure } from "#web/features/repository-history/cache/repository-history-storage-maintenance";
+import { readRepositoryCommits } from "#web/features/repository-history/query/repository-history-query";
+import {
+  completeStoredRepositoryHistory,
+  readStoredRepositoryHistoryState,
+  storeRepositoryHistoryBatch,
+  storeRepositoryHistoryPage,
+} from "#web/features/repository-history/replica/repository-history-store";
 import {
   type RepositoryHistoryGateway,
   RepositoryHistoryOffline,
   RepositoryHistoryStorageUnavailable,
   RepositoryHistoryUnavailable,
 } from "#web/features/repository-history/repository-history-reader.contract";
+import { readHistoryCacheRecords } from "#web/persistence/repository-history/repository-history-cache-records";
 import {
-  clearHistoryCache,
-  describeHistoryCaches,
-  markHistoryCacheOpened,
-  pruneHistoryCache,
-  readHistoryCacheRecords,
-} from "#web/features/repository-history/repository-history-storage";
-import { writeHistoryUnderPressure } from "#web/features/repository-history/repository-history-storage-maintenance";
-import {
-  completeStoredRepositoryHistory,
-  readStoredRepositoryHistoryState,
-  storeRepositoryHistoryBatch,
-  storeRepositoryHistoryPage,
-} from "#web/features/repository-history/repository-history-store";
+  repositoryStoreName,
+  requestResult,
+  transactionCompleted,
+  withRepositoryHistoryDatabase,
+} from "#web/persistence/repository-history/repository-history-database";
+import type { StoredRepository } from "#web/persistence/repository-history/repository-history-database.contract";
+import { repositoryKey } from "#web/persistence/repository-history/repository-history-records";
 
 describe("history cache storage", () => {
   it("does not restart history on a reader closed while rebuilding its shared cache", async () => {

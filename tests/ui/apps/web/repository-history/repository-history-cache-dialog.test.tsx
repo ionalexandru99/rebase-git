@@ -1,11 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { render } from "vitest-browser-react";
-import type { RepositoryHistoryCacheReader } from "#web/features/repository-history/diagnostics/repository-history-cache-dialog.contract";
+import type { RepositoryHistoryCacheReader } from "#web/features/repository-history/diagnostics/components/repository-history-cache-dialog.contract";
 import type { RepositoryHistorySnapshot } from "#web/features/repository-history/repository-history-reader.contract";
 import { RepositoryHistoryStorageUnavailable } from "#web/features/repository-history/repository-history-reader.contract";
 import type { RepositoryHistoryStorageDiagnostics } from "#web/features/repository-history/repository-history-storage.contract";
-import { RepositoryHistoryCacheButton } from "#web-ui/features/repository-history/diagnostics/repository-history-cache-dialog";
+import { RepositoryHistoryCacheButton } from "#web-ui/features/repository-history/diagnostics/components/repository-history-cache-dialog";
 
 const identity = {
   environmentId: "environment-1",

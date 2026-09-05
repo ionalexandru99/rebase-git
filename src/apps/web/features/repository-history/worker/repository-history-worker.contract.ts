@@ -5,7 +5,7 @@ import type {
   RepositoryHistoryOperationFailure,
   SynchronizeRepositoryHistory,
 } from "@rebase/contracts";
-import type { HistoryAncestryRoute } from "#web/features/repository-history/history-order.contract";
+import type { HistoryAncestryRoute } from "#web/features/repository-history/query/history-order.contract";
 import type {
   RepositoryHistoryPosition,
   RepositoryHistoryQuery,

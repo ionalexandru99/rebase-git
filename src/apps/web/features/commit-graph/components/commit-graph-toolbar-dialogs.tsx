@@ -1,7 +1,7 @@
 import type {
   RepositoryHistoryCacheDialogProps,
   RepositoryHistoryCacheReader,
-} from "#web/features/repository-history/diagnostics/repository-history-cache-dialog.contract";
+} from "#web/features/repository-history/diagnostics/components/repository-history-cache-dialog.contract";
 import { describeRepositoryFetchError } from "#web/features/repository-history/freshness/repository-fetch-error";
 import type {
   RepositoryHistoryReader,
@@ -14,8 +14,8 @@ import {
   DialogTitle,
 } from "#web-ui/components/ui/dialog";
 import { useCommitGraphToolbar } from "#web-ui/features/commit-graph/components/commit-graph-toolbar-provider";
-import { RepositoryHistoryCacheDialog } from "#web-ui/features/repository-history/diagnostics/repository-history-cache-dialog";
-import { RepositoryFetchSettings } from "#web-ui/features/repository-history/freshness/repository-fetch-settings";
+import { RepositoryHistoryCacheDialog } from "#web-ui/features/repository-history/diagnostics/components/repository-history-cache-dialog";
+import { RepositoryFetchSettings } from "#web-ui/features/repository-history/freshness/components/repository-fetch-settings";
 
 export function CommitGraphToolbarDialogs({
   repositoryName,

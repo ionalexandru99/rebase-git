@@ -1,4 +1,4 @@
-import type { RepositoryHistoryCacheIdentity } from "#web/features/repository-history/diagnostics/repository-history-cache-dialog.contract";
+import type { RepositoryHistoryCacheIdentity } from "#web/features/repository-history/diagnostics/components/repository-history-cache-dialog.contract";
 import type { RepositoryHistoryStorageDiagnostics } from "#web/features/repository-history/repository-history-storage.contract";
 
 export function RepositoryHistoryCacheList({

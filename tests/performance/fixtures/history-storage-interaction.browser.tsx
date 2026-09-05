@@ -11,16 +11,16 @@ import {
   useCommitGraphToolbarModel,
 } from "#web/features/commit-graph/index";
 import { createBrowserRepositoryHistoryReader } from "#web/features/repository-history/browser-repository-history-reader";
-import type {
-  RepositoryHistoryGateway,
-  RepositoryHistoryReader,
-} from "#web/features/repository-history/repository-history-reader.contract";
 import {
   beginRepositoryHistorySynchronization,
   completeStoredRepositoryHistory,
   storeRepositoryHistoryBatch,
   storeRepositoryHistoryPage,
-} from "#web/features/repository-history/repository-history-store";
+} from "#web/features/repository-history/replica/repository-history-store";
+import type {
+  RepositoryHistoryGateway,
+  RepositoryHistoryReader,
+} from "#web/features/repository-history/repository-history-reader.contract";
 
 const environmentId = crypto.randomUUID();
 const name = crypto.randomUUID();

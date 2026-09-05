@@ -3,9 +3,8 @@ import {
   locateRepositoryHistoryCommits,
   prepareRepositoryHistoryOrder,
   readRepositoryCommits,
-} from "#web/features/repository-history/repository-history-query";
-import { readStoredRepositoryHistoryState } from "#web/features/repository-history/repository-history-store";
-import type { RepositoryHistoryWorkerRequest } from "#web/features/repository-history/repository-history-worker.contract";
+} from "#web/features/repository-history/query/repository-history-query";
+import { readStoredRepositoryHistoryState } from "#web/features/repository-history/replica/repository-history-store";
 import {
   readCacheDiagnostics,
   scheduleCacheManagement,
@@ -32,6 +31,7 @@ import {
   post,
   publishSnapshot,
 } from "#web/features/repository-history/worker/replica-state";
+import type { RepositoryHistoryWorkerRequest } from "#web/features/repository-history/worker/repository-history-worker.contract";
 import {
   acceptHistoryBatch,
   completeSynchronization,

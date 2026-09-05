@@ -1,9 +1,9 @@
-import { findHistoryAncestryRoute } from "#web/features/repository-history/history-ancestry-route";
+import { findHistoryAncestryRoute } from "#web/features/repository-history/query/history-ancestry-route";
 import type {
   HistoryOrderIndexReader,
   HistoryOrderNode,
   HistoryParentEdge,
-} from "#web/features/repository-history/history-order.contract";
+} from "#web/features/repository-history/query/history-order.contract";
 
 export class HistoryOrderIndex implements HistoryOrderIndexReader {
   private readonly positions: Map<string, number>;

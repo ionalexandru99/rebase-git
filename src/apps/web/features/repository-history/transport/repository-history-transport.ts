@@ -11,14 +11,14 @@ import { Deferred, Effect } from "effect";
 import type { EnvironmentConnectionFailure } from "#web/features/environment-connection/environment-connection-errors";
 import { environmentResponseError } from "#web/features/environment-connection/environment-connection-errors";
 import { sendEnvironmentSocketMessage } from "#web/features/environment-connection/websocket/environment-socket";
-import { createRepositoryFreshnessTransport } from "#web/features/repository-history/repository-freshness-transport";
 import {
   RepositoryHistoryRejected,
   type RepositoryHistoryTransport,
   RepositoryHistoryUnavailable,
 } from "#web/features/repository-history/repository-history-reader.contract";
-import { createRepositoryHistoryRequestId } from "#web/features/repository-history/repository-history-request-id";
-import type { RepositoryHistoryTransportRuntime } from "#web/features/repository-history/repository-history-transport.contract";
+import { createRepositoryFreshnessTransport } from "#web/features/repository-history/transport/repository-freshness-transport";
+import { createRepositoryHistoryRequestId } from "#web/features/repository-history/transport/repository-history-request-id";
+import type { RepositoryHistoryTransportRuntime } from "#web/features/repository-history/transport/repository-history-transport.contract";
 
 type RequestFailure =
   | EnvironmentConnectionFailure
