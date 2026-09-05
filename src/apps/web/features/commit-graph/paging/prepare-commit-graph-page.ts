@@ -2,6 +2,7 @@ import type { RepositoryCommit } from "@rebase/contracts";
 import {
   appendCommitLanes,
   type CommitLaneCheckpoint,
+  type CommitLaneRow,
 } from "#web/features/commit-graph/layout/commit-lanes";
 import { graphLaneSeeds } from "#web/features/commit-graph/layout/graph-colors";
 import type {
@@ -16,6 +17,7 @@ export async function prepareCommitGraphPage(
   offset: number,
   incomingCheckpoint: CommitLaneCheckpoint,
   signal: AbortSignal,
+  previousRows: readonly CommitLaneRow[] = [],
 ): Promise<CommitGraphPage> {
   signal.throwIfAborted();
   const [commits, refs] = await Promise.all([
@@ -82,7 +84,7 @@ export async function prepareCommitGraphPage(
   const plan = appendCommitLanes(
     incomingCheckpoint,
     topology,
-    graphLaneSeeds([...query.roots, ...refs]),
+    graphLaneSeeds([...query.roots, ...refs], previousRows),
   );
   const merges = new Map<string, "collapsed" | "expanded">();
   for (const commit of commits) {

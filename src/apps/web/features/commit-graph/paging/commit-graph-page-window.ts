@@ -180,6 +180,7 @@ export function createCommitGraphPageWindow(
       knownEndOffset: offset,
       hasOlder: query.roots.length > 0,
     };
+    const previousRows = snapshot.pages.flatMap((page) => page.rows);
     publish({ loading: true, error: undefined });
     try {
       for (
@@ -195,6 +196,7 @@ export function createCommitGraphPageWindow(
           cursor,
           checkpoint,
           signal,
+          previousRows,
         );
         retain(next, page);
         if (page.commits.length < pageSize) break;
@@ -556,7 +558,7 @@ export function createCommitGraphPageWindow(
       if (viewport !== undefined && first !== viewport.first)
         scrollingBackwards = first < viewport.first;
       viewport = { first, last };
-      const lookahead = Math.max(1, (last - first + 1) * 2);
+      const lookahead = Math.max(pageSize, (last - first + 1) * 2);
       if (scrollingBackwards) {
         const offset = Math.max(0, snapshot.startOffset - pageSize);
         const lastVisiblePage = Math.floor(last / pageSize) * pageSize;

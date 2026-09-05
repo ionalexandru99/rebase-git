@@ -48,8 +48,10 @@ export async function acceptHistoryBatch(
   );
   if (replica.synchronization !== active) return;
   replica.synchronizedCommitCount = synchronizedCommitCount;
-  if (batch.commits.length > 0) active.storingCommits = true;
-  invalidateStoredHistory(replica);
+  if (batch.commits.length > 0) {
+    active.storingCommits = true;
+    invalidateStoredHistory(replica);
+  }
   replica.revision += 1;
   publishSnapshot(replica);
   post(reader, { _tag: "HistoryBatchCommitted", batchId });
@@ -130,7 +132,16 @@ export async function completeSynchronization(
           ),
     );
     if (completion === undefined || replica.synchronization !== active) return;
-    invalidateStoredHistory(replica);
+    const snapshot = completion.snapshot;
+    if (
+      active.storingCommits ||
+      (snapshot !== undefined &&
+        (JSON.stringify(snapshot.refTargets) !==
+          JSON.stringify(replica.refTargets) ||
+          JSON.stringify(snapshot.shallowOids ?? []) !==
+            JSON.stringify(replica.shallowOids)))
+    )
+      invalidateStoredHistory(replica);
     replica.synchronizedCommitCount = completion.commitCount;
     if (completion.snapshot !== undefined) {
       replica.shallowOids = completion.snapshot.shallowOids ?? [];

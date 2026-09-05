@@ -15,6 +15,65 @@ const query: RepositoryHistoryQuery = {
 };
 
 describe("commit graph page window", () => {
+  it("prepares the next page before the first scroll in a short viewport", async () => {
+    const reader = fakeReader(history(300));
+    const window = createCommitGraphPageWindow(reader);
+    await window.loadInitial(query);
+    window.setViewport(0, 11);
+    await vi.waitFor(() => expect(window.getSnapshot().endOffset).toBe(200));
+    expect(reader.read.mock.calls.map(([request]) => request.offset)).toEqual([
+      0, 100,
+    ]);
+    window.dispose();
+  });
+
+  it("retains branch colors when expanding and collapsing from an older page", async () => {
+    const commits = history(12);
+    const merge = commits[6];
+    const side = history(21)[20];
+    if (merge === undefined || side === undefined)
+      throw new Error("Missing fixture");
+    commits[6] = { ...merge, parents: [oid(7), side.oid] };
+    const expanded = [...commits.slice(0, 7), side, ...commits.slice(7)];
+    const reader = fakeReader(commits);
+    reader.read.mockImplementation(async (request) => {
+      const source = request.additionalParentEdges?.length ? expanded : commits;
+      return source.slice(
+        request.offset ?? 0,
+        (request.offset ?? 0) + request.limit,
+      );
+    });
+    reader.locateMany.mockResolvedValue([]);
+    const window = createCommitGraphPageWindow(reader, { pageSize: 5 });
+    const scope: RepositoryHistoryQuery = {
+      ...query,
+      ancestry: "first-parent",
+      roots: [{ name: "feature/cache", oid: oid(0), type: "branch" }],
+    };
+    const color = () => {
+      const row = window
+        .getSnapshot()
+        .pages.flatMap((page) => page.rows)
+        .find((row) => row.oid === oid(6));
+      return row?.lanesBefore.find((lane) => lane.id === row.nodeLaneId)?.color;
+    };
+    await window.loadInitial(scope);
+    await window.appendOlder();
+    const original = color();
+    expect(original).toBeGreaterThan(0);
+    await window.reload(
+      {
+        ...scope,
+        additionalParentEdges: [{ childOid: oid(6), parentOid: side.oid }],
+      },
+      oid(6),
+    );
+    expect(color()).toBe(original);
+    await window.reload(scope, oid(6));
+    expect(color()).toBe(original);
+    window.dispose();
+  });
+
   it("keeps the current graph when a search is canceled during replacement page loading", async () => {
     const commits = history(15);
     const reader = fakeReader(commits);

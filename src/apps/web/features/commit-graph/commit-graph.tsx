@@ -125,6 +125,18 @@ export function CommitGraph({
     (): CommitGraphViewportAnchor | undefined => viewport.captureAnchor(),
   );
   const { commits, laneRows, refTargets, historySnapshot, loading } = paging;
+  const merges = useMemo(
+    () =>
+      new Map(
+        [...paging.merges.keys()].map((oid) => [
+          oid,
+          expandedMerges.has(oid)
+            ? ("expanded" as const)
+            : ("collapsed" as const),
+        ]),
+      ),
+    [paging.merges, expandedMerges],
+  );
   const colors = useMemo(
     () => graphColors(laneRows, refTargets),
     [laneRows, refTargets],
@@ -189,7 +201,7 @@ export function CommitGraph({
     loading: paging.loading,
     oids: visibleOids,
     laneRows,
-    merges: paging.merges,
+    merges,
     toggleMerge,
     pageSize,
     startOffset: paging.snapshot.startOffset,
@@ -467,7 +479,7 @@ export function CommitGraph({
                           const labels =
                             labelsByOid.get(commit.oid) ?? emptyRefLabels;
                           const lane = laneRows[virtualRow.index];
-                          const merge = paging.merges.get(commit.oid);
+                          const merge = merges.get(commit.oid);
                           return (
                             <tr
                               key={virtualRow.key}
@@ -478,8 +490,15 @@ export function CommitGraph({
                                 2
                               }
                               aria-expanded={
-                                paging.merges.has(commit.oid)
-                                  ? paging.merges.get(commit.oid) === "expanded"
+                                merge !== undefined
+                                  ? merge === "expanded"
+                                  : undefined
+                              }
+                              aria-busy={
+                                merge !== undefined &&
+                                merge !== paging.merges.get(commit.oid) &&
+                                paging.snapshot.error === undefined
+                                  ? true
                                   : undefined
                               }
                               aria-selected={selected}
@@ -589,14 +608,6 @@ export function CommitGraph({
             void paging.engine?.retry();
           }}
         />
-      ) : null}
-      {loading && commits.length > 0 ? (
-        <p
-          className="m-0 shrink-0 border-border border-t px-3 py-1 text-xs text-muted-foreground"
-          role="status"
-        >
-          Loading history…
-        </p>
       ) : null}
       {error === undefined && historySnapshot.synchronization === "stale" ? (
         <Button

@@ -32,6 +32,10 @@ export class HistoryOrderIndex implements HistoryOrderIndexReader {
     this.parents = Uint32Array.from(parents);
   }
 
+  has(oid: string) {
+    return this.positions.has(oid);
+  }
+
   ancestryRoute(roots: readonly string[], targetOid: string) {
     return findHistoryAncestryRoute(
       {

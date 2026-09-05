@@ -45,9 +45,11 @@ export function CommitRefPill({
   const separator =
     label.type === "remote-branch" ? label.name.indexOf("/") : -1;
   const remote = separator > 0 ? label.name.slice(0, separator) : undefined;
+  const name =
+    remote === undefined ? label.name : label.name.slice(separator + 1);
   return (
     <CopyPill
-      value={label.name}
+      value={name}
       className="rounded-[5px] border px-1.5 py-0.5 font-mono text-[10px] leading-none outline-none focus-visible:ring-1 focus-visible:ring-primary"
       style={{
         color: local ? "#0e141c" : color,
@@ -60,7 +62,7 @@ export function CommitRefPill({
       }}
     >
       {remote === undefined ? null : <GitProviderIcon remote={remote} />}
-      {remote === undefined ? label.name : label.name.slice(remote.length + 1)}
+      {name}
     </CopyPill>
   );
 }

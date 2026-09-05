@@ -27,6 +27,87 @@ import {
 import { withRepositoryHistoryDatabase } from "#web/persistence/repository-history/repository-history-database";
 
 describe("browser repository history reader", () => {
+  it("keeps prepared history usable when reopening an unchanged repository", async () => {
+    const environmentId = crypto.randomUUID();
+    const repositoryId = crypto.randomUUID();
+    const commits = history(120);
+    const main = { ...root("main"), oid: commits[0]?.oid ?? "" };
+    const query = { roots: [main], order: "topological" as const, limit: 100 };
+    await storeRepositoryHistoryPage(
+      environmentId,
+      repositoryId,
+      {
+        commits: commits.slice(0, 100),
+        objectFormat: "sha1",
+        repositoryId,
+        requestId: crypto.randomUUID(),
+        refTargets: [main],
+      },
+      query,
+    );
+    await beginRepositoryHistorySynchronization(environmentId, repositoryId);
+    await storeRepositoryHistoryBatch(environmentId, repositoryId, {
+      commits,
+      objectFormat: "sha1",
+      repositoryId,
+      requestId: crypto.randomUUID(),
+      sequence: 0,
+      snapshot: snapshot("a", main),
+    });
+    await completeStoredRepositoryHistory(
+      environmentId,
+      repositoryId,
+      commits.length,
+    );
+    let release: (() => void) | undefined;
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const gateway: RepositoryHistoryGateway = {
+      read: vi.fn(async () => {
+        throw new RepositoryHistoryOffline();
+      }),
+      synchronize: vi.fn(async (_request, acceptBatch) => {
+        await held;
+        await acceptBatch(
+          encodeRepositoryHistoryBatch({
+            commits: [],
+            objectFormat: "sha1",
+            repositoryId,
+            requestId: crypto.randomUUID(),
+            sequence: 0,
+            snapshot: snapshot("a", main),
+          }),
+        );
+        return commits.length;
+      }),
+    };
+    const reader = createBrowserRepositoryHistoryReader({
+      environmentId,
+      repositoryId,
+      gateway,
+    });
+    try {
+      await reader.getRefTargets();
+      await reader.locate(query, commits[110]?.oid ?? "");
+      const revision = reader.getSnapshot().historyRevision;
+      await reader.read(query);
+      await expect.poll(() => gateway.synchronize).toHaveBeenCalledOnce();
+      release?.();
+      await expect
+        .poll(() => reader.getSnapshot().synchronization)
+        .toBe("complete");
+      expect(reader.getSnapshot().historyRevision).toBe(revision);
+      expect(await reader.read({ ...query, offset: 100 })).toEqual(
+        commits.slice(100),
+      );
+      expect(gateway.read).not.toHaveBeenCalled();
+    } finally {
+      release?.();
+      reader.close();
+    }
+  });
+
   it("rejects oversized navigation requests without failing linked readers", async () => {
     const environmentId = crypto.randomUUID();
     const logicalRepositoryId = crypto.randomUUID();

@@ -16,6 +16,39 @@ import { RepositoryHistoryUnavailable } from "#web/features/repository-history/r
 import { saveRepositoryHistoryOrder } from "#web/features/repository-settings/preferences/repository-history-order";
 
 describe("commit graph navigation", () => {
+  it("acknowledges expansion immediately and lets collapse supersede a pending read", async () => {
+    const commits = mergeHistory();
+    const reader = historyReader({ commits, status: "ready" });
+    const screen = await renderGraph(reader);
+    const expand = screen.getByRole("button", {
+      name: "Expand merge Commit 0",
+    });
+    await expect.element(expand).toBeVisible();
+    let release: ((commits: readonly RepositoryCommit[]) => void) | undefined;
+    reader.read.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          release = resolve;
+        }),
+    );
+    await expand.click();
+    const collapse = screen.getByRole("button", {
+      name: "Collapse merge Commit 0",
+    });
+    await expect.element(collapse).toBeVisible();
+    const row = screen.getByRole("row", { name: /^Commit 0,/ });
+    await expect.element(row).toHaveAttribute("aria-busy", "true");
+    await vi.waitFor(() => expect(release).toBeDefined());
+    await collapse.click();
+    await expect.element(expand).toBeVisible();
+    await expect.element(row).not.toHaveAttribute("aria-busy", "true");
+    await act(async () => release?.(commits));
+    await expect.element(expand).toBeVisible();
+    await expect
+      .element(screen.getByRole("row", { name: /^Commit 2,/ }))
+      .not.toBeInTheDocument();
+  });
+
   it.each([false, true])(
     "discards shared cache rows and selection without querying a closed reader (%s)",
     async (removed) => {
@@ -69,18 +102,19 @@ describe("commit graph navigation", () => {
   it("prefetches older pages, retains one keyboard move and retries without hiding loaded rows", async () => {
     const commits = history(230);
     const reader = historyReader({ commits, status: "ready" });
-    const screen = await renderGraph(reader);
-    const grid = screen.getByRole("grid");
-    await expect
-      .element(grid.getByRole("row", { name: /^Commit 0,/ }))
-      .toBeVisible();
     let release: ((commits: readonly RepositoryCommit[]) => void) | undefined;
+    reader.read.mockResolvedValueOnce(commits.slice(0, 100));
     reader.read.mockImplementationOnce(
       () =>
         new Promise((resolve) => {
           release = resolve;
         }),
     );
+    const screen = await renderGraph(reader);
+    const grid = screen.getByRole("grid");
+    await expect
+      .element(grid.getByRole("row", { name: /^Commit 0,/ }))
+      .toBeVisible();
     grid.element().scrollTop = 80 * 26;
     grid.element().dispatchEvent(new Event("scroll"));
     await vi.waitFor(() =>
@@ -97,6 +131,7 @@ describe("commit graph navigation", () => {
     await expect
       .element(grid.getByRole("row", { name: /^Commit 99,/ }))
       .toHaveAttribute("aria-selected", "true");
+    reader.read.mockRejectedValueOnce(new Error("Older page failed"));
     release?.(commits.slice(100, 200));
     await expect
       .element(grid.getByRole("row", { name: /^Commit 100,/ }))
@@ -104,7 +139,6 @@ describe("commit graph navigation", () => {
     expect(
       reader.read.mock.calls.filter(([query]) => query.offset === 100),
     ).toHaveLength(1);
-    reader.read.mockRejectedValueOnce(new Error("Older page failed"));
     grid.element().scrollTop = 180 * 26;
     grid.element().dispatchEvent(new Event("scroll"));
     await expect
@@ -129,18 +163,19 @@ describe("commit graph navigation", () => {
   it("keeps a later pointer selection when a pending keyboard page arrives", async () => {
     const commits = history(130);
     const reader = historyReader({ commits, status: "ready" });
-    const screen = await renderGraph(reader);
-    const grid = screen.getByRole("grid");
-    await expect
-      .element(grid.getByRole("row", { name: /^Commit 0,/ }))
-      .toBeVisible();
     let release: ((value: readonly RepositoryCommit[]) => void) | undefined;
+    reader.read.mockResolvedValueOnce(commits.slice(0, 100));
     reader.read.mockImplementationOnce(
       () =>
         new Promise((resolve) => {
           release = resolve;
         }),
     );
+    const screen = await renderGraph(reader);
+    const grid = screen.getByRole("grid");
+    await expect
+      .element(grid.getByRole("row", { name: /^Commit 0,/ }))
+      .toBeVisible();
     grid.element().focus();
     await userEvent.keyboard("{End}{ArrowDown}");
     await vi.waitFor(() => expect(release).toBeDefined());
@@ -209,18 +244,19 @@ describe("commit graph navigation", () => {
   it("continues same-lane keyboard navigation across a pending page", async () => {
     const commits = history(130);
     const reader = historyReader({ commits, status: "ready" });
-    const screen = await renderGraph(reader);
-    const grid = screen.getByRole("grid");
-    await expect
-      .element(grid.getByRole("row", { name: /^Commit 0,/ }))
-      .toBeVisible();
     let release: ((value: readonly RepositoryCommit[]) => void) | undefined;
+    reader.read.mockResolvedValueOnce(commits.slice(0, 100));
     reader.read.mockImplementationOnce(
       () =>
         new Promise((resolve) => {
           release = resolve;
         }),
     );
+    const screen = await renderGraph(reader);
+    const grid = screen.getByRole("grid");
+    await expect
+      .element(grid.getByRole("row", { name: /^Commit 0,/ }))
+      .toBeVisible();
     grid.element().focus();
     await userEvent.keyboard("{End}");
     await expect
@@ -565,9 +601,11 @@ describe("commit graph navigation", () => {
         },
       );
       const reader = historyReader({ commits, status: "ready" });
-      reader.read
-        .mockResolvedValueOnce(commits)
-        .mockReturnValueOnce(reconciliation);
+      reader.read.mockImplementation(async (query) =>
+        query.roots[0]?.oid === "e".repeat(40) && (query.offset ?? 0) === 0
+          ? reconciliation
+          : commits.slice(query.offset ?? 0, (query.offset ?? 0) + query.limit),
+      );
       const screen = await renderGraph(reader);
       const grid = screen.getByRole("grid", { name: "Commit history" });
       grid.element().scrollTop = scrollTop;

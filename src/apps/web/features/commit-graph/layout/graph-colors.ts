@@ -38,7 +38,10 @@ export function graphBranchColorIndex(name: string) {
   return 1 + (hash % (palette.length - 1));
 }
 
-export function graphLaneSeeds(refs: readonly RepositoryHistoryRefTarget[]) {
+export function graphLaneSeeds(
+  refs: readonly RepositoryHistoryRefTarget[],
+  previousRows: readonly CommitLaneRow[] = [],
+) {
   const seeds = new Map<string, CommitLaneSeed>();
   for (const ref of refs) {
     if (ref.type !== "branch" && ref.type !== "remote-branch") continue;
@@ -47,6 +50,14 @@ export function graphLaneSeeds(refs: readonly RepositoryHistoryRefTarget[]) {
       color: graphBranchColorIndex(graphRefName(ref)),
       remote: ref.type === "remote-branch",
     });
+  }
+  for (const row of previousRows) {
+    const node = row.lanesBefore.find((lane) => lane.id === row.nodeLaneId);
+    if (node !== undefined)
+      seeds.set(row.oid, {
+        color: node.color,
+        remote: seeds.get(row.oid)?.remote ?? row.nodeRemote,
+      });
   }
   return seeds;
 }

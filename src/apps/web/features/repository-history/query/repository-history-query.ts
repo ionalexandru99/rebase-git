@@ -54,9 +54,11 @@ export async function locateRepositoryHistoryCommits(
   const roots = normalizedOids(query.roots.map(({ oid }) => oid));
   const key = historyOrderScopeKey(query);
   const previous = cache.queries.get(key);
+  const index = cache.index;
   if (
-    !previous?.complete ||
-    previous.basis !== JSON.stringify([revision, roots])
+    (index === undefined || roots.some((oid) => !index.has(oid))) &&
+    (!previous?.complete ||
+      previous.basis !== JSON.stringify([revision, roots]))
   ) {
     const known = await locateCachedHistoryPrefix(
       environmentId,
@@ -128,6 +130,19 @@ async function resolveRepositoryHistoryOrder(
   const roots = normalizedOids(query.roots.map(({ oid }) => oid));
   const basis = JSON.stringify([revision, roots]);
   let previous = cache.queries.get(key);
+  if (previous?.complete && previous.basis === basis) return previous.oids;
+  const index = cache.index;
+  if (index !== undefined && roots.every((oid) => index.has(oid))) {
+    const ordered = index.order(
+      roots,
+      query.order,
+      previous?.oids,
+      query.ancestry,
+      query.additionalParentEdges,
+    );
+    rememberHistoryOrder(cache, key, { basis, oids: ordered, complete: true });
+    return ordered;
+  }
   if (previous?.basis !== basis) {
     const page = await readRepositoryHistory(
       environmentId,

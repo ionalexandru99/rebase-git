@@ -137,7 +137,34 @@ test("cached order changes on 250,000 merge-heavy commits", async ({
           throw new Error("Ordered page is inconsistent");
         durations.push(duration);
       }
-      return { indexMilliseconds, durations };
+      const expandedQuery = {
+        roots,
+        order: "topological" as const,
+        ancestry: "first-parent" as const,
+        additionalParentEdges: [{ childOid: oid(0), parentOid: oid(2) }],
+        limit: 100,
+      };
+      const expansionStarted = performance.now();
+      const position = await queries.locateRepositoryHistoryCommit(
+        environmentId,
+        repositoryId,
+        expandedQuery,
+        oid(0),
+        cache,
+      );
+      if (position !== 0)
+        throw new Error("Expanded merge position is inconsistent");
+      const expandedPage = await queries.readRepositoryHistory(
+        environmentId,
+        repositoryId,
+        { ...expandedQuery, offset: position },
+        indexedDB,
+        cache,
+      );
+      const firstExpansionMilliseconds = performance.now() - expansionStarted;
+      if (!expandedPage?.some((commit) => commit.oid === oid(2)))
+        throw new Error("Expanded merge page is inconsistent");
+      return { indexMilliseconds, durations, firstExpansionMilliseconds };
     });
     const durations = measurements.durations.toSorted((a, b) => a - b);
     const p95 = durations[Math.ceil(durations.length * 0.95) - 1] ?? Infinity;
@@ -145,6 +172,11 @@ test("cached order changes on 250,000 merge-heavy commits", async ({
       `${JSON.stringify({ ...measurements, p95Milliseconds: p95 })}\n`,
     );
     assertTimingBudget("Cached history order p95", p95, 100);
+    assertTimingBudget(
+      "First merge expansion with prepared history",
+      measurements.firstExpansionMilliseconds,
+      100,
+    );
   } finally {
     await server.close();
   }

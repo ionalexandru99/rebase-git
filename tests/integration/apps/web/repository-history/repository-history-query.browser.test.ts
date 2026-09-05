@@ -23,6 +23,88 @@ import type { StoredRepository } from "#web/persistence/repository-history/repos
 import { repositoryKey } from "#web/persistence/repository-history/repository-history-records";
 
 describe("local ordered history pages", () => {
+  it("uses the cached page when a moved branch tip is newer than the prepared index", async () => {
+    const fixture = await seed("main", false);
+    const cache: HistoryOrderCache = { queries: new Map(), revision: 0 };
+    await prepareRepositoryHistoryOrder(
+      fixture.environmentId,
+      fixture.repositoryId,
+      cache,
+    );
+    const existing = fixture.commits[0];
+    if (existing === undefined) throw new Error("Missing fixture commit");
+    const commit = {
+      ...existing,
+      oid: "f".repeat(40),
+      parents: [oid("merge")],
+    };
+    const roots = [{ name: "main", type: "branch" as const, oid: commit.oid }];
+    const query = {
+      roots,
+      order: "topological" as const,
+      ancestry: "first-parent" as const,
+      limit: 100,
+    };
+    await storeRepositoryHistoryPage(
+      fixture.environmentId,
+      fixture.repositoryId,
+      {
+        repositoryId: fixture.repositoryId,
+        requestId: crypto.randomUUID(),
+        objectFormat: "sha1",
+        refTargets: roots,
+        commits: [commit],
+      },
+      query,
+    );
+
+    expect(cache.index?.has(commit.oid)).toBe(false);
+    expect(
+      await locateRepositoryHistoryCommits(
+        fixture.environmentId,
+        fixture.repositoryId,
+        query,
+        [commit.oid],
+        cache,
+      ),
+    ).toEqual([{ oid: commit.oid, index: 0 }]);
+  });
+
+  it("locates a newly expanded merge from the prepared index without loading commit metadata", async () => {
+    const fixture = await seed("main", false);
+    const cache: HistoryOrderCache = { queries: new Map(), revision: 0 };
+    await prepareRepositoryHistoryOrder(
+      fixture.environmentId,
+      fixture.repositoryId,
+      cache,
+    );
+    const reads = vi.spyOn(IDBObjectStore.prototype, "get");
+    try {
+      const located = await locateRepositoryHistoryCommits(
+        fixture.environmentId,
+        fixture.repositoryId,
+        {
+          roots: [root("main", "merge")],
+          order: "topological",
+          ancestry: "first-parent",
+          additionalParentEdges: [
+            { childOid: oid("merge"), parentOid: oid("right") },
+          ],
+          limit: 100,
+        },
+        [oid("right"), oid("base")],
+        cache,
+      );
+      expect(located).toEqual([
+        { oid: oid("right"), index: 2 },
+        { oid: oid("base"), index: 3 },
+      ]);
+      expect(reads).not.toHaveBeenCalled();
+    } finally {
+      reads.mockRestore();
+    }
+  });
+
   it.each([false, true])(
     "retries a generation change unless the query was superseded (superseded=%s)",
     async (superseded) => {

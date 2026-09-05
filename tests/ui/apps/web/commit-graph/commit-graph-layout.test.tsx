@@ -181,7 +181,7 @@ describe("commit graph layout", () => {
       .getByRole("button", { name: "Copy main", exact: true });
     const remote = screen
       .getByRole("row", { name: /^Commit 1,/ })
-      .getByRole("button", { name: "Copy origin/main", exact: true });
+      .getByRole("button", { name: "Copy main", exact: true });
     await expect.element(local).toBeVisible();
     await expect.element(remote).toBeVisible();
     const filled = getComputedStyle(local.element());

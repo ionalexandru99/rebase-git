@@ -182,14 +182,9 @@ describe("commit graph states", () => {
     await expect
       .element(firstCommit.getByText("main", { exact: true }))
       .toBeVisible();
-    await expect
-      .element(
-        firstCommit.getByRole("button", {
-          name: "Copy origin/main",
-          exact: true,
-        }),
-      )
-      .not.toBeInTheDocument();
+    expect(
+      firstCommit.getByRole("button", { name: "Copy main", exact: true }).all(),
+    ).toHaveLength(1);
     await expect.element(screen.getByText("hidden")).not.toBeInTheDocument();
 
     await screen
@@ -226,7 +221,7 @@ describe("commit graph states", () => {
     const screen = await renderGraph(reader);
     const grid = screen.getByRole("grid", { name: "Commit history" });
 
-    await expect.element(grid).toHaveAttribute("aria-rowcount", "-1");
+    await expect.element(grid).toHaveAttribute("aria-rowcount", "101");
     await expect
       .element(grid.getByRole("row", { name: /Commit 0/ }))
       .toBeVisible();

@@ -36,6 +36,7 @@ export interface HistoryOrderCache {
 }
 
 export interface HistoryOrderIndexReader {
+  readonly has: (oid: string) => boolean;
   readonly ancestryRoute: (
     roots: readonly string[],
     targetOid: string,

@@ -7,7 +7,7 @@ import { GraphRefAppearance } from "#web-ui/features/commit-graph/components/gra
 afterEach(() => vi.restoreAllMocks());
 
 describe("commit reference pills", () => {
-  it("copies the full remote name on keyboard activation and preserves pill width", async () => {
+  it("copies the branch name without its remote on keyboard activation and preserves pill width", async () => {
     const copy = vi.spyOn(navigator.clipboard, "writeText").mockResolvedValue();
     const screen = await render(
       <GraphRefAppearance
@@ -22,19 +22,17 @@ describe("commit reference pills", () => {
       </GraphRefAppearance>,
     );
     const pill = screen.getByRole("button", {
-      name: "Copy origin/feature/cache",
+      name: "Copy feature/cache",
     });
     expect(pill.element().textContent).toBe("feature/cache");
     expect(pill.element().querySelector("svg")).not.toBeNull();
     const width = pill.element().getBoundingClientRect().width;
     pill.element().focus();
     await userEvent.keyboard("{Enter}");
-    await vi.waitFor(() =>
-      expect(copy).toHaveBeenCalledWith("origin/feature/cache"),
-    );
+    await vi.waitFor(() => expect(copy).toHaveBeenCalledWith("feature/cache"));
     await expect
       .element(screen.getByRole("status"))
-      .toHaveTextContent("Copied origin/feature/cache");
+      .toHaveTextContent("Copied feature/cache");
     expect(pill.element().getBoundingClientRect().width).toBe(width);
     await expect.element(screen.getByRole("status")).toHaveTextContent("");
   });
@@ -55,11 +53,9 @@ describe("commit reference pills", () => {
     await expect
       .element(screen.getByRole("button", { name: "Copy v1", exact: true }))
       .toBeVisible();
-    await expect
-      .element(
-        screen.getByRole("button", { name: "Copy origin/main", exact: true }),
-      )
-      .not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Copy main", exact: true }).all(),
+    ).toHaveLength(1);
   });
 
   it("reports a failed clipboard write inside the pill", async () => {
@@ -87,7 +83,7 @@ describe("commit reference pills", () => {
       .mockImplementation(() => {
         const field = document.activeElement;
         expect(field).toBeInstanceOf(HTMLTextAreaElement);
-        expect((field as HTMLTextAreaElement).value).toBe("origin/main");
+        expect((field as HTMLTextAreaElement).value).toBe("main");
         return true;
       });
     const screen = await render(
@@ -95,12 +91,12 @@ describe("commit reference pills", () => {
         labels={[{ name: "origin/main", oid: "a", type: "remote-branch" }]}
       />,
     );
-    const pill = screen.getByRole("button", { name: "Copy origin/main" });
+    const pill = screen.getByRole("button", { name: "Copy main" });
     pill.element().focus();
     await userEvent.keyboard("{Enter}");
     await expect
       .element(screen.getByRole("status"))
-      .toHaveTextContent("Copied origin/main");
+      .toHaveTextContent("Copied main");
     expect(fallback).toHaveBeenCalledWith("copy");
     expect(document.activeElement).toBe(pill.element());
     expect(document.querySelector("textarea")).toBeNull();
