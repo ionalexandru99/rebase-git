@@ -8,14 +8,18 @@ import {
   RepositoryCatalog as RepositoryCatalogSchema,
   RepositoryRemoved,
 } from "@rebase/contracts";
-import { Effect, Schema } from "effect";
+import { Effect } from "effect";
 import type { RepositoryCatalog } from "#server/domain/repository-catalog.contract";
 import type { EnvironmentAuthorization } from "#server/features/environment-authorization/environment-authorization.contract";
 import {
   readBearerCredential,
   validateRequestOrigin,
 } from "#server/features/environment-connection/environment-request-authorization";
-import { EnvironmentHttpBodyError } from "#server/features/environment-connection/http/environment-http-request-body.contract";
+import {
+  decodeRequestBody,
+  requireEmptyBody,
+  requireMethod,
+} from "#server/features/environment-connection/http/environment-http-request-validation";
 import { writeJson } from "#server/features/environment-connection/http/environment-http-response";
 
 export function respondToRepositoryCatalogRequest(
@@ -117,39 +121,5 @@ export function respondToRepositoryCatalogRequest(
     }
 
     return false;
-  });
-}
-
-function requireMethod(
-  request: IncomingMessage,
-  response: ServerResponse,
-  method: string,
-) {
-  if (request.method === method) return Effect.void;
-  return Effect.sync(() =>
-    response.writeHead(405, { allow: method }).end(),
-  ).pipe(Effect.andThen(Effect.interrupt));
-}
-
-function requireEmptyBody(body: Buffer) {
-  return body.byteLength === 0 ? Effect.void : Effect.fail(invalidMessage());
-}
-
-function decodeRequestBody<S extends Schema.ConstraintDecoder<unknown, never>>(
-  schema: S,
-  body: Buffer,
-) {
-  return Effect.try({
-    try: () =>
-      Schema.decodeUnknownSync(schema)(JSON.parse(body.toString("utf8")), {
-        onExcessProperty: "error",
-      }),
-    catch: invalidMessage,
-  });
-}
-
-function invalidMessage() {
-  return new EnvironmentHttpBodyError({
-    failure: { _tag: "InvalidMessage" },
   });
 }

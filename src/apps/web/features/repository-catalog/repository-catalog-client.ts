@@ -1,5 +1,4 @@
 import {
-  currentClientReceiveLimits,
   RecordRepositoryOpened,
   RememberRepository,
   RemoveRepository,
@@ -10,7 +9,7 @@ import {
   RepositoryRemoved,
 } from "@rebase/contracts";
 import { Effect, Schema } from "effect";
-import { readBoundedEnvironmentResponseBody } from "#web/features/environment-connection/http/environment-http-response-body";
+import { requestEnvironmentJson } from "#web/features/environment-connection/http/environment-http-json";
 import {
   RepositoryCatalogRejected,
   RepositoryCatalogResponseError,
@@ -90,57 +89,28 @@ function requestRepositoryCatalog<
   failureSchema: F,
   body?: string,
 ) {
-  return Effect.gen(function* () {
-    const response = yield* Effect.tryPromise({
-      try: (signal) =>
-        fetch(new URL(path, normalizeOrigin(origin)), {
-          ...(body === undefined ? {} : { body }),
-          headers: {
-            authorization: `Bearer ${credential}`,
-            ...(body === undefined
-              ? {}
-              : { "content-type": "application/json" }),
-          },
-          method,
-          signal,
-        }),
-      catch: () => new RepositoryCatalogResponseError(),
-    });
-    return yield* decodeResponse(response, successSchema, failureSchema);
-  });
-}
-
-function decodeResponse<
-  S extends Schema.ConstraintDecoder<unknown, never>,
-  F extends Schema.ConstraintDecoder<RepositoryCatalogHttpFailure, never>,
->(response: Response, successSchema: S, failureSchema: F) {
-  return Effect.scoped(
-    Effect.gen(function* () {
-      const encoded = yield* readBoundedEnvironmentResponseBody(
-        response,
-        currentClientReceiveLimits.maxHttpResponseBytes,
-      ).pipe(Effect.mapError(() => new RepositoryCatalogResponseError()));
-      const json = yield* Effect.try({
-        try: () => JSON.parse(encoded) as unknown,
-        catch: () => new RepositoryCatalogResponseError(),
-      });
-      if (!response.ok) {
-        const failure = yield* Effect.try({
-          try: () => Schema.decodeUnknownSync(failureSchema)(json),
-          catch: () => new RepositoryCatalogResponseError(),
-        });
-        return yield* Effect.fail(
-          new RepositoryCatalogRejected({
-            failure,
-            status: response.status,
-          }),
-        );
-      }
-      return yield* Effect.try({
-        try: () => Schema.decodeUnknownSync(successSchema)(json),
-        catch: () => new RepositoryCatalogResponseError(),
-      });
-    }),
+  return Effect.try({
+    try: () => new URL(path, normalizeOrigin(origin)),
+    catch: () => new RepositoryCatalogResponseError(),
+  }).pipe(
+    Effect.flatMap((url) =>
+      requestEnvironmentJson(
+        url,
+        method,
+        credential,
+        successSchema,
+        failureSchema,
+        body,
+      ),
+    ),
+    Effect.mapError((error) =>
+      error._tag === "EnvironmentHttpRejected"
+        ? new RepositoryCatalogRejected({
+            failure: error.failure,
+            status: error.status,
+          })
+        : new RepositoryCatalogResponseError(),
+    ),
   );
 }
 

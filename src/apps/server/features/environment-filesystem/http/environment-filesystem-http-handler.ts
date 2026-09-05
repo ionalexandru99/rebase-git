@@ -4,14 +4,17 @@ import {
   EnvironmentFilesystemHttpApi,
   ListEnvironmentDirectory,
 } from "@rebase/contracts";
-import { Effect, Schema } from "effect";
+import { Effect } from "effect";
 import type { EnvironmentFilesystem } from "#server/domain/environment-filesystem.contract";
 import type { EnvironmentAuthorization } from "#server/features/environment-authorization/environment-authorization.contract";
 import {
   readBearerCredential,
   validateRequestOrigin,
 } from "#server/features/environment-connection/environment-request-authorization";
-import { EnvironmentHttpBodyError } from "#server/features/environment-connection/http/environment-http-request-body.contract";
+import {
+  decodeRequestBody,
+  requireMethod,
+} from "#server/features/environment-connection/http/environment-http-request-validation";
 import { writeJson } from "#server/features/environment-connection/http/environment-http-response";
 
 export function respondToEnvironmentFilesystemRequest(
@@ -36,7 +39,10 @@ export function respondToEnvironmentFilesystemRequest(
       readBearerCredential(request),
       "repository.write",
     );
-    const requestedDirectory = yield* decodeRequestBody(body);
+    const requestedDirectory = yield* decodeRequestBody(
+      ListEnvironmentDirectory,
+      body,
+    );
     const listing = yield* filesystem.listDirectory(
       requestedDirectory.path,
       requestedDirectory.includeHidden,
@@ -48,32 +54,5 @@ export function respondToEnvironmentFilesystemRequest(
       listing,
     );
     return true;
-  });
-}
-
-function requireMethod(
-  request: IncomingMessage,
-  response: ServerResponse,
-  method: string,
-) {
-  if (request.method === method) return Effect.void;
-  return Effect.sync(() =>
-    response.writeHead(405, { allow: method }).end(),
-  ).pipe(Effect.andThen(Effect.interrupt));
-}
-
-function decodeRequestBody(body: Buffer) {
-  return Effect.try({
-    try: () =>
-      Schema.decodeUnknownSync(ListEnvironmentDirectory)(
-        JSON.parse(body.toString("utf8")),
-        {
-          onExcessProperty: "error",
-        },
-      ),
-    catch: () =>
-      new EnvironmentHttpBodyError({
-        failure: { _tag: "InvalidMessage" },
-      }),
   });
 }

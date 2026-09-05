@@ -38,6 +38,59 @@ afterEach(async () => {
 });
 
 describe("Environment authorization transport", () => {
+  it("rejects malformed, invalid, and excess JSON fields before exchanging a pairing", async () => {
+    await withAuthorizedListener(async ({ authorization, origin }) => {
+      const pairing = await run(
+        authorization.createPairing({ capabilities: [], role: "viewer" }),
+      );
+      const exchange = {
+        label: "Browser client",
+        pairingMaterial: pairing.material,
+      };
+      for (const body of [
+        "{",
+        "{}",
+        JSON.stringify({ ...exchange, unexpected: true }),
+      ]) {
+        const response = await fetch(
+          `${origin}${EnvironmentAuthorizationHttpApi.exchangePairing.path}`,
+          {
+            method: "POST",
+            headers: { "content-type": "application/json", origin },
+            body,
+          },
+        );
+        expect(await responseResult(response)).toEqual({
+          body: { _tag: "InvalidMessage" },
+          status: 400,
+        });
+      }
+      await expect(
+        exchangeEnvironmentPairingFromClient(origin, exchange),
+      ).resolves.toHaveProperty("credential");
+    });
+  });
+
+  it("returns the allowed method and rejects bodies on empty-body routes", async () => {
+    await withAuthorizedListener(async ({ origin, owner }) => {
+      const url = `${origin}${EnvironmentAuthorizationHttpApi.mintWebSocketTicket.path}`;
+      const wrongMethod = await fetch(url);
+      expect(wrongMethod.status).toBe(405);
+      expect(wrongMethod.headers.get("allow")).toBe("POST");
+      expect(await wrongMethod.text()).toBe("");
+
+      const nonEmpty = await fetch(url, {
+        method: "POST",
+        headers: { authorization: `Bearer ${owner.credential}`, origin },
+        body: " ",
+      });
+      expect(await responseResult(nonEmpty)).toEqual({
+        body: { _tag: "InvalidMessage" },
+        status: 400,
+      });
+    });
+  });
+
   it("connects the browser client with the exchanged device credential", async () => {
     await withAuthorizedListener(async ({ authorization, origin }) => {
       await expect(
