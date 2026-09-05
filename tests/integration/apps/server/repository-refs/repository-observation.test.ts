@@ -95,13 +95,11 @@ for (const firstRelease of ["refs", "freshness"] as const)
           const fresh = vi.fn();
           const unsubscribe = yield* freshness.subscribe(linkedEntry.id, fresh);
           expect(run).toHaveBeenCalledTimes(12);
-          const roots = vi
-            .mocked(watch)
-            .mock.calls.flatMap((args, index) =>
-              args[0] === join(main, ".git")
-                ? [vi.mocked(watch).mock.results[index]?.value]
-                : [],
-            );
+          const roots = vi.mocked(watch).mock.calls.flatMap((args, index) => {
+            if (args[0] !== join(main, ".git")) return [];
+            const result = vi.mocked(watch).mock.results[index];
+            return result?.type === "return" ? [result.value] : [];
+          });
           expect(roots).toHaveLength(1);
           expect(
             run.mock.calls.filter(([command]) =>
