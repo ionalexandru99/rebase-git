@@ -2,14 +2,16 @@ import type { EnvironmentEventPublisher } from "#server/features/environment-con
 
 export function createEnvironmentEventPublisher(): EnvironmentEventPublisher {
   let sequence = 0;
-  const subscribers = new Set<(sequence: number) => void>();
+  const subscribers = new Set<
+    (sequence: number, repositoryIds?: readonly string[]) => void
+  >();
 
   return {
     currentSequence: () => sequence,
-    publishChanged: () => {
+    publishChanged: (repositoryIds) => {
       sequence += 1;
       for (const subscriber of subscribers) {
-        subscriber(sequence);
+        subscriber(sequence, repositoryIds);
       }
       return sequence;
     },

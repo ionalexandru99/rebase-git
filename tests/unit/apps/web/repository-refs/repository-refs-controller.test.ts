@@ -13,6 +13,87 @@ const alphaId = "00000000-0000-4000-8000-000000000001";
 const bravoId = "00000000-0000-4000-8000-000000000002";
 
 describe("repository refs controller", () => {
+  it("retries stale cached refs after a failed refresh when the repository is selected again", async () => {
+    const gateway = createGateway({
+      [alphaId]: refs(alphaId),
+      [bravoId]: refs(bravoId),
+    });
+    const session = createRepositoryRefsController(gateway);
+    session.authorize("private-credential");
+    session.controller.select(alphaId);
+    await whenReady(session.controller);
+    gateway.read.mockReturnValueOnce(
+      Effect.fail(
+        new RepositoryRefsRejected({
+          status: 404,
+          failure: { _tag: "RepositoryMissing", repositoryId: alphaId },
+        }),
+      ),
+    );
+    session.controller.invalidate([alphaId]);
+    await vi.waitFor(() =>
+      expect(session.controller.getSnapshot().status).toBe("error"),
+    );
+    expect(gateway.read).toHaveBeenCalledTimes(2);
+
+    session.controller.select(bravoId);
+    await whenReady(session.controller);
+    session.controller.select(alphaId);
+    await vi.waitFor(() => expect(gateway.read).toHaveBeenCalledTimes(4));
+    expect(gateway.read).toHaveBeenLastCalledWith(
+      "private-credential",
+      alphaId,
+    );
+  });
+
+  it("keeps a background read stale when its repository changes before the response arrives", async () => {
+    const pending = Deferred.makeUnsafe<RepositoryRefs>();
+    const gateway = createGateway({
+      [alphaId]: refs(alphaId),
+      [bravoId]: refs(bravoId),
+    });
+    gateway.read.mockImplementationOnce(() => Deferred.await(pending));
+    const session = createRepositoryRefsController(gateway);
+    session.authorize("private-credential");
+    session.controller.select(alphaId);
+    session.controller.select(bravoId);
+    await whenReady(session.controller);
+    session.controller.invalidate([alphaId]);
+    Deferred.doneUnsafe(pending, Effect.succeed(refs(alphaId)));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    session.controller.select(alphaId);
+    await vi.waitFor(() => expect(gateway.read).toHaveBeenCalledTimes(3));
+    expect(gateway.read).toHaveBeenLastCalledWith(
+      "private-credential",
+      alphaId,
+    );
+  });
+
+  it("invalidates a background repository without reloading the selected repository", async () => {
+    const gateway = createGateway({
+      [alphaId]: refs(alphaId),
+      [bravoId]: refs(bravoId),
+    });
+    const session = createRepositoryRefsController(gateway);
+    session.authorize("private-credential");
+    session.controller.select(alphaId);
+    await whenReady(session.controller);
+    session.controller.select(bravoId);
+    await whenReady(session.controller);
+
+    session.controller.invalidate([alphaId]);
+    await Promise.resolve();
+
+    expect(gateway.read).toHaveBeenCalledTimes(2);
+    session.controller.select(alphaId);
+    await vi.waitFor(() => expect(gateway.read).toHaveBeenCalledTimes(3));
+    expect(gateway.read).toHaveBeenLastCalledWith(
+      "private-credential",
+      alphaId,
+    );
+  });
+
   it("loads refs for the selected repository with its private credential", async () => {
     const gateway = createGateway({ [alphaId]: refs(alphaId) });
     const session = createRepositoryRefsController(gateway);

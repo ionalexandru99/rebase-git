@@ -128,6 +128,7 @@ function initializeNegotiatedSession(
         state,
         runSessionEffect,
         writer.send,
+        capabilities.has("repository-ref-events"),
       );
     }
     yield* enqueueInitialResnapshot(writer.enqueue, hello, result, state);
@@ -244,12 +245,19 @@ function acquireEventSubscription(
   state: EnvironmentTransportState,
   runSessionEffect: (effect: Effect.Effect<void, never, never>) => unknown,
   send: EnvironmentWebSocketWriter["send"],
+  supportsRepositoryIdentity: boolean,
 ) {
   return Effect.acquireRelease(
     Effect.sync(() =>
-      state.events.subscribe((sequence) => {
+      state.events.subscribe((sequence, repositoryIds) => {
         runSessionEffect(
-          send({ _tag: "EnvironmentChanged", sequence }).pipe(
+          send({
+            _tag: "EnvironmentChanged",
+            sequence,
+            ...(supportsRepositoryIdentity && repositoryIds !== undefined
+              ? { repositoryIds }
+              : {}),
+          }).pipe(
             Effect.catchTag("EnvironmentWebSocketWriteError", (error) =>
               closeForWriteError(socket, error),
             ),

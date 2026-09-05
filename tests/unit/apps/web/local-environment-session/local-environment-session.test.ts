@@ -25,6 +25,50 @@ import {
 import type { RepositoryRefsGateway } from "#web/features/repository-refs/repository-refs-controller.contract";
 
 describe("local Environment session", () => {
+  it("refreshes only changed refs and releases its change subscription on disconnect", async () => {
+    const connection = createConnection();
+    const release = vi.fn();
+    connection.subscribeChanges.mockReturnValue(release);
+    const refs = createRepositoryRefsGateway();
+    refs.read.mockImplementation((_credential, repositoryId) =>
+      Effect.succeed({
+        repositoryId,
+        logicalRepositoryId: repositoryId,
+        branches: [],
+        remoteBranches: [],
+        tags: [],
+        worktrees: [],
+        truncated: { branches: false, remoteBranches: false, tags: false },
+      }),
+    );
+    const session = createLocalEnvironmentSession({
+      filesystemGateway: createFilesystemGateway(),
+      gateway: createGateway(connection),
+      pairingMaterial: "123-456",
+      repositoryCatalogGateway: createRepositoryCatalogGateway(),
+      repositoryRefsGateway: refs,
+    });
+    session.start();
+    try {
+      await expectState(session.getSnapshot, "Connected");
+      session.repositoryRefs.select("background");
+      await vi.waitFor(() =>
+        expect(session.repositoryRefs.getSnapshot().status).toBe("ready"),
+      );
+      session.repositoryRefs.select("selected");
+      await vi.waitFor(() =>
+        expect(session.repositoryRefs.getSnapshot().status).toBe("ready"),
+      );
+      connection.subscribeChanges.mock.calls[0]?.[0](["background"]);
+      expect(refs.read).toHaveBeenCalledTimes(2);
+      connection.subscribeChanges.mock.calls[0]?.[0](["selected"]);
+      await vi.waitFor(() => expect(refs.read).toHaveBeenCalledTimes(3));
+    } finally {
+      session.stop();
+    }
+    await vi.waitFor(() => expect(release).toHaveBeenCalledOnce());
+  });
+
   it("exchanges the pairing material and opens the initial connection", async () => {
     const connection = createConnection();
     const gateway = createGateway(connection);
@@ -265,6 +309,9 @@ function createConnection(
     },
     repositoryHistory,
     waitForSequence: vi.fn(() => Effect.never),
+    subscribeChanges: vi.fn<EnvironmentProtocolConnection["subscribeChanges"]>(
+      () => () => {},
+    ),
   } satisfies EnvironmentProtocolConnection & {
     readonly disconnect: ReturnType<typeof deferred<EnvironmentResponseError>>;
   };

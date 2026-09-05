@@ -71,7 +71,7 @@ function handleEnvironmentServerMessage(
     case "RepositoryHistoryFreshness":
       return session.repositoryHistory.freshness.accept(message);
     case "EnvironmentChanged":
-      return handleEnvironmentChanged(session, capabilities, message.sequence);
+      return handleEnvironmentChanged(session, capabilities, message);
     case "ResnapshotRequired":
       return capabilities.has("sequence-resnapshot")
         ? recoverEnvironmentSnapshot(session, message.currentSequence)
@@ -106,7 +106,7 @@ function binaryMessageBytes(data: unknown) {
 function handleEnvironmentChanged(
   session: EnvironmentLiveSession,
   capabilities: ReadonlySet<EnvironmentCapabilityName>,
-  sequence: number,
+  message: Extract<EnvironmentServerMessage, { _tag: "EnvironmentChanged" }>,
 ) {
   if (!capabilities.has("environment-events")) {
     return Effect.fail(environmentResponseError("WebSocket"));
@@ -114,11 +114,16 @@ function handleEnvironmentChanged(
 
   const advanced = advanceEnvironmentSequence(
     Ref.getUnsafe(session.state).currentSequence,
-    sequence,
+    message.sequence,
   );
+  if (advanced._tag === "SequenceIgnored") return Effect.void;
   return advanced._tag === "SequenceAccepted"
-    ? updateEnvironmentSequence(session.state, advanced.sequence)
-    : recoverEnvironmentSnapshot(session, sequence);
+    ? updateEnvironmentSequence(
+        session.state,
+        advanced.sequence,
+        message.repositoryIds,
+      )
+    : recoverEnvironmentSnapshot(session, message.sequence);
 }
 
 function recoverEnvironmentSnapshot(

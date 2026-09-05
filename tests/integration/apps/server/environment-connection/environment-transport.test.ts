@@ -34,7 +34,7 @@ describe("Environment transport", () => {
       expect(discovery).toMatchObject({
         environmentId,
         productVersion: "0.0.0",
-        protocol: { major: 1, minor: 3, minimumSupportedMinor: 0 },
+        protocol: { major: 1, minor: 4, minimumSupportedMinor: 0 },
         limits: currentTransportLimits,
       });
       expect(
@@ -68,7 +68,7 @@ describe("Environment transport", () => {
         _tag: "HelloAccepted",
         accessCapabilities: ["environment.read"],
         environmentId,
-        protocol: { major: 1, minor: 3 },
+        protocol: { major: 1, minor: 4 },
       });
       expect(
         accepted._tag === "HelloAccepted" &&

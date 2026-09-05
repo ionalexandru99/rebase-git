@@ -66,24 +66,21 @@ export function startEnvironmentServer(
       : options.port;
     const events = createEnvironmentEventPublisher();
     const git = createLocalGitCommandRunner();
+    const watcher = createLocalRepositoryWatcher();
     const freshness = yield* Layer.build(
       repositoryFreshnessLayer.pipe(
         Layer.provide(
           Layer.mergeAll(
             Layer.succeed(GitCommands, git),
             Layer.succeed(RepositoryCatalogAccess, catalog),
-            Layer.succeed(RepositoryWatching, createLocalRepositoryWatcher()),
+            Layer.succeed(RepositoryWatching, watcher),
           ),
         ),
       ),
     );
     const refs = createRepositoryRefsService({
       catalog,
-      changes: yield* acquireRepositoryChangePublisher(
-        git,
-        createLocalRepositoryWatcher(),
-        events,
-      ),
+      changes: yield* acquireRepositoryChangePublisher(git, watcher, events),
       git,
     });
     const listener = yield* acquireEnvironmentListener({

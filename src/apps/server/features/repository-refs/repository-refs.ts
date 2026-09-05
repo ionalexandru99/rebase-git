@@ -35,7 +35,7 @@ export function createRepositoryRefsService(dependencies: {
     read: (repositoryId) =>
       Effect.gen(function* () {
         const repository = yield* requireRepository(catalog, repositoryId);
-        yield* changes.watch(repository.path);
+        yield* changes.watch(repository);
         return yield* readRepositoryRefs(git, repository);
       }),
   };

@@ -4,7 +4,6 @@ import {
   type EnvironmentConnectionFailure,
   EnvironmentHelloRejected,
 } from "#web/features/environment-connection/environment-connection-errors";
-import type { EnvironmentProtocolConnection } from "#web/features/environment-connection/environment-protocol-connection.contract";
 import { createEnvironmentFilesystemController } from "#web/features/environment-filesystem/environment-filesystem-controller";
 import type {
   LocalEnvironmentSession,
@@ -161,10 +160,18 @@ function maintainConnection(
         Effect.scoped(
           options.gateway.connect(credential, lastObservedSequence).pipe(
             Effect.flatMap((active) =>
-              Effect.sync(() => {
-                repositoryHistory.connect(active.repositoryHistory);
-                environmentId = active.negotiated.environmentId;
-              }).pipe(
+              Effect.acquireRelease(
+                Effect.sync(() =>
+                  active.subscribeChanges(repositoryRefs.invalidate),
+                ),
+                (unsubscribe) => Effect.sync(unsubscribe),
+              ).pipe(
+                Effect.andThen(
+                  Effect.sync(() => {
+                    repositoryHistory.connect(active.repositoryHistory);
+                    environmentId = active.negotiated.environmentId;
+                  }),
+                ),
                 Effect.andThen(refreshRepositoryCatalog(repositoryCatalog)),
                 Effect.andThen(Effect.sync(repositoryRefs.invalidate)),
                 Effect.andThen(
@@ -176,13 +183,7 @@ function maintainConnection(
                   }),
                 ),
                 Effect.andThen(
-                  Effect.raceFirst(
-                    active.closed,
-                    observeEnvironmentChanges(
-                      active,
-                      repositoryRefs.invalidate,
-                    ),
-                  ).pipe(
+                  active.closed.pipe(
                     Effect.map((failure) => ({
                       failure,
                       lastObservedSequence: active.currentSequence(),
@@ -224,20 +225,6 @@ function refreshRepositoryCatalog(
   return Effect.promise(() =>
     repositoryCatalog.refresh().catch(() => undefined),
   );
-}
-
-function observeEnvironmentChanges(
-  connection: EnvironmentProtocolConnection,
-  onChange: () => void,
-): Effect.Effect<never> {
-  return Effect.gen(function* () {
-    let observed = connection.currentSequence();
-    while (true) {
-      const reached = yield* connection.waitForSequence(observed + 1);
-      observed = Math.max(reached, observed + 1);
-      onChange();
-    }
-  }).pipe(Effect.catch(() => Effect.never));
 }
 
 function reconnectAfter(

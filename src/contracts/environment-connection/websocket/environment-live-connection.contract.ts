@@ -104,6 +104,9 @@ export type HelloRejected = typeof HelloRejected.Type;
 
 export const EnvironmentChanged = Schema.TaggedStruct("EnvironmentChanged", {
   sequence: Schema.Natural,
+  repositoryIds: Schema.optionalKey(
+    Schema.Array(Schema.String.check(Schema.isUUID(4))),
+  ),
 });
 
 export const ResnapshotRequired = Schema.TaggedStruct("ResnapshotRequired", {

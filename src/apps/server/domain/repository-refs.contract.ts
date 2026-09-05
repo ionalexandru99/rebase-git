@@ -1,5 +1,6 @@
 import type {
   CheckoutRepositoryRef,
+  RepositoryCatalogEntry,
   RepositoryCheckedOut,
   RepositoryRefs,
   RepositoryRefsOperationFailure,
@@ -23,7 +24,7 @@ export interface RepositoryRefsService {
 }
 
 export interface RepositoryChangePublisher {
-  readonly watch: (repositoryPath: string) => Effect.Effect<void>;
+  readonly watch: (repository: RepositoryCatalogEntry) => Effect.Effect<void>;
 }
 
 export class RepositoryRefsError extends Data.TaggedError(
