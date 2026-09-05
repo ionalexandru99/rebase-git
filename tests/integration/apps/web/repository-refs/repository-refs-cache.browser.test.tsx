@@ -123,7 +123,7 @@ it.each(["Automatic", "Custom"] as const)(
       .element(
         screen
           .getByRole("group", { name: `${mode} history scope` })
-          .getByRole("button", { name: "Remove feature from history" }),
+          .getByRole("button", { name: "Copy feature", exact: true }),
       )
       .toBeVisible();
     await expect
@@ -131,7 +131,8 @@ it.each(["Automatic", "Custom"] as const)(
         screen
           .getByRole("group", { name: `${mode} history scope` })
           .getByRole("button", {
-            name: `Remove ${mode === "Automatic" ? "main" : "new-tag"} from history`,
+            name: `Copy ${mode === "Automatic" ? "main" : "new-tag"}`,
+            exact: true,
           }),
       )
       .toBeVisible();
