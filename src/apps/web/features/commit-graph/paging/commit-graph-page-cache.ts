@@ -52,16 +52,17 @@ export function retainGraphPage(
   ) {
     if (cache.pages.size <= 1) break;
     const farthest = [...cache.pages.keys()]
-      .filter((offset) =>
-        viewport === undefined
-          ? offset !== page.offset
-          : offset > viewport.last || offset + pageSize <= viewport.first,
-      )
+      .filter((offset) => offset !== page.offset)
       .sort(
         (left, right) =>
           Math.abs(right - page.offset) - Math.abs(left - page.offset),
       )[0];
-    if (farthest === undefined) {
+    if (
+      farthest === undefined ||
+      (viewport !== undefined &&
+        farthest <= viewport.last &&
+        farthest + pageSize > viewport.first)
+    ) {
       cache.pages.delete(page.offset);
       break;
     }

@@ -63,25 +63,28 @@ describe("commit graph page window", () => {
     },
   );
 
-  it("keeps the cache bounded when a resize covers a pending speculative page", async () => {
-    const commits = history(300);
-    const reader = fakeReader(commits);
-    const window = createCommitGraphPageWindow(reader, { maximumPages: 2 });
-    await window.loadInitial(query);
-    await window.appendOlder();
-    const pending = deferred<readonly RepositoryCommit[]>();
-    reader.read.mockReturnValueOnce(pending.promise);
-    window.setViewport(100, 139);
-    await vi.waitFor(() => expect(reader.read).toHaveBeenCalledTimes(3));
-    window.setViewport(0, 299);
-    pending.resolve(commits.slice(200));
-    await vi.waitFor(() => expect(window.getSnapshot().loading).toBe(false));
-    expect(window.getSnapshot().pages.map((page) => page.offset)).toEqual([
-      0, 100,
-    ]);
-    expect(window.getSnapshot().knownEndOffset).toBe(200);
-    window.dispose();
-  });
+  it.each([89, 299])(
+    "preserves a contiguous cache when a pending prefetch outlives viewport 0..%i",
+    async (last) => {
+      const commits = history(300);
+      const reader = fakeReader(commits);
+      const window = createCommitGraphPageWindow(reader, { maximumPages: 2 });
+      await window.loadInitial(query);
+      await window.appendOlder();
+      const pending = deferred<readonly RepositoryCommit[]>();
+      reader.read.mockReturnValueOnce(pending.promise);
+      window.setViewport(100, 139);
+      await vi.waitFor(() => expect(reader.read).toHaveBeenCalledTimes(3));
+      window.setViewport(0, last);
+      pending.resolve(commits.slice(200));
+      await vi.waitFor(() => expect(window.getSnapshot().loading).toBe(false));
+      expect(window.getSnapshot().pages.map((page) => page.offset)).toEqual([
+        0, 100,
+      ]);
+      expect(window.getSnapshot().knownEndOffset).toBe(200);
+      window.dispose();
+    },
+  );
 
   it("discards resident history and pending navigation while preserving the query for rebuild", async () => {
     const commits = history(12);
