@@ -21,8 +21,11 @@ interface WatchedRepository {
   readonly controller: AbortController;
   path: string;
   readonly subscribers: Map<(freshness: RepositoryFreshness) => void, string>;
+  readonly fetchOwners: Set<(freshness: RepositoryFreshness) => void>;
   freshness: RepositoryFreshness;
   fetch?: Promise<RepositoryFreshness>;
+  fetchController?: AbortController;
+  manualFetchOwners: number;
   timer?: ReturnType<typeof setTimeout>;
   changeTimer?: ReturnType<typeof setTimeout>;
   watch?: RepositoryWatchHandle;
@@ -82,11 +85,16 @@ function createRepositoryFreshnessService(dependencies: {
     repository.controller.abort();
     repository.subscribers.clear();
   };
+  const cancelFetch = (repository: WatchedRepository) => {
+    repository.freshness = { ...repository.freshness, fetching: false };
+    publish(repository);
+    return repository.freshness;
+  };
   const schedule = (repository: WatchedRepository) => {
     clearTimeout(repository.timer);
     if (
       repository.controller.signal.aborted ||
-      repository.subscribers.size === 0
+      repository.fetchOwners.size === 0
     )
       return;
     const setting = repository.freshness.setting;
@@ -106,6 +114,7 @@ function createRepositoryFreshnessService(dependencies: {
     if (repository.fetch !== undefined) return repository.fetch;
     clearTimeout(repository.timer);
     repository.freshness = { ...repository.freshness, fetching: true };
+    repository.fetchController = new AbortController();
     publish(repository);
     repository.fetch = Effect.runPromise(
       dependencies.git
@@ -127,15 +136,26 @@ function createRepositoryFreshnessService(dependencies: {
             } as const),
           ),
         ),
-      { signal: repository.controller.signal },
+      {
+        signal: AbortSignal.any([
+          repository.controller.signal,
+          repository.fetchController.signal,
+        ]),
+      },
     )
       .then(
         (failure) => completeFetch(repository, failure),
         () =>
-          completeFetch(repository, { _tag: "FetchFailed", reason: "Failed" }),
+          repository.fetchController?.signal.aborted
+            ? cancelFetch(repository)
+            : completeFetch(repository, {
+                _tag: "FetchFailed",
+                reason: "Failed",
+              }),
       )
       .finally(() => {
         delete repository.fetch;
+        delete repository.fetchController;
         schedule(repository);
       });
     return repository.fetch;
@@ -177,6 +197,8 @@ function createRepositoryFreshnessService(dependencies: {
           controller: new AbortController(),
           path: entry.path,
           subscribers: new Map(),
+          fetchOwners: new Set(),
+          manualFetchOwners: 0,
           freshness: {
             fetching: false,
             stale: false,
@@ -204,7 +226,7 @@ function createRepositoryFreshnessService(dependencies: {
   };
 
   return {
-    subscribe: (repositoryId, subscriber) =>
+    subscribe: (repositoryId, subscriber, authorization) =>
       Effect.tryPromise({
         try: async (signal) => {
           if (closed) throw missingRepository(repositoryId);
@@ -236,6 +258,12 @@ function createRepositoryFreshnessService(dependencies: {
             signal.removeEventListener("abort", release);
             pending.count -= 1;
             repository.subscribers.delete(subscriber);
+            repository.fetchOwners.delete(subscriber);
+            if (repository.fetchOwners.size === 0) {
+              clearTimeout(repository.timer);
+              if (repository.manualFetchOwners === 0)
+                repository.fetchController?.abort();
+            }
             const survivingPath = repository.subscribers.values().next().value;
             if (survivingPath !== undefined) repository.path = survivingPath;
             if (pending.count !== 0) return;
@@ -250,10 +278,13 @@ function createRepositoryFreshnessService(dependencies: {
           }
           if (repository.subscribers.size === 0) repository.path = entry.path;
           repository.subscribers.set(subscriber, entry.path);
+          if (authorization?.automaticFetch)
+            repository.fetchOwners.add(subscriber);
           signal.addEventListener("abort", release, { once: true });
           subscriber(repository.freshness);
           if (
-            repository.subscribers.size === 1 &&
+            authorization?.automaticFetch &&
+            repository.fetchOwners.size === 1 &&
             repository.freshness.setting._tag !== "Disabled"
           )
             void fetch(repository);
@@ -263,9 +294,31 @@ function createRepositoryFreshnessService(dependencies: {
       }),
     fetch: (repositoryId) =>
       Effect.tryPromise({
-        try: async () => fetch(await active(repositoryId)),
+        try: () => active(repositoryId),
         catch: historyError,
-      }),
+      }).pipe(
+        Effect.flatMap((repository) =>
+          Effect.acquireUseRelease(
+            Effect.sync(() => {
+              repository.manualFetchOwners += 1;
+            }),
+            () =>
+              Effect.tryPromise({
+                try: () => fetch(repository),
+                catch: historyError,
+              }),
+            () =>
+              Effect.sync(() => {
+                repository.manualFetchOwners -= 1;
+                if (
+                  repository.manualFetchOwners === 0 &&
+                  repository.fetchOwners.size === 0
+                )
+                  repository.fetchController?.abort();
+              }),
+          ),
+        ),
+      ),
     configure: (repositoryId, setting: RepositoryFetchSetting) =>
       Effect.tryPromise({
         try: async () => {

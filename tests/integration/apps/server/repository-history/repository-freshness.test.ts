@@ -203,7 +203,9 @@ describe("repository freshness with real Git", { timeout: 30_000 }, () => {
     const states: RepositoryFreshness[] = [];
     await withService(fixture, async (service) => {
       await Effect.runPromise(
-        service.subscribe(repositoryId, (state) => states.push(state)),
+        service.subscribe(repositoryId, (state) => states.push(state), {
+          automaticFetch: true,
+        }),
       );
       expect(states[0]?.setting).toEqual({ _tag: "Interval", seconds: 1 });
       await vi.waitFor(async () =>
