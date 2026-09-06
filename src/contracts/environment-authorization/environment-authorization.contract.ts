@@ -5,7 +5,7 @@ import {
 import {
   InvalidMessage,
   PayloadTooLarge,
-} from "@rebase/contracts/environment-connection/websocket/environment-live-connection.contract";
+} from "@rebase/contracts/environment-connection/environment-request-failure.contract";
 import { Schema } from "effect";
 
 export const environmentAuthorizationRoles = [

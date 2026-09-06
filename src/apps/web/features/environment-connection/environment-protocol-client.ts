@@ -32,6 +32,7 @@ import {
   readEnvironmentHelloResult,
 } from "#web/features/environment-connection/websocket/environment-socket";
 import { createRepositoryHistoryTransport } from "#web/features/repository-history/transport/repository-history-transport";
+import { createRepositoryRefsTransport } from "#web/features/repository-refs/transport/repository-refs-transport";
 
 export {
   EnvironmentAuthorizationRejected,
@@ -257,11 +258,19 @@ function runEnvironmentConnection(
       ),
     );
     yield* initializeEnvironmentSequence(state, hello, negotiated);
+    const repositoryRefs = createRepositoryRefsTransport(
+      socket,
+      supportsJsonFragmentation &&
+        negotiated.capabilities.some(
+          (capability) => capability.name === "repository-refs",
+        ),
+    );
     yield* publishEnvironmentConnection(
       connected,
       closed,
       state,
       repositoryHistory,
+      repositoryRefs,
       discovery,
       negotiated,
       closeController,
@@ -277,10 +286,12 @@ function runEnvironmentConnection(
       socket,
       state,
       repositoryHistory,
+      repositoryRefs,
     }).pipe(
       Effect.ensuring(
         repositoryHistory.close(environmentResponseError("WebSocket")),
       ),
+      Effect.ensuring(repositoryRefs.close),
     );
   });
 }
@@ -309,6 +320,7 @@ function publishEnvironmentConnection(
   closed: Deferred.Deferred<EnvironmentConnectionFailure>,
   state: Ref.Ref<EnvironmentConnectionState>,
   repositoryHistory: ReturnType<typeof createRepositoryHistoryTransport>,
+  repositoryRefs: ReturnType<typeof createRepositoryRefsTransport>,
   discovery: EnvironmentDiscovery,
   negotiated: EnvironmentProtocolConnection["negotiated"],
   closeController: AbortController,
@@ -320,6 +332,7 @@ function publishEnvironmentConnection(
     discovery,
     negotiated,
     repositoryHistory,
+    repositoryRefs,
     waitForSequence: (sequence) => waitForEnvironmentSequence(state, sequence),
     subscribeChanges: (listener) => {
       const listeners = Ref.getUnsafe(state).changeListeners;

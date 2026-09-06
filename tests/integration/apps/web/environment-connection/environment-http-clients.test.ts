@@ -12,10 +12,6 @@ import {
   listEnvironmentRepositoriesEffect,
   RepositoryCatalogResponseError,
 } from "@rebase/web/features/repository-catalog";
-import {
-  RepositoryRefsResponseError,
-  readRepositoryRefsEffect,
-} from "@rebase/web/features/repository-refs";
 import { Effect } from "effect";
 import { describe, expect, it } from "vite-plus/test";
 
@@ -28,16 +24,6 @@ const clients = [
         value: "credential",
       }),
     error: new RepositoryCatalogResponseError(),
-  },
-  {
-    name: "refs",
-    request: (origin: string) =>
-      readRepositoryRefsEffect(
-        origin,
-        { type: "bearer", value: "credential" },
-        "00000000-0000-4000-8000-000000000001",
-      ),
-    error: new RepositoryRefsResponseError(),
   },
   {
     name: "filesystem",

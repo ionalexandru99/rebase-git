@@ -10,6 +10,7 @@ import { maximumRepositoryHistorySequence } from "@rebase/contracts/repository-h
 import { Deferred, Effect } from "effect";
 import type { EnvironmentConnectionFailure } from "#web/features/environment-connection/environment-connection-errors";
 import { environmentResponseError } from "#web/features/environment-connection/environment-connection-errors";
+import { createEnvironmentRequestId } from "#web/features/environment-connection/websocket/environment-request-id";
 import { sendEnvironmentSocketMessage } from "#web/features/environment-connection/websocket/environment-socket";
 import {
   RepositoryHistoryRejected,
@@ -17,7 +18,6 @@ import {
   RepositoryHistoryUnavailable,
 } from "#web/features/repository-history/repository-history-reader.contract";
 import { createRepositoryFreshnessTransport } from "#web/features/repository-history/transport/repository-freshness-transport";
-import { createRepositoryHistoryRequestId } from "#web/features/repository-history/transport/repository-history-request-id";
 import type { RepositoryHistoryTransportRuntime } from "#web/features/repository-history/transport/repository-history-transport.contract";
 
 type RequestFailure =
@@ -45,7 +45,7 @@ export function createRepositoryHistoryTransport(
       if (!enabled) {
         return yield* new RepositoryHistoryUnavailable();
       }
-      const requestId = createRepositoryHistoryRequestId();
+      const requestId = createEnvironmentRequestId();
       const result = yield* Deferred.make<Uint8Array, RequestFailure>();
       return yield* Effect.gen(function* () {
         requests.set(requestId, { kind: "read", result });
@@ -119,7 +119,7 @@ export function createRepositoryHistoryTransport(
       if (!synchronizationEnabled) {
         return yield* new RepositoryHistoryUnavailable();
       }
-      const requestId = createRepositoryHistoryRequestId();
+      const requestId = createEnvironmentRequestId();
       const result = yield* Deferred.make<number, RequestFailure>();
       return yield* Effect.gen(function* () {
         requests.set(requestId, {

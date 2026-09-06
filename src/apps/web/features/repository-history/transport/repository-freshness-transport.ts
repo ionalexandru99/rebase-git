@@ -4,6 +4,7 @@ import {
   type RepositoryHistoryFreshness,
 } from "@rebase/contracts";
 import { Deferred, Effect } from "effect";
+import { createEnvironmentRequestId } from "#web/features/environment-connection/websocket/environment-request-id";
 import { sendEnvironmentSocketMessage } from "#web/features/environment-connection/websocket/environment-socket";
 import {
   RepositoryHistoryRejected,
@@ -13,7 +14,6 @@ import type {
   RepositoryFreshnessFailure,
   RepositoryFreshnessTransportRuntime,
 } from "#web/features/repository-history/transport/repository-freshness.contract";
-import { createRepositoryHistoryRequestId } from "#web/features/repository-history/transport/repository-history-request-id";
 
 interface PendingCommand {
   readonly repositoryId: string;
@@ -82,7 +82,7 @@ export function createRepositoryFreshnessTransport(
       Effect.gen(function* () {
         if (!enabled || closed)
           return yield* new RepositoryHistoryUnavailable();
-        const requestId = createRepositoryHistoryRequestId();
+        const requestId = createEnvironmentRequestId();
         const ended = yield* Deferred.make<never, RepositoryFreshnessFailure>();
         subscriptions.set(requestId, { repositoryId, publish, closed: ended });
         return yield* sendEnvironmentSocketMessage(
@@ -109,14 +109,14 @@ export function createRepositoryFreshnessTransport(
       execute({
         _tag: "FetchRepositoryHistory",
         repositoryId,
-        requestId: createRepositoryHistoryRequestId(),
+        requestId: createEnvironmentRequestId(),
       }),
     configure: (repositoryId, setting) =>
       execute({
         _tag: "ConfigureRepositoryFetch",
         repositoryId,
         setting,
-        requestId: createRepositoryHistoryRequestId(),
+        requestId: createEnvironmentRequestId(),
       }),
     accept,
     acceptFailure: (message) => {

@@ -1,5 +1,15 @@
 import { EnvironmentAccessCapability } from "@rebase/contracts/environment-authorization/environment-access-capability.contract";
 import {
+  InvalidMessage,
+  PayloadTooLarge,
+} from "@rebase/contracts/environment-connection/environment-request-failure.contract";
+
+export {
+  InvalidMessage,
+  PayloadTooLarge,
+} from "@rebase/contracts/environment-connection/environment-request-failure.contract";
+
+import {
   ClientReceiveLimits,
   currentClientReceiveLimits,
   TransportLimits,
@@ -21,6 +31,10 @@ import {
   RepositoryHistoryFailed,
   RepositoryHistorySynchronized,
 } from "@rebase/contracts/repository-history/repository-history.contract";
+import {
+  RepositoryRefsClientMessage,
+  RepositoryRefsFailed,
+} from "@rebase/contracts/repository-refs/repository-refs-sync.contract";
 import { Schema } from "effect";
 
 export const EnvironmentHello = Schema.TaggedStruct("Hello", {
@@ -42,6 +56,7 @@ export const EnvironmentClientMessage = Schema.Union([
   SnapshotApplied,
   RepositoryHistoryClientMessage,
   RepositoryFreshnessClientMessage,
+  RepositoryRefsClientMessage,
 ]);
 
 export type EnvironmentClientMessage = typeof EnvironmentClientMessage.Type;
@@ -59,10 +74,6 @@ const ProtocolMinorMismatch = Schema.TaggedStruct("ProtocolMinorMismatch", {
   serverMinimumSupportedMinor: Schema.Natural,
 });
 
-export const InvalidMessage = Schema.TaggedStruct("InvalidMessage", {});
-export const PayloadTooLarge = Schema.TaggedStruct("PayloadTooLarge", {
-  limitBytes: Schema.Natural,
-});
 const HandshakeRequired = Schema.TaggedStruct("HandshakeRequired", {});
 const HandshakeAlreadyCompleted = Schema.TaggedStruct(
   "HandshakeAlreadyCompleted",
@@ -130,6 +141,7 @@ export const EnvironmentServerMessage = Schema.Union([
   RepositoryHistoryFailed,
   RepositoryHistorySynchronized,
   RepositoryHistoryFreshness,
+  RepositoryRefsFailed,
   JsonMessageFragment,
 ]);
 

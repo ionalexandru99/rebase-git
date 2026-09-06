@@ -1,4 +1,5 @@
 import { decodeRepositoryHistoryBatch } from "@rebase/contracts";
+import { createEnvironmentRequestId } from "#web/features/environment-connection/websocket/environment-request-id";
 import { queueHistoryStorageWrite as queueStorageWrite } from "#web/features/repository-history/cache/repository-history-storage-maintenance";
 import { prepareRepositoryHistoryOrder } from "#web/features/repository-history/query/repository-history-query";
 import {
@@ -7,7 +8,6 @@ import {
   restartRepositoryHistorySynchronization,
   storeRepositoryHistoryBatch,
 } from "#web/features/repository-history/replica/repository-history-store";
-import { createRepositoryHistoryRequestId } from "#web/features/repository-history/transport/repository-history-request-id";
 import type {
   ConnectedReader,
   RepositoryReplica,
@@ -68,7 +68,7 @@ export async function startSynchronization(
     replica.synchronization.status === "syncing"
   )
     return;
-  const requestId = createRepositoryHistoryRequestId();
+  const requestId = createEnvironmentRequestId();
   const active = beginSynchronization(replica, reader, requestId);
   replica.revision += 1;
   publishSnapshot(replica);

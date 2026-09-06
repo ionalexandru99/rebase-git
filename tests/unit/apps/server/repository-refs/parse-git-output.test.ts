@@ -148,7 +148,7 @@ describe("git ref parsing", () => {
     ).toMatchObject({ _tag: "CheckoutRejected", reason: "LocalChanges" });
   });
 
-  it("keeps oversized ref listings within the HTTP response limit", () => {
+  it("keeps refs beyond one frame while enforcing the collection limits", () => {
     const fitted = fitRepositoryRefs({
       branches: Array.from({ length: 5 }, (_, index) => ({
         name: `branch-${index}`,
@@ -166,12 +166,13 @@ describe("git ref parsing", () => {
     });
 
     expect(fitted.branches).toHaveLength(5);
-    expect(fitted.remoteBranches.length).toBeLessThan(30_000);
+    expect(fitted.remoteBranches).toHaveLength(20_000);
+    expect(fitted.tags).toEqual([{ name: "v1.0.0" }]);
     expect(fitted.truncated).toMatchObject({
       branches: false,
       remoteBranches: true,
     });
-    expect(Buffer.byteLength(JSON.stringify(fitted))).toBeLessThanOrEqual(
+    expect(Buffer.byteLength(JSON.stringify(fitted))).toBeGreaterThan(
       currentTransportLimits.maxHttpResponseBytes,
     );
   });

@@ -5,6 +5,7 @@ import type {
 import type { Effect } from "effect";
 import type { EnvironmentConnectionFailure } from "#web/features/environment-connection/environment-connection-errors";
 import type { RepositoryHistoryTransport } from "#web/features/repository-history/repository-history-reader.contract";
+import type { RepositoryRefsTransport } from "#web/features/repository-refs/transport/repository-refs-transport.contract";
 
 export type NegotiatedEnvironment = Exclude<
   typeof EnvironmentHelloResult.Type,
@@ -18,6 +19,7 @@ export interface EnvironmentProtocolConnection {
   readonly discovery: EnvironmentDiscovery;
   readonly negotiated: NegotiatedEnvironment;
   readonly repositoryHistory: RepositoryHistoryTransport;
+  readonly repositoryRefs: RepositoryRefsTransport;
   readonly subscribeChanges: (
     listener: (repositoryIds?: readonly string[]) => void,
   ) => () => void;

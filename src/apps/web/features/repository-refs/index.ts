@@ -1,7 +1,4 @@
-export {
-  checkoutRepositoryRefEffect,
-  readRepositoryRefsEffect,
-} from "#web/features/repository-refs/repository-refs-client";
+export { checkoutRepositoryRefEffect } from "#web/features/repository-refs/repository-refs-client";
 export {
   type RepositoryRefsClientError,
   RepositoryRefsRejected,

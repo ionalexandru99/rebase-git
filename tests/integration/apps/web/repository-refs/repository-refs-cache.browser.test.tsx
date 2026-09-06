@@ -181,7 +181,8 @@ function repositoryRefs(): RepositoryRefs {
       { remote: "origin", name: "main", target: oid },
     ],
     remoteDefaultBranches: [{ remote: "origin", name: "main" }],
-    tags: [],
+    remoteProviders: [{ remote: "origin", provider: "github" }],
+    tags: [{ name: "v1.0.0", target: oid }],
     truncated: { branches: false, remoteBranches: false, tags: false },
     worktrees: [
       {

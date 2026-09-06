@@ -52,12 +52,13 @@ function handleEnvironmentServerMessage(
 ) {
   switch (message._tag) {
     case "JsonMessageFragment":
-      return capabilities.has("repository-history") &&
-        capabilities.has("json-fragmentation")
-        ? session.repositoryHistory.acceptJson(message)
-        : Effect.fail(environmentResponseError("WebSocket"));
+      return routeJsonFragment(session, capabilities, message);
     case "RepositoryHistoryFailed":
       return session.repositoryHistory.acceptFailure(message);
+    case "RepositoryRefsFailed":
+      return capabilities.has("repository-refs")
+        ? session.repositoryRefs.acceptFailure(message)
+        : Effect.fail(environmentResponseError("WebSocket"));
     case "RepositoryHistorySynchronized":
       return session.repositoryHistory.acceptSynchronized(message);
     case "RepositoryHistoryFreshness":
@@ -71,6 +72,25 @@ function handleEnvironmentServerMessage(
     default:
       return Effect.fail(environmentResponseError("WebSocket"));
   }
+}
+
+function routeJsonFragment(
+  session: EnvironmentLiveSession,
+  capabilities: ReadonlySet<EnvironmentCapabilityName>,
+  message: Extract<EnvironmentServerMessage, { _tag: "JsonMessageFragment" }>,
+) {
+  if (!capabilities.has("json-fragmentation"))
+    return Effect.fail(environmentResponseError("WebSocket"));
+  if (
+    capabilities.has("repository-refs") &&
+    session.repositoryRefs.hasRequest(message.requestId)
+  )
+    return session.repositoryRefs.acceptJson(message);
+  if (capabilities.has("repository-history"))
+    return session.repositoryHistory.acceptJson(message);
+  return capabilities.has("repository-refs")
+    ? Effect.void
+    : Effect.fail(environmentResponseError("WebSocket"));
 }
 
 function handleEnvironmentChanged(

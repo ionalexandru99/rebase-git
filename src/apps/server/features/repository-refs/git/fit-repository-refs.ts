@@ -1,10 +1,12 @@
-import { currentTransportLimits, type RepositoryRefs } from "@rebase/contracts";
+import {
+  maximumJsonMessageBytes,
+  type RepositoryRefs,
+} from "@rebase/contracts";
 
 const responseSizeMargin = 512;
 
 export function fitRepositoryRefs(refs: RepositoryRefs): RepositoryRefs {
-  const budget =
-    currentTransportLimits.maxHttpResponseBytes - responseSizeMargin;
+  const budget = maximumJsonMessageBytes - responseSizeMargin;
   const emptied: RepositoryRefs = {
     ...refs,
     branches: [],
@@ -26,9 +28,9 @@ export function fitRepositoryRefs(refs: RepositoryRefs): RepositoryRefs {
     return fitted;
   };
 
-  const branches = fit(refs.branches);
-  const remoteBranches = fit(refs.remoteBranches);
-  const tags = fit(refs.tags);
+  const branches = fit(refs.branches.slice(0, 10_000));
+  const remoteBranches = fit(refs.remoteBranches.slice(0, 20_000));
+  const tags = fit(refs.tags.slice(0, 10_000));
   return {
     ...refs,
     branches,

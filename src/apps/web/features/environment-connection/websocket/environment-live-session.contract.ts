@@ -6,6 +6,7 @@ import type { NegotiatedEnvironment } from "#web/features/environment-connection
 import type { EnvironmentConnectionState } from "#web/features/environment-connection/websocket/environment-connection-state";
 import type { EnvironmentSocketEvent } from "#web/features/environment-connection/websocket/environment-socket.contract";
 import type { RepositoryHistoryTransportRuntime } from "#web/features/repository-history/transport/repository-history-transport.contract";
+import type { RepositoryRefsTransportRuntime } from "#web/features/repository-refs/transport/repository-refs-transport.contract";
 
 export interface EnvironmentLiveSession {
   readonly credential: EnvironmentCredential;
@@ -18,6 +19,7 @@ export interface EnvironmentLiveSession {
   readonly negotiated: NegotiatedEnvironment;
   readonly origin: string;
   readonly repositoryHistory: RepositoryHistoryTransportRuntime;
+  readonly repositoryRefs: RepositoryRefsTransportRuntime;
   readonly signal: AbortSignal;
   readonly socket: WebSocket;
   readonly state: Ref.Ref<EnvironmentConnectionState>;

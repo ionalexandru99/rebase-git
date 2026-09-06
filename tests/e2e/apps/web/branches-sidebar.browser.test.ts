@@ -76,10 +76,10 @@ test("opens a repository and checks out a local branch", async ({ page }) => {
     const tree = branches.getByRole("tree", { name: "Branches" });
     const main = tree.getByRole("treeitem", { name: /^main(?:,|$)/ });
     const feature = tree.getByRole("treeitem", { name: "feature" });
-    await expect(main).toHaveAttribute("aria-selected", "true");
+    await expect(main).toHaveAttribute("aria-current", "true");
     await feature.dblclick();
-    await expect(feature).toHaveAttribute("aria-selected", "true");
-    await expect(main).toHaveAttribute("aria-selected", "false");
+    await expect(feature).toHaveAttribute("aria-current", "true");
+    await expect(main).not.toHaveAttribute("aria-current");
     await expect.poll(() => currentBranch(repositoryPath)).toBe("feature");
   } finally {
     server.child.kill("SIGTERM");

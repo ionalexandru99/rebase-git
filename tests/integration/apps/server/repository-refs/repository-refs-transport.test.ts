@@ -1,14 +1,16 @@
 import { execFile } from "node:child_process";
-import { mkdir, mkdtemp, realpath, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
-import { exchangeEnvironmentPairing } from "@rebase/web/features/environment-connection";
+import {
+  connectCurrentEnvironmentEffect,
+  exchangeEnvironmentPairing,
+} from "@rebase/web/features/environment-connection";
 import { rememberEnvironmentRepositoryEffect } from "@rebase/web/features/repository-catalog";
 import {
   checkoutRepositoryRefEffect,
   RepositoryRefsRejected,
-  readRepositoryRefsEffect,
 } from "@rebase/web/features/repository-refs";
 import { Effect } from "effect";
 import { afterEach, describe, expect, it } from "vite-plus/test";
@@ -37,6 +39,108 @@ afterEach(async () => {
 });
 
 describe("repository refs transport", () => {
+  it("reassembles a ref snapshot larger than a WebSocket frame", async () => {
+    await withRefsListener(async ({ authorization, origin, root }) => {
+      const repositoryPath = join(root, "repository");
+      await createRepository(repositoryPath);
+      const owner = await pair(origin, authorization, "owner");
+      const { stdout } = await execFilePromise("git", [
+        "-C",
+        repositoryPath,
+        "rev-parse",
+        "HEAD",
+      ]);
+      const names = Array.from(
+        { length: 8_000 },
+        (_, index) =>
+          `branch-${index.toString().padStart(5, "0")}-${"x".repeat(140)}`,
+      );
+      await writeFile(
+        join(repositoryPath, ".git", "packed-refs"),
+        names
+          .map((name) => `${stdout.trim()} refs/remotes/origin/${name}\n`)
+          .join(""),
+      );
+      await git(repositoryPath, "tag", "v1");
+      const repository = await Effect.runPromise(
+        rememberEnvironmentRepositoryEffect(origin, owner, repositoryPath),
+      );
+      const refs = await Effect.runPromise(
+        readRefsOverWebSocket(origin, owner, repository.id),
+      );
+      expect(refs.remoteBranches.map((branch) => branch.name)).toEqual(names);
+      expect(refs.tags.map((tag) => tag.name)).toEqual(["v1"]);
+      expect(refs.truncated).toEqual({
+        branches: false,
+        remoteBranches: false,
+        tags: false,
+      });
+    });
+  });
+
+  it("reads branches, remotes and tags over the live connection after Git changes", async () => {
+    await withRefsListener(async ({ authorization, origin, root }) => {
+      const repositoryPath = join(root, "repository");
+      await createRepository(repositoryPath);
+      const owner = await pair(origin, authorization, "owner");
+      const remembered = await Effect.runPromise(
+        rememberEnvironmentRepositoryEffect(origin, owner, repositoryPath),
+      );
+      await Effect.runPromise(
+        Effect.scoped(
+          Effect.gen(function* () {
+            const connection = yield* connectCurrentEnvironmentEffect(
+              origin,
+              "0.0.0",
+              { credential: owner },
+            );
+            const initial = yield* connection.repositoryRefs.read(
+              remembered.id,
+            );
+            expect(initial.branches.map((branch) => branch.name)).toEqual([
+              "feature",
+              "main",
+            ]);
+            const sequence = connection.currentSequence();
+            yield* Effect.promise(async () => {
+              await git(repositoryPath, "branch", "added");
+              await git(
+                repositoryPath,
+                "remote",
+                "add",
+                "origin",
+                "git@github.com:alex/rebase.git",
+              );
+              await git(
+                repositoryPath,
+                "update-ref",
+                "refs/remotes/origin/main",
+                "HEAD",
+              );
+              await git(repositoryPath, "tag", "v1");
+            });
+            yield* connection
+              .waitForSequence(sequence + 1)
+              .pipe(Effect.timeout(5_000));
+            const updated = yield* connection.repositoryRefs.read(
+              remembered.id,
+            );
+            expect(updated.branches.map((branch) => branch.name)).toContain(
+              "added",
+            );
+            expect(updated.remoteBranches).toMatchObject([
+              { remote: "origin", name: "main" },
+            ]);
+            expect(updated.remoteProviders).toEqual([
+              { remote: "origin", provider: "github" },
+            ]);
+            expect(updated.tags.map((tag) => tag.name)).toEqual(["v1"]);
+          }),
+        ),
+      );
+    });
+  });
+
   it("serves refs to readers and reserves checkout for writers", async () => {
     await withRefsListener(async ({ authorization, origin, root }) => {
       const repositoryPath = join(root, "repository");
@@ -55,7 +159,7 @@ describe("repository refs transport", () => {
       );
 
       const refs = await Effect.runPromise(
-        readRepositoryRefsEffect(origin, viewer, remembered.id),
+        readRefsOverWebSocket(origin, viewer, remembered.id),
       );
       expect(refs.repositoryId).toBe(remembered.id);
       expect(refs.githubRepository).toEqual({ owner: "alex", name: "rebase" });
@@ -88,7 +192,7 @@ describe("repository refs transport", () => {
       ).resolves.toMatchObject({ head: { branch: "feature" }, stash: "none" });
       await expect(
         Effect.runPromise(
-          readRepositoryRefsEffect(
+          readRefsOverWebSocket(
             origin,
             viewer,
             "00000000-0000-4000-8000-000000000099",
@@ -106,6 +210,23 @@ describe("repository refs transport", () => {
     });
   });
 });
+
+function readRefsOverWebSocket(
+  origin: string,
+  credential: { readonly type: "bearer"; readonly value: string },
+  repositoryId: string,
+) {
+  return Effect.scoped(
+    Effect.gen(function* () {
+      const connection = yield* connectCurrentEnvironmentEffect(
+        origin,
+        "0.0.0",
+        { credential },
+      );
+      return yield* connection.repositoryRefs.read(repositoryId);
+    }),
+  );
+}
 
 function withRefsListener(use: (fixture: ListenerFixture) => Promise<void>) {
   return Effect.runPromise(

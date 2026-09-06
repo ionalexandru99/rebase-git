@@ -33,10 +33,13 @@ export function acquireEnvironmentListener(
             (capability.name !== "repository-history" ||
               options.history !== undefined) &&
             (capability.name !== "repository-history-freshness" ||
-              options.freshness !== undefined),
+              options.freshness !== undefined) &&
+            (capability.name !== "repository-refs" ||
+              options.refs !== undefined),
         ),
       },
       events: options.events,
+      ...(options.refs === undefined ? {} : { refs: options.refs }),
       ...(options.history === undefined ? {} : { history: options.history }),
       ...(options.freshness === undefined
         ? {}

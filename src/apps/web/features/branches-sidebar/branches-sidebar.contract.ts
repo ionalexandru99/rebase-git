@@ -23,7 +23,10 @@ export interface BranchesSidebarRefRow {
   readonly sectionId: string;
   readonly target: RepositoryRefTarget;
   readonly upstream?: BranchUpstream;
-  readonly worktreePath?: string;
+  readonly checkout?: {
+    readonly kind: "repository" | "worktree";
+    readonly path: string;
+  };
 }
 
 export type BranchesSidebarRow =

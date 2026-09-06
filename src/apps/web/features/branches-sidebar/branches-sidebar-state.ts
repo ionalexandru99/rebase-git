@@ -31,6 +31,7 @@ export function buildBranchesSidebarRows(
   const matches = createMatcher(query);
   const filtering = query.trim().length > 0 || scope !== "all";
   const currentBranch = activeHead(refs, activeWorktreePath)?.branch;
+  const mainPath = refs.worktrees.find((worktree) => worktree.main)?.path;
   const sections: readonly SectionDraft[] = [
     {
       refs: refs.branches
@@ -49,7 +50,15 @@ export function buildBranchesSidebarRows(
             : { upstream: branch.upstream }),
           ...(branch.worktreePath === undefined
             ? {}
-            : { worktreePath: branch.worktreePath }),
+            : {
+                checkout: {
+                  kind:
+                    branch.worktreePath === mainPath
+                      ? ("repository" as const)
+                      : ("worktree" as const),
+                  path: branch.worktreePath,
+                },
+              }),
         })),
       sectionId: localBranchesSectionId,
       scope: "local",
