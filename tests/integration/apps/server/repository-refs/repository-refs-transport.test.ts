@@ -13,7 +13,7 @@ import {
   RepositoryRefsRejected,
 } from "@rebase/web/features/repository-refs";
 import { Effect } from "effect";
-import { afterEach, describe, expect, it } from "vite-plus/test";
+import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import { createLocalGitCommandRunner } from "#server/adapters/local-git/local-git-command-runner";
 import { createLocalRepositoryWatcher } from "#server/adapters/local-git/local-repository-watcher";
 import { createEnvironmentAuthorization } from "#server/features/environment-authorization/environment-authorization";
@@ -24,6 +24,7 @@ import { acquireRepositoryChangePublisher } from "#server/features/repository-re
 import { createRepositoryRefsService } from "#server/features/repository-refs/repository-refs";
 import { acquireEnvironmentContext } from "#server/persistence/environment-context";
 import { environmentPaths } from "#server/persistence/storage/environment-paths";
+import { createBrowserLocalEnvironmentSession } from "#web/features/local-environment-session/browser-local-environment-session";
 
 const execFilePromise = promisify(execFile);
 const directories = new Set<string>();
@@ -36,6 +37,7 @@ afterEach(async () => {
     ),
   );
   directories.clear();
+  vi.unstubAllGlobals();
 });
 
 describe("repository refs transport", () => {
@@ -78,7 +80,7 @@ describe("repository refs transport", () => {
     });
   });
 
-  it("reads branches, remotes and tags over the live connection after Git changes", async () => {
+  it("automatically updates the client refs after filesystem changes and fetches", async () => {
     await withRefsListener(async ({ authorization, origin, root }) => {
       const repositoryPath = join(root, "repository");
       await createRepository(repositoryPath);
@@ -86,58 +88,76 @@ describe("repository refs transport", () => {
       const remembered = await Effect.runPromise(
         rememberEnvironmentRepositoryEffect(origin, owner, repositoryPath),
       );
-      await Effect.runPromise(
-        Effect.scoped(
-          Effect.gen(function* () {
-            const connection = yield* connectCurrentEnvironmentEffect(
-              origin,
-              "0.0.0",
-              { credential: owner },
-            );
-            const initial = yield* connection.repositoryRefs.read(
-              remembered.id,
-            );
-            expect(initial.branches.map((branch) => branch.name)).toEqual([
-              "feature",
-              "main",
-            ]);
-            const sequence = connection.currentSequence();
-            yield* Effect.promise(async () => {
-              await git(repositoryPath, "branch", "added");
-              await git(
-                repositoryPath,
-                "remote",
-                "add",
-                "origin",
-                "git@github.com:alex/rebase.git",
-              );
-              await git(
-                repositoryPath,
-                "update-ref",
-                "refs/remotes/origin/main",
-                "HEAD",
-              );
-              await git(repositoryPath, "tag", "v1");
-            });
-            yield* connection
-              .waitForSequence(sequence + 1)
-              .pipe(Effect.timeout(5_000));
-            const updated = yield* connection.repositoryRefs.read(
-              remembered.id,
-            );
-            expect(updated.branches.map((branch) => branch.name)).toContain(
-              "added",
-            );
-            expect(updated.remoteBranches).toMatchObject([
-              { remote: "origin", name: "main" },
-            ]);
-            expect(updated.remoteProviders).toEqual([
-              { remote: "origin", provider: "github" },
-            ]);
-            expect(updated.tags.map((tag) => tag.name)).toEqual(["v1"]);
-          }),
-        ),
-      );
+      vi.stubGlobal("window", {
+        location: new URL(origin),
+        rebaseHost: {
+          environmentOrigin: origin,
+          getEnvironmentCredential: async () => owner.value,
+        },
+      });
+      const session = createBrowserLocalEnvironmentSession("0.0.0");
+      const refs = () => session.repositoryRefs.getSnapshot().refs;
+      session.start();
+      try {
+        await expect.poll(() => session.getSnapshot()._tag).toBe("Connected");
+        session.repositoryRefs.select(remembered.id);
+        await expect
+          .poll(() => refs()?.branches.map((branch) => branch.name))
+          .toEqual(["feature", "main"]);
+
+        await git(repositoryPath, "branch", "added");
+        await git(
+          repositoryPath,
+          "remote",
+          "add",
+          "github",
+          "git@github.com:alex/rebase.git",
+        );
+        await git(repositoryPath, "tag", "v1");
+        await expect.poll(refs).toMatchObject({
+          branches: expect.arrayContaining([
+            { name: "added", target: expect.any(String) },
+          ]),
+          remoteProviders: [{ remote: "github", provider: "github" }],
+          tags: [{ name: "v1", target: expect.any(String) }],
+        });
+
+        const remotePath = join(root, "remote");
+        await createRepository(remotePath);
+        await git(remotePath, "branch", "fetched-branch");
+        await git(remotePath, "tag", "fetched-tag");
+        await git(repositoryPath, "remote", "add", "origin", remotePath);
+        await git(repositoryPath, "fetch", "origin", "--tags");
+        await expect.poll(refs).toMatchObject({
+          remoteBranches: expect.arrayContaining([
+            {
+              name: "fetched-branch",
+              remote: "origin",
+              target: expect.any(String),
+            },
+          ]),
+          tags: expect.arrayContaining([
+            { name: "fetched-tag", target: expect.any(String) },
+          ]),
+        });
+
+        await git(repositoryPath, "branch", "-D", "added");
+        await git(repositoryPath, "tag", "-d", "v1");
+        await git(repositoryPath, "remote", "remove", "origin");
+        await expect
+          .poll(() => ({
+            branches: refs()?.branches.map((branch) => branch.name),
+            remotes: refs()?.remoteBranches,
+            tags: refs()?.tags.map((tag) => tag.name),
+          }))
+          .toEqual({
+            branches: ["feature", "main"],
+            remotes: [],
+            tags: ["fetched-tag"],
+          });
+      } finally {
+        session.stop();
+      }
     });
   });
 
