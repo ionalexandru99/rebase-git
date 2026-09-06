@@ -13,6 +13,7 @@ export interface CommitLanePosition {
 export interface CommitLaneSeed {
   readonly color: number;
   readonly remote: boolean;
+  readonly boundary?: boolean;
 }
 
 export interface CommitLane extends CommitLanePosition {

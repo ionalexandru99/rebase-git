@@ -84,7 +84,7 @@ export async function prepareCommitGraphPage(
   const plan = appendCommitLanes(
     incomingCheckpoint,
     topology,
-    graphLaneSeeds([...query.roots, ...refs], previousRows),
+    graphLaneSeeds([...query.roots, ...refs], previousRows, query.roots),
   );
   const merges = new Map<string, "collapsed" | "expanded">();
   for (const commit of commits) {

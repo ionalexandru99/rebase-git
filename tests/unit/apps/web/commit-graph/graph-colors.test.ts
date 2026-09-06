@@ -35,7 +35,7 @@ describe("graph branch colors", () => {
     const after = graphColors(second.rows, refs, before.refs);
     expect(before.refs.get("dev")).toBe("#F97316");
     expect(after.refs.get("dev")).toBe(before.refs.get("dev"));
-    expect(after.refs.get("dev")).toBe(after.lanes.get(0));
+    expect(after.refs.get("dev")).toBe(after.nodes.get("older"));
   });
 
   it("keeps the destination's first-parent lane regardless of its name or side-branch visit order", () => {
@@ -158,12 +158,14 @@ describe("graph branch colors", () => {
     ]);
     const initialColors = graphColors(first.rows, refs);
     const olderColors = graphColors(second.rows, refs);
-    expect(initialColors.lanes.get(0)).toBe(initialColors.lanes.get(1));
-    expect(initialColors.refs.get("main")).toBe(initialColors.lanes.get(0));
+    expect(initialColors.nodes.get("a")).toBe(initialColors.nodes.get("b"));
+    expect(initialColors.refs.get("main")).toBe(initialColors.nodes.get("a"));
     expect(initialColors.refs.get("origin/main")).toBe(
-      initialColors.lanes.get(1),
+      initialColors.nodes.get("b"),
     );
-    expect(olderColors.lanes).toEqual(initialColors.lanes);
+    expect([...olderColors.nodes.values()]).toEqual([
+      ...initialColors.nodes.values(),
+    ]);
     expect(initialColors.refs.get("main")).toBe(graphLaneColor(0));
   });
 
@@ -186,8 +188,8 @@ describe("graph branch colors", () => {
     const before = graphColors(first.rows, refs);
     const after = graphColors([...first.rows, ...second.rows], refs);
 
-    expect(after.lanes).toEqual(before.lanes);
-    expect(after.refs.get("feature/cache")).toBe(after.lanes.get(0));
-    expect(after.refs.get("main")).toBe(after.lanes.get(0));
+    expect(after.nodes.get("a")).toEqual(before.nodes.get("a"));
+    expect(after.refs.get("feature/cache")).toBe(after.nodes.get("b"));
+    expect(after.refs.get("main")).toBe(after.nodes.get("b"));
   });
 });

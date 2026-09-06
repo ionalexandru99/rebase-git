@@ -1,6 +1,7 @@
 import type { CommitLaneRow } from "#web/features/commit-graph/layout/commit-lanes.contract";
 import {
   graphLaneColor,
+  graphNodeColor,
   graphRemoteOpacity,
 } from "#web/features/commit-graph/layout/graph-colors";
 import {
@@ -19,7 +20,6 @@ export function graphTilePaths(
   rows: readonly CommitLaneRow[],
   left: number,
   width: number,
-  colors: ReadonlyMap<number, string>,
 ) {
   const strokes = new Map<string, LaneStroke>();
   const centers = new Path2D();
@@ -38,7 +38,7 @@ export function graphTilePaths(
       if (Math.max(x, targetX) < -4 || Math.min(x, targetX) > width + 4)
         continue;
       drawLane(
-        laneStroke(strokes, graphLaneColor(lane.id, colors), lane.remote),
+        laneStroke(strokes, graphLaneColor(lane.color), lane.remote),
         x,
         top,
         targetX,
@@ -52,7 +52,7 @@ export function graphTilePaths(
       if (Math.max(parentX, nodeX) < -4 || Math.min(parentX, nodeX) > width + 4)
         continue;
       drawLane(
-        laneStroke(strokes, graphLaneColor(id, colors), row.nodeRemote),
+        laneStroke(strokes, graphLaneColor(parent.color), row.nodeRemote),
         nodeX,
         center,
         parentX,
@@ -60,11 +60,7 @@ export function graphTilePaths(
       );
     }
     if (nodeX < -4 || nodeX > width + 4) continue;
-    const path = laneStroke(
-      strokes,
-      graphLaneColor(row.nodeLaneId, colors),
-      row.nodeRemote,
-    );
+    const path = laneStroke(strokes, graphNodeColor(row), row.nodeRemote);
     path.moveTo(nodeX + 3, center);
     path.arc(nodeX, center, 3, 0, Math.PI * 2);
     centers.moveTo(nodeX + 2, center);

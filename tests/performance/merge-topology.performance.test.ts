@@ -80,7 +80,6 @@ test("256 active lanes stay within append and canvas budgets", async ({
           frame % 2 === 0 ? 0 : 2048,
           1024,
           Math.min(window.devicePixelRatio || 1, 2),
-          new Map(),
         );
         if (frame >= 10) redrawDurations.push(performance.now() - started);
       }

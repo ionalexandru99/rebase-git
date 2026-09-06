@@ -36,7 +36,7 @@ import { useCommitGraphPages } from "#web/features/commit-graph/hooks/use-commit
 import { useCommitGraphSelection } from "#web/features/commit-graph/hooks/use-commit-graph-selection";
 import { useCommitGraphViewport } from "#web/features/commit-graph/hooks/use-commit-graph-viewport";
 import { useGraphColors } from "#web/features/commit-graph/hooks/use-graph-colors";
-import { graphLaneColor } from "#web/features/commit-graph/layout/graph-colors";
+import { graphNodeColor } from "#web/features/commit-graph/layout/graph-colors";
 import {
   commitGraphGutterWidth,
   commitGraphNodePosition,
@@ -436,7 +436,6 @@ export function CommitGraph({
                         <CommitGraphCanvas
                           laneRows={laneRows}
                           virtualRows={virtualRows}
-                          colors={colors.lanes}
                           scrollRef={scrollRef}
                           viewportWidth={viewport.width}
                         />
@@ -548,10 +547,7 @@ export function CommitGraph({
                                       onToggle={toggleMerge}
                                       position={commitGraphNodePosition(lane)}
                                       remote={lane.nodeRemote}
-                                      color={graphLaneColor(
-                                        lane.nodeLaneId,
-                                        colors.lanes,
-                                      )}
+                                      color={graphNodeColor(lane)}
                                     />
                                   )
                                 }

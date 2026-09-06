@@ -4,6 +4,7 @@ import {
   appendCommitLanes,
   createCommitLaneCheckpoint,
 } from "#web/features/commit-graph/layout/commit-lanes";
+import { graphColors } from "#web/features/commit-graph/layout/graph-colors";
 import { createCommitGraphPageWindow } from "#web/features/commit-graph/paging/commit-graph-page-window";
 import type { CommitGraphPageReader } from "#web/features/commit-graph/paging/commit-graph-page-window.contract";
 import type { RepositoryHistoryQuery } from "#web/features/repository-history/repository-history-reader.contract";
@@ -15,6 +16,61 @@ const query: RepositoryHistoryQuery = {
 };
 
 describe("commit graph page window", () => {
+  it("keeps main blue when a selected worktree extends its history across pages", async () => {
+    const commits = history(8);
+    const refs = [
+      {
+        name: "experimental/graph-scroll-a1",
+        oid: oid(0),
+        type: "branch" as const,
+      },
+      { name: "origin/main", oid: oid(3), type: "remote-branch" as const },
+      { name: "main", oid: oid(6), type: "branch" as const },
+    ];
+    const reader = fakeReader(commits);
+    reader.getRefTargets.mockResolvedValue(refs);
+    reader.read.mockImplementation(async (request) => {
+      const start = request.roots.some((ref) => ref.oid === oid(0)) ? 0 : 3;
+      return commits.slice(
+        start + (request.offset ?? 0),
+        start + (request.offset ?? 0) + request.limit,
+      );
+    });
+    const window = createCommitGraphPageWindow(reader, { pageSize: 3 });
+    const rows = () => window.getSnapshot().pages.flatMap((page) => page.rows);
+    const scope = { ...query, roots: refs.slice(1) };
+    await window.loadInitial(scope);
+    await window.appendOlder();
+    const before = graphColors(rows(), refs);
+    await window.loadInitial({ ...scope, roots: refs });
+    await window.appendOlder();
+    await window.appendOlder();
+    const after = graphColors(rows(), refs);
+    expect(after.refs.get("main")).toBe("#4C9AFF");
+    expect(after.refs.get("origin/main")).toBe(before.refs.get("origin/main"));
+    expect(after.refs.get("experimental/graph-scroll-a1")).toBe("#F97316");
+    expect(rows().map((row) => after.nodes.get(row.oid))).toEqual([
+      ...Array(3).fill("#F97316"),
+      ...Array(5).fill("#4C9AFF"),
+    ]);
+    expect(
+      rows().every(
+        (row) => row.lanesBefore.length === 1 && row.lanesBefore[0]?.slot === 0,
+      ),
+    ).toBe(true);
+    await expect(window.requestLaneMove(2, 1)).resolves.toEqual({
+      oid: oid(3),
+      offset: 3,
+    });
+    await expect(window.requestLaneMove(3, -1)).resolves.toEqual({
+      oid: oid(2),
+      offset: 2,
+    });
+    await window.loadInitial(scope);
+    expect(graphColors(rows(), refs).refs.get("origin/main")).toBe("#4C9AFF");
+    window.dispose();
+  });
+
   it("prepares the next page before the first scroll in a short viewport", async () => {
     const reader = fakeReader(history(300));
     const window = createCommitGraphPageWindow(reader);

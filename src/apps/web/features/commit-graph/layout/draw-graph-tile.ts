@@ -8,7 +8,6 @@ export function drawGraphTile(
   left: number,
   width: number,
   ratio: number,
-  colors: ReadonlyMap<number, string>,
 ) {
   const height = rows.length * graphRowHeight;
   if (width <= 0 || height <= 0) {
@@ -28,7 +27,7 @@ export function drawGraphTile(
   context.lineCap = "butt";
   context.lineWidth = 2;
   context.clearRect(0, 0, width, height);
-  const { strokes, centers } = graphTilePaths(rows, left, width, colors);
+  const { strokes, centers } = graphTilePaths(rows, left, width);
   for (const { path, color, opacity } of strokes.values()) {
     context.strokeStyle = color;
     context.globalAlpha = opacity;

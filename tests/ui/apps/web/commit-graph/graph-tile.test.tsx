@@ -4,12 +4,40 @@ import {
   createCommitLaneCheckpoint,
 } from "#web/features/commit-graph/layout/commit-lanes";
 import { drawGraphTile } from "#web/features/commit-graph/layout/draw-graph-tile";
-import {
-  graphColors,
-  graphLaneSeeds,
-} from "#web/features/commit-graph/layout/graph-colors";
+import { graphLaneSeeds } from "#web/features/commit-graph/layout/graph-colors";
 
 describe("graph tile endpoints", () => {
+  it("paints selected branch colors independently along one continuous lane", () => {
+    const refs = [
+      {
+        name: "experimental/graph-scroll-a1",
+        oid: "feature",
+        type: "branch" as const,
+      },
+      { name: "origin/main", oid: "main", type: "remote-branch" as const },
+    ];
+    const plan = appendCommitLanes(
+      createCommitLaneCheckpoint(),
+      [
+        { oid: "feature", parents: ["work"] },
+        { oid: "work", parents: ["main"] },
+        { oid: "main", parents: ["base"] },
+        { oid: "base", parents: [] },
+      ],
+      graphLaneSeeds(refs, [], refs),
+    );
+    const canvas = document.createElement("canvas");
+    const context = canvas.getContext("2d");
+    if (context === null) throw new Error("Missing canvas context");
+    drawGraphTile(canvas, plan.rows, 0, 64, 1);
+    expect([...context.getImageData(16, 22, 1, 1).data]).toEqual([
+      249, 115, 22, 255,
+    ]);
+    expect([...context.getImageData(16, 74, 1, 1).data]).toEqual([
+      76, 154, 255, 255,
+    ]);
+  });
+
   it("keeps remote joins and merging curves at one opacity", () => {
     const refs = [
       { name: "origin/main", oid: "a", type: "remote-branch" as const },
@@ -28,14 +56,7 @@ describe("graph tile endpoints", () => {
     const canvas = document.createElement("canvas");
     const context = canvas.getContext("2d");
     if (context === null) throw new Error("Missing canvas context");
-    drawGraphTile(
-      canvas,
-      plan.rows,
-      0,
-      64,
-      1,
-      graphColors(plan.rows, refs).lanes,
-    );
+    drawGraphTile(canvas, plan.rows, 0, 64, 1);
     const pixels = context.getImageData(0, 0, canvas.width, canvas.height).data;
     const alphas = pixels.filter((_, index) => index % 4 === 3);
     expect(Math.max(...alphas)).toBe(128);
@@ -58,7 +79,7 @@ describe("graph tile endpoints", () => {
     const canvas = document.createElement("canvas");
     const context = canvas.getContext("2d");
     if (context === null) throw new Error("Missing canvas context");
-    drawGraphTile(canvas, plan.rows, 0, 64, 1, new Map());
+    drawGraphTile(canvas, plan.rows, 0, 64, 1);
     const remote = context.getImageData(16, 22, 1, 1).data;
     const local = context.getImageData(16, 48, 1, 1).data;
     expect(remote[3]).toBe(128);
@@ -84,12 +105,12 @@ describe("graph tile endpoints", () => {
     const alpha = (x: number, y: number) =>
       context.getImageData(x, y, 1, 1).data[3];
 
-    drawGraphTile(canvas, first.rows, 0, 64, 1, new Map());
+    drawGraphTile(canvas, first.rows, 0, 64, 1);
     expect(alpha(16, 2)).toBe(0);
     expect(alpha(19, 13)).toBeGreaterThan(0);
     expect(alpha(16, 22)).toBeGreaterThan(0);
 
-    drawGraphTile(canvas, second.rows, 0, 64, 1, new Map());
+    drawGraphTile(canvas, second.rows, 0, 64, 1);
     expect(alpha(16, 2)).toBeGreaterThan(0);
     expect(alpha(16, 24)).toBeGreaterThan(0);
     expect(alpha(32, 2)).toBe(0);

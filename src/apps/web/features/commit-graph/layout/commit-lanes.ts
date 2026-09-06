@@ -87,6 +87,8 @@ export function appendCommitLanes(
         parentLaneIds.push(nodeLane.id);
       }
 
+      colorParentLane(lanes, firstParent, seeds.get(firstParent));
+
       let insertIndex = Math.min(nodeIndex + 1, lanes.length);
       for (const parent of otherParents) {
         const existing = lanes.find(
@@ -131,6 +133,18 @@ export function appendCommitLanes(
   };
 }
 
+function colorParentLane(
+  lanes: CommitLane[],
+  oid: string,
+  seed: CommitLaneSeed | undefined,
+) {
+  if (!seed?.boundary) return;
+  const index = lanes.findIndex((current) => current.expectedOid === oid);
+  const parent = lanes[index];
+  if (parent !== undefined && parent.color !== seed.color)
+    lanes[index] = { ...parent, color: seed.color };
+}
+
 function lane(
   id: number,
   expectedOid: string,
@@ -138,7 +152,14 @@ function lane(
   seed: CommitLaneSeed = { color: id % 8, remote: false },
   branchDepth = 0,
 ): CommitLane {
-  return { ...seed, expectedOid, id, slot, branchDepth };
+  return {
+    color: seed.color,
+    remote: seed.remote,
+    expectedOid,
+    id,
+    slot,
+    branchDepth,
+  };
 }
 
 function availableSlot(lanes: readonly CommitLane[]) {

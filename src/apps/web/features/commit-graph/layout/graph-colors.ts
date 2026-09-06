@@ -17,11 +17,14 @@ const palette = [
   "#F59E0B",
 ] as const;
 
-export function graphLaneColor(
-  laneId: number,
-  colors?: ReadonlyMap<number, string>,
-) {
-  return colors?.get(laneId) ?? palette[laneId % palette.length] ?? palette[0];
+export function graphLaneColor(color: number) {
+  return palette[color % palette.length] ?? palette[0];
+}
+
+export function graphNodeColor(row: CommitLaneRow) {
+  return graphLaneColor(
+    row.lanesBefore.find((lane) => lane.id === row.nodeLaneId)?.color ?? 0,
+  );
 }
 
 export function graphRefName(ref: RepositoryHistoryRefTarget) {
@@ -41,6 +44,7 @@ export function graphBranchColorIndex(name: string) {
 export function graphLaneSeeds(
   refs: readonly RepositoryHistoryRefTarget[],
   previousRows: readonly CommitLaneRow[] = [],
+  roots: readonly RepositoryHistoryRefTarget[] = [],
 ) {
   const seeds = new Map<string, CommitLaneSeed>();
   for (const ref of refs) {
@@ -59,6 +63,18 @@ export function graphLaneSeeds(
         remote: seeds.get(row.oid)?.remote === false ? false : row.nodeRemote,
       });
   }
+  const selectedNames = new Set(roots.map(graphRefName));
+  for (const ref of refs) {
+    if (ref.type !== "branch" && ref.type !== "remote-branch") continue;
+    if (!selectedNames.has(graphRefName(ref))) continue;
+    const seed = seeds.get(ref.oid);
+    if (seed?.boundary) continue;
+    seeds.set(ref.oid, {
+      color: graphBranchColorIndex(graphRefName(ref)),
+      remote: seed?.remote ?? ref.type === "remote-branch",
+      boundary: true,
+    });
+  }
   return seeds;
 }
 
@@ -67,28 +83,18 @@ export function graphColors(
   refs: readonly RepositoryHistoryRefTarget[],
   previousRefs?: ReadonlyMap<string, string>,
 ) {
-  const lanes = new Map<number, string>();
-  const byOid = new Map<string, number>();
-  for (const row of rows) {
-    byOid.set(row.oid, row.nodeLaneId);
-    for (const lane of row.lanesBefore)
-      lanes.set(lane.id, graphLaneColor(lane.color));
-    for (const lane of row.lanesAfter)
-      lanes.set(lane.id, graphLaneColor(lane.color));
-  }
+  const nodes = new Map(rows.map((row) => [row.oid, graphNodeColor(row)]));
   return {
-    lanes,
+    nodes,
     refs: new Map(
       refs
         .filter((ref) => ref.type === "branch" || ref.type === "remote-branch")
         .map((ref) => {
-          const id = byOid.get(ref.oid);
           return [
             ref.name,
-            id === undefined
-              ? (previousRefs?.get(ref.name) ??
-                graphLaneColor(graphBranchColorIndex(graphRefName(ref))))
-              : graphLaneColor(id, lanes),
+            nodes.get(ref.oid) ??
+              previousRefs?.get(ref.name) ??
+              graphLaneColor(graphBranchColorIndex(graphRefName(ref))),
           ];
         }),
     ),

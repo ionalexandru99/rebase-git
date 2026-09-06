@@ -17,13 +17,11 @@ const tileRows = 32;
 export function CommitGraphCanvas({
   laneRows,
   virtualRows,
-  colors,
   scrollRef,
   viewportWidth,
 }: {
   readonly laneRows: readonly CommitLaneRow[];
   readonly virtualRows: readonly VirtualItem[];
-  readonly colors: ReadonlyMap<number, string>;
   readonly scrollRef: RefObject<HTMLTableElement | null>;
   readonly viewportWidth: number;
 }) {
@@ -62,7 +60,6 @@ export function CommitGraphCanvas({
       tile={tile}
       offset={offset}
       laneRows={laneRows}
-      colors={colors}
       left={left}
       maximumWidth={maximumWidth}
       maximumRatio={maximumRatio}
@@ -74,7 +71,6 @@ const GraphTile = memo(function GraphTile({
   tile,
   offset,
   laneRows,
-  colors,
   left,
   maximumWidth,
   maximumRatio,
@@ -82,7 +78,6 @@ const GraphTile = memo(function GraphTile({
   readonly tile: number;
   readonly offset: number;
   readonly laneRows: readonly CommitLaneRow[];
-  readonly colors: ReadonlyMap<number, string>;
   readonly left: number;
   readonly maximumWidth: number;
   readonly maximumRatio: number;
@@ -110,15 +105,8 @@ const GraphTile = memo(function GraphTile({
   useLayoutEffect(() => {
     const canvas = canvasRef.current;
     if (canvas === null) return;
-    drawGraphTile(
-      canvas,
-      rows,
-      left,
-      width,
-      Math.min(ratio, maximumRatio),
-      colors,
-    );
-  }, [rows, width, colors, ratio, left, maximumRatio]);
+    drawGraphTile(canvas, rows, left, width, Math.min(ratio, maximumRatio));
+  }, [rows, width, ratio, left, maximumRatio]);
 
   return (
     <tr
