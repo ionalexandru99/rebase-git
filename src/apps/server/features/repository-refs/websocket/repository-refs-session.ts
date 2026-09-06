@@ -14,7 +14,7 @@ export function acquireRepositoryRefsSession(
   access: ReadonlySet<EnvironmentAccessCapability>,
 ) {
   return Effect.gen(function* () {
-    const requests = new Map<string, Fiber.Fiber<void>>();
+    const requests = new Map<string, { fiber?: Fiber.Fiber<void> }>();
     const fibers = yield* FiberSet.make<void>();
     let logicalMessageId = 0;
     const fail = (
@@ -26,7 +26,7 @@ export function acquireRepositoryRefsSession(
       Effect.gen(function* () {
         const { requestId } = message;
         if (message._tag === "CancelRepositoryRefs") {
-          const fiber = requests.get(requestId);
+          const fiber = requests.get(requestId)?.fiber;
           if (fiber !== undefined) yield* Fiber.interrupt(fiber);
           return;
         }
@@ -51,7 +51,9 @@ export function acquireRepositoryRefsSession(
             detail: "Too many concurrent repository refs requests",
           });
         }
-        const fiber = yield* FiberSet.run(
+        const request: { fiber?: Fiber.Fiber<void> } = {};
+        requests.set(requestId, request);
+        request.fiber = yield* FiberSet.run(
           fibers,
           refs.read(message.repositoryId).pipe(
             Effect.flatMap((value) =>
@@ -77,9 +79,7 @@ export function acquireRepositoryRefsSession(
               () => Effect.void,
             ),
           ),
-          { startImmediately: false },
         );
-        requests.set(requestId, fiber);
       });
   });
 }
