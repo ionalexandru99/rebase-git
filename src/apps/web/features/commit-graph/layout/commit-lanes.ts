@@ -28,7 +28,7 @@ export function appendCommitLanes(
   const rows: CommitLaneRow[] = [];
 
   for (const commit of commits) {
-    let nodeIndex = lanes.findIndex((lane) => lane.expectedOid === commit.oid);
+    let nodeIndex = arrivingLaneIndex(lanes, commit.oid);
     const nodeHasIncomingLane = nodeIndex >= 0;
     if (nodeIndex < 0) {
       lanes.push(
@@ -46,7 +46,23 @@ export function appendCommitLanes(
     if (nodeLane === undefined) {
       throw new Error("Missing commit lane");
     }
+    const seed = seeds.get(commit.oid);
+    if (seed?.boundary && seed.color !== nodeLane.color) {
+      nodeLane = {
+        ...nodeLane,
+        incomingColor: nodeLane.color,
+        color: seed.color,
+      };
+      lanes[nodeIndex] = nodeLane;
+    }
     const lanesBefore = [...lanes];
+    for (let index = lanes.length - 1; index >= 0; index -= 1) {
+      const incoming = lanes[index];
+      if (incoming?.expectedOid === commit.oid && incoming.id !== nodeLane.id)
+        lanes.splice(index, 1);
+    }
+    const nodeLaneId = nodeLane.id;
+    nodeIndex = lanes.findIndex((lane) => lane.id === nodeLaneId);
     if (nodeLane.incomingColor !== undefined) {
       const { incomingColor: _incomingColor, ...continuation } = nodeLane;
       nodeLane = continuation;
@@ -54,7 +70,9 @@ export function appendCommitLanes(
     }
     const remote =
       localHistory === undefined
-        ? nodeLane.remote && seeds.get(commit.oid)?.remote !== false
+        ? !lanesBefore.some(
+            (lane) => lane.expectedOid === commit.oid && !lane.remote,
+          ) && seeds.get(commit.oid)?.remote !== false
         : !localHistory.has(commit.oid);
     if (remote !== nodeLane.remote) {
       nodeLane = { ...nodeLane, remote };
@@ -69,53 +87,21 @@ export function appendCommitLanes(
       if (firstParent === undefined) {
         throw new Error("Missing first parent");
       }
-      const existingFirst = lanes.findIndex(
-        (current, index) =>
-          index !== nodeIndex && current.expectedOid === firstParent,
-      );
-      if (existingFirst >= 0) {
-        const target = lanes[existingFirst];
-        if (target === undefined) {
-          throw new Error("Missing parent lane");
-        }
-        if (nodeLane.branchDepth < target.branchDepth) {
-          parentLaneIds.push(nodeLane.id);
-          lanes[nodeIndex] = {
-            ...nodeLane,
-            expectedOid: firstParent,
-            remote: nodeLane.remote && target.remote,
-          };
-          lanes.splice(existingFirst, 1);
-        } else {
-          parentLaneIds.push(target.id);
-          if (!nodeLane.remote && target.remote)
-            lanes[existingFirst] = { ...target, remote: false };
-          lanes.splice(nodeIndex, 1);
-        }
-      } else {
-        lanes[nodeIndex] = { ...nodeLane, expectedOid: firstParent };
-        parentLaneIds.push(nodeLane.id);
-      }
-
-      colorParentLane(lanes, firstParent, seeds.get(firstParent));
+      lanes[nodeIndex] = { ...nodeLane, expectedOid: firstParent };
+      parentLaneIds.push(nodeLane.id);
 
       let insertIndex = Math.min(nodeIndex + 1, lanes.length);
       for (const parent of otherParents) {
         const existing = lanes.find(
           (current) => current.expectedOid === parent,
         );
-        if (existing !== undefined) {
-          parentLaneIds.push(existing.id);
-          if (!nodeLane.remote && existing.remote)
-            lanes[lanes.indexOf(existing)] = { ...existing, remote: false };
-          continue;
-        }
         const created = lane(
           nextLaneId,
           parent,
           availableSlot(lanes),
           {
-            color: seeds.get(parent)?.color ?? nextLaneId % 8,
+            color:
+              existing?.color ?? seeds.get(parent)?.color ?? nextLaneId % 8,
             remote: nodeLane.remote,
           },
           nodeLane.branchDepth + 1,
@@ -143,20 +129,19 @@ export function appendCommitLanes(
   };
 }
 
-function colorParentLane(
-  lanes: CommitLane[],
-  oid: string,
-  seed: CommitLaneSeed | undefined,
-) {
-  if (!seed?.boundary) return;
-  const index = lanes.findIndex((current) => current.expectedOid === oid);
-  const parent = lanes[index];
-  if (parent !== undefined && parent.color !== seed.color)
-    lanes[index] = {
-      ...parent,
-      incomingColor: parent.incomingColor ?? parent.color,
-      color: seed.color,
-    };
+function arrivingLaneIndex(lanes: readonly CommitLane[], oid: string) {
+  let selected = -1;
+  for (const [index, lane] of lanes.entries()) {
+    if (lane.expectedOid !== oid) continue;
+    const current = lanes[selected];
+    if (
+      current === undefined ||
+      lane.branchDepth < current.branchDepth ||
+      (lane.branchDepth === current.branchDepth && lane.id < current.id)
+    )
+      selected = index;
+  }
+  return selected;
 }
 
 function lane(

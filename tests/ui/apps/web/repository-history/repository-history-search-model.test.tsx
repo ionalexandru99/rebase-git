@@ -28,6 +28,7 @@ describe("history search model view", () => {
       },
       setText: vi.fn((text) => publish({ ...snapshot, text, loading: true })),
       retry: vi.fn(),
+      loadMore: vi.fn(),
       navigate: vi.fn(),
       next: vi.fn(),
       previous: vi.fn(),
@@ -48,7 +49,7 @@ describe("history search model view", () => {
     expect(model.setText).toHaveBeenCalledWith("history");
     await expect
       .element(page.getByRole("status"))
-      .toHaveTextContent("Searching cached history");
+      .toHaveTextContent("Searching");
     await act(() =>
       publish({
         ...snapshot,

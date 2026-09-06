@@ -92,7 +92,7 @@ export function CommitGraph({
   readonly shortcuts?: GraphCommandShortcuts | undefined;
   readonly commandsActive?: boolean;
   readonly onAddHistoryRef?: () => void;
-  readonly onResetHistoryScope?: () => void;
+  readonly onResetHistoryScope?: (() => void) | undefined;
   readonly onRemoveHistoryRef?: (target: RepositoryRefTarget) => void;
   readonly onRevealHistoryRef?: (target: RepositoryRefTarget) => void;
   readonly reader: RepositoryHistoryReader | undefined;

@@ -11,6 +11,24 @@ const d = "d".repeat(40);
 const e = "e".repeat(40);
 
 describe("commit lanes", () => {
+  it("keeps converging lanes separate until their shared parent commit", () => {
+    const first = appendCommitLanes(createCommitLaneCheckpoint(), [
+      { oid: "merge", parents: ["main", "side"] },
+      { oid: "main", parents: ["base"] },
+      { oid: "side", parents: ["base"] },
+    ]);
+    expect(first.checkpoint.lanes.map((lane) => lane.expectedOid)).toEqual([
+      "base",
+      "base",
+    ]);
+    expect(first.rows[2]?.parentLaneIds).toEqual([first.rows[2]?.nodeLaneId]);
+    const joined = appendCommitLanes(first.checkpoint, [
+      { oid: "base", parents: [] },
+    ]);
+    expect(joined.rows[0]?.lanesBefore).toHaveLength(2);
+    expect(joined.rows[0]?.nodeLaneId).toBe(0);
+    expect(joined.checkpoint.lanes).toEqual([]);
+  });
   it("preserves first-parent continuations through nested merges", () => {
     const first = appendCommitLanes(createCommitLaneCheckpoint(), [
       { oid: "tip", parents: ["destination", "side"] },
@@ -26,8 +44,10 @@ describe("commit lanes", () => {
 
     expect(first.rows.map((row) => row.nodeLaneId)).toEqual([0, 1, 2]);
     expect(second.rows.map((row) => row.nodeLaneId)).toEqual([1, 0, 1, 0]);
-    expect(second.rows[0]?.lanesAfter.map((lane) => lane.slot)).toEqual([0, 1]);
-    expect(second.rows[2]?.lanesAfter.map((lane) => lane.slot)).toEqual([0]);
+    expect(second.rows[0]?.lanesAfter.map((lane) => lane.slot)).toEqual([
+      0, 1, 2,
+    ]);
+    expect(second.rows[2]?.lanesAfter.map((lane) => lane.slot)).toEqual([0, 1]);
   });
 
   it("reuses vacant slots across successive merges without widening the graph", () => {

@@ -147,6 +147,18 @@ function RepositoryWorkspaceContent({
           }),
     [activeWorktreePath, historyScope, refs.refs, refsRestored],
   );
+  const canResetHistoryScope = useMemo(() => {
+    if (refs.refs === undefined || resolvedScope === undefined) return false;
+    const automatic = resolveHistoryScope(
+      automaticHistoryScope,
+      refs.refs,
+      activeWorktreePath,
+    );
+    return !historyScopesEqual(
+      { _tag: "Custom", selections: resolvedScope.selections },
+      { _tag: "Custom", selections: automatic.selections },
+    );
+  }, [activeWorktreePath, refs.refs, resolvedScope]);
   useEffect(() => {
     if (
       resolvedScope === undefined ||
@@ -244,19 +256,23 @@ function RepositoryWorkspaceContent({
             onAddHistoryRef={() =>
               setLocalBranchesFocusRequest((request) => request + 1)
             }
-            onResetHistoryScope={() => {
-              setHistoryScope(automaticHistoryScope);
-              if (
-                environmentId !== undefined &&
-                logicalRepositoryId !== undefined
-              ) {
-                filterStore.save(
-                  environmentId,
-                  logicalRepositoryId,
-                  automaticHistoryScope,
-                );
-              }
-            }}
+            onResetHistoryScope={
+              canResetHistoryScope
+                ? () => {
+                    setHistoryScope(automaticHistoryScope);
+                    if (
+                      environmentId !== undefined &&
+                      logicalRepositoryId !== undefined
+                    ) {
+                      filterStore.save(
+                        environmentId,
+                        logicalRepositoryId,
+                        automaticHistoryScope,
+                      );
+                    }
+                  }
+                : undefined
+            }
             reader={historyReader}
             repositoryName={repositoryName}
             roots={resolvedScope?.roots}

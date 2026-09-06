@@ -46,7 +46,7 @@ export function graphTilePaths(
         x,
         top,
         targetX,
-        lane.id === row.nodeLaneId ? center : bottom,
+        lane.id === row.nodeLaneId || joinsNode ? center : bottom,
       );
     }
     for (const id of row.parentLaneIds) {

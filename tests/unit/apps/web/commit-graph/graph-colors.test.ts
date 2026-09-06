@@ -86,7 +86,7 @@ describe("graph branch colors", () => {
     );
     expect(first.rows.map((row) => row.nodeLaneId)).toEqual([0, 1]);
     expect(second.rows.map((row) => row.nodeLaneId)).toEqual([0, 0, 0]);
-    expect(second.rows[0]?.lanesAfter).toMatchObject([
+    expect(second.rows[1]?.lanesAfter).toMatchObject([
       { id: 0, slot: 0, color: first.checkpoint.lanes[0]?.color },
     ]);
     expect(first.checkpoint.lanes.map((lane) => lane.id)).toEqual([0, 1]);
@@ -149,7 +149,7 @@ describe("graph branch colors", () => {
       false,
     ]);
     expect(plan.rows[0]?.lanesAfter[0]?.remote).toBe(true);
-    expect(plan.rows[1]?.lanesAfter[0]?.remote).toBe(false);
+    expect(plan.rows[2]?.lanesAfter[0]?.remote).toBe(false);
   });
 
   it("prefers vivid local tips when refs share a commit regardless of ref order", () => {

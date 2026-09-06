@@ -24,6 +24,48 @@ const bindings = {
 };
 
 describe("history search controls", () => {
+  it("loads further matches by scrolling without opening a commit", async () => {
+    const reader = {
+      search: vi
+        .fn<RepositoryHistorySearch["search"]>()
+        .mockResolvedValueOnce({
+          ...result(Array.from({ length: 20 }, (_, index) => commit(index))),
+          nextCursor: "more",
+        })
+        .mockResolvedValueOnce(result([commit(20), commit(21)])),
+    };
+    const onNavigate = vi.fn(async () => {});
+    await render(
+      <RepositoryHistorySearchControls
+        reader={reader}
+        snapshot={snapshot}
+        onNavigate={onNavigate}
+      />,
+    );
+    const input = page.getByRole("searchbox");
+    await input.click();
+    await expect.element(input).toHaveAttribute("aria-expanded", "false");
+    await input.fill("history");
+    const matches = page.getByRole("region", { name: "Search matches" });
+    await expect.element(matches).toBeVisible();
+    const element = matches.element();
+    element.scrollTop = element.scrollHeight;
+    element.dispatchEvent(new Event("scroll"));
+    await vi.waitFor(() => expect(reader.search).toHaveBeenCalledTimes(2));
+    expect(onNavigate).not.toHaveBeenCalled();
+    element.scrollTop = element.scrollHeight;
+    element.dispatchEvent(new Event("scroll"));
+    await page
+      .getByRole("button", { name: /Repair shallow history 21/ })
+      .click();
+    await vi.waitFor(() =>
+      expect(onNavigate).toHaveBeenCalledWith(
+        commit(21).oid,
+        expect.any(AbortSignal),
+      ),
+    );
+  });
+
   it("keeps one request in Strict Mode and transfers the query on repository switching", async () => {
     const signals: AbortSignal[] = [];
     const search = vi.fn<RepositoryHistorySearch["search"]>(
@@ -107,7 +149,7 @@ describe("history search controls", () => {
       .toHaveAttribute("aria-keyshortcuts", "Control+F");
   });
 
-  it("uses the same navigation handlers for buttons, Enter, Shift Enter and external shortcuts", async () => {
+  it("uses the same navigation handlers for result clicks, Enter, Shift Enter and external shortcuts", async () => {
     const actions = createRef<RepositoryHistorySearchActions>();
     const reader = {
       search: vi
@@ -140,7 +182,9 @@ describe("history search controls", () => {
         expect.any(AbortSignal),
       ),
     );
-    await page.getByRole("button", { name: "Next search result" }).click();
+    await page
+      .getByRole("button", { name: /Repair shallow history 2/ })
+      .click();
     await vi.waitFor(() =>
       expect(onNavigate).toHaveBeenLastCalledWith(
         commit(2).oid,
@@ -162,12 +206,6 @@ describe("history search controls", () => {
         expect.any(AbortSignal),
       ),
     );
-    await expect
-      .element(page.getByRole("status"))
-      .toHaveTextContent("Result 2");
-    await expect
-      .element(page.getByRole("button", { name: "Next search result" }))
-      .toBeEnabled();
     actions.current?.next();
     await vi.waitFor(() =>
       expect(onNavigate).toHaveBeenLastCalledWith(
@@ -179,10 +217,7 @@ describe("history search controls", () => {
       { text: "history", cursor: "next", limit: 20 },
       expect.any(AbortSignal),
     );
-    await expect
-      .element(page.getByRole("button", { name: "Previous search result" }))
-      .toHaveAttribute("aria-keyshortcuts", "Shift+F3");
-    await page.getByRole("button", { name: "Previous search result" }).click();
+    actions.current?.previous();
     await userEvent.keyboard("{Escape}");
     await expect
       .element(page.getByRole("dialog", { name: "History search results" }))
@@ -220,7 +255,7 @@ describe("history search controls", () => {
     const signal = reader.search.mock.calls[0]?.[1];
     await expect
       .element(page.getByRole("status"))
-      .toHaveTextContent("Searching cached history");
+      .toHaveTextContent("Searching");
     await page.getByRole("searchbox").fill("new");
     await expect
       .element(page.getByRole("button", { name: /Repair shallow history 2/ }))
@@ -280,9 +315,6 @@ describe("history search controls", () => {
     await expect
       .element(page.getByRole("button", { name: /Repair shallow history 2/ }))
       .toHaveAttribute("aria-current", "true");
-    await expect
-      .element(page.getByRole("status"))
-      .toHaveTextContent("Result 3");
     expect(onNavigate).toHaveBeenCalledTimes(1);
   });
 
@@ -340,9 +372,6 @@ describe("history search controls", () => {
           .toHaveAttribute("aria-current", "true");
       } else {
         await expect
-          .element(page.getByRole("button", { name: "Next search result" }))
-          .toBeEnabled();
-        await expect
           .element(
             page.getByRole("button", { name: /Repair shallow history 99/ }),
           )
@@ -352,7 +381,7 @@ describe("history search controls", () => {
       expect(onNavigate).toHaveBeenCalledTimes(1);
       if (emptyPages) {
         await expect
-          .element(page.getByText("No matches in cached history."))
+          .element(page.getByText("No matches."))
           .not.toBeInTheDocument();
       }
     },
@@ -391,7 +420,7 @@ describe("history search controls", () => {
       .element(page.getByRole("status"))
       .toHaveTextContent("Opening result");
     await expect
-      .element(page.getByRole("button", { name: "Next search result" }))
+      .element(page.getByRole("button", { name: /Repair shallow history 1/ }))
       .toBeDisabled();
     rejectNavigation?.(new Error("Not found"));
     await expect
@@ -399,13 +428,7 @@ describe("history search controls", () => {
       .toHaveTextContent("Could not open this search result.");
     await page.getByRole("button", { name: "Clear history search" }).click();
     await expect.element(page.getByRole("searchbox")).toHaveValue("");
-    await expect
-      .element(
-        page.getByText(
-          "Find a commit by hash, subject, author, email, or ref name.",
-        ),
-      )
-      .toBeVisible();
+    await expect.element(page.getByRole("dialog")).not.toBeInTheDocument();
   });
 });
 

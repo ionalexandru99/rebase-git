@@ -26,6 +26,7 @@ export interface RepositoryHistorySearchModel {
   readonly subscribe: (listener: () => void) => () => void;
   readonly setText: (text: string) => void;
   readonly retry: () => void;
+  readonly loadMore: () => void;
   readonly navigate: (index: number) => void;
   readonly next: () => void;
   readonly previous: () => void;

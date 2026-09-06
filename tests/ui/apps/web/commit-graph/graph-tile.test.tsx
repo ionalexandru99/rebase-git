@@ -7,6 +7,26 @@ import { drawGraphTile } from "#web/features/commit-graph/layout/draw-graph-tile
 import { graphLaneSeeds } from "#web/features/commit-graph/layout/graph-colors";
 
 describe("graph tile endpoints", () => {
+  it("joins incoming branches at the shared commit circle across tile boundaries", () => {
+    const first = appendCommitLanes(createCommitLaneCheckpoint(), [
+      { oid: "merge", parents: ["main", "side"] },
+      { oid: "main", parents: ["base"] },
+      { oid: "side", parents: ["base"] },
+    ]);
+    const second = appendCommitLanes(first.checkpoint, [
+      { oid: "base", parents: [] },
+    ]);
+    const canvas = document.createElement("canvas");
+    const context = canvas.getContext("2d");
+    if (context === null) throw new Error("Missing canvas context");
+    drawGraphTile(canvas, [...first.rows, ...second.rows], 0, 64, 1);
+    expect(context.getImageData(32, 75, 1, 1).data[3]).toBeGreaterThan(0);
+    expect(context.getImageData(16, 98, 1, 1).data[3]).toBe(0);
+    drawGraphTile(canvas, second.rows, 0, 64, 1);
+    expect(context.getImageData(32, 2, 1, 1).data[3]).toBeGreaterThan(0);
+    expect(context.getImageData(19, 13, 1, 1).data[3]).toBeGreaterThan(0);
+    expect(context.getImageData(16, 20, 1, 1).data[3]).toBe(0);
+  });
   it("paints selected branch colors independently along one continuous lane", () => {
     const refs = [
       {
