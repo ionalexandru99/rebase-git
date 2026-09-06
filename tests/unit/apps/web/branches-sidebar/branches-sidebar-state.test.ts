@@ -31,8 +31,14 @@ describe("branches sidebar state", () => {
       "section:remote:upstream",
       "section:tags",
     ]);
-    expect(rows[1]).toMatchObject({ current: true, worktreePath: mainPath });
-    expect(rows[2]).toMatchObject({ current: false, worktreePath: topicPath });
+    expect(rows[1]).toMatchObject({
+      current: true,
+      checkout: { kind: "repository", path: mainPath },
+    });
+    expect(rows[2]).toMatchObject({
+      current: false,
+      checkout: { kind: "worktree", path: topicPath },
+    });
     expect(rows[4]).toMatchObject({
       count: 2,
       expanded: false,

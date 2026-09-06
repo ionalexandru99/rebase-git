@@ -7,6 +7,7 @@ import {
   type HelloAccepted,
   negotiateEnvironmentHello,
   type RepositoryFreshnessClientMessage,
+  type RepositoryRefsClientMessage,
 } from "@rebase/contracts";
 import { Effect, FiberSet, Option, Queue, Schema } from "effect";
 import type { WebSocket } from "ws";
@@ -26,6 +27,7 @@ import type { EnvironmentWebSocketWriter } from "#server/features/environment-co
 import { acquireRepositoryFreshnessSession } from "#server/features/environment-connection/websocket/repository-freshness-session";
 import { acquireRepositoryHistorySession } from "#server/features/environment-connection/websocket/repository-history-session";
 import type { RepositoryHistorySession } from "#server/features/environment-connection/websocket/repository-history-session.contract";
+import { acquireRepositoryRefsSession } from "#server/features/repository-refs/websocket/repository-refs-session";
 
 export function runEnvironmentWebSocketSession(
   socket: WebSocket,
@@ -81,6 +83,11 @@ function runSession(
         capabilities,
         accessCapabilities,
         runSessionEffect,
+      ),
+      yield* acquireRepositoryRefsSession(
+        state.refs,
+        writer,
+        accessCapabilities,
       ),
     );
   });
@@ -149,10 +156,24 @@ function processClientMessages(
   handleFreshness: (
     message: RepositoryFreshnessClientMessage,
   ) => Effect.Effect<void, EnvironmentWebSocketWriteError>,
+  handleRefs: Effect.Success<ReturnType<typeof acquireRepositoryRefsSession>>,
 ) {
   return Effect.gen(function* () {
     while (true) {
       const message = decodeSocketMessage(yield* Queue.take(messages));
+      if (
+        message?._tag === "ReadRepositoryRefs" ||
+        message?._tag === "CancelRepositoryRefs"
+      ) {
+        if (
+          !capabilities.has("repository-refs") ||
+          !capabilities.has("json-fragmentation")
+        ) {
+          return yield* rejectSession("InvalidMessage");
+        }
+        yield* handleRefs(message);
+        continue;
+      }
       if (
         message?._tag === "SubscribeRepositoryHistory" ||
         message?._tag === "UnsubscribeRepositoryHistory" ||
@@ -171,7 +192,7 @@ function handleClientMessage(
   message:
     | Exclude<
         typeof EnvironmentClientMessage.Type,
-        RepositoryFreshnessClientMessage
+        RepositoryFreshnessClientMessage | RepositoryRefsClientMessage
       >
     | undefined,
   writer: EnvironmentWebSocketWriter,

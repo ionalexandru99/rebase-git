@@ -33,22 +33,34 @@ const shortcutRuntime: KeyboardShortcutRuntime = {
 };
 
 describe("branches sidebar", () => {
-  it("renders branches with their active and worktree labels", async () => {
+  it("distinguishes the current branch from linked worktrees and reveals checkout details on selection", async () => {
     const { screen } = await renderSidebar();
     const tree = screen.getByRole("tree", { name: "Branches" });
     const main = tree.getByRole("treeitem", {
-      name: "main, this worktree",
+      name: "main, current branch",
     });
     const topic = tree.getByRole("treeitem", {
-      name: "topic, checked out in another worktree",
+      name: "topic, linked worktree",
     });
 
-    await expect.element(main).toHaveAttribute("aria-selected", "true");
+    await expect.element(main).toHaveAttribute("aria-current", "true");
     await expect
-      .element(main.getByText("This worktree", { exact: true }))
+      .element(topic.getByRole("img", { name: "Linked worktree" }))
+      .toBeVisible();
+    await main.click();
+    const details = screen.getByRole("region", { name: "Selected branch" });
+    await expect
+      .element(details.getByText(mainPath, { exact: true }))
       .toBeVisible();
     await expect
-      .element(topic.getByText("Worktree", { exact: true }))
+      .element(details.getByText("Repository", { exact: true }))
+      .toBeVisible();
+    tree.element().focus();
+    await userEvent.keyboard("{ArrowDown}");
+    await expect.element(topic).toHaveAttribute("aria-selected", "true");
+    await expect.element(main).toHaveAttribute("aria-selected", "false");
+    await expect
+      .element(details.getByText(topicPath, { exact: true }))
       .toBeVisible();
     await expect
       .element(tree.getByRole("treeitem", { name: "origin, 1" }))
@@ -97,7 +109,7 @@ describe("branches sidebar", () => {
     });
 
     const tree = screen.getByRole("tree", { name: "Branches" });
-    await tree.getByRole("treeitem", { name: "main, this worktree" }).click();
+    await tree.getByRole("treeitem", { name: "main, current branch" }).click();
     tree.element().focus();
     await userEvent.keyboard(" ");
     expect(onToggleHistoryRef).toHaveBeenLastCalledWith({
@@ -142,7 +154,7 @@ describe("branches sidebar", () => {
     const { onSelectRef, screen } = await renderSidebar({ focusRequest: 1 });
     const tree = screen.getByRole("tree", { name: "Branches" });
     const main = tree.getByRole("treeitem", {
-      name: "main, this worktree",
+      name: "main, current branch",
     });
 
     await expect.element(tree).toHaveFocus();

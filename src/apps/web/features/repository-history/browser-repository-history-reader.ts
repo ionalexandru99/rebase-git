@@ -3,6 +3,7 @@ import type {
   RepositoryFetchSetting,
   RepositoryFreshness,
 } from "@rebase/contracts";
+import { createEnvironmentRequestId } from "#web/features/environment-connection/websocket/environment-request-id";
 import type { HistoryAncestryRoute } from "#web/features/repository-history/query/history-order.contract";
 import { holdRepositoryHistoryReaderLease } from "#web/features/repository-history/reader/repository-history-reader-lease";
 import { maintainRepositoryHistoryReader } from "#web/features/repository-history/reader/repository-history-reader-lifecycle";
@@ -22,7 +23,6 @@ import {
 } from "#web/features/repository-history/repository-history-reader.contract";
 import type { RepositoryHistoryStorageDiagnostics } from "#web/features/repository-history/repository-history-storage.contract";
 import type { RepositoryHistorySearchResult } from "#web/features/repository-history/search/repository-history-search.contract";
-import { createRepositoryHistoryRequestId } from "#web/features/repository-history/transport/repository-history-request-id";
 import type {
   ConnectRepositoryHistoryReader,
   RepositoryHistoryWorkerFailure,
@@ -402,7 +402,7 @@ function connectBrowserRepositoryHistoryReader(
         },
         (bytes) => {
           if (closed) return Promise.reject(new RepositoryHistoryUnavailable());
-          const batchId = createRepositoryHistoryRequestId();
+          const batchId = createEnvironmentRequestId();
           return new Promise<void>((resolve, reject) => {
             pendingBatches.set(batchId, { reject, requestId, resolve });
             const message: RepositoryHistoryWorkerRequest = {
@@ -493,71 +493,71 @@ function connectBrowserRepositoryHistoryReader(
         _tag: "LocateHistoryCommits",
         query,
         oids,
-        requestId: createRepositoryHistoryRequestId(),
+        requestId: createEnvironmentRequestId(),
       }),
     ancestryRoute: (roots, oid) =>
       request<HistoryAncestryRoute | undefined>({
         _tag: "GetAncestryRoute",
         roots,
         oid,
-        requestId: createRepositoryHistoryRequestId(),
+        requestId: createEnvironmentRequestId(),
       }),
     locate: (query, oid) =>
       request<number | undefined>({
         _tag: "LocateHistoryCommit",
         query,
         oid,
-        requestId: createRepositoryHistoryRequestId(),
+        requestId: createEnvironmentRequestId(),
       }),
     fetch: () =>
       request<RepositoryFreshness>({
         _tag: "FetchHistory",
-        requestId: createRepositoryHistoryRequestId(),
+        requestId: createEnvironmentRequestId(),
       }),
     configureFetch: (setting: RepositoryFetchSetting) =>
       request<RepositoryFreshness>({
         _tag: "ConfigureFetch",
         setting,
-        requestId: createRepositoryHistoryRequestId(),
+        requestId: createEnvironmentRequestId(),
       }),
     search: (query, signal) =>
       request<RepositoryHistorySearchResult>(
         {
           _tag: "SearchHistory",
           query,
-          requestId: createRepositoryHistoryRequestId(),
+          requestId: createEnvironmentRequestId(),
         },
         signal,
       ),
     getCacheDiagnostics: () =>
       request<RepositoryHistoryStorageDiagnostics>({
         _tag: "GetCacheDiagnostics",
-        requestId: createRepositoryHistoryRequestId(),
+        requestId: createEnvironmentRequestId(),
       }),
     manageCache: (action) =>
       request<void>({
         _tag: "ManageCache",
         action,
-        requestId: createRepositoryHistoryRequestId(),
+        requestId: createEnvironmentRequestId(),
       }),
     close: dispose,
     getCommitSummaries: (oids) =>
       request<readonly RepositoryCommit[]>({
         _tag: "GetCommitSummaries",
         oids,
-        requestId: createRepositoryHistoryRequestId(),
+        requestId: createEnvironmentRequestId(),
       }),
     getRefTargets: () =>
       request<readonly RepositoryHistoryRefTarget[]>({
         _tag: "GetRefTargets",
-        requestId: createRepositoryHistoryRequestId(),
+        requestId: createEnvironmentRequestId(),
       }),
     getSnapshot: () => snapshot,
     read: (query) =>
       request<readonly RepositoryCommit[]>({
         _tag: "ReadHistory",
         query,
-        requestId: createRepositoryHistoryRequestId(),
+        requestId: createEnvironmentRequestId(),
       }),
     subscribe: (listener) => {
       listeners.add(listener);

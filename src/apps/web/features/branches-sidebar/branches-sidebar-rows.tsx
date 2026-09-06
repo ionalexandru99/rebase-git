@@ -99,13 +99,14 @@ export function RefRow({
       <ContextMenuTrigger
         render={
           <div
-            className={`group absolute top-0 left-0 flex w-full cursor-default items-center rounded-md text-[.85rem] outline-none select-none hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground ${row.current ? "bg-sidebar-accent font-medium text-sidebar-accent-foreground" : "text-sidebar-foreground"} ${active ? "ring-1 ring-sidebar-ring/60 ring-inset" : ""}`}
+            className={`group absolute top-0 left-0 flex w-full cursor-default items-center rounded-md text-[.85rem] outline-none select-none hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground ${row.current ? "font-medium text-sidebar-accent-foreground" : "text-sidebar-foreground"} ${active ? "bg-sidebar-accent ring-1 ring-sidebar-ring/60 ring-inset" : ""}`}
             style={style}
           >
             <button
               aria-level={2}
               aria-label={refRowLabel(row)}
-              aria-selected={row.current}
+              aria-current={row.current ? "true" : undefined}
+              aria-selected={active}
               className="flex h-full min-w-0 flex-1 items-center gap-2 rounded-md pr-1 pl-2.5 text-left outline-none"
               id={rowElementId(row.id)}
               onClick={onActivate}
@@ -117,8 +118,12 @@ export function RefRow({
             >
               <RefIcon row={row} />
               <span className="min-w-0 flex-1 truncate">{row.name}</span>
-              {row.worktreePath === undefined ? null : (
-                <WorktreeBadge current={row.current} />
+              {row.checkout?.kind !== "worktree" ? null : (
+                <IconFolderCode
+                  aria-label="Linked worktree"
+                  role="img"
+                  className="size-3.5 shrink-0 text-muted-foreground"
+                />
               )}
               {row.upstream === undefined ? null : (
                 <UpstreamIndicator upstream={row.upstream} />
@@ -169,6 +174,15 @@ function HistorySelectionButton({
 }
 
 function RefIcon({ row }: { readonly row: BranchesSidebarRefRow }) {
+  if (row.current)
+    return (
+      <span
+        aria-hidden="true"
+        className="flex size-3.5 shrink-0 items-center justify-center"
+      >
+        <span className="size-1.5 rounded-full bg-primary" />
+      </span>
+    );
   const Icon = row.target._tag === "Tag" ? IconTag : IconGitBranch;
   return (
     <Icon
@@ -178,23 +192,12 @@ function RefIcon({ row }: { readonly row: BranchesSidebarRefRow }) {
   );
 }
 
-function WorktreeBadge({ current }: { readonly current: boolean }) {
-  return (
-    <span
-      className={`flex shrink-0 items-center gap-0.5 rounded-sm border px-1 py-0.5 font-mono text-[.52rem] font-semibold leading-none tracking-wide uppercase ${current ? "border-primary/40 bg-primary/10 text-sidebar-accent-foreground" : "border-sidebar-border bg-sidebar-accent/30 text-muted-foreground"}`}
-    >
-      <IconFolderCode aria-hidden="true" className="size-3" />
-      {current ? "This worktree" : "Worktree"}
-    </span>
-  );
-}
-
 function refRowLabel(row: BranchesSidebarRefRow): string {
-  if (row.current) return `${row.name}, this worktree`;
-  if (row.worktreePath !== undefined) {
-    return `${row.name}, checked out in another worktree`;
-  }
-  return row.name;
+  return [
+    row.name,
+    ...(row.current ? ["current branch"] : []),
+    ...(row.checkout?.kind === "worktree" ? ["linked worktree"] : []),
+  ].join(", ");
 }
 
 function UpstreamIndicator({

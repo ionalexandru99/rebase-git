@@ -1,3 +1,4 @@
+import { createEnvironmentRequestId } from "#web/features/environment-connection/websocket/environment-request-id";
 import {
   clearHistoryCache,
   describeHistoryCaches,
@@ -7,7 +8,6 @@ import type {
   RepositoryHistoryCacheAction,
   RepositoryHistoryStorageDiagnostics,
 } from "#web/features/repository-history/repository-history-storage.contract";
-import { createRepositoryHistoryRequestId } from "#web/features/repository-history/transport/repository-history-request-id";
 import { readHistory } from "#web/features/repository-history/worker/history-pages";
 import type {
   ConnectedReader,
@@ -146,7 +146,7 @@ async function manageCache(request: CacheManagementRequest) {
       await readHistory(request.reader, request.replica, {
         _tag: "ReadHistory",
         query,
-        requestId: createRepositoryHistoryRequestId(),
+        requestId: createEnvironmentRequestId(),
       });
     } else {
       await startSynchronization(request.reader, request.replica);

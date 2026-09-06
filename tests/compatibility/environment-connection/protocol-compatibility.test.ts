@@ -79,6 +79,11 @@ describe("Environment protocol compatibility", () => {
       _tag: "HelloAccepted",
       capabilities: [
         {
+          introducedInMinor: 5,
+          name: "repository-refs",
+          version: 1,
+        },
+        {
           introducedInMinor: 4,
           name: "repository-ref-events",
           version: 1,
@@ -109,7 +114,7 @@ describe("Environment protocol compatibility", () => {
           version: 6,
         },
       ],
-      protocol: { major: 1, minor: 4 },
+      protocol: { major: 1, minor: 5 },
     });
   });
 
@@ -235,7 +240,7 @@ describe("Environment protocol compatibility", () => {
     );
     const hello = {
       ...createCurrentEnvironmentHello("0.0.0"),
-      protocol: { major: 1, minor: 5, minimumSupportedMinor: 5 },
+      protocol: { major: 1, minor: 6, minimumSupportedMinor: 6 },
     };
 
     expect(negotiateThroughJson(discovery, hello)).toMatchObject({

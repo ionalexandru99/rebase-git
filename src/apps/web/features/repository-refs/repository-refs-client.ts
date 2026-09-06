@@ -1,7 +1,6 @@
 import {
   CheckoutRepositoryRef,
   RepositoryCheckedOut,
-  RepositoryRefs,
   RepositoryRefsHttpApi,
   type RepositoryRefsHttpFailure,
   type RepositoryRefTarget,
@@ -13,22 +12,6 @@ import {
   RepositoryRefsRejected,
   RepositoryRefsResponseError,
 } from "#web/features/repository-refs/repository-refs-client.contract";
-
-export function readRepositoryRefsEffect(
-  origin: string,
-  credential: EnvironmentCredential,
-  repositoryId: string,
-) {
-  const url = new URL(RepositoryRefsHttpApi.read.path, normalizeOrigin(origin));
-  url.searchParams.set("repositoryId", repositoryId);
-  return requestRepositoryRefs(
-    url,
-    RepositoryRefsHttpApi.read.method,
-    credential,
-    RepositoryRefs,
-    RepositoryRefsHttpApi.read.failure,
-  );
-}
 
 export function checkoutRepositoryRefEffect(
   origin: string,

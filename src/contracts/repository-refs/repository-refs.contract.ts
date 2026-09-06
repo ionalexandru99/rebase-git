@@ -113,11 +113,6 @@ export const RepositoryRefs = Schema.Struct({
 });
 export type RepositoryRefs = typeof RepositoryRefs.Type;
 
-export const ReadRepositoryRefs = Schema.Struct({
-  repositoryId: RepositoryId,
-});
-export type ReadRepositoryRefs = typeof ReadRepositoryRefs.Type;
-
 export const RepositoryRefTarget = Schema.Union([
   Schema.TaggedStruct("LocalBranch", { name: RefName }),
   Schema.TaggedStruct("RemoteBranch", { name: RefName, remote: RemoteName }),
@@ -184,7 +179,6 @@ export const RepositoryRefsHttpFailure = Schema.Union([
 ]);
 export type RepositoryRefsHttpFailure = typeof RepositoryRefsHttpFailure.Type;
 
-export const repositoryRefsPath = "/api/repositories/refs";
 export const checkoutRepositoryRefPath = "/api/repositories/refs/checkout";
 
 export const RepositoryRefsHttpApi = {
@@ -195,15 +189,6 @@ export const RepositoryRefsHttpApi = {
     path: checkoutRepositoryRefPath,
     request: CheckoutRepositoryRef,
     success: RepositoryCheckedOut,
-    successStatus: 200,
-  },
-  read: {
-    failure: RepositoryRefsHttpFailure,
-    failureStatuses: [400, 401, 403, 404, 410, 413, 422] as const,
-    method: "GET",
-    path: repositoryRefsPath,
-    query: ReadRepositoryRefs,
-    success: RepositoryRefs,
     successStatus: 200,
   },
 } as const;

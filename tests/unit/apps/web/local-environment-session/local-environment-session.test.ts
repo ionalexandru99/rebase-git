@@ -339,6 +339,7 @@ function createConnection(
       ...(accessCapabilities === undefined ? {} : { accessCapabilities }),
     },
     repositoryHistory,
+    repositoryRefs: { read: () => Effect.die("Refs transport is not used") },
     waitForSequence: vi.fn(() => Effect.never),
     subscribeChanges: vi.fn<EnvironmentProtocolConnection["subscribeChanges"]>(
       () => () => {},

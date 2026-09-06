@@ -1,4 +1,4 @@
-export function createRepositoryHistoryRequestId() {
+export function createEnvironmentRequestId() {
   if (typeof crypto.randomUUID === "function") return crypto.randomUUID();
 
   const random = crypto.getRandomValues(new Uint8Array(16));

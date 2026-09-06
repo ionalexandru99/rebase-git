@@ -36,6 +36,7 @@ import {
   SectionRow,
 } from "#web-ui/features/branches-sidebar/branches-sidebar-rows";
 import { BranchesSidebarScopeFilter } from "#web-ui/features/branches-sidebar/branches-sidebar-scope-filter";
+import { BranchSelectionDetails } from "#web-ui/features/branches-sidebar/components/branch-selection-details";
 import { useKeyboardShortcuts } from "#web-ui/features/keyboard-shortcuts/keyboard-shortcuts-provider";
 
 const rowHeight = 32;
@@ -98,6 +99,7 @@ export function BranchesSidebar({
     getScrollElement: () => treeRef.current,
     overscan: overscanRows,
   });
+  const selectedRow = rows.find((row) => row.id === activeRowId);
 
   useEffect(() => {
     if (
@@ -268,6 +270,9 @@ export function BranchesSidebar({
           snapshot={snapshot}
         />
       </div>
+      {selectedRow?.kind === "ref" ? (
+        <BranchSelectionDetails row={selectedRow} />
+      ) : null}
       {snapshot.checkoutError === undefined ? null : (
         <p
           className="mx-3 mb-3 rounded-md border border-status-unavailable/40 bg-status-unavailable/10 px-3 py-2 text-xs text-foreground"

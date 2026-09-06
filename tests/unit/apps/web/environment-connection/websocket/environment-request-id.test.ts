@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { createRepositoryHistoryRequestId } from "#web/features/repository-history/transport/repository-history-request-id";
+import { createEnvironmentRequestId } from "#web/features/environment-connection/websocket/environment-request-id";
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -11,7 +11,7 @@ describe("repository history request ids", () => {
     });
     vi.stubGlobal("crypto", { getRandomValues });
 
-    expect(createRepositoryHistoryRequestId()).toBe(
+    expect(createEnvironmentRequestId()).toBe(
       "01010101-0101-4101-8101-010101010101",
     );
     expect(getRandomValues).toHaveBeenCalledOnce();
