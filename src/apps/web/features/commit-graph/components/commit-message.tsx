@@ -78,7 +78,7 @@ export function CommitMessage({
       {edges.room ? null : (
         <Popover>
           <PopoverTrigger
-            className="absolute inset-y-0 z-[3] bg-[var(--graph-row-background)] px-2 text-[10px] text-muted-foreground"
+            className="absolute inset-y-0 z-[3] bg-[var(--graph-row-background)] px-2 text-[.85rem] text-muted-foreground"
             style={{ right: graphMetadataWidth }}
             onClick={(event) => event.stopPropagation()}
             aria-label="Show message hidden by wide graph"
@@ -89,7 +89,7 @@ export function CommitMessage({
             className="max-w-[calc(100vw-24px)]"
             aria-label="Commit message"
           >
-            <p className="mb-3 break-words text-xs">{subject}</p>
+            <p className="mb-3 break-words text-[.85rem]">{subject}</p>
             <div className="overflow-x-auto">
               <CommitRefLabels labels={labels} />
             </div>

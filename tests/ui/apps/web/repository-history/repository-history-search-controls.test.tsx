@@ -97,10 +97,7 @@ describe("history search controls", () => {
       .element(page.getByText("Alex · alex@example.test"))
       .toBeVisible();
     await expect
-      .element(page.getByText("Offline · Partial results · 42 commits indexed"))
-      .toBeVisible();
-    await expect
-      .element(page.getByText("Commit bodies are not searched."))
+      .element(page.getByText("Offline · Partial results"))
       .toBeVisible();
     await expect
       .element(page.getByRole("searchbox"))

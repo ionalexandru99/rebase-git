@@ -327,6 +327,7 @@ describe("browser repository history reader", () => {
       expect(await reader.locate(query, oid(250))).toBeUndefined();
       const route = await reader.ancestryRoute([main.oid], oid(250));
       expect(route).toEqual({
+        rootOid: main.oid,
         edges: [
           { childOid: oid(0), parentOid: oid(120) },
           { childOid: oid(120), parentOid: oid(200) },

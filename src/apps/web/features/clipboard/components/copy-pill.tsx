@@ -45,7 +45,7 @@ export function CopyPill({
       </span>
       {feedback === undefined ? null : (
         <span
-          className="absolute inset-0 flex items-center justify-center text-[10px]"
+          className="absolute inset-0 flex items-center justify-center"
           aria-hidden="true"
         >
           {feedback.text}

@@ -21,6 +21,7 @@ export function appendCommitLanes(
   checkpoint: CommitLaneCheckpoint,
   commits: readonly CommitTopology[],
   seeds: ReadonlyMap<string, CommitLaneSeed> = new Map(),
+  localHistory?: ReadonlySet<string>,
 ) {
   const lanes = checkpoint.lanes.map((lane) => ({ ...lane }));
   let nextLaneId = checkpoint.nextLaneId;
@@ -46,8 +47,17 @@ export function appendCommitLanes(
       throw new Error("Missing commit lane");
     }
     const lanesBefore = [...lanes];
-    if (seeds.get(commit.oid)?.remote === false && nodeLane.remote) {
-      nodeLane = { ...nodeLane, remote: false };
+    if (nodeLane.incomingColor !== undefined) {
+      const { incomingColor: _incomingColor, ...continuation } = nodeLane;
+      nodeLane = continuation;
+      lanes[nodeIndex] = nodeLane;
+    }
+    const remote =
+      localHistory === undefined
+        ? nodeLane.remote && seeds.get(commit.oid)?.remote !== false
+        : !localHistory.has(commit.oid);
+    if (remote !== nodeLane.remote) {
+      nodeLane = { ...nodeLane, remote };
       lanes[nodeIndex] = nodeLane;
     }
     const parentLaneIds: number[] = [];
@@ -142,7 +152,11 @@ function colorParentLane(
   const index = lanes.findIndex((current) => current.expectedOid === oid);
   const parent = lanes[index];
   if (parent !== undefined && parent.color !== seed.color)
-    lanes[index] = { ...parent, color: seed.color };
+    lanes[index] = {
+      ...parent,
+      incomingColor: parent.incomingColor ?? parent.color,
+      color: seed.color,
+    };
 }
 
 function lane(

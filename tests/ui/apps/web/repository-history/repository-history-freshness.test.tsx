@@ -242,9 +242,6 @@ describe("repository fetch controls", () => {
       .element(page.getByRole("status"))
       .toHaveTextContent("Offline. Cached history is available.");
     await expect
-      .element(page.getByText("Shallow history", { exact: true }))
-      .toBeVisible();
-    await expect
       .element(page.getByRole("combobox", { name: "Automatic fetch" }))
       .toBeDisabled();
     await expect

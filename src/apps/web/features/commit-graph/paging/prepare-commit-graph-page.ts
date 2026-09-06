@@ -9,6 +9,7 @@ import type {
   CommitGraphPage,
   CommitGraphPageReader,
 } from "#web/features/commit-graph/paging/commit-graph-page-window.contract";
+import { locateLocalHistory } from "#web/features/commit-graph/paging/locate-local-history";
 import type { RepositoryHistoryQuery } from "#web/features/repository-history/repository-history-reader.contract";
 
 export async function prepareCommitGraphPage(
@@ -85,6 +86,7 @@ export async function prepareCommitGraphPage(
     incomingCheckpoint,
     topology,
     graphLaneSeeds([...query.roots, ...refs], previousRows, query.roots),
+    await locateLocalHistory(reader, query, commits, signal),
   );
   const merges = new Map<string, "collapsed" | "expanded">();
   for (const commit of commits) {

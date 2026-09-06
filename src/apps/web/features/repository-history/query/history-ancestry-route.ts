@@ -67,9 +67,12 @@ function collectRoute(
     child = predecessors[parent] ?? -1;
   }
   const edges = reversed.reverse().slice(0, 1_000);
+  const rootOid = oids[parent];
+  if (rootOid === undefined) throw new Error("Missing ancestry root");
   const continuationOid =
     reversed.length > edges.length ? edges.at(-1)?.parentOid : undefined;
   return {
+    rootOid,
     edges,
     ...(continuationOid === undefined ? {} : { continuationOid }),
   };

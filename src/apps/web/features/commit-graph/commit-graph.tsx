@@ -42,6 +42,7 @@ import {
   commitGraphNodePosition,
 } from "#web/features/commit-graph/layout/graph-geometry";
 import { graphMetadataColumns } from "#web/features/commit-graph/layout/graph-metrics";
+import { graphRefLabels } from "#web/features/commit-graph/layout/graph-ref-labels";
 import { useRepositoryHistoryFetch } from "#web/features/repository-history/freshness/hooks/use-repository-history-fetch";
 import type {
   RepositoryHistoryQuery,
@@ -61,6 +62,7 @@ import {
 } from "#web-ui/features/commit-graph/components/commit-graph-status";
 import { CommitGraphToolbar } from "#web-ui/features/commit-graph/components/commit-graph-toolbar";
 import { CommitGraphVirtualWindow } from "#web-ui/features/commit-graph/components/commit-graph-virtual-window";
+import { historyLabelTarget } from "#web-ui/features/commit-graph/components/commit-ref-labels";
 import { GraphRefAppearance } from "#web-ui/features/commit-graph/components/graph-ref-appearance";
 import { HistoryScopeStrip } from "#web-ui/features/commit-graph/components/history-scope-strip";
 import { RepositoryHistoryFreshnessStatus } from "#web-ui/features/repository-history/freshness/components/repository-history-freshness-status";
@@ -74,6 +76,7 @@ export function CommitGraph({
   shortcuts,
   commandsActive = true,
   onRemoveHistoryRef,
+  onRevealHistoryRef,
   onAddHistoryRef,
   onResetHistoryScope,
   reader,
@@ -91,6 +94,7 @@ export function CommitGraph({
   readonly onAddHistoryRef?: () => void;
   readonly onResetHistoryScope?: () => void;
   readonly onRemoveHistoryRef?: (target: RepositoryRefTarget) => void;
+  readonly onRevealHistoryRef?: (target: RepositoryRefTarget) => void;
   readonly reader: RepositoryHistoryReader | undefined;
   readonly repositoryName: string;
   readonly roots: RepositoryHistoryQuery["roots"] | undefined;
@@ -157,7 +161,11 @@ export function CommitGraph({
       setPendingNavigation(undefined);
     }
   }, [reader]);
-  const labelsByOid = useMemo(() => groupRefLabels(refTargets), [refTargets]);
+  const labelsByOid = useMemo(
+    () =>
+      graphRefLabels(refTargets, laneRows, paging.snapshot.query?.roots ?? []),
+    [refTargets, laneRows, paging.snapshot.query?.roots],
+  );
   const gutterWidth = useMemo(
     () => commitGraphGutterWidth(laneRows),
     [laneRows],
@@ -238,6 +246,16 @@ export function CommitGraph({
     if (intent !== navigationIntent.current) return;
     if (target === undefined)
       throw new Error("This commit is outside the selected history.");
+    for (const root of target.query.roots) {
+      if (
+        roots?.some(
+          (current) => current.type === root.type && current.name === root.name,
+        )
+      )
+        continue;
+      const selection = historyLabelTarget(root);
+      if (selection !== undefined) onRevealHistoryRef?.(selection);
+    }
     setExpandedMerges((current) => {
       const next = new Map(current);
       for (const edge of target.query.additionalParentEdges ?? [])
@@ -407,7 +425,7 @@ export function CommitGraph({
                         style={{ minWidth: gutterWidth + 560 }}
                       >
                         <tr
-                          className="grid h-7 items-center border-border/60 border-b text-left text-[11px] font-normal text-muted-foreground"
+                          className="grid h-7 items-center border-border/60 border-b text-left text-[.85rem] font-normal text-muted-foreground"
                           style={{
                             gridTemplateColumns: `minmax(0, 1fr) ${graphMetadataColumns}`,
                           }}
@@ -496,7 +514,7 @@ export function CommitGraph({
                                   : undefined
                               }
                               aria-selected={selected}
-                              className={`absolute left-0 grid w-full cursor-default items-center bg-[var(--graph-row-background)] text-xs after:pointer-events-none after:absolute after:inset-0 after:z-[5] data-[active=true]:after:border data-[active=true]:after:border-primary/70 ${
+                              className={`absolute left-0 grid w-full cursor-default items-center bg-[var(--graph-row-background)] text-[.85rem] after:pointer-events-none after:absolute after:inset-0 after:z-[5] data-[active=true]:after:border data-[active=true]:after:border-primary/70 ${
                                 selected
                                   ? "text-foreground"
                                   : "text-foreground hover:[--graph-row-background:color-mix(in_oklab,var(--accent)_35%,var(--repository))]"
@@ -576,7 +594,7 @@ export function CommitGraph({
                   {!loading && error === undefined && commits.length === 0 ? (
                     <div
                       aria-label="Empty commit history"
-                      className="absolute inset-0 grid place-items-center text-sm text-muted-foreground"
+                      className="absolute inset-0 grid place-items-center text-[.85rem] text-muted-foreground"
                       role="status"
                     >
                       {(roots?.length ?? 0) > 0
@@ -612,14 +630,13 @@ export function CommitGraph({
       ) : null}
       {commands.error === undefined ? null : (
         <p
-          className="m-0 border-border border-t px-3 py-2 text-xs text-destructive"
+          className="m-0 border-border border-t px-3 py-2 text-[.85rem] text-destructive"
           role="alert"
         >
           {commands.error}
         </p>
       )}
       <RepositoryHistoryFreshnessStatus
-        selectedCount={navigation.selected.size}
         snapshot={historySnapshot}
         fetchAction={fetchAction}
         fetching={fetch.fetching}
@@ -627,17 +644,6 @@ export function CommitGraph({
       />
     </section>
   );
-}
-
-function groupRefLabels(refs: readonly RepositoryHistoryRefTarget[]) {
-  const labels = new Map<string, RepositoryHistoryRefTarget[]>();
-  for (const ref of refs) {
-    if (ref.type === "head") continue;
-    const current = labels.get(ref.oid);
-    if (current === undefined) labels.set(ref.oid, [ref]);
-    else current.push(ref);
-  }
-  return labels;
 }
 
 function commitAriaLabel(

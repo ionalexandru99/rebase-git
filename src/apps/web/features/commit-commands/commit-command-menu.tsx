@@ -51,13 +51,14 @@ export function CommitCommandMenu({
           )
           .map((command) => (
             <ContextMenuItem
+              className="text-[.85rem] sm:text-[.85rem]"
               key={command.id}
               disabled={!command.enabled}
               onClick={() => void execute(command.id, context)}
             >
               <span className="flex-1">{command.label}</span>
               {shortcuts !== undefined && command.shortcutId !== undefined ? (
-                <span className="ml-3 text-[10px] text-muted-foreground">
+                <span className="ml-3 text-[.85rem] text-muted-foreground">
                   {keyboardShortcutLabel(
                     shortcuts.bindings[command.shortcutId],
                     shortcuts.platform,

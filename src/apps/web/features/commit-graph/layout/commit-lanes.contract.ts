@@ -7,6 +7,7 @@ export interface CommitLanePosition {
   readonly id: number;
   readonly slot: number;
   readonly color: number;
+  readonly incomingColor?: number;
   readonly remote: boolean;
 }
 

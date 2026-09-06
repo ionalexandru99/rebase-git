@@ -38,7 +38,11 @@ export function graphTilePaths(
       if (Math.max(x, targetX) < -4 || Math.min(x, targetX) > width + 4)
         continue;
       drawLane(
-        laneStroke(strokes, graphLaneColor(lane.color), lane.remote),
+        laneStroke(
+          strokes,
+          graphLaneColor(lane.incomingColor ?? lane.color),
+          lane.remote,
+        ),
         x,
         top,
         targetX,
@@ -52,7 +56,11 @@ export function graphTilePaths(
       if (Math.max(parentX, nodeX) < -4 || Math.min(parentX, nodeX) > width + 4)
         continue;
       drawLane(
-        laneStroke(strokes, graphLaneColor(parent.color), row.nodeRemote),
+        laneStroke(
+          strokes,
+          graphLaneColor(parent.incomingColor ?? parent.color),
+          row.nodeRemote,
+        ),
         nodeX,
         center,
         parentX,

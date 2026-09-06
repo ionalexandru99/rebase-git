@@ -16,26 +16,37 @@ describe("graph tile endpoints", () => {
       },
       { name: "origin/main", oid: "main", type: "remote-branch" as const },
     ];
-    const plan = appendCommitLanes(
+    const seeds = graphLaneSeeds(refs, [], refs);
+    const first = appendCommitLanes(
       createCommitLaneCheckpoint(),
       [
         { oid: "feature", parents: ["work"] },
         { oid: "work", parents: ["main"] },
+      ],
+      seeds,
+    );
+    const second = appendCommitLanes(
+      first.checkpoint,
+      [
         { oid: "main", parents: ["base"] },
         { oid: "base", parents: [] },
       ],
-      graphLaneSeeds(refs, [], refs),
+      seeds,
     );
     const canvas = document.createElement("canvas");
     const context = canvas.getContext("2d");
     if (context === null) throw new Error("Missing canvas context");
-    drawGraphTile(canvas, plan.rows, 0, 64, 1);
-    expect([...context.getImageData(16, 22, 1, 1).data]).toEqual([
-      249, 115, 22, 255,
-    ]);
+    drawGraphTile(canvas, [...first.rows, ...second.rows], 0, 64, 1);
+    for (const y of [22, 44, 60])
+      expect([...context.getImageData(16, y, 1, 1).data]).toEqual([
+        249, 115, 22, 255,
+      ]);
     expect([...context.getImageData(16, 74, 1, 1).data]).toEqual([
       76, 154, 255, 255,
     ]);
+    const expected = context.getImageData(0, 52, 64, 52).data;
+    drawGraphTile(canvas, second.rows, 0, 64, 1);
+    expect(context.getImageData(0, 0, 64, 52).data).toEqual(expected);
   });
 
   it("keeps remote joins and merging curves at one opacity", () => {

@@ -2,7 +2,7 @@ import type {
   RepositoryHistoryRefTarget,
   RepositoryRefTarget,
 } from "@rebase/contracts";
-import { IconX } from "@tabler/icons-react";
+import { IconTag, IconX } from "@tabler/icons-react";
 import { CopyPill } from "#web/features/clipboard/index";
 import {
   graphBranchColorIndex,
@@ -39,7 +39,7 @@ export function CommitRefPill({
   const { colors } = useGraphRefAppearance();
   const color =
     label.type === "tag"
-      ? "#D3BE8B"
+      ? "#A8B4C8"
       : (colors.get(label.name) ??
         graphLaneColor(
           graphBranchColorIndex(graphRefName({ ...label, oid: "" })),
@@ -52,7 +52,7 @@ export function CommitRefPill({
     remote === undefined ? label.name : label.name.slice(separator + 1);
   return (
     <span
-      className="group/ref relative inline-flex shrink-0 items-center rounded-[5px] border font-mono text-[10px] leading-none"
+      className="group/ref relative inline-flex shrink-0 items-center rounded-[5px] border font-sans text-[.85rem] leading-none"
       style={{
         color: local ? "#0e141c" : color,
         borderColor: local
@@ -68,6 +68,9 @@ export function CommitRefPill({
         className="rounded-[4px] px-1.5 py-0.5 outline-none focus-visible:ring-1 focus-visible:ring-primary"
       >
         {remote === undefined ? null : <GitProviderIcon remote={remote} />}
+        {label.type === "tag" ? (
+          <IconTag aria-hidden="true" className="size-3" />
+        ) : null}
         {name}
       </CopyPill>
       {onRemove === undefined ? null : (

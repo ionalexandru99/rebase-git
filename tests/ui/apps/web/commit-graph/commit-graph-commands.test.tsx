@@ -19,6 +19,7 @@ describe("commit graph commands", () => {
       synchronizedCommitCount: 6,
     });
     reader.ancestryRoute.mockResolvedValue({
+      rootOid: historyOid(0),
       edges: [{ childOid: historyOid(0), parentOid: historyOid(2) }],
     });
     const screen = await renderGraph(reader);

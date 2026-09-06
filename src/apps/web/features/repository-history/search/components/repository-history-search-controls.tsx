@@ -116,7 +116,6 @@ export function RepositoryHistorySearchView({
     windowStart + historySearchPageSize,
   );
   const busy = search.loading || search.navigating;
-  const indexedCount = search.count || snapshot.synchronizedCommitCount || 0;
   const complete =
     search.text.trim() === ""
       ? snapshot.synchronization === "complete"
@@ -135,7 +134,7 @@ export function RepositoryHistorySearchView({
           aria-haspopup="dialog"
           aria-keyshortcuts={bindings.open?.ariaKeyShortcuts}
           aria-label="Search history"
-          className="h-7 pr-7 pl-7 text-xs md:text-xs"
+          className="h-7 pr-7 pl-7 text-[.85rem] md:text-[.85rem]"
           maxLength={256}
           onKeyDown={onKeyDown}
           onChange={(event) => {
@@ -145,7 +144,8 @@ export function RepositoryHistorySearchView({
           onClick={() => setOpened(true)}
           placeholder="Search history"
           ref={input}
-          type="search"
+          type="text"
+          role="searchbox"
           value={search.text}
         />
         {search.text === "" ? null : (
@@ -181,7 +181,10 @@ export function RepositoryHistorySearchView({
                 onKeyDown={onKeyDown}
               >
                 <div className="flex items-center gap-1 border-border border-b px-2 py-1.5">
-                  <span className="mr-auto text-xs tabular-nums" role="status">
+                  <span
+                    className="mr-auto text-[.85rem] tabular-nums"
+                    role="status"
+                  >
                     {search.loading
                       ? "Searching cached history…"
                       : search.navigating
@@ -237,20 +240,20 @@ export function RepositoryHistorySearchView({
                       variant="ghost"
                     >
                       <span className="min-w-0 flex-1">
-                        <span className="block truncate text-xs">
+                        <span className="block truncate text-[.85rem]">
                           {commit.subject}
                         </span>
-                        <span className="mt-0.5 block truncate text-[10px] text-muted-foreground">
+                        <span className="mt-0.5 block truncate text-[.85rem] text-muted-foreground">
                           {commit.author.name} · {commit.author.email}
                         </span>
                       </span>
-                      <code className="shrink-0 text-[10px] text-muted-foreground">
+                      <code className="shrink-0 font-sans text-[.85rem] text-muted-foreground">
                         {commit.oid.slice(0, 8)}
                       </code>
                     </Button>
                   ))}
                   {search.text.trim() === "" ? (
-                    <p className="px-2 py-3 text-xs text-muted-foreground">
+                    <p className="px-2 py-3 text-[.85rem] text-muted-foreground">
                       Find a commit by hash, subject, author, email, or ref
                       name.
                     </p>
@@ -260,15 +263,15 @@ export function RepositoryHistorySearchView({
                   search.text.trim() !== "" &&
                   search.cursor === undefined &&
                   search.commits.length === 0 ? (
-                    <p className="px-2 py-3 text-xs text-muted-foreground">
+                    <p className="px-2 py-3 text-[.85rem] text-muted-foreground">
                       No matches in cached history.
                     </p>
                   ) : null}
                   {search.error === undefined ? null : (
-                    <div className="px-2 py-2 text-xs">
+                    <div className="px-2 py-2 text-[.85rem]">
                       <p role="alert">{search.error}</p>
                       <Button
-                        className="mt-1"
+                        className="mt-1 text-[.85rem] sm:text-[.85rem]"
                         onClick={search.retry}
                         size="xs"
                         variant="ghost"
@@ -278,13 +281,16 @@ export function RepositoryHistorySearchView({
                     </div>
                   )}
                 </div>
-                <div className="border-border border-t px-3 py-2 text-[10px] text-muted-foreground">
-                  {offline ? "Offline · " : ""}
-                  {complete
-                    ? `${indexedCount.toLocaleString()} commits indexed`
-                    : `Partial results · ${indexedCount.toLocaleString()} commits indexed`}
-                  <span className="block">Commit bodies are not searched.</span>
-                </div>
+                {offline || !complete ? (
+                  <div className="border-border border-t px-3 py-2 text-[.85rem] text-muted-foreground">
+                    {[
+                      offline ? "Offline" : undefined,
+                      !complete ? "Partial results" : undefined,
+                    ]
+                      .filter(Boolean)
+                      .join(" · ")}
+                  </div>
+                ) : null}
               </Popover.Popup>
             </Popover.Positioner>
           </Popover.Portal>

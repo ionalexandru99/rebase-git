@@ -10,6 +10,7 @@ export interface HistoryParentEdge {
 }
 
 export interface HistoryAncestryRoute {
+  readonly rootOid: string;
   readonly edges: readonly HistoryParentEdge[];
   readonly continuationOid?: string;
 }

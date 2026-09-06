@@ -16,6 +16,60 @@ const query: RepositoryHistoryQuery = {
 };
 
 describe("commit graph page window", () => {
+  it("mutes upstream history until a selected local branch reaches it", async () => {
+    const commits = history(8);
+    const roots = [
+      { name: "main", oid: oid(6), type: "branch" as const },
+      { name: "origin/main", oid: oid(0), type: "remote-branch" as const },
+    ];
+    const worktree = {
+      name: "experimental/work",
+      oid: oid(2),
+      type: "branch" as const,
+    };
+    const reader = fakeReader(commits);
+    reader.getRefTargets.mockResolvedValue([...roots, worktree]);
+    reader.locateMany.mockImplementation(async (scope, targets) => {
+      const first = Math.min(
+        ...scope.roots.map((root) =>
+          commits.findIndex((commit) => commit.oid === root.oid),
+        ),
+      );
+      return commits.flatMap((commit, index) =>
+        index >= first && targets.includes(commit.oid)
+          ? [{ oid: commit.oid, index }]
+          : [],
+      );
+    });
+    const window = createCommitGraphPageWindow(reader, { pageSize: 3 });
+    const scope = { ...query, roots };
+    const remote = () =>
+      window
+        .getSnapshot()
+        .pages.flatMap((page) => page.rows.map((row) => row.nodeRemote));
+    await window.loadInitial(scope);
+    await window.appendOlder();
+    await window.appendOlder();
+    expect(remote()).toEqual([
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      false,
+      false,
+    ]);
+    await window.loadInitial({ ...scope, roots: [...roots, worktree] });
+    await window.appendOlder();
+    expect(remote()).toEqual([true, true, false, false, false, false]);
+    await window.loadInitial(scope);
+    expect(remote()).toEqual([true, true, true]);
+    await window.jumpToOid(oid(3));
+    expect(remote().slice(0, 3)).toEqual([true, true, true]);
+    window.dispose();
+  });
+
   it("keeps main blue when a selected worktree extends its history across pages", async () => {
     const commits = history(8);
     const refs = [
@@ -597,10 +651,12 @@ describe("commit graph page window", () => {
     );
     reader.ancestryRoute
       .mockResolvedValueOnce({
+        rootOid: oid(0),
         edges: [{ childOid: oid(0), parentOid: oid(2) }],
         continuationOid: oid(2),
       })
       .mockResolvedValueOnce({
+        rootOid: oid(2),
         edges: [{ childOid: oid(2), parentOid: oid(7) }],
       });
     const window = createCommitGraphPageWindow(reader, { pageSize: 5 });

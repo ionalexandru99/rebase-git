@@ -129,10 +129,12 @@ describe("commit graph states", () => {
         .element(grid.getByRole("row", { name: /^Commit 1,/ }))
         .toHaveAttribute("aria-selected", "true");
       await userEvent.keyboard("{Shift>}{ArrowDown}{/Shift}");
-      await expect.element(screen.getByText("2 selected")).toBeVisible();
       await expect
-        .element(screen.getByRole("status"))
-        .not.toHaveTextContent("selected");
+        .element(grid.getByRole("row", { name: /^Commit 1,/ }))
+        .toHaveAttribute("aria-selected", "true");
+      await expect
+        .element(grid.getByRole("row", { name: /^Commit 2,/ }))
+        .toHaveAttribute("aria-selected", "true");
       expect(
         element.querySelectorAll("tr[aria-rowindex]").length,
       ).toBeLessThanOrEqual(
@@ -222,24 +224,6 @@ describe("commit graph states", () => {
     expect(add).toHaveBeenCalledOnce();
     await screen.getByRole("button", { name: "Reset filters" }).click();
     expect(reset).toHaveBeenCalledOnce();
-  });
-
-  it("shows background synchronization without covering the graph", async () => {
-    const reader = historyReader({ commits: history(2), status: "ready" });
-    reader.snapshot = {
-      revision: 1,
-      historyRevision: 1,
-      status: "ready",
-      synchronization: "syncing",
-      synchronizedCommitCount: 256,
-      storingCommits: true,
-    };
-    const screen = await renderGraph(reader);
-
-    await expect.element(screen.getByText("Syncing")).toBeVisible();
-    await expect
-      .element(screen.getByRole("row", { name: /^Commit 0,/ }))
-      .toBeVisible();
   });
 
   it("renders 100 connected commits with bounded semantic rows and selection", async () => {

@@ -26,6 +26,7 @@ describe("commit reference pills", () => {
     });
     expect(pill.element().textContent).toBe("feature/cache");
     expect(pill.element().querySelector("svg")).not.toBeNull();
+    await document.fonts.ready;
     const width = pill.element().getBoundingClientRect().width;
     pill.element().focus();
     await userEvent.keyboard("{Enter}");

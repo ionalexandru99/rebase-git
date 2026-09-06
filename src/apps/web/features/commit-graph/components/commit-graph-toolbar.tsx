@@ -12,7 +12,7 @@ function Frame({ children }: { readonly children: ReactNode }) {
 }
 function Title({ repositoryName }: { readonly repositoryName: string }) {
   return (
-    <h1 className="mr-auto min-w-0 max-w-48 truncate text-[13px] font-semibold text-foreground">
+    <h1 className="mr-auto min-w-0 max-w-48 truncate text-[.85rem] font-semibold text-foreground">
       {repositoryName}
     </h1>
   );
@@ -27,7 +27,7 @@ function Fetch({
   return (
     <Button
       aria-keyshortcuts={fetchAction.ariaKeyShortcuts}
-      className="h-7 gap-1.5 text-xs"
+      className="h-7 gap-1.5 text-[.85rem] sm:text-[.85rem]"
       disabled={fetchAction.disabled || fetching}
       onClick={fetchAction.execute}
       size="sm"

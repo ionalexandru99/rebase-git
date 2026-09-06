@@ -24,7 +24,7 @@ export function HistoryScopeStrip({
   return (
     <fieldset className="flex min-h-9 shrink-0 flex-wrap items-center gap-1.5 border-border/60 border-b bg-muted/20 px-3 py-1">
       <legend className="sr-only">{scope._tag} history scope</legend>
-      <span className="mr-1 text-[11px] text-muted-foreground">Filters</span>
+      <span className="mr-1 text-[.85rem] text-muted-foreground">Filters</span>
       {selections.map((selection) => (
         <CommitRefPill
           key={scopeSelectionKey(selection)}
@@ -43,18 +43,18 @@ export function HistoryScopeStrip({
         />
       ))}
       {selections.length === 0 && detachedHead !== undefined ? (
-        <span className="inline-flex h-6 items-center rounded-sm border border-border/70 bg-background/60 px-2 text-[11px] text-foreground">
+        <span className="inline-flex h-6 items-center rounded-sm border border-border/70 bg-background/60 px-2 text-[.85rem] text-foreground">
           Detached HEAD
         </span>
       ) : null}
       {selections.length === 0 && detachedHead === undefined ? (
-        <span className="text-[11px] text-muted-foreground">No refs</span>
+        <span className="text-[.85rem] text-muted-foreground">No refs</span>
       ) : null}
       {onAdd === undefined ? null : (
         <button
           type="button"
           onClick={onAdd}
-          className="h-6 rounded-sm px-2 text-[11px] text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:outline-2 focus-visible:outline-primary"
+          className="h-6 rounded-sm px-2 text-[.85rem] text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:outline-2 focus-visible:outline-primary"
         >
           + Add ref
         </button>
@@ -63,7 +63,7 @@ export function HistoryScopeStrip({
         <button
           type="button"
           onClick={onReset}
-          className="ml-auto h-6 rounded-sm px-2 text-[11px] text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:outline-2 focus-visible:outline-primary"
+          className="ml-auto h-6 rounded-sm px-2 text-[.85rem] text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:outline-2 focus-visible:outline-primary"
         >
           Reset filters
         </button>

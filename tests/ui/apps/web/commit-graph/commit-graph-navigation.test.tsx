@@ -1,5 +1,8 @@
-import type { RepositoryCommit } from "@rebase/contracts";
-import { act, createRef } from "react";
+import type {
+  RepositoryCommit,
+  RepositoryHistoryRefTarget,
+} from "@rebase/contracts";
+import { act, createRef, useState } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { userEvent } from "vitest/browser";
 import { render } from "vitest-browser-react";
@@ -16,6 +19,75 @@ import { RepositoryHistoryUnavailable } from "#web/features/repository-history/r
 import { saveRepositoryHistoryOrder } from "#web/features/repository-settings/preferences/repository-history-order";
 
 describe("commit graph navigation", () => {
+  it("adds the containing branch when opening a search result outside the filters", async () => {
+    const commits = history(6);
+    const main = { name: "main", type: "branch" as const, oid: historyOid(3) };
+    const feature = {
+      name: "feature/search",
+      type: "branch" as const,
+      oid: historyOid(0),
+    };
+    const reader = historyReader({ commits, status: "ready" });
+    reader.getRefTargets.mockResolvedValue([main, feature]);
+    reader.ancestryRoute.mockImplementation(async (roots) =>
+      roots.includes(feature.oid)
+        ? { rootOid: feature.oid, edges: [] }
+        : undefined,
+    );
+    reader.search.mockResolvedValue({
+      commits: [commits[1] as RepositoryCommit],
+      replicaComplete: true,
+      synchronizedCommitCount: 6,
+    });
+    function Workspace() {
+      const [roots, setRoots] = useState<readonly RepositoryHistoryRefTarget[]>(
+        [main],
+      );
+      return (
+        <div style={{ height: 520, width: 900 }}>
+          <CommitGraphFixture
+            reader={reader}
+            repositoryName="Search"
+            roots={roots}
+            scope={{
+              _tag: "Custom",
+              selections: roots.map((root) => ({
+                _tag: "LocalBranch" as const,
+                name: root.name,
+              })),
+            }}
+            selections={roots.map((root) => ({
+              _tag: "LocalBranch" as const,
+              name: root.name,
+            }))}
+            onRevealHistoryRef={() => setRoots([main, feature])}
+          />
+        </div>
+      );
+    }
+    const screen = await render(<Workspace />);
+    await expect
+      .element(screen.getByRole("row", { name: /^Commit 3,/ }))
+      .toBeVisible();
+    await screen
+      .getByRole("searchbox", { name: "Search history" })
+      .fill("Commit 1");
+    await screen.getByRole("button", { name: /Commit 1 Alex/ }).click();
+    await expect
+      .element(
+        screen
+          .getByRole("button", { name: "Copy feature/search", exact: true })
+          .first(),
+      )
+      .toBeVisible();
+    await expect
+      .element(screen.getByRole("row", { name: /^Commit 1,/ }))
+      .toHaveAttribute("aria-selected", "true");
+    await expect
+      .element(screen.getByRole("row", { name: /^Commit 1,/ }))
+      .toBeVisible();
+  });
+
   it("acknowledges expansion immediately and lets collapse supersede a pending read", async () => {
     const commits = mergeHistory();
     const reader = historyReader({ commits, status: "ready" });
@@ -56,7 +128,9 @@ describe("commit graph navigation", () => {
       reader.snapshot = { ...reader.snapshot, synchronization: "complete" };
       const screen = await renderGraph(reader);
       await screen.getByRole("row", { name: /^Commit 0,/ }).click();
-      await expect.element(screen.getByText("1 selected")).toBeVisible();
+      await expect
+        .element(screen.getByRole("row", { name: /^Commit 0,/ }))
+        .toHaveAttribute("aria-selected", "true");
       expect(reader.read).toHaveBeenCalledTimes(1);
       const reads = reader.read.mock.calls.length;
       if (removed) {
@@ -77,7 +151,6 @@ describe("commit graph navigation", () => {
       await expect
         .element(screen.getByRole("status", { name: "Empty commit history" }))
         .toBeVisible();
-      await expect.element(screen.getByText("0 selected")).toBeVisible();
       await expect
         .element(screen.getByRole("row", { name: /^Commit 0,/ }))
         .not.toBeInTheDocument();
@@ -94,7 +167,9 @@ describe("commit graph navigation", () => {
         await expect
           .element(screen.getByRole("row", { name: /^Commit 0,/ }))
           .toBeVisible();
-        await expect.element(screen.getByText("0 selected")).toBeVisible();
+        await expect
+          .element(screen.getByRole("row", { name: /^Commit 0,/ }))
+          .toHaveAttribute("aria-selected", "false");
       }
     },
   );
@@ -331,10 +406,12 @@ describe("commit graph navigation", () => {
     const reader = historyReader({ commits, status: "ready" });
     reader.ancestryRoute
       .mockResolvedValueOnce({
+        rootOid: historyOid(0),
         edges: [{ childOid: historyOid(0), parentOid: historyOid(250) }],
         continuationOid: historyOid(250),
       })
       .mockResolvedValueOnce({
+        rootOid: historyOid(250),
         edges: [{ childOid: historyOid(250), parentOid: historyOid(320) }],
       });
     const handle = createRef<CommitGraphHandle>();
@@ -398,6 +475,7 @@ describe("commit graph navigation", () => {
     }));
     const reader = historyReader({ commits, status: "ready" });
     reader.ancestryRoute.mockResolvedValue({
+      rootOid: historyOid(0),
       edges: [{ childOid: historyOid(0), parentOid: historyOid(3) }],
     });
     const handle = createRef<CommitGraphHandle>();

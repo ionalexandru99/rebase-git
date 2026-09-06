@@ -240,6 +240,7 @@ function RepositoryWorkspaceContent({
             commandsActive={commandsActive}
             shortcuts={shortcuts}
             onRemoveHistoryRef={toggleRef}
+            onRevealHistoryRef={toggleRef}
             onAddHistoryRef={() =>
               setLocalBranchesFocusRequest((request) => request + 1)
             }
