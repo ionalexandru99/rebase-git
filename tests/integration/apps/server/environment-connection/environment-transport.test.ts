@@ -1,5 +1,6 @@
 import { request } from "node:http";
 import {
+  createCurrentEnvironmentHello,
   currentTransportLimits,
   EnvironmentDiscovery,
   EnvironmentSnapshot,
@@ -98,7 +99,90 @@ describe("Environment transport", () => {
 
     await expect(closed).resolves.toMatchObject({ code: 1006 });
   });
+
+  it("requires a hello before application calls and rejects a second hello", async () => {
+    await withListener(async (origin) => {
+      const socket = await openWebSocket(origin);
+      expect(
+        await rpcRequest(socket, "1", "WatchEnvironment", null),
+      ).toMatchObject({
+        _tag: "Exit",
+        exit: {
+          _tag: "Failure",
+          cause: [{ _tag: "Fail", error: { _tag: "AuthorizationDenied" } }],
+        },
+      });
+      const hello = createCurrentEnvironmentHello("0.0.0");
+      expect(await rpcRequest(socket, "2", "Hello", hello)).toMatchObject({
+        _tag: "Exit",
+        exit: { _tag: "Success", value: { _tag: "HelloAccepted" } },
+      });
+      expect(await rpcRequest(socket, "3", "Hello", hello)).toMatchObject({
+        _tag: "Exit",
+        exit: {
+          _tag: "Success",
+          value: {
+            _tag: "HelloRejected",
+            failure: { _tag: "HandshakeAlreadyCompleted" },
+          },
+        },
+      });
+    });
+  });
+
+  it("rejects malformed JSON frames", async () => {
+    await withListener(async (origin) => {
+      const socket = await openWebSocket(origin);
+      const response = nextMessage(socket);
+      socket.send("{");
+      expect(await response).toMatchObject({ _tag: "Defect" });
+    });
+  });
+
+  it("closes sockets that exceed the advertised frame limit", async () => {
+    await withListener(async (origin) => {
+      const socket = await openWebSocket(origin);
+      const closed = nextClose(socket);
+      socket.send(
+        "x".repeat(currentTransportLimits.maxWebSocketRequestBytes + 1),
+      );
+      expect(await closed).toMatchObject({ code: 1009 });
+    });
+  });
+
+  it("closes sockets that never complete the handshake", async () => {
+    await withListener(async (origin) => {
+      const socket = await openWebSocket(origin);
+      expect(await nextClose(socket)).toEqual({
+        code: 1008,
+        reason: "HandshakeRequired",
+      });
+    });
+  }, 10_000);
 });
+
+function rpcRequest(
+  socket: WebSocket,
+  id: string,
+  tag: string,
+  payload?: unknown,
+) {
+  const response = nextMessage(socket);
+  socket.send(
+    JSON.stringify({ _tag: "Request", id, tag, payload, headers: [] }),
+  );
+  return response;
+}
+
+function nextMessage(socket: WebSocket) {
+  return new Promise<unknown>((resolveMessage) => {
+    socket.addEventListener(
+      "message",
+      (event) => resolveMessage(JSON.parse(event.data)),
+      { once: true },
+    );
+  });
+}
 
 function withListener(
   run: (origin: string, events: EnvironmentEventPublisher) => Promise<void>,

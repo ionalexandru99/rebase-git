@@ -13,7 +13,7 @@ import {
 import { Schema } from "effect";
 import { Rpc, RpcGroup } from "effect/unstable/rpc";
 
-const RepositoryId = Schema.String.check(Schema.isUUID(4));
+const RepositoryId = ReadRepositoryHistory.fields.repositoryId;
 export const RepositoryHistoryRpc = RpcGroup.make(
   Rpc.make("ReadHistory", {
     payload: ReadRepositoryHistory,

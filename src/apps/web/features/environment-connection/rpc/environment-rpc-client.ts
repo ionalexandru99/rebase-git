@@ -17,6 +17,8 @@ import {
   environmentResponseError,
 } from "#web/features/environment-connection/environment-connection-errors";
 
+const equivalentHello = Schema.toEquivalence(EnvironmentHelloResult);
+
 export function acquireEnvironmentRpc(
   url: URL,
   discovery: EnvironmentDiscovery,
@@ -79,10 +81,7 @@ export function negotiateEnvironmentRpc(
       result.currentSequence,
     );
     const { accessCapabilities: _access, ...negotiated } = result;
-    if (
-      JSON.stringify(Schema.encodeSync(EnvironmentHelloResult)(expected)) !==
-      JSON.stringify(Schema.encodeSync(EnvironmentHelloResult)(negotiated))
-    )
+    if (!equivalentHello(expected, negotiated))
       return yield* environmentResponseError("WebSocket");
     return result;
   });
