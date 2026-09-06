@@ -183,7 +183,7 @@ export function RepositoryHistorySearchView({
                   key={search.text}
                   commits={search.commits}
                   selected={search.selected}
-                  navigating={search.navigating}
+                  busy={busy}
                   onNavigate={search.navigate}
                   onLoadMore={search.loadMore}
                 />

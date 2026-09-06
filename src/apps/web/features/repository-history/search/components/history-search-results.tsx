@@ -5,13 +5,13 @@ import { useEffect, useRef } from "react";
 export function HistorySearchResults({
   commits,
   selected,
-  navigating,
+  busy,
   onNavigate,
   onLoadMore,
 }: {
   readonly commits: readonly RepositoryCommit[];
   readonly selected: number;
-  readonly navigating: boolean;
+  readonly busy: boolean;
   readonly onNavigate: (index: number) => void;
   readonly onLoadMore: () => void;
 }) {
@@ -60,7 +60,7 @@ export function HistorySearchResults({
                 type="button"
                 aria-current={selected === row.index ? "true" : undefined}
                 className="flex w-full flex-col gap-1 rounded-sm px-2 py-2 text-left text-[.85rem] leading-5 outline-none hover:bg-accent focus-visible:bg-accent disabled:opacity-50 aria-current:bg-accent"
-                disabled={navigating}
+                disabled={busy}
                 onClick={() => onNavigate(row.index)}
               >
                 <span className="w-full whitespace-normal [overflow-wrap:anywhere]">
