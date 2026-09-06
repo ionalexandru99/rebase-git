@@ -16,6 +16,30 @@ const query: RepositoryHistoryQuery = {
 };
 
 describe("commit graph page window", () => {
+  it("opens a search target while the first history page is still loading", async () => {
+    const commits = history(250);
+    const reader = fakeReader(commits);
+    let release: ((commits: readonly RepositoryCommit[]) => void) | undefined;
+    reader.read.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          release = resolve;
+        }),
+    );
+    const window = createCommitGraphPageWindow(reader);
+    const initial = window.loadInitial(query);
+    await vi.waitFor(() => expect(release).toBeDefined());
+    await expect(window.jumpToOid(oid(112))).resolves.toMatchObject({
+      oid: oid(112),
+      offset: 112,
+    });
+    release?.(commits.slice(0, 100));
+    await initial;
+    expect(window.getSnapshot().anchorOid).toBe(oid(112));
+    expect(window.getSnapshot().startOffset).toBe(100);
+    window.dispose();
+  });
+
   it("mutes upstream history until a selected local branch reaches it", async () => {
     const commits = history(8);
     const roots = [
@@ -190,6 +214,11 @@ describe("commit graph page window", () => {
     const window = createCommitGraphPageWindow(reader, { pageSize: 5 });
     await window.loadInitial(query);
     const pending = deferred<readonly RepositoryCommit[]>();
+    reader.getRefTargets.mockResolvedValue([
+      ...query.roots,
+      { name: "feature/search", type: "branch", oid: oid(10) },
+    ]);
+    reader.locate.mockResolvedValueOnce(undefined);
     reader.read.mockReturnValueOnce(pending.promise);
     const controller = new AbortController();
     const navigation = window.jumpToOid(oid(10), controller.signal);
@@ -197,6 +226,7 @@ describe("commit graph page window", () => {
     controller.abort();
     pending.resolve(commits.slice(10));
     await expect(navigation).resolves.toBeUndefined();
+    expect(window.getSnapshot().requestedQuery?.roots).toEqual(query.roots);
     expect(window.getSnapshot()).toMatchObject({
       startOffset: 0,
       loading: false,

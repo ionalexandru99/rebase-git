@@ -38,7 +38,7 @@ export function HistorySearchResults({
     <section
       ref={viewport}
       aria-label="Search matches"
-      className="max-h-[min(24rem,60vh)] overflow-y-auto overscroll-contain p-1"
+      className="max-h-[min(24rem,60vh)] overflow-y-auto overscroll-contain p-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
       onScroll={loadNearEnd}
       onWheel={(event) => {
         if (event.deltaY > 0) loadNearEnd();

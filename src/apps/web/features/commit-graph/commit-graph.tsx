@@ -399,7 +399,7 @@ export function CommitGraph({
                           ? -1
                           : paging.snapshot.knownEndOffset + 1
                       }
-                      className="absolute inset-0 block h-full w-full overflow-auto focus-visible:outline-2 focus-visible:outline-primary/70 focus-visible:outline-offset-[-2px]"
+                      className="absolute inset-0 block h-full w-full overflow-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden focus-visible:outline-2 focus-visible:outline-primary/70 focus-visible:outline-offset-[-2px]"
                       onKeyDown={handleKeyDown}
                       onContextMenuCapture={(event) => {
                         if (
@@ -415,6 +415,7 @@ export function CommitGraph({
                       style={
                         {
                           contain: "layout paint",
+                          overflowAnchor: "none",
                           "--graph-row-background": "var(--repository)",
                         } as CSSProperties
                       }

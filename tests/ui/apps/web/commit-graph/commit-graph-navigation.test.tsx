@@ -19,6 +19,67 @@ import { RepositoryHistoryUnavailable } from "#web/features/repository-history/r
 import { saveRepositoryHistoryOrder } from "#web/features/repository-settings/preferences/repository-history-order";
 
 describe("commit graph navigation", () => {
+  it("keeps a search result in view when the preceding page arrives", async () => {
+    const commits = history(360);
+    const reader = historyReader({ commits, status: "ready" });
+    reader.search.mockResolvedValue({
+      commits: [commits[112] as RepositoryCommit],
+      replicaComplete: true,
+      synchronizedCommitCount: commits.length,
+    });
+    const screen = await renderGraph(reader);
+    const grid = screen.getByRole("grid");
+    await expect
+      .element(grid.getByRole("row", { name: /^Commit 0,/ }))
+      .toBeVisible();
+    await screen.getByRole("searchbox").fill("Commit 112");
+    await screen.getByRole("button", { name: /Commit 112 Alex/ }).click();
+    await vi.waitFor(() =>
+      expect(
+        reader.read.mock.calls.filter(([query]) => query.offset === 0).length,
+      ).toBeGreaterThan(1),
+    );
+    await expect.element(grid).toHaveAttribute("aria-busy", "false");
+    await new Promise<void>((resolve) =>
+      requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+    );
+    const target = grid.getByRole("row", { name: /^Commit 112,/ });
+    await expect.element(target).toHaveAttribute("aria-selected", "true");
+    const bounds = grid.element().getBoundingClientRect();
+    expect(target.element().getBoundingClientRect().top).toBeGreaterThanOrEqual(
+      bounds.top + 28,
+    );
+    expect(target.element().getBoundingClientRect().bottom).toBeLessThanOrEqual(
+      bounds.bottom,
+    );
+  });
+
+  it("does not offer to expand a merge whose side is already revealed", async () => {
+    const commits = mergeHistory().map((commit, index) =>
+      index === 1
+        ? { ...commit, parents: [historyOid(5), historyOid(2)] }
+        : commit,
+    );
+    const reader = historyReader({ commits, status: "ready" });
+    const screen = await renderGraph(reader);
+    await screen.getByRole("button", { name: "Expand merge Commit 0" }).click();
+    await expect
+      .element(screen.getByRole("row", { name: /^Commit 2,/ }))
+      .toBeVisible();
+    await expect
+      .element(screen.getByRole("button", { name: "Expand merge Commit 1" }))
+      .not.toBeInTheDocument();
+    await screen
+      .getByRole("button", { name: "Collapse merge Commit 0" })
+      .click();
+    await expect
+      .element(screen.getByRole("row", { name: /^Commit 2,/ }))
+      .not.toBeInTheDocument();
+    await expect
+      .element(screen.getByRole("button", { name: "Expand merge Commit 1" }))
+      .toBeVisible();
+  });
+
   it("adds the containing branch when opening a search result outside the filters", async () => {
     const commits = history(6);
     const main = { name: "main", type: "branch" as const, oid: historyOid(3) };
@@ -414,6 +475,11 @@ describe("commit graph navigation", () => {
         rootOid: historyOid(250),
         edges: [{ childOid: historyOid(250), parentOid: historyOid(320) }],
       });
+    reader.search.mockResolvedValue({
+      commits: [commits[350] as RepositoryCommit],
+      replicaComplete: true,
+      synchronizedCommitCount: commits.length,
+    });
     const handle = createRef<CommitGraphHandle>();
     const screen = await render(
       <div style={{ height: 520, width: 900 }}>
@@ -429,10 +495,20 @@ describe("commit graph navigation", () => {
     await expect
       .element(grid.getByRole("row", { name: /^Commit 0,/ }))
       .toBeVisible();
-    await handle.current?.navigateToOid(historyOid(350));
+    await screen.getByRole("searchbox").fill("Commit 350");
+    await screen.getByRole("button", { name: /Commit 350 Alex/ }).click();
     await expect
       .element(grid.getByRole("row", { name: /^Commit 350,/ }))
       .toHaveAttribute("aria-selected", "true");
+    await vi.waitFor(() => {
+      const bounds = grid.element().getBoundingClientRect();
+      const target = grid
+        .getByRole("row", { name: /^Commit 350,/ })
+        .element()
+        .getBoundingClientRect();
+      expect(target.top).toBeGreaterThanOrEqual(bounds.top + 28);
+      expect(target.bottom).toBeLessThanOrEqual(bounds.bottom);
+    });
     expect(reader.read).toHaveBeenCalledWith(
       expect.objectContaining({ offset: 100 }),
     );

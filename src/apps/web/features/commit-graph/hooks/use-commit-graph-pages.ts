@@ -135,8 +135,8 @@ export function useCommitGraphPages(
     previousCompletion.current = completion;
     if (
       !refreshed &&
-      !engine.getSnapshot().loading &&
-      JSON.stringify(engine.getSnapshot().query) === JSON.stringify(stableQuery)
+      JSON.stringify(engine.getSnapshot().requestedQuery) ===
+        JSON.stringify(stableQuery)
     )
       return;
     const anchor = capture.current();

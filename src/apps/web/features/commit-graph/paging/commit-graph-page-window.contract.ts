@@ -28,6 +28,7 @@ export interface CommitGraphPage {
 export interface CommitGraphPageWindowSnapshot {
   readonly epoch: number;
   readonly query: RepositoryHistoryQuery | undefined;
+  readonly requestedQuery: RepositoryHistoryQuery | undefined;
   readonly pages: readonly CommitGraphPage[];
   readonly startOffset: number;
   readonly endOffset: number;

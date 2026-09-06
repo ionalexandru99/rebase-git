@@ -61,6 +61,16 @@ export function BranchesSidebar({
   const { bindings, platform } = useKeyboardShortcuts();
   const focusBinding = bindings["branches.focusSidebar"];
   const [query, setQuery] = useState("");
+  const [settledQuery, setSettledQuery] = useState("");
+  useEffect(() => {
+    if (query === "") {
+      setSettledQuery("");
+      return;
+    }
+    const timeout = setTimeout(() => setSettledQuery(query), 200);
+    return () => clearTimeout(timeout);
+  }, [query]);
+  const filterQuery = query === "" ? "" : settledQuery;
   const [scope, setScope] = useState<BranchesSidebarScope>("all");
   const [expandedSections, setExpandedSections] = useState(
     defaultExpandedSections,
@@ -77,10 +87,10 @@ export function BranchesSidebar({
             refs,
             activeWorktreePath,
             expandedSections,
-            query,
+            filterQuery,
             scope,
           ),
-    [activeWorktreePath, expandedSections, query, refs, scope],
+    [activeWorktreePath, expandedSections, filterQuery, refs, scope],
   );
   const virtualizer = useVirtualizer({
     count: rows.length,

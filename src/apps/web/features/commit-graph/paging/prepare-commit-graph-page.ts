@@ -37,17 +37,6 @@ export async function prepareCommitGraphPage(
       (edge) => `${edge.childOid}\0${edge.parentOid}`,
     ),
   );
-  const scopeOwned = new Set(query.roots.map((root) => root.oid));
-  const byOid = new Map(commits.map((commit) => [commit.oid, commit]));
-  for (const root of query.roots) {
-    let current: string | undefined = root.oid;
-    const visited = new Set<string>();
-    while (current !== undefined && !visited.has(current)) {
-      visited.add(current);
-      scopeOwned.add(current);
-      current = byOid.get(current)?.parents[0];
-    }
-  }
   if (query.ancestry === "first-parent") {
     const parents = [
       ...new Set(commits.flatMap((commit) => commit.parents.slice(1))),
@@ -59,15 +48,6 @@ export async function prepareCommitGraphPage(
       );
       signal.throwIfAborted();
       for (const { oid } of located) visibleParents.add(oid);
-      const baseline =
-        additionalEdges.size === 0
-          ? located
-          : await reader.locateMany(
-              { ...query, additionalParentEdges: [] },
-              parents.slice(start, start + 1_000),
-            );
-      signal.throwIfAborted();
-      for (const { oid } of baseline) scopeOwned.add(oid);
     }
   }
   const topology = commits.map((commit) => ({
@@ -90,18 +70,15 @@ export async function prepareCommitGraphPage(
   );
   const merges = new Map<string, "collapsed" | "expanded">();
   for (const commit of commits) {
+    const expanded = commit.parents
+      .slice(1)
+      .some((oid) => additionalEdges.has(`${commit.oid}\0${oid}`));
     if (
       commit.parents.length > 1 &&
-      commit.parents.slice(1).some((oid) => !scopeOwned.has(oid))
+      (expanded ||
+        commit.parents.slice(1).some((oid) => !visibleParents.has(oid)))
     )
-      merges.set(
-        commit.oid,
-        commit.parents
-          .slice(1)
-          .some((oid) => additionalEdges.has(`${commit.oid}\0${oid}`))
-          ? "expanded"
-          : "collapsed",
-      );
+      merges.set(commit.oid, expanded ? "expanded" : "collapsed");
   }
   const estimatedBytes =
     merges.size * 128 +

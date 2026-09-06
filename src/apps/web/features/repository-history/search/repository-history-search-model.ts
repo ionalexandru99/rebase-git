@@ -63,7 +63,7 @@ export function createRepositoryHistorySearchModel(
     for (const listener of listeners) listener();
   }
 
-  function search() {
+  function search(delay = 0) {
     if (closed) return;
     interrupt?.();
     const text = snapshot.text;
@@ -75,6 +75,7 @@ export function createRepositoryHistorySearchModel(
     if (text.trim() === "") return;
     interrupt = runtime.runCallback(
       restoreSearchResults(text, selectedOid).pipe(
+        Effect.delay(delay),
         Effect.match({
           onFailure: (error) => publish({ ...snapshot, loading: false, error }),
           onSuccess: (result) => {
@@ -155,7 +156,7 @@ export function createRepositoryHistorySearchModel(
       if (text === snapshot.text) return;
       selectedOid = undefined;
       snapshot = { ...snapshot, text };
-      search();
+      search(200);
     },
     retry: search,
     loadMore: () => {
