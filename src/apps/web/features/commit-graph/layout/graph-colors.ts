@@ -63,10 +63,10 @@ export function graphLaneSeeds(
         remote: seeds.get(row.oid)?.remote === false ? false : row.nodeRemote,
       });
   }
-  const selectedNames = new Set(roots.map(graphRefName));
+  const selectedRefs = new Set(roots.map((ref) => `${ref.type}\0${ref.name}`));
   for (const ref of refs) {
     if (ref.type !== "branch" && ref.type !== "remote-branch") continue;
-    if (!selectedNames.has(graphRefName(ref))) continue;
+    if (!selectedRefs.has(`${ref.type}\0${ref.name}`)) continue;
     const seed = seeds.get(ref.oid);
     if (seed?.boundary) continue;
     seeds.set(ref.oid, {

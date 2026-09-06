@@ -10,6 +10,31 @@ import {
 } from "#web/features/commit-graph/layout/graph-colors";
 
 describe("graph branch colors", () => {
+  it.each([
+    { name: "feature/cache", type: "branch" as const },
+    { name: "upstream/feature/cache", type: "remote-branch" as const },
+  ])("does not let unselected $name recolor another branch", (incidental) => {
+    const roots = [
+      { name: "main", oid: "main", type: "branch" as const },
+      {
+        name: "origin/feature/cache",
+        oid: "feature",
+        type: "remote-branch" as const,
+      },
+    ];
+    const refs = [...roots, { ...incidental, oid: "older" }];
+    const plan = appendCommitLanes(
+      createCommitLaneCheckpoint(),
+      [
+        { oid: "main", parents: ["older"] },
+        { oid: "feature", parents: [] },
+        { oid: "older", parents: [] },
+      ],
+      graphLaneSeeds(refs, [], roots),
+    );
+    expect(graphColors(plan.rows, refs).nodes.get("older")).toBe("#4C9AFF");
+  });
+
   it("keeps known local ancestry vivid when its only named ref is remote", () => {
     const first = appendCommitLanes(createCommitLaneCheckpoint(), [
       { oid: "local", parents: ["older"] },
