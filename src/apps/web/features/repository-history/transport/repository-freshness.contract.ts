@@ -1,8 +1,6 @@
 import type {
   RepositoryFetchSetting,
   RepositoryFreshness,
-  RepositoryHistoryFailed,
-  RepositoryHistoryFreshness,
 } from "@rebase/contracts";
 import type { Effect } from "effect";
 import type { EnvironmentConnectionFailure } from "#web/features/environment-connection/environment-connection-errors";
@@ -28,15 +26,6 @@ export interface RepositoryFreshnessTransport {
     repositoryId: string,
     setting: RepositoryFetchSetting,
   ) => Effect.Effect<RepositoryFreshness, RepositoryFreshnessFailure>;
-}
-
-export interface RepositoryFreshnessTransportRuntime
-  extends RepositoryFreshnessTransport {
-  readonly accept: (message: RepositoryHistoryFreshness) => Effect.Effect<void>;
-  readonly acceptFailure: (
-    message: RepositoryHistoryFailed,
-  ) => Effect.Effect<void>;
-  readonly close: (error: EnvironmentConnectionFailure) => Effect.Effect<void>;
 }
 
 export interface RepositoryFreshnessGateway {

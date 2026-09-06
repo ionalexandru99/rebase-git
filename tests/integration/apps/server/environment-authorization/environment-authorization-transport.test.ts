@@ -410,7 +410,15 @@ describe("Environment authorization transport", () => {
       });
 
       const socket = await openWebSocket(origin, ticket);
-      socket.send(JSON.stringify(createCurrentEnvironmentHello("0.0.0")));
+      socket.send(
+        JSON.stringify({
+          _tag: "Request",
+          id: "1",
+          tag: "Hello",
+          payload: createCurrentEnvironmentHello("0.0.0"),
+          headers: [],
+        }),
+      );
       await expect(nextTextMessage(socket)).resolves.toContain(
         '"_tag":"HelloAccepted"',
       );
