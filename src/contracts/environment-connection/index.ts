@@ -28,17 +28,13 @@ export { negotiateEnvironmentHello } from "@rebase/contracts/environment-connect
 export {
   createCurrentEnvironmentHello,
   EnvironmentChanged,
-  EnvironmentClientMessage,
   EnvironmentHello,
   EnvironmentHelloResult,
-  EnvironmentServerMessage,
   EnvironmentTransportFailure,
   HelloAccepted,
   HelloRejected,
   InvalidMessage,
   PayloadTooLarge,
-  ResnapshotRequired,
-  SnapshotApplied,
 } from "@rebase/contracts/environment-connection/websocket/environment-live-connection.contract";
 export * from "@rebase/contracts/environment-connection/websocket/json-message-fragment";
 export * from "@rebase/contracts/environment-connection/websocket/json-message-fragment.contract";

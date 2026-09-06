@@ -53,7 +53,7 @@ export const EnvironmentCapabilities = Schema.Array(
 export const ProductVersionSchema = ProductVersion;
 
 export const currentEnvironmentProtocol = {
-  major: 1,
+  major: 2,
   minor: 5,
   minimumSupportedMinor: 0,
 } satisfies ProtocolRange;

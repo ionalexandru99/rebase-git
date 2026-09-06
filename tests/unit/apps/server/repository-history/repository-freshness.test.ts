@@ -1,6 +1,4 @@
 import type {
-  EnvironmentAccessCapability,
-  EnvironmentServerMessage,
   RepositoryCatalogEntry,
   RepositoryFreshness,
 } from "@rebase/contracts";
@@ -10,7 +8,6 @@ import {
   Effect,
   Exit,
   Fiber,
-  FiberSet,
   Layer,
   type Scope,
 } from "effect";
@@ -27,7 +24,6 @@ import {
   RepositoryFreshnessState,
 } from "#server/domain/repository-freshness.contract";
 import { RepositoryWatching } from "#server/domain/repository-watcher.contract";
-import { acquireRepositoryFreshnessSession } from "#server/features/environment-connection/websocket/repository-freshness-session";
 import { repositoryFreshnessLayer } from "#server/features/repository-history/freshness/repository-freshness";
 
 const repositoryId = "00000000-0000-4000-8000-000000000001";
@@ -35,56 +31,31 @@ const linkedId = "00000000-0000-4000-8000-000000000002";
 const writer = { automaticFetch: true };
 
 describe("repository freshness", () => {
-  it("keeps read-only sessions observing while automatic fetch belongs to subscribed writers", () => {
+  it("keeps readers observing after the final automatic-fetch subscriber leaves", () => {
     const fetch = vi.fn(() => Effect.succeed(output()));
-    const messages: EnvironmentServerMessage[] = [];
+    const states: RepositoryFreshness[] = [];
     return withService({ fetch }, (service, watch) =>
       Effect.gen(function* () {
-        const reader = yield* openSession(
-          service,
-          ["repository.read"],
-          messages,
-        );
-        yield* reader({
-          _tag: "SubscribeRepositoryHistory",
+        const reader = yield* service.subscribe(
           repositoryId,
-          requestId: repositoryId,
-        });
+          (state) => states.push(state),
+          { automaticFetch: false },
+        );
         yield* TestClock.adjust(300_000);
         expect(fetch).not.toHaveBeenCalled();
-        watch.change();
-        yield* TestClock.adjust(50);
-        expect(messages.at(-1)).toMatchObject({ freshness: { revision: 1 } });
-        yield* Effect.gen(function* () {
-          const handle = yield* openSession(
-            service,
-            ["repository.read", "repository.write"],
-            [],
-          );
-          yield* handle({
-            _tag: "SubscribeRepositoryHistory",
-            repositoryId,
-            requestId: linkedId,
-          });
-          yield* TestClock.adjust(0);
-          expect(fetch).toHaveBeenCalledTimes(1);
-          yield* handle({
-            _tag: "FetchRepositoryHistory",
-            repositoryId,
-            requestId: linkedId,
-          });
-          yield* TestClock.adjust(0);
-          expect(fetch).toHaveBeenCalledTimes(2);
-          yield* TestClock.adjust(300_000);
-          expect(fetch).toHaveBeenCalledTimes(3);
-        }).pipe(Effect.scoped);
+        const writer = yield* service.subscribe(repositoryId, () => {}, {
+          automaticFetch: true,
+        });
+        yield* TestClock.adjust(0);
+        expect(fetch).toHaveBeenCalledOnce();
+        yield* writer;
         yield* TestClock.adjust(600_000);
-        expect(fetch).toHaveBeenCalledTimes(3);
+        expect(fetch).toHaveBeenCalledOnce();
         expect(watch.close).not.toHaveBeenCalled();
         watch.change();
         yield* TestClock.adjust(50);
-        expect(messages.at(-1)).toMatchObject({ freshness: { revision: 5 } });
-        yield* reader({ _tag: "UnsubscribeRepositoryHistory", repositoryId });
+        expect(states.at(-1)?.revision).toBeGreaterThan(0);
+        yield* reader;
         expect(watch.close).toHaveBeenCalledOnce();
       }),
     );
@@ -461,28 +432,6 @@ describe("repository freshness", () => {
 
 function output(exitCode = 0, stdout = "") {
   return { exitCode, stdout, stderr: "" };
-}
-
-function openSession(
-  service: RepositoryFreshnessService,
-  access: readonly EnvironmentAccessCapability[],
-  messages: EnvironmentServerMessage[],
-) {
-  return Effect.gen(function* () {
-    const run = yield* FiberSet.makeRuntime<never, void, never>();
-    return yield* acquireRepositoryFreshnessSession(
-      service,
-      {
-        send: (message) =>
-          Effect.sync(() => {
-            messages.push(message);
-          }),
-      },
-      new Map([["repository-history-freshness", 1]]),
-      new Set(access),
-      run,
-    );
-  });
 }
 
 function withService(

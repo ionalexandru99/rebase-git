@@ -7,13 +7,15 @@ import { promisify } from "node:util";
 import { expect, test } from "@playwright/test";
 import {
   createCurrentEnvironmentHello,
-  createJsonMessageReassembler,
   decodeRepositoryHistoryBatch,
   decodeRepositoryHistoryPage,
   environmentLivePath,
-  JsonMessageFragment,
 } from "@rebase/contracts";
-import { Schema } from "effect";
+import { EnvironmentRpc } from "@rebase/contracts/environment-connection/rpc/environment-rpc.contract";
+import { Effect, Exit, Scope } from "effect";
+import { RpcClient, RpcSerialization } from "effect/unstable/rpc";
+import { Socket } from "effect/unstable/socket";
+import { createRepositoryHistoryRpc } from "#web/features/repository-history/transport/repository-history-rpc";
 
 const execute = promisify(execFile);
 const corpusPath = process.env.HISTORY_PROCESS_CORPUS_PATH;
@@ -95,81 +97,73 @@ test("prepared corpus stays within server and Git process budgets", async () => 
   const socket = new WebSocket(
     `${started.origin.replace("http://", "ws://")}${environmentLivePath}?ticket=benchmark`,
   );
+  const rpcScope = Effect.runSync(Scope.make());
   try {
     await new Promise<void>((resolveOpen, reject) => {
       socket.onopen = () => resolveOpen();
       socket.onerror = () => reject(new Error("WebSocket failed"));
     });
-    const hello = message(socket);
-    socket.send(JSON.stringify(createCurrentEnvironmentHello("0.0.0")));
-    await hello;
+    const client = await Effect.runPromise(
+      Effect.gen(function* () {
+        const transport = yield* Socket.fromWebSocket(Effect.succeed(socket));
+        const protocol = yield* RpcClient.makeProtocolSocket().pipe(
+          Effect.provideService(Socket.Socket, transport),
+        );
+        return yield* RpcClient.make(EnvironmentRpc).pipe(
+          Effect.provideService(RpcClient.Protocol, protocol),
+        );
+      }).pipe(
+        Effect.provideService(Scope.Scope, rpcScope),
+        Effect.provideService(
+          RpcSerialization.RpcSerialization,
+          RpcSerialization.json,
+        ),
+      ),
+    );
+    await Effect.runPromise(
+      client.Hello(createCurrentEnvironmentHello("0.0.0")),
+    );
+    const history = createRepositoryHistoryRpc(client, true, false);
     const firstPages: number[] = [];
     for (let iteration = 0; iteration <= 30; iteration += 1) {
-      const pending = historyMessage(socket);
       const start = performance.now();
-      socket.send(
-        JSON.stringify({
-          _tag: "ReadRepositoryHistory",
-          repositoryId: started.repositoryId,
-          requestId: crypto.randomUUID(),
-          roots: [{ name: "main", oid: revision, type: "branch" }],
-          order: "topological",
-          limit: 100,
-        }),
+      const page = decodeRepositoryHistoryPage(
+        await Effect.runPromise(
+          history.read({
+            repositoryId: started.repositoryId,
+            roots: [{ name: "main", oid: revision, type: "branch" }],
+            order: "topological",
+            limit: 100,
+          }),
+        ),
       );
-      const page = decodeRepositoryHistoryPage(await pending);
       expect(page.commits).toHaveLength(100);
       if (iteration > 0) firstPages.push(performance.now() - start);
     }
-    const reassembler = createJsonMessageReassembler();
     let received = 0;
     let batches = 0;
     let wireBytes = 0;
     let snapshotRoots: readonly string[] | undefined;
-    const requestId = crypto.randomUUID();
     const synchronizationStarted = performance.now();
-    const completed = new Promise<void>((resolveDone, reject) => {
-      socket.onmessage = (event) => {
-        try {
-          if (typeof event.data !== "string")
-            throw new Error("Expected JSON text");
-          const response = JSON.parse(event.data);
-          if (response._tag === "RepositoryHistorySynchronized") {
-            resolveDone();
-            return;
-          }
-          if (response._tag.includes("Failed")) throw new Error(event.data);
-          wireBytes += Buffer.byteLength(event.data);
-          const complete = reassembler.accept(
-            Schema.decodeUnknownSync(JsonMessageFragment)(response),
-          );
-          if (complete === undefined) return;
-          const batch = decodeRepositoryHistoryBatch(complete.payload);
-          if (batch.snapshot !== undefined)
-            snapshotRoots = batch.snapshot.rootOids;
-          received += batch.commits.length;
-          batches += 1;
-          socket.send(
-            JSON.stringify({
-              _tag: "AcknowledgeRepositoryHistoryBatch",
-              requestId,
-              sequence: batch.sequence,
-            }),
-          );
-        } catch (error) {
-          reject(error);
-        }
-      };
-    });
-    socket.send(
-      JSON.stringify({
-        _tag: "SynchronizeRepositoryHistory",
-        priority: "visible",
-        repositoryId: started.repositoryId,
-        requestId,
-      }),
+    const countWireBytes = (event: MessageEvent) => {
+      if (typeof event.data === "string")
+        wireBytes += Buffer.byteLength(event.data);
+    };
+    socket.addEventListener("message", countWireBytes);
+    await Effect.runPromise(
+      history.synchronize(
+        { repositoryId: started.repositoryId, priority: "visible" },
+        (bytes) =>
+          Effect.sync(() => {
+            const batch = decodeRepositoryHistoryBatch(bytes);
+            if (batch.snapshot !== undefined)
+              snapshotRoots = batch.snapshot.rootOids;
+            received += batch.commits.length;
+            batches += 1;
+          }),
+      ),
     );
-    await completed;
+    socket.removeEventListener("message", countWireBytes);
     await sample();
     const elapsed = performance.now() - synchronizationStarted;
     clearInterval(timer);
@@ -220,6 +214,7 @@ test("prepared corpus stays within server and Git process budgets", async () => 
     expect(metrics.maximumGitRssBytes).toBeLessThan(256 * 1_048_576);
   } finally {
     clearInterval(timer);
+    await Effect.runPromise(Scope.close(rpcScope, Exit.void));
     socket.close();
     child.kill("SIGTERM");
     await closed;
@@ -229,32 +224,6 @@ test("prepared corpus stays within server and Git process budgets", async () => 
 async function rss(pid: number) {
   const status = await readFile(`/proc/${pid}/status`, "utf8").catch(() => "");
   return Number(status.match(/^VmRSS:\s+(\d+)/m)?.[1] ?? 0) * 1024;
-}
-
-function message(socket: WebSocket) {
-  return new Promise<MessageEvent>((resolveMessage, reject) => {
-    socket.onmessage = resolveMessage;
-    socket.onerror = () => reject(new Error("WebSocket failed"));
-  });
-}
-
-function historyMessage(socket: WebSocket) {
-  const reassembler = createJsonMessageReassembler();
-  return new Promise<Uint8Array>((resolveMessage, reject) => {
-    socket.onmessage = (event) => {
-      try {
-        if (typeof event.data !== "string")
-          throw new Error("Expected JSON text");
-        const complete = reassembler.accept(
-          Schema.decodeUnknownSync(JsonMessageFragment)(JSON.parse(event.data)),
-        );
-        if (complete !== undefined) resolveMessage(complete.payload);
-      } catch (error) {
-        reject(error);
-      }
-    };
-    socket.onerror = () => reject(new Error("WebSocket failed"));
-  });
 }
 
 function statistics(values: number[]) {
