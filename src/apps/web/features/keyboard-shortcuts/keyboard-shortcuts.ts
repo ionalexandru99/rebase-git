@@ -295,15 +295,6 @@ export function keyboardShortcutLabel(
   return keyboardShortcutKeys(binding, platform).join(" ");
 }
 
-export function keyboardShortcutTitle(
-  label: string,
-  binding: KeyboardShortcutBinding | null,
-  platform: KeyboardShortcutPlatform,
-): string {
-  const shortcut = keyboardShortcutLabel(binding, platform);
-  return shortcut.length === 0 ? label : `${label} (${shortcut})`;
-}
-
 export function keyboardShortcutAria(
   binding: KeyboardShortcutBinding | null,
   platform: KeyboardShortcutPlatform,

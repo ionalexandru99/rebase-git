@@ -35,6 +35,7 @@ test("the renderer's initial 16-page cache stays below 64 MiB of retained JavaSc
       const oid = (index: number) => index.toString(16).padStart(40, "0");
       const reader: import("#web/features/commit-graph/paging/commit-graph-page-window.contract").CommitGraphPageReader =
         {
+          getRefTargets: async () => [],
           ancestryRoute: async () => undefined,
           locate: async () => undefined,
           locateMany: async () => [],

@@ -4,6 +4,7 @@ import {
   appendCommitLanes,
   createCommitLaneCheckpoint,
 } from "#web/features/commit-graph/layout/commit-lanes";
+import { graphColors } from "#web/features/commit-graph/layout/graph-colors";
 import { createCommitGraphPageWindow } from "#web/features/commit-graph/paging/commit-graph-page-window";
 import type { CommitGraphPageReader } from "#web/features/commit-graph/paging/commit-graph-page-window.contract";
 import type { RepositoryHistoryQuery } from "#web/features/repository-history/repository-history-reader.contract";
@@ -15,12 +16,209 @@ const query: RepositoryHistoryQuery = {
 };
 
 describe("commit graph page window", () => {
+  it("opens a search target while the first history page is still loading", async () => {
+    const commits = history(250);
+    const reader = fakeReader(commits);
+    let release: ((commits: readonly RepositoryCommit[]) => void) | undefined;
+    reader.read.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          release = resolve;
+        }),
+    );
+    const window = createCommitGraphPageWindow(reader);
+    const initial = window.loadInitial(query);
+    await vi.waitFor(() => expect(release).toBeDefined());
+    await expect(window.jumpToOid(oid(112))).resolves.toMatchObject({
+      oid: oid(112),
+      offset: 112,
+    });
+    release?.(commits.slice(0, 100));
+    await initial;
+    expect(window.getSnapshot().anchorOid).toBe(oid(112));
+    expect(window.getSnapshot().startOffset).toBe(100);
+    window.dispose();
+  });
+
+  it("mutes upstream history until a selected local branch reaches it", async () => {
+    const commits = history(8);
+    const roots = [
+      { name: "main", oid: oid(6), type: "branch" as const },
+      { name: "origin/main", oid: oid(0), type: "remote-branch" as const },
+    ];
+    const worktree = {
+      name: "experimental/work",
+      oid: oid(2),
+      type: "branch" as const,
+    };
+    const reader = fakeReader(commits);
+    reader.getRefTargets.mockResolvedValue([...roots, worktree]);
+    reader.locateMany.mockImplementation(async (scope, targets) => {
+      const first = Math.min(
+        ...scope.roots.map((root) =>
+          commits.findIndex((commit) => commit.oid === root.oid),
+        ),
+      );
+      return commits.flatMap((commit, index) =>
+        index >= first && targets.includes(commit.oid)
+          ? [{ oid: commit.oid, index }]
+          : [],
+      );
+    });
+    const window = createCommitGraphPageWindow(reader, { pageSize: 3 });
+    const scope = { ...query, roots };
+    const remote = () =>
+      window
+        .getSnapshot()
+        .pages.flatMap((page) => page.rows.map((row) => row.nodeRemote));
+    await window.loadInitial(scope);
+    await window.appendOlder();
+    await window.appendOlder();
+    expect(remote()).toEqual([
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      false,
+      false,
+    ]);
+    await window.loadInitial({ ...scope, roots: [...roots, worktree] });
+    await window.appendOlder();
+    expect(remote()).toEqual([true, true, false, false, false, false]);
+    await window.loadInitial(scope);
+    expect(remote()).toEqual([true, true, true]);
+    await window.jumpToOid(oid(3));
+    expect(remote().slice(0, 3)).toEqual([true, true, true]);
+    window.dispose();
+  });
+
+  it("keeps main blue when a selected worktree extends its history across pages", async () => {
+    const commits = history(8);
+    const refs = [
+      {
+        name: "experimental/graph-scroll-a1",
+        oid: oid(0),
+        type: "branch" as const,
+      },
+      { name: "origin/main", oid: oid(3), type: "remote-branch" as const },
+      { name: "main", oid: oid(6), type: "branch" as const },
+    ];
+    const reader = fakeReader(commits);
+    reader.getRefTargets.mockResolvedValue(refs);
+    reader.read.mockImplementation(async (request) => {
+      const start = request.roots.some((ref) => ref.oid === oid(0)) ? 0 : 3;
+      return commits.slice(
+        start + (request.offset ?? 0),
+        start + (request.offset ?? 0) + request.limit,
+      );
+    });
+    const window = createCommitGraphPageWindow(reader, { pageSize: 3 });
+    const rows = () => window.getSnapshot().pages.flatMap((page) => page.rows);
+    const scope = { ...query, roots: refs.slice(1) };
+    await window.loadInitial(scope);
+    await window.appendOlder();
+    const before = graphColors(rows(), refs);
+    await window.loadInitial({ ...scope, roots: refs });
+    await window.appendOlder();
+    await window.appendOlder();
+    const after = graphColors(rows(), refs);
+    expect(after.refs.get("main")).toBe("#4C9AFF");
+    expect(after.refs.get("origin/main")).toBe(before.refs.get("origin/main"));
+    expect(after.refs.get("experimental/graph-scroll-a1")).toBe("#F97316");
+    expect(rows().map((row) => after.nodes.get(row.oid))).toEqual([
+      ...Array(3).fill("#F97316"),
+      ...Array(5).fill("#4C9AFF"),
+    ]);
+    expect(
+      rows().every(
+        (row) => row.lanesBefore.length === 1 && row.lanesBefore[0]?.slot === 0,
+      ),
+    ).toBe(true);
+    await expect(window.requestLaneMove(2, 1)).resolves.toEqual({
+      oid: oid(3),
+      offset: 3,
+    });
+    await expect(window.requestLaneMove(3, -1)).resolves.toEqual({
+      oid: oid(2),
+      offset: 2,
+    });
+    await window.loadInitial(scope);
+    expect(graphColors(rows(), refs).refs.get("origin/main")).toBe("#4C9AFF");
+    window.dispose();
+  });
+
+  it("prepares the next page before the first scroll in a short viewport", async () => {
+    const reader = fakeReader(history(300));
+    const window = createCommitGraphPageWindow(reader);
+    await window.loadInitial(query);
+    window.setViewport(0, 11);
+    await vi.waitFor(() => expect(window.getSnapshot().endOffset).toBe(200));
+    expect(reader.read.mock.calls.map(([request]) => request.offset)).toEqual([
+      0, 100,
+    ]);
+    window.dispose();
+  });
+
+  it("retains branch colors when expanding and collapsing from an older page", async () => {
+    const commits = history(12);
+    const merge = commits[6];
+    const side = history(21)[20];
+    if (merge === undefined || side === undefined)
+      throw new Error("Missing fixture");
+    commits[6] = { ...merge, parents: [oid(7), side.oid] };
+    const expanded = [...commits.slice(0, 7), side, ...commits.slice(7)];
+    const reader = fakeReader(commits);
+    reader.read.mockImplementation(async (request) => {
+      const source = request.additionalParentEdges?.length ? expanded : commits;
+      return source.slice(
+        request.offset ?? 0,
+        (request.offset ?? 0) + request.limit,
+      );
+    });
+    reader.locateMany.mockResolvedValue([]);
+    const window = createCommitGraphPageWindow(reader, { pageSize: 5 });
+    const scope: RepositoryHistoryQuery = {
+      ...query,
+      ancestry: "first-parent",
+      roots: [{ name: "feature/cache", oid: oid(0), type: "branch" }],
+    };
+    const color = () => {
+      const row = window
+        .getSnapshot()
+        .pages.flatMap((page) => page.rows)
+        .find((row) => row.oid === oid(6));
+      return row?.lanesBefore.find((lane) => lane.id === row.nodeLaneId)?.color;
+    };
+    await window.loadInitial(scope);
+    await window.appendOlder();
+    const original = color();
+    expect(original).toBeGreaterThan(0);
+    await window.reload(
+      {
+        ...scope,
+        additionalParentEdges: [{ childOid: oid(6), parentOid: side.oid }],
+      },
+      oid(6),
+    );
+    expect(color()).toBe(original);
+    await window.reload(scope, oid(6));
+    expect(color()).toBe(original);
+    window.dispose();
+  });
+
   it("keeps the current graph when a search is canceled during replacement page loading", async () => {
     const commits = history(15);
     const reader = fakeReader(commits);
     const window = createCommitGraphPageWindow(reader, { pageSize: 5 });
     await window.loadInitial(query);
     const pending = deferred<readonly RepositoryCommit[]>();
+    reader.getRefTargets.mockResolvedValue([
+      ...query.roots,
+      { name: "feature/search", type: "branch", oid: oid(10) },
+    ]);
+    reader.locate.mockResolvedValueOnce(undefined);
     reader.read.mockReturnValueOnce(pending.promise);
     const controller = new AbortController();
     const navigation = window.jumpToOid(oid(10), controller.signal);
@@ -28,6 +226,7 @@ describe("commit graph page window", () => {
     controller.abort();
     pending.resolve(commits.slice(10));
     await expect(navigation).resolves.toBeUndefined();
+    expect(window.getSnapshot().requestedQuery?.roots).toEqual(query.roots);
     expect(window.getSnapshot()).toMatchObject({
       startOffset: 0,
       loading: false,
@@ -482,10 +681,12 @@ describe("commit graph page window", () => {
     );
     reader.ancestryRoute
       .mockResolvedValueOnce({
+        rootOid: oid(0),
         edges: [{ childOid: oid(0), parentOid: oid(2) }],
         continuationOid: oid(2),
       })
       .mockResolvedValueOnce({
+        rootOid: oid(2),
         edges: [{ childOid: oid(2), parentOid: oid(7) }],
       });
     const window = createCommitGraphPageWindow(reader, { pageSize: 5 });
@@ -551,6 +752,9 @@ describe("commit graph page window", () => {
 
 function fakeReader(commits: readonly RepositoryCommit[]) {
   return {
+    getRefTargets: vi.fn<CommitGraphPageReader["getRefTargets"]>(
+      async () => [],
+    ),
     read: vi.fn<CommitGraphPageReader["read"]>(async (request) =>
       commits.slice(request.offset ?? 0, (request.offset ?? 0) + request.limit),
     ),

@@ -18,13 +18,20 @@ describe("history ancestry navigation", () => {
       node("main"),
     ]);
     expect(index.ancestryRoute(["tip"], "target")).toEqual({
+      rootOid: "tip",
       edges: [
         { childOid: "outer", parentOid: "inner" },
         { childOid: "inner", parentOid: "side" },
       ],
     });
-    expect(index.ancestryRoute(["tip"], "main")).toEqual({ edges: [] });
-    expect(index.ancestryRoute(["target"], "target")).toEqual({ edges: [] });
+    expect(index.ancestryRoute(["tip"], "main")).toEqual({
+      rootOid: "tip",
+      edges: [],
+    });
+    expect(index.ancestryRoute(["target"], "target")).toEqual({
+      rootOid: "target",
+      edges: [],
+    });
     expect(index.ancestryRoute(["main"], "target")).toBeUndefined();
     expect(index.ancestryRoute(["missing"], "target")).toBeUndefined();
     expect(index.ancestryRoute(["tip"], "missing")).toBeUndefined();
@@ -37,8 +44,12 @@ describe("history ancestry navigation", () => {
       node("b", ["target"]),
       node("target"),
     ]);
-    expect(index.ancestryRoute(["tip"], "target")).toEqual({ edges: [] });
+    expect(index.ancestryRoute(["tip"], "target")).toEqual({
+      rootOid: "tip",
+      edges: [],
+    });
     expect(index.ancestryRoute(["tip", "target"], "target")).toEqual({
+      rootOid: "target",
       edges: [],
     });
   });
@@ -49,6 +60,7 @@ describe("history ancestry navigation", () => {
       node("side"),
     ]);
     expect(index.ancestryRoute(["merge"], "side")).toEqual({
+      rootOid: "merge",
       edges: [{ childOid: "merge", parentOid: "side" }],
     });
   });
@@ -86,9 +98,11 @@ describe("history ancestry navigation", () => {
     const first = index.ancestryRoute(["merge-0"], "target");
     expect(first?.edges).toHaveLength(1_000);
     expect(first?.continuationOid).toBe("merge-1000");
+    expect(first?.rootOid).toBe("merge-0");
     const rest = index.ancestryRoute([first?.continuationOid ?? ""], "target");
     expect(rest?.edges).toHaveLength(5);
     expect(rest?.continuationOid).toBeUndefined();
+    expect(rest?.rootOid).toBe("merge-1000");
     expect(
       index.order(["merge-0"], "topological", [], "first-parent", [
         ...(first?.edges ?? []),

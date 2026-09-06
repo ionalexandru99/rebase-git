@@ -31,7 +31,6 @@ import {
   ResizablePanel,
   ResizablePanelGroup,
 } from "#web-ui/components/ui/resizable";
-import { TooltipProvider } from "#web-ui/components/ui/tooltip";
 import { useKeyboardShortcuts } from "#web-ui/features/keyboard-shortcuts/keyboard-shortcuts-provider";
 import { OpenProjectScreen } from "#web-ui/features/open-project/open-project-screen";
 import { ProjectsSidebar } from "#web-ui/features/project-navigation/projects-sidebar";
@@ -316,160 +315,158 @@ export function ApplicationShell({
   });
 
   return (
-    <TooltipProvider>
-      <div className="h-svh min-h-80 w-full overflow-hidden bg-background">
-        <section
-          aria-label="Rebase application"
-          className="h-full overflow-hidden bg-background"
-        >
-          <div className={`h-full ${settingsOpen ? "hidden" : ""}`}>
-            <ResizablePanelGroup
-              className="h-full min-h-0"
-              orientation="horizontal"
+    <div className="h-svh min-h-80 w-full overflow-hidden bg-background">
+      <section
+        aria-label="Rebase application"
+        className="h-full overflow-hidden bg-background"
+      >
+        <div className={`h-full ${settingsOpen ? "hidden" : ""}`}>
+          <ResizablePanelGroup
+            className="h-full min-h-0"
+            orientation="horizontal"
+          >
+            <ResizablePanel
+              collapsedSize={projectSidebarSize.collapsed}
+              collapsible
+              defaultSize={projectSidebarSize.default}
+              groupResizeBehavior="preserve-pixel-size"
+              id="projects"
+              maxSize={projectSidebarSize.max}
+              minSize={projectSidebarSize.min}
+              onResize={() =>
+                setCollapsed(sidebarRef.current?.isCollapsed() ?? false)
+              }
+              panelRef={sidebarRef}
             >
-              <ResizablePanel
-                collapsedSize={projectSidebarSize.collapsed}
-                collapsible
-                defaultSize={projectSidebarSize.default}
-                groupResizeBehavior="preserve-pixel-size"
-                id="projects"
-                maxSize={projectSidebarSize.max}
-                minSize={projectSidebarSize.min}
-                onResize={() =>
-                  setCollapsed(sidebarRef.current?.isCollapsed() ?? false)
+              <ProjectsSidebar
+                closeRepository={closeSidebarRepository}
+                collapse={collapseSidebar}
+                environmentStatus={environmentStatus}
+                expand={expandSidebar}
+                filterRequest={sidebarFilterRequest}
+                navigation={visibleNavigation}
+                openProject={showOpenProjectScreen}
+                openSettings={() => setSettingsOpen(true)}
+                openRepositorySettings={openRepositorySettings}
+                selectRepository={selectSidebarRepository}
+                toggleEnvironment={(environmentId) =>
+                  setNavigation((current) =>
+                    toggleEnvironment(current, environmentId),
+                  )
                 }
-                panelRef={sidebarRef}
+              />
+            </ResizablePanel>
+            <ResizableHandle className="bg-transparent after:w-2 focus-visible:ring-primary/40" />
+            <ResizablePanel
+              className="rounded-none"
+              id="repository"
+              minSize="40%"
+            >
+              <div
+                className={`h-full ${repositorySettingsOpen ? "hidden" : ""}`}
+                inert={repositorySettingsOpen}
               >
-                <ProjectsSidebar
-                  closeRepository={closeSidebarRepository}
-                  collapse={collapseSidebar}
-                  environmentStatus={environmentStatus}
-                  expand={expandSidebar}
-                  filterRequest={sidebarFilterRequest}
-                  navigation={visibleNavigation}
-                  openProject={showOpenProjectScreen}
-                  openSettings={() => setSettingsOpen(true)}
-                  openRepositorySettings={openRepositorySettings}
-                  selectRepository={selectSidebarRepository}
-                  toggleEnvironment={(environmentId) =>
-                    setNavigation((current) =>
-                      toggleEnvironment(current, environmentId),
-                    )
-                  }
-                />
-              </ResizablePanel>
-              <ResizableHandle className="bg-transparent after:w-2 focus-visible:ring-primary/40" />
-              <ResizablePanel
-                className="rounded-none"
-                id="repository"
-                minSize="40%"
-              >
-                <div
-                  className={`h-full ${repositorySettingsOpen ? "hidden" : ""}`}
-                  inert={repositorySettingsOpen}
-                >
-                  {navigation.workspaceView === "open-project" ? (
-                    <OpenProjectScreen
-                      active={!settingsOpen && !repositorySettingsOpen}
-                      browseAvailable={
-                        environmentStatus.availability === "available"
-                      }
-                      environments={openProjectEnvironments}
-                      expandedEnvironmentIds={expandedEnvironmentIds}
-                      key={openProjectRequest}
-                      onBrowse={browseRepository}
-                      onEnvironmentOpenChange={setEnvironmentExpanded}
-                      onOpenRepository={selectOpenProjectRepository}
-                      onOpenSettings={(repository) =>
-                        openRepositorySettings(
-                          repository.environmentId,
-                          repository,
-                        )
-                      }
-                    />
-                  ) : (
-                    <RepositoryWorkspace
-                      accessCapabilities={
-                        sessionState._tag === "Connected"
-                          ? sessionState.accessCapabilities
-                          : []
-                      }
-                      connected={sessionState._tag === "Connected"}
-                      commandsActive={
-                        !settingsOpen &&
-                        !repositorySettingsOpen &&
-                        !folderPickerOpen
-                      }
-                      shortcuts={shortcuts}
-                      activeWorktreePath={activeWorktreePath}
-                      branchesFocusRequest={branchesFocusRequest}
-                      environmentId={historyEnvironmentId}
-                      historyReader={graphReader}
-                      logicalRepositoryId={
-                        selectedRepository?.logicalRepositoryId
-                      }
-                      refs={repositoryRefs}
-                      repositoryId={navigation.selectedRepositoryId}
-                      repositoryName={selectedRepository?.name ?? "Repository"}
-                      retryRefs={retryRefs}
-                      selectRef={selectRef}
-                    />
-                  )}
-                </div>
-                {settingsTarget === undefined ||
-                settingsRepository === undefined ? null : (
-                  <RepositorySettingsPage
-                    key={JSON.stringify([
-                      historyEnvironmentId,
-                      settingsRepository.id,
-                    ])}
-                    repository={settingsTarget}
-                    environmentId={historyEnvironmentId}
-                    logicalRepositoryId={
-                      settingsRepository.logicalRepositoryId ??
-                      settingsRepository.id
+                {navigation.workspaceView === "open-project" ? (
+                  <OpenProjectScreen
+                    active={!settingsOpen && !repositorySettingsOpen}
+                    browseAvailable={
+                      environmentStatus.availability === "available"
                     }
-                    environmentName={
-                      visibleNavigation.environments.find(
-                        ({ id }) => id === localEnvironmentId,
-                      )?.name ?? "Environment"
+                    environments={openProjectEnvironments}
+                    expandedEnvironmentIds={expandedEnvironmentIds}
+                    key={openProjectRequest}
+                    onBrowse={browseRepository}
+                    onEnvironmentOpenChange={setEnvironmentExpanded}
+                    onOpenRepository={selectOpenProjectRepository}
+                    onOpenSettings={(repository) =>
+                      openRepositorySettings(
+                        repository.environmentId,
+                        repository,
+                      )
                     }
-                    reader={sameHistory ? graphReader : settingsReader}
+                  />
+                ) : (
+                  <RepositoryWorkspace
+                    accessCapabilities={
+                      sessionState._tag === "Connected"
+                        ? sessionState.accessCapabilities
+                        : []
+                    }
                     connected={sessionState._tag === "Connected"}
-                    canConfigure={canWrite}
-                    canRemove={canWrite}
-                    copyPath={() => copyRepositoryPath(settingsTarget)}
-                    reveal={
-                      window.rebaseHost?.revealRepository === undefined
-                        ? undefined
-                        : () => revealRepository(settingsTarget)
+                    commandsActive={
+                      !settingsOpen &&
+                      !repositorySettingsOpen &&
+                      !folderPickerOpen
                     }
-                    remove={async () => {
-                      await removeRepository(settingsTarget);
-                      closeRepositorySettings();
-                    }}
+                    shortcuts={shortcuts}
+                    activeWorktreePath={activeWorktreePath}
+                    branchesFocusRequest={branchesFocusRequest}
+                    environmentId={historyEnvironmentId}
+                    historyReader={graphReader}
+                    logicalRepositoryId={
+                      selectedRepository?.logicalRepositoryId
+                    }
+                    refs={repositoryRefs}
+                    repositoryId={navigation.selectedRepositoryId}
+                    repositoryName={selectedRepository?.name ?? "Repository"}
+                    retryRefs={retryRefs}
+                    selectRef={selectRef}
                   />
                 )}
-              </ResizablePanel>
-            </ResizablePanelGroup>
-          </div>
-          {settingsOpen ? (
-            <SettingsPanel
-              closeSettings={() => setSettingsOpen(false)}
-              desktopUpdates={desktopUpdates}
-              productVersion={productVersion}
-            />
-          ) : null}
-          <RepositoryFolderPicker
-            environments={openProjectEnvironments}
-            listDirectory={listRepositoryDirectory}
-            onOpenChange={setFolderPickerOpen}
-            onOpenRepository={openRepositoryFromFolder}
-            open={folderPickerOpen}
+              </div>
+              {settingsTarget === undefined ||
+              settingsRepository === undefined ? null : (
+                <RepositorySettingsPage
+                  key={JSON.stringify([
+                    historyEnvironmentId,
+                    settingsRepository.id,
+                  ])}
+                  repository={settingsTarget}
+                  environmentId={historyEnvironmentId}
+                  logicalRepositoryId={
+                    settingsRepository.logicalRepositoryId ??
+                    settingsRepository.id
+                  }
+                  environmentName={
+                    visibleNavigation.environments.find(
+                      ({ id }) => id === localEnvironmentId,
+                    )?.name ?? "Environment"
+                  }
+                  reader={sameHistory ? graphReader : settingsReader}
+                  connected={sessionState._tag === "Connected"}
+                  canConfigure={canWrite}
+                  canRemove={canWrite}
+                  copyPath={() => copyRepositoryPath(settingsTarget)}
+                  reveal={
+                    window.rebaseHost?.revealRepository === undefined
+                      ? undefined
+                      : () => revealRepository(settingsTarget)
+                  }
+                  remove={async () => {
+                    await removeRepository(settingsTarget);
+                    closeRepositorySettings();
+                  }}
+                />
+              )}
+            </ResizablePanel>
+          </ResizablePanelGroup>
+        </div>
+        {settingsOpen ? (
+          <SettingsPanel
+            closeSettings={() => setSettingsOpen(false)}
+            desktopUpdates={desktopUpdates}
+            productVersion={productVersion}
           />
-        </section>
-      </div>
-    </TooltipProvider>
+        ) : null}
+        <RepositoryFolderPicker
+          environments={openProjectEnvironments}
+          listDirectory={listRepositoryDirectory}
+          onOpenChange={setFolderPickerOpen}
+          onOpenRepository={openRepositoryFromFolder}
+          open={folderPickerOpen}
+        />
+      </section>
+    </div>
   );
 }
 

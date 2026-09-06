@@ -30,6 +30,26 @@ const ready: RepositoryHistorySnapshot = {
 };
 
 describe("repository fetch controls", () => {
+  it("shows unavailable fetching when a subscription fails with stale history", async () => {
+    await render(
+      <Controls
+        reader={createReader()}
+        snapshot={{
+          ...ready,
+          freshness: { ...fresh, stale: true },
+          freshnessError: new RepositoryHistoryRejected({
+            failure: { _tag: "AuthorizationDenied" },
+          }),
+        }}
+      />,
+    );
+    await expect
+      .element(page.getByRole("status"))
+      .toHaveTextContent(
+        "Fetching is unavailable. Cached history is available.",
+      );
+  });
+
   it("updates clean settings from other clients while preserving an edited interval", async () => {
     const reader = createReader();
     const screen = await render(
@@ -96,9 +116,6 @@ describe("repository fetch controls", () => {
     await expect
       .element(fetch)
       .toHaveAttribute("aria-keyshortcuts", "Control+Shift+F");
-    await expect
-      .element(fetch)
-      .toHaveAttribute("title", "Fetch (Ctrl+Shift+F)");
     await fetch.click();
     await expect
       .element(page.getByRole("status"))
@@ -106,8 +123,8 @@ describe("repository fetch controls", () => {
     expect(reader.fetch).toHaveBeenCalledOnce();
     await page.getByRole("button", { name: "Retry fetch" }).click();
     await expect
-      .element(page.getByRole("status"))
-      .toHaveTextContent("Automatic fetch every 5 minutes");
+      .element(page.getByRole("button", { name: "Retry fetch" }))
+      .not.toBeInTheDocument();
     expect(reader.fetch).toHaveBeenCalledTimes(2);
   });
 
@@ -224,9 +241,6 @@ describe("repository fetch controls", () => {
     await expect
       .element(page.getByRole("status"))
       .toHaveTextContent("Offline. Cached history is available.");
-    await expect
-      .element(page.getByText("Shallow history", { exact: true }))
-      .toBeVisible();
     await expect
       .element(page.getByRole("combobox", { name: "Automatic fetch" }))
       .toBeDisabled();

@@ -147,6 +147,18 @@ function RepositoryWorkspaceContent({
           }),
     [activeWorktreePath, historyScope, refs.refs, refsRestored],
   );
+  const canResetHistoryScope = useMemo(() => {
+    if (refs.refs === undefined || resolvedScope === undefined) return false;
+    const automatic = resolveHistoryScope(
+      automaticHistoryScope,
+      refs.refs,
+      activeWorktreePath,
+    );
+    return !historyScopesEqual(
+      { _tag: "Custom", selections: resolvedScope.selections },
+      { _tag: "Custom", selections: automatic.selections },
+    );
+  }, [activeWorktreePath, refs.refs, resolvedScope]);
   useEffect(() => {
     if (
       resolvedScope === undefined ||
@@ -218,6 +230,8 @@ function RepositoryWorkspaceContent({
           className="h-full rounded-none bg-repository"
         >
           <CommitGraph
+            githubRepository={refs.refs?.githubRepository}
+            remoteProviders={refs.refs?.remoteProviders}
             commandEnvironment={
               environmentId === undefined ||
               logicalRepositoryId === undefined ||
@@ -238,22 +252,27 @@ function RepositoryWorkspaceContent({
             commandsActive={commandsActive}
             shortcuts={shortcuts}
             onRemoveHistoryRef={toggleRef}
+            onRevealHistoryRef={toggleRef}
             onAddHistoryRef={() =>
               setLocalBranchesFocusRequest((request) => request + 1)
             }
-            onResetHistoryScope={() => {
-              setHistoryScope(automaticHistoryScope);
-              if (
-                environmentId !== undefined &&
-                logicalRepositoryId !== undefined
-              ) {
-                filterStore.save(
-                  environmentId,
-                  logicalRepositoryId,
-                  automaticHistoryScope,
-                );
-              }
-            }}
+            onResetHistoryScope={
+              canResetHistoryScope
+                ? () => {
+                    setHistoryScope(automaticHistoryScope);
+                    if (
+                      environmentId !== undefined &&
+                      logicalRepositoryId !== undefined
+                    ) {
+                      filterStore.save(
+                        environmentId,
+                        logicalRepositoryId,
+                        automaticHistoryScope,
+                      );
+                    }
+                  }
+                : undefined
+            }
             reader={historyReader}
             repositoryName={repositoryName}
             roots={resolvedScope?.roots}

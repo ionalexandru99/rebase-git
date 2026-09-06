@@ -8,19 +8,21 @@ import {
   type ReactNode,
   type Ref,
   type RefObject,
-  type UIEventHandler,
   useEffect,
   useImperativeHandle,
   useMemo,
   useState,
 } from "react";
 import type { CommitGraphViewportHandle } from "#web/features/commit-graph/commit-graph.contract";
+import {
+  graphHeaderHeight,
+  graphRowHeight as rowHeight,
+} from "#web/features/commit-graph/layout/graph-metrics";
 import type {
   CommitGraphPageWindow,
   CommitGraphPageWindowSnapshot,
 } from "#web/features/commit-graph/paging/commit-graph-page-window.contract";
 
-const rowHeight = 36;
 const overscanRows = 6;
 const emptyViewport = { width: 0, height: 0 };
 
@@ -43,20 +45,18 @@ export function CommitGraphVirtualWindow({
   readonly onPageSize: (size: number) => void;
   readonly children: (viewport: {
     readonly viewport: { readonly width: number; readonly height: number };
-    readonly horizontalOffset: number;
-    readonly verticalOffset: number;
     readonly totalHeight: number;
     readonly virtualRows: readonly VirtualItem[];
-    readonly onScroll: UIEventHandler<HTMLTableElement>;
   }) => ReactNode;
 }) {
-  const [horizontalOffset, setHorizontalOffset] = useState(0);
   const error = snapshot.error;
   const virtualizer = useVirtualizer({
     count:
       snapshot.knownEndOffset +
       (commits.length > 0 && snapshot.hasOlder ? 1 : 0),
     estimateSize: () => rowHeight,
+    paddingStart: graphHeaderHeight,
+    scrollPaddingStart: graphHeaderHeight,
     getScrollElement: () => scrollRef.current,
     observeElementRect: (instance, callback) => {
       const element = instance.scrollElement;
@@ -100,6 +100,8 @@ export function CommitGraphVirtualWindow({
     () =>
       absoluteRows.map((row) => ({
         ...row,
+        start: row.start - graphHeaderHeight,
+        end: row.end - graphHeaderHeight,
         key: nextSlots.indexOf(
           commits[row.index - snapshot.startOffset]?.oid ??
             `retry-${row.index}`,
@@ -115,7 +117,11 @@ export function CommitGraphVirtualWindow({
   const lastVirtual =
     firstVirtual === undefined
       ? undefined
-      : firstVirtual + Math.ceil(viewport.height / rowHeight);
+      : firstVirtual +
+        Math.max(
+          0,
+          Math.ceil((viewport.height - graphHeaderHeight) / rowHeight),
+        );
   useEffect(() => {
     if (
       firstVirtual === undefined ||
@@ -142,7 +148,13 @@ export function CommitGraphVirtualWindow({
   ]);
 
   useEffect(
-    () => onPageSize(Math.max(1, Math.floor(viewport.height / rowHeight))),
+    () =>
+      onPageSize(
+        Math.max(
+          1,
+          Math.floor((viewport.height - graphHeaderHeight) / rowHeight),
+        ),
+      ),
     [onPageSize, viewport.height],
   );
   useImperativeHandle(ref, () => ({
@@ -156,11 +168,8 @@ export function CommitGraphVirtualWindow({
   }
   return children({
     viewport,
-    horizontalOffset,
-    verticalOffset: virtualizer.scrollOffset ?? 0,
-    totalHeight: virtualizer.getTotalSize(),
+    totalHeight: Math.max(0, virtualizer.getTotalSize() - graphHeaderHeight),
     virtualRows,
-    onScroll: (event) => setHorizontalOffset(event.currentTarget.scrollLeft),
   });
 }
 

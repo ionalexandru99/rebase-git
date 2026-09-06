@@ -2,8 +2,8 @@ import type {
   RepositoryHistoryRefTarget,
   RepositoryRefTarget,
 } from "@rebase/contracts";
-import { IconX } from "@tabler/icons-react";
 import type { HistoryScope } from "#web/features/commit-graph/history-scope.contract";
+import { CommitRefPill } from "#web-ui/features/commit-graph/components/commit-ref-labels";
 
 export function HistoryScopeStrip({
   onRemove,
@@ -24,45 +24,37 @@ export function HistoryScopeStrip({
   return (
     <fieldset className="flex min-h-9 shrink-0 flex-wrap items-center gap-1.5 border-border/60 border-b bg-muted/20 px-3 py-1">
       <legend className="sr-only">{scope._tag} history scope</legend>
-      <span className="mr-1 text-[11px] text-muted-foreground">
-        {scope._tag}
-      </span>
+      <span className="mr-1 text-[.85rem] text-muted-foreground">Filters</span>
       {selections.map((selection) => (
-        <span
-          className="inline-flex h-6 max-w-64 items-center gap-1 rounded-sm border border-border/70 bg-background/60 px-2 text-[11px] text-foreground"
+        <CommitRefPill
           key={scopeSelectionKey(selection)}
-        >
-          <span
-            className="truncate font-mono"
-            title={scopeSelectionName(selection)}
-          >
-            {scopeSelectionName(selection)}
-          </span>
-          {onRemove === undefined ? null : (
-            <button
-              aria-label={`Remove ${scopeSelectionName(selection)} from history`}
-              className="-mr-1 grid size-4 shrink-0 place-items-center rounded-sm text-muted-foreground outline-none hover:bg-accent hover:text-foreground focus-visible:ring-1 focus-visible:ring-primary/70"
-              onClick={() => onRemove(selection)}
-              type="button"
-            >
-              <IconX aria-hidden="true" className="size-3" />
-            </button>
-          )}
-        </span>
+          label={{
+            name: scopeSelectionName(selection),
+            type:
+              selection._tag === "RemoteBranch"
+                ? "remote-branch"
+                : selection._tag === "Tag"
+                  ? "tag"
+                  : "branch",
+          }}
+          onRemove={
+            onRemove === undefined ? undefined : () => onRemove(selection)
+          }
+        />
       ))}
       {selections.length === 0 && detachedHead !== undefined ? (
-        <span className="inline-flex h-6 items-center rounded-sm border border-border/70 bg-background/60 px-2 text-[11px] text-foreground">
+        <span className="inline-flex h-6 items-center rounded-sm border border-border/70 bg-background/60 px-2 text-[.85rem] text-foreground">
           Detached HEAD
         </span>
       ) : null}
       {selections.length === 0 && detachedHead === undefined ? (
-        <span className="text-[11px] text-muted-foreground">No refs</span>
+        <span className="text-[.85rem] text-muted-foreground">No refs</span>
       ) : null}
       {onAdd === undefined ? null : (
         <button
           type="button"
           onClick={onAdd}
-          className="h-6 rounded-sm px-2 text-[11px] text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:outline-2 focus-visible:outline-primary"
+          className="h-6 rounded-sm px-2 text-[.85rem] text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:outline-2 focus-visible:outline-primary"
         >
           + Add ref
         </button>
@@ -71,9 +63,9 @@ export function HistoryScopeStrip({
         <button
           type="button"
           onClick={onReset}
-          className="ml-auto h-6 rounded-sm px-2 text-[11px] text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:outline-2 focus-visible:outline-primary"
+          className="ml-auto h-6 rounded-sm px-2 text-[.85rem] text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:outline-2 focus-visible:outline-primary"
         >
-          Reset to Automatic
+          Reset filters
         </button>
       )}
     </fieldset>

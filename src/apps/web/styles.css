@@ -37,8 +37,6 @@
   --status-available: #6ec48a;
   --status-connecting: #d9b95b;
   --status-unavailable: #ef7a78;
-  --tooltip: #303038;
-  --tooltip-foreground: #f4f4f5;
 }
 
 .dark {
@@ -109,8 +107,6 @@
   --color-status-available: var(--status-available);
   --color-status-connecting: var(--status-connecting);
   --color-status-unavailable: var(--status-unavailable);
-  --color-tooltip: var(--tooltip);
-  --color-tooltip-foreground: var(--tooltip-foreground);
 }
 
 @layer base {

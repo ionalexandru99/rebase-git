@@ -2,11 +2,14 @@ import type { RepositoryCommit } from "@rebase/contracts";
 import {
   appendCommitLanes,
   type CommitLaneCheckpoint,
+  type CommitLaneRow,
 } from "#web/features/commit-graph/layout/commit-lanes";
+import { graphLaneSeeds } from "#web/features/commit-graph/layout/graph-colors";
 import type {
   CommitGraphPage,
   CommitGraphPageReader,
 } from "#web/features/commit-graph/paging/commit-graph-page-window.contract";
+import { locateLocalHistory } from "#web/features/commit-graph/paging/locate-local-history";
 import type { RepositoryHistoryQuery } from "#web/features/repository-history/repository-history-reader.contract";
 
 export async function prepareCommitGraphPage(
@@ -15,9 +18,13 @@ export async function prepareCommitGraphPage(
   offset: number,
   incomingCheckpoint: CommitLaneCheckpoint,
   signal: AbortSignal,
+  previousRows: readonly CommitLaneRow[] = [],
 ): Promise<CommitGraphPage> {
   signal.throwIfAborted();
-  const commits = await reader.read({ ...query, offset });
+  const [commits, refs] = await Promise.all([
+    reader.read({ ...query, offset }),
+    reader.getRefTargets().catch(() => query.roots),
+  ]);
   signal.throwIfAborted();
   if (commits.length > query.limit)
     throw new Error("History page exceeds its requested size");
@@ -30,17 +37,6 @@ export async function prepareCommitGraphPage(
       (edge) => `${edge.childOid}\0${edge.parentOid}`,
     ),
   );
-  const scopeOwned = new Set(query.roots.map((root) => root.oid));
-  const byOid = new Map(commits.map((commit) => [commit.oid, commit]));
-  for (const root of query.roots) {
-    let current: string | undefined = root.oid;
-    const visited = new Set<string>();
-    while (current !== undefined && !visited.has(current)) {
-      visited.add(current);
-      scopeOwned.add(current);
-      current = byOid.get(current)?.parents[0];
-    }
-  }
   if (query.ancestry === "first-parent") {
     const parents = [
       ...new Set(commits.flatMap((commit) => commit.parents.slice(1))),
@@ -52,15 +48,6 @@ export async function prepareCommitGraphPage(
       );
       signal.throwIfAborted();
       for (const { oid } of located) visibleParents.add(oid);
-      const baseline =
-        additionalEdges.size === 0
-          ? located
-          : await reader.locateMany(
-              { ...query, additionalParentEdges: [] },
-              parents.slice(start, start + 1_000),
-            );
-      signal.throwIfAborted();
-      for (const { oid } of baseline) scopeOwned.add(oid);
     }
   }
   const topology = commits.map((commit) => ({
@@ -75,21 +62,23 @@ export async function prepareCommitGraphPage(
           )
         : commit.parents,
   }));
-  const plan = appendCommitLanes(incomingCheckpoint, topology);
+  const plan = appendCommitLanes(
+    incomingCheckpoint,
+    topology,
+    graphLaneSeeds([...query.roots, ...refs], previousRows, query.roots),
+    await locateLocalHistory(reader, query, commits, signal),
+  );
   const merges = new Map<string, "collapsed" | "expanded">();
   for (const commit of commits) {
+    const expanded = commit.parents
+      .slice(1)
+      .some((oid) => additionalEdges.has(`${commit.oid}\0${oid}`));
     if (
       commit.parents.length > 1 &&
-      commit.parents.slice(1).some((oid) => !scopeOwned.has(oid))
+      (expanded ||
+        commit.parents.slice(1).some((oid) => !visibleParents.has(oid)))
     )
-      merges.set(
-        commit.oid,
-        commit.parents
-          .slice(1)
-          .some((oid) => additionalEdges.has(`${commit.oid}\0${oid}`))
-          ? "expanded"
-          : "collapsed",
-      );
+      merges.set(commit.oid, expanded ? "expanded" : "collapsed");
   }
   const estimatedBytes =
     merges.size * 128 +
@@ -99,7 +88,7 @@ export async function prepareCommitGraphPage(
         bytes +
         160 +
         2 * row.oid.length +
-        8 *
+        24 *
           (row.lanesBefore.length +
             row.lanesAfter.length +
             row.parentLaneIds.length),

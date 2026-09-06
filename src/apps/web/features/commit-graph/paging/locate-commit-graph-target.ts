@@ -1,8 +1,31 @@
 import type { CommitGraphPageReader } from "#web/features/commit-graph/paging/commit-graph-page-window.contract";
+import { findContainingHistoryRef } from "#web/features/commit-graph/paging/find-containing-history-ref";
 import type { HistoryParentEdge } from "#web/features/repository-history/query/history-order.contract";
 import type { RepositoryHistoryQuery } from "#web/features/repository-history/repository-history-reader.contract";
 
 export async function locateCommitGraphTarget(
+  reader: CommitGraphPageReader,
+  query: RepositoryHistoryQuery,
+  oid: string,
+  signal: AbortSignal,
+) {
+  const current = await locateInScope(reader, query, oid, signal);
+  if (current !== undefined) return current;
+  const ref = await findContainingHistoryRef(reader, oid, signal);
+  if (
+    ref === undefined ||
+    query.roots.some((root) => root.type === ref.type && root.name === ref.name)
+  )
+    return undefined;
+  return locateInScope(
+    reader,
+    { ...query, roots: [...query.roots, ref] },
+    oid,
+    signal,
+  );
+}
+
+async function locateInScope(
   reader: CommitGraphPageReader,
   query: RepositoryHistoryQuery,
   oid: string,

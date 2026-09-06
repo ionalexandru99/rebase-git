@@ -3,6 +3,7 @@ import type {
   RepositoryRefTarget,
 } from "@rebase/contracts";
 import type { KeyboardEvent, RefObject } from "react";
+import { writeClipboardText } from "#web/features/clipboard/index";
 import type {
   GraphCommandEnvironment,
   GraphCommandShortcuts,
@@ -77,7 +78,7 @@ export function useCommitGraphCommands({
     active: commandsActive,
     handlers: {
       readCommit: async (oid) => (await reader?.getCommitSummaries([oid]))?.[0],
-      writeClipboard: (text) => navigator.clipboard.writeText(text),
+      writeClipboard: writeClipboardText,
       ...(onRemoveHistoryRef === undefined
         ? {}
         : { toggleHistoryRef: onRemoveHistoryRef }),

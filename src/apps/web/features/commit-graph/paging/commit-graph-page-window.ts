@@ -31,6 +31,7 @@ export const emptyCommitGraphPageWindowSnapshot: CommitGraphPageWindowSnapshot =
   {
     epoch: 0,
     query: undefined,
+    requestedQuery: undefined,
     pages: [],
     startOffset: 0,
     endOffset: 0,
@@ -63,6 +64,7 @@ export function createCommitGraphPageWindow(
     throw new Error("Invalid graph page cache limits");
   let snapshot = emptyCommitGraphPageWindowSnapshot;
   let view: PageView | undefined;
+  let requestedQuery: RepositoryHistoryQuery | undefined;
   let controller = new AbortController();
   let generation = 0;
   let navigationRequest = 0;
@@ -105,6 +107,7 @@ export function createCommitGraphPageWindow(
       ...snapshot,
       epoch: view?.epoch ?? 0,
       query: view?.query,
+      requestedQuery,
       pages,
       startOffset: first?.offset ?? 0,
       endOffset: last === undefined ? 0 : last.offset + last.commits.length,
@@ -180,6 +183,8 @@ export function createCommitGraphPageWindow(
       knownEndOffset: offset,
       hasOlder: query.roots.length > 0,
     };
+    const previousRows = snapshot.pages.flatMap((page) => page.rows);
+    requestedQuery = next.query;
     publish({ loading: true, error: undefined });
     try {
       for (
@@ -195,6 +200,7 @@ export function createCommitGraphPageWindow(
           cursor,
           checkpoint,
           signal,
+          previousRows,
         );
         retain(next, page);
         if (page.commits.length < pageSize) break;
@@ -230,6 +236,7 @@ export function createCommitGraphPageWindow(
       loads.clear();
       queue = Promise.resolve();
       replacing = false;
+      requestedQuery = view?.query ?? requestedQuery;
       publish({ loading: false });
     } else if (hadPendingMove) publish();
   };
@@ -240,6 +247,7 @@ export function createCommitGraphPageWindow(
   ) => {
     if (disposed) return;
     cancelNavigation();
+    requestedQuery = { ...query, limit: pageSize, offset: 0 };
     const request = ++initialRequest;
     let offset = 0;
     if (anchorOid !== undefined) {
@@ -440,7 +448,8 @@ export function createCommitGraphPageWindow(
 
   const jumpToOid = async (oid: string, callerSignal?: AbortSignal) => {
     callerSignal?.throwIfAborted();
-    if (view === undefined || disposed) return undefined;
+    const scopeQuery = requestedQuery;
+    if (scopeQuery === undefined || disposed) return undefined;
     initialRequest += 1;
     cancelNavigation();
     const request = navigationRequest;
@@ -452,7 +461,7 @@ export function createCommitGraphPageWindow(
     try {
       const target = await locateCommitGraphTarget(
         reader,
-        view.query,
+        scopeQuery,
         oid,
         signal,
       );
@@ -484,7 +493,9 @@ export function createCommitGraphPageWindow(
     } finally {
       if (request === navigationRequest) {
         jumping = false;
-        if (snapshot.loading) publish({ loading: false });
+        requestedQuery = view?.query ?? scopeQuery;
+        if (snapshot.loading || snapshot.requestedQuery !== requestedQuery)
+          publish({ loading: false });
       }
     }
   };
@@ -556,7 +567,7 @@ export function createCommitGraphPageWindow(
       if (viewport !== undefined && first !== viewport.first)
         scrollingBackwards = first < viewport.first;
       viewport = { first, last };
-      const lookahead = Math.max(1, (last - first + 1) * 2);
+      const lookahead = Math.max(pageSize, (last - first + 1) * 2);
       if (scrollingBackwards) {
         const offset = Math.max(0, snapshot.startOffset - pageSize);
         const lastVisiblePage = Math.floor(last / pageSize) * pageSize;
@@ -583,7 +594,8 @@ export function createCommitGraphPageWindow(
       const row = page?.rows[offset - pageOffset];
       if (
         row === undefined ||
-        (direction > 0 && !row.lanesAfter.includes(row.nodeLaneId))
+        (direction > 0 &&
+          !row.lanesAfter.some((lane) => lane.id === row.nodeLaneId))
       )
         return Promise.resolve(undefined);
       return requestMove(offset + direction, {

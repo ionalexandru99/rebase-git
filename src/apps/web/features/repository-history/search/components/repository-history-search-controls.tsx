@@ -1,10 +1,5 @@
 import { Popover } from "@base-ui/react/popover";
-import {
-  IconArrowDown,
-  IconArrowUp,
-  IconSearch,
-  IconX,
-} from "@tabler/icons-react";
+import { IconSearch, IconX } from "@tabler/icons-react";
 import {
   type KeyboardEvent,
   type Ref,
@@ -20,11 +15,11 @@ import type {
 } from "#web/features/repository-history/search/components/repository-history-search-controls.contract";
 import { useRepositoryHistorySearch } from "#web/features/repository-history/search/hooks/use-repository-history-search";
 import { useRepositoryHistorySearchModel } from "#web/features/repository-history/search/hooks/use-repository-history-search-model";
-import { historySearchPageSize } from "#web/features/repository-history/search/read-next-history-search-page";
 import type { RepositoryHistorySearch } from "#web/features/repository-history/search/repository-history-search.contract";
 import type { RepositoryHistorySearchModel } from "#web/features/repository-history/search/repository-history-search-model.contract";
 import { Button } from "#web-ui/components/ui/button";
 import { Input } from "#web-ui/components/ui/input";
+import { HistorySearchResults } from "#web-ui/features/repository-history/search/components/history-search-results";
 
 export function RepositoryHistorySearchControls({
   reader,
@@ -108,15 +103,11 @@ export function RepositoryHistorySearchView({
       else search.next();
     }
   };
-  const windowStart =
-    Math.floor(Math.max(0, search.selected) / historySearchPageSize) *
-    historySearchPageSize;
-  const visible = search.commits.slice(
-    windowStart,
-    windowStart + historySearchPageSize,
-  );
   const busy = search.loading || search.navigating;
-  const indexedCount = search.count || snapshot.synchronizedCommitCount || 0;
+  const showPopup =
+    opened &&
+    search.text.trim() !== "" &&
+    (!search.loading || search.commits.length > 0);
   const complete =
     search.text.trim() === ""
       ? snapshot.synchronization === "complete"
@@ -127,15 +118,16 @@ export function RepositoryHistorySearchView({
       <div className="relative min-w-32 max-w-64 flex-1">
         <IconSearch
           aria-hidden="true"
-          className="pointer-events-none absolute top-1.5 left-2 size-3.5 text-muted-foreground"
+          className="pointer-events-none absolute top-1/2 left-2 size-3.5 -translate-y-1/2 text-muted-foreground"
         />
         <Input
-          aria-controls={opened ? resultsId : undefined}
-          aria-expanded={opened}
+          aria-controls={showPopup ? resultsId : undefined}
+          aria-expanded={showPopup}
+          aria-busy={busy}
           aria-haspopup="dialog"
           aria-keyshortcuts={bindings.open?.ariaKeyShortcuts}
           aria-label="Search history"
-          className="h-7 pr-7 pl-7 text-xs md:text-xs"
+          className="h-7 pr-7 pl-7 text-[.85rem] md:text-[.85rem]"
           maxLength={256}
           onKeyDown={onKeyDown}
           onChange={(event) => {
@@ -145,30 +137,32 @@ export function RepositoryHistorySearchView({
           onClick={() => setOpened(true)}
           placeholder="Search history"
           ref={input}
-          title={
-            bindings.open?.shortcut === undefined
-              ? "Search history"
-              : `Search history (${bindings.open.shortcut})`
-          }
-          type="search"
+          type="text"
+          role="searchbox"
           value={search.text}
         />
         {search.text === "" ? null : (
-          <Button
+          <button
+            type="button"
             aria-label="Clear history search"
-            className="absolute top-0 right-0 size-7"
+            className="absolute inset-y-0 right-0 grid w-7 place-items-center rounded-r-md text-muted-foreground outline-none hover:text-foreground focus-visible:ring-1 focus-visible:ring-primary"
             onClick={() => {
               search.setText("");
               open();
             }}
-            size="icon-xs"
-            variant="ghost"
           >
-            <IconX />
-          </Button>
+            <IconX aria-hidden="true" className="size-3.5" />
+          </button>
         )}
       </div>
-      {opened ? (
+      <span className="sr-only" role="status">
+        {search.loading
+          ? "Searching"
+          : search.navigating
+            ? "Opening result"
+            : ""}
+      </span>
+      {showPopup ? (
         <Popover.Root open onOpenChange={setOpened}>
           <Popover.Portal>
             <Popover.Positioner
@@ -179,107 +173,35 @@ export function RepositoryHistorySearchView({
             >
               <Popover.Popup
                 aria-label="History search results"
-                className="w-[min(28rem,calc(100vw-1rem))] rounded-md border border-border bg-popover text-popover-foreground shadow-xl outline-none"
+                className="w-[min(36rem,calc(100vw-1rem))] rounded-md border border-border bg-popover text-popover-foreground shadow-xl outline-none"
                 finalFocus={input}
                 id={resultsId}
                 initialFocus={false}
                 onKeyDown={onKeyDown}
               >
-                <div className="flex items-center gap-1 border-border border-b px-2 py-1.5">
-                  <span className="mr-auto text-xs tabular-nums" role="status">
-                    {search.loading
-                      ? "Searching cached history…"
-                      : search.navigating
-                        ? "Opening result…"
-                        : search.text.trim() === ""
-                          ? "Search cached history"
-                          : `${search.commits.length}${search.cursor === undefined ? "" : "+"} ${search.commits.length === 1 && search.cursor === undefined ? "match" : "matches"}`}
-                    {search.selected >= 0
-                      ? ` · Result ${search.selected + 1}`
-                      : ""}
-                  </span>
-                  <Button
-                    aria-keyshortcuts={bindings.previous?.ariaKeyShortcuts}
-                    aria-label="Previous search result"
-                    disabled={!search.canPrevious}
-                    onClick={search.previous}
-                    size="icon-xs"
-                    title={bindings.previous?.shortcut}
-                    variant="ghost"
-                  >
-                    <IconArrowUp />
-                  </Button>
-                  <Button
-                    aria-keyshortcuts={bindings.next?.ariaKeyShortcuts}
-                    aria-label="Next search result"
-                    disabled={!search.canNext}
-                    onClick={search.next}
-                    size="icon-xs"
-                    title={bindings.next?.shortcut}
-                    variant="ghost"
-                  >
-                    <IconArrowDown />
-                  </Button>
-                  <Button
-                    aria-label="Close history search"
-                    onClick={close}
-                    size="icon-xs"
-                    title="Escape"
-                    variant="ghost"
-                  >
-                    <IconX />
-                  </Button>
-                </div>
-                <div className="max-h-72 overflow-y-auto p-1" aria-busy={busy}>
-                  {visible.map((commit, offset) => (
-                    <Button
-                      aria-current={
-                        search.selected === windowStart + offset
-                          ? "true"
-                          : undefined
-                      }
-                      className="h-auto w-full justify-start gap-2 px-2 py-2 text-left"
-                      disabled={busy}
-                      key={commit.oid}
-                      onClick={() => search.navigate(windowStart + offset)}
-                      variant="ghost"
-                    >
-                      <span className="min-w-0 flex-1">
-                        <span className="block truncate text-xs">
-                          {commit.subject}
-                        </span>
-                        <span
-                          className="mt-0.5 block truncate text-[10px] text-muted-foreground"
-                          title={`${commit.author.name} <${commit.author.email}>`}
-                        >
-                          {commit.author.name} · {commit.author.email}
-                        </span>
-                      </span>
-                      <code className="shrink-0 text-[10px] text-muted-foreground">
-                        {commit.oid.slice(0, 8)}
-                      </code>
-                    </Button>
-                  ))}
-                  {search.text.trim() === "" ? (
-                    <p className="px-2 py-3 text-xs text-muted-foreground">
-                      Find a commit by hash, subject, author, email, or ref
-                      name.
-                    </p>
-                  ) : null}
+                <HistorySearchResults
+                  key={search.text}
+                  commits={search.commits}
+                  selected={search.selected}
+                  busy={busy}
+                  onNavigate={search.navigate}
+                  onLoadMore={search.loadMore}
+                />
+                <div aria-busy={busy}>
                   {!busy &&
                   search.error === undefined &&
                   search.text.trim() !== "" &&
                   search.cursor === undefined &&
                   search.commits.length === 0 ? (
-                    <p className="px-2 py-3 text-xs text-muted-foreground">
-                      No matches in cached history.
+                    <p className="px-2 py-3 text-[.85rem] text-muted-foreground">
+                      No matches.
                     </p>
                   ) : null}
                   {search.error === undefined ? null : (
-                    <div className="px-2 py-2 text-xs">
+                    <div className="px-2 py-2 text-[.85rem]">
                       <p role="alert">{search.error}</p>
                       <Button
-                        className="mt-1"
+                        className="mt-1 text-[.85rem] sm:text-[.85rem]"
                         onClick={search.retry}
                         size="xs"
                         variant="ghost"
@@ -289,13 +211,16 @@ export function RepositoryHistorySearchView({
                     </div>
                   )}
                 </div>
-                <div className="border-border border-t px-3 py-2 text-[10px] text-muted-foreground">
-                  {offline ? "Offline · " : ""}
-                  {complete
-                    ? `${indexedCount.toLocaleString()} commits indexed`
-                    : `Partial results · ${indexedCount.toLocaleString()} commits indexed`}
-                  <span className="block">Commit bodies are not searched.</span>
-                </div>
+                {offline || !complete ? (
+                  <div className="border-border border-t px-3 py-2 text-[.85rem] text-muted-foreground">
+                    {[
+                      offline ? "Offline" : undefined,
+                      !complete ? "Partial results" : undefined,
+                    ]
+                      .filter(Boolean)
+                      .join(" · ")}
+                  </div>
+                ) : null}
               </Popover.Popup>
             </Popover.Positioner>
           </Popover.Portal>

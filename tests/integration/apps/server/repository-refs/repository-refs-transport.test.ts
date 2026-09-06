@@ -41,6 +41,13 @@ describe("repository refs transport", () => {
     await withRefsListener(async ({ authorization, origin, root }) => {
       const repositoryPath = join(root, "repository");
       await createRepository(repositoryPath);
+      await git(
+        repositoryPath,
+        "remote",
+        "add",
+        "origin",
+        "git@github.com:alex/rebase.git",
+      );
       const owner = await pair(origin, authorization, "owner");
       const viewer = await pair(origin, authorization, "viewer");
       const remembered = await Effect.runPromise(
@@ -51,6 +58,7 @@ describe("repository refs transport", () => {
         readRepositoryRefsEffect(origin, viewer, remembered.id),
       );
       expect(refs.repositoryId).toBe(remembered.id);
+      expect(refs.githubRepository).toEqual({ owner: "alex", name: "rebase" });
       expect(refs.branches.map((branch) => branch.name)).toEqual(
         expect.arrayContaining(["main", "feature"]),
       );

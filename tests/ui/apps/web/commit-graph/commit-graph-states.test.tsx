@@ -1,6 +1,6 @@
 import type { RepositoryCommit } from "@rebase/contracts";
 import { act } from "react";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { render } from "vitest-browser-react";
 import {
@@ -10,10 +10,14 @@ import {
   historyReader,
   renderGraph,
 } from "#tests-ui/apps/web/commit-graph/commit-graph-fixture";
+import { graphRowHeight } from "#web/features/commit-graph/layout/graph-metrics";
 import { RepositoryHistoryUnavailable } from "#web/features/repository-history/repository-history-reader.contract";
 import { saveRepositoryHistoryOrder } from "#web/features/repository-settings/preferences/repository-history-order";
 
 describe("commit graph states", () => {
+  beforeEach(async () => {
+    await page.viewport(1280, 720);
+  });
   it.each([
     [3, 100],
     [100, 3],
@@ -125,11 +129,17 @@ describe("commit graph states", () => {
         .element(grid.getByRole("row", { name: /^Commit 1,/ }))
         .toHaveAttribute("aria-selected", "true");
       await userEvent.keyboard("{Shift>}{ArrowDown}{/Shift}");
-      await expect.element(screen.getByText("2 selected")).toBeVisible();
       await expect
-        .element(screen.getByRole("status"))
-        .not.toHaveTextContent("selected");
-      expect(element.querySelectorAll("tr").length).toBeLessThan(60);
+        .element(grid.getByRole("row", { name: /^Commit 1,/ }))
+        .toHaveAttribute("aria-selected", "true");
+      await expect
+        .element(grid.getByRole("row", { name: /^Commit 2,/ }))
+        .toHaveAttribute("aria-selected", "true");
+      expect(
+        element.querySelectorAll("tr[aria-rowindex]").length,
+      ).toBeLessThanOrEqual(
+        Math.ceil(element.clientHeight / graphRowHeight) + 13,
+      );
     },
   );
 
@@ -174,37 +184,46 @@ describe("commit graph states", () => {
     await expect
       .element(firstCommit.getByText("main", { exact: true }))
       .toBeVisible();
-    await expect
-      .element(firstCommit.getByText("origin/main", { exact: true }))
-      .toBeVisible();
+    expect(
+      firstCommit.getByRole("button", { name: "Copy main", exact: true }).all(),
+    ).toHaveLength(1);
     await expect.element(screen.getByText("hidden")).not.toBeInTheDocument();
 
-    await screen
-      .getByRole("button", { name: "Remove main from history" })
-      .click();
+    const removePill = screen.getByRole("button", {
+      name: "Remove main from history",
+    });
+    const copyPill = screen
+      .getByRole("group", { name: "Custom history scope" })
+      .getByRole("button", { name: "Copy main", exact: true });
+    expect(getComputedStyle(removePill.element()).opacity).toBe("0");
+    const pill = copyPill.element().parentElement;
+    if (pill === null) throw new Error("Missing pill");
+    const bounds = pill.getBoundingClientRect();
+    const addRef = screen.getByRole("button", { name: "+ Add ref" });
+    const addBounds = addRef.element().getBoundingClientRect();
+    await copyPill.hover();
+    expect(getComputedStyle(removePill.element()).opacity).toBe("1");
+    expect(
+      removePill.element().getBoundingClientRect().right,
+    ).toBeLessThanOrEqual(pill.getBoundingClientRect().right);
+    expect(pill.getBoundingClientRect().width).toBe(bounds.width);
+    expect(addRef.element().getBoundingClientRect().left).toBe(addBounds.left);
+    await removePill.hover();
+    expect(pill.getBoundingClientRect().width).toBe(bounds.width);
+    expect(getComputedStyle(removePill.element()).opacity).toBe("1");
+    await firstCommit.hover();
+    expect(pill.getBoundingClientRect().width).toBe(bounds.width);
+    expect(getComputedStyle(removePill.element()).opacity).toBe("0");
+    copyPill.element().focus();
+    await userEvent.keyboard("{Tab}");
+    expect(document.activeElement).toBe(removePill.element());
+    expect(getComputedStyle(removePill.element()).opacity).toBe("1");
+    await userEvent.keyboard("{Enter}");
     expect(remove).toHaveBeenCalledWith(selection);
     await screen.getByRole("button", { name: "+ Add ref" }).click();
     expect(add).toHaveBeenCalledOnce();
-    await screen.getByRole("button", { name: "Reset to Automatic" }).click();
+    await screen.getByRole("button", { name: "Reset filters" }).click();
     expect(reset).toHaveBeenCalledOnce();
-  });
-
-  it("shows background synchronization without covering the graph", async () => {
-    const reader = historyReader({ commits: history(2), status: "ready" });
-    reader.snapshot = {
-      revision: 1,
-      historyRevision: 1,
-      status: "ready",
-      synchronization: "syncing",
-      synchronizedCommitCount: 256,
-      storingCommits: true,
-    };
-    const screen = await renderGraph(reader);
-
-    await expect.element(screen.getByText("Syncing")).toBeVisible();
-    await expect
-      .element(screen.getByRole("row", { name: /^Commit 0,/ }))
-      .toBeVisible();
   });
 
   it("renders 100 connected commits with bounded semantic rows and selection", async () => {
@@ -213,12 +232,12 @@ describe("commit graph states", () => {
     const screen = await renderGraph(reader);
     const grid = screen.getByRole("grid", { name: "Commit history" });
 
-    await expect.element(grid).toHaveAttribute("aria-rowcount", "-1");
+    await expect.element(grid).toHaveAttribute("aria-rowcount", "101");
     await expect
       .element(grid.getByRole("row", { name: /Commit 0/ }))
       .toBeVisible();
     expect(grid.getByRole("row").all().length).toBeLessThan(40);
-    await expect.element(grid.getByRole("rowgroup")).toBeInTheDocument();
+    expect(grid.getByRole("rowgroup").all()).toHaveLength(2);
     expect(document.querySelector("canvas")).not.toBeNull();
 
     const second = grid.getByRole("row", { name: /^Commit 1,/ });

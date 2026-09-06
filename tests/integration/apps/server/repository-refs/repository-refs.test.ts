@@ -35,6 +35,32 @@ afterEach(async () => {
 });
 
 describe("repository refs", { timeout: 30_000 }, () => {
+  it("reads each remote provider alongside the GitHub avatar repository", async () => {
+    const fixture = await createFixture();
+    await git(
+      fixture.repositoryPath,
+      "remote",
+      "set-url",
+      "origin",
+      "git@github.com:alex/rebase.git",
+    );
+    await git(
+      fixture.repositoryPath,
+      "remote",
+      "add",
+      "upstream",
+      "https://gitlab.com/team/rebase.git",
+    );
+    const result = await withRefsService(fixture, ({ refs, repositoryId }) =>
+      refs.read(repositoryId),
+    );
+    expect(result.githubRepository).toEqual({ owner: "alex", name: "rebase" });
+    expect(result.remoteProviders).toEqual([
+      { remote: "origin", provider: "github" },
+      { remote: "upstream", provider: "gitlab" },
+    ]);
+  });
+
   it("reads branches with tracking, worktrees, remotes, and tags", async () => {
     const fixture = await createFixture();
 

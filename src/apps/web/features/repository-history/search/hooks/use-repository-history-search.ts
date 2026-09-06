@@ -18,6 +18,7 @@ export function useRepositoryHistorySearch(
     ...state,
     setText: model?.setText ?? ignore,
     retry: model?.retry ?? ignore,
+    loadMore: model?.loadMore ?? ignore,
     navigate: model?.navigate ?? ignore,
     next: model?.next ?? ignore,
     previous: model?.previous ?? ignore,
@@ -27,13 +28,5 @@ export function useRepositoryHistorySearch(
         : state.error.operation === "search"
           ? "Could not search cached history."
           : "Could not open this search result.",
-    canNext:
-      !state.loading &&
-      !state.navigating &&
-      (state.selected + 1 < state.commits.length || state.cursor !== undefined),
-    canPrevious:
-      !state.loading &&
-      !state.navigating &&
-      (state.selected > 0 || (state.selected < 0 && state.commits.length > 0)),
   };
 }

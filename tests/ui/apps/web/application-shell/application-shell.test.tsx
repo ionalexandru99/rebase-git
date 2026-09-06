@@ -230,13 +230,7 @@ describe("application shell", () => {
       .getByRole("grid", { name: "Commit history" })
       .getByRole("row", { name: /^cached commit,/ });
     await expect.element(commit).toBeVisible();
-    await expect
-      .element(page.getByText("Syncing", { exact: true }))
-      .toBeVisible();
     connected.finishSynchronization();
-    await expect
-      .element(page.getByText("Syncing", { exact: true }))
-      .not.toBeInTheDocument();
 
     connected.disconnect();
 

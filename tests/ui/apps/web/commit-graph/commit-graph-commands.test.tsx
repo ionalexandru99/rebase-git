@@ -19,6 +19,7 @@ describe("commit graph commands", () => {
       synchronizedCommitCount: 6,
     });
     reader.ancestryRoute.mockResolvedValue({
+      rootOid: historyOid(0),
       edges: [{ childOid: historyOid(0), parentOid: historyOid(2) }],
     });
     const screen = await renderGraph(reader);
@@ -87,122 +88,6 @@ describe("commit graph commands", () => {
       }),
     );
     await vi.waitFor(() => expect(reader.fetch).toHaveBeenCalledTimes(2));
-  });
-
-  it("uses the same history command from a ref label and the row keyboard menu", async () => {
-    const commits = history(3);
-    const reader = historyReader({ commits, status: "ready" });
-    const roots = [
-      { name: "main", oid: "0".repeat(40), type: "branch" as const },
-    ];
-    reader.getRefTargets.mockResolvedValue(roots);
-    const toggle = vi.fn();
-    const screen = await renderGraph(reader, roots, {
-      onRemoveHistoryRef: toggle,
-    });
-    await screen.getByRole("button", { name: "Actions for main" }).click();
-    await screen.getByRole("menuitem", { name: "Remove from history" }).click();
-    expect(toggle).toHaveBeenLastCalledWith(
-      { _tag: "LocalBranch", name: "main" },
-      expect.objectContaining({ selectedOids: [] }),
-    );
-    await expect.element(screen.getByRole("grid")).toHaveFocus();
-    await userEvent.keyboard("{Shift>}{F10}{/Shift}");
-    await screen
-      .getByRole("menuitem", { name: "Remove main from history" })
-      .click();
-    expect(toggle).toHaveBeenCalledTimes(2);
-    const label = screen.getByRole("button", { name: "Actions for main" });
-    label.element().focus();
-    await userEvent.keyboard("{ArrowDown}");
-    await expect
-      .element(screen.getByRole("menuitem", { name: "Remove from history" }))
-      .toHaveFocus();
-    await expect.element(label).toHaveAttribute("aria-expanded", "true");
-    await userEvent.keyboard("{Escape}");
-    await expect.element(screen.getByRole("grid")).toHaveFocus();
-    await expect.element(label).toHaveAttribute("aria-expanded", "false");
-    await expect
-      .element(screen.getByRole("row", { name: /^Commit 0,/ }))
-      .toHaveAttribute("aria-selected", "true");
-  });
-  it("keeps overflow ref actions available without selecting their row", async () => {
-    const reader = historyReader({ commits: history(3), status: "ready" });
-    reader.getRefTargets.mockResolvedValue([
-      { name: "main", oid: historyOid(0), type: "branch" },
-      { name: "origin/main", oid: historyOid(0), type: "remote-branch" },
-      { name: "release/long-tag-name", oid: historyOid(0), type: "tag" },
-      { name: "topic/another-long-branch", oid: historyOid(0), type: "branch" },
-    ]);
-    const toggle = vi.fn();
-    const screen = await renderGraph(reader, undefined, {
-      onRemoveHistoryRef: toggle,
-    });
-    const row = screen.getByRole("row", { name: /^Commit 0,/ });
-    await row.getByRole("button", { name: "2 more refs" }).click();
-    await screen
-      .getByRole("menuitem", { name: "release/long-tag-name Add to history" })
-      .click();
-    expect(toggle).toHaveBeenLastCalledWith(
-      { _tag: "Tag", name: "release/long-tag-name" },
-      expect.objectContaining({ selectedOids: [] }),
-    );
-    await expect.element(row).toHaveAttribute("aria-selected", "false");
-    await expect.element(screen.getByRole("grid")).toHaveFocus();
-    row.getByRole("button", { name: "2 more refs" }).element().focus();
-    await userEvent.keyboard("{ArrowUp}");
-    await expect
-      .element(
-        screen.getByRole("menuitem", {
-          name: "topic/another-long-branch Add to history",
-        }),
-      )
-      .toHaveFocus();
-    await userEvent.keyboard("{Escape}");
-    await expect.element(screen.getByRole("grid")).toHaveFocus();
-  });
-
-  it("closes ref actions when scrolling replaces their commit and uses the new row metadata", async () => {
-    const reader = historyReader({ commits: history(100), status: "ready" });
-    reader.getRefTargets.mockResolvedValue([
-      { name: "main", oid: historyOid(0), type: "branch" },
-      { name: "older-label", oid: historyOid(1), type: "tag" },
-      { name: "newer-label", oid: historyOid(61), type: "tag" },
-    ]);
-    const toggle = vi.fn();
-    const screen = await renderGraph(reader, undefined, {
-      onRemoveHistoryRef: toggle,
-    });
-    await screen
-      .getByRole("button", { name: "Actions for older-label" })
-      .click();
-    await expect
-      .element(screen.getByRole("menuitem", { name: "Add to history" }))
-      .toBeVisible();
-    const grid = screen.getByRole("grid");
-    grid.element().scrollTop = 60 * 36;
-    grid.element().dispatchEvent(new Event("scroll"));
-    const row = grid.getByRole("row", { name: /^Commit 61,/ });
-    await expect.element(row).toBeVisible();
-    await expect
-      .element(screen.getByRole("menuitem", { name: "Add to history" }))
-      .not.toBeInTheDocument();
-    await expect
-      .element(
-        row.getByRole("gridcell", { name: `Commit SHA ${historyOid(61)}` }),
-      )
-      .toBeVisible();
-    await row.getByRole("button", { name: "Actions for newer-label" }).click();
-    await screen.getByRole("menuitem", { name: "Add to history" }).click();
-    expect(toggle).toHaveBeenLastCalledWith(
-      { _tag: "Tag", name: "newer-label" },
-      expect.objectContaining({ selectedOids: [] }),
-    );
-    await row.click();
-    await expect.element(row).toHaveAttribute("aria-selected", "true");
-    await expect
-      .element(grid)
-      .toHaveAttribute("aria-activedescendant", `commit-${historyOid(61)}`);
   });
 
   it("selects the invoking commit and opens its menu from the keyboard", async () => {

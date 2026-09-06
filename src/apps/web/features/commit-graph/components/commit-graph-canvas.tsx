@@ -1,174 +1,122 @@
 import type { VirtualItem } from "@tanstack/react-virtual";
-import { type JSX, useLayoutEffect, useRef } from "react";
+import {
+  memo,
+  type RefObject,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import type { CommitLaneRow } from "#web/features/commit-graph/layout/commit-lanes";
+import { drawGraphTile } from "#web/features/commit-graph/layout/draw-graph-tile";
+import { commitGraphGutterWidth } from "#web/features/commit-graph/layout/graph-geometry";
+import { graphRowHeight } from "#web/features/commit-graph/layout/graph-metrics";
 
-const lanePitch = 14;
-const laneInset = 14;
-const laneColors = [
-  "#7c8cff",
-  "#62d39a",
-  "#d56c83",
-  "#d0ae54",
-  "#63b3d4",
-  "#b07bd8",
-  "#d58a5f",
-  "#8dbf68",
-] as const;
+const tileRows = 32;
 
 export function CommitGraphCanvas({
-  height,
-  horizontalOffset,
   laneRows,
   virtualRows,
-  verticalOffset,
-  width,
-}: CommitGraphCanvasViewport): JSX.Element {
+  scrollRef,
+  viewportWidth,
+}: {
+  readonly laneRows: readonly CommitLaneRow[];
+  readonly virtualRows: readonly VirtualItem[];
+  readonly scrollRef: RefObject<HTMLTableElement | null>;
+  readonly viewportWidth: number;
+}) {
+  const [left, setLeft] = useState(0);
+  useLayoutEffect(() => {
+    const element = scrollRef.current;
+    if (element === null) return;
+    const scroll = () =>
+      setLeft(Math.max(0, Math.floor(element.scrollLeft / 256) * 256 - 256));
+    scroll();
+    element.addEventListener("scroll", scroll, { passive: true });
+    return () => element.removeEventListener("scroll", scroll);
+  }, [scrollRef]);
+  const offset =
+    virtualRows[0] === undefined
+      ? 0
+      : virtualRows[0].start / graphRowHeight - virtualRows[0].index;
+  const tiles = new Set(
+    virtualRows.map((row) => Math.floor((row.index + offset) / tileRows)),
+  );
+  const graphWidth = useMemo(
+    () => commitGraphGutterWidth(laneRows),
+    [laneRows],
+  );
+  const maximumWidth = Math.min(graphWidth, viewportWidth + 768);
+  const maximumRatio = Math.min(
+    2,
+    Math.sqrt(
+      (63 * 1_048_576) /
+        Math.max(1, tiles.size * maximumWidth * tileRows * graphRowHeight * 4),
+    ),
+  );
+  return [...tiles].map((tile) => (
+    <GraphTile
+      key={tile}
+      tile={tile}
+      offset={offset}
+      laneRows={laneRows}
+      left={left}
+      maximumWidth={maximumWidth}
+      maximumRatio={maximumRatio}
+    />
+  ));
+}
+
+const GraphTile = memo(function GraphTile({
+  tile,
+  offset,
+  laneRows,
+  left,
+  maximumWidth,
+  maximumRatio,
+}: {
+  readonly tile: number;
+  readonly offset: number;
+  readonly laneRows: readonly CommitLaneRow[];
+  readonly left: number;
+  readonly maximumWidth: number;
+  readonly maximumRatio: number;
+}) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const [ratio, setRatio] = useState(() => window.devicePixelRatio || 1);
+  const start = Math.max(0, tile * tileRows - offset);
+  const end = Math.min(laneRows.length, (tile + 1) * tileRows - offset);
+  const rows = useMemo(
+    () => laneRows.slice(start, end),
+    [laneRows, start, end],
+  );
+  const width = Math.max(
+    0,
+    Math.min(commitGraphGutterWidth(rows) - left, maximumWidth),
+  );
+  const height = rows.length * graphRowHeight;
+  useLayoutEffect(() => {
+    const query = window.matchMedia(`(resolution: ${ratio}dppx)`);
+    const refresh = () => setRatio(window.devicePixelRatio || 1);
+    query.addEventListener("change", refresh);
+    return () => query.removeEventListener("change", refresh);
+  }, [ratio]);
 
   useLayoutEffect(() => {
     const canvas = canvasRef.current;
     if (canvas === null) return;
-    redrawCommitGraphCanvas(canvas, {
-      height,
-      horizontalOffset,
-      laneRows,
-      virtualRows,
-      verticalOffset,
-      width,
-    });
-  }, [height, horizontalOffset, laneRows, verticalOffset, virtualRows, width]);
+    drawGraphTile(canvas, rows, left, width, Math.min(ratio, maximumRatio));
+  }, [rows, width, ratio, left, maximumRatio]);
 
   return (
-    <canvas
-      className="pointer-events-none absolute top-0 left-0"
-      ref={canvasRef}
-    />
+    <tr
+      inert
+      className="pointer-events-none absolute z-[1] block overflow-hidden"
+      style={{ top: (offset + start) * graphRowHeight, left, width, height }}
+    >
+      <td className="block p-0">
+        <canvas ref={canvasRef} />
+      </td>
+    </tr>
   );
-}
-
-interface CommitGraphCanvasViewport {
-  readonly height: number;
-  readonly horizontalOffset: number;
-  readonly laneRows: readonly CommitLaneRow[];
-  readonly virtualRows: readonly VirtualItem[];
-  readonly verticalOffset: number;
-  readonly width: number;
-}
-
-export function redrawCommitGraphCanvas(
-  canvas: HTMLCanvasElement,
-  {
-    height,
-    horizontalOffset,
-    laneRows,
-    virtualRows,
-    verticalOffset,
-    width,
-  }: CommitGraphCanvasViewport,
-) {
-  if (width <= 0 || height <= 0) return;
-  const ratio = Math.min(window.devicePixelRatio || 1, 2);
-  const pixelWidth = Math.ceil(width * ratio);
-  const pixelHeight = Math.ceil(height * ratio);
-  if (canvas.width !== pixelWidth) canvas.width = pixelWidth;
-  if (canvas.height !== pixelHeight) canvas.height = pixelHeight;
-  canvas.style.width = `${width}px`;
-  canvas.style.height = `${height}px`;
-  const context = canvas.getContext("2d");
-  if (context === null) {
-    return;
-  }
-  context.setTransform(ratio, 0, 0, ratio, 0, 0);
-  context.lineCap = "round";
-  context.lineWidth = 1.5;
-  context.clearRect(0, 0, width, height);
-
-  for (const virtualRow of virtualRows) {
-    const row = laneRows[virtualRow.index];
-    if (row === undefined) {
-      continue;
-    }
-    const top = virtualRow.start - verticalOffset;
-    const bottom = top + virtualRow.size;
-    const center = top + virtualRow.size / 2;
-    const nodeIndex = row.lanesBefore.indexOf(row.nodeLaneId);
-    if (nodeIndex < 0) {
-      continue;
-    }
-    const nodeX = laneX(nodeIndex) - horizontalOffset;
-    const afterPositions = new Map(
-      row.lanesAfter.map((id, index) => [id, index]),
-    );
-
-    for (const [from, laneId] of row.lanesBefore.entries()) {
-      const to = afterPositions.get(laneId) ?? -1;
-      const fromX = laneX(from) - horizontalOffset;
-      const toX = to < 0 ? nodeX : laneX(to) - horizontalOffset;
-      if (Math.max(fromX, toX) < -2 || Math.min(fromX, toX) > width + 2)
-        continue;
-      drawLane(context, laneId, fromX, top, toX, to < 0 ? center : bottom);
-    }
-
-    for (const parentLaneId of row.parentLaneIds) {
-      const parentIndex = afterPositions.get(parentLaneId) ?? -1;
-      if (parentIndex < 0) {
-        continue;
-      }
-      const parentX = laneX(parentIndex) - horizontalOffset;
-      if (Math.max(parentX, nodeX) < -2 || Math.min(parentX, nodeX) > width + 2)
-        continue;
-      if (parentLaneId === row.nodeLaneId && parentX === nodeX) {
-        continue;
-      }
-      drawLane(context, parentLaneId, nodeX, center, parentX, bottom);
-    }
-
-    context.fillStyle =
-      laneColors[row.nodeLaneId % laneColors.length] ?? laneColors[0];
-    context.beginPath();
-    context.arc(nodeX, center, 4, 0, Math.PI * 2);
-    context.fill();
-    context.globalCompositeOperation = "destination-out";
-    context.lineWidth = 2;
-    context.stroke();
-    context.globalCompositeOperation = "source-over";
-    context.lineWidth = 1.5;
-  }
-}
-
-export function commitGraphGutterWidth(laneRows: readonly CommitLaneRow[]) {
-  const lanes = laneRows.reduce(
-    (maximum, row) =>
-      Math.max(maximum, row.lanesBefore.length, row.lanesAfter.length),
-    1,
-  );
-  return Math.max(64, laneInset * 2 + lanes * lanePitch);
-}
-
-function laneX(index: number) {
-  return laneInset + index * lanePitch;
-}
-
-export function commitGraphNodePosition(row: CommitLaneRow) {
-  return laneX(row.lanesBefore.indexOf(row.nodeLaneId));
-}
-
-function drawLane(
-  context: CanvasRenderingContext2D,
-  laneId: number,
-  fromX: number,
-  fromY: number,
-  toX: number,
-  toY: number,
-) {
-  context.strokeStyle = laneColors[laneId % laneColors.length] ?? laneColors[0];
-  context.beginPath();
-  context.moveTo(fromX, fromY);
-  if (fromX === toX) {
-    context.lineTo(toX, toY);
-  } else {
-    const middle = (fromY + toY) / 2;
-    context.bezierCurveTo(fromX, middle, toX, middle, toX, toY);
-  }
-  context.stroke();
-}
+});

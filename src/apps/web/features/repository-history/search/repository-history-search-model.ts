@@ -63,7 +63,7 @@ export function createRepositoryHistorySearchModel(
     for (const listener of listeners) listener();
   }
 
-  function search() {
+  function search(delay = 0) {
     if (closed) return;
     interrupt?.();
     const text = snapshot.text;
@@ -75,6 +75,7 @@ export function createRepositoryHistorySearchModel(
     if (text.trim() === "") return;
     interrupt = runtime.runCallback(
       restoreSearchResults(text, selectedOid).pipe(
+        Effect.delay(delay),
         Effect.match({
           onFailure: (error) => publish({ ...snapshot, loading: false, error }),
           onSuccess: (result) => {
@@ -97,8 +98,8 @@ export function createRepositoryHistorySearchModel(
     );
   }
 
-  const openResult = Effect.fn(function* (index: number) {
-    if (index >= snapshot.commits.length && snapshot.cursor !== undefined) {
+  const loadPage = Effect.fn(function* () {
+    if (snapshot.cursor !== undefined) {
       publish({ ...snapshot, loading: true });
       const result = yield* readNextHistorySearchPage(
         snapshot.text,
@@ -113,6 +114,10 @@ export function createRepositoryHistorySearchModel(
         loading: false,
       });
     }
+  });
+
+  const openResult = Effect.fn(function* (index: number) {
+    if (index >= snapshot.commits.length) yield* loadPage();
     const commit = snapshot.commits[index];
     if (commit === undefined) return;
     selectedOid = commit.oid;
@@ -151,9 +156,26 @@ export function createRepositoryHistorySearchModel(
       if (text === snapshot.text) return;
       selectedOid = undefined;
       snapshot = { ...snapshot, text };
-      search();
+      search(200);
     },
-    retry: search,
+    retry: () => search(),
+    loadMore: () => {
+      if (
+        closed ||
+        snapshot.loading ||
+        snapshot.navigating ||
+        snapshot.error !== undefined ||
+        snapshot.cursor === undefined
+      )
+        return;
+      interrupt = runtime.runCallback(
+        loadPage().pipe(
+          Effect.catch((error) =>
+            Effect.sync(() => publish({ ...snapshot, loading: false, error })),
+          ),
+        ),
+      );
+    },
     refresh: (next) => {
       if (closed || revision === next) return;
       revision = next;

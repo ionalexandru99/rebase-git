@@ -18,6 +18,7 @@ import {
   tagFromRecord,
 } from "#server/features/repository-refs/git/parse-for-each-ref";
 import { parseWorktreeList } from "#server/features/repository-refs/git/parse-worktree-list";
+import { readRemoteMetadata } from "#server/features/repository-refs/git/read-remote-metadata";
 import {
   gitCommandFailed,
   requireSuccessfulOutput,
@@ -52,11 +53,16 @@ export function readRepositoryRefs(
         ),
         tags: listRefs(git, repository.path, "refs/tags", "-creatordate"),
         worktrees: readWorktrees(git, repository.path),
+        remoteMetadata: readRemoteMetadata(git, repository.path),
       },
       { concurrency: "unbounded" },
     );
     const worktrees = yield* canonicalizeWorktrees(output.worktrees);
     return fitRepositoryRefs({
+      remoteProviders: output.remoteMetadata.remoteProviders,
+      ...(output.remoteMetadata.githubRepository === undefined
+        ? {}
+        : { githubRepository: output.remoteMetadata.githubRepository }),
       branches: canonicalizeBranchWorktrees(
         output.branches.flatMap(withDefined(localBranchFromRecord)),
         output.worktrees,
