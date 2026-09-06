@@ -158,7 +158,7 @@ export function createRepositoryHistorySearchModel(
       snapshot = { ...snapshot, text };
       search(200);
     },
-    retry: search,
+    retry: () => search(),
     loadMore: () => {
       if (
         closed ||
