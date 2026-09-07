@@ -1,7 +1,7 @@
 import { type ChildProcessByStdio, spawn } from "node:child_process";
 import { mkdir, mkdtemp, readdir, readFile, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { basename, join, resolve } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 import process from "node:process";
 import type { Readable } from "node:stream";
 
@@ -13,14 +13,14 @@ interface CommandOutput {
 }
 
 const installSource = await resolveInstallSource(process.argv[2] ?? ".");
-const temporaryRoot = await mkdtemp(join(tmpdir(), "rebase-package-"));
+const temporaryRoot = await mkdtemp(join(tmpdir(), "rebase package & %PATH%-"));
 const installRoot = join(temporaryRoot, "install");
 const homeRoot = join(temporaryRoot, "home");
 await mkdir(homeRoot);
 
 try {
   await run(
-    npmCommand(),
+    "npm",
     [
       "install",
       "--ignore-scripts",
@@ -36,21 +36,23 @@ try {
   const packageRoot = join(installRoot, "node_modules", "rebase-git");
   await verifyPackageContents(packageRoot);
   await verifyVersionCommands(installRoot, packageRoot);
+  const serverEnvironment = {
+    ...process.env,
+    BROWSER: "none",
+    HOME: homeRoot,
+    USERPROFILE: homeRoot,
+  };
   await verifyServer(
-    npxCommand(),
-    ["--offline", "--no-install", "rebase-git"],
-    installRoot,
+    spawnProcess(
+      "npx",
+      ["--offline", "--no-install", "rebase-git"],
+      installRoot,
+      serverEnvironment,
+    ),
     homeRoot,
   );
   await verifyServer(
-    join(
-      installRoot,
-      "node_modules",
-      ".bin",
-      process.platform === "win32" ? "rebase.cmd" : "rebase",
-    ),
-    ["serve"],
-    installRoot,
+    spawnInstalledCommand(installRoot, serverEnvironment),
     homeRoot,
   );
 } finally {
@@ -146,7 +148,7 @@ async function verifyVersionCommands(installRoot: string, packageRoot: string) {
     await readFile(join(packageRoot, "package.json"), "utf8"),
   ) as { readonly version: string };
   const npxVersion = await run(
-    npxCommand(),
+    "npx",
     ["--offline", "--no-install", "rebase-git", "--version"],
     installRoot,
   );
@@ -176,18 +178,7 @@ function assertVersionOutput(output: string, expectedVersion: string) {
   }
 }
 
-async function verifyServer(
-  command: string,
-  arguments_: readonly string[],
-  cwd: string,
-  home: string,
-) {
-  const child = spawnProcess(command, arguments_, cwd, {
-    ...process.env,
-    BROWSER: "none",
-    HOME: home,
-    USERPROFILE: home,
-  });
+async function verifyServer(child: RunningProcess, home: string) {
   let stderr = "";
   let stdout = "";
   child.stderr.on("data", (chunk) => {
@@ -362,9 +353,21 @@ function spawnProcess(
   cwd: string,
   env: NodeJS.ProcessEnv = process.env,
 ): RunningProcess {
-  const windowsShim = process.platform === "win32" && command.endsWith(".cmd");
-  const executable = windowsShim ? (process.env.ComSpec ?? "cmd.exe") : command;
-  const args = windowsShim ? ["/d", "/c", command, ...arguments_] : arguments_;
+  const windowsNpm =
+    process.platform === "win32" && (command === "npm" || command === "npx");
+  const executable = windowsNpm ? process.execPath : command;
+  const args = windowsNpm
+    ? [
+        join(
+          dirname(process.execPath),
+          "node_modules",
+          "npm",
+          "bin",
+          `${command}-cli.js`,
+        ),
+        ...arguments_,
+      ]
+    : arguments_;
   const child = spawn(executable, args, {
     cwd,
     env,
@@ -386,10 +389,21 @@ function hasProcessId(value: unknown): value is { readonly pid: number } {
   );
 }
 
-function npmCommand() {
-  return process.platform === "win32" ? "npm.cmd" : "npm";
-}
-
-function npxCommand() {
-  return process.platform === "win32" ? "npx.cmd" : "npx";
+function spawnInstalledCommand(
+  cwd: string,
+  env: NodeJS.ProcessEnv,
+): RunningProcess {
+  if (process.platform === "win32") {
+    return spawn(
+      process.env.ComSpec ?? "cmd.exe",
+      ["/d", "/c", "node_modules\\.bin\\rebase.cmd", "serve"],
+      { cwd, env, stdio: ["ignore", "pipe", "pipe"] },
+    );
+  }
+  return spawnProcess(
+    join(cwd, "node_modules", ".bin", "rebase"),
+    ["serve"],
+    cwd,
+    env,
+  );
 }
