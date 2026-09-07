@@ -1,5 +1,13 @@
 import { type ChildProcessByStdio, spawn } from "node:child_process";
-import { mkdir, mkdtemp, readdir, readFile, rm, stat } from "node:fs/promises";
+import {
+  copyFile,
+  mkdir,
+  mkdtemp,
+  readdir,
+  readFile,
+  rm,
+  stat,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
 import process from "node:process";
@@ -12,13 +20,16 @@ interface CommandOutput {
   readonly stdout: string;
 }
 
-const installSource = await resolveInstallSource(process.argv[2] ?? ".");
-const temporaryRoot = await mkdtemp(join(tmpdir(), "rebase package & %PATH%-"));
+const temporaryRoot = await mkdtemp(join(tmpdir(), "rebase package-"));
 const installRoot = join(temporaryRoot, "install");
 const homeRoot = join(temporaryRoot, "home");
 await mkdir(homeRoot);
 
 try {
+  const installSource = await resolveInstallSource(
+    process.argv[2] ?? ".",
+    temporaryRoot,
+  );
   await run(
     "npm",
     [
@@ -59,11 +70,13 @@ try {
   await rm(temporaryRoot, { force: true, recursive: true });
 }
 
-async function resolveInstallSource(source: string) {
+async function resolveInstallSource(source: string, temporaryRoot: string) {
   if (source.startsWith("npm:")) {
     return source.slice("npm:".length);
   }
-  return findArtifact(resolve(source));
+  const artifactPath = join(temporaryRoot, "package & %PATH%.tgz");
+  await copyFile(await findArtifact(resolve(source)), artifactPath);
+  return artifactPath;
 }
 
 async function findArtifact(path: string) {
