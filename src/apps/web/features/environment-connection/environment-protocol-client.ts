@@ -2,8 +2,9 @@ import {
   createCurrentEnvironmentHello,
   type EnvironmentDiscovery,
   type EnvironmentHello,
+  negotiateEnvironmentHello,
 } from "@rebase/contracts";
-import { Deferred, Effect, Ref } from "effect";
+import { Deferred, Effect, Fiber, Ref } from "effect";
 import {
   EnvironmentAuthorizationRejected,
   type EnvironmentConnectionFailure,
@@ -20,19 +21,21 @@ import {
   mintEnvironmentWebSocketTicketEffect,
 } from "#web/features/environment-connection/http/environment-http-client";
 import {
+  acquireEnvironmentRpc,
+  negotiateEnvironmentRpc,
+} from "#web/features/environment-connection/rpc/environment-rpc-client";
+import {
+  initializeEnvironmentRpcEvents,
+  processEnvironmentRpcEvents,
+} from "#web/features/environment-connection/rpc/environment-rpc-events";
+import {
   createEnvironmentConnectionState,
   type EnvironmentConnectionState,
   terminateEnvironmentConnection,
   waitForEnvironmentSequence,
 } from "#web/features/environment-connection/websocket/environment-connection-state";
-import { processEnvironmentServerMessages } from "#web/features/environment-connection/websocket/environment-live-session";
-import {
-  acquireEnvironmentSocket,
-  acquireEnvironmentSocketEvents,
-  readEnvironmentHelloResult,
-} from "#web/features/environment-connection/websocket/environment-socket";
-import { createRepositoryHistoryTransport } from "#web/features/repository-history/transport/repository-history-transport";
-import { createRepositoryRefsTransport } from "#web/features/repository-refs/transport/repository-refs-transport";
+import { createRepositoryHistoryRpc } from "#web/features/repository-history/transport/repository-history-rpc";
+import { createRepositoryRefsRpc } from "#web/features/repository-refs/transport/repository-refs-rpc";
 
 export {
   EnvironmentAuthorizationRejected,
@@ -199,6 +202,7 @@ function startEnvironmentConnection(
           Effect.flatMap((failure) => Deferred.succeed(closed, failure)),
         ),
       ),
+      Effect.interruptible,
       Effect.forkDetach,
     );
 
@@ -223,6 +227,11 @@ function runEnvironmentConnection(
   state: Ref.Ref<EnvironmentConnectionState>,
 ) {
   return Effect.gen(function* () {
+    const compatibility = negotiateEnvironmentHello(discovery, hello, 0);
+    if (compatibility._tag === "HelloRejected")
+      return yield* new EnvironmentHelloRejected({
+        failure: compatibility.failure,
+      });
     const ticket = yield* mintEnvironmentWebSocketTicketEffect(
       origin,
       credential,
@@ -231,39 +240,51 @@ function runEnvironmentConnection(
     const socketUrl = new URL(discovery.routes.live, normalizeOrigin(origin));
     socketUrl.protocol = socketUrl.protocol === "https:" ? "wss:" : "ws:";
     socketUrl.searchParams.set("ticket", ticket.ticket);
-    const socket = yield* acquireEnvironmentSocket(socketUrl, signal);
-    const events = yield* acquireEnvironmentSocketEvents(
-      socket,
-      signal,
+    const { client, disconnected } = yield* acquireEnvironmentRpc(
+      socketUrl,
       discovery,
-    );
-    const negotiated = yield* readEnvironmentHelloResult(
-      socket,
-      events,
       hello,
-      discovery,
     );
+    const negotiated = yield* negotiateEnvironmentRpc(client, discovery, hello);
     const supportsJsonFragmentation = negotiated.capabilities.some(
       (capability) => capability.name === "json-fragmentation",
     );
     const repositoryHistoryVersion = negotiated.capabilities.find(
       (capability) => capability.name === "repository-history",
     )?.version;
-    const repositoryHistory = createRepositoryHistoryTransport(
-      socket,
-      (repositoryHistoryVersion ?? 0) >= 6 && supportsJsonFragmentation,
+    const repositoryHistory = createRepositoryHistoryRpc(
+      client,
       (repositoryHistoryVersion ?? 0) >= 6 && supportsJsonFragmentation,
       negotiated.capabilities.some(
         (capability) => capability.name === "repository-history-freshness",
       ),
     );
     yield* initializeEnvironmentSequence(state, hello, negotiated);
-    const repositoryRefs = createRepositoryRefsTransport(
-      socket,
+    const repositoryRefs = createRepositoryRefsRpc(
+      client,
       supportsJsonFragmentation &&
         negotiated.capabilities.some(
           (capability) => capability.name === "repository-refs",
         ),
+    );
+    const events = {
+      discovery,
+      credential,
+      client,
+      hello,
+      negotiated,
+      origin,
+      signal,
+      state,
+    };
+    yield* initializeEnvironmentRpcEvents(events);
+    const watch = yield* processEnvironmentRpcEvents(events).pipe(
+      Effect.raceFirst(
+        disconnected.pipe(
+          Effect.andThen(Effect.fail(environmentResponseError("WebSocket"))),
+        ),
+      ),
+      Effect.forkScoped,
     );
     yield* publishEnvironmentConnection(
       connected,
@@ -275,24 +296,17 @@ function runEnvironmentConnection(
       negotiated,
       closeController,
     );
-    yield* processEnvironmentServerMessages({
-      discovery,
-      credential,
-      events,
-      hello,
-      negotiated,
-      origin,
-      signal,
-      socket,
-      state,
-      repositoryHistory,
-      repositoryRefs,
-    }).pipe(
-      Effect.ensuring(
-        repositoryHistory.close(environmentResponseError("WebSocket")),
-      ),
-      Effect.ensuring(repositoryRefs.close),
-    );
+    yield* Fiber.join(watch);
+  }).pipe(Effect.raceFirst(waitForConnectionAbort(signal)));
+}
+
+function waitForConnectionAbort(signal: AbortSignal) {
+  return Effect.callback<never, EnvironmentConnectionFailure>((resume) => {
+    const aborted = () =>
+      resume(Effect.fail(environmentResponseError("WebSocket")));
+    signal.addEventListener("abort", aborted, { once: true });
+    if (signal.aborted) aborted();
+    return Effect.sync(() => signal.removeEventListener("abort", aborted));
   });
 }
 
@@ -319,8 +333,8 @@ function publishEnvironmentConnection(
   >,
   closed: Deferred.Deferred<EnvironmentConnectionFailure>,
   state: Ref.Ref<EnvironmentConnectionState>,
-  repositoryHistory: ReturnType<typeof createRepositoryHistoryTransport>,
-  repositoryRefs: ReturnType<typeof createRepositoryRefsTransport>,
+  repositoryHistory: ReturnType<typeof createRepositoryHistoryRpc>,
+  repositoryRefs: ReturnType<typeof createRepositoryRefsRpc>,
   discovery: EnvironmentDiscovery,
   negotiated: EnvironmentProtocolConnection["negotiated"],
   closeController: AbortController,

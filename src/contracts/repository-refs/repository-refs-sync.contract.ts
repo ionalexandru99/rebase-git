@@ -10,19 +10,6 @@ export const ReadRepositoryRefsMessage = Schema.TaggedStruct(
     requestId: EnvironmentRequestId,
   },
 );
-export const CancelRepositoryRefs = Schema.TaggedStruct(
-  "CancelRepositoryRefs",
-  {
-    requestId: EnvironmentRequestId,
-  },
-);
-export const RepositoryRefsClientMessage = Schema.Union([
-  ReadRepositoryRefsMessage,
-  CancelRepositoryRefs,
-]);
-export type RepositoryRefsClientMessage =
-  typeof RepositoryRefsClientMessage.Type;
-
 export const RepositoryRefsFailed = Schema.TaggedStruct(
   "RepositoryRefsFailed",
   {

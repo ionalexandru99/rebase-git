@@ -6,20 +6,21 @@ import { pathToFileURL } from "node:url";
 import { promisify } from "node:util";
 import {
   createCurrentEnvironmentHello,
-  createJsonMessageReassembler,
   decodeRepositoryHistoryBatch,
   decodeRepositoryHistoryPage,
   type EnvironmentAccessCapability,
   type EnvironmentHello,
-  environmentLivePath,
-  JsonMessageFragment,
   maximumRepositoryHistorySequence,
   type RepositoryCommit,
   type RepositoryHistoryBatch,
   type RepositoryHistorySnapshot,
 } from "@rebase/contracts";
-import { Effect, Schema } from "effect";
-import { afterEach, describe, expect, it, vi } from "vite-plus/test";
+import {
+  connectEnvironment,
+  fetchEnvironmentDiscovery,
+} from "@rebase/web/features/environment-connection";
+import { Effect } from "effect";
+import { afterEach, describe, expect, it } from "vite-plus/test";
 import { createLocalGitCommandRunner } from "#server/adapters/local-git/local-git-command-runner";
 import {
   RepositoryHistoryError,
@@ -50,78 +51,6 @@ afterEach(async () => {
 });
 
 describe("repository history", { timeout: 30_000 }, () => {
-  it("waits for each committed-batch acknowledgement before sending the next", async () => {
-    const continuedAfterFirst = vi.fn();
-    const history: RepositoryHistoryService = {
-      read: () => Effect.die("unused"),
-      synchronize: (request, emit) =>
-        Effect.gen(function* () {
-          yield* emit(emptyBatch(request.repositoryId, request.requestId, 0));
-          continuedAfterFirst();
-          yield* emit(emptyBatch(request.repositoryId, request.requestId, 1));
-          return 0;
-        }),
-    };
-    await withHistoryListener(async ({ origin }) => {
-      const socket = await openHistorySocket(
-        origin,
-        createCurrentEnvironmentHello("0.0.0"),
-      );
-      expect(socket.extensions).toContain("permessage-deflate");
-      const first = collectJsonMessage(
-        socket,
-        createJsonMessageReassembler(),
-        [],
-      );
-      socket.send(
-        JSON.stringify({
-          _tag: "SynchronizeRepositoryHistory",
-          priority: "visible",
-          repositoryId: environmentId,
-          requestId,
-        }),
-      );
-      await first;
-      expect(continuedAfterFirst).not.toHaveBeenCalled();
-
-      const second = collectJsonMessage(
-        socket,
-        createJsonMessageReassembler(),
-        [],
-      );
-      socket.send(
-        JSON.stringify({
-          _tag: "AcknowledgeRepositoryHistoryBatch",
-          requestId,
-          sequence: 0,
-        }),
-      );
-      await second;
-      expect(continuedAfterFirst).toHaveBeenCalledOnce();
-
-      const completed = nextTextMessage(socket);
-      socket.send(
-        JSON.stringify({
-          _tag: "AcknowledgeRepositoryHistoryBatch",
-          requestId,
-          sequence: 0,
-        }),
-      );
-      socket.send(
-        JSON.stringify({
-          _tag: "AcknowledgeRepositoryHistoryBatch",
-          requestId,
-          sequence: 1,
-        }),
-      );
-      expect(JSON.parse(await completed)).toMatchObject({
-        _tag: "RepositoryHistorySynchronized",
-        requestId,
-      });
-      socket.close();
-    }, history);
-  });
-
   it("synchronizes a bare repository without a worktree HEAD", async () => {
     const root = await createTemporaryDirectory();
     const source = join(root, "bare-source");
@@ -262,36 +191,7 @@ describe("repository history", { timeout: 30_000 }, () => {
         const hello = smallFrames
           ? smallFrameHello()
           : createCurrentEnvironmentHello("0.0.0");
-        const socket = await openHistorySocket(origin, hello);
-        const reassembler = createJsonMessageReassembler();
-        const fragments: string[] = [];
-        const received = collectJsonMessage(socket, reassembler, fragments);
-        socket.send(
-          JSON.stringify({
-            _tag: "ReadRepositoryHistory",
-            limit: 100,
-            order: "topological",
-            repositoryId: repository.id,
-            requestId,
-            roots: [{ name: "main", oid: head, type: "branch" }],
-          }),
-        );
-
-        const complete = await received;
-        socket.close();
-
-        if (smallFrames) expect(fragments.length).toBeGreaterThan(1);
-        else expect(fragments).toHaveLength(1);
-        for (const frame of fragments) {
-          expect(Buffer.byteLength(frame)).toBeLessThanOrEqual(
-            hello.receiveLimits.maxWebSocketResponseBytes,
-          );
-          expect(JSON.parse(frame)).toHaveProperty(
-            "_tag",
-            "JsonMessageFragment",
-          );
-        }
-        const page = decodeRepositoryHistoryPage(complete.payload);
+        const page = await readHistoryPage(origin, repository.id, head, hello);
         expect(page.objectFormat).toBe(objectFormat);
         expect(page.commits).toHaveLength(100);
         expect(page.commits[0]?.subject).toBe("commit 109");
@@ -305,43 +205,6 @@ describe("repository history", { timeout: 30_000 }, () => {
       });
     },
   );
-
-  it("cancels an in-flight history request without closing the connection", async () => {
-    const canceled = vi.fn();
-    const history: RepositoryHistoryService = {
-      read: () => Effect.never.pipe(Effect.ensuring(Effect.sync(canceled))),
-      synchronize: () => Effect.never,
-    };
-    await withHistoryListener(async ({ catalog, origin, root }) => {
-      const repositoryPath = join(root, "cancel");
-      await createRepository(repositoryPath, "sha1", 1);
-      const repository = await Effect.runPromise(
-        catalog.remember(repositoryPath),
-      );
-      const head = await gitOutput(repositoryPath, "rev-parse", "main");
-      const socket = await openHistorySocket(
-        origin,
-        createCurrentEnvironmentHello("0.0.0"),
-      );
-      socket.send(
-        JSON.stringify({
-          _tag: "ReadRepositoryHistory",
-          limit: 100,
-          order: "topological",
-          repositoryId: repository.id,
-          requestId,
-          roots: [{ name: "main", oid: head, type: "branch" }],
-        }),
-      );
-      socket.send(
-        JSON.stringify({ _tag: "CancelRepositoryHistory", requestId }),
-      );
-
-      await vi.waitFor(() => expect(canceled).toHaveBeenCalledOnce());
-      expect(socket.readyState).toBe(WebSocket.OPEN);
-      socket.close();
-    }, history);
-  });
 
   it("preserves nested and octopus merge topology", async () => {
     await withHistoryListener(async ({ catalog, origin, root }) => {
@@ -415,86 +278,6 @@ describe("repository history", { timeout: 30_000 }, () => {
       expect(synchronized).toHaveLength(2);
       expect(synchronized.at(-1)?.parents).toEqual([missingParent]);
     });
-  });
-
-  it("rejects history reads without closing an authorized environment connection", async () => {
-    await withHistoryListener(
-      async ({ catalog, origin, root }) => {
-        const repositoryPath = join(root, "denied");
-        await createRepository(repositoryPath, "sha1", 1);
-        const repository = await Effect.runPromise(
-          catalog.remember(repositoryPath),
-        );
-        const head = await gitOutput(repositoryPath, "rev-parse", "main");
-        const socket = await openHistorySocket(
-          origin,
-          createCurrentEnvironmentHello("0.0.0"),
-        );
-        socket.send(
-          JSON.stringify({
-            _tag: "ReadRepositoryHistory",
-            limit: 100,
-            order: "topological",
-            repositoryId: repository.id,
-            requestId,
-            roots: [{ name: "main", oid: head, type: "branch" }],
-          }),
-        );
-
-        expect(JSON.parse(await nextTextMessage(socket))).toEqual({
-          _tag: "RepositoryHistoryFailed",
-          failure: { _tag: "AuthorizationDenied" },
-          requestId,
-        });
-        expect(socket.readyState).toBe(WebSocket.OPEN);
-        socket.close();
-      },
-      undefined,
-      testAuthorization(["environment.read"]),
-    );
-  });
-
-  it("bounds concurrent history reads within one connection", async () => {
-    const history: RepositoryHistoryService = {
-      read: vi.fn(() => Effect.never),
-      synchronize: () => Effect.never,
-    };
-    await withHistoryListener(async ({ origin }) => {
-      const socket = await openHistorySocket(
-        origin,
-        createCurrentEnvironmentHello("0.0.0"),
-      );
-      const requestIds = [
-        "00000000-0000-4000-8000-000000000021",
-        "00000000-0000-4000-8000-000000000022",
-        "00000000-0000-4000-8000-000000000023",
-      ];
-      for (const currentRequestId of requestIds) {
-        socket.send(
-          JSON.stringify({
-            _tag: "ReadRepositoryHistory",
-            limit: 100,
-            order: "topological",
-            repositoryId: "00000000-0000-4000-8000-000000000001",
-            requestId: currentRequestId,
-            roots: [{ name: "main", oid: "a".repeat(40), type: "branch" }],
-          }),
-        );
-      }
-
-      expect(JSON.parse(await nextTextMessage(socket))).toEqual({
-        _tag: "RepositoryHistoryFailed",
-        failure: {
-          _tag: "GitFailed",
-          detail: "Too many concurrent repository history requests",
-          reason: "Failed",
-        },
-        requestId: requestIds[2],
-      });
-      expect(history.read).toHaveBeenCalledTimes(2);
-      expect(socket.readyState).toBe(WebSocket.OPEN);
-      socket.close();
-    }, history);
   });
 
   it("coalesces ref movement during traversal before publishing the latest refs", async () => {
@@ -972,84 +755,53 @@ async function readHistoryPage(
   origin: string,
   repositoryId: string,
   oid: string,
+  hello = smallFrameHello(),
 ) {
-  const socket = await openHistorySocket(origin, smallFrameHello());
-  const received = collectJsonMessage(
-    socket,
-    createJsonMessageReassembler(),
-    [],
-  );
-  socket.send(
-    JSON.stringify({
-      _tag: "ReadRepositoryHistory",
-      limit: 100,
-      order: "topological",
-      repositoryId,
-      requestId,
-      roots: [{ name: "main", oid, type: "branch" }],
-    }),
-  );
-  const complete = await received;
-  socket.close();
-  return decodeRepositoryHistoryPage(complete.payload);
+  const connection = await connectHistory(origin, hello);
+  try {
+    return decodeRepositoryHistoryPage(
+      await Effect.runPromise(
+        connection.repositoryHistory.read({
+          repositoryId,
+          order: "topological",
+          limit: 100,
+          roots: [{ name: "main", oid, type: "branch" }],
+        }),
+      ),
+    );
+  } finally {
+    connection.close();
+    await Effect.runPromise(connection.closed);
+  }
 }
 
 async function synchronizeHistory(origin: string, repositoryId: string) {
-  const socket = await openHistorySocket(origin, smallFrameHello());
-  const synchronizationRequestId = crypto.randomUUID();
-  const reassembler = createJsonMessageReassembler();
+  const connection = await connectHistory(origin, smallFrameHello());
   const commits: RepositoryCommit[] = [];
-  const completed = new Promise<void>((resolve, reject) => {
-    const timeout = setTimeout(
-      () => reject(new Error("Timed out waiting for history synchronization")),
-      10_000,
+  try {
+    await Effect.runPromise(
+      connection.repositoryHistory.synchronize(
+        { repositoryId, priority: "visible" },
+        (bytes) =>
+          Effect.sync(() => {
+            commits.push(...decodeRepositoryHistoryBatch(bytes).commits);
+          }),
+      ),
     );
-    socket.addEventListener("message", (event) => {
-      void Promise.resolve()
-        .then(() => {
-          expect(typeof event.data).toBe("string");
-          const message = JSON.parse(event.data) as {
-            readonly _tag: string;
-            readonly requestId?: string;
-          };
-          if (
-            message._tag === "RepositoryHistorySynchronized" &&
-            message.requestId === synchronizationRequestId
-          ) {
-            clearTimeout(timeout);
-            resolve();
-            return;
-          }
-          const fragment =
-            Schema.decodeUnknownSync(JsonMessageFragment)(message);
-          const complete = reassembler.accept(fragment);
-          if (complete === undefined) {
-            return;
-          }
-          const batch = decodeRepositoryHistoryBatch(complete.payload);
-          commits.push(...batch.commits);
-          socket.send(
-            JSON.stringify({
-              _tag: "AcknowledgeRepositoryHistoryBatch",
-              requestId: synchronizationRequestId,
-              sequence: batch.sequence,
-            }),
-          );
-        })
-        .catch(reject);
-    });
-  });
-  socket.send(
-    JSON.stringify({
-      _tag: "SynchronizeRepositoryHistory",
-      priority: "visible",
-      repositoryId,
-      requestId: synchronizationRequestId,
-    }),
+    return commits;
+  } finally {
+    connection.close();
+    await Effect.runPromise(connection.closed);
+  }
+}
+
+async function connectHistory(origin: string, hello: EnvironmentHello) {
+  return connectEnvironment(
+    origin,
+    await fetchEnvironmentDiscovery(origin),
+    hello,
+    { type: "bearer", value: "test" },
   );
-  await completed;
-  socket.close();
-  return commits;
 }
 
 function smallFrameHello(): EnvironmentHello {
@@ -1061,109 +813,6 @@ function smallFrameHello(): EnvironmentHello {
       maxWebSocketResponseBytes: 1_024,
     },
   };
-}
-
-function emptyBatch(
-  repositoryId: string,
-  batchRequestId: string,
-  sequence: number,
-) {
-  return {
-    commits: [],
-    objectFormat: "sha1" as const,
-    repositoryId,
-    requestId: batchRequestId,
-    sequence,
-  };
-}
-
-async function openHistorySocket(origin: string, hello: EnvironmentHello) {
-  const socket = await new Promise<WebSocket>((resolveOpen, rejectOpen) => {
-    const current = new WebSocket(
-      `${origin.replace("http://", "ws://")}${environmentLivePath}?ticket=test-ticket`,
-    );
-    current.binaryType = "arraybuffer";
-    current.addEventListener("open", () => resolveOpen(current), {
-      once: true,
-    });
-    current.addEventListener(
-      "error",
-      () => rejectOpen(new Error("WebSocket failed")),
-      { once: true },
-    );
-  });
-  socket.send(JSON.stringify(hello));
-  await nextTextMessage(socket);
-  return socket;
-}
-
-function nextTextMessage(socket: WebSocket) {
-  return nextMessage(socket, (data) =>
-    typeof data === "string" ? data : undefined,
-  );
-}
-
-function collectJsonMessage(
-  socket: WebSocket,
-  reassembler: ReturnType<typeof createJsonMessageReassembler>,
-  fragments: string[],
-) {
-  return new Promise<NonNullable<ReturnType<typeof reassembler.accept>>>(
-    (resolveMessage, rejectMessage) => {
-      const timeout = setTimeout(() => {
-        cleanup();
-        rejectMessage(new Error("Timed out waiting for JSON history"));
-      }, 10_000);
-      const received = (event: MessageEvent) => {
-        try {
-          expect(typeof event.data).toBe("string");
-          fragments.push(event.data);
-          const fragment = Schema.decodeUnknownSync(JsonMessageFragment)(
-            JSON.parse(event.data),
-          );
-          const complete = reassembler.accept(fragment);
-          if (complete === undefined) {
-            return;
-          }
-          cleanup();
-          resolveMessage(complete);
-        } catch (error) {
-          cleanup();
-          rejectMessage(error);
-        }
-      };
-      const cleanup = () => {
-        clearTimeout(timeout);
-        socket.removeEventListener("message", received);
-      };
-      socket.addEventListener("message", received);
-    },
-  );
-}
-
-function nextMessage<T>(
-  socket: WebSocket,
-  select: (data: unknown) => T | undefined,
-) {
-  return new Promise<T>((resolveMessage, rejectMessage) => {
-    const timeout = setTimeout(() => {
-      cleanup();
-      rejectMessage(new Error("Timed out waiting for WebSocket message"));
-    }, 10_000);
-    const received = (event: MessageEvent) => {
-      const selected = select(event.data);
-      if (selected === undefined) {
-        return;
-      }
-      cleanup();
-      resolveMessage(selected);
-    };
-    const cleanup = () => {
-      clearTimeout(timeout);
-      socket.removeEventListener("message", received);
-    };
-    socket.addEventListener("message", received);
-  });
 }
 
 function testAuthorization(
@@ -1183,7 +832,11 @@ function testAuthorization(
     consumeTicket: () => Effect.succeed(authorization),
     createPairing: () => Effect.die("unused"),
     exchangePairing: () => Effect.die("unused"),
-    mintTicket: () => Effect.die("unused"),
+    mintTicket: () =>
+      Effect.succeed({
+        ticket: "test-ticket-material-00000000000000000000",
+        expiresAt: "2026-09-06T00:00:00.000Z",
+      }),
     revoke: () => Effect.die("unused"),
   };
 }

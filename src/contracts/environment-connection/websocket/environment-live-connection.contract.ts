@@ -21,20 +21,6 @@ import {
   ProductVersionSchema,
   ProtocolRange,
 } from "@rebase/contracts/environment-connection/negotiation/environment-protocol.contract";
-import { JsonMessageFragment } from "@rebase/contracts/environment-connection/websocket/json-message-fragment.contract";
-import {
-  RepositoryFreshnessClientMessage,
-  RepositoryHistoryFreshness,
-} from "@rebase/contracts/repository-history/repository-freshness.contract";
-import {
-  RepositoryHistoryClientMessage,
-  RepositoryHistoryFailed,
-  RepositoryHistorySynchronized,
-} from "@rebase/contracts/repository-history/repository-history.contract";
-import {
-  RepositoryRefsClientMessage,
-  RepositoryRefsFailed,
-} from "@rebase/contracts/repository-refs/repository-refs-sync.contract";
 import { Schema } from "effect";
 
 export const EnvironmentHello = Schema.TaggedStruct("Hello", {
@@ -46,20 +32,6 @@ export const EnvironmentHello = Schema.TaggedStruct("Hello", {
 });
 
 export type EnvironmentHello = typeof EnvironmentHello.Type;
-
-export const SnapshotApplied = Schema.TaggedStruct("SnapshotApplied", {
-  sequence: Schema.Natural,
-});
-
-export const EnvironmentClientMessage = Schema.Union([
-  EnvironmentHello,
-  SnapshotApplied,
-  RepositoryHistoryClientMessage,
-  RepositoryFreshnessClientMessage,
-  RepositoryRefsClientMessage,
-]);
-
-export type EnvironmentClientMessage = typeof EnvironmentClientMessage.Type;
 
 const ProtocolMajorMismatch = Schema.TaggedStruct("ProtocolMajorMismatch", {
   clientMajor: Schema.Natural,
@@ -121,31 +93,12 @@ export const EnvironmentChanged = Schema.TaggedStruct("EnvironmentChanged", {
   ),
 });
 
-export const ResnapshotRequired = Schema.TaggedStruct("ResnapshotRequired", {
-  currentSequence: Schema.Natural,
-  reason: Schema.Literals(["SequenceGap", "OutgoingQueueOverflow"]),
-});
-
 export const EnvironmentHelloResult = Schema.Union([
   HelloAccepted,
   HelloRejected,
 ]);
 
 export type EnvironmentHelloResult = typeof EnvironmentHelloResult.Type;
-
-export const EnvironmentServerMessage = Schema.Union([
-  HelloAccepted,
-  HelloRejected,
-  EnvironmentChanged,
-  ResnapshotRequired,
-  RepositoryHistoryFailed,
-  RepositoryHistorySynchronized,
-  RepositoryHistoryFreshness,
-  RepositoryRefsFailed,
-  JsonMessageFragment,
-]);
-
-export type EnvironmentServerMessage = typeof EnvironmentServerMessage.Type;
 
 export function createCurrentEnvironmentHello(
   productVersion: string,

@@ -21,46 +21,6 @@ const oldestFixture = JSON.parse(
   readonly hello: unknown;
 };
 
-const OldCapability = Schema.Struct({
-  introducedInMinor: Schema.Natural,
-  name: Schema.String,
-  version: Schema.Int,
-});
-const OldProtocolRange = Schema.Struct({
-  major: Schema.Natural,
-  minor: Schema.Natural,
-  minimumSupportedMinor: Schema.Natural,
-});
-const OldReceiveLimits = Schema.Struct({
-  maxCapturedOutputBytes: Schema.Int,
-  maxHttpResponseBytes: Schema.Int,
-  maxWebSocketResponseBytes: Schema.Int,
-});
-const OldTransportLimits = Schema.Struct({
-  helloTimeoutMilliseconds: Schema.Int,
-  maxCapturedOutputBytes: Schema.Int,
-  maxHttpRequestBytes: Schema.Int,
-  maxHttpResponseBytes: Schema.Int,
-  maxQueuedEventBytes: Schema.Int,
-  maxQueuedEvents: Schema.Int,
-  maxWebSocketRequestBytes: Schema.Int,
-  maxWebSocketResponseBytes: Schema.Int,
-});
-const OldHello = Schema.TaggedStruct("Hello", {
-  capabilities: Schema.Array(OldCapability),
-  lastObservedSequence: Schema.optionalKey(Schema.Natural),
-  productVersion: Schema.String,
-  protocol: OldProtocolRange,
-  receiveLimits: OldReceiveLimits,
-});
-const OldHelloAccepted = Schema.TaggedStruct("HelloAccepted", {
-  capabilities: Schema.Array(OldCapability),
-  currentSequence: Schema.Natural,
-  environmentId: Schema.String,
-  limits: OldTransportLimits,
-  protocol: Schema.Struct({ major: Schema.Natural, minor: Schema.Natural }),
-});
-
 describe("Environment protocol compatibility", () => {
   it("negotiates current client to current server", () => {
     const discovery = serialize(
@@ -114,7 +74,7 @@ describe("Environment protocol compatibility", () => {
           version: 6,
         },
       ],
-      protocol: { major: 1, minor: 5 },
+      protocol: { major: 2, minor: 5 },
     });
   });
 
@@ -151,48 +111,43 @@ describe("Environment protocol compatibility", () => {
     },
   );
 
-  it("negotiates the oldest client to the current server", () => {
+  it("requires a client update for the previous WebSocket protocol", () => {
     const discovery = createCurrentEnvironmentDiscovery(
       "00000000-0000-4000-8000-000000000001",
       "0.0.0",
     );
-    const oldHello = Schema.decodeUnknownSync(OldHello)(oldestFixture.hello);
     const hello = Schema.decodeUnknownSync(EnvironmentHello)(
-      serializeUnknown(Schema.encodeSync(OldHello)(oldHello)),
+      oldestFixture.hello,
     );
-
-    const result = negotiateEnvironmentHello(discovery, hello, 0);
-    const receivedByOldClient = Schema.decodeUnknownSync(OldHelloAccepted)(
-      serializeUnknown(Schema.encodeSync(EnvironmentHelloResult)(result)),
-    );
-    expect(receivedByOldClient).toMatchObject({
-      _tag: "HelloAccepted",
-      capabilities: [{ name: "environment-events", version: 1 }],
-      protocol: { major: 1, minor: 0 },
+    expect(negotiateEnvironmentHello(discovery, hello, 0)).toMatchObject({
+      _tag: "HelloRejected",
+      failure: {
+        _tag: "ProtocolMajorMismatch",
+        clientMajor: 1,
+        serverMajor: 2,
+        requiredUpdate: "client",
+      },
     });
   });
 
-  it("negotiates the current client to the oldest server", () => {
+  it("requires a server update for the previous WebSocket protocol", () => {
     const discovery = Schema.decodeUnknownSync(EnvironmentDiscovery)(
-      serializeUnknown(oldestFixture.discovery),
+      oldestFixture.discovery,
     );
-    expect(discovery.protocol.minor).toBe(0);
-    const currentHello = createCurrentEnvironmentHello("0.0.0", 12);
-    Schema.decodeUnknownSync(OldHello)(
-      serializeUnknown(Schema.encodeSync(EnvironmentHello)(currentHello)),
-      { onExcessProperty: "error" },
-    );
-    const oldResult = Schema.decodeUnknownSync(OldHelloAccepted)(
-      oldestFixture.accepted,
-    );
-    const receivedByCurrentClient = Schema.decodeUnknownSync(
-      EnvironmentHelloResult,
-    )(serializeUnknown(Schema.encodeSync(OldHelloAccepted)(oldResult)));
-
-    expect(receivedByCurrentClient).toMatchObject({
-      _tag: "HelloAccepted",
-      capabilities: [{ name: "environment-events", version: 1 }],
-      protocol: { major: 1, minor: 0 },
+    expect(
+      negotiateEnvironmentHello(
+        discovery,
+        createCurrentEnvironmentHello("0.0.0"),
+        0,
+      ),
+    ).toMatchObject({
+      _tag: "HelloRejected",
+      failure: {
+        _tag: "ProtocolMajorMismatch",
+        clientMajor: 2,
+        serverMajor: 1,
+        requiredUpdate: "server",
+      },
     });
   });
 
@@ -203,16 +158,16 @@ describe("Environment protocol compatibility", () => {
     );
     const hello = {
       ...createCurrentEnvironmentHello("0.0.0"),
-      protocol: { major: 2, minor: 0, minimumSupportedMinor: 0 },
+      protocol: { major: 3, minor: 0, minimumSupportedMinor: 0 },
     };
 
     expect(negotiateThroughJson(discovery, hello)).toEqual({
       _tag: "HelloRejected",
       failure: {
         _tag: "ProtocolMajorMismatch",
-        clientMajor: 2,
+        clientMajor: 3,
         requiredUpdate: "server",
-        serverMajor: 1,
+        serverMajor: 2,
       },
     });
   });
@@ -240,7 +195,7 @@ describe("Environment protocol compatibility", () => {
     );
     const hello = {
       ...createCurrentEnvironmentHello("0.0.0"),
-      protocol: { major: 1, minor: 6, minimumSupportedMinor: 6 },
+      protocol: { major: 2, minor: 6, minimumSupportedMinor: 6 },
     };
 
     expect(negotiateThroughJson(discovery, hello)).toMatchObject({

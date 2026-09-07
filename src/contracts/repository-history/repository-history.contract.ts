@@ -50,11 +50,6 @@ export const ReadRepositoryHistory = Schema.TaggedStruct(
 );
 export type ReadRepositoryHistory = typeof ReadRepositoryHistory.Type;
 
-export const CancelRepositoryHistory = Schema.TaggedStruct(
-  "CancelRepositoryHistory",
-  { requestId: EnvironmentRequestId },
-);
-
 export const SynchronizeRepositoryHistory = Schema.TaggedStruct(
   "SynchronizeRepositoryHistory",
   {
@@ -93,15 +88,6 @@ export const AcknowledgeRepositoryHistoryBatch = Schema.TaggedStruct(
   },
 );
 
-export const RepositoryHistoryClientMessage = Schema.Union([
-  ReadRepositoryHistory,
-  SynchronizeRepositoryHistory,
-  AcknowledgeRepositoryHistoryBatch,
-  CancelRepositoryHistory,
-]);
-export type RepositoryHistoryClientMessage =
-  typeof RepositoryHistoryClientMessage.Type;
-
 export const RepositoryHistoryOperationFailure = Schema.Union([
   Schema.TaggedStruct("AuthorizationDenied", {}),
   Schema.TaggedStruct("RepositoryMissing", { repositoryId: RepositoryId }),
@@ -119,15 +105,6 @@ export const RepositoryHistoryOperationFailure = Schema.Union([
 ]);
 export type RepositoryHistoryOperationFailure =
   typeof RepositoryHistoryOperationFailure.Type;
-
-export const RepositoryHistoryFailed = Schema.TaggedStruct(
-  "RepositoryHistoryFailed",
-  {
-    failure: RepositoryHistoryOperationFailure,
-    requestId: EnvironmentRequestId,
-  },
-);
-export type RepositoryHistoryFailed = typeof RepositoryHistoryFailed.Type;
 
 export const RepositoryHistorySynchronized = Schema.TaggedStruct(
   "RepositoryHistorySynchronized",

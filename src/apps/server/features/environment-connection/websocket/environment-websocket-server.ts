@@ -21,7 +21,7 @@ import {
   validateRequestHost,
   validateRequestOrigin,
 } from "#server/features/environment-connection/environment-request-authorization";
-import { runEnvironmentWebSocketSession } from "#server/features/environment-connection/websocket/environment-websocket-session";
+import { runEnvironmentRpcSession } from "#server/features/environment-connection/rpc/environment-rpc-server";
 
 export function attachEnvironmentWebSocketServer(
   server: Server,
@@ -85,10 +85,22 @@ export function attachEnvironmentWebSocketServer(
 
   server.on("upgrade", upgrade);
   webSocketServer.on("connection", (socket) => {
+    const address = server.address();
+    if (address === null) {
+      socket.close();
+      return;
+    }
     runEnvironmentEffect(
-      runEnvironmentWebSocketSession(
+      runEnvironmentRpcSession(
         socket,
         state,
+        typeof address === "string"
+          ? { _tag: "UnixAddress", path: address }
+          : {
+              _tag: "TcpAddress",
+              hostname: address.address,
+              port: address.port,
+            },
         accessCapabilities.get(socket) ?? new Set(),
       ),
     );

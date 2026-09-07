@@ -4,14 +4,9 @@ import { mkdir, mkdtemp, rename, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
-import {
-  createCurrentEnvironmentHello,
-  type EnvironmentServerMessage,
-  environmentLivePath,
-  type RepositoryFreshness,
-  type RepositoryFreshnessClientMessage,
-} from "@rebase/contracts";
-import { Context, Effect, Layer } from "effect";
+import type { RepositoryFreshness } from "@rebase/contracts";
+import { connectCurrentEnvironmentEffect } from "@rebase/web/features/environment-connection";
+import { Context, Deferred, Effect, Layer } from "effect";
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import { createLocalGitCommandRunner } from "#server/adapters/local-git/local-git-command-runner";
 import { createLocalRepositoryWatcher } from "#server/adapters/local-git/local-repository-watcher";
@@ -258,102 +253,44 @@ describe("repository freshness with real Git", { timeout: 30_000 }, () => {
           productVersion: "0.0.0",
         });
         listener.readiness.value = true;
-        yield* Effect.promise(async () => {
-          const socket = new WebSocket(
-            `${listener.origin.replace("http://", "ws://")}${environmentLivePath}?ticket=test`,
-          );
-          const messages: EnvironmentServerMessage[] = [];
-          socket.addEventListener("message", (event) => {
-            if (typeof event.data === "string")
-              messages.push(JSON.parse(event.data));
-          });
-          await new Promise<void>((resolve, reject) => {
-            socket.addEventListener("open", () => resolve(), { once: true });
-            socket.addEventListener("error", reject, { once: true });
-          });
-          try {
-            socket.send(JSON.stringify(createCurrentEnvironmentHello("0.0.0")));
-            await vi.waitFor(() =>
-              expect(
-                messages.some((message) => message._tag === "HelloAccepted"),
-              ).toBe(true),
-            );
-            const subscribeId = randomUUID();
-            await request(socket, messages, {
-              _tag: "SubscribeRepositoryHistory",
-              repositoryId,
-              requestId: subscribeId,
-            });
-            await git(
-              fixture.local,
-              "remote",
-              "set-url",
-              "origin",
-              join(fixture.root, "missing"),
-            );
-            const failed = await request(socket, messages, {
-              _tag: "FetchRepositoryHistory",
-              repositoryId,
-              requestId: randomUUID(),
-            });
-            expect(failed).toMatchObject({
-              _tag: "RepositoryHistoryFreshness",
-              freshness: { stale: true, failure: { _tag: "FetchFailed" } },
-            });
-            await git(
-              fixture.local,
-              "remote",
-              "set-url",
-              "origin",
-              fixture.remote,
-            );
-            const recovered = await request(socket, messages, {
-              _tag: "FetchRepositoryHistory",
-              repositoryId,
-              requestId: randomUUID(),
-            });
-            expect(recovered).toMatchObject({
-              _tag: "RepositoryHistoryFreshness",
-              freshness: { stale: false },
-            });
-            expect(socket.readyState).toBe(WebSocket.OPEN);
-            socket.send(
-              JSON.stringify({
-                _tag: "UnsubscribeRepositoryHistory",
-                repositoryId,
-              }),
-            );
-          } finally {
-            socket.close();
-          }
+        const connection = yield* connectCurrentEnvironmentEffect(
+          listener.origin,
+          "0.0.0",
+          { credential: { type: "bearer", value: "test" } },
+        );
+        const transport = connection.repositoryHistory.freshness;
+        if (transport === undefined)
+          throw new Error("Missing freshness transport");
+        const observing = yield* Deferred.make<void>();
+        yield* transport
+          .observe(repositoryId, () =>
+            Deferred.doneUnsafe(observing, Effect.void),
+          )
+          .pipe(Effect.forkScoped);
+        yield* Deferred.await(observing);
+        yield* Effect.promise(() =>
+          git(
+            fixture.local,
+            "remote",
+            "set-url",
+            "origin",
+            join(fixture.root, "missing"),
+          ),
+        );
+        const failed = yield* transport.fetch(repositoryId);
+        expect(failed).toMatchObject({
+          stale: true,
+          failure: { _tag: "FetchFailed" },
         });
+        yield* Effect.promise(() =>
+          git(fixture.local, "remote", "set-url", "origin", fixture.remote),
+        );
+        const recovered = yield* transport.fetch(repositoryId);
+        expect(recovered).toMatchObject({ stale: false });
       }).pipe(Effect.scoped),
     );
   });
 });
-
-async function request(
-  socket: WebSocket,
-  messages: EnvironmentServerMessage[],
-  message: Exclude<
-    RepositoryFreshnessClientMessage,
-    { _tag: "UnsubscribeRepositoryHistory" }
-  >,
-) {
-  socket.send(JSON.stringify(message));
-  await vi.waitFor(() =>
-    expect(
-      messages.some(
-        (response) =>
-          "requestId" in response && response.requestId === message.requestId,
-      ),
-    ).toBe(true),
-  );
-  return messages.find(
-    (response) =>
-      "requestId" in response && response.requestId === message.requestId,
-  );
-}
 
 async function createFixture() {
   const root = await mkdtemp(join(tmpdir(), "rebase freshness "));
@@ -428,7 +365,11 @@ function testAuthorization(): EnvironmentAuthorization {
     consumeTicket: () => Effect.succeed(authorization),
     createPairing: () => Effect.die("unused"),
     exchangePairing: () => Effect.die("unused"),
-    mintTicket: () => Effect.die("unused"),
+    mintTicket: () =>
+      Effect.succeed({
+        ticket: "test-ticket-material-00000000000000000000",
+        expiresAt: "2026-09-06T00:00:00.000Z",
+      }),
     revoke: () => Effect.die("unused"),
   };
 }

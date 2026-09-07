@@ -80,7 +80,7 @@ describe("browser Environment protocol client", () => {
             ? hello
             : {
                 ...hello,
-                protocol: { major: 1, minor: 3, minimumSupportedMinor: 0 },
+                protocol: { major: 2, minor: 3, minimumSupportedMinor: 0 },
                 capabilities: hello.capabilities.filter(
                   (capability) => capability.name !== "repository-ref-events",
                 ),
@@ -199,12 +199,28 @@ describe("browser Environment protocol client", () => {
     });
   });
 
+  it("resets the observed sequence after a server restart", async () => {
+    await withListener(async (origin, events) => {
+      const connection = await connectCurrentEnvironment(origin, "0.0.0", {
+        credential,
+        lastObservedSequence: 12,
+      });
+      try {
+        expect(connection.currentSequence()).toBe(0);
+        events.publishChanged();
+        expect(await Effect.runPromise(connection.waitForSequence(1))).toBe(1);
+      } finally {
+        connection.close();
+      }
+    });
+  });
+
   it("exposes a tagged protocol rejection", async () => {
     await withListener(async (origin) => {
       const discovery = await fetchEnvironmentDiscovery(origin);
       const incompatibleHello = {
         ...createCurrentEnvironmentHello("0.0.0"),
-        protocol: { major: 2, minor: 0, minimumSupportedMinor: 0 },
+        protocol: { major: 3, minor: 0, minimumSupportedMinor: 0 },
       };
 
       await expect(
@@ -213,9 +229,9 @@ describe("browser Environment protocol client", () => {
         new EnvironmentHelloRejected({
           failure: {
             _tag: "ProtocolMajorMismatch",
-            clientMajor: 2,
+            clientMajor: 3,
             requiredUpdate: "server",
-            serverMajor: 1,
+            serverMajor: 2,
           },
         }),
       );
@@ -234,7 +250,7 @@ describe("browser Environment protocol client", () => {
             version: 1,
           },
         ],
-        protocol: { major: 1, minor: 0, minimumSupportedMinor: 0 },
+        protocol: { major: 2, minor: 0, minimumSupportedMinor: 0 },
       };
       const connection = await connectEnvironment(
         origin,
