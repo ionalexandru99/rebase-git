@@ -14,6 +14,41 @@ import { repositorySelectionPositions } from "#web/features/keyboard-shortcuts/k
 export const keyboardShortcutCommands = [
   {
     contexts: ["application"],
+    defaultBinding: { key: "b", modifiers: ["Mod", "Alt"] },
+    group: "Navigation",
+    id: "workspacePanel.toggle",
+    label: "Toggle side panel",
+  },
+  {
+    contexts: ["application"],
+    defaultBinding: { key: "t", modifiers: ["Mod", "Alt"] },
+    group: "Navigation",
+    id: "workspacePanel.openTab",
+    label: "Open side panel tab",
+  },
+  {
+    contexts: ["application"],
+    defaultBinding: { key: "w", modifiers: ["Mod", "Alt"] },
+    group: "Navigation",
+    id: "workspacePanel.closeTab",
+    label: "Close side panel tab",
+  },
+  {
+    contexts: ["application"],
+    defaultBinding: { key: "ArrowLeft", modifiers: ["Mod", "Alt"] },
+    group: "Navigation",
+    id: "workspacePanel.previousTab",
+    label: "Previous side panel tab",
+  },
+  {
+    contexts: ["application"],
+    defaultBinding: { key: "ArrowRight", modifiers: ["Mod", "Alt"] },
+    group: "Navigation",
+    id: "workspacePanel.nextTab",
+    label: "Next side panel tab",
+  },
+  {
+    contexts: ["application"],
     defaultBinding: { key: ",", modifiers: ["Mod", "Shift"] },
     group: "Navigation",
     id: "repository.openSettings",

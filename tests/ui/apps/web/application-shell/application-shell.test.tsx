@@ -188,7 +188,9 @@ describe("application shell", () => {
   it("resizes the branches sidebar within its configured bounds", async () => {
     await renderRepositoryWorkspace();
     const branches = page.getByRole("navigation", { name: "Branches" });
-    const handle = page.getByRole("separator");
+    const handle = page.getByRole("separator", {
+      name: "Resize branches sidebar",
+    });
     const width = () => branches.element().getBoundingClientRect().width;
     const initialWidth = width();
 
