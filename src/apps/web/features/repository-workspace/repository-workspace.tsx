@@ -21,9 +21,9 @@ import { useHistoryRefRefresh } from "#web/features/repository-workspace/use-his
 import {
   ResizableHandle,
   ResizablePanel,
-  ResizablePanelGroup,
 } from "#web-ui/components/ui/resizable";
 import { BranchesSidebar } from "#web-ui/features/branches-sidebar/branches-sidebar";
+import { WorkspacePanel } from "#web-ui/features/workspace-panel/index";
 
 const branchesSidebarSize = {
   default: "16.5rem",
@@ -203,84 +203,98 @@ function RepositoryWorkspaceContent({
   );
 
   return (
-    <ResizablePanelGroup className="h-full min-h-0" orientation="horizontal">
-      <ResizablePanel
-        defaultSize={branchesSidebarSize.default}
-        groupResizeBehavior="preserve-pixel-size"
-        id="branches"
-        maxSize={branchesSidebarSize.max}
-        minSize={branchesSidebarSize.min}
-      >
-        <BranchesSidebar
-          activeWorktreePath={activeWorktreePath}
-          focusRequest={branchesFocusRequest + localBranchesFocusRequest}
-          onRetry={retryRefs}
-          onSelectRef={selectRef}
-          onToggleHistoryRef={toggleRef}
-          selectedHistoryRefKeys={
-            resolvedScope?.selectedRefKeys ?? new Set<string>()
-          }
-          snapshot={refs}
-        />
-      </ResizablePanel>
-      <ResizableHandle className="z-10 bg-transparent after:w-2 focus-visible:ring-primary/40" />
-      <ResizablePanel id="workspace" minSize="30%">
-        <main
-          aria-label="Repository workspace"
-          className="h-full rounded-none bg-repository"
+    <WorkspacePanel.Provider
+      scopeKey={JSON.stringify([
+        environmentId,
+        logicalRepositoryId,
+        activeWorktreePath,
+      ])}
+      commandsActive={commandsActive}
+    >
+      <WorkspacePanel.Group>
+        <ResizablePanel
+          defaultSize={branchesSidebarSize.default}
+          groupResizeBehavior="preserve-pixel-size"
+          id="branches"
+          maxSize={branchesSidebarSize.max}
+          minSize={branchesSidebarSize.min}
         >
-          <CommitGraph
-            githubRepository={refs.refs?.githubRepository}
-            remoteProviders={refs.refs?.remoteProviders}
-            commandEnvironment={
-              environmentId === undefined ||
-              logicalRepositoryId === undefined ||
-              repositoryId === undefined
-                ? undefined
-                : {
-                    environmentId,
-                    logicalRepositoryId,
-                    repositoryId,
-                    activeWorktreePath,
-                    ...(activeBranch === undefined ? {} : { activeBranch }),
-                    connected,
-                    capabilities: new Set(accessCapabilities),
-                    freshnessReady: false,
-                    operationState: "idle",
-                  }
+          <BranchesSidebar
+            activeWorktreePath={activeWorktreePath}
+            focusRequest={branchesFocusRequest + localBranchesFocusRequest}
+            onRetry={retryRefs}
+            onSelectRef={selectRef}
+            onToggleHistoryRef={toggleRef}
+            selectedHistoryRefKeys={
+              resolvedScope?.selectedRefKeys ?? new Set<string>()
             }
-            commandsActive={commandsActive}
-            shortcuts={shortcuts}
-            onRemoveHistoryRef={toggleRef}
-            onRevealHistoryRef={toggleRef}
-            onAddHistoryRef={() =>
-              setLocalBranchesFocusRequest((request) => request + 1)
-            }
-            onResetHistoryScope={
-              canResetHistoryScope
-                ? () => {
-                    setHistoryScope(automaticHistoryScope);
-                    if (
-                      environmentId !== undefined &&
-                      logicalRepositoryId !== undefined
-                    ) {
-                      filterStore.save(
-                        environmentId,
-                        logicalRepositoryId,
-                        automaticHistoryScope,
-                      );
-                    }
-                  }
-                : undefined
-            }
-            reader={historyReader}
-            repositoryName={repositoryName}
-            roots={resolvedScope?.roots}
-            scope={resolvedScope?.scope ?? automaticHistoryScope}
-            selections={resolvedScope?.selections ?? []}
+            snapshot={refs}
           />
-        </main>
-      </ResizablePanel>
-    </ResizablePanelGroup>
+        </ResizablePanel>
+        <ResizableHandle
+          aria-label="Resize branches sidebar"
+          className="z-10 bg-transparent after:w-2 focus-visible:ring-primary/40"
+        />
+        <ResizablePanel id="workspace" minSize="30%">
+          <main
+            aria-label="Repository workspace"
+            className="h-full rounded-none bg-repository"
+          >
+            <CommitGraph
+              toolbarActions={<WorkspacePanel.Toggle />}
+              githubRepository={refs.refs?.githubRepository}
+              remoteProviders={refs.refs?.remoteProviders}
+              commandEnvironment={
+                environmentId === undefined ||
+                logicalRepositoryId === undefined ||
+                repositoryId === undefined
+                  ? undefined
+                  : {
+                      environmentId,
+                      logicalRepositoryId,
+                      repositoryId,
+                      activeWorktreePath,
+                      ...(activeBranch === undefined ? {} : { activeBranch }),
+                      connected,
+                      capabilities: new Set(accessCapabilities),
+                      freshnessReady: false,
+                      operationState: "idle",
+                    }
+              }
+              commandsActive={commandsActive}
+              shortcuts={shortcuts}
+              onRemoveHistoryRef={toggleRef}
+              onRevealHistoryRef={toggleRef}
+              onAddHistoryRef={() =>
+                setLocalBranchesFocusRequest((request) => request + 1)
+              }
+              onResetHistoryScope={
+                canResetHistoryScope
+                  ? () => {
+                      setHistoryScope(automaticHistoryScope);
+                      if (
+                        environmentId !== undefined &&
+                        logicalRepositoryId !== undefined
+                      ) {
+                        filterStore.save(
+                          environmentId,
+                          logicalRepositoryId,
+                          automaticHistoryScope,
+                        );
+                      }
+                    }
+                  : undefined
+              }
+              reader={historyReader}
+              repositoryName={repositoryName}
+              roots={resolvedScope?.roots}
+              scope={resolvedScope?.scope ?? automaticHistoryScope}
+              selections={resolvedScope?.selections ?? []}
+            />
+          </main>
+        </ResizablePanel>
+        <WorkspacePanel.Pane />
+      </WorkspacePanel.Group>
+    </WorkspacePanel.Provider>
   );
 }

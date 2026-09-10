@@ -8,6 +8,7 @@ import {
   type CSSProperties,
   type JSX,
   type KeyboardEvent,
+  type ReactNode,
   type Ref,
   useEffect,
   useImperativeHandle,
@@ -86,7 +87,9 @@ export function CommitGraph({
   selections,
   githubRepository,
   remoteProviders,
+  toolbarActions,
 }: {
+  readonly toolbarActions?: ReactNode;
   readonly ref?: Ref<CommitGraphHandle>;
   readonly commandEnvironment?: GraphCommandEnvironment | undefined;
   readonly shortcuts?: GraphCommandShortcuts | undefined;
@@ -348,6 +351,7 @@ export function CommitGraph({
           fetchAction={fetchAction}
           fetching={fetch.fetching}
         />
+        {toolbarActions}
       </CommitGraphToolbar.Frame>
       <GraphRefAppearance
         colors={colors.refs}
