@@ -1,7 +1,9 @@
 import type { RepositoryFreshness } from "@rebase/contracts";
+import { StrictMode } from "react";
 import { describe, expect, it, vi } from "vitest";
-import { page } from "vitest/browser";
+import { page, userEvent } from "vitest/browser";
 import { render } from "vitest-browser-react";
+import { NotificationsProvider } from "#web/features/notifications/index";
 import { useRepositoryHistoryFetch } from "#web/features/repository-history/freshness/hooks/use-repository-history-fetch";
 import { describeRepositoryFetchError } from "#web/features/repository-history/freshness/repository-fetch-error";
 import {
@@ -30,6 +32,63 @@ const ready: RepositoryHistorySnapshot = {
 };
 
 describe("repository fetch controls", () => {
+  it("keeps an error dismissed across history updates and announces a later failure", async () => {
+    const reader = createReader();
+    const failed = { ...ready, freshness: { ...fresh, stale: true } };
+    const screen = await render(
+      <StrictMode>
+        <Controls reader={reader} snapshot={failed} />
+      </StrictMode>,
+    );
+    const notification = page.getByRole("dialog", {
+      name: "Fetch failed",
+      exact: true,
+    });
+    await expect.element(notification).toBeVisible();
+    await page.getByRole("button", { name: "Dismiss notification" }).click();
+    await screen.rerender(
+      <StrictMode>
+        <Controls reader={reader} snapshot={{ ...failed, revision: 1 }} />
+      </StrictMode>,
+    );
+    await expect.element(notification).not.toBeInTheDocument();
+    await screen.rerender(
+      <StrictMode>
+        <Controls reader={reader} snapshot={ready} />
+      </StrictMode>,
+    );
+    await screen.rerender(
+      <StrictMode>
+        <Controls reader={reader} snapshot={failed} />
+      </StrictMode>,
+    );
+    await expect.element(notification).toBeVisible();
+  });
+
+  it("preserves focus when an error arrives and lets the keyboard dismiss it", async () => {
+    const reader = createReader();
+    const screen = await render(<Controls reader={reader} snapshot={ready} />);
+    const fetch = page.getByRole("button", { name: "Fetch", exact: true });
+    await userEvent.tab();
+    await expect.element(fetch).toHaveFocus();
+    await screen.rerender(
+      <Controls
+        reader={reader}
+        snapshot={{ ...ready, freshness: { ...fresh, stale: true } }}
+      />,
+    );
+    await expect
+      .element(page.getByRole("dialog", { name: "Fetch failed", exact: true }))
+      .toBeVisible();
+    await expect.element(fetch).toHaveFocus();
+    await userEvent.keyboard("{F6}{Tab}{Tab}");
+    const dismiss = page.getByRole("button", { name: "Dismiss notification" });
+    await expect.element(dismiss).toHaveFocus();
+    await userEvent.keyboard("{Enter}");
+    await expect.element(dismiss).not.toBeInTheDocument();
+    await expect.element(fetch).toHaveFocus();
+  });
+
   it("shows unavailable fetching when a subscription fails with stale history", async () => {
     await render(
       <Controls
@@ -44,10 +103,8 @@ describe("repository fetch controls", () => {
       />,
     );
     await expect
-      .element(page.getByRole("status"))
-      .toHaveTextContent(
-        "Fetching is unavailable. Cached history is available.",
-      );
+      .element(page.getByRole("dialog", { name: "Fetching unavailable" }))
+      .toBeVisible();
   });
 
   it("updates clean settings from other clients while preserving an edited interval", async () => {
@@ -108,7 +165,7 @@ describe("repository fetch controls", () => {
     });
   });
 
-  it("uses the shared fetch handler for the toolbar and retry with configured shortcut metadata", async () => {
+  it("shows a failed fetch toast and clears it when fetching from the toolbar", async () => {
     const reader = createReader();
     reader.fetch.mockRejectedValueOnce(new RepositoryHistoryOffline());
     await render(<Controls reader={reader} snapshot={ready} />);
@@ -118,17 +175,17 @@ describe("repository fetch controls", () => {
       .toHaveAttribute("aria-keyshortcuts", "Control+Shift+F");
     await fetch.click();
     await expect
-      .element(page.getByRole("status"))
-      .toHaveTextContent("Reconnect to the server and try again.");
+      .element(page.getByRole("dialog", { name: "Fetch failed", exact: true }))
+      .toBeVisible();
     expect(reader.fetch).toHaveBeenCalledOnce();
-    await page.getByRole("button", { name: "Retry fetch" }).click();
+    await fetch.click();
     await expect
-      .element(page.getByRole("button", { name: "Retry fetch" }))
+      .element(page.getByRole("dialog", { name: "Fetch failed", exact: true }))
       .not.toBeInTheDocument();
     expect(reader.fetch).toHaveBeenCalledTimes(2);
   });
 
-  it("disables duplicate fetches while keeping cached-history status nonblocking", async () => {
+  it("disables duplicate fetches and shows background fetch failures", async () => {
     const reader = createReader();
     let complete: ((state: RepositoryFreshness) => void) | undefined;
     reader.fetch.mockImplementation(
@@ -161,10 +218,10 @@ describe("repository fetch controls", () => {
       />,
     );
     await expect
-      .element(page.getByRole("status"))
-      .toHaveTextContent("Fetch failed. Cached history is available.");
+      .element(page.getByRole("dialog", { name: "Fetch failed", exact: true }))
+      .toBeVisible();
     await expect
-      .element(page.getByRole("button", { name: "Retry fetch" }))
+      .element(page.getByRole("button", { name: "Fetch", exact: true }))
       .toBeEnabled();
   });
 
@@ -239,8 +296,8 @@ describe("repository fetch controls", () => {
       .element(page.getByRole("button", { name: "Fetch", exact: true }))
       .toBeDisabled();
     await expect
-      .element(page.getByRole("status"))
-      .toHaveTextContent("Offline. Cached history is available.");
+      .element(page.getByRole("dialog", { name: "You're offline" }))
+      .toBeVisible();
     await expect
       .element(page.getByRole("combobox", { name: "Automatic fetch" }))
       .toBeDisabled();
@@ -288,7 +345,7 @@ function Controls({
     ariaKeyShortcuts: "Control+Shift+F",
   };
   return (
-    <>
+    <NotificationsProvider>
       <CommitGraphToolbar.Frame>
         <CommitGraphToolbar.Title repositoryName="Rebase" />
         <CommitGraphToolbar.Fetch
@@ -311,11 +368,10 @@ function Controls({
       />
       <RepositoryHistoryFreshnessStatus
         error={fetch.error}
-        fetchAction={fetchAction}
         fetching={fetch.fetching}
         snapshot={snapshot}
       />
-    </>
+    </NotificationsProvider>
   );
 }
 

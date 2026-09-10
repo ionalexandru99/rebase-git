@@ -4,6 +4,7 @@ import { browserKeyboardShortcutHost } from "#web/features/keyboard-shortcuts/br
 import { browserKeyboardShortcutStorage } from "#web/features/keyboard-shortcuts/browser-keyboard-shortcut-storage";
 import { createKeyboardShortcutStore } from "#web/features/keyboard-shortcuts/keyboard-shortcut-store";
 import { createBrowserLocalEnvironmentSession } from "#web/features/local-environment-session/browser-local-environment-session";
+import { NotificationsProvider } from "#web/features/notifications/index";
 import { ApplicationShell } from "#web-ui/features/application-shell/application-shell";
 import { KeyboardShortcutsProvider } from "#web-ui/features/keyboard-shortcuts/keyboard-shortcuts-provider";
 import "@rebase/web/styles.css";
@@ -25,11 +26,13 @@ const keyboardShortcuts = {
 createRoot(rootElement).render(
   <StrictMode>
     <KeyboardShortcutsProvider runtime={keyboardShortcuts}>
-      <ApplicationShell
-        desktopUpdates={window.rebaseHost?.updates}
-        productVersion={productVersion}
-        session={session}
-      />
+      <NotificationsProvider>
+        <ApplicationShell
+          desktopUpdates={window.rebaseHost?.updates}
+          productVersion={productVersion}
+          session={session}
+        />
+      </NotificationsProvider>
     </KeyboardShortcutsProvider>
   </StrictMode>,
 );

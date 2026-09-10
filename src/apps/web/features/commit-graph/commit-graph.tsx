@@ -643,7 +643,6 @@ export function CommitGraph({
       )}
       <RepositoryHistoryFreshnessStatus
         snapshot={historySnapshot}
-        fetchAction={fetchAction}
         fetching={fetch.fetching}
         error={fetch.error}
       />
