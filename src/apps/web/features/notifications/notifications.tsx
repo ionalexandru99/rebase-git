@@ -25,7 +25,7 @@ function Notifications() {
           <Toast.Root
             key={toast.id}
             toast={toast}
-            className="pointer-events-auto shrink-0 rounded-lg border border-border bg-popover text-popover-foreground shadow-lg outline-none data-ending:hidden data-limited:hidden"
+            className="pointer-events-auto shrink-0 rounded-lg border border-border bg-popover text-popover-foreground shadow-lg outline-none data-ending-style:hidden data-limited:hidden"
           >
             <Toast.Content className="flex items-center gap-3 px-3 py-2">
               <IconAlertCircle
