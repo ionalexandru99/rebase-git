@@ -40,11 +40,10 @@ describe("branches sidebar state", () => {
       checkout: { kind: "worktree", path: topicPath },
     });
     expect(rows[4]).toMatchObject({
-      count: 2,
       expanded: false,
       title: "origin",
     });
-    expect(rows[6]).toMatchObject({ count: 1, expanded: false, title: "Tags" });
+    expect(rows[6]).toMatchObject({ expanded: false, title: "Tags" });
   });
 
   it("keeps the active branch ahead of branches in other worktrees", () => {

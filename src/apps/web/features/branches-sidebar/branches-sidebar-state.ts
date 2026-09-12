@@ -8,10 +8,12 @@ import {
   type BranchesSidebarRow,
   type BranchesSidebarScope,
   type BranchesSidebarSectionRow,
+  type BranchesSidebarTreeOptions,
   localBranchesSectionId,
   type RefSelection,
   tagsSectionId,
 } from "#web/features/branches-sidebar/branches-sidebar.contract";
+import { buildBranchTree } from "#web/features/branches-sidebar/tree/branch-tree";
 
 export const defaultExpandedSections: ReadonlySet<string> = new Set([
   localBranchesSectionId,
@@ -27,6 +29,7 @@ export function buildBranchesSidebarRows(
   expandedSections: ReadonlySet<string>,
   query: string,
   scope: BranchesSidebarScope = "all",
+  tree?: BranchesSidebarTreeOptions,
 ): readonly BranchesSidebarRow[] {
   const matches = createMatcher(query);
   const filtering = query.trim().length > 0 || scope !== "all";
@@ -93,11 +96,17 @@ export function buildBranchesSidebarRows(
     },
   ];
 
-  return sections.filter(sectionMatchesScope(scope)).flatMap((section) => {
-    if (filtering && section.refs.length === 0) return [];
+  const visibleSections = sections
+    .filter(sectionMatchesScope(scope))
+    .filter((section) => !filtering || section.refs.length > 0);
+  let previousExpanded = false;
+  return visibleSections.flatMap((section, index) => {
     const expanded = filtering || expandedSections.has(section.sectionId);
     const header: BranchesSidebarSectionRow = {
-      count: section.refs.length,
+      level: 1,
+      position: index + 1,
+      setSize: visibleSections.length,
+      separator: previousExpanded,
       expanded,
       id: `section:${section.sectionId}`,
       kind: "section",
@@ -105,19 +114,27 @@ export function buildBranchesSidebarRows(
       title: section.title,
       truncated: section.truncated,
     };
-    return expanded
-      ? [
-          header,
-          ...section.refs.map(
-            (ref): BranchesSidebarRefRow => ({
-              ...ref,
-              id: `ref:${section.sectionId}:${ref.name}`,
-              kind: "ref",
-              sectionId: section.sectionId,
-            }),
-          ),
-        ]
-      : [header];
+    previousExpanded = expanded;
+    if (!expanded) return [header];
+    const refRows = section.refs.map(
+      (ref, position): BranchesSidebarRefRow => ({
+        ...ref,
+        id: `ref:${section.sectionId}:${ref.name}`,
+        kind: "ref",
+        sectionId: section.sectionId,
+        label: ref.name,
+        level: 2,
+        parentId: header.id,
+        position: position + 1,
+        setSize: section.refs.length,
+      }),
+    );
+    return [
+      header,
+      ...(tree?.view === "tree"
+        ? buildBranchTree(refRows, tree.folders, query.trim().length > 0)
+        : refRows),
+    ];
   });
 }
 
@@ -204,10 +221,6 @@ export function stepRow(
   return rows[nextIndex]?.id;
 }
 
-export function sectionRowId(sectionId: string): string {
-  return `section:${sectionId}`;
-}
-
 export function currentRefRowId(
   rows: readonly BranchesSidebarRow[],
 ): string | undefined {
@@ -245,7 +258,14 @@ function groupByRemote(
 interface SectionDraft {
   readonly refs: readonly Omit<
     BranchesSidebarRefRow,
-    "id" | "kind" | "sectionId"
+    | "id"
+    | "kind"
+    | "sectionId"
+    | "label"
+    | "level"
+    | "parentId"
+    | "position"
+    | "setSize"
   >[];
   readonly sectionId: string;
   readonly scope: Exclude<BranchesSidebarScope, "all">;
