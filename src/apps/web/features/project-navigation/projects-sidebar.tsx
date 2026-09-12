@@ -8,9 +8,8 @@ import {
   IconSettings,
   IconX,
 } from "@tabler/icons-react";
-import { type JSX, type RefObject, useEffect, useRef, useState } from "react";
+import { type JSX, useState } from "react";
 import type { EnvironmentSessionPresentation } from "#web/features/application-shell/environment-session-presentation";
-import { keyboardShortcutAria } from "#web/features/keyboard-shortcuts/keyboard-shortcuts";
 import type {
   ProjectNavigationRepository,
   ProjectNavigationState,
@@ -24,14 +23,12 @@ import {
   CollapsibleTrigger,
 } from "#web-ui/components/ui/collapsible";
 import { Input } from "#web-ui/components/ui/input";
-import { useKeyboardShortcuts } from "#web-ui/features/keyboard-shortcuts/keyboard-shortcuts-provider";
 
 export function ProjectsSidebar({
   closeRepository,
   collapse,
   environmentStatus,
   expand,
-  filterRequest,
   navigation,
   openProject,
   openSettings,
@@ -46,7 +43,6 @@ export function ProjectsSidebar({
   readonly collapse: () => void;
   readonly environmentStatus: EnvironmentSessionPresentation;
   readonly expand: () => void;
-  readonly filterRequest: number;
   readonly navigation: ProjectNavigationState;
   readonly openProject: () => void;
   readonly openSettings: () => void;
@@ -61,13 +57,6 @@ export function ProjectsSidebar({
   readonly toggleEnvironment: (environmentId: string) => void;
 }): JSX.Element {
   const [filterQuery, setFilterQuery] = useState("");
-  const filterInputRef = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    if (filterRequest === 0) return;
-    filterInputRef.current?.focus();
-    filterInputRef.current?.select();
-  }, [filterRequest]);
 
   return (
     <nav
@@ -91,7 +80,6 @@ export function ProjectsSidebar({
           collapse={collapse}
           environmentStatus={environmentStatus}
           filterQuery={filterQuery}
-          filterInputRef={filterInputRef}
           navigation={navigation}
           openProject={openProject}
           openSettings={openSettings}
@@ -110,7 +98,6 @@ function ExpandedProjectsSidebar({
   collapse,
   environmentStatus,
   filterQuery,
-  filterInputRef,
   navigation,
   openProject,
   openSettings,
@@ -126,7 +113,6 @@ function ExpandedProjectsSidebar({
   readonly collapse: () => void;
   readonly environmentStatus: EnvironmentSessionPresentation;
   readonly filterQuery: string;
-  readonly filterInputRef: RefObject<HTMLInputElement | null>;
   readonly navigation: ProjectNavigationState;
   readonly openProject: () => void;
   readonly openSettings: () => void;
@@ -141,12 +127,6 @@ function ExpandedProjectsSidebar({
   readonly setFilterQuery: (query: string) => void;
   readonly toggleEnvironment: (environmentId: string) => void;
 }) {
-  const { bindings, platform } = useKeyboardShortcuts();
-  const toggleSidebarShortcut = bindings["projects.toggleSidebar"];
-  const focusFilterShortcut = bindings["projects.focusFilter"];
-  const showOpenProjectShortcut = bindings["projects.showOpenProject"];
-  const closeRepositoryShortcut = bindings["projects.closeActiveRepository"];
-
   return (
     <>
       <div className="flex h-11 shrink-0 items-center px-4 text-sidebar-accent-foreground">
@@ -155,10 +135,6 @@ function ExpandedProjectsSidebar({
         </h1>
         <Button
           aria-label="Collapse Projects sidebar"
-          aria-keyshortcuts={keyboardShortcutAria(
-            toggleSidebarShortcut,
-            platform,
-          )}
           onClick={collapse}
           size="icon"
           variant="ghost"
@@ -174,14 +150,9 @@ function ExpandedProjectsSidebar({
           />
           <Input
             aria-label="Filter open projects"
-            aria-keyshortcuts={keyboardShortcutAria(
-              focusFilterShortcut,
-              platform,
-            )}
             className="pl-9"
             onChange={(event) => setFilterQuery(event.target.value)}
             placeholder="Filter open projects"
-            ref={filterInputRef}
             value={filterQuery}
           />
         </div>
@@ -190,10 +161,6 @@ function ExpandedProjectsSidebar({
             navigation.workspaceView === "open-project" ? "page" : undefined
           }
           aria-label="Open project"
-          aria-keyshortcuts={keyboardShortcutAria(
-            showOpenProjectShortcut,
-            platform,
-          )}
           className={`!size-7.5 shrink-0 border-0 ${navigation.workspaceView === "open-project" ? "bg-sidebar-accent text-sidebar-accent-foreground" : ""}`}
           onClick={openProject}
           size="icon"
@@ -282,24 +249,12 @@ function ExpandedProjectsSidebar({
                       </button>
                       <RepositorySettingsButton
                         name={repository.name}
-                        active={
-                          navigation.selectedRepositoryId === repository.id
-                        }
                         onOpen={() =>
                           openRepositorySettings(environment.id, repository)
                         }
                       />
                       <button
                         aria-label={`Close ${repository.name}`}
-                        aria-keyshortcuts={
-                          navigation.workspaceView === "repository" &&
-                          navigation.selectedRepositoryId === repository.id
-                            ? keyboardShortcutAria(
-                                closeRepositoryShortcut,
-                                platform,
-                              )
-                            : undefined
-                        }
                         className="grid size-7.5 place-items-center rounded-md text-muted-foreground outline-none hover:bg-sidebar-accent-foreground/10 hover:text-sidebar-accent-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring/40"
                         onClick={() =>
                           closeRepository(environment.id, repository)
@@ -343,19 +298,11 @@ function CollapsedProjectsSidebar({
   ) => void;
   readonly toggleEnvironment: (environmentId: string) => void;
 }) {
-  const { bindings, platform } = useKeyboardShortcuts();
-  const toggleSidebarShortcut = bindings["projects.toggleSidebar"];
-  const showOpenProjectShortcut = bindings["projects.showOpenProject"];
-
   return (
     <>
       <button
         type="button"
         aria-label="Expand Projects sidebar"
-        aria-keyshortcuts={keyboardShortcutAria(
-          toggleSidebarShortcut,
-          platform,
-        )}
         className="mx-auto mt-1 grid size-10 shrink-0 place-items-center rounded-md text-muted-foreground outline-none hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring/40"
         onClick={expand}
       >
@@ -368,10 +315,6 @@ function CollapsedProjectsSidebar({
           navigation.workspaceView === "open-project" ? "page" : undefined
         }
         aria-label="Open project"
-        aria-keyshortcuts={keyboardShortcutAria(
-          showOpenProjectShortcut,
-          platform,
-        )}
         className={`mx-auto mt-2 grid size-10 shrink-0 place-items-center rounded-md text-sidebar-foreground outline-none hover:bg-sidebar-accent focus-visible:ring-2 focus-visible:ring-sidebar-ring/40 ${navigation.workspaceView === "open-project" ? "bg-sidebar-accent text-sidebar-accent-foreground" : ""}`}
         onClick={openProject}
       >
@@ -445,15 +388,11 @@ function SidebarSettings({
   readonly collapsed?: boolean;
   readonly openSettings: () => void;
 }) {
-  const { bindings, platform } = useKeyboardShortcuts();
-  const openSettingsShortcut = bindings["settings.open"];
-
   if (collapsed) {
     return (
       <button
         type="button"
         aria-label="Settings"
-        aria-keyshortcuts={keyboardShortcutAria(openSettingsShortcut, platform)}
         className="mx-auto mb-3 grid size-10 shrink-0 place-items-center rounded-md text-muted-foreground outline-none hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring/40"
         onClick={openSettings}
       >
@@ -463,7 +402,6 @@ function SidebarSettings({
   }
   return (
     <Button
-      aria-keyshortcuts={keyboardShortcutAria(openSettingsShortcut, platform)}
       className="mx-3 mb-2 h-10 justify-between px-2 text-muted-foreground"
       onClick={openSettings}
       variant="ghost"

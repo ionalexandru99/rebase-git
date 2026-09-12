@@ -136,14 +136,6 @@ describe("commit graph page window", () => {
         (row) => row.lanesBefore.length === 1 && row.lanesBefore[0]?.slot === 0,
       ),
     ).toBe(true);
-    await expect(window.requestLaneMove(2, 1)).resolves.toEqual({
-      oid: oid(3),
-      offset: 3,
-    });
-    await expect(window.requestLaneMove(3, -1)).resolves.toEqual({
-      oid: oid(2),
-      offset: 2,
-    });
     await window.loadInitial(scope);
     expect(graphColors(rows(), refs).refs.get("origin/main")).toBe("#4C9AFF");
     window.dispose();
@@ -572,48 +564,6 @@ describe("commit graph page window", () => {
     pending.resolve(commits.slice(5, 10));
     await expect(latest).resolves.toEqual({ oid: oid(7), offset: 7 });
     expect(reader.read).toHaveBeenCalledTimes(2);
-    window.dispose();
-  });
-
-  it("follows a lane across intervening pages and restores an evicted previous node", async () => {
-    const commits = history(30).map((commit, index) =>
-      index === 4
-        ? { ...commit, parents: [oid(10)] }
-        : index === 9
-          ? { ...commit, parents: [] }
-          : commit,
-    );
-    const reader = fakeReader(commits);
-    const window = createCommitGraphPageWindow(reader, {
-      pageSize: 5,
-      maximumPages: 2,
-    });
-    await window.loadInitial(query);
-    const pending = deferred<readonly RepositoryCommit[]>();
-    reader.read.mockReturnValueOnce(pending.promise);
-    const first = window.requestLaneMove(4, 1);
-    const second = window.requestLaneMove(4, 1);
-    await expect(first).resolves.toBeUndefined();
-    pending.resolve(commits.slice(5, 10));
-    await expect(second).resolves.toEqual({ oid: oid(10), offset: 10 });
-    expect(window.getSnapshot().pages.map((page) => page.offset)).toEqual([
-      5, 10,
-    ]);
-    await expect(window.requestLaneMove(10, -1)).resolves.toEqual({
-      oid: oid(4),
-      offset: 4,
-    });
-    expect(window.getSnapshot().pages.length).toBeLessThanOrEqual(2);
-    window.dispose();
-  });
-
-  it("stops lane navigation at an incomplete boundary without retrying the same partial page", async () => {
-    const reader = fakeReader(history(4).slice(0, 3));
-    const window = createCommitGraphPageWindow(reader, { pageSize: 5 });
-    await window.loadInitial(query);
-    await expect(window.requestLaneMove(2, 1)).resolves.toBeUndefined();
-    await expect(window.requestLaneMove(0, -1)).resolves.toBeUndefined();
-    expect(reader.read).toHaveBeenCalledTimes(1);
     window.dispose();
   });
 

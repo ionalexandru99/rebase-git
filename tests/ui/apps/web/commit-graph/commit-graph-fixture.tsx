@@ -3,7 +3,6 @@ import type { ComponentProps } from "react";
 import { vi } from "vitest";
 import { render } from "vitest-browser-react";
 import { CommitGraph } from "#web/features/commit-graph/index";
-import { defaultKeyboardShortcutBindings } from "#web/features/keyboard-shortcuts/keyboard-shortcuts";
 import type {
   RepositoryHistoryQuery,
   RepositoryHistoryReader,
@@ -16,7 +15,7 @@ export async function renderGraph(
   roots = [{ name: "main", oid: "0".repeat(40), type: "branch" as const }],
   options: Pick<
     ComponentProps<typeof CommitGraph>,
-    "onRemoveHistoryRef" | "commandEnvironment" | "shortcuts"
+    "onRemoveHistoryRef" | "commandEnvironment"
   > = {},
 ) {
   saveRepositoryHistoryOrder(
@@ -42,10 +41,6 @@ export async function renderGraph(
           connected: false,
           freshnessReady: false,
           operationState: "idle",
-        }}
-        shortcuts={{
-          bindings: defaultKeyboardShortcutBindings,
-          platform: "other",
         }}
         {...options}
       />

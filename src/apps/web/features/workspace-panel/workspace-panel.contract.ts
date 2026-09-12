@@ -20,7 +20,6 @@ export interface WorkspacePanelState {
 export type WorkspacePanelAction =
   | { readonly type: "open"; readonly kind: WorkspacePanelKind }
   | { readonly type: "close"; readonly kind: WorkspacePanelKind }
-  | { readonly type: "cycle"; readonly offset: -1 | 1 }
   | { readonly type: "visibility"; readonly open: boolean }
   | { readonly type: "resize"; readonly width: number };
 

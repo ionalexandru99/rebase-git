@@ -107,62 +107,6 @@ test("opens, closes, and reopens a recent repository after restart", async () =>
   }
 });
 
-test("edits a shortcut, restarts, and uses it", async () => {
-  const testHome = await mkdtemp(join(tmpdir(), "rebase-electron-e2e-"));
-
-  try {
-    const environment = await createTestEnvironment(testHome);
-    const application = await launchApplication(environment);
-    try {
-      const window = await connectedWindow(application);
-      await window.getByRole("button", { name: "Settings" }).click();
-      await window
-        .getByRole("navigation", { name: "Settings" })
-        .getByRole("button", { name: "Keyboard shortcuts" })
-        .click();
-      await window
-        .getByRole("button", {
-          name: "Edit Toggle Projects sidebar shortcut",
-        })
-        .click();
-      const shortcutPopover = window.locator('[data-slot="popover-content"]');
-      await expect(shortcutPopover).toBeVisible();
-      await expect(shortcutPopover.getByRole("button").first()).toBeFocused();
-      await window.keyboard.press("Control+Shift+k");
-      await shortcutPopover.getByRole("button", { name: "Save" }).click();
-    } finally {
-      await application.close();
-    }
-
-    const restartedApplication = await launchApplication(environment);
-    try {
-      const restartedWindow = await connectedWindow(restartedApplication);
-      await restartedWindow.getByRole("button", { name: "Settings" }).click();
-      await restartedWindow
-        .getByRole("navigation", { name: "Settings" })
-        .getByRole("button", { name: "Keyboard shortcuts" })
-        .click();
-      const shortcut = restartedWindow.getByRole("button", {
-        name: "Edit Toggle Projects sidebar shortcut",
-      });
-      await expect(shortcut).toContainText("Shift");
-      await expect(shortcut).toContainText("K");
-      await restartedWindow.keyboard.press("Escape");
-      await expect(
-        restartedWindow.getByRole("heading", { level: 1, name: "Projects" }),
-      ).toBeVisible();
-      await restartedWindow.keyboard.press("Control+Shift+k");
-      await expect(
-        restartedWindow.getByRole("heading", { level: 1, name: "Projects" }),
-      ).not.toBeVisible();
-    } finally {
-      await restartedApplication.close();
-    }
-  } finally {
-    await rm(testHome, { force: true, recursive: true });
-  }
-});
-
 async function createTestEnvironment(testHome: string) {
   const environment = Object.fromEntries(
     Object.entries(process.env).filter(
@@ -206,7 +150,7 @@ async function connectedWindow(application: ElectronApplication) {
 }
 
 async function openRepository(window: Page, repositoryName: string) {
-  await window.keyboard.press("Control+o");
+  await window.getByRole("button", { name: "Browse files" }).click();
   const picker = window.getByRole("dialog", { name: "Choose repository" });
   await expect(picker).toBeVisible();
   await picker
@@ -214,7 +158,9 @@ async function openRepository(window: Page, repositoryName: string) {
     .filter({ hasText: repositoryName })
     .first()
     .click();
-  await window.keyboard.press("Control+Enter");
+  await window
+    .getByRole("button", { name: "Open repository", exact: true })
+    .click();
   await expect(picker).not.toBeVisible();
 }
 

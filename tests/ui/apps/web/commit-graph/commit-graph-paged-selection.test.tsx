@@ -68,7 +68,6 @@ function Selection({
     reader,
     query,
     oids,
-    laneRows: [],
     merges: new Map(),
     pageSize: 2,
     scrollToIndex: () => {},

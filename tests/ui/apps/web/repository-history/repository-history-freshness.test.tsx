@@ -170,9 +170,6 @@ describe("repository fetch controls", () => {
     reader.fetch.mockRejectedValueOnce(new RepositoryHistoryOffline());
     await render(<Controls reader={reader} snapshot={ready} />);
     const fetch = page.getByRole("button", { name: "Fetch", exact: true });
-    await expect
-      .element(fetch)
-      .toHaveAttribute("aria-keyshortcuts", "Control+Shift+F");
     await fetch.click();
     await expect
       .element(page.getByRole("dialog", { name: "Fetch failed", exact: true }))
@@ -341,8 +338,6 @@ function Controls({
   const fetchAction = {
     execute: fetch.execute,
     disabled: snapshot.freshnessError !== undefined,
-    shortcut: "Ctrl+Shift+F",
-    ariaKeyShortcuts: "Control+Shift+F",
   };
   return (
     <NotificationsProvider>

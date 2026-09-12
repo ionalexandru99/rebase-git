@@ -80,12 +80,6 @@ export function createCommitGraphPageWindow(
   let pendingMove:
     | {
         offset: number;
-        lane?: {
-          id: number;
-          readonly direction: -1 | 1;
-          readonly activeOid: string;
-          epoch: number;
-        };
         resolve: (value: { oid: string; offset: number } | undefined) => void;
       }
     | undefined;
@@ -353,15 +347,7 @@ export function createCommitGraphPageWindow(
     return task;
   };
 
-  const requestMove = (
-    offset: number,
-    lane?: {
-      id: number;
-      readonly direction: -1 | 1;
-      readonly activeOid: string;
-      epoch: number;
-    },
-  ) => {
+  const requestMove = (offset: number) => {
     cancelNavigation();
     if (disposed || replacing || !Number.isInteger(offset) || offset < 0) {
       pendingMove = undefined;
@@ -373,7 +359,6 @@ export function createCommitGraphPageWindow(
         const move = {
           offset,
           resolve,
-          ...(lane === undefined ? {} : { lane }),
         };
         pendingMove = move;
         publish();
@@ -392,46 +377,7 @@ export function createCommitGraphPageWindow(
         if (pendingMove !== move) continue;
         const pageOffset = Math.floor(move.offset / pageSize) * pageSize;
         const page = view?.pages.get(pageOffset);
-        let targetOffset = move.offset;
-        if (move.lane !== undefined && page !== undefined) {
-          const lane = move.lane;
-          if (lane.epoch !== snapshot.epoch) {
-            const activeRow = snapshot.pages
-              .flatMap((item) => item.rows)
-              .find((row) => row.oid === lane.activeOid);
-            if (activeRow === undefined) {
-              pendingMove = undefined;
-              publish();
-              move.resolve(undefined);
-              continue;
-            }
-            lane.id = activeRow.nodeLaneId;
-            lane.epoch = snapshot.epoch;
-          }
-          let index = move.offset - pageOffset;
-          while (
-            index >= 0 &&
-            index < page.rows.length &&
-            page.rows[index]?.nodeLaneId !== lane.id
-          )
-            index += lane.direction;
-          targetOffset = pageOffset + index;
-          if (index < 0 || index >= page.rows.length) {
-            const checkpoint =
-              lane.direction > 0
-                ? page.outgoingCheckpoint
-                : page.incomingCheckpoint;
-            if (
-              targetOffset >= 0 &&
-              (lane.direction < 0 || page.commits.length === pageSize) &&
-              checkpoint.lanes.some((item) => item.id === lane.id)
-            ) {
-              move.offset = targetOffset;
-              publish();
-              continue;
-            }
-          }
-        }
+        const targetOffset = move.offset;
         const commit = page?.commits[targetOffset - pageOffset];
         pendingMove = undefined;
         publish();
@@ -588,23 +534,6 @@ export function createCommitGraphPageWindow(
       }
     },
     requestMove,
-    requestLaneMove: (offset, direction) => {
-      const pageOffset = Math.floor(offset / pageSize) * pageSize;
-      const page = view?.pages.get(pageOffset);
-      const row = page?.rows[offset - pageOffset];
-      if (
-        row === undefined ||
-        (direction > 0 &&
-          !row.lanesAfter.some((lane) => lane.id === row.nodeLaneId))
-      )
-        return Promise.resolve(undefined);
-      return requestMove(offset + direction, {
-        id: row.nodeLaneId,
-        direction,
-        activeOid: row.oid,
-        epoch: snapshot.epoch,
-      });
-    },
     cancelNavigation,
     jumpToOid,
     retry: async () => {

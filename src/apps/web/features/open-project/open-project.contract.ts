@@ -20,7 +20,6 @@ export interface OpenProjectEnvironment {
 }
 
 export interface OpenProjectScreenProps {
-  readonly active: boolean;
   readonly browseAvailable: boolean;
   readonly environments: readonly OpenProjectEnvironment[];
   readonly expandedEnvironmentIds: ReadonlySet<string>;

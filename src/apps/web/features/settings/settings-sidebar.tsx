@@ -1,7 +1,6 @@
 import {
   IconArrowLeft,
   IconDatabase,
-  IconKeyboard,
   IconSearch,
   IconSettings,
 } from "@tabler/icons-react";
@@ -12,11 +11,6 @@ import { Input } from "#web-ui/components/ui/input";
 
 const sections = [
   { icon: IconSettings, id: "general", label: "General" },
-  {
-    icon: IconKeyboard,
-    id: "keyboard-shortcuts",
-    label: "Keyboard shortcuts",
-  },
   { icon: IconDatabase, id: "history-storage", label: "History storage" },
 ] as const satisfies ReadonlyArray<{
   readonly icon: typeof IconSettings;

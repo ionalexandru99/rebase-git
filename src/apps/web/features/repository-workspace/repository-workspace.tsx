@@ -4,7 +4,6 @@ import type {
 } from "@rebase/contracts";
 import type { JSX } from "react";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import type { GraphCommandShortcuts } from "#web/features/commit-commands/graph-command.contract";
 import type { HistoryScope } from "#web/features/commit-graph/index";
 import {
   automaticHistoryScope,
@@ -34,10 +33,7 @@ const branchesSidebarSize = {
 export function RepositoryWorkspace({
   accessCapabilities = [],
   connected = false,
-  commandsActive = true,
-  shortcuts,
   activeWorktreePath,
-  branchesFocusRequest,
   environmentId,
   historyReader,
   logicalRepositoryId: catalogLogicalRepositoryId,
@@ -49,10 +45,7 @@ export function RepositoryWorkspace({
 }: {
   readonly accessCapabilities?: readonly EnvironmentAccessCapability[];
   readonly connected?: boolean;
-  readonly commandsActive?: boolean;
-  readonly shortcuts?: GraphCommandShortcuts | undefined;
   readonly activeWorktreePath: string;
-  readonly branchesFocusRequest: number;
   readonly environmentId: string | undefined;
   readonly historyReader: RepositoryHistoryReader | undefined;
   readonly logicalRepositoryId?: string | undefined;
@@ -76,10 +69,7 @@ export function RepositoryWorkspace({
     <RepositoryWorkspaceContent
       accessCapabilities={accessCapabilities}
       connected={connected}
-      commandsActive={commandsActive}
-      shortcuts={shortcuts}
       activeWorktreePath={activeWorktreePath}
-      branchesFocusRequest={branchesFocusRequest}
       environmentId={environmentId}
       historyReader={historyReader}
       key={`${environmentId ?? ""}\0${logicalRepositoryId ?? ""}`}
@@ -97,10 +87,7 @@ export function RepositoryWorkspace({
 function RepositoryWorkspaceContent({
   accessCapabilities,
   connected,
-  commandsActive,
-  shortcuts,
   activeWorktreePath,
-  branchesFocusRequest,
   environmentId,
   historyReader,
   logicalRepositoryId,
@@ -113,10 +100,7 @@ function RepositoryWorkspaceContent({
 }: {
   readonly accessCapabilities: readonly EnvironmentAccessCapability[];
   readonly connected: boolean;
-  readonly commandsActive: boolean;
-  readonly shortcuts: GraphCommandShortcuts | undefined;
   readonly activeWorktreePath: string;
-  readonly branchesFocusRequest: number;
   readonly environmentId: string | undefined;
   readonly historyReader: RepositoryHistoryReader | undefined;
   readonly logicalRepositoryId: string | undefined;
@@ -209,7 +193,6 @@ function RepositoryWorkspaceContent({
         logicalRepositoryId,
         activeWorktreePath,
       ])}
-      commandsActive={commandsActive}
     >
       <WorkspacePanel.Group>
         <ResizablePanel
@@ -221,7 +204,7 @@ function RepositoryWorkspaceContent({
         >
           <BranchesSidebar
             activeWorktreePath={activeWorktreePath}
-            focusRequest={branchesFocusRequest + localBranchesFocusRequest}
+            focusRequest={localBranchesFocusRequest}
             onRetry={retryRefs}
             onSelectRef={selectRef}
             onToggleHistoryRef={toggleRef}
@@ -261,8 +244,6 @@ function RepositoryWorkspaceContent({
                       operationState: "idle",
                     }
               }
-              commandsActive={commandsActive}
-              shortcuts={shortcuts}
               onRemoveHistoryRef={toggleRef}
               onRevealHistoryRef={toggleRef}
               onAddHistoryRef={() =>

@@ -109,13 +109,15 @@ async function measureCommitGraph(
       "data-connection-state",
       "Connected",
     );
-    await page.keyboard.press("Control+o");
+    await page.getByRole("button", { name: "Browse files" }).click();
     const picker = page.getByRole("dialog", { name: "Choose repository" });
     await picker
       .getByRole("button", { name: /^rebase-performance Folder/ })
       .click();
     await page.evaluate(() => window.__startGraphMeasurement());
-    await page.keyboard.press("Control+Enter");
+    await page
+      .getByRole("button", { name: "Open repository", exact: true })
+      .click();
     const history = page.getByRole("grid", { name: "Commit history" });
     await page.evaluate(async () => {
       while (window.__graphMetrics.firstContent === undefined)

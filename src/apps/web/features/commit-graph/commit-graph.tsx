@@ -21,10 +21,7 @@ import {
   AuthorAvatars,
   type GitHubRepository,
 } from "#web/features/author-avatars/index";
-import type {
-  GraphCommandEnvironment,
-  GraphCommandShortcuts,
-} from "#web/features/commit-commands/graph-command.contract";
+import type { GraphCommandEnvironment } from "#web/features/commit-commands/graph-command.contract";
 import type {
   CommitGraphHandle,
   CommitGraphViewportAnchor,
@@ -49,7 +46,6 @@ import type {
   RepositoryHistoryQuery,
   RepositoryHistoryReader,
 } from "#web/features/repository-history/repository-history-reader.contract";
-import type { RepositoryHistorySearchActions } from "#web/features/repository-history/search/components/repository-history-search-controls.contract";
 import { useRepositoryHistoryOrder } from "#web/features/repository-settings/index";
 import { Button } from "#web-ui/components/ui/button";
 import { CommitCommandMenu } from "#web-ui/features/commit-commands/commit-command-menu";
@@ -74,8 +70,6 @@ const emptyRefLabels: readonly RepositoryHistoryRefTarget[] = [];
 export function CommitGraph({
   ref,
   commandEnvironment,
-  shortcuts,
-  commandsActive = true,
   onRemoveHistoryRef,
   onRevealHistoryRef,
   onAddHistoryRef,
@@ -92,8 +86,6 @@ export function CommitGraph({
   readonly toolbarActions?: ReactNode;
   readonly ref?: Ref<CommitGraphHandle>;
   readonly commandEnvironment?: GraphCommandEnvironment | undefined;
-  readonly shortcuts?: GraphCommandShortcuts | undefined;
-  readonly commandsActive?: boolean;
   readonly onAddHistoryRef?: () => void;
   readonly onResetHistoryScope?: (() => void) | undefined;
   readonly onRemoveHistoryRef?: (target: RepositoryRefTarget) => void;
@@ -106,7 +98,6 @@ export function CommitGraph({
   readonly remoteProviders?: RepositoryRefs["remoteProviders"];
   readonly githubRepository?: GitHubRepository | undefined;
 }): JSX.Element {
-  const searchRef = useRef<RepositoryHistorySearchActions>(null);
   const [menuOid, setMenuOid] = useState<string>();
   const [expandedMerges, setExpandedMerges] = useState<
     ReadonlyMap<string, readonly string[]>
@@ -206,7 +197,6 @@ export function CommitGraph({
     query: paging.snapshot.query,
     loading: paging.loading,
     oids: visibleOids,
-    laneRows,
     merges,
     toggleMerge,
     pageSize,
@@ -214,13 +204,6 @@ export function CommitGraph({
     viewEpoch: paging.snapshot.epoch,
     oldestLoadedOffset: Math.max(0, paging.snapshot.knownEndOffset - 1),
     onSelectionIntent: beginNavigation,
-    requestLaneMove: (offset, direction) => {
-      const intent = beginNavigation();
-      void paging.engine?.requestLaneMove(offset, direction).then((target) => {
-        if (intent === navigationIntent.current && target !== undefined)
-          setPendingNavigation({ ...target, mode: "replace" });
-      });
-    },
     requestMove: (offset, mode) => {
       const intent = beginNavigation();
       void paging.engine?.requestMove(offset).then((target) => {
@@ -278,21 +261,14 @@ export function CommitGraph({
     ? navigation.selection.activeOid
     : undefined;
 
-  const { commands, binding, fetchAction, handleCommandKeyDown } =
-    useCommitGraphCommands({
-      commandEnvironment,
-      shortcuts,
-      commandsActive,
-      reader,
-      historySnapshot,
-      fetch,
-      navigation,
-      activeCommitOid,
-      scrollRef,
-      searchRef,
-      roots,
-      onRemoveHistoryRef,
-    });
+  const { commands, fetchAction } = useCommitGraphCommands({
+    commandEnvironment,
+    reader,
+    historySnapshot,
+    fetch,
+    selectedOids: navigation.selection.selectedOids,
+    onRemoveHistoryRef,
+  });
   const handleKeyDown = (event: KeyboardEvent<HTMLElement>) => {
     if (event.defaultPrevented) return;
     if (
@@ -314,8 +290,6 @@ export function CommitGraph({
       }
       return;
     }
-    handleCommandKeyDown(event);
-    if (event.defaultPrevented) return;
     if (
       event.target instanceof Element &&
       event.target.closest("button, input, select, textarea, [role=dialog]") !==
@@ -328,23 +302,16 @@ export function CommitGraph({
   return (
     <section
       aria-label="Commit graph"
-      onKeyDown={handleCommandKeyDown}
       className="flex h-full min-h-0 flex-col bg-repository"
     >
       <CommitGraphToolbar.Frame>
         <CommitGraphToolbar.Title repositoryName={repositoryName} />
         {reader === undefined ? null : (
           <RepositoryHistorySearchControls
-            ref={searchRef}
             reader={reader}
             snapshot={historySnapshot}
             onNavigate={navigateToOid}
             offline={commandEnvironment?.connected === false}
-            bindings={{
-              open: binding("graph.search"),
-              next: binding("graph.nextMatch"),
-              previous: binding("graph.previousMatch"),
-            }}
           />
         )}
         <CommitGraphToolbar.Fetch
@@ -384,7 +351,6 @@ export function CommitGraph({
                     context={commands.context(menuOid)}
                     registry={commands.registry}
                     execute={commands.execute}
-                    shortcuts={shortcuts}
                     tabIndex={0}
                     restoreFocus={() => scrollRef.current?.focus()}
                   >

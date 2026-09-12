@@ -48,18 +48,6 @@ export function reduceWorkspacePanel(
             : state.active,
       };
     }
-    case "cycle": {
-      if (state.tabs.length < 2) return state;
-      const index =
-        state.active === null ? 0 : state.tabs.indexOf(state.active);
-      return {
-        ...state,
-        active:
-          state.tabs[
-            (index + action.offset + state.tabs.length) % state.tabs.length
-          ] ?? null,
-      };
-    }
     case "visibility":
       return state.open === action.open
         ? state
