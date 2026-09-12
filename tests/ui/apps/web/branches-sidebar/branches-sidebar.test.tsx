@@ -1,5 +1,5 @@
 import type { RepositoryRefs, RepositoryRefTarget } from "@rebase/contracts";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { userEvent } from "vitest/browser";
 import { render } from "vitest-browser-react";
 import { historyRefKey } from "#web/features/commit-graph/scope/history-scope";
@@ -15,41 +15,140 @@ const mainPath = "/repo";
 const topicPath = "/repo/.worktrees/topic";
 const commit = "a".repeat(40);
 describe("branches sidebar", () => {
-  it("distinguishes the current branch from linked worktrees and reveals checkout details on selection", async () => {
+  beforeEach(() => localStorage.removeItem("rebase:branches-view:v1"));
+
+  it("reveals linked worktree icons on hover and keyboard focus", async () => {
     const { screen } = await renderSidebar();
     const tree = screen.getByRole("tree", { name: "Branches" });
-    const main = tree.getByRole("treeitem", {
-      name: "main, current branch",
-    });
+    const main = tree.getByRole("treeitem", { name: "main, current branch" });
     const topic = tree.getByRole("treeitem", {
       name: "topic, linked worktree",
     });
-
+    const marker = topic.getByRole("img", { name: "Linked worktree" });
     await expect.element(main).toHaveAttribute("aria-current", "true");
     await expect
-      .element(topic.getByRole("img", { name: "Linked worktree" }))
-      .toBeVisible();
+      .element(main.getByRole("img", { name: "Linked worktree" }))
+      .not.toBeInTheDocument();
+    await expect.element(marker).toHaveStyle({ opacity: "0" });
+    await topic.hover();
+    await expect.element(marker).toHaveStyle({ opacity: "1" });
     await main.click();
-    const details = screen.getByRole("region", { name: "Selected branch" });
-    await expect
-      .element(details.getByText(mainPath, { exact: true }))
-      .toBeVisible();
-    await expect
-      .element(details.getByText("Repository", { exact: true }))
-      .toBeVisible();
     tree.element().focus();
     await userEvent.keyboard("{ArrowDown}");
+    await screen.getByRole("heading", { name: "Branches" }).hover();
     await expect.element(topic).toHaveAttribute("aria-selected", "true");
-    await expect.element(main).toHaveAttribute("aria-selected", "false");
+    await expect.element(marker).toHaveStyle({ opacity: "1" });
+    await screen.getByRole("textbox", { name: "Filter branches" }).click();
+    await expect.element(marker).toHaveStyle({ opacity: "0" });
     await expect
-      .element(details.getByText(topicPath, { exact: true }))
+      .element(tree.getByRole("treeitem", { name: "origin" }))
+      .toHaveAttribute("aria-expanded", "false");
+  });
+
+  it("switches views with arrow keys and remembers the choice after remounting", async () => {
+    const { screen } = await renderSidebar();
+    const treeView = screen.getByRole("radio", { name: "Tree view" });
+    const linearView = screen.getByRole("radio", { name: "Linear view" });
+    await expect.element(treeView).toBeChecked();
+    treeView.element().focus();
+    await userEvent.keyboard("{ArrowLeft}");
+    await expect.element(linearView).toBeChecked();
+    await screen.unmount();
+    const reopened = await renderSidebar();
+    await expect
+      .element(reopened.screen.getByRole("radio", { name: "Linear view" }))
+      .toBeChecked();
+  });
+
+  it("navigates nested folders and checks out the full branch name", async () => {
+    const { screen, onSelectRef } = await renderSidebar({
+      snapshot: snapshot({ refs: nestedRefs(), status: "ready" }),
+    });
+    const tree = screen.getByRole("tree", { name: "Branches" });
+    const feature = tree.getByRole("treeitem", {
+      name: "feature",
+      exact: true,
+    });
+    await feature.click();
+    tree.element().focus();
+    await userEvent.keyboard("{ArrowRight}");
+    const api = tree.getByRole("treeitem", {
+      name: "feature/api",
+      exact: true,
+    });
+    await expect
+      .element(tree)
+      .toHaveAttribute("aria-activedescendant", api.element().id);
+    await userEvent.keyboard("{ArrowRight}{ArrowRight}");
+    const alpha = tree.getByRole("treeitem", { name: "feature/api/alpha" });
+    await expect.element(alpha).toHaveAttribute("aria-level", "4");
+    await expect.element(alpha).toHaveTextContent("alpha");
+    await userEvent.keyboard("{Enter}");
+    expect(onSelectRef).toHaveBeenLastCalledWith({
+      _tag: "LocalBranch",
+      name: "feature/api/alpha",
+    });
+    await userEvent.keyboard("{ArrowLeft}{ArrowLeft}");
+    await expect.element(api).toHaveAttribute("aria-expanded", "false");
+    await userEvent.keyboard("{ArrowLeft}");
+    await expect
+      .element(tree)
+      .toHaveAttribute("aria-activedescendant", feature.element().id);
+    const filter = screen.getByRole("textbox", { name: "Filter branches" });
+    await filter.fill("api/alpha");
+    await expect.element(alpha).toBeVisible();
+    await expect.element(api).toHaveAttribute("aria-expanded", "true");
+  });
+
+  it("keeps inline sync counts and the worktree marker stable as counts change", async () => {
+    const current = refs();
+    const withSync = (ahead: number, behind: number): RepositoryRefs => ({
+      ...current,
+      branches: current.branches.map((branch) =>
+        branch.name === "topic"
+          ? {
+              ...branch,
+              upstream: { ahead, behind, gone: false, name: "origin/topic" },
+            }
+          : branch,
+      ),
+    });
+    const callbacks = sidebarCallbacks();
+    const screen = await render(
+      sidebarView(
+        snapshot({ refs: withSync(0, 2), status: "ready" }),
+        callbacks,
+      ),
+    );
+    const topic = screen.getByRole("treeitem", {
+      name: "topic, linked worktree",
+    });
+    await topic.hover();
+    const marker = topic.getByRole("img", { name: "Linked worktree" });
+    const x = marker.element().getBoundingClientRect().x;
+    const name = topic
+      .getByText("topic", { exact: true })
+      .element()
+      .getBoundingClientRect();
+    const pull = topic.getByRole("img", { name: "2 commits to pull" });
+    expect(
+      pull.element().getBoundingClientRect().left - name.right,
+    ).toBeLessThan(12);
+    await screen.rerender(
+      sidebarView(
+        snapshot({ refs: withSync(99, 111), status: "ready" }),
+        callbacks,
+      ),
+    );
+    await expect
+      .element(topic.getByRole("img", { name: "111 commits to pull" }))
       .toBeVisible();
-    await expect
-      .element(tree.getByRole("treeitem", { name: "origin, 1" }))
-      .toHaveAttribute("aria-expanded", "false");
-    await expect
-      .element(tree.getByRole("treeitem", { name: "Tags, 1" }))
-      .toHaveAttribute("aria-expanded", "false");
+    expect(marker.element().getBoundingClientRect().x).toBe(x);
+    expect(
+      getComputedStyle(
+        topic.getByRole("img", { name: "111 commits to pull" }).element(),
+      ).fontFamily,
+    ).toBe(getComputedStyle(topic.element()).fontFamily);
   });
 
   it("keeps a single click as focus and checks out on double click", async () => {
@@ -278,6 +377,20 @@ function refs(): RepositoryRefs {
     worktrees: [
       { head: { branch: "main", commit }, main: true, path: mainPath },
       { head: { branch: "topic", commit }, main: false, path: topicPath },
+    ],
+  };
+}
+
+function nestedRefs(): RepositoryRefs {
+  const current = refs();
+  return {
+    ...current,
+    branches: [
+      ...current.branches.filter((branch) => branch.name !== "feature"),
+      { name: "feature/zeta" },
+      { name: "feature/api/zeta" },
+      { name: "feature/api/alpha" },
+      { name: "bugfix/login" },
     ],
   };
 }

@@ -4,7 +4,9 @@ import { useVirtualizer } from "@tanstack/react-virtual";
 import {
   type JSX,
   type KeyboardEvent,
+  useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -13,29 +15,26 @@ import type {
   BranchesSidebarRow,
   BranchesSidebarScope,
 } from "#web/features/branches-sidebar/branches-sidebar.contract";
-import {
-  describeEmptyBranchesSidebar,
-  describeRepositoryRefsError,
-} from "#web/features/branches-sidebar/branches-sidebar-messages";
+import { describeRepositoryRefsError } from "#web/features/branches-sidebar/branches-sidebar-messages";
 import {
   buildBranchesSidebarRows,
   currentRefRowId,
   defaultExpandedSections,
-  sectionRowId,
-  stepRow,
   toggleSection,
 } from "#web/features/branches-sidebar/branches-sidebar-state";
+import { useBranchesSidebarView } from "#web/features/branches-sidebar/hooks/use-branches-sidebar-view";
+import { treeKeyAction } from "#web/features/branches-sidebar/navigation/branches-sidebar-keyboard";
 import { historyRefKey } from "#web/features/commit-graph/index";
 import type { RepositoryRefsSnapshot } from "#web/features/repository-refs/repository-refs-controller.contract";
-import { Button } from "#web-ui/components/ui/button";
 import { Input } from "#web-ui/components/ui/input";
 import {
   RefRow,
   rowElementId,
   SectionRow,
-} from "#web-ui/features/branches-sidebar/branches-sidebar-rows";
-import { BranchesSidebarScopeFilter } from "#web-ui/features/branches-sidebar/branches-sidebar-scope-filter";
-import { BranchSelectionDetails } from "#web-ui/features/branches-sidebar/components/branch-selection-details";
+} from "#web-ui/features/branches-sidebar/components/branches-sidebar-rows";
+import { BranchesSidebarScopeFilter } from "#web-ui/features/branches-sidebar/components/branches-sidebar-scope-filter";
+import { BranchesSidebarViewSelector } from "#web-ui/features/branches-sidebar/components/branches-sidebar-view-selector";
+import { SidebarStatus } from "#web-ui/features/branches-sidebar/components/sidebar-status";
 
 const rowHeight = 32;
 const overscanRows = 12;
@@ -72,10 +71,19 @@ export function BranchesSidebar({
   const [expandedSections, setExpandedSections] = useState(
     defaultExpandedSections,
   );
+  const [view, setView] = useBranchesSidebarView();
+  const [expandedFolders, setExpandedFolders] = useState<
+    ReadonlyMap<string, boolean>
+  >(() => new Map());
   const [activeRowId, setActiveRowId] = useState<string>();
   const treeRef = useRef<HTMLDivElement>(null);
-  const filterInputRef = useRef<HTMLInputElement>(null);
   const refs = snapshot.refs;
+  const folderRepositoryRef = useRef(refs?.repositoryId);
+  useEffect(() => {
+    if (folderRepositoryRef.current === refs?.repositoryId) return;
+    folderRepositoryRef.current = refs?.repositoryId;
+    setExpandedFolders(new Map());
+  }, [refs?.repositoryId]);
   const rows = useMemo(
     () =>
       refs === undefined
@@ -86,16 +94,35 @@ export function BranchesSidebar({
             expandedSections,
             filterQuery,
             scope,
+            { view, folders: expandedFolders },
           ),
-    [activeWorktreePath, expandedSections, filterQuery, refs, scope],
+    [
+      activeWorktreePath,
+      expandedSections,
+      expandedFolders,
+      filterQuery,
+      refs,
+      scope,
+      view,
+    ],
+  );
+  const getItemKey = useCallback(
+    (index: number) => rows[index]?.id ?? index,
+    [rows],
   );
   const virtualizer = useVirtualizer({
     count: rows.length,
-    estimateSize: () => rowHeight,
+    estimateSize: (index) =>
+      rows[index]?.kind === "section" && rows[index].separator
+        ? rowHeight + 12
+        : rowHeight,
+    getItemKey,
     getScrollElement: () => treeRef.current,
     overscan: overscanRows,
   });
-  const selectedRow = rows.find((row) => row.id === activeRowId);
+  useLayoutEffect(() => {
+    if (rows.length > 0) virtualizer.measure();
+  }, [rows, virtualizer]);
 
   useEffect(() => {
     if (
@@ -123,26 +150,32 @@ export function BranchesSidebar({
     );
   }, [focusRequest]);
 
-  const activateRow = (row: BranchesSidebarRow) => {
-    if (row.kind === "section") {
-      setExpandedSections((current) => toggleSection(current, row.sectionId));
+  const setRowExpanded = (
+    row: Exclude<BranchesSidebarRow, { kind: "ref" }>,
+    expanded: boolean,
+  ) => {
+    if (row.kind === "folder") {
+      setExpandedFolders((current) => new Map(current).set(row.id, expanded));
     } else {
-      onSelectRef(row.target);
+      setExpandedSections((current) =>
+        current.has(row.sectionId) === expanded
+          ? current
+          : toggleSection(current, row.sectionId),
+      );
     }
+  };
+
+  const activateRow = (row: BranchesSidebarRow) => {
+    if (row.kind === "ref") onSelectRef(row.target);
+    else setRowExpanded(row, !row.expanded);
   };
 
   const handleTreeKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     const activeRow = rows.find((row) => row.id === activeRowId);
     const handled = treeKeyAction(event.key, {
       activeRow,
-      collapse: (sectionId) =>
-        setExpandedSections((current) =>
-          current.has(sectionId) ? toggleSection(current, sectionId) : current,
-        ),
-      expand: (sectionId) =>
-        setExpandedSections((current) =>
-          current.has(sectionId) ? current : toggleSection(current, sectionId),
-        ),
+      collapse: (row) => setRowExpanded(row, false),
+      expand: (row) => setRowExpanded(row, true),
       hasQuery: query.length > 0,
       rows,
       setActive: setActiveRowId,
@@ -186,6 +219,7 @@ export function BranchesSidebar({
         <h2 className="min-w-0 flex-1 truncate text-base font-semibold">
           Branches
         </h2>
+        <BranchesSidebarViewSelector view={view} onChange={setView} />
       </div>
       <div className="relative mx-3 mt-3">
         <IconSearch
@@ -198,7 +232,6 @@ export function BranchesSidebar({
           onChange={(event) => setQuery(event.target.value)}
           onKeyDown={handleFilterKeyDown}
           placeholder="Filter branches"
-          ref={filterInputRef}
           value={query}
         />
       </div>
@@ -209,7 +242,7 @@ export function BranchesSidebar({
         }
         aria-busy={snapshot.checkingOut}
         aria-label="Branches"
-        className={`min-h-0 flex-1 overflow-x-hidden overflow-y-auto [scrollbar-width:none] px-2 pb-2 outline-none [&::-webkit-scrollbar]:hidden focus-visible:ring-2 focus-visible:ring-sidebar-ring/40 ${snapshot.checkingOut ? "cursor-progress opacity-70" : ""}`}
+        className={`group/tree min-h-0 flex-1 overflow-x-hidden overflow-y-auto [scrollbar-width:none] px-2 pb-2 outline-none [&::-webkit-scrollbar]:hidden focus-visible:ring-2 focus-visible:ring-sidebar-ring/40 ${snapshot.checkingOut ? "cursor-progress opacity-70" : ""}`}
         data-slot="branches-scroll"
         onKeyDown={handleTreeKeyDown}
         ref={treeRef}
@@ -227,7 +260,7 @@ export function BranchesSidebar({
               height: item.size,
               transform: `translateY(${item.start}px)`,
             };
-            return row.kind === "section" ? (
+            return row.kind !== "ref" ? (
               <SectionRow
                 active={row.id === activeRowId}
                 key={row.id}
@@ -260,9 +293,6 @@ export function BranchesSidebar({
           snapshot={snapshot}
         />
       </div>
-      {selectedRow?.kind === "ref" ? (
-        <BranchSelectionDetails row={selectedRow} />
-      ) : null}
       {snapshot.checkoutError === undefined ? null : (
         <p
           className="mx-3 mb-3 rounded-md border border-status-unavailable/40 bg-status-unavailable/10 px-3 py-2 text-xs text-foreground"
@@ -273,105 +303,4 @@ export function BranchesSidebar({
       )}
     </nav>
   );
-}
-
-function SidebarStatus({
-  onRetry,
-  query,
-  rows,
-  scope,
-  snapshot,
-}: {
-  readonly onRetry: () => void;
-  readonly query: string;
-  readonly rows: readonly BranchesSidebarRow[];
-  readonly scope: BranchesSidebarScope;
-  readonly snapshot: RepositoryRefsSnapshot;
-}): JSX.Element | null {
-  if (snapshot.error !== undefined) {
-    return (
-      <div className="px-2 py-3 text-xs text-status-unavailable" role="alert">
-        <p>{describeRepositoryRefsError(snapshot.error)}</p>
-        <Button className="mt-2" onClick={onRetry} size="xs" variant="outline">
-          Retry
-        </Button>
-      </div>
-    );
-  }
-  if (snapshot.refs === undefined) {
-    return (
-      <p className="px-2 py-3 text-xs text-muted-foreground" role="status">
-        {snapshot.status === "loading"
-          ? "Loading branches…"
-          : "No repository selected."}
-      </p>
-    );
-  }
-  if (rows.length === 0) {
-    return (
-      <p className="px-2 py-3 text-xs text-muted-foreground" role="status">
-        {describeEmptyBranchesSidebar(scope, query)}
-      </p>
-    );
-  }
-  return null;
-}
-
-function treeKeyAction(
-  key: string,
-  actions: {
-    readonly activate: (row: BranchesSidebarRow) => void;
-    readonly activeRow: BranchesSidebarRow | undefined;
-    readonly clearQuery: () => void;
-    readonly collapse: (sectionId: string) => void;
-    readonly expand: (sectionId: string) => void;
-    readonly hasQuery: boolean;
-    readonly rows: readonly BranchesSidebarRow[];
-    readonly setActive: (rowId: string | undefined) => void;
-    readonly toggleHistoryRef: (
-      row: Extract<BranchesSidebarRow, { kind: "ref" }>,
-    ) => void;
-  },
-): boolean {
-  const { activeRow, rows } = actions;
-  switch (key) {
-    case "ArrowDown":
-      actions.setActive(stepRow(rows, activeRow?.id, 1));
-      return true;
-    case "ArrowUp":
-      actions.setActive(stepRow(rows, activeRow?.id, -1));
-      return true;
-    case "Home":
-      actions.setActive(rows[0]?.id);
-      return true;
-    case "End":
-      actions.setActive(rows.at(-1)?.id);
-      return true;
-    case "ArrowRight":
-      if (activeRow?.kind !== "section") return false;
-      if (activeRow.expanded) actions.setActive(stepRow(rows, activeRow.id, 1));
-      else actions.expand(activeRow.sectionId);
-      return true;
-    case "ArrowLeft":
-      if (activeRow === undefined) return false;
-      if (activeRow.kind === "ref")
-        actions.setActive(sectionRowId(activeRow.sectionId));
-      else actions.collapse(activeRow.sectionId);
-      return true;
-    case "Enter":
-      if (activeRow === undefined) return false;
-      actions.activate(activeRow);
-      return true;
-    case " ":
-      if (activeRow === undefined) return false;
-      if (activeRow.kind === "ref") actions.toggleHistoryRef(activeRow);
-      else actions.activate(activeRow);
-      return true;
-    case "Escape":
-      if (!actions.hasQuery) return false;
-      actions.clearQuery();
-      return true;
-    default:
-      return false;
-  }
 }
