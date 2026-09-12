@@ -25,7 +25,6 @@ export function useRepositoryRefsActions({
   const [worktreePaths, setWorktreePaths] = useState<
     ReadonlyMap<string, string>
   >(() => new Map());
-  const [branchesFocusRequest, setBranchesFocusRequest] = useState(0);
 
   useEffect(() => {
     session.repositoryRefs.select(selectedRepositoryId);
@@ -82,18 +81,12 @@ export function useRepositoryRefsActions({
     ],
   );
 
-  const focusBranchesSidebar = useCallback(() => {
-    setBranchesFocusRequest((current) => current + 1);
-  }, []);
-
   const retryRefs = useCallback(() => {
     void session.repositoryRefs.refresh().catch(() => undefined);
   }, [session.repositoryRefs]);
 
   return {
     activeWorktreePath,
-    branchesFocusRequest,
-    focusBranchesSidebar,
     refs,
     retryRefs,
     selectRef,

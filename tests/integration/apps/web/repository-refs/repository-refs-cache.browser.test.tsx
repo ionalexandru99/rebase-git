@@ -5,15 +5,12 @@ import { expect, it, vi } from "vitest";
 import { render } from "vitest-browser-react";
 import { createBrowserHistoryFilterStore } from "#web/features/commit-graph/scope/browser-history-filter-store";
 import { resolveHistoryScope } from "#web/features/commit-graph/scope/history-scope";
-import { browserKeyboardShortcutHost } from "#web/features/keyboard-shortcuts/browser-keyboard-shortcut-host";
-import { createKeyboardShortcutStore } from "#web/features/keyboard-shortcuts/keyboard-shortcut-store";
 import { storeRepositoryHistoryPage } from "#web/features/repository-history/replica/repository-history-store";
 import { RepositoryHistoryOffline } from "#web/features/repository-history/repository-history-reader.contract";
 import {
   cacheRepositoryRefs,
   readCachedRepositoryRefs,
 } from "#web/features/repository-refs/browser-repository-refs-cache";
-import { KeyboardShortcutsProvider } from "#web-ui/features/keyboard-shortcuts/keyboard-shortcuts-provider";
 import { RepositoryWorkspace } from "#web-ui/features/repository-workspace/repository-workspace";
 
 it("restores complete Automatic metadata and isolates real environment and repository identities", async () => {
@@ -86,35 +83,23 @@ it.each(["Automatic", "Custom"] as const)(
       },
     });
     const screen = await render(
-      <KeyboardShortcutsProvider
-        runtime={{
-          host: browserKeyboardShortcutHost(),
-          store: createKeyboardShortcutStore({
-            getItem: () => null,
-            setItem: () => undefined,
-            removeItem: () => undefined,
-          }),
-        }}
-      >
-        <div style={{ height: 720, width: 1280 }}>
-          <RepositoryWorkspace
-            activeWorktreePath="/feature"
-            branchesFocusRequest={0}
-            environmentId={environmentId}
-            logicalRepositoryId={logicalId}
-            repositoryId={refs.repositoryId}
-            repositoryName="Cached repository"
-            historyReader={reader}
-            refs={{
-              checkingOut: false,
-              repositoryId: refs.repositoryId,
-              status: "loading",
-            }}
-            retryRefs={() => undefined}
-            selectRef={() => undefined}
-          />
-        </div>
-      </KeyboardShortcutsProvider>,
+      <div style={{ height: 720, width: 1280 }}>
+        <RepositoryWorkspace
+          activeWorktreePath="/feature"
+          environmentId={environmentId}
+          logicalRepositoryId={logicalId}
+          repositoryId={refs.repositoryId}
+          repositoryName="Cached repository"
+          historyReader={reader}
+          refs={{
+            checkingOut: false,
+            repositoryId: refs.repositoryId,
+            status: "loading",
+          }}
+          retryRefs={() => undefined}
+          selectRef={() => undefined}
+        />
+      </div>,
     );
     await expect
       .element(screen.getByRole("row", { name: /^Cached commit,/ }))

@@ -1,10 +1,8 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { page, userEvent } from "vitest/browser";
+import { page } from "vitest/browser";
 import { render } from "vitest-browser-react";
-import { createKeyboardShortcutStore } from "#web/features/keyboard-shortcuts/keyboard-shortcut-store";
 import { createWorkspacePanelStore } from "#web/features/workspace-panel/persistence/workspace-panel-store";
 import { ResizablePanel } from "#web-ui/components/ui/resizable";
-import { KeyboardShortcutsProvider } from "#web-ui/features/keyboard-shortcuts/keyboard-shortcuts-provider";
 import { WorkspacePanel } from "#web-ui/features/workspace-panel/index";
 
 describe("workspace panel", () => {
@@ -33,29 +31,6 @@ describe("workspace panel", () => {
     expect(
       page.getByRole("button", { name: "Graph selection" }).element(),
     ).toBe(graph);
-  });
-
-  it("supports configurable shortcuts without activating unavailable features", async () => {
-    const { shortcuts } = await renderPanel();
-    await page.getByRole("button", { name: "Show side panel" }).click();
-    shortcuts.setBinding("workspacePanel.toggle", {
-      key: "p",
-      modifiers: ["Alt", "Shift"],
-    });
-    shortcuts.setBinding("workspacePanel.openTab", {
-      key: "o",
-      modifiers: ["Alt", "Shift"],
-    });
-    await userEvent.keyboard("{Alt>}{Shift>}p{/Shift}{/Alt}");
-    await expect
-      .element(page.getByRole("button", { name: "Show side panel" }))
-      .toHaveAttribute("aria-keyshortcuts", "Alt+Shift+p");
-    await userEvent.keyboard("{Alt>}{Shift>}o{/Shift}{/Alt}");
-    const heading = page.getByRole("heading", { name: "Open a tab" });
-    await expect.element(heading).toHaveFocus();
-    await userEvent.keyboard("{Enter}");
-    await expect.element(heading).toBeVisible();
-    await expect.element(page.getByRole("tab")).not.toBeInTheDocument();
   });
 
   it("restores panel preferences without reopening unavailable saved tabs", async () => {
@@ -105,30 +80,21 @@ function panelWidth() {
 }
 
 async function renderPanel(scopeKey = "panel-test") {
-  const shortcuts = createKeyboardShortcutStore(localStorage);
   const tree = (scopeKey: string) => (
-    <KeyboardShortcutsProvider
-      runtime={{
-        host: { client: "browser", platform: "other" },
-        store: shortcuts,
-      }}
-    >
-      <div className="dark" style={{ width: 1000, height: 600 }}>
-        <WorkspacePanel.Provider scopeKey={scopeKey} commandsActive>
-          <WorkspacePanel.Group>
-            <ResizablePanel id="graph" minSize="20%">
-              <WorkspacePanel.Toggle />
-              <button type="button">Graph selection</button>
-            </ResizablePanel>
-            <WorkspacePanel.Pane />
-          </WorkspacePanel.Group>
-        </WorkspacePanel.Provider>
-      </div>
-    </KeyboardShortcutsProvider>
+    <div className="dark" style={{ width: 1000, height: 600 }}>
+      <WorkspacePanel.Provider scopeKey={scopeKey}>
+        <WorkspacePanel.Group>
+          <ResizablePanel id="graph" minSize="20%">
+            <WorkspacePanel.Toggle />
+            <button type="button">Graph selection</button>
+          </ResizablePanel>
+          <WorkspacePanel.Pane />
+        </WorkspacePanel.Group>
+      </WorkspacePanel.Provider>
+    </div>
   );
   const view = await render(tree(scopeKey));
   return {
-    shortcuts,
     view,
     switchScope: (next: string) => view.rerender(tree(next)),
   };

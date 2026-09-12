@@ -3,27 +3,13 @@ import type {
   RepositoryCommit,
   RepositoryRefTarget,
 } from "@rebase/contracts";
-import type {
-  KeyboardShortcutBindings,
-  KeyboardShortcutCommandId,
-  KeyboardShortcutPlatform,
-} from "#web/features/keyboard-shortcuts/keyboard-shortcuts.contract";
 
 export type GraphCommandEnvironment = Omit<
   GraphCommandContext,
   "selectedOids" | "invokingOid" | "ref"
 >;
-export interface GraphCommandShortcuts {
-  readonly bindings: KeyboardShortcutBindings;
-  readonly platform: KeyboardShortcutPlatform;
-}
-
-export type GraphShortcutCommandId = Extract<
-  KeyboardShortcutCommandId,
-  `graph.${string}`
->;
 export type GraphCommandId =
-  | GraphShortcutCommandId
+  | "graph.fetch"
   | "graph.copySha"
   | "graph.copySubject"
   | "history.toggleRef";
@@ -53,14 +39,6 @@ export interface GraphCommandDescriptor {
   readonly order: number;
   readonly enabled: boolean;
   readonly disabledReason?: string;
-  readonly shortcutId?: GraphShortcutCommandId;
-}
-
-export interface GraphCommandAction {
-  readonly execute: (context: GraphCommandContext) => void | Promise<void>;
-  readonly disabledReason?: (
-    context: GraphCommandContext,
-  ) => string | undefined;
 }
 
 export interface GraphCommandHandlers {
@@ -70,9 +48,7 @@ export interface GraphCommandHandlers {
     target: RepositoryRefTarget,
     context: GraphCommandContext,
   ) => void | Promise<void>;
-  readonly actions?: Partial<
-    Readonly<Record<GraphShortcutCommandId, GraphCommandAction>>
-  >;
+  readonly fetch?: (context: GraphCommandContext) => void | Promise<void>;
 }
 
 export type GraphCommandResult =

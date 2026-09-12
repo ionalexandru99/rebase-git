@@ -3,9 +3,7 @@ import type {
   GraphCommandContext,
   GraphCommandId,
   GraphCommandRegistry,
-  GraphCommandShortcuts,
 } from "#web/features/commit-commands/graph-command.contract";
-import { keyboardShortcutLabel } from "#web/features/keyboard-shortcuts/keyboard-shortcuts";
 import {
   ContextMenu,
   ContextMenuContent,
@@ -18,7 +16,6 @@ export function CommitCommandMenu({
   context,
   registry,
   execute,
-  shortcuts,
   restoreFocus,
   tabIndex = -1,
 }: {
@@ -30,7 +27,6 @@ export function CommitCommandMenu({
     id: GraphCommandId,
     context: GraphCommandContext,
   ) => Promise<void>;
-  readonly shortcuts: GraphCommandShortcuts | undefined;
   readonly restoreFocus: () => void;
 }) {
   if (context === undefined) return children;
@@ -57,14 +53,6 @@ export function CommitCommandMenu({
               onClick={() => void execute(command.id, context)}
             >
               <span className="flex-1">{command.label}</span>
-              {shortcuts !== undefined && command.shortcutId !== undefined ? (
-                <span className="ml-3 text-[.85rem] text-muted-foreground">
-                  {keyboardShortcutLabel(
-                    shortcuts.bindings[command.shortcutId],
-                    shortcuts.platform,
-                  )}
-                </span>
-              ) : null}
             </ContextMenuItem>
           ))}
       </ContextMenuContent>

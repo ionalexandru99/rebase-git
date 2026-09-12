@@ -1,7 +1,6 @@
 import type { KeyboardEvent, MouseEvent } from "react";
 import type { CommitGraphSelectionMode } from "#web/features/commit-graph/commit-selection.contract";
 import { usePagedGraphSelection } from "#web/features/commit-graph/hooks/use-paged-graph-selection";
-import type { CommitLaneRow } from "#web/features/commit-graph/layout/commit-lanes";
 import type {
   RepositoryHistoryQuery,
   RepositoryHistoryReader,
@@ -12,7 +11,6 @@ export function useCommitGraphSelection({
   query,
   loading = false,
   oids,
-  laneRows,
   pageSize,
   scrollToIndex,
   toggleMerge,
@@ -21,7 +19,6 @@ export function useCommitGraphSelection({
   oldestLoadedOffset,
   viewEpoch = 0,
   requestMove,
-  requestLaneMove,
   onSelectionIntent,
 }: {
   readonly reader:
@@ -30,7 +27,6 @@ export function useCommitGraphSelection({
   readonly query?: RepositoryHistoryQuery | undefined;
   readonly loading?: boolean;
   readonly oids: readonly string[];
-  readonly laneRows: readonly CommitLaneRow[];
   readonly pageSize: number;
   readonly scrollToIndex: (index: number) => void;
   readonly toggleMerge: (oid: string, expand: boolean) => void;
@@ -39,7 +35,6 @@ export function useCommitGraphSelection({
   readonly oldestLoadedOffset?: number;
   readonly viewEpoch?: number;
   readonly onSelectionIntent?: () => void;
-  readonly requestLaneMove?: (offset: number, direction: -1 | 1) => void;
   readonly requestMove?: (
     offset: number,
     mode: CommitGraphSelectionMode,
@@ -65,26 +60,6 @@ export function useCommitGraphSelection({
     if (oid === undefined) return;
     select(oid, mode);
     scrollToIndex(bounded);
-  };
-  const moveInLane = (direction: -1 | 1) => {
-    const activeIndex = selection.activeIndex;
-    if (requestLaneMove !== undefined) {
-      model.cancelPending();
-      requestLaneMove(activeIndex + startOffset, direction);
-      return;
-    }
-    const lane = laneRows[activeIndex]?.nodeLaneId;
-    if (lane === undefined) return;
-    for (
-      let index = activeIndex + direction;
-      index >= 0 && index < laneRows.length;
-      index += direction
-    ) {
-      if (laneRows[index]?.nodeLaneId === lane) {
-        move(index);
-        return;
-      }
-    }
   };
   const onKeyDown = (event: KeyboardEvent<HTMLElement>) => {
     if (event.defaultPrevented || event.nativeEvent.isComposing) return;
@@ -152,7 +127,6 @@ export function useCommitGraphSelection({
     selection,
     selected,
     select,
-    moveInLane,
     onKeyDown,
     onClick,
     reset: model.reset,

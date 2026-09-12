@@ -1,10 +1,8 @@
 import { IconX } from "@tabler/icons-react";
-import { keyboardShortcutAria } from "#web/features/keyboard-shortcuts/keyboard-shortcuts";
 import type { WorkspacePanelKind } from "#web/features/workspace-panel/workspace-panel.contract";
 import { cn } from "#web/lib/utils";
 import { Button } from "#web-ui/components/ui/button";
 import { TabsTrigger } from "#web-ui/components/ui/tabs";
-import { useKeyboardShortcuts } from "#web-ui/features/keyboard-shortcuts/keyboard-shortcuts-provider";
 import { workspacePanelFeatures } from "#web-ui/features/workspace-panel/components/workspace-panel-kinds";
 import { useWorkspacePanel } from "#web-ui/features/workspace-panel/workspace-panel-provider";
 
@@ -14,7 +12,6 @@ export function WorkspacePanelTab({
   readonly kind: WorkspacePanelKind;
 }) {
   const panel = useWorkspacePanel();
-  const { bindings, platform } = useKeyboardShortcuts();
   const feature = workspacePanelFeatures[kind];
   const active = panel.state.active === kind;
   return (
@@ -28,14 +25,6 @@ export function WorkspacePanelTab({
     >
       <Button
         aria-label={`Close ${feature.label} tab`}
-        aria-keyshortcuts={
-          active
-            ? keyboardShortcutAria(
-                bindings["workspacePanel.closeTab"],
-                platform,
-              )
-            : undefined
-        }
         size="icon-xs"
         variant="ghost"
         className="size-4 text-inherit hover:bg-muted sm:size-4"

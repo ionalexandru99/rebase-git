@@ -1,9 +1,8 @@
 import type { RepositoryCommit } from "@rebase/contracts";
-import { act, createRef, StrictMode } from "react";
+import { act, StrictMode } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { render } from "vitest-browser-react";
-import type { RepositoryHistorySearchActions } from "#web/features/repository-history/search/components/repository-history-search-controls.contract";
 import type {
   RepositoryHistorySearch,
   RepositoryHistorySearchResult,
@@ -17,12 +16,6 @@ const snapshot = {
   synchronization: "complete" as const,
   synchronizedCommitCount: 100,
 };
-const bindings = {
-  open: { shortcut: "Ctrl F", ariaKeyShortcuts: "Control+F" },
-  next: { shortcut: "F3", ariaKeyShortcuts: "F3" },
-  previous: { shortcut: "Shift F3", ariaKeyShortcuts: "Shift+F3" },
-};
-
 describe("history search controls", () => {
   it("loads further matches by scrolling without opening a commit", async () => {
     const reader = {
@@ -120,7 +113,6 @@ describe("history search controls", () => {
         reader={reader}
         snapshot={snapshot}
         onNavigate={vi.fn()}
-        bindings={bindings}
         offline
       />,
     );
@@ -144,13 +136,9 @@ describe("history search controls", () => {
     await expect
       .element(page.getByRole("searchbox"))
       .toHaveAttribute("maxlength", "256");
-    await expect
-      .element(page.getByRole("searchbox"))
-      .toHaveAttribute("aria-keyshortcuts", "Control+F");
   });
 
-  it("uses the same navigation handlers for result clicks, Enter, Shift Enter and external shortcuts", async () => {
-    const actions = createRef<RepositoryHistorySearchActions>();
+  it("uses the same navigation handlers for result clicks, Enter, Shift Enter", async () => {
     const reader = {
       search: vi
         .fn<RepositoryHistorySearch["search"]>()
@@ -163,11 +151,9 @@ describe("history search controls", () => {
     const onNavigate = vi.fn(async () => undefined);
     await render(
       <RepositoryHistorySearchControls
-        ref={actions}
         reader={reader}
         snapshot={snapshot}
         onNavigate={onNavigate}
-        bindings={bindings}
       />,
     );
     const input = page.getByRole("searchbox");
@@ -199,14 +185,14 @@ describe("history search controls", () => {
         expect.any(AbortSignal),
       ),
     );
-    actions.current?.next();
+    await userEvent.keyboard("{Enter}");
     await vi.waitFor(() =>
       expect(onNavigate).toHaveBeenLastCalledWith(
         commit(2).oid,
         expect.any(AbortSignal),
       ),
     );
-    actions.current?.next();
+    await userEvent.keyboard("{Enter}");
     await vi.waitFor(() =>
       expect(onNavigate).toHaveBeenLastCalledWith(
         commit(3).oid,
@@ -217,13 +203,13 @@ describe("history search controls", () => {
       { text: "history", cursor: "next", limit: 20 },
       expect.any(AbortSignal),
     );
-    actions.current?.previous();
+    await userEvent.keyboard("{Shift>}{Enter}{/Shift}");
     await userEvent.keyboard("{Escape}");
     await expect
       .element(page.getByRole("dialog", { name: "History search results" }))
       .not.toBeInTheDocument();
     await expect.element(input).toHaveFocus();
-    actions.current?.open();
+    await input.click();
     await expect
       .element(page.getByRole("dialog", { name: "History search results" }))
       .toBeVisible();

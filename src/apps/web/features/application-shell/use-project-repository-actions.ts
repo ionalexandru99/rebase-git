@@ -139,24 +139,6 @@ export function useProjectRepositoryActions({
     [setNavigation],
   );
 
-  const closeSelectedRepository = useCallback(() => {
-    setNavigation((current) => {
-      if (current.selectedRepositoryId === undefined) return current;
-      const environment = current.environments.find((candidate) =>
-        candidate.repositories.some(
-          (repository) => repository.id === current.selectedRepositoryId,
-        ),
-      );
-      return environment === undefined
-        ? current
-        : removeProjectRepository(
-            current,
-            environment.id,
-            current.selectedRepositoryId,
-          );
-    });
-  }, [setNavigation]);
-
   const removeRepository = useCallback(
     (repository: OpenProjectRepository) => {
       return session.repositoryCatalog
@@ -188,7 +170,6 @@ export function useProjectRepositoryActions({
 
   return {
     browseRepository,
-    closeSelectedRepository,
     closeSidebarRepository,
     copyRepositoryPath,
     expandedEnvironmentIds,

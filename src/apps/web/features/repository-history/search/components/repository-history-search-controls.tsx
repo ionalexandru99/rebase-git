@@ -1,18 +1,7 @@
 import { Popover } from "@base-ui/react/popover";
 import { IconSearch, IconX } from "@tabler/icons-react";
-import {
-  type KeyboardEvent,
-  type Ref,
-  useId,
-  useImperativeHandle,
-  useRef,
-  useState,
-} from "react";
+import { type KeyboardEvent, useId, useRef, useState } from "react";
 import type { RepositoryHistorySnapshot } from "#web/features/repository-history/repository-history-reader.contract";
-import type {
-  RepositoryHistorySearchActions,
-  RepositoryHistorySearchBindings,
-} from "#web/features/repository-history/search/components/repository-history-search-controls.contract";
 import { useRepositoryHistorySearch } from "#web/features/repository-history/search/hooks/use-repository-history-search";
 import { useRepositoryHistorySearchModel } from "#web/features/repository-history/search/hooks/use-repository-history-search-model";
 import type { RepositoryHistorySearch } from "#web/features/repository-history/search/repository-history-search.contract";
@@ -25,16 +14,12 @@ export function RepositoryHistorySearchControls({
   reader,
   snapshot,
   onNavigate,
-  bindings = {},
   offline = false,
-  ref,
 }: {
   readonly reader: RepositoryHistorySearch;
   readonly snapshot: RepositoryHistorySnapshot;
   readonly onNavigate: (oid: string, signal: AbortSignal) => Promise<void>;
-  readonly bindings?: RepositoryHistorySearchBindings;
   readonly offline?: boolean;
-  readonly ref?: Ref<RepositoryHistorySearchActions>;
 }) {
   const model = useRepositoryHistorySearchModel(
     reader,
@@ -45,9 +30,7 @@ export function RepositoryHistorySearchControls({
     <RepositoryHistorySearchView
       model={model}
       snapshot={snapshot}
-      bindings={bindings}
       offline={offline}
-      {...(ref === undefined ? {} : { ref })}
     />
   );
 }
@@ -55,15 +38,11 @@ export function RepositoryHistorySearchControls({
 export function RepositoryHistorySearchView({
   model,
   snapshot,
-  bindings = {},
   offline = false,
-  ref,
 }: {
   readonly model: RepositoryHistorySearchModel | undefined;
   readonly snapshot: RepositoryHistorySnapshot;
-  readonly bindings?: RepositoryHistorySearchBindings;
   readonly offline?: boolean;
-  readonly ref?: Ref<RepositoryHistorySearchActions>;
 }) {
   const input = useRef<HTMLInputElement>(null);
   const resultsId = useId();
@@ -77,12 +56,6 @@ export function RepositoryHistorySearchView({
     setOpened(false);
     input.current?.focus();
   };
-  useImperativeHandle(ref, () => ({
-    open,
-    close,
-    next: search.next,
-    previous: search.previous,
-  }));
   const onKeyDown = (event: KeyboardEvent) => {
     if (event.nativeEvent.isComposing) return;
     if (event.key === "Escape") {
@@ -125,7 +98,6 @@ export function RepositoryHistorySearchView({
           aria-expanded={showPopup}
           aria-busy={busy}
           aria-haspopup="dialog"
-          aria-keyshortcuts={bindings.open?.ariaKeyShortcuts}
           aria-label="Search history"
           className="h-7 pr-7 pl-7 text-[.85rem] md:text-[.85rem]"
           maxLength={256}

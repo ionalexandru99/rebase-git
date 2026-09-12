@@ -26,7 +26,6 @@ import {
   toggleSection,
 } from "#web/features/branches-sidebar/branches-sidebar-state";
 import { historyRefKey } from "#web/features/commit-graph/index";
-import { keyboardShortcutAria } from "#web/features/keyboard-shortcuts/keyboard-shortcuts";
 import type { RepositoryRefsSnapshot } from "#web/features/repository-refs/repository-refs-controller.contract";
 import { Button } from "#web-ui/components/ui/button";
 import { Input } from "#web-ui/components/ui/input";
@@ -37,7 +36,6 @@ import {
 } from "#web-ui/features/branches-sidebar/branches-sidebar-rows";
 import { BranchesSidebarScopeFilter } from "#web-ui/features/branches-sidebar/branches-sidebar-scope-filter";
 import { BranchSelectionDetails } from "#web-ui/features/branches-sidebar/components/branch-selection-details";
-import { useKeyboardShortcuts } from "#web-ui/features/keyboard-shortcuts/keyboard-shortcuts-provider";
 
 const rowHeight = 32;
 const overscanRows = 12;
@@ -59,8 +57,6 @@ export function BranchesSidebar({
   readonly selectedHistoryRefKeys?: ReadonlySet<string>;
   readonly snapshot: RepositoryRefsSnapshot;
 }): JSX.Element {
-  const { bindings, platform } = useKeyboardShortcuts();
-  const focusBinding = bindings["branches.focusSidebar"];
   const [query, setQuery] = useState("");
   const [settledQuery, setSettledQuery] = useState("");
   useEffect(() => {
@@ -147,10 +143,6 @@ export function BranchesSidebar({
         setExpandedSections((current) =>
           current.has(sectionId) ? current : toggleSection(current, sectionId),
         ),
-      focusFilter: () => {
-        filterInputRef.current?.focus();
-        filterInputRef.current?.select();
-      },
       hasQuery: query.length > 0,
       rows,
       setActive: setActiveRowId,
@@ -201,7 +193,6 @@ export function BranchesSidebar({
           className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground"
         />
         <Input
-          aria-keyshortcuts="/"
           aria-label="Filter branches"
           className="pl-9"
           onChange={(event) => setQuery(event.target.value)}
@@ -217,7 +208,6 @@ export function BranchesSidebar({
           activeRowId === undefined ? undefined : rowElementId(activeRowId)
         }
         aria-busy={snapshot.checkingOut}
-        aria-keyshortcuts={keyboardShortcutAria(focusBinding, platform)}
         aria-label="Branches"
         className={`min-h-0 flex-1 overflow-x-hidden overflow-y-auto [scrollbar-width:none] px-2 pb-2 outline-none [&::-webkit-scrollbar]:hidden focus-visible:ring-2 focus-visible:ring-sidebar-ring/40 ${snapshot.checkingOut ? "cursor-progress opacity-70" : ""}`}
         data-slot="branches-scroll"
@@ -335,7 +325,6 @@ function treeKeyAction(
     readonly clearQuery: () => void;
     readonly collapse: (sectionId: string) => void;
     readonly expand: (sectionId: string) => void;
-    readonly focusFilter: () => void;
     readonly hasQuery: boolean;
     readonly rows: readonly BranchesSidebarRow[];
     readonly setActive: (rowId: string | undefined) => void;
@@ -377,9 +366,6 @@ function treeKeyAction(
       if (activeRow === undefined) return false;
       if (activeRow.kind === "ref") actions.toggleHistoryRef(activeRow);
       else actions.activate(activeRow);
-      return true;
-    case "/":
-      actions.focusFilter();
       return true;
     case "Escape":
       if (!actions.hasQuery) return false;

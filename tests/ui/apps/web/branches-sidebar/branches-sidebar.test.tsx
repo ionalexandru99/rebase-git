@@ -3,35 +3,17 @@ import { describe, expect, it, vi } from "vitest";
 import { userEvent } from "vitest/browser";
 import { render } from "vitest-browser-react";
 import { historyRefKey } from "#web/features/commit-graph/scope/history-scope";
-import { defaultKeyboardShortcutBindings } from "#web/features/keyboard-shortcuts/keyboard-shortcuts";
-import type { KeyboardShortcutRuntime } from "#web/features/keyboard-shortcuts/keyboard-shortcuts.contract";
 import {
   RepositoryRefsBusy,
   type RepositoryRefsSnapshot,
   RepositoryRefsUnavailable,
 } from "#web/features/repository-refs/repository-refs-controller.contract";
 import { BranchesSidebar } from "#web-ui/features/branches-sidebar/branches-sidebar";
-import { KeyboardShortcutsProvider } from "#web-ui/features/keyboard-shortcuts/keyboard-shortcuts-provider";
 
 const repositoryId = "00000000-0000-4000-8000-000000000001";
 const mainPath = "/repo";
 const topicPath = "/repo/.worktrees/topic";
 const commit = "a".repeat(40);
-const shortcutSnapshot = {
-  bindings: defaultKeyboardShortcutBindings,
-  modifiedCommandIds: [],
-} as const;
-const shortcutRuntime: KeyboardShortcutRuntime = {
-  host: { client: "browser", platform: "other" },
-  store: {
-    getSnapshot: () => shortcutSnapshot,
-    resetAll: () => undefined,
-    resetBinding: () => undefined,
-    setBinding: () => undefined,
-    subscribe: () => () => undefined,
-  },
-};
-
 describe("branches sidebar", () => {
   it("distinguishes the current branch from linked worktrees and reveals checkout details on selection", async () => {
     const { screen } = await renderSidebar();
@@ -173,11 +155,6 @@ describe("branches sidebar", () => {
     await expect
       .element(screen.getByRole("treeitem", { name: "v1.0.0" }))
       .toBeVisible();
-
-    await userEvent.keyboard("/");
-    await expect
-      .element(screen.getByRole("textbox", { name: "Filter branches" }))
-      .toHaveFocus();
   });
 
   it("renders idle, loading, fetch error, and retry states", async () => {
@@ -265,21 +242,19 @@ function sidebarView(
   selectedHistoryRefKeys?: ReadonlySet<string>,
 ) {
   return (
-    <KeyboardShortcutsProvider runtime={shortcutRuntime}>
-      <div style={{ height: 480, width: 320 }}>
-        <BranchesSidebar
-          activeWorktreePath={mainPath}
-          focusRequest={focusRequest}
-          onRetry={callbacks.onRetry}
-          onSelectRef={callbacks.onSelectRef}
-          onToggleHistoryRef={callbacks.onToggleHistoryRef}
-          {...(selectedHistoryRefKeys === undefined
-            ? {}
-            : { selectedHistoryRefKeys })}
-          snapshot={currentSnapshot}
-        />
-      </div>
-    </KeyboardShortcutsProvider>
+    <div style={{ height: 480, width: 320 }}>
+      <BranchesSidebar
+        activeWorktreePath={mainPath}
+        focusRequest={focusRequest}
+        onRetry={callbacks.onRetry}
+        onSelectRef={callbacks.onSelectRef}
+        onToggleHistoryRef={callbacks.onToggleHistoryRef}
+        {...(selectedHistoryRefKeys === undefined
+          ? {}
+          : { selectedHistoryRefKeys })}
+        snapshot={currentSnapshot}
+      />
+    </div>
   );
 }
 

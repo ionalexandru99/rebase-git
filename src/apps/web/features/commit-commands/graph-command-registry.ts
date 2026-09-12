@@ -5,19 +5,7 @@ import type {
   GraphCommandId,
   GraphCommandRegistry,
   GraphCommandResult,
-  GraphShortcutCommandId,
 } from "#web/features/commit-commands/graph-command.contract";
-import { keyboardShortcutCommand } from "#web/features/keyboard-shortcuts/keyboard-shortcuts";
-
-const shortcutCommands: readonly GraphShortcutCommandId[] = [
-  "graph.focus",
-  "graph.search",
-  "graph.previousMatch",
-  "graph.nextMatch",
-  "graph.previousInLane",
-  "graph.nextInLane",
-  "graph.fetch",
-];
 
 export function createGraphCommandRegistry(
   handlers: GraphCommandHandlers,
@@ -51,20 +39,15 @@ export function createGraphCommandRegistry(
         enabled: true,
       });
     }
-    for (const [index, id] of shortcutCommands.entries()) {
-      const action = handlers.actions?.[id];
-      if (action === undefined) continue;
-      const disabledReason =
-        (id === "graph.fetch" ? fetchDisabledReason(context) : undefined) ??
-        action.disabledReason?.(context);
+    if (handlers.fetch !== undefined) {
+      const disabledReason = fetchDisabledReason(context);
       result.push({
-        id,
-        label: keyboardShortcutCommand(id).label,
+        id: "graph.fetch",
+        label: "Fetch",
         group: "Commit graph",
-        order: 20 + index,
+        order: 20,
         enabled: disabledReason === undefined,
         ...(disabledReason === undefined ? {} : { disabledReason }),
-        shortcutId: id,
       });
     }
     return result;
@@ -98,7 +81,7 @@ export function createGraphCommandRegistry(
     } else if (id === "history.toggleRef") {
       if (context.ref !== undefined)
         await handlers.toggleHistoryRef?.(context.ref.target, context);
-    } else await handlers.actions?.[id]?.execute(context);
+    } else await handlers.fetch?.(context);
     return { _tag: "Executed" };
   }
 

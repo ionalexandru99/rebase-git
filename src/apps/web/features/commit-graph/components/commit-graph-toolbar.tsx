@@ -26,7 +26,6 @@ function Fetch({
 }) {
   return (
     <Button
-      aria-keyshortcuts={fetchAction.ariaKeyShortcuts}
       className="h-7 gap-1.5 text-[.85rem] sm:text-[.85rem]"
       disabled={fetchAction.disabled || fetching}
       onClick={fetchAction.execute}

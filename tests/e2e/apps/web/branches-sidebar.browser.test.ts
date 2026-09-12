@@ -55,10 +55,12 @@ test("opens a repository and checks out a local branch", async ({ page }) => {
       await reopened.close();
     }
 
-    await page.keyboard.press("Control+o");
+    await page.getByRole("button", { name: "Browse files" }).click();
     const picker = page.getByRole("dialog", { name: "Choose repository" });
     await picker.getByRole("button", { name: /^rebase-test Folder/ }).click();
-    await page.keyboard.press("Control+Enter");
+    await page
+      .getByRole("button", { name: "Open repository", exact: true })
+      .click();
     await expect(picker).not.toBeVisible();
     await expect(
       projects.getByRole("button", { name: "Open rebase-test" }),
@@ -178,12 +180,14 @@ async function currentBranch(path: string) {
 }
 
 async function openRepository(page: Page, name: string) {
-  await page.keyboard.press("Control+o");
+  await page.getByRole("button", { name: "Browse files" }).click();
   const picker = page.getByRole("dialog", { name: "Choose repository" });
   await picker
     .getByRole("button", { name: new RegExp(`^${name} Folder`) })
     .click();
-  await page.keyboard.press("Control+Enter");
+  await page
+    .getByRole("button", { name: "Open repository", exact: true })
+    .click();
   await expect(picker).not.toBeVisible();
 }
 

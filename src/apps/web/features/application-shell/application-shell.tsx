@@ -10,15 +10,12 @@ import {
 } from "react";
 import type { PanelImperativeHandle } from "react-resizable-panels";
 import { environmentSessionPresentation } from "#web/features/application-shell/environment-session-presentation";
-import { useApplicationShortcuts } from "#web/features/application-shell/use-application-shortcuts";
 import { useProjectRepositoryActions } from "#web/features/application-shell/use-project-repository-actions";
 import { useRepositoryRefsActions } from "#web/features/application-shell/use-repository-refs-actions";
 import type { LocalEnvironmentSession } from "#web/features/local-environment-session/local-environment-session.contract";
 import type { OpenProjectEnvironment } from "#web/features/open-project/open-project.contract";
 import type { ProjectNavigationState } from "#web/features/project-navigation/project-navigation.contract";
 import {
-  selectProjectRepositoryByOffset,
-  selectProjectRepositoryByPosition,
   setEnvironmentAvailability,
   setProjectSidebarCollapsed,
   showOpenProject,
@@ -31,7 +28,6 @@ import {
   ResizablePanel,
   ResizablePanelGroup,
 } from "#web-ui/components/ui/resizable";
-import { useKeyboardShortcuts } from "#web-ui/features/keyboard-shortcuts/keyboard-shortcuts-provider";
 import { OpenProjectScreen } from "#web-ui/features/open-project/open-project-screen";
 import { ProjectsSidebar } from "#web-ui/features/project-navigation/projects-sidebar";
 import { RepositoryFolderPicker } from "#web-ui/features/repository-folder-picker/repository-folder-picker";
@@ -64,7 +60,6 @@ export function ApplicationShell({
     session.repositoryCatalog.getSnapshot,
   );
   const environmentStatus = environmentSessionPresentation(sessionState);
-  const shortcuts = useKeyboardShortcuts();
   const lastConnectedEnvironmentId = useRef<string | undefined>(undefined);
   if (sessionState._tag === "Connected") {
     lastConnectedEnvironmentId.current = sessionState.environmentId;
@@ -94,7 +89,6 @@ export function ApplicationShell({
       closeRepositorySettings();
   }, [repositorySettingsId, repositoryCatalog, closeRepositorySettings]);
   const [openProjectRequest, setOpenProjectRequest] = useState(0);
-  const [sidebarFilterRequest, setSidebarFilterRequest] = useState(0);
   const [navigation, setNavigation] = useState<ProjectNavigationState>(() => ({
     environments: [
       {
@@ -158,7 +152,6 @@ export function ApplicationShell({
   }, []);
   const {
     browseRepository,
-    closeSelectedRepository,
     closeSidebarRepository,
     copyRepositoryPath,
     expandedEnvironmentIds,
@@ -180,8 +173,6 @@ export function ApplicationShell({
   });
   const {
     activeWorktreePath,
-    branchesFocusRequest,
-    focusBranchesSidebar,
     refs: repositoryRefs,
     retryRefs,
     selectRef,
@@ -190,57 +181,6 @@ export function ApplicationShell({
     selectedRepositoryId: navigation.selectedRepositoryId,
     session,
   });
-  const toggleSidebar = useCallback(() => {
-    if (sidebarRef.current?.isCollapsed()) {
-      expandSidebar();
-    } else {
-      collapseSidebar();
-    }
-  }, [collapseSidebar, expandSidebar]);
-  const focusSidebarFilter = useCallback(() => {
-    setSettingsOpen(false);
-    expandSidebar();
-    setSidebarFilterRequest((current) => current + 1);
-  }, [expandSidebar]);
-  const updateNavigation = useCallback(
-    (update: (current: ProjectNavigationState) => ProjectNavigationState) => {
-      setRepositorySettingsId(undefined);
-      setNavigation((current) =>
-        update(
-          navigationWithAvailability(current, environmentStatus.availability),
-        ),
-      );
-    },
-    [environmentStatus.availability],
-  );
-  const selectPreviousRepository = useCallback(
-    () =>
-      updateNavigation((current) =>
-        selectProjectRepositoryByOffset(current, -1),
-      ),
-    [updateNavigation],
-  );
-  const selectNextRepository = useCallback(
-    () =>
-      updateNavigation((current) =>
-        selectProjectRepositoryByOffset(current, 1),
-      ),
-    [updateNavigation],
-  );
-  const selectRepositoryByPosition = useCallback(
-    (position: number) =>
-      updateNavigation((current) =>
-        selectProjectRepositoryByPosition(current, position),
-      ),
-    [updateNavigation],
-  );
-  const selectableRepositoryCount = visibleNavigation.environments.reduce(
-    (count, environment) =>
-      environment.availability === "available"
-        ? count + environment.repositories.length
-        : count,
-    0,
-  );
   const selectedRepository = repositoryCatalog.repositories.find(
     (repository) => repository.id === navigation.selectedRepositoryId,
   );
@@ -285,35 +225,6 @@ export function ApplicationShell({
       : (settingsRepository?.logicalRepositoryId ?? settingsRepository?.id),
   );
 
-  const openSelectedRepositorySettings = useCallback(() => {
-    if (navigation.selectedRepositoryId !== undefined)
-      openRepositorySettings(localEnvironmentId, {
-        id: navigation.selectedRepositoryId,
-      });
-  }, [navigation.selectedRepositoryId, openRepositorySettings]);
-
-  useApplicationShortcuts({
-    availability: environmentStatus.availability,
-    closeSelectedRepository,
-    folderPickerOpen,
-    focusBranchesSidebar,
-    focusSidebarFilter,
-    hasSelectedRepository:
-      navigation.workspaceView === "repository" &&
-      navigation.selectedRepositoryId !== undefined,
-    openFolderPicker: browseRepository,
-    openSettings: setSettingsOpen,
-    openRepositorySettings: openSelectedRepositorySettings,
-    repositorySettingsOpen,
-    selectNextRepository,
-    selectPreviousRepository,
-    selectRepositoryByPosition,
-    selectableRepositoryCount,
-    settingsOpen,
-    showOpenProject: showOpenProjectScreen,
-    toggleSidebar,
-  });
-
   return (
     <div className="h-svh min-h-80 w-full overflow-hidden bg-background">
       <section
@@ -343,7 +254,6 @@ export function ApplicationShell({
                 collapse={collapseSidebar}
                 environmentStatus={environmentStatus}
                 expand={expandSidebar}
-                filterRequest={sidebarFilterRequest}
                 navigation={visibleNavigation}
                 openProject={showOpenProjectScreen}
                 openSettings={() => setSettingsOpen(true)}
@@ -368,7 +278,6 @@ export function ApplicationShell({
               >
                 {navigation.workspaceView === "open-project" ? (
                   <OpenProjectScreen
-                    active={!settingsOpen && !repositorySettingsOpen}
                     browseAvailable={
                       environmentStatus.availability === "available"
                     }
@@ -393,14 +302,7 @@ export function ApplicationShell({
                         : []
                     }
                     connected={sessionState._tag === "Connected"}
-                    commandsActive={
-                      !settingsOpen &&
-                      !repositorySettingsOpen &&
-                      !folderPickerOpen
-                    }
-                    shortcuts={shortcuts}
                     activeWorktreePath={activeWorktreePath}
-                    branchesFocusRequest={branchesFocusRequest}
                     environmentId={historyEnvironmentId}
                     historyReader={graphReader}
                     logicalRepositoryId={

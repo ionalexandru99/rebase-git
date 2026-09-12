@@ -6,11 +6,8 @@ import {
 import { describe, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { render } from "vitest-browser-react";
-import { browserKeyboardShortcutHost } from "#web/features/keyboard-shortcuts/browser-keyboard-shortcut-host";
-import { createKeyboardShortcutStore } from "#web/features/keyboard-shortcuts/keyboard-shortcut-store";
 import type { LocalEnvironmentSession } from "#web/features/local-environment-session/local-environment-session.contract";
 import { ApplicationShell } from "#web-ui/features/application-shell/application-shell";
-import { KeyboardShortcutsProvider } from "#web-ui/features/keyboard-shortcuts/keyboard-shortcuts-provider";
 import { RepositoryWorkspace } from "#web-ui/features/repository-workspace/repository-workspace";
 
 describe("application shell", () => {
@@ -22,13 +19,11 @@ describe("application shell", () => {
     );
     connected.finishSynchronization();
     await render(
-      <KeyboardShortcutsProvider runtime={keyboardShortcutRuntime()}>
-        <ApplicationShell
-          desktopUpdates={undefined}
-          productVersion="test"
-          session={connected.session}
-        />
-      </KeyboardShortcutsProvider>,
+      <ApplicationShell
+        desktopUpdates={undefined}
+        productVersion="test"
+        session={connected.session}
+      />,
     );
     await page
       .getByRole("button", { name: "Repository settings for rebase-test" })
@@ -54,13 +49,11 @@ describe("application shell", () => {
     const connected = connectedSession();
     connected.finishSynchronization();
     await render(
-      <KeyboardShortcutsProvider runtime={keyboardShortcutRuntime()}>
-        <ApplicationShell
-          desktopUpdates={undefined}
-          productVersion="test"
-          session={connected.session}
-        />
-      </KeyboardShortcutsProvider>,
+      <ApplicationShell
+        desktopUpdates={undefined}
+        productVersion="test"
+        session={connected.session}
+      />,
     );
     await page
       .getByRole("main", { name: "Open project" })
@@ -72,7 +65,10 @@ describe("application shell", () => {
     await expect.element(commit).toBeVisible();
     await commit.click();
     const graphElement = graph.element();
-    await userEvent.keyboard("{Control>}{Shift>},{/Shift}{/Control}");
+    await page
+      .getByRole("navigation", { name: "Projects" })
+      .getByRole("button", { name: "Repository settings for rebase-test" })
+      .click();
     await expect
       .element(page.getByRole("main", { name: "Repository settings" }))
       .toBeVisible();
@@ -151,40 +147,6 @@ describe("application shell", () => {
     await expect.element(projectFilter).toHaveValue("rebase");
   });
 
-  it("controls project navigation and settings with keyboard shortcuts", async () => {
-    await renderShell();
-
-    const projectFilter = page.getByRole("textbox", {
-      name: "Filter open projects",
-    });
-    await projectFilter.fill("rebase");
-
-    await userEvent.keyboard("{Control>}b{/Control}");
-    await expect
-      .element(page.getByRole("heading", { level: 1, name: "Projects" }))
-      .not.toBeInTheDocument();
-
-    await userEvent.keyboard("{Control>}b{/Control}");
-    await userEvent.keyboard("{Control>}{Shift>}f{/Shift}{/Control}");
-    await expect.element(projectFilter).toHaveFocus();
-    await expect.element(projectFilter).toHaveValue("rebase");
-
-    await userEvent.keyboard("{Control>}{Shift>}o{/Shift}{/Control}");
-    await expect
-      .element(page.getByRole("searchbox", { name: "Search repositories" }))
-      .toHaveFocus();
-
-    await userEvent.keyboard("{Control>},{/Control}");
-    await expect
-      .element(page.getByRole("navigation", { name: "Settings" }))
-      .toBeVisible();
-
-    await userEvent.keyboard("{Escape}");
-    await expect
-      .element(page.getByRole("navigation", { name: "Projects" }))
-      .toBeVisible();
-  });
-
   it("resizes the branches sidebar within its configured bounds", async () => {
     await renderRepositoryWorkspace();
     const branches = page.getByRole("navigation", { name: "Branches" });
@@ -214,13 +176,11 @@ describe("application shell", () => {
   it("keeps cached commit rows visible while reconnecting", async () => {
     const connected = connectedSession();
     await render(
-      <KeyboardShortcutsProvider runtime={keyboardShortcutRuntime()}>
-        <ApplicationShell
-          desktopUpdates={undefined}
-          productVersion="0.0.2-test"
-          session={connected.session}
-        />
-      </KeyboardShortcutsProvider>,
+      <ApplicationShell
+        desktopUpdates={undefined}
+        productVersion="0.0.2-test"
+        session={connected.session}
+      />,
     );
     await page
       .getByRole("main", { name: "Open project" })
@@ -244,62 +204,50 @@ describe("application shell", () => {
 
 async function renderShell() {
   return render(
-    <KeyboardShortcutsProvider runtime={keyboardShortcutRuntime()}>
-      <ApplicationShell
-        desktopUpdates={undefined}
-        productVersion="0.0.2-test"
-        session={pairingRequiredSession()}
-      />
-    </KeyboardShortcutsProvider>,
+    <ApplicationShell
+      desktopUpdates={undefined}
+      productVersion="0.0.2-test"
+      session={pairingRequiredSession()}
+    />,
   );
 }
 
 async function renderRepositoryWorkspace() {
   return render(
-    <KeyboardShortcutsProvider runtime={keyboardShortcutRuntime()}>
-      <div style={{ height: 720, width: 900 }}>
-        <RepositoryWorkspace
-          activeWorktreePath="/repo"
-          branchesFocusRequest={0}
-          environmentId={undefined}
-          historyReader={undefined}
-          refs={{
-            checkingOut: false,
-            refs: {
-              branches: [{ name: "main", worktreePath: "/repo" }],
-              remoteBranches: [],
-              repositoryId: "00000000-0000-4000-8000-000000000001",
-              tags: [],
-              truncated: {
-                branches: false,
-                remoteBranches: false,
-                tags: false,
-              },
-              worktrees: [
-                {
-                  head: { branch: "main", commit: "a".repeat(40) },
-                  main: true,
-                  path: "/repo",
-                },
-              ],
+    <div style={{ height: 720, width: 900 }}>
+      <RepositoryWorkspace
+        activeWorktreePath="/repo"
+        environmentId={undefined}
+        historyReader={undefined}
+        refs={{
+          checkingOut: false,
+          refs: {
+            branches: [{ name: "main", worktreePath: "/repo" }],
+            remoteBranches: [],
+            repositoryId: "00000000-0000-4000-8000-000000000001",
+            tags: [],
+            truncated: {
+              branches: false,
+              remoteBranches: false,
+              tags: false,
             },
-            status: "ready",
-          }}
-          retryRefs={() => undefined}
-          repositoryId="00000000-0000-4000-8000-000000000001"
-          repositoryName="rebase-test"
-          selectRef={() => undefined}
-        />
-      </div>
-    </KeyboardShortcutsProvider>,
+            worktrees: [
+              {
+                head: { branch: "main", commit: "a".repeat(40) },
+                main: true,
+                path: "/repo",
+              },
+            ],
+          },
+          status: "ready",
+        }}
+        retryRefs={() => undefined}
+        repositoryId="00000000-0000-4000-8000-000000000001"
+        repositoryName="rebase-test"
+        selectRef={() => undefined}
+      />
+    </div>,
   );
-}
-
-function keyboardShortcutRuntime() {
-  return {
-    host: browserKeyboardShortcutHost(),
-    store: createKeyboardShortcutStore(memoryStorage()),
-  };
 }
 
 function pairingRequiredSession(): LocalEnvironmentSession {
@@ -472,14 +420,5 @@ function identity() {
     name: "Alex",
     timestampSeconds: 1_777_777_777,
     timezoneOffsetMinutes: 120,
-  };
-}
-
-function memoryStorage() {
-  const values = new Map<string, string>();
-  return {
-    getItem: (key: string) => values.get(key) ?? null,
-    removeItem: (key: string) => values.delete(key),
-    setItem: (key: string, value: string) => values.set(key, value),
   };
 }

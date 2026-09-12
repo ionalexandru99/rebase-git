@@ -7,10 +7,9 @@ import {
   mergeHistory,
   renderGraph,
 } from "#tests-ui/apps/web/commit-graph/commit-graph-fixture";
-import { defaultKeyboardShortcutBindings } from "#web/features/keyboard-shortcuts/keyboard-shortcuts";
 
 describe("commit graph commands", () => {
-  it("opens cached search with the configured shortcut and reveals a hidden result", async () => {
+  it("reveals a hidden result from cached search", async () => {
     const commits = mergeHistory();
     const reader = historyReader({ commits, status: "ready" });
     reader.search.mockResolvedValue({
@@ -27,10 +26,7 @@ describe("commit graph commands", () => {
     await expect
       .element(grid.getByRole("row", { name: /^Commit 0,/ }))
       .toBeVisible();
-    grid.element().focus();
-    await userEvent.keyboard("{Control>}f{/Control}");
     const search = screen.getByRole("searchbox", { name: "Search history" });
-    await expect.element(search).toHaveFocus();
     await search.fill("Commit 3");
     await screen.getByRole("button", { name: /^Commit 3 Alex/ }).click();
     await expect
@@ -42,7 +38,7 @@ describe("commit graph commands", () => {
     );
   });
 
-  it("uses one fetch handler from the toolbar and configured application shortcut", async () => {
+  it("fetches from the toolbar", async () => {
     const reader = historyReader({ commits: history(2), status: "ready" });
     const freshness = {
       revision: 0,
@@ -63,31 +59,11 @@ describe("commit graph commands", () => {
         freshnessReady: true,
         operationState: "idle",
       },
-      shortcuts: {
-        platform: "other",
-        bindings: {
-          ...defaultKeyboardShortcutBindings,
-          "graph.fetch": { key: "y", modifiers: ["Mod", "Shift"] },
-        },
-      },
     });
     const fetch = screen.getByRole("button", { name: "Fetch", exact: true });
-    await expect
-      .element(fetch)
-      .toHaveAttribute("aria-keyshortcuts", "Control+Shift+y");
     await fetch.click();
     await vi.waitFor(() => expect(reader.fetch).toHaveBeenCalledOnce());
     await expect.element(fetch).toBeEnabled();
-    document.body.dispatchEvent(
-      new KeyboardEvent("keydown", {
-        key: "y",
-        ctrlKey: true,
-        shiftKey: true,
-        bubbles: true,
-        cancelable: true,
-      }),
-    );
-    await vi.waitFor(() => expect(reader.fetch).toHaveBeenCalledTimes(2));
   });
 
   it("selects the invoking commit and opens its menu from the keyboard", async () => {

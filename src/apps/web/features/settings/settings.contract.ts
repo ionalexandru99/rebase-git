@@ -1,4 +1,1 @@
-export type SettingsSection =
-  | "general"
-  | "keyboard-shortcuts"
-  | "history-storage";
+export type SettingsSection = "general" | "history-storage";

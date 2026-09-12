@@ -78,7 +78,7 @@ describe("graph commands", () => {
       const registry = createGraphCommandRegistry({
         readCommit: async () => undefined,
         writeClipboard: async () => {},
-        actions: { "graph.fetch": { execute } },
+        fetch: execute,
       });
       const unavailable = { ...context, ...override };
       expect(
@@ -88,7 +88,6 @@ describe("graph commands", () => {
       ).toMatchObject({
         enabled: false,
         disabledReason: reason,
-        shortcutId: "graph.fetch",
       });
       expect(await registry.execute("graph.fetch", unavailable)).toEqual({
         _tag: "Unavailable",
@@ -121,24 +120,5 @@ describe("graph commands", () => {
     ).toBe("Add to history");
     await registry.execute("history.toggleRef", included);
     expect(toggleHistoryRef).toHaveBeenCalledWith(target, included);
-  });
-
-  it("preserves typed context and caller availability for implemented graph actions", async () => {
-    const execute = vi.fn(async () => {});
-    const registry = createGraphCommandRegistry({
-      readCommit: async () => undefined,
-      writeClipboard: async () => {},
-      actions: {
-        "graph.nextMatch": {
-          execute,
-          disabledReason: () => "No matching commits",
-        },
-      },
-    });
-    expect(await registry.execute("graph.nextMatch", context)).toEqual({
-      _tag: "Unavailable",
-      reason: "No matching commits",
-    });
-    expect(execute).not.toHaveBeenCalled();
   });
 });
