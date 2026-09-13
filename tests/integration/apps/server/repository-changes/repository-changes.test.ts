@@ -12,6 +12,7 @@ import type {
 import { Effect } from "effect";
 import { afterEach, describe, expect, it } from "vite-plus/test";
 import { createLocalGitCommandRunner } from "#server/adapters/local-git/local-git-command-runner";
+import type { GitCommand } from "#server/domain/git-command.contract";
 import { createRepositoryChangesService } from "#server/features/repository-changes/repository-changes";
 
 const exec = promisify(execFile);
@@ -23,7 +24,10 @@ afterEach(async () => {
       .map((path) => rm(path, { recursive: true, force: true })),
   );
 });
-async function fixture(initial = true) {
+async function fixture(
+  initial = true,
+  afterCommand?: (command: GitCommand) => Promise<void>,
+) {
   const directory = await realpath(
     await mkdtemp(join(tmpdir(), "rebase-changes-")),
   );
@@ -45,6 +49,7 @@ async function fixture(initial = true) {
     worktreePath: directory,
     amend: false,
   };
+  const runner = createLocalGitCommandRunner();
   const service = createRepositoryChangesService(
     {
       find: () =>
@@ -56,7 +61,16 @@ async function fixture(initial = true) {
           lastOpenedAt: new Date().toISOString(),
         }),
     },
-    createLocalGitCommandRunner(),
+    {
+      run: (command) =>
+        runner.run(command).pipe(
+          Effect.tap(() =>
+            Effect.promise(async () => {
+              await afterCommand?.(command);
+            }),
+          ),
+        ),
+    },
   );
   const read = (amend = false) =>
     Effect.runPromise(service.read({ ...scope, amend }));
@@ -85,6 +99,67 @@ async function fixture(initial = true) {
 }
 
 describe("working changes through Git", { timeout: 30000 }, () => {
+  it.each(["stage", "discard"] as const)(
+    "rejects external edits while preparing %s",
+    async (action) => {
+      let changed = false;
+      const f = await fixture(true, async (command) => {
+        const prepared =
+          action === "stage"
+            ? command.arguments.includes("add")
+            : command.arguments.includes("--binary");
+        if (!changed && prepared) {
+          changed = true;
+          await writeFile(
+            join(command.directory, "file.txt"),
+            "external edit\n",
+          );
+        }
+      });
+      await writeFile(join(f.directory, "file.txt"), "reviewed edit\n");
+      await expect(f.mutate(action, "unstaged")).rejects.toMatchObject({
+        failure: { reason: "Stale" },
+      });
+      expect(changed).toBe(true);
+      expect((await f.git("show", ":file.txt")).stdout).toBe(
+        "one\ntwo\nthree\n",
+      );
+      expect(await readFile(join(f.directory, "file.txt"), "utf8")).toBe(
+        "external edit\n",
+      );
+    },
+  );
+  it("keeps the real index locked until the reviewed commit is published", async () => {
+    let competingStageRejected = false;
+    const f = await fixture(true, async (command) => {
+      if (!command.arguments.includes("commit")) return;
+      await expect(
+        exec("git", ["-C", command.directory, "add", "."]),
+      ).rejects.toMatchObject({ code: 128 });
+      competingStageRejected = true;
+    });
+    await writeFile(join(f.directory, "file.txt"), "reviewed\n");
+    await f.git("add", ".");
+    await writeFile(join(f.directory, "file.txt"), "unstaged\n");
+    const snapshot = await f.read();
+    await Effect.runPromise(
+      f.service.commit({
+        ...f.scope,
+        revision: snapshot.revision,
+        message: "Reviewed",
+      }),
+    );
+    expect(competingStageRejected).toBe(true);
+    expect((await f.git("show", "HEAD:file.txt")).stdout).toBe("reviewed\n");
+    expect(await readFile(join(f.directory, "file.txt"), "utf8")).toBe(
+      "unstaged\n",
+    );
+  });
+  it("discards an untracked file before the repository has an index", async () => {
+    const f = await fixture(false);
+    await f.mutate("discard", "unstaged");
+    expect((await f.read()).unstaged).toEqual([]);
+  });
   it("applies selected lines to filenames with spaces, quotes and Unicode", async () => {
     const f = await fixture();
     const path =

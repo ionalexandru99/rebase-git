@@ -49,6 +49,7 @@ function Group({ children }: { readonly children: ReactNode }) {
     return () => {
       cancelAnimationFrame(frame);
       cancelAnimationFrame(settledFrame);
+      transitioning.current = false;
     };
   }, [expanded, groupRef, panelId, state.open, state.width]);
   return (

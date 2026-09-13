@@ -41,11 +41,18 @@ export function withChangeIndex<A, E>(
             await rm(`${temporary}.lock`, { force: true });
           }),
       );
-      yield* changeIo(() =>
-        copyFile(index, temporary).catch((error) => {
-          if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
-        }),
+      const copied = yield* changeIo(() =>
+        copyFile(index, temporary)
+          .then(() => true)
+          .catch((error) => {
+            if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+            return false;
+          }),
       );
+      if (!copied)
+        yield* changeGit(git, directory, ["read-tree", "--empty"], {
+          indexFile: temporary,
+        });
       return yield* Effect.uninterruptible(
         Effect.gen(function* () {
           const result = yield* mutate(temporary);

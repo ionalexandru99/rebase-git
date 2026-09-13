@@ -7,13 +7,13 @@ import type {
 import { createTwoFilesPatch } from "diff";
 import { Effect } from "effect";
 import type { GitCommandRunner } from "#server/domain/git-command.contract";
+import type { RepositoryChangesError } from "#server/domain/repository-changes.contract";
 import { safeChangePath } from "#server/features/repository-changes/git/change-files";
 import {
   changeGit,
   changeIo,
   changesError,
 } from "#server/features/repository-changes/git/change-git";
-import { withChangeIndex } from "#server/features/repository-changes/git/change-index";
 import { readChangeDiff } from "#server/features/repository-changes/git/read-change-diff";
 import { selectedChangeText } from "#server/features/repository-changes/patch/selected-change-text";
 
@@ -22,6 +22,7 @@ export function mutateChanges(
   command: MutateChanges,
   snapshot: RepositoryChanges,
   base: string,
+  verify: Effect.Effect<void, RepositoryChangesError>,
 ) {
   return Effect.gen(function* () {
     if (
@@ -99,25 +100,24 @@ export function mutateChanges(
           ? null
           : target;
       const patch = contentPatch(diff, current, destination);
+      yield* verify;
       yield* applyChangePatch(git, command, patch);
       return;
     }
     if (command.action === "stage" || command.action === "unstage") {
-      yield* withChangeIndex(git, command.worktreePath, (indexFile) =>
-        changeGit(
-          git,
-          command.worktreePath,
-          command.action === "stage"
-            ? ["add", "--pathspec-from-file=-", "--pathspec-file-nul"]
-            : [
-                "restore",
-                `--source=${base}`,
-                "--staged",
-                "--pathspec-from-file=-",
-                "--pathspec-file-nul",
-              ],
-          { indexFile, input: `${paths.join("\0")}\0` },
-        ),
+      yield* changeGit(
+        git,
+        command.worktreePath,
+        command.action === "stage"
+          ? ["add", "--pathspec-from-file=-", "--pathspec-file-nul"]
+          : [
+              "restore",
+              `--source=${base}`,
+              "--staged",
+              "--pathspec-from-file=-",
+              "--pathspec-file-nul",
+            ],
+        { input: `${paths.join("\0")}\0` },
       );
       return;
     }
@@ -142,8 +142,10 @@ export function mutateChanges(
         "--",
         ...tracked,
       ]);
+      yield* verify;
       yield* applyChangePatch(git, command, patch, true);
     }
+    if (tracked.length === 0) yield* verify;
     for (const path of removed) {
       const target = yield* safeChangePath(command.worktreePath, path);
       yield* changeIo(() => unlink(target));
@@ -191,16 +193,13 @@ function applyChangePatch(
       Effect.asVoid,
     );
   }
-  return withChangeIndex(git, directory, (indexFile) =>
-    Effect.gen(function* () {
-      yield* changeGit(git, directory, [...args, "--cached"], {
-        input: patch,
-        indexFile,
-      }).pipe(Effect.mapError(rejected));
-      if (command.action === "discard")
-        yield* changeGit(git, directory, args, { input: patch }).pipe(
-          Effect.mapError(rejected),
-        );
-    }),
-  );
+  return Effect.gen(function* () {
+    yield* changeGit(git, directory, [...args, "--cached"], {
+      input: patch,
+    }).pipe(Effect.mapError(rejected));
+    if (command.action === "discard")
+      yield* changeGit(git, directory, args, { input: patch }).pipe(
+        Effect.mapError(rejected),
+      );
+  });
 }
