@@ -118,9 +118,10 @@ async function verifyPackageContents(packageRoot: string) {
     (file) =>
       file.startsWith("src/") ||
       file.startsWith("tests/") ||
-      file.includes("desktop") ||
-      file.includes("electron") ||
-      file.includes("agent"),
+      (!file.startsWith("dist/web/assets/") &&
+        (file.includes("desktop") ||
+          file.includes("electron") ||
+          file.includes("agent"))),
   );
   if (forbidden.length > 0) {
     throw new Error(

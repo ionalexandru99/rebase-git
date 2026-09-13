@@ -1,6 +1,6 @@
 import { execFile } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
@@ -24,13 +24,16 @@ afterEach(async () => {
   );
 });
 async function fixture(initial = true) {
-  const directory = await mkdtemp(join(tmpdir(), "rebase-changes-"));
+  const directory = await realpath(
+    await mkdtemp(join(tmpdir(), "rebase-changes-")),
+  );
   directories.push(directory);
   const git = (...args: string[]) => exec("git", ["-C", directory, ...args]);
   await git("init", "-b", "main");
   await git("config", "user.name", "Test");
   await git("config", "user.email", "test@example.com");
   await git("config", "commit.gpgsign", "false");
+  await git("config", "core.autocrlf", "false");
   await writeFile(join(directory, "file.txt"), "one\ntwo\nthree\n");
   if (initial) {
     await git("add", ".");
@@ -84,7 +87,8 @@ async function fixture(initial = true) {
 describe("working changes through Git", { timeout: 30000 }, () => {
   it("applies selected lines to filenames with spaces, quotes and Unicode", async () => {
     const f = await fixture();
-    const path = 'a "quoted" λ file.txt';
+    const path =
+      process.platform === "win32" ? "a λ file.txt" : 'a "quoted" λ file.txt';
     await writeFile(join(f.directory, path), "before\n");
     await f.git("add", ".");
     await f.git("commit", "-m", "Unusual filename");
@@ -256,7 +260,8 @@ describe("working changes through Git", { timeout: 30000 }, () => {
   });
   it("handles binary and literal pathspec filenames at whole-file level", async () => {
     const f = await fixture();
-    const path = ":(glob)*.bin";
+    const path =
+      process.platform === "win32" ? "[literal].bin" : ":(glob)*.bin";
     const bytes = Buffer.from([0, 255, 128, 1]);
     await writeFile(join(f.directory, path), bytes);
     expect((await f.diff("unstaged", false, path)).kind).toBe("binary");

@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
@@ -16,7 +16,9 @@ import { environmentPaths } from "#server/persistence/storage/environment-paths"
 import { createRepositoryChangesClient } from "#web/features/working-changes/transport/repository-changes-client";
 
 it("authorizes changes reads separately from index mutations across HTTP", async () => {
-  const root = await mkdtemp(join(tmpdir(), "rebase-changes-http-"));
+  const root = await realpath(
+    await mkdtemp(join(tmpdir(), "rebase-changes-http-")),
+  );
   const directory = join(root, "repository");
   try {
     await promisify(execFile)("git", ["init", "-b", "main", directory]);
