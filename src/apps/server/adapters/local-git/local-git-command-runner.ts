@@ -38,7 +38,7 @@ function streamLocalGitCommand(
         "git",
         ["-C", command.directory, ...command.arguments],
         {
-          env: gitEnvironment(),
+          env: gitEnvironment(command),
           signal: combinedSignal,
           stdio: ["pipe", "pipe", "pipe"],
           windowsHide: true,
@@ -100,18 +100,20 @@ function streamFailureReason(cause: unknown): GitCommandFailureReason {
 function runLocalGitCommand(command: GitCommand) {
   return Effect.callback<GitCommandOutput, GitCommandError>(
     (resume, signal) => {
-      execFile(
+      const child = execFile(
         "git",
         ["-C", command.directory, ...command.arguments],
         {
-          encoding: "utf8",
-          env: gitEnvironment(),
+          encoding: "buffer",
+          env: gitEnvironment(command),
           maxBuffer: command.maxOutputBytes ?? defaultMaximumOutputBytes,
           signal,
           timeout: command.timeoutMilliseconds ?? defaultTimeoutMilliseconds,
           windowsHide: true,
         },
-        (error, stdout, stderr) => {
+        (error, output, errorOutput) => {
+          const stdout = output.toString(command.outputEncoding ?? "utf8");
+          const stderr = errorOutput.toString("utf8");
           if (error === null) {
             resume(Effect.succeed({ exitCode: 0, stderr, stdout }));
             return;
@@ -129,16 +131,21 @@ function runLocalGitCommand(command: GitCommand) {
           );
         },
       );
+      child.stdin?.once("error", () => undefined);
+      child.stdin?.end(command.input);
     },
   );
 }
 
-function gitEnvironment() {
+function gitEnvironment(command: GitCommand) {
   return {
     ...process.env,
     GIT_OPTIONAL_LOCKS: "0",
     GIT_TERMINAL_PROMPT: "0",
     LC_ALL: "C",
+    ...(command.indexFile === undefined
+      ? {}
+      : { GIT_INDEX_FILE: command.indexFile }),
   };
 }
 

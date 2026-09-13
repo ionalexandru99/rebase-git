@@ -29,6 +29,7 @@
   },
   "dependencies": {
     "@rebase/contracts": "workspace:*",
+    "diff": "8.0.4",
     "drizzle-orm": "catalog:",
     "effect": "catalog:",
     "ws": "8.21.3"

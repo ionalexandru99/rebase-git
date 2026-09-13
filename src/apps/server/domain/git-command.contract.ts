@@ -4,6 +4,8 @@ export interface GitCommand {
   readonly arguments: readonly string[];
   readonly directory: string;
   readonly input?: string;
+  readonly indexFile?: string;
+  readonly outputEncoding?: "utf8" | "base64";
   readonly maxOutputBytes?: number;
   readonly timeoutMilliseconds?: number;
 }

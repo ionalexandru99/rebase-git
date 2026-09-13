@@ -8,6 +8,41 @@ import { WorkspacePanel } from "#web-ui/features/workspace-panel/index";
 describe("workspace panel", () => {
   beforeEach(() => localStorage.clear());
 
+  it("expands across the graph while keeping branches visible and restores its width", async () => {
+    await render(
+      <div className="dark" style={{ width: 1200, height: 600 }}>
+        <WorkspacePanel.Provider scopeKey="expanded">
+          <WorkspacePanel.Group>
+            <ResizablePanel id="branches" defaultSize="20%" minSize="15%">
+              <div data-testid="branch-content">Branches</div>
+            </ResizablePanel>
+            <WorkspacePanel.Main>
+              {() => (
+                <>
+                  <WorkspacePanel.Toggle />
+                  <button type="button" data-testid="graph">
+                    Graph
+                  </button>
+                </>
+              )}
+            </WorkspacePanel.Main>
+            <WorkspacePanel.Pane />
+          </WorkspacePanel.Group>
+        </WorkspacePanel.Provider>
+      </div>,
+    );
+    await page.getByRole("button", { name: "Show side panel" }).click();
+    const width = panelWidth();
+    const graph = document.querySelector('[data-testid="graph"]');
+    await page.getByRole("button", { name: "Expand side panel" }).click();
+    await expect.poll(panelWidth).toBeCloseTo(960, -1);
+    await expect.element(page.getByTestId("branch-content")).toBeVisible();
+    expect(document.querySelector('[data-testid="graph"]')).toBe(graph);
+    await page.getByRole("button", { name: "Restore side panel" }).click();
+    await expect.poll(panelWidth).toBeCloseTo(width, -1);
+    await expect.element(page.getByTestId("graph")).toBeVisible();
+  });
+
   it("shows unavailable features as disabled and uses one toggle without remounting the graph", async () => {
     await renderPanel();
     const graph = page
@@ -16,8 +51,7 @@ describe("workspace panel", () => {
     const panel = page.getByRole("complementary", { name: "Side panel" });
     await expect.element(panel).not.toBeInTheDocument();
     await page.getByRole("button", { name: "Show side panel" }).click();
-    expect(panel.getByRole("button").elements()).toHaveLength(3);
-    for (const name of ["Changes", "Code", "Pull requests"]) {
+    for (const name of ["Code", "Pull requests"]) {
       await expect
         .element(page.getByRole("button", { name: `${name} Coming soon` }))
         .toBeDisabled();
@@ -46,9 +80,8 @@ describe("workspace panel", () => {
     await renderPanel("saved");
     await page.getByRole("button", { name: "Show side panel" }).click();
     await expect
-      .element(page.getByRole("heading", { name: "Open a tab" }))
+      .element(page.getByRole("tab", { name: "Diffs" }))
       .toBeVisible();
-    await expect.element(page.getByRole("tab")).not.toBeInTheDocument();
     await expect.poll(panelWidth).toBeCloseTo(550, -1);
   });
 

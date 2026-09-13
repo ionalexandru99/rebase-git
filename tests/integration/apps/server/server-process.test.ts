@@ -219,6 +219,12 @@ async function verifyBrowserAssets(origin: string) {
   const entryResponse = await fetch(`${origin}/pair`);
   expect(entryResponse.status).toBe(200);
   expect(entryResponse.headers.get("cache-control")).toBe("no-store");
+  const policy = entryResponse.headers
+    .get("content-security-policy")
+    ?.split(";")
+    .map((directive) => directive.trim());
+  expect(policy).toContain("style-src 'self' 'unsafe-inline'");
+  expect(policy).toContain("script-src 'self'");
   expect(entryResponse.headers.get("content-type")).toBe(
     "text/html; charset=utf-8",
   );

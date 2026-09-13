@@ -9,6 +9,7 @@ import {
   RepositoryCatalogOperationFailure,
   RepositoryRefsOperationFailure,
 } from "@rebase/contracts";
+import { ChangesFailure } from "@rebase/contracts/repository-changes/repository-changes.contract";
 import { Effect } from "effect";
 import type {
   EnvironmentFilesystem,
@@ -19,6 +20,7 @@ import type {
   RepositoryCatalog,
   RepositoryCatalogError,
 } from "#server/domain/repository-catalog.contract";
+import type { RepositoryChangesError } from "#server/domain/repository-changes.contract";
 import type {
   RepositoryRefsError,
   RepositoryRefsService,
@@ -47,6 +49,7 @@ import {
 } from "#server/features/environment-connection/http/environment-http-response";
 import { respondToEnvironmentFilesystemRequest } from "#server/features/environment-filesystem/http/environment-filesystem-http-handler";
 import { respondToRepositoryCatalogRequest } from "#server/features/repository-catalog/http/repository-catalog-http-handler";
+import { respondToRepositoryChangesRequest } from "#server/features/repository-changes/http/repository-changes-http-handler";
 import { respondToRepositoryRefsRequest } from "#server/features/repository-refs/http/repository-refs-http-handler";
 
 export function createEnvironmentHttpHandler(
@@ -231,6 +234,18 @@ function respondToEnvironmentRequest(
     }
 
     if (
+      state.changes !== undefined &&
+      (yield* respondToRepositoryChangesRequest(
+        request,
+        response,
+        body,
+        authorization,
+        state.changes,
+      ))
+    )
+      return;
+
+    if (
       refs !== undefined &&
       (yield* respondToRepositoryRefsRequest(
         request,
@@ -278,9 +293,19 @@ function writeEnvironmentHttpError(
     | EnvironmentHttpBodyError
     | RepositoryCatalogError
     | RepositoryRefsError
+    | RepositoryChangesError
     | EnvironmentStorageError,
 ) {
   if (response.writableEnded) {
+    return;
+  }
+  if (error._tag === "RepositoryChangesError") {
+    writeJson(
+      response,
+      error.failure.reason === "Missing" ? 404 : 409,
+      ChangesFailure,
+      error.failure,
+    );
     return;
   }
   if (error._tag === "EnvironmentAuthorizationError") {
