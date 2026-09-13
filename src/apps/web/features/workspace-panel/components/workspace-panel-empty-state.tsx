@@ -34,7 +34,9 @@ export function WorkspacePanelEmptyState() {
                   {feature.label}
                 </span>
                 <span className="text-[10px] font-normal text-muted-foreground">
-                  Coming soon
+                  {workspacePanelAvailability[kind]
+                    ? "Review and commit working changes"
+                    : "Coming soon"}
                 </span>
               </Button>
             );

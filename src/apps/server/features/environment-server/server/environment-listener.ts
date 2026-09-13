@@ -26,6 +26,7 @@ export function acquireEnvironmentListener(
       options.productVersion,
     );
     const state: EnvironmentTransportState = {
+      ...(options.changes === undefined ? {} : { changes: options.changes }),
       discovery: {
         ...discovery,
         capabilities: discovery.capabilities.filter(

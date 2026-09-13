@@ -31,7 +31,8 @@ function usePanelController(scopeKey: string) {
   const execute = useCallback(
     (action: WorkspacePanelAction) => {
       store.dispatch(action);
-      if (action.type !== "resize") setFocusRequest((request) => request + 1);
+      if (action.type !== "resize" && action.type !== "expand")
+        setFocusRequest((request) => request + 1);
     },
     [store],
   );

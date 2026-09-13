@@ -18,6 +18,10 @@ import type { RepositoryRefsSnapshot } from "#web/features/repository-refs/repos
 import { useCachedRepositoryRefs } from "#web/features/repository-refs/use-cached-repository-refs";
 import { useHistoryRefRefresh } from "#web/features/repository-workspace/use-history-ref-refresh";
 import {
+  type RepositoryChangesClient,
+  WorkingChanges,
+} from "#web/features/working-changes/index";
+import {
   ResizableHandle,
   ResizablePanel,
 } from "#web-ui/components/ui/resizable";
@@ -31,6 +35,7 @@ const branchesSidebarSize = {
 } as const;
 
 export function RepositoryWorkspace({
+  changesClient,
   accessCapabilities = [],
   connected = false,
   activeWorktreePath,
@@ -43,6 +48,7 @@ export function RepositoryWorkspace({
   retryRefs,
   selectRef,
 }: {
+  readonly changesClient?: RepositoryChangesClient | undefined;
   readonly accessCapabilities?: readonly EnvironmentAccessCapability[];
   readonly connected?: boolean;
   readonly activeWorktreePath: string;
@@ -67,6 +73,7 @@ export function RepositoryWorkspace({
   );
   return (
     <RepositoryWorkspaceContent
+      changesClient={changesClient}
       accessCapabilities={accessCapabilities}
       connected={connected}
       activeWorktreePath={activeWorktreePath}
@@ -85,6 +92,7 @@ export function RepositoryWorkspace({
 }
 
 function RepositoryWorkspaceContent({
+  changesClient,
   accessCapabilities,
   connected,
   activeWorktreePath,
@@ -99,6 +107,7 @@ function RepositoryWorkspaceContent({
   selectRef,
 }: {
   readonly accessCapabilities: readonly EnvironmentAccessCapability[];
+  readonly changesClient: RepositoryChangesClient | undefined;
   readonly connected: boolean;
   readonly activeWorktreePath: string;
   readonly environmentId: string | undefined;
@@ -218,63 +227,79 @@ function RepositoryWorkspaceContent({
           aria-label="Resize branches sidebar"
           className="z-10 bg-transparent after:w-2 focus-visible:ring-primary/40"
         />
-        <ResizablePanel id="workspace" minSize="30%">
-          <main
-            aria-label="Repository workspace"
-            className="h-full rounded-none bg-repository"
-          >
-            <CommitGraph
-              toolbarActions={<WorkspacePanel.Toggle />}
-              githubRepository={refs.refs?.githubRepository}
-              remoteProviders={refs.refs?.remoteProviders}
-              commandEnvironment={
-                environmentId === undefined ||
-                logicalRepositoryId === undefined ||
-                repositoryId === undefined
-                  ? undefined
-                  : {
-                      environmentId,
-                      logicalRepositoryId,
-                      repositoryId,
-                      activeWorktreePath,
-                      ...(activeBranch === undefined ? {} : { activeBranch }),
-                      connected,
-                      capabilities: new Set(accessCapabilities),
-                      freshnessReady: false,
-                      operationState: "idle",
-                    }
-              }
-              onRemoveHistoryRef={toggleRef}
-              onRevealHistoryRef={toggleRef}
-              onAddHistoryRef={() =>
-                setLocalBranchesFocusRequest((request) => request + 1)
-              }
-              onResetHistoryScope={
-                canResetHistoryScope
-                  ? () => {
-                      setHistoryScope(automaticHistoryScope);
-                      if (
-                        environmentId !== undefined &&
-                        logicalRepositoryId !== undefined
-                      ) {
-                        filterStore.save(
-                          environmentId,
-                          logicalRepositoryId,
-                          automaticHistoryScope,
-                        );
+        <WorkspacePanel.Main>
+          {() => (
+            <main
+              aria-label="Repository workspace"
+              className="h-full rounded-none bg-repository"
+            >
+              <CommitGraph
+                toolbarActions={<WorkspacePanel.Toggle />}
+                githubRepository={refs.refs?.githubRepository}
+                remoteProviders={refs.refs?.remoteProviders}
+                commandEnvironment={
+                  environmentId === undefined ||
+                  logicalRepositoryId === undefined ||
+                  repositoryId === undefined
+                    ? undefined
+                    : {
+                        environmentId,
+                        logicalRepositoryId,
+                        repositoryId,
+                        activeWorktreePath,
+                        ...(activeBranch === undefined ? {} : { activeBranch }),
+                        connected,
+                        capabilities: new Set(accessCapabilities),
+                        freshnessReady: false,
+                        operationState: "idle",
                       }
-                    }
-                  : undefined
-              }
-              reader={historyReader}
-              repositoryName={repositoryName}
-              roots={resolvedScope?.roots}
-              scope={resolvedScope?.scope ?? automaticHistoryScope}
-              selections={resolvedScope?.selections ?? []}
-            />
-          </main>
-        </ResizablePanel>
-        <WorkspacePanel.Pane />
+                }
+                onRemoveHistoryRef={toggleRef}
+                onRevealHistoryRef={toggleRef}
+                onAddHistoryRef={() =>
+                  setLocalBranchesFocusRequest((request) => request + 1)
+                }
+                onResetHistoryScope={
+                  canResetHistoryScope
+                    ? () => {
+                        setHistoryScope(automaticHistoryScope);
+                        if (
+                          environmentId !== undefined &&
+                          logicalRepositoryId !== undefined
+                        ) {
+                          filterStore.save(
+                            environmentId,
+                            logicalRepositoryId,
+                            automaticHistoryScope,
+                          );
+                        }
+                      }
+                    : undefined
+                }
+                reader={historyReader}
+                repositoryName={repositoryName}
+                roots={resolvedScope?.roots}
+                scope={resolvedScope?.scope ?? automaticHistoryScope}
+                selections={resolvedScope?.selections ?? []}
+              />
+            </main>
+          )}
+        </WorkspacePanel.Main>
+        <WorkspacePanel.Pane
+          contents={{
+            changes: (
+              <WorkingChanges
+                client={changesClient}
+                environmentId={environmentId}
+                repositoryId={repositoryId}
+                worktreePath={activeWorktreePath}
+                connected={connected}
+                writable={accessCapabilities.includes("repository.write")}
+                onCommitted={retryRefs}
+              />
+            ),
+          }}
+        />
       </WorkspacePanel.Group>
     </WorkspacePanel.Provider>
   );

@@ -4,9 +4,10 @@ import { RepositoryHistoryStorageUnavailable } from "#web/persistence/repository
 export const commitStoreName = "commits";
 export const repositoryStoreName = "repositories";
 export const topologyStoreName = "topology";
+export const workingChangesStoreName = "workingChanges";
 
 const databaseName = "rebase-repository-history";
-const databaseVersion = 6;
+const databaseVersion = 7;
 
 export function withRepositoryHistoryDatabase<T>(
   indexedDB: IDBFactory | undefined,
@@ -83,6 +84,8 @@ function openDatabase(indexedDB: IDBFactory) {
     }
     request.onupgradeneeded = (event) => {
       const database = request.result;
+      if (!database.objectStoreNames.contains(workingChangesStoreName))
+        database.createObjectStore(workingChangesStoreName);
       const commits = database.objectStoreNames.contains(commitStoreName)
         ? request.transaction?.objectStore(commitStoreName)
         : database.createObjectStore(commitStoreName, { keyPath: "key" });

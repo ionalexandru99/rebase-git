@@ -24,6 +24,8 @@ export function reduceWorkspacePanel(
   action: WorkspacePanelAction,
 ): WorkspacePanelState {
   switch (action.type) {
+    case "expand":
+      return { ...state, expanded: action.expanded };
     case "open":
       if (!workspacePanelAvailability[action.kind]) return state;
       if (state.open && state.active === action.kind) return state;

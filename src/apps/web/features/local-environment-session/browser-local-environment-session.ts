@@ -1,5 +1,6 @@
 import { Effect } from "effect";
 import { environmentResponseError } from "#web/features/environment-connection/environment-connection-errors";
+import type { EnvironmentCredential } from "#web/features/environment-connection/environment-credential.contract";
 import {
   createEnvironmentBrowserSessionEffect,
   readEnvironmentBrowserSessionEffect,
@@ -21,17 +22,26 @@ import { checkoutRepositoryRefEffect } from "#web/features/repository-refs/repos
 import { RepositoryRefsResponseError } from "#web/features/repository-refs/repository-refs-client.contract";
 import type { RepositoryRefsGateway } from "#web/features/repository-refs/repository-refs-controller.contract";
 import type { RepositoryRefsTransport } from "#web/features/repository-refs/transport/repository-refs-transport.contract";
+import { createRepositoryChangesClient } from "#web/features/working-changes/transport/repository-changes-client";
 
 export function createBrowserLocalEnvironmentSession(productVersion: string) {
   const host = window.rebaseHost;
   const bootstrap = resolveLocalEnvironmentBootstrap(window.location, host);
   let repositoryRefs: RepositoryRefsTransport | undefined;
+  let changesCredential: EnvironmentCredential | undefined;
   const gateway: LocalEnvironmentGateway = {
-    authorize: createLocalEnvironmentAuthorization(
-      bootstrap.environmentOrigin,
-      bootstrap.pairingMaterial,
-      host,
-    ),
+    authorize: () =>
+      createLocalEnvironmentAuthorization(
+        bootstrap.environmentOrigin,
+        bootstrap.pairingMaterial,
+        host,
+      )().pipe(
+        Effect.tap((credential) =>
+          Effect.sync(() => {
+            changesCredential = credential;
+          }),
+        ),
+      ),
     connect: (credential, lastObservedSequence) =>
       connectCurrentEnvironmentEffect(
         bootstrap.environmentOrigin,
@@ -99,6 +109,10 @@ export function createBrowserLocalEnvironmentSession(productVersion: string) {
   };
 
   return createLocalEnvironmentSession({
+    repositoryChanges: createRepositoryChangesClient(
+      bootstrap.environmentOrigin,
+      () => changesCredential,
+    ),
     filesystemGateway,
     gateway,
     repositoryCatalogGateway,

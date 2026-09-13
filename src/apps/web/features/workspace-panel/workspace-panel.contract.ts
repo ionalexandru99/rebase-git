@@ -5,7 +5,7 @@ export type WorkspacePanelKind = (typeof workspacePanelKinds)[number];
 export const workspacePanelAvailability: Readonly<
   Record<WorkspacePanelKind, boolean>
 > = {
-  changes: false,
+  changes: true,
   code: false,
   "pull-request": false,
 };
@@ -15,13 +15,15 @@ export interface WorkspacePanelState {
   readonly active: WorkspacePanelKind | null;
   readonly open: boolean;
   readonly width: number;
+  readonly expanded?: boolean;
 }
 
 export type WorkspacePanelAction =
   | { readonly type: "open"; readonly kind: WorkspacePanelKind }
   | { readonly type: "close"; readonly kind: WorkspacePanelKind }
   | { readonly type: "visibility"; readonly open: boolean }
-  | { readonly type: "resize"; readonly width: number };
+  | { readonly type: "resize"; readonly width: number }
+  | { readonly type: "expand"; readonly expanded: boolean };
 
 export interface WorkspacePanelStore {
   readonly getSnapshot: () => WorkspacePanelState;

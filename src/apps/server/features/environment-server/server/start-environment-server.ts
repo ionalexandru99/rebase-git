@@ -6,6 +6,7 @@ import type { Environment } from "#server/domain/environment-state.contract";
 import type { EnvironmentStorageError } from "#server/domain/environment-storage-error.contract";
 import { GitCommands } from "#server/domain/git-command.contract";
 import { RepositoryCatalogAccess } from "#server/domain/repository-catalog.contract";
+import { RepositoryChangesAccess } from "#server/domain/repository-changes.contract";
 import { RepositoryFreshnessState } from "#server/domain/repository-freshness.contract";
 import { RepositoryWatching } from "#server/domain/repository-watcher.contract";
 import { createEnvironmentAuthorization } from "#server/features/environment-authorization/environment-authorization";
@@ -30,6 +31,7 @@ import type {
 } from "#server/features/environment-server/server/environment-server.contract";
 import type { EnvironmentServerStartError } from "#server/features/environment-server/server/environment-server-error.contract";
 import { createRepositoryCatalog } from "#server/features/repository-catalog/repository-catalog";
+import { repositoryChangesLayer } from "#server/features/repository-changes/index";
 import { repositoryFreshnessLayer } from "#server/features/repository-history/freshness/repository-freshness";
 import { createRepositoryHistoryService } from "#server/features/repository-history/repository-history";
 import { acquireRepositoryChangePublisher } from "#server/features/repository-refs/repository-change-publisher";
@@ -67,8 +69,8 @@ export function startEnvironmentServer(
     const events = createEnvironmentEventPublisher();
     const git = createLocalGitCommandRunner();
     const watcher = createLocalRepositoryWatcher();
-    const freshness = yield* Layer.build(
-      repositoryFreshnessLayer.pipe(
+    const repositoryServices = yield* Layer.build(
+      Layer.merge(repositoryFreshnessLayer, repositoryChangesLayer).pipe(
         Layer.provide(
           Layer.mergeAll(
             Layer.succeed(GitCommands, git),
@@ -84,6 +86,7 @@ export function startEnvironmentServer(
       git,
     });
     const listener = yield* acquireEnvironmentListener({
+      changes: Context.get(repositoryServices, RepositoryChangesAccess),
       authorization,
       catalog,
       ...(options.browserAssetsRoot === undefined
@@ -93,7 +96,7 @@ export function startEnvironmentServer(
       events,
       filesystem: createEnvironmentFilesystem(),
       history: createRepositoryHistoryService({ catalog, git }),
-      freshness: Context.get(freshness, RepositoryFreshnessState),
+      freshness: Context.get(repositoryServices, RepositoryFreshnessState),
       ...(options.host === undefined ? {} : { host: options.host }),
       port: requestedPort,
       productVersion,

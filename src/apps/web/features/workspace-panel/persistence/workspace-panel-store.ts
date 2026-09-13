@@ -53,6 +53,7 @@ function readPanelState(key: string): WorkspacePanelState {
         : (tabs[0] ?? null);
     return {
       tabs,
+      expanded: "expanded" in saved && saved.expanded === true,
       active,
       open:
         "open" in saved && typeof saved.open === "boolean"

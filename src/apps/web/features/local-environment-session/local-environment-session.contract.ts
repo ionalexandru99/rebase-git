@@ -19,6 +19,7 @@ import type {
   RepositoryRefsController,
   RepositoryRefsGateway,
 } from "#web/features/repository-refs/repository-refs-controller.contract";
+import type { RepositoryChangesClient } from "#web/features/working-changes/working-changes.contract";
 
 export type LocalEnvironmentSessionState =
   | { readonly _tag: "PairingRequired" }
@@ -44,6 +45,7 @@ export type LocalEnvironmentSessionState =
     };
 
 export interface LocalEnvironmentSession {
+  readonly repositoryChanges?: RepositoryChangesClient;
   readonly filesystem: EnvironmentFilesystemController;
   readonly getSnapshot: () => LocalEnvironmentSessionState;
   readonly repositoryCatalog: RepositoryCatalogController;
@@ -70,6 +72,7 @@ export interface LocalEnvironmentGateway {
 }
 
 export interface LocalEnvironmentSessionOptions {
+  readonly repositoryChanges?: RepositoryChangesClient;
   readonly filesystemGateway: EnvironmentFilesystemGateway;
   readonly gateway: LocalEnvironmentGateway;
   readonly repositoryCatalogGateway: RepositoryCatalogGateway;

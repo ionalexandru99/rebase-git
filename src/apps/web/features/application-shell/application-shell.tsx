@@ -296,6 +296,7 @@ export function ApplicationShell({
                   />
                 ) : (
                   <RepositoryWorkspace
+                    changesClient={session.repositoryChanges}
                     accessCapabilities={
                       sessionState._tag === "Connected"
                         ? sessionState.accessCapabilities

@@ -8,6 +8,7 @@ import {
   requestResult,
   transactionCompleted,
   withRepositoryHistoryDatabase,
+  workingChangesStoreName,
 } from "#web/persistence/repository-history/repository-history-database";
 import type { StoredCommit } from "#web/persistence/repository-history/repository-history-database.contract";
 import {
@@ -15,7 +16,7 @@ import {
   storedCommit,
 } from "#web/persistence/repository-history/repository-history-records";
 
-it.each([2, 4, 5])(
+it.each([2, 4, 5, 6])(
   "preserves history and ordering when upgrading a version-%i cache",
   async (version) => {
     const factory = isolatedFactory();
@@ -44,7 +45,10 @@ it.each([2, 4, 5])(
     await createOldCache(factory, version, legacyRecords, repository);
     try {
       await withRepositoryHistoryDatabase(factory, async (database) => {
-        expect(database.version).toBe(6);
+        expect(database.version).toBe(7);
+        expect(
+          database.objectStoreNames.contains(workingChangesStoreName),
+        ).toBe(true);
         const transaction = database.transaction([
           commitStoreName,
           repositoryStoreName,
@@ -167,17 +171,18 @@ async function createOldCache(
     const commits = database.createObjectStore(commitStoreName, {
       keyPath: "key",
     });
-    commits.createIndex(
-      "repositoryOrder",
-      version === 2
-        ? ["environmentId", "repositoryId", "topologicalOrder"]
-        : [
-            "environmentId",
-            "repositoryId",
-            "topologicalEpoch",
-            "topologicalOrder",
-          ],
-    );
+    if (version < 6)
+      commits.createIndex(
+        "repositoryOrder",
+        version === 2
+          ? ["environmentId", "repositoryId", "topologicalOrder"]
+          : [
+              "environmentId",
+              "repositoryId",
+              "topologicalEpoch",
+              "topologicalOrder",
+            ],
+      );
     if (version === 4)
       commits.createIndex("repositorySearch", [
         "environmentId",
