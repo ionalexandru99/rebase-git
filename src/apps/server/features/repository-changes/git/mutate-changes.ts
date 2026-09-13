@@ -1,4 +1,3 @@
-import { unlink } from "node:fs/promises";
 import type {
   ChangeDiff,
   MutateChanges,
@@ -11,7 +10,6 @@ import type { RepositoryChangesError } from "#server/domain/repository-changes.c
 import { safeChangePath } from "#server/features/repository-changes/git/change-files";
 import {
   changeGit,
-  changeIo,
   changesError,
 } from "#server/features/repository-changes/git/change-git";
 import { readChangeDiff } from "#server/features/repository-changes/git/read-change-diff";
@@ -131,6 +129,7 @@ export function mutateChanges(
         ? paths.filter((path) => untracked.has(path))
         : [];
     const tracked = paths.filter((path) => !removed.includes(path));
+    const patches: string[] = [];
     if (tracked.length > 0) {
       const patch = yield* changeGit(git, command.worktreePath, [
         "diff",
@@ -142,14 +141,37 @@ export function mutateChanges(
         "--",
         ...tracked,
       ]);
-      yield* verify;
-      yield* applyChangePatch(git, command, patch, true);
+      patches.push(patch);
     }
-    if (tracked.length === 0) yield* verify;
     for (const path of removed) {
-      const target = yield* safeChangePath(command.worktreePath, path);
-      yield* changeIo(() => unlink(target));
+      const output = yield* git
+        .run({
+          directory: command.worktreePath,
+          arguments: [
+            "diff",
+            "--no-index",
+            "--binary",
+            "--no-ext-diff",
+            "--no-textconv",
+            "--",
+            "/dev/null",
+            path,
+          ],
+        })
+        .pipe(
+          Effect.mapError(() =>
+            changesError(
+              "GitFailed",
+              "Could not prepare the untracked file for discard.",
+            ),
+          ),
+        );
+      if (output.exitCode !== 0 && output.exitCode !== 1)
+        return yield* Effect.fail(changesError("GitFailed", output.stderr));
+      patches.push(output.stdout);
     }
+    yield* verify;
+    yield* applyChangePatch(git, command, patches.join("\n"), true);
   });
 }
 

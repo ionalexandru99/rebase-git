@@ -27,6 +27,7 @@ afterEach(async () => {
 async function fixture(
   initial = true,
   afterCommand?: (command: GitCommand) => Promise<void>,
+  beforeCommand?: (command: GitCommand) => Promise<void>,
 ) {
   const directory = await realpath(
     await mkdtemp(join(tmpdir(), "rebase-changes-")),
@@ -63,7 +64,10 @@ async function fixture(
     },
     {
       run: (command) =>
-        runner.run(command).pipe(
+        Effect.promise(async () => {
+          await beforeCommand?.(command);
+        }).pipe(
+          Effect.andThen(runner.run(command)),
           Effect.tap(() =>
             Effect.promise(async () => {
               await afterCommand?.(command);
@@ -155,11 +159,31 @@ describe("working changes through Git", { timeout: 30000 }, () => {
       "unstaged\n",
     );
   });
-  it("discards an untracked file before the repository has an index", async () => {
-    const f = await fixture(false);
-    await f.mutate("discard", "unstaged");
-    expect((await f.read()).unstaged).toEqual([]);
+  it("preserves a replaced untracked file when the discard patch is applied", async () => {
+    const f = await fixture(false, undefined, async (command) => {
+      if (command.arguments.includes("apply"))
+        await writeFile(join(command.directory, "file.txt"), "replacement\n");
+    });
+    await expect(f.mutate("discard", "unstaged")).rejects.toMatchObject({
+      failure: { reason: "Conflict" },
+    });
+    expect(await readFile(join(f.directory, "file.txt"), "utf8")).toBe(
+      "replacement\n",
+    );
   });
+  it.each(["text", "empty", "binary"])(
+    "discards an untracked %s file before the repository has an index",
+    async (kind) => {
+      const f = await fixture(false);
+      if (kind !== "text")
+        await writeFile(
+          join(f.directory, "file.txt"),
+          kind === "empty" ? "" : Buffer.from([0, 255, 1]),
+        );
+      await f.mutate("discard", "unstaged");
+      expect((await f.read()).unstaged).toEqual([]);
+    },
+  );
   it("applies selected lines to filenames with spaces, quotes and Unicode", async () => {
     const f = await fixture();
     const path =
