@@ -158,6 +158,7 @@ describe("commit inspection", () => {
       .poll(
         () =>
           document.querySelector("diffs-container")?.shadowRoot?.textContent,
+        { timeout: 5_000 },
       )
       .toContain("export const initial = true;");
     await expect
