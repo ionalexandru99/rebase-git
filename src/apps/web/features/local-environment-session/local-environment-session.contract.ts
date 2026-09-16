@@ -1,5 +1,6 @@
 import type { EnvironmentAccessCapability } from "@rebase/contracts";
 import type { Effect, Scope } from "effect";
+import type { CommitInspectionClient } from "#web/features/commit-inspection/commit-inspection.contract";
 import type {
   EnvironmentAuthorizationRejected,
   EnvironmentConnectionFailure,
@@ -46,6 +47,7 @@ export type LocalEnvironmentSessionState =
 
 export interface LocalEnvironmentSession {
   readonly repositoryChanges?: RepositoryChangesClient;
+  readonly commitInspection?: CommitInspectionClient;
   readonly filesystem: EnvironmentFilesystemController;
   readonly getSnapshot: () => LocalEnvironmentSessionState;
   readonly repositoryCatalog: RepositoryCatalogController;
@@ -73,6 +75,7 @@ export interface LocalEnvironmentGateway {
 
 export interface LocalEnvironmentSessionOptions {
   readonly repositoryChanges?: RepositoryChangesClient;
+  readonly commitInspection?: CommitInspectionClient;
   readonly filesystemGateway: EnvironmentFilesystemGateway;
   readonly gateway: LocalEnvironmentGateway;
   readonly repositoryCatalogGateway: RepositoryCatalogGateway;

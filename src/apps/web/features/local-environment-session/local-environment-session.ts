@@ -91,6 +91,9 @@ export function createLocalEnvironmentSession(
     ...(options.repositoryChanges === undefined
       ? {}
       : { repositoryChanges: options.repositoryChanges }),
+    ...(options.commitInspection === undefined
+      ? {}
+      : { commitInspection: options.commitInspection }),
     filesystem: filesystemSession.controller,
     getSnapshot: () => state,
     repositoryCatalog: repositoryCatalogSession.controller,

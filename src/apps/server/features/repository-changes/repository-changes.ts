@@ -20,6 +20,10 @@ import { readChangeDiff } from "#server/features/repository-changes/git/read-cha
 import { readChanges } from "#server/features/repository-changes/git/read-changes";
 import { verifyChanges } from "#server/features/repository-changes/git/verify-changes";
 import {
+  inspectCommit,
+  inspectCommitDiff,
+} from "#server/features/repository-changes/history/inspect-commit";
+import {
   canonicalizeWorktrees,
   readWorktrees,
 } from "#server/features/repository-refs/git/read-repository-refs";
@@ -29,7 +33,9 @@ export function createRepositoryChangesService(
   git: GitCommandRunner,
 ): RepositoryChangesService {
   const locks = new Map<string, Semaphore.Semaphore>();
-  const validate = (scope: ChangesScope) =>
+  const validate = (
+    scope: Pick<ChangesScope, "repositoryId" | "worktreePath">,
+  ) =>
     Effect.gen(function* () {
       const repository = yield* catalog
         .find(scope.repositoryId)
@@ -67,6 +73,12 @@ export function createRepositoryChangesService(
       return yield* lock.withPermit(run);
     });
   return {
+    inspect: (command) =>
+      validate(command).pipe(Effect.andThen(() => inspectCommit(git, command))),
+    inspectDiff: (command) =>
+      validate(command).pipe(
+        Effect.andThen(() => inspectCommitDiff(git, command)),
+      ),
     read: (scope) =>
       locked(
         scope,
