@@ -36,7 +36,6 @@ export function createCommitInspectionController(
   let fileGeneration = 0;
   let disposed = false;
   let owners = 0;
-  let parentOid: string | undefined;
   const publish = (next: Partial<CommitInspectionState>) => {
     if (disposed) return;
     state = { ...state, ...next };
@@ -81,22 +80,15 @@ export function createCommitInspectionController(
         ),
     );
   };
-  const load = (oid: string | undefined, parent?: string) => {
+  const load = (oid: string | undefined) => {
     const current = ++generation;
     ++fileGeneration;
     cancel(detailsFiber);
     cancel(diffFiber);
-    parentOid = parent;
     const previousPath = state.oid === oid ? state.path : null;
-    const details =
-      state.details !== null &&
-      state.details.oid === oid &&
-      parent !== undefined
-        ? { ...state.details, parentOid: parent, files: [] }
-        : null;
     publish({
       oid,
-      details,
+      details: null,
       path: previousPath,
       diff: null,
       loading: oid !== undefined,
@@ -110,7 +102,6 @@ export function createCommitInspectionController(
         .inspect({
           ...scope,
           oid,
-          ...(parent === undefined ? {} : { parentOid: parent }),
         })
         .pipe(
           Effect.match({
@@ -165,9 +156,8 @@ export function createCommitInspectionController(
     selectCommit: (oid: string | undefined) => {
       if (oid !== state.oid) load(oid);
     },
-    selectParent: (parent: string) => load(state.oid, parent),
     selectFile,
-    retry: () => load(state.oid, parentOid),
+    retry: () => load(state.oid),
     retryDiff: () => selectFile(state.path),
     preferences: (preferences: DiffPreferences) => {
       publish({ preferences });
