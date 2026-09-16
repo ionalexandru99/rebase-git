@@ -172,11 +172,7 @@ export function createCommitInspectionController(
     preferences: (preferences: DiffPreferences) => {
       publish({ preferences });
       runtime.runFork(
-        saveDiffPreferences(preferences).pipe(
-          Effect.catch((error) =>
-            Effect.sync(() => publish({ diffError: error.message })),
-          ),
-        ),
+        saveDiffPreferences(preferences).pipe(Effect.catch(() => Effect.void)),
       );
     },
   };
