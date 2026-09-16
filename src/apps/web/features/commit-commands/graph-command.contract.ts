@@ -9,6 +9,7 @@ export type GraphCommandEnvironment = Omit<
   "selectedOids" | "invokingOid" | "ref"
 >;
 export type GraphCommandId =
+  | "graph.openDetails"
   | "graph.fetch"
   | "graph.copySha"
   | "graph.copySubject"
@@ -42,6 +43,7 @@ export interface GraphCommandDescriptor {
 }
 
 export interface GraphCommandHandlers {
+  readonly openDetails?: (oid: string) => void;
   readonly readCommit: (oid: string) => Promise<RepositoryCommit | undefined>;
   readonly writeClipboard: (text: string) => Promise<void>;
   readonly toggleHistoryRef?: (

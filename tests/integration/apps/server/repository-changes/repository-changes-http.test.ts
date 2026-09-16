@@ -13,6 +13,7 @@ import { createRepositoryCatalog } from "#server/features/repository-catalog/rep
 import { createRepositoryChangesService } from "#server/features/repository-changes/index";
 import { acquireEnvironmentContext } from "#server/persistence/environment-context";
 import { environmentPaths } from "#server/persistence/storage/environment-paths";
+import { createCommitInspectionClient } from "#web/features/commit-inspection/transport/commit-inspection-client";
 import { createRepositoryChangesClient } from "#web/features/working-changes/transport/repository-changes-client";
 
 it("authorizes changes reads separately from index mutations across HTTP", async () => {
@@ -91,6 +92,60 @@ it("authorizes changes reads separately from index mutations across HTTP", async
               path: "draft.txt",
             })).after,
           ).toBe("draft\n");
+          yield* Effect.promise(() =>
+            promisify(execFile)("git", [
+              "-C",
+              directory,
+              "-c",
+              "user.name=Test",
+              "-c",
+              "user.email=test@example.test",
+              "-c",
+              "commit.gpgsign=false",
+              "commit",
+              "-m",
+              "Initial",
+            ]),
+          );
+          const oid = (yield* Effect.promise(() =>
+            promisify(execFile)("git", ["-C", directory, "rev-parse", "HEAD"]),
+          )).stdout.trim();
+          const inspection = createCommitInspectionClient(
+            listener.origin,
+            () => ({ type: "bearer", value: viewerToken }),
+          );
+          const inspectionScope = {
+            repositoryId: repository.id,
+            worktreePath: directory,
+          };
+          const details = yield* inspection.inspect({
+            ...inspectionScope,
+            oid,
+          });
+          expect(details.files).toEqual([
+            { path: "draft.txt", previousPath: null, status: "A" },
+          ]);
+          expect(
+            (yield* inspection.diff({
+              ...inspectionScope,
+              oid,
+              path: "draft.txt",
+            })).after,
+          ).toBe("draft\n");
+          expect(
+            (yield* inspection
+              .inspect({ ...inspectionScope, oid: "HEAD" })
+              .pipe(Effect.flip)).message,
+          ).toContain("Could not load");
+          const unauthorized = createCommitInspectionClient(
+            listener.origin,
+            () => ({ type: "bearer", value: "invalid" }),
+          );
+          expect(
+            (yield* unauthorized
+              .inspect({ ...inspectionScope, oid })
+              .pipe(Effect.flip)).message,
+          ).toContain("Could not load");
         }),
       ),
     );

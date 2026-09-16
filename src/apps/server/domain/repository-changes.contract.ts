@@ -1,4 +1,9 @@
 import type {
+  CommitInspection,
+  InspectCommit,
+  InspectCommitDiff,
+} from "@rebase/contracts/commit-inspection/commit-inspection.contract";
+import type {
   ChangeDiff,
   ChangesFailure,
   ChangesScope,
@@ -15,6 +20,12 @@ export class RepositoryChangesError extends Data.TaggedError(
   readonly failure: ChangesFailure;
 }> {}
 export interface RepositoryChangesService {
+  readonly inspect: (
+    command: InspectCommit,
+  ) => Effect.Effect<CommitInspection, RepositoryChangesError>;
+  readonly inspectDiff: (
+    command: InspectCommitDiff,
+  ) => Effect.Effect<ChangeDiff, RepositoryChangesError>;
   readonly read: (
     scope: ChangesScope,
   ) => Effect.Effect<RepositoryChanges, RepositoryChangesError>;

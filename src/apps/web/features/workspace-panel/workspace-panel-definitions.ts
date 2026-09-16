@@ -1,11 +1,19 @@
 import {
   IconCode,
   IconFileDiff,
+  IconGitCommit,
   IconGitPullRequest,
 } from "@tabler/icons-react";
 import type { WorkspacePanelDefinition } from "#web/features/workspace-panel/workspace-panel.contract";
 
 const definitions = {
+  commit: {
+    label: "Commit",
+    icon: IconGitCommit,
+    available: true,
+    lifetime: "selection",
+    description: "Inspect a selected commit",
+  },
   changes: {
     label: "Diffs",
     icon: IconFileDiff,

@@ -1,4 +1,5 @@
 import { Effect } from "effect";
+import { createCommitInspectionClient } from "#web/features/commit-inspection/transport/commit-inspection-client";
 import { environmentResponseError } from "#web/features/environment-connection/environment-connection-errors";
 import type { EnvironmentCredential } from "#web/features/environment-connection/environment-credential.contract";
 import {
@@ -109,6 +110,10 @@ export function createBrowserLocalEnvironmentSession(productVersion: string) {
   };
 
   return createLocalEnvironmentSession({
+    commitInspection: createCommitInspectionClient(
+      bootstrap.environmentOrigin,
+      () => changesCredential,
+    ),
     repositoryChanges: createRepositoryChangesClient(
       bootstrap.environmentOrigin,
       () => changesCredential,
