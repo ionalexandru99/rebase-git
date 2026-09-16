@@ -40,7 +40,6 @@ export function recoverRepositoryOperation(
           ),
         ),
       );
-    yield* requireRecoverySuccess(output);
     const operation = yield* readRepositoryOperation(
       git,
       command.worktreePath,
@@ -53,8 +52,24 @@ export function recoverRepositoryOperation(
         ),
       ),
     );
+    if (command.action === "abort" || !advancedToConflict(state, operation))
+      yield* requireRecoverySuccess(output);
     return { operation, invalidation: recoveryInvalidation };
   }).pipe(Effect.uninterruptible);
+}
+
+function advancedToConflict(
+  previous: RepositoryOperation,
+  current: RepositoryOperation,
+) {
+  return (
+    current.kind === previous.kind &&
+    current.phase === "conflicts" &&
+    ((current.commit !== null && current.commit !== previous.commit) ||
+      (current.progress !== null &&
+        previous.progress !== null &&
+        current.progress.current > previous.progress.current))
+  );
 }
 
 function validateRecoveryAction(

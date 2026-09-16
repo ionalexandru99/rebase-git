@@ -1,4 +1,4 @@
-import { Effect, Semaphore } from "effect";
+import { Effect, Option, Semaphore } from "effect";
 import type { GitCommandRunner } from "#server/domain/git-command.contract";
 import type {
   RepositoryWriteIntent,
@@ -17,7 +17,11 @@ export function createRepositoryWrites(
     string,
     { semaphore: Semaphore.Semaphore; owners: number }
   >();
-  const withLock = <A, E, R>(key: string, effect: Effect.Effect<A, E, R>) =>
+  const withLock = <A, E, R>(
+    key: string,
+    effect: Effect.Effect<A, E, R>,
+    waitForPermit = true,
+  ) =>
     Effect.acquireUseRelease(
       Effect.sync(() => {
         let entry = locks.get(key);
@@ -28,7 +32,25 @@ export function createRepositoryWrites(
         entry.owners++;
         return entry;
       }),
-      (entry) => entry.semaphore.withPermit(effect),
+      (entry) =>
+        waitForPermit
+          ? entry.semaphore.withPermit(effect)
+          : entry.semaphore
+              .withPermitsIfAvailable(1)(effect)
+              .pipe(
+                Effect.flatMap(
+                  Option.match({
+                    onSome: Effect.succeed,
+                    onNone: () =>
+                      Effect.fail(
+                        operationError(
+                          "Locked",
+                          "Another repository write is in progress.",
+                        ),
+                      ),
+                  }),
+                ),
+              ),
       (entry) =>
         Effect.sync(() => {
           if (--entry.owners === 0) locks.delete(key);
@@ -64,7 +86,11 @@ export function createRepositoryWrites(
             ? execute
             : withLock(`worktree:${paths.gitDirectory}`, execute);
         return yield* sharedRefs
-          ? withLock(`refs:${paths.commonDirectory}`, worktree)
+          ? withLock(
+              `refs:${paths.commonDirectory}`,
+              worktree,
+              intent !== "fetch",
+            )
           : worktree;
       }),
   };

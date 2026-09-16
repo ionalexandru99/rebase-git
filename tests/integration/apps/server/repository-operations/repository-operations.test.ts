@@ -43,6 +43,7 @@ async function fixture() {
   await git("config", "user.name", "Test");
   await git("config", "user.email", "test@example.com");
   await git("config", "commit.gpgsign", "false");
+  await git("config", "rerere.enabled", "false");
   await writeFile(join(directory, "file.txt"), "base\n");
   await git("add", ".");
   await git("commit", "-m", "base");
@@ -196,6 +197,34 @@ describe("Git operation recovery", { timeout: 30000 }, () => {
     expect((await f.execute("continue")).operation.kind).toBe("idle");
     expect((await f.git("show", "HEAD:file.txt")).stdout).toBe("amended\n");
   });
+
+  it.each(["continue", "skip"] as const)(
+    "returns the next conflict after rebase %s advances a step",
+    async (action) => {
+      const f = await fixture();
+      await writeFile(join(f.directory, "second.txt"), "main\n");
+      await f.git("add", "second.txt");
+      await f.git("commit", "-m", "main second file");
+      await f.git("switch", "topic");
+      await writeFile(join(f.directory, "second.txt"), "topic\n");
+      await f.git("add", "second.txt");
+      await f.git("commit", "-m", "topic second file");
+      await expect(f.git("rebase", "main")).rejects.toBeDefined();
+      expect((await f.read()).progress).toEqual({ current: 1, total: 2 });
+      if (action === "continue") {
+        await writeFile(join(f.directory, "file.txt"), "resolved\n");
+        await f.git("add", "file.txt");
+      }
+      const result = await f.execute(action);
+      expect(result.operation).toMatchObject({
+        kind: "rebase",
+        phase: "conflicts",
+        progress: { current: 2, total: 2 },
+        unresolvedPaths: ["second.txt"],
+      });
+      await f.execute("abort");
+    },
+  );
 
   it("coordinates writes but leaves reads and other worktree staging available", async () => {
     const f = await fixture();
@@ -385,6 +414,10 @@ describe("Git operation recovery", { timeout: 30000 }, () => {
             )
             .pipe(Effect.forkScoped);
           yield* Deferred.await(entered);
+          const contendedFetch = yield* f.writes
+            .run(linked, "fetch", Effect.die("Fetch must not start"))
+            .pipe(Effect.flip, Effect.timeout("1 second"));
+          expect(contendedFetch.failure.reason).toBe("Locked");
           const second = yield* f.writes
             .run(
               linked,

@@ -14,6 +14,7 @@ import { afterEach, describe, expect, it } from "vite-plus/test";
 import { createLocalGitCommandRunner } from "#server/adapters/local-git/local-git-command-runner";
 import type { GitCommand } from "#server/domain/git-command.contract";
 import { createRepositoryChangesService } from "#server/features/repository-changes/repository-changes";
+import { createRepositoryWrites } from "#server/features/repository-operations/index";
 
 const exec = promisify(execFile);
 const directories: string[] = [];
@@ -75,6 +76,7 @@ async function fixture(
           ),
         ),
     },
+    createRepositoryWrites(runner),
   );
   const read = (amend = false) =>
     Effect.runPromise(service.read({ ...scope, amend }));

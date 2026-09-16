@@ -27,7 +27,6 @@ import { mutateChanges } from "#server/features/repository-changes/git/mutate-ch
 import { readChangeDiff } from "#server/features/repository-changes/git/read-change-diff";
 import { readChanges } from "#server/features/repository-changes/git/read-changes";
 import { verifyChanges } from "#server/features/repository-changes/git/verify-changes";
-import { createRepositoryWrites } from "#server/features/repository-operations/index";
 import {
   canonicalizeWorktrees,
   readWorktrees,
@@ -36,7 +35,7 @@ import {
 export function createRepositoryChangesService(
   catalog: Pick<RepositoryCatalog, "find">,
   git: GitCommandRunner,
-  writes: RepositoryWritesService = createRepositoryWrites(git),
+  writes: RepositoryWritesService,
 ): RepositoryChangesService {
   const validate = (scope: ChangesScope) =>
     Effect.gen(function* () {
