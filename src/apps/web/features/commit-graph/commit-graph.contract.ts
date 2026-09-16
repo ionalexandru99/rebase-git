@@ -1,4 +1,5 @@
 export interface CommitGraphHandle {
+  readonly focusSelection: () => void;
   readonly navigateToOid: (oid: string) => Promise<void>;
 }
 

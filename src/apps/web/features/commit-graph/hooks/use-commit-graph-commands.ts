@@ -14,7 +14,9 @@ export function useCommitGraphCommands({
   fetch,
   selectedOids,
   onRemoveHistoryRef,
+  onOpenDetails,
 }: {
+  readonly onOpenDetails?: ((oid: string) => void) | undefined;
   readonly commandEnvironment: GraphCommandEnvironment | undefined;
   readonly reader:
     | Pick<RepositoryHistoryReader, "getCommitSummaries">
@@ -44,6 +46,7 @@ export function useCommitGraphCommands({
           },
     selectedOids,
     handlers: {
+      ...(onOpenDetails === undefined ? {} : { openDetails: onOpenDetails }),
       readCommit: async (oid) => (await reader?.getCommitSummaries([oid]))?.[0],
       writeClipboard: writeClipboardText,
       ...(onRemoveHistoryRef === undefined

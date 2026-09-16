@@ -1,4 +1,5 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
+import { CommitInspectionHttpApi } from "@rebase/contracts/commit-inspection/commit-inspection.contract";
 import { RepositoryChangesHttpApi } from "@rebase/contracts/repository-changes/repository-changes.contract";
 import { Effect } from "effect";
 import type { RepositoryChangesService } from "#server/domain/repository-changes.contract";
@@ -21,7 +22,7 @@ export function respondToRepositoryChangesRequest(
   changes: RepositoryChangesService,
 ) {
   return Effect.gen(function* () {
-    const api = RepositoryChangesHttpApi;
+    const api = { ...RepositoryChangesHttpApi, ...CommitInspectionHttpApi };
     const action = (Object.keys(api) as (keyof typeof api)[]).find(
       (key) => api[key].path === request.url,
     );
@@ -30,11 +31,31 @@ export function respondToRepositoryChangesRequest(
     yield* validateRequestOrigin(request, false);
     yield* authorization.authorize(
       readRequestCredential(request),
-      action === "read" || action === "diff"
-        ? "repository.read"
-        : "repository.write",
+      action === "mutate" || action === "commit"
+        ? "repository.write"
+        : "repository.read",
     );
     switch (action) {
+      case "inspect":
+        writeJson(
+          response,
+          200,
+          api.inspect.success,
+          yield* changes.inspect(
+            yield* decodeRequestBody(api.inspect.request, body),
+          ),
+        );
+        break;
+      case "inspectDiff":
+        writeJson(
+          response,
+          200,
+          api.inspectDiff.success,
+          yield* changes.inspectDiff(
+            yield* decodeRequestBody(api.inspectDiff.request, body),
+          ),
+        );
+        break;
       case "read":
         writeJson(
           response,
