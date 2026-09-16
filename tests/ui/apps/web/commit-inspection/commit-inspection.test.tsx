@@ -207,11 +207,10 @@ describe("commit inspection", () => {
       )
       .not.toBeInTheDocument();
   });
-  it("opens from graph keyboard activation, follows selection, and closes with focus restored", async () => {
+  it("opens from a double click, follows selection, and closes with focus restored", async () => {
     const { screen, grid, client } = await fixture();
     const row = grid.getByRole("row", { name: /^Commit 0,/ });
-    await row.click();
-    await userEvent.keyboard("{Enter}");
+    await row.dblClick();
     await expect
       .element(screen.getByRole("region", { name: "Commit details" }))
       .toBeVisible();
@@ -229,8 +228,7 @@ describe("commit inspection", () => {
         expect.objectContaining({ oid: historyOid(1) }),
       ),
     );
-    await screen.getByRole("tab", { name: "Commit", exact: true }).click();
-    await userEvent.keyboard("{Escape}");
+    await screen.getByRole("button", { name: "Close Commit tab" }).click();
     await expect
       .element(screen.getByRole("region", { name: "Commit details" }))
       .not.toBeInTheDocument();
@@ -260,32 +258,6 @@ describe("commit inspection", () => {
       .element(screen.getByRole("textbox", { name: "Working draft" }))
       .toHaveValue("Unsaved selection state");
     await expect.element(grid).toHaveFocus();
-  });
-
-  it("navigates files by keyboard", async () => {
-    const { screen, grid, client } = await fixture();
-    await grid.getByRole("row", { name: /^Commit 0,/ }).dblClick();
-    await expect
-      .element(screen.getByRole("treeitem", { name: /first.bin/ }))
-      .toHaveAttribute("aria-selected", "true");
-    await screen.getByRole("tree", { name: "Commit files" }).click();
-    await userEvent.keyboard("{Home}{ArrowLeft}");
-    await expect
-      .element(screen.getByRole("treeitem", { name: "src/", exact: true }))
-      .toHaveAttribute("aria-expanded", "false");
-    await expect
-      .element(screen.getByRole("treeitem", { name: /second.bin/ }))
-      .not.toBeInTheDocument();
-    await userEvent.keyboard("{ArrowRight}");
-    await userEvent.keyboard("{End}");
-    await vi.waitFor(() =>
-      expect(client.diff).toHaveBeenLastCalledWith(
-        expect.objectContaining({
-          path: "src/second.bin",
-          parentOid: historyOid(1),
-        }),
-      ),
-    );
   });
 
   it("discards late metadata and file responses after selection changes", async () => {
@@ -328,9 +300,9 @@ describe("commit inspection", () => {
     await expect.element(screen.getByText("Loading commit…")).toBeVisible();
     await grid.getByRole("row", { name: /^Commit 1,/ }).click();
     await expect
-      .element(screen.getByRole("treeitem", { name: /second.bin/ }))
+      .element(screen.getByRole("button", { name: /second.bin/ }))
       .toBeVisible();
-    await screen.getByRole("treeitem", { name: /second.bin/ }).click();
+    await screen.getByRole("button", { name: /second.bin/ }).click();
     await expect.element(screen.getByText("10 → 222 bytes")).toBeVisible();
     resolveDetails(details());
     resolveDiff(diff("src/first.bin", 999));

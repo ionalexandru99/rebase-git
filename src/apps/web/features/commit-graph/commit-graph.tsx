@@ -313,23 +313,6 @@ export function CommitGraph({
         null
     )
       return;
-    if (
-      event.key === "Enter" &&
-      !event.altKey &&
-      !event.ctrlKey &&
-      !event.metaKey &&
-      !event.shiftKey &&
-      !event.nativeEvent.isComposing &&
-      onOpenDetails &&
-      activeCommitOid !== undefined
-    ) {
-      event.preventDefault();
-      void commands.execute(
-        "graph.openDetails",
-        commands.context(activeCommitOid),
-      );
-      return;
-    }
     navigation.onKeyDown(event);
   };
 

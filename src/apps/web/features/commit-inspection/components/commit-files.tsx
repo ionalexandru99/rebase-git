@@ -4,7 +4,7 @@ import {
   IconChevronRight,
   IconFolder,
 } from "@tabler/icons-react";
-import { useCommitFiles } from "#web/features/commit-inspection/hooks/use-commit-files";
+import { useFileRows } from "#web/features/file-diff/index";
 
 const statusLabels: Record<CommitFile["status"], string> = {
   A: "Added",
@@ -23,17 +23,8 @@ export function CommitFiles({
   readonly path: string | null;
   readonly select: (path: string) => void;
 }) {
-  const {
-    rows,
-    collapsed,
-    active,
-    activeIndex,
-    scrollRef,
-    virtualizer,
-    toggle,
-    activate,
-    onKeyDown,
-  } = useCommitFiles(files, path, select);
+  const { rows, collapsed, scrollRef, virtualizer, toggle } =
+    useFileRows(files);
   return (
     <section
       className="flex min-h-0 flex-col border-border border-l"
@@ -45,14 +36,7 @@ export function CommitFiles({
       </div>
       <div
         ref={scrollRef}
-        role="tree"
-        aria-label="Commit files"
-        aria-activedescendant={
-          activeIndex < 0 ? undefined : `commit-file-${activeIndex}`
-        }
-        tabIndex={0}
         className="min-h-0 flex-1 overflow-auto outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-primary"
-        onKeyDown={onKeyDown}
       >
         <div
           style={{ height: virtualizer.getTotalSize(), position: "relative" }}
@@ -62,10 +46,11 @@ export function CommitFiles({
             if (!row) return null;
             const file = row.file;
             return (
-              <div
-                role="treeitem"
-                aria-level={row.depth + 1}
-                aria-selected={file !== undefined && path === file.path}
+              <button
+                type="button"
+                aria-pressed={
+                  file !== undefined ? path === file.path : undefined
+                }
                 aria-expanded={
                   file === undefined ? !collapsed.has(row.key) : undefined
                 }
@@ -74,24 +59,14 @@ export function CommitFiles({
                     ? `${file.path} ${statusLabels[file.status]}${file.previousPath ? ` from ${file.previousPath}` : ""}`
                     : row.key
                 }
-                id={`commit-file-${item.index}`}
                 key={row.key}
-                tabIndex={-1}
-                data-active={active === row.key}
-                className="absolute inset-x-0 cursor-default py-1.5 pr-3 text-xs aria-selected:bg-primary/15 data-[active=true]:ring-1 data-[active=true]:ring-primary/40 data-[active=true]:ring-inset"
+                className="absolute inset-x-0 cursor-default py-1.5 pr-3 text-left text-xs aria-pressed:bg-primary/15 focus-visible:ring-1 focus-visible:ring-primary/40 focus-visible:ring-inset"
                 style={{
                   top: item.start,
                   height: item.size,
                   paddingLeft: 10 + row.depth * 12,
                 }}
-                onClick={() => {
-                  activate(item.index);
-                  if (!file) toggle(row.key, !collapsed.has(row.key));
-                  scrollRef.current?.focus();
-                }}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter") activate(item.index);
-                }}
+                onClick={() => (file ? select(file.path) : toggle(row.key))}
               >
                 <div className="flex items-center gap-1.5">
                   {file ? null : (
@@ -127,7 +102,7 @@ export function CommitFiles({
                     from {file.previousPath}
                   </div>
                 ) : null}
-              </div>
+              </button>
             );
           })}
         </div>

@@ -1,5 +1,6 @@
 import type { InspectCommit } from "@rebase/contracts/commit-inspection/commit-inspection.contract";
-import { Effect, Fiber, Layer, ManagedRuntime } from "effect";
+import { Effect, Fiber } from "effect";
+import { createApplicationRuntime } from "#web/features/application-runtime/index";
 import type {
   CommitInspectionClient,
   CommitInspectionState,
@@ -17,7 +18,7 @@ export function createCommitInspectionController(
   client: CommitInspectionClient,
   scope: Pick<InspectCommit, "repositoryId" | "worktreePath">,
 ) {
-  const runtime = ManagedRuntime.make(Layer.empty);
+  const runtime = createApplicationRuntime();
   let state: CommitInspectionState = {
     oid: undefined,
     details: null,
@@ -34,10 +35,8 @@ export function createCommitInspectionController(
   let diffFiber: Fiber.Fiber<void> | undefined;
   let generation = 0;
   let fileGeneration = 0;
-  let disposed = false;
-  let owners = 0;
   const publish = (next: Partial<CommitInspectionState>) => {
-    if (disposed) return;
+    if (runtime.disposed) return;
     state = { ...state, ...next };
     for (const listener of listeners) listener();
   };
@@ -131,28 +130,16 @@ export function createCommitInspectionController(
         listeners.delete(listener);
       };
     },
-    start: () => {
-      owners++;
-      runtime.runFork(
+    start: () =>
+      runtime.start(
         readDiffPreferences().pipe(
           Effect.match({
             onSuccess: (preferences) => publish({ preferences }),
             onFailure: () => undefined,
           }),
         ),
-      );
-    },
-    stop: () => {
-      owners--;
-      queueMicrotask(() => {
-        if (owners === 0) {
-          disposed = true;
-          ++generation;
-          ++fileGeneration;
-          void runtime.dispose();
-        }
-      });
-    },
+      ),
+    stop: runtime.stop,
     selectCommit: (oid: string | undefined) => {
       if (oid !== state.oid) load(oid);
     },
