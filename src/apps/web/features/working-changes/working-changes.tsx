@@ -2,7 +2,7 @@ import type {
   ChangeSection,
   ChangeSelection,
 } from "@rebase/contracts/repository-changes/repository-changes.contract";
-import { lazy, Suspense, useState } from "react";
+import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import type { RepositoryChangesClient } from "#web/features/working-changes/working-changes.contract";
 import {
   AlertDialog,
@@ -41,6 +41,7 @@ export function WorkingChanges({
   connected,
   writable,
   onCommitted,
+  reviewRequest = 0,
 }: {
   readonly client: RepositoryChangesClient | undefined;
   readonly environmentId: string | undefined;
@@ -49,6 +50,7 @@ export function WorkingChanges({
   readonly connected: boolean;
   readonly writable: boolean;
   readonly onCommitted: () => void;
+  readonly reviewRequest?: number;
 }) {
   if (
     client === undefined ||
@@ -69,13 +71,33 @@ export function WorkingChanges({
       worktreePath={worktreePath}
       onCommitted={onCommitted}
     >
-      <ChangesLayout writable={writable} />
+      <ChangesLayout writable={writable} reviewRequest={reviewRequest} />
     </WorkingChangesProvider>
   );
 }
 
-function ChangesLayout({ writable }: { readonly writable: boolean }) {
+function ChangesLayout({
+  writable,
+  reviewRequest,
+}: {
+  readonly writable: boolean;
+  readonly reviewRequest: number;
+}) {
   const { state, controller } = useWorkingChanges();
+  const section = useRef<HTMLElement>(null);
+  const reviewed = useRef(0);
+  useEffect(() => {
+    if (
+      reviewRequest === reviewed.current ||
+      state.loading ||
+      state.changes === null
+    )
+      return;
+    reviewed.current = reviewRequest;
+    const conflict = state.changes.unstaged.find((file) => file.status === "U");
+    if (conflict) controller.select("unstaged", conflict.path);
+    section.current?.focus();
+  }, [reviewRequest, state.loading, state.changes, controller]);
   const [discard, setDiscard] = useState<{
     section: ChangeSection;
     selection: ChangeSelection;
@@ -88,6 +110,8 @@ function ChangesLayout({ writable }: { readonly writable: boolean }) {
   };
   return (
     <section
+      ref={section}
+      tabIndex={-1}
       className="flex h-full min-h-0 flex-col"
       aria-label="Working changes"
       aria-busy={state.busy}

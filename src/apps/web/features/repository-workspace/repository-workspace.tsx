@@ -13,6 +13,12 @@ import {
   resolveHistoryScope,
   toggleHistoryRef,
 } from "#web/features/commit-graph/index";
+import {
+  OperationRecovery,
+  OperationRecoveryProvider,
+  type RepositoryOperationsClient,
+  useOperationCommandState,
+} from "#web/features/operation-recovery/index";
 import type { RepositoryHistoryReader } from "#web/features/repository-history/repository-history-reader.contract";
 import type { RepositoryRefsSnapshot } from "#web/features/repository-refs/repository-refs-controller.contract";
 import { useCachedRepositoryRefs } from "#web/features/repository-refs/use-cached-repository-refs";
@@ -35,6 +41,7 @@ const branchesSidebarSize = {
 } as const;
 
 export function RepositoryWorkspace({
+  operationsClient,
   changesClient,
   accessCapabilities = [],
   connected = false,
@@ -49,6 +56,7 @@ export function RepositoryWorkspace({
   selectRef,
 }: {
   readonly changesClient?: RepositoryChangesClient | undefined;
+  readonly operationsClient?: RepositoryOperationsClient | undefined;
   readonly accessCapabilities?: readonly EnvironmentAccessCapability[];
   readonly connected?: boolean;
   readonly activeWorktreePath: string;
@@ -71,7 +79,7 @@ export function RepositoryWorkspace({
     repositoryId,
     refs,
   );
-  return (
+  const content = (
     <RepositoryWorkspaceContent
       changesClient={changesClient}
       accessCapabilities={accessCapabilities}
@@ -88,6 +96,19 @@ export function RepositoryWorkspace({
       retryRefs={retryRefs}
       selectRef={selectRef}
     />
+  );
+  return operationsClient && repositoryId ? (
+    <OperationRecoveryProvider
+      key={`${environmentId}:${repositoryId}:${activeWorktreePath}`}
+      client={operationsClient}
+      scope={{ repositoryId, worktreePath: activeWorktreePath }}
+      connected={connected}
+      invalidate={retryRefs}
+    >
+      {content}
+    </OperationRecoveryProvider>
+  ) : (
+    content
   );
 }
 
@@ -121,6 +142,8 @@ function RepositoryWorkspaceContent({
   readonly selectRef: (target: RepositoryRefTarget) => void;
 }): JSX.Element {
   const [localBranchesFocusRequest, setLocalBranchesFocusRequest] = useState(0);
+  const [changesReviewRequest, setChangesReviewRequest] = useState(0);
+  const operationState = useOperationCommandState();
   useHistoryRefRefresh(historyReader, connected, retryRefs);
   const activeBranch = refs.refs?.worktrees.find(
     ({ path }) => path === activeWorktreePath,
@@ -203,6 +226,11 @@ function RepositoryWorkspaceContent({
         activeWorktreePath,
       ])}
     >
+      <OperationRecovery
+        repositoryName={repositoryName}
+        writable={accessCapabilities.includes("repository.write")}
+        onReview={() => setChangesReviewRequest((request) => request + 1)}
+      />
       <WorkspacePanel.Group>
         <ResizablePanel
           defaultSize={branchesSidebarSize.default}
@@ -251,7 +279,7 @@ function RepositoryWorkspaceContent({
                         connected,
                         capabilities: new Set(accessCapabilities),
                         freshnessReady: false,
-                        operationState: "idle",
+                        operationState,
                       }
                 }
                 onRemoveHistoryRef={toggleRef}
@@ -289,6 +317,7 @@ function RepositoryWorkspaceContent({
           contents={{
             changes: (
               <WorkingChanges
+                reviewRequest={changesReviewRequest}
                 client={changesClient}
                 environmentId={environmentId}
                 repositoryId={repositoryId}

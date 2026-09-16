@@ -4,8 +4,10 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useSyncExternalStore,
 } from "react";
+import { useOperationRecovery } from "#web/features/operation-recovery/index";
 import type { RepositoryChangesClient } from "#web/features/working-changes/working-changes.contract";
 import {
   createWorkingChangesController,
@@ -30,6 +32,8 @@ export function WorkingChangesProvider({
   readonly worktreePath: string;
   readonly onCommitted: () => void;
 }) {
+  const { controller: recovery, state: operationState } =
+    useOperationRecovery();
   const controller = useMemo(
     () =>
       createWorkingChangesController(
@@ -37,13 +41,26 @@ export function WorkingChangesProvider({
         { repositoryId, worktreePath, amend: false },
         JSON.stringify([environmentId, repositoryId, worktreePath]),
         onCommitted,
+        recovery?.refresh,
       ),
-    [client, environmentId, repositoryId, worktreePath, onCommitted],
+    [client, environmentId, repositoryId, worktreePath, onCommitted, recovery],
   );
   useEffect(() => {
     controller.start();
     return controller.stop;
   }, [controller]);
+  const revision = operationState?.operation?.revision;
+  const busy = operationState?.busy ?? false;
+  const previousOperation = useRef({ revision, busy });
+  useEffect(() => {
+    const previous = previousOperation.current;
+    previousOperation.current = { revision, busy };
+    if (
+      (previous.revision !== undefined && previous.revision !== revision) ||
+      (previous.busy && !busy)
+    )
+      controller.refresh();
+  }, [controller, revision, busy]);
   return (
     <WorkingChangesContext.Provider value={controller}>
       {children}

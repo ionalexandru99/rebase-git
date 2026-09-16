@@ -10,6 +10,7 @@ import type {
   EnvironmentFilesystemController,
   EnvironmentFilesystemGateway,
 } from "#web/features/environment-filesystem/environment-filesystem-controller.contract";
+import type { RepositoryOperationsClient } from "#web/features/operation-recovery/index";
 import type {
   RepositoryCatalogController,
   RepositoryCatalogGateway,
@@ -45,6 +46,7 @@ export type LocalEnvironmentSessionState =
     };
 
 export interface LocalEnvironmentSession {
+  readonly repositoryOperations?: RepositoryOperationsClient;
   readonly repositoryChanges?: RepositoryChangesClient;
   readonly filesystem: EnvironmentFilesystemController;
   readonly getSnapshot: () => LocalEnvironmentSessionState;
@@ -72,6 +74,7 @@ export interface LocalEnvironmentGateway {
 }
 
 export interface LocalEnvironmentSessionOptions {
+  readonly repositoryOperations?: RepositoryOperationsClient;
   readonly repositoryChanges?: RepositoryChangesClient;
   readonly filesystemGateway: EnvironmentFilesystemGateway;
   readonly gateway: LocalEnvironmentGateway;

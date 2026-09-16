@@ -11,6 +11,7 @@ import { createEnvironmentEventPublisher } from "#server/features/environment-co
 import { acquireEnvironmentListener } from "#server/features/environment-server/server/environment-listener";
 import { createRepositoryCatalog } from "#server/features/repository-catalog/repository-catalog";
 import { createRepositoryChangesService } from "#server/features/repository-changes/index";
+import { createRepositoryWrites } from "#server/features/repository-operations/index";
 import { acquireEnvironmentContext } from "#server/persistence/environment-context";
 import { environmentPaths } from "#server/persistence/storage/environment-paths";
 import { createRepositoryChangesClient } from "#web/features/working-changes/transport/repository-changes-client";
@@ -35,12 +36,14 @@ it("authorizes changes reads separately from index mutations across HTTP", async
           );
           const catalog = createRepositoryCatalog(context);
           const repository = yield* catalog.remember(directory);
+          const git = createLocalGitCommandRunner();
           const listener = yield* acquireEnvironmentListener({
             authorization,
             catalog,
             changes: createRepositoryChangesService(
               catalog,
-              createLocalGitCommandRunner(),
+              git,
+              createRepositoryWrites(git),
             ),
             environmentId: "00000000-0000-4000-8000-000000000001",
             events: createEnvironmentEventPublisher(),

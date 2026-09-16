@@ -10,6 +10,7 @@ import {
   RepositoryRefsOperationFailure,
 } from "@rebase/contracts";
 import { ChangesFailure } from "@rebase/contracts/repository-changes/repository-changes.contract";
+import { OperationFailure } from "@rebase/contracts/repository-operations/repository-operations.contract";
 import { Effect } from "effect";
 import type {
   EnvironmentFilesystem,
@@ -21,6 +22,7 @@ import type {
   RepositoryCatalogError,
 } from "#server/domain/repository-catalog.contract";
 import type { RepositoryChangesError } from "#server/domain/repository-changes.contract";
+import type { RepositoryOperationError } from "#server/domain/repository-operations.contract";
 import type {
   RepositoryRefsError,
   RepositoryRefsService,
@@ -50,6 +52,7 @@ import {
 import { respondToEnvironmentFilesystemRequest } from "#server/features/environment-filesystem/http/environment-filesystem-http-handler";
 import { respondToRepositoryCatalogRequest } from "#server/features/repository-catalog/http/repository-catalog-http-handler";
 import { respondToRepositoryChangesRequest } from "#server/features/repository-changes/http/repository-changes-http-handler";
+import { respondToRepositoryOperationsRequest } from "#server/features/repository-operations/http/repository-operations-http-handler";
 import { respondToRepositoryRefsRequest } from "#server/features/repository-refs/http/repository-refs-http-handler";
 
 export function createEnvironmentHttpHandler(
@@ -234,6 +237,18 @@ function respondToEnvironmentRequest(
     }
 
     if (
+      state.operations !== undefined &&
+      (yield* respondToRepositoryOperationsRequest(
+        request,
+        response,
+        body,
+        authorization,
+        state.operations,
+      ))
+    )
+      return;
+
+    if (
       state.changes !== undefined &&
       (yield* respondToRepositoryChangesRequest(
         request,
@@ -294,9 +309,19 @@ function writeEnvironmentHttpError(
     | RepositoryCatalogError
     | RepositoryRefsError
     | RepositoryChangesError
+    | RepositoryOperationError
     | EnvironmentStorageError,
 ) {
   if (response.writableEnded) {
+    return;
+  }
+  if (error._tag === "RepositoryOperationError") {
+    writeJson(
+      response,
+      error.failure.reason === "Missing" ? 404 : 409,
+      OperationFailure,
+      error.failure,
+    );
     return;
   }
   if (error._tag === "RepositoryChangesError") {

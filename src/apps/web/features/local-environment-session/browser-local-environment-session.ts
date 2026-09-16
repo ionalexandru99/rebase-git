@@ -11,6 +11,7 @@ import type { EnvironmentFilesystemGateway } from "#web/features/environment-fil
 import type { DesktopHostBridge } from "#web/features/local-environment-session/environment-bootstrap.contract";
 import { createLocalEnvironmentSession } from "#web/features/local-environment-session/local-environment-session";
 import type { LocalEnvironmentGateway } from "#web/features/local-environment-session/local-environment-session.contract";
+import { createRepositoryOperationsClient } from "#web/features/operation-recovery/transport/repository-operations-client";
 import {
   listEnvironmentRepositoriesEffect,
   recordEnvironmentRepositoryOpenedEffect,
@@ -109,6 +110,10 @@ export function createBrowserLocalEnvironmentSession(productVersion: string) {
   };
 
   return createLocalEnvironmentSession({
+    repositoryOperations: createRepositoryOperationsClient(
+      bootstrap.environmentOrigin,
+      () => changesCredential,
+    ),
     repositoryChanges: createRepositoryChangesClient(
       bootstrap.environmentOrigin,
       () => changesCredential,

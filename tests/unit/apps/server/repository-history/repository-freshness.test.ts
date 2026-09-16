@@ -23,7 +23,12 @@ import {
   type RepositoryFreshnessService,
   RepositoryFreshnessState,
 } from "#server/domain/repository-freshness.contract";
+import { RepositoryOperationError } from "#server/domain/repository-operations.contract";
 import { RepositoryWatching } from "#server/domain/repository-watcher.contract";
+import {
+  RepositoryWrites,
+  type RepositoryWritesService,
+} from "#server/domain/repository-writes.contract";
 import { repositoryFreshnessLayer } from "#server/features/repository-history/freshness/repository-freshness";
 
 const repositoryId = "00000000-0000-4000-8000-000000000001";
@@ -299,6 +304,55 @@ describe("repository freshness", () => {
       }),
     ));
 
+  it("reschedules automatic fetch when another write holds the coordinator", () => {
+    let busy = true;
+    const fetched = vi.fn();
+    return withService(
+      {
+        setting: "10",
+        fetch: () => Effect.sync(fetched).pipe(Effect.as(output())),
+        writes: {
+          run: (_directory, _intent, operation) =>
+            busy
+              ? Effect.fail(
+                  new RepositoryOperationError({
+                    failure: {
+                      _tag: "OperationFailed",
+                      reason: "Locked",
+                      detail: "Another repository write is in progress.",
+                      invalidation: {
+                        status: false,
+                        refs: false,
+                        history: false,
+                      },
+                    },
+                  }),
+                )
+              : operation,
+        },
+      },
+      (service) =>
+        Effect.gen(function* () {
+          const states: RepositoryFreshness[] = [];
+          yield* service.subscribe(
+            repositoryId,
+            (state) => states.push(state),
+            writer,
+          );
+          yield* TestClock.adjust(0);
+          expect(states.at(-1)).toMatchObject({ fetching: false, stale: true });
+          expect(fetched).not.toHaveBeenCalled();
+          busy = false;
+          yield* TestClock.adjust(10_000);
+          expect(fetched).toHaveBeenCalledOnce();
+          expect(states.at(-1)).toMatchObject({
+            fetching: false,
+            stale: false,
+          });
+        }),
+    );
+  });
+
   it("shares linked worktree watching and fetches through a surviving path", () =>
     withService({ setting: "0" }, (service, watch, git) =>
       Effect.gen(function* () {
@@ -439,6 +493,7 @@ function withService(
   options: {
     readonly fetch?: GitCommandRunner["run"];
     readonly setting?: string;
+    readonly writes?: RepositoryWritesService;
   },
   test: (
     service: RepositoryFreshnessService,
@@ -474,6 +529,12 @@ function withService(
         repositoryFreshnessLayer.pipe(
           Layer.provide(
             Layer.mergeAll(
+              Layer.succeed(
+                RepositoryWrites,
+                options.writes ?? {
+                  run: (_directory, _intent, operation) => operation,
+                },
+              ),
               Layer.succeed(RepositoryCatalogAccess, {
                 find: (id) =>
                   Effect.succeed({

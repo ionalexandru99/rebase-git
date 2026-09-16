@@ -42,6 +42,7 @@ export function createWorkingChangesController(
   initialScope: ChangesScope,
   draftKey: string,
   onCommitted: () => void,
+  onChanged?: () => void,
 ) {
   const runtime = ManagedRuntime.make(Layer.empty);
   const lock = Semaphore.makeUnsafe(1);
@@ -114,7 +115,10 @@ export function createWorkingChangesController(
       const first = state.changes === null;
       const changed = next.revision !== state.changes?.revision;
       if (first && state.selection === null) {
-        const file = next.unstaged[0] ?? next.staged[0];
+        const file =
+          next.unstaged.find((file) => file.status === "U") ??
+          next.unstaged[0] ??
+          next.staged[0];
         if (file)
           publish({
             selection: {
@@ -270,6 +274,7 @@ export function createWorkingChangesController(
             section,
             selection,
           });
+          onChanged?.();
           publish({ changes: next });
           yield* loadDiff();
         }),
@@ -289,6 +294,7 @@ export function createWorkingChangesController(
             revision: state.changes.revision,
             message,
           });
+          onChanged?.();
           normalDraft = emptyCommitDraft;
           amendDraft = undefined;
           publish({

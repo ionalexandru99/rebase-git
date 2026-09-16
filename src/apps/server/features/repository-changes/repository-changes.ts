@@ -2,13 +2,21 @@ import type {
   ChangesScope,
   RepositoryChanges,
 } from "@rebase/contracts/repository-changes/repository-changes.contract";
-import { Effect, Layer, Semaphore } from "effect";
+import { Effect, Layer } from "effect";
 import type { GitCommandRunner } from "#server/domain/git-command.contract";
 import { GitCommands } from "#server/domain/git-command.contract";
 import type { RepositoryCatalog } from "#server/domain/repository-catalog.contract";
 import { RepositoryCatalogAccess } from "#server/domain/repository-catalog.contract";
-import type { RepositoryChangesService } from "#server/domain/repository-changes.contract";
+import type {
+  RepositoryChangesError,
+  RepositoryChangesService,
+} from "#server/domain/repository-changes.contract";
 import { RepositoryChangesAccess } from "#server/domain/repository-changes.contract";
+import {
+  type RepositoryWriteIntent,
+  RepositoryWrites,
+  type RepositoryWritesService,
+} from "#server/domain/repository-writes.contract";
 import { safeChangePath } from "#server/features/repository-changes/git/change-files";
 import {
   changeGit,
@@ -27,8 +35,8 @@ import {
 export function createRepositoryChangesService(
   catalog: Pick<RepositoryCatalog, "find">,
   git: GitCommandRunner,
+  writes: RepositoryWritesService,
 ): RepositoryChangesService {
-  const locks = new Map<string, Semaphore.Semaphore>();
   const validate = (scope: ChangesScope) =>
     Effect.gen(function* () {
       const repository = yield* catalog
@@ -56,26 +64,41 @@ export function createRepositoryChangesService(
           ),
         );
     });
-  const locked = <A, E>(scope: ChangesScope, run: Effect.Effect<A, E>) =>
+  const validated = <A, E>(scope: ChangesScope, run: Effect.Effect<A, E>) =>
     Effect.gen(function* () {
       yield* validate(scope);
-      let lock = locks.get(scope.worktreePath);
-      if (lock === undefined) {
-        lock = yield* Semaphore.make(1);
-        locks.set(scope.worktreePath, lock);
-      }
-      return yield* lock.withPermit(run);
+      return yield* run;
     });
+  const write = <A>(
+    scope: ChangesScope,
+    intent: RepositoryWriteIntent,
+    run: Effect.Effect<A, RepositoryChangesError>,
+  ) =>
+    validated(
+      scope,
+      writes
+        .run(scope.worktreePath, intent, run)
+        .pipe(
+          Effect.mapError((error) =>
+            error._tag === "RepositoryOperationError"
+              ? changesError(
+                  error.failure.reason === "Locked" ? "Busy" : "Unsupported",
+                  error.failure.detail,
+                )
+              : error,
+          ),
+        ),
+    );
   return {
     read: (scope) =>
-      locked(
+      validated(
         scope,
         readChanges(git, scope).pipe(
           Effect.map((value) => fitChanges(value.snapshot)),
         ),
       ),
     diff: (command) =>
-      locked(
+      validated(
         command,
         Effect.gen(function* () {
           yield* safeChangePath(command.worktreePath, command.path);
@@ -84,8 +107,9 @@ export function createRepositoryChangesService(
         }),
       ),
     mutate: (command) =>
-      locked(
+      write(
         command,
+        command.action,
         Effect.gen(function* () {
           yield* withChangeIndex(git, command.worktreePath, (indexFile) =>
             Effect.gen(function* () {
@@ -108,8 +132,9 @@ export function createRepositoryChangesService(
         }),
       ),
     commit: (command) =>
-      locked(
+      write(
         command,
+        command.amend ? "amend" : "commit",
         withChangeIndex(git, command.worktreePath, (indexFile) =>
           Effect.gen(function* () {
             const { snapshot } = yield* verifyChanges(git, command);
@@ -163,6 +188,7 @@ export const repositoryChangesLayer = Layer.effect(
     return createRepositoryChangesService(
       yield* RepositoryCatalogAccess,
       yield* GitCommands,
+      yield* RepositoryWrites,
     );
   }),
 );
