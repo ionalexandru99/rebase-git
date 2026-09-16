@@ -1,14 +1,15 @@
-export const workspacePanelKinds = ["changes", "code", "pull-request"] as const;
+import type { IconCode } from "@tabler/icons-react";
+import type { WorkspacePanelKind } from "#web/features/workspace-panel/workspace-panel-definitions";
 
-export type WorkspacePanelKind = (typeof workspacePanelKinds)[number];
+export type { WorkspacePanelKind } from "#web/features/workspace-panel/workspace-panel-definitions";
 
-export const workspacePanelAvailability: Readonly<
-  Record<WorkspacePanelKind, boolean>
-> = {
-  changes: true,
-  code: false,
-  "pull-request": false,
-};
+export interface WorkspacePanelDefinition {
+  readonly label: string;
+  readonly icon: typeof IconCode;
+  readonly available: boolean;
+  readonly lifetime: "persistent" | "selection";
+  readonly description: string;
+}
 
 export interface WorkspacePanelState {
   readonly tabs: readonly WorkspacePanelKind[];
@@ -16,6 +17,12 @@ export interface WorkspacePanelState {
   readonly open: boolean;
   readonly width: number;
   readonly expanded?: boolean;
+  readonly returnTo?: {
+    readonly kind: WorkspacePanelKind;
+    readonly active: WorkspacePanelKind | null;
+    readonly open: boolean;
+    readonly expanded: boolean;
+  };
 }
 
 export type WorkspacePanelAction =

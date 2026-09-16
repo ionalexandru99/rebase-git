@@ -12,9 +12,8 @@ import {
   IconFolder,
   IconTrash,
 } from "@tabler/icons-react";
-import { useVirtualizer } from "@tanstack/react-virtual";
-import { useMemo, useRef, useState } from "react";
-import { changeTreeRows } from "#web/features/working-changes/tree/change-tree";
+import { useRef, useState } from "react";
+import { useFileRows } from "#web/features/file-diff/index";
 import { Button } from "#web-ui/components/ui/button";
 import { ChangeFileIcon } from "#web-ui/features/working-changes/components/change-file-icon";
 import type { ChangeAction } from "#web-ui/features/working-changes/components/change-file-tree";
@@ -41,23 +40,14 @@ export function ChangeFileSection({
   readonly act: ChangeAction;
 }) {
   const { state, controller } = useWorkingChanges();
-  const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(new Set());
   const anchor = useRef<string | null>(null);
   const [checked, setChecked] = useState<ReadonlySet<string>>(new Set());
   const [open, setOpen] = useState(true);
-  const scrollRef = useRef<HTMLDivElement>(null);
   const files = state.changes?.[section] ?? [];
-  const rows = useMemo(
-    () => changeTreeRows(files, state.preferences.tree, filter, collapsed),
-    [files, state.preferences.tree, filter, collapsed],
+  const { rows, collapsed, scrollRef, virtualizer, toggle } = useFileRows(
+    files,
+    { tree: state.preferences.tree, filter, open },
   );
-  const virtualizer = useVirtualizer({
-    count: open ? rows.length : 0,
-    getScrollElement: () => scrollRef.current,
-    estimateSize: () => 32,
-    overscan: 6,
-    getItemKey: (index) => rows[index]?.key ?? index,
-  });
   const selected = files
     .filter((file) => checked.has(file.path))
     .map((file) => file.path);
@@ -159,12 +149,7 @@ export function ChangeFileSection({
                     anchor.current = row.key;
                     setChecked(new Set(isFolder ? [] : row.paths));
                     isFolder
-                      ? setCollapsed((current) => {
-                          const next = new Set(current);
-                          if (next.has(row.key)) next.delete(row.key);
-                          else next.add(row.key);
-                          return next;
-                        })
+                      ? toggle(row.key)
                       : controller.select(section, row.key);
                   }}
                 >

@@ -1,18 +1,16 @@
-import type { ChangedFile } from "@rebase/contracts/repository-changes/repository-changes.contract";
-
-export interface ChangeTreeRow {
+export interface ChangeTreeRow<File extends { readonly path: string }> {
   readonly key: string;
   readonly name: string;
   readonly depth: number;
   readonly paths: readonly string[];
-  readonly file?: ChangedFile;
+  readonly file?: File;
 }
-export function changeTreeRows(
-  files: readonly ChangedFile[],
+export function changeTreeRows<File extends { readonly path: string }>(
+  files: readonly File[],
   tree: boolean,
   filter: string,
   collapsed: ReadonlySet<string>,
-): readonly ChangeTreeRow[] {
+): readonly ChangeTreeRow<File>[] {
   const visible = files.filter((file) =>
     file.path.toLowerCase().includes(filter.toLowerCase()),
   );
@@ -24,7 +22,7 @@ export function changeTreeRows(
       paths: [file.path],
       file,
     }));
-  const rows: ChangeTreeRow[] = [];
+  const rows: ChangeTreeRow<File>[] = [];
   const folders = new Set<string>();
   const folderPaths = new Map<string, string[]>();
   for (const file of files) {

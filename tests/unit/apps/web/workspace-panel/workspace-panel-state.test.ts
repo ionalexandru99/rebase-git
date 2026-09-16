@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
-  workspacePanelAvailability,
+  workspacePanelDefinitions,
   workspacePanelKinds,
-} from "#web/features/workspace-panel/workspace-panel.contract";
+} from "#web/features/workspace-panel/workspace-panel-definitions";
 import {
   initialWorkspacePanelState,
   reduceWorkspacePanel,
@@ -11,7 +11,7 @@ import {
 describe("workspace panel state", () => {
   it("does not open unavailable features", () => {
     for (const kind of workspacePanelKinds) {
-      if (workspacePanelAvailability[kind]) continue;
+      if (workspacePanelDefinitions[kind].available) continue;
       expect(
         reduceWorkspacePanel(initialWorkspacePanelState, {
           type: "open",

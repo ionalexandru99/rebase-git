@@ -29,14 +29,8 @@ export interface CommitDraft {
   readonly subject: string;
   readonly description: string;
 }
-export interface DiffPreferences {
-  readonly split: boolean;
-  readonly wrap: boolean;
-  readonly tree: boolean;
-}
-export const defaultDiffPreferences: DiffPreferences = {
-  split: false,
-  wrap: false,
-  tree: true,
-};
+export {
+  type DiffPreferences,
+  defaultDiffPreferences,
+} from "#web/features/file-diff/file-diff.contract";
 export const emptyCommitDraft: CommitDraft = { subject: "", description: "" };

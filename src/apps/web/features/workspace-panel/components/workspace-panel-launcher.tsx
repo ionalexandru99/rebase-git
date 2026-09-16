@@ -1,9 +1,9 @@
 import { IconPlus } from "@tabler/icons-react";
 import { useRef } from "react";
 import {
-  workspacePanelAvailability,
+  workspacePanelDefinitions,
   workspacePanelKinds,
-} from "#web/features/workspace-panel/workspace-panel.contract";
+} from "#web/features/workspace-panel/workspace-panel-definitions";
 import { Button } from "#web-ui/components/ui/button";
 import {
   DropdownMenu,
@@ -11,7 +11,6 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "#web-ui/components/ui/dropdown-menu";
-import { workspacePanelFeatures } from "#web-ui/features/workspace-panel/components/workspace-panel-kinds";
 import { useWorkspacePanel } from "#web-ui/features/workspace-panel/workspace-panel-provider";
 
 export function WorkspacePanelLauncher() {
@@ -51,23 +50,27 @@ export function WorkspacePanelLauncher() {
         <div className="flex items-center justify-between gap-3 px-2 py-2 text-[10px] text-muted-foreground">
           <span>Coming soon</span>
         </div>
-        {workspacePanelKinds.map((kind) => {
-          const feature = workspacePanelFeatures[kind];
-          return (
-            <DropdownMenuItem
-              key={kind}
-              disabled={!workspacePanelAvailability[kind]}
-              onClick={() => {
-                openedTab.current = true;
-                panel.setLauncherOpen(false);
-                panel.execute({ type: "open", kind });
-              }}
-            >
-              <feature.icon aria-hidden="true" />
-              {feature.label}
-            </DropdownMenuItem>
-          );
-        })}
+        {workspacePanelKinds
+          .filter(
+            (kind) => workspacePanelDefinitions[kind].lifetime === "persistent",
+          )
+          .map((kind) => {
+            const feature = workspacePanelDefinitions[kind];
+            return (
+              <DropdownMenuItem
+                key={kind}
+                disabled={!workspacePanelDefinitions[kind].available}
+                onClick={() => {
+                  openedTab.current = true;
+                  panel.setLauncherOpen(false);
+                  panel.execute({ type: "open", kind });
+                }}
+              >
+                <feature.icon aria-hidden="true" />
+                {feature.label}
+              </DropdownMenuItem>
+            );
+          })}
       </DropdownMenuContent>
     </DropdownMenu>
   );

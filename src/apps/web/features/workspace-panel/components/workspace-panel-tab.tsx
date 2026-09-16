@@ -1,9 +1,9 @@
 import { IconX } from "@tabler/icons-react";
 import type { WorkspacePanelKind } from "#web/features/workspace-panel/workspace-panel.contract";
+import { workspacePanelDefinitions } from "#web/features/workspace-panel/workspace-panel-definitions";
 import { cn } from "#web/lib/utils";
 import { Button } from "#web-ui/components/ui/button";
 import { TabsTrigger } from "#web-ui/components/ui/tabs";
-import { workspacePanelFeatures } from "#web-ui/features/workspace-panel/components/workspace-panel-kinds";
 import { useWorkspacePanel } from "#web-ui/features/workspace-panel/workspace-panel-provider";
 
 export function WorkspacePanelTab({
@@ -12,7 +12,7 @@ export function WorkspacePanelTab({
   readonly kind: WorkspacePanelKind;
 }) {
   const panel = useWorkspacePanel();
-  const feature = workspacePanelFeatures[kind];
+  const feature = workspacePanelDefinitions[kind];
   const active = panel.state.active === kind;
   return (
     <div
