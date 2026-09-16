@@ -42,10 +42,7 @@ export function CommitInspection({
       ) : null}
       {details ? (
         <>
-          <CommitMetadata
-            details={details}
-            selectParent={controller.selectParent}
-          />
+          <CommitMetadata key={details.oid} details={details} />
           {details.truncated ? (
             <p role="status" className="p-3 text-xs text-muted-foreground">
               The changed-file list is too large to show in full.
@@ -57,8 +54,7 @@ export function CommitInspection({
             </p>
           ) : details.files.length === 0 ? (
             <p className="p-4 text-sm text-muted-foreground">
-              No file changes compared with{" "}
-              {details.parentOid === null ? "the empty tree" : "this parent"}.
+              No file changes.
             </p>
           ) : (
             <div className="grid min-h-0 flex-1 grid-cols-1 grid-rows-[minmax(0,1fr)_minmax(7rem,30%)] @[28rem]:grid-cols-[minmax(0,1fr)_12.5rem] @[28rem]:grid-rows-1">

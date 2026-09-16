@@ -13,6 +13,7 @@ import {
 import type { CommitInspectionClient } from "#web/features/commit-inspection/commit-inspection.contract";
 import { ResizablePanel } from "#web-ui/components/ui/resizable";
 import { CommitInspectionBridge } from "#web-ui/features/commit-inspection/components/commit-inspection-bridge";
+import { CommitMetadata } from "#web-ui/features/commit-inspection/components/commit-metadata";
 import { WorkspacePanel } from "#web-ui/features/workspace-panel/index";
 
 function details(oid = historyOid(0), parentOid = historyOid(1)): Details {
@@ -128,6 +129,51 @@ async function fixture(
 }
 
 describe("commit inspection", () => {
+  it("replaces the short SHA in place and combines matching author details", async () => {
+    const info = details();
+    const screen = await render(
+      <CommitMetadata details={{ ...info, committer: info.author }} />,
+    );
+    await expect.element(screen.getByText("Author & committer")).toBeVisible();
+    await expect.element(screen.getByText(info.author.email)).toBeVisible();
+    expect(document.querySelectorAll("time")).toHaveLength(1);
+    expect(document.querySelector("time")?.textContent).not.toContain("T10:");
+    await screen.getByRole("button", { name: "Show full commit SHA" }).click();
+    expect(
+      [...document.querySelectorAll("code")].map((code) => code.textContent),
+    ).toEqual([info.oid]);
+    const collapse = screen.getByRole("button", {
+      name: "Show short commit SHA",
+    });
+    await expect.element(collapse).toHaveAttribute("aria-expanded", "true");
+    await collapse.click();
+    await userEvent.keyboard("{Enter}");
+    expect(
+      [...document.querySelectorAll("code")].map((code) => code.textContent),
+    ).toEqual([info.oid]);
+  });
+
+  it("shows separate identity rows when the commit timestamps differ", async () => {
+    const info = details();
+    const screen = await render(
+      <CommitMetadata
+        details={{
+          ...info,
+          committer: { ...info.author, date: info.committer.date },
+        }}
+      />,
+    );
+    await expect
+      .element(screen.getByText("Author", { exact: true }))
+      .toBeVisible();
+    await expect
+      .element(screen.getByText("Committer", { exact: true }))
+      .toBeVisible();
+    expect(
+      [...document.querySelectorAll("time")].map((time) => time.dateTime),
+    ).toEqual([info.author.date, info.committer.date]);
+  });
+
   it("renders a root commit's text patch through the shared viewer", async () => {
     const { screen, grid } = await fixture({
       inspect: (command) =>
@@ -148,12 +194,6 @@ describe("commit inspection", () => {
         }),
     });
     await grid.getByRole("row", { name: /^Commit 0,/ }).dblClick();
-    await expect
-      .element(screen.getByText("Compared with empty tree"))
-      .toBeVisible();
-    await expect
-      .element(screen.getByRole("combobox", { name: "Compare with" }))
-      .not.toBeInTheDocument();
     await expect
       .poll(
         () =>
@@ -222,17 +262,8 @@ describe("commit inspection", () => {
     await expect.element(grid).toHaveFocus();
   });
 
-  it("changes parent comparisons and navigates files by keyboard", async () => {
-    const { screen, grid, client } = await fixture({
-      inspect: (command) =>
-        Effect.succeed({
-          ...details(command.oid, command.parentOid),
-          files:
-            command.parentOid === historyOid(2)
-              ? [{ path: "other.bin", previousPath: null, status: "A" }]
-              : details().files,
-        }),
-    });
+  it("navigates files by keyboard", async () => {
+    const { screen, grid, client } = await fixture();
     await grid.getByRole("row", { name: /^Commit 0,/ }).dblClick();
     await expect
       .element(screen.getByRole("treeitem", { name: /first.bin/ }))
@@ -252,23 +283,6 @@ describe("commit inspection", () => {
         expect.objectContaining({
           path: "src/second.bin",
           parentOid: historyOid(1),
-        }),
-      ),
-    );
-    await screen
-      .getByRole("combobox", { name: "Compare with" })
-      .selectOptions(historyOid(2));
-    await expect
-      .element(screen.getByRole("treeitem", { name: /other.bin/ }))
-      .toHaveAttribute("aria-selected", "true");
-    await expect
-      .element(screen.getByRole("treeitem", { name: /second.bin/ }))
-      .not.toBeInTheDocument();
-    await vi.waitFor(() =>
-      expect(client.diff).toHaveBeenLastCalledWith(
-        expect.objectContaining({
-          path: "other.bin",
-          parentOid: historyOid(2),
         }),
       ),
     );
