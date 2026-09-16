@@ -1,5 +1,6 @@
 import type {
   OperationAction,
+  OperationFailure,
   OperationScope,
 } from "@rebase/contracts/repository-operations/repository-operations.contract";
 import { Effect, Layer, ManagedRuntime, Semaphore } from "effect";
@@ -20,6 +21,7 @@ export function createOperationRecoveryController(
   let started = false;
   let disposed = false;
   let generation = 0;
+  let recoveryFailure: OperationFailure | null = null;
   let state: OperationRecoveryState = {
     operation: null,
     connected: false,
@@ -54,7 +56,7 @@ export function createOperationRecoveryController(
               previous?.revision === operation.revision ? previous : operation,
             checking: false,
             completed: operation.kind === "idle" ? state.completed : null,
-            ...(operation.kind === "idle" ? { error: null } : {}),
+            error: recoveryFailure,
           });
         }),
       ),
@@ -107,6 +109,10 @@ export function createOperationRecoveryController(
       if (connected) runtime.runFork(mutex.withPermit(refresh));
     },
     refresh: () => runtime.runFork(mutex.withPermit(refresh)),
+    checkAgain: () => {
+      recoveryFailure = null;
+      runtime.runFork(mutex.withPermit(refresh));
+    },
     dismiss: () => publish({ completed: null }),
     execute: (action: OperationAction, revision: string) => {
       const previous = state.operation;
@@ -119,6 +125,7 @@ export function createOperationRecoveryController(
         )
       )
         return;
+      recoveryFailure = null;
       publish({ busy: true, error: null, completed: null });
       const requestGeneration = generation;
       runtime.runFork(
@@ -141,6 +148,7 @@ export function createOperationRecoveryController(
               Effect.sync(() => {
                 invalidate();
                 if (requestGeneration !== generation) return;
+                recoveryFailure = error.failure;
                 publish({ error: error.failure, checking: true });
               }).pipe(Effect.andThen(refresh)),
             ),

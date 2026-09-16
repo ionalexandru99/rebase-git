@@ -128,7 +128,7 @@ export function readRepositoryOperation(
       lock !== null
         ? "Git is using this worktree. Check again when it finishes."
         : unresolvedPaths.length
-          ? `Resolve and stage ${unresolvedPaths.length} files to continue.`
+          ? `Resolve and stage ${unresolvedPaths.length} ${unresolvedPaths.length === 1 ? "file" : "files"} to continue.`
           : edit && status.length > 0
             ? "Amend your changes before continuing the rebase."
             : kind === "rebase" && unstaged

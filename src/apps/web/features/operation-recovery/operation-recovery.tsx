@@ -22,7 +22,7 @@ export function OperationRecovery({
         repositoryName={repositoryName}
         writable={writable}
         execute={controller.execute}
-        refresh={controller.refresh}
+        refresh={controller.checkAgain}
         dismiss={controller.dismiss}
         review={() => {
           panel.execute({ type: "open", kind: "changes" });
