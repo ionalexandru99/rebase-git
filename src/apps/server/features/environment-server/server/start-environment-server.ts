@@ -8,7 +8,9 @@ import { GitCommands } from "#server/domain/git-command.contract";
 import { RepositoryCatalogAccess } from "#server/domain/repository-catalog.contract";
 import { RepositoryChangesAccess } from "#server/domain/repository-changes.contract";
 import { RepositoryFreshnessState } from "#server/domain/repository-freshness.contract";
+import { RepositoryOperations } from "#server/domain/repository-operations.contract";
 import { RepositoryWatching } from "#server/domain/repository-watcher.contract";
+import { RepositoryWrites } from "#server/domain/repository-writes.contract";
 import { createEnvironmentAuthorization } from "#server/features/environment-authorization/environment-authorization";
 import { createEnvironmentEventPublisher } from "#server/features/environment-connection/events/environment-event-publisher";
 import { createEnvironmentFilesystem } from "#server/features/environment-filesystem/environment-filesystem";
@@ -34,6 +36,10 @@ import { createRepositoryCatalog } from "#server/features/repository-catalog/rep
 import { repositoryChangesLayer } from "#server/features/repository-changes/index";
 import { repositoryFreshnessLayer } from "#server/features/repository-history/freshness/repository-freshness";
 import { createRepositoryHistoryService } from "#server/features/repository-history/repository-history";
+import {
+  createRepositoryWrites,
+  repositoryOperationsLayer,
+} from "#server/features/repository-operations/index";
 import { acquireRepositoryChangePublisher } from "#server/features/repository-refs/repository-change-publisher";
 import { createRepositoryRefsService } from "#server/features/repository-refs/repository-refs";
 import { acquireEnvironmentContext } from "#server/persistence/environment-context";
@@ -68,12 +74,20 @@ export function startEnvironmentServer(
       : options.port;
     const events = createEnvironmentEventPublisher();
     const git = createLocalGitCommandRunner();
+    const writes = createRepositoryWrites(git, () => {
+      events.publishChanged();
+    });
     const watcher = createLocalRepositoryWatcher();
     const repositoryServices = yield* Layer.build(
-      Layer.merge(repositoryFreshnessLayer, repositoryChangesLayer).pipe(
+      Layer.mergeAll(
+        repositoryFreshnessLayer,
+        repositoryChangesLayer,
+        repositoryOperationsLayer,
+      ).pipe(
         Layer.provide(
           Layer.mergeAll(
             Layer.succeed(GitCommands, git),
+            Layer.succeed(RepositoryWrites, writes),
             Layer.succeed(RepositoryCatalogAccess, catalog),
             Layer.succeed(RepositoryWatching, watcher),
           ),
@@ -84,8 +98,10 @@ export function startEnvironmentServer(
       catalog,
       changes: yield* acquireRepositoryChangePublisher(git, watcher, events),
       git,
+      writes,
     });
     const listener = yield* acquireEnvironmentListener({
+      operations: Context.get(repositoryServices, RepositoryOperations),
       changes: Context.get(repositoryServices, RepositoryChangesAccess),
       authorization,
       catalog,

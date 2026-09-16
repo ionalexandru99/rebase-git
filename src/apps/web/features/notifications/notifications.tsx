@@ -1,26 +1,35 @@
 import { Toast } from "@base-ui/react/toast";
 import { IconAlertCircle, IconX } from "@tabler/icons-react";
-import type { ReactNode } from "react";
+import { type ReactNode, useState } from "react";
 import { Button } from "#web-ui/components/ui/button";
+import { PersistentNotificationOutlet } from "#web-ui/features/notifications/components/persistent-notification";
 
 export function NotificationsProvider({
   children,
 }: {
   readonly children: ReactNode;
 }) {
+  const [outlet, setOutlet] = useState<HTMLDivElement | null>(null);
   return (
     <Toast.Provider timeout={0} limit={3}>
-      {children}
-      <Notifications />
+      <PersistentNotificationOutlet.Provider value={outlet}>
+        {children}
+        <Notifications persistentOutlet={setOutlet} />
+      </PersistentNotificationOutlet.Provider>
     </Toast.Provider>
   );
 }
 
-function Notifications() {
+function Notifications({
+  persistentOutlet,
+}: {
+  readonly persistentOutlet: (element: HTMLDivElement | null) => void;
+}) {
   const { toasts } = Toast.useToastManager();
   return (
     <Toast.Portal>
       <Toast.Viewport className="pointer-events-none fixed top-14 right-4 z-100 flex w-[calc(100%-2rem)] max-w-90 flex-col gap-2 outline-none">
+        <div ref={persistentOutlet} className="empty:hidden" />
         {toasts.map((toast) => (
           <Toast.Root
             key={toast.id}

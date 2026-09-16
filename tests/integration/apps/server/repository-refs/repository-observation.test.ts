@@ -12,9 +12,11 @@ import { GitCommands } from "#server/domain/git-command.contract";
 import { RepositoryCatalogAccess } from "#server/domain/repository-catalog.contract";
 import { RepositoryFreshnessState } from "#server/domain/repository-freshness.contract";
 import { RepositoryWatching } from "#server/domain/repository-watcher.contract";
+import { RepositoryWrites } from "#server/domain/repository-writes.contract";
 import { createEnvironmentEventPublisher } from "#server/features/environment-connection/events/environment-event-publisher";
 import { createRepositoryCatalog } from "#server/features/repository-catalog/repository-catalog";
 import { repositoryFreshnessLayer } from "#server/features/repository-history/freshness/repository-freshness";
+import { createRepositoryWrites } from "#server/features/repository-operations/index";
 import { acquireRepositoryChangePublisher } from "#server/features/repository-refs/repository-change-publisher";
 import { createRepositoryRefsService } from "#server/features/repository-refs/repository-refs";
 import { acquireEnvironmentContext } from "#server/persistence/environment-context";
@@ -84,6 +86,10 @@ for (const firstRelease of ["refs", "freshness"] as const)
             repositoryFreshnessLayer.pipe(
               Layer.provide(
                 Layer.mergeAll(
+                  Layer.succeed(
+                    RepositoryWrites,
+                    createRepositoryWrites(runner),
+                  ),
                   Layer.succeed(GitCommands, runner),
                   Layer.succeed(RepositoryCatalogAccess, catalog),
                   Layer.succeed(RepositoryWatching, watcher),

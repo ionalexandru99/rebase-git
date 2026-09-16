@@ -88,6 +88,9 @@ export function createLocalEnvironmentSession(
   };
 
   return {
+    ...(options.repositoryOperations === undefined
+      ? {}
+      : { repositoryOperations: options.repositoryOperations }),
     ...(options.repositoryChanges === undefined
       ? {}
       : { repositoryChanges: options.repositoryChanges }),

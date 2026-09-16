@@ -1,22 +1,29 @@
 import type { RepositoryCatalogEntry } from "@rebase/contracts";
-import { Effect, Semaphore } from "effect";
+import { Effect } from "effect";
 import type { GitCommandRunner } from "#server/domain/git-command.contract";
 import type { RepositoryCatalog } from "#server/domain/repository-catalog.contract";
 import type {
   RepositoryChangePublisher,
   RepositoryRefsService,
 } from "#server/domain/repository-refs.contract";
+import type { RepositoryWritesService } from "#server/domain/repository-writes.contract";
+import { createRepositoryWrites } from "#server/features/repository-operations/index";
 import { checkoutRepositoryRef } from "#server/features/repository-refs/git/checkout-repository-ref";
-import { readRepositoryRefs } from "#server/features/repository-refs/git/read-repository-refs";
+import {
+  canonicalizeWorktrees,
+  readRepositoryRefs,
+  readWorktrees,
+} from "#server/features/repository-refs/git/read-repository-refs";
 import { repositoryRefsFailure } from "#server/features/repository-refs/git/repository-refs-failures";
 
 export function createRepositoryRefsService(dependencies: {
   readonly catalog: RepositoryCatalog;
   readonly changes: RepositoryChangePublisher;
   readonly git: GitCommandRunner;
+  readonly writes?: RepositoryWritesService;
 }): RepositoryRefsService {
   const { catalog, changes, git } = dependencies;
-  const checkoutLocks = new Map<string, Semaphore.Semaphore>();
+  const writes = dependencies.writes ?? createRepositoryWrites(git);
   return {
     checkout: (command) =>
       Effect.gen(function* () {
@@ -24,13 +31,33 @@ export function createRepositoryRefsService(dependencies: {
           catalog,
           command.repositoryId,
         );
-        const lock = yield* repositoryCheckoutLock(
-          checkoutLocks,
-          repository.id,
+        const worktrees = yield* readWorktrees(git, repository.path).pipe(
+          Effect.flatMap(canonicalizeWorktrees),
         );
-        return yield* lock.withPermit(
-          checkoutRepositoryRef(git, repository.path, command),
-        );
+        if (!worktrees.some((tree) => tree.path === command.worktreePath))
+          return yield* Effect.fail(
+            repositoryRefsFailure({
+              _tag: "WorktreeMissing",
+              worktreePath: command.worktreePath,
+            }),
+          );
+        return yield* writes
+          .run(
+            command.worktreePath,
+            "checkout",
+            checkoutRepositoryRef(git, repository.path, command),
+          )
+          .pipe(
+            Effect.mapError((error) =>
+              error._tag === "RepositoryOperationError"
+                ? repositoryRefsFailure({
+                    _tag: "GitFailed",
+                    reason: "Failed",
+                    detail: error.failure.detail,
+                  })
+                : error,
+            ),
+          );
       }),
     read: (repositoryId) =>
       Effect.gen(function* () {
@@ -39,19 +66,6 @@ export function createRepositoryRefsService(dependencies: {
         return yield* readRepositoryRefs(git, repository);
       }),
   };
-}
-
-function repositoryCheckoutLock(
-  locks: Map<string, Semaphore.Semaphore>,
-  repositoryId: string,
-) {
-  return Effect.gen(function* () {
-    const existing = locks.get(repositoryId);
-    if (existing !== undefined) return existing;
-    const lock = yield* Semaphore.make(1);
-    locks.set(repositoryId, lock);
-    return lock;
-  });
 }
 
 function requireRepository(catalog: RepositoryCatalog, repositoryId: string) {

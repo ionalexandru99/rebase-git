@@ -296,6 +296,7 @@ export function ApplicationShell({
                   />
                 ) : (
                   <RepositoryWorkspace
+                    operationsClient={session.repositoryOperations}
                     changesClient={session.repositoryChanges}
                     accessCapabilities={
                       sessionState._tag === "Connected"

@@ -24,6 +24,7 @@ import {
   RepositoryFreshnessState,
 } from "#server/domain/repository-freshness.contract";
 import { RepositoryWatching } from "#server/domain/repository-watcher.contract";
+import { RepositoryWrites } from "#server/domain/repository-writes.contract";
 import { repositoryFreshnessLayer } from "#server/features/repository-history/freshness/repository-freshness";
 
 const repositoryId = "00000000-0000-4000-8000-000000000001";
@@ -474,6 +475,9 @@ function withService(
         repositoryFreshnessLayer.pipe(
           Layer.provide(
             Layer.mergeAll(
+              Layer.succeed(RepositoryWrites, {
+                run: (_directory, _intent, operation) => operation,
+              }),
               Layer.succeed(RepositoryCatalogAccess, {
                 find: (id) =>
                   Effect.succeed({

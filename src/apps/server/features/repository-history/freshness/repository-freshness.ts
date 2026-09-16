@@ -7,6 +7,7 @@ import {
 } from "#server/domain/repository-freshness.contract";
 import { RepositoryHistoryError } from "#server/domain/repository-history.contract";
 import { RepositoryWatching } from "#server/domain/repository-watcher.contract";
+import { RepositoryWrites } from "#server/domain/repository-writes.contract";
 import { acquireWatchedRepository } from "#server/features/repository-history/freshness/watched-repository";
 import type { FreshnessSubscription } from "#server/features/repository-history/freshness/watched-repository.contract";
 
@@ -25,6 +26,7 @@ export const repositoryFreshnessLayer = Layer.effect(
   Effect.gen(function* () {
     const catalog = yield* RepositoryCatalogAccess;
     const git = yield* GitCommands;
+    const writes = yield* RepositoryWrites;
     const watcher = yield* RepositoryWatching;
     const scope = yield* Effect.scope;
     const repositories = new Map<string, RepositoryLifetime>();
@@ -85,6 +87,7 @@ export const repositoryFreshnessLayer = Layer.effect(
                 subscribers,
                 git,
                 watcher,
+                writes,
               ).pipe(
                 Effect.tap((repository) =>
                   Effect.sync(() => {

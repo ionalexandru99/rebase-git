@@ -4,6 +4,7 @@ import type { RepositoryCatalog } from "#server/domain/repository-catalog.contra
 import type { RepositoryChangesService } from "#server/domain/repository-changes.contract";
 import type { RepositoryFreshnessService } from "#server/domain/repository-freshness.contract";
 import type { RepositoryHistoryService } from "#server/domain/repository-history.contract";
+import type { RepositoryOperationsService } from "#server/domain/repository-operations.contract";
 import type { RepositoryRefsService } from "#server/domain/repository-refs.contract";
 import type { EnvironmentAuthorization } from "#server/features/environment-authorization/environment-authorization.contract";
 import type { EnvironmentEventPublisher } from "#server/features/environment-connection/events/environment-event-publisher.contract";
@@ -30,6 +31,7 @@ export interface EnvironmentListener {
 }
 
 export interface EnvironmentListenerOptions {
+  readonly operations?: RepositoryOperationsService;
   readonly changes?: RepositoryChangesService;
   readonly authorization: EnvironmentAuthorization;
   readonly browserAssetsRoot?: string;

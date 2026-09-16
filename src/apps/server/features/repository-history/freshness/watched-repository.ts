@@ -7,6 +7,7 @@ import { Cause, Effect, Fiber, Option, Queue, Semaphore } from "effect";
 import type { GitCommandRunner } from "#server/domain/git-command.contract";
 import { RepositoryHistoryError } from "#server/domain/repository-history.contract";
 import type { RepositoryWatcher } from "#server/domain/repository-watcher.contract";
+import type { RepositoryWritesService } from "#server/domain/repository-writes.contract";
 import {
   readRepositoryFetchSetting,
   writeRepositoryFetchSetting,
@@ -18,6 +19,7 @@ export function acquireWatchedRepository(
   subscribers: Set<FreshnessSubscription>,
   git: GitCommandRunner,
   watcher: RepositoryWatcher,
+  writes: RepositoryWritesService,
 ) {
   return Effect.gen(function* () {
     const scope = yield* Effect.scope;
@@ -106,11 +108,15 @@ export function acquireWatchedRepository(
     };
     const performFetch = (identity: symbol) =>
       Effect.suspend(() =>
-        git.run({
-          directory: path(),
-          arguments: ["fetch"],
-          timeoutMilliseconds: 120_000,
-        }),
+        writes.run(
+          path(),
+          "fetch",
+          git.run({
+            directory: path(),
+            arguments: ["fetch"],
+            timeoutMilliseconds: 120_000,
+          }),
+        ),
       ).pipe(
         Effect.map((output): RepositoryFreshness["failure"] =>
           output.exitCode === 0
@@ -123,7 +129,10 @@ export function acquireWatchedRepository(
           const error = Cause.findErrorOption(cause);
           return Effect.succeed({
             _tag: "FetchFailed",
-            reason: Option.isSome(error) ? error.value.reason : "Failed",
+            reason:
+              Option.isSome(error) && error.value._tag === "GitCommandError"
+                ? error.value.reason
+                : "Failed",
           } as const);
         }),
         Effect.map((failure) =>

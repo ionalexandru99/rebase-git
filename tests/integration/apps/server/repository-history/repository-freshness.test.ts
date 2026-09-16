@@ -20,11 +20,13 @@ import {
   RepositoryFreshnessState,
 } from "#server/domain/repository-freshness.contract";
 import { RepositoryWatching } from "#server/domain/repository-watcher.contract";
+import { RepositoryWrites } from "#server/domain/repository-writes.contract";
 import type { EnvironmentAuthorization } from "#server/features/environment-authorization/environment-authorization.contract";
 import { createEnvironmentEventPublisher } from "#server/features/environment-connection/events/environment-event-publisher";
 import { acquireEnvironmentListener } from "#server/features/environment-server/server/environment-listener";
 import { repositoryFreshnessLayer } from "#server/features/repository-history/freshness/repository-freshness";
 import { createRepositoryHistoryService } from "#server/features/repository-history/repository-history";
+import { createRepositoryWrites } from "#server/features/repository-operations/index";
 
 const exec = promisify(execFile);
 const directories: string[] = [];
@@ -341,6 +343,10 @@ function freshnessLayer(catalog: RepositoryCatalog) {
   return repositoryFreshnessLayer.pipe(
     Layer.provide(
       Layer.mergeAll(
+        Layer.succeed(
+          RepositoryWrites,
+          createRepositoryWrites(createLocalGitCommandRunner()),
+        ),
         Layer.succeed(RepositoryCatalogAccess, catalog),
         Layer.succeed(GitCommands, createLocalGitCommandRunner()),
         Layer.succeed(RepositoryWatching, createLocalRepositoryWatcher()),
