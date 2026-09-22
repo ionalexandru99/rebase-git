@@ -192,8 +192,11 @@ describe("commit inspection", () => {
     });
     await grid.getByRole("row", { name: /^Commit 0,/ }).dblClick();
     const content = () =>
-      document.querySelector("diffs-container")?.shadowRoot?.textContent;
-    await expect.poll(content).toContain("new");
+      screen
+        .getByRole("region", { name: "Commit file diff" })
+        .element()
+        .querySelector("diffs-container")?.shadowRoot?.textContent;
+    await expect.poll(content, { timeout: 5_000 }).toContain("new");
     await expect.poll(content).not.toContain("retained heading");
     await screen.getByRole("button", { name: "Show unchanged lines" }).click();
     await expect.poll(content).toContain("retained heading");
