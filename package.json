@@ -85,6 +85,7 @@
     "@biomejs/biome": "2.5.9",
     "@playwright/test": "1.62.1",
     "@rebase/contracts": "workspace:*",
+    "@rebase/environment-client": "workspace:*",
     "@rebase/desktop": "workspace:*",
     "@rebase/server": "workspace:*",
     "@rebase/web": "workspace:*",

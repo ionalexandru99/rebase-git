@@ -1,5 +1,5 @@
+import type { EnvironmentConnectionFailure } from "@rebase/environment-client";
 import { Deferred, Effect, Ref } from "effect";
-import type { EnvironmentConnectionFailure } from "#web/features/environment-connection/environment-connection-errors";
 import type { EnvironmentProtocolConnection } from "#web/features/environment-connection/environment-protocol-connection.contract";
 
 export interface EnvironmentConnectionState {

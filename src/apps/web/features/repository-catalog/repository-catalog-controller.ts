@@ -1,6 +1,6 @@
 import type { RepositoryCatalogEntry } from "@rebase/contracts";
+import type { EnvironmentCredential } from "@rebase/environment-client";
 import { Effect } from "effect";
-import type { EnvironmentCredential } from "#web/features/environment-connection/environment-credential.contract";
 import {
   RepositoryCatalogRejected,
   RepositoryCatalogResponseError,

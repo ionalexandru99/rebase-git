@@ -32,7 +32,10 @@ try {
         const context = yield* acquireEnvironmentContext(
           environmentPaths(temporary),
         );
-        const catalog = createRepositoryCatalog(context);
+        const catalog = createRepositoryCatalog(
+          context,
+          createLocalGitCommandRunner(),
+        );
         const repository = yield* catalog.remember(repositoryPath);
         const listener = yield* acquireEnvironmentListener({
           authorization,

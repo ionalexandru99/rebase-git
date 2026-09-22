@@ -419,7 +419,10 @@ function withRefsService<Value, Failure>(
         const context = yield* acquireEnvironmentContext(
           environmentPaths(join(fixture.root, ".rebase")),
         );
-        const catalog = createRepositoryCatalog(context);
+        const catalog = createRepositoryCatalog(
+          context,
+          createLocalGitCommandRunner(),
+        );
         const remembered = yield* catalog.remember(fixture.repositoryPath);
         const refs = createRepositoryRefsService({
           catalog,

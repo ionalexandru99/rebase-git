@@ -17,6 +17,7 @@ import {
 } from "@rebase/web/features/repository-catalog";
 import { Effect } from "effect";
 import { afterEach, describe, expect, it } from "vite-plus/test";
+import { createLocalGitCommandRunner } from "#server/adapters/local-git/local-git-command-runner";
 import { createEnvironmentAuthorization } from "#server/features/environment-authorization/environment-authorization";
 import { createEnvironmentEventPublisher } from "#server/features/environment-connection/events/environment-event-publisher";
 import { createEnvironmentFilesystem } from "#server/features/environment-filesystem/environment-filesystem";
@@ -167,7 +168,10 @@ function withCatalogListener(
         );
         const listener = yield* acquireEnvironmentListener({
           authorization,
-          catalog: createRepositoryCatalog(context),
+          catalog: createRepositoryCatalog(
+            context,
+            createLocalGitCommandRunner(),
+          ),
           environmentId,
           events: createEnvironmentEventPublisher(),
           filesystem: createEnvironmentFilesystem(root),

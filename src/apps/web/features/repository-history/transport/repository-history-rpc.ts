@@ -1,7 +1,7 @@
 import { readRepositoryHistoryBatchSequence } from "@rebase/contracts";
 import type { EnvironmentRpcClient } from "@rebase/contracts/environment-connection/rpc/environment-rpc.contract";
+import { environmentResponseError } from "@rebase/environment-client";
 import { Effect, Option, Stream } from "effect";
-import { environmentResponseError } from "#web/features/environment-connection/environment-connection-errors";
 import { rpcJsonReassembler } from "#web/features/environment-connection/rpc/environment-rpc-json";
 import { createEnvironmentRequestId } from "#web/features/environment-connection/websocket/environment-request-id";
 import {

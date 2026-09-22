@@ -1,11 +1,11 @@
-import { Effect } from "effect";
-import { createCommitInspectionClient } from "#web/features/commit-inspection/transport/commit-inspection-client";
-import { environmentResponseError } from "#web/features/environment-connection/environment-connection-errors";
-import type { EnvironmentCredential } from "#web/features/environment-connection/environment-credential.contract";
+import type { EnvironmentCredential } from "@rebase/environment-client";
 import {
   createEnvironmentBrowserSessionEffect,
+  environmentResponseError,
   readEnvironmentBrowserSessionEffect,
-} from "#web/features/environment-connection/http/environment-http-client";
+} from "@rebase/environment-client";
+import { Effect } from "effect";
+import { createCommitInspectionClient } from "#web/features/commit-inspection/transport/commit-inspection-client";
 import { connectCurrentEnvironmentEffect } from "#web/features/environment-connection/index";
 import { listEnvironmentDirectoryEffect } from "#web/features/environment-filesystem/environment-filesystem-client";
 import type { EnvironmentFilesystemGateway } from "#web/features/environment-filesystem/environment-filesystem-controller.contract";

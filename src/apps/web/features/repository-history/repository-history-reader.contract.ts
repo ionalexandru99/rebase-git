@@ -11,8 +11,8 @@ import type {
   RepositoryHistoryRefTarget,
   SynchronizeRepositoryHistory,
 } from "@rebase/contracts";
+import type { EnvironmentConnectionFailure } from "@rebase/environment-client";
 import { Data, type Effect } from "effect";
-import type { EnvironmentConnectionFailure } from "#web/features/environment-connection/environment-connection-errors";
 import type {
   HistoryAncestryRoute,
   HistoryParentEdge,

@@ -5,9 +5,9 @@ import {
   type RepositoryRefsHttpFailure,
   type RepositoryRefTarget,
 } from "@rebase/contracts";
+import type { EnvironmentCredential } from "@rebase/environment-client";
+import { requestEnvironmentJson } from "@rebase/environment-client";
 import { Effect, Schema } from "effect";
-import type { EnvironmentCredential } from "#web/features/environment-connection/environment-credential.contract";
-import { requestEnvironmentJson } from "#web/features/environment-connection/http/environment-http-json";
 import {
   RepositoryRefsRejected,
   RepositoryRefsResponseError,

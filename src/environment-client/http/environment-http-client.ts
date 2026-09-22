@@ -16,10 +16,10 @@ import {
   EnvironmentAuthorizationRejected,
   type EnvironmentResponseError,
   environmentResponseError,
-} from "#web/features/environment-connection/environment-connection-errors";
-import type { EnvironmentCredential } from "#web/features/environment-connection/environment-credential.contract";
-import { environmentCredentialRequest } from "#web/features/environment-connection/http/environment-credential-request";
-import { readBoundedEnvironmentResponseBody } from "#web/features/environment-connection/http/environment-http-response-body";
+} from "#environment-client/environment-connection-errors";
+import type { EnvironmentCredential } from "#environment-client/environment-credential.contract";
+import { environmentCredentialRequest } from "#environment-client/http/environment-credential-request";
+import { readBoundedEnvironmentResponseBody } from "#environment-client/http/environment-http-response-body";
 
 export function fetchEnvironmentDiscovery(
   origin: string,

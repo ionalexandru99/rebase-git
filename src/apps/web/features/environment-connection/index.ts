@@ -1,4 +1,9 @@
-export type { EnvironmentCredential } from "#web/features/environment-connection/environment-credential.contract";
+export type { EnvironmentCredential } from "@rebase/environment-client";
+export {
+  createEnvironmentJsonClient,
+  exchangeEnvironmentPairing,
+  exchangeEnvironmentPairingEffect,
+} from "@rebase/environment-client";
 export {
   connectCurrentEnvironment,
   connectCurrentEnvironmentEffect,
@@ -11,8 +16,3 @@ export {
   fetchEnvironmentDiscovery,
   fetchEnvironmentSnapshot,
 } from "#web/features/environment-connection/environment-protocol-client";
-export {
-  exchangeEnvironmentPairing,
-  exchangeEnvironmentPairingEffect,
-} from "#web/features/environment-connection/http/environment-http-client";
-export { createEnvironmentJsonClient } from "#web/features/environment-connection/http/environment-json-client";

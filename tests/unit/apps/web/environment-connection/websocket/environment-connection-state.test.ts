@@ -1,7 +1,7 @@
+import type { EnvironmentConnectionFailure } from "@rebase/environment-client";
+import { environmentResponseError } from "@rebase/environment-client";
 import { Deferred, Effect, Fiber, Ref } from "effect";
 import { describe, expect, it } from "vite-plus/test";
-import type { EnvironmentConnectionFailure } from "#web/features/environment-connection/environment-connection-errors";
-import { environmentResponseError } from "#web/features/environment-connection/environment-connection-errors";
 import type { EnvironmentProtocolConnection } from "#web/features/environment-connection/environment-protocol-connection.contract";
 import {
   createEnvironmentConnectionState,

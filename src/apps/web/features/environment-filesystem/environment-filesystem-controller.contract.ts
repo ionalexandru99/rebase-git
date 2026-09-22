@@ -1,6 +1,6 @@
 import type { EnvironmentDirectory } from "@rebase/contracts";
+import type { EnvironmentCredential } from "@rebase/environment-client";
 import { Data, type Effect } from "effect";
-import type { EnvironmentCredential } from "#web/features/environment-connection/environment-credential.contract";
 import type { EnvironmentFilesystemClientError } from "#web/features/environment-filesystem/environment-filesystem-client.contract";
 
 export interface EnvironmentFilesystemController {

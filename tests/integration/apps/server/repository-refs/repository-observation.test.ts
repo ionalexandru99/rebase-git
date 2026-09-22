@@ -56,7 +56,10 @@ for (const firstRelease of ["refs", "freshness"] as const)
           const context = yield* acquireEnvironmentContext(
             environmentPaths(join(root, "state")),
           );
-          const catalog = createRepositoryCatalog(context);
+          const catalog = createRepositoryCatalog(
+            context,
+            createLocalGitCommandRunner(),
+          );
           const mainEntry = yield* catalog.remember(main);
           const linkedEntry = yield* catalog.remember(linked);
           const local = createLocalGitCommandRunner();

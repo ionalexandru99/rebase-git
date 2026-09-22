@@ -4,22 +4,20 @@ import {
   type EnvironmentHello,
   negotiateEnvironmentHello,
 } from "@rebase/contracts";
-import { Deferred, Effect, Fiber, Ref } from "effect";
+import type { EnvironmentCredential } from "@rebase/environment-client";
 import {
   EnvironmentAuthorizationRejected,
   type EnvironmentConnectionFailure,
   EnvironmentHelloRejected,
   EnvironmentResponseError,
   environmentResponseError,
-} from "#web/features/environment-connection/environment-connection-errors";
-import type { EnvironmentCredential } from "#web/features/environment-connection/environment-credential.contract";
-import type { EnvironmentProtocolConnection } from "#web/features/environment-connection/environment-protocol-connection.contract";
-import {
   fetchEnvironmentDiscovery,
   fetchEnvironmentDiscoveryEffect,
   fetchEnvironmentSnapshot,
   mintEnvironmentWebSocketTicketEffect,
-} from "#web/features/environment-connection/http/environment-http-client";
+} from "@rebase/environment-client";
+import { Deferred, Effect, Fiber, Ref } from "effect";
+import type { EnvironmentProtocolConnection } from "#web/features/environment-connection/environment-protocol-connection.contract";
 import {
   acquireEnvironmentRpc,
   negotiateEnvironmentRpc,

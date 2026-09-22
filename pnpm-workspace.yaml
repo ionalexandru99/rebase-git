@@ -1,6 +1,7 @@
 packages:
   - src/apps/*
   - src/contracts
+  - src/environment-client
 
 engineStrict: true
 

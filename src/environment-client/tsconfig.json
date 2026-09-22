@@ -1,15 +1,13 @@
 {
-  "extends": "../../../tsconfig.base.json",
+  "extends": "../../tsconfig.base.json",
   "compilerOptions": {
+    "skipLibCheck": true,
+    "lib": ["ES2024", "ESNext.Disposable", "DOM", "DOM.Iterable"],
     "outDir": "./dist",
     "rootDir": ".",
     "tsBuildInfoFile": "./dist/tsconfig.tsbuildinfo"
   },
   "include": ["./**/*.ts"],
   "exclude": ["./dist"],
-  "references": [
-    { "path": "../../contracts" },
-    { "path": "../server" },
-    { "path": "../../environment-client" }
-  ]
+  "references": [{ "path": "../contracts" }]
 }

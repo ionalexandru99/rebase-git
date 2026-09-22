@@ -56,7 +56,8 @@ export function startEnvironmentServer(
     yield* verifyRuntimeRequirements;
     const paths = defaultEnvironmentPaths();
     const context = yield* acquireEnvironmentContext(paths);
-    const catalog = createRepositoryCatalog(context);
+    const git = createLocalGitCommandRunner();
+    const catalog = createRepositoryCatalog(context, git);
     const environment = yield* readCurrentEnvironment(context);
     const authorization = createEnvironmentAuthorization(
       context,
@@ -67,7 +68,6 @@ export function startEnvironmentServer(
       ? (environment.automaticPort ?? 0)
       : options.port;
     const events = createEnvironmentEventPublisher();
-    const git = createLocalGitCommandRunner();
     const watcher = createLocalRepositoryWatcher();
     const repositoryServices = yield* Layer.build(
       Layer.merge(repositoryFreshnessLayer, repositoryChangesLayer).pipe(

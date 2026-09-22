@@ -1,6 +1,8 @@
+import {
+  environmentResponseError,
+  fetchEnvironmentSnapshotWithinLimitEffect,
+} from "@rebase/environment-client";
 import { Effect, Ref, Stream } from "effect";
-import { environmentResponseError } from "#web/features/environment-connection/environment-connection-errors";
-import { fetchEnvironmentSnapshotWithinLimitEffect } from "#web/features/environment-connection/http/environment-http-client";
 import type { EnvironmentRpcEvents } from "#web/features/environment-connection/rpc/environment-rpc-events.contract";
 import { updateEnvironmentSequence } from "#web/features/environment-connection/websocket/environment-connection-state";
 import { advanceEnvironmentSequence } from "#web/features/environment-connection/websocket/environment-sequence";
