@@ -33,6 +33,7 @@ export default defineConfig({
                       `${alias}/features/*/**`,
                       `!${alias}/features/${name}/**`,
                       `!${alias}/features/*/index`,
+                      `!${alias}/features/*/api`,
                       `!${alias}/features/*/*.contract`,
                     ]),
                     message:
