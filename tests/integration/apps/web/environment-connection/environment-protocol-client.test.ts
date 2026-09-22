@@ -16,8 +16,8 @@ import {
 import { Effect } from "effect";
 import { describe, expect, it, vi } from "vite-plus/test";
 import { createEnvironmentEventPublisher } from "#server/adapters/environment-transport/events/environment-event-publisher";
-import type { EnvironmentEventPublisher } from "#server/adapters/environment-transport/events/environment-event-publisher.contract";
 import { acquireEnvironmentListener } from "#server/app/server/environment-listener";
+import type { EnvironmentEventPublisher } from "#server/domain/environment-event-publisher.contract";
 import type { EnvironmentAuthorization } from "#server/features/environment-authorization/environment-authorization.contract";
 import { createEnvironmentAuthorizationHttpHandler } from "#server/features/environment-authorization/index";
 

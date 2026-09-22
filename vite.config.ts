@@ -18,32 +18,69 @@ export default defineConfig({
         },
       )
         .filter((entry) => entry.isDirectory())
-        .map(({ name }) => ({
-          files: [`src/apps/${application}/features/${name}/**`],
-          rules: {
+        .flatMap(({ name }) => {
+          const patterns = [
+            {
+              group: (application === "web"
+                ? ["#web", "#web-ui"]
+                : [`#${application}`]
+              ).flatMap((alias) => [
+                `${alias}/features/*/**`,
+                `!${alias}/features/${name}/**`,
+                `!${alias}/features/*/index`,
+                `!${alias}/features/*/api`,
+                `!${alias}/features/*/*.contract`,
+              ]),
+              message:
+                "Use the feature's public entry point or public contract.",
+            },
+            ...(application === "server"
+              ? [
+                  {
+                    group: ["node:child_process", "child_process"],
+                    message:
+                      "Server features run processes through domain ports.",
+                  },
+                ]
+              : []),
+          ];
+          const rules = (blockAdapters: boolean) => ({
             "no-restricted-imports": [
               "error",
               {
                 patterns: [
-                  {
-                    group: (application === "web"
-                      ? ["#web", "#web-ui"]
-                      : [`#${application}`]
-                    ).flatMap((alias) => [
-                      `${alias}/features/*/**`,
-                      `!${alias}/features/${name}/**`,
-                      `!${alias}/features/*/index`,
-                      `!${alias}/features/*/api`,
-                      `!${alias}/features/*/*.contract`,
-                    ]),
-                    message:
-                      "Use the feature's public entry point or public contract.",
-                  },
+                  ...patterns,
+                  ...(blockAdapters
+                    ? [
+                        {
+                          group: ["#server/adapters/**"],
+                          message:
+                            "Server feature core depends on domain ports, not concrete adapters.",
+                        },
+                      ]
+                    : []),
                 ],
               },
-            ],
-          },
-        })),
+            ] satisfies ["error", { patterns: typeof patterns }],
+          });
+          return [
+            {
+              files: [`src/apps/${application}/features/${name}/**`],
+              rules: rules(application === "server"),
+            },
+            ...(application === "server"
+              ? [
+                  {
+                    files: [
+                      `src/apps/server/features/${name}/http/**`,
+                      `src/apps/server/features/${name}/rpc/**`,
+                    ],
+                    rules: rules(false),
+                  },
+                ]
+              : []),
+          ];
+        }),
     ),
   },
 });

@@ -1,5 +1,5 @@
 import { Effect, Exit, Queue, Scope, Semaphore } from "effect";
-import type { EnvironmentEventPublisher } from "#server/adapters/environment-transport/events/environment-event-publisher.contract";
+import type { EnvironmentEventPublisher } from "#server/domain/environment-event-publisher.contract";
 import type { GitCommandRunner } from "#server/domain/git-command.contract";
 import type { RepositoryChangePublisher } from "#server/domain/repository-refs.contract";
 import type { RepositoryWatcher } from "#server/domain/repository-watcher.contract";
