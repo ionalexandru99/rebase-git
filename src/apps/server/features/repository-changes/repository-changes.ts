@@ -2,7 +2,7 @@ import type {
   ChangesScope,
   RepositoryChanges,
 } from "@rebase/contracts/repository-changes/repository-changes.contract";
-import { Effect, Layer, Semaphore } from "effect";
+import { Effect, Layer } from "effect";
 import type { GitCommandRunner } from "#server/domain/git-command.contract";
 import { GitCommands } from "#server/domain/git-command.contract";
 import {
@@ -11,6 +11,12 @@ import {
 } from "#server/domain/repository-access.contract";
 import type { RepositoryChangesService } from "#server/domain/repository-changes.contract";
 import { RepositoryChangesAccess } from "#server/domain/repository-changes.contract";
+import {
+  RepositoryCoordination,
+  RepositoryCoordinationError,
+  type RepositoryCoordinationService,
+  type RepositoryResourceScope,
+} from "#server/domain/repository-coordination.contract";
 import { safeChangePath } from "#server/features/repository-changes/git/change-files";
 import {
   changeGit,
@@ -25,21 +31,28 @@ import { verifyChanges } from "#server/features/repository-changes/git/verify-ch
 export function createRepositoryChangesService(
   access: RepositoryAccessService,
   git: GitCommandRunner,
+  coordination: RepositoryCoordinationService,
 ): RepositoryChangesService {
-  const locks = new Map<string, Semaphore.Semaphore>();
-  const locked = <A, E>(scope: ChangesScope, run: Effect.Effect<A, E>) =>
+  const locked = <A, E>(
+    scope: ChangesScope,
+    run: Effect.Effect<A, E>,
+    resources: RepositoryResourceScope = "worktree",
+  ) =>
     Effect.gen(function* () {
       yield* access
         .worktree(scope)
         .pipe(
           Effect.mapError((error) => changesError("Missing", error.detail)),
         );
-      let lock = locks.get(scope.worktreePath);
-      if (lock === undefined) {
-        lock = yield* Semaphore.make(1);
-        locks.set(scope.worktreePath, lock);
-      }
-      return yield* lock.withPermit(run);
+      return yield* coordination
+        .run(scope.worktreePath, resources, run)
+        .pipe(
+          Effect.mapError((error) =>
+            error instanceof RepositoryCoordinationError
+              ? changesError("GitFailed", error.detail)
+              : error,
+          ),
+        );
     });
   return {
     read: (scope) =>
@@ -128,6 +141,7 @@ export function createRepositoryChangesService(
           Effect.andThen(() => readChanges(git, { ...command, amend: false })),
           Effect.map(({ snapshot }) => fitChanges(snapshot)),
         ),
+        "shared-refs",
       ),
   };
 }
@@ -138,6 +152,7 @@ export const repositoryChangesLayer = Layer.effect(
     return createRepositoryChangesService(
       yield* RepositoryAccess,
       yield* GitCommands,
+      yield* RepositoryCoordination,
     );
   }),
 );
