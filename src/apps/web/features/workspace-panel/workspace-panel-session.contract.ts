@@ -20,6 +20,12 @@ export interface WorkspacePanelEnvironment {
 
 export interface PanelViewState {
   readonly mounted: boolean;
-  readonly targets: Partial<Record<WorkspacePanelKind, HTMLElement>>;
+  readonly targets: Partial<Record<WorkspacePanelKind, PanelViewTarget>>;
   readonly contents: Partial<Record<WorkspacePanelKind, ReactNode>>;
+}
+
+export interface PanelViewTarget {
+  readonly element: HTMLElement;
+  readonly beforeDetach: (listener: () => void) => () => void;
+  readonly detach: () => void;
 }

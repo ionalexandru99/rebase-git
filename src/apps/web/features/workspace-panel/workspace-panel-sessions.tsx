@@ -10,18 +10,19 @@ import {
   useState,
   useSyncExternalStore,
 } from "react";
-import { createPortal } from "react-dom";
 import { PanelFeatureContext } from "#web/features/workspace-panel/api";
 import {
   createSessionCollection,
   type PanelSession,
 } from "#web/features/workspace-panel/sessions/panel-view-sessions";
+import { createPanelViewTarget } from "#web/features/workspace-panel/sessions/panel-view-target";
 import type { WorkspacePanelKind } from "#web/features/workspace-panel/workspace-panel.contract";
 import { workspacePanelDefinitions } from "#web/features/workspace-panel/workspace-panel-definitions";
 import type {
   WorkspacePanelEnvironment,
   WorkspacePanelScope,
 } from "#web/features/workspace-panel/workspace-panel-session.contract";
+import { RetainedPanelView } from "#web-ui/features/workspace-panel/components/retained-panel-view";
 
 export type {
   WorkspacePanelEnvironment,
@@ -89,7 +90,7 @@ function ProjectViews({
   );
   const view = useSyncExternalStore(session.subscribe, session.getSnapshot);
   return panel.tabs.map((kind) => (
-    <RetainedView key={kind} target={view.targets[kind]}>
+    <RetainedPanelView key={kind} target={view.targets[kind]}>
       <PanelFeatureContext.Provider
         value={{
           scope: session.scope,
@@ -109,7 +110,7 @@ function ProjectViews({
             <PanelPlaceholder kind={kind} />
           ))}
       </PanelFeatureContext.Provider>
-    </RetainedView>
+    </RetainedPanelView>
   ));
 }
 
@@ -158,27 +159,6 @@ function PanelContent({ kind }: { readonly kind: WorkspacePanelKind }) {
   ) : null;
 }
 
-function RetainedView({
-  children,
-  target,
-}: {
-  readonly children: ReactNode;
-  readonly target: HTMLElement | undefined;
-}) {
-  const [container] = useState(() => {
-    const element = document.createElement("div");
-    element.className = "h-full min-h-0";
-    return element;
-  });
-  useLayoutEffect(() => {
-    target?.append(container);
-    return () => {
-      container.remove();
-    };
-  }, [container, target]);
-  return createPortal(children, container);
-}
-
 export function usePanelSession(
   key: string,
   scope: WorkspacePanelScope | undefined,
@@ -214,11 +194,13 @@ export function PanelSessionTarget({
     if (!target) {
       return;
     }
+    const attachment = createPanelViewTarget(target);
     session.update({
-      targets: { ...session.getSnapshot().targets, [kind]: target },
+      targets: { ...session.getSnapshot().targets, [kind]: attachment },
       contents: { ...session.getSnapshot().contents, [kind]: children },
     });
     return () => {
+      attachment.detach();
       const targets = { ...session.getSnapshot().targets };
       delete targets[kind];
       session.update({ targets });
