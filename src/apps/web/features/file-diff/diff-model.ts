@@ -1,4 +1,8 @@
-import { getFiletypeFromFileName, processFile } from "@pierre/diffs";
+import {
+  type FileDiffMetadata,
+  getFiletypeFromFileName,
+  processFile,
+} from "@pierre/diffs";
 import type { ChangeDiff } from "@rebase/contracts/repository-changes/repository-changes.contract";
 
 export function createChangeDiffModel(
@@ -23,5 +27,22 @@ export function createChangeDiffModel(
     metadata.type =
       diff.before === null ? "new" : diff.after === null ? "deleted" : "change";
   }
-  return { metadata };
+  return { metadata, hasHiddenContext: hasHiddenContext(metadata) };
+}
+
+function hasHiddenContext(metadata: FileDiffMetadata | undefined) {
+  if (!metadata || metadata.isPartial) return false;
+  if (metadata.hunks.some((hunk) => hunk.collapsedBefore > 1)) return true;
+  const last = metadata.hunks.at(-1);
+  if (
+    !last ||
+    metadata.additionLines.length === 0 ||
+    metadata.deletionLines.length === 0
+  )
+    return false;
+  return (
+    metadata.additionLines.length -
+      (last.additionLineIndex + last.additionCount) >
+    1
+  );
 }

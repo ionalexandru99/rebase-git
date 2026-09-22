@@ -98,7 +98,13 @@ export function buildBranchesSidebarRows(
 
   const visibleSections = sections
     .filter(sectionMatchesScope(scope))
-    .filter((section) => !filtering || section.refs.length > 0);
+    .filter((section) => !filtering || section.refs.length > 0)
+    .filter(
+      (section) =>
+        section.scope !== "tags" ||
+        section.refs.length > 0 ||
+        section.truncated,
+    );
   let previousExpanded = false;
   return visibleSections.flatMap((section, index) => {
     const expanded = filtering || expandedSections.has(section.sectionId);

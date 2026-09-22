@@ -20,7 +20,10 @@ export default function ChangeDiffViewer({
   const [selected, setSelected] = useState<SelectedLineRange | null>(null);
   const [expandContext, setExpandContext] = useState(false);
   const diff = state.diff;
-  const { metadata } = useMemo(() => createChangeDiffModel(diff), [diff]);
+  const { metadata, hasHiddenContext } = useMemo(
+    () => createChangeDiffModel(diff),
+    [diff],
+  );
   const lines = useMemo(
     () => (metadata ? selectedDiffLines(metadata, selected) : []),
     [metadata, selected],
@@ -51,7 +54,10 @@ export default function ChangeDiffViewer({
       className="flex h-full min-h-0 min-w-0 flex-col bg-background"
       aria-label="File diff"
     >
-      <DiffDisplayControls expanded={expandContext} onExpand={setExpandContext}>
+      <DiffDisplayControls
+        expanded={expandContext}
+        onExpand={!empty && hasHiddenContext ? setExpandContext : undefined}
+      >
         {diff && !empty ? (
           <Button
             size="xs"

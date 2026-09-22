@@ -16,15 +16,19 @@ export default function CommitDiff({
   readonly controller: CommitInspectionController;
 }) {
   const [expanded, setExpanded] = useState(false);
-  const { metadata } = useMemo(
-    () => createChangeDiffModel(state.diff),
-    [state.diff],
-  );
   const files = state.details?.files ?? [];
   const index = files.findIndex((file) => file.path === state.path);
   const previous = files[index - 1];
   const next = files[index + 1];
   const file = files[index];
+  const { metadata, hasHiddenContext } = useMemo(() => {
+    const model = createChangeDiffModel(state.diff);
+    if (model.metadata && file?.previousPath) {
+      model.metadata.prevName = file.previousPath;
+      model.metadata.type = "rename-changed";
+    }
+    return model;
+  }, [state.diff, file?.previousPath]);
   return (
     <section
       className="flex min-h-0 min-w-0 flex-col"
@@ -33,7 +37,7 @@ export default function CommitDiff({
     >
       <DiffDisplayControls
         expanded={expanded}
-        onExpand={setExpanded}
+        onExpand={hasHiddenContext ? setExpanded : undefined}
         preferences={state.preferences}
         onPreferences={controller.preferences}
         previous={
@@ -41,7 +45,7 @@ export default function CommitDiff({
         }
         next={next ? () => controller.selectFile(next.path) : undefined}
       />
-      {file ? (
+      {file && (!metadata || state.diff?.before === state.diff?.after) ? (
         <div className="shrink-0 break-all border-border border-b px-3 py-2 font-mono text-xs">
           {file.previousPath ? `${file.previousPath} → ` : ""}
           {file.path}

@@ -11,7 +11,7 @@ const definitions = {
     label: "Commit",
     icon: IconGitCommit,
     available: true,
-    lifetime: "selection",
+    launchable: false,
     description: "Inspect a selected commit",
   },
   changes: {

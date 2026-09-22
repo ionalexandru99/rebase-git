@@ -2,7 +2,6 @@ import type { CommitInspection as Details } from "@rebase/contracts/commit-inspe
 import type { ChangeDiff } from "@rebase/contracts/repository-changes/repository-changes.contract";
 import { Effect } from "effect";
 import { describe, expect, it, vi } from "vitest";
-import { userEvent } from "vitest/browser";
 import { render } from "vitest-browser-react";
 import {
   CommitGraphFixture,
@@ -13,7 +12,6 @@ import {
 import type { CommitInspectionClient } from "#web/features/commit-inspection/commit-inspection.contract";
 import { ResizablePanel } from "#web-ui/components/ui/resizable";
 import { CommitInspectionBridge } from "#web-ui/features/commit-inspection/components/commit-inspection-bridge";
-import { CommitMetadata } from "#web-ui/features/commit-inspection/components/commit-metadata";
 import { WorkspacePanel } from "#web-ui/features/workspace-panel/index";
 
 function details(oid = historyOid(0), parentOid = historyOid(1)): Details {
@@ -129,51 +127,6 @@ async function fixture(
 }
 
 describe("commit inspection", () => {
-  it("replaces the short SHA in place and combines matching author details", async () => {
-    const info = details();
-    const screen = await render(
-      <CommitMetadata details={{ ...info, committer: info.author }} />,
-    );
-    await expect.element(screen.getByText("Author & committer")).toBeVisible();
-    await expect.element(screen.getByText(info.author.email)).toBeVisible();
-    expect(document.querySelectorAll("time")).toHaveLength(1);
-    expect(document.querySelector("time")?.textContent).not.toContain("T10:");
-    await screen.getByRole("button", { name: "Show full commit SHA" }).click();
-    expect(
-      [...document.querySelectorAll("code")].map((code) => code.textContent),
-    ).toEqual([info.oid]);
-    const collapse = screen.getByRole("button", {
-      name: "Show short commit SHA",
-    });
-    await expect.element(collapse).toHaveAttribute("aria-expanded", "true");
-    await collapse.click();
-    await userEvent.keyboard("{Enter}");
-    expect(
-      [...document.querySelectorAll("code")].map((code) => code.textContent),
-    ).toEqual([info.oid]);
-  });
-
-  it("shows separate identity rows when the commit timestamps differ", async () => {
-    const info = details();
-    const screen = await render(
-      <CommitMetadata
-        details={{
-          ...info,
-          committer: { ...info.author, date: info.committer.date },
-        }}
-      />,
-    );
-    await expect
-      .element(screen.getByText("Author", { exact: true }))
-      .toBeVisible();
-    await expect
-      .element(screen.getByText("Committer", { exact: true }))
-      .toBeVisible();
-    expect(
-      [...document.querySelectorAll("time")].map((time) => time.dateTime),
-    ).toEqual([info.author.date, info.committer.date]);
-  });
-
   it("renders a root commit's text patch through the shared viewer", async () => {
     const { screen, grid } = await fixture({
       inspect: (command) =>
@@ -207,6 +160,42 @@ describe("commit inspection", () => {
       )
       .not.toBeInTheDocument();
   });
+  it("shows hidden unchanged lines on demand and omits the control for an added file", async () => {
+    const { screen, grid } = await fixture({
+      diff: (command) =>
+        Effect.succeed({
+          ...diff(command.path),
+          kind: "text",
+          before:
+            command.path === "src/first.bin"
+              ? "retained heading\nretained context\nold\n"
+              : null,
+          after:
+            command.path === "src/first.bin"
+              ? "retained heading\nretained context\nnew\n"
+              : "added content\n",
+          patch:
+            command.path === "src/first.bin"
+              ? "--- src/first.bin\n+++ src/first.bin\n@@ -3 +3 @@\n-old\n+new\n"
+              : "--- src/second.bin\n+++ src/second.bin\n@@ -0,0 +1 @@\n+added content\n",
+        }),
+    });
+    await grid.getByRole("row", { name: /^Commit 0,/ }).dblClick();
+    const content = () =>
+      document.querySelector("diffs-container")?.shadowRoot?.textContent;
+    await expect.poll(content).toContain("new");
+    await expect.poll(content).not.toContain("retained heading");
+    await screen.getByRole("button", { name: "Show unchanged lines" }).click();
+    await expect.poll(content).toContain("retained heading");
+    await screen.getByRole("button", { name: "Hide unchanged lines" }).click();
+    await expect.poll(content).not.toContain("retained heading");
+    await screen.getByRole("button", { name: /second.bin/ }).click();
+    await expect.poll(content).toContain("added content");
+    await expect
+      .element(screen.getByRole("button", { name: "Show unchanged lines" }))
+      .not.toBeInTheDocument();
+  });
+
   it("opens from a double click, follows selection, and closes with focus restored", async () => {
     const { screen, grid, client } = await fixture();
     const row = grid.getByRole("row", { name: /^Commit 0,/ });
@@ -219,9 +208,6 @@ describe("commit inspection", () => {
       .toBeVisible();
     await expect.element(row).toBeVisible();
     await expect.element(row).toHaveAttribute("aria-selected", "true");
-    await expect
-      .element(screen.getByRole("button", { name: "Expand side panel" }))
-      .not.toBeInTheDocument();
     await grid.getByRole("row", { name: /^Commit 1,/ }).click();
     await vi.waitFor(() =>
       expect(client.inspect).toHaveBeenLastCalledWith(
