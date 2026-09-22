@@ -23,6 +23,7 @@ const idleSnapshot: RepositoryRefsSnapshot = {
 export function createRepositoryRefsController(gateway: RepositoryRefsGateway) {
   const listeners = new Set<() => void>();
   const cache = new Map<string, RepositoryRefs>();
+  const checkoutRevisions = new Map<string, number>();
   const stale = new Set<string>();
   let credential: EnvironmentCredential | undefined;
   let snapshot = idleSnapshot;
@@ -35,16 +36,23 @@ export function createRepositoryRefsController(gateway: RepositoryRefsGateway) {
   };
 
   const load = (repositoryId: string) => {
+    const checkoutRevision = checkoutRevisions.get(repositoryId);
     stale.delete(repositoryId);
     let failed = false;
     const pending = readRefs(repositoryId)
       .then(
         (refs) => {
+          if (checkoutRevisions.get(repositoryId) !== checkoutRevision) {
+            return;
+          }
           cache.set(repositoryId, refs);
           if (snapshot.repositoryId === repositoryId)
             publish(withRefs(snapshot, refs));
         },
         (error: unknown) => {
+          if (checkoutRevisions.get(repositoryId) !== checkoutRevision) {
+            return;
+          }
           failed = true;
           if (snapshot.repositoryId === repositoryId) {
             publish(withError(snapshot, normalizeControllerError(error)));
@@ -100,6 +108,13 @@ export function createRepositoryRefsController(gateway: RepositoryRefsGateway) {
         }),
       );
       const cached = cache.get(repositoryId);
+      checkoutRevisions.set(
+        repositoryId,
+        (checkoutRevisions.get(repositoryId) ?? 0) + 1,
+      );
+      if (loading.has(repositoryId)) {
+        stale.add(repositoryId);
+      }
       const refs =
         cached === undefined
           ? undefined
