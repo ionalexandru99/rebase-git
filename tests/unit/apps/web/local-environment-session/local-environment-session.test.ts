@@ -26,6 +26,30 @@ import {
 import type { RepositoryRefsGateway } from "#web/features/repository-refs/repository-refs-controller.contract";
 
 describe("local Environment session", () => {
+  it("releases a pending catalog refresh when its session stops", async () => {
+    const started = Promise.withResolvers<void>();
+    const canceled = Promise.withResolvers<void>();
+    const catalog = createRepositoryCatalogGateway();
+    catalog.list.mockReturnValueOnce(
+      Effect.sync(started.resolve).pipe(
+        Effect.andThen(Effect.never),
+        Effect.ensuring(Effect.sync(canceled.resolve)),
+      ),
+    );
+    const session = createLocalEnvironmentSession({
+      filesystemGateway: createFilesystemGateway(),
+      gateway: createGateway(createConnection()),
+      repositoryCatalogGateway: catalog,
+      repositoryRefsGateway: createRepositoryRefsGateway(),
+    });
+
+    session.start();
+    await started.promise;
+    session.stop();
+    await canceled.promise;
+    expect(session.repositoryCatalog.getSnapshot().repositories).toEqual([]);
+  });
+
   it("refreshes only changed refs and releases its change subscription on disconnect", async () => {
     const connection = createConnection();
     const release = vi.fn();
