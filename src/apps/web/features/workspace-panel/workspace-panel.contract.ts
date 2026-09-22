@@ -7,7 +7,7 @@ export interface WorkspacePanelDefinition {
   readonly label: string;
   readonly icon: typeof IconCode;
   readonly available: boolean;
-  readonly lifetime: "persistent" | "selection";
+  readonly launchable: boolean;
   readonly description: string;
 }
 
@@ -17,12 +17,6 @@ export interface WorkspacePanelState {
   readonly open: boolean;
   readonly width: number;
   readonly expanded?: boolean;
-  readonly returnTo?: {
-    readonly kind: WorkspacePanelKind;
-    readonly active: WorkspacePanelKind | null;
-    readonly open: boolean;
-    readonly expanded: boolean;
-  };
 }
 
 export type WorkspacePanelAction =

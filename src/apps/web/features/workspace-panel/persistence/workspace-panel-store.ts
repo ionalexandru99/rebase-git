@@ -6,7 +6,6 @@ import { workspacePanelDefinitions } from "#web/features/workspace-panel/workspa
 import {
   initialWorkspacePanelState,
   isWorkspacePanelKind,
-  persistentWorkspacePanel,
   reduceWorkspacePanel,
 } from "#web/features/workspace-panel/workspace-panel-state";
 
@@ -29,10 +28,7 @@ export function createWorkspacePanelStore(
       if (next === state) return;
       state = next;
       try {
-        localStorage.setItem(
-          key,
-          JSON.stringify(persistentWorkspacePanel(state)),
-        );
+        localStorage.setItem(key, JSON.stringify(state));
       } catch {}
       for (const notify of listeners) notify();
     },
@@ -47,9 +43,7 @@ function readPanelState(key: string): WorkspacePanelState {
     if (!("tabs" in saved) || !Array.isArray(saved.tabs))
       return initialWorkspacePanelState;
     const tabs = [...new Set(saved.tabs.filter(isWorkspacePanelKind))].filter(
-      (kind) =>
-        workspacePanelDefinitions[kind].available &&
-        workspacePanelDefinitions[kind].lifetime === "persistent",
+      (kind) => workspacePanelDefinitions[kind].available,
     );
     const active =
       "active" in saved &&

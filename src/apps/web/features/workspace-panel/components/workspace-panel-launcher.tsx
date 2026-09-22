@@ -51,9 +51,7 @@ export function WorkspacePanelLauncher() {
           <span>Coming soon</span>
         </div>
         {workspacePanelKinds
-          .filter(
-            (kind) => workspacePanelDefinitions[kind].lifetime === "persistent",
-          )
+          .filter((kind) => workspacePanelDefinitions[kind].launchable)
           .map((kind) => {
             const feature = workspacePanelDefinitions[kind];
             return (

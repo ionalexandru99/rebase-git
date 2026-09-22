@@ -19,10 +19,7 @@ export function WorkspacePanelEmptyState() {
         </h2>
         <div className="grid grid-cols-2 gap-2">
           {workspacePanelKinds
-            .filter(
-              (kind) =>
-                workspacePanelDefinitions[kind].lifetime === "persistent",
-            )
+            .filter((kind) => workspacePanelDefinitions[kind].launchable)
             .map((kind) => {
               const feature = workspacePanelDefinitions[kind];
               return (

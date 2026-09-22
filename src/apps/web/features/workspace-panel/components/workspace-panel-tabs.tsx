@@ -62,26 +62,23 @@ export function WorkspacePanelTabs({
             </>
           ) : null}
         </div>
-        {active === null ||
-        workspacePanelDefinitions[active].lifetime === "persistent" ? (
-          <Button
-            size="icon-xs"
-            variant="ghost"
-            aria-label={
-              panel.state.expanded ? "Restore side panel" : "Expand side panel"
-            }
-            aria-pressed={panel.state.expanded === true}
-            onClick={() =>
-              panel.execute({ type: "expand", expanded: !panel.state.expanded })
-            }
-          >
-            {panel.state.expanded ? (
-              <IconArrowsMinimize />
-            ) : (
-              <IconArrowsMaximize />
-            )}
-          </Button>
-        ) : null}
+        <Button
+          size="icon-xs"
+          variant="ghost"
+          aria-label={
+            panel.state.expanded ? "Restore side panel" : "Expand side panel"
+          }
+          aria-pressed={panel.state.expanded === true}
+          onClick={() =>
+            panel.execute({ type: "expand", expanded: !panel.state.expanded })
+          }
+        >
+          {panel.state.expanded ? (
+            <IconArrowsMinimize />
+          ) : (
+            <IconArrowsMaximize />
+          )}
+        </Button>
       </div>
       {tabs.map((kind) => {
         const feature = workspacePanelDefinitions[kind];

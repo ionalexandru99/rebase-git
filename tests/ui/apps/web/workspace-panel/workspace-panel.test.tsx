@@ -85,6 +85,41 @@ describe("workspace panel", () => {
     await expect.poll(panelWidth).toBeCloseTo(550, -1);
   });
 
+  it("keeps each project's tabs and visibility when switching projects and reopening the panel", async () => {
+    const panel = await renderPanel("project-a");
+    await page.getByRole("button", { name: "Show side panel" }).click();
+    await page
+      .getByRole("button", { name: "Diffs Review and commit working changes" })
+      .click();
+    await expect
+      .element(page.getByRole("tab", { name: "Diffs" }))
+      .toHaveAttribute("aria-selected", "true");
+    await page.getByRole("button", { name: "Hide side panel" }).click();
+
+    await panel.switchScope("project-b");
+    await page.getByRole("button", { name: "Show side panel" }).click();
+    await expect
+      .element(page.getByRole("heading", { name: "Open a tab" }))
+      .toBeVisible();
+
+    await panel.switchScope("project-a");
+    await expect
+      .element(page.getByRole("complementary", { name: "Side panel" }))
+      .not.toBeInTheDocument();
+    await page.getByRole("button", { name: "Show side panel" }).click();
+    await expect
+      .element(page.getByRole("tab", { name: "Diffs" }))
+      .toHaveAttribute("aria-selected", "true");
+
+    await panel.switchScope("project-b");
+    await expect
+      .element(page.getByRole("heading", { name: "Open a tab" }))
+      .toBeVisible();
+    await expect
+      .element(page.getByRole("tab", { name: "Diffs" }))
+      .not.toBeInTheDocument();
+  });
+
   it("restores the panel width when switching worktrees with the graph mounted", async () => {
     createWorkspacePanelStore("first").dispatch({ type: "resize", width: 35 });
     createWorkspacePanelStore("other").dispatch({ type: "resize", width: 55 });

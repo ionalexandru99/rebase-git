@@ -21,50 +21,21 @@ export function isWorkspacePanelKind(
   return workspacePanelKinds.some((kind) => kind === value);
 }
 
-export function persistentWorkspacePanel(
-  state: WorkspacePanelState,
-): WorkspacePanelState {
-  return state.tabs.reduce(
-    (current, kind) =>
-      workspacePanelDefinitions[kind].lifetime === "selection"
-        ? reduceWorkspacePanel(current, { type: "close", kind })
-        : current,
-    state,
-  );
-}
-
 function openPanel(
   state: WorkspacePanelState,
   kind: WorkspacePanelKind,
 ): WorkspacePanelState {
-  if (!workspacePanelDefinitions[kind].available) return state;
-  if (state.open && state.active === kind) return state;
-  const selection = workspacePanelDefinitions[kind].lifetime === "selection";
-  const previous =
-    selection && state.returnTo && state.returnTo.kind !== kind
-      ? reduceWorkspacePanel(state, {
-          type: "close",
-          kind: state.returnTo.kind,
-        })
-      : state;
+  if (!workspacePanelDefinitions[kind].available) {
+    return state;
+  }
+  if (state.open && state.active === kind) {
+    return state;
+  }
   return {
-    ...previous,
-    ...(selection && !previous.tabs.includes(kind)
-      ? {
-          returnTo: {
-            kind,
-            active: previous.active,
-            open: previous.open,
-            expanded: previous.expanded === true,
-          },
-        }
-      : {}),
-    ...(selection ? { expanded: false } : {}),
+    ...state,
     open: true,
     active: kind,
-    tabs: previous.tabs.includes(kind)
-      ? previous.tabs
-      : [...previous.tabs, kind],
+    tabs: state.tabs.includes(kind) ? state.tabs : [...state.tabs, kind],
   };
 }
 
@@ -73,29 +44,18 @@ function closePanel(
   kind: WorkspacePanelKind,
 ): WorkspacePanelState {
   const index = state.tabs.indexOf(kind);
-  if (index < 0) return state;
-  const tabs = state.tabs.filter((tab) => tab !== kind);
-  if (state.returnTo?.kind === kind) {
-    const { returnTo, ...rest } = state;
-    if (state.active !== kind) return { ...rest, tabs };
-    return {
-      ...rest,
-      tabs,
-      active:
-        returnTo.active !== null && tabs.includes(returnTo.active)
-          ? returnTo.active
-          : (tabs[0] ?? null),
-      open: returnTo.open,
-      expanded: returnTo.expanded,
-    };
+  if (index < 0) {
+    return state;
   }
+  const tabs = state.tabs.filter((tab) => tab !== kind);
+  const active =
+    state.active === kind
+      ? (tabs[index] ?? tabs[index - 1] ?? null)
+      : state.active;
   return {
     ...state,
     tabs,
-    active:
-      state.active === kind
-        ? (tabs[index] ?? tabs[index - 1] ?? null)
-        : state.active,
+    active,
   };
 }
 
@@ -105,11 +65,6 @@ export function reduceWorkspacePanel(
 ): WorkspacePanelState {
   switch (action.type) {
     case "expand":
-      if (
-        state.active &&
-        workspacePanelDefinitions[state.active].lifetime === "selection"
-      )
-        return state;
       return { ...state, expanded: action.expanded };
     case "open":
       return openPanel(state, action.kind);
