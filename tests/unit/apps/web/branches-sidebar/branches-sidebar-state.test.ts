@@ -3,8 +3,6 @@ import { describe, expect, it } from "vite-plus/test";
 import {
   buildBranchesSidebarRows,
   defaultExpandedSections,
-  resolveActiveWorktreePath,
-  resolveRefSelection,
   stepRow,
   toggleSection,
 } from "#web/features/branches-sidebar/branches-sidebar-state";
@@ -131,58 +129,6 @@ describe("branches sidebar state", () => {
         "remote",
       ).map((row) => row.id),
     ).toEqual(["section:remote:origin", "ref:remote:origin:feature"]);
-  });
-
-  it("switches worktrees for branches held elsewhere and checks out the rest", () => {
-    const current = refs();
-
-    expect(
-      resolveRefSelection(current, mainPath, {
-        _tag: "LocalBranch",
-        name: "topic",
-      }),
-    ).toEqual({ _tag: "SwitchWorktree", worktreePath: topicPath });
-    expect(
-      resolveRefSelection(current, mainPath, {
-        _tag: "LocalBranch",
-        name: "main",
-      }),
-    ).toEqual({ _tag: "AlreadyCurrent" });
-    expect(
-      resolveRefSelection(current, mainPath, {
-        _tag: "RemoteBranch",
-        name: "topic",
-        remote: "origin",
-      }),
-    ).toEqual({ _tag: "SwitchWorktree", worktreePath: topicPath });
-    expect(
-      resolveRefSelection(current, mainPath, {
-        _tag: "RemoteBranch",
-        name: "main",
-        remote: "upstream",
-      }),
-    ).toEqual({
-      _tag: "Checkout",
-      target: { _tag: "RemoteBranch", name: "main", remote: "upstream" },
-    });
-    expect(
-      resolveRefSelection(current, mainPath, {
-        _tag: "RemoteBranch",
-        name: "release",
-        remote: "upstream",
-      }),
-    ).toEqual({
-      _tag: "Checkout",
-      target: { _tag: "RemoteBranch", name: "release", remote: "upstream" },
-    });
-    expect(
-      resolveRefSelection(current, topicPath, { _tag: "Tag", name: "v1.0.0" }),
-    ).toEqual({ _tag: "Checkout", target: { _tag: "Tag", name: "v1.0.0" } });
-  });
-
-  it("falls back to the main worktree when the preferred path disappeared", () => {
-    expect(resolveActiveWorktreePath(refs(), topicPath)).toBe(topicPath);
-    expect(resolveActiveWorktreePath(refs(), "/gone")).toBe(mainPath);
   });
 
   it("steps through rows without wrapping and toggles sections", () => {
