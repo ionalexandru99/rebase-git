@@ -141,7 +141,7 @@ export function createRepositoryChangesService(
           Effect.andThen(() => readChanges(git, { ...command, amend: false })),
           Effect.map(({ snapshot }) => fitChanges(snapshot)),
         ),
-        "shared-refs",
+        "worktree-and-refs",
       ),
   };
 }

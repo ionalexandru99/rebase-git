@@ -1,6 +1,6 @@
 import { Context, Data, type Effect } from "effect";
 
-export type RepositoryResourceScope = "worktree" | "shared-refs";
+export type RepositoryResourceScope = "worktree" | "refs" | "worktree-and-refs";
 
 export class RepositoryCoordinationError extends Data.TaggedError(
   "RepositoryCoordinationError",

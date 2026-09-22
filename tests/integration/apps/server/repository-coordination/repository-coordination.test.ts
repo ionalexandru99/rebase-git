@@ -11,6 +11,7 @@ import type { GitCommandRunner } from "#server/domain/git-command.contract";
 import { createRepositoryAccess } from "#server/features/repository-access/index";
 import { createRepositoryChangesService } from "#server/features/repository-changes/index";
 import { createRepositoryCoordination } from "#server/features/repository-coordination/index";
+import { acquireWatchedRepository } from "#server/features/repository-history/freshness/watched-repository";
 import { createRepositoryRefsService } from "#server/features/repository-refs/repository-refs";
 
 const directories: string[] = [];
@@ -24,9 +25,14 @@ afterEach(async () => {
   );
 });
 
-it.each([false, true])(
-  "serializes commit and checkout across features, linked worktree: %s",
-  async (linked) => {
+it.each([
+  { mutation: "commit", linked: false },
+  { mutation: "commit", linked: true },
+  { mutation: "fetch", linked: false },
+  { mutation: "fetch", linked: true },
+] as const)(
+  "serializes $mutation and checkout across features, linked worktree: $linked",
+  async ({ mutation, linked }) => {
     const root = await realpath(
       await mkdtemp(join(tmpdir(), "rebase-coordination-")),
     );
@@ -61,12 +67,12 @@ it.each([false, true])(
           const runner: GitCommandRunner = {
             run: (command) =>
               Effect.gen(function* () {
-                if (command.arguments.includes("commit")) {
-                  events.push("commit-start");
+                if (command.arguments.includes(mutation)) {
+                  events.push("mutation-start");
                   yield* Deferred.succeed(commitEntered, undefined);
                   yield* Deferred.await(releaseCommit);
                   const result = yield* local.run(command);
-                  events.push("commit-end");
+                  events.push("mutation-end");
                   return result;
                 }
                 if (command.arguments[0] === "checkout") {
@@ -106,13 +112,30 @@ it.each([false, true])(
           });
           const scope = { repositoryId, worktreePath: directory, amend: false };
           const snapshot = yield* changes.read(scope);
-          const committing = yield* changes
-            .commit({
-              ...scope,
-              revision: snapshot.revision,
-              message: "Coordinated",
-            })
-            .pipe(Effect.forkScoped);
+          const freshness = yield* acquireWatchedRepository(
+            {
+              id: repositoryId,
+              path: directory,
+              name: "test",
+              addedAt: "",
+              lastOpenedAt: "",
+            },
+            new Set(),
+            runner,
+            { watch: () => Effect.succeed({ close: () => {} }) },
+            coordination,
+          );
+          const committing = yield* (
+            mutation === "fetch"
+              ? freshness.fetch.pipe(Effect.asVoid)
+              : changes
+                  .commit({
+                    ...scope,
+                    revision: snapshot.revision,
+                    message: "Coordinated",
+                  })
+                  .pipe(Effect.asVoid)
+          ).pipe(Effect.forkScoped);
           yield* Deferred.await(commitEntered);
           const checkingOut = yield* refs
             .checkout({
@@ -130,12 +153,16 @@ it.each([false, true])(
           const result = yield* Fiber.join(checkingOut);
           expect(Option.isNone(prematureCheckout)).toBe(true);
           expect(result.head.branch).toBe("next");
-          expect(events).toEqual(["commit-start", "commit-end", "checkout"]);
+          expect(events).toEqual([
+            "mutation-start",
+            "mutation-end",
+            "checkout",
+          ]);
         }),
       ),
     );
     expect((await git("log", "main", "-1", "--format=%s")).stdout.trim()).toBe(
-      "Coordinated",
+      mutation === "commit" ? "Coordinated" : "Initial",
     );
   },
 );

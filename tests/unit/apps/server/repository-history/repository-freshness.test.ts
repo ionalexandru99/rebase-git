@@ -19,6 +19,7 @@ import {
   GitCommands,
 } from "#server/domain/git-command.contract";
 import { RepositoryCatalogAccess } from "#server/domain/repository-catalog.contract";
+import { RepositoryCoordination } from "#server/domain/repository-coordination.contract";
 import {
   type RepositoryFreshnessService,
   RepositoryFreshnessState,
@@ -474,6 +475,9 @@ function withService(
         repositoryFreshnessLayer.pipe(
           Layer.provide(
             Layer.mergeAll(
+              Layer.succeed(RepositoryCoordination, {
+                run: (_directory, _scope, operation) => operation,
+              }),
               Layer.succeed(RepositoryCatalogAccess, {
                 find: (id) =>
                   Effect.succeed({

@@ -49,7 +49,7 @@ export function createRepositoryRefsService(dependencies: {
         return yield* coordination
           .run(
             command.worktreePath,
-            "shared-refs",
+            "worktree-and-refs",
             checkoutRepositoryRef(git, repository.path, command),
           )
           .pipe(

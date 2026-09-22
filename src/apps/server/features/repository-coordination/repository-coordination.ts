@@ -41,8 +41,11 @@ export function createRepositoryCoordination(
     run: (directory, scope, operation) =>
       Effect.gen(function* () {
         const paths = yield* resolveGitDirectories(git, directory);
-        const worktree = withLock(`worktree:${paths.gitDirectory}`, operation);
-        return yield* scope === "shared-refs"
+        const worktree =
+          scope === "refs"
+            ? operation
+            : withLock(`worktree:${paths.gitDirectory}`, operation);
+        return yield* scope !== "worktree"
           ? withLock(`refs:${paths.commonDirectory}`, worktree)
           : worktree;
       }),

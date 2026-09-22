@@ -14,7 +14,10 @@ import { RepositoryFreshnessState } from "#server/domain/repository-freshness.co
 import { RepositoryWatching } from "#server/domain/repository-watcher.contract";
 import { createEnvironmentEventPublisher } from "#server/features/environment-connection/events/environment-event-publisher";
 import { createRepositoryCatalog } from "#server/features/repository-catalog/repository-catalog";
-import { createRepositoryCoordination } from "#server/features/repository-coordination/index";
+import {
+  createRepositoryCoordination,
+  repositoryCoordinationLayer,
+} from "#server/features/repository-coordination/index";
 import { repositoryFreshnessLayer } from "#server/features/repository-history/freshness/repository-freshness";
 import { acquireRepositoryChangePublisher } from "#server/features/repository-refs/repository-change-publisher";
 import { createRepositoryRefsService } from "#server/features/repository-refs/repository-refs";
@@ -87,6 +90,7 @@ for (const firstRelease of ["refs", "freshness"] as const)
           yield* refs.read(linkedEntry.id);
           const services = yield* Layer.build(
             repositoryFreshnessLayer.pipe(
+              Layer.provide(repositoryCoordinationLayer),
               Layer.provide(
                 Layer.mergeAll(
                   Layer.succeed(GitCommands, runner),
