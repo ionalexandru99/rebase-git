@@ -82,7 +82,8 @@
                       "#desktop/**",
                       "@rebase/server",
                       "@rebase/web",
-                      "@rebase/desktop"
+                      "@rebase/desktop",
+                      "@rebase/web/**"
                     ],
                     "message": "Shared contracts and clients cannot depend on application implementations."
                   }
@@ -120,7 +121,11 @@
                       "#*/app/**",
                       "#*/features/**",
                       "#*/adapters/**",
-                      "#*/platform/**"
+                      "#*/platform/**",
+                      "@rebase/server",
+                      "@rebase/web",
+                      "@rebase/web/**",
+                      "@rebase/desktop"
                     ],
                     "message": "Domain code depends on contracts, not UI, application composition, or concrete adapters."
                   }
@@ -153,7 +158,9 @@
                       "#web/app/**",
                       "#web-ui/app/**",
                       "#web/features/**",
-                      "#web-ui/features/**"
+                      "#web-ui/features/**",
+                      "@rebase/web",
+                      "@rebase/web/**"
                     ],
                     "message": "Platform adapters and UI primitives cannot depend on product features or application composition."
                   }
@@ -186,7 +193,11 @@
                       "#web/app/**",
                       "#web-ui/app/**",
                       "#server/app/**",
-                      "#desktop/app/**"
+                      "#desktop/app/**",
+                      "@rebase/server",
+                      "@rebase/web",
+                      "@rebase/web/**",
+                      "@rebase/desktop"
                     ],
                     "message": "Features expose capabilities to application composition and must not depend on it."
                   }
@@ -198,7 +209,12 @@
       }
     },
     {
-      "includes": ["src/apps/desktop/**", "src/apps/server/**"],
+      "includes": [
+        "src/apps/desktop/**",
+        "src/apps/server/**",
+        "!src/apps/*/domain/**",
+        "!src/apps/*/features/**"
+      ],
       "linter": {
         "rules": {
           "style": {
