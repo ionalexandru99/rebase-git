@@ -7,7 +7,7 @@ export function DiffDisplayControls({
   children,
 }: {
   readonly expanded: boolean;
-  readonly onExpand: (expanded: boolean) => void;
+  readonly onExpand?: ((expanded: boolean) => void) | undefined;
   readonly children?: ReactNode;
 }) {
   const { state, controller } = useWorkingChanges();

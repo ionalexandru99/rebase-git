@@ -13,7 +13,7 @@ export function DiffDisplayControls({
   next,
 }: {
   readonly expanded: boolean;
-  readonly onExpand: (expanded: boolean) => void;
+  readonly onExpand?: ((expanded: boolean) => void) | undefined;
   readonly children?: ReactNode;
   readonly preferences: DiffPreferences;
   readonly onPreferences: (preferences: DiffPreferences) => void;
@@ -53,15 +53,17 @@ export function DiffDisplayControls({
       >
         <IconTextWrap />
       </Button>
-      <Button
-        size="xs"
-        variant="ghost"
-        aria-pressed={expanded}
-        className="aria-pressed:bg-sidebar-accent aria-pressed:text-sidebar-accent-foreground"
-        onClick={() => onExpand(!expanded)}
-      >
-        {expanded ? "Collapse context" : "Expand context"}
-      </Button>
+      {onExpand ? (
+        <Button
+          size="xs"
+          variant="ghost"
+          aria-pressed={expanded}
+          className="aria-pressed:bg-sidebar-accent aria-pressed:text-sidebar-accent-foreground"
+          onClick={() => onExpand(!expanded)}
+        >
+          {expanded ? "Hide unchanged lines" : "Show unchanged lines"}
+        </Button>
+      ) : null}
       <div className="ml-auto flex">
         {children}
         <Button

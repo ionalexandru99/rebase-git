@@ -82,7 +82,13 @@ export function CommitGraph({
   githubRepository,
   remoteProviders,
   toolbarActions,
+  onOpenDetails,
+  onActiveCommitChange,
 }: {
+  readonly onOpenDetails?: ((oid: string) => void) | undefined;
+  readonly onActiveCommitChange?:
+    | ((oid: string | undefined) => void)
+    | undefined;
   readonly toolbarActions?: ReactNode;
   readonly ref?: Ref<CommitGraphHandle>;
   readonly commandEnvironment?: GraphCommandEnvironment | undefined;
@@ -253,7 +259,17 @@ export function CommitGraph({
     setPendingNavigation({ oid, offset: target.offset, mode: "replace" });
     scrollRef.current?.focus();
   };
-  useImperativeHandle(ref, () => ({ navigateToOid }));
+  const focusSelection = () => {
+    if (navigation.selection.activeOid !== undefined)
+      viewportRef.current?.scrollToIndex(
+        navigation.selection.activeIndex + paging.snapshot.startOffset,
+      );
+    scrollRef.current?.focus();
+  };
+  useImperativeHandle(ref, () => ({ navigateToOid, focusSelection }));
+  useEffect(() => {
+    onActiveCommitChange?.(navigation.selection.activeOid);
+  }, [onActiveCommitChange, navigation.selection.activeOid]);
   selectedOidRef.current = navigation.selection.activeOid;
   const activeCommitOid = visibleOids.includes(
     navigation.selection.activeOid ?? "",
@@ -268,6 +284,7 @@ export function CommitGraph({
     fetch,
     selectedOids: navigation.selection.selectedOids,
     onRemoveHistoryRef,
+    onOpenDetails,
   });
   const handleKeyDown = (event: KeyboardEvent<HTMLElement>) => {
     if (event.defaultPrevented) return;
@@ -499,6 +516,17 @@ export function CommitGraph({
                               onClick={(event) => {
                                 navigation.onClick(commit.oid, event);
                                 scrollRef.current?.focus();
+                              }}
+                              onDoubleClick={(event) => {
+                                if (
+                                  event.target instanceof Element &&
+                                  event.target.closest("button")
+                                )
+                                  return;
+                                void commands.execute(
+                                  "graph.openDetails",
+                                  commands.context(commit.oid),
+                                );
                               }}
                               onContextMenu={() => {
                                 beginNavigation();

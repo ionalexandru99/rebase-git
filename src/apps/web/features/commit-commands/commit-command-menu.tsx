@@ -43,6 +43,7 @@ export function CommitCommandMenu({
           .filter(
             (command) =>
               command.id === "graph.copySha" ||
+              command.id === "graph.openDetails" ||
               command.id === "graph.copySubject",
           )
           .map((command) => (

@@ -15,6 +15,15 @@ export function createGraphCommandRegistry(
   ): readonly GraphCommandDescriptor[] {
     const result: GraphCommandDescriptor[] = [];
     if (context.invokingOid !== undefined) {
+      if (handlers.openDetails)
+        result.push({
+          id: "graph.openDetails",
+          label: "Open details",
+          group: "Commit",
+          order: -1,
+          enabled:
+            context.connected && context.capabilities.has("repository.read"),
+        });
       result.push({
         id: "graph.copySha",
         label: "Copy commit SHA",
@@ -64,7 +73,10 @@ export function createGraphCommandRegistry(
         reason:
           descriptor?.disabledReason ?? "This command is unavailable here",
       };
-    if (id === "graph.copySha" || id === "graph.copySubject") {
+    if (id === "graph.openDetails") {
+      if (context.invokingOid !== undefined)
+        handlers.openDetails?.(context.invokingOid);
+    } else if (id === "graph.copySha" || id === "graph.copySubject") {
       const oid = context.invokingOid;
       if (oid === undefined)
         return { _tag: "Unavailable", reason: "Choose a commit" };
