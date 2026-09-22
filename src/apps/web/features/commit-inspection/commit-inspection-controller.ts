@@ -35,6 +35,7 @@ export function createCommitInspectionController(
   let diffFiber: Fiber.Fiber<void> | undefined;
   let generation = 0;
   let fileGeneration = 0;
+  let active = true;
   const publish = (next: Partial<CommitInspectionState>) => {
     if (runtime.disposed) return;
     state = { ...state, ...next };
@@ -54,7 +55,7 @@ export function createCommitInspectionController(
     cancel(diffFiber);
     publish({ path, diff: null, diffError: null, loadingDiff: path !== null });
     const details = state.details;
-    if (path === null || details === null) return;
+    if (path === null || details === null || !active) return;
     diffFiber = runtime.runFork(
       client
         .diff({
@@ -95,7 +96,7 @@ export function createCommitInspectionController(
       error: null,
       diffError: null,
     });
-    if (oid === undefined) return;
+    if (oid === undefined || !active) return;
     detailsFiber = runtime.runFork(
       client
         .inspect({
@@ -123,6 +124,25 @@ export function createCommitInspectionController(
     );
   };
   return {
+    setActive: (next: boolean) => {
+      if (next === active) {
+        return;
+      }
+      active = next;
+      if (!active) {
+        ++generation;
+        ++fileGeneration;
+        cancel(detailsFiber);
+        cancel(diffFiber);
+        publish({ loading: false, loadingDiff: false });
+      } else if (state.oid !== undefined) {
+        if (state.details === null) {
+          load(state.oid);
+        } else if (state.diff === null) {
+          selectFile(state.path);
+        }
+      }
+    },
     getSnapshot: () => state,
     subscribe: (listener: () => void) => {
       listeners.add(listener);

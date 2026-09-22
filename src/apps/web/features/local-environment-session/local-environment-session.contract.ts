@@ -3,9 +3,9 @@ import type {
   EnvironmentAuthorizationRejected,
   EnvironmentConnectionFailure,
   EnvironmentCredential,
+  EnvironmentRequestClient,
 } from "@rebase/environment-client";
 import type { Effect, Scope } from "effect";
-import type { CommitInspectionClient } from "#web/features/commit-inspection/commit-inspection.contract";
 import type { EnvironmentProtocolConnection } from "#web/features/environment-connection/environment-protocol-connection.contract";
 import type {
   EnvironmentFilesystemController,
@@ -20,7 +20,6 @@ import type {
   RepositoryRefsController,
   RepositoryRefsGateway,
 } from "#web/features/repository-refs/repository-refs-controller.contract";
-import type { RepositoryChangesClient } from "#web/features/working-changes/working-changes.contract";
 
 export type LocalEnvironmentSessionState =
   | { readonly _tag: "PairingRequired" }
@@ -46,8 +45,7 @@ export type LocalEnvironmentSessionState =
     };
 
 export interface LocalEnvironmentSession {
-  readonly repositoryChanges?: RepositoryChangesClient;
-  readonly commitInspection?: CommitInspectionClient;
+  readonly requests?: EnvironmentRequestClient;
   readonly filesystem: EnvironmentFilesystemController;
   readonly getSnapshot: () => LocalEnvironmentSessionState;
   readonly repositoryCatalog: RepositoryCatalogController;
@@ -74,8 +72,7 @@ export interface LocalEnvironmentGateway {
 }
 
 export interface LocalEnvironmentSessionOptions {
-  readonly repositoryChanges?: RepositoryChangesClient;
-  readonly commitInspection?: CommitInspectionClient;
+  readonly requests?: EnvironmentRequestClient;
   readonly filesystemGateway: EnvironmentFilesystemGateway;
   readonly gateway: LocalEnvironmentGateway;
   readonly repositoryCatalogGateway: RepositoryCatalogGateway;

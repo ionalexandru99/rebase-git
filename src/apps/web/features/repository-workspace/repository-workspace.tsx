@@ -4,7 +4,10 @@ import type {
 } from "@rebase/contracts";
 import type { JSX } from "react";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import type { HistoryScope } from "#web/features/commit-graph/index";
+import type {
+  CommitGraphHistory,
+  HistoryScope,
+} from "#web/features/commit-graph/index";
 import {
   automaticHistoryScope,
   CommitGraph,
@@ -13,23 +16,15 @@ import {
   resolveHistoryScope,
   toggleHistoryRef,
 } from "#web/features/commit-graph/index";
-import {
-  CommitInspectionBridge,
-  type CommitInspectionClient,
-} from "#web/features/commit-inspection/index";
-import type { RepositoryHistoryReader } from "#web/features/repository-history/repository-history-reader.contract";
 import type { RepositoryRefsSnapshot } from "#web/features/repository-refs/repository-refs-controller.contract";
 import { useCachedRepositoryRefs } from "#web/features/repository-refs/use-cached-repository-refs";
 import { useHistoryRefRefresh } from "#web/features/repository-workspace/use-history-ref-refresh";
-import {
-  type RepositoryChangesClient,
-  WorkingChanges,
-} from "#web/features/working-changes/index";
 import {
   ResizableHandle,
   ResizablePanel,
 } from "#web-ui/components/ui/resizable";
 import { BranchesSidebar } from "#web-ui/features/branches-sidebar/branches-sidebar";
+import { CommitInspectionBridge } from "#web-ui/features/repository-workspace/commit-inspection-bridge";
 import { WorkspacePanel } from "#web-ui/features/workspace-panel/index";
 
 const branchesSidebarSize = {
@@ -39,8 +34,6 @@ const branchesSidebarSize = {
 } as const;
 
 export function RepositoryWorkspace({
-  changesClient,
-  inspectionClient,
   accessCapabilities = [],
   connected = false,
   activeWorktreePath,
@@ -53,13 +46,11 @@ export function RepositoryWorkspace({
   retryRefs,
   selectRef,
 }: {
-  readonly inspectionClient?: CommitInspectionClient | undefined;
-  readonly changesClient?: RepositoryChangesClient | undefined;
   readonly accessCapabilities?: readonly EnvironmentAccessCapability[];
   readonly connected?: boolean;
   readonly activeWorktreePath: string;
   readonly environmentId: string | undefined;
-  readonly historyReader: RepositoryHistoryReader | undefined;
+  readonly historyReader: CommitGraphHistory | undefined;
   readonly logicalRepositoryId?: string | undefined;
   readonly refs: RepositoryRefsSnapshot;
   readonly repositoryId: string | undefined;
@@ -79,14 +70,12 @@ export function RepositoryWorkspace({
   );
   return (
     <RepositoryWorkspaceContent
-      changesClient={changesClient}
-      inspectionClient={inspectionClient}
       accessCapabilities={accessCapabilities}
       connected={connected}
       activeWorktreePath={activeWorktreePath}
       environmentId={environmentId}
       historyReader={historyReader}
-      key={`${environmentId ?? ""}\0${logicalRepositoryId ?? ""}`}
+      key={`${environmentId ?? ""}\0${repositoryId ?? ""}\0${logicalRepositoryId ?? ""}`}
       logicalRepositoryId={logicalRepositoryId}
       refs={cachedRefs.snapshot}
       refsRestored={cachedRefs.restored}
@@ -99,8 +88,6 @@ export function RepositoryWorkspace({
 }
 
 function RepositoryWorkspaceContent({
-  changesClient,
-  inspectionClient,
   accessCapabilities,
   connected,
   activeWorktreePath,
@@ -115,12 +102,10 @@ function RepositoryWorkspaceContent({
   selectRef,
 }: {
   readonly accessCapabilities: readonly EnvironmentAccessCapability[];
-  readonly inspectionClient: CommitInspectionClient | undefined;
-  readonly changesClient: RepositoryChangesClient | undefined;
   readonly connected: boolean;
   readonly activeWorktreePath: string;
   readonly environmentId: string | undefined;
-  readonly historyReader: RepositoryHistoryReader | undefined;
+  readonly historyReader: CommitGraphHistory | undefined;
   readonly logicalRepositoryId: string | undefined;
   readonly refs: RepositoryRefsSnapshot;
   readonly refsRestored: boolean;
@@ -130,6 +115,18 @@ function RepositoryWorkspaceContent({
   readonly selectRef: (target: RepositoryRefTarget) => void;
 }): JSX.Element {
   const [localBranchesFocusRequest, setLocalBranchesFocusRequest] = useState(0);
+  const panelScope = useMemo(
+    () =>
+      environmentId && repositoryId && logicalRepositoryId
+        ? {
+            environmentId,
+            repositoryId,
+            logicalRepositoryId,
+            worktreePath: activeWorktreePath,
+          }
+        : undefined,
+    [environmentId, repositoryId, logicalRepositoryId, activeWorktreePath],
+  );
   useHistoryRefRefresh(historyReader, connected, retryRefs);
   const activeBranch = refs.refs?.worktrees.find(
     ({ path }) => path === activeWorktreePath,
@@ -206,18 +203,14 @@ function RepositoryWorkspaceContent({
 
   return (
     <WorkspacePanel.Provider
+      scope={panelScope}
       scopeKey={JSON.stringify([
         environmentId,
         logicalRepositoryId,
         activeWorktreePath,
       ])}
     >
-      <CommitInspectionBridge
-        client={inspectionClient}
-        repositoryId={repositoryId}
-        worktreePath={activeWorktreePath}
-        connected={connected}
-      >
+      <CommitInspectionBridge connected={connected}>
         {(inspection) => (
           <WorkspacePanel.Group>
             <ResizablePanel
@@ -306,22 +299,7 @@ function RepositoryWorkspaceContent({
                 </main>
               )}
             </WorkspacePanel.Main>
-            <WorkspacePanel.Pane
-              contents={{
-                commit: inspection.content,
-                changes: (
-                  <WorkingChanges
-                    client={changesClient}
-                    environmentId={environmentId}
-                    repositoryId={repositoryId}
-                    worktreePath={activeWorktreePath}
-                    connected={connected}
-                    writable={accessCapabilities.includes("repository.write")}
-                    onCommitted={retryRefs}
-                  />
-                ),
-              }}
-            />
+            <WorkspacePanel.Pane />
           </WorkspacePanel.Group>
         )}
       </CommitInspectionBridge>

@@ -51,8 +51,21 @@ function readPanelState(key: string): WorkspacePanelState {
       tabs.includes(saved.active)
         ? saved.active
         : (tabs[0] ?? null);
+    const storedInputs = "inputs" in saved ? saved.inputs : undefined;
+    const inputs =
+      typeof storedInputs === "object" && storedInputs !== null
+        ? Object.fromEntries(
+            tabs.flatMap((kind) => {
+              const input: unknown = Reflect.get(storedInputs, kind);
+              return workspacePanelDefinitions[kind].acceptsInput?.(input)
+                ? [[kind, input]]
+                : [];
+            }),
+          )
+        : {};
     return {
       tabs,
+      inputs,
       expanded: "expanded" in saved && saved.expanded === true,
       active,
       open:

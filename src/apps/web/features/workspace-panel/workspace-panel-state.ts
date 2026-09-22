@@ -48,6 +48,8 @@ function closePanel(
     return state;
   }
   const tabs = state.tabs.filter((tab) => tab !== kind);
+  const inputs = { ...state.inputs };
+  delete inputs[kind];
   const active =
     state.active === kind
       ? (tabs[index] ?? tabs[index - 1] ?? null)
@@ -55,6 +57,7 @@ function closePanel(
   return {
     ...state,
     tabs,
+    inputs,
     active,
   };
 }
@@ -64,6 +67,13 @@ export function reduceWorkspacePanel(
   action: WorkspacePanelAction,
 ): WorkspacePanelState {
   switch (action.type) {
+    case "input":
+      return state.inputs?.[action.kind] === action.input
+        ? state
+        : {
+            ...state,
+            inputs: { ...state.inputs, [action.kind]: action.input },
+          };
     case "expand":
       return { ...state, expanded: action.expanded };
     case "open":

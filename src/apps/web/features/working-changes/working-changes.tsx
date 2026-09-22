@@ -4,6 +4,7 @@ import type {
 } from "@rebase/contracts/repository-changes/repository-changes.contract";
 import { lazy, Suspense, useState } from "react";
 import type { RepositoryChangesClient } from "#web/features/working-changes/working-changes.contract";
+import { usePanelFeature } from "#web/features/workspace-panel/api";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -50,11 +51,11 @@ export function WorkingChanges({
   readonly writable: boolean;
   readonly onCommitted: () => void;
 }) {
+  const feature = usePanelFeature();
   if (
     client === undefined ||
     environmentId === undefined ||
-    repositoryId === undefined ||
-    !connected
+    repositoryId === undefined
   )
     return (
       <div className="flex h-full items-center justify-center p-6 text-sm text-muted-foreground">
@@ -63,13 +64,21 @@ export function WorkingChanges({
     );
   return (
     <WorkingChangesProvider
+      active={connected && (feature?.active ?? true)}
       client={client}
       environmentId={environmentId}
       repositoryId={repositoryId}
       worktreePath={worktreePath}
       onCommitted={onCommitted}
     >
-      <ChangesLayout writable={writable} />
+      {!connected ? (
+        <div className="flex h-full items-center justify-center p-6 text-sm text-muted-foreground">
+          Connect to the repository to review changes.
+        </div>
+      ) : null}
+      <div className="h-full min-h-0" hidden={!connected}>
+        <ChangesLayout writable={writable && connected} />
+      </div>
     </WorkingChangesProvider>
   );
 }

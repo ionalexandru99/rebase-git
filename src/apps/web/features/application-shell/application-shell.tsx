@@ -33,6 +33,7 @@ import { ProjectsSidebar } from "#web-ui/features/project-navigation/projects-si
 import { RepositoryFolderPicker } from "#web-ui/features/repository-folder-picker/repository-folder-picker";
 import { RepositoryWorkspace } from "#web-ui/features/repository-workspace/repository-workspace";
 import { SettingsPanel } from "#web-ui/features/settings/settings-panel";
+import { WorkspacePanel } from "#web-ui/features/workspace-panel/index";
 
 const localEnvironmentId = "local-environment";
 const projectSidebarSize = {
@@ -224,8 +225,12 @@ export function ApplicationShell({
       ? undefined
       : (settingsRepository?.logicalRepositoryId ?? settingsRepository?.id),
   );
+  const invalidateRepository = useCallback(
+    (repositoryId: string) => session.repositoryRefs.invalidate([repositoryId]),
+    [session.repositoryRefs],
+  );
 
-  return (
+  const content = (
     <div className="h-svh min-h-80 w-full overflow-hidden bg-background">
       <section
         aria-label="Rebase application"
@@ -296,8 +301,6 @@ export function ApplicationShell({
                   />
                 ) : (
                   <RepositoryWorkspace
-                    changesClient={session.repositoryChanges}
-                    inspectionClient={session.commitInspection}
                     accessCapabilities={
                       sessionState._tag === "Connected"
                         ? sessionState.accessCapabilities
@@ -371,6 +374,23 @@ export function ApplicationShell({
         />
       </section>
     </div>
+  );
+  return (
+    <WorkspacePanel.Sessions
+      environment={{
+        environmentId: historyEnvironmentId,
+        requests: session.requests,
+        connected: sessionState._tag === "Connected",
+        writable: canWrite,
+        visible: !settingsOpen && !repositorySettingsOpen,
+        invalidate: invalidateRepository,
+      }}
+      repositoryIds={navigation.environments.flatMap((environment) =>
+        environment.repositories.map((repository) => repository.id),
+      )}
+    >
+      {content}
+    </WorkspacePanel.Sessions>
   );
 }
 

@@ -6,7 +6,7 @@ import type {
   MutateChanges,
   RepositoryChanges,
 } from "@rebase/contracts/repository-changes/repository-changes.contract";
-import { Effect, Semaphore } from "effect";
+import { Effect, Fiber, Semaphore } from "effect";
 import { createApplicationRuntime } from "#web/features/application-runtime/index";
 import {
   type CommitDraft,
@@ -48,6 +48,10 @@ export function createWorkingChangesController(
   const lock = Semaphore.makeUnsafe(1);
   const writes = Semaphore.makeUnsafe(1);
   const listeners = new Set<() => void>();
+  let active = true;
+  let initialized = false;
+  let polling: Fiber.Fiber<void> | undefined;
+  let reading: Fiber.Fiber<unknown> | undefined;
   let normalDraft = emptyCommitDraft;
   let amendDraft: CommitDraft | undefined;
   let amendDraftHead: string | null = null;
@@ -73,8 +77,19 @@ export function createWorkingChangesController(
     Effect.sync(() => publish({ error: error.message }));
   const run = (effect: Effect.Effect<unknown, WorkingChangesError>) =>
     runtime.runFork(effect.pipe(Effect.catch(fail)));
+  const runRead = (effect: Effect.Effect<unknown, WorkingChangesError>) => {
+    if (reading) {
+      runtime.runFork(Fiber.interrupt(reading));
+    }
+    if (active) {
+      reading = run(effect);
+    }
+  };
   const loadDiff = () =>
     Effect.gen(function* () {
+      if (!active) {
+        return;
+      }
       const selection = state.selection;
       const currentScope = scope();
       if (
@@ -87,7 +102,11 @@ export function createWorkingChangesController(
         return;
       }
       const diff = yield* client.diff({ ...currentScope, ...selection });
-      if (selection === state.selection && currentScope.amend === state.amend)
+      if (
+        active &&
+        selection === state.selection &&
+        currentScope.amend === state.amend
+      )
         publish({
           diff: state.diff?.revision === diff.revision ? state.diff : diff,
         });
@@ -143,7 +162,43 @@ export function createWorkingChangesController(
       ),
     );
   };
+  const resume = () => {
+    if (!active || !initialized || polling || runtime.disposed) {
+      return;
+    }
+    polling = runtime.runFork(
+      Effect.forever(
+        Effect.suspend(() =>
+          document.visibilityState === "hidden" || state.busy
+            ? Effect.void
+            : lock
+                .withPermit(refresh())
+                .pipe(
+                  Effect.catch((error) =>
+                    fail(error).pipe(
+                      Effect.andThen(
+                        Effect.sync(() => publish({ loading: false })),
+                      ),
+                    ),
+                  ),
+                ),
+        ).pipe(Effect.andThen(Effect.sleep(2500))),
+      ),
+    );
+  };
   return {
+    setActive: (next: boolean) => {
+      active = next;
+      if (!active && polling) {
+        runtime.runFork(Fiber.interrupt(polling));
+        polling = undefined;
+      }
+      if (!active && reading) {
+        runtime.runFork(Fiber.interrupt(reading));
+        reading = undefined;
+      }
+      resume();
+    },
     getSnapshot: () => state,
     subscribe: (listener: () => void) => {
       listeners.add(listener);
@@ -169,40 +224,20 @@ export function createWorkingChangesController(
             ),
             Effect.catch(fail),
           );
-          yield* lock
-            .withPermit(refresh())
-            .pipe(
-              Effect.catch((error) =>
-                fail(error).pipe(
-                  Effect.andThen(
-                    Effect.sync(() => publish({ loading: false })),
-                  ),
-                ),
-              ),
-            );
-          yield* Effect.forever(
-            Effect.sleep(2500).pipe(
-              Effect.andThen(
-                Effect.suspend(() =>
-                  state.busy || document.visibilityState === "hidden"
-                    ? Effect.void
-                    : lock.withPermit(refresh()).pipe(Effect.catch(fail)),
-                ),
-              ),
-            ),
-          );
+          initialized = true;
+          resume();
         }).pipe(Effect.catch(fail)),
       ),
     stop: runtime.stop,
     refresh: () =>
-      run(
+      runRead(
         lock
           .withPermit(refresh())
           .pipe(Effect.tap(() => Effect.sync(() => publish({ error: null })))),
       ),
     select: (section: ChangeSection, path: string) => {
       publish({ selection: { section, path }, diff: null });
-      run(lock.withPermit(loadDiff()));
+      runRead(lock.withPermit(loadDiff()));
     },
     updateDraft: (draft: CommitDraft) => {
       publish({ draft, notice: null });
@@ -256,7 +291,7 @@ export function createWorkingChangesController(
             section,
             selection,
           });
-          publish({ changes: next });
+          publish({ changes: next, diff: null });
           yield* loadDiff();
         }),
       ),
@@ -279,6 +314,7 @@ export function createWorkingChangesController(
           amendDraft = undefined;
           publish({
             changes: next,
+            diff: null,
             draft: emptyCommitDraft,
             amend: false,
             notice: amendedHead ? "Commit amended." : "Changes committed.",

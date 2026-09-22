@@ -5,6 +5,15 @@ import type {
   EnvironmentHttpRejected,
   EnvironmentHttpResponseError,
 } from "#environment-client/http/environment-http-json.contract";
+import type { EnvironmentRequestClient } from "#environment-client/http/environment-request-client.contract";
+
+export function createEnvironmentRequestClient(
+  origin: string,
+  credential: () => EnvironmentCredential | undefined,
+): EnvironmentRequestClient {
+  return (failure, errors) =>
+    createEnvironmentJsonClient(origin, credential, failure, errors);
+}
 
 export function createEnvironmentJsonClient<
   F extends Schema.ConstraintDecoder<unknown, never>,
