@@ -322,6 +322,22 @@ describe("commit inspection", () => {
   });
 });
 
+it("loads the file selected while disconnected when the connection resumes", async () => {
+  const { screen, grid, client, connect } = await fixture();
+  await grid.getByRole("row", { name: /^Commit 0,/ }).dblClick();
+  await expect.poll(() => vi.mocked(client.diff).mock.calls.length).toBe(1);
+  await connect(false);
+  await screen.getByRole("button", { name: /second.bin/ }).click();
+  expect(client.diff).toHaveBeenCalledTimes(1);
+  await connect(true);
+  await expect
+    .poll(() => vi.mocked(client.diff).mock.calls.at(-1)?.[0].path)
+    .toBe("src/second.bin");
+  await expect
+    .element(screen.getByRole("region", { name: "Commit file diff" }))
+    .toHaveAttribute("aria-busy", "false");
+});
+
 it("preserves the restored inspector target across connection-driven graph notifications", async () => {
   const { screen, client, connect } = await fixture(
     {},

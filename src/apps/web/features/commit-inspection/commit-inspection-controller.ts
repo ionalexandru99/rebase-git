@@ -53,7 +53,12 @@ export function createCommitInspectionController(
       return;
     const current = ++fileGeneration;
     cancel(diffFiber);
-    publish({ path, diff: null, diffError: null, loadingDiff: path !== null });
+    publish({
+      path,
+      diff: null,
+      diffError: null,
+      loadingDiff: path !== null && active,
+    });
     const details = state.details;
     if (path === null || details === null || !active) return;
     diffFiber = runtime.runFork(
