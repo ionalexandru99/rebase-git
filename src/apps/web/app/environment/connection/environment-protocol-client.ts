@@ -17,23 +17,23 @@ import {
   mintEnvironmentWebSocketTicketEffect,
 } from "@rebase/environment-client";
 import { Deferred, Effect, Fiber, Ref } from "effect";
-import type { EnvironmentProtocolConnection } from "#web/features/environment-connection/environment-protocol-connection.contract";
+import type { EnvironmentProtocolConnection } from "#web/app/environment/connection/environment-protocol-connection.contract";
+import { createRepositoryHistoryRpc } from "#web/features/repository-history/transport/repository-history-rpc";
+import { createRepositoryRefsRpc } from "#web/features/repository-refs/transport/repository-refs-rpc";
 import {
   acquireEnvironmentRpc,
   negotiateEnvironmentRpc,
-} from "#web/features/environment-connection/rpc/environment-rpc-client";
+} from "#web/platform/environment/rpc/environment-rpc-client";
 import {
   initializeEnvironmentRpcEvents,
   processEnvironmentRpcEvents,
-} from "#web/features/environment-connection/rpc/environment-rpc-events";
+} from "#web/platform/environment/rpc/environment-rpc-events";
 import {
   createEnvironmentConnectionState,
   type EnvironmentConnectionState,
   terminateEnvironmentConnection,
   waitForEnvironmentSequence,
-} from "#web/features/environment-connection/websocket/environment-connection-state";
-import { createRepositoryHistoryRpc } from "#web/features/repository-history/transport/repository-history-rpc";
-import { createRepositoryRefsRpc } from "#web/features/repository-refs/transport/repository-refs-rpc";
+} from "#web/platform/environment/websocket/environment-connection-state";
 
 export {
   EnvironmentAuthorizationRejected,

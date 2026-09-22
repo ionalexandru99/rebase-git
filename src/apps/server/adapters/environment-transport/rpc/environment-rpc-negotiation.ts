@@ -6,8 +6,8 @@ import {
   type RepositoryHistoryOperationFailure,
 } from "@rebase/contracts";
 import { Deferred, Effect } from "effect";
-import type { EnvironmentTransportState } from "#server/features/environment-connection/environment-connection.contract";
-import type { EnvironmentRpcSession } from "#server/features/environment-connection/rpc/environment-rpc-session.contract";
+import type { EnvironmentTransportState } from "#server/adapters/environment-transport/environment-connection.contract";
+import type { EnvironmentRpcSession } from "#server/adapters/environment-transport/rpc/environment-rpc-session.contract";
 
 export function createEnvironmentRpcSession(
   state: EnvironmentTransportState,

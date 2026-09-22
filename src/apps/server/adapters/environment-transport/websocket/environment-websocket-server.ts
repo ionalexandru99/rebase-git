@@ -7,21 +7,21 @@ import {
 } from "@rebase/contracts";
 import { Cause, Effect } from "effect";
 import { type WebSocket, WebSocketServer } from "ws";
-import {
-  type EnvironmentAuthorization,
-  isEnvironmentAuthorizationError,
-} from "#server/features/environment-authorization/environment-authorization.contract";
 import type {
   EnvironmentTransportState,
   RunEnvironmentEffect,
-} from "#server/features/environment-connection/environment-connection.contract";
+} from "#server/adapters/environment-transport/environment-connection.contract";
 import {
   authorizationFailureStatus,
   expectedRequestOrigin,
   validateRequestHost,
   validateRequestOrigin,
-} from "#server/features/environment-connection/environment-request-authorization";
-import { runEnvironmentRpcSession } from "#server/features/environment-connection/rpc/environment-rpc-server";
+} from "#server/adapters/environment-transport/environment-request-authorization";
+import { runEnvironmentRpcSession } from "#server/adapters/environment-transport/rpc/environment-rpc-server";
+import {
+  type EnvironmentAuthorization,
+  isEnvironmentAuthorizationError,
+} from "#server/features/environment-authorization/environment-authorization.contract";
 
 export function attachEnvironmentWebSocketServer(
   server: Server,

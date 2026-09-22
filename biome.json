@@ -58,7 +58,7 @@
       }
     },
     {
-      "includes": ["src/contracts/**"],
+      "includes": ["src/contracts/**", "src/environment-client/**"],
       "linter": {
         "rules": {
           "style": {
@@ -84,7 +84,7 @@
                       "@rebase/web",
                       "@rebase/desktop"
                     ],
-                    "message": "Shared contracts cannot depend on application implementations."
+                    "message": "Shared contracts and clients cannot depend on application implementations."
                   }
                 ]
               }

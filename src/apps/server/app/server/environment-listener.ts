@@ -1,16 +1,16 @@
 import { createServer, type Server } from "node:http";
 import { createCurrentEnvironmentDiscovery } from "@rebase/contracts";
 import { Effect, FiberSet } from "effect";
-import type { EnvironmentListenerOptions } from "#server/app/server/environment-server.contract";
-import { EnvironmentServerStartError } from "#server/app/server/environment-server-error.contract";
-import { errorMessage, isFileSystemError } from "#server/error-inspection";
 import type {
   EnvironmentTransportState,
   RunEnvironmentEffect,
-} from "#server/features/environment-connection/environment-connection.contract";
-import { formatHostAddress } from "#server/features/environment-connection/environment-request-authorization";
-import { createEnvironmentHttpHandler } from "#server/features/environment-connection/http/environment-http-handler";
-import { attachEnvironmentWebSocketServer } from "#server/features/environment-connection/websocket/environment-websocket-server";
+} from "#server/adapters/environment-transport/environment-connection.contract";
+import { formatHostAddress } from "#server/adapters/environment-transport/environment-request-authorization";
+import { createEnvironmentHttpHandler } from "#server/adapters/environment-transport/http/environment-http-handler";
+import { attachEnvironmentWebSocketServer } from "#server/adapters/environment-transport/websocket/environment-websocket-server";
+import type { EnvironmentListenerOptions } from "#server/app/server/environment-server.contract";
+import { EnvironmentServerStartError } from "#server/app/server/environment-server-error.contract";
+import { errorMessage, isFileSystemError } from "#server/error-inspection";
 
 const loopbackHost = "127.0.0.1";
 

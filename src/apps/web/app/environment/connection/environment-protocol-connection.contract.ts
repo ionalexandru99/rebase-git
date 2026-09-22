@@ -1,16 +1,10 @@
-import type {
-  EnvironmentDiscovery,
-  EnvironmentHelloResult,
-} from "@rebase/contracts";
+import type { EnvironmentDiscovery } from "@rebase/contracts";
 import type { EnvironmentConnectionFailure } from "@rebase/environment-client";
 import type { Effect } from "effect";
 import type { RepositoryHistoryTransport } from "#web/features/repository-history/repository-history-reader.contract";
 import type { RepositoryRefsTransport } from "#web/features/repository-refs/transport/repository-refs-transport.contract";
 
-export type NegotiatedEnvironment = Exclude<
-  typeof EnvironmentHelloResult.Type,
-  { readonly _tag: "HelloRejected" }
->;
+import type { NegotiatedEnvironment } from "#web/platform/environment/environment-protocol.contract";
 
 export interface EnvironmentProtocolConnection {
   readonly close: () => void;

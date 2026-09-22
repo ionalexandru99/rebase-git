@@ -5,11 +5,11 @@ import { Deferred, Effect, Fiber, Layer, Option } from "effect";
 import { RpcSerialization, RpcServer } from "effect/unstable/rpc";
 import { Socket, SocketServer } from "effect/unstable/socket";
 import type { WebSocket } from "ws";
-import type { EnvironmentTransportState } from "#server/features/environment-connection/environment-connection.contract";
-import { acquireEnvironmentEvents } from "#server/features/environment-connection/rpc/environment-rpc-events";
-import { createEnvironmentRpcSession } from "#server/features/environment-connection/rpc/environment-rpc-negotiation";
-import { repositoryFreshnessRpc } from "#server/features/environment-connection/rpc/repository-freshness-rpc";
-import { repositoryHistoryRpc } from "#server/features/environment-connection/rpc/repository-history-rpc";
+import type { EnvironmentTransportState } from "#server/adapters/environment-transport/environment-connection.contract";
+import { acquireEnvironmentEvents } from "#server/adapters/environment-transport/rpc/environment-rpc-events";
+import { createEnvironmentRpcSession } from "#server/adapters/environment-transport/rpc/environment-rpc-negotiation";
+import { repositoryFreshnessRpc } from "#server/adapters/environment-transport/rpc/repository-freshness-rpc";
+import { repositoryHistoryRpc } from "#server/adapters/environment-transport/rpc/repository-history-rpc";
 import { repositoryRefsRpc } from "#server/features/repository-refs/rpc/repository-refs-rpc";
 
 export function runEnvironmentRpcSession(

@@ -14,7 +14,7 @@ import {
   AlertDialogTitle,
 } from "#web-ui/components/ui/alert-dialog";
 import { Button } from "#web-ui/components/ui/button";
-import { SettingsRow } from "#web-ui/features/settings/components/settings-layout";
+import { SettingsRow } from "#web-ui/components/ui/settings-layout";
 
 export function RepositoryCacheSettings(
   props: Pick<

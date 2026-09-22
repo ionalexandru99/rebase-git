@@ -13,8 +13,8 @@ import { describe, expect, it } from "vite-plus/test";
 import { acquireEnvironmentListener } from "#server/app/server/environment-listener";
 import type { EnvironmentAuthorization } from "#server/features/environment-authorization/environment-authorization.contract";
 import { createEnvironmentAuthorizationHttpHandler } from "#server/features/environment-authorization/index";
-import { createEnvironmentEventPublisher } from "#server/features/environment-connection/events/environment-event-publisher";
-import type { EnvironmentEventPublisher } from "#server/features/environment-connection/events/environment-event-publisher.contract";
+import { createEnvironmentEventPublisher } from "#server/adapters/environment-transport/events/environment-event-publisher";
+import type { EnvironmentEventPublisher } from "#server/adapters/environment-transport/events/environment-event-publisher.contract";
 
 const environmentId = "00000000-0000-4000-8000-000000000001";
 const testAuthorization = createTestAuthorization();

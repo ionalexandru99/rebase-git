@@ -6,7 +6,7 @@ import { promisify } from "node:util";
 import {
   connectCurrentEnvironmentEffect,
   exchangeEnvironmentPairing,
-} from "@rebase/web/features/environment-connection";
+} from "@rebase/web/environment-connection";
 import { rememberEnvironmentRepositoryEffect } from "@rebase/web/features/repository-catalog";
 import {
   checkoutRepositoryRefEffect,
@@ -18,7 +18,7 @@ import { createLocalGitCommandRunner } from "#server/adapters/local-git/local-gi
 import { createLocalRepositoryWatcher } from "#server/adapters/local-git/local-repository-watcher";
 import { createEnvironmentAuthorization } from "#server/features/environment-authorization/environment-authorization";
 import { createEnvironmentAuthorizationHttpHandler } from "#server/features/environment-authorization/index";
-import { createEnvironmentEventPublisher } from "#server/features/environment-connection/events/environment-event-publisher";
+import { createEnvironmentEventPublisher } from "#server/adapters/environment-transport/events/environment-event-publisher";
 import { acquireEnvironmentListener } from "#server/app/server/environment-listener";
 import {
   createRepositoryCatalog,

@@ -1,8 +1,11 @@
 import { Effect, Fiber } from "effect";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { manageBrowserHistoryStorage } from "#web/features/repository-history/diagnostics/browser-history-storage";
+import {
+  manageBrowserHistoryStorage,
+  RepositoryHistoryCacheList,
+} from "#web/features/repository-history/index";
 import type { RepositoryHistoryStorageDiagnostics } from "#web/features/repository-history/repository-history-storage.contract";
-import { clearAllCachedRepositoryRefs } from "#web/features/repository-refs/browser-repository-refs-cache";
+import { clearAllCachedRepositoryRefs } from "#web/features/repository-refs/index";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -13,7 +16,6 @@ import {
   AlertDialogTitle,
 } from "#web-ui/components/ui/alert-dialog";
 import { Button } from "#web-ui/components/ui/button";
-import { RepositoryHistoryCacheList } from "#web-ui/features/repository-history/diagnostics/components/repository-history-cache-list";
 
 export function HistoryStorageSettings() {
   const [diagnostics, setDiagnostics] =

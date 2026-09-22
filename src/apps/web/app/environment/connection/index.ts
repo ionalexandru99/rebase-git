@@ -15,4 +15,4 @@ export {
   EnvironmentResponseError,
   fetchEnvironmentDiscovery,
   fetchEnvironmentSnapshot,
-} from "#web/features/environment-connection/environment-protocol-client";
+} from "#web/app/environment/connection/environment-protocol-client";

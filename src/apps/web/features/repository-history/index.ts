@@ -1,4 +1,5 @@
 export { createBrowserRepositoryHistoryReader } from "#web/features/repository-history/browser-repository-history-reader";
+export { manageBrowserHistoryStorage } from "#web/features/repository-history/diagnostics/browser-history-storage";
 export { formatCacheSize } from "#web/features/repository-history/diagnostics/format-cache-size";
 export type {
   RepositoryHistoryCacheIdentity,
@@ -45,6 +46,7 @@ export type {
   RepositoryHistorySearchModel,
   RepositoryHistorySearchSnapshot,
 } from "#web/features/repository-history/search/repository-history-search-model.contract";
+export { RepositoryHistoryCacheList } from "#web-ui/features/repository-history/diagnostics/components/repository-history-cache-list";
 export { RepositoryFetchSettings } from "#web-ui/features/repository-history/freshness/components/repository-fetch-settings";
 export { RepositoryHistoryFreshnessStatus } from "#web-ui/features/repository-history/freshness/components/repository-history-freshness-status";
 export { RepositoryHistorySearchControls } from "#web-ui/features/repository-history/search/components/repository-history-search-controls";

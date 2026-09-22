@@ -1,6 +1,5 @@
 import type { EnvironmentConnectionFailure } from "@rebase/environment-client";
 import { Deferred, Effect, Ref } from "effect";
-import type { EnvironmentProtocolConnection } from "#web/features/environment-connection/environment-protocol-connection.contract";
 
 export interface EnvironmentConnectionState {
   readonly currentSequence: number;
@@ -78,11 +77,8 @@ export function updateEnvironmentSequence(
   });
 }
 
-export function terminateEnvironmentConnection(
-  connected: Deferred.Deferred<
-    EnvironmentProtocolConnection,
-    EnvironmentConnectionFailure
-  >,
+export function terminateEnvironmentConnection<Connection>(
+  connected: Deferred.Deferred<Connection, EnvironmentConnectionFailure>,
   state: Ref.Ref<EnvironmentConnectionState>,
   failure: EnvironmentConnectionFailure,
 ) {

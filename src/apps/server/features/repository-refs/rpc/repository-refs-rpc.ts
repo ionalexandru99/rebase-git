@@ -3,7 +3,7 @@ import {
   type RepositoryRefsFailed,
 } from "@rebase/contracts";
 import { Effect, Stream } from "effect";
-import type { EnvironmentRpcSession } from "#server/features/environment-connection/rpc/environment-rpc-session.contract";
+import type { EnvironmentRpcSession } from "#server/adapters/environment-transport/rpc/environment-rpc-session.contract";
 
 export function repositoryRefsRpc(session: EnvironmentRpcSession) {
   let active = 0;

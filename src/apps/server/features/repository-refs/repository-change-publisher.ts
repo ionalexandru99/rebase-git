@@ -1,8 +1,8 @@
 import { Effect, Exit, Queue, Scope, Semaphore } from "effect";
+import type { EnvironmentEventPublisher } from "#server/adapters/environment-transport/events/environment-event-publisher.contract";
 import type { GitCommandRunner } from "#server/domain/git-command.contract";
 import type { RepositoryChangePublisher } from "#server/domain/repository-refs.contract";
 import type { RepositoryWatcher } from "#server/domain/repository-watcher.contract";
-import type { EnvironmentEventPublisher } from "#server/features/environment-connection/events/environment-event-publisher.contract";
 
 const maximumWatchedRepositories = 32;
 const publishDelayMilliseconds = 150;

@@ -2,13 +2,13 @@ import type { EnvironmentConnectionFailure } from "@rebase/environment-client";
 import { environmentResponseError } from "@rebase/environment-client";
 import { Deferred, Effect, Fiber, Ref } from "effect";
 import { describe, expect, it } from "vite-plus/test";
-import type { EnvironmentProtocolConnection } from "#web/features/environment-connection/environment-protocol-connection.contract";
+import type { EnvironmentProtocolConnection } from "#web/app/environment/connection/environment-protocol-connection.contract";
 import {
   createEnvironmentConnectionState,
   terminateEnvironmentConnection,
   updateEnvironmentSequence,
   waitForEnvironmentSequence,
-} from "#web/features/environment-connection/websocket/environment-connection-state";
+} from "#web/platform/environment/websocket/environment-connection-state";
 
 describe("Environment connection state", () => {
   it("returns the current sequence immediately when the target was observed", async () => {

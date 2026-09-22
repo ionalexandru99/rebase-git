@@ -1,7 +1,7 @@
 import type { IncomingMessage } from "node:http";
 import { currentTransportLimits } from "@rebase/contracts";
 import { Effect } from "effect";
-import { EnvironmentHttpBodyError } from "#server/features/environment-connection/http/environment-http-request-body.contract";
+import { EnvironmentHttpBodyError } from "#server/adapters/environment-transport/http/environment-http-request-body.contract";
 
 const maximumRequestBytes = currentTransportLimits.maxHttpRequestBytes;
 

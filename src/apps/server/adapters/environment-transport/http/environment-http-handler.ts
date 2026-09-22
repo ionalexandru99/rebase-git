@@ -12,23 +12,23 @@ import type { EnvironmentAuthorization } from "#server/features/environment-auth
 import type {
   EnvironmentTransportState,
   RunEnvironmentEffect,
-} from "#server/features/environment-connection/environment-connection.contract";
+} from "#server/adapters/environment-transport/environment-connection.contract";
 import {
   authorizationFailureStatus,
   readRequestCredential,
   validateRequestHost,
   validateRequestOrigin,
-} from "#server/features/environment-connection/environment-request-authorization";
-import type { EnvironmentHttpRequestHandler } from "#server/features/environment-connection/http/environment-http-handler.contract";
-import { readEnvironmentHttpRequestBody } from "#server/features/environment-connection/http/environment-http-request-body";
+} from "#server/adapters/environment-transport/environment-request-authorization";
+import type { EnvironmentHttpRequestHandler } from "#server/adapters/environment-transport/http/environment-http-handler.contract";
+import { readEnvironmentHttpRequestBody } from "#server/adapters/environment-transport/http/environment-http-request-body";
 import {
   requireEmptyBody,
   requireMethod,
-} from "#server/features/environment-connection/http/environment-http-request-validation";
+} from "#server/adapters/environment-transport/http/environment-http-request-validation";
 import {
   writeJson,
   writeJsonValue,
-} from "#server/features/environment-connection/http/environment-http-response";
+} from "#server/adapters/environment-transport/http/environment-http-response";
 
 export function createEnvironmentHttpHandler(
   state: EnvironmentTransportState,

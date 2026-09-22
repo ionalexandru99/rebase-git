@@ -9,7 +9,7 @@ import {
   EnvironmentHelloRejected,
   type EnvironmentProtocolConnection,
   EnvironmentResponseError,
-} from "@rebase/web/features/environment-connection";
+} from "@rebase/web/environment-connection";
 import { Effect } from "effect";
 import { describe, expect, it, vi } from "vite-plus/test";
 import { createLocalEnvironmentSession } from "#web/app/environment/local-environment-session";

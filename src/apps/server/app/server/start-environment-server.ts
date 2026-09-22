@@ -19,7 +19,7 @@ import {
   createEnvironmentAuthorization,
   createEnvironmentAuthorizationHttpHandler,
 } from "#server/features/environment-authorization/index";
-import { createEnvironmentEventPublisher } from "#server/features/environment-connection/events/environment-event-publisher";
+import { createEnvironmentEventPublisher } from "#server/adapters/environment-transport/events/environment-event-publisher";
 import {
   createEnvironmentFilesystem,
   createEnvironmentFilesystemHttpHandler,

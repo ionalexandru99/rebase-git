@@ -9,10 +9,10 @@ import type {
   RepositoryHistorySettingsClient,
   RepositorySettingsIdentity,
 } from "#web/features/repository-settings/repository-settings.contract";
+import { SettingsSection } from "#web-ui/components/ui/settings-layout";
 import { RepositoryCacheSettings } from "#web-ui/features/repository-settings/components/repository-cache-settings";
 import { RepositoryDetailsSettings } from "#web-ui/features/repository-settings/components/repository-details-settings";
 import { RepositoryOrderSettings } from "#web-ui/features/repository-settings/components/repository-order-settings";
-import { SettingsSection } from "#web-ui/features/settings/components/settings-layout";
 
 export function RepositorySettingsPage({
   repository,

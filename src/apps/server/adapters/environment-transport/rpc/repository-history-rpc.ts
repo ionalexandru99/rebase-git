@@ -9,8 +9,8 @@ import {
   type SynchronizeRepositoryHistory,
 } from "@rebase/contracts";
 import { type Cause, Deferred, Effect, Queue, Stream } from "effect";
+import type { EnvironmentRpcSession } from "#server/adapters/environment-transport/rpc/environment-rpc-session.contract";
 import { RepositoryHistoryError } from "#server/domain/repository-history.contract";
-import type { EnvironmentRpcSession } from "#server/features/environment-connection/rpc/environment-rpc-session.contract";
 
 type HistoryOutput = JsonMessageFragment | RepositoryHistorySynchronized;
 interface PendingBatch {

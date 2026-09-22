@@ -2,7 +2,7 @@ import { readFile } from "node:fs/promises";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { isAbsolute, relative, resolve } from "node:path";
 import { Effect } from "effect";
-import { formatHostAddress } from "#server/features/environment-connection/environment-request-authorization";
+import { formatHostAddress } from "#server/adapters/environment-transport/environment-request-authorization";
 
 const contentTypes: Readonly<Record<string, string>> = {
   ".css": "text/css; charset=utf-8",

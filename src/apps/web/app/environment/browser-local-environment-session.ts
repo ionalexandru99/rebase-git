@@ -6,7 +6,7 @@ import {
   readEnvironmentBrowserSessionEffect,
 } from "@rebase/environment-client";
 import { Effect } from "effect";
-import { connectCurrentEnvironmentEffect } from "#web/features/environment-connection/index";
+import { connectCurrentEnvironmentEffect } from "#web/app/environment/connection/index";
 import { listEnvironmentDirectoryEffect } from "#web/features/environment-filesystem/environment-filesystem-client";
 import type { EnvironmentFilesystemGateway } from "#web/features/environment-filesystem/environment-filesystem-controller.contract";
 import type { DesktopHostBridge } from "#web/app/environment/environment-bootstrap.contract";

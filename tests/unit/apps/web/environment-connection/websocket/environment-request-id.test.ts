@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { createEnvironmentRequestId } from "#web/features/environment-connection/websocket/environment-request-id";
+import { createEnvironmentRequestId } from "#web/platform/environment/websocket/environment-request-id";
 
 afterEach(() => vi.unstubAllGlobals());
 

@@ -1,13 +1,13 @@
 import { RepositoryRefs } from "@rebase/contracts";
 import type { EnvironmentRpcClient } from "@rebase/contracts/environment-connection/rpc/environment-rpc.contract";
 import { Effect, Option, Schema, Stream } from "effect";
-import { rpcJsonReassembler } from "#web/features/environment-connection/rpc/environment-rpc-json";
-import { createEnvironmentRequestId } from "#web/features/environment-connection/websocket/environment-request-id";
 import {
   RepositoryRefsRejected,
   RepositoryRefsResponseError,
 } from "#web/features/repository-refs/repository-refs-client.contract";
 import type { RepositoryRefsTransport } from "#web/features/repository-refs/transport/repository-refs-transport.contract";
+import { rpcJsonReassembler } from "#web/platform/environment/rpc/environment-rpc-json";
+import { createEnvironmentRequestId } from "#web/platform/environment/websocket/environment-request-id";
 
 export function createRepositoryRefsRpc(
   client: EnvironmentRpcClient,

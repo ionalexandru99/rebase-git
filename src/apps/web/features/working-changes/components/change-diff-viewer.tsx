@@ -1,8 +1,10 @@
 import type { SelectedLineRange } from "@pierre/diffs";
 import { IconCheck } from "@tabler/icons-react";
 import { useMemo, useState } from "react";
-import { createChangeDiffModel } from "#web/features/file-diff/diff-model";
-import { DiffContent } from "#web/features/file-diff/index";
+import {
+  createChangeDiffModel,
+  DiffContent,
+} from "#web/features/file-diff/index";
 import { selectedDiffLines } from "#web/features/working-changes/diff/diff-selection";
 import { Button } from "#web-ui/components/ui/button";
 import type { ChangeAction } from "#web-ui/features/working-changes/components/change-file-tree";

@@ -1,4 +1,3 @@
-import { createEnvironmentRequestId } from "#web/features/environment-connection/websocket/environment-request-id";
 import {
   clearHistoryCache,
   describeHistoryCaches,
@@ -26,6 +25,7 @@ import {
   startSynchronization,
 } from "#web/features/repository-history/worker/synchronization";
 import { readHistoryCacheRecords } from "#web/persistence/repository-history/repository-history-cache-records";
+import { createEnvironmentRequestId } from "#web/platform/environment/websocket/environment-request-id";
 
 type CacheManagementRequest =
   | { readonly action: "clear-all" }

@@ -27,11 +27,11 @@
       "import": "./dist/types/index.js",
       "default": "./dist/types/index.js"
     },
-    "./features/environment-connection": {
-      "rebase-source": "./features/environment-connection/index.ts",
-      "types": "./dist/types/features/environment-connection/index.d.ts",
-      "import": "./dist/types/features/environment-connection/index.js",
-      "default": "./dist/types/features/environment-connection/index.js"
+    "./environment-connection": {
+      "rebase-source": "./app/environment/connection/index.ts",
+      "types": "./dist/types/app/environment/connection/index.d.ts",
+      "import": "./dist/types/app/environment/connection/index.js",
+      "default": "./dist/types/app/environment/connection/index.js"
     },
     "./features/environment-filesystem": {
       "rebase-source": "./features/environment-filesystem/index.ts",

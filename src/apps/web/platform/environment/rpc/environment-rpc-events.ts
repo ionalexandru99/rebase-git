@@ -3,9 +3,9 @@ import {
   fetchEnvironmentSnapshotWithinLimitEffect,
 } from "@rebase/environment-client";
 import { Effect, Ref, Stream } from "effect";
-import type { EnvironmentRpcEvents } from "#web/features/environment-connection/rpc/environment-rpc-events.contract";
-import { updateEnvironmentSequence } from "#web/features/environment-connection/websocket/environment-connection-state";
-import { advanceEnvironmentSequence } from "#web/features/environment-connection/websocket/environment-sequence";
+import type { EnvironmentRpcEvents } from "#web/platform/environment/rpc/environment-rpc-events.contract";
+import { updateEnvironmentSequence } from "#web/platform/environment/websocket/environment-connection-state";
+import { advanceEnvironmentSequence } from "#web/platform/environment/websocket/environment-sequence";
 
 export function processEnvironmentRpcEvents(session: EnvironmentRpcEvents) {
   if (

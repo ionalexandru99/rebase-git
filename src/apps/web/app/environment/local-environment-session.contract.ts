@@ -6,7 +6,7 @@ import type {
   EnvironmentRequestClient,
 } from "@rebase/environment-client";
 import type { Effect, Scope } from "effect";
-import type { EnvironmentProtocolConnection } from "#web/features/environment-connection/environment-protocol-connection.contract";
+import type { EnvironmentProtocolConnection } from "#web/app/environment/connection/environment-protocol-connection.contract";
 import type {
   EnvironmentFilesystemController,
   EnvironmentFilesystemGateway,
