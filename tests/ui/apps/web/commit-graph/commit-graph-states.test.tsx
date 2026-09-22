@@ -11,8 +11,8 @@ import {
   renderGraph,
 } from "#tests-ui/apps/web/commit-graph/commit-graph-fixture";
 import { graphRowHeight } from "#web/features/commit-graph/layout/graph-metrics";
+import { saveRepositoryHistoryOrder } from "#web/features/repository-history/preferences/repository-history-order";
 import { RepositoryHistoryUnavailable } from "#web/features/repository-history/repository-history-reader.contract";
-import { saveRepositoryHistoryOrder } from "#web/features/repository-settings/preferences/repository-history-order";
 
 describe("commit graph states", () => {
   beforeEach(async () => {

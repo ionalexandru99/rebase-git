@@ -1,7 +1,7 @@
 import type { RepositoryFetchSetting } from "@rebase/contracts";
 import { type FormEvent, useId, useState } from "react";
 import { describeRepositoryFetchError } from "#web/features/repository-history/freshness/repository-fetch-error";
-import type { RepositoryHistoryReader } from "#web/features/repository-history/repository-history-reader.contract";
+import type { RepositoryHistoryFetchCommands } from "#web/features/repository-history/repository-history-reader.contract";
 import { Button } from "#web-ui/components/ui/button";
 import { Input } from "#web-ui/components/ui/input";
 import { SettingsRow } from "#web-ui/features/settings/components/settings-layout";
@@ -14,7 +14,7 @@ export function RepositoryFetchSettings({
   disabledReason,
   onSaved,
 }: {
-  readonly reader: Pick<RepositoryHistoryReader, "configureFetch">;
+  readonly reader: Pick<RepositoryHistoryFetchCommands, "configureFetch">;
   readonly setting: RepositoryFetchSetting;
   readonly defaultIntervalSeconds: number;
   readonly disabled: boolean;

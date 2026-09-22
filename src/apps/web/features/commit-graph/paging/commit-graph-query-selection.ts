@@ -5,11 +5,11 @@ import type {
 import type {
   RepositoryHistoryPosition,
   RepositoryHistoryQuery,
-  RepositoryHistoryReader,
-} from "#web/features/repository-history/repository-history-reader.contract";
+  RepositoryHistoryReadModel,
+} from "#web/features/repository-history/index";
 
 export async function locateGraphSelection(
-  reader: Pick<RepositoryHistoryReader, "locateMany">,
+  reader: Pick<RepositoryHistoryReadModel, "locateMany">,
   query: RepositoryHistoryQuery,
   oids: readonly string[],
   cancelled: () => boolean,
@@ -26,7 +26,7 @@ export async function locateGraphSelection(
 }
 
 export async function selectGraphQueryCommit(
-  reader: Pick<RepositoryHistoryReader, "locateMany" | "read">,
+  reader: Pick<RepositoryHistoryReadModel, "locateMany" | "read">,
   query: RepositoryHistoryQuery,
   state: CommitGraphSelection,
   oid: string,
@@ -84,7 +84,7 @@ export async function selectGraphQueryCommit(
 }
 
 export async function reconcileGraphQuerySelection(
-  reader: Pick<RepositoryHistoryReader, "locateMany" | "read">,
+  reader: Pick<RepositoryHistoryReadModel, "locateMany" | "read">,
   query: RepositoryHistoryQuery,
   state: CommitGraphSelection,
   previousStartOffset: number,
@@ -140,7 +140,7 @@ export async function reconcileGraphQuerySelection(
 }
 
 async function findGraphSelectionReplacement(
-  reader: Pick<RepositoryHistoryReader, "read">,
+  reader: Pick<RepositoryHistoryReadModel, "read">,
   query: RepositoryHistoryQuery,
   index: number,
   cancelled: () => boolean,

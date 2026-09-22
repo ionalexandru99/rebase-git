@@ -15,8 +15,8 @@ import {
   renderGraph,
 } from "#tests-ui/apps/web/commit-graph/commit-graph-fixture";
 import type { CommitGraphHandle } from "#web/features/commit-graph/commit-graph.contract";
+import { saveRepositoryHistoryOrder } from "#web/features/repository-history/preferences/repository-history-order";
 import { RepositoryHistoryUnavailable } from "#web/features/repository-history/repository-history-reader.contract";
-import { saveRepositoryHistoryOrder } from "#web/features/repository-settings/preferences/repository-history-order";
 
 describe("commit graph navigation", () => {
   it("keeps a search result in view when the preceding page arrives", async () => {

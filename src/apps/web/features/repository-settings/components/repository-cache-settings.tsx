@@ -1,7 +1,9 @@
-import { formatCacheSize } from "#web/features/repository-history/diagnostics/format-cache-size";
-import type { RepositoryHistoryCacheProps } from "#web/features/repository-history/diagnostics/history-cache.contract";
-import { historyCacheActions } from "#web/features/repository-history/diagnostics/history-cache-actions";
-import { useHistoryCacheManagement } from "#web/features/repository-history/diagnostics/hooks/use-history-cache-management";
+import type { RepositoryHistoryCacheProps } from "#web/features/repository-history/index";
+import {
+  formatCacheSize,
+  historyCacheActions,
+  useHistoryCacheManagement,
+} from "#web/features/repository-history/index";
 import {
   AlertDialog,
   AlertDialogAction,

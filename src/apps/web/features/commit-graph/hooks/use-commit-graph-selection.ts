@@ -3,8 +3,8 @@ import type { CommitGraphSelectionMode } from "#web/features/commit-graph/commit
 import { usePagedGraphSelection } from "#web/features/commit-graph/hooks/use-paged-graph-selection";
 import type {
   RepositoryHistoryQuery,
-  RepositoryHistoryReader,
-} from "#web/features/repository-history/repository-history-reader.contract";
+  RepositoryHistoryReadModel,
+} from "#web/features/repository-history/index";
 
 export function useCommitGraphSelection({
   reader,
@@ -22,7 +22,7 @@ export function useCommitGraphSelection({
   onSelectionIntent,
 }: {
   readonly reader:
-    | Pick<RepositoryHistoryReader, "read" | "locateMany">
+    | Pick<RepositoryHistoryReadModel, "read" | "locateMany">
     | undefined;
   readonly query?: RepositoryHistoryQuery | undefined;
   readonly loading?: boolean;

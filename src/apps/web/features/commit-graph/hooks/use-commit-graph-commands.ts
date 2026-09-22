@@ -1,11 +1,11 @@
 import type { RepositoryRefTarget } from "@rebase/contracts";
 import { writeClipboardText } from "#web/features/clipboard/index";
-import type { GraphCommandEnvironment } from "#web/features/commit-commands/graph-command.contract";
-import { useGraphCommands } from "#web/features/commit-commands/use-graph-commands";
+import type { GraphCommandEnvironment } from "#web/features/commit-commands/index";
+import { useGraphCommands } from "#web/features/commit-commands/index";
 import type {
-  RepositoryHistoryReader,
+  RepositoryHistoryReadModel,
   RepositoryHistorySnapshot,
-} from "#web/features/repository-history/repository-history-reader.contract";
+} from "#web/features/repository-history/index";
 
 export function useCommitGraphCommands({
   commandEnvironment,
@@ -19,7 +19,7 @@ export function useCommitGraphCommands({
   readonly onOpenDetails?: ((oid: string) => void) | undefined;
   readonly commandEnvironment: GraphCommandEnvironment | undefined;
   readonly reader:
-    | Pick<RepositoryHistoryReader, "getCommitSummaries">
+    | Pick<RepositoryHistoryReadModel, "getCommitSummaries">
     | undefined;
   readonly historySnapshot: Pick<
     RepositoryHistorySnapshot,

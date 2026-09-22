@@ -1,6 +1,6 @@
 import type { RepositoryCommit } from "@rebase/contracts";
 import type { CommitGraphPageReader } from "#web/features/commit-graph/paging/commit-graph-page-window.contract";
-import type { RepositoryHistoryQuery } from "#web/features/repository-history/repository-history-reader.contract";
+import type { RepositoryHistoryQuery } from "#web/features/repository-history/index";
 
 export async function locateLocalHistory(
   reader: CommitGraphPageReader,

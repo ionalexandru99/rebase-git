@@ -1,4 +1,4 @@
-import type { RepositoryHistoryReaderError } from "#web/features/repository-history/repository-history-reader.contract";
+import type { RepositoryHistoryReaderError } from "#web/features/repository-history/index";
 
 export function describeRepositoryHistoryError(
   error: RepositoryHistoryReaderError,
