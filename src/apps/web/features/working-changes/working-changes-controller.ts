@@ -6,7 +6,8 @@ import type {
   MutateChanges,
   RepositoryChanges,
 } from "@rebase/contracts/repository-changes/repository-changes.contract";
-import { Effect, Layer, ManagedRuntime, Semaphore } from "effect";
+import { Effect, Semaphore } from "effect";
+import { createApplicationRuntime } from "#web/features/application-runtime/index";
 import {
   type CommitDraft,
   type DiffPreferences,
@@ -43,16 +44,13 @@ export function createWorkingChangesController(
   draftKey: string,
   onCommitted: () => void,
 ) {
-  const runtime = ManagedRuntime.make(Layer.empty);
+  const runtime = createApplicationRuntime();
   const lock = Semaphore.makeUnsafe(1);
   const writes = Semaphore.makeUnsafe(1);
   const listeners = new Set<() => void>();
   let normalDraft = emptyCommitDraft;
   let amendDraft: CommitDraft | undefined;
   let amendDraftHead: string | null = null;
-  let disposed = false;
-  let owners = 0;
-  let started = false;
   let state: WorkingChangesState = {
     changes: null,
     diff: null,
@@ -66,7 +64,7 @@ export function createWorkingChangesController(
     notice: null,
   };
   const publish = (next: Partial<WorkingChangesState>) => {
-    if (disposed) return;
+    if (runtime.disposed) return;
     state = { ...state, ...next };
     for (const listener of listeners) listener();
   };
@@ -153,11 +151,8 @@ export function createWorkingChangesController(
         listeners.delete(listener);
       };
     },
-    start: () => {
-      owners++;
-      if (started) return;
-      started = true;
-      run(
+    start: () =>
+      runtime.start(
         Effect.gen(function* () {
           yield* readCommitDraft(draftKey).pipe(
             Effect.tap((draft) =>
@@ -196,18 +191,9 @@ export function createWorkingChangesController(
               ),
             ),
           );
-        }),
-      );
-    },
-    stop: () => {
-      owners--;
-      queueMicrotask(() => {
-        if (owners === 0) {
-          disposed = true;
-          void runtime.dispose();
-        }
-      });
-    },
+        }).pipe(Effect.catch(fail)),
+      ),
+    stop: runtime.stop,
     refresh: () =>
       run(
         lock

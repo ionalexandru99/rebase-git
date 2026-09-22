@@ -15,3 +15,4 @@ export {
   exchangeEnvironmentPairing,
   exchangeEnvironmentPairingEffect,
 } from "#web/features/environment-connection/http/environment-http-client";
+export { createEnvironmentJsonClient } from "#web/features/environment-connection/http/environment-json-client";

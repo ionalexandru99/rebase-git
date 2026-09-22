@@ -1,10 +1,12 @@
-import {
-  type WorkspacePanelAction,
-  type WorkspacePanelKind,
-  type WorkspacePanelState,
-  workspacePanelAvailability,
-  workspacePanelKinds,
+import type {
+  WorkspacePanelAction,
+  WorkspacePanelKind,
+  WorkspacePanelState,
 } from "#web/features/workspace-panel/workspace-panel.contract";
+import {
+  workspacePanelDefinitions,
+  workspacePanelKinds,
+} from "#web/features/workspace-panel/workspace-panel-definitions";
 
 export const initialWorkspacePanelState: WorkspacePanelState = {
   tabs: [],
@@ -19,6 +21,44 @@ export function isWorkspacePanelKind(
   return workspacePanelKinds.some((kind) => kind === value);
 }
 
+function openPanel(
+  state: WorkspacePanelState,
+  kind: WorkspacePanelKind,
+): WorkspacePanelState {
+  if (!workspacePanelDefinitions[kind].available) {
+    return state;
+  }
+  if (state.open && state.active === kind) {
+    return state;
+  }
+  return {
+    ...state,
+    open: true,
+    active: kind,
+    tabs: state.tabs.includes(kind) ? state.tabs : [...state.tabs, kind],
+  };
+}
+
+function closePanel(
+  state: WorkspacePanelState,
+  kind: WorkspacePanelKind,
+): WorkspacePanelState {
+  const index = state.tabs.indexOf(kind);
+  if (index < 0) {
+    return state;
+  }
+  const tabs = state.tabs.filter((tab) => tab !== kind);
+  const active =
+    state.active === kind
+      ? (tabs[index] ?? tabs[index - 1] ?? null)
+      : state.active;
+  return {
+    ...state,
+    tabs,
+    active,
+  };
+}
+
 export function reduceWorkspacePanel(
   state: WorkspacePanelState,
   action: WorkspacePanelAction,
@@ -27,29 +67,9 @@ export function reduceWorkspacePanel(
     case "expand":
       return { ...state, expanded: action.expanded };
     case "open":
-      if (!workspacePanelAvailability[action.kind]) return state;
-      if (state.open && state.active === action.kind) return state;
-      return {
-        ...state,
-        open: true,
-        active: action.kind,
-        tabs: state.tabs.includes(action.kind)
-          ? state.tabs
-          : [...state.tabs, action.kind],
-      };
-    case "close": {
-      const index = state.tabs.indexOf(action.kind);
-      if (index < 0) return state;
-      const tabs = state.tabs.filter((kind) => kind !== action.kind);
-      return {
-        ...state,
-        tabs,
-        active:
-          state.active === action.kind
-            ? (tabs[index] ?? tabs[index - 1] ?? null)
-            : state.active,
-      };
-    }
+      return openPanel(state, action.kind);
+    case "close":
+      return closePanel(state, action.kind);
     case "visibility":
       return state.open === action.open
         ? state
