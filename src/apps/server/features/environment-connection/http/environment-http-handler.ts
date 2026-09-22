@@ -26,6 +26,7 @@ import type {
   RepositoryRefsService,
 } from "#server/domain/repository-refs.contract";
 import { respondWithBrowserAsset } from "#server/features/browser-client/browser-assets";
+import { respondToCommitInspectionRequest } from "#server/features/commit-inspection/index";
 import type {
   EnvironmentAuthorization,
   EnvironmentAuthorizationError,
@@ -228,6 +229,19 @@ function respondToEnvironmentRequest(
         body,
         authorization,
         catalog,
+      ))
+    ) {
+      return;
+    }
+
+    if (
+      state.inspection !== undefined &&
+      (yield* respondToCommitInspectionRequest(
+        request,
+        response,
+        body,
+        authorization,
+        state.inspection,
       ))
     ) {
       return;

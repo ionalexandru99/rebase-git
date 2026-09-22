@@ -2,6 +2,7 @@ import { and } from "drizzle-orm";
 import { Context, Effect, Layer, type Scope } from "effect";
 import { createLocalGitCommandRunner } from "#server/adapters/local-git/local-git-command-runner";
 import { createLocalRepositoryWatcher } from "#server/adapters/local-git/local-repository-watcher";
+import { CommitInspectionAccess } from "#server/domain/commit-inspection.contract";
 import type { Environment } from "#server/domain/environment-state.contract";
 import type { EnvironmentStorageError } from "#server/domain/environment-storage-error.contract";
 import { GitCommands } from "#server/domain/git-command.contract";
@@ -9,6 +10,7 @@ import { RepositoryCatalogAccess } from "#server/domain/repository-catalog.contr
 import { RepositoryChangesAccess } from "#server/domain/repository-changes.contract";
 import { RepositoryFreshnessState } from "#server/domain/repository-freshness.contract";
 import { RepositoryWatching } from "#server/domain/repository-watcher.contract";
+import { commitInspectionLayer } from "#server/features/commit-inspection/index";
 import { createEnvironmentAuthorization } from "#server/features/environment-authorization/environment-authorization";
 import { createEnvironmentEventPublisher } from "#server/features/environment-connection/events/environment-event-publisher";
 import { createEnvironmentFilesystem } from "#server/features/environment-filesystem/environment-filesystem";
@@ -30,6 +32,7 @@ import type {
   EnvironmentServerOptions,
 } from "#server/features/environment-server/server/environment-server.contract";
 import type { EnvironmentServerStartError } from "#server/features/environment-server/server/environment-server-error.contract";
+import { repositoryAccessLayer } from "#server/features/repository-access/index";
 import { createRepositoryCatalog } from "#server/features/repository-catalog/repository-catalog";
 import { repositoryChangesLayer } from "#server/features/repository-changes/index";
 import { repositoryFreshnessLayer } from "#server/features/repository-history/freshness/repository-freshness";
@@ -70,7 +73,12 @@ export function startEnvironmentServer(
     const events = createEnvironmentEventPublisher();
     const watcher = createLocalRepositoryWatcher();
     const repositoryServices = yield* Layer.build(
-      Layer.merge(repositoryFreshnessLayer, repositoryChangesLayer).pipe(
+      Layer.mergeAll(
+        repositoryFreshnessLayer,
+        repositoryChangesLayer,
+        commitInspectionLayer,
+      ).pipe(
+        Layer.provide(repositoryAccessLayer),
         Layer.provide(
           Layer.mergeAll(
             Layer.succeed(GitCommands, git),
@@ -86,6 +94,7 @@ export function startEnvironmentServer(
       git,
     });
     const listener = yield* acquireEnvironmentListener({
+      inspection: Context.get(repositoryServices, CommitInspectionAccess),
       changes: Context.get(repositoryServices, RepositoryChangesAccess),
       authorization,
       catalog,

@@ -6,12 +6,12 @@ import type {
 } from "@rebase/contracts/commit-inspection/commit-inspection.contract";
 import { Effect } from "effect";
 import type { GitCommandRunner } from "#server/domain/git-command.contract";
-import { buildChangeDiff } from "#server/features/repository-changes/git/build-change-diff";
-import { objectFile } from "#server/features/repository-changes/git/change-files";
+import { inspectionError } from "#server/features/commit-inspection/git/inspection-error";
+import { runRepositoryGit } from "#server/features/repository-access/index";
 import {
-  changeGit,
-  changesError,
-} from "#server/features/repository-changes/git/change-git";
+  buildChangeDiff,
+  objectFile,
+} from "#server/features/repository-comparison/index";
 
 export function inspectCommit(git: GitCommandRunner, command: InspectCommit) {
   return Effect.gen(function* () {
@@ -52,7 +52,7 @@ export function inspectCommitDiff(
     const file = files.find((file) => file.path === command.path);
     if (file === undefined)
       return yield* Effect.fail(
-        changesError(
+        inspectionError(
           "Missing",
           "This file is not changed in the selected comparison.",
         ),
@@ -102,9 +102,9 @@ function readMetadata(git: GitCommandRunner, command: InspectCommit) {
       ].every((oid) => /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/.test(oid))
     )
       return yield* Effect.fail(
-        changesError("Unsupported", "Select a full commit identity."),
+        inspectionError("Unsupported", "Select a full commit identity."),
       );
-    const output = yield* changeGit(
+    const output = yield* runRepositoryGit(
       git,
       command.worktreePath,
       [
@@ -144,12 +144,15 @@ function readMetadata(git: GitCommandRunner, command: InspectCommit) {
       oid !== command.oid
     )
       return yield* Effect.fail(
-        changesError("GitFailed", "Could not read commit metadata."),
+        inspectionError("GitFailed", "Could not read commit metadata."),
       );
     const parents = (parentText ?? "").split(" ").filter(Boolean);
     if (command.parentOid !== undefined && !parents.includes(command.parentOid))
       return yield* Effect.fail(
-        changesError("Unsupported", "Choose a parent of the selected commit."),
+        inspectionError(
+          "Unsupported",
+          "Choose a parent of the selected commit.",
+        ),
       );
     return {
       oid: command.oid,
@@ -176,7 +179,7 @@ function readFiles(
   parentOid: string | null,
   path?: string,
 ) {
-  return changeGit(
+  return runRepositoryGit(
     git,
     command.worktreePath,
     [

@@ -9,8 +9,8 @@ import { worktreeIdentities } from "#server/features/repository-changes/git/chan
 import {
   changeGit,
   changesError,
-  fingerprint,
 } from "#server/features/repository-changes/git/change-git";
+import { fingerprint } from "#server/features/repository-comparison/index";
 
 export function readChanges(git: GitCommandRunner, scope: ChangesScope) {
   return Effect.gen(function* () {

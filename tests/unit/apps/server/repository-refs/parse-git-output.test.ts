@@ -1,5 +1,6 @@
 import { currentTransportLimits } from "@rebase/contracts";
 import { describe, expect, it } from "vite-plus/test";
+import { parseWorktreeList } from "#server/features/repository-access/git/parse-worktree-list";
 import { fitRepositoryRefs } from "#server/features/repository-refs/git/fit-repository-refs";
 import {
   localBranchFromRecord,
@@ -8,7 +9,6 @@ import {
   remoteDefaultBranchFromRecord,
   tagFromRecord,
 } from "#server/features/repository-refs/git/parse-for-each-ref";
-import { parseWorktreeList } from "#server/features/repository-refs/git/parse-worktree-list";
 import { checkoutFailure } from "#server/features/repository-refs/git/repository-refs-failures";
 
 const commit = "a".repeat(40);

@@ -1,5 +1,3 @@
-import { realpath } from "node:fs";
-import { promisify } from "node:util";
 import type {
   LocalBranch,
   RepositoryRefs,
@@ -8,6 +6,10 @@ import type {
 import { Effect } from "effect";
 import type { GitCommandRunner } from "#server/domain/git-command.contract";
 import type { RepositoryRefsError } from "#server/domain/repository-refs.contract";
+import {
+  canonicalizeWorktrees,
+  readWorktrees,
+} from "#server/features/repository-access/index";
 import { fitRepositoryRefs } from "#server/features/repository-refs/git/fit-repository-refs";
 import {
   forEachRefFormat,
@@ -17,16 +19,15 @@ import {
   remoteDefaultBranchFromRecord,
   tagFromRecord,
 } from "#server/features/repository-refs/git/parse-for-each-ref";
-import { parseWorktreeList } from "#server/features/repository-refs/git/parse-worktree-list";
 import { readRemoteMetadata } from "#server/features/repository-refs/git/read-remote-metadata";
 import {
   gitCommandFailed,
   requireSuccessfulOutput,
+  worktreeReadFailed,
 } from "#server/features/repository-refs/git/repository-refs-failures";
 
 const readTimeoutMilliseconds = 15_000;
 const maximumRefsOutputBytes = 16 * 1_048_576;
-const realpathNative = promisify(realpath.native);
 
 export function readRepositoryRefs(
   git: GitCommandRunner,
@@ -52,7 +53,9 @@ export function readRepositoryRefs(
           "refname",
         ),
         tags: listRefs(git, repository.path, "refs/tags", "-creatordate"),
-        worktrees: readWorktrees(git, repository.path),
+        worktrees: readWorktrees(git, repository.path).pipe(
+          Effect.mapError(worktreeReadFailed),
+        ),
         remoteMetadata: readRemoteMetadata(git, repository.path),
       },
       { concurrency: "unbounded" },
@@ -81,33 +84,6 @@ export function readRepositoryRefs(
       worktrees,
     });
   });
-}
-
-export function readWorktrees(git: GitCommandRunner, directory: string) {
-  return git
-    .run({
-      arguments: ["worktree", "list", "--porcelain", "-z"],
-      directory,
-      timeoutMilliseconds: readTimeoutMilliseconds,
-    })
-    .pipe(
-      Effect.mapError(gitCommandFailed),
-      Effect.flatMap(requireSuccessfulOutput),
-      Effect.map((output) => parseWorktreeList(output.stdout)),
-    );
-}
-
-export function canonicalizeWorktrees(
-  worktrees: readonly RepositoryWorktree[],
-) {
-  return Effect.promise(() =>
-    Promise.all(
-      worktrees.map(async (worktree) => ({
-        ...worktree,
-        path: await canonicalPath(worktree.path),
-      })),
-    ),
-  );
 }
 
 function listRefs(
@@ -155,10 +131,6 @@ function canonicalizeBranchWorktrees(
             canonicalByRawPath.get(branch.worktreePath) ?? branch.worktreePath,
         },
   );
-}
-
-function canonicalPath(path: string) {
-  return realpathNative(path).catch(() => path);
 }
 
 function withDefined<Input, Output>(

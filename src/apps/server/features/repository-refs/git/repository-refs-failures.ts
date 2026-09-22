@@ -4,6 +4,7 @@ import type {
   GitCommandError,
   GitCommandOutput,
 } from "#server/domain/git-command.contract";
+import type { RepositoryGitExitError } from "#server/domain/repository-git.contract";
 import { RepositoryRefsError } from "#server/domain/repository-refs.contract";
 
 const maximumDetailLength = 2_048;
@@ -33,6 +34,14 @@ export function gitOutputFailed(output: GitCommandOutput) {
       ? "NotRepository"
       : "Failed",
   });
+}
+
+export function worktreeReadFailed(
+  error: GitCommandError | RepositoryGitExitError,
+) {
+  return error._tag === "RepositoryGitExitError"
+    ? gitOutputFailed(error.output)
+    : gitCommandFailed(error);
 }
 
 export function requireSuccessfulOutput(output: GitCommandOutput) {

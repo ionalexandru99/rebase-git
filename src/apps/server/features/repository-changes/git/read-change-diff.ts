@@ -1,17 +1,20 @@
 import type { ReadChangeDiff } from "@rebase/contracts/repository-changes/repository-changes.contract";
 import { Effect } from "effect";
 import type { GitCommandRunner } from "#server/domain/git-command.contract";
+import { previewByteLimit } from "#server/domain/repository-comparison.contract";
 import {
-  binary,
-  buildChangeDiff,
-} from "#server/features/repository-changes/git/build-change-diff";
-import {
-  objectFile,
-  previewByteLimit,
   safeChangePath,
   worktreeFile,
 } from "#server/features/repository-changes/git/change-files";
-import { changeGit } from "#server/features/repository-changes/git/change-git";
+import {
+  changeGit,
+  changesError,
+} from "#server/features/repository-changes/git/change-git";
+import {
+  binary,
+  buildChangeDiff,
+  objectFile,
+} from "#server/features/repository-comparison/index";
 
 export function readChangeDiff(
   git: GitCommandRunner,
@@ -50,7 +53,13 @@ export function readChangeDiff(
           }
         : working;
     return buildChangeDiff(command.path, base, before, after);
-  });
+  }).pipe(
+    Effect.mapError((error) =>
+      error._tag === "RepositoryGitError"
+        ? changesError("GitFailed", error.detail)
+        : error,
+    ),
+  );
 }
 
 function cleanFileContent(

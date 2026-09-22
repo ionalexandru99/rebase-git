@@ -5,8 +5,10 @@ import type {
 import { Effect, Layer, Semaphore } from "effect";
 import type { GitCommandRunner } from "#server/domain/git-command.contract";
 import { GitCommands } from "#server/domain/git-command.contract";
-import type { RepositoryCatalog } from "#server/domain/repository-catalog.contract";
-import { RepositoryCatalogAccess } from "#server/domain/repository-catalog.contract";
+import {
+  RepositoryAccess,
+  type RepositoryAccessService,
+} from "#server/domain/repository-access.contract";
 import type { RepositoryChangesService } from "#server/domain/repository-changes.contract";
 import { RepositoryChangesAccess } from "#server/domain/repository-changes.contract";
 import { safeChangePath } from "#server/features/repository-changes/git/change-files";
@@ -19,52 +21,19 @@ import { mutateChanges } from "#server/features/repository-changes/git/mutate-ch
 import { readChangeDiff } from "#server/features/repository-changes/git/read-change-diff";
 import { readChanges } from "#server/features/repository-changes/git/read-changes";
 import { verifyChanges } from "#server/features/repository-changes/git/verify-changes";
-import {
-  inspectCommit,
-  inspectCommitDiff,
-} from "#server/features/repository-changes/history/inspect-commit";
-import {
-  canonicalizeWorktrees,
-  readWorktrees,
-} from "#server/features/repository-refs/git/read-repository-refs";
 
 export function createRepositoryChangesService(
-  catalog: Pick<RepositoryCatalog, "find">,
+  access: RepositoryAccessService,
   git: GitCommandRunner,
 ): RepositoryChangesService {
   const locks = new Map<string, Semaphore.Semaphore>();
-  const validate = (
-    scope: Pick<ChangesScope, "repositoryId" | "worktreePath">,
-  ) =>
-    Effect.gen(function* () {
-      const repository = yield* catalog
-        .find(scope.repositoryId)
-        .pipe(
-          Effect.mapError(() =>
-            changesError("Missing", "Could not find this repository."),
-          ),
-        );
-      if (repository === undefined)
-        return yield* Effect.fail(
-          changesError("Missing", "This repository is no longer available."),
-        );
-      const worktrees = yield* readWorktrees(git, repository.path).pipe(
-        Effect.flatMap(canonicalizeWorktrees),
-        Effect.mapError(() =>
-          changesError("Missing", "Could not read the repository worktrees."),
-        ),
-      );
-      if (!worktrees.some((tree) => tree.path === scope.worktreePath))
-        return yield* Effect.fail(
-          changesError(
-            "Missing",
-            "This worktree does not belong to the repository.",
-          ),
-        );
-    });
   const locked = <A, E>(scope: ChangesScope, run: Effect.Effect<A, E>) =>
     Effect.gen(function* () {
-      yield* validate(scope);
+      yield* access
+        .worktree(scope)
+        .pipe(
+          Effect.mapError((error) => changesError("Missing", error.detail)),
+        );
       let lock = locks.get(scope.worktreePath);
       if (lock === undefined) {
         lock = yield* Semaphore.make(1);
@@ -73,12 +42,6 @@ export function createRepositoryChangesService(
       return yield* lock.withPermit(run);
     });
   return {
-    inspect: (command) =>
-      validate(command).pipe(Effect.andThen(() => inspectCommit(git, command))),
-    inspectDiff: (command) =>
-      validate(command).pipe(
-        Effect.andThen(() => inspectCommitDiff(git, command)),
-      ),
     read: (scope) =>
       locked(
         scope,
@@ -173,7 +136,7 @@ export const repositoryChangesLayer = Layer.effect(
   RepositoryChangesAccess,
   Effect.gen(function* () {
     return createRepositoryChangesService(
-      yield* RepositoryCatalogAccess,
+      yield* RepositoryAccess,
       yield* GitCommands,
     );
   }),
