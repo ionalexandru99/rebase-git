@@ -8,12 +8,8 @@ export type GraphCommandEnvironment = Omit<
   GraphCommandContext,
   "selectedOids" | "invokingOid" | "ref"
 >;
-export type GraphCommandId =
-  | "graph.openDetails"
-  | "graph.fetch"
-  | "graph.copySha"
-  | "graph.copySubject"
-  | "history.toggleRef";
+export type GraphCommandGroup = "Commit" | "History scope" | "Commit graph";
+export type GraphCommandPlacement = "commit-menu" | "ref-menu" | "toolbar";
 
 export interface GraphCommandContext {
   readonly environmentId: string;
@@ -33,11 +29,12 @@ export interface GraphCommandContext {
   readonly capabilities: ReadonlySet<EnvironmentAccessCapability>;
 }
 
-export interface GraphCommandDescriptor {
-  readonly id: GraphCommandId;
+export interface GraphCommandDescriptor<Id extends string = string> {
+  readonly id: Id;
   readonly label: string;
-  readonly group: "Commit" | "History scope" | "Commit graph";
+  readonly group: GraphCommandGroup;
   readonly order: number;
+  readonly placement: GraphCommandPlacement;
   readonly enabled: boolean;
   readonly disabledReason?: string;
 }
@@ -57,12 +54,30 @@ export type GraphCommandResult =
   | { readonly _tag: "Executed" }
   | { readonly _tag: "Unavailable"; readonly reason: string };
 
-export interface GraphCommandRegistry {
+export interface GraphCommandRegistry<Id extends string = string> {
   readonly commands: (
     context: GraphCommandContext,
-  ) => readonly GraphCommandDescriptor[];
+    placement?: GraphCommandPlacement,
+  ) => readonly GraphCommandDescriptor<Id>[];
   readonly execute: (
-    id: GraphCommandId,
+    id: Id,
     context: GraphCommandContext,
   ) => Promise<GraphCommandResult>;
+}
+
+export interface GraphCommandInvocation {
+  readonly label: string;
+  readonly enabled: boolean;
+  readonly disabledReason?: string;
+  readonly execute: () => Promise<GraphCommandResult>;
+}
+
+export interface GraphCommandDefinition<Id extends string = string> {
+  readonly id: Id;
+  readonly group: GraphCommandGroup;
+  readonly order: number;
+  readonly placement: GraphCommandPlacement;
+  readonly resolve: (
+    context: GraphCommandContext,
+  ) => GraphCommandInvocation | undefined;
 }

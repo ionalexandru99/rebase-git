@@ -3,8 +3,11 @@ import type {
   GraphCommandContext,
   GraphCommandEnvironment,
   GraphCommandHandlers,
-  GraphCommandId,
 } from "#web/features/commit-commands/graph-command.contract";
+import {
+  createGraphCommandDefinitions,
+  type GraphCommandId,
+} from "#web/features/commit-commands/graph-command-definitions";
 import { createGraphCommandRegistry } from "#web/features/commit-commands/graph-command-registry";
 
 export function useGraphCommands({
@@ -17,7 +20,7 @@ export function useGraphCommands({
   readonly handlers: GraphCommandHandlers;
 }) {
   const registry = useMemo(
-    () => createGraphCommandRegistry(handlers),
+    () => createGraphCommandRegistry(createGraphCommandDefinitions(handlers)),
     [handlers],
   );
   const [error, setError] = useState<string>();
