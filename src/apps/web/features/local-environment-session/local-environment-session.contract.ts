@@ -1,11 +1,11 @@
 import type { EnvironmentAccessCapability } from "@rebase/contracts";
-import type { Effect, Scope } from "effect";
-import type { CommitInspectionClient } from "#web/features/commit-inspection/commit-inspection.contract";
 import type {
   EnvironmentAuthorizationRejected,
   EnvironmentConnectionFailure,
-} from "#web/features/environment-connection/environment-connection-errors";
-import type { EnvironmentCredential } from "#web/features/environment-connection/environment-credential.contract";
+  EnvironmentCredential,
+} from "@rebase/environment-client";
+import type { Effect, Scope } from "effect";
+import type { CommitInspectionClient } from "#web/features/commit-inspection/commit-inspection.contract";
 import type { EnvironmentProtocolConnection } from "#web/features/environment-connection/environment-protocol-connection.contract";
 import type {
   EnvironmentFilesystemController,

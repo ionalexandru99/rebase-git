@@ -1,4 +1,4 @@
-import { exchangeEnvironmentPairingEffect } from "@rebase/web/features/environment-connection";
+import { exchangeEnvironmentPairingEffect } from "@rebase/environment-client";
 import { Effect } from "effect";
 import type {
   DesktopApplicationHost,

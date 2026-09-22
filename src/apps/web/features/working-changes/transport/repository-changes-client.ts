@@ -2,7 +2,7 @@ import {
   ChangesHttpFailure,
   RepositoryChangesHttpApi,
 } from "@rebase/contracts/repository-changes/repository-changes.contract";
-import type { EnvironmentCredential } from "#web/features/environment-connection/environment-credential.contract";
+import type { EnvironmentCredential } from "@rebase/environment-client";
 import { createEnvironmentJsonClient } from "#web/features/environment-connection/index";
 import {
   type RepositoryChangesClient,

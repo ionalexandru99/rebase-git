@@ -52,6 +52,9 @@ importers:
       '@rebase/desktop':
         specifier: workspace:*
         version: link:src/apps/desktop
+      '@rebase/environment-client':
+        specifier: workspace:*
+        version: link:src/environment-client
       '@rebase/server':
         specifier: workspace:*
         version: link:src/apps/server
@@ -121,9 +124,9 @@ importers:
       '@rebase/server':
         specifier: workspace:*
         version: link:../server
-      '@rebase/web':
+      '@rebase/environment-client':
         specifier: workspace:*
-        version: link:../web
+        version: link:../../environment-client
       effect:
         specifier: 'catalog:'
         version: 4.0.0-rc.110
@@ -183,6 +186,9 @@ importers:
       '@rebase/contracts':
         specifier: workspace:*
         version: link:../../contracts
+      '@rebase/environment-client':
+        specifier: workspace:*
+        version: link:../../environment-client
       '@tabler/icons-react':
         specifier: 3.46.0
         version: 3.46.0(react@19.2.8)
@@ -244,6 +250,15 @@ importers:
 
   src/contracts:
     dependencies:
+      effect:
+        specifier: 'catalog:'
+        version: 4.0.0-rc.110
+
+  src/environment-client:
+    dependencies:
+      '@rebase/contracts':
+        specifier: workspace:*
+        version: link:../contracts
       effect:
         specifier: 'catalog:'
         version: 4.0.0-rc.110

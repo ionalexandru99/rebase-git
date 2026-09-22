@@ -1,12 +1,12 @@
 import { currentClientReceiveLimits } from "@rebase/contracts";
 import { Effect, Schema } from "effect";
-import type { EnvironmentCredential } from "#web/features/environment-connection/environment-credential.contract";
-import { environmentCredentialRequest } from "#web/features/environment-connection/http/environment-credential-request";
+import type { EnvironmentCredential } from "#environment-client/environment-credential.contract";
+import { environmentCredentialRequest } from "#environment-client/http/environment-credential-request";
 import {
   EnvironmentHttpRejected,
   EnvironmentHttpResponseError,
-} from "#web/features/environment-connection/http/environment-http-json.contract";
-import { readBoundedEnvironmentResponseBody } from "#web/features/environment-connection/http/environment-http-response-body";
+} from "#environment-client/http/environment-http-json.contract";
+import { readBoundedEnvironmentResponseBody } from "#environment-client/http/environment-http-response-body";
 
 export function requestEnvironmentJson<
   S extends Schema.ConstraintDecoder<unknown, never>,

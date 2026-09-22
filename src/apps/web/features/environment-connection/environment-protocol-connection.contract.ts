@@ -2,8 +2,8 @@ import type {
   EnvironmentDiscovery,
   EnvironmentHelloResult,
 } from "@rebase/contracts";
+import type { EnvironmentConnectionFailure } from "@rebase/environment-client";
 import type { Effect } from "effect";
-import type { EnvironmentConnectionFailure } from "#web/features/environment-connection/environment-connection-errors";
 import type { RepositoryHistoryTransport } from "#web/features/repository-history/repository-history-reader.contract";
 import type { RepositoryRefsTransport } from "#web/features/repository-refs/transport/repository-refs-transport.contract";
 

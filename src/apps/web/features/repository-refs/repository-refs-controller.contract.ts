@@ -4,8 +4,8 @@ import type {
   RepositoryRefs,
   RepositoryRefTarget,
 } from "@rebase/contracts";
+import type { EnvironmentCredential } from "@rebase/environment-client";
 import { Data, type Effect } from "effect";
-import type { EnvironmentCredential } from "#web/features/environment-connection/environment-credential.contract";
 import type { RepositoryRefsClientError } from "#web/features/repository-refs/repository-refs-client.contract";
 
 export type RepositoryRefsControllerStatus =

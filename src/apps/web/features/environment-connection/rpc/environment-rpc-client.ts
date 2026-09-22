@@ -9,13 +9,13 @@ import {
   type EnvironmentRpcClient,
 } from "@rebase/contracts/environment-connection/rpc/environment-rpc.contract";
 import { environmentRpcSerialization } from "@rebase/contracts/environment-connection/rpc/environment-rpc-serialization";
-import { Deferred, Effect, Layer, Schedule, Schema } from "effect";
-import { RpcClient, RpcSerialization } from "effect/unstable/rpc";
-import { Socket } from "effect/unstable/socket";
 import {
   EnvironmentHelloRejected,
   environmentResponseError,
-} from "#web/features/environment-connection/environment-connection-errors";
+} from "@rebase/environment-client";
+import { Deferred, Effect, Layer, Schedule, Schema } from "effect";
+import { RpcClient, RpcSerialization } from "effect/unstable/rpc";
+import { Socket } from "effect/unstable/socket";
 
 const equivalentHello = Schema.toEquivalence(EnvironmentHelloResult);
 

@@ -1,6 +1,6 @@
 import type { RepositoryHistoryOperationFailure } from "@rebase/contracts";
+import { environmentResponseError } from "@rebase/environment-client";
 import type { RpcClientError } from "effect/unstable/rpc";
-import { environmentResponseError } from "#web/features/environment-connection/environment-connection-errors";
 import { RepositoryHistoryRejected } from "#web/features/repository-history/repository-history-reader.contract";
 
 export function historyRpcFailure(

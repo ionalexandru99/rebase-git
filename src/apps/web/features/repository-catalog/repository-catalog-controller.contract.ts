@@ -1,6 +1,6 @@
 import type { RepositoryCatalogEntry } from "@rebase/contracts";
+import type { EnvironmentCredential } from "@rebase/environment-client";
 import { Data, type Effect } from "effect";
-import type { EnvironmentCredential } from "#web/features/environment-connection/environment-credential.contract";
 import type { RepositoryCatalogClientError } from "#web/features/repository-catalog/repository-catalog-client.contract";
 
 export type RepositoryCatalogControllerStatus =

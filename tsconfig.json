@@ -2,6 +2,7 @@
   "files": [],
   "references": [
     { "path": "./src/contracts" },
+    { "path": "./src/environment-client" },
     { "path": "./src/apps/server" },
     { "path": "./src/apps/web" },
     { "path": "./src/apps/desktop" }

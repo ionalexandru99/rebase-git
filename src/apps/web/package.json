@@ -72,6 +72,7 @@
     "@pierre/diffs": "1.4.2",
     "@pierre/theme": "2.0.0",
     "@rebase/contracts": "workspace:*",
+    "@rebase/environment-client": "workspace:*",
     "@tabler/icons-react": "3.46.0",
     "@tanstack/react-virtual": "3.14.10",
     "class-variance-authority": "0.7.1",

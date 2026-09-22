@@ -1,10 +1,10 @@
 import { Effect, type Schema } from "effect";
-import type { EnvironmentCredential } from "#web/features/environment-connection/environment-credential.contract";
-import { requestEnvironmentJson } from "#web/features/environment-connection/http/environment-http-json";
+import type { EnvironmentCredential } from "#environment-client/environment-credential.contract";
+import { requestEnvironmentJson } from "#environment-client/http/environment-http-json";
 import type {
   EnvironmentHttpRejected,
   EnvironmentHttpResponseError,
-} from "#web/features/environment-connection/http/environment-http-json.contract";
+} from "#environment-client/http/environment-http-json.contract";
 
 export function createEnvironmentJsonClient<
   F extends Schema.ConstraintDecoder<unknown, never>,

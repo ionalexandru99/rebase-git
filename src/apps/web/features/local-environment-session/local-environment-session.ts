@@ -1,10 +1,10 @@
-import { Effect, Fiber, Result } from "effect";
+import type { EnvironmentCredential } from "@rebase/environment-client";
 import {
   EnvironmentAuthorizationRejected,
   type EnvironmentConnectionFailure,
   EnvironmentHelloRejected,
-} from "#web/features/environment-connection/environment-connection-errors";
-import type { EnvironmentCredential } from "#web/features/environment-connection/environment-credential.contract";
+} from "@rebase/environment-client";
+import { Effect, Fiber, Result } from "effect";
 import { createEnvironmentFilesystemController } from "#web/features/environment-filesystem/environment-filesystem-controller";
 import type {
   LocalEnvironmentSession,

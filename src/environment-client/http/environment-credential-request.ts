@@ -1,4 +1,4 @@
-import type { EnvironmentCredential } from "#web/features/environment-connection/environment-credential.contract";
+import type { EnvironmentCredential } from "#environment-client/environment-credential.contract";
 
 export function environmentCredentialRequest(
   credential: EnvironmentCredential,
