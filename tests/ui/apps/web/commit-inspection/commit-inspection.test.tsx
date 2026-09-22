@@ -11,7 +11,8 @@ import {
 } from "#tests-ui/apps/web/commit-graph/commit-graph-fixture";
 import type { CommitInspectionClient } from "#web/features/commit-inspection/commit-inspection.contract";
 import { ResizablePanel } from "#web-ui/components/ui/resizable";
-import { CommitInspectionBridge } from "#web-ui/features/commit-inspection/components/commit-inspection-bridge";
+import { CommitInspectionSession } from "#web-ui/features/commit-inspection/commit-inspection-session";
+import { CommitInspectionBridge } from "#web-ui/features/repository-workspace/commit-inspection-bridge";
 import { WorkspacePanel } from "#web-ui/features/workspace-panel/index";
 
 function details(oid = historyOid(0), parentOid = historyOid(1)): Details {
@@ -68,15 +69,10 @@ async function fixture(
       `rebase:workspace-panel:v1:${scopeKey}`,
       JSON.stringify(saved),
     );
-  const screen = await render(
+  const tree = (connected = true) => (
     <div className="dark text-foreground" style={{ width: 1200, height: 650 }}>
       <WorkspacePanel.Provider scopeKey={scopeKey}>
-        <CommitInspectionBridge
-          client={client}
-          repositoryId="repository"
-          worktreePath="/repo"
-          connected
-        >
+        <CommitInspectionBridge connected={connected}>
           {(inspection) => (
             <WorkspacePanel.Group>
               <ResizablePanel id="branches" defaultSize="15%" minSize="10%">
@@ -108,7 +104,14 @@ async function fixture(
               </WorkspacePanel.Main>
               <WorkspacePanel.Pane
                 contents={{
-                  commit: inspection.content,
+                  commit: (
+                    <CommitInspectionSession
+                      client={client}
+                      repositoryId="repository"
+                      worktreePath="/repo"
+                      connected={connected}
+                    />
+                  ),
                   changes: (
                     <input
                       aria-label="Working draft"
@@ -121,9 +124,16 @@ async function fixture(
           )}
         </CommitInspectionBridge>
       </WorkspacePanel.Provider>
-    </div>,
+    </div>
   );
-  return { screen, client, grid: screen.getByRole("grid"), scopeKey };
+  const screen = await render(tree());
+  return {
+    screen,
+    client,
+    grid: screen.getByRole("grid"),
+    scopeKey,
+    connect: (connected: boolean) => screen.rerender(tree(connected)),
+  };
 }
 
 describe("commit inspection", () => {
@@ -182,8 +192,11 @@ describe("commit inspection", () => {
     });
     await grid.getByRole("row", { name: /^Commit 0,/ }).dblClick();
     const content = () =>
-      document.querySelector("diffs-container")?.shadowRoot?.textContent;
-    await expect.poll(content).toContain("new");
+      screen
+        .getByRole("region", { name: "Commit file diff" })
+        .element()
+        .querySelector("diffs-container")?.shadowRoot?.textContent;
+    await expect.poll(content, { timeout: 5_000 }).toContain("new");
     await expect.poll(content).not.toContain("retained heading");
     await screen.getByRole("button", { name: "Show unchanged lines" }).click();
     await expect.poll(content).toContain("retained heading");
@@ -307,4 +320,46 @@ describe("commit inspection", () => {
       .element(screen.getByText("10 → 999 bytes"))
       .not.toBeInTheDocument();
   });
+});
+
+it("loads the file selected while disconnected when the connection resumes", async () => {
+  const { screen, grid, client, connect } = await fixture();
+  await grid.getByRole("row", { name: /^Commit 0,/ }).dblClick();
+  await expect.poll(() => vi.mocked(client.diff).mock.calls.length).toBe(1);
+  await connect(false);
+  await screen.getByRole("button", { name: /second.bin/ }).click();
+  expect(client.diff).toHaveBeenCalledTimes(1);
+  await connect(true);
+  await expect
+    .poll(() => vi.mocked(client.diff).mock.calls.at(-1)?.[0].path)
+    .toBe("src/second.bin");
+  await expect
+    .element(screen.getByRole("region", { name: "Commit file diff" }))
+    .toHaveAttribute("aria-busy", "false");
+});
+
+it("preserves the restored inspector target across connection-driven graph notifications", async () => {
+  const { screen, client, connect } = await fixture(
+    {},
+    {
+      tabs: ["commit"],
+      active: "commit",
+      open: true,
+      width: 40,
+      inputs: { commit: historyOid(1) },
+    },
+  );
+  await expect
+    .element(screen.getByRole("button", { name: /second.bin/ }))
+    .toBeVisible();
+  await screen.getByRole("button", { name: /second.bin/ }).click();
+  await connect(false);
+  await connect(true);
+  await expect
+    .element(screen.getByRole("region", { name: "Commit details" }))
+    .toHaveTextContent(`Message ${historyOid(1)}`);
+  await expect
+    .element(screen.getByRole("button", { name: /second.bin/ }))
+    .toHaveAttribute("aria-pressed", "true");
+  expect(client.inspect).toHaveBeenCalledTimes(1);
 });

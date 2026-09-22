@@ -1,7 +1,6 @@
 import { IconArrowsMaximize, IconArrowsMinimize } from "@tabler/icons-react";
 import { type ReactNode, useLayoutEffect, useRef } from "react";
 import type { WorkspacePanelKind } from "#web/features/workspace-panel/workspace-panel.contract";
-import { workspacePanelDefinitions } from "#web/features/workspace-panel/workspace-panel-definitions";
 import { isWorkspacePanelKind } from "#web/features/workspace-panel/workspace-panel-state";
 import { Button } from "#web-ui/components/ui/button";
 import { Tabs, TabsContent, TabsList } from "#web-ui/components/ui/tabs";
@@ -9,6 +8,7 @@ import { WorkspacePanelEmptyState } from "#web-ui/features/workspace-panel/compo
 import { WorkspacePanelLauncher } from "#web-ui/features/workspace-panel/components/workspace-panel-launcher";
 import { WorkspacePanelTab } from "#web-ui/features/workspace-panel/components/workspace-panel-tab";
 import { useWorkspacePanel } from "#web-ui/features/workspace-panel/workspace-panel-provider";
+import { PanelSessionTarget } from "#web-ui/features/workspace-panel/workspace-panel-sessions";
 
 export function WorkspacePanelTabs({
   contents,
@@ -81,7 +81,6 @@ export function WorkspacePanelTabs({
         </Button>
       </div>
       {tabs.map((kind) => {
-        const feature = workspacePanelDefinitions[kind];
         return (
           <TabsContent
             key={kind}
@@ -89,16 +88,9 @@ export function WorkspacePanelTabs({
             keepMounted
             className="min-h-0 flex-1 overflow-hidden data-[hidden]:hidden"
           >
-            {contents?.[kind] ?? (
-              <div className="flex h-full min-h-40 flex-col items-center justify-center gap-3 p-6 text-center">
-                <feature.icon
-                  aria-hidden="true"
-                  className="size-7 text-muted-foreground/60"
-                />
-                <h2 className="text-sm font-medium">{feature.label}</h2>
-                <p className="text-xs text-muted-foreground">Coming soon</p>
-              </div>
-            )}
+            <PanelSessionTarget session={panel.session} kind={kind}>
+              {contents?.[kind]}
+            </PanelSessionTarget>
           </TabsContent>
         );
       })}

@@ -26,4 +26,8 @@ export {
   EnvironmentHttpResponseError,
 } from "#environment-client/http/environment-http-json.contract";
 export { readBoundedEnvironmentResponseBody } from "#environment-client/http/environment-http-response-body";
-export { createEnvironmentJsonClient } from "#environment-client/http/environment-json-client";
+export {
+  createEnvironmentJsonClient,
+  createEnvironmentRequestClient,
+} from "#environment-client/http/environment-json-client";
+export type { EnvironmentRequestClient } from "#environment-client/http/environment-request-client.contract";

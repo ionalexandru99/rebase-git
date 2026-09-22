@@ -22,6 +22,7 @@ export function WorkingChangesProvider({
   repositoryId,
   worktreePath,
   onCommitted,
+  active = true,
 }: {
   readonly children: ReactNode;
   readonly client: RepositoryChangesClient;
@@ -29,6 +30,7 @@ export function WorkingChangesProvider({
   readonly repositoryId: string;
   readonly worktreePath: string;
   readonly onCommitted: () => void;
+  readonly active?: boolean;
 }) {
   const controller = useMemo(
     () =>
@@ -44,6 +46,7 @@ export function WorkingChangesProvider({
     controller.start();
     return controller.stop;
   }, [controller]);
+  useEffect(() => controller.setActive(active), [controller, active]);
   return (
     <WorkingChangesContext.Provider value={controller}>
       {children}

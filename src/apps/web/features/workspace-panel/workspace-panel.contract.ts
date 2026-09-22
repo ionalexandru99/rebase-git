@@ -1,9 +1,15 @@
 import type { IconCode } from "@tabler/icons-react";
-import type { WorkspacePanelKind } from "#web/features/workspace-panel/workspace-panel-definitions";
+import type { ComponentType } from "react";
+import type {
+  WorkspacePanelInputAction,
+  WorkspacePanelKind,
+} from "#web/features/workspace-panel/workspace-panel-definitions";
 
 export type { WorkspacePanelKind } from "#web/features/workspace-panel/workspace-panel-definitions";
 
 export interface WorkspacePanelDefinition {
+  readonly acceptsInput?: (input: unknown) => boolean;
+  readonly Content?: ComponentType;
   readonly label: string;
   readonly icon: typeof IconCode;
   readonly available: boolean;
@@ -12,6 +18,7 @@ export interface WorkspacePanelDefinition {
 }
 
 export interface WorkspacePanelState {
+  readonly inputs?: Partial<Record<WorkspacePanelKind, unknown>>;
   readonly tabs: readonly WorkspacePanelKind[];
   readonly active: WorkspacePanelKind | null;
   readonly open: boolean;
@@ -20,6 +27,7 @@ export interface WorkspacePanelState {
 }
 
 export type WorkspacePanelAction =
+  | WorkspacePanelInputAction
   | { readonly type: "open"; readonly kind: WorkspacePanelKind }
   | { readonly type: "close"; readonly kind: WorkspacePanelKind }
   | { readonly type: "visibility"; readonly open: boolean }

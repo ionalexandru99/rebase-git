@@ -1,10 +1,8 @@
 import { useEffect } from "react";
-import type { RepositoryHistoryReader } from "#web/features/repository-history/repository-history-reader.contract";
+import type { RepositoryHistoryObservation } from "#web/features/repository-history/index";
 
 export function useHistoryRefRefresh(
-  reader:
-    | Pick<RepositoryHistoryReader, "getSnapshot" | "subscribe">
-    | undefined,
+  reader: RepositoryHistoryObservation | undefined,
   connected: boolean,
   refresh: () => void,
 ) {

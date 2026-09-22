@@ -3,19 +3,35 @@ import {
   type ReactNode,
   useCallback,
   useContext,
-  useMemo,
   useRef,
   useState,
   useSyncExternalStore,
 } from "react";
-import { createWorkspacePanelStore } from "#web/features/workspace-panel/persistence/workspace-panel-store";
 import type {
   WorkspacePanelAction,
   WorkspacePanelStore,
 } from "#web/features/workspace-panel/workspace-panel.contract";
+import {
+  usePanelSession,
+  usePanelSessionOwner,
+  type WorkspacePanelScope,
+  WorkspacePanelSessions,
+} from "#web-ui/features/workspace-panel/workspace-panel-sessions";
 
-function usePanelController(scopeKey: string) {
-  const store = useMemo(() => createWorkspacePanelStore(scopeKey), [scopeKey]);
+function usePanelController(
+  scopeKey: string,
+  scope: WorkspacePanelScope | undefined,
+) {
+  const sessionKey = scope
+    ? JSON.stringify([
+        scope.environmentId,
+        scope.repositoryId,
+        scope.logicalRepositoryId,
+        scope.worktreePath,
+      ])
+    : scopeKey;
+  const session = usePanelSession(sessionKey, scope, scopeKey);
+  const store = session.store;
   const [launcher, setLauncher] = useState<{
     store: WorkspacePanelStore;
     open: boolean;
@@ -31,13 +47,18 @@ function usePanelController(scopeKey: string) {
   const execute = useCallback(
     (action: WorkspacePanelAction) => {
       store.dispatch(action);
-      if (action.type !== "resize" && action.type !== "expand")
+      if (
+        action.type !== "resize" &&
+        action.type !== "expand" &&
+        action.type !== "input"
+      )
         setFocusRequest((request) => request + 1);
     },
     [store],
   );
   return {
-    panelId: `side-panel:${scopeKey}`,
+    session,
+    panelId: `side-panel:${sessionKey}`,
     store,
     execute,
     launcherOpen,
@@ -55,11 +76,39 @@ const WorkspacePanelContext = createContext<
 export function WorkspacePanelProvider({
   children,
   scopeKey,
+  scope,
 }: {
   readonly children: ReactNode;
   readonly scopeKey: string;
+  readonly scope?: WorkspacePanelScope | undefined;
 }) {
-  const controller = usePanelController(scopeKey);
+  const owner = usePanelSessionOwner();
+  if (!owner) {
+    return (
+      <WorkspacePanelSessions>
+        <PanelProvider scopeKey={scopeKey} scope={scope}>
+          {children}
+        </PanelProvider>
+      </WorkspacePanelSessions>
+    );
+  }
+  return (
+    <PanelProvider scopeKey={scopeKey} scope={scope}>
+      {children}
+    </PanelProvider>
+  );
+}
+
+function PanelProvider({
+  children,
+  scopeKey,
+  scope,
+}: {
+  readonly children: ReactNode;
+  readonly scopeKey: string;
+  readonly scope: WorkspacePanelScope | undefined;
+}) {
+  const controller = usePanelController(scopeKey, scope);
   return (
     <WorkspacePanelContext.Provider value={controller}>
       {children}

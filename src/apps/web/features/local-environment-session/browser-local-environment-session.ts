@@ -1,11 +1,11 @@
 import type { EnvironmentCredential } from "@rebase/environment-client";
 import {
   createEnvironmentBrowserSessionEffect,
+  createEnvironmentRequestClient,
   environmentResponseError,
   readEnvironmentBrowserSessionEffect,
 } from "@rebase/environment-client";
 import { Effect } from "effect";
-import { createCommitInspectionClient } from "#web/features/commit-inspection/transport/commit-inspection-client";
 import { connectCurrentEnvironmentEffect } from "#web/features/environment-connection/index";
 import { listEnvironmentDirectoryEffect } from "#web/features/environment-filesystem/environment-filesystem-client";
 import type { EnvironmentFilesystemGateway } from "#web/features/environment-filesystem/environment-filesystem-controller.contract";
@@ -23,7 +23,6 @@ import { checkoutRepositoryRefEffect } from "#web/features/repository-refs/repos
 import { RepositoryRefsResponseError } from "#web/features/repository-refs/repository-refs-client.contract";
 import type { RepositoryRefsGateway } from "#web/features/repository-refs/repository-refs-controller.contract";
 import type { RepositoryRefsTransport } from "#web/features/repository-refs/transport/repository-refs-transport.contract";
-import { createRepositoryChangesClient } from "#web/features/working-changes/transport/repository-changes-client";
 
 export function createBrowserLocalEnvironmentSession(productVersion: string) {
   const host = window.rebaseHost;
@@ -110,11 +109,7 @@ export function createBrowserLocalEnvironmentSession(productVersion: string) {
   };
 
   return createLocalEnvironmentSession({
-    commitInspection: createCommitInspectionClient(
-      bootstrap.environmentOrigin,
-      () => changesCredential,
-    ),
-    repositoryChanges: createRepositoryChangesClient(
+    requests: createEnvironmentRequestClient(
       bootstrap.environmentOrigin,
       () => changesCredential,
     ),

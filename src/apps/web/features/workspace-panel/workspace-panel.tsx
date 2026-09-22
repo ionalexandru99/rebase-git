@@ -16,6 +16,7 @@ import {
   useWorkspacePanel,
   WorkspacePanelProvider,
 } from "#web-ui/features/workspace-panel/workspace-panel-provider";
+import { WorkspacePanelSessions } from "#web-ui/features/workspace-panel/workspace-panel-sessions";
 
 function Group({ children }: { readonly children: ReactNode }) {
   const { store, panelId, state } = useWorkspacePanel();
@@ -148,6 +149,7 @@ function Pane({
 }
 
 export const WorkspacePanel = {
+  Sessions: WorkspacePanelSessions,
   Provider: WorkspacePanelProvider,
   Group,
   Toggle,
