@@ -12,7 +12,12 @@ import { join } from "node:path";
 import { promisify } from "node:util";
 import { Effect } from "effect";
 import { afterEach, describe, expect, it } from "vite-plus/test";
+import { createLocalGitCommandRunner } from "#server/adapters/local-git/local-git-command-runner";
 import type { EnvironmentStorageError } from "#server/domain/environment-storage-error.contract";
+import {
+  GitCommandError,
+  type GitCommandRunner,
+} from "#server/domain/git-command.contract";
 import { RepositoryCatalogError } from "#server/domain/repository-catalog.contract";
 import { createRepositoryCatalog } from "#server/features/repository-catalog/repository-catalog";
 import { acquireEnvironmentContext } from "#server/persistence/environment-context";
@@ -33,6 +38,26 @@ afterEach(async () => {
 });
 
 describe("repository catalog", () => {
+  it("reports unavailable Git without remembering the path", async () => {
+    const root = await createTemporaryDirectory();
+    const unavailable: GitCommandRunner = {
+      run: () => Effect.fail(new GitCommandError({ reason: "GitUnavailable" })),
+    };
+    const result = await withCatalog(
+      root,
+      (catalog) =>
+        Effect.gen(function* () {
+          const error = yield* Effect.flip(catalog.remember(root));
+          return { error, repositories: yield* catalog.list() };
+        }),
+      unavailable,
+    );
+    expect(result.error).toMatchObject({
+      failure: { reason: "InspectionFailed" },
+    });
+    expect(result.repositories).toEqual([]);
+  });
+
   it("remembers one canonical worktree root and keeps its identity stable", async () => {
     const root = await createTemporaryDirectory();
     const repositoryPath = join(root, "projects", "rebase git");
@@ -188,6 +213,7 @@ function withCatalog<A, E>(
     catalog: ReturnType<typeof createRepositoryCatalog>,
     context: EnvironmentContext,
   ) => Effect.Effect<A, E>,
+  git: GitCommandRunner = createLocalGitCommandRunner(),
 ) {
   return Effect.runPromise(
     Effect.scoped(
@@ -195,7 +221,7 @@ function withCatalog<A, E>(
         const context = yield* acquireEnvironmentContext(
           environmentPaths(join(root, ".rebase")),
         );
-        return yield* use(createRepositoryCatalog(context), context);
+        return yield* use(createRepositoryCatalog(context, git), context);
       }),
     ),
   );

@@ -34,7 +34,10 @@ it("authorizes changes reads separately from index mutations across HTTP", async
             context,
             context.serverSecret,
           );
-          const catalog = createRepositoryCatalog(context);
+          const catalog = createRepositoryCatalog(
+            context,
+            createLocalGitCommandRunner(),
+          );
           const repository = yield* catalog.remember(directory);
           const listener = yield* acquireEnvironmentListener({
             authorization,

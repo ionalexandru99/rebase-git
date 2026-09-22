@@ -665,7 +665,10 @@ function withHistoryListener(
         const context = yield* acquireEnvironmentContext(
           environmentPaths(join(root, ".rebase")),
         );
-        const catalog = createRepositoryCatalog(context);
+        const catalog = createRepositoryCatalog(
+          context,
+          createLocalGitCommandRunner(),
+        );
         const history =
           historyOverride ??
           createRepositoryHistoryService({

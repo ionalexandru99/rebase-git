@@ -1,4 +1,3 @@
-import { execFile } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { realpath } from "node:fs";
 import { stat } from "node:fs/promises";
@@ -7,6 +6,7 @@ import { promisify } from "node:util";
 import type { RepositoryCatalogEntry } from "@rebase/contracts";
 import { asc, eq } from "drizzle-orm";
 import { Effect } from "effect";
+import type { GitCommandRunner } from "#server/domain/git-command.contract";
 import {
   type RepositoryCatalog,
   RepositoryCatalogError,
@@ -18,13 +18,14 @@ const realpathNative = promisify(realpath.native);
 
 export function createRepositoryCatalog(
   context: EnvironmentContext,
+  git: GitCommandRunner,
 ): RepositoryCatalog {
   return {
-    find: (repositoryId) => findRepository(context, repositoryId),
+    find: (repositoryId) => findRepository(context, git, repositoryId),
     list: () => listRepositories(context),
     recordOpened: (repositoryId) =>
       recordRepositoryOpened(context, repositoryId),
-    remember: (path) => rememberRepository(context, path),
+    remember: (path) => rememberRepository(context, git, path),
     remove: (repositoryId) => removeRepository(context, repositoryId),
   };
 }
@@ -43,7 +44,11 @@ function listRepositories(context: EnvironmentContext) {
     .pipe(Effect.map((repositories) => repositories.map(catalogEntry)));
 }
 
-function findRepository(context: EnvironmentContext, repositoryId: string) {
+function findRepository(
+  context: EnvironmentContext,
+  git: GitCommandRunner,
+  repositoryId: string,
+) {
   return context
     .read("Could not read repository", (database) =>
       database
@@ -56,7 +61,7 @@ function findRepository(context: EnvironmentContext, repositoryId: string) {
       Effect.flatMap((repository) =>
         repository === undefined
           ? Effect.succeed(undefined)
-          : ensureRepositoryIdentity(context, repository),
+          : ensureRepositoryIdentity(context, git, repository),
       ),
       Effect.map((repository) =>
         repository === undefined ? undefined : catalogEntry(repository),
@@ -66,6 +71,7 @@ function findRepository(context: EnvironmentContext, repositoryId: string) {
 
 function ensureRepositoryIdentity(
   context: EnvironmentContext,
+  git: GitCommandRunner,
   repository: typeof repositoryCatalogTable.$inferSelect,
 ) {
   if (
@@ -75,7 +81,7 @@ function ensureRepositoryIdentity(
     return Effect.succeed(repository);
   }
 
-  return resolveRepository(repository.path).pipe(
+  return resolveRepository(git, repository.path).pipe(
     Effect.flatMap((resolved) =>
       context.write(
         "Could not repair repository identity",
@@ -115,10 +121,11 @@ function ensureRepositoryIdentity(
 
 function rememberRepository(
   context: EnvironmentContext,
+  git: GitCommandRunner,
   requestedPath: string,
 ) {
   return Effect.gen(function* () {
-    const repository = yield* resolveRepository(requestedPath);
+    const repository = yield* resolveRepository(git, requestedPath);
     const openedAt = new Date().toISOString();
     return yield* context.write(
       "Could not remember repository",
@@ -205,7 +212,7 @@ function removeRepository(context: EnvironmentContext, repositoryId: string) {
     );
 }
 
-function resolveRepository(requestedPath: string) {
+function resolveRepository(git: GitCommandRunner, requestedPath: string) {
   if (
     requestedPath.length === 0 ||
     requestedPath.length > 4_096 ||
@@ -221,10 +228,10 @@ function resolveRepository(requestedPath: string) {
     if (!metadata.isDirectory()) {
       return yield* Effect.fail(repositoryPathRejected("NotDirectory"));
     }
-    const git = yield* resolveGitPaths(selectedPath);
+    const resolved = yield* resolveGitPaths(git, selectedPath);
     const [path, gitCommonDirectory] = yield* Effect.all([
-      canonicalizePath(git.worktreeRoot),
-      canonicalizePath(git.commonDirectory),
+      canonicalizePath(resolved.worktreeRoot),
+      canonicalizePath(resolved.commonDirectory),
     ]);
     return { gitCommonDirectory, path };
   });
@@ -246,52 +253,39 @@ function inspectPath(path: string) {
   });
 }
 
-function resolveGitPaths(path: string) {
-  return Effect.tryPromise({
-    try: (signal) =>
-      new Promise<{
-        readonly commonDirectory: string;
-        readonly worktreeRoot: string;
-      }>((resolve, reject) => {
-        execFile(
-          "git",
-          [
-            "-C",
-            path,
-            "rev-parse",
-            "--path-format=absolute",
-            "--show-toplevel",
-            "--git-common-dir",
-          ],
-          {
-            encoding: "utf8",
-            maxBuffer: 8_192,
-            signal,
-            timeout: 5_000,
-          },
-          (error, stdout) => {
-            if (error) {
-              reject(error);
-              return;
-            }
-            const [worktreeRoot, commonDirectory, ...extra] = stdout
-              .trim()
-              .split("\n");
-            if (
-              worktreeRoot === undefined ||
-              commonDirectory === undefined ||
-              extra.length > 0 ||
-              !isAbsolute(worktreeRoot) ||
-              !isAbsolute(commonDirectory)
-            ) {
-              reject(new Error("Git returned invalid repository paths."));
-              return;
-            }
-            resolve({ commonDirectory, worktreeRoot });
-          },
-        );
-      }),
-    catch: (cause) => repositoryPathRejected(gitRejectionReason(cause), cause),
+function resolveGitPaths(git: GitCommandRunner, path: string) {
+  return Effect.gen(function* () {
+    const result = yield* git
+      .run({
+        directory: path,
+        arguments: [
+          "rev-parse",
+          "--path-format=absolute",
+          "--show-toplevel",
+          "--git-common-dir",
+        ],
+        maxOutputBytes: 8_192,
+        timeoutMilliseconds: 5_000,
+      })
+      .pipe(
+        Effect.mapError((cause) =>
+          repositoryPathRejected("InspectionFailed", cause),
+        ),
+      );
+    const [worktreeRoot, commonDirectory, ...extra] = result.stdout
+      .trim()
+      .split("\n");
+    if (
+      result.exitCode !== 0 ||
+      worktreeRoot === undefined ||
+      commonDirectory === undefined ||
+      extra.length > 0 ||
+      !isAbsolute(worktreeRoot) ||
+      !isAbsolute(commonDirectory)
+    ) {
+      return yield* Effect.fail(repositoryPathRejected("NotRepository"));
+    }
+    return { commonDirectory, worktreeRoot };
   });
 }
 
@@ -299,28 +293,6 @@ function fileSystemRejectionReason(cause: unknown) {
   return fileSystemErrorCode(cause) === "ENOENT"
     ? ("NotFound" as const)
     : ("InspectionFailed" as const);
-}
-
-function gitRejectionReason(cause: unknown) {
-  const code = fileSystemErrorCode(cause);
-  return code === "ENOENT" ||
-    code === "ETIMEDOUT" ||
-    code === "ABORT_ERR" ||
-    code === "ERR_CHILD_PROCESS_STDIO_MAXBUFFER" ||
-    childProcessTimedOut(cause)
-    ? ("InspectionFailed" as const)
-    : ("NotRepository" as const);
-}
-
-function childProcessTimedOut(cause: unknown) {
-  return (
-    typeof cause === "object" &&
-    cause !== null &&
-    "killed" in cause &&
-    cause.killed === true &&
-    "code" in cause &&
-    cause.code === null
-  );
 }
 
 function fileSystemErrorCode(cause: unknown) {

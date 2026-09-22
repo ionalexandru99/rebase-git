@@ -260,7 +260,10 @@ function withRefsListener(use: (fixture: ListenerFixture) => Promise<void>) {
           context,
           context.serverSecret,
         );
-        const catalog = createRepositoryCatalog(context);
+        const catalog = createRepositoryCatalog(
+          context,
+          createLocalGitCommandRunner(),
+        );
         const events = createEnvironmentEventPublisher();
         const git = createLocalGitCommandRunner();
         const listener = yield* acquireEnvironmentListener({
