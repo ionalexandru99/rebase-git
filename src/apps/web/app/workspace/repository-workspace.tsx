@@ -4,6 +4,7 @@ import type {
 } from "@rebase/contracts";
 import type { JSX } from "react";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useHistoryRefRefresh } from "#web/app/workspace/use-history-ref-refresh";
 import type {
   CommitGraphHistory,
   HistoryScope,
@@ -18,13 +19,12 @@ import {
 } from "#web/features/commit-graph/index";
 import type { RepositoryRefsSnapshot } from "#web/features/repository-refs/repository-refs-controller.contract";
 import { useCachedRepositoryRefs } from "#web/features/repository-refs/use-cached-repository-refs";
-import { useHistoryRefRefresh } from "#web/app/workspace/use-history-ref-refresh";
+import { CommitInspectionBridge } from "#web-ui/app/workspace/commit-inspection-bridge";
 import {
   ResizableHandle,
   ResizablePanel,
 } from "#web-ui/components/ui/resizable";
 import { BranchesSidebar } from "#web-ui/features/branches-sidebar/branches-sidebar";
-import { CommitInspectionBridge } from "#web-ui/app/workspace/commit-inspection-bridge";
 import { WorkspacePanel } from "#web-ui/features/workspace-panel/index";
 
 const branchesSidebarSize = {
