@@ -9,6 +9,50 @@ import {
 } from "#web/features/repository-catalog/repository-catalog-controller.contract";
 
 describe("repository catalog controller", () => {
+  it("cancels an owner's read and queued mutations without publishing a late response", async () => {
+    const started = Promise.withResolvers<AbortSignal>();
+    const response = Promise.withResolvers<readonly RepositoryCatalogEntry[]>();
+    const gateway = createGateway({ remembered: repository("alpha") });
+    gateway.list.mockReturnValueOnce(
+      Effect.tryPromise({
+        try: (signal) => {
+          started.resolve(signal);
+          return response.promise;
+        },
+        catch: () => new RepositoryCatalogResponseError(),
+      }),
+    );
+    const catalog = createRepositoryCatalogController(gateway);
+    catalog.authorize({ type: "bearer", value: "private-credential" });
+    const listener = vi.fn();
+    catalog.controller.subscribe(listener);
+    const read = catalog.controller.refresh().catch((error: unknown) => error);
+    const signal = await started.promise;
+    const queued = catalog.controller
+      .remember("/code/alpha")
+      .catch((error: unknown) => error);
+
+    await catalog.stop();
+    expect(signal.aborted).toBe(true);
+    expect(await read).toBeInstanceOf(Error);
+    expect(await queued).toBeInstanceOf(Error);
+    expect(gateway.remember).not.toHaveBeenCalled();
+    const stoppedSnapshot = catalog.controller.getSnapshot();
+    listener.mockClear();
+    response.resolve([repository("alpha")]);
+    await response.promise;
+    expect(catalog.controller.getSnapshot()).toBe(stoppedSnapshot);
+    expect(listener).not.toHaveBeenCalled();
+
+    catalog.authorize({ type: "bearer", value: "new-credential" });
+    await catalog.controller.refresh();
+    expect(catalog.controller.getSnapshot()).toEqual({
+      repositories: [],
+      status: "ready",
+    });
+    await catalog.stop();
+  });
+
   it("keeps a stable snapshot and refreshes with its private credential", async () => {
     const repositories = [repository("bravo"), repository("alpha")];
     const gateway = createGateway({ list: repositories });

@@ -46,7 +46,13 @@ export function createLocalEnvironmentSession(
     if (credential === undefined) {
       credential = yield* authorizeSession(options, publish);
     }
-    repositoryCatalogSession.authorize(credential);
+    const authorizedCredential = credential;
+    yield* Effect.acquireRelease(
+      Effect.sync(() =>
+        repositoryCatalogSession.authorize(authorizedCredential),
+      ),
+      () => Effect.promise(repositoryCatalogSession.stop),
+    );
     filesystemSession.authorize(credential);
     repositoryRefsSession.authorize(credential);
     yield* maintainConnection(
@@ -66,7 +72,7 @@ export function createLocalEnvironmentSession(
 
     running = true;
     fiber = Effect.runFork(
-      runSession.pipe(
+      Effect.scoped(runSession).pipe(
         Effect.ensuring(
           Effect.sync(() => {
             running = false;

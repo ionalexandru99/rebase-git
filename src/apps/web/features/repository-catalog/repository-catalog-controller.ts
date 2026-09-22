@@ -1,6 +1,6 @@
 import type { RepositoryCatalogEntry } from "@rebase/contracts";
 import type { EnvironmentCredential } from "@rebase/environment-client";
-import { Effect } from "effect";
+import { Cause, Effect, Layer, ManagedRuntime, Semaphore } from "effect";
 import {
   RepositoryCatalogRejected,
   RepositoryCatalogResponseError,
@@ -22,20 +22,12 @@ export function createRepositoryCatalogController(
     repositories: [],
     status: "idle",
   };
-  let operationQueue = Promise.resolve();
+  let runtime: ManagedRuntime.ManagedRuntime<never, never> | undefined;
+  const operations = Semaphore.makeUnsafe(1);
 
   const publish = (next: RepositoryCatalogControllerSnapshot) => {
     snapshot = next;
     for (const listener of listeners) listener();
-  };
-
-  const enqueue = <Value>(operation: () => Promise<Value>) => {
-    const result = operationQueue.then(operation, operation);
-    operationQueue = result.then(
-      () => undefined,
-      () => undefined,
-    );
-    return result;
   };
 
   const run = <Value>(
@@ -46,33 +38,49 @@ export function createRepositoryCatalogController(
       repositories: readonly RepositoryCatalogEntry[],
       value: Value,
     ) => readonly RepositoryCatalogEntry[],
-  ) =>
-    enqueue(async () => {
-      const authorizedCredential = credential;
-      if (authorizedCredential === undefined) {
-        const error = new RepositoryCatalogUnavailable();
-        publish({ ...snapshot, error, status: "error" });
-        throw error;
-      }
-
-      publish({ repositories: snapshot.repositories, status: "loading" });
-      try {
-        const value = await Effect.runPromise(operation(authorizedCredential));
-        publish({
-          repositories: sortRepositories(update(snapshot.repositories, value)),
-          status: "ready",
-        });
-        return value;
-      } catch (error) {
-        const catalogError = normalizeControllerError(error);
-        publish({
-          error: catalogError,
-          repositories: snapshot.repositories,
-          status: "error",
-        });
-        throw catalogError;
-      }
-    });
+  ): Promise<Value> => {
+    const owner = runtime;
+    const authorizedCredential = credential;
+    if (owner === undefined || authorizedCredential === undefined) {
+      const error = new RepositoryCatalogUnavailable();
+      publish({ ...snapshot, error, status: "error" });
+      return Promise.reject(error);
+    }
+    return owner.runPromise(
+      operations.withPermit(
+        Effect.gen(function* () {
+          if (runtime !== owner) {
+            return yield* Effect.interrupt;
+          }
+          publish({ repositories: snapshot.repositories, status: "loading" });
+          const value = yield* operation(authorizedCredential);
+          if (runtime !== owner) {
+            return yield* Effect.interrupt;
+          }
+          publish({
+            repositories: sortRepositories(
+              update(snapshot.repositories, value),
+            ),
+            status: "ready",
+          });
+          return value;
+        }).pipe(
+          Effect.catchCause((cause) => {
+            if (Cause.hasInterrupts(cause) || runtime !== owner) {
+              return Effect.failCause(cause);
+            }
+            const error = normalizeControllerError(Cause.squash(cause));
+            publish({
+              error,
+              repositories: snapshot.repositories,
+              status: "error",
+            });
+            return Effect.fail(error);
+          }),
+        ),
+      ),
+    );
+  };
 
   const controller: RepositoryCatalogController = {
     getSnapshot: () => snapshot,
@@ -108,6 +116,13 @@ export function createRepositoryCatalogController(
   return {
     authorize: (nextCredential: EnvironmentCredential) => {
       credential = nextCredential;
+      runtime ??= ManagedRuntime.make(Layer.empty);
+    },
+    stop: () => {
+      const owner = runtime;
+      runtime = undefined;
+      credential = undefined;
+      return owner?.dispose() ?? Promise.resolve();
     },
     controller,
   };

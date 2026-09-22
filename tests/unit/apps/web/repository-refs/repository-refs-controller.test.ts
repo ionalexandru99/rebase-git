@@ -13,6 +13,34 @@ const alphaId = "00000000-0000-4000-8000-000000000001";
 const bravoId = "00000000-0000-4000-8000-000000000002";
 
 describe("repository refs controller", () => {
+  it("does not overwrite a completed checkout with a read started before the mutation", async () => {
+    const gateway = createGateway({ [alphaId]: refs(alphaId) });
+    const session = createRepositoryRefsController(gateway);
+    session.authorize({ type: "bearer", value: "private-credential" });
+    session.controller.select(alphaId);
+    await whenReady(session.controller);
+    const beforeCheckout = Deferred.makeUnsafe<RepositoryRefs>();
+    const afterCheckout = Deferred.makeUnsafe<RepositoryRefs>();
+    gateway.read.mockReturnValueOnce(Deferred.await(beforeCheckout));
+    gateway.read.mockReturnValueOnce(Deferred.await(afterCheckout));
+    const refresh = session.controller.refresh();
+    await session.controller.checkout("/repo", {
+      _tag: "LocalBranch",
+      name: "feature",
+    });
+    const checkedOutRefs = session.controller.getSnapshot().refs;
+    expect(checkedOutRefs?.worktrees[0]?.head.branch).toBe("feature");
+
+    Deferred.doneUnsafe(beforeCheckout, Effect.succeed(refs(alphaId)));
+    await refresh;
+    expect(session.controller.getSnapshot().refs).toEqual(checkedOutRefs);
+    expect(gateway.read).toHaveBeenCalledTimes(3);
+    Deferred.doneUnsafe(
+      afterCheckout,
+      Effect.succeed(checkedOutRefs ?? refs(alphaId)),
+    );
+  });
+
   it("retries stale cached refs after a failed refresh when the repository is selected again", async () => {
     const gateway = createGateway({
       [alphaId]: refs(alphaId),
