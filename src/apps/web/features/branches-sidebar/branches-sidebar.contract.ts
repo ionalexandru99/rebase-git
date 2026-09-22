@@ -57,8 +57,3 @@ export type BranchesSidebarRow =
   | BranchesSidebarRefRow
   | BranchesSidebarFolderRow
   | BranchesSidebarSectionRow;
-
-export type RefSelection =
-  | { readonly _tag: "AlreadyCurrent" }
-  | { readonly _tag: "Checkout"; readonly target: RepositoryRefTarget }
-  | { readonly _tag: "SwitchWorktree"; readonly worktreePath: string };

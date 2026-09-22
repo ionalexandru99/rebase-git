@@ -2,7 +2,7 @@ import { useCallback, useSyncExternalStore } from "react";
 import {
   readRepositoryHistoryOrder,
   subscribeRepositoryHistoryOrder,
-} from "#web/features/repository-settings/preferences/repository-history-order";
+} from "#web/features/repository-history/preferences/repository-history-order";
 
 export function useRepositoryHistoryOrder(
   environmentId: string | undefined,

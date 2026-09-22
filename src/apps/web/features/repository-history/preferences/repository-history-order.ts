@@ -1,16 +1,16 @@
 import type {
+  RepositoryHistoryIdentity,
   RepositoryHistoryOrder,
-  RepositorySettingsIdentity,
-} from "#web/features/repository-settings/repository-settings.contract";
+} from "#web/features/repository-history/preferences/repository-history-preferences.contract";
 
 const listeners = new Map<string, Set<() => void>>();
 
-function storageKey(identity: RepositorySettingsIdentity) {
+function storageKey(identity: RepositoryHistoryIdentity) {
   return `rebase:history-order:v1:${JSON.stringify([identity.environmentId, identity.repositoryId])}`;
 }
 
 export function readRepositoryHistoryOrder(
-  identity: RepositorySettingsIdentity,
+  identity: RepositoryHistoryIdentity,
 ): RepositoryHistoryOrder {
   try {
     return localStorage.getItem(storageKey(identity)) === "chronological"
@@ -22,7 +22,7 @@ export function readRepositoryHistoryOrder(
 }
 
 export function saveRepositoryHistoryOrder(
-  identity: RepositorySettingsIdentity,
+  identity: RepositoryHistoryIdentity,
   order: RepositoryHistoryOrder,
 ) {
   const key = storageKey(identity);
@@ -31,7 +31,7 @@ export function saveRepositoryHistoryOrder(
 }
 
 export function subscribeRepositoryHistoryOrder(
-  identity: RepositorySettingsIdentity,
+  identity: RepositoryHistoryIdentity,
   notify: () => void,
 ) {
   const key = storageKey(identity);

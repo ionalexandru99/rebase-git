@@ -1,6 +1,10 @@
-import type { RepositoryHistoryQuery } from "#web/features/repository-history/repository-history-reader.contract";
+import type {
+  RepositoryHistoryCacheReader,
+  RepositoryHistoryFetchCommands,
+} from "#web/features/repository-history/index";
 
-export type RepositoryHistoryOrder = RepositoryHistoryQuery["order"];
+export type RepositoryHistorySettingsClient = RepositoryHistoryCacheReader &
+  Pick<RepositoryHistoryFetchCommands, "configureFetch">;
 
 export interface RepositorySettingsIdentity {
   readonly environmentId: string;

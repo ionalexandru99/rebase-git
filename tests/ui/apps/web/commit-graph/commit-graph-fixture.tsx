@@ -3,12 +3,12 @@ import type { ComponentProps } from "react";
 import { vi } from "vitest";
 import { render } from "vitest-browser-react";
 import { CommitGraph } from "#web/features/commit-graph/index";
+import { saveRepositoryHistoryOrder } from "#web/features/repository-history/preferences/repository-history-order";
 import type {
   RepositoryHistoryQuery,
   RepositoryHistoryReader,
   RepositoryHistorySnapshot,
 } from "#web/features/repository-history/repository-history-reader.contract";
-import { saveRepositoryHistoryOrder } from "#web/features/repository-settings/preferences/repository-history-order";
 
 export async function renderGraph(
   reader: ReturnType<typeof historyReader>,

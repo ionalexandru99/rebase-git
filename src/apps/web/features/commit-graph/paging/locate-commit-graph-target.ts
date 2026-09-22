@@ -1,7 +1,9 @@
 import type { CommitGraphPageReader } from "#web/features/commit-graph/paging/commit-graph-page-window.contract";
 import { findContainingHistoryRef } from "#web/features/commit-graph/paging/find-containing-history-ref";
-import type { HistoryParentEdge } from "#web/features/repository-history/query/history-order.contract";
-import type { RepositoryHistoryQuery } from "#web/features/repository-history/repository-history-reader.contract";
+import type {
+  HistoryParentEdge,
+  RepositoryHistoryQuery,
+} from "#web/features/repository-history/index";
 
 export async function locateCommitGraphTarget(
   reader: CommitGraphPageReader,

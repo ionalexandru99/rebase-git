@@ -14,8 +14,8 @@ import {
 } from "#web/features/commit-graph/selection/commit-selection";
 import type {
   RepositoryHistoryQuery,
-  RepositoryHistoryReader,
-} from "#web/features/repository-history/repository-history-reader.contract";
+  RepositoryHistoryReadModel,
+} from "#web/features/repository-history/index";
 
 export function usePagedGraphSelection({
   reader,
@@ -26,7 +26,7 @@ export function usePagedGraphSelection({
   viewEpoch,
 }: {
   readonly reader:
-    | Pick<RepositoryHistoryReader, "read" | "locateMany">
+    | Pick<RepositoryHistoryReadModel, "read" | "locateMany">
     | undefined;
   readonly query: RepositoryHistoryQuery | undefined;
   readonly oids: readonly string[];

@@ -21,9 +21,11 @@ import {
   AuthorAvatars,
   type GitHubRepository,
 } from "#web/features/author-avatars/index";
-import type { GraphCommandEnvironment } from "#web/features/commit-commands/graph-command.contract";
+import type { GraphCommandEnvironment } from "#web/features/commit-commands/index";
+import { CommitCommandMenu } from "#web/features/commit-commands/index";
 import type {
   CommitGraphHandle,
+  CommitGraphHistory,
   CommitGraphViewportAnchor,
 } from "#web/features/commit-graph/commit-graph.contract";
 import type { CommitGraphSelectionMode } from "#web/features/commit-graph/commit-selection.contract";
@@ -41,14 +43,14 @@ import {
 } from "#web/features/commit-graph/layout/graph-geometry";
 import { graphMetadataColumns } from "#web/features/commit-graph/layout/graph-metrics";
 import { graphRefLabels } from "#web/features/commit-graph/layout/graph-ref-labels";
-import { useRepositoryHistoryFetch } from "#web/features/repository-history/freshness/hooks/use-repository-history-fetch";
-import type {
-  RepositoryHistoryQuery,
-  RepositoryHistoryReader,
-} from "#web/features/repository-history/repository-history-reader.contract";
-import { useRepositoryHistoryOrder } from "#web/features/repository-settings/index";
+import type { RepositoryHistoryQuery } from "#web/features/repository-history/index";
+import {
+  RepositoryHistoryFreshnessStatus,
+  RepositoryHistorySearchControls,
+  useRepositoryHistoryFetch,
+  useRepositoryHistoryOrder,
+} from "#web/features/repository-history/index";
 import { Button } from "#web-ui/components/ui/button";
-import { CommitCommandMenu } from "#web-ui/features/commit-commands/commit-command-menu";
 import { CommitGraphCanvas } from "#web-ui/features/commit-graph/components/commit-graph-canvas";
 import { CommitGraphCommitCells } from "#web-ui/features/commit-graph/components/commit-graph-commit-cells";
 import { CommitGraphMergeControl } from "#web-ui/features/commit-graph/components/commit-graph-merge-controls";
@@ -62,8 +64,6 @@ import { CommitGraphVirtualWindow } from "#web-ui/features/commit-graph/componen
 import { historyLabelTarget } from "#web-ui/features/commit-graph/components/commit-ref-labels";
 import { GraphRefAppearance } from "#web-ui/features/commit-graph/components/graph-ref-appearance";
 import { HistoryScopeStrip } from "#web-ui/features/commit-graph/components/history-scope-strip";
-import { RepositoryHistoryFreshnessStatus } from "#web-ui/features/repository-history/freshness/components/repository-history-freshness-status";
-import { RepositoryHistorySearchControls } from "#web-ui/features/repository-history/search/components/repository-history-search-controls";
 
 const emptyRefLabels: readonly RepositoryHistoryRefTarget[] = [];
 
@@ -96,7 +96,7 @@ export function CommitGraph({
   readonly onResetHistoryScope?: (() => void) | undefined;
   readonly onRemoveHistoryRef?: (target: RepositoryRefTarget) => void;
   readonly onRevealHistoryRef?: (target: RepositoryRefTarget) => void;
-  readonly reader: RepositoryHistoryReader | undefined;
+  readonly reader: CommitGraphHistory | undefined;
   readonly repositoryName: string;
   readonly roots: RepositoryHistoryQuery["roots"] | undefined;
   readonly scope?: HistoryScope;

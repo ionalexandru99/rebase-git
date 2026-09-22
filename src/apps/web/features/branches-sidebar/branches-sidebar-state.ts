@@ -1,8 +1,4 @@
-import type {
-  RemoteBranch,
-  RepositoryRefs,
-  RepositoryRefTarget,
-} from "@rebase/contracts";
+import type { RemoteBranch, RepositoryRefs } from "@rebase/contracts";
 import {
   type BranchesSidebarRefRow,
   type BranchesSidebarRow,
@@ -10,10 +6,10 @@ import {
   type BranchesSidebarSectionRow,
   type BranchesSidebarTreeOptions,
   localBranchesSectionId,
-  type RefSelection,
   tagsSectionId,
 } from "#web/features/branches-sidebar/branches-sidebar.contract";
 import { buildBranchTree } from "#web/features/branches-sidebar/tree/branch-tree";
+import { activeHead } from "#web/features/repository-refs/index";
 
 export const defaultExpandedSections: ReadonlySet<string> = new Set([
   localBranchesSectionId,
@@ -146,59 +142,6 @@ export function buildBranchesSidebarRows(
 
 function sectionMatchesScope(scope: BranchesSidebarScope) {
   return (section: SectionDraft) => scope === "all" || section.scope === scope;
-}
-
-export function resolveRefSelection(
-  refs: RepositoryRefs,
-  activeWorktreePath: string,
-  target: RepositoryRefTarget,
-): RefSelection {
-  if (target._tag === "RemoteBranch") {
-    return refs.branches.some(
-      (branch) =>
-        branch.name === target.name &&
-        (branch.upstream === undefined ||
-          branch.upstream.name === `${target.remote}/${target.name}`),
-    )
-      ? resolveRefSelection(refs, activeWorktreePath, {
-          _tag: "LocalBranch",
-          name: target.name,
-        })
-      : { _tag: "Checkout", target };
-  }
-  if (target._tag === "Tag") return { _tag: "Checkout", target };
-
-  const branch = refs.branches.find(
-    (candidate) => candidate.name === target.name,
-  );
-  if (
-    branch?.worktreePath !== undefined &&
-    branch.worktreePath !== activeWorktreePath
-  ) {
-    return { _tag: "SwitchWorktree", worktreePath: branch.worktreePath };
-  }
-  return activeHead(refs, activeWorktreePath)?.branch === target.name
-    ? { _tag: "AlreadyCurrent" }
-    : { _tag: "Checkout", target };
-}
-
-export function activeHead(refs: RepositoryRefs, activeWorktreePath: string) {
-  return refs.worktrees.find((worktree) => worktree.path === activeWorktreePath)
-    ?.head;
-}
-
-export function resolveActiveWorktreePath(
-  refs: RepositoryRefs,
-  preferredPath: string,
-): string {
-  if (refs.worktrees.some((worktree) => worktree.path === preferredPath)) {
-    return preferredPath;
-  }
-  return (
-    refs.worktrees.find((worktree) => worktree.main)?.path ??
-    refs.worktrees[0]?.path ??
-    preferredPath
-  );
 }
 
 export function toggleSection(

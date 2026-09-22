@@ -1,3 +1,10 @@
+export {
+  activeHead,
+  resolveActiveWorktreePath,
+  resolveRefActivation,
+} from "#web/features/repository-refs/activate-repository-ref";
+export { clearCachedRepositoryRefs } from "#web/features/repository-refs/browser-repository-refs-cache";
+export type { RepositoryRefActivation } from "#web/features/repository-refs/repository-ref-activation.contract";
 export { checkoutRepositoryRefEffect } from "#web/features/repository-refs/repository-refs-client";
 export {
   type RepositoryRefsClientError,

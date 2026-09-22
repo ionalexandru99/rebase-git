@@ -1,11 +1,11 @@
-import type { RepositoryHistoryReader } from "#web/features/repository-history/repository-history-reader.contract";
+import type { RepositoryHistoryObservation } from "#web/features/repository-history/repository-history-reader.contract";
 import type {
   RepositoryHistoryCacheAction,
   RepositoryHistoryCacheManagement,
 } from "#web/features/repository-history/repository-history-storage.contract";
 
 export type RepositoryHistoryCacheReader = RepositoryHistoryCacheManagement &
-  Pick<RepositoryHistoryReader, "getSnapshot" | "subscribe">;
+  RepositoryHistoryObservation;
 
 export interface RepositoryHistoryCacheIdentity {
   readonly environmentId: string;

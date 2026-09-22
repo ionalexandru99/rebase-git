@@ -6,11 +6,11 @@ import type {
 } from "#web/features/commit-graph/layout/commit-lanes";
 import type {
   RepositoryHistoryQuery,
-  RepositoryHistoryReader,
-} from "#web/features/repository-history/repository-history-reader.contract";
+  RepositoryHistoryReadModel,
+} from "#web/features/repository-history/index";
 
 export type CommitGraphPageReader = Pick<
-  RepositoryHistoryReader,
+  RepositoryHistoryReadModel,
   "read" | "locate" | "locateMany" | "ancestryRoute" | "getRefTargets"
 >;
 

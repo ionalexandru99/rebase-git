@@ -1,10 +1,14 @@
 import { useEffect, useMemo, useRef, useSyncExternalStore } from "react";
 import type { OpenProjectRepository } from "#web/features/open-project/open-project.contract";
-import { describeRepositoryFetchError } from "#web/features/repository-history/freshness/repository-fetch-error";
-import type { RepositoryHistoryReader } from "#web/features/repository-history/repository-history-reader.contract";
-import { clearCachedRepositoryRefs } from "#web/features/repository-refs/browser-repository-refs-cache";
-import type { RepositorySettingsIdentity } from "#web/features/repository-settings/repository-settings.contract";
-import { RepositoryFetchSettings } from "#web-ui/features/repository-history/freshness/components/repository-fetch-settings";
+import {
+  describeRepositoryFetchError,
+  RepositoryFetchSettings,
+} from "#web/features/repository-history/index";
+import { clearCachedRepositoryRefs } from "#web/features/repository-refs/index";
+import type {
+  RepositoryHistorySettingsClient,
+  RepositorySettingsIdentity,
+} from "#web/features/repository-settings/repository-settings.contract";
 import { RepositoryCacheSettings } from "#web-ui/features/repository-settings/components/repository-cache-settings";
 import { RepositoryDetailsSettings } from "#web-ui/features/repository-settings/components/repository-details-settings";
 import { RepositoryOrderSettings } from "#web-ui/features/repository-settings/components/repository-order-settings";
@@ -27,7 +31,7 @@ export function RepositorySettingsPage({
   readonly environmentId: string | undefined;
   readonly logicalRepositoryId: string;
   readonly environmentName: string;
-  readonly reader: RepositoryHistoryReader | undefined;
+  readonly reader: RepositoryHistorySettingsClient | undefined;
   readonly connected: boolean;
   readonly canConfigure: boolean;
   readonly canRemove: boolean;
@@ -113,7 +117,7 @@ function RepositoryHistorySettings({
   connected,
   canConfigure,
 }: {
-  readonly reader: RepositoryHistoryReader;
+  readonly reader: RepositoryHistorySettingsClient;
   readonly identity: RepositorySettingsIdentity;
   readonly connected: boolean;
   readonly canConfigure: boolean;

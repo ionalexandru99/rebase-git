@@ -53,9 +53,7 @@ export interface RepositoryHistoryPosition {
   readonly index: number;
 }
 
-export interface RepositoryHistoryReader
-  extends RepositoryHistoryCacheManagement,
-    RepositoryHistorySearch {
+export interface RepositoryHistoryQueries extends RepositoryHistorySearch {
   readonly locateMany: (
     query: RepositoryHistoryQuery,
     oids: readonly string[],
@@ -68,21 +66,40 @@ export interface RepositoryHistoryReader
     query: RepositoryHistoryQuery,
     oid: string,
   ) => Promise<number | undefined>;
-  readonly fetch: () => Promise<RepositoryFreshness>;
-  readonly configureFetch: (
-    setting: RepositoryFetchSetting,
-  ) => Promise<RepositoryFreshness>;
-  readonly close: () => void;
   readonly getCommitSummaries: (
     oids: readonly string[],
   ) => Promise<readonly RepositoryCommit[]>;
-  readonly getSnapshot: () => RepositoryHistorySnapshot;
   readonly getRefTargets: () => Promise<readonly RepositoryHistoryRefTarget[]>;
   readonly read: (
     query: RepositoryHistoryQuery,
   ) => Promise<readonly RepositoryCommit[]>;
+}
+
+export interface RepositoryHistoryObservation {
+  readonly getSnapshot: () => RepositoryHistorySnapshot;
   readonly subscribe: (listener: () => void) => () => void;
 }
+
+export interface RepositoryHistoryReadModel
+  extends RepositoryHistoryQueries,
+    RepositoryHistoryObservation {}
+
+export interface RepositoryHistoryFetchCommands {
+  readonly fetch: () => Promise<RepositoryFreshness>;
+  readonly configureFetch: (
+    setting: RepositoryFetchSetting,
+  ) => Promise<RepositoryFreshness>;
+}
+
+export interface RepositoryHistoryLifetime {
+  readonly close: () => void;
+}
+
+export interface RepositoryHistoryReader
+  extends RepositoryHistoryReadModel,
+    RepositoryHistoryFetchCommands,
+    RepositoryHistoryCacheManagement,
+    RepositoryHistoryLifetime {}
 
 export class RepositoryHistoryRejected extends Data.TaggedError(
   "RepositoryHistoryRejected",

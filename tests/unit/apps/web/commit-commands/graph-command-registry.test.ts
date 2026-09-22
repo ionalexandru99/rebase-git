@@ -1,6 +1,10 @@
 import type { RepositoryCommit } from "@rebase/contracts";
 import { describe, expect, it, vi } from "vite-plus/test";
-import type { GraphCommandContext } from "#web/features/commit-commands/graph-command.contract";
+import type {
+  GraphCommandContext,
+  GraphCommandHandlers,
+} from "#web/features/commit-commands/graph-command.contract";
+import { createGraphCommandDefinitions } from "#web/features/commit-commands/graph-command-definitions";
 import { createGraphCommandRegistry } from "#web/features/commit-commands/graph-command-registry";
 
 const context: GraphCommandContext = {
@@ -35,10 +39,59 @@ const commit: RepositoryCommit = {
 };
 
 describe("graph commands", () => {
+  it("renders a contributed command in its declared placement and rechecks it before execution", async () => {
+    const execute = vi.fn(async () => ({ _tag: "Executed" as const }));
+    const registry = createGraphCommandRegistry([
+      {
+        id: "commit.inspect",
+        group: "Commit",
+        order: 0,
+        placement: "commit-menu",
+        resolve: (target) => ({
+          label: "Inspect commit",
+          enabled: target.connected,
+          execute,
+        }),
+      },
+    ]);
+
+    expect(registry.commands(context, "toolbar")).toEqual([]);
+    expect(registry.commands(context, "commit-menu")).toMatchObject([
+      { id: "commit.inspect", label: "Inspect commit", enabled: true },
+    ]);
+    expect(
+      await registry.execute("commit.inspect", {
+        ...context,
+        connected: false,
+      }),
+    ).toMatchObject({ _tag: "Unavailable" });
+    expect(execute).not.toHaveBeenCalled();
+    expect(await registry.execute("commit.inspect", context)).toEqual({
+      _tag: "Executed",
+    });
+    expect(execute).toHaveBeenCalledOnce();
+  });
+
+  it("keeps commit actions out of the fetch toolbar and preserves their display order", () => {
+    const registry = createCommands({
+      readCommit: async () => commit,
+      writeClipboard: async () => {},
+      openDetails: () => {},
+      fetch: async () => {},
+    });
+
+    expect(
+      registry.commands(context, "commit-menu").map(({ id }) => id),
+    ).toEqual(["graph.openDetails", "graph.copySha", "graph.copySubject"]);
+    expect(registry.commands(context, "toolbar").map(({ id }) => id)).toEqual([
+      "graph.fetch",
+    ]);
+  });
+
   it("copies the invoking commit even when other commits are selected", async () => {
     const readCommit = vi.fn(async () => commit);
     const writeClipboard = vi.fn(async () => {});
-    const registry = createGraphCommandRegistry({ readCommit, writeClipboard });
+    const registry = createCommands({ readCommit, writeClipboard });
     expect(await registry.execute("graph.copySha", context)).toEqual({
       _tag: "Executed",
     });
@@ -50,7 +103,7 @@ describe("graph commands", () => {
   });
 
   it("hides unsupported and irrelevant actions", async () => {
-    const registry = createGraphCommandRegistry({
+    const registry = createCommands({
       readCommit: async () => undefined,
       writeClipboard: async () => {},
     });
@@ -75,7 +128,7 @@ describe("graph commands", () => {
     "disables fetch and rechecks execution for %o",
     async (override, reason) => {
       const execute = vi.fn(async () => {});
-      const registry = createGraphCommandRegistry({
+      const registry = createCommands({
         readCommit: async () => undefined,
         writeClipboard: async () => {},
         fetch: execute,
@@ -101,7 +154,7 @@ describe("graph commands", () => {
 
   it("routes ref inclusion through the supplied history handler", async () => {
     const toggleHistoryRef = vi.fn(async () => {});
-    const registry = createGraphCommandRegistry({
+    const registry = createCommands({
       readCommit: async () => undefined,
       writeClipboard: async () => {},
       toggleHistoryRef,
@@ -122,3 +175,7 @@ describe("graph commands", () => {
     expect(toggleHistoryRef).toHaveBeenCalledWith(target, included);
   });
 });
+
+function createCommands(handlers: GraphCommandHandlers) {
+  return createGraphCommandRegistry(createGraphCommandDefinitions(handlers));
+}

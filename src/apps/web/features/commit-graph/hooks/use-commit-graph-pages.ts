@@ -14,8 +14,8 @@ import {
 import type { CommitGraphPageWindow } from "#web/features/commit-graph/paging/commit-graph-page-window.contract";
 import type {
   RepositoryHistoryQuery,
-  RepositoryHistoryReader,
-} from "#web/features/repository-history/repository-history-reader.contract";
+  RepositoryHistoryReadModel,
+} from "#web/features/repository-history/index";
 
 const emptyHistorySnapshot = {
   revision: 0,
@@ -25,18 +25,18 @@ const emptyHistorySnapshot = {
 const noSubscription = () => () => undefined;
 
 export function useCommitGraphPages(
-  reader: RepositoryHistoryReader | undefined,
+  reader: RepositoryHistoryReadModel | undefined,
   roots: RepositoryHistoryQuery["roots"] | undefined,
   order: RepositoryHistoryQuery["order"],
   expanded: ReadonlyMap<string, readonly string[]>,
   captureAnchor: () => CommitGraphViewportAnchor | undefined,
 ) {
   const [owner, setOwner] = useState<{
-    reader: RepositoryHistoryReader;
+    reader: RepositoryHistoryReadModel;
     engine: CommitGraphPageWindow;
   }>();
   const [refOwner, setRefOwner] = useState<{
-    reader: RepositoryHistoryReader;
+    reader: RepositoryHistoryReadModel;
     refs: readonly RepositoryHistoryRefTarget[];
   }>();
   const [completion, setCompletion] = useState(0);

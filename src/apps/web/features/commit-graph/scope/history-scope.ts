@@ -12,7 +12,7 @@ import {
 import {
   resolveAutomaticHistoryRoots,
   resolveAutomaticHistorySelections,
-} from "#web/features/repository-history/replica/automatic-history-roots";
+} from "#web/features/repository-history/index";
 
 export type {
   HistoryScope,

@@ -1,21 +1,23 @@
 import { useCallback, useRef, useState } from "react";
 import { describeRepositoryFetchError } from "#web/features/repository-history/freshness/repository-fetch-error";
 import type {
-  RepositoryHistoryReader,
+  RepositoryHistoryFetchCommands,
   RepositoryHistorySnapshot,
 } from "#web/features/repository-history/repository-history-reader.contract";
 
 interface FetchAttempt {
-  readonly reader: Pick<RepositoryHistoryReader, "fetch">;
+  readonly reader: Pick<RepositoryHistoryFetchCommands, "fetch">;
   readonly pending: boolean;
   readonly error?: string;
 }
 
 export function useRepositoryHistoryFetch(
-  reader: Pick<RepositoryHistoryReader, "fetch"> | undefined,
+  reader: Pick<RepositoryHistoryFetchCommands, "fetch"> | undefined,
   snapshot: RepositoryHistorySnapshot,
 ) {
-  const pending = useRef(new Set<Pick<RepositoryHistoryReader, "fetch">>());
+  const pending = useRef(
+    new Set<Pick<RepositoryHistoryFetchCommands, "fetch">>(),
+  );
   const [attempt, setAttempt] = useState<FetchAttempt>();
   const execute = useCallback(() => {
     if (

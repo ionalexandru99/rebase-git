@@ -13,8 +13,8 @@ import type {
 import { graphRowHeight as rowHeight } from "#web/features/commit-graph/layout/graph-metrics";
 import type {
   RepositoryHistoryQuery,
-  RepositoryHistoryReader,
-} from "#web/features/repository-history/repository-history-reader.contract";
+  RepositoryHistoryReadModel,
+} from "#web/features/repository-history/index";
 
 export function useCommitGraphViewport({
   reader,
@@ -24,7 +24,7 @@ export function useCommitGraphViewport({
   startOffset,
   loading,
 }: {
-  readonly reader: RepositoryHistoryReader | undefined;
+  readonly reader: RepositoryHistoryReadModel | undefined;
   readonly order: RepositoryHistoryQuery["order"];
   readonly selectedOidRef: RefObject<string | undefined>;
   readonly commits: readonly RepositoryCommit[];

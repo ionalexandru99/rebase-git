@@ -3,11 +3,11 @@ import type {
   RepositoryRefTarget,
 } from "@rebase/contracts";
 import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
+import type { LocalEnvironmentSession } from "#web/features/local-environment-session/local-environment-session.contract";
 import {
   resolveActiveWorktreePath,
-  resolveRefSelection,
-} from "#web/features/branches-sidebar/branches-sidebar-state";
-import type { LocalEnvironmentSession } from "#web/features/local-environment-session/local-environment-session.contract";
+  resolveRefActivation,
+} from "#web/features/repository-refs/index";
 
 export function useRepositoryRefsActions({
   repositories,
@@ -55,7 +55,7 @@ export function useRepositoryRefsActions({
       ) {
         return;
       }
-      const selection = resolveRefSelection(
+      const selection = resolveRefActivation(
         selectedRefs,
         activeWorktreePath,
         target,

@@ -1,4 +1,7 @@
-export type { CommitGraphHandle } from "#web/features/commit-graph/commit-graph.contract";
+export type {
+  CommitGraphHandle,
+  CommitGraphHistory,
+} from "#web/features/commit-graph/commit-graph.contract";
 export {
   automaticHistoryScope,
   type HistoryScope,
