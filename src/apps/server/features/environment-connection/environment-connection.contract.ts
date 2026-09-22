@@ -1,15 +1,11 @@
 import type { EnvironmentDiscovery } from "@rebase/contracts";
 import type { Effect } from "effect";
-import type { CommitInspectionService } from "#server/domain/commit-inspection.contract";
-import type { RepositoryChangesService } from "#server/domain/repository-changes.contract";
 import type { RepositoryFreshnessService } from "#server/domain/repository-freshness.contract";
 import type { RepositoryHistoryService } from "#server/domain/repository-history.contract";
 import type { RepositoryRefsService } from "#server/domain/repository-refs.contract";
 import type { EnvironmentEventPublisher } from "#server/features/environment-connection/events/environment-event-publisher.contract";
 
 export interface EnvironmentTransportState {
-  readonly inspection?: CommitInspectionService;
-  readonly changes?: RepositoryChangesService;
   readonly discovery: EnvironmentDiscovery;
   readonly events: EnvironmentEventPublisher;
   readonly history?: RepositoryHistoryService;

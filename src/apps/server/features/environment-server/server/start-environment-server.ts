@@ -11,10 +11,19 @@ import { RepositoryChangesAccess } from "#server/domain/repository-changes.contr
 import { RepositoryCoordination } from "#server/domain/repository-coordination.contract";
 import { RepositoryFreshnessState } from "#server/domain/repository-freshness.contract";
 import { RepositoryWatching } from "#server/domain/repository-watcher.contract";
-import { commitInspectionLayer } from "#server/features/commit-inspection/index";
-import { createEnvironmentAuthorization } from "#server/features/environment-authorization/environment-authorization";
+import {
+  commitInspectionLayer,
+  createCommitInspectionHttpHandler,
+} from "#server/features/commit-inspection/index";
+import {
+  createEnvironmentAuthorization,
+  createEnvironmentAuthorizationHttpHandler,
+} from "#server/features/environment-authorization/index";
 import { createEnvironmentEventPublisher } from "#server/features/environment-connection/events/environment-event-publisher";
-import { createEnvironmentFilesystem } from "#server/features/environment-filesystem/environment-filesystem";
+import {
+  createEnvironmentFilesystem,
+  createEnvironmentFilesystemHttpHandler,
+} from "#server/features/environment-filesystem/index";
 import {
   hasNoAutomaticPort,
   isCurrentEnvironment,
@@ -34,13 +43,22 @@ import type {
 } from "#server/features/environment-server/server/environment-server.contract";
 import type { EnvironmentServerStartError } from "#server/features/environment-server/server/environment-server-error.contract";
 import { repositoryAccessLayer } from "#server/features/repository-access/index";
-import { createRepositoryCatalog } from "#server/features/repository-catalog/repository-catalog";
-import { repositoryChangesLayer } from "#server/features/repository-changes/index";
+import {
+  createRepositoryCatalog,
+  createRepositoryCatalogHttpHandler,
+} from "#server/features/repository-catalog/index";
+import {
+  createRepositoryChangesHttpHandler,
+  repositoryChangesLayer,
+} from "#server/features/repository-changes/index";
 import { repositoryCoordinationLayer } from "#server/features/repository-coordination/index";
 import { repositoryFreshnessLayer } from "#server/features/repository-history/freshness/repository-freshness";
 import { createRepositoryHistoryService } from "#server/features/repository-history/repository-history";
+import {
+  createRepositoryRefsHttpHandler,
+  createRepositoryRefsService,
+} from "#server/features/repository-refs/index";
 import { acquireRepositoryChangePublisher } from "#server/features/repository-refs/repository-change-publisher";
-import { createRepositoryRefsService } from "#server/features/repository-refs/repository-refs";
 import { acquireEnvironmentContext } from "#server/persistence/environment-context";
 import type { EnvironmentContext } from "#server/persistence/environment-context.contract";
 import { environmentTable } from "#server/persistence/environment-state.schema";
@@ -98,16 +116,29 @@ export function startEnvironmentServer(
       git,
     });
     const listener = yield* acquireEnvironmentListener({
-      inspection: Context.get(repositoryServices, CommitInspectionAccess),
-      changes: Context.get(repositoryServices, RepositoryChangesAccess),
       authorization,
-      catalog,
+      httpHandlers: [
+        createEnvironmentAuthorizationHttpHandler(authorization),
+        createEnvironmentFilesystemHttpHandler(
+          authorization,
+          createEnvironmentFilesystem(),
+        ),
+        createRepositoryCatalogHttpHandler(authorization, catalog),
+        createCommitInspectionHttpHandler(
+          authorization,
+          Context.get(repositoryServices, CommitInspectionAccess),
+        ),
+        createRepositoryChangesHttpHandler(
+          authorization,
+          Context.get(repositoryServices, RepositoryChangesAccess),
+        ),
+        createRepositoryRefsHttpHandler(authorization, refs),
+      ],
       ...(options.browserAssetsRoot === undefined
         ? {}
         : { browserAssetsRoot: options.browserAssetsRoot }),
       environmentId: environment.id,
       events,
-      filesystem: createEnvironmentFilesystem(),
       history: createRepositoryHistoryService({ catalog, git }),
       freshness: Context.get(repositoryServices, RepositoryFreshnessState),
       ...(options.host === undefined ? {} : { host: options.host }),

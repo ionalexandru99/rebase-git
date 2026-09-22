@@ -5,16 +5,21 @@ import {
   RemoveRepository,
   RepositoryCatalogEntry,
   RepositoryCatalogHttpApi,
+  RepositoryCatalogOperationFailure,
   RepositoryCatalog as RepositoryCatalogSchema,
   RepositoryRemoved,
 } from "@rebase/contracts";
 import { Effect } from "effect";
-import type { RepositoryCatalog } from "#server/domain/repository-catalog.contract";
+import type {
+  RepositoryCatalog,
+  RepositoryCatalogError,
+} from "#server/domain/repository-catalog.contract";
 import type { EnvironmentAuthorization } from "#server/features/environment-authorization/environment-authorization.contract";
 import {
   readRequestCredential,
   validateRequestOrigin,
 } from "#server/features/environment-connection/environment-request-authorization";
+import type { EnvironmentHttpRequestHandler } from "#server/features/environment-connection/http/environment-http-handler.contract";
 import {
   decodeRequestBody,
   requireEmptyBody,
@@ -22,7 +27,49 @@ import {
 } from "#server/features/environment-connection/http/environment-http-request-validation";
 import { writeJson } from "#server/features/environment-connection/http/environment-http-response";
 
-export function respondToRepositoryCatalogRequest(
+export function createRepositoryCatalogHttpHandler(
+  authorization: EnvironmentAuthorization,
+  catalog: RepositoryCatalog,
+): EnvironmentHttpRequestHandler {
+  return (request, response, body) =>
+    respondToRepositoryCatalogRequest(
+      request,
+      response,
+      body,
+      authorization,
+      catalog,
+    ).pipe(
+      Effect.catchTag("RepositoryCatalogError", (error) =>
+        Effect.sync(() => {
+          writeJson(
+            response,
+            failureStatus(error),
+            RepositoryCatalogOperationFailure,
+            error.failure,
+          );
+          return true;
+        }),
+      ),
+    );
+}
+
+function failureStatus(error: RepositoryCatalogError) {
+  if (error.failure._tag === "RepositoryMissing") {
+    return 404;
+  }
+  switch (error.failure.reason) {
+    case "MalformedPath":
+      return 400;
+    case "NotFound":
+      return 404;
+    case "InspectionFailed":
+    case "NotDirectory":
+    case "NotRepository":
+      return 422;
+  }
+}
+
+function respondToRepositoryCatalogRequest(
   request: IncomingMessage,
   response: ServerResponse,
   body: Buffer,

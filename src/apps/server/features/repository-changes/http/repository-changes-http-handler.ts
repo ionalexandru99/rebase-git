@@ -1,5 +1,8 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
-import { RepositoryChangesHttpApi } from "@rebase/contracts/repository-changes/repository-changes.contract";
+import {
+  ChangesFailure,
+  RepositoryChangesHttpApi,
+} from "@rebase/contracts/repository-changes/repository-changes.contract";
 import { Effect } from "effect";
 import type { RepositoryChangesService } from "#server/domain/repository-changes.contract";
 import type { EnvironmentAuthorization } from "#server/features/environment-authorization/environment-authorization.contract";
@@ -7,13 +10,40 @@ import {
   readRequestCredential,
   validateRequestOrigin,
 } from "#server/features/environment-connection/environment-request-authorization";
+import type { EnvironmentHttpRequestHandler } from "#server/features/environment-connection/http/environment-http-handler.contract";
 import {
   decodeRequestBody,
   requireMethod,
 } from "#server/features/environment-connection/http/environment-http-request-validation";
 import { writeJson } from "#server/features/environment-connection/http/environment-http-response";
 
-export function respondToRepositoryChangesRequest(
+export function createRepositoryChangesHttpHandler(
+  authorization: EnvironmentAuthorization,
+  changes: RepositoryChangesService,
+): EnvironmentHttpRequestHandler {
+  return (request, response, body) =>
+    respondToRepositoryChangesRequest(
+      request,
+      response,
+      body,
+      authorization,
+      changes,
+    ).pipe(
+      Effect.catchTag("RepositoryChangesError", (error) =>
+        Effect.sync(() => {
+          writeJson(
+            response,
+            error.failure.reason === "Missing" ? 404 : 409,
+            ChangesFailure,
+            error.failure,
+          );
+          return true;
+        }),
+      ),
+    );
+}
+
+function respondToRepositoryChangesRequest(
   request: IncomingMessage,
   response: ServerResponse,
   body: Buffer,

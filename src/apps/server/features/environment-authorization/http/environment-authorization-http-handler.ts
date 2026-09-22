@@ -17,6 +17,7 @@ import {
   readRequestCredential,
   validateRequestOrigin,
 } from "#server/features/environment-connection/environment-request-authorization";
+import type { EnvironmentHttpRequestHandler } from "#server/features/environment-connection/http/environment-http-handler.contract";
 import {
   decodeRequestBody,
   requireEmptyBody,
@@ -24,7 +25,19 @@ import {
 } from "#server/features/environment-connection/http/environment-http-request-validation";
 import { writeJson } from "#server/features/environment-connection/http/environment-http-response";
 
-export function respondToEnvironmentAuthorizationRequest(
+export function createEnvironmentAuthorizationHttpHandler(
+  authorization: EnvironmentAuthorization,
+): EnvironmentHttpRequestHandler {
+  return (request, response, body) =>
+    respondToEnvironmentAuthorizationRequest(
+      request,
+      response,
+      body,
+      authorization,
+    );
+}
+
+function respondToEnvironmentAuthorizationRequest(
   request: IncomingMessage,
   response: ServerResponse,
   body: Buffer,

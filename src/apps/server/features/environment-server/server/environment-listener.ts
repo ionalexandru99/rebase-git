@@ -26,10 +26,6 @@ export function acquireEnvironmentListener(
       options.productVersion,
     );
     const state: EnvironmentTransportState = {
-      ...(options.inspection === undefined
-        ? {}
-        : { inspection: options.inspection }),
-      ...(options.changes === undefined ? {} : { changes: options.changes }),
       discovery: {
         ...discovery,
         capabilities: discovery.capabilities.filter(
@@ -58,9 +54,7 @@ export function acquireEnvironmentListener(
         readiness,
         state,
         options.authorization,
-        options.catalog,
-        options.filesystem,
-        options.refs,
+        options.httpHandlers ?? [],
         host,
         port,
         runEnvironmentEffect,
@@ -99,9 +93,7 @@ function createHttpServer(
   readiness: { value: boolean },
   state: EnvironmentTransportState,
   authorization: EnvironmentListenerOptions["authorization"],
-  catalog: EnvironmentListenerOptions["catalog"],
-  filesystem: EnvironmentListenerOptions["filesystem"],
-  refs: EnvironmentListenerOptions["refs"],
+  handlers: NonNullable<EnvironmentListenerOptions["httpHandlers"]>,
   host: string,
   port: number,
   runEnvironmentEffect: RunEnvironmentEffect,
@@ -114,9 +106,7 @@ function createHttpServer(
         createEnvironmentHttpHandler(
           state,
           authorization,
-          catalog,
-          filesystem,
-          refs,
+          handlers,
           () => readiness.value,
           runEnvironmentEffect,
           browserAssetsRoot,

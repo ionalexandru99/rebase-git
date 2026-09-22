@@ -19,10 +19,17 @@ import { Effect } from "effect";
 import { afterEach, describe, expect, it } from "vite-plus/test";
 import { createLocalGitCommandRunner } from "#server/adapters/local-git/local-git-command-runner";
 import { createEnvironmentAuthorization } from "#server/features/environment-authorization/environment-authorization";
+import { createEnvironmentAuthorizationHttpHandler } from "#server/features/environment-authorization/index";
 import { createEnvironmentEventPublisher } from "#server/features/environment-connection/events/environment-event-publisher";
-import { createEnvironmentFilesystem } from "#server/features/environment-filesystem/environment-filesystem";
+import {
+  createEnvironmentFilesystem,
+  createEnvironmentFilesystemHttpHandler,
+} from "#server/features/environment-filesystem/index";
 import { acquireEnvironmentListener } from "#server/features/environment-server/server/environment-listener";
-import { createRepositoryCatalog } from "#server/features/repository-catalog/repository-catalog";
+import {
+  createRepositoryCatalog,
+  createRepositoryCatalogHttpHandler,
+} from "#server/features/repository-catalog/index";
 import { acquireEnvironmentContext } from "#server/persistence/environment-context";
 import { environmentPaths } from "#server/persistence/storage/environment-paths";
 
@@ -168,13 +175,19 @@ function withCatalogListener(
         );
         const listener = yield* acquireEnvironmentListener({
           authorization,
-          catalog: createRepositoryCatalog(
-            context,
-            createLocalGitCommandRunner(),
-          ),
+          httpHandlers: [
+            createEnvironmentAuthorizationHttpHandler(authorization),
+            createRepositoryCatalogHttpHandler(
+              authorization,
+              createRepositoryCatalog(context, createLocalGitCommandRunner()),
+            ),
+            createEnvironmentFilesystemHttpHandler(
+              authorization,
+              createEnvironmentFilesystem(root),
+            ),
+          ],
           environmentId,
           events: createEnvironmentEventPublisher(),
-          filesystem: createEnvironmentFilesystem(root),
           productVersion: "0.0.0",
         });
         listener.readiness.value = true;

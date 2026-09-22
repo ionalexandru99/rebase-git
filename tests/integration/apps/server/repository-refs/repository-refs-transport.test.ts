@@ -17,12 +17,19 @@ import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import { createLocalGitCommandRunner } from "#server/adapters/local-git/local-git-command-runner";
 import { createLocalRepositoryWatcher } from "#server/adapters/local-git/local-repository-watcher";
 import { createEnvironmentAuthorization } from "#server/features/environment-authorization/environment-authorization";
+import { createEnvironmentAuthorizationHttpHandler } from "#server/features/environment-authorization/index";
 import { createEnvironmentEventPublisher } from "#server/features/environment-connection/events/environment-event-publisher";
 import { acquireEnvironmentListener } from "#server/features/environment-server/server/environment-listener";
-import { createRepositoryCatalog } from "#server/features/repository-catalog/repository-catalog";
+import {
+  createRepositoryCatalog,
+  createRepositoryCatalogHttpHandler,
+} from "#server/features/repository-catalog/index";
 import { createRepositoryCoordination } from "#server/features/repository-coordination/index";
+import {
+  createRepositoryRefsHttpHandler,
+  createRepositoryRefsService,
+} from "#server/features/repository-refs/index";
 import { acquireRepositoryChangePublisher } from "#server/features/repository-refs/repository-change-publisher";
-import { createRepositoryRefsService } from "#server/features/repository-refs/repository-refs";
 import { acquireEnvironmentContext } from "#server/persistence/environment-context";
 import { environmentPaths } from "#server/persistence/storage/environment-paths";
 import { createBrowserLocalEnvironmentSession } from "#web/features/local-environment-session/browser-local-environment-session";
@@ -267,22 +274,27 @@ function withRefsListener(use: (fixture: ListenerFixture) => Promise<void>) {
         );
         const events = createEnvironmentEventPublisher();
         const git = createLocalGitCommandRunner();
+        const refs = createRepositoryRefsService({
+          coordination: createRepositoryCoordination(git),
+          catalog,
+          changes: yield* acquireRepositoryChangePublisher(
+            git,
+            createLocalRepositoryWatcher(),
+            events,
+          ),
+          git,
+        });
         const listener = yield* acquireEnvironmentListener({
           authorization,
-          catalog,
+          httpHandlers: [
+            createEnvironmentAuthorizationHttpHandler(authorization),
+            createRepositoryCatalogHttpHandler(authorization, catalog),
+            createRepositoryRefsHttpHandler(authorization, refs),
+          ],
           environmentId,
           events,
           productVersion: "0.0.0",
-          refs: createRepositoryRefsService({
-            coordination: createRepositoryCoordination(git),
-            catalog,
-            changes: yield* acquireRepositoryChangePublisher(
-              git,
-              createLocalRepositoryWatcher(),
-              events,
-            ),
-            git,
-          }),
+          refs,
         });
         listener.readiness.value = true;
         yield* Effect.promise(() =>

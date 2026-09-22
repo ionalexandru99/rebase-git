@@ -20,6 +20,7 @@ import { Effect } from "effect";
 import { afterEach, describe, expect, it } from "vite-plus/test";
 import { createEnvironmentAuthorization } from "#server/features/environment-authorization/environment-authorization";
 import type { EnvironmentAuthorization } from "#server/features/environment-authorization/environment-authorization.contract";
+import { createEnvironmentAuthorizationHttpHandler } from "#server/features/environment-authorization/index";
 import { createEnvironmentEventPublisher } from "#server/features/environment-connection/events/environment-event-publisher";
 import { acquireEnvironmentListener } from "#server/features/environment-server/server/environment-listener";
 import { acquireEnvironmentContext } from "#server/persistence/environment-context";
@@ -456,6 +457,9 @@ function withAuthorizedListener(
         const events = createEnvironmentEventPublisher();
         const listener = yield* acquireEnvironmentListener({
           authorization,
+          httpHandlers: [
+            createEnvironmentAuthorizationHttpHandler(authorization),
+          ],
           environmentId,
           events,
           productVersion: "0.0.0",

@@ -27,6 +27,7 @@ import {
   type RepositoryHistoryService,
 } from "#server/domain/repository-history.contract";
 import type { EnvironmentAuthorization } from "#server/features/environment-authorization/environment-authorization.contract";
+import { createEnvironmentAuthorizationHttpHandler } from "#server/features/environment-authorization/index";
 import { createEnvironmentEventPublisher } from "#server/features/environment-connection/events/environment-event-publisher";
 import { acquireEnvironmentListener } from "#server/features/environment-server/server/environment-listener";
 import { createRepositoryCatalog } from "#server/features/repository-catalog/repository-catalog";
@@ -677,6 +678,9 @@ function withHistoryListener(
           });
         const listener = yield* acquireEnvironmentListener({
           authorization,
+          httpHandlers: [
+            createEnvironmentAuthorizationHttpHandler(authorization),
+          ],
           environmentId,
           events: createEnvironmentEventPublisher(),
           history,
