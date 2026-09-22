@@ -1,4 +1,4 @@
-import { ChangeDiff } from "@rebase/contracts/repository-changes/repository-changes.contract";
+import { ChangeDiff } from "@rebase/contracts/repository-comparison/repository-comparison.contract";
 import { Schema } from "effect";
 
 const Oid = Schema.String.check(

@@ -13,6 +13,7 @@ import { Effect } from "effect";
 import { afterEach, describe, expect, it } from "vite-plus/test";
 import { createLocalGitCommandRunner } from "#server/adapters/local-git/local-git-command-runner";
 import type { GitCommand } from "#server/domain/git-command.contract";
+import { createRepositoryAccess } from "#server/features/repository-access/index";
 import { createRepositoryChangesService } from "#server/features/repository-changes/repository-changes";
 
 const exec = promisify(execFile);
@@ -52,16 +53,19 @@ async function fixture(
   };
   const runner = createLocalGitCommandRunner();
   const service = createRepositoryChangesService(
-    {
-      find: () =>
-        Effect.succeed({
-          id: repositoryId,
-          name: "test",
-          path: directory,
-          addedAt: new Date().toISOString(),
-          lastOpenedAt: new Date().toISOString(),
-        }),
-    },
+    createRepositoryAccess(
+      {
+        find: () =>
+          Effect.succeed({
+            id: repositoryId,
+            name: "test",
+            path: directory,
+            addedAt: new Date().toISOString(),
+            lastOpenedAt: new Date().toISOString(),
+          }),
+      },
+      runner,
+    ),
     {
       run: (command) =>
         Effect.promise(async () => {

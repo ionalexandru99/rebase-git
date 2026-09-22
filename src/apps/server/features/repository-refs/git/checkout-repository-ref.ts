@@ -14,12 +14,13 @@ import type { RepositoryRefsError } from "#server/domain/repository-refs.contrac
 import {
   canonicalizeWorktrees,
   readWorktrees,
-} from "#server/features/repository-refs/git/read-repository-refs";
+} from "#server/features/repository-access/index";
 import {
   checkoutFailure,
   failureDetail,
   gitCommandFailed,
   repositoryRefsFailure,
+  worktreeReadFailed,
 } from "#server/features/repository-refs/git/repository-refs-failures";
 
 const checkoutTimeoutMilliseconds = 60_000;
@@ -72,6 +73,7 @@ function checkoutWithAutoStash(
 
 function readCanonicalWorktrees(git: GitCommandRunner, repositoryPath: string) {
   return readWorktrees(git, repositoryPath).pipe(
+    Effect.mapError(worktreeReadFailed),
     Effect.flatMap(canonicalizeWorktrees),
   );
 }

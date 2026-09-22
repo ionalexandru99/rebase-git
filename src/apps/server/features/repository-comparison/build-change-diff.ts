@@ -1,16 +1,16 @@
-import type { ChangeDiff } from "@rebase/contracts/repository-changes/repository-changes.contract";
+import type { ChangeDiff } from "@rebase/contracts/repository-comparison/repository-comparison.contract";
 import { createTwoFilesPatch } from "diff";
 import {
-  type ChangeFileContent,
   previewByteLimit,
-} from "#server/features/repository-changes/git/change-files";
-import { fingerprint } from "#server/features/repository-changes/git/change-git";
+  type RepositoryFileContent,
+} from "#server/domain/repository-comparison.contract";
+import { fingerprint } from "#server/features/repository-comparison/fingerprint";
 
 export function buildChangeDiff(
   path: string,
   base: string,
-  before: ChangeFileContent,
-  after: ChangeFileContent,
+  before: RepositoryFileContent,
+  after: RepositoryFileContent,
   previousPath = path,
 ): ChangeDiff {
   const mime = imageMime(path);

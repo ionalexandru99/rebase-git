@@ -1,4 +1,5 @@
 import type { Server as HttpServer } from "node:http";
+import type { CommitInspectionService } from "#server/domain/commit-inspection.contract";
 import type { EnvironmentFilesystem } from "#server/domain/environment-filesystem.contract";
 import type { RepositoryCatalog } from "#server/domain/repository-catalog.contract";
 import type { RepositoryChangesService } from "#server/domain/repository-changes.contract";
@@ -30,6 +31,7 @@ export interface EnvironmentListener {
 }
 
 export interface EnvironmentListenerOptions {
+  readonly inspection?: CommitInspectionService;
   readonly changes?: RepositoryChangesService;
   readonly authorization: EnvironmentAuthorization;
   readonly browserAssetsRoot?: string;

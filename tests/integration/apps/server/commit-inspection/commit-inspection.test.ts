@@ -7,7 +7,8 @@ import { promisify } from "node:util";
 import { Effect } from "effect";
 import { afterEach, describe, expect, it } from "vite-plus/test";
 import { createLocalGitCommandRunner } from "#server/adapters/local-git/local-git-command-runner";
-import { createRepositoryChangesService } from "#server/features/repository-changes/index";
+import { createCommitInspectionService } from "#server/features/commit-inspection/index";
+import { createRepositoryAccess } from "#server/features/repository-access/index";
 
 const directories: string[] = [];
 afterEach(async () => {
@@ -37,24 +38,46 @@ async function fixture() {
   await git("commit", "-m", "Initial\n\nFull commit body.");
   const oid = await git("rev-parse", "HEAD");
   const repositoryId = randomUUID();
-  const service = createRepositoryChangesService(
-    {
-      find: () =>
-        Effect.succeed({
-          id: repositoryId,
-          name: "test",
-          path: directory,
-          addedAt: "",
-          lastOpenedAt: "",
-        }),
-    },
-    createLocalGitCommandRunner(),
+  const runner = createLocalGitCommandRunner();
+  const service = createCommitInspectionService(
+    createRepositoryAccess(
+      {
+        find: () =>
+          Effect.succeed({
+            id: repositoryId,
+            name: "test",
+            path: directory,
+            addedAt: "",
+            lastOpenedAt: "",
+          }),
+      },
+      runner,
+    ),
+    runner,
   );
   const scope = { repositoryId, worktreePath: directory, oid };
   return { directory, git, service, scope };
 }
 
 describe("historical commit inspection", () => {
+  it("rejects a worktree belonging to a different repository", async () => {
+    const selected = await fixture();
+    const other = await fixture();
+    const failure = await Effect.runPromise(
+      Effect.flip(
+        selected.service.inspect({
+          ...selected.scope,
+          worktreePath: other.directory,
+        }),
+      ),
+    );
+    expect(failure.failure).toEqual({
+      _tag: "ChangesFailed",
+      reason: "Missing",
+      detail: "This worktree does not belong to the repository.",
+    });
+  });
+
   it("reads root metadata and an added-file patch without touching dirty worktree or index", async () => {
     const f = await fixture();
     await writeFile(join(f.directory, "old.txt"), "staged\n");

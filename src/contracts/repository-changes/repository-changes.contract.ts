@@ -1,5 +1,8 @@
 import { EnvironmentGrantHttpFailure } from "@rebase/contracts/environment-authorization/environment-authorization.contract";
+import { ChangeDiff } from "@rebase/contracts/repository-comparison/repository-comparison.contract";
 import { Schema } from "effect";
+
+export { ChangeDiff } from "@rebase/contracts/repository-comparison/repository-comparison.contract";
 
 const Path = Schema.String.check(
   Schema.isMinLength(1),
@@ -34,26 +37,6 @@ export const ReadChangeDiff = Schema.Struct({
   path: Path,
 });
 export type ReadChangeDiff = typeof ReadChangeDiff.Type;
-export const ChangeDiff = Schema.Struct({
-  path: Path,
-  revision: Revision,
-  kind: Schema.Literals([
-    "text",
-    "image",
-    "binary",
-    "large",
-    "conflict",
-    "submodule",
-    "symlink",
-  ]),
-  before: Schema.NullOr(Schema.String),
-  after: Schema.NullOr(Schema.String),
-  beforeBytes: Schema.Natural,
-  afterBytes: Schema.Natural,
-  mime: Schema.NullOr(Schema.String),
-  patch: Schema.String,
-});
-export type ChangeDiff = typeof ChangeDiff.Type;
 export const ChangeSelection = Schema.Union([
   Schema.TaggedStruct("All", {}),
   Schema.TaggedStruct("Files", {
