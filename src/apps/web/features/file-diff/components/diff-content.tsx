@@ -8,8 +8,8 @@ import DiffWorker from "@pierre/diffs/worker/worker.js?worker";
 import type { ChangeDiff } from "@rebase/contracts/repository-changes/repository-changes.contract";
 import { IconFileDiff } from "@tabler/icons-react";
 import type { CSSProperties } from "react";
+import type { createChangeDiffModel } from "#web/features/file-diff/api";
 import type { DiffPreferences } from "#web/features/file-diff/file-diff.contract";
-import type { createChangeDiffModel } from "#web/features/file-diff/index";
 
 const poolOptions: WorkerPoolOptions = {
   workerFactory: () => new DiffWorker(),
