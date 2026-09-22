@@ -1,23 +1,67 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 import {
   EnvironmentDirectory,
+  EnvironmentDirectoryRejected,
   EnvironmentFilesystemHttpApi,
   ListEnvironmentDirectory,
 } from "@rebase/contracts";
 import { Effect } from "effect";
-import type { EnvironmentFilesystem } from "#server/domain/environment-filesystem.contract";
+import type {
+  EnvironmentFilesystem,
+  EnvironmentFilesystemError,
+} from "#server/domain/environment-filesystem.contract";
 import type { EnvironmentAuthorization } from "#server/features/environment-authorization/environment-authorization.contract";
 import {
   readRequestCredential,
   validateRequestOrigin,
 } from "#server/features/environment-connection/environment-request-authorization";
+import type { EnvironmentHttpRequestHandler } from "#server/features/environment-connection/http/environment-http-handler.contract";
 import {
   decodeRequestBody,
   requireMethod,
 } from "#server/features/environment-connection/http/environment-http-request-validation";
 import { writeJson } from "#server/features/environment-connection/http/environment-http-response";
 
-export function respondToEnvironmentFilesystemRequest(
+export function createEnvironmentFilesystemHttpHandler(
+  authorization: EnvironmentAuthorization,
+  filesystem: EnvironmentFilesystem,
+): EnvironmentHttpRequestHandler {
+  return (request, response, body) =>
+    respondToEnvironmentFilesystemRequest(
+      request,
+      response,
+      body,
+      authorization,
+      filesystem,
+    ).pipe(
+      Effect.catchTag("EnvironmentFilesystemError", (error) =>
+        Effect.sync(() => {
+          writeJson(
+            response,
+            failureStatus(error),
+            EnvironmentDirectoryRejected,
+            error.failure,
+          );
+          return true;
+        }),
+      ),
+    );
+}
+
+function failureStatus(error: EnvironmentFilesystemError) {
+  switch (error.failure.reason) {
+    case "MalformedPath":
+      return 400;
+    case "NotFound":
+      return 404;
+    case "InspectionFailed":
+    case "NotDirectory":
+    case "PermissionDenied":
+      return 422;
+  }
+}
+
+function respondToEnvironmentFilesystemRequest(
   request: IncomingMessage,
   response: ServerResponse,
   body: Buffer,

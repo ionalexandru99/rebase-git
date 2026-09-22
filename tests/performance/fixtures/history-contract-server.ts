@@ -4,9 +4,13 @@ import { join } from "node:path";
 import { Effect } from "effect";
 import { createLocalGitCommandRunner } from "#server/adapters/local-git/local-git-command-runner";
 import type { EnvironmentAuthorization } from "#server/features/environment-authorization/environment-authorization.contract";
+import { createEnvironmentAuthorizationHttpHandler } from "#server/features/environment-authorization/index";
 import { createEnvironmentEventPublisher } from "#server/features/environment-connection/events/environment-event-publisher";
 import { acquireEnvironmentListener } from "#server/features/environment-server/server/environment-listener";
-import { createRepositoryCatalog } from "#server/features/repository-catalog/repository-catalog";
+import {
+  createRepositoryCatalog,
+  createRepositoryCatalogHttpHandler,
+} from "#server/features/repository-catalog/index";
 import { createRepositoryHistoryService } from "#server/features/repository-history/repository-history";
 import { acquireEnvironmentContext } from "#server/persistence/environment-context";
 import { environmentPaths } from "#server/persistence/storage/environment-paths";
@@ -39,7 +43,10 @@ try {
         const repository = yield* catalog.remember(repositoryPath);
         const listener = yield* acquireEnvironmentListener({
           authorization,
-          catalog,
+          httpHandlers: [
+            createEnvironmentAuthorizationHttpHandler(authorization),
+            createRepositoryCatalogHttpHandler(authorization, catalog),
+          ],
           environmentId: crypto.randomUUID(),
           events: createEnvironmentEventPublisher(),
           history: createRepositoryHistoryService({

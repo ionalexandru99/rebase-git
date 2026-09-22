@@ -3,22 +3,67 @@ import {
   CheckoutRepositoryRef,
   RepositoryCheckedOut,
   RepositoryRefsHttpApi,
+  RepositoryRefsOperationFailure,
 } from "@rebase/contracts";
 import { Effect } from "effect";
-import type { RepositoryRefsService } from "#server/domain/repository-refs.contract";
+import type {
+  RepositoryRefsError,
+  RepositoryRefsService,
+} from "#server/domain/repository-refs.contract";
 import type { EnvironmentAuthorization } from "#server/features/environment-authorization/environment-authorization.contract";
 import {
   expectedRequestOrigin,
   readRequestCredential,
   validateRequestOrigin,
 } from "#server/features/environment-connection/environment-request-authorization";
+import type { EnvironmentHttpRequestHandler } from "#server/features/environment-connection/http/environment-http-handler.contract";
 import {
   decodeRequestBody,
   requireMethod,
 } from "#server/features/environment-connection/http/environment-http-request-validation";
 import { writeJson } from "#server/features/environment-connection/http/environment-http-response";
 
-export function respondToRepositoryRefsRequest(
+export function createRepositoryRefsHttpHandler(
+  authorization: EnvironmentAuthorization,
+  refs: RepositoryRefsService,
+): EnvironmentHttpRequestHandler {
+  return (request, response, body) =>
+    respondToRepositoryRefsRequest(
+      request,
+      response,
+      body,
+      authorization,
+      refs,
+    ).pipe(
+      Effect.catchTag("RepositoryRefsError", (error) =>
+        Effect.sync(() => {
+          writeJson(
+            response,
+            failureStatus(error),
+            RepositoryRefsOperationFailure,
+            error.failure,
+          );
+          return true;
+        }),
+      ),
+    );
+}
+
+function failureStatus(error: RepositoryRefsError) {
+  switch (error.failure._tag) {
+    case "RepositoryMissing":
+    case "WorktreeMissing":
+    case "RefMissing":
+      return 404;
+    case "BranchCheckedOutElsewhere":
+    case "CheckoutRejected":
+      return 409;
+    case "GitFailed":
+      return 422;
+  }
+}
+
+function respondToRepositoryRefsRequest(
   request: IncomingMessage,
   response: ServerResponse,
   body: Buffer,

@@ -6,13 +6,20 @@ import { promisify } from "node:util";
 import { Effect } from "effect";
 import { expect, it } from "vite-plus/test";
 import { createLocalGitCommandRunner } from "#server/adapters/local-git/local-git-command-runner";
-import { createCommitInspectionService } from "#server/features/commit-inspection/index";
+import {
+  createCommitInspectionHttpHandler,
+  createCommitInspectionService,
+} from "#server/features/commit-inspection/index";
 import { createEnvironmentAuthorization } from "#server/features/environment-authorization/environment-authorization";
+import { createEnvironmentAuthorizationHttpHandler } from "#server/features/environment-authorization/index";
 import { createEnvironmentEventPublisher } from "#server/features/environment-connection/events/environment-event-publisher";
 import { acquireEnvironmentListener } from "#server/features/environment-server/server/environment-listener";
 import { createRepositoryAccess } from "#server/features/repository-access/index";
 import { createRepositoryCatalog } from "#server/features/repository-catalog/repository-catalog";
-import { createRepositoryChangesService } from "#server/features/repository-changes/index";
+import {
+  createRepositoryChangesHttpHandler,
+  createRepositoryChangesService,
+} from "#server/features/repository-changes/index";
 import { createRepositoryCoordination } from "#server/features/repository-coordination/index";
 import { acquireEnvironmentContext } from "#server/persistence/environment-context";
 import { environmentPaths } from "#server/persistence/storage/environment-paths";
@@ -46,13 +53,21 @@ it("authorizes changes reads separately from index mutations across HTTP", async
           const access = createRepositoryAccess(catalog, runner);
           const listener = yield* acquireEnvironmentListener({
             authorization,
-            catalog,
-            changes: createRepositoryChangesService(
-              access,
-              runner,
-              createRepositoryCoordination(runner),
-            ),
-            inspection: createCommitInspectionService(access, runner),
+            httpHandlers: [
+              createEnvironmentAuthorizationHttpHandler(authorization),
+              createRepositoryChangesHttpHandler(
+                authorization,
+                createRepositoryChangesService(
+                  access,
+                  runner,
+                  createRepositoryCoordination(runner),
+                ),
+              ),
+              createCommitInspectionHttpHandler(
+                authorization,
+                createCommitInspectionService(access, runner),
+              ),
+            ],
             environmentId: "00000000-0000-4000-8000-000000000001",
             events: createEnvironmentEventPublisher(),
             productVersion: "0.0.0",

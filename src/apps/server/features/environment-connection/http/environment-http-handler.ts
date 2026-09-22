@@ -1,37 +1,14 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 import {
   EnvironmentAuthorizationFailure,
-  EnvironmentDirectoryRejected,
   EnvironmentDiscovery,
   EnvironmentHttpApi,
   EnvironmentHttpFailure,
   EnvironmentSnapshot,
-  RepositoryCatalogOperationFailure,
-  RepositoryRefsOperationFailure,
 } from "@rebase/contracts";
-import { ChangesFailure } from "@rebase/contracts/repository-changes/repository-changes.contract";
 import { Effect } from "effect";
-import type {
-  EnvironmentFilesystem,
-  EnvironmentFilesystemError,
-} from "#server/domain/environment-filesystem.contract";
-import type { EnvironmentStorageError } from "#server/domain/environment-storage-error.contract";
-import type {
-  RepositoryCatalog,
-  RepositoryCatalogError,
-} from "#server/domain/repository-catalog.contract";
-import type { RepositoryChangesError } from "#server/domain/repository-changes.contract";
-import type {
-  RepositoryRefsError,
-  RepositoryRefsService,
-} from "#server/domain/repository-refs.contract";
 import { respondWithBrowserAsset } from "#server/features/browser-client/browser-assets";
-import { respondToCommitInspectionRequest } from "#server/features/commit-inspection/index";
-import type {
-  EnvironmentAuthorization,
-  EnvironmentAuthorizationError,
-} from "#server/features/environment-authorization/environment-authorization.contract";
-import { respondToEnvironmentAuthorizationRequest } from "#server/features/environment-authorization/http/environment-authorization-http-handler";
+import type { EnvironmentAuthorization } from "#server/features/environment-authorization/environment-authorization.contract";
 import type {
   EnvironmentTransportState,
   RunEnvironmentEffect,
@@ -42,23 +19,21 @@ import {
   validateRequestHost,
   validateRequestOrigin,
 } from "#server/features/environment-connection/environment-request-authorization";
+import type { EnvironmentHttpRequestHandler } from "#server/features/environment-connection/http/environment-http-handler.contract";
 import { readEnvironmentHttpRequestBody } from "#server/features/environment-connection/http/environment-http-request-body";
-import { EnvironmentHttpBodyError } from "#server/features/environment-connection/http/environment-http-request-body.contract";
+import {
+  requireEmptyBody,
+  requireMethod,
+} from "#server/features/environment-connection/http/environment-http-request-validation";
 import {
   writeJson,
   writeJsonValue,
 } from "#server/features/environment-connection/http/environment-http-response";
-import { respondToEnvironmentFilesystemRequest } from "#server/features/environment-filesystem/http/environment-filesystem-http-handler";
-import { respondToRepositoryCatalogRequest } from "#server/features/repository-catalog/http/repository-catalog-http-handler";
-import { respondToRepositoryChangesRequest } from "#server/features/repository-changes/http/repository-changes-http-handler";
-import { respondToRepositoryRefsRequest } from "#server/features/repository-refs/http/repository-refs-http-handler";
 
 export function createEnvironmentHttpHandler(
   state: EnvironmentTransportState,
   authorization: EnvironmentAuthorization,
-  catalog: EnvironmentListenerRepositoryCatalog,
-  filesystem: EnvironmentListenerFilesystem,
-  refs: EnvironmentListenerRepositoryRefs,
+  handlers: readonly EnvironmentHttpRequestHandler[],
   ready: () => boolean,
   runEnvironmentEffect: RunEnvironmentEffect,
   browserAssetsRoot?: string,
@@ -66,17 +41,20 @@ export function createEnvironmentHttpHandler(
   return (request: IncomingMessage, response: ServerResponse) => {
     const lifetime = startHttpRequestLifetime(request, response);
     runEnvironmentEffect(
-      createEnvironmentHttpResponse(
+      respondToEnvironmentRequest(
         request,
         response,
         state,
         authorization,
-        catalog,
-        filesystem,
-        refs,
+        handlers,
         ready(),
         browserAssetsRoot,
-      ).pipe(Effect.ensuring(Effect.sync(lifetime.release))),
+      ).pipe(
+        Effect.catch((error) =>
+          Effect.sync(() => writeEnvironmentHttpError(response, error)),
+        ),
+        Effect.ensuring(Effect.sync(lifetime.release)),
+      ),
       lifetime.signal,
     );
   };
@@ -85,7 +63,7 @@ export function createEnvironmentHttpHandler(
 function startHttpRequestLifetime(
   request: IncomingMessage,
   response: ServerResponse,
-): HttpRequestLifetime {
+) {
   const abortController = new AbortController();
   const abort = () => abortController.abort();
   request.once("aborted", abort);
@@ -99,42 +77,12 @@ function startHttpRequestLifetime(
   };
 }
 
-function createEnvironmentHttpResponse(
-  request: IncomingMessage,
-  response: ServerResponse,
-  state: EnvironmentTransportState,
-  authorization: EnvironmentAuthorization,
-  catalog: EnvironmentListenerRepositoryCatalog,
-  filesystem: EnvironmentListenerFilesystem,
-  refs: EnvironmentListenerRepositoryRefs,
-  ready: boolean,
-  browserAssetsRoot?: string,
-) {
-  return respondToEnvironmentRequest(
-    request,
-    response,
-    state,
-    authorization,
-    catalog,
-    filesystem,
-    refs,
-    ready,
-    browserAssetsRoot,
-  ).pipe(
-    Effect.catch((error) =>
-      Effect.sync(() => writeEnvironmentHttpError(response, error)),
-    ),
-  );
-}
-
 function respondToEnvironmentRequest(
   request: IncomingMessage,
   response: ServerResponse,
   state: EnvironmentTransportState,
   authorization: EnvironmentAuthorization,
-  catalog: EnvironmentListenerRepositoryCatalog,
-  filesystem: EnvironmentListenerFilesystem,
-  refs: EnvironmentListenerRepositoryRefs,
+  handlers: readonly EnvironmentHttpRequestHandler[],
   ready: boolean,
   browserAssetsRoot?: string,
 ) {
@@ -147,7 +95,6 @@ function respondToEnvironmentRequest(
       });
       return;
     }
-
     yield* validateRequestHost(request);
     if (
       browserAssetsRoot !== undefined &&
@@ -156,7 +103,6 @@ function respondToEnvironmentRequest(
       return;
     }
     const body = yield* readEnvironmentHttpRequestBody(request);
-
     if (request.url === EnvironmentHttpApi.discovery.path) {
       yield* requireMethod(
         request,
@@ -172,7 +118,6 @@ function respondToEnvironmentRequest(
       );
       return;
     }
-
     if (request.url === EnvironmentHttpApi.snapshot.path) {
       yield* requireMethod(
         request,
@@ -196,130 +141,20 @@ function respondToEnvironmentRequest(
       );
       return;
     }
-
-    if (
-      yield* respondToEnvironmentAuthorizationRequest(
-        request,
-        response,
-        body,
-        authorization,
-      )
-    ) {
-      return;
+    for (const handle of handlers) {
+      if (yield* handle(request, response, body)) {
+        return;
+      }
     }
-
-    if (
-      filesystem !== undefined &&
-      (yield* respondToEnvironmentFilesystemRequest(
-        request,
-        response,
-        body,
-        authorization,
-        filesystem,
-      ))
-    ) {
-      return;
-    }
-
-    if (
-      catalog !== undefined &&
-      (yield* respondToRepositoryCatalogRequest(
-        request,
-        response,
-        body,
-        authorization,
-        catalog,
-      ))
-    ) {
-      return;
-    }
-
-    if (
-      state.inspection !== undefined &&
-      (yield* respondToCommitInspectionRequest(
-        request,
-        response,
-        body,
-        authorization,
-        state.inspection,
-      ))
-    ) {
-      return;
-    }
-
-    if (
-      state.changes !== undefined &&
-      (yield* respondToRepositoryChangesRequest(
-        request,
-        response,
-        body,
-        authorization,
-        state.changes,
-      ))
-    )
-      return;
-
-    if (
-      refs !== undefined &&
-      (yield* respondToRepositoryRefsRequest(
-        request,
-        response,
-        body,
-        authorization,
-        refs,
-      ))
-    ) {
-      return;
-    }
-
     response.writeHead(404).end();
   });
 }
 
-function requireMethod(
-  request: IncomingMessage,
-  response: ServerResponse,
-  method: string,
-) {
-  if (request.method === method) {
-    return Effect.void;
-  }
-  return Effect.sync(() =>
-    response.writeHead(405, { allow: method }).end(),
-  ).pipe(Effect.andThen(Effect.interrupt));
-}
-
-function requireEmptyBody(body: Buffer) {
-  return body.byteLength === 0
-    ? Effect.void
-    : Effect.fail(
-        new EnvironmentHttpBodyError({
-          failure: { _tag: "InvalidMessage" },
-        }),
-      );
-}
-
 function writeEnvironmentHttpError(
   response: ServerResponse,
-  error:
-    | EnvironmentAuthorizationError
-    | EnvironmentFilesystemError
-    | EnvironmentHttpBodyError
-    | RepositoryCatalogError
-    | RepositoryRefsError
-    | RepositoryChangesError
-    | EnvironmentStorageError,
+  error: Effect.Error<ReturnType<typeof respondToEnvironmentRequest>>,
 ) {
   if (response.writableEnded) {
-    return;
-  }
-  if (error._tag === "RepositoryChangesError") {
-    writeJson(
-      response,
-      error.failure.reason === "Missing" ? 404 : 409,
-      ChangesFailure,
-      error.failure,
-    );
     return;
   }
   if (error._tag === "EnvironmentAuthorizationError") {
@@ -340,82 +175,5 @@ function writeEnvironmentHttpError(
     );
     return;
   }
-  if (error._tag === "EnvironmentFilesystemError") {
-    writeJson(
-      response,
-      environmentFilesystemFailureStatus(error),
-      EnvironmentDirectoryRejected,
-      error.failure,
-    );
-    return;
-  }
-  if (error._tag === "RepositoryCatalogError") {
-    writeJson(
-      response,
-      repositoryCatalogFailureStatus(error),
-      RepositoryCatalogOperationFailure,
-      error.failure,
-    );
-    return;
-  }
-  if (error._tag === "RepositoryRefsError") {
-    writeJson(
-      response,
-      repositoryRefsFailureStatus(error),
-      RepositoryRefsOperationFailure,
-      error.failure,
-    );
-    return;
-  }
   response.writeHead(500).end();
 }
-
-function environmentFilesystemFailureStatus(error: EnvironmentFilesystemError) {
-  switch (error.failure.reason) {
-    case "MalformedPath":
-      return 400;
-    case "NotFound":
-      return 404;
-    case "InspectionFailed":
-    case "NotDirectory":
-    case "PermissionDenied":
-      return 422;
-  }
-}
-
-function repositoryCatalogFailureStatus(error: RepositoryCatalogError) {
-  if (error.failure._tag === "RepositoryMissing") return 404;
-  switch (error.failure.reason) {
-    case "MalformedPath":
-      return 400;
-    case "NotFound":
-      return 404;
-    case "InspectionFailed":
-    case "NotDirectory":
-    case "NotRepository":
-      return 422;
-  }
-}
-
-function repositoryRefsFailureStatus(error: RepositoryRefsError) {
-  switch (error.failure._tag) {
-    case "RepositoryMissing":
-    case "WorktreeMissing":
-    case "RefMissing":
-      return 404;
-    case "BranchCheckedOutElsewhere":
-    case "CheckoutRejected":
-      return 409;
-    case "GitFailed":
-      return 422;
-  }
-}
-
-interface HttpRequestLifetime {
-  readonly release: () => void;
-  readonly signal: AbortSignal;
-}
-
-type EnvironmentListenerRepositoryCatalog = RepositoryCatalog | undefined;
-type EnvironmentListenerFilesystem = EnvironmentFilesystem | undefined;
-type EnvironmentListenerRepositoryRefs = RepositoryRefsService | undefined;
