@@ -182,14 +182,15 @@ function RetainedView({
 export function usePanelSession(
   key: string,
   scope: WorkspacePanelScope | undefined,
+  previousScopeKey: string,
 ) {
   const collection = useContext(SessionsContext);
   if (!collection) {
     throw new Error("Workspace panel sessions require an owner.");
   }
   const session = useMemo(
-    () => collection.acquire(key, scope),
-    [collection, key, scope],
+    () => collection.acquire(key, scope, previousScopeKey),
+    [collection, key, scope, previousScopeKey],
   );
   useEffect(() => collection.attach(session), [collection, session]);
   return session;

@@ -30,7 +30,7 @@ function usePanelController(
         scope.worktreePath,
       ])
     : scopeKey;
-  const session = usePanelSession(sessionKey, scope);
+  const session = usePanelSession(sessionKey, scope, scopeKey);
   const store = session.store;
   const [launcher, setLauncher] = useState<{
     store: WorkspacePanelStore;

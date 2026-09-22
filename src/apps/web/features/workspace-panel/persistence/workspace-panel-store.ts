@@ -11,9 +11,10 @@ import {
 
 export function createWorkspacePanelStore(
   scopeKey: string,
+  previousScopeKey?: string,
 ): WorkspacePanelStore {
   const key = `rebase:workspace-panel:v1:${scopeKey}`;
-  let state = readPanelState(key);
+  let state = readPanelState(key, previousScopeKey);
   const listeners = new Set<() => void>();
   return {
     getSnapshot: () => state,
@@ -27,17 +28,33 @@ export function createWorkspacePanelStore(
       const next = reduceWorkspacePanel(state, action);
       if (next === state) return;
       state = next;
-      try {
-        localStorage.setItem(key, JSON.stringify(state));
-      } catch {}
+      savePanelState(key, JSON.stringify(state));
       for (const notify of listeners) notify();
     },
   };
 }
 
-function readPanelState(key: string): WorkspacePanelState {
+function savePanelState(key: string, serialized: string) {
   try {
-    const saved: unknown = JSON.parse(localStorage.getItem(key) ?? "null");
+    localStorage.setItem(key, serialized);
+  } catch {}
+}
+
+function readPanelState(
+  key: string,
+  previousScopeKey: string | undefined,
+): WorkspacePanelState {
+  try {
+    let serialized = localStorage.getItem(key);
+    if (serialized === null && previousScopeKey !== undefined) {
+      serialized = localStorage.getItem(
+        `rebase:workspace-panel:v1:${previousScopeKey}`,
+      );
+      if (serialized !== null) {
+        savePanelState(key, serialized);
+      }
+    }
+    const saved: unknown = JSON.parse(serialized ?? "null");
     if (saved === null || typeof saved !== "object")
       return initialWorkspacePanelState;
     if (!("tabs" in saved) || !Array.isArray(saved.tabs))

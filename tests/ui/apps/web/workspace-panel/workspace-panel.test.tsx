@@ -167,3 +167,71 @@ async function renderPanel(scopeKey = "panel-test") {
     switchScope: (next: string) => view.rerender(tree(next)),
   };
 }
+
+it("migrates existing layouts into independent project sessions and prefers their saved state", async () => {
+  localStorage.clear();
+  const scopeKey = JSON.stringify(["environment", "logical", "/repo"]);
+  const storageKey = `rebase:workspace-panel:v1:${scopeKey}`;
+  const saved = {
+    tabs: ["changes", "commit"],
+    active: "commit",
+    open: true,
+    width: 55,
+  };
+  localStorage.setItem(storageKey, JSON.stringify(saved));
+  const tree = (repositoryId: string) => (
+    <div style={{ width: 1000, height: 600 }}>
+      <WorkspacePanel.Provider
+        key={repositoryId}
+        scopeKey={scopeKey}
+        scope={{
+          environmentId: "environment",
+          repositoryId,
+          logicalRepositoryId: "logical",
+          worktreePath: "/repo",
+        }}
+      >
+        <WorkspacePanel.Group>
+          <ResizablePanel id="graph" minSize="20%">
+            <WorkspacePanel.Toggle />
+          </ResizablePanel>
+          <WorkspacePanel.Pane />
+        </WorkspacePanel.Group>
+      </WorkspacePanel.Provider>
+    </div>
+  );
+  const view = await render(tree("project-a"));
+  await expect
+    .element(page.getByRole("tab", { name: "Commit", exact: true }))
+    .toHaveAttribute("aria-selected", "true");
+  await expect
+    .element(page.getByRole("tab", { name: "Diffs", exact: true }))
+    .toBeVisible();
+  await expect.poll(panelWidth).toBeCloseTo(550, -1);
+  await page.getByRole("button", { name: "Close Commit tab" }).click();
+  await page.getByRole("button", { name: "Hide side panel" }).click();
+  await view.rerender(tree("project-b"));
+  await expect
+    .element(page.getByRole("tab", { name: "Commit", exact: true }))
+    .toHaveAttribute("aria-selected", "true");
+  await expect.poll(panelWidth).toBeCloseTo(550, -1);
+  expect(JSON.parse(localStorage.getItem(storageKey) ?? "null")).toEqual(saved);
+  localStorage.setItem(storageKey, JSON.stringify({ ...saved, width: 35 }));
+  await view.rerender(tree("project-a"));
+  await expect
+    .element(page.getByRole("complementary", { name: "Side panel" }))
+    .not.toBeInTheDocument();
+  await page.getByRole("button", { name: "Show side panel" }).click();
+  await expect
+    .element(page.getByRole("tab", { name: "Commit", exact: true }))
+    .not.toBeInTheDocument();
+  await expect
+    .element(page.getByRole("tab", { name: "Diffs", exact: true }))
+    .toHaveAttribute("aria-selected", "true");
+  await expect.poll(panelWidth).toBeCloseTo(550, -1);
+  await view.rerender(tree("project-b"));
+  await expect
+    .element(page.getByRole("tab", { name: "Commit", exact: true }))
+    .toHaveAttribute("aria-selected", "true");
+  await expect.poll(panelWidth).toBeCloseTo(550, -1);
+});

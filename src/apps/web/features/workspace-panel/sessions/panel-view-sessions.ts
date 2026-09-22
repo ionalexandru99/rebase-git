@@ -7,8 +7,9 @@ import type {
 function createPanelSession(
   key: string,
   scope: WorkspacePanelScope | undefined,
+  previousScopeKey: string | undefined,
 ) {
-  const store = createWorkspacePanelStore(key);
+  const store = createWorkspacePanelStore(key, previousScopeKey);
   let state: PanelViewState = { mounted: false, targets: {}, contents: {} };
   const listeners = new Set<() => void>();
   return {
@@ -51,8 +52,14 @@ export function createSessionCollection() {
         listeners.delete(listener);
       };
     },
-    acquire: (key: string, scope: WorkspacePanelScope | undefined) => {
-      return sessions.get(key) ?? createPanelSession(key, scope);
+    acquire: (
+      key: string,
+      scope: WorkspacePanelScope | undefined,
+      previousScopeKey?: string,
+    ) => {
+      return (
+        sessions.get(key) ?? createPanelSession(key, scope, previousScopeKey)
+      );
     },
     attach: (session: PanelSession) => {
       sessions.set(session.key, session);
