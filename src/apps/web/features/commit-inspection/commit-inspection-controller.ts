@@ -1,6 +1,5 @@
 import type { InspectCommit } from "@rebase/contracts/commit-inspection/commit-inspection.contract";
 import { Effect, Fiber } from "effect";
-import { createApplicationRuntime } from "#web/features/application-runtime/index";
 import type {
   CommitInspectionClient,
   CommitInspectionState,
@@ -13,6 +12,7 @@ import {
   readDiffPreferences,
   saveDiffPreferences,
 } from "#web/persistence/working-changes/working-changes-store";
+import { createApplicationRuntime } from "#web/platform/effect/application-runtime";
 
 export function createCommitInspectionController(
   client: CommitInspectionClient,

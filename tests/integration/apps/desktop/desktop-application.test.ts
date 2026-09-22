@@ -5,12 +5,12 @@ import { afterEach, describe, expect, it } from "vite-plus/test";
 import {
   type DesktopApplication,
   startDesktopApplication,
-} from "#desktop/features/desktop-application/desktop-application";
+} from "#desktop/app/desktop-application";
 import type {
   DesktopApplicationHost,
   DesktopWindowOptions,
-} from "#desktop/features/desktop-application/desktop-application.contract";
-import { startManagedEnvironmentServer } from "#desktop/features/environment-supervision/environment-supervisor";
+} from "#desktop/app/desktop-application.contract";
+import { startManagedEnvironmentServer } from "#desktop/platform/environment/environment-supervisor";
 
 const directories = new Set<string>();
 

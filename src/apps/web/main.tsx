@@ -1,8 +1,8 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
-import { createBrowserLocalEnvironmentSession } from "#web/features/local-environment-session/browser-local-environment-session";
+import { createBrowserLocalEnvironmentSession } from "#web/app/environment/browser-local-environment-session";
 import { NotificationsProvider } from "#web/features/notifications/index";
-import { ApplicationShell } from "#web-ui/features/application-shell/application-shell";
+import { ApplicationShell } from "#web-ui/app/shell/application-shell";
 import "@rebase/web/styles.css";
 
 const rootElement = document.getElementById("root");

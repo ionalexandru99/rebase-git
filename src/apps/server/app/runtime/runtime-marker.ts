@@ -2,9 +2,9 @@ import { randomUUID } from "node:crypto";
 import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import { Effect, type Scope } from "effect";
+import { RuntimeMarkerError } from "#server/app/runtime/runtime-errors.contract";
+import type { RuntimeMarker } from "#server/app/runtime/runtime-marker.contract";
 import { errorMessage, isFileSystemError } from "#server/error-inspection";
-import { RuntimeMarkerError } from "#server/features/environment-server/runtime/runtime-errors.contract";
-import type { RuntimeMarker } from "#server/features/environment-server/runtime/runtime-marker.contract";
 import { defaultEnvironmentPaths } from "#server/persistence/storage/environment-paths";
 
 export function defaultRuntimePath(): string {

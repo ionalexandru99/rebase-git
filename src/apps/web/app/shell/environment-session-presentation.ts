@@ -1,16 +1,9 @@
-import type { LocalEnvironmentSessionState } from "#web/features/local-environment-session/local-environment-session.contract";
-import type { EnvironmentAvailability } from "#web/features/project-navigation/project-navigation.contract";
-
-export interface EnvironmentSessionPresentation {
-  readonly availability: EnvironmentAvailability;
-  readonly connectionState: LocalEnvironmentSessionState["_tag"];
-  readonly detail: string;
-  readonly status: string;
-}
+import type { LocalEnvironmentSessionState } from "#web/app/environment/local-environment-session.contract";
+import type { EnvironmentNavigationStatus } from "#web/features/project-navigation/project-navigation.contract";
 
 export function environmentSessionPresentation(
   state: LocalEnvironmentSessionState,
-): EnvironmentSessionPresentation {
+): EnvironmentNavigationStatus {
   switch (state._tag) {
     case "PairingRequired":
       return {

@@ -4,7 +4,7 @@ import {
   useCallback,
   useState,
 } from "react";
-import type { LocalEnvironmentSession } from "#web/features/local-environment-session/local-environment-session.contract";
+import type { LocalEnvironmentSession } from "#web/app/environment/local-environment-session.contract";
 import type { OpenProjectRepository } from "#web/features/open-project/open-project.contract";
 import type {
   EnvironmentAvailability,

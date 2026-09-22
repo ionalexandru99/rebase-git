@@ -5,8 +5,8 @@ import type {
   DesktopApplicationOptions,
   DesktopQuitEvent,
   DesktopRenderer,
-} from "#desktop/features/desktop-application/desktop-application.contract";
-import type { ManagedEnvironmentServer } from "#desktop/features/environment-supervision/environment-supervisor.contract";
+} from "#desktop/app/desktop-application.contract";
+import type { ManagedEnvironmentServer } from "#desktop/platform/environment/environment-supervisor.contract";
 
 export async function startDesktopApplication(
   options: DesktopApplicationOptions,

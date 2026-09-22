@@ -1,4 +1,4 @@
-import type { ManagedEnvironmentServer } from "#desktop/features/environment-supervision/environment-supervisor.contract";
+import type { ManagedEnvironmentServer } from "#desktop/platform/environment/environment-supervisor.contract";
 
 export type DesktopRenderer =
   | { readonly type: "file"; readonly path: string }

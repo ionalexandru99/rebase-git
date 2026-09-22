@@ -51,7 +51,177 @@
       ],
       "linter": {
         "rules": {
-          "a11y": { "noNoninteractiveElementToInteractiveRole": "off" }
+          "a11y": {
+            "noNoninteractiveElementToInteractiveRole": "off"
+          }
+        }
+      }
+    },
+    {
+      "includes": ["src/contracts/**"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "patterns": [
+                  {
+                    "group": [
+                      "@rebase/server/**",
+                      "!@rebase/server/package.json",
+                      "@rebase/desktop/**"
+                    ],
+                    "message": "Use private #server/* or #desktop/* aliases for internal imports and tests. Cross-package consumers must use the public package entry point."
+                  },
+                  {
+                    "group": [
+                      "#server/**",
+                      "#web/**",
+                      "#web-ui/**",
+                      "#desktop/**",
+                      "@rebase/server",
+                      "@rebase/web",
+                      "@rebase/desktop"
+                    ],
+                    "message": "Shared contracts cannot depend on application implementations."
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "includes": ["src/apps/*/domain/**"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "patterns": [
+                  {
+                    "group": [
+                      "@rebase/server/**",
+                      "!@rebase/server/package.json",
+                      "@rebase/desktop/**"
+                    ],
+                    "message": "Use private #server/* or #desktop/* aliases for internal imports and tests. Cross-package consumers must use the public package entry point."
+                  },
+                  {
+                    "group": [
+                      "react",
+                      "react/**",
+                      "react-dom",
+                      "react-dom/**",
+                      "electron",
+                      "#*/app/**",
+                      "#*/features/**",
+                      "#*/adapters/**",
+                      "#*/platform/**"
+                    ],
+                    "message": "Domain code depends on contracts, not UI, application composition, or concrete adapters."
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "includes": ["src/apps/web/platform/**", "src/apps/web/components/ui/**"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "patterns": [
+                  {
+                    "group": [
+                      "@rebase/server/**",
+                      "!@rebase/server/package.json",
+                      "@rebase/desktop/**"
+                    ],
+                    "message": "Use private #server/* or #desktop/* aliases for internal imports and tests. Cross-package consumers must use the public package entry point."
+                  },
+                  {
+                    "group": [
+                      "#web/app/**",
+                      "#web-ui/app/**",
+                      "#web/features/**",
+                      "#web-ui/features/**"
+                    ],
+                    "message": "Platform adapters and UI primitives cannot depend on product features or application composition."
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "includes": ["src/apps/*/features/**"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "patterns": [
+                  {
+                    "group": [
+                      "@rebase/server/**",
+                      "!@rebase/server/package.json",
+                      "@rebase/desktop/**"
+                    ],
+                    "message": "Use private #server/* or #desktop/* aliases for internal imports and tests. Cross-package consumers must use the public package entry point."
+                  },
+                  {
+                    "group": [
+                      "#web/app/**",
+                      "#web-ui/app/**",
+                      "#server/app/**",
+                      "#desktop/app/**"
+                    ],
+                    "message": "Features expose capabilities to application composition and must not depend on it."
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "includes": ["src/apps/desktop/**", "src/apps/server/**"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "patterns": [
+                  {
+                    "group": [
+                      "@rebase/server/**",
+                      "!@rebase/server/package.json",
+                      "@rebase/desktop/**"
+                    ],
+                    "message": "Use private #server/* or #desktop/* aliases for internal imports and tests. Cross-package consumers must use the public package entry point."
+                  },
+                  {
+                    "group": ["@rebase/web", "@rebase/web/**"],
+                    "message": "Server and desktop code cannot depend on the browser application. Extract a purpose-specific shared client or port."
+                  }
+                ]
+              }
+            }
+          }
         }
       }
     }

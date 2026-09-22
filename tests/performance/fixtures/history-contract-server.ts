@@ -6,7 +6,7 @@ import { createLocalGitCommandRunner } from "#server/adapters/local-git/local-gi
 import type { EnvironmentAuthorization } from "#server/features/environment-authorization/environment-authorization.contract";
 import { createEnvironmentAuthorizationHttpHandler } from "#server/features/environment-authorization/index";
 import { createEnvironmentEventPublisher } from "#server/features/environment-connection/events/environment-event-publisher";
-import { acquireEnvironmentListener } from "#server/features/environment-server/server/environment-listener";
+import { acquireEnvironmentListener } from "#server/app/server/environment-listener";
 import {
   createRepositoryCatalog,
   createRepositoryCatalogHttpHandler,

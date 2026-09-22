@@ -3,6 +3,13 @@ export type EnvironmentAvailability =
   | "connecting"
   | "unavailable";
 
+export interface EnvironmentNavigationStatus {
+  readonly availability: EnvironmentAvailability;
+  readonly connectionState: string;
+  readonly detail: string;
+  readonly status: string;
+}
+
 export interface ProjectNavigationRepository {
   readonly id: string;
   readonly name: string;

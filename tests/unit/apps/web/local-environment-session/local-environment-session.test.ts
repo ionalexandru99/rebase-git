@@ -12,12 +12,12 @@ import {
 } from "@rebase/web/features/environment-connection";
 import { Effect } from "effect";
 import { describe, expect, it, vi } from "vite-plus/test";
-import type { EnvironmentFilesystemGateway } from "#web/features/environment-filesystem/environment-filesystem-controller.contract";
-import { createLocalEnvironmentSession } from "#web/features/local-environment-session/local-environment-session";
+import { createLocalEnvironmentSession } from "#web/app/environment/local-environment-session";
 import type {
   LocalEnvironmentGateway,
   LocalEnvironmentSessionState,
-} from "#web/features/local-environment-session/local-environment-session.contract";
+} from "#web/app/environment/local-environment-session.contract";
+import type { EnvironmentFilesystemGateway } from "#web/features/environment-filesystem/environment-filesystem-controller.contract";
 import type { RepositoryCatalogGateway } from "#web/features/repository-catalog/repository-catalog-controller.contract";
 import {
   RepositoryHistoryRejected,

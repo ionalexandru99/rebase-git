@@ -7,7 +7,7 @@ import type {
   RepositoryChanges,
 } from "@rebase/contracts/repository-changes/repository-changes.contract";
 import { Effect, Fiber, Semaphore } from "effect";
-import { createApplicationRuntime } from "#web/features/application-runtime/index";
+import { createApplicationRuntime } from "#web/platform/effect/application-runtime";
 import {
   type CommitDraft,
   type DiffPreferences,

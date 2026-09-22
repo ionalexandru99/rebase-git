@@ -11,7 +11,7 @@ import {
   hasNoAutomaticPort,
   isActiveAuthorization,
   isCurrentEnvironment,
-} from "#server/features/environment-server/environment-state.specifications";
+} from "#server/app/environment-state.specifications";
 import { acquireEnvironmentContext } from "#server/persistence/environment-context";
 import type { EnvironmentContext } from "#server/persistence/environment-context.contract";
 import {

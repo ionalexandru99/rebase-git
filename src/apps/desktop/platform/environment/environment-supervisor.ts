@@ -1,6 +1,6 @@
 import { startEnvironmentServer } from "@rebase/server";
 import { Effect, Exit, Scope } from "effect";
-import type { ManagedEnvironmentServer } from "#desktop/features/environment-supervision/environment-supervisor.contract";
+import type { ManagedEnvironmentServer } from "#desktop/platform/environment/environment-supervisor.contract";
 
 export async function startManagedEnvironmentServer(): Promise<ManagedEnvironmentServer> {
   const scope = Scope.makeUnsafe();

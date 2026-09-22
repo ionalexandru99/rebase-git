@@ -1,6 +1,6 @@
 import { execFile } from "node:child_process";
 import { Effect } from "effect";
-import { RuntimeRequirementsError } from "#server/features/environment-server/runtime/runtime-errors.contract";
+import { RuntimeRequirementsError } from "#server/app/runtime/runtime-errors.contract";
 
 const minimumNode22Version = [22, 18, 0] as const;
 const minimumGitVersion = [2, 34, 0] as const;

@@ -9,10 +9,10 @@ import {
   useSyncExternalStore,
 } from "react";
 import type { PanelImperativeHandle } from "react-resizable-panels";
-import { environmentSessionPresentation } from "#web/features/application-shell/environment-session-presentation";
-import { useProjectRepositoryActions } from "#web/features/application-shell/use-project-repository-actions";
-import { useRepositoryRefsActions } from "#web/features/application-shell/use-repository-refs-actions";
-import type { LocalEnvironmentSession } from "#web/features/local-environment-session/local-environment-session.contract";
+import type { LocalEnvironmentSession } from "#web/app/environment/local-environment-session.contract";
+import { environmentSessionPresentation } from "#web/app/shell/environment-session-presentation";
+import { useProjectRepositoryActions } from "#web/app/shell/hooks/use-project-repository-actions";
+import { useRepositoryRefsActions } from "#web/app/shell/hooks/use-repository-refs-actions";
 import type { OpenProjectEnvironment } from "#web/features/open-project/open-project.contract";
 import type { ProjectNavigationState } from "#web/features/project-navigation/project-navigation.contract";
 import {
@@ -23,6 +23,7 @@ import {
 } from "#web/features/project-navigation/project-navigation-state";
 import { useRepositoryHistoryReader } from "#web/features/repository-history/hooks/use-repository-history-reader";
 import { RepositorySettingsPage } from "#web/features/repository-settings/index";
+import { RepositoryWorkspace } from "#web-ui/app/workspace/repository-workspace";
 import {
   ResizableHandle,
   ResizablePanel,
@@ -31,7 +32,6 @@ import {
 import { OpenProjectScreen } from "#web-ui/features/open-project/open-project-screen";
 import { ProjectsSidebar } from "#web-ui/features/project-navigation/projects-sidebar";
 import { RepositoryFolderPicker } from "#web-ui/features/repository-folder-picker/repository-folder-picker";
-import { RepositoryWorkspace } from "#web-ui/features/repository-workspace/repository-workspace";
 import { SettingsPanel } from "#web-ui/features/settings/settings-panel";
 import { WorkspacePanel } from "#web-ui/features/workspace-panel/index";
 

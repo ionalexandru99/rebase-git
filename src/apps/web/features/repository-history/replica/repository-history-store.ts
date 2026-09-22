@@ -6,7 +6,7 @@ import type {
 import {
   historyOrderScopeKey,
   normalizedOids,
-} from "#web/features/repository-history/query/repository-history-query";
+} from "#web/features/repository-history/query/history-query-scope";
 import {
   acceptRepositoryHistoryBatch,
   completeRepositoryHistory,

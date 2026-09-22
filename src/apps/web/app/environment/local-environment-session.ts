@@ -5,12 +5,12 @@ import {
   EnvironmentHelloRejected,
 } from "@rebase/environment-client";
 import { Effect, Fiber, Result } from "effect";
-import { createEnvironmentFilesystemController } from "#web/features/environment-filesystem/environment-filesystem-controller";
 import type {
   LocalEnvironmentSession,
   LocalEnvironmentSessionOptions,
   LocalEnvironmentSessionState,
-} from "#web/features/local-environment-session/local-environment-session.contract";
+} from "#web/app/environment/local-environment-session.contract";
+import { createEnvironmentFilesystemController } from "#web/features/environment-filesystem/environment-filesystem-controller";
 import { createRepositoryCatalogController } from "#web/features/repository-catalog/repository-catalog-controller";
 import { createRepositoryHistoryGateway } from "#web/features/repository-history/transport/repository-history-gateway";
 import { createRepositoryRefsController } from "#web/features/repository-refs/repository-refs-controller";

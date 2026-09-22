@@ -27,21 +27,21 @@ import {
 import {
   hasNoAutomaticPort,
   isCurrentEnvironment,
-} from "#server/features/environment-server/environment-state.specifications";
+} from "#server/app/environment-state.specifications";
 import type {
   RuntimeMarkerError,
   RuntimeRequirementsError,
-} from "#server/features/environment-server/runtime/runtime-errors.contract";
-import { acquireRuntimeMarker } from "#server/features/environment-server/runtime/runtime-marker";
-import type { RuntimeMarker } from "#server/features/environment-server/runtime/runtime-marker.contract";
-import { verifyRuntimeRequirements } from "#server/features/environment-server/runtime/runtime-requirements";
-import { acquireEnvironmentListener } from "#server/features/environment-server/server/environment-listener";
+} from "#server/app/runtime/runtime-errors.contract";
+import { acquireRuntimeMarker } from "#server/app/runtime/runtime-marker";
+import type { RuntimeMarker } from "#server/app/runtime/runtime-marker.contract";
+import { verifyRuntimeRequirements } from "#server/app/runtime/runtime-requirements";
+import { acquireEnvironmentListener } from "#server/app/server/environment-listener";
 import type {
   EnvironmentListener,
   EnvironmentServer,
   EnvironmentServerOptions,
-} from "#server/features/environment-server/server/environment-server.contract";
-import type { EnvironmentServerStartError } from "#server/features/environment-server/server/environment-server-error.contract";
+} from "#server/app/server/environment-server.contract";
+import type { EnvironmentServerStartError } from "#server/app/server/environment-server-error.contract";
 import { repositoryAccessLayer } from "#server/features/repository-access/index";
 import {
   createRepositoryCatalog,

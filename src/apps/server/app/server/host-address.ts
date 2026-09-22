@@ -4,7 +4,7 @@ import {
   type HostAlias,
   hostAliases,
   type NetworkAddresses,
-} from "#server/features/environment-server/server/host-address.contract";
+} from "#server/app/server/host-address.contract";
 
 const unspecifiedAddresses = new BlockList();
 unspecifiedAddresses.addAddress("0.0.0.0");

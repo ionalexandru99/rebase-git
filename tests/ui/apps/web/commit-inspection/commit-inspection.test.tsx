@@ -12,7 +12,7 @@ import {
 import type { CommitInspectionClient } from "#web/features/commit-inspection/commit-inspection.contract";
 import { ResizablePanel } from "#web-ui/components/ui/resizable";
 import { CommitInspectionSession } from "#web-ui/features/commit-inspection/commit-inspection-session";
-import { CommitInspectionBridge } from "#web-ui/features/repository-workspace/commit-inspection-bridge";
+import { CommitInspectionBridge } from "#web-ui/app/workspace/commit-inspection-bridge";
 import { WorkspacePanel } from "#web-ui/features/workspace-panel/index";
 
 function details(oid = historyOid(0), parentOid = historyOid(1)): Details {

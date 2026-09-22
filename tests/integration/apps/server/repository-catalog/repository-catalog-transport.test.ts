@@ -25,7 +25,7 @@ import {
   createEnvironmentFilesystem,
   createEnvironmentFilesystemHttpHandler,
 } from "#server/features/environment-filesystem/index";
-import { acquireEnvironmentListener } from "#server/features/environment-server/server/environment-listener";
+import { acquireEnvironmentListener } from "#server/app/server/environment-listener";
 import {
   createRepositoryCatalog,
   createRepositoryCatalogHttpHandler,

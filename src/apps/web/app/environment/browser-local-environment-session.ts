@@ -9,9 +9,9 @@ import { Effect } from "effect";
 import { connectCurrentEnvironmentEffect } from "#web/features/environment-connection/index";
 import { listEnvironmentDirectoryEffect } from "#web/features/environment-filesystem/environment-filesystem-client";
 import type { EnvironmentFilesystemGateway } from "#web/features/environment-filesystem/environment-filesystem-controller.contract";
-import type { DesktopHostBridge } from "#web/features/local-environment-session/environment-bootstrap.contract";
-import { createLocalEnvironmentSession } from "#web/features/local-environment-session/local-environment-session";
-import type { LocalEnvironmentGateway } from "#web/features/local-environment-session/local-environment-session.contract";
+import type { DesktopHostBridge } from "#web/app/environment/environment-bootstrap.contract";
+import { createLocalEnvironmentSession } from "#web/app/environment/local-environment-session";
+import type { LocalEnvironmentGateway } from "#web/app/environment/local-environment-session.contract";
 import {
   listEnvironmentRepositoriesEffect,
   recordEnvironmentRepositoryOpenedEffect,

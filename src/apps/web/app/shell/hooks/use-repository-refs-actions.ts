@@ -3,7 +3,7 @@ import type {
   RepositoryRefTarget,
 } from "@rebase/contracts";
 import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
-import type { LocalEnvironmentSession } from "#web/features/local-environment-session/local-environment-session.contract";
+import type { LocalEnvironmentSession } from "#web/app/environment/local-environment-session.contract";
 import {
   resolveActiveWorktreePath,
   resolveRefActivation,

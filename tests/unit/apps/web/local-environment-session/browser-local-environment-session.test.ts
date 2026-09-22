@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vite-plus/test";
-import { resolveLocalEnvironmentBootstrap } from "#web/features/local-environment-session/browser-local-environment-session";
+import { resolveLocalEnvironmentBootstrap } from "#web/app/environment/browser-local-environment-session";
 
 describe("browser local Environment bootstrap", () => {
   it("uses the desktop host bootstrap for a packaged renderer", () => {

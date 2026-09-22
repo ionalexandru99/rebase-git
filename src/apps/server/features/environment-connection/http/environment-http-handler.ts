@@ -7,7 +7,7 @@ import {
   EnvironmentSnapshot,
 } from "@rebase/contracts";
 import { Effect } from "effect";
-import { respondWithBrowserAsset } from "#server/features/browser-client/browser-assets";
+import { respondWithBrowserAsset } from "#server/adapters/browser-client/browser-assets";
 import type { EnvironmentAuthorization } from "#server/features/environment-authorization/environment-authorization.contract";
 import type {
   EnvironmentTransportState,

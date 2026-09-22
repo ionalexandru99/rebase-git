@@ -21,6 +21,7 @@
   "include": [
     "../playwright*.config.ts",
     "../vitest.config.ts",
+    "../vite.config.ts",
     "./**/*.ts",
     "./**/*.tsx"
   ]

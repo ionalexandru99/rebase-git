@@ -2,22 +2,22 @@ import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { app, BrowserWindow, dialog } from "electron";
 import electronUpdater, { type AppUpdater } from "electron-updater";
-import { createApplicationUpdateSettingsStore } from "#desktop/features/application-updates/application-update-settings-store";
-import { createApplicationUpdater } from "#desktop/features/application-updates/application-updater";
-import { registerApplicationUpdaterIpc } from "#desktop/features/application-updates/application-updater-ipc";
 import {
   type DesktopApplication,
   startDesktopApplication,
-} from "#desktop/features/desktop-application/desktop-application";
+} from "#desktop/app/desktop-application";
 import type {
   DesktopApplicationHost,
   DesktopRenderer,
   DesktopWindowOptions,
-} from "#desktop/features/desktop-application/desktop-application.contract";
-import { desktopApplicationIpc } from "#desktop/features/desktop-application/desktop-application-ipc.contract";
-import { startManagedEnvironmentServer } from "#desktop/features/environment-supervision/environment-supervisor";
+} from "#desktop/app/desktop-application.contract";
+import { desktopApplicationIpc } from "#desktop/app/desktop-application-ipc.contract";
+import { createApplicationUpdateSettingsStore } from "#desktop/features/application-updates/application-update-settings-store";
+import { createApplicationUpdater } from "#desktop/features/application-updates/application-updater";
+import { registerApplicationUpdaterIpc } from "#desktop/features/application-updates/application-updater-ipc";
 import { createElectronRepositoryFilesystem } from "#desktop/features/repository-filesystem/electron-repository-filesystem";
 import { registerRepositoryFilesystemIpc } from "#desktop/features/repository-filesystem/repository-filesystem-ipc";
+import { startManagedEnvironmentServer } from "#desktop/platform/environment/environment-supervisor";
 
 let desktopApplication: DesktopApplication | undefined;
 const desktopIconPath = fileURLToPath(
