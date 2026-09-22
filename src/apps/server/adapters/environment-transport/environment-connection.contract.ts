@@ -1,9 +1,9 @@
 import type { EnvironmentDiscovery } from "@rebase/contracts";
 import type { Effect } from "effect";
+import type { EnvironmentEventPublisher } from "#server/adapters/environment-transport/events/environment-event-publisher.contract";
 import type { RepositoryFreshnessService } from "#server/domain/repository-freshness.contract";
 import type { RepositoryHistoryService } from "#server/domain/repository-history.contract";
 import type { RepositoryRefsService } from "#server/domain/repository-refs.contract";
-import type { EnvironmentEventPublisher } from "#server/adapters/environment-transport/events/environment-event-publisher.contract";
 
 export interface EnvironmentTransportState {
   readonly discovery: EnvironmentDiscovery;

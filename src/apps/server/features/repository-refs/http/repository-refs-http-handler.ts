@@ -6,11 +6,6 @@ import {
   RepositoryRefsOperationFailure,
 } from "@rebase/contracts";
 import { Effect } from "effect";
-import type {
-  RepositoryRefsError,
-  RepositoryRefsService,
-} from "#server/domain/repository-refs.contract";
-import type { EnvironmentAuthorization } from "#server/features/environment-authorization/environment-authorization.contract";
 import {
   expectedRequestOrigin,
   readRequestCredential,
@@ -22,6 +17,11 @@ import {
   requireMethod,
 } from "#server/adapters/environment-transport/http/environment-http-request-validation";
 import { writeJson } from "#server/adapters/environment-transport/http/environment-http-response";
+import type {
+  RepositoryRefsError,
+  RepositoryRefsService,
+} from "#server/domain/repository-refs.contract";
+import type { EnvironmentAuthorization } from "#server/features/environment-authorization/environment-authorization.contract";
 
 export function createRepositoryRefsHttpHandler(
   authorization: EnvironmentAuthorization,

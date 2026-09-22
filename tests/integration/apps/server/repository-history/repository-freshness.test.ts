@@ -8,8 +8,10 @@ import type { RepositoryFreshness } from "@rebase/contracts";
 import { connectCurrentEnvironmentEffect } from "@rebase/web/environment-connection";
 import { Context, Deferred, Effect, Layer } from "effect";
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
+import { createEnvironmentEventPublisher } from "#server/adapters/environment-transport/events/environment-event-publisher";
 import { createLocalGitCommandRunner } from "#server/adapters/local-git/local-git-command-runner";
 import { createLocalRepositoryWatcher } from "#server/adapters/local-git/local-repository-watcher";
+import { acquireEnvironmentListener } from "#server/app/server/environment-listener";
 import { GitCommands } from "#server/domain/git-command.contract";
 import {
   type RepositoryCatalog,
@@ -22,8 +24,6 @@ import {
 import { RepositoryWatching } from "#server/domain/repository-watcher.contract";
 import type { EnvironmentAuthorization } from "#server/features/environment-authorization/environment-authorization.contract";
 import { createEnvironmentAuthorizationHttpHandler } from "#server/features/environment-authorization/index";
-import { createEnvironmentEventPublisher } from "#server/adapters/environment-transport/events/environment-event-publisher";
-import { acquireEnvironmentListener } from "#server/app/server/environment-listener";
 import { repositoryCoordinationLayer } from "#server/features/repository-coordination/index";
 import { repositoryFreshnessLayer } from "#server/features/repository-history/freshness/repository-freshness";
 import { createRepositoryHistoryService } from "#server/features/repository-history/repository-history";

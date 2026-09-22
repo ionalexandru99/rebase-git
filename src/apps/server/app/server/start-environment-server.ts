@@ -1,29 +1,8 @@
 import { and } from "drizzle-orm";
 import { Context, Effect, Layer, type Scope } from "effect";
+import { createEnvironmentEventPublisher } from "#server/adapters/environment-transport/events/environment-event-publisher";
 import { createLocalGitCommandRunner } from "#server/adapters/local-git/local-git-command-runner";
 import { createLocalRepositoryWatcher } from "#server/adapters/local-git/local-repository-watcher";
-import { CommitInspectionAccess } from "#server/domain/commit-inspection.contract";
-import type { Environment } from "#server/domain/environment-state.contract";
-import type { EnvironmentStorageError } from "#server/domain/environment-storage-error.contract";
-import { GitCommands } from "#server/domain/git-command.contract";
-import { RepositoryCatalogAccess } from "#server/domain/repository-catalog.contract";
-import { RepositoryChangesAccess } from "#server/domain/repository-changes.contract";
-import { RepositoryCoordination } from "#server/domain/repository-coordination.contract";
-import { RepositoryFreshnessState } from "#server/domain/repository-freshness.contract";
-import { RepositoryWatching } from "#server/domain/repository-watcher.contract";
-import {
-  commitInspectionLayer,
-  createCommitInspectionHttpHandler,
-} from "#server/features/commit-inspection/index";
-import {
-  createEnvironmentAuthorization,
-  createEnvironmentAuthorizationHttpHandler,
-} from "#server/features/environment-authorization/index";
-import { createEnvironmentEventPublisher } from "#server/adapters/environment-transport/events/environment-event-publisher";
-import {
-  createEnvironmentFilesystem,
-  createEnvironmentFilesystemHttpHandler,
-} from "#server/features/environment-filesystem/index";
 import {
   hasNoAutomaticPort,
   isCurrentEnvironment,
@@ -42,6 +21,27 @@ import type {
   EnvironmentServerOptions,
 } from "#server/app/server/environment-server.contract";
 import type { EnvironmentServerStartError } from "#server/app/server/environment-server-error.contract";
+import { CommitInspectionAccess } from "#server/domain/commit-inspection.contract";
+import type { Environment } from "#server/domain/environment-state.contract";
+import type { EnvironmentStorageError } from "#server/domain/environment-storage-error.contract";
+import { GitCommands } from "#server/domain/git-command.contract";
+import { RepositoryCatalogAccess } from "#server/domain/repository-catalog.contract";
+import { RepositoryChangesAccess } from "#server/domain/repository-changes.contract";
+import { RepositoryCoordination } from "#server/domain/repository-coordination.contract";
+import { RepositoryFreshnessState } from "#server/domain/repository-freshness.contract";
+import { RepositoryWatching } from "#server/domain/repository-watcher.contract";
+import {
+  commitInspectionLayer,
+  createCommitInspectionHttpHandler,
+} from "#server/features/commit-inspection/index";
+import {
+  createEnvironmentAuthorization,
+  createEnvironmentAuthorizationHttpHandler,
+} from "#server/features/environment-authorization/index";
+import {
+  createEnvironmentFilesystem,
+  createEnvironmentFilesystemHttpHandler,
+} from "#server/features/environment-filesystem/index";
 import { repositoryAccessLayer } from "#server/features/repository-access/index";
 import {
   createRepositoryCatalog,

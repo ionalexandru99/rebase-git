@@ -2,8 +2,6 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import { CommitInspectionHttpApi } from "@rebase/contracts/commit-inspection/commit-inspection.contract";
 import { ChangesFailure } from "@rebase/contracts/repository-changes/repository-changes.contract";
 import { Effect } from "effect";
-import type { CommitInspectionService } from "#server/domain/commit-inspection.contract";
-import type { EnvironmentAuthorization } from "#server/features/environment-authorization/environment-authorization.contract";
 import {
   readRequestCredential,
   validateRequestOrigin,
@@ -14,6 +12,8 @@ import {
   requireMethod,
 } from "#server/adapters/environment-transport/http/environment-http-request-validation";
 import { writeJson } from "#server/adapters/environment-transport/http/environment-http-response";
+import type { CommitInspectionService } from "#server/domain/commit-inspection.contract";
+import type { EnvironmentAuthorization } from "#server/features/environment-authorization/environment-authorization.contract";
 
 export function createCommitInspectionHttpHandler(
   authorization: EnvironmentAuthorization,

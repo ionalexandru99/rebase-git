@@ -10,11 +10,6 @@ import {
   RepositoryRemoved,
 } from "@rebase/contracts";
 import { Effect } from "effect";
-import type {
-  RepositoryCatalog,
-  RepositoryCatalogError,
-} from "#server/domain/repository-catalog.contract";
-import type { EnvironmentAuthorization } from "#server/features/environment-authorization/environment-authorization.contract";
 import {
   readRequestCredential,
   validateRequestOrigin,
@@ -26,6 +21,11 @@ import {
   requireMethod,
 } from "#server/adapters/environment-transport/http/environment-http-request-validation";
 import { writeJson } from "#server/adapters/environment-transport/http/environment-http-response";
+import type {
+  RepositoryCatalog,
+  RepositoryCatalogError,
+} from "#server/domain/repository-catalog.contract";
+import type { EnvironmentAuthorization } from "#server/features/environment-authorization/environment-authorization.contract";
 
 export function createRepositoryCatalogHttpHandler(
   authorization: EnvironmentAuthorization,

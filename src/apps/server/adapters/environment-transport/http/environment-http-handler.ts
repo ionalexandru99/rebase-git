@@ -8,7 +8,6 @@ import {
 } from "@rebase/contracts";
 import { Effect } from "effect";
 import { respondWithBrowserAsset } from "#server/adapters/browser-client/browser-assets";
-import type { EnvironmentAuthorization } from "#server/features/environment-authorization/environment-authorization.contract";
 import type {
   EnvironmentTransportState,
   RunEnvironmentEffect,
@@ -29,6 +28,7 @@ import {
   writeJson,
   writeJsonValue,
 } from "#server/adapters/environment-transport/http/environment-http-response";
+import type { EnvironmentAuthorization } from "#server/features/environment-authorization/environment-authorization.contract";
 
 export function createEnvironmentHttpHandler(
   state: EnvironmentTransportState,

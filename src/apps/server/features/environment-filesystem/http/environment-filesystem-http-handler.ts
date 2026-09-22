@@ -6,11 +6,6 @@ import {
   ListEnvironmentDirectory,
 } from "@rebase/contracts";
 import { Effect } from "effect";
-import type {
-  EnvironmentFilesystem,
-  EnvironmentFilesystemError,
-} from "#server/domain/environment-filesystem.contract";
-import type { EnvironmentAuthorization } from "#server/features/environment-authorization/environment-authorization.contract";
 import {
   readRequestCredential,
   validateRequestOrigin,
@@ -21,6 +16,11 @@ import {
   requireMethod,
 } from "#server/adapters/environment-transport/http/environment-http-request-validation";
 import { writeJson } from "#server/adapters/environment-transport/http/environment-http-response";
+import type {
+  EnvironmentFilesystem,
+  EnvironmentFilesystemError,
+} from "#server/domain/environment-filesystem.contract";
+import type { EnvironmentAuthorization } from "#server/features/environment-authorization/environment-authorization.contract";
 
 export function createEnvironmentFilesystemHttpHandler(
   authorization: EnvironmentAuthorization,

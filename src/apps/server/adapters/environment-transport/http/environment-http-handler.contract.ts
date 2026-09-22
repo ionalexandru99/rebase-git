@@ -1,8 +1,8 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type { Effect } from "effect";
+import type { EnvironmentHttpBodyError } from "#server/adapters/environment-transport/http/environment-http-request-body.contract";
 import type { EnvironmentStorageError } from "#server/domain/environment-storage-error.contract";
 import type { EnvironmentAuthorizationError } from "#server/features/environment-authorization/environment-authorization.contract";
-import type { EnvironmentHttpBodyError } from "#server/adapters/environment-transport/http/environment-http-request-body.contract";
 
 export type EnvironmentHttpRequestHandler = (
   request: IncomingMessage,
