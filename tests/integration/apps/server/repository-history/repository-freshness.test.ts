@@ -23,6 +23,7 @@ import { RepositoryWatching } from "#server/domain/repository-watcher.contract";
 import type { EnvironmentAuthorization } from "#server/features/environment-authorization/environment-authorization.contract";
 import { createEnvironmentEventPublisher } from "#server/features/environment-connection/events/environment-event-publisher";
 import { acquireEnvironmentListener } from "#server/features/environment-server/server/environment-listener";
+import { repositoryCoordinationLayer } from "#server/features/repository-coordination/index";
 import { repositoryFreshnessLayer } from "#server/features/repository-history/freshness/repository-freshness";
 import { createRepositoryHistoryService } from "#server/features/repository-history/repository-history";
 
@@ -339,6 +340,7 @@ function withService(
 
 function freshnessLayer(catalog: RepositoryCatalog) {
   return repositoryFreshnessLayer.pipe(
+    Layer.provide(repositoryCoordinationLayer),
     Layer.provide(
       Layer.mergeAll(
         Layer.succeed(RepositoryCatalogAccess, catalog),

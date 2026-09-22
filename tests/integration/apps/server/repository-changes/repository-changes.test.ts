@@ -15,6 +15,7 @@ import { createLocalGitCommandRunner } from "#server/adapters/local-git/local-gi
 import type { GitCommand } from "#server/domain/git-command.contract";
 import { createRepositoryAccess } from "#server/features/repository-access/index";
 import { createRepositoryChangesService } from "#server/features/repository-changes/repository-changes";
+import { createRepositoryCoordination } from "#server/features/repository-coordination/index";
 
 const exec = promisify(execFile);
 const directories: string[] = [];
@@ -79,6 +80,7 @@ async function fixture(
           ),
         ),
     },
+    createRepositoryCoordination(runner),
   );
   const read = (amend = false) =>
     Effect.runPromise(service.read({ ...scope, amend }));

@@ -1,6 +1,7 @@
 import { Effect, Exit, Fiber, Layer, Scope } from "effect";
 import { GitCommands } from "#server/domain/git-command.contract";
 import { RepositoryCatalogAccess } from "#server/domain/repository-catalog.contract";
+import { RepositoryCoordination } from "#server/domain/repository-coordination.contract";
 import {
   type RepositoryFreshnessService,
   RepositoryFreshnessState,
@@ -26,6 +27,7 @@ export const repositoryFreshnessLayer = Layer.effect(
     const catalog = yield* RepositoryCatalogAccess;
     const git = yield* GitCommands;
     const watcher = yield* RepositoryWatching;
+    const coordination = yield* RepositoryCoordination;
     const scope = yield* Effect.scope;
     const repositories = new Map<string, RepositoryLifetime>();
     const aliases = new Map<string, string>();
@@ -85,6 +87,7 @@ export const repositoryFreshnessLayer = Layer.effect(
                 subscribers,
                 git,
                 watcher,
+                coordination,
               ).pipe(
                 Effect.tap((repository) =>
                   Effect.sync(() => {

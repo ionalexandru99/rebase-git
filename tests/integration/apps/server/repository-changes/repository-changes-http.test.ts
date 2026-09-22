@@ -13,6 +13,7 @@ import { acquireEnvironmentListener } from "#server/features/environment-server/
 import { createRepositoryAccess } from "#server/features/repository-access/index";
 import { createRepositoryCatalog } from "#server/features/repository-catalog/repository-catalog";
 import { createRepositoryChangesService } from "#server/features/repository-changes/index";
+import { createRepositoryCoordination } from "#server/features/repository-coordination/index";
 import { acquireEnvironmentContext } from "#server/persistence/environment-context";
 import { environmentPaths } from "#server/persistence/storage/environment-paths";
 import { createCommitInspectionClient } from "#web/features/commit-inspection/transport/commit-inspection-client";
@@ -46,7 +47,11 @@ it("authorizes changes reads separately from index mutations across HTTP", async
           const listener = yield* acquireEnvironmentListener({
             authorization,
             catalog,
-            changes: createRepositoryChangesService(access, runner),
+            changes: createRepositoryChangesService(
+              access,
+              runner,
+              createRepositoryCoordination(runner),
+            ),
             inspection: createCommitInspectionService(access, runner),
             environmentId: "00000000-0000-4000-8000-000000000001",
             events: createEnvironmentEventPublisher(),

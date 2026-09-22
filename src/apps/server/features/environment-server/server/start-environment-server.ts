@@ -8,6 +8,7 @@ import type { EnvironmentStorageError } from "#server/domain/environment-storage
 import { GitCommands } from "#server/domain/git-command.contract";
 import { RepositoryCatalogAccess } from "#server/domain/repository-catalog.contract";
 import { RepositoryChangesAccess } from "#server/domain/repository-changes.contract";
+import { RepositoryCoordination } from "#server/domain/repository-coordination.contract";
 import { RepositoryFreshnessState } from "#server/domain/repository-freshness.contract";
 import { RepositoryWatching } from "#server/domain/repository-watcher.contract";
 import { commitInspectionLayer } from "#server/features/commit-inspection/index";
@@ -35,6 +36,7 @@ import type { EnvironmentServerStartError } from "#server/features/environment-s
 import { repositoryAccessLayer } from "#server/features/repository-access/index";
 import { createRepositoryCatalog } from "#server/features/repository-catalog/repository-catalog";
 import { repositoryChangesLayer } from "#server/features/repository-changes/index";
+import { repositoryCoordinationLayer } from "#server/features/repository-coordination/index";
 import { repositoryFreshnessLayer } from "#server/features/repository-history/freshness/repository-freshness";
 import { createRepositoryHistoryService } from "#server/features/repository-history/repository-history";
 import { acquireRepositoryChangePublisher } from "#server/features/repository-refs/repository-change-publisher";
@@ -78,6 +80,7 @@ export function startEnvironmentServer(
         repositoryChangesLayer,
         commitInspectionLayer,
       ).pipe(
+        Layer.provideMerge(repositoryCoordinationLayer),
         Layer.provide(repositoryAccessLayer),
         Layer.provide(
           Layer.mergeAll(
@@ -89,6 +92,7 @@ export function startEnvironmentServer(
       ),
     );
     const refs = createRepositoryRefsService({
+      coordination: Context.get(repositoryServices, RepositoryCoordination),
       catalog,
       changes: yield* acquireRepositoryChangePublisher(git, watcher, events),
       git,
