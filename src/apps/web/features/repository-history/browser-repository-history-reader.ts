@@ -1,18 +1,11 @@
-import type {
-  RepositoryCommit,
-  RepositoryFetchSetting,
-  RepositoryFreshness,
-} from "@rebase/contracts";
+import type { RepositoryFetchSetting } from "@rebase/contracts";
 import { createEnvironmentRequestId } from "#web/features/environment-connection/websocket/environment-request-id";
-import type { HistoryAncestryRoute } from "#web/features/repository-history/query/history-order.contract";
 import { holdRepositoryHistoryReaderLease } from "#web/features/repository-history/reader/repository-history-reader-lease";
 import { maintainRepositoryHistoryReader } from "#web/features/repository-history/reader/repository-history-reader-lifecycle";
 import type {
   RepositoryHistoryGateway,
-  RepositoryHistoryPosition,
   RepositoryHistoryQuery,
   RepositoryHistoryReader,
-  RepositoryHistoryRefTarget,
   RepositoryHistorySnapshot,
 } from "#web/features/repository-history/repository-history-reader.contract";
 import {
@@ -21,11 +14,12 @@ import {
   RepositoryHistoryStorageUnavailable,
   RepositoryHistoryUnavailable,
 } from "#web/features/repository-history/repository-history-reader.contract";
-import type { RepositoryHistoryStorageDiagnostics } from "#web/features/repository-history/repository-history-storage.contract";
-import type { RepositoryHistorySearchResult } from "#web/features/repository-history/search/repository-history-search.contract";
+import { isHistoryWorkerReply } from "#web/features/repository-history/worker/history-worker-replies";
 import type {
   ConnectRepositoryHistoryReader,
   RepositoryHistoryWorkerFailure,
+  RepositoryHistoryWorkerQuery,
+  RepositoryHistoryWorkerReplies,
   RepositoryHistoryWorkerRequest,
   RepositoryHistoryWorkerResponse,
 } from "#web/features/repository-history/worker/repository-history-worker.contract";
@@ -193,43 +187,11 @@ function connectBrowserRepositoryHistoryReader(
       );
       return;
     }
-    if (message._tag === "HistorySearchResult") {
-      request.resolve(message.result);
-      return;
-    }
     if (message._tag === "RequestFailed") {
       request.reject(readerError(message.failure));
       return;
     }
-    if (message._tag === "RefTargetsResult") {
-      request.resolve(message.refs);
-      return;
-    }
-    if (message._tag === "AncestryRouteResult") {
-      request.resolve(message.route);
-      return;
-    }
-    if (message._tag === "HistoryPositionResult") {
-      request.resolve(message.position);
-      return;
-    }
-    if (message._tag === "HistoryPositionsResult") {
-      request.resolve(message.positions);
-      return;
-    }
-    if (message._tag === "FreshnessResult") {
-      request.resolve(message.freshness);
-      return;
-    }
-    if (message._tag === "CacheDiagnosticsResult") {
-      request.resolve(message.diagnostics);
-      return;
-    }
-    if (message._tag === "CacheManaged") {
-      request.resolve(undefined);
-      return;
-    }
-    request.resolve(message.commits);
+    request.resolve(message);
   };
   port.start();
   function failWorker() {
@@ -450,115 +412,117 @@ function connectBrowserRepositoryHistoryReader(
     }
   }
 
-  function request<T>(
-    message: RepositoryHistoryWorkerRequest,
+  function request<Message extends RepositoryHistoryWorkerQuery>(
+    message: Message,
     signal?: AbortSignal,
   ) {
     if (closed) {
       return Promise.reject(new RepositoryHistoryUnavailable());
     }
     if (signal?.aborted) return Promise.reject(signal.reason);
-    return new Promise<T>((resolve, reject) => {
-      if (!("requestId" in message)) {
-        reject(new RepositoryHistoryUnavailable());
-        return;
-      }
-      const abort = () => {
-        pending.delete(message.requestId);
-        if (message._tag === "SearchHistory")
-          port.postMessage({
-            _tag: "CancelHistorySearch",
-            requestId: message.requestId,
-          } satisfies RepositoryHistoryWorkerRequest);
-        reject(signal?.reason);
-      };
-      signal?.addEventListener("abort", abort, { once: true });
-      pending.set(message.requestId, {
-        reject: (error) => {
-          signal?.removeEventListener("abort", abort);
-          reject(error);
-        },
-        resolve: (value) => {
-          signal?.removeEventListener("abort", abort);
-          resolve(value as T);
-        },
-      });
-      port.postMessage(message);
-    });
+    return new Promise<RepositoryHistoryWorkerReplies[Message["_tag"]]>(
+      (resolve, reject) => {
+        const abort = () => {
+          pending.delete(message.requestId);
+          if (message._tag === "SearchHistory")
+            port.postMessage({
+              _tag: "CancelHistorySearch",
+              requestId: message.requestId,
+            } satisfies RepositoryHistoryWorkerRequest);
+          reject(signal?.reason);
+        };
+        signal?.addEventListener("abort", abort, { once: true });
+        pending.set(message.requestId, {
+          reject: (error) => {
+            signal?.removeEventListener("abort", abort);
+            reject(error);
+          },
+          resolve: (value) => {
+            signal?.removeEventListener("abort", abort);
+            if (isHistoryWorkerReply<Message["_tag"]>(message._tag, value)) {
+              resolve(value);
+            } else {
+              reject(new RepositoryHistoryUnavailable());
+            }
+          },
+        });
+        port.postMessage(message);
+      },
+    );
   }
 
   const reader: RepositoryHistoryReader = {
     locateMany: (query, oids) =>
-      request<readonly RepositoryHistoryPosition[]>({
+      request({
         _tag: "LocateHistoryCommits",
         query,
         oids,
         requestId: createEnvironmentRequestId(),
-      }),
+      }).then((reply) => reply.positions),
     ancestryRoute: (roots, oid) =>
-      request<HistoryAncestryRoute | undefined>({
+      request({
         _tag: "GetAncestryRoute",
         roots,
         oid,
         requestId: createEnvironmentRequestId(),
-      }),
+      }).then((reply) => reply.route),
     locate: (query, oid) =>
-      request<number | undefined>({
+      request({
         _tag: "LocateHistoryCommit",
         query,
         oid,
         requestId: createEnvironmentRequestId(),
-      }),
+      }).then((reply) => reply.position),
     fetch: () =>
-      request<RepositoryFreshness>({
+      request({
         _tag: "FetchHistory",
         requestId: createEnvironmentRequestId(),
-      }),
+      }).then((reply) => reply.freshness),
     configureFetch: (setting: RepositoryFetchSetting) =>
-      request<RepositoryFreshness>({
+      request({
         _tag: "ConfigureFetch",
         setting,
         requestId: createEnvironmentRequestId(),
-      }),
+      }).then((reply) => reply.freshness),
     search: (query, signal) =>
-      request<RepositoryHistorySearchResult>(
+      request(
         {
           _tag: "SearchHistory",
           query,
           requestId: createEnvironmentRequestId(),
         },
         signal,
-      ),
+      ).then((reply) => reply.result),
     getCacheDiagnostics: () =>
-      request<RepositoryHistoryStorageDiagnostics>({
+      request({
         _tag: "GetCacheDiagnostics",
         requestId: createEnvironmentRequestId(),
-      }),
+      }).then((reply) => reply.diagnostics),
     manageCache: (action) =>
-      request<void>({
+      request({
         _tag: "ManageCache",
         action,
         requestId: createEnvironmentRequestId(),
-      }),
+      }).then(() => undefined),
     close: dispose,
     getCommitSummaries: (oids) =>
-      request<readonly RepositoryCommit[]>({
+      request({
         _tag: "GetCommitSummaries",
         oids,
         requestId: createEnvironmentRequestId(),
-      }),
+      }).then((reply) => reply.commits),
     getRefTargets: () =>
-      request<readonly RepositoryHistoryRefTarget[]>({
+      request({
         _tag: "GetRefTargets",
         requestId: createEnvironmentRequestId(),
-      }),
+      }).then((reply) => reply.refs),
     getSnapshot: () => snapshot,
     read: (query) =>
-      request<readonly RepositoryCommit[]>({
+      request({
         _tag: "ReadHistory",
         query,
         requestId: createEnvironmentRequestId(),
-      }),
+      }).then((reply) => reply.commits),
     subscribe: (listener) => {
       listeners.add(listener);
       return () => listeners.delete(listener);
@@ -623,7 +587,7 @@ function requestPersistentStorage() {
 
 interface PendingRequest {
   readonly reject: (error: unknown) => void;
-  readonly resolve: (value: unknown) => void;
+  readonly resolve: (value: RepositoryHistoryWorkerResponse) => void;
 }
 
 interface PendingBatch {

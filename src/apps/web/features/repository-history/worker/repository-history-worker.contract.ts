@@ -239,3 +239,55 @@ export interface ConnectRepositoryHistoryReader {
   readonly port: MessagePort;
   readonly repositoryId: string;
 }
+
+export interface RepositoryHistoryWorkerReplies {
+  readonly LocateHistoryCommits: Extract<
+    RepositoryHistoryWorkerResponse,
+    { readonly _tag: "HistoryPositionsResult" }
+  >;
+  readonly GetAncestryRoute: Extract<
+    RepositoryHistoryWorkerResponse,
+    { readonly _tag: "AncestryRouteResult" }
+  >;
+  readonly LocateHistoryCommit: Extract<
+    RepositoryHistoryWorkerResponse,
+    { readonly _tag: "HistoryPositionResult" }
+  >;
+  readonly FetchHistory: Extract<
+    RepositoryHistoryWorkerResponse,
+    { readonly _tag: "FreshnessResult" }
+  >;
+  readonly ConfigureFetch: Extract<
+    RepositoryHistoryWorkerResponse,
+    { readonly _tag: "FreshnessResult" }
+  >;
+  readonly SearchHistory: Extract<
+    RepositoryHistoryWorkerResponse,
+    { readonly _tag: "HistorySearchResult" }
+  >;
+  readonly GetCacheDiagnostics: Extract<
+    RepositoryHistoryWorkerResponse,
+    { readonly _tag: "CacheDiagnosticsResult" }
+  >;
+  readonly ManageCache: Extract<
+    RepositoryHistoryWorkerResponse,
+    { readonly _tag: "CacheManaged" }
+  >;
+  readonly GetCommitSummaries: Extract<
+    RepositoryHistoryWorkerResponse,
+    { readonly _tag: "CommitSummariesResult" }
+  >;
+  readonly GetRefTargets: Extract<
+    RepositoryHistoryWorkerResponse,
+    { readonly _tag: "RefTargetsResult" }
+  >;
+  readonly ReadHistory: Extract<
+    RepositoryHistoryWorkerResponse,
+    { readonly _tag: "HistoryResult" }
+  >;
+}
+
+export type RepositoryHistoryWorkerQuery = Extract<
+  RepositoryHistoryWorkerRequest,
+  { readonly _tag: keyof RepositoryHistoryWorkerReplies }
+>;
