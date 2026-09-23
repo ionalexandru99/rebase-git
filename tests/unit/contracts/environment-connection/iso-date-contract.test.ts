@@ -9,4 +9,10 @@ describe("IsoDate contract", () => {
     expect(() => decode("2026-08-24T20:00:00Z")).toThrow();
     expect(() => decode("yesterday")).toThrow();
   });
+
+  it("rejects impossible calendar dates and clock values", () => {
+    const decode = Schema.decodeUnknownSync(IsoDate);
+    expect(() => decode("2026-02-30T20:00:00.000Z")).toThrow();
+    expect(() => decode("2026-08-24T24:00:00.000Z")).toThrow();
+  });
 });
