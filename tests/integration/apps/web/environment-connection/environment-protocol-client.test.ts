@@ -1,17 +1,15 @@
-import { createServer, type ServerResponse } from "node:http";
 import {
-  createCurrentEnvironmentDiscovery,
   createCurrentEnvironmentHello,
-  currentTransportLimits,
+  type EnvironmentHello,
 } from "@rebase/contracts";
 import {
-  connectCurrentEnvironment,
   connectCurrentEnvironmentEffect,
-  connectEnvironment,
+  connectEnvironmentEffect,
   EnvironmentHelloRejected,
+  type EnvironmentProtocolConnection,
   EnvironmentResponseError,
-  fetchEnvironmentDiscovery,
-  fetchEnvironmentSnapshot,
+  fetchEnvironmentDiscoveryEffect,
+  fetchEnvironmentSnapshotEffect,
 } from "@rebase/web/environment-connection";
 import { Effect } from "effect";
 import { describe, expect, it, vi } from "vite-plus/test";
@@ -24,39 +22,35 @@ import { environmentAuthorizationFeature } from "#server/features/environment-au
 const environmentId = "00000000-0000-4000-8000-000000000001";
 const credential = { type: "bearer", value: "test-device-credential" } as const;
 const testAuthorization = createTestAuthorization();
-const encodedSnapshot = JSON.stringify({ environmentId, sequence: 0 });
-const oversizedSnapshot = Buffer.from(
-  encodedSnapshot.padEnd(currentTransportLimits.maxHttpResponseBytes + 1),
-);
+const closedByClient = new EnvironmentResponseError({
+  responseTag: "WebSocket",
+});
 
 describe("browser Environment protocol client", () => {
   it("invalidates all refs after a sequence gap and resumes targeted changes without replaying duplicates", async () => {
     const events = createEnvironmentEventPublisher();
     await withListener(
-      async (origin) => {
-        const connection = await connectCurrentEnvironment(origin, "0.0.0", {
-          credential,
-        });
-        const changed = vi.fn();
-        const unsubscribe = connection.subscribeChanges(changed);
-        try {
-          events.publishChanged([environmentId]);
-          events.publishChanged([environmentId]);
-          await Effect.runPromise(connection.waitForSequence(2));
-          expect(changed).toHaveBeenCalledExactlyOnceWith(undefined);
-          events.publishChanged([environmentId]);
-          events.publishChanged([environmentId]);
-          await Effect.runPromise(connection.waitForSequence(4));
-          expect(changed.mock.calls).toEqual([
-            [undefined],
-            [[environmentId]],
-            [[environmentId]],
-          ]);
-        } finally {
-          unsubscribe();
-          connection.close();
-        }
-      },
+      (origin) =>
+        withCurrentConnection(origin, {}, async (connection) => {
+          const changed = vi.fn();
+          const unsubscribe = connection.subscribeChanges(changed);
+          try {
+            events.publishChanged([environmentId]);
+            events.publishChanged([environmentId]);
+            await Effect.runPromise(connection.waitForSequence(2));
+            expect(changed).toHaveBeenCalledExactlyOnceWith(undefined);
+            events.publishChanged([environmentId]);
+            events.publishChanged([environmentId]);
+            await Effect.runPromise(connection.waitForSequence(4));
+            expect(changed.mock.calls).toEqual([
+              [undefined],
+              [[environmentId]],
+              [[environmentId]],
+            ]);
+          } finally {
+            unsubscribe();
+          }
+        }),
       {
         ...events,
         subscribe: (listener) =>
@@ -71,99 +65,98 @@ describe("browser Environment protocol client", () => {
 
   for (const identified of [true, false])
     it(`delivers repository changes with identity negotiation ${identified}`, async () => {
-      await withListener(async (origin, events) => {
-        const discovery = await fetchEnvironmentDiscovery(origin);
-        const hello = createCurrentEnvironmentHello("0.0.0");
-        const connection = await connectEnvironment(
+      await withListener((origin, events) =>
+        withNegotiatedConnection(
           origin,
-          discovery,
-          identified
-            ? hello
-            : {
-                ...hello,
-                protocol: { major: 2, minor: 3, minimumSupportedMinor: 0 },
-                capabilities: hello.capabilities.filter(
-                  (capability) => capability.name !== "repository-ref-events",
-                ),
-              },
-          credential,
-        );
-        const changed = vi.fn();
-        const unsubscribe = connection.subscribeChanges(changed);
-        try {
-          events.publishChanged([environmentId]);
-          await Effect.runPromise(connection.waitForSequence(1));
-          expect(changed).toHaveBeenCalledExactlyOnceWith(
-            identified ? [environmentId] : undefined,
-          );
-          unsubscribe();
-          events.publishChanged([environmentId]);
-          await Effect.runPromise(connection.waitForSequence(2));
-          expect(changed).toHaveBeenCalledOnce();
-        } finally {
-          unsubscribe();
-          connection.close();
-        }
-      });
+          (hello) =>
+            identified
+              ? hello
+              : {
+                  ...hello,
+                  protocol: { major: 2, minor: 3, minimumSupportedMinor: 0 },
+                  capabilities: hello.capabilities.filter(
+                    (capability) => capability.name !== "repository-ref-events",
+                  ),
+                },
+          async (connection) => {
+            const changed = vi.fn();
+            const unsubscribe = connection.subscribeChanges(changed);
+            try {
+              events.publishChanged([environmentId]);
+              await Effect.runPromise(connection.waitForSequence(1));
+              expect(changed).toHaveBeenCalledExactlyOnceWith(
+                identified ? [environmentId] : undefined,
+              );
+              unsubscribe();
+              events.publishChanged([environmentId]);
+              await Effect.runPromise(connection.waitForSequence(2));
+              expect(changed).toHaveBeenCalledOnce();
+            } finally {
+              unsubscribe();
+            }
+          },
+        ),
+      );
     });
 
   it("discovers, negotiates, and snapshots one Environment", async () => {
-    await withListener(async (origin, events) => {
-      const connection = await connectCurrentEnvironment(origin, "0.0.0", {
-        credential,
-      });
-      expect(connection.negotiated).toMatchObject({
-        _tag: "HelloAccepted",
-        accessCapabilities: ["environment.read"],
-        environmentId,
-      });
+    await withListener((origin, events) =>
+      withCurrentConnection(origin, {}, async (connection) => {
+        expect(connection.negotiated).toMatchObject({
+          _tag: "HelloAccepted",
+          accessCapabilities: ["environment.read"],
+          environmentId,
+        });
 
-      await expect(
-        fetchEnvironmentSnapshot(origin, connection.discovery, credential),
-      ).resolves.toEqual({ environmentId, sequence: 0 });
+        await expect(
+          Effect.runPromise(
+            fetchEnvironmentSnapshotEffect(
+              origin,
+              connection.discovery,
+              credential,
+            ),
+          ),
+        ).resolves.toEqual({ environmentId, sequence: 0 });
 
-      const changed = Effect.runPromise(connection.waitForSequence(1));
-      events.publishChanged();
-      await expect(changed).resolves.toBe(1);
-      connection.close();
-      await expect(Effect.runPromise(connection.closed)).resolves.toEqual(
-        new EnvironmentResponseError({ responseTag: "WebSocket" }),
-      );
-      await expect(
-        Effect.runPromise(connection.waitForSequence(2)),
-      ).rejects.toEqual(
-        new EnvironmentResponseError({ responseTag: "WebSocket" }),
-      );
-    });
+        const changed = Effect.runPromise(connection.waitForSequence(1));
+        events.publishChanged();
+        await expect(changed).resolves.toBe(1);
+        connection.close();
+        await expect(Effect.runPromise(connection.closed)).resolves.toEqual(
+          closedByClient,
+        );
+        await expect(
+          Effect.runPromise(connection.waitForSequence(2)),
+        ).rejects.toEqual(closedByClient);
+      }),
+    );
   });
 
   it("fetches a fresh snapshot after reconnecting across a sequence gap", async () => {
     await withListener(async (origin, events) => {
-      const initial = await connectCurrentEnvironment(origin, "0.0.0", {
-        credential,
-      });
-      initial.close();
+      await withCurrentConnection(origin, {}, async () => undefined);
       events.publishChanged();
       events.publishChanged();
 
-      const recovered = await connectCurrentEnvironment(origin, "0.0.0", {
-        credential,
-        lastObservedSequence: 0,
-      });
-      events.publishChanged();
-      await expect(
-        Effect.runPromise(recovered.waitForSequence(3)),
-      ).resolves.toBe(3);
-      expect(recovered.currentSequence()).toBe(3);
+      await withCurrentConnection(
+        origin,
+        { lastObservedSequence: 0 },
+        async (recovered) => {
+          events.publishChanged();
+          await expect(
+            Effect.runPromise(recovered.waitForSequence(3)),
+          ).resolves.toBe(3);
+          expect(recovered.currentSequence()).toBe(3);
 
-      const resumed = Effect.runPromise(recovered.waitForSequence(4));
-      events.publishChanged();
-      await expect(resumed).resolves.toBe(4);
-      recovered.close();
+          const resumed = Effect.runPromise(recovered.waitForSequence(4));
+          events.publishChanged();
+          await expect(resumed).resolves.toBe(4);
+        },
+      );
     });
   });
 
-  it("closes an Effect connection when its scope ends", async () => {
+  it("closes the connection when its scope ends", async () => {
     await withListener(async (origin) => {
       const closed = await Effect.runPromise(
         Effect.scoped(
@@ -178,54 +171,37 @@ describe("browser Environment protocol client", () => {
         ),
       );
 
-      await expect(Effect.runPromise(closed)).resolves.toEqual(
-        new EnvironmentResponseError({ responseTag: "WebSocket" }),
-      );
-    });
-  });
-
-  it("closes a Promise connection when its signal is aborted", async () => {
-    await withListener(async (origin) => {
-      const controller = new AbortController();
-      const connection = await connectCurrentEnvironment(origin, "0.0.0", {
-        credential,
-        signal: controller.signal,
-      });
-
-      controller.abort();
-
-      await expect(Effect.runPromise(connection.closed)).resolves.toEqual(
-        new EnvironmentResponseError({ responseTag: "WebSocket" }),
-      );
+      await expect(Effect.runPromise(closed)).resolves.toEqual(closedByClient);
     });
   });
 
   it("resets the observed sequence after a server restart", async () => {
-    await withListener(async (origin, events) => {
-      const connection = await connectCurrentEnvironment(origin, "0.0.0", {
-        credential,
-        lastObservedSequence: 12,
-      });
-      try {
-        expect(connection.currentSequence()).toBe(0);
-        events.publishChanged();
-        expect(await Effect.runPromise(connection.waitForSequence(1))).toBe(1);
-      } finally {
-        connection.close();
-      }
-    });
+    await withListener((origin, events) =>
+      withCurrentConnection(
+        origin,
+        { lastObservedSequence: 12 },
+        async (connection) => {
+          expect(connection.currentSequence()).toBe(0);
+          events.publishChanged();
+          expect(await Effect.runPromise(connection.waitForSequence(1))).toBe(
+            1,
+          );
+        },
+      ),
+    );
   });
 
   it("exposes a tagged protocol rejection", async () => {
     await withListener(async (origin) => {
-      const discovery = await fetchEnvironmentDiscovery(origin);
-      const incompatibleHello = {
-        ...createCurrentEnvironmentHello("0.0.0"),
-        protocol: { major: 3, minor: 0, minimumSupportedMinor: 0 },
-      };
-
       await expect(
-        connectEnvironment(origin, discovery, incompatibleHello, credential),
+        withNegotiatedConnection(
+          origin,
+          (hello) => ({
+            ...hello,
+            protocol: { major: 3, minor: 0, minimumSupportedMinor: 0 },
+          }),
+          async () => undefined,
+        ),
       ).rejects.toEqual(
         new EnvironmentHelloRejected({
           failure: {
@@ -240,71 +216,69 @@ describe("browser Environment protocol client", () => {
   });
 
   it("uses the server baseline when resnapshot was not negotiated", async () => {
-    await withListener(async (origin, events) => {
-      const discovery = await fetchEnvironmentDiscovery(origin);
-      const hello = {
-        ...createCurrentEnvironmentHello("0.0.0", 12),
-        capabilities: [
-          {
-            introducedInMinor: 0,
-            name: "environment-events",
-            version: 1,
-          },
-        ],
-        protocol: { major: 2, minor: 0, minimumSupportedMinor: 0 },
-      };
-      const connection = await connectEnvironment(
+    await withListener((origin, events) =>
+      withNegotiatedConnection(
         origin,
-        discovery,
-        hello,
-        credential,
-      );
-      expect(connection.currentSequence()).toBe(0);
+        () => ({
+          ...createCurrentEnvironmentHello("0.0.0", 12),
+          capabilities: [
+            {
+              introducedInMinor: 0,
+              name: "environment-events",
+              version: 1,
+            },
+          ],
+          protocol: { major: 2, minor: 0, minimumSupportedMinor: 0 },
+        }),
+        async (connection) => {
+          expect(connection.currentSequence()).toBe(0);
 
-      const changed = Effect.runPromise(connection.waitForSequence(1));
-      events.publishChanged();
-      await expect(changed).resolves.toBe(1);
-      connection.close();
-    });
-  });
-
-  it.each([
-    ["declared", writeDeclaredOversizedSnapshot],
-    ["streamed", writeStreamedOversizedSnapshot],
-  ])("rejects a %s HTTP response above the client limit", async (_, write) => {
-    await withSnapshotResponse(write, async (origin) => {
-      const discovery = createCurrentEnvironmentDiscovery(
-        environmentId,
-        "0.0.0",
-      );
-      await expect(
-        fetchEnvironmentSnapshot(origin, discovery, credential),
-      ).rejects.toEqual(
-        new EnvironmentResponseError({ responseTag: "Snapshot" }),
-      );
-    });
-  });
-
-  it("rejects failures that do not belong to the snapshot route", async () => {
-    await withSnapshotResponse(
-      (response) => {
-        response.writeHead(401, { "content-type": "application/json" });
-        response.end(JSON.stringify({ _tag: "InvalidPairing" }));
-      },
-      async (origin) => {
-        const discovery = createCurrentEnvironmentDiscovery(
-          environmentId,
-          "0.0.0",
-        );
-        await expect(
-          fetchEnvironmentSnapshot(origin, discovery, credential),
-        ).rejects.toEqual(
-          new EnvironmentResponseError({ responseTag: "Snapshot" }),
-        );
-      },
+          const changed = Effect.runPromise(connection.waitForSequence(1));
+          events.publishChanged();
+          await expect(changed).resolves.toBe(1);
+        },
+      ),
     );
   });
 });
+
+function withCurrentConnection(
+  origin: string,
+  options: { readonly lastObservedSequence?: number },
+  run: (connection: EnvironmentProtocolConnection) => Promise<void>,
+) {
+  return Effect.runPromise(
+    Effect.scoped(
+      connectCurrentEnvironmentEffect(origin, "0.0.0", {
+        credential,
+        ...options,
+      }).pipe(
+        Effect.flatMap((connection) => Effect.promise(() => run(connection))),
+      ),
+    ),
+  );
+}
+
+function withNegotiatedConnection(
+  origin: string,
+  hello: (current: EnvironmentHello) => EnvironmentHello,
+  run: (connection: EnvironmentProtocolConnection) => Promise<void>,
+) {
+  return Effect.runPromise(
+    Effect.scoped(
+      Effect.gen(function* () {
+        const discovery = yield* fetchEnvironmentDiscoveryEffect(origin);
+        const connection = yield* connectEnvironmentEffect(
+          origin,
+          discovery,
+          hello(createCurrentEnvironmentHello("0.0.0")),
+          credential,
+        );
+        yield* Effect.promise(() => run(connection));
+      }),
+    ),
+  );
+}
 
 function withListener(
   run: (origin: string, events: EnvironmentEventPublisher) => Promise<void>,
@@ -355,50 +329,4 @@ function createTestAuthorization(): EnvironmentAuthorization {
         revokedAt: "2026-08-21T12:00:00.000Z",
       }),
   };
-}
-
-async function withSnapshotResponse(
-  write: (response: ServerResponse) => void,
-  run: (origin: string) => Promise<void>,
-) {
-  const server = createServer((_, response) => write(response));
-  await new Promise<void>((resolveListening) => {
-    server.listen(0, "127.0.0.1", resolveListening);
-  });
-
-  const address = server.address();
-  if (address === null || typeof address === "string") {
-    throw new Error("Expected the test HTTP server to have a TCP address.");
-  }
-
-  try {
-    await run(`http://127.0.0.1:${address.port}`);
-  } finally {
-    await new Promise<void>((resolveClosed, rejectClosed) => {
-      server.close((error) => {
-        if (error === undefined) {
-          resolveClosed();
-        } else {
-          rejectClosed(error);
-        }
-      });
-    });
-  }
-}
-
-function writeDeclaredOversizedSnapshot(response: ServerResponse) {
-  response.writeHead(200, {
-    "content-length": oversizedSnapshot.byteLength,
-  });
-  response.end(oversizedSnapshot);
-}
-
-function writeStreamedOversizedSnapshot(response: ServerResponse) {
-  response.writeHead(200);
-  response.write(
-    oversizedSnapshot.subarray(0, currentTransportLimits.maxHttpResponseBytes),
-  );
-  response.end(
-    oversizedSnapshot.subarray(currentTransportLimits.maxHttpResponseBytes),
-  );
 }

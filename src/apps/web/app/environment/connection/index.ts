@@ -1,18 +1,14 @@
 export type { EnvironmentCredential } from "@rebase/environment-client";
 export {
-  createEnvironmentJsonClient,
-  exchangeEnvironmentPairing,
+  EnvironmentHelloRejected,
+  EnvironmentHttpRejected,
+  EnvironmentResponseError,
   exchangeEnvironmentPairingEffect,
+  fetchEnvironmentDiscoveryEffect,
+  fetchEnvironmentSnapshotEffect,
 } from "@rebase/environment-client";
 export {
-  connectCurrentEnvironment,
   connectCurrentEnvironmentEffect,
-  connectEnvironment,
   connectEnvironmentEffect,
-  EnvironmentAuthorizationRejected,
-  EnvironmentHelloRejected,
   type EnvironmentProtocolConnection,
-  EnvironmentResponseError,
-  fetchEnvironmentDiscovery,
-  fetchEnvironmentSnapshot,
 } from "#web/app/environment/connection/environment-protocol-client";

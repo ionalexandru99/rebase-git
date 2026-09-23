@@ -6,14 +6,10 @@ import {
 } from "@rebase/contracts";
 import type { EnvironmentCredential } from "@rebase/environment-client";
 import {
-  EnvironmentAuthorizationRejected,
   type EnvironmentConnectionFailure,
   EnvironmentHelloRejected,
-  EnvironmentResponseError,
   environmentResponseError,
-  fetchEnvironmentDiscovery,
   fetchEnvironmentDiscoveryEffect,
-  fetchEnvironmentSnapshot,
   mintEnvironmentWebSocketTicketEffect,
 } from "@rebase/environment-client";
 import { Deferred, Effect, Fiber, Ref } from "effect";
@@ -35,34 +31,7 @@ import {
   waitForEnvironmentSequence,
 } from "#web/platform/environment/websocket/environment-connection-state";
 
-export {
-  EnvironmentAuthorizationRejected,
-  EnvironmentHelloRejected,
-  type EnvironmentProtocolConnection,
-  EnvironmentResponseError,
-  fetchEnvironmentDiscovery,
-  fetchEnvironmentSnapshot,
-};
-
-export function connectCurrentEnvironment(
-  origin: string,
-  productVersion: string,
-  options: {
-    readonly credential: EnvironmentCredential;
-    readonly lastObservedSequence?: number;
-    readonly signal?: AbortSignal;
-  },
-) {
-  return Effect.runPromise(
-    openCurrentEnvironmentConnection(
-      origin,
-      productVersion,
-      options,
-      options.signal,
-    ),
-    options.signal === undefined ? undefined : { signal: options.signal },
-  );
-}
+export type { EnvironmentProtocolConnection };
 
 export function connectCurrentEnvironmentEffect(
   origin: string,
@@ -72,46 +41,20 @@ export function connectCurrentEnvironmentEffect(
     readonly lastObservedSequence?: number;
   },
 ) {
-  return Effect.acquireRelease(
-    openCurrentEnvironmentConnection(origin, productVersion, options),
-    closeEnvironmentConnection,
-  );
-}
-
-function openCurrentEnvironmentConnection(
-  origin: string,
-  productVersion: string,
-  options: {
-    readonly credential: EnvironmentCredential;
-    readonly lastObservedSequence?: number;
-  },
-  signal?: AbortSignal,
-) {
-  return Effect.gen(function* () {
-    const discovery = yield* fetchEnvironmentDiscoveryEffect(origin);
-    return yield* startEnvironmentConnection(
-      origin,
-      discovery,
-      createCurrentEnvironmentHello(
-        productVersion,
-        options.lastObservedSequence,
+  return acquireEnvironmentConnection(
+    fetchEnvironmentDiscoveryEffect(origin).pipe(
+      Effect.flatMap((discovery) =>
+        startEnvironmentConnection(
+          origin,
+          discovery,
+          createCurrentEnvironmentHello(
+            productVersion,
+            options.lastObservedSequence,
+          ),
+          options.credential,
+        ),
       ),
-      options.credential,
-      signal,
-    );
-  });
-}
-
-export function connectEnvironment(
-  origin: string,
-  discovery: EnvironmentDiscovery,
-  hello: EnvironmentHello,
-  credential: EnvironmentCredential,
-  signal?: AbortSignal,
-): Promise<EnvironmentProtocolConnection> {
-  return Effect.runPromise(
-    openEnvironmentConnection(origin, discovery, hello, credential, signal),
-    signal === undefined ? undefined : { signal },
+    ),
   );
 }
 
@@ -121,25 +64,23 @@ export function connectEnvironmentEffect(
   hello: EnvironmentHello,
   credential: EnvironmentCredential,
 ) {
-  return Effect.acquireRelease(
-    openEnvironmentConnection(origin, discovery, hello, credential),
-    closeEnvironmentConnection,
+  return acquireEnvironmentConnection(
+    startEnvironmentConnection(origin, discovery, hello, credential),
   );
 }
 
-function openEnvironmentConnection(
-  origin: string,
-  discovery: EnvironmentDiscovery,
-  hello: EnvironmentHello,
-  credential: EnvironmentCredential,
-  signal?: AbortSignal,
+function acquireEnvironmentConnection(
+  start: Effect.Effect<
+    EnvironmentProtocolConnection,
+    EnvironmentConnectionFailure
+  >,
 ) {
-  return startEnvironmentConnection(
-    origin,
-    discovery,
-    hello,
-    credential,
-    signal,
+  return Effect.uninterruptibleMask((restore) =>
+    restore(start).pipe(
+      Effect.tap((connection) =>
+        Effect.addFinalizer(() => closeEnvironmentConnection(connection)),
+      ),
+    ),
   );
 }
 
@@ -155,7 +96,6 @@ function startEnvironmentConnection(
   discovery: EnvironmentDiscovery,
   hello: EnvironmentHello,
   credential: EnvironmentCredential,
-  externalSignal?: AbortSignal,
 ) {
   return Effect.gen(function* () {
     const connected = yield* Deferred.make<
@@ -170,17 +110,12 @@ function startEnvironmentConnection(
       environmentResponseError("WebSocket"),
     );
     const closeController = new AbortController();
-    const signal =
-      externalSignal === undefined
-        ? closeController.signal
-        : AbortSignal.any([externalSignal, closeController.signal]);
 
-    yield* runEnvironmentConnection(
+    return yield* runEnvironmentConnection(
       origin,
       discovery,
       hello,
       credential,
-      signal,
       closeController,
       connected,
       closed,
@@ -202,9 +137,7 @@ function startEnvironmentConnection(
       ),
       Effect.interruptible,
       Effect.forkDetach,
-    );
-
-    return yield* Deferred.await(connected).pipe(
+      Effect.andThen(Deferred.await(connected)),
       Effect.onInterrupt(() => Effect.sync(() => closeController.abort())),
     );
   });
@@ -215,7 +148,6 @@ function runEnvironmentConnection(
   discovery: EnvironmentDiscovery,
   hello: EnvironmentHello,
   credential: EnvironmentCredential,
-  signal: AbortSignal,
   closeController: AbortController,
   connected: Deferred.Deferred<
     EnvironmentProtocolConnection,
@@ -224,6 +156,7 @@ function runEnvironmentConnection(
   closed: Deferred.Deferred<EnvironmentConnectionFailure>,
   state: Ref.Ref<EnvironmentConnectionState>,
 ) {
+  const signal = closeController.signal;
   return Effect.gen(function* () {
     const compatibility = negotiateEnvironmentHello(discovery, hello, 0);
     if (compatibility._tag === "HelloRejected")
@@ -235,7 +168,7 @@ function runEnvironmentConnection(
       credential,
       signal,
     );
-    const socketUrl = new URL(discovery.routes.live, normalizeOrigin(origin));
+    const socketUrl = new URL(discovery.routes.live, origin);
     socketUrl.protocol = socketUrl.protocol === "https:" ? "wss:" : "ws:";
     socketUrl.searchParams.set("ticket", ticket.ticket);
     const { client, disconnected } = yield* acquireEnvironmentRpc(
@@ -354,8 +287,4 @@ function publishEnvironmentConnection(
       };
     },
   });
-}
-
-function normalizeOrigin(origin: string) {
-  return origin.endsWith("/") ? origin : `${origin}/`;
 }

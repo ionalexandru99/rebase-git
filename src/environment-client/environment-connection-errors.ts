@@ -1,5 +1,6 @@
 import type {
   EnvironmentAuthorizationHttpFailure,
+  EnvironmentHttpRoute,
   EnvironmentTransportFailure,
 } from "@rebase/contracts";
 import { Data } from "effect";
@@ -7,11 +8,14 @@ import { Data } from "effect";
 export class EnvironmentResponseError extends Data.TaggedError(
   "EnvironmentResponseError",
 )<{
-  readonly responseTag:
-    | "Authorization"
-    | "Discovery"
-    | "Snapshot"
-    | "WebSocket";
+  readonly responseTag: EnvironmentHttpRoute["path"] | "WebSocket";
+}> {}
+
+export class EnvironmentHttpRejected<Failure> extends Data.TaggedError(
+  "EnvironmentHttpRejected",
+)<{
+  readonly failure: Failure;
+  readonly status: number;
 }> {}
 
 export class EnvironmentHelloRejected extends Data.TaggedError(
@@ -20,15 +24,8 @@ export class EnvironmentHelloRejected extends Data.TaggedError(
   readonly failure: EnvironmentTransportFailure;
 }> {}
 
-export class EnvironmentAuthorizationRejected extends Data.TaggedError(
-  "EnvironmentAuthorizationRejected",
-)<{
-  readonly failure: EnvironmentAuthorizationHttpFailure;
-  readonly status: number;
-}> {}
-
 export type EnvironmentConnectionFailure =
-  | EnvironmentAuthorizationRejected
+  | EnvironmentHttpRejected<EnvironmentAuthorizationHttpFailure>
   | EnvironmentHelloRejected
   | EnvironmentResponseError;
 

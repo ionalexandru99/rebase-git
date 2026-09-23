@@ -2,7 +2,11 @@ import {
   CommitInspectionHttpApi,
   RepositoryChangesHttpApi,
 } from "@rebase/contracts";
-import type { EnvironmentRequestClient } from "@rebase/environment-client";
+import {
+  type EnvironmentRequestClient,
+  environmentHttpRoutesClient,
+  type RequestableEnvironmentHttpRoute,
+} from "@rebase/environment-client";
 import { Effect, Schema } from "effect";
 import { expect, it } from "vitest";
 import { page } from "vitest/browser";
@@ -25,101 +29,108 @@ async function fixture(linkedWorktree = false) {
   const foreignRequests: string[] = [];
   let holdReads = false;
   let holdInspections = false;
-  const requests: EnvironmentRequestClient =
-    (_failure, errors) => (endpoint, command) =>
-      Effect.suspend(() => {
-        let response: unknown;
-        if (endpoint.path === RepositoryChangesHttpApi.read.path) {
-          const scope = Schema.decodeUnknownSync(
-            RepositoryChangesHttpApi.read.request,
-          )(command);
-          reads.push(scope.repositoryId);
-          if (holdReads) {
-            return Effect.never.pipe(
-              Effect.ensuring(
-                Effect.sync(() => {
-                  cancelled.push(scope.repositoryId);
-                }),
-              ),
-            );
-          }
-          response = {
-            revision: "one",
-            head: oid,
-            message: "Previous message",
-            unstaged: [
-              { path: "first.bin", status: "M" },
-              { path: "second.bin", status: "M" },
-            ],
-            staged: [],
-            truncated: false,
-          };
-        } else if (endpoint.path === CommitInspectionHttpApi.inspect.path) {
-          const scope = Schema.decodeUnknownSync(
-            CommitInspectionHttpApi.inspect.request,
-          )(command);
-          inspections.push(scope.oid);
-          if (holdInspections) {
-            return Effect.never.pipe(
-              Effect.ensuring(
-                Effect.sync(() => {
-                  cancelled.push(scope.oid);
-                }),
-              ),
-            );
-          }
-          response = {
-            oid: scope.oid,
-            parentOid,
-            parents: [parentOid],
-            message: "Inspected commit\n\nRetained body",
-            author: {
-              name: "Alex",
-              email: "alex@example.test",
-              date: "2026-09-15T10:00:00Z",
-            },
-            committer: {
-              name: "Alex",
-              email: "alex@example.test",
-              date: "2026-09-15T10:00:00Z",
-            },
-            files: [
-              { path: "first.bin", status: "M", previousPath: null },
-              { path: "second.bin", status: "M", previousPath: null },
-            ],
-            truncated: false,
-          };
-        } else {
-          const scope =
-            endpoint.path === CommitInspectionHttpApi.inspectDiff.path
-              ? Schema.decodeUnknownSync(
-                  CommitInspectionHttpApi.inspectDiff.request,
-                )(command)
-              : Schema.decodeUnknownSync(RepositoryChangesHttpApi.diff.request)(
-                  command,
-                );
-          diffs.push(`${endpoint.path}:${scope.path}`);
-          response = {
-            path: scope.path,
-            revision: scope.path,
-            kind: "binary",
-            before: null,
-            after: null,
-            beforeBytes: 10,
-            afterBytes: 20,
-            mime: null,
-            patch: "",
-          };
+  const respond = <Route extends RequestableEnvironmentHttpRoute, Error>(
+    endpoint: Route,
+    command: unknown,
+    disconnected: () => Error,
+  ): Effect.Effect<Route["success"]["Type"], Error> =>
+    Effect.suspend(() => {
+      let response: unknown;
+      if (endpoint.path === RepositoryChangesHttpApi.read.path) {
+        const scope = Schema.decodeUnknownSync(
+          RepositoryChangesHttpApi.read.request,
+        )(command);
+        reads.push(scope.repositoryId);
+        if (holdReads) {
+          return Effect.never.pipe(
+            Effect.ensuring(
+              Effect.sync(() => {
+                cancelled.push(scope.repositoryId);
+              }),
+            ),
+          );
         }
-        return Schema.decodeUnknownEffect(endpoint.success)(response).pipe(
-          Effect.mapError(() => errors.disconnected()),
-        );
-      });
-  const foreignClient: EnvironmentRequestClient =
-    (failure, errors) => (endpoint, command) => {
+        response = {
+          revision: "one",
+          head: oid,
+          message: "Previous message",
+          unstaged: [
+            { path: "first.bin", status: "M" },
+            { path: "second.bin", status: "M" },
+          ],
+          staged: [],
+          truncated: false,
+        };
+      } else if (endpoint.path === CommitInspectionHttpApi.inspect.path) {
+        const scope = Schema.decodeUnknownSync(
+          CommitInspectionHttpApi.inspect.request,
+        )(command);
+        inspections.push(scope.oid);
+        if (holdInspections) {
+          return Effect.never.pipe(
+            Effect.ensuring(
+              Effect.sync(() => {
+                cancelled.push(scope.oid);
+              }),
+            ),
+          );
+        }
+        response = {
+          oid: scope.oid,
+          parentOid,
+          parents: [parentOid],
+          message: "Inspected commit\n\nRetained body",
+          author: {
+            name: "Alex",
+            email: "alex@example.test",
+            date: "2026-09-15T10:00:00Z",
+          },
+          committer: {
+            name: "Alex",
+            email: "alex@example.test",
+            date: "2026-09-15T10:00:00Z",
+          },
+          files: [
+            { path: "first.bin", status: "M", previousPath: null },
+            { path: "second.bin", status: "M", previousPath: null },
+          ],
+          truncated: false,
+        };
+      } else {
+        const scope =
+          endpoint.path === CommitInspectionHttpApi.inspectDiff.path
+            ? Schema.decodeUnknownSync(
+                CommitInspectionHttpApi.inspectDiff.request,
+              )(command)
+            : Schema.decodeUnknownSync(RepositoryChangesHttpApi.diff.request)(
+                command,
+              );
+        diffs.push(`${endpoint.path}:${scope.path}`);
+        response = {
+          path: scope.path,
+          revision: scope.path,
+          kind: "binary",
+          before: null,
+          after: null,
+          beforeBytes: 10,
+          afterBytes: 20,
+          mime: null,
+          patch: "",
+        };
+      }
+      return Schema.decodeUnknownEffect(endpoint.success)(response).pipe(
+        Effect.mapError(disconnected),
+      );
+    });
+  const requests: EnvironmentRequestClient = (routes, errors) =>
+    environmentHttpRoutesClient(routes, (endpoint, command) =>
+      respond(endpoint, command, errors.disconnected),
+    );
+  const foreignClient: EnvironmentRequestClient = (routes, errors) =>
+    environmentHttpRoutesClient(routes, (endpoint, command) => {
       foreignRequests.push(endpoint.path);
-      return requests(failure, errors)(endpoint, command);
-    };
+      return respond(endpoint, command, errors.disconnected);
+    });
   const invalidate = () => undefined;
   const tree = (
     project: string,

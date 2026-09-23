@@ -16,8 +16,9 @@ import {
   type RepositoryHistorySnapshot,
 } from "@rebase/contracts";
 import {
-  connectEnvironment,
-  fetchEnvironmentDiscovery,
+  connectEnvironmentEffect,
+  type EnvironmentProtocolConnection,
+  fetchEnvironmentDiscoveryEffect,
 } from "@rebase/web/environment-connection";
 import { Effect } from "effect";
 import { afterEach, describe, expect, it } from "vite-plus/test";
@@ -761,56 +762,56 @@ async function commitFile(
   await git(path, "commit", "-m", subject);
 }
 
-async function readHistoryPage(
+function readHistoryPage(
   origin: string,
   repositoryId: string,
   oid: string,
   hello = smallFrameHello(),
 ) {
-  const connection = await connectHistory(origin, hello);
-  try {
-    return decodeRepositoryHistoryPage(
-      await Effect.runPromise(
-        connection.repositoryHistory.read({
-          repositoryId,
-          order: "topological",
-          limit: 100,
-          roots: [{ name: "main", oid, type: "branch" }],
-        }),
-      ),
-    );
-  } finally {
-    connection.close();
-    await Effect.runPromise(connection.closed);
-  }
+  return withHistoryConnection(origin, hello, (connection) =>
+    connection.repositoryHistory
+      .read({
+        repositoryId,
+        order: "topological",
+        limit: 100,
+        roots: [{ name: "main", oid, type: "branch" }],
+      })
+      .pipe(Effect.map(decodeRepositoryHistoryPage)),
+  );
 }
 
 async function synchronizeHistory(origin: string, repositoryId: string) {
-  const connection = await connectHistory(origin, smallFrameHello());
   const commits: RepositoryCommit[] = [];
-  try {
-    await Effect.runPromise(
-      connection.repositoryHistory.synchronize(
-        { repositoryId, priority: "visible" },
-        (bytes) =>
-          Effect.sync(() => {
-            commits.push(...decodeRepositoryHistoryBatch(bytes).commits);
-          }),
-      ),
-    );
-    return commits;
-  } finally {
-    connection.close();
-    await Effect.runPromise(connection.closed);
-  }
+  await withHistoryConnection(origin, smallFrameHello(), (connection) =>
+    connection.repositoryHistory.synchronize(
+      { repositoryId, priority: "visible" },
+      (bytes) =>
+        Effect.sync(() => {
+          commits.push(...decodeRepositoryHistoryBatch(bytes).commits);
+        }),
+    ),
+  );
+  return commits;
 }
 
-async function connectHistory(origin: string, hello: EnvironmentHello) {
-  return connectEnvironment(
-    origin,
-    await fetchEnvironmentDiscovery(origin),
-    hello,
-    { type: "bearer", value: "test" },
+function withHistoryConnection<A, E>(
+  origin: string,
+  hello: EnvironmentHello,
+  use: (connection: EnvironmentProtocolConnection) => Effect.Effect<A, E>,
+) {
+  return Effect.runPromise(
+    Effect.scoped(
+      Effect.gen(function* () {
+        const discovery = yield* fetchEnvironmentDiscoveryEffect(origin);
+        const connection = yield* connectEnvironmentEffect(
+          origin,
+          discovery,
+          hello,
+          { type: "bearer", value: "test" },
+        );
+        return yield* use(connection);
+      }),
+    ),
   );
 }
 

@@ -1,7 +1,4 @@
-import {
-  ChangesHttpFailure,
-  RepositoryChangesHttpApi,
-} from "@rebase/contracts";
+import { RepositoryChangesHttpApi } from "@rebase/contracts";
 import type {
   EnvironmentCredential,
   EnvironmentRequestClient,
@@ -24,7 +21,7 @@ export function createRepositoryChangesClient(
 export function repositoryChangesClient(
   requests: EnvironmentRequestClient,
 ): RepositoryChangesClient {
-  const request = requests(ChangesHttpFailure, {
+  return requests(RepositoryChangesHttpApi, {
     disconnected: () =>
       new WorkingChangesError({
         message: "Connect to the environment to review changes.",
@@ -38,11 +35,4 @@ export function repositoryChangesClient(
             : "Could not complete the request. Check the environment connection and try again.",
       }),
   });
-  const api = RepositoryChangesHttpApi;
-  return {
-    read: (command) => request(api.read, command),
-    diff: (command) => request(api.diff, command),
-    mutate: (command) => request(api.mutate, command),
-    commit: (command) => request(api.commit, command),
-  };
 }

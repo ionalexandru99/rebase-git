@@ -1,30 +1,50 @@
 import type { Effect, Schema } from "effect";
 import type {
   EnvironmentHttpRejected,
-  EnvironmentHttpResponseError,
-} from "#environment-client/http/environment-http-json.contract";
+  EnvironmentResponseError,
+} from "#environment-client/environment-connection-errors";
+import type {
+  EnvironmentHttpCommand,
+  RequestableEnvironmentHttpRoute,
+} from "#environment-client/http/environment-http-request.contract";
+
+export type EnvironmentHttpRoutes = Record<
+  string,
+  RequestableEnvironmentHttpRoute
+>;
+
+export type EnvironmentHttpRoutesFailure<Routes extends EnvironmentHttpRoutes> =
+  Routes[keyof Routes]["failure"]["Type"];
+
+export interface EnvironmentRequestErrors<
+  Routes extends EnvironmentHttpRoutes,
+  Error,
+> {
+  readonly disconnected: () => Error;
+  readonly response: (
+    error:
+      | EnvironmentResponseError
+      | EnvironmentHttpRejected<EnvironmentHttpRoutesFailure<Routes>>,
+  ) => Error;
+}
+
+export type EnvironmentHttpRoutesClient<
+  Routes extends EnvironmentHttpRoutes,
+  Error,
+> = {
+  readonly [Name in keyof Routes]: Routes[Name] extends {
+    readonly request: Schema.ConstraintEncoder<unknown>;
+  }
+    ? (
+        command: EnvironmentHttpCommand<Routes[Name]>,
+      ) => Effect.Effect<Routes[Name]["success"]["Type"], Error>
+    : () => Effect.Effect<Routes[Name]["success"]["Type"], Error>;
+};
 
 export type EnvironmentRequestClient = <
-  Failure extends Schema.ConstraintDecoder<unknown, never>,
+  Routes extends EnvironmentHttpRoutes,
   Error,
 >(
-  failure: Failure,
-  errors: {
-    readonly disconnected: () => Error;
-    readonly response: (
-      error:
-        | EnvironmentHttpResponseError
-        | EnvironmentHttpRejected<Failure["Type"]>,
-    ) => Error;
-  },
-) => <
-  Request extends Schema.ConstraintDecoder<unknown, never>,
-  Success extends Schema.ConstraintDecoder<unknown, never>,
->(
-  endpoint: {
-    readonly path: string;
-    readonly request: Request;
-    readonly success: Success;
-  },
-  command: Request["Type"],
-) => Effect.Effect<Success["Type"], Error>;
+  routes: Routes,
+  errors: EnvironmentRequestErrors<Routes, Error>,
+) => EnvironmentHttpRoutesClient<Routes, Error>;

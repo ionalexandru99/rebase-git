@@ -10,11 +10,11 @@ import {
   environmentSnapshotPath,
 } from "@rebase/contracts";
 import {
-  connectCurrentEnvironment,
-  EnvironmentAuthorizationRejected,
-  exchangeEnvironmentPairing as exchangeEnvironmentPairingFromClient,
-  fetchEnvironmentDiscovery,
-  fetchEnvironmentSnapshot,
+  connectCurrentEnvironmentEffect,
+  EnvironmentHttpRejected,
+  exchangeEnvironmentPairingEffect,
+  fetchEnvironmentDiscoveryEffect,
+  fetchEnvironmentSnapshotEffect,
 } from "@rebase/web/environment-connection";
 import { Effect } from "effect";
 import { afterEach, describe, expect, it } from "vite-plus/test";
@@ -218,7 +218,7 @@ describe("Environment authorization transport", () => {
         });
       }
       await expect(
-        exchangeEnvironmentPairingFromClient(origin, exchange),
+        run(exchangeEnvironmentPairingEffect(origin, exchange)),
       ).resolves.toHaveProperty("credential");
     });
   });
@@ -246,12 +246,14 @@ describe("Environment authorization transport", () => {
   it("connects the browser client with the exchanged device credential", async () => {
     await withAuthorizedListener(async ({ authorization, origin }) => {
       await expect(
-        exchangeEnvironmentPairingFromClient(origin, {
-          label: "Browser client",
-          pairingMaterial: "123-456",
-        }),
+        run(
+          exchangeEnvironmentPairingEffect(origin, {
+            label: "Browser client",
+            pairingMaterial: "123-456",
+          }),
+        ),
       ).rejects.toEqual(
-        new EnvironmentAuthorizationRejected({
+        new EnvironmentHttpRejected({
           failure: { _tag: "InvalidPairing" },
           status: 401,
         }),
@@ -260,21 +262,30 @@ describe("Environment authorization transport", () => {
       const pairing = await run(
         authorization.createPairing({ capabilities: [], role: "viewer" }),
       );
-      const paired = await exchangeEnvironmentPairingFromClient(origin, {
-        label: "Browser client",
-        pairingMaterial: pairing.material,
-      });
-      const connection = await connectCurrentEnvironment(origin, "0.0.0", {
-        credential: { type: "bearer", value: paired.credential },
-      });
-
-      await expect(
-        fetchEnvironmentSnapshot(origin, connection.discovery, {
-          type: "bearer",
-          value: paired.credential,
+      const paired = await run(
+        exchangeEnvironmentPairingEffect(origin, {
+          label: "Browser client",
+          pairingMaterial: pairing.material,
         }),
+      );
+      const credential = { type: "bearer", value: paired.credential } as const;
+      await expect(
+        run(
+          Effect.scoped(
+            connectCurrentEnvironmentEffect(origin, "0.0.0", {
+              credential,
+            }).pipe(
+              Effect.flatMap((connection) =>
+                fetchEnvironmentSnapshotEffect(
+                  origin,
+                  connection.discovery,
+                  credential,
+                ),
+              ),
+            ),
+          ),
+        ),
       ).resolves.toEqual({ environmentId, sequence: 0 });
-      connection.close();
     });
   });
 
@@ -346,14 +357,16 @@ describe("Environment authorization transport", () => {
         body: { _tag: "RevokedGrant" },
         status: 401,
       });
-      const discovery = await fetchEnvironmentDiscovery(origin);
+      const discovery = await run(fetchEnvironmentDiscoveryEffect(origin));
       await expect(
-        fetchEnvironmentSnapshot(origin, discovery, {
-          type: "bearer",
-          value: viewer.credential,
-        }),
+        run(
+          fetchEnvironmentSnapshotEffect(origin, discovery, {
+            type: "bearer",
+            value: viewer.credential,
+          }),
+        ),
       ).rejects.toEqual(
-        new EnvironmentAuthorizationRejected({
+        new EnvironmentHttpRejected({
           failure: { _tag: "RevokedGrant" },
           status: 401,
         }),

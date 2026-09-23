@@ -1,4 +1,4 @@
-import { ChangesHttpFailure, CommitInspectionHttpApi } from "@rebase/contracts";
+import { CommitInspectionHttpApi } from "@rebase/contracts";
 import type {
   EnvironmentCredential,
   EnvironmentRequestClient,
@@ -21,7 +21,7 @@ export function createCommitInspectionClient(
 export function commitInspectionClient(
   requests: EnvironmentRequestClient,
 ): CommitInspectionClient {
-  const request = requests(ChangesHttpFailure, {
+  const api = requests(CommitInspectionHttpApi, {
     disconnected: () =>
       new CommitInspectionError({
         message: "Connect to the environment to inspect commits.",
@@ -35,9 +35,5 @@ export function commitInspectionClient(
             : "Could not load this commit. Check the environment connection and try again.",
       }),
   });
-  const api = CommitInspectionHttpApi;
-  return {
-    inspect: (command) => request(api.inspect, command),
-    diff: (command) => request(api.inspectDiff, command),
-  };
+  return { inspect: api.inspect, diff: api.inspectDiff };
 }

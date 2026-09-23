@@ -8,7 +8,7 @@ import {
 } from "@rebase/contracts";
 import {
   connectEnvironmentEffect,
-  fetchEnvironmentDiscovery,
+  fetchEnvironmentDiscoveryEffect,
 } from "@rebase/web/environment-connection";
 import { Deferred, Effect, Fiber } from "effect";
 import { describe, expect, it } from "vite-plus/test";
@@ -273,9 +273,7 @@ function historyConnection<A, E, R>(
       productVersion: "0.0.0",
     });
     listener.readiness.value = true;
-    const discovery = yield* Effect.promise(() =>
-      fetchEnvironmentDiscovery(listener.origin),
-    );
+    const discovery = yield* fetchEnvironmentDiscoveryEffect(listener.origin);
     const hello = createCurrentEnvironmentHello("0.0.0");
     const connection = yield* connectEnvironmentEffect(
       listener.origin,

@@ -1,10 +1,6 @@
+export { repositoryCatalogClient } from "#web/features/repository-catalog/repository-catalog-client";
 export {
-  listEnvironmentRepositoriesEffect,
-  recordEnvironmentRepositoryOpenedEffect,
-  rememberEnvironmentRepositoryEffect,
-  removeEnvironmentRepositoryEffect,
-} from "#web/features/repository-catalog/repository-catalog-client";
-export {
+  type RepositoryCatalogClient,
   type RepositoryCatalogClientError,
   RepositoryCatalogRejected,
   RepositoryCatalogResponseError,
