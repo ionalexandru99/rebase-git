@@ -1,4 +1,5 @@
-import { realpath } from "node:fs/promises";
+import { lstat, realpath } from "node:fs/promises";
+import { join } from "node:path";
 import { Effect, Layer, Semaphore } from "effect";
 import {
   type GitCommandRunner,
@@ -38,17 +39,21 @@ export function createRepositoryCoordination(
           }
         }),
     );
-  const directories = new Map<string, GitDirectories>();
-  const gitDirectories = (directory: string) => {
-    const cached = directories.get(directory);
-    return cached !== undefined
-      ? Effect.succeed(cached)
-      : resolveGitDirectories(git, directory).pipe(
-          Effect.tap((paths) =>
-            Effect.sync(() => directories.set(directory, paths)),
-          ),
-        );
-  };
+  const directories = new Map<
+    string,
+    { readonly identity: string; readonly paths: GitDirectories }
+  >();
+  const gitDirectories = (directory: string) =>
+    Effect.gen(function* () {
+      const identity = yield* gitEntryIdentity(directory);
+      const cached = directories.get(directory);
+      if (identity !== undefined && cached?.identity === identity)
+        return cached.paths;
+      const paths = yield* resolveGitDirectories(git, directory);
+      if (identity !== undefined)
+        directories.set(directory, { identity, paths });
+      return paths;
+    });
   return {
     run: (directory, scope, operation) =>
       Effect.gen(function* () {
@@ -69,6 +74,15 @@ export function createRepositoryCoordination(
 interface GitDirectories {
   readonly gitDirectory: string;
   readonly commonDirectory: string;
+}
+
+function gitEntryIdentity(directory: string) {
+  return Effect.promise(() =>
+    lstat(join(directory, ".git"), { bigint: true }).then(
+      (info) => `${info.dev}:${info.ino}:${info.ctimeNs}`,
+      () => undefined,
+    ),
+  );
 }
 
 function resolveGitDirectories(
