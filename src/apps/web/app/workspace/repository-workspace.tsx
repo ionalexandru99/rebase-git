@@ -6,6 +6,7 @@ import type { JSX } from "react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useHistoryRefRefresh } from "#web/app/workspace/use-history-ref-refresh";
 import { BranchesSidebar } from "#web/features/branches-sidebar/index";
+import type { GraphCommandEnvironment } from "#web/features/commit-commands/index";
 import type {
   CommitGraphHistory,
   HistoryScope,
@@ -27,6 +28,7 @@ import {
 } from "#web-ui/components/ui/resizable";
 import { WorkspacePanel } from "#web-ui/features/workspace-panel/index";
 
+const noAccessCapabilities: readonly EnvironmentAccessCapability[] = [];
 const branchesSidebarSize = {
   default: "16.5rem",
   max: "26rem",
@@ -34,7 +36,7 @@ const branchesSidebarSize = {
 } as const;
 
 export function RepositoryWorkspace({
-  accessCapabilities = [],
+  accessCapabilities = noAccessCapabilities,
   connected = false,
   activeWorktreePath,
   environmentId,
@@ -132,6 +134,33 @@ function RepositoryWorkspaceContent({
     ({ path }) => path === activeWorktreePath,
   )?.head.branch;
   const filterStore = useMemo(() => createBrowserHistoryFilterStore(), []);
+  const commandEnvironment = useMemo<GraphCommandEnvironment | undefined>(
+    () =>
+      environmentId === undefined ||
+      logicalRepositoryId === undefined ||
+      repositoryId === undefined
+        ? undefined
+        : {
+            environmentId,
+            logicalRepositoryId,
+            repositoryId,
+            activeWorktreePath,
+            ...(activeBranch === undefined ? {} : { activeBranch }),
+            connected,
+            capabilities: new Set(accessCapabilities),
+            freshnessReady: false,
+            operationState: "idle",
+          },
+    [
+      environmentId,
+      logicalRepositoryId,
+      repositoryId,
+      activeWorktreePath,
+      activeBranch,
+      connected,
+      accessCapabilities,
+    ],
+  );
   const [historyScope, setHistoryScope] = useState<HistoryScope>(() =>
     environmentId === undefined || logicalRepositoryId === undefined
       ? automaticHistoryScope
@@ -249,25 +278,7 @@ function RepositoryWorkspaceContent({
                     toolbarActions={<WorkspacePanel.Toggle />}
                     githubRepository={refs.refs?.githubRepository}
                     remoteProviders={refs.refs?.remoteProviders}
-                    commandEnvironment={
-                      environmentId === undefined ||
-                      logicalRepositoryId === undefined ||
-                      repositoryId === undefined
-                        ? undefined
-                        : {
-                            environmentId,
-                            logicalRepositoryId,
-                            repositoryId,
-                            activeWorktreePath,
-                            ...(activeBranch === undefined
-                              ? {}
-                              : { activeBranch }),
-                            connected,
-                            capabilities: new Set(accessCapabilities),
-                            freshnessReady: false,
-                            operationState: "idle",
-                          }
-                    }
+                    commandEnvironment={commandEnvironment}
                     onRemoveHistoryRef={toggleRef}
                     onRevealHistoryRef={toggleRef}
                     onAddHistoryRef={() =>

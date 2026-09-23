@@ -88,17 +88,16 @@ function ProjectViews({
   const view = useStore(session);
   return tabs.map((kind) => (
     <RetainedPanelView key={kind} target={view.targets[kind]}>
-      <PanelFeatureContext.Provider
-        value={{
-          scope: session.scope,
-          environment,
-          active:
-            environment?.visible !== false &&
-            view.mounted &&
-            open &&
-            active === kind,
-          input: inputs?.[kind],
-        }}
+      <PanelFeatureScope
+        scope={session.scope}
+        environment={environment}
+        active={
+          environment?.visible !== false &&
+          view.mounted &&
+          open &&
+          active === kind
+        }
+        input={inputs?.[kind]}
       >
         {view.contents[kind] ??
           (session.scope && workspacePanelDefinitions[kind].Content ? (
@@ -106,9 +105,33 @@ function ProjectViews({
           ) : (
             <PanelPlaceholder kind={kind} />
           ))}
-      </PanelFeatureContext.Provider>
+      </PanelFeatureScope>
     </RetainedPanelView>
   ));
+}
+
+function PanelFeatureScope({
+  scope,
+  environment,
+  active,
+  input,
+  children,
+}: {
+  readonly scope: WorkspacePanelScope | undefined;
+  readonly environment: WorkspacePanelEnvironment | undefined;
+  readonly active: boolean;
+  readonly input: unknown;
+  readonly children: ReactNode;
+}) {
+  const value = useMemo(
+    () => ({ scope, environment, active, input }),
+    [scope, environment, active, input],
+  );
+  return (
+    <PanelFeatureContext.Provider value={value}>
+      {children}
+    </PanelFeatureContext.Provider>
+  );
 }
 
 function useProjectEnvironment(
@@ -116,21 +139,28 @@ function useProjectEnvironment(
   environment: WorkspacePanelEnvironment | undefined,
 ) {
   const retained = useRef<WorkspacePanelEnvironment | undefined>(undefined);
-  if (scope === undefined) {
-    return environment;
-  }
-  if (environment?.environmentId === scope.environmentId) {
-    retained.current = {
-      ...environment,
-      requests: environment.requests ?? retained.current?.requests,
-      connected: environment.connected && environment.requests !== undefined,
-      writable: environment.writable && environment.requests !== undefined,
-    };
-    return retained.current;
-  }
-  return retained.current
-    ? { ...retained.current, connected: false, writable: false, visible: false }
-    : undefined;
+  return useMemo(() => {
+    if (scope === undefined) {
+      return environment;
+    }
+    if (environment?.environmentId === scope.environmentId) {
+      retained.current = {
+        ...environment,
+        requests: environment.requests ?? retained.current?.requests,
+        connected: environment.connected && environment.requests !== undefined,
+        writable: environment.writable && environment.requests !== undefined,
+      };
+      return retained.current;
+    }
+    return retained.current
+      ? {
+          ...retained.current,
+          connected: false,
+          writable: false,
+          visible: false,
+        }
+      : undefined;
+  }, [scope, environment]);
 }
 
 function PanelPlaceholder({ kind }: { readonly kind: WorkspacePanelKind }) {
