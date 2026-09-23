@@ -31,32 +31,36 @@ import { RepositoryCoordination } from "#server/domain/repository-coordination.c
 import { RepositoryFreshnessState } from "#server/domain/repository-freshness.contract";
 import { RepositoryWatching } from "#server/domain/repository-watcher.contract";
 import {
-  commitInspectionHttpRoutes,
+  commitInspectionFeature,
   commitInspectionLayer,
 } from "#server/features/commit-inspection/index";
 import {
   createEnvironmentAuthorization,
-  environmentAuthorizationHttpRoutes,
+  environmentAuthorizationFeature,
 } from "#server/features/environment-authorization/index";
 import {
   createEnvironmentFilesystem,
-  environmentFilesystemHttpRoutes,
+  environmentFilesystemFeature,
 } from "#server/features/environment-filesystem/index";
 import { repositoryAccessLayer } from "#server/features/repository-access/index";
 import {
   createRepositoryCatalog,
-  repositoryCatalogHttpRoutes,
+  repositoryCatalogFeature,
 } from "#server/features/repository-catalog/index";
 import {
-  repositoryChangesHttpRoutes,
+  repositoryChangesFeature,
   repositoryChangesLayer,
 } from "#server/features/repository-changes/index";
 import { repositoryCoordinationLayer } from "#server/features/repository-coordination/index";
-import { repositoryFreshnessLayer } from "#server/features/repository-history/freshness/repository-freshness";
-import { createRepositoryHistoryService } from "#server/features/repository-history/repository-history";
+import {
+  createRepositoryHistoryService,
+  repositoryFreshnessFeature,
+  repositoryFreshnessLayer,
+  repositoryHistoryFeature,
+} from "#server/features/repository-history/index";
 import {
   createRepositoryRefsService,
-  repositoryRefsHttpRoutes,
+  repositoryRefsFeature,
 } from "#server/features/repository-refs/index";
 import { acquireRepositoryChangePublisher } from "#server/features/repository-refs/repository-change-publisher";
 import { acquireEnvironmentContext } from "#server/persistence/environment-context";
@@ -117,29 +121,32 @@ export function startEnvironmentServer(
     });
     const listener = yield* acquireEnvironmentListener({
       authorization,
-      httpRoutes: [
-        ...environmentAuthorizationHttpRoutes(authorization),
-        ...environmentFilesystemHttpRoutes(createEnvironmentFilesystem()),
-        ...repositoryCatalogHttpRoutes(catalog),
-        ...commitInspectionHttpRoutes(
-          Context.get(repositoryServices, CommitInspectionAccess),
-        ),
-        ...repositoryChangesHttpRoutes(
-          Context.get(repositoryServices, RepositoryChangesAccess),
-        ),
-        ...repositoryRefsHttpRoutes(refs),
-      ],
       ...(options.browserAssetsRoot === undefined
         ? {}
         : { browserAssetsRoot: options.browserAssetsRoot }),
       environmentId: environment.id,
       events,
-      history: createRepositoryHistoryService({ catalog, git }),
-      freshness: Context.get(repositoryServices, RepositoryFreshnessState),
+      features: [
+        environmentAuthorizationFeature(authorization),
+        environmentFilesystemFeature(createEnvironmentFilesystem()),
+        repositoryCatalogFeature(catalog),
+        commitInspectionFeature(
+          Context.get(repositoryServices, CommitInspectionAccess),
+        ),
+        repositoryChangesFeature(
+          Context.get(repositoryServices, RepositoryChangesAccess),
+        ),
+        repositoryHistoryFeature(
+          createRepositoryHistoryService({ catalog, git }),
+        ),
+        repositoryFreshnessFeature(
+          Context.get(repositoryServices, RepositoryFreshnessState),
+        ),
+        repositoryRefsFeature(refs),
+      ],
       ...(options.host === undefined ? {} : { host: options.host }),
       port: requestedPort,
       productVersion,
-      refs,
     });
 
     if (useAutomaticPort && environment.automaticPort === null) {

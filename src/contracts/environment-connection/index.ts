@@ -26,6 +26,7 @@ export {
   currentEnvironmentProtocol,
   EnvironmentCapabilities,
   EnvironmentCapability,
+  type EnvironmentCapabilityName,
   EnvironmentRequestId,
   ProductVersionSchema,
   ProtocolRange,
@@ -35,6 +36,10 @@ export {
   EnvironmentRpc,
   type EnvironmentRpcClient,
 } from "@rebase/contracts/environment-connection/rpc/environment-rpc.contract";
+export {
+  AuthorizationDenied,
+  EnvironmentRpcFailure,
+} from "@rebase/contracts/environment-connection/rpc/environment-rpc-failure.contract";
 export { environmentRpcSerialization } from "@rebase/contracts/environment-connection/rpc/environment-rpc-serialization";
 export {
   createCurrentEnvironmentHello,

@@ -11,6 +11,7 @@ import type {
   EnvironmentTransportState,
   RunEnvironmentEffect,
 } from "#server/adapters/environment-transport/environment-connection.contract";
+import type { EnvironmentFeature } from "#server/adapters/environment-transport/environment-feature.contract";
 import {
   authorizationFailureStatus,
   expectedRequestOrigin,
@@ -27,6 +28,7 @@ export function attachEnvironmentWebSocketServer(
   server: Server,
   state: EnvironmentTransportState,
   authorization: EnvironmentAuthorization,
+  features: readonly EnvironmentFeature[],
   runEnvironmentEffect: RunEnvironmentEffect,
 ) {
   const webSocketServer = new WebSocketServer({
@@ -94,6 +96,7 @@ export function attachEnvironmentWebSocketServer(
       runEnvironmentRpcSession(
         socket,
         state,
+        features,
         typeof address === "string"
           ? { _tag: "UnixAddress", path: address }
           : {

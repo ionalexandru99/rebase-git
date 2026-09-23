@@ -9,16 +9,16 @@ import { createEnvironmentEventPublisher } from "#server/adapters/environment-tr
 import { createLocalGitCommandRunner } from "#server/adapters/local-git/local-git-command-runner";
 import { acquireEnvironmentListener } from "#server/app/server/environment-listener";
 import {
-  commitInspectionHttpRoutes,
+  commitInspectionFeature,
   createCommitInspectionService,
 } from "#server/features/commit-inspection/index";
 import { createEnvironmentAuthorization } from "#server/features/environment-authorization/environment-authorization";
-import { environmentAuthorizationHttpRoutes } from "#server/features/environment-authorization/index";
+import { environmentAuthorizationFeature } from "#server/features/environment-authorization/index";
 import { createRepositoryAccess } from "#server/features/repository-access/index";
 import { createRepositoryCatalog } from "#server/features/repository-catalog/repository-catalog";
 import {
   createRepositoryChangesService,
-  repositoryChangesHttpRoutes,
+  repositoryChangesFeature,
 } from "#server/features/repository-changes/index";
 import { createRepositoryCoordination } from "#server/features/repository-coordination/index";
 import { acquireEnvironmentContext } from "#server/persistence/environment-context";
@@ -53,21 +53,21 @@ it("authorizes changes reads separately from index mutations across HTTP", async
           const access = createRepositoryAccess(catalog, runner);
           const listener = yield* acquireEnvironmentListener({
             authorization,
-            httpRoutes: [
-              ...environmentAuthorizationHttpRoutes(authorization),
-              ...repositoryChangesHttpRoutes(
+            environmentId: "00000000-0000-4000-8000-000000000001",
+            events: createEnvironmentEventPublisher(),
+            features: [
+              environmentAuthorizationFeature(authorization),
+              repositoryChangesFeature(
                 createRepositoryChangesService(
                   access,
                   runner,
                   createRepositoryCoordination(runner),
                 ),
               ),
-              ...commitInspectionHttpRoutes(
+              commitInspectionFeature(
                 createCommitInspectionService(access, runner),
               ),
             ],
-            environmentId: "00000000-0000-4000-8000-000000000001",
-            events: createEnvironmentEventPublisher(),
             productVersion: "0.0.0",
           });
           const credential = (role: "owner" | "viewer") =>

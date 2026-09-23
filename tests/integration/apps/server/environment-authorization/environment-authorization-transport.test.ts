@@ -22,7 +22,7 @@ import { createEnvironmentEventPublisher } from "#server/adapters/environment-tr
 import { acquireEnvironmentListener } from "#server/app/server/environment-listener";
 import { createEnvironmentAuthorization } from "#server/features/environment-authorization/environment-authorization";
 import type { EnvironmentAuthorization } from "#server/features/environment-authorization/environment-authorization.contract";
-import { environmentAuthorizationHttpRoutes } from "#server/features/environment-authorization/index";
+import { environmentAuthorizationFeature } from "#server/features/environment-authorization/index";
 import { acquireEnvironmentContext } from "#server/persistence/environment-context";
 import { environmentPaths } from "#server/persistence/storage/environment-paths";
 
@@ -457,9 +457,9 @@ function withAuthorizedListener(
         const events = createEnvironmentEventPublisher();
         const listener = yield* acquireEnvironmentListener({
           authorization,
-          httpRoutes: environmentAuthorizationHttpRoutes(authorization),
           environmentId,
           events,
+          features: [environmentAuthorizationFeature(authorization)],
           productVersion: "0.0.0",
         });
         listener.readiness.value = true;

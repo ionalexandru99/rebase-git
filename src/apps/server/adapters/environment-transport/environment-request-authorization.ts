@@ -2,8 +2,8 @@ import type { IncomingMessage } from "node:http";
 import { isIPv4 } from "node:net";
 import type { EnvironmentAuthorizationFailure } from "@rebase/contracts";
 import { Effect } from "effect";
+import { readBrowserSessionCredential } from "#server/adapters/environment-transport/http/environment-session-cookie";
 import { EnvironmentAuthorizationError } from "#server/features/environment-authorization/environment-authorization.contract";
-import { readBrowserSessionCredential } from "#server/features/environment-authorization/http/environment-session-cookie";
 
 export function validateRequestHost(request: IncomingMessage) {
   const expectedHost = listeningHost(request);

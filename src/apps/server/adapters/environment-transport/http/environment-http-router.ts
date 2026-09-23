@@ -18,8 +18,8 @@ import type {
   EnvironmentHttpRouteFailure,
   EnvironmentHttpRouteHandler,
 } from "#server/adapters/environment-transport/http/environment-http-route-handler.contract";
+import { writeBrowserSessionCookie } from "#server/adapters/environment-transport/http/environment-session-cookie";
 import type { EnvironmentAuthorization } from "#server/features/environment-authorization/environment-authorization.contract";
-import { writeBrowserSessionCookie } from "#server/features/environment-authorization/http/environment-session-cookie";
 
 export function routeEnvironmentHttpRequest(
   handlers: readonly EnvironmentHttpRouteHandler[],

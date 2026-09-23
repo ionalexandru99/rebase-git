@@ -1,6 +1,6 @@
 import type {
   EnvironmentChanged,
-  RepositoryHistoryOperationFailure,
+  EnvironmentRpcFailure,
 } from "@rebase/contracts";
 import { Effect, Queue, Stream } from "effect";
 import type { EnvironmentRpcSession } from "#server/adapters/environment-transport/rpc/environment-rpc-session.contract";
@@ -40,9 +40,8 @@ export function acquireEnvironmentEvents(session: EnvironmentRpcSession) {
           yield* Effect.acquireRelease(
             Effect.suspend(() =>
               watching
-                ? Effect.fail<RepositoryHistoryOperationFailure>({
-                    _tag: "GitFailed",
-                    reason: "Failed",
+                ? Effect.fail<EnvironmentRpcFailure>({
+                    _tag: "AlreadyWatching",
                   })
                 : Effect.sync(() => {
                     watching = true;

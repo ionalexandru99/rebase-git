@@ -4,9 +4,14 @@ import type {
   RepositoryHistoryOperationFailure,
 } from "@rebase/contracts";
 import { Effect, Option, Queue, Semaphore, Stream } from "effect";
+import type { EnvironmentRpcHandlers } from "#server/adapters/environment-transport/environment-feature.contract";
 import type { EnvironmentRpcSession } from "#server/adapters/environment-transport/rpc/environment-rpc-session.contract";
+import type { RepositoryFreshnessService } from "#server/domain/repository-freshness.contract";
 
-export function repositoryFreshnessRpc(session: EnvironmentRpcSession) {
+export function repositoryFreshnessRpc(
+  session: EnvironmentRpcSession,
+  freshness: RepositoryFreshnessService,
+): Partial<EnvironmentRpcHandlers> {
   const subscriptions = new Set<string>();
   const commands = Semaphore.makeUnsafe(32);
   const runCommand = <A>(
@@ -25,27 +30,16 @@ export function repositoryFreshnessRpc(session: EnvironmentRpcSession) {
         }),
       ),
     );
-  const service = (write = false) =>
-    session
-      .requireCapability(
-        "repository-history-freshness",
-        write ? "repository.write" : "repository.read",
-      )
-      .pipe(
-        Effect.flatMap(() =>
-          session.state.freshness === undefined
-            ? Effect.fail<RepositoryHistoryOperationFailure>({
-                _tag: "GitFailed",
-                reason: "Failed",
-              })
-            : Effect.succeed(session.state.freshness),
-        ),
-      );
+  const authorize = (write = false) =>
+    session.requireCapability(
+      "repository-history-freshness",
+      write ? "repository.write" : "repository.read",
+    );
   return {
     WatchFreshness: ({ repositoryId }: { repositoryId: string }) =>
       Stream.unwrap(
         Effect.gen(function* () {
-          const freshness = yield* service();
+          yield* authorize();
           if (subscriptions.size >= 32 || subscriptions.has(repositoryId))
             return yield* Effect.fail<RepositoryHistoryOperationFailure>({
               _tag: "GitFailed",
@@ -59,7 +53,7 @@ export function repositoryFreshnessRpc(session: EnvironmentRpcSession) {
           );
           const queue = yield* Queue.sliding<RepositoryFreshness>(1);
           yield* Effect.addFinalizer(() => Queue.shutdown(queue));
-          const automaticFetch = yield* service(true).pipe(
+          const automaticFetch = yield* authorize(true).pipe(
             Effect.match({ onFailure: () => false, onSuccess: () => true }),
           );
           yield* Effect.acquireRelease(
@@ -76,8 +70,8 @@ export function repositoryFreshnessRpc(session: EnvironmentRpcSession) {
         }),
       ),
     FetchHistory: ({ repositoryId }: { repositoryId: string }) =>
-      service(true).pipe(
-        Effect.flatMap((freshness) => freshness.fetch(repositoryId)),
+      authorize(true).pipe(
+        Effect.flatMap(() => freshness.fetch(repositoryId)),
         Effect.mapError(failure),
         runCommand,
       ),
@@ -88,10 +82,8 @@ export function repositoryFreshnessRpc(session: EnvironmentRpcSession) {
       repositoryId: string;
       setting: RepositoryFetchSetting;
     }) =>
-      service(true).pipe(
-        Effect.flatMap((freshness) =>
-          freshness.configure(repositoryId, setting),
-        ),
+      authorize(true).pipe(
+        Effect.flatMap(() => freshness.configure(repositoryId, setting)),
         Effect.mapError(failure),
         runCommand,
       ),

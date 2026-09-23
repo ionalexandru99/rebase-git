@@ -6,12 +6,15 @@ import { createEnvironmentEventPublisher } from "#server/adapters/environment-tr
 import { createLocalGitCommandRunner } from "#server/adapters/local-git/local-git-command-runner";
 import { acquireEnvironmentListener } from "#server/app/server/environment-listener";
 import type { EnvironmentAuthorization } from "#server/features/environment-authorization/environment-authorization.contract";
-import { environmentAuthorizationHttpRoutes } from "#server/features/environment-authorization/index";
+import { environmentAuthorizationFeature } from "#server/features/environment-authorization/index";
 import {
   createRepositoryCatalog,
-  repositoryCatalogHttpRoutes,
+  repositoryCatalogFeature,
 } from "#server/features/repository-catalog/index";
-import { createRepositoryHistoryService } from "#server/features/repository-history/repository-history";
+import {
+  createRepositoryHistoryService,
+  repositoryHistoryFeature,
+} from "#server/features/repository-history/index";
 import { acquireEnvironmentContext } from "#server/persistence/environment-context";
 import { environmentPaths } from "#server/persistence/storage/environment-paths";
 
@@ -43,16 +46,18 @@ try {
         const repository = yield* catalog.remember(repositoryPath);
         const listener = yield* acquireEnvironmentListener({
           authorization,
-          httpRoutes: [
-            ...environmentAuthorizationHttpRoutes(authorization),
-            ...repositoryCatalogHttpRoutes(catalog),
-          ],
           environmentId: crypto.randomUUID(),
           events: createEnvironmentEventPublisher(),
-          history: createRepositoryHistoryService({
-            catalog,
-            git: createLocalGitCommandRunner(),
-          }),
+          features: [
+            environmentAuthorizationFeature(authorization),
+            repositoryCatalogFeature(catalog),
+            repositoryHistoryFeature(
+              createRepositoryHistoryService({
+                catalog,
+                git: createLocalGitCommandRunner(),
+              }),
+            ),
+          ],
           productVersion: "0.0.0",
         });
         listener.readiness.value = true;

@@ -1,7 +1,8 @@
 import type {
+  AuthorizationDenied,
   EnvironmentAccessCapability,
+  EnvironmentCapabilityName,
   HelloAccepted,
-  RepositoryHistoryOperationFailure,
 } from "@rebase/contracts";
 import type { Effect } from "effect";
 import type { EnvironmentTransportState } from "#server/adapters/environment-transport/environment-connection.contract";
@@ -9,7 +10,7 @@ import type { EnvironmentTransportState } from "#server/adapters/environment-tra
 export interface EnvironmentRpcSession {
   readonly state: EnvironmentTransportState;
   readonly requireCapability: (
-    name: string,
+    name: EnvironmentCapabilityName,
     access?: EnvironmentAccessCapability,
-  ) => Effect.Effect<HelloAccepted, RepositoryHistoryOperationFailure>;
+  ) => Effect.Effect<HelloAccepted, AuthorizationDenied>;
 }

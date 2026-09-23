@@ -1,12 +1,13 @@
 import { createServer, type Server } from "node:http";
-import { createCurrentEnvironmentDiscovery } from "@rebase/contracts";
 import { Effect, FiberSet } from "effect";
 import type {
   EnvironmentTransportState,
   RunEnvironmentEffect,
 } from "#server/adapters/environment-transport/environment-connection.contract";
 import { formatHostAddress } from "#server/adapters/environment-transport/environment-request-authorization";
+import { createEnvironmentTransportDiscovery } from "#server/adapters/environment-transport/environment-transport-discovery";
 import { createEnvironmentHttpHandler } from "#server/adapters/environment-transport/http/environment-http-handler";
+import type { EnvironmentHttpRouteHandler } from "#server/adapters/environment-transport/http/environment-http-route-handler.contract";
 import { attachEnvironmentWebSocketServer } from "#server/adapters/environment-transport/websocket/environment-websocket-server";
 import type { EnvironmentListenerOptions } from "#server/app/server/environment-server.contract";
 import { EnvironmentServerStartError } from "#server/app/server/environment-server-error.contract";
@@ -21,29 +22,13 @@ export function acquireEnvironmentListener(
     const host = options.host ?? loopbackHost;
     const port = options.port ?? 0;
     const readiness = { value: false };
-    const discovery = createCurrentEnvironmentDiscovery(
-      options.environmentId,
-      options.productVersion,
-    );
     const state: EnvironmentTransportState = {
-      discovery: {
-        ...discovery,
-        capabilities: discovery.capabilities.filter(
-          (capability) =>
-            (capability.name !== "repository-history" ||
-              options.history !== undefined) &&
-            (capability.name !== "repository-history-freshness" ||
-              options.freshness !== undefined) &&
-            (capability.name !== "repository-refs" ||
-              options.refs !== undefined),
-        ),
-      },
+      discovery: createEnvironmentTransportDiscovery(
+        options.environmentId,
+        options.productVersion,
+        options.features,
+      ),
       events: options.events,
-      ...(options.refs === undefined ? {} : { refs: options.refs }),
-      ...(options.history === undefined ? {} : { history: options.history }),
-      ...(options.freshness === undefined
-        ? {}
-        : { freshness: options.freshness }),
     };
     const runFork = yield* FiberSet.makeRuntime<never, void, never>();
     const runEnvironmentEffect: RunEnvironmentEffect = (effect, signal) => {
@@ -54,7 +39,7 @@ export function acquireEnvironmentListener(
         readiness,
         state,
         options.authorization,
-        options.httpRoutes ?? [],
+        options.features.flatMap((feature) => feature.httpRoutes),
         host,
         port,
         runEnvironmentEffect,
@@ -70,6 +55,7 @@ export function acquireEnvironmentListener(
             server,
             state,
             options.authorization,
+            options.features,
             runEnvironmentEffect,
           ),
         catch: (cause) => environmentServerError(cause, host, port),
@@ -93,7 +79,7 @@ function createHttpServer(
   readiness: { value: boolean },
   state: EnvironmentTransportState,
   authorization: EnvironmentListenerOptions["authorization"],
-  routes: NonNullable<EnvironmentListenerOptions["httpRoutes"]>,
+  routes: readonly EnvironmentHttpRouteHandler[],
   host: string,
   port: number,
   runEnvironmentEffect: RunEnvironmentEffect,
