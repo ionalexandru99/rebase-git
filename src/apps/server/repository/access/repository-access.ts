@@ -15,14 +15,21 @@ import {
 } from "#server/domain/repository-catalog.contract";
 import type { RepositoryGitError } from "#server/domain/repository-git.contract";
 import {
+  type RepositoryWatcher,
+  RepositoryWatching,
+} from "#server/domain/repository-watcher.contract";
+import {
   canonicalizeWorktrees,
   readWorktrees,
 } from "#server/repository/access/git/read-worktrees";
+import { createWorktreePathCache } from "#server/repository/access/worktree-path-cache";
 
 export function createRepositoryAccess(
   catalog: Pick<RepositoryCatalog, "find">,
   git: GitCommandRunner,
+  watcher: RepositoryWatcher,
 ): RepositoryAccessService {
+  const worktreePaths = createWorktreePathCache(git, watcher);
   const repository = (repositoryId: string) =>
     catalog
       .find(repositoryId)
@@ -41,7 +48,7 @@ export function createRepositoryAccess(
   return {
     repository,
     worktrees,
-    worktree: (scope) =>
+    requireWorktree: (scope) =>
       Effect.gen(function* () {
         const entry = yield* repository(scope.repositoryId).pipe(
           Effect.mapError((error) =>
@@ -50,12 +57,11 @@ export function createRepositoryAccess(
               : error,
           ),
         );
-        const worktree = (yield* worktrees(entry.path)).find(
-          (tree) => tree.path === scope.worktreePath,
-        );
-        return worktree === undefined
-          ? yield* Effect.fail(worktreeMissing(scope.worktreePath))
-          : worktree;
+        const known = yield* worktreePaths
+          .contains(entry.path, scope.worktreePath)
+          .pipe(Effect.mapError(worktreesUnreadable));
+        if (!known)
+          return yield* Effect.fail(worktreeMissing(scope.worktreePath));
       }),
   };
 }
@@ -66,6 +72,7 @@ export const repositoryAccessLayer = Layer.effect(
     return createRepositoryAccess(
       yield* RepositoryCatalogAccess,
       yield* GitCommands,
+      yield* RepositoryWatching,
     );
   }),
 );

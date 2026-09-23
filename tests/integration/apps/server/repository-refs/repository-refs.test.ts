@@ -453,7 +453,11 @@ function withRefsService<Value, Failure>(
         const remembered = yield* catalog.remember(fixture.repositoryPath);
         const refs = createRepositoryRefsService({
           coordination: createRepositoryCoordination(git),
-          access: createRepositoryAccess(catalog, git),
+          access: createRepositoryAccess(
+            catalog,
+            git,
+            createLocalRepositoryWatcher(),
+          ),
           changes: yield* acquireRepositoryChangePublisher(
             git,
             createLocalRepositoryWatcher(),

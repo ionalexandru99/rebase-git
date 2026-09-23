@@ -37,7 +37,7 @@ export function createRepositoryChangesService(
   ) =>
     Effect.gen(function* () {
       yield* access
-        .worktree(scope)
+        .requireWorktree(scope)
         .pipe(
           Effect.mapError((error) => changesError("Missing", error.detail)),
         );

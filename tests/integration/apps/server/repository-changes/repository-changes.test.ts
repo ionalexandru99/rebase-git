@@ -19,6 +19,7 @@ import type {
 import { Effect } from "effect";
 import { afterEach, describe, expect, it } from "vite-plus/test";
 import { createLocalGitCommandRunner } from "#server/adapters/local-git/local-git-command-runner";
+import { createLocalRepositoryWatcher } from "#server/adapters/local-git/local-repository-watcher";
 import type { GitCommand } from "#server/domain/git-command.contract";
 import { createRepositoryChangesService } from "#server/features/repository-changes/repository-changes";
 import {
@@ -75,6 +76,7 @@ async function fixture(
           }),
       },
       runner,
+      createLocalRepositoryWatcher(),
     ),
     {
       ...runner,

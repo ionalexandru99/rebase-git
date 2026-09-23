@@ -7,6 +7,7 @@ import { Effect } from "effect";
 import { expect, it } from "vite-plus/test";
 import { createEnvironmentEventPublisher } from "#server/adapters/environment-transport/events/environment-event-publisher";
 import { createLocalGitCommandRunner } from "#server/adapters/local-git/local-git-command-runner";
+import { createLocalRepositoryWatcher } from "#server/adapters/local-git/local-repository-watcher";
 import { acquireEnvironmentListener } from "#server/app/server/environment-listener";
 import { EnvironmentAuthorizationAccess } from "#server/domain/environment-authorization.contract";
 import { GitCommands } from "#server/domain/git-command.contract";
@@ -62,7 +63,11 @@ it("authorizes changes reads separately from index mutations across HTTP", async
             ),
             Effect.provideService(
               RepositoryAccess,
-              createRepositoryAccess(catalog, runner),
+              createRepositoryAccess(
+                catalog,
+                runner,
+                createLocalRepositoryWatcher(),
+              ),
             ),
             Effect.provideService(GitCommands, runner),
             Effect.provideService(

@@ -26,7 +26,7 @@ export function createRepositoryRefsService(dependencies: {
     checkout: (command: CheckoutRepositoryRef) =>
       Effect.gen(function* () {
         yield* access
-          .worktree(command)
+          .requireWorktree(command)
           .pipe(Effect.mapError(repositoryAccessFailed));
         return yield* coordination
           .run(

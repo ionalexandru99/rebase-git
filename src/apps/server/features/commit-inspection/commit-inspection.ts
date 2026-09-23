@@ -14,7 +14,7 @@ export function createCommitInspectionService(
 ) {
   return {
     inspect: (command: InspectCommit) =>
-      access.worktree(command).pipe(
+      access.requireWorktree(command).pipe(
         Effect.mapError((error) => inspectionError("Missing", error.detail)),
         Effect.andThen(() => inspectCommit(git, command)),
         Effect.mapError((error) =>
@@ -24,7 +24,7 @@ export function createCommitInspectionService(
         ),
       ),
     inspectDiff: (command: InspectCommitDiff) =>
-      access.worktree(command).pipe(
+      access.requireWorktree(command).pipe(
         Effect.mapError((error) => inspectionError("Missing", error.detail)),
         Effect.andThen(() => inspectCommitDiff(git, command)),
         Effect.mapError((error) =>
