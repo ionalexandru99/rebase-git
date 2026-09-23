@@ -6,6 +6,7 @@ import {
   readFile,
   realpath,
   rm,
+  utimes,
   writeFile,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -390,6 +391,21 @@ describe("working changes through Git", { timeout: 30000 }, () => {
       expect((await f.read())[section]).toEqual([]);
     },
   );
+  it("discards a same-size edit that only the index timestamp marks as changed", async () => {
+    const f = await fixture();
+    const path = join(f.directory, "file.txt");
+    const past = new Date("2020-01-01T00:00:00Z");
+    await f.git("config", "core.checkStat", "minimal");
+    await utimes(path, past, past);
+    await f.git("update-index", "--refresh");
+    await writeFile(path, "ONE\ntwo\nthree\n");
+    await utimes(path, past, past);
+    await utimes(join(f.directory, ".git", "index"), past, past);
+
+    await f.mutate("discard", "unstaged");
+
+    expect(await readFile(path, "utf8")).toBe("one\ntwo\nthree\n");
+  });
   it("tracks index-only edits in the linked worktree's own index", async () => {
     const f = await fixture();
     const parent = await realpath(

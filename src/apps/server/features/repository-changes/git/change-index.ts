@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { copyFile, open, rename, rm } from "node:fs/promises";
+import { copyFile, open, rename, rm, stat, utimes } from "node:fs/promises";
 import { Effect } from "effect";
 import type { GitCommandRunner } from "#server/domain/git-command.contract";
 import {
@@ -43,7 +43,7 @@ export function withChangeIndex<A, E>(
           }),
       );
       const copied = yield* changeIo(() =>
-        copyFile(index, temporary)
+        copyIndex(index, temporary)
           .then(() => true)
           .catch((error) => {
             if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
@@ -67,4 +67,10 @@ export function withChangeIndex<A, E>(
       );
     }),
   );
+}
+
+async function copyIndex(index: string, temporary: string) {
+  const { atime, mtime } = await stat(index);
+  await copyFile(index, temporary);
+  await utimes(temporary, atime, mtime);
 }
