@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createChangeDiffModel } from "#web/features/file-diff/api";
+import { createChangeDiffModel } from "#web/features/file-diff/diff-model";
 
 function model(before: string | null, after: string | null, patch: string) {
   return createChangeDiffModel({

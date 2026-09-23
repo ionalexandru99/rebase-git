@@ -1,24 +1,25 @@
 import type { InspectCommit } from "@rebase/contracts";
-import { Effect, Fiber } from "effect";
+import { Effect, type Fiber, type ManagedRuntime } from "effect";
+import {
+  type DiffPreferences,
+  defaultDiffPreferences,
+} from "#web/domain/file-diff/diff-preferences.contract";
 import type {
   CommitInspectionClient,
   CommitInspectionState,
 } from "#web/features/commit-inspection/commit-inspection.contract";
 import {
-  type DiffPreferences,
-  defaultDiffPreferences,
-} from "#web/features/file-diff/file-diff.contract";
-import {
   readDiffPreferences,
   saveDiffPreferences,
 } from "#web/persistence/working-changes/working-changes-store";
-import { createApplicationRuntime } from "#web/platform/effect/application-runtime";
+import { createControllerScope } from "#web/platform/effect/controller-scope";
 
 export function createCommitInspectionController(
   client: CommitInspectionClient,
   scope: Pick<InspectCommit, "repositoryId" | "worktreePath">,
+  runtime: ManagedRuntime.ManagedRuntime<never, never>,
 ) {
-  const runtime = createApplicationRuntime();
+  const work = createControllerScope(runtime);
   let state: CommitInspectionState = {
     oid: undefined,
     details: null,
@@ -37,12 +38,9 @@ export function createCommitInspectionController(
   let fileGeneration = 0;
   let active = true;
   const publish = (next: Partial<CommitInspectionState>) => {
-    if (runtime.disposed) return;
+    if (!work.open) return;
     state = { ...state, ...next };
     for (const listener of listeners) listener();
-  };
-  const cancel = (fiber: Fiber.Fiber<void> | undefined) => {
-    if (fiber !== undefined) runtime.runFork(Fiber.interrupt(fiber));
   };
   const selectFile = (path: string | null) => {
     if (
@@ -52,7 +50,7 @@ export function createCommitInspectionController(
     )
       return;
     const current = ++fileGeneration;
-    cancel(diffFiber);
+    work.interrupt(diffFiber);
     publish({
       path,
       diff: null,
@@ -61,7 +59,7 @@ export function createCommitInspectionController(
     });
     const details = state.details;
     if (path === null || details === null || !active) return;
-    diffFiber = runtime.runFork(
+    diffFiber = work.fork(
       client
         .diff({
           ...scope,
@@ -88,8 +86,8 @@ export function createCommitInspectionController(
   const load = (oid: string | undefined) => {
     const current = ++generation;
     ++fileGeneration;
-    cancel(detailsFiber);
-    cancel(diffFiber);
+    work.interrupt(detailsFiber);
+    work.interrupt(diffFiber);
     const previousPath = state.oid === oid ? state.path : null;
     publish({
       oid,
@@ -102,7 +100,7 @@ export function createCommitInspectionController(
       diffError: null,
     });
     if (oid === undefined || !active) return;
-    detailsFiber = runtime.runFork(
+    detailsFiber = work.fork(
       client
         .inspect({
           ...scope,
@@ -137,8 +135,8 @@ export function createCommitInspectionController(
       if (!active) {
         ++generation;
         ++fileGeneration;
-        cancel(detailsFiber);
-        cancel(diffFiber);
+        work.interrupt(detailsFiber);
+        work.interrupt(diffFiber);
         publish({ loading: false, loadingDiff: false });
       } else if (state.oid !== undefined) {
         if (state.details === null) {
@@ -155,16 +153,18 @@ export function createCommitInspectionController(
         listeners.delete(listener);
       };
     },
-    start: () =>
-      runtime.start(
+    start: () => {
+      if (!work.start()) return;
+      work.fork(
         readDiffPreferences().pipe(
           Effect.match({
             onSuccess: (preferences) => publish({ preferences }),
             onFailure: () => undefined,
           }),
         ),
-      ),
-    stop: runtime.stop,
+      );
+    },
+    stop: work.stop,
     selectCommit: (oid: string | undefined) => {
       if (oid !== state.oid) load(oid);
     },
@@ -173,7 +173,7 @@ export function createCommitInspectionController(
     retryDiff: () => selectFile(state.path),
     preferences: (preferences: DiffPreferences) => {
       publish({ preferences });
-      runtime.runFork(
+      work.fork(
         saveDiffPreferences(preferences).pipe(Effect.catch(() => Effect.void)),
       );
     },

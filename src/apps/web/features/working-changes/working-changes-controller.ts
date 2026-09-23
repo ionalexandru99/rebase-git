@@ -6,14 +6,18 @@ import type {
   MutateChanges,
   RepositoryChanges,
 } from "@rebase/contracts";
-import { Effect, Fiber, Semaphore } from "effect";
+import { Effect, type Fiber, type ManagedRuntime, Semaphore } from "effect";
 import {
-  type CommitDraft,
   type DiffPreferences,
   defaultDiffPreferences,
+} from "#web/domain/file-diff/diff-preferences.contract";
+import {
+  type CommitDraft,
   emptyCommitDraft,
-  type RepositoryChangesClient,
-  type WorkingChangesError,
+} from "#web/domain/working-changes/commit-draft.contract";
+import type {
+  RepositoryChangesClient,
+  WorkingChangesError,
 } from "#web/features/working-changes/working-changes.contract";
 import {
   readCommitDraft,
@@ -21,7 +25,12 @@ import {
   saveCommitDraft,
   saveDiffPreferences,
 } from "#web/persistence/working-changes/working-changes-store";
-import { createApplicationRuntime } from "#web/platform/effect/application-runtime";
+import type { WorkingChangesStoreUnavailable } from "#web/persistence/working-changes/working-changes-store.contract";
+import { createControllerScope } from "#web/platform/effect/controller-scope";
+
+type WorkingChangesFailure =
+  | WorkingChangesError
+  | WorkingChangesStoreUnavailable;
 
 export interface WorkingChangesState {
   readonly changes: RepositoryChanges | null;
@@ -43,8 +52,9 @@ export function createWorkingChangesController(
   initialScope: ChangesScope,
   draftKey: string,
   onCommitted: () => void,
+  runtime: ManagedRuntime.ManagedRuntime<never, never>,
 ) {
-  const runtime = createApplicationRuntime();
+  const work = createControllerScope(runtime);
   const lock = Semaphore.makeUnsafe(1);
   const writes = Semaphore.makeUnsafe(1);
   const listeners = new Set<() => void>();
@@ -68,19 +78,17 @@ export function createWorkingChangesController(
     notice: null,
   };
   const publish = (next: Partial<WorkingChangesState>) => {
-    if (runtime.disposed) return;
+    if (!work.open) return;
     state = { ...state, ...next };
     for (const listener of listeners) listener();
   };
   const scope = (): ChangesScope => ({ ...initialScope, amend: state.amend });
-  const fail = (error: WorkingChangesError) =>
+  const fail = (error: WorkingChangesFailure) =>
     Effect.sync(() => publish({ error: error.message }));
-  const run = (effect: Effect.Effect<unknown, WorkingChangesError>) =>
-    runtime.runFork(effect.pipe(Effect.catch(fail)));
-  const runRead = (effect: Effect.Effect<unknown, WorkingChangesError>) => {
-    if (reading) {
-      runtime.runFork(Fiber.interrupt(reading));
-    }
+  const run = (effect: Effect.Effect<unknown, WorkingChangesFailure>) =>
+    work.fork(effect.pipe(Effect.catch(fail)));
+  const runRead = (effect: Effect.Effect<unknown, WorkingChangesFailure>) => {
+    work.interrupt(reading);
     if (active) {
       reading = run(effect);
     }
@@ -145,7 +153,7 @@ export function createWorkingChangesController(
       publish({ loading: false });
     });
   const operation = (
-    effect: () => Effect.Effect<void, WorkingChangesError>,
+    effect: () => Effect.Effect<void, WorkingChangesFailure>,
   ) => {
     if (state.busy || state.loading) return;
     publish({ busy: true, error: null, notice: null });
@@ -163,10 +171,10 @@ export function createWorkingChangesController(
     );
   };
   const resume = () => {
-    if (!active || !initialized || polling || runtime.disposed) {
+    if (!active || !initialized || polling || !work.open) {
       return;
     }
-    polling = runtime.runFork(
+    polling = work.fork(
       Effect.forever(
         Effect.suspend(() =>
           document.visibilityState === "hidden" || state.busy
@@ -189,12 +197,10 @@ export function createWorkingChangesController(
   return {
     setActive: (next: boolean) => {
       active = next;
-      if (!active && polling) {
-        runtime.runFork(Fiber.interrupt(polling));
+      if (!active) {
+        work.interrupt(polling);
+        work.interrupt(reading);
         polling = undefined;
-      }
-      if (!active && reading) {
-        runtime.runFork(Fiber.interrupt(reading));
         reading = undefined;
       }
       resume();
@@ -206,8 +212,9 @@ export function createWorkingChangesController(
         listeners.delete(listener);
       };
     },
-    start: () =>
-      runtime.start(
+    start: () => {
+      if (!work.start()) return;
+      work.fork(
         Effect.gen(function* () {
           yield* readCommitDraft(draftKey).pipe(
             Effect.tap((draft) =>
@@ -227,8 +234,13 @@ export function createWorkingChangesController(
           initialized = true;
           resume();
         }).pipe(Effect.catch(fail)),
-      ),
-    stop: runtime.stop,
+      );
+    },
+    stop: () => {
+      work.stop();
+      polling = undefined;
+      reading = undefined;
+    },
     refresh: () =>
       runRead(
         lock

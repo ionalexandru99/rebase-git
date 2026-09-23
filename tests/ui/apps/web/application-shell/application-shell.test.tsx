@@ -3,12 +3,15 @@ import {
   encodeRepositoryHistoryPage,
   type RepositoryCommit,
 } from "@rebase/contracts";
+import { Layer, ManagedRuntime } from "effect";
 import { describe, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { render } from "vitest-browser-react";
 import type { LocalEnvironmentSession } from "#web/app/environment/local-environment-session.contract";
 import { ApplicationShell } from "#web-ui/app/shell/application-shell";
 import { RepositoryWorkspace } from "#web-ui/app/workspace/repository-workspace";
+
+const runtime = ManagedRuntime.make(Layer.empty);
 
 describe("application shell", () => {
   it("opens repository settings from the list without opening its graph", async () => {
@@ -290,6 +293,7 @@ function pairingRequiredSession(): LocalEnvironmentSession {
       select: () => undefined,
       subscribe: () => unsubscribe,
     },
+    runtime,
     start: () => undefined,
     stop: () => undefined,
     subscribe: () => unsubscribe,
@@ -403,6 +407,7 @@ function connectedSession() {
       select: () => undefined,
       subscribe: () => () => undefined,
     },
+    runtime,
     start: () => undefined,
     stop: () => undefined,
     subscribe: (listener) => {

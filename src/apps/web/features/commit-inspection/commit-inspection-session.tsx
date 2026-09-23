@@ -1,3 +1,4 @@
+import type { ManagedRuntime } from "effect";
 import { useEffect, useMemo } from "react";
 import type { CommitInspectionClient } from "#web/features/commit-inspection/commit-inspection.contract";
 import { createCommitInspectionController } from "#web/features/commit-inspection/commit-inspection-controller";
@@ -9,17 +10,23 @@ export function CommitInspectionSession({
   repositoryId,
   worktreePath,
   connected,
+  runtime,
 }: {
   readonly client: CommitInspectionClient;
   readonly repositoryId: string;
   readonly worktreePath: string;
   readonly connected: boolean;
+  readonly runtime: ManagedRuntime.ManagedRuntime<never, never>;
 }) {
   const feature = usePanelFeature();
   const controller = useMemo(
     () =>
-      createCommitInspectionController(client, { repositoryId, worktreePath }),
-    [client, repositoryId, worktreePath],
+      createCommitInspectionController(
+        client,
+        { repositoryId, worktreePath },
+        runtime,
+      ),
+    [client, repositoryId, worktreePath, runtime],
   );
   useEffect(() => {
     controller.start();

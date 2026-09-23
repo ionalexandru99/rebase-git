@@ -1,6 +1,6 @@
 import { IconArrowDown, IconArrowUp, IconTextWrap } from "@tabler/icons-react";
 import type { ReactNode } from "react";
-import type { DiffPreferences } from "#web/features/file-diff/file-diff.contract";
+import type { DiffPreferences } from "#web/domain/file-diff/diff-preferences.contract";
 import { Button } from "#web-ui/components/ui/button";
 
 export function DiffDisplayControls({

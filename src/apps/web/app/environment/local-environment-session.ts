@@ -79,6 +79,7 @@ export function createLocalEnvironmentSession(
       },
     },
     getSnapshot: () => state,
+    runtime: options.runtime,
     start,
     stop,
     subscribe: (listener) => {

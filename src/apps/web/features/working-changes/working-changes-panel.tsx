@@ -26,6 +26,7 @@ export function WorkingChangesPanel() {
       connected={feature?.environment?.connected ?? false}
       writable={feature?.environment?.writable ?? false}
       onCommitted={onCommitted}
+      runtime={feature?.environment?.runtime}
     />
   );
 }

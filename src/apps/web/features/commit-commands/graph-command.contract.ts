@@ -1,15 +1,14 @@
 import type {
   EnvironmentAccessCapability,
   RepositoryCommit,
-  RepositoryRefTarget,
 } from "@rebase/contracts";
 
 export type GraphCommandEnvironment = Omit<
   GraphCommandContext,
-  "selectedOids" | "invokingOid" | "ref"
+  "selectedOids" | "invokingOid"
 >;
-export type GraphCommandGroup = "Commit" | "History scope" | "Commit graph";
-export type GraphCommandPlacement = "commit-menu" | "ref-menu" | "toolbar";
+export type GraphCommandGroup = "Commit" | "Commit graph";
+export type GraphCommandPlacement = "commit-menu" | "toolbar";
 
 export interface GraphCommandContext {
   readonly environmentId: string;
@@ -19,10 +18,6 @@ export interface GraphCommandContext {
   readonly activeBranch?: string;
   readonly selectedOids: readonly string[];
   readonly invokingOid?: string;
-  readonly ref?: {
-    readonly target: RepositoryRefTarget;
-    readonly included: boolean;
-  };
   readonly connected: boolean;
   readonly freshnessReady: boolean;
   readonly operationState: "idle" | "fetching" | "busy";
@@ -43,10 +38,6 @@ export interface GraphCommandHandlers {
   readonly openDetails?: (oid: string) => void;
   readonly readCommit: (oid: string) => Promise<RepositoryCommit | undefined>;
   readonly writeClipboard: (text: string) => Promise<void>;
-  readonly toggleHistoryRef?: (
-    target: RepositoryRefTarget,
-    context: GraphCommandContext,
-  ) => void | Promise<void>;
   readonly fetch?: (context: GraphCommandContext) => void | Promise<void>;
 }
 
@@ -59,6 +50,10 @@ export interface GraphCommandRegistry<Id extends string = string> {
     context: GraphCommandContext,
     placement?: GraphCommandPlacement,
   ) => readonly GraphCommandDescriptor<Id>[];
+  readonly describe: (
+    id: Id,
+    context: GraphCommandContext,
+  ) => GraphCommandDescriptor<Id> | undefined;
   readonly execute: (
     id: Id,
     context: GraphCommandContext,

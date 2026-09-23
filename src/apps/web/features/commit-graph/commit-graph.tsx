@@ -283,7 +283,6 @@ export function CommitGraph({
     historySnapshot,
     fetch,
     selectedOids: navigation.selection.selectedOids,
-    onRemoveHistoryRef,
     onOpenDetails,
   });
   const handleKeyDown = (event: KeyboardEvent<HTMLElement>) => {

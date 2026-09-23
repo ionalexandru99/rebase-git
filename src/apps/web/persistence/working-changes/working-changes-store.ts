@@ -1,17 +1,19 @@
 import { Effect } from "effect";
 import {
-  type CommitDraft,
   type DiffPreferences,
   defaultDiffPreferences,
+} from "#web/domain/file-diff/diff-preferences.contract";
+import {
+  type CommitDraft,
   emptyCommitDraft,
-  WorkingChangesError,
-} from "#web/features/working-changes/working-changes.contract";
+} from "#web/domain/working-changes/commit-draft.contract";
 import {
   requestResult,
   transactionCompleted,
   withRepositoryHistoryDatabase,
   workingChangesStoreName,
 } from "#web/persistence/repository-history/repository-history-database";
+import { WorkingChangesStoreUnavailable } from "#web/persistence/working-changes/working-changes-store.contract";
 
 function access<T>(use: (store: IDBObjectStore) => Promise<T>, write: boolean) {
   return Effect.tryPromise({
@@ -29,7 +31,7 @@ function access<T>(use: (store: IDBObjectStore) => Promise<T>, write: boolean) {
         return result;
       }),
     catch: () =>
-      new WorkingChangesError({
+      new WorkingChangesStoreUnavailable({
         message:
           "Could not access changes preferences or the commit draft in this browser.",
       }),

@@ -1,20 +1,23 @@
-import { Effect } from "effect";
+import { Effect, Layer, ManagedRuntime } from "effect";
 import { expect, it, vi } from "vite-plus/test";
+import { defaultDiffPreferences } from "#web/domain/file-diff/diff-preferences.contract";
 import { createCommitInspectionController } from "#web/features/commit-inspection/commit-inspection-controller";
-import { defaultDiffPreferences } from "#web/features/file-diff/file-diff.contract";
-import { WorkingChangesError } from "#web/features/working-changes/working-changes.contract";
 import { saveDiffPreferences } from "#web/persistence/working-changes/working-changes-store";
+import { WorkingChangesStoreUnavailable } from "#web/persistence/working-changes/working-changes-store.contract";
 
 vi.mock("#web/persistence/working-changes/working-changes-store", () => ({
   readDiffPreferences: () => Effect.succeed(defaultDiffPreferences),
   saveDiffPreferences: vi.fn(),
 }));
 
+const runtime = ManagedRuntime.make(Layer.empty);
+const scope = { repositoryId: "repository", worktreePath: "/repository" };
+
 it("keeps inspection state available when saving display preferences fails", async () => {
   let failed = false;
   vi.mocked(saveDiffPreferences).mockReturnValue(
     Effect.fail(
-      new WorkingChangesError({ message: "Storage unavailable" }),
+      new WorkingChangesStoreUnavailable({ message: "Storage unavailable" }),
     ).pipe(
       Effect.tapError(() =>
         Effect.sync(() => {
@@ -25,7 +28,8 @@ it("keeps inspection state available when saving display preferences fails", asy
   );
   const controller = createCommitInspectionController(
     { inspect: () => Effect.die("Unused"), diff: () => Effect.die("Unused") },
-    { repositoryId: "repository", worktreePath: "/repository" },
+    scope,
+    runtime,
   );
   controller.start();
   try {
@@ -40,4 +44,28 @@ it("keeps inspection state available when saving display preferences fails", asy
   } finally {
     controller.stop();
   }
+});
+
+it("interrupts the in-flight inspection when stopped", async () => {
+  let interrupted = false;
+  const controller = createCommitInspectionController(
+    {
+      inspect: () =>
+        Effect.never.pipe(
+          Effect.onInterrupt(() =>
+            Effect.sync(() => {
+              interrupted = true;
+            }),
+          ),
+        ),
+      diff: () => Effect.die("Unused"),
+    },
+    scope,
+    runtime,
+  );
+  controller.start();
+  controller.selectCommit("a".repeat(40));
+  expect(controller.getSnapshot().loading).toBe(true);
+  controller.stop();
+  await vi.waitFor(() => expect(interrupted).toBe(true));
 });

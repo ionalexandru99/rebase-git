@@ -25,12 +25,3 @@ export interface RepositoryChangesClient {
     command: CommitChanges,
   ) => Effect.Effect<RepositoryChanges, WorkingChangesError>;
 }
-export interface CommitDraft {
-  readonly subject: string;
-  readonly description: string;
-}
-export {
-  type DiffPreferences,
-  defaultDiffPreferences,
-} from "#web/features/file-diff/file-diff.contract";
-export const emptyCommitDraft: CommitDraft = { subject: "", description: "" };

@@ -1,8 +1,10 @@
 import type { DesktopUpdateSnapshot, DesktopUpdates } from "@rebase/contracts";
-import { type JSX, useEffect, useState } from "react";
-import type { SettingsSection } from "#web/features/settings/settings.contract";
-import { GeneralSettings } from "#web-ui/features/settings/general-settings";
-import { HistoryStorageSettings } from "#web-ui/features/settings/history-storage-settings";
+import { type ComponentType, type JSX, useEffect, useState } from "react";
+import type { SettingsSectionContext } from "#web/features/settings/settings.contract";
+import {
+  type SettingsSectionId,
+  settingsSections,
+} from "#web/features/settings/settings-sections";
 import { SettingsSidebar } from "#web-ui/features/settings/settings-sidebar";
 
 export function SettingsPanel({
@@ -14,7 +16,10 @@ export function SettingsPanel({
   readonly desktopUpdates: DesktopUpdates | undefined;
   readonly productVersion: string;
 }): JSX.Element {
-  const [section, setSection] = useState<SettingsSection>("general");
+  const [sectionId, setSectionId] = useState<SettingsSectionId>("general");
+  const Content: ComponentType<SettingsSectionContext> =
+    settingsSections.find(({ id }) => id === sectionId)?.Content ??
+    settingsSections[0].Content;
   const [updateSnapshot, setUpdateSnapshot] = useState<DesktopUpdateSnapshot>();
   const [updateLoadError, setUpdateLoadError] = useState<string>();
 
@@ -63,23 +68,19 @@ export function SettingsPanel({
     <div className="flex h-full min-h-0">
       <SettingsSidebar
         closeSettings={closeSettings}
-        section={section}
-        selectSection={setSection}
+        section={sectionId}
+        selectSection={setSectionId}
       />
       <main
         aria-label="Settings content"
         className="min-w-0 flex-1 overflow-y-auto rounded-none bg-repository"
       >
-        {section === "general" ? (
-          <GeneralSettings
-            desktopUpdates={desktopUpdates}
-            productVersion={productVersion}
-            updateLoadError={updateLoadError}
-            updateSnapshot={updateSnapshot}
-          />
-        ) : (
-          <HistoryStorageSettings />
-        )}
+        <Content
+          desktopUpdates={desktopUpdates}
+          productVersion={productVersion}
+          updateLoadError={updateLoadError}
+          updateSnapshot={updateSnapshot}
+        />
       </main>
     </div>
   );

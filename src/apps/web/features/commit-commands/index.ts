@@ -2,6 +2,7 @@ export type {
   GraphCommandContext,
   GraphCommandDefinition,
   GraphCommandEnvironment,
+  GraphCommandHandlers,
   GraphCommandRegistry,
   GraphCommandResult,
 } from "#web/features/commit-commands/graph-command.contract";

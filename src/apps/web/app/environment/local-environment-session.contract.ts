@@ -56,6 +56,7 @@ export interface LocalEnvironmentControllers {
 export interface LocalEnvironmentSession extends LocalEnvironmentControllers {
   readonly changes: EnvironmentChanges;
   readonly requests?: EnvironmentRequestClient;
+  readonly runtime: ManagedRuntime.ManagedRuntime<never, never>;
   readonly getSnapshot: () => LocalEnvironmentSessionState;
   readonly start: () => void;
   readonly stop: () => void;

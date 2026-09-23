@@ -1,5 +1,5 @@
 import type { LocalEnvironmentSessionState } from "#web/app/environment/local-environment-session.contract";
-import type { EnvironmentNavigationStatus } from "#web/features/project-navigation/project-navigation.contract";
+import type { EnvironmentNavigationStatus } from "#web/features/project-navigation/index";
 
 export function environmentSessionPresentation(
   state: LocalEnvironmentSessionState,

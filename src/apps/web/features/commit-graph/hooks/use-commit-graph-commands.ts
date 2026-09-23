@@ -1,6 +1,9 @@
-import type { RepositoryRefTarget } from "@rebase/contracts";
+import { useMemo } from "react";
 import { writeClipboardText } from "#web/features/clipboard/index";
-import type { GraphCommandEnvironment } from "#web/features/commit-commands/index";
+import type {
+  GraphCommandEnvironment,
+  GraphCommandHandlers,
+} from "#web/features/commit-commands/index";
 import { useGraphCommands } from "#web/features/commit-commands/index";
 import type {
   RepositoryHistoryReadModel,
@@ -13,7 +16,6 @@ export function useCommitGraphCommands({
   historySnapshot,
   fetch,
   selectedOids,
-  onRemoveHistoryRef,
   onOpenDetails,
 }: {
   readonly onOpenDetails?: ((oid: string) => void) | undefined;
@@ -27,10 +29,16 @@ export function useCommitGraphCommands({
   >;
   readonly fetch: { readonly fetching: boolean; readonly execute: () => void };
   readonly selectedOids: readonly string[];
-  readonly onRemoveHistoryRef:
-    | ((target: RepositoryRefTarget) => void)
-    | undefined;
 }) {
+  const handlers = useMemo(
+    (): GraphCommandHandlers => ({
+      ...(onOpenDetails === undefined ? {} : { openDetails: onOpenDetails }),
+      readCommit: async (oid) => (await reader?.getCommitSummaries([oid]))?.[0],
+      writeClipboard: writeClipboardText,
+      ...(reader === undefined ? {} : { fetch: fetch.execute }),
+    }),
+    [onOpenDetails, reader, fetch.execute],
+  );
   const commands = useGraphCommands({
     environment:
       commandEnvironment === undefined
@@ -45,23 +53,13 @@ export function useCommitGraphCommands({
               : commandEnvironment.operationState,
           },
     selectedOids,
-    handlers: {
-      ...(onOpenDetails === undefined ? {} : { openDetails: onOpenDetails }),
-      readCommit: async (oid) => (await reader?.getCommitSummaries([oid]))?.[0],
-      writeClipboard: writeClipboardText,
-      ...(onRemoveHistoryRef === undefined
-        ? {}
-        : { toggleHistoryRef: onRemoveHistoryRef }),
-      ...(reader === undefined ? {} : { fetch: fetch.execute }),
-    },
+    handlers,
   });
   const fetchContext = commands.context();
   const fetchCommand =
     fetchContext === undefined
       ? undefined
-      : commands.registry
-          .commands(fetchContext)
-          .find(({ id }) => id === "graph.fetch");
+      : commands.registry.describe("graph.fetch", fetchContext);
   const fetchAction = {
     execute: () => {
       void commands.execute("graph.fetch", commands.context());

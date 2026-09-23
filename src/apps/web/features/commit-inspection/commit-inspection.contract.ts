@@ -5,7 +5,7 @@ import type {
   InspectCommitDiff,
 } from "@rebase/contracts";
 import { Data, type Effect } from "effect";
-import type { DiffPreferences } from "#web/features/file-diff/file-diff.contract";
+import type { DiffPreferences } from "#web/domain/file-diff/diff-preferences.contract";
 
 export class CommitInspectionError extends Data.TaggedError(
   "CommitInspectionError",

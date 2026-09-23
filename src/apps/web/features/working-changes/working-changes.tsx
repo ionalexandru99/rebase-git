@@ -1,4 +1,5 @@
 import type { ChangeSection, ChangeSelection } from "@rebase/contracts";
+import type { ManagedRuntime } from "effect";
 import { lazy, Suspense, useState } from "react";
 import type { RepositoryChangesClient } from "#web/features/working-changes/working-changes.contract";
 import { usePanelFeature } from "#web/features/workspace-panel/api";
@@ -39,6 +40,7 @@ export function WorkingChanges({
   connected,
   writable,
   onCommitted,
+  runtime,
 }: {
   readonly client: RepositoryChangesClient | undefined;
   readonly environmentId: string | undefined;
@@ -47,12 +49,14 @@ export function WorkingChanges({
   readonly connected: boolean;
   readonly writable: boolean;
   readonly onCommitted: () => void;
+  readonly runtime: ManagedRuntime.ManagedRuntime<never, never> | undefined;
 }) {
   const feature = usePanelFeature();
   if (
     client === undefined ||
     environmentId === undefined ||
-    repositoryId === undefined
+    repositoryId === undefined ||
+    runtime === undefined
   )
     return (
       <div className="flex h-full items-center justify-center p-6 text-sm text-muted-foreground">
@@ -67,6 +71,7 @@ export function WorkingChanges({
       repositoryId={repositoryId}
       worktreePath={worktreePath}
       onCommitted={onCommitted}
+      runtime={runtime}
     >
       {!connected ? (
         <div className="flex h-full items-center justify-center p-6 text-sm text-muted-foreground">

@@ -4,7 +4,7 @@ import type {
   MutateChanges,
   RepositoryChanges,
 } from "@rebase/contracts";
-import { Effect } from "effect";
+import { Effect, Layer, ManagedRuntime } from "effect";
 import { describe, expect, it, vi } from "vitest";
 import { page } from "vitest/browser";
 import { render } from "vitest-browser-react";
@@ -13,6 +13,8 @@ import {
   WorkingChangesError,
 } from "#web/features/working-changes/working-changes.contract";
 import { WorkingChanges } from "#web-ui/features/working-changes/working-changes";
+
+const runtime = ManagedRuntime.make(Layer.empty);
 
 const path = "src/read-status.ts";
 const before = 'export const status = "old";\n';
@@ -86,6 +88,7 @@ async function fixture(extraPaths: readonly string[] = []) {
         repositoryId={repositoryId}
         worktreePath="/repo"
         onCommitted={onCommitted}
+        runtime={runtime}
       />
     </div>
   );
