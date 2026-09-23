@@ -103,76 +103,131 @@ export function mutateChanges(
       return;
     }
     if (command.action === "stage" || command.action === "unstage") {
-      yield* changeGit(
+      yield* pathspecGit(
         git,
         command.worktreePath,
         command.action === "stage"
-          ? ["add", "--pathspec-from-file=-", "--pathspec-file-nul"]
-          : [
-              "restore",
-              `--source=${base}`,
-              "--staged",
-              "--pathspec-from-file=-",
-              "--pathspec-file-nul",
-            ],
-        { input: `${paths.join("\0")}\0` },
+          ? ["add"]
+          : ["restore", `--source=${base}`, "--staged"],
+        paths,
       );
       return;
     }
-    const untracked = new Set(
-      snapshot.unstaged
-        .filter((file) => file.status === "?")
-        .map((file) => file.path),
-    );
-    const removed =
-      command.section === "unstaged"
-        ? paths.filter((path) => untracked.has(path))
-        : [];
-    const tracked = paths.filter((path) => !removed.includes(path));
-    const patches: string[] = [];
-    if (tracked.length > 0) {
-      const patch = yield* changeGit(git, command.worktreePath, [
-        "diff",
-        "--no-ext-diff",
-        "--no-textconv",
-        "--no-renames",
-        "--binary",
-        ...(command.section === "staged" ? ["--cached", base] : []),
-        "--",
-        ...tracked,
-      ]);
-      patches.push(patch);
-    }
-    for (const path of removed) {
-      const output = yield* git
-        .run({
-          directory: command.worktreePath,
-          arguments: [
-            "diff",
-            "--no-index",
-            "--binary",
-            "--no-ext-diff",
-            "--no-textconv",
-            "--",
-            "/dev/null",
-            path,
-          ],
-        })
-        .pipe(
-          Effect.mapError(() =>
-            changesError(
-              "GitFailed",
-              "Could not prepare the untracked file for discard.",
-            ),
-          ),
-        );
-      if (output.exitCode !== 0 && output.exitCode !== 1)
-        return yield* Effect.fail(changesError("GitFailed", output.stderr));
-      patches.push(output.stdout);
-    }
-    yield* verify;
-    yield* applyChangePatch(git, command, patches.join("\n"), true);
+    yield* discardFiles(git, command, snapshot, paths, base, verify);
   });
+}
+
+function discardFiles(
+  git: GitCommandRunner,
+  command: MutateChanges,
+  snapshot: RepositoryChanges,
+  paths: readonly string[],
+  base: string,
+  verify: Effect.Effect<void, RepositoryChangesError>,
+) {
+  return Effect.gen(function* () {
+    const directory = command.worktreePath;
+    const unstaged = new Map(
+      snapshot.unstaged.map((file) => [file.path, file.status]),
+    );
+    if (command.section === "unstaged") {
+      const created = new Set(
+        paths.filter((path) => {
+          const status = unstaged.get(path);
+          return status === "?" || status === "A";
+        }),
+      );
+      const patch = yield* createdFilesPatch(git, directory, [...created]);
+      yield* verify;
+      yield* applyChangePatch(git, command, patch, true);
+      yield* pathspecGit(
+        git,
+        directory,
+        ["restore", "--worktree"],
+        paths.filter((path) => !created.has(path)),
+      );
+      return;
+    }
+    const edited = paths.filter((path) => unstaged.has(path));
+    const patch =
+      edited.length === 0
+        ? ""
+        : yield* changeGit(git, directory, [
+            "diff",
+            ...patchOptions,
+            "--no-renames",
+            "--cached",
+            base,
+            "--",
+            ...edited,
+          ]);
+    yield* verify;
+    yield* applyChangePatch(git, command, patch, true);
+    yield* pathspecGit(
+      git,
+      directory,
+      ["restore", `--source=${base}`, "--staged", "--worktree"],
+      paths.filter((path) => !unstaged.has(path)),
+    );
+  });
+}
+
+const patchOptions = [
+  "--binary",
+  "--no-color",
+  "--no-ext-diff",
+  "--no-textconv",
+  "--src-prefix=a/",
+  "--dst-prefix=b/",
+];
+
+function createdFilesPatch(
+  git: GitCommandRunner,
+  directory: string,
+  paths: readonly string[],
+) {
+  return Effect.forEach(paths, (path) =>
+    git
+      .run({
+        directory,
+        arguments: [
+          "diff",
+          "--no-index",
+          ...patchOptions,
+          "--",
+          "/dev/null",
+          path,
+        ],
+      })
+      .pipe(
+        Effect.mapError(() =>
+          changesError(
+            "GitFailed",
+            "Could not prepare the untracked file for discard.",
+          ),
+        ),
+        Effect.flatMap((output) =>
+          output.exitCode === 0 || output.exitCode === 1
+            ? Effect.succeed(output.stdout)
+            : Effect.fail(changesError("GitFailed", output.stderr)),
+        ),
+      ),
+  ).pipe(Effect.map((patches) => patches.join("\n")));
+}
+
+function pathspecGit(
+  git: GitCommandRunner,
+  directory: string,
+  args: readonly string[],
+  paths: readonly string[],
+) {
+  if (paths.length === 0) return Effect.void;
+  return changeGit(
+    git,
+    directory,
+    [...args, "--pathspec-from-file=-", "--pathspec-file-nul"],
+    { input: `${paths.join("\0")}\0` },
+  ).pipe(Effect.asVoid);
 }
 
 function contentPatch(

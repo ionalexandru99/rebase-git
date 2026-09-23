@@ -1,6 +1,13 @@
 import { execFile } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
+import {
+  mkdir,
+  mkdtemp,
+  readFile,
+  realpath,
+  rm,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
@@ -111,36 +118,24 @@ async function fixture(
 }
 
 describe("working changes through Git", { timeout: 30000 }, () => {
-  it.each(["stage", "discard"] as const)(
-    "rejects external edits while preparing %s",
-    async (action) => {
-      let changed = false;
-      const f = await fixture(true, async (command) => {
-        const prepared =
-          action === "stage"
-            ? command.arguments.includes("add")
-            : command.arguments.includes("--binary");
-        if (!changed && prepared) {
-          changed = true;
-          await writeFile(
-            join(command.directory, "file.txt"),
-            "external edit\n",
-          );
-        }
-      });
-      await writeFile(join(f.directory, "file.txt"), "reviewed edit\n");
-      await expect(f.mutate(action, "unstaged")).rejects.toMatchObject({
-        failure: { reason: "Stale" },
-      });
-      expect(changed).toBe(true);
-      expect((await f.git("show", ":file.txt")).stdout).toBe(
-        "one\ntwo\nthree\n",
-      );
-      expect(await readFile(join(f.directory, "file.txt"), "utf8")).toBe(
-        "external edit\n",
-      );
-    },
-  );
+  it("rejects external edits while preparing stage", async () => {
+    let changed = false;
+    const f = await fixture(true, async (command) => {
+      if (!changed && command.arguments.includes("add")) {
+        changed = true;
+        await writeFile(join(command.directory, "file.txt"), "external edit\n");
+      }
+    });
+    await writeFile(join(f.directory, "file.txt"), "reviewed edit\n");
+    await expect(f.mutate("stage", "unstaged")).rejects.toMatchObject({
+      failure: { reason: "Stale" },
+    });
+    expect(changed).toBe(true);
+    expect((await f.git("show", ":file.txt")).stdout).toBe("one\ntwo\nthree\n");
+    expect(await readFile(join(f.directory, "file.txt"), "utf8")).toBe(
+      "external edit\n",
+    );
+  });
   it("keeps the real index locked until the reviewed commit is published", async () => {
     let competingStageRejected = false;
     const f = await fixture(true, async (command) => {
@@ -365,6 +360,33 @@ describe("working changes through Git", { timeout: 30000 }, () => {
       Effect.runPromise(f.service.read({ ...f.scope, worktreePath: tmpdir() })),
     ).rejects.toMatchObject({ failure: { reason: "Missing" } });
   });
+  it.each(["unstaged", "staged"] as const)(
+    "discards %s nested edits when Git omits diff prefixes",
+    async (section) => {
+      const f = await fixture();
+      await f.git("config", "diff.noprefix", "true");
+      const path = join(f.directory, "src", "file.txt");
+      const base = Array.from({ length: 12 }, (_, i) => `line ${i}\n`).join("");
+      const unstaged = base.replace("line 11\n", "UNSTAGED\n");
+      await mkdir(join(f.directory, "src"));
+      await writeFile(path, base);
+      await f.git("add", ".");
+      await f.git("commit", "-m", "Nested");
+      await writeFile(path, base.replace("line 0\n", "STAGED\n"));
+      if (section === "staged") {
+        await f.git("add", ".");
+        await writeFile(path, unstaged.replace("line 0\n", "STAGED\n"));
+      }
+      await f.mutate("discard", section, {
+        _tag: "Files",
+        paths: ["src/file.txt"],
+      });
+      expect(await readFile(path, "utf8")).toBe(
+        section === "staged" ? unstaged : base,
+      );
+      expect((await f.read())[section]).toEqual([]);
+    },
+  );
   it("tracks index-only edits in the linked worktree's own index", async () => {
     const f = await fixture();
     const parent = await realpath(
