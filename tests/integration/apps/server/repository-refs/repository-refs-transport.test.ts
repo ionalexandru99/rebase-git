@@ -19,15 +19,15 @@ import { createLocalGitCommandRunner } from "#server/adapters/local-git/local-gi
 import { createLocalRepositoryWatcher } from "#server/adapters/local-git/local-repository-watcher";
 import { acquireEnvironmentListener } from "#server/app/server/environment-listener";
 import { createEnvironmentAuthorization } from "#server/features/environment-authorization/environment-authorization";
-import { environmentAuthorizationHttpRoutes } from "#server/features/environment-authorization/index";
+import { environmentAuthorizationFeature } from "#server/features/environment-authorization/index";
 import {
   createRepositoryCatalog,
-  repositoryCatalogHttpRoutes,
+  repositoryCatalogFeature,
 } from "#server/features/repository-catalog/index";
 import { createRepositoryCoordination } from "#server/features/repository-coordination/index";
 import {
   createRepositoryRefsService,
-  repositoryRefsHttpRoutes,
+  repositoryRefsFeature,
 } from "#server/features/repository-refs/index";
 import { acquireRepositoryChangePublisher } from "#server/features/repository-refs/repository-change-publisher";
 import { acquireEnvironmentContext } from "#server/persistence/environment-context";
@@ -283,15 +283,14 @@ function withRefsListener(use: (fixture: ListenerFixture) => Promise<void>) {
         });
         const listener = yield* acquireEnvironmentListener({
           authorization,
-          httpRoutes: [
-            ...environmentAuthorizationHttpRoutes(authorization),
-            ...repositoryCatalogHttpRoutes(catalog),
-            ...repositoryRefsHttpRoutes(refs),
-          ],
           environmentId,
           events,
+          features: [
+            environmentAuthorizationFeature(authorization),
+            repositoryCatalogFeature(catalog),
+            repositoryRefsFeature(refs),
+          ],
           productVersion: "0.0.0",
-          refs,
         });
         listener.readiness.value = true;
         yield* Effect.promise(() =>

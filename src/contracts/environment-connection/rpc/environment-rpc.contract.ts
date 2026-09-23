@@ -1,9 +1,9 @@
+import { EnvironmentRpcFailure } from "@rebase/contracts/environment-connection/rpc/environment-rpc-failure.contract";
 import {
   EnvironmentChanged,
   EnvironmentHello,
   EnvironmentHelloResult,
 } from "@rebase/contracts/environment-connection/websocket/environment-live-connection.contract";
-import { RepositoryHistoryOperationFailure } from "@rebase/contracts/repository-history/repository-history.contract";
 import { RepositoryHistoryRpc } from "@rebase/contracts/repository-history/repository-history-rpc.contract";
 import { RepositoryRefsRpc } from "@rebase/contracts/repository-refs/repository-refs-rpc.contract";
 import {
@@ -20,7 +20,7 @@ export const EnvironmentRpc = RpcGroup.make(
   }),
   Rpc.make("WatchEnvironment", {
     success: EnvironmentChanged,
-    error: RepositoryHistoryOperationFailure,
+    error: EnvironmentRpcFailure,
     stream: true,
   }),
 ).merge(RepositoryHistoryRpc, RepositoryRefsRpc);

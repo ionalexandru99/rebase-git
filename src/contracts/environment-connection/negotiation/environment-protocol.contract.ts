@@ -94,4 +94,7 @@ export const currentEnvironmentCapabilities = [
     name: "repository-history",
     version: 6,
   },
-] satisfies ReadonlyArray<EnvironmentCapability>;
+] as const satisfies ReadonlyArray<EnvironmentCapability>;
+
+export type EnvironmentCapabilityName =
+  (typeof currentEnvironmentCapabilities)[number]["name"];

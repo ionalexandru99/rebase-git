@@ -74,6 +74,7 @@ export default defineConfig({
                     files: [
                       `src/apps/server/features/${name}/http/**`,
                       `src/apps/server/features/${name}/rpc/**`,
+                      `src/apps/server/features/${name}/*.feature.ts`,
                     ],
                     rules: rules(false),
                   },

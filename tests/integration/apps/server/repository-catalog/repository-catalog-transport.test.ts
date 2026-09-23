@@ -21,14 +21,14 @@ import { createEnvironmentEventPublisher } from "#server/adapters/environment-tr
 import { createLocalGitCommandRunner } from "#server/adapters/local-git/local-git-command-runner";
 import { acquireEnvironmentListener } from "#server/app/server/environment-listener";
 import { createEnvironmentAuthorization } from "#server/features/environment-authorization/environment-authorization";
-import { environmentAuthorizationHttpRoutes } from "#server/features/environment-authorization/index";
+import { environmentAuthorizationFeature } from "#server/features/environment-authorization/index";
 import {
   createEnvironmentFilesystem,
-  environmentFilesystemHttpRoutes,
+  environmentFilesystemFeature,
 } from "#server/features/environment-filesystem/index";
 import {
   createRepositoryCatalog,
-  repositoryCatalogHttpRoutes,
+  repositoryCatalogFeature,
 } from "#server/features/repository-catalog/index";
 import { acquireEnvironmentContext } from "#server/persistence/environment-context";
 import { environmentPaths } from "#server/persistence/storage/environment-paths";
@@ -175,17 +175,15 @@ function withCatalogListener(
         );
         const listener = yield* acquireEnvironmentListener({
           authorization,
-          httpRoutes: [
-            ...environmentAuthorizationHttpRoutes(authorization),
-            ...repositoryCatalogHttpRoutes(
-              createRepositoryCatalog(context, createLocalGitCommandRunner()),
-            ),
-            ...environmentFilesystemHttpRoutes(
-              createEnvironmentFilesystem(root),
-            ),
-          ],
           environmentId,
           events: createEnvironmentEventPublisher(),
+          features: [
+            environmentAuthorizationFeature(authorization),
+            repositoryCatalogFeature(
+              createRepositoryCatalog(context, createLocalGitCommandRunner()),
+            ),
+            environmentFilesystemFeature(createEnvironmentFilesystem(root)),
+          ],
           productVersion: "0.0.0",
         });
         listener.readiness.value = true;

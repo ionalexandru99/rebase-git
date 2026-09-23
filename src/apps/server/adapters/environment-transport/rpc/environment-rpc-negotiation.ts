@@ -1,9 +1,9 @@
 import {
+  type AuthorizationDenied,
   type EnvironmentAccessCapability,
   type EnvironmentHello,
   type HelloAccepted,
   negotiateEnvironmentHello,
-  type RepositoryHistoryOperationFailure,
 } from "@rebase/contracts";
 import { Deferred, Effect } from "effect";
 import type { EnvironmentTransportState } from "#server/adapters/environment-transport/environment-connection.contract";
@@ -23,9 +23,7 @@ export function createEnvironmentRpcSession(
           negotiated === undefined ||
           !negotiated.capabilities.some((entry) => entry.name === name) ||
           (capability !== undefined && !access.has(capability))
-            ? Effect.fail<RepositoryHistoryOperationFailure>({
-                _tag: "AuthorizationDenied",
-              })
+            ? Effect.fail<AuthorizationDenied>({ _tag: "AuthorizationDenied" })
             : Effect.succeed(negotiated),
         ),
     };

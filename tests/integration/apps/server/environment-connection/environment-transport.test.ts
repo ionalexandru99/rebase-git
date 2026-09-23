@@ -10,11 +10,12 @@ import {
 } from "@rebase/contracts";
 import { Effect, Schema } from "effect";
 import { describe, expect, it } from "vite-plus/test";
+import type { EnvironmentFeature } from "#server/adapters/environment-transport/environment-feature.contract";
 import { createEnvironmentEventPublisher } from "#server/adapters/environment-transport/events/environment-event-publisher";
 import { acquireEnvironmentListener } from "#server/app/server/environment-listener";
 import type { EnvironmentEventPublisher } from "#server/domain/environment-event-publisher.contract";
 import type { EnvironmentAuthorization } from "#server/features/environment-authorization/environment-authorization.contract";
-import { environmentAuthorizationHttpRoutes } from "#server/features/environment-authorization/index";
+import { environmentAuthorizationFeature } from "#server/features/environment-authorization/index";
 
 const environmentId = "00000000-0000-4000-8000-000000000001";
 const testAuthorization = createTestAuthorization();
@@ -52,6 +53,27 @@ describe("Environment transport", () => {
         ),
       ).toEqual({ environmentId, sequence: 0 });
     });
+  });
+
+  it("advertises the capabilities of registered features only", async () => {
+    const history: EnvironmentFeature = {
+      capabilities: ["repository-history"],
+      httpRoutes: [],
+      rpcHandlers: () => ({}),
+    };
+    await withListener(
+      async (origin) => {
+        const response = await fetch(`${origin}${environmentDiscoveryPath}`);
+        const discovery = Schema.decodeUnknownSync(EnvironmentDiscovery)(
+          await response.json(),
+        );
+        const names = discovery.capabilities.map(({ name }) => name);
+        expect(names).toContain("repository-history");
+        expect(names).toContain("environment-events");
+        expect(names).not.toContain("repository-refs");
+      },
+      [history],
+    );
   });
 
   it("counts and rejects HTTP bodies beyond the advertised limit", async () => {
@@ -187,6 +209,7 @@ function nextMessage(socket: WebSocket) {
 
 function withListener(
   run: (origin: string, events: EnvironmentEventPublisher) => Promise<void>,
+  features: readonly EnvironmentFeature[] = [],
 ) {
   return Effect.runPromise(
     Effect.scoped(
@@ -194,9 +217,12 @@ function withListener(
         const events = createEnvironmentEventPublisher();
         const listener = yield* acquireEnvironmentListener({
           authorization: testAuthorization,
-          httpRoutes: environmentAuthorizationHttpRoutes(testAuthorization),
           environmentId,
           events,
+          features: [
+            environmentAuthorizationFeature(testAuthorization),
+            ...features,
+          ],
           productVersion: "0.0.0",
         });
         listener.readiness.value = true;

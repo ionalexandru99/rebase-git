@@ -23,10 +23,14 @@ import {
 } from "#server/domain/repository-freshness.contract";
 import { RepositoryWatching } from "#server/domain/repository-watcher.contract";
 import type { EnvironmentAuthorization } from "#server/features/environment-authorization/environment-authorization.contract";
-import { environmentAuthorizationHttpRoutes } from "#server/features/environment-authorization/index";
+import { environmentAuthorizationFeature } from "#server/features/environment-authorization/index";
 import { repositoryCoordinationLayer } from "#server/features/repository-coordination/index";
-import { repositoryFreshnessLayer } from "#server/features/repository-history/freshness/repository-freshness";
-import { createRepositoryHistoryService } from "#server/features/repository-history/repository-history";
+import {
+  createRepositoryHistoryService,
+  repositoryFreshnessFeature,
+  repositoryFreshnessLayer,
+  repositoryHistoryFeature,
+} from "#server/features/repository-history/index";
 
 const exec = promisify(execFile);
 const directories: string[] = [];
@@ -245,14 +249,18 @@ describe("repository freshness with real Git", { timeout: 30_000 }, () => {
         const freshness = Context.get(context, RepositoryFreshnessState);
         const listener = yield* acquireEnvironmentListener({
           authorization: testAuthorization(),
-          httpRoutes: environmentAuthorizationHttpRoutes(testAuthorization()),
           environmentId: repositoryId,
           events: createEnvironmentEventPublisher(),
-          history: createRepositoryHistoryService({
-            catalog: fixture.catalog,
-            git: runner,
-          }),
-          freshness,
+          features: [
+            environmentAuthorizationFeature(testAuthorization()),
+            repositoryHistoryFeature(
+              createRepositoryHistoryService({
+                catalog: fixture.catalog,
+                git: runner,
+              }),
+            ),
+            repositoryFreshnessFeature(freshness),
+          ],
           productVersion: "0.0.0",
         });
         listener.readiness.value = true;

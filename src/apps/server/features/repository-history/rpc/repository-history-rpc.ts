@@ -9,8 +9,12 @@ import {
   type SynchronizeRepositoryHistory,
 } from "@rebase/contracts";
 import { type Cause, Deferred, Effect, Queue, Stream } from "effect";
+import type { EnvironmentRpcHandlers } from "#server/adapters/environment-transport/environment-feature.contract";
 import type { EnvironmentRpcSession } from "#server/adapters/environment-transport/rpc/environment-rpc-session.contract";
-import { RepositoryHistoryError } from "#server/domain/repository-history.contract";
+import {
+  RepositoryHistoryError,
+  type RepositoryHistoryService,
+} from "#server/domain/repository-history.contract";
 
 type HistoryOutput = JsonMessageFragment | RepositoryHistorySynchronized;
 interface PendingBatch {
@@ -18,7 +22,10 @@ interface PendingBatch {
   readonly committed: Deferred.Deferred<void>;
 }
 
-export function repositoryHistoryRpc(session: EnvironmentRpcSession) {
+export function repositoryHistoryRpc(
+  session: EnvironmentRpcSession,
+  history: RepositoryHistoryService,
+): Partial<EnvironmentRpcHandlers> {
   const requests = new Set<string>();
   const pending = new Map<string, PendingBatch>();
   const acquire = (requestId: string) =>
@@ -28,17 +35,10 @@ export function repositoryHistoryRpc(session: EnvironmentRpcSession) {
           "repository-history",
           "repository.read",
         );
-        if (
-          session.state.history === undefined ||
-          requests.size >= 2 ||
-          requests.has(requestId)
-        )
+        if (requests.size >= 2 || requests.has(requestId))
           return yield* failed();
         requests.add(requestId);
-        return {
-          history: session.state.history,
-          limit: negotiated.limits.maxWebSocketResponseBytes - 512,
-        };
+        return negotiated.limits.maxWebSocketResponseBytes - 512;
       }),
       () =>
         Effect.sync(() => {
@@ -51,7 +51,7 @@ export function repositoryHistoryRpc(session: EnvironmentRpcSession) {
     ReadHistory: (request: ReadRepositoryHistory) =>
       Stream.unwrap(
         Effect.gen(function* () {
-          const { history, limit } = yield* acquire(request.requestId);
+          const limit = yield* acquire(request.requestId);
           const page = yield* history
             .read(request)
             .pipe(Effect.mapError(historyFailure));
@@ -73,7 +73,7 @@ export function repositoryHistoryRpc(session: EnvironmentRpcSession) {
     SynchronizeHistory: (request: SynchronizeRepositoryHistory) =>
       Stream.unwrap(
         Effect.gen(function* () {
-          const { history, limit } = yield* acquire(request.requestId);
+          const limit = yield* acquire(request.requestId);
           const queue = yield* Queue.bounded<
             HistoryOutput,
             RepositoryHistoryOperationFailure | Cause.Done

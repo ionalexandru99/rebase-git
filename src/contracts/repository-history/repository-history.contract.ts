@@ -1,4 +1,5 @@
 import { EnvironmentRequestId } from "@rebase/contracts/environment-connection/negotiation/environment-protocol.contract";
+import { AuthorizationDenied } from "@rebase/contracts/environment-connection/rpc/environment-rpc-failure.contract";
 import {
   GitFailed,
   RepositoryMissing,
@@ -93,7 +94,7 @@ export const AcknowledgeRepositoryHistoryBatch = Schema.TaggedStruct(
 );
 
 export const RepositoryHistoryOperationFailure = Schema.Union([
-  Schema.TaggedStruct("AuthorizationDenied", {}),
+  AuthorizationDenied,
   RepositoryMissing,
   Schema.TaggedStruct("SnapshotInvalidated", {}),
   GitFailed,

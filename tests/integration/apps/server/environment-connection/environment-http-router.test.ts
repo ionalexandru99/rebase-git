@@ -139,7 +139,9 @@ function withListener(use: (origin: string) => Promise<void>) {
           authorization: createTestAuthorization(),
           environmentId: "00000000-0000-4000-8000-000000000001",
           events: createEnvironmentEventPublisher(),
-          httpRoutes: routes,
+          features: [
+            { capabilities: [], httpRoutes: routes, rpcHandlers: () => ({}) },
+          ],
           productVersion: "0.0.0",
         });
         listener.readiness.value = true;

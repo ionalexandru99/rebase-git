@@ -1,9 +1,6 @@
 import type { Server as HttpServer } from "node:http";
-import type { EnvironmentHttpRouteHandler } from "#server/adapters/environment-transport/http/environment-http-route-handler.contract";
+import type { EnvironmentFeature } from "#server/adapters/environment-transport/environment-feature.contract";
 import type { EnvironmentEventPublisher } from "#server/domain/environment-event-publisher.contract";
-import type { RepositoryFreshnessService } from "#server/domain/repository-freshness.contract";
-import type { RepositoryHistoryService } from "#server/domain/repository-history.contract";
-import type { RepositoryRefsService } from "#server/domain/repository-refs.contract";
 import type { EnvironmentAuthorization } from "#server/features/environment-authorization/environment-authorization.contract";
 
 export interface EnvironmentServerOptions {
@@ -28,15 +25,12 @@ export interface EnvironmentListener {
 }
 
 export interface EnvironmentListenerOptions {
-  readonly httpRoutes?: readonly EnvironmentHttpRouteHandler[];
   readonly authorization: EnvironmentAuthorization;
   readonly browserAssetsRoot?: string;
   readonly environmentId: string;
   readonly events: EnvironmentEventPublisher;
+  readonly features: readonly EnvironmentFeature[];
   readonly host?: string;
   readonly port?: number;
   readonly productVersion: string;
-  readonly history?: RepositoryHistoryService;
-  readonly freshness?: RepositoryFreshnessService;
-  readonly refs?: RepositoryRefsService;
 }
