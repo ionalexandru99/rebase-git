@@ -17,7 +17,9 @@ export function runRepositoryGit(
       Effect.mapError(
         (error) =>
           new RepositoryGitError({
+            cause: error,
             detail: `Git could not complete the operation (${error.reason}).`,
+            reason: error.reason,
           }),
       ),
       Effect.flatMap((output) =>
@@ -26,6 +28,7 @@ export function runRepositoryGit(
           : Effect.fail(
               new RepositoryGitError({
                 detail: output.stderr || "Git rejected the operation.",
+                reason: "Failed",
               }),
             ),
       ),

@@ -7,6 +7,7 @@ import { createLocalGitCommandRunner } from "#server/adapters/local-git/local-gi
 import { acquireEnvironmentListener } from "#server/app/server/environment-listener";
 import type { EnvironmentAuthorization } from "#server/features/environment-authorization/environment-authorization.contract";
 import { environmentAuthorizationFeature } from "#server/features/environment-authorization/index";
+import { createRepositoryAccess } from "#server/features/repository-access/index";
 import {
   createRepositoryCatalog,
   repositoryCatalogFeature,
@@ -53,7 +54,10 @@ try {
             repositoryCatalogFeature(catalog),
             repositoryHistoryFeature(
               createRepositoryHistoryService({
-                catalog,
+                access: createRepositoryAccess(
+                  catalog,
+                  createLocalGitCommandRunner(),
+                ),
                 git: createLocalGitCommandRunner(),
               }),
             ),

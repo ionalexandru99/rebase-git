@@ -25,6 +25,7 @@ import {
   RepositoryFreshnessState,
 } from "#server/domain/repository-freshness.contract";
 import { RepositoryWatching } from "#server/domain/repository-watcher.contract";
+import { repositoryAccessLayer } from "#server/features/repository-access/index";
 import { repositoryFreshnessLayer } from "#server/features/repository-history/freshness/repository-freshness";
 
 const repositoryId = "00000000-0000-4000-8000-000000000001";
@@ -475,6 +476,7 @@ function withService(
     Effect.gen(function* () {
       const context = yield* Layer.build(
         repositoryFreshnessLayer.pipe(
+          Layer.provide(repositoryAccessLayer),
           Layer.provide(
             Layer.mergeAll(
               Layer.succeed(RepositoryCoordination, {
@@ -496,7 +498,7 @@ function withService(
                 run: (command) =>
                   command.arguments[0] === "fetch"
                     ? git.fetch(command)
-                    : command.arguments[0] === "rev-parse"
+                    : command.arguments.includes("rev-parse")
                       ? Effect.succeed(output(0, "/repo/.git"))
                       : git.initialize.pipe(
                           Effect.as(output(0, options.setting ?? "inherit")),

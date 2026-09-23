@@ -40,7 +40,10 @@ import {
   environmentFilesystemLayer,
 } from "#server/features/environment-filesystem/index";
 import { environmentIdentityLayer } from "#server/features/environment-identity/index";
-import { repositoryAccessLayer } from "#server/features/repository-access/index";
+import {
+  repositoryAccessLayer,
+  repositoryCoordinationLayer,
+} from "#server/features/repository-access/index";
 import {
   repositoryCatalogFeature,
   repositoryCatalogLayer,
@@ -49,7 +52,6 @@ import {
   repositoryChangesFeature,
   repositoryChangesLayer,
 } from "#server/features/repository-changes/index";
-import { repositoryCoordinationLayer } from "#server/features/repository-coordination/index";
 import {
   repositoryFreshnessFeature,
   repositoryFreshnessLayer,
@@ -98,11 +100,13 @@ function environmentLayer(paths: EnvironmentPaths) {
     repositoryRefsLayer,
   ).pipe(
     Layer.provideMerge(
-      Layer.mergeAll(repositoryAccessLayer, repositoryChangePublisherLayer),
+      Layer.mergeAll(
+        repositoryAccessLayer,
+        repositoryCoordinationLayer,
+        repositoryChangePublisherLayer,
+      ),
     ),
-    Layer.provideMerge(
-      Layer.mergeAll(repositoryCatalogLayer, repositoryCoordinationLayer),
-    ),
+    Layer.provideMerge(repositoryCatalogLayer),
     Layer.provideMerge(
       Layer.mergeAll(
         localGitCommandRunnerLayer,

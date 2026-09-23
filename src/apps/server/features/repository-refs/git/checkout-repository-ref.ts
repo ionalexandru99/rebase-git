@@ -6,32 +6,36 @@ import type {
   RepositoryWorktree,
 } from "@rebase/contracts";
 import { Effect } from "effect";
+import type { EnvironmentStorageError } from "#server/domain/environment-storage-error.contract";
 import type {
   GitCommandOutput,
   GitCommandRunner,
 } from "#server/domain/git-command.contract";
+import type { RepositoryAccessService } from "#server/domain/repository-access.contract";
 import type { RepositoryRefsError } from "#server/domain/repository-refs.contract";
-import {
-  canonicalizeWorktrees,
-  readWorktrees,
-} from "#server/features/repository-access/index";
 import {
   checkoutFailure,
   failureDetail,
   gitCommandFailed,
+  repositoryAccessFailed,
   repositoryRefsFailure,
-  worktreeReadFailed,
 } from "#server/features/repository-refs/git/repository-refs-failures";
 
 const checkoutTimeoutMilliseconds = 60_000;
 
 export function checkoutRepositoryRef(
   git: GitCommandRunner,
-  repositoryPath: string,
+  access: RepositoryAccessService,
   command: CheckoutRepositoryRef,
-): Effect.Effect<RepositoryCheckedOut, RepositoryRefsError> {
+): Effect.Effect<
+  RepositoryCheckedOut,
+  EnvironmentStorageError | RepositoryRefsError
+> {
   return Effect.gen(function* () {
-    const worktrees = yield* readCanonicalWorktrees(git, repositoryPath);
+    const worktrees = yield* readCanonicalWorktrees(
+      access,
+      command.worktreePath,
+    );
     const worktree = yield* requireWorktree(worktrees, command.worktreePath);
     const target = yield* resolveTarget(git, worktree.path, command.target);
     yield* rejectBranchCheckedOutElsewhere(worktrees, worktree, target);
@@ -46,7 +50,7 @@ export function checkoutRepositoryRef(
     const stash = yield* Effect.uninterruptible(
       checkoutWithAutoStash(git, worktree.path, target),
     );
-    const head = yield* readCheckedOutHead(git, repositoryPath, worktree.path);
+    const head = yield* readCheckedOutHead(access, worktree.path);
     return { head, stash, worktreePath: worktree.path };
   });
 }
@@ -71,11 +75,13 @@ function checkoutWithAutoStash(
   });
 }
 
-function readCanonicalWorktrees(git: GitCommandRunner, repositoryPath: string) {
-  return readWorktrees(git, repositoryPath).pipe(
-    Effect.mapError(worktreeReadFailed),
-    Effect.flatMap(canonicalizeWorktrees),
-  );
+function readCanonicalWorktrees(
+  access: RepositoryAccessService,
+  directory: string,
+) {
+  return access
+    .worktrees(directory)
+    .pipe(Effect.mapError(repositoryAccessFailed));
 }
 
 function requireWorktree(
@@ -262,11 +268,10 @@ function restoreStash(git: GitCommandRunner, directory: string, token: string) {
 }
 
 function readCheckedOutHead(
-  git: GitCommandRunner,
-  repositoryPath: string,
+  access: RepositoryAccessService,
   worktreePath: string,
 ) {
-  return readCanonicalWorktrees(git, repositoryPath).pipe(
+  return readCanonicalWorktrees(access, worktreePath).pipe(
     Effect.flatMap((worktrees) => requireWorktree(worktrees, worktreePath)),
     Effect.map((worktree) => worktree.head),
   );

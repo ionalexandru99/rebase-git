@@ -8,6 +8,7 @@ import type { GitCommandRunner } from "#server/domain/git-command.contract";
 import type { RepositoryCoordinationService } from "#server/domain/repository-coordination.contract";
 import { RepositoryHistoryError } from "#server/domain/repository-history.contract";
 import type { RepositoryWatcher } from "#server/domain/repository-watcher.contract";
+import { readGitCommonDirectory } from "#server/features/repository-access/index";
 import {
   readRepositoryFetchSetting,
   writeRepositoryFetchSetting,
@@ -25,26 +26,15 @@ export function acquireWatchedRepository(
     const scope = yield* Effect.scope;
     const mutex = yield* Semaphore.make(1);
     const setting = yield* readRepositoryFetchSetting(git, entry.path);
-    const directory = yield* git
-      .run({
-        directory: entry.path,
-        arguments: ["rev-parse", "--path-format=absolute", "--git-common-dir"],
-      })
-      .pipe(
-        Effect.mapError(
-          (cause) =>
-            new RepositoryHistoryError({
-              cause,
-              failure: { _tag: "RepositoryMissing", repositoryId: entry.id },
-            }),
-        ),
-      );
-    if (directory.exitCode !== 0 || directory.stdout.trim() === "")
-      return yield* Effect.fail(
-        new RepositoryHistoryError({
-          failure: { _tag: "RepositoryMissing", repositoryId: entry.id },
-        }),
-      );
+    const directory = yield* readGitCommonDirectory(git, entry.path).pipe(
+      Effect.mapError(
+        (cause) =>
+          new RepositoryHistoryError({
+            cause,
+            failure: { _tag: "RepositoryMissing", repositoryId: entry.id },
+          }),
+      ),
+    );
     let freshness: RepositoryFreshness = {
       fetching: false,
       stale: false,
@@ -192,7 +182,7 @@ export function acquireWatchedRepository(
       strategy: "dropping",
     });
     yield* Effect.acquireRelease(
-      watcher.watch(directory.stdout.trim(), () => {
+      watcher.watch(directory, () => {
         Queue.offerUnsafe(changes, undefined);
       }),
       (handle) => Effect.sync(handle.close),

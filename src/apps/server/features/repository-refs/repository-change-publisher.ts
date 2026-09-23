@@ -15,6 +15,7 @@ import {
   type RepositoryWatcher,
   RepositoryWatching,
 } from "#server/domain/repository-watcher.contract";
+import { readGitCommonDirectory } from "#server/features/repository-access/index";
 
 const maximumWatchedRepositories = 32;
 const publishDelayMilliseconds = 150;
@@ -70,10 +71,11 @@ export function acquireRepositoryChangePublisher(
       watch: (repository) =>
         Effect.gen(function* () {
           if (closed || watches.has(repository.id)) return;
-          const directory = yield* resolveGitCommonDirectory(
+          const directory = yield* readGitCommonDirectory(
             git,
             repository.path,
-          );
+            { timeoutMilliseconds: 5_000 },
+          ).pipe(Effect.catch(() => Effect.succeed(undefined)));
           if (closed || directory === undefined) return;
           yield* register(repository.id, directory);
         }).pipe(Semaphore.withPermit(mutex)),
@@ -107,24 +109,4 @@ function publishRepositoryChanges(
       if (repositoryIds.length > 0) events.publishChanged(repositoryIds);
     }
   });
-}
-
-function resolveGitCommonDirectory(
-  git: GitCommandRunner,
-  repositoryPath: string,
-) {
-  return git
-    .run({
-      arguments: ["rev-parse", "--path-format=absolute", "--git-common-dir"],
-      directory: repositoryPath,
-      timeoutMilliseconds: 5_000,
-    })
-    .pipe(
-      Effect.map((output) =>
-        output.exitCode === 0 && output.stdout.trim().length > 0
-          ? output.stdout.trim()
-          : undefined,
-      ),
-      Effect.catch(() => Effect.succeed(undefined)),
-    );
 }

@@ -1,6 +1,6 @@
 import { Effect, Exit, Fiber, Layer, Scope } from "effect";
 import { GitCommands } from "#server/domain/git-command.contract";
-import { RepositoryCatalogAccess } from "#server/domain/repository-catalog.contract";
+import { RepositoryAccess } from "#server/domain/repository-access.contract";
 import { RepositoryCoordination } from "#server/domain/repository-coordination.contract";
 import {
   type RepositoryFreshnessService,
@@ -24,7 +24,7 @@ interface RepositoryLifetime {
 export const repositoryFreshnessLayer = Layer.effect(
   RepositoryFreshnessState,
   Effect.gen(function* () {
-    const catalog = yield* RepositoryCatalogAccess;
+    const access = yield* RepositoryAccess;
     const git = yield* GitCommands;
     const watcher = yield* RepositoryWatching;
     const coordination = yield* RepositoryCoordination;
@@ -64,11 +64,16 @@ export const repositoryFreshnessLayer = Layer.effect(
     ) =>
       Effect.gen(function* () {
         if (closed) return yield* Effect.fail(missingRepository(repositoryId));
-        const entry = yield* catalog
-          .find(repositoryId)
-          .pipe(Effect.mapError(historyError));
-        if (entry === undefined || closed)
-          return yield* Effect.fail(missingRepository(repositoryId));
+        const entry = yield* access
+          .repository(repositoryId)
+          .pipe(
+            Effect.mapError((error) =>
+              error._tag === "RepositoryAccessError"
+                ? missingRepository(repositoryId)
+                : historyError(error),
+            ),
+          );
+        if (closed) return yield* Effect.fail(missingRepository(repositoryId));
         const key = entry.logicalRepositoryId ?? repositoryId;
         const subscription: FreshnessSubscription = {
           path: entry.path,

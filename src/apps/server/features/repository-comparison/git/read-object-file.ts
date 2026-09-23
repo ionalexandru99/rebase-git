@@ -37,7 +37,10 @@ export function objectFile(
     const oid = fields[tree === undefined ? 1 : 2];
     if (oid === undefined)
       return yield* Effect.fail(
-        new RepositoryGitError({ detail: "Could not read the file object." }),
+        new RepositoryGitError({
+          detail: "Could not read the file object.",
+          reason: "Failed",
+        }),
       );
     if (tree === undefined && fields[2] !== "0")
       return {
