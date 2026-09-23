@@ -95,5 +95,8 @@ function cleanFileContent(
 
 const scratchObjectDirectory = Effect.acquireRelease(
   changeIo(() => mkdtemp(join(tmpdir(), "rebase-objects-"))),
-  (path) => Effect.promise(() => rm(path, { recursive: true, force: true })),
+  (path) =>
+    changeIo(() => rm(path, { recursive: true, force: true })).pipe(
+      Effect.ignore,
+    ),
 );
