@@ -8,9 +8,11 @@ import { Deferred, Effect, Fiber, Option } from "effect";
 import { afterEach, expect, it } from "vite-plus/test";
 import { createLocalGitCommandRunner } from "#server/adapters/local-git/local-git-command-runner";
 import type { GitCommandRunner } from "#server/domain/git-command.contract";
-import { createRepositoryAccess } from "#server/features/repository-access/index";
+import {
+  createRepositoryAccess,
+  createRepositoryCoordination,
+} from "#server/features/repository-access/index";
 import { createRepositoryChangesService } from "#server/features/repository-changes/index";
-import { createRepositoryCoordination } from "#server/features/repository-coordination/index";
 import { acquireWatchedRepository } from "#server/features/repository-history/freshness/watched-repository";
 import { createRepositoryRefsService } from "#server/features/repository-refs/repository-refs";
 
@@ -94,13 +96,14 @@ it.each([
                 lastOpenedAt: "",
               }),
           };
+          const access = createRepositoryAccess(catalog, runner);
           const changes = createRepositoryChangesService(
-            createRepositoryAccess(catalog, runner),
+            access,
             runner,
             coordination,
           );
           const refs = createRepositoryRefsService({
-            catalog,
+            access,
             git: runner,
             changes: { watch: () => Effect.void },
             coordination: {

@@ -1,4 +1,9 @@
 export {
+  createRepositoryCoordination,
+  repositoryCoordinationLayer,
+} from "#server/features/repository-access/coordination/repository-coordination";
+export { readGitCommonDirectory } from "#server/features/repository-access/git/read-git-common-directory";
+export {
   canonicalizeWorktrees,
   readWorktrees,
 } from "#server/features/repository-access/git/read-worktrees";

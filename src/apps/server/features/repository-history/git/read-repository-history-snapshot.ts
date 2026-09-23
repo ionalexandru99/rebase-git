@@ -2,6 +2,7 @@ import type { RepositoryHistorySnapshot } from "@rebase/contracts";
 import { Effect } from "effect";
 import type { GitCommandRunner } from "#server/domain/git-command.contract";
 import { RepositoryHistoryError } from "#server/domain/repository-history.contract";
+import { historyGit } from "#server/features/repository-history/git/history-git";
 import { historySnapshotIdentity } from "#server/features/repository-history/git/history-snapshot-identity";
 import { readShallowHistoryOids } from "#server/features/repository-history/git/shallow-repository-history";
 
@@ -24,8 +25,11 @@ export function readRepositoryHistorySnapshot(
     const [formatOutput, refsOutput, stashTipOutput, worktreesOutput] =
       yield* Effect.all(
         [
-          runGit(git, repositoryPath, ["rev-parse", "--show-object-format"]),
-          runGit(
+          historyGit(git, repositoryPath, [
+            "rev-parse",
+            "--show-object-format",
+          ]),
+          historyGit(
             git,
             repositoryPath,
             [
@@ -35,14 +39,14 @@ export function readRepositoryHistorySnapshot(
               "refs/remotes",
               "refs/tags",
             ],
-            maximumRefsOutputBytes,
+            { maxOutputBytes: maximumRefsOutputBytes },
           ),
-          runGit(git, repositoryPath, [
+          historyGit(git, repositoryPath, [
             "for-each-ref",
             "--format=%(objectname)",
             "refs/stash",
           ]),
-          runGit(git, repositoryPath, [
+          historyGit(git, repositoryPath, [
             "worktree",
             "list",
             "--porcelain",
@@ -56,11 +60,11 @@ export function readRepositoryHistorySnapshot(
     const stashOutput =
       stashTipOutput.trim() === ""
         ? ""
-        : yield* runGit(
+        : yield* historyGit(
             git,
             repositoryPath,
             ["reflog", "show", "--format=%H", "refs/stash"],
-            maximumStashRootsBytes,
+            { maxOutputBytes: maximumStashRootsBytes },
           );
     const refTargets = parseSnapshotRefs(refsOutput, objectFormat);
     const worktreeHeads = parseWorktreeHeads(worktreesOutput, objectFormat);
@@ -175,41 +179,4 @@ function isOid(oid: string, objectFormat: "sha1" | "sha256") {
     oid.length === (objectFormat === "sha1" ? 40 : 64) &&
     /^[0-9a-f]+$/.test(oid)
   );
-}
-
-function runGit(
-  git: GitCommandRunner,
-  directory: string,
-  arguments_: readonly string[],
-  maxOutputBytes?: number,
-) {
-  return git
-    .run({
-      arguments: arguments_,
-      directory,
-      ...(maxOutputBytes === undefined ? {} : { maxOutputBytes }),
-      timeoutMilliseconds: 30_000,
-    })
-    .pipe(
-      Effect.mapError(
-        (cause) =>
-          new RepositoryHistoryError({
-            cause,
-            failure: { _tag: "GitFailed", reason: cause.reason },
-          }),
-      ),
-      Effect.flatMap((result) =>
-        result.exitCode === 0
-          ? Effect.succeed(result.stdout)
-          : Effect.fail(
-              new RepositoryHistoryError({
-                failure: {
-                  _tag: "GitFailed",
-                  detail: result.stderr.slice(0, 2_048),
-                  reason: "Failed",
-                },
-              }),
-            ),
-      ),
-    );
 }

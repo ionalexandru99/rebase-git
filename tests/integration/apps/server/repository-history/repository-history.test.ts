@@ -31,6 +31,7 @@ import {
 } from "#server/domain/repository-history.contract";
 import type { EnvironmentAuthorization } from "#server/features/environment-authorization/environment-authorization.contract";
 import { environmentAuthorizationFeature } from "#server/features/environment-authorization/index";
+import { createRepositoryAccess } from "#server/features/repository-access/index";
 import { createRepositoryCatalog } from "#server/features/repository-catalog/repository-catalog";
 import { readRepositoryHistorySnapshot } from "#server/features/repository-history/git/read-repository-history-snapshot";
 import { synchronizeRepositoryHistory } from "#server/features/repository-history/git/synchronize-repository-history";
@@ -677,7 +678,10 @@ function withHistoryListener(
         const history =
           historyOverride ??
           createRepositoryHistoryService({
-            catalog,
+            access: createRepositoryAccess(
+              catalog,
+              createLocalGitCommandRunner(),
+            ),
             git: createLocalGitCommandRunner(),
           });
         const listener = yield* acquireEnvironmentListener({

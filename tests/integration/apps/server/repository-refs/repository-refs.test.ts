@@ -16,8 +16,11 @@ import { createEnvironmentEventPublisher } from "#server/adapters/environment-tr
 import { createLocalGitCommandRunner } from "#server/adapters/local-git/local-git-command-runner";
 import { createLocalRepositoryWatcher } from "#server/adapters/local-git/local-repository-watcher";
 import type { GitCommandRunner } from "#server/domain/git-command.contract";
+import {
+  createRepositoryAccess,
+  createRepositoryCoordination,
+} from "#server/features/repository-access/index";
 import { createRepositoryCatalog } from "#server/features/repository-catalog/repository-catalog";
-import { createRepositoryCoordination } from "#server/features/repository-coordination/index";
 import { acquireRepositoryChangePublisher } from "#server/features/repository-refs/repository-change-publisher";
 import { createRepositoryRefsService } from "#server/features/repository-refs/repository-refs";
 import { acquireEnvironmentContext } from "#server/persistence/environment-context";
@@ -427,7 +430,7 @@ function withRefsService<Value, Failure>(
         const remembered = yield* catalog.remember(fixture.repositoryPath);
         const refs = createRepositoryRefsService({
           coordination: createRepositoryCoordination(git),
-          catalog,
+          access: createRepositoryAccess(catalog, git),
           changes: yield* acquireRepositoryChangePublisher(
             git,
             createLocalRepositoryWatcher(),

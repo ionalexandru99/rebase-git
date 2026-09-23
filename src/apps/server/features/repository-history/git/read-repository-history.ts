@@ -5,6 +5,7 @@ import type {
 import { Effect } from "effect";
 import type { GitCommandRunner } from "#server/domain/git-command.contract";
 import { RepositoryHistoryError } from "#server/domain/repository-history.contract";
+import { historyGit } from "#server/features/repository-history/git/history-git";
 import {
   gitHistoryFormat,
   parseGitHistory,
@@ -18,15 +19,13 @@ import {
   restoreShallowCommitParents,
 } from "#server/features/repository-history/git/shallow-repository-history";
 
-const historyTimeoutMilliseconds = 30_000;
-
 export function readRepositoryHistory(
   git: GitCommandRunner,
   repositoryPath: string,
   request: ReadRepositoryHistory,
 ): Effect.Effect<RepositoryHistoryPage, RepositoryHistoryError> {
   return Effect.gen(function* () {
-    const formatOutput = yield* runGit(git, repositoryPath, [
+    const formatOutput = yield* historyGit(git, repositoryPath, [
       "rev-parse",
       "--show-object-format",
     ]);
@@ -35,7 +34,7 @@ export function readRepositoryHistory(
     );
     const historyOutput = yield* request.ancestry === "first-parent"
       ? readSelectedHistory(git, repositoryPath, request)
-      : runGit(
+      : historyGit(
           git,
           repositoryPath,
           [
@@ -50,7 +49,7 @@ export function readRepositoryHistory(
             ...request.roots.map((root) => root.oid),
             "--",
           ],
-          maximumHistoryOutputBytes,
+          { maxOutputBytes: maximumHistoryOutputBytes },
         );
     const parsed = yield* parseHistoryOutput(() =>
       parseGitHistory(historyOutput, objectFormat),
@@ -86,43 +85,6 @@ function parseHistoryOutput<T>(parse: () => T) {
       }),
     try: parse,
   });
-}
-
-function runGit(
-  git: GitCommandRunner,
-  directory: string,
-  arguments_: readonly string[],
-  maxOutputBytes?: number,
-) {
-  return git
-    .run({
-      arguments: arguments_,
-      directory,
-      ...(maxOutputBytes === undefined ? {} : { maxOutputBytes }),
-      timeoutMilliseconds: historyTimeoutMilliseconds,
-    })
-    .pipe(
-      Effect.mapError(
-        (error) =>
-          new RepositoryHistoryError({
-            cause: error,
-            failure: { _tag: "GitFailed", reason: error.reason },
-          }),
-      ),
-      Effect.flatMap((output) =>
-        output.exitCode === 0
-          ? Effect.succeed(output.stdout)
-          : Effect.fail(
-              new RepositoryHistoryError({
-                failure: {
-                  _tag: "GitFailed",
-                  detail: output.stderr.slice(0, 2_048),
-                  reason: "Failed",
-                },
-              }),
-            ),
-      ),
-    );
 }
 
 function parseObjectFormat(output: string) {

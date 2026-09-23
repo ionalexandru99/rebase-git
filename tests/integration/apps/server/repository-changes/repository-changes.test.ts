@@ -13,9 +13,11 @@ import { Effect } from "effect";
 import { afterEach, describe, expect, it } from "vite-plus/test";
 import { createLocalGitCommandRunner } from "#server/adapters/local-git/local-git-command-runner";
 import type { GitCommand } from "#server/domain/git-command.contract";
-import { createRepositoryAccess } from "#server/features/repository-access/index";
+import {
+  createRepositoryAccess,
+  createRepositoryCoordination,
+} from "#server/features/repository-access/index";
 import { createRepositoryChangesService } from "#server/features/repository-changes/repository-changes";
-import { createRepositoryCoordination } from "#server/features/repository-coordination/index";
 
 const exec = promisify(execFile);
 const directories: string[] = [];

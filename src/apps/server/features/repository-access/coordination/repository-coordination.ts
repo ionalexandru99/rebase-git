@@ -9,7 +9,8 @@ import {
   RepositoryCoordinationError,
   type RepositoryCoordinationService,
 } from "#server/domain/repository-coordination.contract";
-import { runRepositoryGit } from "#server/features/repository-access/index";
+import { readGitCommonDirectory } from "#server/features/repository-access/git/read-git-common-directory";
+import { runRepositoryGit } from "#server/features/repository-access/run-repository-git";
 
 export function createRepositoryCoordination(
   git: GitCommandRunner,
@@ -58,11 +59,7 @@ function resolveGitDirectories(git: GitCommandRunner, directory: string) {
       "rev-parse",
       "--absolute-git-dir",
     ])).trimEnd();
-    const commonDirectory = (yield* runRepositoryGit(git, directory, [
-      "rev-parse",
-      "--path-format=absolute",
-      "--git-common-dir",
-    ])).trimEnd();
+    const commonDirectory = yield* readGitCommonDirectory(git, directory);
     return yield* Effect.tryPromise({
       try: async () => ({
         gitDirectory: await realpath(gitDirectory),

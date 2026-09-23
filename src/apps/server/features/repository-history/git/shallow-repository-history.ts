@@ -3,19 +3,21 @@ import type { RepositoryCommit } from "@rebase/contracts";
 import { Effect } from "effect";
 import type { GitCommandRunner } from "#server/domain/git-command.contract";
 import { RepositoryHistoryError } from "#server/domain/repository-history.contract";
+import { historyGit } from "#server/features/repository-history/git/history-git";
 
 const maximumShallowBytes = 4 * 1_048_576;
+const maximumShallowOutputBytes = 8 * 1_048_576;
 
 export function readShallowHistoryOids(
   git: GitCommandRunner,
   directory: string,
 ) {
-  return runGit(git, directory, [
-    "rev-parse",
-    "--path-format=absolute",
-    "--git-path",
-    "shallow",
-  ]).pipe(
+  return historyGit(
+    git,
+    directory,
+    ["rev-parse", "--path-format=absolute", "--git-path", "shallow"],
+    { maxOutputBytes: maximumShallowOutputBytes },
+  ).pipe(
     Effect.flatMap((path) =>
       Effect.tryPromise({
         try: async () => {
@@ -75,16 +77,21 @@ export function restoreShallowCommitParents(
 ): Effect.Effect<readonly RepositoryCommit[], RepositoryHistoryError> {
   const boundaries = commits.filter((commit) => shallowOids.has(commit.oid));
   if (boundaries.length === 0) return Effect.succeed(commits);
-  return runGit(git, directory, [
-    "show",
-    "--no-patch",
-    "--pretty=raw",
-    "--no-abbrev",
-    "--no-show-signature",
-    "--end-of-options",
-    ...boundaries.map((commit) => commit.oid),
-    "--",
-  ]).pipe(
+  return historyGit(
+    git,
+    directory,
+    [
+      "show",
+      "--no-patch",
+      "--pretty=raw",
+      "--no-abbrev",
+      "--no-show-signature",
+      "--end-of-options",
+      ...boundaries.map((commit) => commit.oid),
+      "--",
+    ],
+    { maxOutputBytes: maximumShallowOutputBytes },
+  ).pipe(
     Effect.map((output) => {
       const parentsByOid = new Map<string, string[]>();
       let parents: string[] | undefined;
@@ -108,23 +115,6 @@ export function restoreShallowCommitParents(
       });
     }),
   );
-}
-
-function runGit(
-  git: GitCommandRunner,
-  directory: string,
-  args: readonly string[],
-) {
-  return git
-    .run({ directory, arguments: args, maxOutputBytes: 8 * 1_048_576 })
-    .pipe(
-      Effect.mapError(historyError),
-      Effect.flatMap((result) =>
-        result.exitCode === 0
-          ? Effect.succeed(result.stdout)
-          : Effect.fail(historyError(result.stderr)),
-      ),
-    );
 }
 
 function historyError(cause: unknown) {

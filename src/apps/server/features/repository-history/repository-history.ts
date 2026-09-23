@@ -1,13 +1,12 @@
-import type { RepositoryCatalogEntry } from "@rebase/contracts";
 import { Effect, Layer } from "effect";
 import {
   type GitCommandRunner,
   GitCommands,
 } from "#server/domain/git-command.contract";
 import {
-  type RepositoryCatalog,
-  RepositoryCatalogAccess,
-} from "#server/domain/repository-catalog.contract";
+  RepositoryAccess,
+  type RepositoryAccessService,
+} from "#server/domain/repository-access.contract";
 import {
   RepositoryHistoryAccess,
   RepositoryHistoryError,
@@ -17,19 +16,17 @@ import { readRepositoryHistory } from "#server/features/repository-history/git/r
 import { synchronizeRepositoryHistory } from "#server/features/repository-history/git/synchronize-repository-history";
 
 export function createRepositoryHistoryService(dependencies: {
-  readonly catalog: RepositoryCatalog;
+  readonly access: RepositoryAccessService;
   readonly git: GitCommandRunner;
 }): RepositoryHistoryService {
   const findRepository = (repositoryId: string) =>
-    dependencies.catalog.find(repositoryId).pipe(
-      Effect.flatMap((repository: RepositoryCatalogEntry | undefined) =>
-        repository === undefined
-          ? Effect.fail(
-              new RepositoryHistoryError({
-                failure: { _tag: "RepositoryMissing", repositoryId },
-              }),
-            )
-          : Effect.succeed(repository),
+    dependencies.access.repository(repositoryId).pipe(
+      Effect.mapError((error) =>
+        error._tag === "RepositoryAccessError"
+          ? new RepositoryHistoryError({
+              failure: { _tag: "RepositoryMissing", repositoryId },
+            })
+          : error,
       ),
     );
   return {
@@ -57,7 +54,7 @@ export const repositoryHistoryLayer = Layer.effect(
   RepositoryHistoryAccess,
   Effect.gen(function* () {
     return createRepositoryHistoryService({
-      catalog: yield* RepositoryCatalogAccess,
+      access: yield* RepositoryAccess,
       git: yield* GitCommands,
     });
   }),

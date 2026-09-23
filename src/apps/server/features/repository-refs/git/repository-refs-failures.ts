@@ -1,9 +1,11 @@
 import type { RepositoryRefsOperationFailure } from "@rebase/contracts";
 import { Effect } from "effect";
+import type { EnvironmentStorageError } from "#server/domain/environment-storage-error.contract";
 import type {
   GitCommandError,
   GitCommandOutput,
 } from "#server/domain/git-command.contract";
+import type { RepositoryAccessError } from "#server/domain/repository-access.contract";
 import type { RepositoryGitExitError } from "#server/domain/repository-git.contract";
 import { RepositoryRefsError } from "#server/domain/repository-refs.contract";
 
@@ -42,6 +44,28 @@ export function worktreeReadFailed(
   return error._tag === "RepositoryGitExitError"
     ? gitOutputFailed(error.output)
     : gitCommandFailed(error);
+}
+
+export function repositoryAccessFailed(
+  error: RepositoryAccessError | EnvironmentStorageError,
+) {
+  if (error._tag === "EnvironmentStorageError") return error;
+  switch (error.failure._tag) {
+    case "CatalogUnavailable":
+      return error.failure.cause;
+    case "RepositoryMissing":
+      return repositoryRefsFailure({
+        _tag: "RepositoryMissing",
+        repositoryId: error.failure.repositoryId,
+      });
+    case "WorktreesUnreadable":
+      return worktreeReadFailed(error.failure.cause);
+    case "WorktreeMissing":
+      return repositoryRefsFailure({
+        _tag: "WorktreeMissing",
+        worktreePath: error.failure.worktreePath,
+      });
+  }
 }
 
 export function requireSuccessfulOutput(output: GitCommandOutput) {

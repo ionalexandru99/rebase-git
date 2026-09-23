@@ -25,10 +25,13 @@ import { acquireEnvironmentListener } from "#server/app/server/environment-liste
 import { createEnvironmentAuthorization } from "#server/features/environment-authorization/environment-authorization";
 import { environmentAuthorizationFeature } from "#server/features/environment-authorization/index";
 import {
+  createRepositoryAccess,
+  createRepositoryCoordination,
+} from "#server/features/repository-access/index";
+import {
   createRepositoryCatalog,
   repositoryCatalogFeature,
 } from "#server/features/repository-catalog/index";
-import { createRepositoryCoordination } from "#server/features/repository-coordination/index";
 import {
   createRepositoryRefsService,
   repositoryRefsFeature,
@@ -277,7 +280,7 @@ function withRefsListener(use: (fixture: ListenerFixture) => Promise<void>) {
         const git = createLocalGitCommandRunner();
         const refs = createRepositoryRefsService({
           coordination: createRepositoryCoordination(git),
-          catalog,
+          access: createRepositoryAccess(catalog, git),
           changes: yield* acquireRepositoryChangePublisher(
             git,
             createLocalRepositoryWatcher(),

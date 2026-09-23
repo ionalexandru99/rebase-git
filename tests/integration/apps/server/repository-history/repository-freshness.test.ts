@@ -24,7 +24,11 @@ import {
 import { RepositoryWatching } from "#server/domain/repository-watcher.contract";
 import type { EnvironmentAuthorization } from "#server/features/environment-authorization/environment-authorization.contract";
 import { environmentAuthorizationFeature } from "#server/features/environment-authorization/index";
-import { repositoryCoordinationLayer } from "#server/features/repository-coordination/index";
+import {
+  createRepositoryAccess,
+  repositoryAccessLayer,
+  repositoryCoordinationLayer,
+} from "#server/features/repository-access/index";
 import {
   createRepositoryHistoryService,
   repositoryFreshnessFeature,
@@ -255,7 +259,7 @@ describe("repository freshness with real Git", { timeout: 30_000 }, () => {
             environmentAuthorizationFeature(testAuthorization()),
             repositoryHistoryFeature(
               createRepositoryHistoryService({
-                catalog: fixture.catalog,
+                access: createRepositoryAccess(fixture.catalog, runner),
                 git: runner,
               }),
             ),
@@ -350,7 +354,9 @@ function withService(
 
 function freshnessLayer(catalog: RepositoryCatalog) {
   return repositoryFreshnessLayer.pipe(
-    Layer.provide(repositoryCoordinationLayer),
+    Layer.provide(
+      Layer.mergeAll(repositoryAccessLayer, repositoryCoordinationLayer),
+    ),
     Layer.provide(
       Layer.mergeAll(
         Layer.succeed(RepositoryCatalogAccess, catalog),
