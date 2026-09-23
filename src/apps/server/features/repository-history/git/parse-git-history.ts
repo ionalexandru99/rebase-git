@@ -2,6 +2,10 @@ import type {
   RepositoryCommit,
   RepositoryCommitIdentity,
 } from "@rebase/contracts";
+import {
+  type GitObjectFormat,
+  isGitObjectId,
+} from "#server/domain/git-object-id";
 
 export const gitHistoryFormat = [
   "%H",
@@ -20,9 +24,8 @@ export const gitHistoryFormat = [
 const fieldsPerCommit = 11;
 
 export function createGitHistoryBatchParser(
-  objectFormat: "sha1" | "sha256",
+  objectFormat: GitObjectFormat,
   batchSize: number,
-  emit: (commits: readonly RepositoryCommit[]) => Promise<void>,
   maximumBatchCharacters = Number.POSITIVE_INFINITY,
 ) {
   if (
@@ -36,19 +39,17 @@ export function createGitHistoryBatchParser(
   let fields: string[] = [];
   let commits: RepositoryCommit[] = [];
   let batchCharacters = 0;
-  let count = 0;
 
-  const flush = async () => {
+  const flush = (batches: RepositoryCommit[][]) => {
     if (commits.length === 0) {
       return;
     }
-    const batch = commits;
+    batches.push(commits);
     commits = [];
     batchCharacters = 0;
-    await emit(batch);
   };
 
-  const acceptField = async (field: string) => {
+  const acceptField = (field: string, batches: RepositoryCommit[][]) => {
     fields.push(field);
     if (fields.length !== fieldsPerCommit) {
       return;
@@ -60,32 +61,36 @@ export function createGitHistoryBatchParser(
       commits.length > 0 &&
       batchCharacters + characters > maximumBatchCharacters
     ) {
-      await flush();
+      flush(batches);
     }
     commits.push(commit);
     batchCharacters += characters;
-    count += 1;
     if (commits.length === batchSize) {
-      await flush();
+      flush(batches);
     }
   };
 
   return {
-    async accept(chunk: string) {
+    accept(chunk: string): readonly (readonly RepositoryCommit[])[] {
+      const batches: RepositoryCommit[][] = [];
       remainder += chunk;
+      let start = 0;
       let separator = remainder.indexOf("\0");
       while (separator >= 0) {
-        await acceptField(remainder.slice(0, separator));
-        remainder = remainder.slice(separator + 1);
-        separator = remainder.indexOf("\0");
+        acceptField(remainder.slice(start, separator), batches);
+        start = separator + 1;
+        separator = remainder.indexOf("\0", start);
       }
+      remainder = remainder.slice(start);
+      return batches;
     },
-    async finish() {
+    finish(): readonly (readonly RepositoryCommit[])[] {
       if (remainder.length > 0 || fields.length > 0) {
         throw new Error("Truncated Git history record");
       }
-      await flush();
-      return count;
+      const batches: RepositoryCommit[][] = [];
+      flush(batches);
+      return batches;
     },
   };
 }
@@ -104,7 +109,7 @@ function commitCharacters(commit: RepositoryCommit) {
 
 export function parseGitHistory(
   output: string,
-  objectFormat: "sha1" | "sha256",
+  objectFormat: GitObjectFormat,
 ): readonly RepositoryCommit[] {
   if (output.length === 0) {
     return [];
@@ -127,7 +132,7 @@ export function parseGitHistory(
 
 function parseCommit(
   fields: readonly string[],
-  objectFormat: "sha1" | "sha256",
+  objectFormat: GitObjectFormat,
 ): RepositoryCommit {
   const [
     oid,
@@ -211,9 +216,8 @@ function parseTimezoneOffset(isoDate: string) {
   return timezone[1] === "-" ? -absoluteMinutes : absoluteMinutes;
 }
 
-function requireOid(oid: string, objectFormat: "sha1" | "sha256") {
-  const expectedLength = objectFormat === "sha1" ? 40 : 64;
-  if (oid.length !== expectedLength || !/^[0-9a-f]+$/.test(oid)) {
+function requireOid(oid: string, objectFormat: GitObjectFormat) {
+  if (!isGitObjectId(oid, objectFormat)) {
     throw new Error("Invalid Git object ID");
   }
 }

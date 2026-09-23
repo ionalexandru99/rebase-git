@@ -4,12 +4,14 @@ import type {
 } from "@rebase/contracts";
 import { Effect } from "effect";
 import type { GitCommandRunner } from "#server/domain/git-command.contract";
-import { RepositoryHistoryError } from "#server/domain/repository-history.contract";
-import { historyGit } from "#server/features/repository-history/git/history-git";
+import type { RepositoryGitError } from "#server/domain/repository-git.contract";
+import type { RepositoryHistoryError } from "#server/domain/repository-history.contract";
+import { parseHistoryOutput } from "#server/features/repository-history/git/history-failures";
 import {
   gitHistoryFormat,
   parseGitHistory,
 } from "#server/features/repository-history/git/parse-git-history";
+import { readObjectFormat } from "#server/features/repository-history/git/read-object-format";
 import {
   maximumHistoryOutputBytes,
   readSelectedHistory,
@@ -18,23 +20,21 @@ import {
   readShallowHistoryOids,
   restoreShallowCommitParents,
 } from "#server/features/repository-history/git/shallow-repository-history";
+import { runRepositoryGit } from "#server/repository/access/index";
 
 export function readRepositoryHistory(
   git: GitCommandRunner,
   repositoryPath: string,
   request: ReadRepositoryHistory,
-): Effect.Effect<RepositoryHistoryPage, RepositoryHistoryError> {
+): Effect.Effect<
+  RepositoryHistoryPage,
+  RepositoryHistoryError | RepositoryGitError
+> {
   return Effect.gen(function* () {
-    const formatOutput = yield* historyGit(git, repositoryPath, [
-      "rev-parse",
-      "--show-object-format",
-    ]);
-    const objectFormat = yield* parseHistoryOutput(() =>
-      parseObjectFormat(formatOutput),
-    );
+    const objectFormat = yield* readObjectFormat(git, repositoryPath);
     const historyOutput = yield* request.ancestry === "first-parent"
       ? readSelectedHistory(git, repositoryPath, request)
-      : historyGit(
+      : runRepositoryGit(
           git,
           repositoryPath,
           [
@@ -69,28 +69,4 @@ export function readRepositoryHistory(
       requestId: request.requestId,
     };
   });
-}
-
-function parseHistoryOutput<T>(parse: () => T) {
-  return Effect.try({
-    catch: (cause) =>
-      new RepositoryHistoryError({
-        cause,
-        failure: {
-          _tag: "GitFailed",
-          detail:
-            cause instanceof Error ? cause.message.slice(0, 2_048) : undefined,
-          reason: "Failed",
-        },
-      }),
-    try: parse,
-  });
-}
-
-function parseObjectFormat(output: string) {
-  const format = output.trim();
-  if (format !== "sha1" && format !== "sha256") {
-    throw new Error(`Unsupported Git object format: ${format}`);
-  }
-  return format;
 }

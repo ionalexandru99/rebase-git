@@ -77,6 +77,7 @@ async function fixture(
       runner,
     ),
     {
+      ...runner,
       run: (command) =>
         Effect.promise(async () => {
           await beforeCommand?.(command);

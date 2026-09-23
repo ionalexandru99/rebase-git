@@ -3,17 +3,17 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { ReadChangeDiff } from "@rebase/contracts";
 import { Effect } from "effect";
-import type { GitCommandRunner } from "#server/domain/git-command.contract";
+import type {
+  GitCommandOptions,
+  GitCommandRunner,
+} from "#server/domain/git-command.contract";
 import { previewByteLimit } from "#server/domain/repository-comparison.contract";
+import { changeIo } from "#server/features/repository-changes/git/change-failures";
 import {
   safeChangePath,
   worktreeFile,
 } from "#server/features/repository-changes/git/change-files";
-import {
-  changeGit,
-  changeIo,
-  changesError,
-} from "#server/features/repository-changes/git/change-git";
+import { runRepositoryGit } from "#server/repository/access/index";
 import {
   binary,
   buildChangeDiff,
@@ -24,6 +24,7 @@ export function readChangeDiff(
   git: GitCommandRunner,
   command: ReadChangeDiff,
   base: string,
+  index: GitCommandOptions = {},
 ) {
   return Effect.gen(function* () {
     yield* safeChangePath(command.worktreePath, command.path);
@@ -33,10 +34,10 @@ export function readChangeDiff(
           git,
           command.worktreePath,
           command.path,
-          command.section === "staged" ? base : undefined,
+          command.section === "staged" ? { ...index, tree: base } : index,
         ),
         command.section === "staged"
-          ? objectFile(git, command.worktreePath, command.path)
+          ? objectFile(git, command.worktreePath, command.path, index)
           : worktreeFile(command.worktreePath, command.path),
       ],
       { concurrency: 2 },
@@ -50,6 +51,7 @@ export function readChangeDiff(
             ...working,
             content: yield* cleanFileContent(
               git,
+              index,
               command.worktreePath,
               command.path,
               working.content,
@@ -57,17 +59,12 @@ export function readChangeDiff(
           }
         : working;
     return buildChangeDiff(command.path, base, before, after);
-  }).pipe(
-    Effect.mapError((error) =>
-      error._tag === "RepositoryGitError"
-        ? changesError("GitFailed", error.detail)
-        : error,
-    ),
-  );
+  });
 }
 
 function cleanFileContent(
   git: GitCommandRunner,
+  index: GitCommandOptions,
   directory: string,
   path: string,
   content: Buffer,
@@ -75,14 +72,15 @@ function cleanFileContent(
   return Effect.scoped(
     Effect.gen(function* () {
       const objectDirectory = yield* scratchObjectDirectory;
-      const oid = (yield* changeGit(
+      const oid = (yield* runRepositoryGit(
         git,
         directory,
         ["hash-object", "-w", `--path=${path}`, "--stdin"],
-        { input: content.toString("utf8"), objectDirectory },
+        { ...index, input: content.toString("utf8"), objectDirectory },
       )).trim();
       return Buffer.from(
-        yield* changeGit(git, directory, ["cat-file", "blob", oid], {
+        yield* runRepositoryGit(git, directory, ["cat-file", "blob", oid], {
+          ...index,
           objectDirectory,
           outputEncoding: "base64",
           maxOutputBytes: previewByteLimit,

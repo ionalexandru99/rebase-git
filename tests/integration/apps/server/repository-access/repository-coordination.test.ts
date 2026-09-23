@@ -67,6 +67,7 @@ it.each([
           const events: string[] = [];
           const local = createLocalGitCommandRunner();
           const runner: GitCommandRunner = {
+            ...local,
             run: (command) =>
               Effect.gen(function* () {
                 if (command.arguments.includes(mutation)) {

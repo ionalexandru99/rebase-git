@@ -3,10 +3,10 @@ import { copyFile, open, readFile, rename, rm } from "node:fs/promises";
 import { Effect } from "effect";
 import type { GitCommandRunner } from "#server/domain/git-command.contract";
 import {
-  changeGit,
   changeIo,
   changesError,
-} from "#server/features/repository-changes/git/change-git";
+} from "#server/features/repository-changes/git/change-failures";
+import { runRepositoryGit } from "#server/repository/access/index";
 
 export function withChangeIndex<A, E>(
   git: GitCommandRunner,
@@ -15,7 +15,7 @@ export function withChangeIndex<A, E>(
 ) {
   return Effect.scoped(
     Effect.gen(function* () {
-      const index = (yield* changeGit(git, directory, [
+      const index = (yield* runRepositoryGit(git, directory, [
         "rev-parse",
         "--path-format=absolute",
         "--git-path",
@@ -50,7 +50,7 @@ export function withChangeIndex<A, E>(
           }),
       );
       if (!copied)
-        yield* changeGit(git, directory, ["read-tree", "--empty"], {
+        yield* runRepositoryGit(git, directory, ["read-tree", "--empty"], {
           indexFile: temporary,
         });
       return yield* Effect.uninterruptible(

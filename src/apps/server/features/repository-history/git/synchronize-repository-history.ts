@@ -6,7 +6,13 @@ import {
 } from "@rebase/contracts";
 import { Effect } from "effect";
 import type { GitCommandRunner } from "#server/domain/git-command.contract";
-import { RepositoryHistoryError } from "#server/domain/repository-history.contract";
+import type { GitObjectFormat } from "#server/domain/git-object-id";
+import type { RepositoryGitError } from "#server/domain/repository-git.contract";
+import type { RepositoryHistoryError } from "#server/domain/repository-history.contract";
+import {
+  historyFailed,
+  snapshotInvalidated,
+} from "#server/features/repository-history/git/history-failures";
 import { historyTraversalIdentity } from "#server/features/repository-history/git/history-snapshot-identity";
 import { readRepositoryHistorySnapshot } from "#server/features/repository-history/git/read-repository-history-snapshot";
 import { streamRepositoryHistory } from "#server/features/repository-history/git/stream-repository-history";
@@ -22,29 +28,19 @@ export function synchronizeRepositoryHistory(
   emit: (
     batch: RepositoryHistoryBatch,
   ) => Effect.Effect<void, RepositoryHistoryError>,
-): Effect.Effect<number, RepositoryHistoryError> {
+): Effect.Effect<number, RepositoryHistoryError | RepositoryGitError> {
   return Effect.gen(function* () {
-    if (git.stream === undefined) {
-      return yield* gitFailure("Git history streaming is unavailable");
-    }
     let sequence =
       request.basis?._tag === "Incomplete"
         ? request.basis.nextBatchSequence
         : 0;
-    const nextSequence = () => {
-      if (sequence >= maximumRepositoryHistorySequence) {
-        throw new RepositoryHistoryError({
-          failure: {
-            _tag: "GitFailed",
-            detail: "Repository history batch sequence is exhausted",
-            reason: "Failed",
-          },
-        });
-      }
-      const current = sequence;
-      sequence += 1;
-      return current;
-    };
+    const nextSequence = Effect.suspend(() =>
+      sequence >= maximumRepositoryHistorySequence
+        ? Effect.fail(
+            historyFailed("Repository history batch sequence is exhausted"),
+          )
+        : Effect.succeed(sequence++),
+    );
     let commitCount =
       request.basis?._tag === "Incomplete"
         ? request.basis.committedCommitCount
@@ -68,7 +64,7 @@ export function synchronizeRepositoryHistory(
         captured.shallowOids ?? [],
       );
     } else {
-      const snapshotSequence = yield* takeSequence(nextSequence);
+      const snapshotSequence = yield* nextSequence;
       yield* emitSnapshot(
         request,
         captured,
@@ -94,11 +90,11 @@ export function synchronizeRepositoryHistory(
     for (let pass = 0; pass < maximumReconciliationPasses; pass += 1) {
       const latest = yield* readRepositoryHistorySnapshot(git, repositoryPath);
       if (!sameShallowBoundaries(captured.shallowOids, latest.shallowOids))
-        return yield* snapshotInvalidated();
+        return yield* Effect.fail(snapshotInvalidated());
       if (latest.id === captured.id) {
         return commitCount;
       }
-      const snapshotSequence = yield* takeSequence(nextSequence);
+      const snapshotSequence = yield* nextSequence;
       yield* emitSnapshot(request, latest, false, snapshotSequence, emit);
       commitCount += yield* streamHistory(
         git,
@@ -115,8 +111,10 @@ export function synchronizeRepositoryHistory(
       );
       captured = latest;
     }
-    return yield* gitFailure(
-      "Repository refs did not settle during history synchronization",
+    return yield* Effect.fail(
+      historyFailed(
+        "Repository refs did not settle during history synchronization",
+      ),
     );
   });
 }
@@ -132,7 +130,7 @@ function initialSnapshot(
       basis !== undefined &&
       !sameShallowBoundaries(basis.shallowOids, current.shallowOids)
     )
-      return yield* snapshotInvalidated();
+      return yield* Effect.fail(snapshotInvalidated());
     if (basis?._tag !== "Incomplete") return current;
     if (
       !basis.snapshotId.startsWith(
@@ -143,7 +141,7 @@ function initialSnapshot(
         ),
       )
     )
-      return yield* snapshotInvalidated();
+      return yield* Effect.fail(snapshotInvalidated());
     return {
       id: basis.snapshotId,
       objectFormat: basis.objectFormat,
@@ -193,8 +191,8 @@ function streamHistory(
   roots: readonly string[],
   excludedRoots: readonly string[],
   skip: number,
-  objectFormat: "sha1" | "sha256",
-  nextSequence: () => number,
+  objectFormat: GitObjectFormat,
+  nextSequence: Effect.Effect<number, RepositoryHistoryError>,
   emit: (
     batch: RepositoryHistoryBatch,
   ) => Effect.Effect<void, RepositoryHistoryError>,
@@ -213,7 +211,7 @@ function streamHistory(
       invalidBasisOnFailure,
     },
     (commits) =>
-      takeSequence(nextSequence).pipe(
+      nextSequence.pipe(
         Effect.flatMap((sequence) =>
           emit({
             commits,
@@ -224,46 +222,5 @@ function streamHistory(
           }),
         ),
       ),
-  );
-}
-
-function takeSequence(nextSequence: () => number) {
-  return Effect.try({
-    try: nextSequence,
-    catch: repositoryHistoryError,
-  });
-}
-
-function repositoryHistoryError(cause: unknown) {
-  if (cause instanceof RepositoryHistoryError) {
-    return cause;
-  }
-  const reason =
-    typeof cause === "object" &&
-    cause !== null &&
-    "reason" in cause &&
-    (cause.reason === "GitUnavailable" ||
-      cause.reason === "Timeout" ||
-      cause.reason === "OutputTooLarge" ||
-      cause.reason === "Failed")
-      ? cause.reason
-      : "Failed";
-  return new RepositoryHistoryError({
-    cause,
-    failure: { _tag: "GitFailed", reason },
-  });
-}
-
-function snapshotInvalidated() {
-  return Effect.fail(
-    new RepositoryHistoryError({ failure: { _tag: "SnapshotInvalidated" } }),
-  );
-}
-
-function gitFailure(detail: string) {
-  return Effect.fail(
-    new RepositoryHistoryError({
-      failure: { _tag: "GitFailed", detail, reason: "Failed" },
-    }),
   );
 }

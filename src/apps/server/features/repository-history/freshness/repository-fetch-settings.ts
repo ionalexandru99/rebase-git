@@ -1,7 +1,9 @@
 import type { RepositoryFetchSetting } from "@rebase/contracts";
 import { Effect } from "effect";
 import type { GitCommandRunner } from "#server/domain/git-command.contract";
+import type { RepositoryGitError } from "#server/domain/repository-git.contract";
 import { RepositoryHistoryError } from "#server/domain/repository-history.contract";
+import { runRepositoryGit } from "#server/repository/access/index";
 
 const settingKey = "rebase.autoFetchIntervalSeconds";
 
@@ -9,27 +11,23 @@ export function readRepositoryFetchSetting(
   git: GitCommandRunner,
   path: string,
 ) {
-  return git
-    .run({
-      directory: path,
-      arguments: ["config", "--local", "--get", settingKey],
-    })
-    .pipe(
-      Effect.flatMap((output) => {
-        if (output.exitCode !== 0 && output.exitCode !== 1)
-          return Effect.fail(settingsError());
-        const value = output.stdout.trim();
-        const seconds = Number(value);
-        const setting: RepositoryFetchSetting =
-          value === "0"
-            ? { _tag: "Disabled" }
-            : Number.isInteger(seconds) && seconds > 0 && seconds <= 86_400
-              ? { _tag: "Interval", seconds }
-              : { _tag: "Inherit" };
-        return Effect.succeed(setting);
-      }),
-      Effect.mapError(() => settingsError()),
-    );
+  return runRepositoryGit(
+    git,
+    path,
+    ["config", "--local", "--get", settingKey],
+    { exitCodes: [0, 1] },
+  ).pipe(
+    Effect.map((output): RepositoryFetchSetting => {
+      const value = output.trim();
+      const seconds = Number(value);
+      return value === "0"
+        ? { _tag: "Disabled" }
+        : Number.isInteger(seconds) && seconds > 0 && seconds <= 86_400
+          ? { _tag: "Interval", seconds }
+          : { _tag: "Inherit" };
+    }),
+    Effect.mapError(settingsError),
+  );
 }
 
 export function writeRepositoryFetchSetting(
@@ -43,21 +41,17 @@ export function writeRepositoryFetchSetting(
       : setting._tag === "Interval"
         ? String(setting.seconds)
         : "inherit";
-  return git
-    .run({
-      directory: path,
-      arguments: ["config", "--local", settingKey, value],
-    })
-    .pipe(
-      Effect.flatMap((output) =>
-        output.exitCode === 0 ? Effect.void : Effect.fail(settingsError()),
-      ),
-      Effect.mapError(() => settingsError()),
-    );
+  return runRepositoryGit(git, path, [
+    "config",
+    "--local",
+    settingKey,
+    value,
+  ]).pipe(Effect.asVoid, Effect.mapError(settingsError));
 }
 
-function settingsError() {
+function settingsError(cause: RepositoryGitError) {
   return new RepositoryHistoryError({
+    cause,
     failure: {
       _tag: "GitFailed",
       reason: "Failed",

@@ -576,7 +576,9 @@ describe("repository history", { timeout: 30_000 }, () => {
       ),
     );
 
-    expect(failure.failure).toEqual({ _tag: "SnapshotInvalidated" });
+    expect(failure).toMatchObject({
+      failure: { _tag: "SnapshotInvalidated" },
+    });
   });
 
   it("rejects a resume that has exhausted the batch sequence", async () => {
@@ -620,9 +622,11 @@ describe("repository history", { timeout: 30_000 }, () => {
       ),
     );
 
-    expect(failure.failure).toMatchObject({
-      _tag: "GitFailed",
-      detail: "Repository history batch sequence is exhausted",
+    expect(failure).toMatchObject({
+      failure: {
+        _tag: "GitFailed",
+        detail: "Repository history batch sequence is exhausted",
+      },
     });
     expect(emitted).toEqual([]);
   });

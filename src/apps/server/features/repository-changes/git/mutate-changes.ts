@@ -5,22 +5,22 @@ import type {
 } from "@rebase/contracts";
 import { createTwoFilesPatch } from "diff";
 import { Effect } from "effect";
-import type { GitCommandRunner } from "#server/domain/git-command.contract";
-import type { RepositoryChangesError } from "#server/domain/repository-changes.contract";
+import type {
+  GitCommandOptions,
+  GitCommandRunner,
+} from "#server/domain/git-command.contract";
+import { changesError } from "#server/features/repository-changes/git/change-failures";
 import { safeChangePath } from "#server/features/repository-changes/git/change-files";
-import {
-  changeGit,
-  changesError,
-} from "#server/features/repository-changes/git/change-git";
 import { readChangeDiff } from "#server/features/repository-changes/git/read-change-diff";
 import { selectedChangeText } from "#server/features/repository-changes/patch/selected-change-text";
+import { runRepositoryGit } from "#server/repository/access/index";
 
-export function mutateChanges(
+export function mutateChanges<E>(
   git: GitCommandRunner,
+  index: GitCommandOptions,
   command: MutateChanges,
-  snapshot: RepositoryChanges,
-  base: string,
-  verify: Effect.Effect<void, RepositoryChangesError>,
+  { snapshot, base }: { snapshot: RepositoryChanges; base: string },
+  verify: Effect.Effect<void, E>,
 ) {
   return Effect.gen(function* () {
     if (
@@ -65,6 +65,7 @@ export function mutateChanges(
         git,
         { ...command, path: selection.path },
         base,
+        index,
       );
       if (diff.revision !== selection.revision)
         return yield* Effect.fail(
@@ -99,12 +100,13 @@ export function mutateChanges(
           : target;
       const patch = contentPatch(diff, current, destination);
       yield* verify;
-      yield* applyChangePatch(git, command, patch);
+      yield* applyChangePatch(git, index, command, patch);
       return;
     }
     if (command.action === "stage" || command.action === "unstage") {
       yield* pathspecGit(
         git,
+        index,
         command.worktreePath,
         command.action === "stage"
           ? ["add"]
@@ -113,17 +115,17 @@ export function mutateChanges(
       );
       return;
     }
-    yield* discardFiles(git, command, snapshot, paths, base, verify);
+    yield* discardFiles(git, index, command, { snapshot, base }, paths, verify);
   });
 }
 
-function discardFiles(
+function discardFiles<E>(
   git: GitCommandRunner,
+  index: GitCommandOptions,
   command: MutateChanges,
-  snapshot: RepositoryChanges,
+  { snapshot, base }: { snapshot: RepositoryChanges; base: string },
   paths: readonly string[],
-  base: string,
-  verify: Effect.Effect<void, RepositoryChangesError>,
+  verify: Effect.Effect<void, E>,
 ) {
   return Effect.gen(function* () {
     const directory = command.worktreePath;
@@ -137,11 +139,14 @@ function discardFiles(
           return status === "?" || status === "A";
         }),
       );
-      const patch = yield* createdFilesPatch(git, directory, [...created]);
+      const patch = yield* createdFilesPatch(git, index, directory, [
+        ...created,
+      ]);
       yield* verify;
-      yield* applyChangePatch(git, command, patch, true);
+      yield* applyChangePatch(git, index, command, patch, true);
       yield* pathspecGit(
         git,
+        index,
         directory,
         ["restore", "--worktree"],
         paths.filter((path) => !created.has(path)),
@@ -152,19 +157,25 @@ function discardFiles(
     const patch =
       edited.length === 0
         ? ""
-        : yield* changeGit(git, directory, [
-            "diff",
-            ...patchOptions,
-            "--no-renames",
-            "--cached",
-            base,
-            "--",
-            ...edited,
-          ]);
+        : yield* runRepositoryGit(
+            git,
+            directory,
+            [
+              "diff",
+              ...patchOptions,
+              "--no-renames",
+              "--cached",
+              base,
+              "--",
+              ...edited,
+            ],
+            index,
+          );
     yield* verify;
-    yield* applyChangePatch(git, command, patch, true);
+    yield* applyChangePatch(git, index, command, patch, true);
     yield* pathspecGit(
       git,
+      index,
       directory,
       ["restore", `--source=${base}`, "--staged", "--worktree"],
       paths.filter((path) => !unstaged.has(path)),
@@ -183,50 +194,33 @@ const patchOptions = [
 
 function createdFilesPatch(
   git: GitCommandRunner,
+  index: GitCommandOptions,
   directory: string,
   paths: readonly string[],
 ) {
   return Effect.forEach(paths, (path) =>
-    git
-      .run({
-        directory,
-        arguments: [
-          "diff",
-          "--no-index",
-          ...patchOptions,
-          "--",
-          "/dev/null",
-          path,
-        ],
-      })
-      .pipe(
-        Effect.mapError(() =>
-          changesError(
-            "GitFailed",
-            "Could not prepare the untracked file for discard.",
-          ),
-        ),
-        Effect.flatMap((output) =>
-          output.exitCode === 0 || output.exitCode === 1
-            ? Effect.succeed(output.stdout)
-            : Effect.fail(changesError("GitFailed", output.stderr)),
-        ),
-      ),
+    runRepositoryGit(
+      git,
+      directory,
+      ["diff", "--no-index", ...patchOptions, "--", "/dev/null", path],
+      { ...index, exitCodes: [0, 1] },
+    ),
   ).pipe(Effect.map((patches) => patches.join("\n")));
 }
 
 function pathspecGit(
   git: GitCommandRunner,
+  index: GitCommandOptions,
   directory: string,
   args: readonly string[],
   paths: readonly string[],
 ) {
   if (paths.length === 0) return Effect.void;
-  return changeGit(
+  return runRepositoryGit(
     git,
     directory,
     [...args, "--pathspec-from-file=-", "--pathspec-file-nul"],
-    { input: `${paths.join("\0")}\0` },
+    { ...index, input: `${paths.join("\0")}\0` },
   ).pipe(Effect.asVoid);
 }
 
@@ -248,6 +242,7 @@ function contentPatch(
 
 function applyChangePatch(
   git: GitCommandRunner,
+  index: GitCommandOptions,
   command: MutateChanges,
   patch: string,
   reverse = false,
@@ -265,18 +260,20 @@ function applyChangePatch(
       "These changes overlap other edits or no longer apply. Nothing was discarded. Refresh the diff and review the overlapping lines.",
     );
   if (command.action === "discard" && command.section === "unstaged") {
-    return changeGit(git, directory, args, { input: patch }).pipe(
-      Effect.mapError(rejected),
-      Effect.asVoid,
-    );
+    return runRepositoryGit(git, directory, args, {
+      ...index,
+      input: patch,
+    }).pipe(Effect.mapError(rejected), Effect.asVoid);
   }
   return Effect.gen(function* () {
-    yield* changeGit(git, directory, [...args, "--cached"], {
+    yield* runRepositoryGit(git, directory, [...args, "--cached"], {
+      ...index,
       input: patch,
     }).pipe(Effect.mapError(rejected));
     if (command.action === "discard")
-      yield* changeGit(git, directory, args, { input: patch }).pipe(
-        Effect.mapError(rejected),
-      );
+      yield* runRepositoryGit(git, directory, args, {
+        ...index,
+        input: patch,
+      }).pipe(Effect.mapError(rejected));
   });
 }

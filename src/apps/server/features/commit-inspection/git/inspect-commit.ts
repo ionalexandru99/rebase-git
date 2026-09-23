@@ -6,12 +6,15 @@ import type {
 } from "@rebase/contracts";
 import { Effect } from "effect";
 import type { GitCommandRunner } from "#server/domain/git-command.contract";
+import { isGitObjectId } from "#server/domain/git-object-id";
 import { inspectionError } from "#server/features/commit-inspection/git/inspection-error";
 import { runRepositoryGit } from "#server/repository/access/index";
 import {
   buildChangeDiff,
   objectFile,
 } from "#server/repository/comparison/index";
+
+const originalObjects = { globalArguments: ["--no-replace-objects"] };
 
 export function inspectCommit(git: GitCommandRunner, command: InspectCommit) {
   return Effect.gen(function* () {
@@ -34,13 +37,6 @@ export function inspectCommitDiff(
   git: GitCommandRunner,
   command: InspectCommitDiff,
 ) {
-  const objectGit: GitCommandRunner = {
-    run: (request) =>
-      git.run({
-        ...request,
-        arguments: ["--no-replace-objects", ...request.arguments],
-      }),
-  };
   return Effect.gen(function* () {
     const metadata = yield* readMetadata(git, command);
     const files = yield* readFiles(
@@ -67,10 +63,10 @@ export function inspectCommitDiff(
               identity: "missing",
             })
           : objectFile(
-              objectGit,
+              git,
               command.worktreePath,
               file.previousPath ?? file.path,
-              metadata.parentOid,
+              { ...originalObjects, tree: metadata.parentOid },
             ),
         file.status === "D"
           ? Effect.succeed({
@@ -79,7 +75,10 @@ export function inspectCommitDiff(
               mode: "0",
               identity: "missing",
             })
-          : objectFile(objectGit, command.worktreePath, file.path, command.oid),
+          : objectFile(git, command.worktreePath, file.path, {
+              ...originalObjects,
+              tree: command.oid,
+            }),
       ],
       { concurrency: 2 },
     );
@@ -99,7 +98,7 @@ function readMetadata(git: GitCommandRunner, command: InspectCommit) {
       ![
         command.oid,
         ...(command.parentOid === undefined ? [] : [command.parentOid]),
-      ].every((oid) => /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/.test(oid))
+      ].every((oid) => isGitObjectId(oid))
     )
       return yield* Effect.fail(
         inspectionError("Unsupported", "Select a full commit identity."),
@@ -108,7 +107,6 @@ function readMetadata(git: GitCommandRunner, command: InspectCommit) {
       git,
       command.worktreePath,
       [
-        "--no-replace-objects",
         "show",
         "--no-patch",
         "--no-show-signature",
@@ -116,7 +114,7 @@ function readMetadata(git: GitCommandRunner, command: InspectCommit) {
         `${command.oid}^{commit}`,
         "--",
       ],
-      { maxOutputBytes: 800_000 },
+      { ...originalObjects, maxOutputBytes: 800_000 },
     );
     const [
       oid,
@@ -183,7 +181,6 @@ function readFiles(
     git,
     command.worktreePath,
     [
-      "--no-replace-objects",
       "diff-tree",
       "--root",
       "--no-commit-id",
@@ -197,7 +194,7 @@ function readFiles(
       command.oid,
       "--",
     ],
-    { maxOutputBytes: 16_000_000 },
+    { ...originalObjects, maxOutputBytes: 16_000_000 },
   ).pipe(
     Effect.map((output) => {
       const fields = output.split("\0");

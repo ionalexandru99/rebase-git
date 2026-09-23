@@ -4,8 +4,7 @@ import type {
 } from "@rebase/contracts";
 import { Context, Data, type Effect } from "effect";
 import type { EnvironmentStorageError } from "#server/domain/environment-storage-error.contract";
-import type { GitCommandError } from "#server/domain/git-command.contract";
-import type { RepositoryGitExitError } from "#server/domain/repository-git.contract";
+import type { RepositoryGitError } from "#server/domain/repository-git.contract";
 
 export type RepositoryAccessFailure =
   | {
@@ -15,7 +14,7 @@ export type RepositoryAccessFailure =
   | { readonly _tag: "RepositoryMissing"; readonly repositoryId: string }
   | {
       readonly _tag: "WorktreesUnreadable";
-      readonly cause: GitCommandError | RepositoryGitExitError;
+      readonly cause: RepositoryGitError;
     }
   | { readonly _tag: "WorktreeMissing"; readonly worktreePath: string };
 

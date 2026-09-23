@@ -1,10 +1,19 @@
 import type { ReadRepositoryHistory } from "@rebase/contracts";
-import { Effect } from "effect";
+import { Effect, Stream } from "effect";
 import type { GitCommandRunner } from "#server/domain/git-command.contract";
+import type { RepositoryGitError } from "#server/domain/repository-git.contract";
 import { RepositoryHistoryError } from "#server/domain/repository-history.contract";
+import { historyOutputTooLarge } from "#server/features/repository-history/git/history-failures";
 import { gitHistoryFormat } from "#server/features/repository-history/git/parse-git-history";
+import { streamRepositoryGit } from "#server/repository/access/index";
 
 export const maximumHistoryOutputBytes = 8 * 1_048_576;
+export const packedGitArguments = [
+  "-c",
+  "core.packedGitLimit=32m",
+  "-c",
+  "core.packedGitWindowSize=16m",
+];
 const maximumParentLineCharacters = 1_048_576;
 
 export function readSelectedHistory(
@@ -39,14 +48,14 @@ export function readSelectedHistory(
       ],
       roots,
       deadline,
-      (chunk) => {
+    ).pipe(
+      Stream.runForEach((chunk) => {
         bytes += Buffer.byteLength(chunk);
         if (bytes > maximumHistoryOutputBytes)
-          throw new RepositoryHistoryError({
-            failure: { _tag: "GitFailed", reason: "OutputTooLarge" },
-          });
+          return Effect.fail(historyOutputTooLarge());
         chunks.push(chunk);
-      },
+        return Effect.void;
+      }),
     );
     return chunks.join("");
   });
@@ -70,10 +79,6 @@ function selectedHistoryRoots(
       const additions = new Set<string>();
       let pending = "";
       const acceptLine = (line: string) => {
-        if (line.length > maximumParentLineCharacters)
-          throw new RepositoryHistoryError({
-            failure: { _tag: "GitFailed", reason: "OutputTooLarge" },
-          });
         const [child, _firstParent, ...secondaryParents] = line.split(" ");
         if (child === undefined) return;
         const selected = requested.get(child);
@@ -96,15 +101,18 @@ function selectedHistoryRoots(
         ],
         [...roots].sort(),
         deadline,
-        (chunk) => {
+      ).pipe(
+        Stream.runForEach((chunk) => {
           const lines = (pending + chunk).split("\n");
           pending = lines.pop() ?? "";
-          if (pending.length > maximumParentLineCharacters)
-            throw new RepositoryHistoryError({
-              failure: { _tag: "GitFailed", reason: "OutputTooLarge" },
-            });
+          if (
+            pending.length > maximumParentLineCharacters ||
+            lines.some((line) => line.length > maximumParentLineCharacters)
+          )
+            return Effect.fail(historyOutputTooLarge());
           for (const line of lines) acceptLine(line);
-        },
+          return Effect.void;
+        }),
       );
       if (pending !== "") acceptLine(pending);
       if (additions.size === 0) break;
@@ -117,67 +125,19 @@ function selectedHistoryRoots(
 function streamQuery(
   git: GitCommandRunner,
   repositoryPath: string,
-  arguments_: readonly string[],
+  args: readonly string[],
   roots: readonly string[],
   deadline: number,
-  accept: (chunk: string) => void,
-) {
-  if (Date.now() >= deadline)
-    return Effect.fail(
-      new RepositoryHistoryError({
-        failure: { _tag: "GitFailed", reason: "Timeout" },
-      }),
-    );
-  const stream = git.stream;
-  if (stream === undefined)
-    return Effect.fail(
-      new RepositoryHistoryError({
-        failure: { _tag: "GitFailed", reason: "GitUnavailable" },
-      }),
-    );
-  let parsingFailure: unknown;
-  return stream(
-    {
-      arguments: [
-        "-c",
-        "core.packedGitLimit=32m",
-        "-c",
-        "core.packedGitWindowSize=16m",
-        ...arguments_,
-      ],
-      directory: repositoryPath,
-      input: `${roots.join("\n")}\n`,
-      timeoutMilliseconds: Math.max(1, deadline - Date.now()),
-    },
-    async (chunk) => {
-      try {
-        accept(chunk);
-      } catch (error) {
-        parsingFailure = error;
-        throw error;
-      }
-    },
-  ).pipe(
-    Effect.mapError((error) =>
-      parsingFailure instanceof RepositoryHistoryError
-        ? parsingFailure
-        : new RepositoryHistoryError({
-            cause: error,
-            failure: { _tag: "GitFailed", reason: error.reason },
-          }),
-    ),
-    Effect.flatMap((output) =>
-      output.exitCode === 0
-        ? Effect.void
-        : Effect.fail(
-            new RepositoryHistoryError({
-              failure: {
-                _tag: "GitFailed",
-                reason: "Failed",
-                detail: output.stderr.slice(0, 2_048),
-              },
-            }),
-          ),
-    ),
-  );
+): Stream.Stream<string, RepositoryHistoryError | RepositoryGitError> {
+  return Date.now() >= deadline
+    ? Stream.fail(
+        new RepositoryHistoryError({
+          failure: { _tag: "GitFailed", reason: "Timeout" },
+        }),
+      )
+    : streamRepositoryGit(git, repositoryPath, args, {
+        globalArguments: packedGitArguments,
+        input: `${roots.join("\n")}\n`,
+        timeoutMilliseconds: Math.max(1, deadline - Date.now()),
+      });
 }
