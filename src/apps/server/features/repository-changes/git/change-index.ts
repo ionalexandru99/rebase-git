@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { copyFile, open, readFile, rename, rm } from "node:fs/promises";
+import { copyFile, open, rename, rm } from "node:fs/promises";
 import { Effect } from "effect";
 import type { GitCommandRunner } from "#server/domain/git-command.contract";
 import {
@@ -23,9 +23,11 @@ export function withChangeIndex<A, E>(
       ])).trim();
       const lockPath = `${index}.lock`;
       const temporary = `${index}.rebase-${randomUUID()}`;
-      let published = false;
-      const lock = yield* Effect.acquireRelease(
-        changeIo(() => open(lockPath, "wx")).pipe(
+      yield* Effect.acquireRelease(
+        changeIo(async () => {
+          const lock = await open(lockPath, "wx");
+          await lock.close().catch(() => undefined);
+        }).pipe(
           Effect.mapError(() =>
             changesError(
               "Busy",
@@ -33,12 +35,11 @@ export function withChangeIndex<A, E>(
             ),
           ),
         ),
-        (handle) =>
+        () =>
           Effect.promise(async () => {
-            await handle.close().catch(() => undefined);
-            if (!published) await rm(lockPath, { force: true });
             await rm(temporary, { force: true });
             await rm(`${temporary}.lock`, { force: true });
+            await rm(lockPath, { force: true });
           }),
       );
       const copied = yield* changeIo(() =>
@@ -57,11 +58,9 @@ export function withChangeIndex<A, E>(
         Effect.gen(function* () {
           const result = yield* mutate(temporary);
           yield* changeIo(async () => {
-            await lock.writeFile(await readFile(temporary));
-            await lock.sync();
-            await lock.close();
-            await rename(lockPath, index);
-            published = true;
+            const published = await open(temporary, "r+");
+            await published.sync().finally(() => published.close());
+            await rename(temporary, index);
           });
           return result;
         }),
