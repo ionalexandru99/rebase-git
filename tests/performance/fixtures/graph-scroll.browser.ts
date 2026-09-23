@@ -2,12 +2,15 @@ import type {
   RepositoryCommit,
   RepositoryHistoryRefTarget,
 } from "@rebase/contracts";
+import { Layer, ManagedRuntime } from "effect";
 import { createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { CommitGraph } from "#web/features/commit-graph/index";
 import type { RepositoryHistoryReader } from "#web/features/repository-history/repository-history-reader.contract";
+import { ApplicationRuntime } from "#web-ui/platform/effect/application-runtime-context";
 
 let root: Root | undefined;
+const runtime = ManagedRuntime.make(Layer.empty);
 
 export function mountGraph(laneCount: number) {
   root?.unmount();
@@ -96,12 +99,16 @@ export function mountGraph(laneCount: number) {
   };
   root = createRoot(container);
   root.render(
-    createElement(CommitGraph, {
-      reader,
-      roots,
-      repositoryName: "100,000 commits",
-      scope: { _tag: "Automatic" },
-    }),
+    createElement(
+      ApplicationRuntime,
+      { value: runtime },
+      createElement(CommitGraph, {
+        reader,
+        roots,
+        repositoryName: "100,000 commits",
+        scope: { _tag: "Automatic" },
+      }),
+    ),
   );
 }
 
