@@ -1,4 +1,3 @@
-import type { RepositoryHistoryReadRpc } from "@rebase/contracts";
 import {
   encodeRepositoryHistoryBatch,
   encodeRepositoryHistoryPage,
@@ -6,16 +5,15 @@ import {
   type JsonMessageFragment,
   type ReadRepositoryHistory,
   type RepositoryHistoryOperationFailure,
+  type RepositoryHistoryReadRpc,
   type RepositoryHistorySynchronized,
   type SynchronizeRepositoryHistory,
 } from "@rebase/contracts";
 import { type Cause, Deferred, Effect, Queue, Stream } from "effect";
 import type { EnvironmentRpcHandlersFor } from "#server/adapters/environment-transport/environment-feature.contract";
 import type { EnvironmentRpcSession } from "#server/adapters/environment-transport/rpc/environment-rpc-session.contract";
-import {
-  RepositoryHistoryError,
-  type RepositoryHistoryService,
-} from "#server/domain/repository-history.contract";
+import { RepositoryHistoryError } from "#server/features/repository-history/git/history-failures";
+import type { RepositoryHistoryService } from "#server/features/repository-history/repository-history";
 
 type HistoryOutput = JsonMessageFragment | RepositoryHistorySynchronized;
 interface PendingBatch {

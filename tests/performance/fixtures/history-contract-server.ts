@@ -5,16 +5,19 @@ import { Effect } from "effect";
 import { createEnvironmentEventPublisher } from "#server/adapters/environment-transport/events/environment-event-publisher";
 import { createLocalGitCommandRunner } from "#server/adapters/local-git/local-git-command-runner";
 import { acquireEnvironmentListener } from "#server/app/server/environment-listener";
-import type { EnvironmentAuthorization } from "#server/domain/environment-authorization.contract";
+import {
+  type EnvironmentAuthorization,
+  EnvironmentAuthorizationAccess,
+} from "#server/domain/environment-authorization.contract";
+import { GitCommands } from "#server/domain/git-command.contract";
+import { RepositoryAccess } from "#server/domain/repository-access.contract";
+import { RepositoryCatalogAccess } from "#server/domain/repository-catalog.contract";
 import { environmentAuthorizationFeature } from "#server/features/environment-authorization/index";
 import {
   createRepositoryCatalog,
   repositoryCatalogFeature,
 } from "#server/features/repository-catalog/index";
-import {
-  createRepositoryHistoryService,
-  repositoryHistoryFeature,
-} from "#server/features/repository-history/index";
+import { repositoryHistoryFeature } from "#server/features/repository-history/index";
 import { acquireEnvironmentContext } from "#server/persistence/environment-context";
 import { environmentPaths } from "#server/persistence/storage/environment-paths";
 import { createRepositoryAccess } from "#server/repository/access/index";
@@ -40,28 +43,27 @@ try {
         const context = yield* acquireEnvironmentContext(
           environmentPaths(temporary),
         );
-        const catalog = createRepositoryCatalog(
-          context,
-          createLocalGitCommandRunner(),
-        );
+        const git = createLocalGitCommandRunner();
+        const catalog = createRepositoryCatalog(context, git);
         const repository = yield* catalog.remember(repositoryPath);
+        const features = yield* Effect.all([
+          environmentAuthorizationFeature,
+          repositoryCatalogFeature,
+          repositoryHistoryFeature,
+        ]).pipe(
+          Effect.provideService(EnvironmentAuthorizationAccess, authorization),
+          Effect.provideService(RepositoryCatalogAccess, catalog),
+          Effect.provideService(
+            RepositoryAccess,
+            createRepositoryAccess(catalog, git),
+          ),
+          Effect.provideService(GitCommands, git),
+        );
         const listener = yield* acquireEnvironmentListener({
           authorization,
           environmentId: crypto.randomUUID(),
           events: createEnvironmentEventPublisher(),
-          features: [
-            environmentAuthorizationFeature(authorization),
-            repositoryCatalogFeature(catalog),
-            repositoryHistoryFeature(
-              createRepositoryHistoryService({
-                access: createRepositoryAccess(
-                  catalog,
-                  createLocalGitCommandRunner(),
-                ),
-                git: createLocalGitCommandRunner(),
-              }),
-            ),
-          ],
+          features,
           productVersion: "0.0.0",
         });
         listener.readiness.value = true;

@@ -14,7 +14,7 @@ import {
   type EnvironmentAuthorization,
   EnvironmentAuthorizationError,
 } from "#server/domain/environment-authorization.contract";
-import { EnvironmentFilesystemError } from "#server/domain/environment-filesystem.contract";
+import { EnvironmentFilesystemError } from "#server/features/environment-filesystem/environment-filesystem";
 
 const writerCredential = "writer";
 const granted: ReadonlySet<EnvironmentAccessCapability> = new Set([

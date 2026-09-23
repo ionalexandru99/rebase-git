@@ -1,21 +1,13 @@
-import { Effect, Exit, Layer, Queue, Scope, Semaphore } from "effect";
-import {
-  type EnvironmentEventPublisher,
-  EnvironmentEvents,
-} from "#server/domain/environment-event-publisher.contract";
-import {
-  type GitCommandRunner,
-  GitCommands,
-} from "#server/domain/git-command.contract";
-import {
-  type RepositoryChangePublisher,
-  RepositoryChangePublishing,
-} from "#server/domain/repository-refs.contract";
-import {
-  type RepositoryWatcher,
-  RepositoryWatching,
-} from "#server/domain/repository-watcher.contract";
+import type { RepositoryCatalogEntry } from "@rebase/contracts";
+import { Effect, Exit, Queue, Scope, Semaphore } from "effect";
+import type { EnvironmentEventPublisher } from "#server/domain/environment-event-publisher.contract";
+import type { GitCommandRunner } from "#server/domain/git-command.contract";
+import type { RepositoryWatcher } from "#server/domain/repository-watcher.contract";
 import { readGitCommonDirectory } from "#server/repository/access/index";
+
+export interface RepositoryChangePublisher {
+  readonly watch: (repository: RepositoryCatalogEntry) => Effect.Effect<void>;
+}
 
 const maximumWatchedRepositories = 32;
 const publishDelayMilliseconds = 150;
@@ -82,17 +74,6 @@ export function acquireRepositoryChangePublisher(
     } satisfies RepositoryChangePublisher;
   });
 }
-
-export const repositoryChangePublisherLayer = Layer.effect(
-  RepositoryChangePublishing,
-  Effect.gen(function* () {
-    return yield* acquireRepositoryChangePublisher(
-      yield* GitCommands,
-      yield* RepositoryWatching,
-      yield* EnvironmentEvents,
-    );
-  }),
-);
 
 function publishRepositoryChanges(
   pending: Queue.Queue<void>,

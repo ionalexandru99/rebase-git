@@ -6,32 +6,32 @@ import { join } from "node:path";
 import { promisify } from "node:util";
 import type { RepositoryFreshness } from "@rebase/contracts";
 import { connectCurrentEnvironmentEffect } from "@rebase/web/environment-connection";
-import { Context, Deferred, Effect, Layer } from "effect";
+import { Deferred, Effect, Layer } from "effect";
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import { createEnvironmentEventPublisher } from "#server/adapters/environment-transport/events/environment-event-publisher";
 import { createLocalGitCommandRunner } from "#server/adapters/local-git/local-git-command-runner";
 import { createLocalRepositoryWatcher } from "#server/adapters/local-git/local-repository-watcher";
 import { acquireEnvironmentListener } from "#server/app/server/environment-listener";
-import type { EnvironmentAuthorization } from "#server/domain/environment-authorization.contract";
+import {
+  type EnvironmentAuthorization,
+  EnvironmentAuthorizationAccess,
+} from "#server/domain/environment-authorization.contract";
 import { GitCommands } from "#server/domain/git-command.contract";
 import {
   type RepositoryCatalog,
   RepositoryCatalogAccess,
 } from "#server/domain/repository-catalog.contract";
-import {
-  type RepositoryFreshnessService,
-  RepositoryFreshnessState,
-} from "#server/domain/repository-freshness.contract";
 import { RepositoryWatching } from "#server/domain/repository-watcher.contract";
 import { environmentAuthorizationFeature } from "#server/features/environment-authorization/index";
 import {
-  createRepositoryHistoryService,
+  acquireRepositoryFreshness,
+  type RepositoryFreshnessService,
+} from "#server/features/repository-history/freshness/repository-freshness";
+import {
   repositoryFreshnessFeature,
-  repositoryFreshnessLayer,
   repositoryHistoryFeature,
 } from "#server/features/repository-history/index";
 import {
-  createRepositoryAccess,
   repositoryAccessLayer,
   repositoryCoordinationLayer,
 } from "#server/repository/access/index";
@@ -249,23 +249,22 @@ describe("repository freshness with real Git", { timeout: 30_000 }, () => {
     const fixture = await createFixture();
     await Effect.runPromise(
       Effect.gen(function* () {
-        const runner = createLocalGitCommandRunner();
-        const context = yield* Layer.build(freshnessLayer(fixture.catalog));
-        const freshness = Context.get(context, RepositoryFreshnessState);
+        const features = yield* Effect.all([
+          environmentAuthorizationFeature,
+          repositoryHistoryFeature,
+          repositoryFreshnessFeature,
+        ]).pipe(
+          Effect.provide(freshnessServices(fixture.catalog)),
+          Effect.provideService(
+            EnvironmentAuthorizationAccess,
+            testAuthorization(),
+          ),
+        );
         const listener = yield* acquireEnvironmentListener({
           authorization: testAuthorization(),
           environmentId: repositoryId,
           events: createEnvironmentEventPublisher(),
-          features: [
-            environmentAuthorizationFeature(testAuthorization()),
-            repositoryHistoryFeature(
-              createRepositoryHistoryService({
-                access: createRepositoryAccess(fixture.catalog, runner),
-                git: runner,
-              }),
-            ),
-            repositoryFreshnessFeature(freshness),
-          ],
+          features,
           productVersion: "0.0.0",
         });
         listener.readiness.value = true;
@@ -346,19 +345,20 @@ function withService(
 ) {
   return Effect.runPromise(
     Effect.gen(function* () {
-      const context = yield* Layer.build(freshnessLayer(fixture.catalog));
-      const service = Context.get(context, RepositoryFreshnessState);
+      const service = yield* acquireRepositoryFreshness.pipe(
+        Effect.provide(freshnessServices(fixture.catalog)),
+      );
       yield* Effect.promise(() => use(service));
     }).pipe(Effect.scoped),
   );
 }
 
-function freshnessLayer(catalog: RepositoryCatalog) {
-  return repositoryFreshnessLayer.pipe(
-    Layer.provide(
-      Layer.mergeAll(repositoryAccessLayer, repositoryCoordinationLayer),
-    ),
-    Layer.provide(
+function freshnessServices(catalog: RepositoryCatalog) {
+  return Layer.mergeAll(
+    repositoryAccessLayer,
+    repositoryCoordinationLayer,
+  ).pipe(
+    Layer.provideMerge(
       Layer.mergeAll(
         Layer.succeed(RepositoryCatalogAccess, catalog),
         Layer.succeed(GitCommands, createLocalGitCommandRunner()),

@@ -6,7 +6,7 @@ import {
   isGitObjectId,
 } from "#server/domain/git-object-id";
 import type { RepositoryGitError } from "#server/domain/repository-git.contract";
-import type { RepositoryHistoryError } from "#server/domain/repository-history.contract";
+import type { RepositoryHistoryError } from "#server/features/repository-history/git/history-failures";
 import { historySnapshotIdentity } from "#server/features/repository-history/git/history-snapshot-identity";
 import { readObjectFormat } from "#server/features/repository-history/git/read-object-format";
 import { readShallowHistoryOids } from "#server/features/repository-history/git/shallow-repository-history";

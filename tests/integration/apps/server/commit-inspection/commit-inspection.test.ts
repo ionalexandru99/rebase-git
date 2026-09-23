@@ -7,7 +7,7 @@ import { promisify } from "node:util";
 import { Effect } from "effect";
 import { afterEach, describe, expect, it } from "vite-plus/test";
 import { createLocalGitCommandRunner } from "#server/adapters/local-git/local-git-command-runner";
-import { createCommitInspectionService } from "#server/features/commit-inspection/index";
+import { createCommitInspectionService } from "#server/features/commit-inspection/commit-inspection";
 import { createRepositoryAccess } from "#server/repository/access/index";
 
 const directories: string[] = [];

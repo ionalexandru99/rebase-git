@@ -21,12 +21,11 @@ import { afterEach, describe, expect, it } from "vite-plus/test";
 import { createEnvironmentEventPublisher } from "#server/adapters/environment-transport/events/environment-event-publisher";
 import { createLocalGitCommandRunner } from "#server/adapters/local-git/local-git-command-runner";
 import { acquireEnvironmentListener } from "#server/app/server/environment-listener";
+import { EnvironmentAuthorizationAccess } from "#server/domain/environment-authorization.contract";
+import { RepositoryCatalogAccess } from "#server/domain/repository-catalog.contract";
 import { createEnvironmentAuthorization } from "#server/features/environment-authorization/environment-authorization";
 import { environmentAuthorizationFeature } from "#server/features/environment-authorization/index";
-import {
-  createEnvironmentFilesystem,
-  environmentFilesystemFeature,
-} from "#server/features/environment-filesystem/index";
+import { environmentFilesystemFeature } from "#server/features/environment-filesystem/index";
 import {
   createRepositoryCatalog,
   repositoryCatalogFeature,
@@ -131,7 +130,7 @@ describe("repository catalog transport", () => {
       const viewer = await pair(origin, authorization, "viewer");
 
       const listing = await Effect.runPromise(
-        filesystem(origin, owner).listDirectory({}),
+        filesystem(origin, owner).listDirectory({ path: root }),
       );
 
       expect(listing.path).toBe(root);
@@ -172,17 +171,22 @@ function withCatalogListener(
           context,
           context.serverSecret,
         );
+        const features = yield* Effect.all([
+          environmentAuthorizationFeature,
+          repositoryCatalogFeature,
+          environmentFilesystemFeature,
+        ]).pipe(
+          Effect.provideService(EnvironmentAuthorizationAccess, authorization),
+          Effect.provideService(
+            RepositoryCatalogAccess,
+            createRepositoryCatalog(context, createLocalGitCommandRunner()),
+          ),
+        );
         const listener = yield* acquireEnvironmentListener({
           authorization,
           environmentId,
           events: createEnvironmentEventPublisher(),
-          features: [
-            environmentAuthorizationFeature(authorization),
-            repositoryCatalogFeature(
-              createRepositoryCatalog(context, createLocalGitCommandRunner()),
-            ),
-            environmentFilesystemFeature(createEnvironmentFilesystem(root)),
-          ],
+          features,
           productVersion: "0.0.0",
         });
         listener.readiness.value = true;

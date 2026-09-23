@@ -7,7 +7,7 @@ import type {
 import { Effect, Option, Queue, Semaphore, Stream } from "effect";
 import type { EnvironmentRpcHandlersFor } from "#server/adapters/environment-transport/environment-feature.contract";
 import type { EnvironmentRpcSession } from "#server/adapters/environment-transport/rpc/environment-rpc-session.contract";
-import type { RepositoryFreshnessService } from "#server/domain/repository-freshness.contract";
+import type { RepositoryFreshnessService } from "#server/features/repository-history/freshness/repository-freshness";
 
 export function repositoryFreshnessRpc(
   session: EnvironmentRpcSession,

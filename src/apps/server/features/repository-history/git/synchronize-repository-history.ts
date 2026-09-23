@@ -8,9 +8,9 @@ import { Effect } from "effect";
 import type { GitCommandRunner } from "#server/domain/git-command.contract";
 import type { GitObjectFormat } from "#server/domain/git-object-id";
 import type { RepositoryGitError } from "#server/domain/repository-git.contract";
-import type { RepositoryHistoryError } from "#server/domain/repository-history.contract";
 import {
   historyFailed,
+  type RepositoryHistoryError,
   snapshotInvalidated,
 } from "#server/features/repository-history/git/history-failures";
 import { historyTraversalIdentity } from "#server/features/repository-history/git/history-snapshot-identity";

@@ -8,17 +8,15 @@ import { expect, it } from "vite-plus/test";
 import { createEnvironmentEventPublisher } from "#server/adapters/environment-transport/events/environment-event-publisher";
 import { createLocalGitCommandRunner } from "#server/adapters/local-git/local-git-command-runner";
 import { acquireEnvironmentListener } from "#server/app/server/environment-listener";
-import {
-  commitInspectionFeature,
-  createCommitInspectionService,
-} from "#server/features/commit-inspection/index";
+import { EnvironmentAuthorizationAccess } from "#server/domain/environment-authorization.contract";
+import { GitCommands } from "#server/domain/git-command.contract";
+import { RepositoryAccess } from "#server/domain/repository-access.contract";
+import { RepositoryCoordination } from "#server/domain/repository-coordination.contract";
+import { commitInspectionFeature } from "#server/features/commit-inspection/index";
 import { createEnvironmentAuthorization } from "#server/features/environment-authorization/environment-authorization";
 import { environmentAuthorizationFeature } from "#server/features/environment-authorization/index";
 import { createRepositoryCatalog } from "#server/features/repository-catalog/repository-catalog";
-import {
-  createRepositoryChangesService,
-  repositoryChangesFeature,
-} from "#server/features/repository-changes/index";
+import { repositoryChangesFeature } from "#server/features/repository-changes/index";
 import { acquireEnvironmentContext } from "#server/persistence/environment-context";
 import { environmentPaths } from "#server/persistence/storage/environment-paths";
 import {
@@ -52,24 +50,30 @@ it("authorizes changes reads separately from index mutations across HTTP", async
           );
           const repository = yield* catalog.remember(directory);
           const runner = createLocalGitCommandRunner();
-          const access = createRepositoryAccess(catalog, runner);
+          const features = yield* Effect.all([
+            environmentAuthorizationFeature,
+            repositoryChangesFeature,
+            commitInspectionFeature,
+          ]).pipe(
+            Effect.provideService(
+              EnvironmentAuthorizationAccess,
+              authorization,
+            ),
+            Effect.provideService(
+              RepositoryAccess,
+              createRepositoryAccess(catalog, runner),
+            ),
+            Effect.provideService(GitCommands, runner),
+            Effect.provideService(
+              RepositoryCoordination,
+              createRepositoryCoordination(runner),
+            ),
+          );
           const listener = yield* acquireEnvironmentListener({
             authorization,
             environmentId: "00000000-0000-4000-8000-000000000001",
             events: createEnvironmentEventPublisher(),
-            features: [
-              environmentAuthorizationFeature(authorization),
-              repositoryChangesFeature(
-                createRepositoryChangesService(
-                  access,
-                  runner,
-                  createRepositoryCoordination(runner),
-                ),
-              ),
-              commitInspectionFeature(
-                createCommitInspectionService(access, runner),
-              ),
-            ],
+            features,
             productVersion: "0.0.0",
           });
           const credential = (role: "owner" | "viewer") =>

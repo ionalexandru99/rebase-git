@@ -15,7 +15,10 @@ import { Effect } from "effect";
 import { describe, expect, it, vi } from "vite-plus/test";
 import { createEnvironmentEventPublisher } from "#server/adapters/environment-transport/events/environment-event-publisher";
 import { acquireEnvironmentListener } from "#server/app/server/environment-listener";
-import type { EnvironmentAuthorization } from "#server/domain/environment-authorization.contract";
+import {
+  type EnvironmentAuthorization,
+  EnvironmentAuthorizationAccess,
+} from "#server/domain/environment-authorization.contract";
 import type { EnvironmentEventPublisher } from "#server/domain/environment-event-publisher.contract";
 import { environmentAuthorizationFeature } from "#server/features/environment-authorization/index";
 
@@ -291,7 +294,13 @@ function withListener(
           authorization: testAuthorization,
           environmentId,
           events,
-          features: [environmentAuthorizationFeature(testAuthorization)],
+          features: [
+            yield* Effect.provideService(
+              environmentAuthorizationFeature,
+              EnvironmentAuthorizationAccess,
+              testAuthorization,
+            ),
+          ],
           productVersion: "0.0.0",
         });
         listener.readiness.value = true;

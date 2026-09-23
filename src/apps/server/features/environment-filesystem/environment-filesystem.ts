@@ -3,19 +3,14 @@ import { readdir, stat } from "node:fs/promises";
 import { homedir } from "node:os";
 import { basename, dirname, extname, isAbsolute, join, parse } from "node:path";
 import { promisify } from "node:util";
-import type {
-  EnvironmentDirectory,
-  EnvironmentDirectoryEntry,
-  EnvironmentDirectoryRejected,
-  EnvironmentPathBreadcrumb,
-} from "@rebase/contracts";
-import { currentTransportLimits } from "@rebase/contracts";
-import { Effect, Layer } from "effect";
 import {
-  type EnvironmentFilesystem,
-  EnvironmentFilesystemAccess,
-  EnvironmentFilesystemError,
-} from "#server/domain/environment-filesystem.contract";
+  currentTransportLimits,
+  type EnvironmentDirectory,
+  type EnvironmentDirectoryEntry,
+  type EnvironmentDirectoryRejected,
+  type EnvironmentPathBreadcrumb,
+} from "@rebase/contracts";
+import { Data, Effect } from "effect";
 
 const maximumEntries = 500;
 const maximumPathLength = 4_096;
@@ -23,24 +18,24 @@ const maximumBreadcrumbBytes = 16_384;
 const responseSizeMargin = 512;
 const realpathNative = promisify(realpath.native);
 
-export function createEnvironmentFilesystem(
-  homeDirectory = homedir(),
-): EnvironmentFilesystem {
+export class EnvironmentFilesystemError extends Data.TaggedError(
+  "EnvironmentFilesystemError",
+)<{
+  readonly cause?: unknown;
+  readonly failure: EnvironmentDirectoryRejected;
+}> {}
+
+export function createEnvironmentFilesystem(homeDirectory = homedir()) {
   return {
-    listDirectory: (requestedPath, includeHidden = false) =>
+    listDirectory: (requestedPath?: string, includeHidden = false) =>
       listEnvironmentDirectory(requestedPath ?? homeDirectory, includeHidden),
   };
 }
 
-export const environmentFilesystemLayer = Layer.sync(
-  EnvironmentFilesystemAccess,
-  () => createEnvironmentFilesystem(),
-);
-
 function listEnvironmentDirectory(
   requestedPath: string,
   includeHidden: boolean,
-) {
+): Effect.Effect<EnvironmentDirectory, EnvironmentFilesystemError> {
   if (!validPath(requestedPath)) {
     return Effect.fail(directoryRejected("MalformedPath"));
   }

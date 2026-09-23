@@ -6,7 +6,7 @@ import {
 import { Effect, Stream } from "effect";
 import type { EnvironmentRpcHandlersFor } from "#server/adapters/environment-transport/environment-feature.contract";
 import type { EnvironmentRpcSession } from "#server/adapters/environment-transport/rpc/environment-rpc-session.contract";
-import type { RepositoryRefsService } from "#server/domain/repository-refs.contract";
+import type { RepositoryRefsService } from "#server/features/repository-refs/repository-refs";
 
 export function repositoryRefsRpc(
   session: EnvironmentRpcSession,

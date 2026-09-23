@@ -1,6 +1,13 @@
-import { Effect } from "effect";
+import type { RepositoryHistoryOperationFailure } from "@rebase/contracts";
+import { Data, Effect } from "effect";
 import type { RepositoryGitError } from "#server/domain/repository-git.contract";
-import { RepositoryHistoryError } from "#server/domain/repository-history.contract";
+
+export class RepositoryHistoryError extends Data.TaggedError(
+  "RepositoryHistoryError",
+)<{
+  readonly cause?: unknown;
+  readonly failure: RepositoryHistoryOperationFailure;
+}> {}
 
 const maximumDetailLength = 2_048;
 
