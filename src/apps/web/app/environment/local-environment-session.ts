@@ -5,30 +5,20 @@ import {
   EnvironmentHttpRejected,
 } from "@rebase/environment-client";
 import { Effect, Fiber, Result } from "effect";
+import type { EnvironmentProtocolConnection } from "#web/app/environment/connection/environment-protocol-connection.contract";
 import type {
+  ConnectedFeature,
   LocalEnvironmentSession,
   LocalEnvironmentSessionOptions,
   LocalEnvironmentSessionState,
 } from "#web/app/environment/local-environment-session.contract";
-import { createEnvironmentFilesystemController } from "#web/features/environment-filesystem/environment-filesystem-controller";
-import { createRepositoryCatalogController } from "#web/features/repository-catalog/repository-catalog-controller";
-import { createRepositoryHistoryGateway } from "#web/features/repository-history/transport/repository-history-gateway";
-import { createRepositoryRefsController } from "#web/features/repository-refs/repository-refs-controller";
+import type { EnvironmentChangeListener } from "#web/platform/environment/environment-protocol.contract";
 
 export function createLocalEnvironmentSession(
   options: LocalEnvironmentSessionOptions,
 ): LocalEnvironmentSession {
-  const repositoryCatalogSession = createRepositoryCatalogController(
-    options.repositoryCatalogGateway,
-  );
-  const filesystemSession = createEnvironmentFilesystemController(
-    options.filesystemGateway,
-  );
-  const repositoryRefsSession = createRepositoryRefsController(
-    options.repositoryRefsGateway,
-  );
-  const repositoryHistory = createRepositoryHistoryGateway();
   const listeners = new Set<() => void>();
+  const changeListeners = new Set<EnvironmentChangeListener>();
   let credential: EnvironmentCredential | undefined;
   let state: LocalEnvironmentSessionState = { _tag: "Authorizing" };
   let fiber: Fiber.Fiber<void, never> | undefined;
@@ -46,23 +36,9 @@ export function createLocalEnvironmentSession(
     if (credential === undefined) {
       credential = yield* authorizeSession(options, publish);
     }
-    const authorizedCredential = credential;
-    yield* Effect.acquireRelease(
-      Effect.sync(() =>
-        repositoryCatalogSession.authorize(authorizedCredential),
-      ),
-      () => Effect.promise(repositoryCatalogSession.stop),
-    );
-    filesystemSession.authorize(credential);
-    repositoryRefsSession.authorize(credential);
-    yield* maintainConnection(
-      options,
-      credential,
-      repositoryCatalogSession.controller,
-      repositoryRefsSession.controller,
-      repositoryHistory,
-      publish,
-    );
+    yield* maintainConnection(options, credential, publish, (repositoryIds) => {
+      for (const listener of changeListeners) listener(repositoryIds);
+    });
   });
 
   const start = () => {
@@ -71,7 +47,7 @@ export function createLocalEnvironmentSession(
     }
 
     running = true;
-    fiber = Effect.runFork(
+    fiber = options.runtime.runFork(
       Effect.scoped(runSession).pipe(
         Effect.ensuring(
           Effect.sync(() => {
@@ -89,17 +65,20 @@ export function createLocalEnvironmentSession(
     }
     const activeFiber = fiber;
     if (activeFiber !== undefined) {
-      Effect.runFork(Fiber.interrupt(activeFiber));
+      options.runtime.runFork(Fiber.interrupt(activeFiber));
     }
   };
 
   return {
+    ...options.controllers,
     ...(options.requests === undefined ? {} : { requests: options.requests }),
-    filesystem: filesystemSession.controller,
+    changes: {
+      subscribe: (listener) => {
+        changeListeners.add(listener);
+        return () => changeListeners.delete(listener);
+      },
+    },
     getSnapshot: () => state,
-    repositoryCatalog: repositoryCatalogSession.controller,
-    repositoryHistory: repositoryHistory.gateway,
-    repositoryRefs: repositoryRefsSession.controller,
     start,
     stop,
     subscribe: (listener) => {
@@ -141,10 +120,8 @@ function authorizeSession(
 function maintainConnection(
   options: LocalEnvironmentSessionOptions,
   credential: EnvironmentCredential,
-  repositoryCatalog: LocalEnvironmentSession["repositoryCatalog"],
-  repositoryRefs: LocalEnvironmentSession["repositoryRefs"],
-  repositoryHistory: ReturnType<typeof createRepositoryHistoryGateway>,
   publish: PublishState,
+  publishChanges: EnvironmentChangeListener,
 ): Effect.Effect<void> {
   return Effect.gen(function* () {
     let attempt = 0;
@@ -157,42 +134,27 @@ function maintainConnection(
       const connection = yield* Effect.result(
         Effect.scoped(
           options.gateway.connect(credential, lastObservedSequence).pipe(
+            Effect.tap((active) =>
+              Effect.sync(() => {
+                environmentId = active.negotiated.environmentId;
+              }),
+            ),
+            Effect.tap((active) =>
+              attachFeatures(options.features, active, publishChanges),
+            ),
+            Effect.tap((active) =>
+              publish({
+                _tag: "Connected",
+                environmentId: active.negotiated.environmentId,
+                accessCapabilities: active.negotiated.accessCapabilities ?? [],
+              }),
+            ),
             Effect.flatMap((active) =>
-              Effect.acquireRelease(
-                Effect.sync(() =>
-                  active.subscribeChanges(repositoryRefs.invalidate),
-                ),
-                (unsubscribe) => Effect.sync(unsubscribe),
-              ).pipe(
-                Effect.andThen(
-                  Effect.sync(() => {
-                    repositoryHistory.connect(active.repositoryHistory);
-                    environmentId = active.negotiated.environmentId;
-                  }),
-                ),
-                Effect.andThen(refreshRepositoryCatalog(repositoryCatalog)),
-                Effect.andThen(Effect.sync(repositoryRefs.invalidate)),
-                Effect.andThen(
-                  publish({
-                    _tag: "Connected",
-                    environmentId: active.negotiated.environmentId,
-                    accessCapabilities:
-                      active.negotiated.accessCapabilities ?? [],
-                  }),
-                ),
-                Effect.andThen(
-                  active.closed.pipe(
-                    Effect.map((failure) => ({
-                      failure,
-                      lastObservedSequence: active.currentSequence(),
-                    })),
-                  ),
-                ),
-                Effect.ensuring(
-                  Effect.sync(() =>
-                    repositoryHistory.disconnect(active.repositoryHistory),
-                  ),
-                ),
+              active.closed.pipe(
+                Effect.map((failure) => ({
+                  failure,
+                  lastObservedSequence: active.currentSequence(),
+                })),
               ),
             ),
           ),
@@ -217,11 +179,25 @@ function maintainConnection(
   });
 }
 
-function refreshRepositoryCatalog(
-  repositoryCatalog: LocalEnvironmentSession["repositoryCatalog"],
+function attachFeatures(
+  features: readonly ConnectedFeature[],
+  connection: EnvironmentProtocolConnection,
+  publishChanges: EnvironmentChangeListener,
 ) {
-  return Effect.promise(() =>
-    repositoryCatalog.refresh().catch(() => undefined),
+  return Effect.acquireRelease(
+    Effect.sync(() =>
+      connection.subscribeChanges((repositoryIds) => {
+        for (const feature of features) feature.invalidate?.(repositoryIds);
+        publishChanges(repositoryIds);
+      }),
+    ),
+    (unsubscribe) => Effect.sync(unsubscribe),
+  ).pipe(
+    Effect.andThen(
+      Effect.forEach(features, (feature) => feature.connect(connection), {
+        discard: true,
+      }),
+    ),
   );
 }
 

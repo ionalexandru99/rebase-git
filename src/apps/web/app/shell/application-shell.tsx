@@ -386,6 +386,7 @@ export function ApplicationShell({
       environment={{
         environmentId: historyEnvironmentId,
         requests: session.requests,
+        changes: session.changes,
         connected: sessionState._tag === "Connected",
         writable: canWrite,
         visible: !settingsOpen && !repositorySettingsOpen,

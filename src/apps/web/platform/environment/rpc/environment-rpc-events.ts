@@ -4,16 +4,13 @@ import {
   fetchEnvironmentSnapshotEffect,
 } from "@rebase/environment-client";
 import { Effect, Ref, Stream } from "effect";
+import { hasEnvironmentCapability } from "#web/platform/environment/environment-capabilities";
 import type { EnvironmentRpcEvents } from "#web/platform/environment/rpc/environment-rpc-events.contract";
 import { updateEnvironmentSequence } from "#web/platform/environment/websocket/environment-connection-state";
 import { advanceEnvironmentSequence } from "#web/platform/environment/websocket/environment-sequence";
 
 export function processEnvironmentRpcEvents(session: EnvironmentRpcEvents) {
-  if (
-    !session.negotiated.capabilities.some(
-      ({ name }) => name === "environment-events",
-    )
-  )
+  if (!hasEnvironmentCapability(session.negotiated, "environment-events"))
     return Effect.never;
   return session.client
     .WatchEnvironment(undefined, { streamBufferSize: 1 })
@@ -43,9 +40,7 @@ export function initializeEnvironmentRpcEvents(session: EnvironmentRpcEvents) {
   const previous = session.hello.lastObservedSequence;
   return previous !== undefined &&
     previous !== session.negotiated.currentSequence &&
-    session.negotiated.capabilities.some(
-      ({ name }) => name === "sequence-resnapshot",
-    )
+    hasEnvironmentCapability(session.negotiated, "sequence-resnapshot")
     ? recoverEnvironmentSnapshot(session, session.negotiated.currentSequence)
     : Effect.void;
 }

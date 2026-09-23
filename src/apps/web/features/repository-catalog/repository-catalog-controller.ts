@@ -1,6 +1,13 @@
 import type { RepositoryCatalogEntry } from "@rebase/contracts";
-import type { EnvironmentCredential } from "@rebase/environment-client";
-import { Cause, Effect, Layer, ManagedRuntime, Semaphore } from "effect";
+import {
+  Cause,
+  Effect,
+  Exit,
+  Fiber,
+  type ManagedRuntime,
+  Scope,
+  Semaphore,
+} from "effect";
 import {
   RepositoryCatalogRejected,
   RepositoryCatalogResponseError,
@@ -15,14 +22,14 @@ import { RepositoryCatalogUnavailable } from "#web/features/repository-catalog/r
 
 export function createRepositoryCatalogController(
   gateway: RepositoryCatalogGateway,
+  runtime: ManagedRuntime.ManagedRuntime<never, never>,
 ) {
   const listeners = new Set<() => void>();
-  let credential: EnvironmentCredential | undefined;
   let snapshot: RepositoryCatalogControllerSnapshot = {
     repositories: [],
     status: "idle",
   };
-  let runtime: ManagedRuntime.ManagedRuntime<never, never> | undefined;
+  let owner: Scope.Closeable | undefined;
   const operations = Semaphore.makeUnsafe(1);
 
   const publish = (next: RepositoryCatalogControllerSnapshot) => {
@@ -31,79 +38,69 @@ export function createRepositoryCatalogController(
   };
 
   const run = <Value>(
-    operation: (
-      authorizedCredential: EnvironmentCredential,
-    ) => Effect.Effect<Value, RepositoryCatalogControllerError>,
+    operation: () => Effect.Effect<Value, RepositoryCatalogControllerError>,
     update: (
       repositories: readonly RepositoryCatalogEntry[],
       value: Value,
     ) => readonly RepositoryCatalogEntry[],
   ): Promise<Value> => {
-    const owner = runtime;
-    const authorizedCredential = credential;
-    if (owner === undefined || authorizedCredential === undefined) {
+    const scope = owner;
+    if (scope === undefined) {
       const error = new RepositoryCatalogUnavailable();
       publish({ ...snapshot, error, status: "error" });
       return Promise.reject(error);
     }
-    return owner.runPromise(
-      operations.withPermit(
-        Effect.gen(function* () {
-          if (runtime !== owner) {
-            return yield* Effect.interrupt;
-          }
-          publish({ repositories: snapshot.repositories, status: "loading" });
-          const value = yield* operation(authorizedCredential);
-          if (runtime !== owner) {
-            return yield* Effect.interrupt;
-          }
-          publish({
-            repositories: sortRepositories(
-              update(snapshot.repositories, value),
-            ),
-            status: "ready",
-          });
-          return value;
-        }).pipe(
-          Effect.catchCause((cause) => {
-            if (Cause.hasInterrupts(cause) || runtime !== owner) {
-              return Effect.failCause(cause);
+    return runtime.runPromise(
+      operations
+        .withPermit(
+          Effect.gen(function* () {
+            if (owner !== scope) {
+              return yield* Effect.interrupt;
             }
-            const error = normalizeControllerError(Cause.squash(cause));
+            publish({ repositories: snapshot.repositories, status: "loading" });
+            const value = yield* operation();
+            if (owner !== scope) {
+              return yield* Effect.interrupt;
+            }
             publish({
-              error,
-              repositories: snapshot.repositories,
-              status: "error",
+              repositories: sortRepositories(
+                update(snapshot.repositories, value),
+              ),
+              status: "ready",
             });
-            return Effect.fail(error);
-          }),
-        ),
-      ),
+            return value;
+          }).pipe(
+            Effect.catchCause((cause) => {
+              if (Cause.hasInterrupts(cause) || owner !== scope) {
+                return Effect.failCause(cause);
+              }
+              const error = normalizeControllerError(Cause.squash(cause));
+              publish({
+                error,
+                repositories: snapshot.repositories,
+                status: "error",
+              });
+              return Effect.fail(error);
+            }),
+          ),
+        )
+        .pipe(Effect.forkIn(scope), Effect.flatMap(Fiber.join)),
     );
   };
 
   const controller: RepositoryCatalogController = {
     getSnapshot: () => snapshot,
     recordOpened: (repositoryId) =>
-      run(
-        (authorizedCredential) =>
-          gateway.recordOpened(authorizedCredential, repositoryId),
-        replaceRepository,
-      ),
+      run(() => gateway.recordOpened(repositoryId), replaceRepository),
     refresh: () =>
       run(
-        (authorizedCredential) => gateway.list(authorizedCredential),
+        () => gateway.list(),
         (_repositories, listed) => listed,
       ).then(() => undefined),
-    remember: (path) =>
-      run(
-        (authorizedCredential) => gateway.remember(authorizedCredential, path),
-        replaceRepository,
-      ),
+    remember: (path) => run(() => gateway.remember(path), replaceRepository),
     remove: (repositoryId) =>
       run(
-        (authorizedCredential) =>
-          gateway.remove(authorizedCredential, repositoryId),
+        () => gateway.remove(repositoryId),
         (repositories) =>
           repositories.filter((repository) => repository.id !== repositoryId),
       ).then(() => undefined),
@@ -114,16 +111,18 @@ export function createRepositoryCatalogController(
   };
 
   return {
-    authorize: (nextCredential: EnvironmentCredential) => {
-      credential = nextCredential;
-      runtime ??= ManagedRuntime.make(Layer.empty);
-    },
-    stop: () => {
-      const owner = runtime;
-      runtime = undefined;
-      credential = undefined;
-      return owner?.dispose() ?? Promise.resolve();
-    },
+    connect: () =>
+      Effect.acquireRelease(
+        Effect.sync(() => {
+          owner = Scope.makeUnsafe();
+          return owner;
+        }),
+        (scope) =>
+          Effect.suspend(() => {
+            if (owner === scope) owner = undefined;
+            return Scope.close(scope, Exit.void);
+          }),
+      ).pipe(Effect.asVoid),
     controller,
   };
 }

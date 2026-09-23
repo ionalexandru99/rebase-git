@@ -1,7 +1,4 @@
-import {
-  type EnvironmentRpcClient,
-  readRepositoryHistoryBatchSequence,
-} from "@rebase/contracts";
+import { readRepositoryHistoryBatchSequence } from "@rebase/contracts";
 import { environmentResponseError } from "@rebase/environment-client";
 import { Effect, Option, Stream } from "effect";
 import {
@@ -11,17 +8,27 @@ import {
 import { createHistorySyncScheduler } from "#web/features/repository-history/transport/history-sync-scheduler";
 import { createRepositoryFreshnessRpc } from "#web/features/repository-history/transport/repository-freshness-rpc";
 import { historyRpcFailure } from "#web/features/repository-history/transport/repository-history-rpc-error";
+import { hasEnvironmentCapability } from "#web/platform/environment/environment-capabilities";
+import type { NegotiatedEnvironmentRpc } from "#web/platform/environment/environment-protocol.contract";
 import { rpcJsonReassembler } from "#web/platform/environment/rpc/environment-rpc-json";
 import { createEnvironmentRequestId } from "#web/platform/environment/websocket/environment-request-id";
 
 export function createRepositoryHistoryRpc(
-  client: EnvironmentRpcClient,
-  enabled: boolean,
-  freshnessEnabled: boolean,
+  connection: NegotiatedEnvironmentRpc,
 ): RepositoryHistoryTransport {
+  const client = connection.rpc;
+  const enabled =
+    hasEnvironmentCapability(connection.negotiated, "repository-history", 6) &&
+    hasEnvironmentCapability(connection.negotiated, "json-fragmentation");
   const schedule = createHistorySyncScheduler();
   return {
-    freshness: createRepositoryFreshnessRpc(client, freshnessEnabled),
+    freshness: createRepositoryFreshnessRpc(
+      client,
+      hasEnvironmentCapability(
+        connection.negotiated,
+        "repository-history-freshness",
+      ),
+    ),
     read: (request) =>
       Effect.gen(function* () {
         if (!enabled) return yield* new RepositoryHistoryUnavailable();

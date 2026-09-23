@@ -14,8 +14,7 @@ import {
 } from "@rebase/environment-client";
 import { Deferred, Effect, Fiber, Ref } from "effect";
 import type { EnvironmentProtocolConnection } from "#web/app/environment/connection/environment-protocol-connection.contract";
-import { createRepositoryHistoryRpc } from "#web/features/repository-history/transport/repository-history-rpc";
-import { createRepositoryRefsRpc } from "#web/features/repository-refs/transport/repository-refs-rpc";
+import { hasEnvironmentCapability } from "#web/platform/environment/environment-capabilities";
 import {
   acquireEnvironmentRpc,
   negotiateEnvironmentRpc,
@@ -24,6 +23,7 @@ import {
   initializeEnvironmentRpcEvents,
   processEnvironmentRpcEvents,
 } from "#web/platform/environment/rpc/environment-rpc-events";
+import type { EnvironmentRpcEvents } from "#web/platform/environment/rpc/environment-rpc-events.contract";
 import {
   createEnvironmentConnectionState,
   type EnvironmentConnectionState,
@@ -177,27 +177,7 @@ function runEnvironmentConnection(
       hello,
     );
     const negotiated = yield* negotiateEnvironmentRpc(client, discovery, hello);
-    const supportsJsonFragmentation = negotiated.capabilities.some(
-      (capability) => capability.name === "json-fragmentation",
-    );
-    const repositoryHistoryVersion = negotiated.capabilities.find(
-      (capability) => capability.name === "repository-history",
-    )?.version;
-    const repositoryHistory = createRepositoryHistoryRpc(
-      client,
-      (repositoryHistoryVersion ?? 0) >= 6 && supportsJsonFragmentation,
-      negotiated.capabilities.some(
-        (capability) => capability.name === "repository-history-freshness",
-      ),
-    );
     yield* initializeEnvironmentSequence(state, hello, negotiated);
-    const repositoryRefs = createRepositoryRefsRpc(
-      client,
-      supportsJsonFragmentation &&
-        negotiated.capabilities.some(
-          (capability) => capability.name === "repository-refs",
-        ),
-    );
     const events = {
       discovery,
       credential,
@@ -221,10 +201,7 @@ function runEnvironmentConnection(
       connected,
       closed,
       state,
-      repositoryHistory,
-      repositoryRefs,
-      discovery,
-      negotiated,
+      { client, discovery, negotiated },
       closeController,
     );
     yield* Fiber.join(watch);
@@ -246,8 +223,9 @@ function initializeEnvironmentSequence(
   hello: EnvironmentHello,
   negotiated: EnvironmentProtocolConnection["negotiated"],
 ) {
-  const supportsResnapshot = negotiated.capabilities.some(
-    (capability) => capability.name === "sequence-resnapshot",
+  const supportsResnapshot = hasEnvironmentCapability(
+    negotiated,
+    "sequence-resnapshot",
   );
   return Ref.update(state, (current) => ({
     ...current,
@@ -264,20 +242,16 @@ function publishEnvironmentConnection(
   >,
   closed: Deferred.Deferred<EnvironmentConnectionFailure>,
   state: Ref.Ref<EnvironmentConnectionState>,
-  repositoryHistory: ReturnType<typeof createRepositoryHistoryRpc>,
-  repositoryRefs: ReturnType<typeof createRepositoryRefsRpc>,
-  discovery: EnvironmentDiscovery,
-  negotiated: EnvironmentProtocolConnection["negotiated"],
+  session: Pick<EnvironmentRpcEvents, "client" | "discovery" | "negotiated">,
   closeController: AbortController,
 ) {
   return Deferred.succeed(connected, {
     close: () => closeController.abort(environmentResponseError("WebSocket")),
     closed: Deferred.await(closed),
     currentSequence: () => Ref.getUnsafe(state).currentSequence,
-    discovery,
-    negotiated,
-    repositoryHistory,
-    repositoryRefs,
+    discovery: session.discovery,
+    negotiated: session.negotiated,
+    rpc: session.client,
     waitForSequence: (sequence) => waitForEnvironmentSequence(state, sequence),
     subscribeChanges: (listener) => {
       const listeners = Ref.getUnsafe(state).changeListeners;

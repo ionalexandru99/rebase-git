@@ -6,37 +6,42 @@ import {
   environmentResponseError,
   readEnvironmentBrowserSessionEffect,
 } from "@rebase/environment-client";
-import { Effect } from "effect";
+import { Effect, Layer, ManagedRuntime } from "effect";
 import { connectCurrentEnvironmentEffect } from "#web/app/environment/connection/index";
 import type {
   DesktopEnvironmentHost,
   DesktopHostBridge,
 } from "#web/app/environment/environment-bootstrap.contract";
 import { createLocalEnvironmentSession } from "#web/app/environment/local-environment-session";
-import type { LocalEnvironmentGateway } from "#web/app/environment/local-environment-session.contract";
+import type {
+  ConnectedFeature,
+  LocalEnvironmentGateway,
+} from "#web/app/environment/local-environment-session.contract";
 import { environmentFilesystemClient } from "#web/features/environment-filesystem/environment-filesystem-client";
+import type { EnvironmentFilesystemClient } from "#web/features/environment-filesystem/environment-filesystem-client.contract";
+import { createEnvironmentFilesystemController } from "#web/features/environment-filesystem/environment-filesystem-controller";
 import type { EnvironmentFilesystemGateway } from "#web/features/environment-filesystem/environment-filesystem-controller.contract";
 import { repositoryCatalogClient } from "#web/features/repository-catalog/repository-catalog-client";
+import type { RepositoryCatalogClient } from "#web/features/repository-catalog/repository-catalog-client.contract";
+import { createRepositoryCatalogController } from "#web/features/repository-catalog/repository-catalog-controller";
 import type { RepositoryCatalogGateway } from "#web/features/repository-catalog/repository-catalog-controller.contract";
+import { createRepositoryHistoryGateway } from "#web/features/repository-history/transport/repository-history-gateway";
 import { repositoryRefsClient } from "#web/features/repository-refs/repository-refs-client";
-import { RepositoryRefsResponseError } from "#web/features/repository-refs/repository-refs-client.contract";
-import type { RepositoryRefsGateway } from "#web/features/repository-refs/repository-refs-controller.contract";
-import type { RepositoryRefsTransport } from "#web/features/repository-refs/transport/repository-refs-transport.contract";
+import { createRepositoryRefsController } from "#web/features/repository-refs/repository-refs-controller";
+import type { RepositoryRefsController } from "#web/features/repository-refs/repository-refs-controller.contract";
+import { createRepositoryRefsGateway } from "#web/features/repository-refs/transport/repository-refs-gateway";
 
 export function createBrowserLocalEnvironmentSession(
   productVersion: string,
   host: DesktopEnvironmentHost | undefined,
 ) {
   const bootstrap = resolveLocalEnvironmentBootstrap(window.location, host);
-  let repositoryRefs: RepositoryRefsTransport | undefined;
   let credential: EnvironmentCredential | undefined;
+  const runtime = ManagedRuntime.make(Layer.empty);
   const requests = createEnvironmentRequestClient(
     bootstrap.environmentOrigin,
     () => credential,
   );
-  const catalog = repositoryCatalogClient(requests);
-  const refs = repositoryRefsClient(requests);
-  const filesystem = environmentFilesystemClient(requests);
   const gateway: LocalEnvironmentGateway = {
     authorize: () =>
       createLocalEnvironmentAuthorization(
@@ -60,42 +65,90 @@ export function createBrowserLocalEnvironmentSession(
             ? {}
             : { lastObservedSequence }),
         },
-      ).pipe(
-        Effect.tap((connection) =>
-          Effect.sync(() => {
-            repositoryRefs = connection.repositoryRefs;
-          }),
-        ),
       ),
   };
-  const repositoryCatalogGateway: RepositoryCatalogGateway = {
-    list: () => catalog.list().pipe(Effect.map((it) => it.repositories)),
-    recordOpened: (_credential, repositoryId) =>
-      catalog.recordOpened({ repositoryId }),
-    remember: (_credential, path) => catalog.remember({ path }),
-    remove: (_credential, repositoryId) => catalog.remove({ repositoryId }),
-  };
-  const repositoryRefsGateway: RepositoryRefsGateway = {
-    checkout: (_credential, command) => refs.checkout(command),
-    read: (_credential, repositoryId) =>
-      Effect.suspend(
-        () =>
-          repositoryRefs?.read(repositoryId) ??
-          Effect.fail(new RepositoryRefsResponseError()),
-      ),
-  };
-  const filesystemGateway: EnvironmentFilesystemGateway = {
-    listDirectory: (_credential, path) =>
-      filesystem.listDirectory(path === undefined ? {} : { path }),
-  };
+  const repositoryCatalog = createRepositoryCatalogController(
+    createRepositoryCatalogGateway(repositoryCatalogClient(requests)),
+    runtime,
+  );
+  const repositoryHistory = createRepositoryHistoryGateway();
+  const repositoryRefs = createRepositoryRefsGateway(
+    repositoryRefsClient(requests),
+  );
+  const repositoryRefsController = createRepositoryRefsController(
+    repositoryRefs.gateway,
+  );
 
   return createLocalEnvironmentSession({
-    requests,
-    filesystemGateway,
+    controllers: {
+      filesystem: createEnvironmentFilesystemController(
+        createEnvironmentFilesystemGateway(
+          environmentFilesystemClient(requests),
+        ),
+      ),
+      repositoryCatalog: repositoryCatalog.controller,
+      repositoryHistory: repositoryHistory.gateway,
+      repositoryRefs: repositoryRefsController,
+    },
+    features: [
+      { connect: repositoryHistory.connect },
+      connectedRepositoryRefs(repositoryRefs, repositoryRefsController),
+      connectedRepositoryCatalog(repositoryCatalog),
+    ],
     gateway,
-    repositoryCatalogGateway,
-    repositoryRefsGateway,
+    requests,
+    runtime,
   });
+}
+
+function connectedRepositoryRefs(
+  refs: ReturnType<typeof createRepositoryRefsGateway>,
+  controller: RepositoryRefsController,
+): ConnectedFeature {
+  return {
+    connect: (connection) =>
+      refs
+        .connect(connection)
+        .pipe(Effect.andThen(Effect.sync(controller.invalidate))),
+    invalidate: controller.invalidate,
+  };
+}
+
+function connectedRepositoryCatalog(
+  catalog: ReturnType<typeof createRepositoryCatalogController>,
+): ConnectedFeature {
+  return {
+    connect: () =>
+      catalog
+        .connect()
+        .pipe(
+          Effect.andThen(
+            Effect.promise(() =>
+              catalog.controller.refresh().catch(() => undefined),
+            ),
+          ),
+        ),
+  };
+}
+
+function createRepositoryCatalogGateway(
+  catalog: RepositoryCatalogClient,
+): RepositoryCatalogGateway {
+  return {
+    list: () => catalog.list().pipe(Effect.map((it) => it.repositories)),
+    recordOpened: (repositoryId) => catalog.recordOpened({ repositoryId }),
+    remember: (path) => catalog.remember({ path }),
+    remove: (repositoryId) => catalog.remove({ repositoryId }),
+  };
+}
+
+function createEnvironmentFilesystemGateway(
+  filesystem: EnvironmentFilesystemClient,
+): EnvironmentFilesystemGateway {
+  return {
+    listDirectory: (path) =>
+      filesystem.listDirectory(path === undefined ? {} : { path }),
+  };
 }
 
 export function resolveLocalEnvironmentBootstrap(

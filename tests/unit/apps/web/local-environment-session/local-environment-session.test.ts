@@ -2,6 +2,7 @@ import {
   createCurrentEnvironmentDiscovery,
   createCurrentEnvironmentHello,
   type EnvironmentAccessCapability,
+  type EnvironmentRpcClient,
   negotiateEnvironmentHello,
 } from "@rebase/contracts";
 import {
@@ -10,99 +11,51 @@ import {
   type EnvironmentProtocolConnection,
   EnvironmentResponseError,
 } from "@rebase/web/environment-connection";
-import { Effect } from "effect";
+import { Effect, Layer, ManagedRuntime } from "effect";
 import { describe, expect, it, vi } from "vite-plus/test";
 import { createLocalEnvironmentSession } from "#web/app/environment/local-environment-session";
 import type {
+  ConnectedFeature,
+  LocalEnvironmentControllers,
   LocalEnvironmentGateway,
+  LocalEnvironmentSessionOptions,
   LocalEnvironmentSessionState,
 } from "#web/app/environment/local-environment-session.contract";
-import type { EnvironmentFilesystemGateway } from "#web/features/environment-filesystem/environment-filesystem-controller.contract";
-import type { RepositoryCatalogGateway } from "#web/features/repository-catalog/repository-catalog-controller.contract";
-import {
-  RepositoryHistoryRejected,
-  type RepositoryHistoryTransport,
-} from "#web/features/repository-history/repository-history-reader.contract";
-import type { RepositoryRefsGateway } from "#web/features/repository-refs/repository-refs-controller.contract";
+
+const runtime = ManagedRuntime.make(Layer.empty);
 
 describe("local Environment session", () => {
-  it("releases a pending catalog refresh when its session stops", async () => {
-    const started = Promise.withResolvers<void>();
-    const canceled = Promise.withResolvers<void>();
-    const catalog = createRepositoryCatalogGateway();
-    catalog.list.mockReturnValueOnce(
-      Effect.sync(started.resolve).pipe(
-        Effect.andThen(Effect.never),
-        Effect.ensuring(Effect.sync(canceled.resolve)),
-      ),
-    );
-    const session = createLocalEnvironmentSession({
-      filesystemGateway: createFilesystemGateway(),
-      gateway: createGateway(createConnection()),
-      repositoryCatalogGateway: catalog,
-      repositoryRefsGateway: createRepositoryRefsGateway(),
-    });
-
-    session.start();
-    await started.promise;
-    session.stop();
-    await canceled.promise;
-    expect(session.repositoryCatalog.getSnapshot().repositories).toEqual([]);
-  });
-
-  it("refreshes only changed refs and releases its change subscription on disconnect", async () => {
+  it("connects each feature, forwards change events, and releases them on disconnect", async () => {
     const connection = createConnection();
     const release = vi.fn();
     connection.subscribeChanges.mockReturnValue(release);
-    const refs = createRepositoryRefsGateway();
-    refs.read.mockImplementation((_credential, repositoryId) =>
-      Effect.succeed({
-        repositoryId,
-        logicalRepositoryId: repositoryId,
-        branches: [],
-        remoteBranches: [],
-        tags: [],
-        worktrees: [],
-        truncated: { branches: false, remoteBranches: false, tags: false },
-      }),
-    );
-    const session = createLocalEnvironmentSession({
-      filesystemGateway: createFilesystemGateway(),
+    const feature = createFeature();
+    const changed = vi.fn();
+    const session = createSession({
+      features: [feature],
       gateway: createGateway(connection),
-      repositoryCatalogGateway: createRepositoryCatalogGateway(),
-      repositoryRefsGateway: refs,
     });
+    session.changes.subscribe(changed);
+
     session.start();
     try {
       await expectState(session.getSnapshot, "Connected");
-      session.repositoryRefs.select("background");
-      await vi.waitFor(() =>
-        expect(session.repositoryRefs.getSnapshot().status).toBe("ready"),
-      );
-      session.repositoryRefs.select("selected");
-      await vi.waitFor(() =>
-        expect(session.repositoryRefs.getSnapshot().status).toBe("ready"),
-      );
-      connection.subscribeChanges.mock.calls[0]?.[0](["background"]);
-      expect(refs.read).toHaveBeenCalledTimes(2);
-      connection.subscribeChanges.mock.calls[0]?.[0](["selected"]);
-      await vi.waitFor(() => expect(refs.read).toHaveBeenCalledTimes(3));
+      expect(feature.connect).toHaveBeenCalledExactlyOnceWith(connection);
+      expect(feature.released).not.toHaveBeenCalled();
+      connection.subscribeChanges.mock.calls[0]?.[0](["changed"]);
+      expect(feature.invalidate).toHaveBeenCalledExactlyOnceWith(["changed"]);
+      expect(changed).toHaveBeenCalledExactlyOnceWith(["changed"]);
     } finally {
       session.stop();
     }
-    await vi.waitFor(() => expect(release).toHaveBeenCalledOnce());
+    await vi.waitFor(() => expect(feature.released).toHaveBeenCalledOnce());
+    expect(release).toHaveBeenCalledOnce();
   });
 
   it("authorizes before opening the initial connection", async () => {
     const connection = createConnection();
     const gateway = createGateway(connection);
-    const repositoryCatalogGateway = createRepositoryCatalogGateway();
-    const session = createLocalEnvironmentSession({
-      filesystemGateway: createFilesystemGateway(),
-      gateway,
-      repositoryCatalogGateway,
-      repositoryRefsGateway: createRepositoryRefsGateway(),
-    });
+    const session = createSession({ gateway });
 
     session.start();
     await expectState(session.getSnapshot, "Connected");
@@ -114,10 +67,6 @@ describe("local Environment session", () => {
       { type: "bearer", value: "device-credential" },
       undefined,
     );
-    expect(repositoryCatalogGateway.list).toHaveBeenCalledWith({
-      type: "bearer",
-      value: "device-credential",
-    });
     session.stop();
     await vi.waitFor(() => expect(connection.close).toHaveBeenCalledOnce());
   });
@@ -134,12 +83,7 @@ describe("local Environment session", () => {
           }),
         ),
       );
-      const session = createLocalEnvironmentSession({
-        filesystemGateway: createFilesystemGateway(),
-        gateway,
-        repositoryCatalogGateway: createRepositoryCatalogGateway(),
-        repositoryRefsGateway: createRepositoryRefsGateway(),
-      });
+      const session = createSession({ gateway });
 
       session.start();
       try {
@@ -158,22 +102,20 @@ describe("local Environment session", () => {
   );
 
   it("owns one reconnect after the active connection closes", async () => {
-    const initial = createConnection(7, undefined, [
+    const initial = createConnection(7, [
       "repository.read",
       "repository.write",
     ]);
-    const reconnected = createConnection(8, undefined, ["repository.read"]);
+    const reconnected = createConnection(8, ["repository.read"]);
     const gateway = createGateway(initial, reconnected);
-    const repositoryCatalogGateway = createRepositoryCatalogGateway();
+    const feature = createFeature();
     const reconnect = deferred<void>();
     const waitBeforeReconnect = vi.fn(() =>
       Effect.promise(() => reconnect.promise),
     );
-    const session = createLocalEnvironmentSession({
-      filesystemGateway: createFilesystemGateway(),
+    const session = createSession({
+      features: [feature],
       gateway,
-      repositoryCatalogGateway,
-      repositoryRefsGateway: createRepositoryRefsGateway(),
       waitBeforeReconnect,
     });
 
@@ -191,6 +133,7 @@ describe("local Environment session", () => {
       environmentId: "00000000-0000-4000-8000-000000000001",
     });
     expect(gateway.connect).toHaveBeenCalledTimes(1);
+    expect(feature.released).toHaveBeenCalledOnce();
 
     reconnect.resolve();
     await expectState(session.getSnapshot, "Connected");
@@ -203,7 +146,7 @@ describe("local Environment session", () => {
       7,
     );
     expect(waitBeforeReconnect).toHaveBeenCalledOnce();
-    expect(repositoryCatalogGateway.list).toHaveBeenCalledTimes(2);
+    expect(feature.connect).toHaveBeenNthCalledWith(2, reconnected);
     session.stop();
   });
 
@@ -222,12 +165,10 @@ describe("local Environment session", () => {
       ),
     );
     const waitBeforeReconnect = vi.fn(() => Effect.void);
-    const repositoryCatalogGateway = createRepositoryCatalogGateway();
-    const session = createLocalEnvironmentSession({
-      filesystemGateway: createFilesystemGateway(),
+    const feature = createFeature();
+    const session = createSession({
+      features: [feature],
       gateway,
-      repositoryCatalogGateway,
-      repositoryRefsGateway: createRepositoryRefsGateway(),
       waitBeforeReconnect,
     });
 
@@ -236,45 +177,34 @@ describe("local Environment session", () => {
 
     expect(gateway.connect).toHaveBeenCalledOnce();
     expect(waitBeforeReconnect).not.toHaveBeenCalled();
-    expect(repositoryCatalogGateway.list).not.toHaveBeenCalled();
-    session.stop();
-  });
-
-  it("preserves typed repository history rejections", async () => {
-    const rejection = new RepositoryHistoryRejected({
-      failure: { _tag: "GitFailed", reason: "Failed" },
-    });
-    const connection = createConnection(0, {
-      read: () => Effect.fail(rejection),
-      synchronize: () => Effect.never,
-    });
-    const session = createLocalEnvironmentSession({
-      filesystemGateway: createFilesystemGateway(),
-      gateway: createGateway(connection),
-      repositoryCatalogGateway: createRepositoryCatalogGateway(),
-      repositoryRefsGateway: createRepositoryRefsGateway(),
-    });
-
-    session.start();
-    await expectState(session.getSnapshot, "Connected");
-
-    await expect(
-      session.repositoryHistory.read({
-        limit: 100,
-        order: "topological",
-        repositoryId: "00000000-0000-4000-8000-000000000001",
-        roots: [
-          {
-            name: "refs/heads/main",
-            oid: "1111111111111111111111111111111111111111",
-            type: "branch",
-          },
-        ],
-      }),
-    ).rejects.toBe(rejection);
+    expect(feature.connect).not.toHaveBeenCalled();
     session.stop();
   });
 });
+
+function createSession(
+  options: Partial<LocalEnvironmentSessionOptions> &
+    Pick<LocalEnvironmentSessionOptions, "gateway">,
+) {
+  return createLocalEnvironmentSession({
+    controllers: unusedControllers,
+    features: [],
+    runtime,
+    ...options,
+  });
+}
+
+function createFeature() {
+  const released = vi.fn();
+  const connect = vi.fn<ConnectedFeature["connect"]>(() =>
+    Effect.acquireRelease(Effect.void, () => Effect.sync(released)),
+  );
+  return {
+    connect,
+    invalidate: vi.fn<NonNullable<ConnectedFeature["invalidate"]>>(),
+    released,
+  } satisfies ConnectedFeature & { readonly released: typeof released };
+}
 
 function createGateway(...connections: ReturnType<typeof createConnection>[]) {
   const remaining = [...connections];
@@ -297,46 +227,34 @@ function createGateway(...connections: ReturnType<typeof createConnection>[]) {
   };
 }
 
-function createRepositoryCatalogGateway() {
-  return {
-    list: vi.fn<RepositoryCatalogGateway["list"]>(() => Effect.succeed([])),
-    recordOpened: vi.fn<RepositoryCatalogGateway["recordOpened"]>(() =>
-      Effect.die("The test does not open repositories."),
-    ),
-    remember: vi.fn<RepositoryCatalogGateway["remember"]>(() =>
-      Effect.die("The test does not remember repositories."),
-    ),
-    remove: vi.fn<RepositoryCatalogGateway["remove"]>(() =>
-      Effect.die("The test does not remove repositories."),
-    ),
-  } satisfies RepositoryCatalogGateway;
-}
-
-function createRepositoryRefsGateway() {
-  return {
-    checkout: vi.fn<RepositoryRefsGateway["checkout"]>(() =>
-      Effect.die("The test does not check out refs."),
-    ),
-    read: vi.fn<RepositoryRefsGateway["read"]>(() =>
-      Effect.die("The test does not read refs."),
-    ),
-  } satisfies RepositoryRefsGateway;
-}
-
-function createFilesystemGateway() {
-  return {
-    listDirectory: vi.fn<EnvironmentFilesystemGateway["listDirectory"]>(() =>
-      Effect.die("The test does not browse the filesystem."),
-    ),
-  } satisfies EnvironmentFilesystemGateway;
-}
+const unusedControllers: LocalEnvironmentControllers = {
+  filesystem: {
+    listDirectory: () => Promise.reject(new Error("Unused")),
+  },
+  repositoryCatalog: {
+    getSnapshot: () => ({ repositories: [], status: "idle" }),
+    recordOpened: () => Promise.reject(new Error("Unused")),
+    refresh: () => Promise.reject(new Error("Unused")),
+    remember: () => Promise.reject(new Error("Unused")),
+    remove: () => Promise.reject(new Error("Unused")),
+    subscribe: () => () => undefined,
+  },
+  repositoryHistory: {
+    read: () => Promise.reject(new Error("Unused")),
+    synchronize: () => Promise.reject(new Error("Unused")),
+  },
+  repositoryRefs: {
+    checkout: () => Promise.reject(new Error("Unused")),
+    getSnapshot: () => ({ checkingOut: false, status: "idle" }),
+    invalidate: () => undefined,
+    refresh: () => Promise.reject(new Error("Unused")),
+    select: () => undefined,
+    subscribe: () => () => undefined,
+  },
+};
 
 function createConnection(
   currentSequence = 0,
-  repositoryHistory: RepositoryHistoryTransport = {
-    read: () => Effect.die("History is not used"),
-    synchronize: () => Effect.die("History is not used"),
-  },
   accessCapabilities?: readonly EnvironmentAccessCapability[],
 ) {
   const disconnect = deferred<EnvironmentResponseError>();
@@ -362,8 +280,7 @@ function createConnection(
       ...negotiated,
       ...(accessCapabilities === undefined ? {} : { accessCapabilities }),
     },
-    repositoryHistory,
-    repositoryRefs: { read: () => Effect.die("Refs transport is not used") },
+    rpc: {} as EnvironmentRpcClient,
     waitForSequence: vi.fn(() => Effect.never),
     subscribeChanges: vi.fn<EnvironmentProtocolConnection["subscribeChanges"]>(
       () => () => {},

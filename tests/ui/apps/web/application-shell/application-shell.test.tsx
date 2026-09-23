@@ -260,6 +260,7 @@ function pairingRequiredSession(): LocalEnvironmentSession {
   const refsSnapshot = { checkingOut: false, status: "idle" } as const;
   const unsubscribe = () => undefined;
   return {
+    changes: { subscribe: () => unsubscribe },
     filesystem: {
       listDirectory: async () => ({
         breadcrumbs: [],
@@ -352,6 +353,7 @@ function connectedSession() {
     finishSynchronization = resolve;
   });
   const session: LocalEnvironmentSession = {
+    changes: { subscribe: () => () => undefined },
     filesystem: {
       listDirectory: async () => ({
         breadcrumbs: [],

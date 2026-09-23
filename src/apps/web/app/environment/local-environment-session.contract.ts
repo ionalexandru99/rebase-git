@@ -8,21 +8,13 @@ import type {
   EnvironmentHttpRejected,
   EnvironmentRequestClient,
 } from "@rebase/environment-client";
-import type { Effect, Scope } from "effect";
+import type { Effect, ManagedRuntime, Scope } from "effect";
 import type { EnvironmentProtocolConnection } from "#web/app/environment/connection/environment-protocol-connection.contract";
-import type {
-  EnvironmentFilesystemController,
-  EnvironmentFilesystemGateway,
-} from "#web/features/environment-filesystem/environment-filesystem-controller.contract";
-import type {
-  RepositoryCatalogController,
-  RepositoryCatalogGateway,
-} from "#web/features/repository-catalog/repository-catalog-controller.contract";
+import type { EnvironmentFilesystemController } from "#web/features/environment-filesystem/environment-filesystem-controller.contract";
+import type { RepositoryCatalogController } from "#web/features/repository-catalog/repository-catalog-controller.contract";
 import type { RepositoryHistoryGateway } from "#web/features/repository-history/repository-history-reader.contract";
-import type {
-  RepositoryRefsController,
-  RepositoryRefsGateway,
-} from "#web/features/repository-refs/repository-refs-controller.contract";
+import type { RepositoryRefsController } from "#web/features/repository-refs/repository-refs-controller.contract";
+import type { EnvironmentChanges } from "#web/platform/environment/environment-protocol.contract";
 
 export type LocalEnvironmentSessionState =
   | { readonly _tag: "PairingRequired" }
@@ -47,13 +39,24 @@ export type LocalEnvironmentSessionState =
       readonly message: string;
     };
 
-export interface LocalEnvironmentSession {
-  readonly requests?: EnvironmentRequestClient;
+export interface ConnectedFeature {
+  readonly connect: (
+    connection: EnvironmentProtocolConnection,
+  ) => Effect.Effect<void, never, Scope.Scope>;
+  readonly invalidate?: (repositoryIds?: readonly string[]) => void;
+}
+
+export interface LocalEnvironmentControllers {
   readonly filesystem: EnvironmentFilesystemController;
-  readonly getSnapshot: () => LocalEnvironmentSessionState;
   readonly repositoryCatalog: RepositoryCatalogController;
   readonly repositoryHistory: RepositoryHistoryGateway;
   readonly repositoryRefs: RepositoryRefsController;
+}
+
+export interface LocalEnvironmentSession extends LocalEnvironmentControllers {
+  readonly changes: EnvironmentChanges;
+  readonly requests?: EnvironmentRequestClient;
+  readonly getSnapshot: () => LocalEnvironmentSessionState;
   readonly start: () => void;
   readonly stop: () => void;
   readonly subscribe: (listener: () => void) => () => void;
@@ -75,10 +78,10 @@ export interface LocalEnvironmentGateway {
 }
 
 export interface LocalEnvironmentSessionOptions {
-  readonly requests?: EnvironmentRequestClient;
-  readonly filesystemGateway: EnvironmentFilesystemGateway;
+  readonly controllers: LocalEnvironmentControllers;
+  readonly features: readonly ConnectedFeature[];
   readonly gateway: LocalEnvironmentGateway;
-  readonly repositoryCatalogGateway: RepositoryCatalogGateway;
-  readonly repositoryRefsGateway: RepositoryRefsGateway;
+  readonly requests?: EnvironmentRequestClient;
+  readonly runtime: ManagedRuntime.ManagedRuntime<never, never>;
   readonly waitBeforeReconnect?: (attempt: number) => Effect.Effect<void>;
 }

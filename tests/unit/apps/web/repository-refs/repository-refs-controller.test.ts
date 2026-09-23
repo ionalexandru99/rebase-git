@@ -6,7 +6,6 @@ import { createRepositoryRefsController } from "#web/features/repository-refs/re
 import {
   RepositoryRefsBusy,
   type RepositoryRefsGateway,
-  RepositoryRefsUnavailable,
 } from "#web/features/repository-refs/repository-refs-controller.contract";
 
 const alphaId = "00000000-0000-4000-8000-000000000001";
@@ -15,25 +14,24 @@ const bravoId = "00000000-0000-4000-8000-000000000002";
 describe("repository refs controller", () => {
   it("does not overwrite a completed checkout with a read started before the mutation", async () => {
     const gateway = createGateway({ [alphaId]: refs(alphaId) });
-    const session = createRepositoryRefsController(gateway);
-    session.authorize({ type: "bearer", value: "private-credential" });
-    session.controller.select(alphaId);
-    await whenReady(session.controller);
+    const controller = createRepositoryRefsController(gateway);
+    controller.select(alphaId);
+    await whenReady(controller);
     const beforeCheckout = Deferred.makeUnsafe<RepositoryRefs>();
     const afterCheckout = Deferred.makeUnsafe<RepositoryRefs>();
     gateway.read.mockReturnValueOnce(Deferred.await(beforeCheckout));
     gateway.read.mockReturnValueOnce(Deferred.await(afterCheckout));
-    const refresh = session.controller.refresh();
-    await session.controller.checkout("/repo", {
+    const refresh = controller.refresh();
+    await controller.checkout("/repo", {
       _tag: "LocalBranch",
       name: "feature",
     });
-    const checkedOutRefs = session.controller.getSnapshot().refs;
+    const checkedOutRefs = controller.getSnapshot().refs;
     expect(checkedOutRefs?.worktrees[0]?.head.branch).toBe("feature");
 
     Deferred.doneUnsafe(beforeCheckout, Effect.succeed(refs(alphaId)));
     await refresh;
-    expect(session.controller.getSnapshot().refs).toEqual(checkedOutRefs);
+    expect(controller.getSnapshot().refs).toEqual(checkedOutRefs);
     expect(gateway.read).toHaveBeenCalledTimes(3);
     Deferred.doneUnsafe(
       afterCheckout,
@@ -46,10 +44,9 @@ describe("repository refs controller", () => {
       [alphaId]: refs(alphaId),
       [bravoId]: refs(bravoId),
     });
-    const session = createRepositoryRefsController(gateway);
-    session.authorize({ type: "bearer", value: "private-credential" });
-    session.controller.select(alphaId);
-    await whenReady(session.controller);
+    const controller = createRepositoryRefsController(gateway);
+    controller.select(alphaId);
+    await whenReady(controller);
     gateway.read.mockReturnValueOnce(
       Effect.fail(
         new RepositoryRefsRejected({
@@ -58,20 +55,17 @@ describe("repository refs controller", () => {
         }),
       ),
     );
-    session.controller.invalidate([alphaId]);
+    controller.invalidate([alphaId]);
     await vi.waitFor(() =>
-      expect(session.controller.getSnapshot().status).toBe("error"),
+      expect(controller.getSnapshot().status).toBe("error"),
     );
     expect(gateway.read).toHaveBeenCalledTimes(2);
 
-    session.controller.select(bravoId);
-    await whenReady(session.controller);
-    session.controller.select(alphaId);
+    controller.select(bravoId);
+    await whenReady(controller);
+    controller.select(alphaId);
     await vi.waitFor(() => expect(gateway.read).toHaveBeenCalledTimes(4));
-    expect(gateway.read).toHaveBeenLastCalledWith(
-      { type: "bearer", value: "private-credential" },
-      alphaId,
-    );
+    expect(gateway.read).toHaveBeenLastCalledWith(alphaId);
   });
 
   it("keeps a background read stale when its repository changes before the response arrives", async () => {
@@ -81,21 +75,17 @@ describe("repository refs controller", () => {
       [bravoId]: refs(bravoId),
     });
     gateway.read.mockImplementationOnce(() => Deferred.await(pending));
-    const session = createRepositoryRefsController(gateway);
-    session.authorize({ type: "bearer", value: "private-credential" });
-    session.controller.select(alphaId);
-    session.controller.select(bravoId);
-    await whenReady(session.controller);
-    session.controller.invalidate([alphaId]);
+    const controller = createRepositoryRefsController(gateway);
+    controller.select(alphaId);
+    controller.select(bravoId);
+    await whenReady(controller);
+    controller.invalidate([alphaId]);
     Deferred.doneUnsafe(pending, Effect.succeed(refs(alphaId)));
     await new Promise((resolve) => setTimeout(resolve, 0));
 
-    session.controller.select(alphaId);
+    controller.select(alphaId);
     await vi.waitFor(() => expect(gateway.read).toHaveBeenCalledTimes(3));
-    expect(gateway.read).toHaveBeenLastCalledWith(
-      { type: "bearer", value: "private-credential" },
-      alphaId,
-    );
+    expect(gateway.read).toHaveBeenLastCalledWith(alphaId);
   });
 
   it("invalidates a background repository without reloading the selected repository", async () => {
@@ -103,43 +93,35 @@ describe("repository refs controller", () => {
       [alphaId]: refs(alphaId),
       [bravoId]: refs(bravoId),
     });
-    const session = createRepositoryRefsController(gateway);
-    session.authorize({ type: "bearer", value: "private-credential" });
-    session.controller.select(alphaId);
-    await whenReady(session.controller);
-    session.controller.select(bravoId);
-    await whenReady(session.controller);
+    const controller = createRepositoryRefsController(gateway);
+    controller.select(alphaId);
+    await whenReady(controller);
+    controller.select(bravoId);
+    await whenReady(controller);
 
-    session.controller.invalidate([alphaId]);
+    controller.invalidate([alphaId]);
     await Promise.resolve();
 
     expect(gateway.read).toHaveBeenCalledTimes(2);
-    session.controller.select(alphaId);
+    controller.select(alphaId);
     await vi.waitFor(() => expect(gateway.read).toHaveBeenCalledTimes(3));
-    expect(gateway.read).toHaveBeenLastCalledWith(
-      { type: "bearer", value: "private-credential" },
-      alphaId,
-    );
+    expect(gateway.read).toHaveBeenLastCalledWith(alphaId);
   });
 
   it("loads refs for the selected repository with its private credential", async () => {
     const gateway = createGateway({ [alphaId]: refs(alphaId) });
-    const session = createRepositoryRefsController(gateway);
-    session.authorize({ type: "bearer", value: "private-credential" });
+    const controller = createRepositoryRefsController(gateway);
 
-    session.controller.select(alphaId);
-    expect(session.controller.getSnapshot()).toEqual({
+    controller.select(alphaId);
+    expect(controller.getSnapshot()).toEqual({
       checkingOut: false,
       repositoryId: alphaId,
       status: "loading",
     });
-    await session.controller.refresh();
+    await controller.refresh();
 
-    expect(gateway.read).toHaveBeenCalledWith(
-      { type: "bearer", value: "private-credential" },
-      alphaId,
-    );
-    expect(session.controller.getSnapshot()).toEqual({
+    expect(gateway.read).toHaveBeenCalledWith(alphaId);
+    expect(controller.getSnapshot()).toEqual({
       checkingOut: false,
       refs: refs(alphaId),
       repositoryId: alphaId,
@@ -151,16 +133,15 @@ describe("repository refs controller", () => {
     const alphaRead = Deferred.makeUnsafe<RepositoryRefs>();
     const gateway = createGateway({ [bravoId]: refs(bravoId) });
     gateway.read.mockImplementationOnce(() => Deferred.await(alphaRead));
-    const session = createRepositoryRefsController(gateway);
-    session.authorize({ type: "bearer", value: "private-credential" });
+    const controller = createRepositoryRefsController(gateway);
 
-    session.controller.select(alphaId);
-    session.controller.select(bravoId);
-    await session.controller.refresh();
+    controller.select(alphaId);
+    controller.select(bravoId);
+    await controller.refresh();
     Deferred.doneUnsafe(alphaRead, Effect.succeed(refs(alphaId)));
     await Promise.resolve();
 
-    expect(session.controller.getSnapshot()).toMatchObject({
+    expect(controller.getSnapshot()).toMatchObject({
       refs: refs(bravoId),
       repositoryId: bravoId,
       status: "ready",
@@ -171,42 +152,37 @@ describe("repository refs controller", () => {
     const firstRead = Deferred.makeUnsafe<RepositoryRefs>();
     const gateway = createGateway({ [alphaId]: refs(alphaId) });
     gateway.read.mockImplementationOnce(() => Deferred.await(firstRead));
-    const session = createRepositoryRefsController(gateway);
-    session.authorize({ type: "bearer", value: "private-credential" });
-    session.controller.select(alphaId);
+    const controller = createRepositoryRefsController(gateway);
+    controller.select(alphaId);
 
-    session.controller.invalidate();
-    session.controller.invalidate();
+    controller.invalidate();
+    controller.invalidate();
     Deferred.doneUnsafe(firstRead, Effect.succeed(refs(alphaId)));
-    await whenReady(session.controller);
+    await whenReady(controller);
 
     expect(gateway.read).toHaveBeenCalledTimes(2);
   });
 
   it("applies a checkout to the cached refs without re-reading them", async () => {
     const gateway = createGateway({ [alphaId]: refs(alphaId) });
-    const session = createRepositoryRefsController(gateway);
-    session.authorize({ type: "bearer", value: "private-credential" });
-    session.controller.select(alphaId);
-    await whenReady(session.controller);
+    const controller = createRepositoryRefsController(gateway);
+    controller.select(alphaId);
+    await whenReady(controller);
 
     await expect(
-      session.controller.checkout("/repo", {
+      controller.checkout("/repo", {
         _tag: "LocalBranch",
         name: "feature",
       }),
     ).resolves.toEqual(checkedOut);
 
-    expect(gateway.checkout).toHaveBeenCalledWith(
-      { type: "bearer", value: "private-credential" },
-      {
-        repositoryId: alphaId,
-        target: { _tag: "LocalBranch", name: "feature" },
-        worktreePath: "/repo",
-      },
-    );
+    expect(gateway.checkout).toHaveBeenCalledWith({
+      repositoryId: alphaId,
+      target: { _tag: "LocalBranch", name: "feature" },
+      worktreePath: "/repo",
+    });
     expect(gateway.read).toHaveBeenCalledTimes(1);
-    expect(session.controller.getSnapshot()).toMatchObject({
+    expect(controller.getSnapshot()).toMatchObject({
       checkingOut: false,
       refs: {
         branches: [
@@ -224,12 +200,12 @@ describe("repository refs controller", () => {
     });
     gateway.checkout.mockReturnValueOnce(Effect.fail(rejected));
     await expect(
-      session.controller.checkout("/repo", {
+      controller.checkout("/repo", {
         _tag: "LocalBranch",
         name: "ghost",
       }),
     ).rejects.toBe(rejected);
-    expect(session.controller.getSnapshot()).toMatchObject({
+    expect(controller.getSnapshot()).toMatchObject({
       checkingOut: false,
       checkoutError: rejected,
       status: "ready",
@@ -241,25 +217,24 @@ describe("repository refs controller", () => {
       [alphaId]: refs(alphaId),
       [bravoId]: refs(bravoId),
     });
-    const session = createRepositoryRefsController(gateway);
-    session.authorize({ type: "bearer", value: "private-credential" });
-    session.controller.select(alphaId);
-    await whenReady(session.controller);
-    session.controller.select(bravoId);
-    await whenReady(session.controller);
+    const controller = createRepositoryRefsController(gateway);
+    controller.select(alphaId);
+    await whenReady(controller);
+    controller.select(bravoId);
+    await whenReady(controller);
 
-    session.controller.select(alphaId);
-    expect(session.controller.getSnapshot()).toMatchObject({
+    controller.select(alphaId);
+    expect(controller.getSnapshot()).toMatchObject({
       refs: refs(alphaId),
       status: "ready",
     });
     expect(gateway.read).toHaveBeenCalledTimes(2);
 
-    session.controller.invalidate();
+    controller.invalidate();
     await vi.waitFor(() => expect(gateway.read).toHaveBeenCalledTimes(3));
-    session.controller.select(bravoId);
+    controller.select(bravoId);
     await vi.waitFor(() => expect(gateway.read).toHaveBeenCalledTimes(4));
-    session.controller.select(alphaId);
+    controller.select(alphaId);
     await new Promise((resolve) => setTimeout(resolve, 10));
     expect(gateway.read).toHaveBeenCalledTimes(4);
   });
@@ -268,17 +243,16 @@ describe("repository refs controller", () => {
     const pending = Deferred.makeUnsafe<RepositoryCheckedOut>();
     const gateway = createGateway({ [alphaId]: refs(alphaId) });
     gateway.checkout.mockImplementationOnce(() => Deferred.await(pending));
-    const session = createRepositoryRefsController(gateway);
-    session.authorize({ type: "bearer", value: "private-credential" });
-    session.controller.select(alphaId);
-    await whenReady(session.controller);
+    const controller = createRepositoryRefsController(gateway);
+    controller.select(alphaId);
+    await whenReady(controller);
 
-    const first = session.controller.checkout("/repo", {
+    const first = controller.checkout("/repo", {
       _tag: "LocalBranch",
       name: "feature",
     });
     await expect(
-      session.controller.checkout("/repo", {
+      controller.checkout("/repo", {
         _tag: "LocalBranch",
         name: "main",
       }),
@@ -287,7 +261,7 @@ describe("repository refs controller", () => {
 
     await expect(first).resolves.toEqual(checkedOut);
     expect(gateway.checkout).toHaveBeenCalledTimes(1);
-    expect(session.controller.getSnapshot().checkingOut).toBe(false);
+    expect(controller.getSnapshot().checkingOut).toBe(false);
   });
 
   it("keeps a finishing checkout from touching another repository's snapshot", async () => {
@@ -297,19 +271,18 @@ describe("repository refs controller", () => {
       [bravoId]: refs(bravoId),
     });
     gateway.checkout.mockImplementationOnce(() => Deferred.await(pending));
-    const session = createRepositoryRefsController(gateway);
-    session.authorize({ type: "bearer", value: "private-credential" });
-    session.controller.select(alphaId);
-    await whenReady(session.controller);
+    const controller = createRepositoryRefsController(gateway);
+    controller.select(alphaId);
+    await whenReady(controller);
 
-    const first = session.controller.checkout("/repo", {
+    const first = controller.checkout("/repo", {
       _tag: "LocalBranch",
       name: "feature",
     });
-    session.controller.select(bravoId);
-    await whenReady(session.controller);
+    controller.select(bravoId);
+    await whenReady(controller);
     await expect(
-      session.controller.checkout("/repo", {
+      controller.checkout("/repo", {
         _tag: "LocalBranch",
         name: "main",
       }),
@@ -317,35 +290,16 @@ describe("repository refs controller", () => {
     Deferred.doneUnsafe(pending, Effect.succeed(checkedOut));
     await first;
 
-    expect(session.controller.getSnapshot()).toMatchObject({
+    expect(controller.getSnapshot()).toMatchObject({
       checkingOut: false,
       refs: refs(bravoId),
       repositoryId: bravoId,
     });
-    session.controller.select(alphaId);
-    expect(session.controller.getSnapshot().refs?.branches).toEqual([
+    controller.select(alphaId);
+    expect(controller.getSnapshot().refs?.branches).toEqual([
       { name: "main" },
       { name: "feature", worktreePath: "/repo" },
     ]);
-  });
-
-  it("reports unavailability before authorization without calling the gateway", async () => {
-    const gateway = createGateway({ [alphaId]: refs(alphaId) });
-    const session = createRepositoryRefsController(gateway);
-
-    session.controller.select(alphaId);
-    await session.controller.refresh();
-
-    expect(session.controller.getSnapshot()).toMatchObject({
-      error: expect.any(RepositoryRefsUnavailable),
-      status: "error",
-    });
-    expect(gateway.read).not.toHaveBeenCalled();
-
-    session.authorize({ type: "bearer", value: "private-credential" });
-    session.controller.invalidate();
-    await whenReady(session.controller);
-    expect(gateway.read).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -366,7 +320,7 @@ function createGateway(values: Record<string, RepositoryRefs> = {}) {
     checkout: vi.fn<RepositoryRefsGateway["checkout"]>(() =>
       Effect.succeed(checkedOut),
     ),
-    read: vi.fn<RepositoryRefsGateway["read"]>((_credential, repositoryId) => {
+    read: vi.fn<RepositoryRefsGateway["read"]>((repositoryId) => {
       const value = values[repositoryId];
       return value === undefined
         ? Effect.die(`No refs were provided for ${repositoryId}.`)
