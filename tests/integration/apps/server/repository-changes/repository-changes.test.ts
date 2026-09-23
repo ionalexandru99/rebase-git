@@ -365,6 +365,31 @@ describe("working changes through Git", { timeout: 30000 }, () => {
       Effect.runPromise(f.service.read({ ...f.scope, worktreePath: tmpdir() })),
     ).rejects.toMatchObject({ failure: { reason: "Missing" } });
   });
+  it("tracks index-only edits in the linked worktree's own index", async () => {
+    const f = await fixture();
+    const parent = await realpath(
+      await mkdtemp(join(tmpdir(), "rebase-changes-linked-")),
+    );
+    directories.push(parent);
+    const linked = join(parent, "linked");
+    await f.git("worktree", "add", "-b", "linked", linked);
+    const git = (...args: string[]) => exec("git", ["-C", linked, ...args]);
+    await writeFile(join(linked, "file.txt"), "staged\n");
+    await git("add", ".");
+    await writeFile(join(linked, "file.txt"), "working\n");
+    await writeFile(join(parent, "restaged.txt"), "restaged\n");
+    const blob = (
+      await git("hash-object", "-w", join(parent, "restaged.txt"))
+    ).stdout.trim();
+    const read = () =>
+      Effect.runPromise(f.service.read({ ...f.scope, worktreePath: linked }));
+    const before = await read();
+    await git("update-index", "--cacheinfo", `100644,${blob},file.txt`);
+    const after = await read();
+    expect(after.staged).toEqual(before.staged);
+    expect(after.unstaged).toEqual(before.unstaged);
+    expect(after.revision).not.toBe(before.revision);
+  });
   it("handles binary and literal pathspec filenames at whole-file level", async () => {
     const f = await fixture();
     const path =

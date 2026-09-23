@@ -1,3 +1,4 @@
+import { stat } from "node:fs/promises";
 import type {
   ChangedFile,
   ChangesScope,
@@ -8,6 +9,7 @@ import type { GitCommandRunner } from "#server/domain/git-command.contract";
 import { worktreeIdentities } from "#server/features/repository-changes/git/change-files";
 import {
   changeGit,
+  changeIo,
   changesError,
 } from "#server/features/repository-changes/git/change-git";
 import { fingerprint } from "#server/repository/comparison/index";
@@ -15,14 +17,7 @@ import { fingerprint } from "#server/repository/comparison/index";
 export function readChanges(git: GitCommandRunner, scope: ChangesScope) {
   return Effect.gen(function* () {
     const directory = scope.worktreePath;
-    const headOutput = yield* git
-      .run({ directory, arguments: ["rev-parse", "--verify", "HEAD"] })
-      .pipe(
-        Effect.mapError(() =>
-          changesError("GitFailed", "Could not read HEAD."),
-        ),
-      );
-    const head = headOutput.exitCode === 0 ? headOutput.stdout.trim() : null;
+    const { head, indexPath } = yield* readHeadAndIndexPath(git, directory);
     if (scope.amend && head === null)
       return yield* Effect.fail(
         changesError("Unsupported", "There is no commit to amend."),
@@ -45,7 +40,7 @@ export function readChanges(git: GitCommandRunner, scope: ChangesScope) {
           "-z",
           base,
         ]),
-        changeGit(git, directory, ["ls-files", "--stage", "-z"]),
+        indexIdentity(indexPath),
         head === null
           ? Effect.succeed("")
           : changeGit(git, directory, ["log", "-1", "--format=%B", head]),
@@ -81,6 +76,45 @@ export function readChanges(git: GitCommandRunner, scope: ChangesScope) {
       } satisfies RepositoryChanges,
       base,
     };
+  });
+}
+
+function readHeadAndIndexPath(git: GitCommandRunner, directory: string) {
+  return git
+    .run({
+      directory,
+      arguments: [
+        "rev-parse",
+        "--path-format=absolute",
+        "--git-path",
+        "index",
+        "--verify",
+        "HEAD",
+      ],
+    })
+    .pipe(
+      Effect.mapError(() => changesError("GitFailed", "Could not read HEAD.")),
+      Effect.flatMap((output) => {
+        const [indexPath, head] = output.stdout.split("\n");
+        return indexPath
+          ? Effect.succeed({
+              indexPath,
+              head: output.exitCode === 0 && head ? head.trim() : null,
+            })
+          : Effect.fail(changesError("GitFailed", output.stderr));
+      }),
+    );
+}
+
+function indexIdentity(indexPath: string) {
+  return changeIo(async () => {
+    const info = await stat(indexPath, { bigint: true }).catch((error) => {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
+      throw error;
+    });
+    return info === null
+      ? "missing"
+      : `${info.ino}:${info.size}:${info.mtimeNs}:${info.ctimeNs}`;
   });
 }
 
