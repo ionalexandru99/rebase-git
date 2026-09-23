@@ -365,13 +365,12 @@ describe("commit graph page window", () => {
       pages: [],
       loading: false,
       error: undefined,
-      pendingMove: undefined,
       hasOlder: false,
-      checkpointCount: 0,
       startOffset: 0,
       endOffset: 0,
     });
     expect(window.getSnapshot().epoch).toBeGreaterThan(epoch);
+    expect(window.diagnostics().checkpointCount).toBe(0);
     await window.retry();
     await window.appendOlder();
     expect(reader.read).toHaveBeenCalledTimes(3);
@@ -478,9 +477,9 @@ describe("commit graph page window", () => {
     for (let page = 1; page < 50; page += 1) {
       await window.appendOlder();
       expect(window.getSnapshot().pages.length).toBeLessThanOrEqual(2);
-      expect(window.getSnapshot().estimatedBytes).toBeLessThanOrEqual(6_000);
+      expect(window.diagnostics().estimatedBytes).toBeLessThanOrEqual(6_000);
     }
-    expect(window.getSnapshot().checkpointCount).toBeLessThan(30);
+    expect(window.diagnostics().checkpointCount).toBeLessThan(30);
     expect(window.getSnapshot().startOffset).toBeGreaterThan(0);
     await window.prefetchOffset(0);
     expect(window.getSnapshot().pages[0]?.rows).toEqual(firstPlans);
@@ -499,10 +498,8 @@ describe("commit graph page window", () => {
     const last = window.requestMove(6);
     await expect(first).resolves.toBeUndefined();
     await vi.waitFor(() => expect(reader.read).toHaveBeenCalledTimes(2));
-    expect(window.getSnapshot().pendingMove).toBe(6);
     pending.resolve(commits.slice(5, 10));
     await expect(last).resolves.toEqual({ oid: oid(6), offset: 6 });
-    expect(window.getSnapshot().pendingMove).toBeUndefined();
     expect(reader.read).toHaveBeenCalledTimes(2);
     window.dispose();
   });

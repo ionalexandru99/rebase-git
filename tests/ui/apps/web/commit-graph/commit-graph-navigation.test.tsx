@@ -19,6 +19,26 @@ import { saveRepositoryHistoryOrder } from "#web/features/repository-history/pre
 import { RepositoryHistoryUnavailable } from "#web/features/repository-history/repository-history-reader.contract";
 
 describe("commit graph navigation", () => {
+  it("selects a loaded row in the same task as the arrow key", async () => {
+    const reader = historyReader({ commits: history(20), status: "ready" });
+    const screen = await renderGraph(reader);
+    const grid = screen.getByRole("grid");
+    const target = grid.getByRole("row", { name: /^Commit 1,/ });
+    await expect.element(target).toBeVisible();
+
+    grid.element().focus();
+    grid.element().dispatchEvent(
+      new KeyboardEvent("keydown", {
+        key: "ArrowDown",
+        bubbles: true,
+        cancelable: true,
+      }),
+    );
+    await Promise.resolve();
+
+    expect(target.element().getAttribute("aria-selected")).toBe("true");
+  });
+
   it("keeps a search result in view when the preceding page arrives", async () => {
     const commits = history(360);
     const reader = historyReader({ commits, status: "ready" });

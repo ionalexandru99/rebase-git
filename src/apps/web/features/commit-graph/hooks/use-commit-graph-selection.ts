@@ -20,6 +20,7 @@ export function useCommitGraphSelection({
   viewEpoch = 0,
   requestMove,
   onSelectionIntent,
+  onActiveCommitChange,
 }: {
   readonly reader:
     | Pick<RepositoryHistoryReadModel, "read" | "locateMany">
@@ -35,6 +36,9 @@ export function useCommitGraphSelection({
   readonly oldestLoadedOffset?: number;
   readonly viewEpoch?: number;
   readonly onSelectionIntent?: () => void;
+  readonly onActiveCommitChange?:
+    | ((oid: string | undefined) => void)
+    | undefined;
   readonly requestMove?: (
     offset: number,
     mode: CommitGraphSelectionMode,
@@ -47,19 +51,24 @@ export function useCommitGraphSelection({
     loading,
     startOffset,
     viewEpoch,
+    onActiveCommitChange,
   });
   const { selection, selected, select } = model;
   const move = (index: number, mode: CommitGraphSelectionMode = "replace") => {
-    if (requestMove !== undefined) {
+    const target =
+      requestMove === undefined
+        ? Math.max(0, Math.min(oids.length - 1, index))
+        : Math.max(-startOffset, index);
+    const oid = oids[target];
+    if (oid === undefined) {
+      if (requestMove === undefined) return;
       model.cancelPending();
-      requestMove(Math.max(0, index + startOffset), mode);
+      requestMove(target + startOffset, mode);
       return;
     }
-    const bounded = Math.max(0, Math.min(oids.length - 1, index));
-    const oid = oids[bounded];
-    if (oid === undefined) return;
+    onSelectionIntent?.();
     select(oid, mode);
-    scrollToIndex(bounded);
+    scrollToIndex(target);
   };
   const onKeyDown = (event: KeyboardEvent<HTMLElement>) => {
     if (event.defaultPrevented || event.nativeEvent.isComposing) return;

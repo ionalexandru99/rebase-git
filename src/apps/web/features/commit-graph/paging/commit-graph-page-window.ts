@@ -41,9 +41,6 @@ export const emptyCommitGraphPageWindowSnapshot: CommitGraphPageWindowSnapshot =
     loading: false,
     error: undefined,
     anchorOid: undefined,
-    pendingMove: undefined,
-    estimatedBytes: 0,
-    checkpointCount: 0,
   };
 
 export function createCommitGraphPageWindow(
@@ -109,9 +106,6 @@ export function createCommitGraphPageWindow(
       endOffset: last === undefined ? 0 : last.offset + last.commits.length,
       knownEndOffset: view?.knownEndOffset ?? 0,
       hasOlder: view?.hasOlder ?? true,
-      estimatedBytes: view === undefined ? 0 : estimateGraphPageCache(view),
-      checkpointCount: view?.checkpoints.size ?? 0,
-      pendingMove: pendingMove?.offset,
       ...changes,
     });
   };
@@ -219,7 +213,6 @@ export function createCommitGraphPageWindow(
   };
 
   const cancelNavigation = () => {
-    const hadPendingMove = pendingMove !== undefined;
     navigationRequest += 1;
     pendingMove?.resolve(undefined);
     pendingMove = undefined;
@@ -233,7 +226,7 @@ export function createCommitGraphPageWindow(
       replacing = false;
       requestedQuery = view?.query ?? requestedQuery;
       publish({ loading: false });
-    } else if (hadPendingMove) publish();
+    }
   };
 
   const loadInitial = async (
@@ -350,19 +343,11 @@ export function createCommitGraphPageWindow(
 
   const requestMove = (offset: number) => {
     cancelNavigation();
-    if (disposed || replacing || !Number.isInteger(offset) || offset < 0) {
-      pendingMove = undefined;
-      publish();
+    if (disposed || replacing || !Number.isInteger(offset) || offset < 0)
       return Promise.resolve(undefined);
-    }
     return new Promise<{ oid: string; offset: number } | undefined>(
       (resolve) => {
-        const move = {
-          offset,
-          resolve,
-        };
-        pendingMove = move;
-        publish();
+        pendingMove = { offset, resolve };
         void finishPendingMove();
       },
     );
@@ -381,7 +366,6 @@ export function createCommitGraphPageWindow(
         const targetOffset = move.offset;
         const commit = page?.commits[targetOffset - pageOffset];
         pendingMove = undefined;
-        publish();
         move.resolve(
           commit === undefined
             ? undefined
@@ -505,6 +489,10 @@ export function createCommitGraphPageWindow(
       if (hasOlder) await prefetchOffset(endOffset);
     },
     prefetchOffset,
+    diagnostics: () => ({
+      estimatedBytes: view === undefined ? 0 : estimateGraphPageCache(view),
+      checkpointCount: view?.checkpoints.size ?? 0,
+    }),
     setViewport: (first, last) => {
       if (viewport !== undefined && first !== viewport.first)
         scrollingBackwards = first < viewport.first;

@@ -40,7 +40,9 @@ export interface CommitGraphPageWindowSnapshot {
     | { readonly offset: number; readonly message: string }
     | undefined;
   readonly anchorOid: string | undefined;
-  readonly pendingMove: number | undefined;
+}
+
+export interface CommitGraphPageWindowDiagnostics {
   readonly estimatedBytes: number;
   readonly checkpointCount: number;
 }
@@ -65,6 +67,7 @@ export interface CommitGraphPageWindow
   ) => Promise<void>;
   readonly appendOlder: () => Promise<void>;
   readonly prefetchOffset: (offset: number) => Promise<void>;
+  readonly diagnostics: () => CommitGraphPageWindowDiagnostics;
   readonly setViewport: (firstOffset: number, lastOffset: number) => void;
   readonly requestMove: (
     offset: number,
