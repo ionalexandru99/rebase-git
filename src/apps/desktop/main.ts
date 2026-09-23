@@ -22,18 +22,12 @@ import {
   createTrustedIpcHandler,
   isTrustedRendererLocation,
 } from "#desktop/platform/renderer-trust/renderer-trust";
+import type { TrustedIpcHandler } from "#desktop/platform/renderer-trust/renderer-trust.contract";
 
 let desktopApplication: DesktopApplication | undefined;
 const desktopIconPath = fileURLToPath(
   new URL("./assets/icon.png", import.meta.url),
 );
-
-const host: DesktopApplicationHost = {
-  platform: process.platform,
-  hasOpenWindows: () => BrowserWindow.getAllWindows().length > 0,
-  openWindow,
-  quit: () => app.quit(),
-};
 
 app.on("activate", () => {
   void desktopApplication?.activate().catch(reportStartupFailure);
@@ -79,7 +73,7 @@ async function start() {
     trusted,
   );
   desktopApplication = await startDesktopApplication({
-    host,
+    host: createHost(trusted),
     renderer,
     startEnvironment: () =>
       startManagedEnvironmentServer((error) =>
@@ -93,7 +87,19 @@ function getAutoUpdater(): AppUpdater {
   return electronUpdater.autoUpdater;
 }
 
-async function openWindow(options: DesktopWindowOptions) {
+function createHost(trusted: TrustedIpcHandler): DesktopApplicationHost {
+  return {
+    platform: process.platform,
+    hasOpenWindows: () => BrowserWindow.getAllWindows().length > 0,
+    openWindow: (options) => openWindow(options, trusted),
+    quit: () => app.quit(),
+  };
+}
+
+async function openWindow(
+  options: DesktopWindowOptions,
+  trusted: TrustedIpcHandler,
+) {
   const window = new BrowserWindow({
     backgroundColor: "#000000",
     height: 800,
@@ -112,7 +118,7 @@ async function openWindow(options: DesktopWindowOptions) {
   });
 
   configureEnvironmentWebSocketOrigin(window, options.environmentOrigin);
-  registerEnvironmentCredentialIpc(window, options);
+  registerEnvironmentCredentialIpc(window, options, trusted);
   preventUntrustedNavigation(window, options.renderer);
   window.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
   window.once("ready-to-show", () => window.show());
@@ -132,8 +138,8 @@ async function openWindow(options: DesktopWindowOptions) {
 function registerEnvironmentCredentialIpc(
   window: BrowserWindow,
   options: DesktopWindowOptions,
+  trusted: TrustedIpcHandler,
 ) {
-  const trusted = createTrustedIpcHandler(options.renderer);
   window.webContents.ipc.handle(
     desktopApplicationIpc.getEnvironmentCredential,
     trusted(() => options.credential),
