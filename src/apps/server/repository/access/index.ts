@@ -3,6 +3,7 @@ export {
   repositoryCoordinationLayer,
 } from "#server/repository/access/coordination/repository-coordination";
 export { readGitCommonDirectory } from "#server/repository/access/git/read-git-common-directory";
+export { readGitEntryIdentity } from "#server/repository/access/git/read-git-entry-identity";
 export {
   canonicalizeWorktrees,
   readWorktrees,

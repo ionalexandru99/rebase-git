@@ -1,5 +1,4 @@
-import { lstat, realpath } from "node:fs/promises";
-import { join } from "node:path";
+import { realpath } from "node:fs/promises";
 import { Effect, Layer, Semaphore } from "effect";
 import {
   type GitCommandRunner,
@@ -11,6 +10,7 @@ import {
   type RepositoryCoordinationService,
 } from "#server/domain/repository-coordination.contract";
 import { readGitCommonDirectory } from "#server/repository/access/git/read-git-common-directory";
+import { readGitEntryIdentity } from "#server/repository/access/git/read-git-entry-identity";
 import { runRepositoryGit } from "#server/repository/access/run-repository-git";
 
 export function createRepositoryCoordination(
@@ -45,7 +45,7 @@ export function createRepositoryCoordination(
   >();
   const gitDirectories = (directory: string) =>
     Effect.gen(function* () {
-      const identity = yield* gitEntryIdentity(directory);
+      const identity = yield* readGitEntryIdentity(directory);
       const cached = directories.get(directory);
       if (identity !== undefined && cached?.identity === identity)
         return cached.paths;
@@ -74,18 +74,6 @@ export function createRepositoryCoordination(
 interface GitDirectories {
   readonly gitDirectory: string;
   readonly commonDirectory: string;
-}
-
-function gitEntryIdentity(directory: string) {
-  return Effect.promise(() =>
-    lstat(join(directory, ".git"), { bigint: true }).then(
-      (info) =>
-        info.isDirectory()
-          ? `${info.dev}:${info.ino}:${info.birthtimeNs}`
-          : `${info.dev}:${info.ino}:${info.ctimeNs}`,
-      () => undefined,
-    ),
-  );
 }
 
 function resolveGitDirectories(

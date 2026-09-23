@@ -6,7 +6,10 @@ import {
   historyFailed,
   type RepositoryHistoryError,
 } from "#server/features/repository-history/git/history-failures";
-import { runRepositoryGit } from "#server/repository/access/index";
+import {
+  readGitEntryIdentity,
+  runRepositoryGit,
+} from "#server/repository/access/index";
 
 export type ObjectFormatRead = Effect.Effect<
   GitObjectFormat,
@@ -14,17 +17,20 @@ export type ObjectFormatRead = Effect.Effect<
 >;
 
 export function createObjectFormatCache(git: GitCommandRunner) {
-  const formats = new Map<string, GitObjectFormat>();
+  const formats = new Map<
+    string,
+    { readonly identity: string; readonly format: GitObjectFormat }
+  >();
   return (repositoryPath: string): ObjectFormatRead =>
-    Effect.suspend(() => {
+    Effect.gen(function* () {
+      const identity = yield* readGitEntryIdentity(repositoryPath);
       const known = formats.get(repositoryPath);
-      return known === undefined
-        ? readObjectFormat(git, repositoryPath).pipe(
-            Effect.tap((format) =>
-              Effect.sync(() => formats.set(repositoryPath, format)),
-            ),
-          )
-        : Effect.succeed(known);
+      if (identity !== undefined && known?.identity === identity)
+        return known.format;
+      const format = yield* readObjectFormat(git, repositoryPath);
+      if (identity !== undefined)
+        formats.set(repositoryPath, { identity, format });
+      return format;
     });
 }
 
