@@ -111,7 +111,7 @@ function startEnvironmentConnection(
     );
     const closeController = new AbortController();
 
-    yield* runEnvironmentConnection(
+    return yield* runEnvironmentConnection(
       origin,
       discovery,
       hello,
@@ -137,9 +137,7 @@ function startEnvironmentConnection(
       ),
       Effect.interruptible,
       Effect.forkDetach,
-    );
-
-    return yield* Deferred.await(connected).pipe(
+      Effect.andThen(Deferred.await(connected)),
       Effect.onInterrupt(() => Effect.sync(() => closeController.abort())),
     );
   });
