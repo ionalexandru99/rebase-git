@@ -7,7 +7,6 @@ import type {
   RepositoryChanges,
 } from "@rebase/contracts/repository-changes/repository-changes.contract";
 import { Effect, Fiber, Semaphore } from "effect";
-import { createApplicationRuntime } from "#web/features/application-runtime/index";
 import {
   type CommitDraft,
   type DiffPreferences,
@@ -22,6 +21,7 @@ import {
   saveCommitDraft,
   saveDiffPreferences,
 } from "#web/persistence/working-changes/working-changes-store";
+import { createApplicationRuntime } from "#web/platform/effect/application-runtime";
 
 export interface WorkingChangesState {
   readonly changes: RepositoryChanges | null;

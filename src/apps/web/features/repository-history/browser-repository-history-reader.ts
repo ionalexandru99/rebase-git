@@ -1,5 +1,4 @@
 import type { RepositoryFetchSetting } from "@rebase/contracts";
-import { createEnvironmentRequestId } from "#web/features/environment-connection/websocket/environment-request-id";
 import { holdRepositoryHistoryReaderLease } from "#web/features/repository-history/reader/repository-history-reader-lease";
 import { maintainRepositoryHistoryReader } from "#web/features/repository-history/reader/repository-history-reader-lifecycle";
 import type {
@@ -23,6 +22,7 @@ import type {
   RepositoryHistoryWorkerRequest,
   RepositoryHistoryWorkerResponse,
 } from "#web/features/repository-history/worker/repository-history-worker.contract";
+import { createEnvironmentRequestId } from "#web/platform/environment/websocket/environment-request-id";
 
 let sharedWorker: SharedWorker | undefined;
 let persistenceRequested = false;

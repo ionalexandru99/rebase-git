@@ -4,10 +4,10 @@ import { existsSync, realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { currentEnvironmentProtocol } from "@rebase/contracts";
 import { Deferred, Effect } from "effect";
-import { openDefaultBrowser } from "#server/features/browser-client/default-browser";
-import type { EnvironmentServerOptions } from "#server/features/environment-server/server/environment-server.contract";
-import { resolveHostAddress } from "#server/features/environment-server/server/host-address";
-import { startEnvironmentServer } from "#server/features/environment-server/server/start-environment-server";
+import { openDefaultBrowser } from "#server/adapters/browser-client/default-browser";
+import type { EnvironmentServerOptions } from "#server/app/server/environment-server.contract";
+import { resolveHostAddress } from "#server/app/server/host-address";
+import { startEnvironmentServer } from "#server/app/server/start-environment-server";
 import { productVersion } from "#server/product-version";
 
 const usage =

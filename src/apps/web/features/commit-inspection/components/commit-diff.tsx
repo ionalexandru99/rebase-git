@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import type { CommitInspectionState } from "#web/features/commit-inspection/commit-inspection.contract";
 import type { CommitInspectionController } from "#web/features/commit-inspection/commit-inspection-controller";
-import { createChangeDiffModel } from "#web/features/file-diff/diff-model";
+import { createChangeDiffModel } from "#web/features/file-diff/api";
 import {
   DiffContent,
   DiffDisplayControls,

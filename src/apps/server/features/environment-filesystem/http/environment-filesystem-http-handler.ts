@@ -6,21 +6,21 @@ import {
   ListEnvironmentDirectory,
 } from "@rebase/contracts";
 import { Effect } from "effect";
+import {
+  readRequestCredential,
+  validateRequestOrigin,
+} from "#server/adapters/environment-transport/environment-request-authorization";
+import type { EnvironmentHttpRequestHandler } from "#server/adapters/environment-transport/http/environment-http-handler.contract";
+import {
+  decodeRequestBody,
+  requireMethod,
+} from "#server/adapters/environment-transport/http/environment-http-request-validation";
+import { writeJson } from "#server/adapters/environment-transport/http/environment-http-response";
 import type {
   EnvironmentFilesystem,
   EnvironmentFilesystemError,
 } from "#server/domain/environment-filesystem.contract";
 import type { EnvironmentAuthorization } from "#server/features/environment-authorization/environment-authorization.contract";
-import {
-  readRequestCredential,
-  validateRequestOrigin,
-} from "#server/features/environment-connection/environment-request-authorization";
-import type { EnvironmentHttpRequestHandler } from "#server/features/environment-connection/http/environment-http-handler.contract";
-import {
-  decodeRequestBody,
-  requireMethod,
-} from "#server/features/environment-connection/http/environment-http-request-validation";
-import { writeJson } from "#server/features/environment-connection/http/environment-http-response";
 
 export function createEnvironmentFilesystemHttpHandler(
   authorization: EnvironmentAuthorization,

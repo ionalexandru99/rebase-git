@@ -11,7 +11,7 @@ import {
   cacheRepositoryRefs,
   readCachedRepositoryRefs,
 } from "#web/features/repository-refs/browser-repository-refs-cache";
-import { RepositoryWorkspace } from "#web-ui/features/repository-workspace/repository-workspace";
+import { RepositoryWorkspace } from "#web-ui/app/workspace/repository-workspace";
 
 it("restores complete Automatic metadata and isolates real environment and repository identities", async () => {
   const environmentId = crypto.randomUUID();

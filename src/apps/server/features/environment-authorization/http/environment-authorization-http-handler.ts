@@ -10,20 +10,20 @@ import {
   RevokeEnvironmentAuthorization,
 } from "@rebase/contracts";
 import { Effect } from "effect";
-import type { EnvironmentAuthorization } from "#server/features/environment-authorization/environment-authorization.contract";
-import { respondToBrowserSessionRequest } from "#server/features/environment-authorization/http/environment-browser-session-handler";
 import {
   expectedRequestOrigin,
   readRequestCredential,
   validateRequestOrigin,
-} from "#server/features/environment-connection/environment-request-authorization";
-import type { EnvironmentHttpRequestHandler } from "#server/features/environment-connection/http/environment-http-handler.contract";
+} from "#server/adapters/environment-transport/environment-request-authorization";
+import type { EnvironmentHttpRequestHandler } from "#server/adapters/environment-transport/http/environment-http-handler.contract";
 import {
   decodeRequestBody,
   requireEmptyBody,
   requireMethod,
-} from "#server/features/environment-connection/http/environment-http-request-validation";
-import { writeJson } from "#server/features/environment-connection/http/environment-http-response";
+} from "#server/adapters/environment-transport/http/environment-http-request-validation";
+import { writeJson } from "#server/adapters/environment-transport/http/environment-http-response";
+import type { EnvironmentAuthorization } from "#server/features/environment-authorization/environment-authorization.contract";
+import { respondToBrowserSessionRequest } from "#server/features/environment-authorization/http/environment-browser-session-handler";
 
 export function createEnvironmentAuthorizationHttpHandler(
   authorization: EnvironmentAuthorization,

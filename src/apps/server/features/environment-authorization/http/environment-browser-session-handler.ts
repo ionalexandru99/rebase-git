@@ -5,17 +5,17 @@ import {
   ExchangeEnvironmentPairing,
 } from "@rebase/contracts";
 import { Effect } from "effect";
-import type { EnvironmentAuthorization } from "#server/features/environment-authorization/environment-authorization.contract";
-import { writeBrowserSessionCookie } from "#server/features/environment-authorization/http/environment-session-cookie";
 import {
   readRequestCredential,
   validateRequestOrigin,
-} from "#server/features/environment-connection/environment-request-authorization";
+} from "#server/adapters/environment-transport/environment-request-authorization";
 import {
   decodeRequestBody,
   requireEmptyBody,
-} from "#server/features/environment-connection/http/environment-http-request-validation";
-import { writeJson } from "#server/features/environment-connection/http/environment-http-response";
+} from "#server/adapters/environment-transport/http/environment-http-request-validation";
+import { writeJson } from "#server/adapters/environment-transport/http/environment-http-response";
+import type { EnvironmentAuthorization } from "#server/features/environment-authorization/environment-authorization.contract";
+import { writeBrowserSessionCookie } from "#server/features/environment-authorization/http/environment-session-cookie";
 
 export function respondToBrowserSessionRequest(
   request: IncomingMessage,

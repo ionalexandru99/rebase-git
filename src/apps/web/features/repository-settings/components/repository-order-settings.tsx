@@ -4,7 +4,7 @@ import {
   useRepositoryHistoryOrder,
 } from "#web/features/repository-history/index";
 import type { RepositorySettingsIdentity } from "#web/features/repository-settings/repository-settings.contract";
-import { SettingsRow } from "#web-ui/features/settings/components/settings-layout";
+import { SettingsRow } from "#web-ui/components/ui/settings-layout";
 
 export function RepositoryOrderSettings({
   identity,

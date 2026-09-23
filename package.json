@@ -46,7 +46,7 @@
     "build:desktop-package": "node packaging/build-desktop.ts",
     "build:package": "tsc -b src/contracts src/apps/server && node packaging/build.ts",
     "build:web": "pnpm --filter @rebase/web build:web",
-    "check": "biome check .",
+    "check": "biome check . && pnpm check:architecture",
     "db:generate": "drizzle-kit generate --config=drizzle.config.ts",
     "dev:electron": "pnpm build && concurrently --kill-others --success first --names web,desktop \"pnpm dev:web --host 127.0.0.1 --strictPort\" \"wait-on http://127.0.0.1:4173 && pnpm --filter @rebase/desktop start -- --renderer-url=http://127.0.0.1:4173\"",
     "dev:server": "node --conditions=rebase-source src/apps/server/cli.ts serve",
@@ -74,7 +74,8 @@
     "validate:integration": "pnpm build:desktop-package && pnpm test:integration:prepared",
     "validate:quality": "pnpm check && pnpm typecheck && pnpm test:unit && pnpm build",
     "validate:release": "pnpm exec install-electron && pnpm build:desktop-package && pnpm package:desktop && pnpm test:release-smoke:built",
-    "prepack": "pnpm build:package"
+    "prepack": "pnpm build:package",
+    "check:architecture": "vp lint --tsconfig tests/tsconfig.json src"
   },
   "dependencies": {
     "drizzle-orm": "1.0.0-rc.5-169397b",

@@ -1,5 +1,4 @@
 import { decodeRepositoryHistoryBatch } from "@rebase/contracts";
-import { createEnvironmentRequestId } from "#web/features/environment-connection/websocket/environment-request-id";
 import { queueHistoryStorageWrite as queueStorageWrite } from "#web/features/repository-history/cache/repository-history-storage-maintenance";
 import { prepareRepositoryHistoryOrder } from "#web/features/repository-history/query/repository-history-query";
 import {
@@ -24,6 +23,7 @@ import {
   beginSynchronization,
   settleSynchronization,
 } from "#web/features/repository-history/worker/synchronization-state";
+import { createEnvironmentRequestId } from "#web/platform/environment/websocket/environment-request-id";
 
 export async function acceptHistoryBatch(
   reader: ConnectedReader,

@@ -9,15 +9,15 @@ import {
 import {
   connectEnvironmentEffect,
   fetchEnvironmentDiscovery,
-} from "@rebase/web/features/environment-connection";
+} from "@rebase/web/environment-connection";
 import { Deferred, Effect, Fiber } from "effect";
 import { describe, expect, it } from "vite-plus/test";
+import { createEnvironmentEventPublisher } from "#server/adapters/environment-transport/events/environment-event-publisher";
+import { acquireEnvironmentListener } from "#server/app/server/environment-listener";
 import type { RepositoryHistoryService } from "#server/domain/repository-history.contract";
 import type { EnvironmentAuthorization } from "#server/features/environment-authorization/environment-authorization.contract";
 import { createEnvironmentAuthorizationHttpHandler } from "#server/features/environment-authorization/index";
-import { createEnvironmentEventPublisher } from "#server/features/environment-connection/events/environment-event-publisher";
-import { acquireEnvironmentListener } from "#server/features/environment-server/server/environment-listener";
-import type { EnvironmentProtocolConnection } from "#web/features/environment-connection/environment-protocol-connection.contract";
+import type { EnvironmentProtocolConnection } from "#web/app/environment/connection/environment-protocol-connection.contract";
 
 const repositoryId = "00000000-0000-4000-8000-000000000001";
 const oid = "a".repeat(40);

@@ -6,7 +6,7 @@ import { promisify } from "node:util";
 import {
   connectCurrentEnvironmentEffect,
   exchangeEnvironmentPairing,
-} from "@rebase/web/features/environment-connection";
+} from "@rebase/web/environment-connection";
 import { rememberEnvironmentRepositoryEffect } from "@rebase/web/features/repository-catalog";
 import {
   checkoutRepositoryRefEffect,
@@ -14,12 +14,12 @@ import {
 } from "@rebase/web/features/repository-refs";
 import { Effect } from "effect";
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
+import { createEnvironmentEventPublisher } from "#server/adapters/environment-transport/events/environment-event-publisher";
 import { createLocalGitCommandRunner } from "#server/adapters/local-git/local-git-command-runner";
 import { createLocalRepositoryWatcher } from "#server/adapters/local-git/local-repository-watcher";
+import { acquireEnvironmentListener } from "#server/app/server/environment-listener";
 import { createEnvironmentAuthorization } from "#server/features/environment-authorization/environment-authorization";
 import { createEnvironmentAuthorizationHttpHandler } from "#server/features/environment-authorization/index";
-import { createEnvironmentEventPublisher } from "#server/features/environment-connection/events/environment-event-publisher";
-import { acquireEnvironmentListener } from "#server/features/environment-server/server/environment-listener";
 import {
   createRepositoryCatalog,
   createRepositoryCatalogHttpHandler,
@@ -32,7 +32,7 @@ import {
 import { acquireRepositoryChangePublisher } from "#server/features/repository-refs/repository-change-publisher";
 import { acquireEnvironmentContext } from "#server/persistence/environment-context";
 import { environmentPaths } from "#server/persistence/storage/environment-paths";
-import { createBrowserLocalEnvironmentSession } from "#web/features/local-environment-session/browser-local-environment-session";
+import { createBrowserLocalEnvironmentSession } from "#web/app/environment/browser-local-environment-session";
 
 const execFilePromise = promisify(execFile);
 const directories = new Set<string>();

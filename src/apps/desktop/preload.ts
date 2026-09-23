@@ -5,8 +5,8 @@ import type {
   ReleaseChannel,
 } from "@rebase/contracts";
 import { contextBridge, ipcRenderer } from "electron";
+import { desktopApplicationIpc } from "#desktop/app/desktop-application-ipc.contract";
 import { applicationUpdaterIpc } from "#desktop/features/application-updates/application-updater-ipc.contract";
-import { desktopApplicationIpc } from "#desktop/features/desktop-application/desktop-application-ipc.contract";
 import { repositoryFilesystemIpc } from "#desktop/features/repository-filesystem/repository-filesystem-ipc.contract";
 
 const host = Object.freeze({

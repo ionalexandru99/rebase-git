@@ -2,9 +2,9 @@ import type { RepositoryCommit } from "@rebase/contracts";
 import { describe, expect, it, vi } from "vitest";
 import { clearHistoryCache } from "#web/features/repository-history/cache/repository-history-storage";
 import type { HistoryOrderCache } from "#web/features/repository-history/query/history-order.contract";
+import { historyOrderScopeKey } from "#web/features/repository-history/query/history-query-scope";
 import { readCurrentRepositoryHistory } from "#web/features/repository-history/query/read-current-repository-history";
 import {
-  historyOrderScopeKey,
   locateRepositoryHistoryCommits,
   prepareRepositoryHistoryOrder,
   readRepositoryHistory,

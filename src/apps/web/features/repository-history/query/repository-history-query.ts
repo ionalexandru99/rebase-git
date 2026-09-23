@@ -5,6 +5,10 @@ import type {
   HistoryOrderNode,
 } from "#web/features/repository-history/query/history-order.contract";
 import { selectHistoryPage } from "#web/features/repository-history/query/history-page-selection";
+import {
+  historyOrderScopeKey,
+  normalizedOids,
+} from "#web/features/repository-history/query/history-query-scope";
 import { readStoredRepositoryHistoryState } from "#web/features/repository-history/replica/repository-history-store";
 import type {
   RepositoryHistoryPosition,
@@ -460,30 +464,6 @@ async function buildRepositoryHistoryOrder(
   );
   if (revision === cache.revision)
     cache.index = new HistoryOrderIndex(topology);
-}
-
-export function normalizedOids(oids: readonly string[]) {
-  return [...new Set(oids)].sort();
-}
-
-export function historyOrderScopeKey(
-  query: Pick<
-    RepositoryHistoryQuery,
-    "order" | "roots" | "ancestry" | "additionalParentEdges"
-  >,
-) {
-  return JSON.stringify([
-    query.order,
-    query.ancestry ?? "all",
-    (query.additionalParentEdges ?? [])
-      .map(({ childOid, parentOid }) => `${childOid}\0${parentOid}`)
-      .toSorted(),
-    query.roots
-      .map(({ name, type, oid }) =>
-        type === "head" ? [name, type, oid] : [name, type],
-      )
-      .sort(),
-  ]);
 }
 
 function hasMissingSelectedParents(

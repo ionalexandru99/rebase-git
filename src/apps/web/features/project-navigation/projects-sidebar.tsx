@@ -9,8 +9,8 @@ import {
   IconX,
 } from "@tabler/icons-react";
 import { type JSX, useState } from "react";
-import type { EnvironmentSessionPresentation } from "#web/features/application-shell/environment-session-presentation";
 import type {
+  EnvironmentNavigationStatus,
   ProjectNavigationRepository,
   ProjectNavigationState,
 } from "#web/features/project-navigation/project-navigation.contract";
@@ -41,7 +41,7 @@ export function ProjectsSidebar({
     repository: ProjectNavigationRepository,
   ) => void;
   readonly collapse: () => void;
-  readonly environmentStatus: EnvironmentSessionPresentation;
+  readonly environmentStatus: EnvironmentNavigationStatus;
   readonly expand: () => void;
   readonly navigation: ProjectNavigationState;
   readonly openProject: () => void;
@@ -111,7 +111,7 @@ function ExpandedProjectsSidebar({
     repository: ProjectNavigationRepository,
   ) => void;
   readonly collapse: () => void;
-  readonly environmentStatus: EnvironmentSessionPresentation;
+  readonly environmentStatus: EnvironmentNavigationStatus;
   readonly filterQuery: string;
   readonly navigation: ProjectNavigationState;
   readonly openProject: () => void;
@@ -286,7 +286,7 @@ function CollapsedProjectsSidebar({
   selectRepository,
   toggleEnvironment,
 }: {
-  readonly environmentStatus: EnvironmentSessionPresentation;
+  readonly environmentStatus: EnvironmentNavigationStatus;
   readonly expand: () => void;
   readonly filterQuery: string;
   readonly navigation: ProjectNavigationState;

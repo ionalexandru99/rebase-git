@@ -5,15 +5,15 @@ import { join } from "node:path";
 import { promisify } from "node:util";
 import { Effect } from "effect";
 import { expect, it } from "vite-plus/test";
+import { createEnvironmentEventPublisher } from "#server/adapters/environment-transport/events/environment-event-publisher";
 import { createLocalGitCommandRunner } from "#server/adapters/local-git/local-git-command-runner";
+import { acquireEnvironmentListener } from "#server/app/server/environment-listener";
 import {
   createCommitInspectionHttpHandler,
   createCommitInspectionService,
 } from "#server/features/commit-inspection/index";
 import { createEnvironmentAuthorization } from "#server/features/environment-authorization/environment-authorization";
 import { createEnvironmentAuthorizationHttpHandler } from "#server/features/environment-authorization/index";
-import { createEnvironmentEventPublisher } from "#server/features/environment-connection/events/environment-event-publisher";
-import { acquireEnvironmentListener } from "#server/features/environment-server/server/environment-listener";
 import { createRepositoryAccess } from "#server/features/repository-access/index";
 import { createRepositoryCatalog } from "#server/features/repository-catalog/repository-catalog";
 import {

@@ -3,7 +3,7 @@ import { mkdir, mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
-import { exchangeEnvironmentPairing } from "@rebase/web/features/environment-connection";
+import { exchangeEnvironmentPairing } from "@rebase/web/environment-connection";
 import {
   EnvironmentFilesystemRejected,
   listEnvironmentDirectoryEffect,
@@ -17,15 +17,15 @@ import {
 } from "@rebase/web/features/repository-catalog";
 import { Effect } from "effect";
 import { afterEach, describe, expect, it } from "vite-plus/test";
+import { createEnvironmentEventPublisher } from "#server/adapters/environment-transport/events/environment-event-publisher";
 import { createLocalGitCommandRunner } from "#server/adapters/local-git/local-git-command-runner";
+import { acquireEnvironmentListener } from "#server/app/server/environment-listener";
 import { createEnvironmentAuthorization } from "#server/features/environment-authorization/environment-authorization";
 import { createEnvironmentAuthorizationHttpHandler } from "#server/features/environment-authorization/index";
-import { createEnvironmentEventPublisher } from "#server/features/environment-connection/events/environment-event-publisher";
 import {
   createEnvironmentFilesystem,
   createEnvironmentFilesystemHttpHandler,
 } from "#server/features/environment-filesystem/index";
-import { acquireEnvironmentListener } from "#server/features/environment-server/server/environment-listener";
 import {
   createRepositoryCatalog,
   createRepositoryCatalogHttpHandler,
