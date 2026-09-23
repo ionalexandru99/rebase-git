@@ -8,7 +8,7 @@ import {
 import type { RepositoryGitError } from "#server/domain/repository-git.contract";
 import type { RepositoryHistoryError } from "#server/features/repository-history/git/history-failures";
 import { historySnapshotIdentity } from "#server/features/repository-history/git/history-snapshot-identity";
-import { readObjectFormat } from "#server/features/repository-history/git/read-object-format";
+import type { ObjectFormatRead } from "#server/features/repository-history/git/read-object-format";
 import { readShallowHistoryOids } from "#server/features/repository-history/git/shallow-repository-history";
 import { runRepositoryGit } from "#server/repository/access/index";
 
@@ -26,6 +26,7 @@ const refFormat = [
 export function readRepositoryHistorySnapshot(
   git: GitCommandRunner,
   repositoryPath: string,
+  readObjectFormat: ObjectFormatRead,
 ): Effect.Effect<
   RepositoryHistorySnapshot,
   RepositoryHistoryError | RepositoryGitError
@@ -34,7 +35,7 @@ export function readRepositoryHistorySnapshot(
     const [objectFormat, refsOutput, stashTipOutput, worktreesOutput] =
       yield* Effect.all(
         [
-          readObjectFormat(git, repositoryPath),
+          readObjectFormat,
           runRepositoryGit(
             git,
             repositoryPath,

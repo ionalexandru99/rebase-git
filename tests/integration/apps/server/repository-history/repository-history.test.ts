@@ -33,6 +33,7 @@ import {
 import { environmentAuthorizationFeature } from "#server/features/environment-authorization/index";
 import { createRepositoryCatalog } from "#server/features/repository-catalog/repository-catalog";
 import { RepositoryHistoryError } from "#server/features/repository-history/git/history-failures";
+import { readObjectFormat } from "#server/features/repository-history/git/read-object-format";
 import { readRepositoryHistorySnapshot } from "#server/features/repository-history/git/read-repository-history-snapshot";
 import { synchronizeRepositoryHistory } from "#server/features/repository-history/git/synchronize-repository-history";
 import {
@@ -83,6 +84,7 @@ describe("repository history", { timeout: 30_000 }, () => {
           Effect.sync(() => {
             commits.push(...batch.commits);
           }),
+        readObjectFormat(createLocalGitCommandRunner(), bare),
       ),
     );
 
@@ -118,6 +120,7 @@ describe("repository history", { timeout: 30_000 }, () => {
             requestId,
           },
           () => Effect.fail(failure),
+          readObjectFormat(createLocalGitCommandRunner(), repositoryPath),
         ),
       ),
     ).rejects.toBe(failure);
@@ -283,6 +286,7 @@ describe("repository history", { timeout: 30_000 }, () => {
             Effect.sync(() => {
               synchronized.push(...batch.commits);
             }),
+          readObjectFormat(createLocalGitCommandRunner(), repositoryPath),
         ),
       );
       expect(synchronized).toHaveLength(2);
@@ -321,6 +325,7 @@ describe("repository history", { timeout: 30_000 }, () => {
               );
             }
           }),
+        readObjectFormat(createLocalGitCommandRunner(), repositoryPath),
       ),
     );
 
@@ -369,6 +374,7 @@ describe("repository history", { timeout: 30_000 }, () => {
               ? Effect.fail(interrupted)
               : Effect.void;
           },
+          readObjectFormat(createLocalGitCommandRunner(), repositoryPath),
         ),
       ),
     ).rejects.toBe(interrupted);
@@ -401,6 +407,7 @@ describe("repository history", { timeout: 30_000 }, () => {
           Effect.sync(() => {
             resumed.push(batch);
           }),
+        readObjectFormat(createLocalGitCommandRunner(), repositoryPath),
       ),
     );
 
@@ -473,7 +480,11 @@ describe("repository history", { timeout: 30_000 }, () => {
     const path = join(root, "legacy-traversal");
     await createRepository(path, "sha1", 3);
     const snapshot = await Effect.runPromise(
-      readRepositoryHistorySnapshot(createLocalGitCommandRunner(), path),
+      readRepositoryHistorySnapshot(
+        createLocalGitCommandRunner(),
+        path,
+        readObjectFormat(createLocalGitCommandRunner(), path),
+      ),
     );
     const emitted: RepositoryHistoryBatch[] = [];
     await expect(
@@ -575,6 +586,7 @@ describe("repository history", { timeout: 30_000 }, () => {
             requestId,
           },
           () => Effect.void,
+          readObjectFormat(createLocalGitCommandRunner(), repositoryPath),
         ),
       ),
     );
@@ -593,6 +605,7 @@ describe("repository history", { timeout: 30_000 }, () => {
       readRepositoryHistorySnapshot(
         createLocalGitCommandRunner(),
         repositoryPath,
+        readObjectFormat(createLocalGitCommandRunner(), repositoryPath),
       ),
     );
     const emitted: RepositoryHistoryBatch[] = [];
@@ -621,6 +634,7 @@ describe("repository history", { timeout: 30_000 }, () => {
             Effect.sync(() => {
               emitted.push(batch);
             }),
+          readObjectFormat(createLocalGitCommandRunner(), repositoryPath),
         ),
       ),
     );
@@ -655,6 +669,7 @@ async function runSynchronization(
         Effect.sync(() => {
           batches.push(batch);
         }),
+      readObjectFormat(createLocalGitCommandRunner(), repositoryPath),
     ),
   );
 }

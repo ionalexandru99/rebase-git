@@ -8,6 +8,7 @@ import type { ReadRepositoryHistory } from "@rebase/contracts";
 import { Effect } from "effect";
 import { afterEach, describe, expect, it } from "vite-plus/test";
 import { createLocalGitCommandRunner } from "#server/adapters/local-git/local-git-command-runner";
+import { readObjectFormat } from "#server/features/repository-history/git/read-object-format";
 import { readRepositoryHistory } from "#server/features/repository-history/git/read-repository-history";
 
 const execute = promisify(execFile);
@@ -146,22 +147,27 @@ describe("foreground history selection", () => {
 
 async function read(path: string, query: Partial<ReadRepositoryHistory>) {
   return Effect.runPromise(
-    readRepositoryHistory(createLocalGitCommandRunner(), path, {
-      _tag: "ReadRepositoryHistory",
-      ancestry: "first-parent",
-      limit: 100,
-      order: "topological",
-      repositoryId: "00000000-0000-4000-8000-000000000001",
-      requestId: "00000000-0000-4000-8000-000000000011",
-      roots: [
-        {
-          name: "main",
-          type: "branch",
-          oid: await git(path, "rev-parse", "main"),
-        },
-      ],
-      ...query,
-    }),
+    readRepositoryHistory(
+      createLocalGitCommandRunner(),
+      path,
+      {
+        _tag: "ReadRepositoryHistory",
+        ancestry: "first-parent",
+        limit: 100,
+        order: "topological",
+        repositoryId: "00000000-0000-4000-8000-000000000001",
+        requestId: "00000000-0000-4000-8000-000000000011",
+        roots: [
+          {
+            name: "main",
+            type: "branch",
+            oid: await git(path, "rev-parse", "main"),
+          },
+        ],
+        ...query,
+      },
+      readObjectFormat(createLocalGitCommandRunner(), path),
+    ),
   );
 }
 
