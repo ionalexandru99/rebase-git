@@ -9,11 +9,13 @@ import {
   reduceWorkspacePanel,
 } from "#web/features/workspace-panel/workspace-panel-state";
 
+const panelStoragePrefix = "rebase:workspace-panel:v1:";
+
 export function createWorkspacePanelStore(
   scopeKey: string,
   previousScopeKey?: string,
 ): WorkspacePanelStore {
-  const key = `rebase:workspace-panel:v1:${scopeKey}`;
+  const key = `${panelStoragePrefix}${scopeKey}`;
   let state = readPanelState(key, previousScopeKey);
   const listeners = new Set<() => void>();
   return {
@@ -47,16 +49,12 @@ function readPanelState(
   try {
     let serialized = localStorage.getItem(key);
     if (serialized === null && previousScopeKey !== undefined) {
-      const migrationOwnerKey = `rebase:workspace-panel:v1:migration-owner:${previousScopeKey}`;
-      const migrationOwner = localStorage.getItem(migrationOwnerKey);
-      if (migrationOwner === null || migrationOwner === key) {
-        serialized = localStorage.getItem(
-          `rebase:workspace-panel:v1:${previousScopeKey}`,
-        );
-        if (serialized !== null) {
-          savePanelState(migrationOwnerKey, key);
-          savePanelState(key, serialized);
-        }
+      const previous = localStorage.getItem(
+        `${panelStoragePrefix}${previousScopeKey}`,
+      );
+      if (previous !== null && !hasMigratedLayout(previousScopeKey, key)) {
+        serialized = previous;
+        savePanelState(key, serialized);
       }
     }
     const saved: unknown = JSON.parse(serialized ?? "null");
@@ -106,4 +104,35 @@ function readPanelState(
   } catch {
     return initialWorkspacePanelState;
   }
+}
+
+function hasMigratedLayout(previousScopeKey: string, currentKey: string) {
+  for (let index = 0; index < localStorage.length; index++) {
+    const key = localStorage.key(index);
+    if (
+      key === null ||
+      key === currentKey ||
+      !key.startsWith(panelStoragePrefix)
+    ) {
+      continue;
+    }
+    const savedScopeKey = key.slice(panelStoragePrefix.length);
+    if (!savedScopeKey.startsWith("[")) {
+      continue;
+    }
+    let scope: unknown;
+    try {
+      scope = JSON.parse(savedScopeKey);
+    } catch {
+      continue;
+    }
+    if (
+      Array.isArray(scope) &&
+      scope.length === 4 &&
+      JSON.stringify([scope[0], scope[2], scope[3]]) === previousScopeKey
+    ) {
+      return true;
+    }
+  }
+  return false;
 }

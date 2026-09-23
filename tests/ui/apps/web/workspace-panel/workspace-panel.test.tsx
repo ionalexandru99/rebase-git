@@ -240,3 +240,27 @@ it("migrates a shared previous layout into only the first repository", async () 
     .element(page.getByRole("tab", { name: "Commit", exact: true }))
     .not.toBeInTheDocument();
 });
+
+it("does not copy an old layout after another repository already migrated it", () => {
+  localStorage.clear();
+  const previousScopeKey = JSON.stringify(["environment", "logical", "/repo"]);
+  localStorage.setItem(
+    `rebase:workspace-panel:v1:${previousScopeKey}`,
+    JSON.stringify({
+      tabs: ["changes"],
+      active: "changes",
+      open: true,
+      width: 55,
+    }),
+  );
+  createWorkspacePanelStore(
+    JSON.stringify(["environment", "project-a", "logical", "/repo"]),
+  ).dispatch({ type: "open", kind: "changes" });
+
+  const other = createWorkspacePanelStore(
+    JSON.stringify(["environment", "project-b", "logical", "/repo"]),
+    previousScopeKey,
+  ).getSnapshot();
+  expect(other.tabs).toEqual([]);
+  expect(other.open).toBe(false);
+});
