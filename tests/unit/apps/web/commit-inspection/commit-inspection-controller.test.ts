@@ -87,3 +87,41 @@ it("restarts an interrupted inspection when the controller starts again", async 
     controller.stop();
   }
 });
+
+it("requests a renamed file's diff with its previous path", async () => {
+  const oid = "a".repeat(40);
+  const identity = { name: "Author", email: "author@example.test", date: "" };
+  const diff = vi.fn(() => Effect.never);
+  const controller = createCommitInspectionController(
+    {
+      inspect: () =>
+        Effect.succeed({
+          oid,
+          message: "",
+          author: identity,
+          committer: identity,
+          parents: [],
+          parentOid: null,
+          files: [{ path: "new.txt", previousPath: "old.txt", status: "R" }],
+          truncated: false,
+        }),
+      diff,
+    },
+    scope,
+    runtime,
+  );
+  controller.start();
+  controller.selectCommit(oid);
+  try {
+    await vi.waitFor(() =>
+      expect(diff).toHaveBeenCalledWith({
+        ...scope,
+        oid,
+        path: "new.txt",
+        previousPath: "old.txt",
+      }),
+    );
+  } finally {
+    controller.stop();
+  }
+});

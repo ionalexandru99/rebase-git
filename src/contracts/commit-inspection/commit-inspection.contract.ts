@@ -18,6 +18,7 @@ export type InspectCommit = typeof InspectCommit.Type;
 export const InspectCommitDiff = Schema.Struct({
   ...InspectCommit.fields,
   path: RepositoryPath,
+  previousPath: Schema.optional(RepositoryPath),
 });
 export type InspectCommitDiff = typeof InspectCommitDiff.Type;
 const CommitIdentity = Schema.Struct({
