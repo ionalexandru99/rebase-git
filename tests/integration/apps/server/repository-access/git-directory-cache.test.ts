@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, rename, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Effect, Stream } from "effect";
@@ -53,4 +53,18 @@ it("resolves the Git directories again when the worktree is replaced", async () 
   await run();
 
   expect(resolutions).toBe(4);
+});
+
+it("keeps the Git directories when Git publishes a new index", async () => {
+  const run = coordinationRun();
+  await run();
+
+  await writeFile(join(worktree, ".git", "index.lock"), "");
+  await rename(
+    join(worktree, ".git", "index.lock"),
+    join(worktree, ".git", "index"),
+  );
+  await run();
+
+  expect(resolutions).toBe(2);
 });

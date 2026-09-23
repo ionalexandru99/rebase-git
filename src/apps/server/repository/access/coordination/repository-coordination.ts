@@ -79,7 +79,10 @@ interface GitDirectories {
 function gitEntryIdentity(directory: string) {
   return Effect.promise(() =>
     lstat(join(directory, ".git"), { bigint: true }).then(
-      (info) => `${info.dev}:${info.ino}:${info.ctimeNs}`,
+      (info) =>
+        info.isDirectory()
+          ? `${info.dev}:${info.ino}`
+          : `${info.dev}:${info.ino}:${info.ctimeNs}`,
       () => undefined,
     ),
   );
