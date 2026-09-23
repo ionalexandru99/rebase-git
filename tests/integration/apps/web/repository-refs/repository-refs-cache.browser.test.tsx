@@ -3,6 +3,7 @@ import "@rebase/web/styles.css";
 import type { RepositoryCommit, RepositoryRefs } from "@rebase/contracts";
 import { expect, it, vi } from "vitest";
 import { render } from "#tests-ui/runtime/render";
+import { openCommitGraphHistory } from "#web/features/commit-graph/index";
 import { createBrowserHistoryFilterStore } from "#web/features/commit-graph/scope/browser-history-filter-store";
 import { resolveHistoryScope } from "#web/features/commit-graph/scope/history-scope";
 import { storeRepositoryHistoryPage } from "#web/features/repository-history/replica/repository-history-store";
@@ -90,7 +91,7 @@ it.each(["Automatic", "Custom"] as const)(
           logicalRepositoryId={logicalId}
           repositoryId={refs.repositoryId}
           repositoryName="Cached repository"
-          historyReader={reader}
+          history={openCommitGraphHistory(reader)}
           refs={{
             checkingOut: false,
             repositoryId: refs.repositoryId,

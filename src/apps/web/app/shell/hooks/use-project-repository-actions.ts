@@ -29,7 +29,7 @@ export function useProjectRepositoryActions({
   readonly environmentId: string;
   readonly repositoryFilesystem: RepositoryFilesystemHost | undefined;
   readonly session: LocalEnvironmentSession;
-  readonly onRepositoryOpened: () => void;
+  readonly onRepositoryOpened: (repositoryId: string) => void;
   readonly setNavigation: Dispatch<SetStateAction<ProjectNavigationState>>;
 }) {
   const [folderPickerOpen, setFolderPickerOpen] = useState(false);
@@ -44,7 +44,7 @@ export function useProjectRepositoryActions({
     ) => {
       if (availability !== "available") return;
 
-      onRepositoryOpened();
+      onRepositoryOpened(repository.id);
       void session.repositoryCatalog
         .recordOpened(repository.id)
         .catch(() => undefined);
@@ -94,7 +94,7 @@ export function useProjectRepositoryActions({
         throw new Error("The Environment is unavailable.");
       }
       const remembered = await session.repositoryCatalog.remember(path);
-      onRepositoryOpened();
+      onRepositoryOpened(remembered.id);
       setNavigation((current) =>
         openProjectRepository(
           withAvailability(current, environmentId, availability),

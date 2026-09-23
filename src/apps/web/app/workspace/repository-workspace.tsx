@@ -40,7 +40,7 @@ export function RepositoryWorkspace({
   connected = false,
   activeWorktreePath,
   environmentId,
-  historyReader,
+  history,
   logicalRepositoryId: catalogLogicalRepositoryId,
   refs,
   repositoryId,
@@ -52,7 +52,7 @@ export function RepositoryWorkspace({
   readonly connected?: boolean;
   readonly activeWorktreePath: string;
   readonly environmentId: string | undefined;
-  readonly historyReader: CommitGraphHistory | undefined;
+  readonly history: CommitGraphHistory | undefined;
   readonly logicalRepositoryId?: string | undefined;
   readonly refs: RepositoryRefsSnapshot;
   readonly repositoryId: string | undefined;
@@ -76,7 +76,7 @@ export function RepositoryWorkspace({
       connected={connected}
       activeWorktreePath={activeWorktreePath}
       environmentId={environmentId}
-      historyReader={historyReader}
+      history={history}
       key={`${environmentId ?? ""}\0${repositoryId ?? ""}\0${logicalRepositoryId ?? ""}`}
       logicalRepositoryId={logicalRepositoryId}
       refs={cachedRefs.snapshot}
@@ -94,7 +94,7 @@ function RepositoryWorkspaceContent({
   connected,
   activeWorktreePath,
   environmentId,
-  historyReader,
+  history,
   logicalRepositoryId,
   refs,
   refsRestored,
@@ -107,7 +107,7 @@ function RepositoryWorkspaceContent({
   readonly connected: boolean;
   readonly activeWorktreePath: string;
   readonly environmentId: string | undefined;
-  readonly historyReader: CommitGraphHistory | undefined;
+  readonly history: CommitGraphHistory | undefined;
   readonly logicalRepositoryId: string | undefined;
   readonly refs: RepositoryRefsSnapshot;
   readonly refsRestored: boolean;
@@ -129,7 +129,7 @@ function RepositoryWorkspaceContent({
         : undefined,
     [environmentId, repositoryId, logicalRepositoryId, activeWorktreePath],
   );
-  useHistoryRefRefresh(historyReader, connected, retryRefs);
+  useHistoryRefRefresh(history?.reader, connected, retryRefs);
   const activeBranch = refs.refs?.worktrees.find(
     ({ path }) => path === activeWorktreePath,
   )?.head.branch;
@@ -269,7 +269,7 @@ function RepositoryWorkspaceContent({
                         ? () => changeHistoryScope(automaticHistoryScope)
                         : undefined
                     }
-                    reader={historyReader}
+                    history={history}
                     repositoryName={repositoryName}
                     roots={resolvedScope?.roots}
                     scope={resolvedScope?.scope ?? automaticHistoryScope}

@@ -8,6 +8,7 @@ import { type JSX, useCallback, useMemo, useRef, useState } from "react";
 import type { PanelImperativeHandle } from "react-resizable-panels";
 import type { LocalEnvironmentSession } from "#web/app/environment/local-environment-session.contract";
 import { environmentSessionPresentation } from "#web/app/shell/environment-session-presentation";
+import { useOpenedRepository } from "#web/app/shell/hooks/use-opened-repository";
 import { useProjectRepositoryActions } from "#web/app/shell/hooks/use-project-repository-actions";
 import { useRepositoryRefsActions } from "#web/app/shell/hooks/use-repository-refs-actions";
 import {
@@ -139,6 +140,42 @@ export function ApplicationShell({
     setOpenProjectRequest((current) => current + 1);
   }, []);
   const {
+    activeWorktreePath,
+    refs: repositoryRefs,
+    retryRefs,
+    selectRef,
+    worktreePathFor,
+  } = useRepositoryRefsActions({
+    repositories: repositoryCatalog.repositories,
+    selectedRepositoryId: navigation.selectedRepositoryId,
+    session,
+  });
+  const historyEnvironmentId =
+    sessionState._tag === "Connected"
+      ? sessionState.environmentId
+      : sessionState._tag === "Reconnecting"
+        ? (sessionState.environmentId ?? lastConnectedEnvironmentId.current)
+        : lastConnectedEnvironmentId.current;
+  const selectedRepository = repositoryCatalog.repositories.find(
+    (repository) => repository.id === navigation.selectedRepositoryId,
+  );
+  const graphRepository =
+    navigation.workspaceView === "repository" ? selectedRepository : undefined;
+  const { history: graphHistory, open: openRepositoryHistory } =
+    useOpenedRepository({
+      environmentId: historyEnvironmentId,
+      repository: graphRepository,
+      session,
+      worktreePathFor,
+    });
+  const openRepositoryView = useCallback(
+    (repositoryId: string) => {
+      closeRepositorySettings();
+      openRepositoryHistory(repositoryId);
+    },
+    [closeRepositorySettings, openRepositoryHistory],
+  );
+  const {
     browseRepository,
     closeSidebarRepository,
     copyRepositoryPath,
@@ -158,31 +195,11 @@ export function ApplicationShell({
     repositoryFilesystem,
     session,
     setNavigation,
-    onRepositoryOpened: closeRepositorySettings,
+    onRepositoryOpened: openRepositoryView,
   });
-  const {
-    activeWorktreePath,
-    refs: repositoryRefs,
-    retryRefs,
-    selectRef,
-  } = useRepositoryRefsActions({
-    repositories: repositoryCatalog.repositories,
-    selectedRepositoryId: navigation.selectedRepositoryId,
-    session,
-  });
-  const selectedRepository = repositoryCatalog.repositories.find(
-    (repository) => repository.id === navigation.selectedRepositoryId,
-  );
-
   const settingsRepository = repositoryCatalog.repositories.find(
     ({ id }) => id === repositorySettingsId,
   );
-  const historyEnvironmentId =
-    sessionState._tag === "Connected"
-      ? sessionState.environmentId
-      : sessionState._tag === "Reconnecting"
-        ? (sessionState.environmentId ?? lastConnectedEnvironmentId.current)
-        : lastConnectedEnvironmentId.current;
   const repositorySettingsOpen = settingsRepository !== undefined;
   const canWrite =
     sessionState._tag === "Connected" &&
@@ -192,14 +209,7 @@ export function ApplicationShell({
       ? undefined
       : { ...settingsRepository, environmentId: localEnvironmentId };
 
-  const graphRepository =
-    navigation.workspaceView === "repository" ? selectedRepository : undefined;
-  const graphReader = useRepositoryHistoryReader(
-    session.repositoryHistory,
-    historyEnvironmentId,
-    graphRepository?.id,
-    graphRepository?.logicalRepositoryId ?? graphRepository?.id,
-  );
+  const graphReader = graphHistory?.reader;
   const sameHistory =
     graphRepository !== undefined &&
     settingsRepository !== undefined &&
@@ -328,7 +338,7 @@ export function ApplicationShell({
                     connected={sessionState._tag === "Connected"}
                     activeWorktreePath={activeWorktreePath}
                     environmentId={historyEnvironmentId}
-                    historyReader={graphReader}
+                    history={graphHistory}
                     logicalRepositoryId={
                       selectedRepository?.logicalRepositoryId
                     }

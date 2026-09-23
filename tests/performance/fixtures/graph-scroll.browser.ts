@@ -5,7 +5,10 @@ import type {
 import { Layer, ManagedRuntime } from "effect";
 import { createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { CommitGraph } from "#web/features/commit-graph/index";
+import {
+  CommitGraph,
+  openCommitGraphHistory,
+} from "#web/features/commit-graph/index";
 import type { RepositoryHistoryReader } from "#web/features/repository-history/repository-history-reader.contract";
 import { ApplicationRuntime } from "#web-ui/platform/effect/application-runtime-context";
 
@@ -103,7 +106,7 @@ export function mountGraph(laneCount: number) {
       ApplicationRuntime,
       { value: runtime },
       createElement(CommitGraph, {
-        reader,
+        history: openCommitGraphHistory(reader),
         roots,
         repositoryName: "100,000 commits",
         scope: { _tag: "Automatic" },

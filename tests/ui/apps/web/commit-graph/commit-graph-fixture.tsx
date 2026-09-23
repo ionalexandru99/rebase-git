@@ -1,8 +1,12 @@
 import type { RepositoryCommit } from "@rebase/contracts";
-import type { ComponentProps } from "react";
+import { type ComponentProps, useMemo } from "react";
 import { vi } from "vitest";
 import { render } from "#tests-ui/runtime/render";
-import { CommitGraph } from "#web/features/commit-graph/index";
+import {
+  CommitGraph,
+  type CommitGraphReader,
+  openCommitGraphHistory,
+} from "#web/features/commit-graph/index";
 import { saveRepositoryHistoryOrder } from "#web/features/repository-history/preferences/repository-history-order";
 import type {
   RepositoryHistoryQuery,
@@ -184,6 +188,15 @@ export function identity(index: number) {
   };
 }
 
-export function CommitGraphFixture(props: ComponentProps<typeof CommitGraph>) {
-  return <CommitGraph {...props} />;
+export function CommitGraphFixture({
+  reader,
+  ...props
+}: Omit<ComponentProps<typeof CommitGraph>, "history"> & {
+  readonly reader: CommitGraphReader | undefined;
+}) {
+  const history = useMemo(
+    () => (reader === undefined ? undefined : openCommitGraphHistory(reader)),
+    [reader],
+  );
+  return <CommitGraph {...props} history={history} />;
 }
