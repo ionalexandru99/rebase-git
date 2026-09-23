@@ -10,6 +10,7 @@ import {
   historyGitFailed,
   RepositoryHistoryError,
 } from "#server/features/repository-history/git/history-failures";
+import { createObjectFormatCache } from "#server/features/repository-history/git/read-object-format";
 import { readRepositoryHistory } from "#server/features/repository-history/git/read-repository-history";
 import { synchronizeRepositoryHistory } from "#server/features/repository-history/git/synchronize-repository-history";
 
@@ -21,6 +22,7 @@ export function createRepositoryHistoryService(dependencies: {
   readonly access: RepositoryAccessService;
   readonly git: GitCommandRunner;
 }) {
+  const objectFormat = createObjectFormatCache(dependencies.git);
   const findRepository = (repositoryId: string) =>
     dependencies.access.repository(repositoryId).pipe(
       Effect.mapError((error) =>
@@ -35,7 +37,12 @@ export function createRepositoryHistoryService(dependencies: {
     read: (request: ReadRepositoryHistory) =>
       findRepository(request.repositoryId).pipe(
         Effect.flatMap((repository) =>
-          readRepositoryHistory(dependencies.git, repository.path, request),
+          readRepositoryHistory(
+            dependencies.git,
+            repository.path,
+            request,
+            objectFormat(repository.path),
+          ),
         ),
         Effect.catchTag("RepositoryGitError", (error) =>
           Effect.fail(historyGitFailed(error)),
@@ -54,6 +61,7 @@ export function createRepositoryHistoryService(dependencies: {
             repository.path,
             request,
             emit,
+            objectFormat(repository.path),
           ),
         ),
         Effect.catchTag("RepositoryGitError", (error) =>

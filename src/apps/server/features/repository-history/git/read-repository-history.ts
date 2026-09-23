@@ -13,7 +13,7 @@ import {
   gitHistoryFormat,
   parseGitHistory,
 } from "#server/features/repository-history/git/parse-git-history";
-import { readObjectFormat } from "#server/features/repository-history/git/read-object-format";
+import type { ObjectFormatRead } from "#server/features/repository-history/git/read-object-format";
 import {
   maximumHistoryOutputBytes,
   readSelectedHistory,
@@ -28,12 +28,13 @@ export function readRepositoryHistory(
   git: GitCommandRunner,
   repositoryPath: string,
   request: ReadRepositoryHistory,
+  readObjectFormat: ObjectFormatRead,
 ): Effect.Effect<
   RepositoryHistoryPage,
   RepositoryHistoryError | RepositoryGitError
 > {
   return Effect.gen(function* () {
-    const objectFormat = yield* readObjectFormat(git, repositoryPath);
+    const objectFormat = yield* readObjectFormat;
     const historyOutput = yield* request.ancestry === "first-parent"
       ? readSelectedHistory(git, repositoryPath, request)
       : runRepositoryGit(

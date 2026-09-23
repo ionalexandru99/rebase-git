@@ -59,6 +59,9 @@ export function createCommitInspectionController(
     });
     const details = state.details;
     if (path === null || details === null || !active) return;
+    const previousPath = details.files.find(
+      (file) => file.path === path,
+    )?.previousPath;
     diffFiber = work.fork(
       client
         .diff({
@@ -68,6 +71,7 @@ export function createCommitInspectionController(
             ? {}
             : { parentOid: details.parentOid }),
           path,
+          ...(previousPath == null ? {} : { previousPath }),
         })
         .pipe(
           Effect.match({

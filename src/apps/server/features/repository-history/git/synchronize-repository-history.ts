@@ -14,6 +14,7 @@ import {
   snapshotInvalidated,
 } from "#server/features/repository-history/git/history-failures";
 import { historyTraversalIdentity } from "#server/features/repository-history/git/history-snapshot-identity";
+import type { ObjectFormatRead } from "#server/features/repository-history/git/read-object-format";
 import { readRepositoryHistorySnapshot } from "#server/features/repository-history/git/read-repository-history-snapshot";
 import { streamRepositoryHistory } from "#server/features/repository-history/git/stream-repository-history";
 
@@ -28,6 +29,7 @@ export function synchronizeRepositoryHistory(
   emit: (
     batch: RepositoryHistoryBatch,
   ) => Effect.Effect<void, RepositoryHistoryError>,
+  readObjectFormat: ObjectFormatRead,
 ): Effect.Effect<number, RepositoryHistoryError | RepositoryGitError> {
   return Effect.gen(function* () {
     let sequence =
@@ -47,7 +49,12 @@ export function synchronizeRepositoryHistory(
         : request.basis?._tag === "Complete"
           ? request.basis.commitCount
           : 0;
-    let captured = yield* initialSnapshot(git, repositoryPath, request.basis);
+    let captured = yield* initialSnapshot(
+      git,
+      repositoryPath,
+      request.basis,
+      readObjectFormat,
+    );
 
     if (request.basis?._tag === "Incomplete") {
       commitCount += yield* streamHistory(
@@ -88,7 +95,11 @@ export function synchronizeRepositoryHistory(
     }
 
     for (let pass = 0; pass < maximumReconciliationPasses; pass += 1) {
-      const latest = yield* readRepositoryHistorySnapshot(git, repositoryPath);
+      const latest = yield* readRepositoryHistorySnapshot(
+        git,
+        repositoryPath,
+        readObjectFormat,
+      );
       if (!sameShallowBoundaries(captured.shallowOids, latest.shallowOids))
         return yield* Effect.fail(snapshotInvalidated());
       if (latest.id === captured.id) {
@@ -123,9 +134,14 @@ function initialSnapshot(
   git: GitCommandRunner,
   repositoryPath: string,
   basis: SynchronizationBasis | undefined,
+  readObjectFormat: ObjectFormatRead,
 ) {
   return Effect.gen(function* () {
-    const current = yield* readRepositoryHistorySnapshot(git, repositoryPath);
+    const current = yield* readRepositoryHistorySnapshot(
+      git,
+      repositoryPath,
+      readObjectFormat,
+    );
     if (
       basis !== undefined &&
       !sameShallowBoundaries(basis.shallowOids, current.shallowOids)

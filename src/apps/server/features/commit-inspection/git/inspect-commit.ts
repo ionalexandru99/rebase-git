@@ -7,14 +7,24 @@ import type {
 import { Effect } from "effect";
 import type { GitCommandRunner } from "#server/domain/git-command.contract";
 import { isGitObjectId } from "#server/domain/git-object-id";
+import type { RepositoryFileContent } from "#server/domain/repository-comparison.contract";
+import type { RepositoryGitError } from "#server/domain/repository-git.contract";
 import { inspectionError } from "#server/features/commit-inspection/git/inspection-error";
+import {
+  type CommitSide,
+  readCommitChange,
+} from "#server/features/commit-inspection/git/read-commit-change";
 import { runRepositoryGit } from "#server/repository/access/index";
 import {
   buildChangeDiff,
-  objectFile,
+  type GitBlob,
+  readBlobs,
+  unreadableBlob,
 } from "#server/repository/comparison/index";
 
 const originalObjects = { globalArguments: ["--no-replace-objects"] };
+const missingMode = "000000";
+const submoduleMode = "160000";
 
 export function inspectCommit(git: GitCommandRunner, command: InspectCommit) {
   return Effect.gen(function* () {
@@ -39,57 +49,56 @@ export function inspectCommitDiff(
 ) {
   return Effect.gen(function* () {
     const metadata = yield* readMetadata(git, command);
-    const files = yield* readFiles(
-      git,
-      command,
-      metadata.parentOid,
-      command.path,
-    );
-    const file = files.find((file) => file.path === command.path);
-    if (file === undefined)
+    const change = yield* readCommitChange(git, command, metadata.parentOid);
+    if (change === undefined)
       return yield* Effect.fail(
         inspectionError(
           "Missing",
           "This file is not changed in the selected comparison.",
         ),
       );
-    const [before, after] = yield* Effect.all(
-      [
-        metadata.parentOid === null || file.status === "A"
-          ? Effect.succeed({
-              content: null,
-              bytes: 0,
-              mode: "0",
-              identity: "missing",
-            })
-          : objectFile(
-              git,
-              command.worktreePath,
-              file.previousPath ?? file.path,
-              { ...originalObjects, tree: metadata.parentOid },
-            ),
-        file.status === "D"
-          ? Effect.succeed({
-              content: null,
-              bytes: 0,
-              mode: "0",
-              identity: "missing",
-            })
-          : objectFile(git, command.worktreePath, file.path, {
-              ...originalObjects,
-              tree: command.oid,
-            }),
-      ],
-      { concurrency: 2 },
+    const blobs = yield* readBlobs(
+      git,
+      command.worktreePath,
+      [change.before, change.after].filter(hasBlob).map((side) => side.oid),
+      originalObjects,
     );
     return buildChangeDiff(
       command.path,
       `${command.oid}:${metadata.parentOid ?? "root"}`,
-      before,
-      after,
-      file.previousPath ?? file.path,
+      yield* commitFile(change.before, blobs),
+      yield* commitFile(change.after, blobs),
+      { previousPath: change.previousPath, patch: change.patch },
     );
   });
+}
+
+function hasBlob(side: CommitSide) {
+  return side.mode !== missingMode && side.mode !== submoduleMode;
+}
+
+function commitFile(
+  side: CommitSide,
+  blobs: ReadonlyMap<string, GitBlob>,
+): Effect.Effect<RepositoryFileContent, RepositoryGitError> {
+  if (side.mode === missingMode)
+    return Effect.succeed({
+      content: null,
+      bytes: 0,
+      mode: "0",
+      identity: "missing",
+    });
+  if (side.mode === submoduleMode)
+    return Effect.succeed({
+      content: null,
+      bytes: 0,
+      mode: side.mode,
+      identity: side.oid,
+    });
+  const blob = blobs.get(side.oid);
+  return blob === undefined
+    ? unreadableBlob
+    : Effect.succeed({ ...blob, mode: side.mode, identity: side.oid });
 }
 
 function readMetadata(git: GitCommandRunner, command: InspectCommit) {
@@ -175,7 +184,6 @@ function readFiles(
   git: GitCommandRunner,
   command: InspectCommit,
   parentOid: string | null,
-  path?: string,
 ) {
   return runRepositoryGit(
     git,
@@ -203,8 +211,7 @@ function readFiles(
         const status = fields[i++]?.[0];
         const first = fields[i++];
         const name = status === "R" ? fields[i++] : first;
-        if (name === undefined || (path !== undefined && name !== path))
-          continue;
+        if (name === undefined) continue;
         if (
           status === "A" ||
           status === "M" ||

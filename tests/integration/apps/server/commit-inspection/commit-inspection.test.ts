@@ -128,7 +128,7 @@ describe("historical commit inspection", () => {
       status: "R",
     });
     const diff = await Effect.runPromise(
-      f.service.inspectDiff({ ...scope, path }),
+      f.service.inspectDiff({ ...scope, path, previousPath: "old.txt" }),
     );
     expect(diff.before).toBe("one\ntwo\nthree\n");
     expect(diff.after).toBe("one\ntwo\nthree\nfour\n");
@@ -138,6 +138,66 @@ describe("historical commit inspection", () => {
         f.service.inspectDiff({ ...scope, path: "binary.dat" }),
       ),
     ).toMatchObject({ kind: "binary", beforeBytes: 0, afterBytes: 3 });
+  });
+
+  it("pairs each file with its own patch when the paths are not a rename", async () => {
+    const f = await fixture();
+    await f.git("rm", "-q", "old.txt");
+    await writeFile(join(f.directory, "new.txt"), "unrelated\n");
+    await f.git("add", ".");
+    await f.git("commit", "-m", "Replace");
+    const scope = { ...f.scope, oid: await f.git("rev-parse", "HEAD") };
+    const diff = await Effect.runPromise(
+      f.service.inspectDiff({
+        ...scope,
+        path: "new.txt",
+        previousPath: "old.txt",
+      }),
+    );
+    expect(diff).toMatchObject({
+      kind: "text",
+      before: null,
+      after: "unrelated\n",
+    });
+    expect(diff.patch).toContain("+unrelated");
+    expect(diff.patch).not.toContain("-one");
+  });
+
+  it("shows text patches for files that Git attributes mark as binary", async () => {
+    const f = await fixture();
+    await writeFile(join(f.directory, ".gitattributes"), "*.txt -diff\n");
+    await writeFile(join(f.directory, "old.txt"), "one\ntwo\nthree\nfour\n");
+    await f.git("add", ".");
+    await f.git("commit", "-m", "Mark text as binary");
+    const scope = { ...f.scope, oid: await f.git("rev-parse", "HEAD") };
+    const diff = await Effect.runPromise(
+      f.service.inspectDiff({ ...scope, path: "old.txt" }),
+    );
+    expect(diff.kind).toBe("text");
+    expect(diff.patch).toContain("+four");
+  });
+
+  it("reports sizes without previewing files over the preview limit", async () => {
+    const f = await fixture();
+    const large = (line: string) => `${line}\n`.repeat(30_000);
+    await writeFile(join(f.directory, "large.txt"), large("before"));
+    await f.git("add", ".");
+    await f.git("commit", "-m", "Add large");
+    await writeFile(join(f.directory, "large.txt"), large("after!"));
+    await f.git("commit", "-am", "Change large");
+    const scope = { ...f.scope, oid: await f.git("rev-parse", "HEAD") };
+    expect(
+      await Effect.runPromise(
+        f.service.inspectDiff({ ...scope, path: "large.txt" }),
+      ),
+    ).toMatchObject({
+      kind: "large",
+      before: null,
+      after: null,
+      patch: "",
+      beforeBytes: 210_000,
+      afterBytes: 210_000,
+    });
   });
 
   it("compares a merge to each explicit parent and rejects unrelated parents and paths", async () => {

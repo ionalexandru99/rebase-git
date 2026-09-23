@@ -9,6 +9,7 @@ import { Effect } from "effect";
 import { expect, it, vi } from "vite-plus/test";
 import { createLocalGitCommandRunner } from "#server/adapters/local-git/local-git-command-runner";
 import { createLocalRepositoryWatcher } from "#server/adapters/local-git/local-repository-watcher";
+import { readObjectFormat } from "#server/features/repository-history/git/read-object-format";
 import { readRepositoryHistory } from "#server/features/repository-history/git/read-repository-history";
 import { readRepositoryHistorySnapshot } from "#server/features/repository-history/git/read-repository-history-snapshot";
 import { synchronizeRepositoryHistory } from "#server/features/repository-history/git/synchronize-repository-history";
@@ -36,18 +37,23 @@ it("preserves true shallow parents and invalidates the old basis when external d
     );
     const oids = (await command(source, "rev-list", "HEAD")).split("\n");
     const snapshot = await Effect.runPromise(
-      readRepositoryHistorySnapshot(git, clone),
+      readRepositoryHistorySnapshot(git, clone, readObjectFormat(git, clone)),
     );
     expect(snapshot.shallowOids).toEqual([oids[1]]);
     const page = await Effect.runPromise(
-      readRepositoryHistory(git, clone, {
-        _tag: "ReadRepositoryHistory",
-        repositoryId,
-        requestId,
-        limit: 100,
-        order: "topological",
-        roots: snapshot.refTargets.filter((ref) => ref.type === "branch"),
-      }),
+      readRepositoryHistory(
+        git,
+        clone,
+        {
+          _tag: "ReadRepositoryHistory",
+          repositoryId,
+          requestId,
+          limit: 100,
+          order: "topological",
+          roots: snapshot.refTargets.filter((ref) => ref.type === "branch"),
+        },
+        readObjectFormat(git, clone),
+      ),
     );
     expect(page.commits).toHaveLength(2);
     expect(page.commits[1]?.parents).toEqual([oids[2]]);
@@ -66,6 +72,7 @@ it("preserves true shallow parents and invalidates the old basis when external d
           Effect.sync(() => {
             batches.push(batch);
           }),
+        readObjectFormat(git, clone),
       ),
     );
     expect(count).toBe(2);
@@ -81,7 +88,7 @@ it("preserves true shallow parents and invalidates the old basis when external d
     await command(clone, "fetch", "--deepen=1");
     await vi.waitFor(() => expect(changed).toHaveBeenCalled());
     const deepened = await Effect.runPromise(
-      readRepositoryHistorySnapshot(git, clone),
+      readRepositoryHistorySnapshot(git, clone, readObjectFormat(git, clone)),
     );
     expect(deepened.rootOids).toEqual(snapshot.rootOids);
     expect(deepened.shallowOids).toEqual([oids[2]]);
@@ -107,6 +114,7 @@ it("preserves true shallow parents and invalidates the old basis when external d
             basis: previousBasis,
           },
           () => Effect.void,
+          readObjectFormat(git, clone),
         ),
       ),
     ).rejects.toMatchObject({ failure: { _tag: "SnapshotInvalidated" } });
@@ -126,6 +134,7 @@ it("preserves true shallow parents and invalidates the old basis when external d
             Effect.sync(() => {
               rebuilt.push(batch);
             }),
+          readObjectFormat(git, clone),
         ),
       ),
     ).toBe(3);
