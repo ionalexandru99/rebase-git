@@ -14,10 +14,6 @@ import {
 } from "#server/features/commit-inspection/index";
 import { createEnvironmentAuthorization } from "#server/features/environment-authorization/environment-authorization";
 import { environmentAuthorizationFeature } from "#server/features/environment-authorization/index";
-import {
-  createRepositoryAccess,
-  createRepositoryCoordination,
-} from "#server/features/repository-access/index";
 import { createRepositoryCatalog } from "#server/features/repository-catalog/repository-catalog";
 import {
   createRepositoryChangesService,
@@ -25,6 +21,10 @@ import {
 } from "#server/features/repository-changes/index";
 import { acquireEnvironmentContext } from "#server/persistence/environment-context";
 import { environmentPaths } from "#server/persistence/storage/environment-paths";
+import {
+  createRepositoryAccess,
+  createRepositoryCoordination,
+} from "#server/repository/access/index";
 import { createCommitInspectionClient } from "#web/features/commit-inspection/transport/commit-inspection-client";
 import { createRepositoryChangesClient } from "#web/features/working-changes/transport/repository-changes-client";
 

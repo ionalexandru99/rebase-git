@@ -15,6 +15,7 @@ import type {
 import { acquireEnvironmentEvents } from "#server/adapters/environment-transport/rpc/environment-rpc-events";
 import { createEnvironmentRpcSession } from "#server/adapters/environment-transport/rpc/environment-rpc-negotiation";
 import type { EnvironmentRpcSession } from "#server/adapters/environment-transport/rpc/environment-rpc-session.contract";
+import { validateEnvironmentRpcHandlers } from "#server/adapters/environment-transport/validate-environment-features";
 
 export function runEnvironmentRpcSession(
   socket: WebSocket,
@@ -87,7 +88,11 @@ function registeredRpcHandlers(
 ): EnvironmentRpcHandlers {
   const handlers = unregisteredRpcHandlers();
   for (const feature of features) {
-    Object.assign(handlers, feature.rpcHandlers(session));
+    if (feature.rpc !== undefined) {
+      const registered = feature.rpc.handlers(session);
+      validateEnvironmentRpcHandlers(feature.rpc.names, registered);
+      Object.assign(handlers, registered);
+    }
   }
   return handlers;
 }

@@ -2,13 +2,13 @@ import { act, StrictMode } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { page } from "vitest/browser";
 import { render } from "vitest-browser-react";
-import { emptyHistorySearchSnapshot } from "#web/features/repository-history/search/repository-history-search-model";
+import { emptyHistorySearchSnapshot } from "#web/features/history-search/repository-history-search-model";
 import {
   RepositoryHistorySearchFailure,
   type RepositoryHistorySearchModel,
   type RepositoryHistorySearchSnapshot,
-} from "#web/features/repository-history/search/repository-history-search-model.contract";
-import { RepositoryHistorySearchView } from "#web-ui/features/repository-history/search/components/repository-history-search-controls";
+} from "#web/features/history-search/repository-history-search-model.contract";
+import { RepositoryHistorySearchView } from "#web-ui/features/history-search/components/repository-history-search-controls";
 
 describe("history search model view", () => {
   it("subscribes only the search view and exposes typed failures through the same action contract", async () => {

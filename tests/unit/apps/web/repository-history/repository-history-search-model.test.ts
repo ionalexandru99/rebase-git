@@ -1,7 +1,7 @@
 import { Effect, Layer, ManagedRuntime } from "effect";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { RepositoryHistorySearch } from "#web/features/repository-history/search/repository-history-search.contract";
-import { createRepositoryHistorySearchModel } from "#web/features/repository-history/search/repository-history-search-model";
+import type { RepositoryHistorySearch } from "#web/domain/history-search.contract";
+import { createRepositoryHistorySearchModel } from "#web/features/history-search/repository-history-search-model";
 
 afterEach(() => vi.useRealTimers());
 

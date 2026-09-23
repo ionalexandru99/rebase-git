@@ -7,7 +7,6 @@ import { createLocalGitCommandRunner } from "#server/adapters/local-git/local-gi
 import { acquireEnvironmentListener } from "#server/app/server/environment-listener";
 import type { EnvironmentAuthorization } from "#server/features/environment-authorization/environment-authorization.contract";
 import { environmentAuthorizationFeature } from "#server/features/environment-authorization/index";
-import { createRepositoryAccess } from "#server/features/repository-access/index";
 import {
   createRepositoryCatalog,
   repositoryCatalogFeature,
@@ -18,6 +17,7 @@ import {
 } from "#server/features/repository-history/index";
 import { acquireEnvironmentContext } from "#server/persistence/environment-context";
 import { environmentPaths } from "#server/persistence/storage/environment-paths";
+import { createRepositoryAccess } from "#server/repository/access/index";
 
 const repositoryPath = process.argv[2];
 if (repositoryPath === undefined)

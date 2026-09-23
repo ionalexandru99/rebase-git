@@ -1,17 +1,18 @@
 import type {
   RepositoryFetchSetting,
   RepositoryFreshness,
+  RepositoryFreshnessRpc,
   RepositoryHistoryOperationFailure,
 } from "@rebase/contracts";
 import { Effect, Option, Queue, Semaphore, Stream } from "effect";
-import type { EnvironmentRpcHandlers } from "#server/adapters/environment-transport/environment-feature.contract";
+import type { EnvironmentRpcHandlersFor } from "#server/adapters/environment-transport/environment-feature.contract";
 import type { EnvironmentRpcSession } from "#server/adapters/environment-transport/rpc/environment-rpc-session.contract";
 import type { RepositoryFreshnessService } from "#server/domain/repository-freshness.contract";
 
 export function repositoryFreshnessRpc(
   session: EnvironmentRpcSession,
   freshness: RepositoryFreshnessService,
-): Partial<EnvironmentRpcHandlers> {
+): EnvironmentRpcHandlersFor<typeof RepositoryFreshnessRpc> {
   const subscriptions = new Set<string>();
   const commands = Semaphore.makeUnsafe(32);
   const runCommand = <A>(

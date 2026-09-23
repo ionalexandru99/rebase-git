@@ -1,6 +1,7 @@
 import type { RepositoryCommit } from "@rebase/contracts";
 import { Effect, Layer, ManagedRuntime } from "effect";
 import { describe, expect, it, vi } from "vitest";
+import { createRepositoryHistorySearchModel } from "#web/features/history-search/repository-history-search-model";
 import { createBrowserRepositoryHistoryReader } from "#web/features/repository-history/browser-repository-history-reader";
 import {
   completeStoredRepositoryHistory,
@@ -9,7 +10,6 @@ import {
 } from "#web/features/repository-history/replica/repository-history-store";
 import { RepositoryHistoryOffline } from "#web/features/repository-history/repository-history-reader.contract";
 import { searchStoredRepositoryHistory } from "#web/features/repository-history/search/repository-history-search";
-import { createRepositoryHistorySearchModel } from "#web/features/repository-history/search/repository-history-search-model";
 import {
   emptyStoredRepository,
   storedCommit,

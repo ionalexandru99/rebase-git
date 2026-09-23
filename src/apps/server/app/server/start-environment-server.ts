@@ -41,10 +41,6 @@ import {
 } from "#server/features/environment-filesystem/index";
 import { environmentIdentityLayer } from "#server/features/environment-identity/index";
 import {
-  repositoryAccessLayer,
-  repositoryCoordinationLayer,
-} from "#server/features/repository-access/index";
-import {
   repositoryCatalogFeature,
   repositoryCatalogLayer,
 } from "#server/features/repository-catalog/index";
@@ -67,6 +63,10 @@ import { environmentContextLayer } from "#server/persistence/environment-context
 import { defaultEnvironmentPaths } from "#server/persistence/storage/environment-paths";
 import type { EnvironmentPaths } from "#server/persistence/storage/environment-paths.contract";
 import { productVersion } from "#server/product-version";
+import {
+  repositoryAccessLayer,
+  repositoryCoordinationLayer,
+} from "#server/repository/access/index";
 
 export function startEnvironmentServer(
   options: EnvironmentServerOptions = {},

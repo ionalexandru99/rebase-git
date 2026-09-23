@@ -59,7 +59,6 @@ describe("Environment transport", () => {
     const history: EnvironmentFeature = {
       capabilities: ["repository-history"],
       httpRoutes: [],
-      rpcHandlers: () => ({}),
     };
     await withListener(
       async (origin) => {

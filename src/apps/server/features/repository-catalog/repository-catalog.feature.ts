@@ -8,6 +8,5 @@ export function repositoryCatalogFeature(
   return {
     capabilities: [],
     httpRoutes: repositoryCatalogHttpRoutes(catalog),
-    rpcHandlers: () => ({}),
   };
 }

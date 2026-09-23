@@ -1,4 +1,4 @@
-import type { RepositoryHistoryCacheDiagnostics } from "#web/features/repository-history/repository-history-storage.contract";
+import type { RepositoryHistoryCacheDiagnostics } from "#web/domain/history-storage.contract";
 import {
   readHistoryCacheRecords,
   visitHistoryCacheCommits,

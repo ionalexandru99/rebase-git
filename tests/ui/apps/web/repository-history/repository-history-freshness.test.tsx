@@ -4,8 +4,8 @@ import { describe, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { render } from "#tests-ui/runtime/render";
 import { NotificationsProvider } from "#web/features/notifications/index";
-import { useRepositoryHistoryFetch } from "#web/features/repository-history/freshness/hooks/use-repository-history-fetch";
-import { describeRepositoryFetchError } from "#web/features/repository-history/freshness/repository-fetch-error";
+import { useRepositoryHistoryFetch } from "#web/features/repository-fetch/hooks/use-repository-history-fetch";
+import { describeRepositoryFetchError } from "#web/features/repository-fetch/repository-fetch-error";
 import {
   RepositoryHistoryOffline,
   type RepositoryHistoryReader,
@@ -13,8 +13,8 @@ import {
   type RepositoryHistorySnapshot,
 } from "#web/features/repository-history/repository-history-reader.contract";
 import { CommitGraphToolbar } from "#web-ui/features/commit-graph/components/commit-graph-toolbar";
-import { RepositoryFetchSettings } from "#web-ui/features/repository-history/freshness/components/repository-fetch-settings";
-import { RepositoryHistoryFreshnessStatus } from "#web-ui/features/repository-history/freshness/components/repository-history-freshness-status";
+import { RepositoryFetchSettings } from "#web-ui/features/repository-fetch/components/repository-fetch-settings";
+import { RepositoryHistoryFreshnessStatus } from "#web-ui/features/repository-fetch/components/repository-history-freshness-status";
 
 const fresh: RepositoryFreshness = {
   defaultIntervalSeconds: 300,

@@ -7,11 +7,11 @@ import type {
 import { Effect } from "effect";
 import type { GitCommandRunner } from "#server/domain/git-command.contract";
 import { inspectionError } from "#server/features/commit-inspection/git/inspection-error";
-import { runRepositoryGit } from "#server/features/repository-access/index";
+import { runRepositoryGit } from "#server/repository/access/index";
 import {
   buildChangeDiff,
   objectFile,
-} from "#server/features/repository-comparison/index";
+} from "#server/repository/comparison/index";
 
 export function inspectCommit(git: GitCommandRunner, command: InspectCommit) {
   return Effect.gen(function* () {

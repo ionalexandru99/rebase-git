@@ -25,8 +25,8 @@ import {
   RepositoryFreshnessState,
 } from "#server/domain/repository-freshness.contract";
 import { RepositoryWatching } from "#server/domain/repository-watcher.contract";
-import { repositoryAccessLayer } from "#server/features/repository-access/index";
 import { repositoryFreshnessLayer } from "#server/features/repository-history/freshness/repository-freshness";
+import { repositoryAccessLayer } from "#server/repository/access/index";
 
 const repositoryId = "00000000-0000-4000-8000-000000000001";
 const linkedId = "00000000-0000-4000-8000-000000000002";

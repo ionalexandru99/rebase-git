@@ -1,16 +1,17 @@
+import type { RepositoryRefsRpc } from "@rebase/contracts";
 import {
   fragmentJsonMessage,
   type RepositoryRefsFailed,
 } from "@rebase/contracts";
 import { Effect, Stream } from "effect";
-import type { EnvironmentRpcHandlers } from "#server/adapters/environment-transport/environment-feature.contract";
+import type { EnvironmentRpcHandlersFor } from "#server/adapters/environment-transport/environment-feature.contract";
 import type { EnvironmentRpcSession } from "#server/adapters/environment-transport/rpc/environment-rpc-session.contract";
 import type { RepositoryRefsService } from "#server/domain/repository-refs.contract";
 
 export function repositoryRefsRpc(
   session: EnvironmentRpcSession,
   refs: RepositoryRefsService,
-): Partial<EnvironmentRpcHandlers> {
+): EnvironmentRpcHandlersFor<typeof RepositoryRefsRpc> {
   let active = 0;
   return {
     ReadRefs: ({ repositoryId, requestId }) =>

@@ -1,7 +1,7 @@
 import type {
   HistoryStorageRequest,
   HistoryStorageResponse,
-} from "#web/features/repository-history/diagnostics/history-storage.contract";
+} from "#web/features/repository-history/storage/history-storage.contract";
 import {
   clearAllHistoryCaches,
   readCacheDiagnostics,

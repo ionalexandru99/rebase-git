@@ -8,6 +8,5 @@ export function commitInspectionFeature(
   return {
     capabilities: [],
     httpRoutes: commitInspectionHttpRoutes(inspection),
-    rpcHandlers: () => ({}),
   };
 }

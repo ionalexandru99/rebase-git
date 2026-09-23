@@ -25,16 +25,16 @@ import { RepositoryWatching } from "#server/domain/repository-watcher.contract";
 import type { EnvironmentAuthorization } from "#server/features/environment-authorization/environment-authorization.contract";
 import { environmentAuthorizationFeature } from "#server/features/environment-authorization/index";
 import {
-  createRepositoryAccess,
-  repositoryAccessLayer,
-  repositoryCoordinationLayer,
-} from "#server/features/repository-access/index";
-import {
   createRepositoryHistoryService,
   repositoryFreshnessFeature,
   repositoryFreshnessLayer,
   repositoryHistoryFeature,
 } from "#server/features/repository-history/index";
+import {
+  createRepositoryAccess,
+  repositoryAccessLayer,
+  repositoryCoordinationLayer,
+} from "#server/repository/access/index";
 import { createRepositoryHistoryRpc } from "#web/features/repository-history/transport/repository-history-rpc";
 
 const exec = promisify(execFile);

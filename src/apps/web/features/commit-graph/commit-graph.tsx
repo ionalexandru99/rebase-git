@@ -43,13 +43,13 @@ import {
 } from "#web/features/commit-graph/layout/graph-geometry";
 import { graphMetadataColumns } from "#web/features/commit-graph/layout/graph-metrics";
 import { graphRefLabels } from "#web/features/commit-graph/layout/graph-ref-labels";
-import type { RepositoryHistoryQuery } from "#web/features/repository-history/index";
+import { RepositoryHistorySearchControls } from "#web/features/history-search/index";
 import {
   RepositoryHistoryFreshnessStatus,
-  RepositoryHistorySearchControls,
   useRepositoryHistoryFetch,
-  useRepositoryHistoryOrder,
-} from "#web/features/repository-history/index";
+} from "#web/features/repository-fetch/index";
+import type { RepositoryHistoryQuery } from "#web/features/repository-history/index";
+import { useRepositoryHistoryOrder } from "#web/features/repository-history/index";
 import { Button } from "#web-ui/components/ui/button";
 import { CommitGraphCanvas } from "#web-ui/features/commit-graph/components/commit-graph-canvas";
 import { CommitGraphCommitCells } from "#web-ui/features/commit-graph/components/commit-graph-commit-cells";

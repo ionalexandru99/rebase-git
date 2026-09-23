@@ -3,7 +3,7 @@ import type { OpenProjectRepository } from "#web/features/open-project/open-proj
 import {
   describeRepositoryFetchError,
   RepositoryFetchSettings,
-} from "#web/features/repository-history/index";
+} from "#web/features/repository-fetch/index";
 import { clearCachedRepositoryRefs } from "#web/features/repository-refs/index";
 import type {
   RepositoryHistorySettingsClient,

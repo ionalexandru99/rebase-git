@@ -13,18 +13,18 @@ import { GitCommands } from "#server/domain/git-command.contract";
 import { RepositoryCatalogAccess } from "#server/domain/repository-catalog.contract";
 import { RepositoryFreshnessState } from "#server/domain/repository-freshness.contract";
 import { RepositoryWatching } from "#server/domain/repository-watcher.contract";
-import {
-  createRepositoryAccess,
-  createRepositoryCoordination,
-  repositoryAccessLayer,
-  repositoryCoordinationLayer,
-} from "#server/features/repository-access/index";
 import { createRepositoryCatalog } from "#server/features/repository-catalog/repository-catalog";
 import { repositoryFreshnessLayer } from "#server/features/repository-history/freshness/repository-freshness";
 import { acquireRepositoryChangePublisher } from "#server/features/repository-refs/repository-change-publisher";
 import { createRepositoryRefsService } from "#server/features/repository-refs/repository-refs";
 import { acquireEnvironmentContext } from "#server/persistence/environment-context";
 import { environmentPaths } from "#server/persistence/storage/environment-paths";
+import {
+  createRepositoryAccess,
+  createRepositoryCoordination,
+  repositoryAccessLayer,
+  repositoryCoordinationLayer,
+} from "#server/repository/access/index";
 
 vi.mock("node:fs", async (original) => {
   const fs = await original<typeof import("node:fs")>();

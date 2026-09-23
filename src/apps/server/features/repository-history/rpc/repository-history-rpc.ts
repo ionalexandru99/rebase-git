@@ -1,3 +1,4 @@
+import type { RepositoryHistoryReadRpc } from "@rebase/contracts";
 import {
   encodeRepositoryHistoryBatch,
   encodeRepositoryHistoryPage,
@@ -9,7 +10,7 @@ import {
   type SynchronizeRepositoryHistory,
 } from "@rebase/contracts";
 import { type Cause, Deferred, Effect, Queue, Stream } from "effect";
-import type { EnvironmentRpcHandlers } from "#server/adapters/environment-transport/environment-feature.contract";
+import type { EnvironmentRpcHandlersFor } from "#server/adapters/environment-transport/environment-feature.contract";
 import type { EnvironmentRpcSession } from "#server/adapters/environment-transport/rpc/environment-rpc-session.contract";
 import {
   RepositoryHistoryError,
@@ -25,7 +26,7 @@ interface PendingBatch {
 export function repositoryHistoryRpc(
   session: EnvironmentRpcSession,
   history: RepositoryHistoryService,
-): Partial<EnvironmentRpcHandlers> {
+): EnvironmentRpcHandlersFor<typeof RepositoryHistoryReadRpc> {
   const requests = new Set<string>();
   const pending = new Map<string, PendingBatch>();
   const acquire = (requestId: string) =>

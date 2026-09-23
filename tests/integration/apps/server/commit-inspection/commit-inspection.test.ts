@@ -8,7 +8,7 @@ import { Effect } from "effect";
 import { afterEach, describe, expect, it } from "vite-plus/test";
 import { createLocalGitCommandRunner } from "#server/adapters/local-git/local-git-command-runner";
 import { createCommitInspectionService } from "#server/features/commit-inspection/index";
-import { createRepositoryAccess } from "#server/features/repository-access/index";
+import { createRepositoryAccess } from "#server/repository/access/index";
 
 const directories: string[] = [];
 afterEach(async () => {
