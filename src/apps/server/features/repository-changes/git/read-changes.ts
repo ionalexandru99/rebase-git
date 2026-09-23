@@ -67,9 +67,10 @@ export function readChanges(git: GitCommandRunner, scope: ChangesScope) {
       const path = parts[i + 1];
       if (path) staged.push({ path, status: fileStatus(parts[i]) });
     }
-    const identities = yield* worktreeIdentities(directory, [
+    const paths = [
       ...new Set([...unstaged, ...staged].map((file) => file.path)),
-    ]);
+    ];
+    const identities = yield* worktreeIdentities(directory, paths);
     return {
       snapshot: {
         head,
@@ -80,6 +81,7 @@ export function readChanges(git: GitCommandRunner, scope: ChangesScope) {
         truncated: false,
       } satisfies RepositoryChanges,
       base,
+      files: { paths, identities },
     };
   });
 }

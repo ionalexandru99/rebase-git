@@ -292,7 +292,11 @@ function withRefsListener(use: (fixture: ListenerFixture) => Promise<void>) {
           Effect.provideService(RepositoryCatalogAccess, catalog),
           Effect.provideService(
             RepositoryAccess,
-            createRepositoryAccess(catalog, git),
+            createRepositoryAccess(
+              catalog,
+              git,
+              createLocalRepositoryWatcher(),
+            ),
           ),
           Effect.provideService(GitCommands, git),
           Effect.provideService(

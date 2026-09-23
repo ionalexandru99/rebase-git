@@ -55,7 +55,11 @@ try {
           Effect.provideService(RepositoryCatalogAccess, catalog),
           Effect.provideService(
             RepositoryAccess,
-            createRepositoryAccess(catalog, git),
+            createRepositoryAccess(
+              catalog,
+              git,
+              createLocalRepositoryWatcher(),
+            ),
           ),
           Effect.provideService(GitCommands, git),
           Effect.provideService(

@@ -1,4 +1,5 @@
-import { realpath } from "node:fs/promises";
+import { lstat, realpath } from "node:fs/promises";
+import { join } from "node:path";
 import { Effect, Layer, Semaphore } from "effect";
 import {
   type GitCommandRunner,
@@ -38,10 +39,25 @@ export function createRepositoryCoordination(
           }
         }),
     );
+  const directories = new Map<
+    string,
+    { readonly identity: string; readonly paths: GitDirectories }
+  >();
+  const gitDirectories = (directory: string) =>
+    Effect.gen(function* () {
+      const identity = yield* gitEntryIdentity(directory);
+      const cached = directories.get(directory);
+      if (identity !== undefined && cached?.identity === identity)
+        return cached.paths;
+      const paths = yield* resolveGitDirectories(git, directory);
+      if (identity !== undefined)
+        directories.set(directory, { identity, paths });
+      return paths;
+    });
   return {
     run: (directory, scope, operation) =>
       Effect.gen(function* () {
-        const paths = yield* resolveGitDirectories(git, directory);
+        const paths = yield* gitDirectories(directory);
         const worktree =
           scope === "refs"
             ? operation
@@ -49,11 +65,33 @@ export function createRepositoryCoordination(
         return yield* scope !== "worktree"
           ? withLock(`refs:${paths.commonDirectory}`, worktree)
           : worktree;
-      }),
+      }).pipe(
+        Effect.onError(() => Effect.sync(() => directories.delete(directory))),
+      ),
   };
 }
 
-function resolveGitDirectories(git: GitCommandRunner, directory: string) {
+interface GitDirectories {
+  readonly gitDirectory: string;
+  readonly commonDirectory: string;
+}
+
+function gitEntryIdentity(directory: string) {
+  return Effect.promise(() =>
+    lstat(join(directory, ".git"), { bigint: true }).then(
+      (info) =>
+        info.isDirectory()
+          ? `${info.dev}:${info.ino}:${info.birthtimeNs}`
+          : `${info.dev}:${info.ino}:${info.ctimeNs}`,
+      () => undefined,
+    ),
+  );
+}
+
+function resolveGitDirectories(
+  git: GitCommandRunner,
+  directory: string,
+): Effect.Effect<GitDirectories, RepositoryCoordinationError> {
   return Effect.gen(function* () {
     const gitDirectory = (yield* runRepositoryGit(git, directory, [
       "rev-parse",

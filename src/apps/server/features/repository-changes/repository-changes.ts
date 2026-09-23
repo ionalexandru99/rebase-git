@@ -9,6 +9,7 @@ import { Effect } from "effect";
 import type { GitCommandRunner } from "#server/domain/git-command.contract";
 import type { RepositoryAccessService } from "#server/domain/repository-access.contract";
 import type {
+  RepositoryCoordinationError,
   RepositoryCoordinationService,
   RepositoryResourceScope,
 } from "#server/domain/repository-coordination.contract";
@@ -22,7 +23,10 @@ import { withChangeIndex } from "#server/features/repository-changes/git/change-
 import { mutateChanges } from "#server/features/repository-changes/git/mutate-changes";
 import { readChangeDiff } from "#server/features/repository-changes/git/read-change-diff";
 import { readChanges } from "#server/features/repository-changes/git/read-changes";
-import { verifyChanges } from "#server/features/repository-changes/git/verify-changes";
+import {
+  verifyChangedFiles,
+  verifyChanges,
+} from "#server/features/repository-changes/git/verify-changes";
 import { runRepositoryGit } from "#server/repository/access/index";
 
 export function createRepositoryChangesService(
@@ -30,37 +34,37 @@ export function createRepositoryChangesService(
   git: GitCommandRunner,
   coordination: RepositoryCoordinationService,
 ) {
+  const inWorktree = <A>(
+    scope: ChangesScope,
+    run: Effect.Effect<
+      A,
+      RepositoryChangesError | RepositoryGitError | RepositoryCoordinationError
+    >,
+  ) =>
+    access.requireWorktree(scope).pipe(
+      Effect.mapError((error) => changesError("Missing", error.detail)),
+      Effect.andThen(run),
+      Effect.mapError((error) =>
+        error._tag === "RepositoryChangesError"
+          ? error
+          : changesError("GitFailed", error.detail),
+      ),
+    );
   const locked = <A>(
     scope: ChangesScope,
     run: Effect.Effect<A, RepositoryChangesError | RepositoryGitError>,
     resources: RepositoryResourceScope = "worktree",
-  ) =>
-    Effect.gen(function* () {
-      yield* access
-        .worktree(scope)
-        .pipe(
-          Effect.mapError((error) => changesError("Missing", error.detail)),
-        );
-      return yield* coordination
-        .run(scope.worktreePath, resources, run)
-        .pipe(
-          Effect.mapError((error) =>
-            error._tag === "RepositoryChangesError"
-              ? error
-              : changesError("GitFailed", error.detail),
-          ),
-        );
-    });
+  ) => inWorktree(scope, coordination.run(scope.worktreePath, resources, run));
   return {
     read: (scope: ChangesScope) =>
-      locked(
+      inWorktree(
         scope,
         readChanges(git, scope).pipe(
           Effect.map((value) => fitChanges(value.snapshot)),
         ),
       ),
     diff: (command: ReadChangeDiff) =>
-      locked(
+      inWorktree(
         command,
         Effect.gen(function* () {
           yield* safeChangePath(command.worktreePath, command.path);
@@ -75,15 +79,18 @@ export function createRepositoryChangesService(
           yield* withChangeIndex(git, command.worktreePath, (indexFile) =>
             Effect.gen(function* () {
               const current = yield* verifyChanges(git, command);
+              const unchanged = verifyChangedFiles(
+                command.worktreePath,
+                current.files,
+              );
               yield* mutateChanges(
                 git,
                 { indexFile },
                 command,
                 current,
-                verifyChanges(git, command).pipe(Effect.asVoid),
+                unchanged,
               );
-              if (command.action !== "discard")
-                yield* verifyChanges(git, command);
+              if (command.action !== "discard") yield* unchanged;
             }),
           );
           return fitChanges((yield* readChanges(git, command)).snapshot);

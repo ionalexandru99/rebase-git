@@ -35,10 +35,10 @@ export interface RepositoryAccessService {
   readonly worktrees: (
     repositoryPath: string,
   ) => Effect.Effect<readonly RepositoryWorktree[], RepositoryAccessError>;
-  readonly worktree: (scope: {
+  readonly requireWorktree: (scope: {
     readonly repositoryId: string;
     readonly worktreePath: string;
-  }) => Effect.Effect<RepositoryWorktree, RepositoryAccessError>;
+  }) => Effect.Effect<void, RepositoryAccessError>;
 }
 
 export class RepositoryAccess extends Context.Service<

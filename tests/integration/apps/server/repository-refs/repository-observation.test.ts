@@ -82,7 +82,11 @@ for (const firstRelease of ["refs", "freshness"] as const)
           ).pipe(Effect.provideService(Scope.Scope, refsScope));
           const refs = createRepositoryRefsService({
             coordination: createRepositoryCoordination(runner),
-            access: createRepositoryAccess(catalog, runner),
+            access: createRepositoryAccess(
+              catalog,
+              runner,
+              createLocalRepositoryWatcher(),
+            ),
             changes,
             git: runner,
           });
