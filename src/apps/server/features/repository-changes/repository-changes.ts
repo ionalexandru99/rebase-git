@@ -23,7 +23,10 @@ import { withChangeIndex } from "#server/features/repository-changes/git/change-
 import { mutateChanges } from "#server/features/repository-changes/git/mutate-changes";
 import { readChangeDiff } from "#server/features/repository-changes/git/read-change-diff";
 import { readChanges } from "#server/features/repository-changes/git/read-changes";
-import { verifyChanges } from "#server/features/repository-changes/git/verify-changes";
+import {
+  verifyChangedFiles,
+  verifyChanges,
+} from "#server/features/repository-changes/git/verify-changes";
 import { runRepositoryGit } from "#server/repository/access/index";
 
 export function createRepositoryChangesService(
@@ -76,15 +79,18 @@ export function createRepositoryChangesService(
           yield* withChangeIndex(git, command.worktreePath, (indexFile) =>
             Effect.gen(function* () {
               const current = yield* verifyChanges(git, command);
+              const unchanged = verifyChangedFiles(
+                command.worktreePath,
+                current.files,
+              );
               yield* mutateChanges(
                 git,
                 { indexFile },
                 command,
                 current,
-                verifyChanges(git, command).pipe(Effect.asVoid),
+                unchanged,
               );
-              if (command.action !== "discard")
-                yield* verifyChanges(git, command);
+              if (command.action !== "discard") yield* unchanged;
             }),
           );
           return fitChanges((yield* readChanges(git, command)).snapshot);

@@ -2,6 +2,7 @@ import type { ChangesScope } from "@rebase/contracts";
 import { Effect } from "effect";
 import type { GitCommandRunner } from "#server/domain/git-command.contract";
 import { changesError } from "#server/features/repository-changes/git/change-failures";
+import { worktreeIdentities } from "#server/features/repository-changes/git/change-files";
 import { readChanges } from "#server/features/repository-changes/git/read-changes";
 
 export function verifyChanges(
@@ -12,12 +13,32 @@ export function verifyChanges(
     Effect.flatMap((current) =>
       current.snapshot.revision === scope.revision
         ? Effect.succeed(current)
-        : Effect.fail(
-            changesError(
-              "Stale",
-              "The repository changed. Review the refreshed changes and try again.",
-            ),
-          ),
+        : Effect.fail(staleChanges()),
     ),
+  );
+}
+
+export function verifyChangedFiles(
+  directory: string,
+  files: {
+    readonly paths: readonly string[];
+    readonly identities: readonly string[];
+  },
+) {
+  return worktreeIdentities(directory, files.paths).pipe(
+    Effect.flatMap((identities) =>
+      identities.every(
+        (identity, index) => identity === files.identities[index],
+      )
+        ? Effect.void
+        : Effect.fail(staleChanges()),
+    ),
+  );
+}
+
+function staleChanges() {
+  return changesError(
+    "Stale",
+    "The repository changed. Review the refreshed changes and try again.",
   );
 }
