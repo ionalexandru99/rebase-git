@@ -1,5 +1,8 @@
 import { EnvironmentHttpApi, EnvironmentRpc } from "@rebase/contracts";
-import type { EnvironmentFeature } from "#server/adapters/environment-transport/environment-feature.contract";
+import type {
+  EnvironmentFeature,
+  EnvironmentRpcHandlers,
+} from "#server/adapters/environment-transport/environment-feature.contract";
 
 export function validateEnvironmentFeatures(
   features: readonly EnvironmentFeature[],
@@ -33,6 +36,24 @@ export function validateEnvironmentFeatures(
         throw new Error(`Duplicate RPC: ${name}`);
       }
       rpcs.add(name);
+    }
+  }
+}
+
+export function validateEnvironmentRpcHandlers(
+  names: readonly string[],
+  handlers: Partial<EnvironmentRpcHandlers>,
+) {
+  const declared = new Set(names);
+  const registered = new Map<string, unknown>(Object.entries(handlers));
+  for (const name of names) {
+    if (typeof registered.get(name) !== "function") {
+      throw new Error(`Missing RPC handler: ${name}`);
+    }
+  }
+  for (const name of registered.keys()) {
+    if (!declared.has(name)) {
+      throw new Error(`Undeclared RPC handler: ${name}`);
     }
   }
 }
