@@ -15,8 +15,10 @@ import {
   tagFromRecord,
 } from "#server/features/repository-refs/git/parse-for-each-ref";
 import { readRemoteMetadata } from "#server/features/repository-refs/git/read-remote-metadata";
-import type { RepositoryRefsError } from "#server/features/repository-refs/git/repository-refs-failures";
-import { gitFailed } from "#server/features/repository-refs/git/repository-refs-failures";
+import {
+  gitFailed,
+  type RepositoryRefsError,
+} from "#server/features/repository-refs/git/repository-refs-failures";
 import {
   canonicalizeWorktrees,
   readWorktrees,

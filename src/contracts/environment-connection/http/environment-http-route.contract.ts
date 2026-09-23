@@ -1,11 +1,9 @@
 import type { EnvironmentAccessCapability } from "@rebase/contracts/environment-connection/environment-access-capability.contract";
 import type { Schema } from "effect";
 
-export const environmentTransportFailureStatuses = [
-  400, 401, 403, 410, 413,
-] as const;
+const environmentTransportFailureStatuses = [400, 401, 403, 410, 413] as const;
 
-export type EnvironmentTransportFailureStatus =
+type EnvironmentTransportFailureStatus =
   (typeof environmentTransportFailureStatuses)[number];
 
 export interface EnvironmentHttpRoute {

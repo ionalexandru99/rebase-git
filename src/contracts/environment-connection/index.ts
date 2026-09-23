@@ -22,8 +22,6 @@ export {
 export {
   type EnvironmentHttpFailureStatus,
   type EnvironmentHttpRoute,
-  type EnvironmentTransportFailureStatus,
-  environmentTransportFailureStatuses,
   isEnvironmentHttpFailureStatus,
 } from "@rebase/contracts/environment-connection/http/environment-http-route.contract";
 export { IsoDate } from "@rebase/contracts/environment-connection/iso-date.contract";
