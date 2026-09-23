@@ -1,7 +1,7 @@
 import type { Server as HttpServer } from "node:http";
-import type { EnvironmentFeature } from "#server/adapters/environment-transport/environment-feature.contract";
+import type { EnvironmentFeatures } from "#server/adapters/environment-transport/environment-feature.contract";
+import type { EnvironmentAuthorization } from "#server/domain/environment-authorization.contract";
 import type { EnvironmentEventPublisher } from "#server/domain/environment-event-publisher.contract";
-import type { EnvironmentAuthorization } from "#server/features/environment-authorization/environment-authorization.contract";
 
 export interface EnvironmentServerOptions {
   readonly browserAssetsRoot?: string;
@@ -29,7 +29,7 @@ export interface EnvironmentListenerOptions {
   readonly browserAssetsRoot?: string;
   readonly environmentId: string;
   readonly events: EnvironmentEventPublisher;
-  readonly features: readonly EnvironmentFeature[];
+  readonly features: EnvironmentFeatures;
   readonly host?: string;
   readonly port?: number;
   readonly productVersion: string;

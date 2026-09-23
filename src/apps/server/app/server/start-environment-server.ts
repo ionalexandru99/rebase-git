@@ -9,6 +9,7 @@ import type {
 import { acquireRuntimeMarker } from "#server/app/runtime/runtime-marker";
 import type { RuntimeMarker } from "#server/app/runtime/runtime-marker.contract";
 import { verifyRuntimeRequirements } from "#server/app/runtime/runtime-requirements";
+import { environmentFeatures } from "#server/app/server/environment-features";
 import { acquireEnvironmentListener } from "#server/app/server/environment-listener";
 import type {
   EnvironmentListener,
@@ -16,50 +17,14 @@ import type {
   EnvironmentServerOptions,
 } from "#server/app/server/environment-server.contract";
 import type { EnvironmentServerStartError } from "#server/app/server/environment-server-error.contract";
-import { CommitInspectionAccess } from "#server/domain/commit-inspection.contract";
+import { EnvironmentAuthorizationAccess } from "#server/domain/environment-authorization.contract";
 import { EnvironmentEvents } from "#server/domain/environment-event-publisher.contract";
-import { EnvironmentFilesystemAccess } from "#server/domain/environment-filesystem.contract";
-import { EnvironmentIdentity } from "#server/domain/environment-identity.contract";
 import type { EnvironmentStorageError } from "#server/domain/environment-storage-error.contract";
-import { RepositoryCatalogAccess } from "#server/domain/repository-catalog.contract";
-import { RepositoryChangesAccess } from "#server/domain/repository-changes.contract";
-import { RepositoryFreshnessState } from "#server/domain/repository-freshness.contract";
-import { RepositoryHistoryAccess } from "#server/domain/repository-history.contract";
-import { RepositoryRefsAccess } from "#server/domain/repository-refs.contract";
-import {
-  commitInspectionFeature,
-  commitInspectionLayer,
-} from "#server/features/commit-inspection/index";
-import { EnvironmentAuthorizationAccess } from "#server/features/environment-authorization/environment-authorization.contract";
-import {
-  environmentAuthorizationFeature,
-  environmentAuthorizationLayer,
-} from "#server/features/environment-authorization/index";
-import {
-  environmentFilesystemFeature,
-  environmentFilesystemLayer,
-} from "#server/features/environment-filesystem/index";
-import { environmentIdentityLayer } from "#server/features/environment-identity/index";
-import {
-  repositoryCatalogFeature,
-  repositoryCatalogLayer,
-} from "#server/features/repository-catalog/index";
-import {
-  repositoryChangesFeature,
-  repositoryChangesLayer,
-} from "#server/features/repository-changes/index";
-import {
-  repositoryFreshnessFeature,
-  repositoryFreshnessLayer,
-  repositoryHistoryFeature,
-  repositoryHistoryLayer,
-} from "#server/features/repository-history/index";
-import {
-  repositoryChangePublisherLayer,
-  repositoryRefsFeature,
-  repositoryRefsLayer,
-} from "#server/features/repository-refs/index";
+import { environmentAuthorizationLayer } from "#server/features/environment-authorization/index";
+import { createEnvironmentIdentity } from "#server/features/environment-identity/index";
+import { repositoryCatalogLayer } from "#server/features/repository-catalog/index";
 import { environmentContextLayer } from "#server/persistence/environment-context";
+import { EnvironmentStorage } from "#server/persistence/environment-context.contract";
 import { defaultEnvironmentPaths } from "#server/persistence/storage/environment-paths";
 import type { EnvironmentPaths } from "#server/persistence/storage/environment-paths.contract";
 import { productVersion } from "#server/product-version";
@@ -90,22 +55,10 @@ export function startEnvironmentServer(
 
 function environmentLayer(paths: EnvironmentPaths) {
   return Layer.mergeAll(
-    environmentIdentityLayer,
     environmentAuthorizationLayer,
-    environmentFilesystemLayer,
-    commitInspectionLayer,
-    repositoryChangesLayer,
-    repositoryHistoryLayer,
-    repositoryFreshnessLayer,
-    repositoryRefsLayer,
+    repositoryAccessLayer,
+    repositoryCoordinationLayer,
   ).pipe(
-    Layer.provideMerge(
-      Layer.mergeAll(
-        repositoryAccessLayer,
-        repositoryCoordinationLayer,
-        repositoryChangePublisherLayer,
-      ),
-    ),
     Layer.provideMerge(repositoryCatalogLayer),
     Layer.provideMerge(
       Layer.mergeAll(
@@ -118,23 +71,12 @@ function environmentLayer(paths: EnvironmentPaths) {
   );
 }
 
-const environmentFeatures = Effect.all([
-  Effect.map(EnvironmentAuthorizationAccess, environmentAuthorizationFeature),
-  Effect.map(EnvironmentFilesystemAccess, environmentFilesystemFeature),
-  Effect.map(RepositoryCatalogAccess, repositoryCatalogFeature),
-  Effect.map(CommitInspectionAccess, commitInspectionFeature),
-  Effect.map(RepositoryChangesAccess, repositoryChangesFeature),
-  Effect.map(RepositoryHistoryAccess, repositoryHistoryFeature),
-  Effect.map(RepositoryFreshnessState, repositoryFreshnessFeature),
-  Effect.map(RepositoryRefsAccess, repositoryRefsFeature),
-]);
-
 function startEnvironment(
   options: EnvironmentServerOptions,
   paths: EnvironmentPaths,
 ) {
   return Effect.gen(function* () {
-    const identity = yield* EnvironmentIdentity;
+    const identity = createEnvironmentIdentity(yield* EnvironmentStorage);
     const authorization = yield* EnvironmentAuthorizationAccess;
     const environment = yield* identity.current();
     const useAutomaticPort = options.port === undefined || options.port === 0;

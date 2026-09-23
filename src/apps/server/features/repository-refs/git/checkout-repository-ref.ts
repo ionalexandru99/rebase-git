@@ -10,10 +10,10 @@ import type { EnvironmentStorageError } from "#server/domain/environment-storage
 import type { GitCommandRunner } from "#server/domain/git-command.contract";
 import type { RepositoryAccessService } from "#server/domain/repository-access.contract";
 import type { RepositoryGitError } from "#server/domain/repository-git.contract";
-import type { RepositoryRefsError } from "#server/domain/repository-refs.contract";
 import {
   checkoutFailure,
   gitFailed,
+  type RepositoryRefsError,
   repositoryAccessFailed,
   repositoryRefsFailure,
 } from "#server/features/repository-refs/git/repository-refs-failures";

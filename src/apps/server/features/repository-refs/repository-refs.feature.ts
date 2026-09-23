@@ -1,18 +1,52 @@
-import { RepositoryRefsRpc } from "@rebase/contracts";
+import { RepositoryRefsHttpApi } from "@rebase/contracts";
+import { Effect } from "effect";
 import type { EnvironmentFeature } from "#server/adapters/environment-transport/environment-feature.contract";
-import { environmentFeatureRpc } from "#server/adapters/environment-transport/rpc/environment-feature-rpc";
-import type { RepositoryRefsService } from "#server/domain/repository-refs.contract";
-import { repositoryRefsHttpRoutes } from "#server/features/repository-refs/http/repository-refs-http-routes";
+import { httpRoute } from "#server/adapters/environment-transport/http/environment-http-route-handler";
+import { EnvironmentEvents } from "#server/domain/environment-event-publisher.contract";
+import { GitCommands } from "#server/domain/git-command.contract";
+import { RepositoryAccess } from "#server/domain/repository-access.contract";
+import { RepositoryCoordination } from "#server/domain/repository-coordination.contract";
+import { RepositoryWatching } from "#server/domain/repository-watcher.contract";
+import type { RepositoryRefsError } from "#server/features/repository-refs/git/repository-refs-failures";
+import { acquireRepositoryChangePublisher } from "#server/features/repository-refs/repository-change-publisher";
+import { createRepositoryRefsService } from "#server/features/repository-refs/repository-refs";
 import { repositoryRefsRpc } from "#server/features/repository-refs/rpc/repository-refs-rpc";
 
-export function repositoryRefsFeature(
-  refs: RepositoryRefsService,
-): EnvironmentFeature {
+export const repositoryRefsFeature = Effect.gen(function* () {
+  const git = yield* GitCommands;
+  const refs = createRepositoryRefsService({
+    access: yield* RepositoryAccess,
+    changes: yield* acquireRepositoryChangePublisher(
+      git,
+      yield* RepositoryWatching,
+      yield* EnvironmentEvents,
+    ),
+    git,
+    coordination: yield* RepositoryCoordination,
+  });
   return {
     capabilities: ["repository-refs"],
-    httpRoutes: repositoryRefsHttpRoutes(refs),
-    rpc: environmentFeatureRpc(RepositoryRefsRpc, (session) =>
-      repositoryRefsRpc(session, refs),
-    ),
-  };
+    httpRoutes: [
+      httpRoute(
+        RepositoryRefsHttpApi.checkout,
+        (command) => refs.checkout(command),
+        { failureStatus },
+      ),
+    ],
+    rpc: (session) => repositoryRefsRpc(session, refs),
+  } satisfies EnvironmentFeature;
+});
+
+function failureStatus(error: RepositoryRefsError) {
+  switch (error.failure._tag) {
+    case "RepositoryMissing":
+    case "WorktreeMissing":
+    case "RefMissing":
+      return 404;
+    case "BranchCheckedOutElsewhere":
+    case "CheckoutRejected":
+      return 409;
+    case "GitFailed":
+      return 422;
+  }
 }

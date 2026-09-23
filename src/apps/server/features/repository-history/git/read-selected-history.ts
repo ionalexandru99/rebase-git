@@ -2,8 +2,10 @@ import type { ReadRepositoryHistory } from "@rebase/contracts";
 import { Effect, Stream } from "effect";
 import type { GitCommandRunner } from "#server/domain/git-command.contract";
 import type { RepositoryGitError } from "#server/domain/repository-git.contract";
-import { RepositoryHistoryError } from "#server/domain/repository-history.contract";
-import { historyOutputTooLarge } from "#server/features/repository-history/git/history-failures";
+import {
+  historyOutputTooLarge,
+  RepositoryHistoryError,
+} from "#server/features/repository-history/git/history-failures";
 import { gitHistoryFormat } from "#server/features/repository-history/git/parse-git-history";
 import { streamRepositoryGit } from "#server/repository/access/index";
 

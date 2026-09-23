@@ -1,4 +1,7 @@
-import { currentClientReceiveLimits } from "@rebase/contracts";
+import {
+  currentClientReceiveLimits,
+  isEnvironmentHttpFailureStatus,
+} from "@rebase/contracts";
 import { Effect, Schema } from "effect";
 import {
   EnvironmentHttpRejected,
@@ -45,7 +48,7 @@ export function requestEnvironmentHttp<
     if (response.status === route.successStatus) {
       return yield* decodeBody(route.success, body, responseError);
     }
-    if (!route.failureStatuses.some((status) => status === response.status)) {
+    if (!isEnvironmentHttpFailureStatus(route, response.status)) {
       return yield* responseError();
     }
     const failure = yield* decodeBody(route.failure, body, responseError);

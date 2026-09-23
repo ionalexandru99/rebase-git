@@ -5,7 +5,6 @@ import type {
 } from "@rebase/contracts";
 import { Effect } from "effect";
 import type { GitCommandRunner } from "#server/domain/git-command.contract";
-import type { RepositoryRefsError } from "#server/domain/repository-refs.contract";
 import { fitRepositoryRefs } from "#server/features/repository-refs/git/fit-repository-refs";
 import {
   forEachRefFormat,
@@ -16,7 +15,10 @@ import {
   tagFromRecord,
 } from "#server/features/repository-refs/git/parse-for-each-ref";
 import { readRemoteMetadata } from "#server/features/repository-refs/git/read-remote-metadata";
-import { gitFailed } from "#server/features/repository-refs/git/repository-refs-failures";
+import {
+  gitFailed,
+  type RepositoryRefsError,
+} from "#server/features/repository-refs/git/repository-refs-failures";
 import {
   canonicalizeWorktrees,
   readWorktrees,

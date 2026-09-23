@@ -22,23 +22,27 @@ import { createEnvironmentEventPublisher } from "#server/adapters/environment-tr
 import { createLocalGitCommandRunner } from "#server/adapters/local-git/local-git-command-runner";
 import { createLocalRepositoryWatcher } from "#server/adapters/local-git/local-repository-watcher";
 import { acquireEnvironmentListener } from "#server/app/server/environment-listener";
+import { EnvironmentAuthorizationAccess } from "#server/domain/environment-authorization.contract";
+import { EnvironmentEvents } from "#server/domain/environment-event-publisher.contract";
+import { GitCommands } from "#server/domain/git-command.contract";
+import { RepositoryAccess } from "#server/domain/repository-access.contract";
+import { RepositoryCatalogAccess } from "#server/domain/repository-catalog.contract";
+import { RepositoryCoordination } from "#server/domain/repository-coordination.contract";
+import { RepositoryWatching } from "#server/domain/repository-watcher.contract";
 import { createEnvironmentAuthorization } from "#server/features/environment-authorization/environment-authorization";
 import { environmentAuthorizationFeature } from "#server/features/environment-authorization/index";
 import {
   createRepositoryCatalog,
   repositoryCatalogFeature,
 } from "#server/features/repository-catalog/index";
-import {
-  createRepositoryRefsService,
-  repositoryRefsFeature,
-} from "#server/features/repository-refs/index";
-import { acquireRepositoryChangePublisher } from "#server/features/repository-refs/repository-change-publisher";
+import { repositoryRefsFeature } from "#server/features/repository-refs/index";
 import { acquireEnvironmentContext } from "#server/persistence/environment-context";
 import { environmentPaths } from "#server/persistence/storage/environment-paths";
 import {
   createRepositoryAccess,
   createRepositoryCoordination,
 } from "#server/repository/access/index";
+import { testEnvironmentFeatures } from "#tests-integration/apps/server/environment-connection/test-environment-features";
 import { createBrowserLocalEnvironmentSession } from "#web/app/environment/browser-local-environment-session";
 import { createRepositoryRefsRpc } from "#web/features/repository-refs/transport/repository-refs-rpc";
 
@@ -279,25 +283,33 @@ function withRefsListener(use: (fixture: ListenerFixture) => Promise<void>) {
         );
         const events = createEnvironmentEventPublisher();
         const git = createLocalGitCommandRunner();
-        const refs = createRepositoryRefsService({
-          coordination: createRepositoryCoordination(git),
-          access: createRepositoryAccess(catalog, git),
-          changes: yield* acquireRepositoryChangePublisher(
-            git,
-            createLocalRepositoryWatcher(),
-            events,
+        const features = yield* Effect.all([
+          environmentAuthorizationFeature,
+          repositoryCatalogFeature,
+          repositoryRefsFeature,
+        ]).pipe(
+          Effect.provideService(EnvironmentAuthorizationAccess, authorization),
+          Effect.provideService(RepositoryCatalogAccess, catalog),
+          Effect.provideService(
+            RepositoryAccess,
+            createRepositoryAccess(catalog, git),
           ),
-          git,
-        });
+          Effect.provideService(GitCommands, git),
+          Effect.provideService(
+            RepositoryCoordination,
+            createRepositoryCoordination(git),
+          ),
+          Effect.provideService(
+            RepositoryWatching,
+            createLocalRepositoryWatcher(),
+          ),
+          Effect.provideService(EnvironmentEvents, events),
+        );
         const listener = yield* acquireEnvironmentListener({
           authorization,
           environmentId,
           events,
-          features: [
-            environmentAuthorizationFeature(authorization),
-            repositoryCatalogFeature(catalog),
-            repositoryRefsFeature(refs),
-          ],
+          features: testEnvironmentFeatures(features),
           productVersion: "0.0.0",
         });
         listener.readiness.value = true;

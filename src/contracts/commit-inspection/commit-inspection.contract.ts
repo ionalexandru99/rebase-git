@@ -46,7 +46,7 @@ export const CommitInspectionHttpApi = {
   inspect: {
     capability: "repository.read",
     failure: ChangesHttpFailure,
-    failureStatuses: [400, 401, 403, 404, 409, 410, 413],
+    failureStatuses: [404, 409],
     method: "POST",
     path: "/api/repositories/commits/inspect",
     request: InspectCommit,
@@ -56,7 +56,7 @@ export const CommitInspectionHttpApi = {
   inspectDiff: {
     capability: "repository.read",
     failure: ChangesHttpFailure,
-    failureStatuses: [400, 401, 403, 404, 409, 410, 413],
+    failureStatuses: [404, 409],
     method: "POST",
     path: "/api/repositories/commits/diff",
     request: InspectCommitDiff,

@@ -4,17 +4,16 @@ import { mkdtemp, realpath, rm, symlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
-import { Context, Effect, Exit, Layer, Scope } from "effect";
+import { Effect, Exit, Layer, Scope } from "effect";
 import { expect, it, vi } from "vite-plus/test";
 import { createEnvironmentEventPublisher } from "#server/adapters/environment-transport/events/environment-event-publisher";
 import { createLocalGitCommandRunner } from "#server/adapters/local-git/local-git-command-runner";
 import { createLocalRepositoryWatcher } from "#server/adapters/local-git/local-repository-watcher";
 import { GitCommands } from "#server/domain/git-command.contract";
 import { RepositoryCatalogAccess } from "#server/domain/repository-catalog.contract";
-import { RepositoryFreshnessState } from "#server/domain/repository-freshness.contract";
 import { RepositoryWatching } from "#server/domain/repository-watcher.contract";
 import { createRepositoryCatalog } from "#server/features/repository-catalog/repository-catalog";
-import { repositoryFreshnessLayer } from "#server/features/repository-history/freshness/repository-freshness";
+import { acquireRepositoryFreshness } from "#server/features/repository-history/freshness/repository-freshness";
 import { acquireRepositoryChangePublisher } from "#server/features/repository-refs/repository-change-publisher";
 import { createRepositoryRefsService } from "#server/features/repository-refs/repository-refs";
 import { acquireEnvironmentContext } from "#server/persistence/environment-context";
@@ -90,24 +89,24 @@ for (const firstRelease of ["refs", "freshness"] as const)
           vi.mocked(watch).mockClear();
           yield* refs.read(mainEntry.id);
           yield* refs.read(linkedEntry.id);
-          const services = yield* Layer.build(
-            repositoryFreshnessLayer.pipe(
-              Layer.provide(
-                Layer.mergeAll(
-                  repositoryAccessLayer,
-                  repositoryCoordinationLayer,
-                ),
-              ),
-              Layer.provide(
-                Layer.mergeAll(
-                  Layer.succeed(GitCommands, runner),
-                  Layer.succeed(RepositoryCatalogAccess, catalog),
-                  Layer.succeed(RepositoryWatching, watcher),
+          const freshness = yield* acquireRepositoryFreshness.pipe(
+            Effect.provide(
+              Layer.mergeAll(
+                repositoryAccessLayer,
+                repositoryCoordinationLayer,
+              ).pipe(
+                Layer.provide(
+                  Layer.mergeAll(
+                    Layer.succeed(GitCommands, runner),
+                    Layer.succeed(RepositoryCatalogAccess, catalog),
+                    Layer.succeed(RepositoryWatching, watcher),
+                  ),
                 ),
               ),
             ),
+            Effect.provideService(GitCommands, runner),
+            Effect.provideService(RepositoryWatching, watcher),
           );
-          const freshness = Context.get(services, RepositoryFreshnessState);
           const fresh = vi.fn();
           const unsubscribe = yield* freshness.subscribe(linkedEntry.id, fresh);
           expect(run).toHaveBeenCalledTimes(14);

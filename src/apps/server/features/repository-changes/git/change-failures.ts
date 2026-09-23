@@ -1,6 +1,11 @@
 import type { ChangesFailure } from "@rebase/contracts";
-import { Effect } from "effect";
-import { RepositoryChangesError } from "#server/domain/repository-changes.contract";
+import { Data, Effect } from "effect";
+
+export class RepositoryChangesError extends Data.TaggedError(
+  "RepositoryChangesError",
+)<{
+  readonly failure: ChangesFailure;
+}> {}
 
 export function changesError(reason: ChangesFailure["reason"], detail: string) {
   return new RepositoryChangesError({

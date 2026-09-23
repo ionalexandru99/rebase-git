@@ -11,7 +11,7 @@ import type {
   EnvironmentTransportState,
   RunEnvironmentEffect,
 } from "#server/adapters/environment-transport/environment-connection.contract";
-import type { EnvironmentFeature } from "#server/adapters/environment-transport/environment-feature.contract";
+import type { EnvironmentFeatures } from "#server/adapters/environment-transport/environment-feature.contract";
 import {
   authorizationFailureStatus,
   expectedRequestOrigin,
@@ -22,13 +22,13 @@ import { runEnvironmentRpcSession } from "#server/adapters/environment-transport
 import {
   type EnvironmentAuthorization,
   isEnvironmentAuthorizationError,
-} from "#server/features/environment-authorization/environment-authorization.contract";
+} from "#server/domain/environment-authorization.contract";
 
 export function attachEnvironmentWebSocketServer(
   server: Server,
   state: EnvironmentTransportState,
   authorization: EnvironmentAuthorization,
-  features: readonly EnvironmentFeature[],
+  features: EnvironmentFeatures,
   runEnvironmentEffect: RunEnvironmentEffect,
 ) {
   const webSocketServer = new WebSocketServer({

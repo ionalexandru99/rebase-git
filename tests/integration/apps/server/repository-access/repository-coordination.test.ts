@@ -8,7 +8,7 @@ import { Deferred, Effect, Fiber, Option } from "effect";
 import { afterEach, expect, it } from "vite-plus/test";
 import { createLocalGitCommandRunner } from "#server/adapters/local-git/local-git-command-runner";
 import type { GitCommandRunner } from "#server/domain/git-command.contract";
-import { createRepositoryChangesService } from "#server/features/repository-changes/index";
+import { createRepositoryChangesService } from "#server/features/repository-changes/repository-changes";
 import { acquireWatchedRepository } from "#server/features/repository-history/freshness/watched-repository";
 import { createRepositoryRefsService } from "#server/features/repository-refs/repository-refs";
 import {

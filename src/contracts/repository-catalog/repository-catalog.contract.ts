@@ -87,7 +87,6 @@ export const RepositoryCatalogHttpApi = {
   list: {
     capability: "repository.read",
     failure: EnvironmentGrantHttpFailure,
-    failureStatuses: [400, 401, 403, 410, 413],
     method: "GET",
     path: repositoryCatalogPath,
     success: RepositoryCatalog,
@@ -96,7 +95,7 @@ export const RepositoryCatalogHttpApi = {
   recordOpened: {
     capability: "repository.read",
     failure: RepositoryCatalogHttpFailure,
-    failureStatuses: [400, 401, 403, 404, 410, 413, 422],
+    failureStatuses: [404, 422],
     method: "POST",
     path: recordRepositoryOpenedPath,
     request: RecordRepositoryOpened,
@@ -106,7 +105,7 @@ export const RepositoryCatalogHttpApi = {
   remember: {
     capability: "repository.write",
     failure: RepositoryCatalogHttpFailure,
-    failureStatuses: [400, 401, 403, 404, 410, 413, 422],
+    failureStatuses: [404, 422],
     method: "POST",
     path: rememberRepositoryPath,
     request: RememberRepository,
@@ -116,7 +115,7 @@ export const RepositoryCatalogHttpApi = {
   remove: {
     capability: "repository.write",
     failure: RepositoryCatalogHttpFailure,
-    failureStatuses: [400, 401, 403, 404, 410, 413, 422],
+    failureStatuses: [404, 422],
     method: "POST",
     path: removeRepositoryPath,
     request: RemoveRepository,

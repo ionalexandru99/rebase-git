@@ -1,16 +1,7 @@
-import { Effect, Layer } from "effect";
-import {
-  CommitInspectionAccess,
-  type CommitInspectionService,
-} from "#server/domain/commit-inspection.contract";
-import {
-  type GitCommandRunner,
-  GitCommands,
-} from "#server/domain/git-command.contract";
-import {
-  RepositoryAccess,
-  type RepositoryAccessService,
-} from "#server/domain/repository-access.contract";
+import type { InspectCommit, InspectCommitDiff } from "@rebase/contracts";
+import { Effect } from "effect";
+import type { GitCommandRunner } from "#server/domain/git-command.contract";
+import type { RepositoryAccessService } from "#server/domain/repository-access.contract";
 import {
   inspectCommit,
   inspectCommitDiff,
@@ -20,9 +11,9 @@ import { inspectionError } from "#server/features/commit-inspection/git/inspecti
 export function createCommitInspectionService(
   access: RepositoryAccessService,
   git: GitCommandRunner,
-): CommitInspectionService {
+) {
   return {
-    inspect: (command) =>
+    inspect: (command: InspectCommit) =>
       access.worktree(command).pipe(
         Effect.mapError((error) => inspectionError("Missing", error.detail)),
         Effect.andThen(() => inspectCommit(git, command)),
@@ -32,7 +23,7 @@ export function createCommitInspectionService(
             : error,
         ),
       ),
-    inspectDiff: (command) =>
+    inspectDiff: (command: InspectCommitDiff) =>
       access.worktree(command).pipe(
         Effect.mapError((error) => inspectionError("Missing", error.detail)),
         Effect.andThen(() => inspectCommitDiff(git, command)),
@@ -44,13 +35,3 @@ export function createCommitInspectionService(
       ),
   };
 }
-
-export const commitInspectionLayer = Layer.effect(
-  CommitInspectionAccess,
-  Effect.gen(function* () {
-    return createCommitInspectionService(
-      yield* RepositoryAccess,
-      yield* GitCommands,
-    );
-  }),
-);

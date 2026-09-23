@@ -19,7 +19,11 @@ export {
   environmentLivePath,
   environmentSnapshotPath,
 } from "@rebase/contracts/environment-connection/http/environment-discovery.contract";
-export type { EnvironmentHttpRoute } from "@rebase/contracts/environment-connection/http/environment-http-route.contract";
+export {
+  type EnvironmentHttpFailureStatus,
+  type EnvironmentHttpRoute,
+  isEnvironmentHttpFailureStatus,
+} from "@rebase/contracts/environment-connection/http/environment-http-route.contract";
 export { IsoDate } from "@rebase/contracts/environment-connection/iso-date.contract";
 export {
   currentEnvironmentCapabilities,

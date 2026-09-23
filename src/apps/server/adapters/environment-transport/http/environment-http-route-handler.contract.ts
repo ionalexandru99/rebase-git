@@ -1,10 +1,11 @@
 import type {
   EnvironmentDeviceAuthorization,
+  EnvironmentHttpFailureStatus,
   EnvironmentHttpRoute,
 } from "@rebase/contracts";
 import type { Effect, Schema } from "effect";
+import type { EnvironmentAuthorizationError } from "#server/domain/environment-authorization.contract";
 import type { EnvironmentStorageError } from "#server/domain/environment-storage-error.contract";
-import type { EnvironmentAuthorizationError } from "#server/features/environment-authorization/environment-authorization.contract";
 
 export type ServableEnvironmentHttpRoute = EnvironmentHttpRoute & {
   readonly failure: Schema.ConstraintEncoder<unknown>;
@@ -17,10 +18,6 @@ export type EnvironmentHttpRouteCommand<
 > = Route extends { readonly request?: infer Request }
   ? CommandOf<Request>
   : undefined;
-
-export type EnvironmentHttpFailureStatus<
-  Route extends ServableEnvironmentHttpRoute,
-> = Route["failureStatuses"][number];
 
 export interface EnvironmentHttpRequestContext<
   Route extends ServableEnvironmentHttpRoute = ServableEnvironmentHttpRoute,

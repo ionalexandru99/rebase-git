@@ -1,31 +1,17 @@
 import { and } from "drizzle-orm";
-import { Effect, Layer } from "effect";
-import {
-  type Environment,
-  EnvironmentIdentity,
-  type EnvironmentIdentityService,
-} from "#server/domain/environment-identity.contract";
 import {
   hasNoAutomaticPort,
   isCurrentEnvironment,
 } from "#server/features/environment-identity/environment-identity.specifications";
 import type { EnvironmentContext } from "#server/persistence/environment-context.contract";
-import { EnvironmentStorage } from "#server/persistence/environment-context.contract";
 import { environmentTable } from "#server/persistence/environment-state.schema";
 
-export function createEnvironmentIdentity(
-  context: EnvironmentContext,
-): EnvironmentIdentityService {
+export function createEnvironmentIdentity(context: EnvironmentContext) {
   return {
     current: () => readCurrentEnvironment(context),
-    claimAutomaticPort: (port) => claimAutomaticPort(context, port),
+    claimAutomaticPort: (port: number) => claimAutomaticPort(context, port),
   };
 }
-
-export const environmentIdentityLayer = Layer.effect(
-  EnvironmentIdentity,
-  Effect.map(EnvironmentStorage, createEnvironmentIdentity),
-);
 
 function readCurrentEnvironment(context: EnvironmentContext) {
   return context.read("Could not read Environment state", async (database) => {
@@ -37,7 +23,7 @@ function readCurrentEnvironment(context: EnvironmentContext) {
     if (environment === undefined) {
       throw new Error("The Environment identity is missing.");
     }
-    return environment satisfies Environment;
+    return environment;
   });
 }
 

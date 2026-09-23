@@ -1,23 +1,22 @@
-import type { ChangesScope, RepositoryChanges } from "@rebase/contracts";
-import { Effect, Layer } from "effect";
+import type {
+  ChangesScope,
+  CommitChanges,
+  MutateChanges,
+  ReadChangeDiff,
+  RepositoryChanges,
+} from "@rebase/contracts";
+import { Effect } from "effect";
 import type { GitCommandRunner } from "#server/domain/git-command.contract";
-import { GitCommands } from "#server/domain/git-command.contract";
-import {
-  RepositoryAccess,
-  type RepositoryAccessService,
-} from "#server/domain/repository-access.contract";
-import {
-  RepositoryChangesAccess,
-  type RepositoryChangesError,
-  type RepositoryChangesService,
-} from "#server/domain/repository-changes.contract";
-import {
-  RepositoryCoordination,
-  type RepositoryCoordinationService,
-  type RepositoryResourceScope,
+import type { RepositoryAccessService } from "#server/domain/repository-access.contract";
+import type {
+  RepositoryCoordinationService,
+  RepositoryResourceScope,
 } from "#server/domain/repository-coordination.contract";
 import type { RepositoryGitError } from "#server/domain/repository-git.contract";
-import { changesError } from "#server/features/repository-changes/git/change-failures";
+import {
+  changesError,
+  type RepositoryChangesError,
+} from "#server/features/repository-changes/git/change-failures";
 import { safeChangePath } from "#server/features/repository-changes/git/change-files";
 import { withChangeIndex } from "#server/features/repository-changes/git/change-index";
 import { mutateChanges } from "#server/features/repository-changes/git/mutate-changes";
@@ -30,7 +29,7 @@ export function createRepositoryChangesService(
   access: RepositoryAccessService,
   git: GitCommandRunner,
   coordination: RepositoryCoordinationService,
-): RepositoryChangesService {
+) {
   const locked = <A>(
     scope: ChangesScope,
     run: Effect.Effect<A, RepositoryChangesError | RepositoryGitError>,
@@ -53,14 +52,14 @@ export function createRepositoryChangesService(
         );
     });
   return {
-    read: (scope) =>
+    read: (scope: ChangesScope) =>
       locked(
         scope,
         readChanges(git, scope).pipe(
           Effect.map((value) => fitChanges(value.snapshot)),
         ),
       ),
-    diff: (command) =>
+    diff: (command: ReadChangeDiff) =>
       locked(
         command,
         Effect.gen(function* () {
@@ -69,7 +68,7 @@ export function createRepositoryChangesService(
           return yield* readChangeDiff(git, command, base);
         }),
       ),
-    mutate: (command) =>
+    mutate: (command: MutateChanges) =>
       locked(
         command,
         Effect.gen(function* () {
@@ -90,7 +89,7 @@ export function createRepositoryChangesService(
           return fitChanges((yield* readChanges(git, command)).snapshot);
         }),
       ),
-    commit: (command) =>
+    commit: (command: CommitChanges) =>
       locked(
         command,
         withChangeIndex(git, command.worktreePath, (indexFile) =>
@@ -140,17 +139,6 @@ export function createRepositoryChangesService(
       ),
   };
 }
-
-export const repositoryChangesLayer = Layer.effect(
-  RepositoryChangesAccess,
-  Effect.gen(function* () {
-    return createRepositoryChangesService(
-      yield* RepositoryAccess,
-      yield* GitCommands,
-      yield* RepositoryCoordination,
-    );
-  }),
-);
 
 function fitChanges(snapshot: RepositoryChanges): RepositoryChanges {
   let size = 0;

@@ -3,7 +3,6 @@ import type {
   RepositoryFreshness,
 } from "@rebase/contracts";
 import {
-  Context,
   Deferred,
   Effect,
   Exit,
@@ -21,12 +20,11 @@ import {
 } from "#server/domain/git-command.contract";
 import { RepositoryCatalogAccess } from "#server/domain/repository-catalog.contract";
 import { RepositoryCoordination } from "#server/domain/repository-coordination.contract";
-import {
-  type RepositoryFreshnessService,
-  RepositoryFreshnessState,
-} from "#server/domain/repository-freshness.contract";
 import { RepositoryWatching } from "#server/domain/repository-watcher.contract";
-import { repositoryFreshnessLayer } from "#server/features/repository-history/freshness/repository-freshness";
+import {
+  acquireRepositoryFreshness,
+  type RepositoryFreshnessService,
+} from "#server/features/repository-history/freshness/repository-freshness";
 import { repositoryAccessLayer } from "#server/repository/access/index";
 
 const repositoryId = "00000000-0000-4000-8000-000000000001";
@@ -475,50 +473,51 @@ function withService(
   const watch = { open: vi.fn(), close: vi.fn(), change: () => {} };
   return Effect.runPromise(
     Effect.gen(function* () {
-      const context = yield* Layer.build(
-        repositoryFreshnessLayer.pipe(
-          Layer.provide(repositoryAccessLayer),
-          Layer.provide(
-            Layer.mergeAll(
-              Layer.succeed(RepositoryCoordination, {
-                run: (_directory, _scope, operation) => operation,
-              }),
-              Layer.succeed(RepositoryCatalogAccess, {
-                find: (id) =>
-                  Effect.succeed({
-                    ...entry,
-                    id,
-                    path: id === linkedId ? "/linked" : entry.path,
-                  }),
-                list: unusedCatalogOperation,
-                recordOpened: unusedCatalogOperation,
-                remember: unusedCatalogOperation,
-                remove: unusedCatalogOperation,
-              }),
-              Layer.succeed(GitCommands, {
-                stream: () => Stream.empty,
-                run: (command) =>
-                  command.arguments[0] === "fetch"
-                    ? git.fetch(command)
-                    : command.arguments.includes("rev-parse")
-                      ? Effect.succeed(output(0, "/repo/.git"))
-                      : git.initialize.pipe(
-                          Effect.as(output(0, options.setting ?? "inherit")),
-                        ),
-              }),
-              Layer.succeed(RepositoryWatching, {
-                watch: (_, change) =>
-                  Effect.sync(() => {
-                    watch.open();
-                    watch.change = change;
-                    return { close: watch.close };
-                  }),
-              }),
+      const service = yield* acquireRepositoryFreshness.pipe(
+        Effect.provide(
+          repositoryAccessLayer.pipe(
+            Layer.provideMerge(
+              Layer.mergeAll(
+                Layer.succeed(RepositoryCoordination, {
+                  run: (_directory, _scope, operation) => operation,
+                }),
+                Layer.succeed(RepositoryCatalogAccess, {
+                  find: (id) =>
+                    Effect.succeed({
+                      ...entry,
+                      id,
+                      path: id === linkedId ? "/linked" : entry.path,
+                    }),
+                  list: unusedCatalogOperation,
+                  recordOpened: unusedCatalogOperation,
+                  remember: unusedCatalogOperation,
+                  remove: unusedCatalogOperation,
+                }),
+                Layer.succeed(GitCommands, {
+                  stream: () => Stream.empty,
+                  run: (command) =>
+                    command.arguments[0] === "fetch"
+                      ? git.fetch(command)
+                      : command.arguments.includes("rev-parse")
+                        ? Effect.succeed(output(0, "/repo/.git"))
+                        : git.initialize.pipe(
+                            Effect.as(output(0, options.setting ?? "inherit")),
+                          ),
+                }),
+                Layer.succeed(RepositoryWatching, {
+                  watch: (_, change) =>
+                    Effect.sync(() => {
+                      watch.open();
+                      watch.change = change;
+                      return { close: watch.close };
+                    }),
+                }),
+              ),
             ),
           ),
         ),
       );
-      yield* test(Context.get(context, RepositoryFreshnessState), watch, git);
+      yield* test(service, watch, git);
     }).pipe(Effect.scoped, Effect.provide(TestClock.layer())),
   );
 }

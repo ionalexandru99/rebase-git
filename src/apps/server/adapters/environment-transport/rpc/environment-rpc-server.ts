@@ -8,19 +8,14 @@ import { RpcSerialization, RpcServer } from "effect/unstable/rpc";
 import { Socket, SocketServer } from "effect/unstable/socket";
 import type { WebSocket } from "ws";
 import type { EnvironmentTransportState } from "#server/adapters/environment-transport/environment-connection.contract";
-import type {
-  EnvironmentFeature,
-  EnvironmentRpcHandlers,
-} from "#server/adapters/environment-transport/environment-feature.contract";
+import type { EnvironmentFeatures } from "#server/adapters/environment-transport/environment-feature.contract";
 import { acquireEnvironmentEvents } from "#server/adapters/environment-transport/rpc/environment-rpc-events";
 import { createEnvironmentRpcSession } from "#server/adapters/environment-transport/rpc/environment-rpc-negotiation";
-import type { EnvironmentRpcSession } from "#server/adapters/environment-transport/rpc/environment-rpc-session.contract";
-import { validateEnvironmentRpcHandlers } from "#server/adapters/environment-transport/validate-environment-features";
 
 export function runEnvironmentRpcSession(
   socket: WebSocket,
   state: EnvironmentTransportState,
-  features: readonly EnvironmentFeature[],
+  features: EnvironmentFeatures,
   address: SocketServer.Address,
   access: ReadonlySet<EnvironmentAccessCapability>,
 ) {
@@ -29,7 +24,7 @@ export function runEnvironmentRpcSession(
     const session = yield* createEnvironmentRpcSession(state, access);
     const watchEnvironment = yield* acquireEnvironmentEvents(session);
     const handlers = EnvironmentRpc.toLayer({
-      ...registeredRpcHandlers(session, features),
+      ...features.rpc(session),
       Hello: session.hello,
       WatchEnvironment: watchEnvironment,
     });
@@ -80,29 +75,4 @@ export function runEnvironmentRpcSession(
     Effect.scoped,
     Effect.catchCause(() => Effect.sync(() => socket.close(1011))),
   );
-}
-
-function registeredRpcHandlers(
-  session: EnvironmentRpcSession,
-  features: readonly EnvironmentFeature[],
-): EnvironmentRpcHandlers {
-  const handlers = unregisteredRpcHandlers();
-  for (const feature of features) {
-    if (feature.rpc !== undefined) {
-      const registered = feature.rpc.handlers(session);
-      validateEnvironmentRpcHandlers(feature.rpc.names, registered);
-      Object.assign(handlers, registered);
-    }
-  }
-  return handlers;
-}
-
-function unregisteredRpcHandlers(): EnvironmentRpcHandlers {
-  return Object.fromEntries(
-    [...EnvironmentRpc.requests.values()].map((rpc) => [
-      rpc._tag,
-      (): Effect.Effect<never> =>
-        Effect.die(new Error(`No feature registered the ${rpc._tag} RPC.`)),
-    ]),
-  ) as Record<keyof EnvironmentRpcHandlers, () => Effect.Effect<never>>;
 }

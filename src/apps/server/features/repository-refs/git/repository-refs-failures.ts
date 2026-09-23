@@ -1,9 +1,16 @@
 import type { RepositoryRefsOperationFailure } from "@rebase/contracts";
+import { Data } from "effect";
 import type { EnvironmentStorageError } from "#server/domain/environment-storage-error.contract";
 import type { RepositoryAccessError } from "#server/domain/repository-access.contract";
 import type { RepositoryGitError } from "#server/domain/repository-git.contract";
-import { RepositoryRefsError } from "#server/domain/repository-refs.contract";
 import { isGitRejection } from "#server/repository/access/index";
+
+export class RepositoryRefsError extends Data.TaggedError(
+  "RepositoryRefsError",
+)<{
+  readonly cause?: unknown;
+  readonly failure: RepositoryRefsOperationFailure;
+}> {}
 
 export function repositoryRefsFailure(
   failure: RepositoryRefsOperationFailure,

@@ -15,9 +15,13 @@ import { Effect } from "effect";
 import { describe, expect, it, vi } from "vite-plus/test";
 import { createEnvironmentEventPublisher } from "#server/adapters/environment-transport/events/environment-event-publisher";
 import { acquireEnvironmentListener } from "#server/app/server/environment-listener";
+import {
+  type EnvironmentAuthorization,
+  EnvironmentAuthorizationAccess,
+} from "#server/domain/environment-authorization.contract";
 import type { EnvironmentEventPublisher } from "#server/domain/environment-event-publisher.contract";
-import type { EnvironmentAuthorization } from "#server/features/environment-authorization/environment-authorization.contract";
 import { environmentAuthorizationFeature } from "#server/features/environment-authorization/index";
+import { testEnvironmentFeatures } from "#tests-integration/apps/server/environment-connection/test-environment-features";
 
 const environmentId = "00000000-0000-4000-8000-000000000001";
 const credential = { type: "bearer", value: "test-device-credential" } as const;
@@ -291,7 +295,13 @@ function withListener(
           authorization: testAuthorization,
           environmentId,
           events,
-          features: [environmentAuthorizationFeature(testAuthorization)],
+          features: testEnvironmentFeatures([
+            yield* Effect.provideService(
+              environmentAuthorizationFeature,
+              EnvironmentAuthorizationAccess,
+              testAuthorization,
+            ),
+          ]),
           productVersion: "0.0.0",
         });
         listener.readiness.value = true;

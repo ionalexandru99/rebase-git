@@ -1,25 +1,26 @@
-import { Effect, Layer } from "effect";
+import type {
+  ReadRepositoryHistory,
+  RepositoryHistoryBatch,
+  SynchronizeRepositoryHistory,
+} from "@rebase/contracts";
+import { Effect } from "effect";
+import type { GitCommandRunner } from "#server/domain/git-command.contract";
+import type { RepositoryAccessService } from "#server/domain/repository-access.contract";
 import {
-  type GitCommandRunner,
-  GitCommands,
-} from "#server/domain/git-command.contract";
-import {
-  RepositoryAccess,
-  type RepositoryAccessService,
-} from "#server/domain/repository-access.contract";
-import {
-  RepositoryHistoryAccess,
+  historyGitFailed,
   RepositoryHistoryError,
-  type RepositoryHistoryService,
-} from "#server/domain/repository-history.contract";
-import { historyGitFailed } from "#server/features/repository-history/git/history-failures";
+} from "#server/features/repository-history/git/history-failures";
 import { readRepositoryHistory } from "#server/features/repository-history/git/read-repository-history";
 import { synchronizeRepositoryHistory } from "#server/features/repository-history/git/synchronize-repository-history";
+
+export type RepositoryHistoryService = ReturnType<
+  typeof createRepositoryHistoryService
+>;
 
 export function createRepositoryHistoryService(dependencies: {
   readonly access: RepositoryAccessService;
   readonly git: GitCommandRunner;
-}): RepositoryHistoryService {
+}) {
   const findRepository = (repositoryId: string) =>
     dependencies.access.repository(repositoryId).pipe(
       Effect.mapError((error) =>
@@ -31,7 +32,7 @@ export function createRepositoryHistoryService(dependencies: {
       ),
     );
   return {
-    read: (request) =>
+    read: (request: ReadRepositoryHistory) =>
       findRepository(request.repositoryId).pipe(
         Effect.flatMap((repository) =>
           readRepositoryHistory(dependencies.git, repository.path, request),
@@ -40,7 +41,12 @@ export function createRepositoryHistoryService(dependencies: {
           Effect.fail(historyGitFailed(error)),
         ),
       ),
-    synchronize: (request, emit) =>
+    synchronize: (
+      request: SynchronizeRepositoryHistory,
+      emit: (
+        batch: RepositoryHistoryBatch,
+      ) => Effect.Effect<void, RepositoryHistoryError>,
+    ) =>
       findRepository(request.repositoryId).pipe(
         Effect.flatMap((repository) =>
           synchronizeRepositoryHistory(
@@ -56,13 +62,3 @@ export function createRepositoryHistoryService(dependencies: {
       ),
   };
 }
-
-export const repositoryHistoryLayer = Layer.effect(
-  RepositoryHistoryAccess,
-  Effect.gen(function* () {
-    return createRepositoryHistoryService({
-      access: yield* RepositoryAccess,
-      git: yield* GitCommands,
-    });
-  }),
-);

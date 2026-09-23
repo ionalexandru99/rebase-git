@@ -26,21 +26,23 @@ import { createEnvironmentEventPublisher } from "#server/adapters/environment-tr
 import { createLocalGitCommandRunner } from "#server/adapters/local-git/local-git-command-runner";
 import { acquireEnvironmentListener } from "#server/app/server/environment-listener";
 import {
-  RepositoryHistoryError,
-  type RepositoryHistoryService,
-} from "#server/domain/repository-history.contract";
-import type { EnvironmentAuthorization } from "#server/features/environment-authorization/environment-authorization.contract";
+  type EnvironmentAuthorization,
+  EnvironmentAuthorizationAccess,
+} from "#server/domain/environment-authorization.contract";
 import { environmentAuthorizationFeature } from "#server/features/environment-authorization/index";
 import { createRepositoryCatalog } from "#server/features/repository-catalog/repository-catalog";
+import { RepositoryHistoryError } from "#server/features/repository-history/git/history-failures";
 import { readRepositoryHistorySnapshot } from "#server/features/repository-history/git/read-repository-history-snapshot";
 import { synchronizeRepositoryHistory } from "#server/features/repository-history/git/synchronize-repository-history";
 import {
   createRepositoryHistoryService,
-  repositoryHistoryFeature,
-} from "#server/features/repository-history/index";
+  type RepositoryHistoryService,
+} from "#server/features/repository-history/repository-history";
+import { repositoryHistoryRpc } from "#server/features/repository-history/rpc/repository-history-rpc";
 import { acquireEnvironmentContext } from "#server/persistence/environment-context";
 import { environmentPaths } from "#server/persistence/storage/environment-paths";
 import { createRepositoryAccess } from "#server/repository/access/index";
+import { testEnvironmentFeatures } from "#tests-integration/apps/server/environment-connection/test-environment-features";
 import { createRepositoryHistoryRpc } from "#web/features/repository-history/transport/repository-history-rpc";
 
 const execFilePromise = promisify(execFile);
@@ -693,10 +695,18 @@ function withHistoryListener(
           authorization,
           environmentId,
           events: createEnvironmentEventPublisher(),
-          features: [
-            environmentAuthorizationFeature(authorization),
-            repositoryHistoryFeature(history),
-          ],
+          features: testEnvironmentFeatures([
+            yield* Effect.provideService(
+              environmentAuthorizationFeature,
+              EnvironmentAuthorizationAccess,
+              authorization,
+            ),
+            {
+              capabilities: ["repository-history"],
+              httpRoutes: [],
+              rpc: (session) => repositoryHistoryRpc(session, history),
+            },
+          ]),
           productVersion: "0.0.0",
         });
         listener.readiness.value = true;

@@ -56,6 +56,9 @@ export default defineConfig({
     alias: {
       "#desktop": fileURLToPath(new URL("./src/apps/desktop", import.meta.url)),
       "#server": fileURLToPath(new URL("./src/apps/server", import.meta.url)),
+      "#tests-integration": fileURLToPath(
+        new URL("./tests/integration", import.meta.url),
+      ),
       "#tests-performance": fileURLToPath(
         new URL("./tests/performance", import.meta.url),
       ),

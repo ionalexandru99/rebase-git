@@ -90,7 +90,7 @@ export const RepositoryChangesHttpApi = {
   read: {
     capability: "repository.read",
     failure: ChangesHttpFailure,
-    failureStatuses: [400, 401, 403, 404, 409, 410, 413],
+    failureStatuses: [404, 409],
     method: "POST",
     path: "/api/repositories/changes/read",
     request: ChangesScope,
@@ -100,7 +100,7 @@ export const RepositoryChangesHttpApi = {
   diff: {
     capability: "repository.read",
     failure: ChangesHttpFailure,
-    failureStatuses: [400, 401, 403, 404, 409, 410, 413],
+    failureStatuses: [404, 409],
     method: "POST",
     path: "/api/repositories/changes/diff",
     request: ReadChangeDiff,
@@ -110,7 +110,7 @@ export const RepositoryChangesHttpApi = {
   mutate: {
     capability: "repository.write",
     failure: ChangesHttpFailure,
-    failureStatuses: [400, 401, 403, 404, 409, 410, 413],
+    failureStatuses: [404, 409],
     method: "POST",
     path: "/api/repositories/changes/mutate",
     request: MutateChanges,
@@ -120,7 +120,7 @@ export const RepositoryChangesHttpApi = {
   commit: {
     capability: "repository.write",
     failure: ChangesHttpFailure,
-    failureStatuses: [400, 401, 403, 404, 409, 410, 413],
+    failureStatuses: [404, 409],
     method: "POST",
     path: "/api/repositories/changes/commit",
     request: CommitChanges,

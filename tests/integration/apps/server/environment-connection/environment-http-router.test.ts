@@ -10,11 +10,12 @@ import type { EnvironmentFeature } from "#server/adapters/environment-transport/
 import { createEnvironmentEventPublisher } from "#server/adapters/environment-transport/events/environment-event-publisher";
 import { httpRoute } from "#server/adapters/environment-transport/http/environment-http-route-handler";
 import { acquireEnvironmentListener } from "#server/app/server/environment-listener";
-import { EnvironmentFilesystemError } from "#server/domain/environment-filesystem.contract";
 import {
   type EnvironmentAuthorization,
   EnvironmentAuthorizationError,
-} from "#server/features/environment-authorization/environment-authorization.contract";
+} from "#server/domain/environment-authorization.contract";
+import { EnvironmentFilesystemError } from "#server/features/environment-filesystem/environment-filesystem";
+import { testEnvironmentFeatures } from "#tests-integration/apps/server/environment-connection/test-environment-features";
 
 const writerCredential = "writer";
 const granted: ReadonlySet<EnvironmentAccessCapability> = new Set([
@@ -67,21 +68,6 @@ describe("Environment HTTP router", () => {
     ).rejects.toThrow("Duplicate HTTP route: GET /api/repositories");
   });
 
-  it("rejects duplicate and transport-owned RPC registrations before opening a listener", async () => {
-    const feature: EnvironmentFeature = {
-      capabilities: [],
-      httpRoutes: [],
-      rpc: { names: ["ReadRefs"], handlers: () => ({}) },
-    };
-    await expect(
-      withListener(async () => {}, [feature, feature]),
-    ).rejects.toThrow("Duplicate RPC: ReadRefs");
-    await expect(
-      withListener(async () => {}, [
-        { ...feature, rpc: { names: ["Hello"], handlers: () => ({}) } },
-      ]),
-    ).rejects.toThrow("Reserved RPC: Hello");
-  });
   it("answers unknown paths and unsupported methods from the route table", async () => {
     await withListener(async (origin) => {
       expect((await fetch(`${origin}/api/unknown`)).status).toBe(404);
@@ -169,7 +155,7 @@ function withListener(
           authorization: createTestAuthorization(),
           environmentId: "00000000-0000-4000-8000-000000000001",
           events: createEnvironmentEventPublisher(),
-          features,
+          features: testEnvironmentFeatures(features),
           productVersion: "0.0.0",
         });
         listener.readiness.value = true;

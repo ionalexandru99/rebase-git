@@ -20,11 +20,15 @@ import { Effect } from "effect";
 import { afterEach, describe, expect, it } from "vite-plus/test";
 import { createEnvironmentEventPublisher } from "#server/adapters/environment-transport/events/environment-event-publisher";
 import { acquireEnvironmentListener } from "#server/app/server/environment-listener";
+import {
+  type EnvironmentAuthorization,
+  EnvironmentAuthorizationAccess,
+} from "#server/domain/environment-authorization.contract";
 import { createEnvironmentAuthorization } from "#server/features/environment-authorization/environment-authorization";
-import type { EnvironmentAuthorization } from "#server/features/environment-authorization/environment-authorization.contract";
 import { environmentAuthorizationFeature } from "#server/features/environment-authorization/index";
 import { acquireEnvironmentContext } from "#server/persistence/environment-context";
 import { environmentPaths } from "#server/persistence/storage/environment-paths";
+import { testEnvironmentFeatures } from "#tests-integration/apps/server/environment-connection/test-environment-features";
 
 const environmentId = "00000000-0000-4000-8000-000000000001";
 const directories = new Set<string>();
@@ -472,7 +476,13 @@ function withAuthorizedListener(
           authorization,
           environmentId,
           events,
-          features: [environmentAuthorizationFeature(authorization)],
+          features: testEnvironmentFeatures([
+            yield* Effect.provideService(
+              environmentAuthorizationFeature,
+              EnvironmentAuthorizationAccess,
+              authorization,
+            ),
+          ]),
           productVersion: "0.0.0",
         });
         listener.readiness.value = true;

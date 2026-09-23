@@ -4,8 +4,10 @@ import { Effect } from "effect";
 import type { GitCommandRunner } from "#server/domain/git-command.contract";
 import { isGitObjectId } from "#server/domain/git-object-id";
 import type { RepositoryGitError } from "#server/domain/repository-git.contract";
-import type { RepositoryHistoryError } from "#server/domain/repository-history.contract";
-import { historyFailed } from "#server/features/repository-history/git/history-failures";
+import {
+  historyFailed,
+  type RepositoryHistoryError,
+} from "#server/features/repository-history/git/history-failures";
 import { runRepositoryGit } from "#server/repository/access/index";
 
 const maximumShallowBytes = 4 * 1_048_576;

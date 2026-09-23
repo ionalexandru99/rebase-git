@@ -6,13 +6,13 @@ import type {
 import { Cause, Effect, Fiber, Option, Queue, Semaphore } from "effect";
 import type { GitCommandRunner } from "#server/domain/git-command.contract";
 import type { RepositoryCoordinationService } from "#server/domain/repository-coordination.contract";
-import { RepositoryHistoryError } from "#server/domain/repository-history.contract";
 import type { RepositoryWatcher } from "#server/domain/repository-watcher.contract";
 import {
   readRepositoryFetchSetting,
   writeRepositoryFetchSetting,
 } from "#server/features/repository-history/freshness/repository-fetch-settings";
 import type { FreshnessSubscription } from "#server/features/repository-history/freshness/watched-repository.contract";
+import { RepositoryHistoryError } from "#server/features/repository-history/git/history-failures";
 import {
   readGitCommonDirectory,
   runRepositoryGit,
