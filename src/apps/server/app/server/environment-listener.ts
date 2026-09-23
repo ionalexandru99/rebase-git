@@ -8,6 +8,7 @@ import { formatHostAddress } from "#server/adapters/environment-transport/enviro
 import { createEnvironmentTransportDiscovery } from "#server/adapters/environment-transport/environment-transport-discovery";
 import { createEnvironmentHttpHandler } from "#server/adapters/environment-transport/http/environment-http-handler";
 import type { EnvironmentHttpRouteHandler } from "#server/adapters/environment-transport/http/environment-http-route-handler.contract";
+import { environmentTransportHttpRoutes } from "#server/adapters/environment-transport/http/environment-transport-http-routes";
 import { validateEnvironmentHttpRoutes } from "#server/adapters/environment-transport/http/validate-environment-http-routes";
 import { attachEnvironmentWebSocketServer } from "#server/adapters/environment-transport/websocket/environment-websocket-server";
 import type { EnvironmentListenerOptions } from "#server/app/server/environment-server.contract";
@@ -22,11 +23,6 @@ export function acquireEnvironmentListener(
   return Effect.gen(function* () {
     const host = options.host ?? loopbackHost;
     const port = options.port ?? 0;
-    yield* Effect.try({
-      try: () => validateEnvironmentHttpRoutes(options.features.httpRoutes),
-      catch: (cause) => environmentServerError(cause, host, port),
-    });
-    const readiness = { value: false };
     const state: EnvironmentTransportState = {
       discovery: createEnvironmentTransportDiscovery(
         options.environmentId,
@@ -35,6 +31,15 @@ export function acquireEnvironmentListener(
       ),
       events: options.events,
     };
+    const routes = [
+      ...environmentTransportHttpRoutes(state),
+      ...options.features.httpRoutes,
+    ];
+    yield* Effect.try({
+      try: () => validateEnvironmentHttpRoutes(routes),
+      catch: (cause) => environmentServerError(cause, host, port),
+    });
+    const readiness = { value: false };
     const runFork = yield* FiberSet.makeRuntime<never, void, never>();
     const runEnvironmentEffect: RunEnvironmentEffect = (effect, signal) => {
       runFork(effect, signal === undefined ? undefined : { signal });
@@ -42,9 +47,8 @@ export function acquireEnvironmentListener(
     const server = yield* Effect.acquireRelease(
       createHttpServer(
         readiness,
-        state,
         options.authorization,
-        options.features.httpRoutes,
+        routes,
         host,
         port,
         runEnvironmentEffect,
@@ -82,7 +86,6 @@ export function acquireEnvironmentListener(
 
 function createHttpServer(
   readiness: { value: boolean },
-  state: EnvironmentTransportState,
   authorization: EnvironmentListenerOptions["authorization"],
   routes: readonly EnvironmentHttpRouteHandler[],
   host: string,
@@ -95,7 +98,6 @@ function createHttpServer(
       createServer(
         { maxHeaderSize: 16_384 },
         createEnvironmentHttpHandler(
-          state,
           authorization,
           routes,
           () => readiness.value,

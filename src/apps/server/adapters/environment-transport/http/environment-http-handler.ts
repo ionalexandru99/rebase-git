@@ -1,20 +1,8 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
-import {
-  EnvironmentDiscovery,
-  EnvironmentHttpApi,
-  EnvironmentSnapshot,
-} from "@rebase/contracts";
 import { Effect } from "effect";
 import { respondWithBrowserAsset } from "#server/adapters/browser-client/browser-assets";
-import type {
-  EnvironmentTransportState,
-  RunEnvironmentEffect,
-} from "#server/adapters/environment-transport/environment-connection.contract";
-import {
-  readRequestCredential,
-  validateRequestHost,
-  validateRequestOrigin,
-} from "#server/adapters/environment-transport/environment-request-authorization";
+import type { RunEnvironmentEffect } from "#server/adapters/environment-transport/environment-connection.contract";
+import { validateRequestHost } from "#server/adapters/environment-transport/environment-request-authorization";
 import { readEnvironmentHttpRequestBody } from "#server/adapters/environment-transport/http/environment-http-request-body";
 import {
   requireEmptyBody,
@@ -22,7 +10,6 @@ import {
 } from "#server/adapters/environment-transport/http/environment-http-request-validation";
 import {
   writeEnvironmentHttpError,
-  writeJson,
   writeJsonValue,
 } from "#server/adapters/environment-transport/http/environment-http-response";
 import type { EnvironmentHttpRouteHandler } from "#server/adapters/environment-transport/http/environment-http-route-handler.contract";
@@ -30,7 +17,6 @@ import { routeEnvironmentHttpRequest } from "#server/adapters/environment-transp
 import type { EnvironmentAuthorization } from "#server/domain/environment-authorization.contract";
 
 export function createEnvironmentHttpHandler(
-  state: EnvironmentTransportState,
   authorization: EnvironmentAuthorization,
   routes: readonly EnvironmentHttpRouteHandler[],
   ready: () => boolean,
@@ -43,7 +29,6 @@ export function createEnvironmentHttpHandler(
       respondToEnvironmentRequest(
         request,
         response,
-        state,
         authorization,
         routes,
         ready(),
@@ -79,7 +64,6 @@ function startHttpRequestLifetime(
 function respondToEnvironmentRequest(
   request: IncomingMessage,
   response: ServerResponse,
-  state: EnvironmentTransportState,
   authorization: EnvironmentAuthorization,
   routes: readonly EnvironmentHttpRouteHandler[],
   ready: boolean,
@@ -102,44 +86,6 @@ function respondToEnvironmentRequest(
       return;
     }
     const body = yield* readEnvironmentHttpRequestBody(request);
-    if (request.url === EnvironmentHttpApi.discovery.path) {
-      yield* requireMethod(
-        request,
-        response,
-        EnvironmentHttpApi.discovery.method,
-      );
-      yield* requireEmptyBody(body);
-      writeJson(
-        response,
-        EnvironmentHttpApi.discovery.successStatus,
-        EnvironmentDiscovery,
-        state.discovery,
-      );
-      return;
-    }
-    if (request.url === EnvironmentHttpApi.snapshot.path) {
-      yield* requireMethod(
-        request,
-        response,
-        EnvironmentHttpApi.snapshot.method,
-      );
-      yield* requireEmptyBody(body);
-      yield* validateRequestOrigin(request, false);
-      yield* authorization.authorize(
-        readRequestCredential(request),
-        "environment.read",
-      );
-      writeJson(
-        response,
-        EnvironmentHttpApi.snapshot.successStatus,
-        EnvironmentSnapshot,
-        {
-          environmentId: state.discovery.environmentId,
-          sequence: state.events.currentSequence(),
-        },
-      );
-      return;
-    }
     yield* routeEnvironmentHttpRequest(
       routes,
       authorization,
