@@ -171,7 +171,7 @@ export const EnvironmentAuthorizationHttpApi = {
   createBrowserSession: {
     capability: null,
     failure: EnvironmentPairingExchangeHttpFailure,
-    failureStatuses: [400, 401, 403, 409, 410, 413],
+    failureStatuses: [409],
     method: "POST",
     path: "/api/authorization/browser-session",
     request: ExchangeEnvironmentPairing,
@@ -181,7 +181,6 @@ export const EnvironmentAuthorizationHttpApi = {
   readBrowserSession: {
     capability: "environment.read",
     failure: EnvironmentGrantHttpFailure,
-    failureStatuses: [400, 401, 403, 410, 413],
     method: "GET",
     path: "/api/authorization/browser-session",
     success: EnvironmentBrowserSession,
@@ -190,7 +189,6 @@ export const EnvironmentAuthorizationHttpApi = {
   createPairing: {
     capability: "authorization.manage",
     failure: EnvironmentGrantHttpFailure,
-    failureStatuses: [400, 401, 403, 410, 413],
     method: "POST",
     path: environmentPairingsPath,
     request: CreateEnvironmentPairing,
@@ -200,7 +198,7 @@ export const EnvironmentAuthorizationHttpApi = {
   exchangePairing: {
     capability: null,
     failure: EnvironmentPairingExchangeHttpFailure,
-    failureStatuses: [400, 401, 403, 409, 410, 413],
+    failureStatuses: [409],
     method: "POST",
     path: environmentPairingExchangePath,
     request: ExchangeEnvironmentPairing,
@@ -210,7 +208,6 @@ export const EnvironmentAuthorizationHttpApi = {
   mintWebSocketTicket: {
     capability: "environment.read",
     failure: EnvironmentGrantHttpFailure,
-    failureStatuses: [400, 401, 403, 410, 413],
     method: "POST",
     path: environmentWebSocketTicketsPath,
     success: EnvironmentWebSocketTicket,
@@ -219,7 +216,6 @@ export const EnvironmentAuthorizationHttpApi = {
   revokeAuthorization: {
     capability: "authorization.manage",
     failure: EnvironmentGrantHttpFailure,
-    failureStatuses: [400, 401, 403, 410, 413],
     method: "POST",
     path: environmentAuthorizationRevocationPath,
     request: RevokeEnvironmentAuthorization,

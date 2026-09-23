@@ -1,5 +1,6 @@
 import type {
   EnvironmentDeviceAuthorization,
+  EnvironmentHttpFailureStatus,
   EnvironmentHttpRoute,
 } from "@rebase/contracts";
 import type { Effect, Schema } from "effect";
@@ -17,10 +18,6 @@ export type EnvironmentHttpRouteCommand<
 > = Route extends { readonly request?: infer Request }
   ? CommandOf<Request>
   : undefined;
-
-export type EnvironmentHttpFailureStatus<
-  Route extends ServableEnvironmentHttpRoute,
-> = Route["failureStatuses"][number];
 
 export interface EnvironmentHttpRequestContext<
   Route extends ServableEnvironmentHttpRoute = ServableEnvironmentHttpRoute,

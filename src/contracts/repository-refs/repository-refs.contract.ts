@@ -176,7 +176,7 @@ export const RepositoryRefsHttpApi = {
   checkout: {
     capability: "repository.write",
     failure: RepositoryRefsHttpFailure,
-    failureStatuses: [400, 401, 403, 404, 409, 410, 413, 422],
+    failureStatuses: [404, 409, 422],
     method: "POST",
     path: checkoutRepositoryRefPath,
     request: CheckoutRepositoryRef,

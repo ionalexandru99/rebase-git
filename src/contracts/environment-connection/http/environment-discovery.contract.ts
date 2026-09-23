@@ -64,7 +64,6 @@ export const EnvironmentHttpApi = {
   discovery: {
     capability: null,
     failure: EnvironmentDiscoveryHttpFailure,
-    failureStatuses: [400, 403, 413],
     method: "GET",
     path: environmentDiscoveryPath,
     success: EnvironmentDiscovery,
@@ -73,7 +72,6 @@ export const EnvironmentHttpApi = {
   snapshot: {
     capability: "environment.read",
     failure: EnvironmentGrantHttpFailure,
-    failureStatuses: [400, 401, 403, 410, 413],
     method: "GET",
     path: environmentSnapshotPath,
     success: EnvironmentSnapshot,

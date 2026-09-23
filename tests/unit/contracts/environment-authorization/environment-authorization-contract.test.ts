@@ -2,6 +2,7 @@ import {
   EnvironmentAuthorizationHttpApi,
   EnvironmentHttpApi,
   ExchangeEnvironmentPairing,
+  isEnvironmentHttpFailureStatus,
 } from "@rebase/contracts";
 import { Schema } from "effect";
 import { describe, expect, it } from "vite-plus/test";
@@ -61,25 +62,15 @@ describe("Environment authorization HTTP contract", () => {
     ).toThrow();
   });
 
-  it("declares the statuses each route can return", () => {
-    expect(EnvironmentHttpApi.discovery.failureStatuses).toEqual([
-      400, 403, 413,
-    ]);
-    expect(EnvironmentHttpApi.snapshot.failureStatuses).toEqual([
-      400, 401, 403, 410, 413,
-    ]);
+  it("accepts transport statuses on every route and feature statuses only where declared", () => {
+    const { createPairing, exchangePairing } = EnvironmentAuthorizationHttpApi;
     expect(
-      EnvironmentAuthorizationHttpApi.createPairing.failureStatuses,
-    ).toEqual([400, 401, 403, 410, 413]);
-    expect(
-      EnvironmentAuthorizationHttpApi.exchangePairing.failureStatuses,
-    ).toEqual([400, 401, 403, 409, 410, 413]);
-    expect(
-      EnvironmentAuthorizationHttpApi.mintWebSocketTicket.failureStatuses,
-    ).toEqual([400, 401, 403, 410, 413]);
-    expect(
-      EnvironmentAuthorizationHttpApi.revokeAuthorization.failureStatuses,
-    ).toEqual([400, 401, 403, 410, 413]);
+      isEnvironmentHttpFailureStatus(EnvironmentHttpApi.discovery, 413),
+    ).toBe(true);
+    expect(isEnvironmentHttpFailureStatus(createPairing, 401)).toBe(true);
+    expect(isEnvironmentHttpFailureStatus(exchangePairing, 409)).toBe(true);
+    expect(isEnvironmentHttpFailureStatus(createPairing, 409)).toBe(false);
+    expect(isEnvironmentHttpFailureStatus(createPairing, 500)).toBe(false);
   });
 });
 

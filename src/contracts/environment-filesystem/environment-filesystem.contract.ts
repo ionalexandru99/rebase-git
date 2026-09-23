@@ -78,7 +78,7 @@ export const EnvironmentFilesystemHttpApi = {
   listDirectory: {
     capability: "repository.write",
     failure: EnvironmentFilesystemHttpFailure,
-    failureStatuses: [400, 401, 403, 404, 410, 413, 422],
+    failureStatuses: [404, 422],
     method: "POST",
     path: environmentDirectoryPath,
     request: ListEnvironmentDirectory,
