@@ -1,12 +1,7 @@
-import { and } from "drizzle-orm";
-import { Context, Effect, Layer, type Scope } from "effect";
-import { createEnvironmentEventPublisher } from "#server/adapters/environment-transport/events/environment-event-publisher";
-import { createLocalGitCommandRunner } from "#server/adapters/local-git/local-git-command-runner";
-import { createLocalRepositoryWatcher } from "#server/adapters/local-git/local-repository-watcher";
-import {
-  hasNoAutomaticPort,
-  isCurrentEnvironment,
-} from "#server/app/environment-state.specifications";
+import { Effect, Layer, type Scope } from "effect";
+import { environmentEventPublisherLayer } from "#server/adapters/environment-transport/events/environment-event-publisher";
+import { localGitCommandRunnerLayer } from "#server/adapters/local-git/local-git-command-runner";
+import { localRepositoryWatcherLayer } from "#server/adapters/local-git/local-repository-watcher";
 import type {
   RuntimeMarkerError,
   RuntimeRequirementsError,
@@ -22,30 +17,33 @@ import type {
 } from "#server/app/server/environment-server.contract";
 import type { EnvironmentServerStartError } from "#server/app/server/environment-server-error.contract";
 import { CommitInspectionAccess } from "#server/domain/commit-inspection.contract";
-import type { Environment } from "#server/domain/environment-state.contract";
+import { EnvironmentEvents } from "#server/domain/environment-event-publisher.contract";
+import { EnvironmentFilesystemAccess } from "#server/domain/environment-filesystem.contract";
+import { EnvironmentIdentity } from "#server/domain/environment-identity.contract";
 import type { EnvironmentStorageError } from "#server/domain/environment-storage-error.contract";
-import { GitCommands } from "#server/domain/git-command.contract";
 import { RepositoryCatalogAccess } from "#server/domain/repository-catalog.contract";
 import { RepositoryChangesAccess } from "#server/domain/repository-changes.contract";
-import { RepositoryCoordination } from "#server/domain/repository-coordination.contract";
 import { RepositoryFreshnessState } from "#server/domain/repository-freshness.contract";
-import { RepositoryWatching } from "#server/domain/repository-watcher.contract";
+import { RepositoryHistoryAccess } from "#server/domain/repository-history.contract";
+import { RepositoryRefsAccess } from "#server/domain/repository-refs.contract";
 import {
   commitInspectionFeature,
   commitInspectionLayer,
 } from "#server/features/commit-inspection/index";
+import { EnvironmentAuthorizationAccess } from "#server/features/environment-authorization/environment-authorization.contract";
 import {
-  createEnvironmentAuthorization,
   environmentAuthorizationFeature,
+  environmentAuthorizationLayer,
 } from "#server/features/environment-authorization/index";
 import {
-  createEnvironmentFilesystem,
   environmentFilesystemFeature,
+  environmentFilesystemLayer,
 } from "#server/features/environment-filesystem/index";
+import { environmentIdentityLayer } from "#server/features/environment-identity/index";
 import { repositoryAccessLayer } from "#server/features/repository-access/index";
 import {
-  createRepositoryCatalog,
   repositoryCatalogFeature,
+  repositoryCatalogLayer,
 } from "#server/features/repository-catalog/index";
 import {
   repositoryChangesFeature,
@@ -53,20 +51,19 @@ import {
 } from "#server/features/repository-changes/index";
 import { repositoryCoordinationLayer } from "#server/features/repository-coordination/index";
 import {
-  createRepositoryHistoryService,
   repositoryFreshnessFeature,
   repositoryFreshnessLayer,
   repositoryHistoryFeature,
+  repositoryHistoryLayer,
 } from "#server/features/repository-history/index";
 import {
-  createRepositoryRefsService,
+  repositoryChangePublisherLayer,
   repositoryRefsFeature,
+  repositoryRefsLayer,
 } from "#server/features/repository-refs/index";
-import { acquireRepositoryChangePublisher } from "#server/features/repository-refs/repository-change-publisher";
-import { acquireEnvironmentContext } from "#server/persistence/environment-context";
-import type { EnvironmentContext } from "#server/persistence/environment-context.contract";
-import { environmentTable } from "#server/persistence/environment-state.schema";
+import { environmentContextLayer } from "#server/persistence/environment-context";
 import { defaultEnvironmentPaths } from "#server/persistence/storage/environment-paths";
+import type { EnvironmentPaths } from "#server/persistence/storage/environment-paths.contract";
 import { productVersion } from "#server/product-version";
 
 export function startEnvironmentServer(
@@ -82,75 +79,79 @@ export function startEnvironmentServer(
   return Effect.gen(function* () {
     yield* verifyRuntimeRequirements;
     const paths = defaultEnvironmentPaths();
-    const context = yield* acquireEnvironmentContext(paths);
-    const git = createLocalGitCommandRunner();
-    const catalog = createRepositoryCatalog(context, git);
-    const environment = yield* readCurrentEnvironment(context);
-    const authorization = createEnvironmentAuthorization(
-      context,
-      context.serverSecret,
+    const services = yield* Layer.build(environmentLayer(paths));
+    return yield* startEnvironment(options, paths).pipe(
+      Effect.provide(services),
     );
+  });
+}
+
+function environmentLayer(paths: EnvironmentPaths) {
+  return Layer.mergeAll(
+    environmentIdentityLayer,
+    environmentAuthorizationLayer,
+    environmentFilesystemLayer,
+    commitInspectionLayer,
+    repositoryChangesLayer,
+    repositoryHistoryLayer,
+    repositoryFreshnessLayer,
+    repositoryRefsLayer,
+  ).pipe(
+    Layer.provideMerge(
+      Layer.mergeAll(repositoryAccessLayer, repositoryChangePublisherLayer),
+    ),
+    Layer.provideMerge(
+      Layer.mergeAll(repositoryCatalogLayer, repositoryCoordinationLayer),
+    ),
+    Layer.provideMerge(
+      Layer.mergeAll(
+        localGitCommandRunnerLayer,
+        localRepositoryWatcherLayer,
+        environmentEventPublisherLayer,
+        environmentContextLayer(paths),
+      ),
+    ),
+  );
+}
+
+const environmentFeatures = Effect.all([
+  Effect.map(EnvironmentAuthorizationAccess, environmentAuthorizationFeature),
+  Effect.map(EnvironmentFilesystemAccess, environmentFilesystemFeature),
+  Effect.map(RepositoryCatalogAccess, repositoryCatalogFeature),
+  Effect.map(CommitInspectionAccess, commitInspectionFeature),
+  Effect.map(RepositoryChangesAccess, repositoryChangesFeature),
+  Effect.map(RepositoryHistoryAccess, repositoryHistoryFeature),
+  Effect.map(RepositoryFreshnessState, repositoryFreshnessFeature),
+  Effect.map(RepositoryRefsAccess, repositoryRefsFeature),
+]);
+
+function startEnvironment(
+  options: EnvironmentServerOptions,
+  paths: EnvironmentPaths,
+) {
+  return Effect.gen(function* () {
+    const identity = yield* EnvironmentIdentity;
+    const authorization = yield* EnvironmentAuthorizationAccess;
+    const environment = yield* identity.current();
     const useAutomaticPort = options.port === undefined || options.port === 0;
     const requestedPort = useAutomaticPort
       ? (environment.automaticPort ?? 0)
       : options.port;
-    const events = createEnvironmentEventPublisher();
-    const watcher = createLocalRepositoryWatcher();
-    const repositoryServices = yield* Layer.build(
-      Layer.mergeAll(
-        repositoryFreshnessLayer,
-        repositoryChangesLayer,
-        commitInspectionLayer,
-      ).pipe(
-        Layer.provideMerge(repositoryCoordinationLayer),
-        Layer.provide(repositoryAccessLayer),
-        Layer.provide(
-          Layer.mergeAll(
-            Layer.succeed(GitCommands, git),
-            Layer.succeed(RepositoryCatalogAccess, catalog),
-            Layer.succeed(RepositoryWatching, watcher),
-          ),
-        ),
-      ),
-    );
-    const refs = createRepositoryRefsService({
-      coordination: Context.get(repositoryServices, RepositoryCoordination),
-      catalog,
-      changes: yield* acquireRepositoryChangePublisher(git, watcher, events),
-      git,
-    });
     const listener = yield* acquireEnvironmentListener({
       authorization,
       ...(options.browserAssetsRoot === undefined
         ? {}
         : { browserAssetsRoot: options.browserAssetsRoot }),
       environmentId: environment.id,
-      events,
-      features: [
-        environmentAuthorizationFeature(authorization),
-        environmentFilesystemFeature(createEnvironmentFilesystem()),
-        repositoryCatalogFeature(catalog),
-        commitInspectionFeature(
-          Context.get(repositoryServices, CommitInspectionAccess),
-        ),
-        repositoryChangesFeature(
-          Context.get(repositoryServices, RepositoryChangesAccess),
-        ),
-        repositoryHistoryFeature(
-          createRepositoryHistoryService({ catalog, git }),
-        ),
-        repositoryFreshnessFeature(
-          Context.get(repositoryServices, RepositoryFreshnessState),
-        ),
-        repositoryRefsFeature(refs),
-      ],
+      events: yield* EnvironmentEvents,
+      features: yield* environmentFeatures,
       ...(options.host === undefined ? {} : { host: options.host }),
       port: requestedPort,
       productVersion,
     });
 
     if (useAutomaticPort && environment.automaticPort === null) {
-      yield* claimAutomaticPort(context, listener.port);
+      yield* identity.claimAutomaticPort(listener.port);
     }
 
     yield* acquireRuntimeMarker(runtimeMarker(listener), paths.runtimeMarker);
@@ -165,47 +166,8 @@ export function startEnvironmentServer(
       origin: listener.origin,
       pairingUrl: `${listener.origin}/pair#${pairing.material}`,
       port: listener.port,
-    };
+    } satisfies EnvironmentServer;
   });
-}
-
-function readCurrentEnvironment(context: EnvironmentContext) {
-  return context.read("Could not read Environment state", async (database) => {
-    const environment = await database
-      .select()
-      .from(environmentTable)
-      .where(isCurrentEnvironment())
-      .get();
-    if (environment === undefined) {
-      throw new Error("The Environment identity is missing.");
-    }
-    return environment satisfies Environment;
-  });
-}
-
-function claimAutomaticPort(context: EnvironmentContext, port: number) {
-  return context.write(
-    "Could not save the automatic port",
-    async (database) => {
-      await database
-        .update(environmentTable)
-        .set({ automaticPort: port })
-        .where(and(isCurrentEnvironment(), hasNoAutomaticPort()));
-      const selected = await database
-        .select({ automaticPort: environmentTable.automaticPort })
-        .from(environmentTable)
-        .where(isCurrentEnvironment())
-        .get();
-      if (selected?.automaticPort === null || selected === undefined) {
-        throw new Error("The automatic port was not saved.");
-      }
-      if (selected.automaticPort !== port) {
-        throw new Error(
-          `Another server selected automatic port ${selected.automaticPort}.`,
-        );
-      }
-    },
-  );
 }
 
 function runtimeMarker(listener: EnvironmentListener): RuntimeMarker {

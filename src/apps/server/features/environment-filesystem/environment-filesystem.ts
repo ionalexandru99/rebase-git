@@ -10,9 +10,10 @@ import type {
   EnvironmentPathBreadcrumb,
 } from "@rebase/contracts";
 import { currentTransportLimits } from "@rebase/contracts";
-import { Effect } from "effect";
+import { Effect, Layer } from "effect";
 import {
   type EnvironmentFilesystem,
+  EnvironmentFilesystemAccess,
   EnvironmentFilesystemError,
 } from "#server/domain/environment-filesystem.contract";
 
@@ -30,6 +31,11 @@ export function createEnvironmentFilesystem(
       listEnvironmentDirectory(requestedPath ?? homeDirectory, includeHidden),
   };
 }
+
+export const environmentFilesystemLayer = Layer.sync(
+  EnvironmentFilesystemAccess,
+  () => createEnvironmentFilesystem(),
+);
 
 function listEnvironmentDirectory(
   requestedPath: string,

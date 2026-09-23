@@ -30,6 +30,8 @@ import { repositoryFreshnessLayer } from "#server/features/repository-history/fr
 const repositoryId = "00000000-0000-4000-8000-000000000001";
 const linkedId = "00000000-0000-4000-8000-000000000002";
 const writer = { automaticFetch: true };
+const unusedCatalogOperation = () =>
+  Effect.die(new Error("The freshness service only looks repositories up."));
 
 describe("repository freshness", () => {
   it("keeps readers observing after the final automatic-fetch subscriber leaves", () => {
@@ -485,6 +487,10 @@ function withService(
                     id,
                     path: id === linkedId ? "/linked" : entry.path,
                   }),
+                list: unusedCatalogOperation,
+                recordOpened: unusedCatalogOperation,
+                remember: unusedCatalogOperation,
+                remove: unusedCatalogOperation,
               }),
               Layer.succeed(GitCommands, {
                 run: (command) =>

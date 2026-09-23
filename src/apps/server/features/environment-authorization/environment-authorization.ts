@@ -8,13 +8,14 @@ import type {
   ExchangeEnvironmentPairing,
 } from "@rebase/contracts";
 import { eq } from "drizzle-orm";
-import { Effect } from "effect";
-import type {
-  EnvironmentAuthorization,
-  EnvironmentAuthorizationClock,
-  EnvironmentAuthorizationOptions,
+import { Effect, Layer } from "effect";
+import {
+  type EnvironmentAuthorization,
+  EnvironmentAuthorizationAccess,
+  type EnvironmentAuthorizationClock,
+  EnvironmentAuthorizationError,
+  type EnvironmentAuthorizationOptions,
 } from "#server/features/environment-authorization/environment-authorization.contract";
-import { EnvironmentAuthorizationError } from "#server/features/environment-authorization/environment-authorization.contract";
 import {
   createDeviceCredential,
   createPairingCode,
@@ -23,7 +24,10 @@ import {
   verifyDeviceCredential,
 } from "#server/features/environment-authorization/environment-authorization-secret";
 import { capabilitiesForRole } from "#server/features/environment-authorization/environment-capabilities";
-import type { EnvironmentContext } from "#server/persistence/environment-context.contract";
+import {
+  type EnvironmentContext,
+  EnvironmentStorage,
+} from "#server/persistence/environment-context.contract";
 import {
   authorizationCapabilityTable,
   authorizationMetadataTable,
@@ -63,6 +67,13 @@ export function createEnvironmentAuthorization(
       ),
   };
 }
+
+export const environmentAuthorizationLayer = Layer.effect(
+  EnvironmentAuthorizationAccess,
+  Effect.map(EnvironmentStorage, (context) =>
+    createEnvironmentAuthorization(context, context.serverSecret),
+  ),
+);
 
 function createPairing(
   clock: EnvironmentAuthorizationClock,

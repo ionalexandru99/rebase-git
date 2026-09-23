@@ -2,7 +2,7 @@ import type {
   EnvironmentDirectory,
   EnvironmentDirectoryRejected,
 } from "@rebase/contracts";
-import { Data, type Effect } from "effect";
+import { Context, Data, type Effect } from "effect";
 
 export interface EnvironmentFilesystem {
   readonly listDirectory: (
@@ -17,3 +17,8 @@ export class EnvironmentFilesystemError extends Data.TaggedError(
   readonly cause?: unknown;
   readonly failure: EnvironmentDirectoryRejected;
 }> {}
+
+export class EnvironmentFilesystemAccess extends Context.Service<
+  EnvironmentFilesystemAccess,
+  EnvironmentFilesystem
+>()("EnvironmentFilesystemAccess") {}

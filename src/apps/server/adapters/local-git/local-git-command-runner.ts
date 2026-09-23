@@ -1,11 +1,12 @@
 import { type ExecFileException, execFile, spawn } from "node:child_process";
-import { Effect } from "effect";
+import { Effect, Layer } from "effect";
 import {
   type GitCommand,
   GitCommandError,
   type GitCommandFailureReason,
   type GitCommandOutput,
   type GitCommandRunner,
+  GitCommands,
 } from "#server/domain/git-command.contract";
 
 const defaultTimeoutMilliseconds = 30_000;
@@ -17,6 +18,11 @@ export function createLocalGitCommandRunner(): GitCommandRunner {
     stream: (command, onStdout) => streamLocalGitCommand(command, onStdout),
   };
 }
+
+export const localGitCommandRunnerLayer = Layer.sync(
+  GitCommands,
+  createLocalGitCommandRunner,
+);
 
 function streamLocalGitCommand(
   command: GitCommand,

@@ -2,9 +2,12 @@ import { randomUUID } from "node:crypto";
 import type { DatabaseSync } from "node:sqlite";
 import { eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/node-sqlite";
-import { Effect, type Scope, Semaphore } from "effect";
+import { Effect, Layer, type Scope, Semaphore } from "effect";
 import type { EnvironmentStorageError } from "#server/domain/environment-storage-error.contract";
-import type { EnvironmentContext } from "#server/persistence/environment-context.contract";
+import {
+  type EnvironmentContext,
+  EnvironmentStorage,
+} from "#server/persistence/environment-context.contract";
 import { environmentTable } from "#server/persistence/environment-state.schema";
 import {
   closeEnvironmentDatabase,
@@ -39,6 +42,10 @@ export function acquireEnvironmentContext(
     yield* initializeEnvironment(context);
     return context;
   });
+}
+
+export function environmentContextLayer(paths: EnvironmentPaths) {
+  return Layer.effect(EnvironmentStorage, acquireEnvironmentContext(paths));
 }
 
 function createEnvironmentContext(

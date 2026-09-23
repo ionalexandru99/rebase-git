@@ -1,8 +1,15 @@
 import type { RepositoryCatalogEntry } from "@rebase/contracts";
-import { Effect } from "effect";
-import type { GitCommandRunner } from "#server/domain/git-command.contract";
-import type { RepositoryCatalog } from "#server/domain/repository-catalog.contract";
+import { Effect, Layer } from "effect";
 import {
+  type GitCommandRunner,
+  GitCommands,
+} from "#server/domain/git-command.contract";
+import {
+  type RepositoryCatalog,
+  RepositoryCatalogAccess,
+} from "#server/domain/repository-catalog.contract";
+import {
+  RepositoryHistoryAccess,
   RepositoryHistoryError,
   type RepositoryHistoryService,
 } from "#server/domain/repository-history.contract";
@@ -45,3 +52,13 @@ export function createRepositoryHistoryService(dependencies: {
       ),
   };
 }
+
+export const repositoryHistoryLayer = Layer.effect(
+  RepositoryHistoryAccess,
+  Effect.gen(function* () {
+    return createRepositoryHistoryService({
+      catalog: yield* RepositoryCatalogAccess,
+      git: yield* GitCommands,
+    });
+  }),
+);
