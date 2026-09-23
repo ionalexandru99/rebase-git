@@ -39,7 +39,10 @@ export function createWorkspacePanelStore(
 function savePanelState(key: string, serialized: string) {
   try {
     localStorage.setItem(key, serialized);
-  } catch {}
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 function readPanelState(
@@ -52,9 +55,12 @@ function readPanelState(
       const previous = localStorage.getItem(
         `${panelStoragePrefix}${previousScopeKey}`,
       );
-      if (previous !== null && !hasMigratedLayout(previousScopeKey, key)) {
+      if (
+        previous !== null &&
+        !hasMigratedLayout(previousScopeKey, key) &&
+        savePanelState(key, previous)
+      ) {
         serialized = previous;
-        savePanelState(key, serialized);
       }
     }
     const saved: unknown = JSON.parse(serialized ?? "null");

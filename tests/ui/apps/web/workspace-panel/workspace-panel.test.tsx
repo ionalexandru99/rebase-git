@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { page } from "vitest/browser";
 import { render } from "vitest-browser-react";
 import { createWorkspacePanelStore } from "#web/features/workspace-panel/persistence/workspace-panel-store";
@@ -263,4 +263,33 @@ it("does not copy an old layout after another repository already migrated it", (
   ).getSnapshot();
   expect(other.tabs).toEqual([]);
   expect(other.open).toBe(false);
+});
+
+it("leaves a previous layout unclaimed when repository storage fails", () => {
+  localStorage.clear();
+  const previousScopeKey = JSON.stringify(["environment", "logical", "/repo"]);
+  localStorage.setItem(
+    `rebase:workspace-panel:v1:${previousScopeKey}`,
+    JSON.stringify({
+      tabs: ["changes"],
+      active: "changes",
+      open: true,
+      width: 55,
+    }),
+  );
+  const write = vi
+    .spyOn(Storage.prototype, "setItem")
+    .mockImplementation(() => {
+      throw new DOMException("Storage full", "QuotaExceededError");
+    });
+  try {
+    const first = createWorkspacePanelStore(
+      JSON.stringify(["environment", "project-a", "logical", "/repo"]),
+      previousScopeKey,
+    ).getSnapshot();
+    expect(first.tabs).toEqual([]);
+    expect(first.open).toBe(false);
+  } finally {
+    write.mockRestore();
+  }
 });
