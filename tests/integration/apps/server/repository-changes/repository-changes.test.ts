@@ -390,6 +390,14 @@ describe("working changes through Git", { timeout: 30000 }, () => {
     expect(after.unstaged).toEqual(before.unstaged);
     expect(after.revision).not.toBe(before.revision);
   });
+  it("views an unstaged diff without writing objects to the repository", async () => {
+    const f = await fixture();
+    await writeFile(join(f.directory, "file.txt"), "unwritten edit\n");
+    const objects = async () => (await f.git("count-objects", "-v")).stdout;
+    const before = await objects();
+    expect((await f.diff()).after).toBe("unwritten edit\n");
+    expect(await objects()).toBe(before);
+  });
   it("handles binary and literal pathspec filenames at whole-file level", async () => {
     const f = await fixture();
     const path =
