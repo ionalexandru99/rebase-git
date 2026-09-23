@@ -3,6 +3,7 @@ import type {
   GitCommandError,
   GitCommandOptions,
   GitCommandRunner,
+  GitStreamOptions,
 } from "#server/domain/git-command.contract";
 import { RepositoryGitError } from "#server/domain/repository-git.contract";
 
@@ -32,7 +33,7 @@ export function streamRepositoryGit(
   git: GitCommandRunner,
   directory: string,
   args: readonly string[],
-  options: GitCommandOptions = {},
+  options: GitStreamOptions = {},
 ) {
   return git
     .stream({ ...options, directory, arguments: args })

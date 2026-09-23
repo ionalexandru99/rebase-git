@@ -15,6 +15,16 @@ export interface GitCommand {
 
 export type GitCommandOptions = Omit<GitCommand, "arguments" | "directory">;
 
+export type GitStreamCommand = Omit<
+  GitCommand,
+  "outputEncoding" | "maxOutputBytes"
+>;
+
+export type GitStreamOptions = Omit<
+  GitStreamCommand,
+  "arguments" | "directory"
+>;
+
 export interface GitCommandOutput {
   readonly exitCode: number;
   readonly stderr: string;
@@ -26,7 +36,7 @@ export interface GitCommandRunner {
     command: GitCommand,
   ) => Effect.Effect<GitCommandOutput, GitCommandError>;
   readonly stream: (
-    command: GitCommand,
+    command: GitStreamCommand,
   ) => Stream.Stream<string, GitCommandError>;
 }
 

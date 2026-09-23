@@ -13,6 +13,7 @@ import {
   type GitCommandOutput,
   type GitCommandRunner,
   GitCommands,
+  type GitStreamCommand,
 } from "#server/domain/git-command.contract";
 
 const defaultTimeoutMilliseconds = 30_000;
@@ -70,7 +71,7 @@ function runLocalGitCommand(command: GitCommand) {
   );
 }
 
-function streamLocalGitCommand(command: GitCommand) {
+function streamLocalGitCommand(command: GitStreamCommand) {
   return Stream.unwrap(
     Effect.map(spawnGitProcess(command), (git) =>
       Stream.fromReadableStream({
@@ -95,7 +96,7 @@ function streamLocalGitCommand(command: GitCommand) {
   );
 }
 
-function spawnGitProcess(command: GitCommand) {
+function spawnGitProcess(command: GitStreamCommand) {
   return Effect.acquireRelease(
     Effect.sync(() => {
       const child = spawn("git", gitArguments(command), {
