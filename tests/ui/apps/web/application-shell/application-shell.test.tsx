@@ -4,14 +4,23 @@ import {
   type RepositoryCommit,
 } from "@rebase/contracts";
 import { Layer, ManagedRuntime } from "effect";
-import { describe, expect, it, vi } from "vitest";
+import type { ReactNode } from "react";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
-import { render } from "#tests-ui/runtime/render";
+import { render as renderWithRuntime } from "#tests-ui/runtime/render";
 import type { LocalEnvironmentSession } from "#web/app/environment/local-environment-session.contract";
 import { ApplicationShell } from "#web-ui/app/shell/application-shell";
 import { RepositoryWorkspace } from "#web-ui/app/workspace/repository-workspace";
 
-const runtime = ManagedRuntime.make(Layer.empty);
+let runtime: ManagedRuntime.ManagedRuntime<never, never>;
+
+beforeEach(() => {
+  runtime = ManagedRuntime.make(Layer.empty);
+});
+
+function render(children: ReactNode) {
+  return renderWithRuntime(children, { runtime });
+}
 
 describe("application shell", () => {
   it("opens repository settings from the list without opening its graph", async () => {

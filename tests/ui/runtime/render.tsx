@@ -16,8 +16,15 @@ afterEach(async () => {
   runtimes.clear();
 });
 
-export function render(children: ReactNode, options: RenderOptions = {}) {
-  const runtime = ManagedRuntime.make(Layer.empty);
+export function render(
+  children: ReactNode,
+  {
+    runtime = ManagedRuntime.make(Layer.empty),
+    ...options
+  }: RenderOptions & {
+    runtime?: ManagedRuntime.ManagedRuntime<never, never>;
+  } = {},
+) {
   runtimes.add(runtime);
   const Wrapper = options.wrapper;
   return renderComponent(children, {
