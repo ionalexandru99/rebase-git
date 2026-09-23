@@ -6,8 +6,8 @@ import {
 import { Schema } from "effect";
 import { authorizationFailureStatus } from "#server/adapters/environment-transport/environment-request-authorization";
 import type { EnvironmentHttpBodyError } from "#server/adapters/environment-transport/http/environment-http-request-body.contract";
+import type { EnvironmentAuthorizationError } from "#server/domain/environment-authorization.contract";
 import type { EnvironmentStorageError } from "#server/domain/environment-storage-error.contract";
-import type { EnvironmentAuthorizationError } from "#server/features/environment-authorization/environment-authorization.contract";
 
 export function writeJson<S extends Schema.ConstraintEncoder<unknown, never>>(
   response: ServerResponse,

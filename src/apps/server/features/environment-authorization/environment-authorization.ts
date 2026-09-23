@@ -12,9 +12,11 @@ import { Effect, Layer } from "effect";
 import {
   type EnvironmentAuthorization,
   EnvironmentAuthorizationAccess,
-  type EnvironmentAuthorizationClock,
   EnvironmentAuthorizationError,
-  type EnvironmentAuthorizationOptions,
+} from "#server/domain/environment-authorization.contract";
+import type {
+  EnvironmentAuthorizationClock,
+  EnvironmentAuthorizationOptions,
 } from "#server/features/environment-authorization/environment-authorization.contract";
 import {
   createDeviceCredential,

@@ -8,12 +8,10 @@ import type {
 import { eq } from "drizzle-orm";
 import { Effect } from "effect";
 import { afterEach, describe, expect, it } from "vite-plus/test";
+import type { EnvironmentAuthorization } from "#server/domain/environment-authorization.contract";
 import { EnvironmentStorageError } from "#server/domain/environment-storage-error.contract";
 import { createEnvironmentAuthorization } from "#server/features/environment-authorization/environment-authorization";
-import type {
-  EnvironmentAuthorization,
-  EnvironmentAuthorizationClock,
-} from "#server/features/environment-authorization/environment-authorization.contract";
+import type { EnvironmentAuthorizationClock } from "#server/features/environment-authorization/environment-authorization.contract";
 import { acquireEnvironmentContext } from "#server/persistence/environment-context";
 import type { EnvironmentContext } from "#server/persistence/environment-context.contract";
 import { authorizationMetadataTable } from "#server/persistence/environment-state.schema";

@@ -3,7 +3,7 @@ import { isIPv4 } from "node:net";
 import type { EnvironmentAuthorizationFailure } from "@rebase/contracts";
 import { Effect } from "effect";
 import { readBrowserSessionCredential } from "#server/adapters/environment-transport/http/environment-session-cookie";
-import { EnvironmentAuthorizationError } from "#server/features/environment-authorization/environment-authorization.contract";
+import { EnvironmentAuthorizationError } from "#server/domain/environment-authorization.contract";
 
 export function validateRequestHost(request: IncomingMessage) {
   const expectedHost = listeningHost(request);

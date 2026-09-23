@@ -27,7 +27,7 @@ import {
 } from "#server/adapters/environment-transport/http/environment-http-response";
 import type { EnvironmentHttpRouteHandler } from "#server/adapters/environment-transport/http/environment-http-route-handler.contract";
 import { routeEnvironmentHttpRequest } from "#server/adapters/environment-transport/http/environment-http-router";
-import type { EnvironmentAuthorization } from "#server/features/environment-authorization/environment-authorization.contract";
+import type { EnvironmentAuthorization } from "#server/domain/environment-authorization.contract";
 
 export function createEnvironmentHttpHandler(
   state: EnvironmentTransportState,

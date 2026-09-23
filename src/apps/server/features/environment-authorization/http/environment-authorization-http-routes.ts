@@ -2,7 +2,7 @@ import { EnvironmentAuthorizationHttpApi } from "@rebase/contracts";
 import { Effect } from "effect";
 import { httpRoute } from "#server/adapters/environment-transport/http/environment-http-route-handler";
 import type { EnvironmentHttpRouteHandler } from "#server/adapters/environment-transport/http/environment-http-route-handler.contract";
-import type { EnvironmentAuthorization } from "#server/features/environment-authorization/environment-authorization.contract";
+import type { EnvironmentAuthorization } from "#server/domain/environment-authorization.contract";
 
 export function environmentAuthorizationHttpRoutes(
   authorization: EnvironmentAuthorization,

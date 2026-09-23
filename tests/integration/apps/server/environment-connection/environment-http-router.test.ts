@@ -10,11 +10,11 @@ import type { EnvironmentFeature } from "#server/adapters/environment-transport/
 import { createEnvironmentEventPublisher } from "#server/adapters/environment-transport/events/environment-event-publisher";
 import { httpRoute } from "#server/adapters/environment-transport/http/environment-http-route-handler";
 import { acquireEnvironmentListener } from "#server/app/server/environment-listener";
-import { EnvironmentFilesystemError } from "#server/domain/environment-filesystem.contract";
 import {
   type EnvironmentAuthorization,
   EnvironmentAuthorizationError,
-} from "#server/features/environment-authorization/environment-authorization.contract";
+} from "#server/domain/environment-authorization.contract";
+import { EnvironmentFilesystemError } from "#server/domain/environment-filesystem.contract";
 
 const writerCredential = "writer";
 const granted: ReadonlySet<EnvironmentAccessCapability> = new Set([

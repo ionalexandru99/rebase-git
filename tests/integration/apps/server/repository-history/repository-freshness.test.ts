@@ -12,6 +12,7 @@ import { createEnvironmentEventPublisher } from "#server/adapters/environment-tr
 import { createLocalGitCommandRunner } from "#server/adapters/local-git/local-git-command-runner";
 import { createLocalRepositoryWatcher } from "#server/adapters/local-git/local-repository-watcher";
 import { acquireEnvironmentListener } from "#server/app/server/environment-listener";
+import type { EnvironmentAuthorization } from "#server/domain/environment-authorization.contract";
 import { GitCommands } from "#server/domain/git-command.contract";
 import {
   type RepositoryCatalog,
@@ -22,7 +23,6 @@ import {
   RepositoryFreshnessState,
 } from "#server/domain/repository-freshness.contract";
 import { RepositoryWatching } from "#server/domain/repository-watcher.contract";
-import type { EnvironmentAuthorization } from "#server/features/environment-authorization/environment-authorization.contract";
 import { environmentAuthorizationFeature } from "#server/features/environment-authorization/index";
 import {
   createRepositoryHistoryService,

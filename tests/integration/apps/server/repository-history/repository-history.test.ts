@@ -25,11 +25,11 @@ import { afterEach, describe, expect, it } from "vite-plus/test";
 import { createEnvironmentEventPublisher } from "#server/adapters/environment-transport/events/environment-event-publisher";
 import { createLocalGitCommandRunner } from "#server/adapters/local-git/local-git-command-runner";
 import { acquireEnvironmentListener } from "#server/app/server/environment-listener";
+import type { EnvironmentAuthorization } from "#server/domain/environment-authorization.contract";
 import {
   RepositoryHistoryError,
   type RepositoryHistoryService,
 } from "#server/domain/repository-history.contract";
-import type { EnvironmentAuthorization } from "#server/features/environment-authorization/environment-authorization.contract";
 import { environmentAuthorizationFeature } from "#server/features/environment-authorization/index";
 import { createRepositoryCatalog } from "#server/features/repository-catalog/repository-catalog";
 import { readRepositoryHistorySnapshot } from "#server/features/repository-history/git/read-repository-history-snapshot";

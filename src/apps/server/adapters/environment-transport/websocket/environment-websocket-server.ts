@@ -22,7 +22,7 @@ import { runEnvironmentRpcSession } from "#server/adapters/environment-transport
 import {
   type EnvironmentAuthorization,
   isEnvironmentAuthorizationError,
-} from "#server/features/environment-authorization/environment-authorization.contract";
+} from "#server/domain/environment-authorization.contract";
 
 export function attachEnvironmentWebSocketServer(
   server: Server,

@@ -4,8 +4,8 @@ import type {
   EnvironmentHttpRoute,
 } from "@rebase/contracts";
 import type { Effect, Schema } from "effect";
+import type { EnvironmentAuthorizationError } from "#server/domain/environment-authorization.contract";
 import type { EnvironmentStorageError } from "#server/domain/environment-storage-error.contract";
-import type { EnvironmentAuthorizationError } from "#server/features/environment-authorization/environment-authorization.contract";
 
 export type ServableEnvironmentHttpRoute = EnvironmentHttpRoute & {
   readonly failure: Schema.ConstraintEncoder<unknown>;

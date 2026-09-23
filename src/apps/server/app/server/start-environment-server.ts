@@ -17,6 +17,7 @@ import type {
 } from "#server/app/server/environment-server.contract";
 import type { EnvironmentServerStartError } from "#server/app/server/environment-server-error.contract";
 import { CommitInspectionAccess } from "#server/domain/commit-inspection.contract";
+import { EnvironmentAuthorizationAccess } from "#server/domain/environment-authorization.contract";
 import { EnvironmentEvents } from "#server/domain/environment-event-publisher.contract";
 import { EnvironmentFilesystemAccess } from "#server/domain/environment-filesystem.contract";
 import { EnvironmentIdentity } from "#server/domain/environment-identity.contract";
@@ -30,7 +31,6 @@ import {
   commitInspectionFeature,
   commitInspectionLayer,
 } from "#server/features/commit-inspection/index";
-import { EnvironmentAuthorizationAccess } from "#server/features/environment-authorization/environment-authorization.contract";
 import {
   environmentAuthorizationFeature,
   environmentAuthorizationLayer,
