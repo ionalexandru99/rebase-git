@@ -218,23 +218,23 @@ function runCheckout(
 function checkoutArguments(target: CheckoutTarget): readonly string[] {
   switch (target._tag) {
     case "LocalBranch":
-      return ["checkout", target.name];
+      return ["switch", target.name];
     case "RemoteBranch":
       return [
-        "checkout",
-        "-b",
+        "switch",
+        "--create",
         target.name,
         "--track",
-        `${target.remote}/${target.name}`,
+        `refs/remotes/${target.remote}/${target.name}`,
       ];
     case "DetachedRemoteBranch":
       return [
-        "checkout",
+        "switch",
         "--detach",
         `refs/remotes/${target.remote}/${target.name}`,
       ];
     case "Tag":
-      return ["checkout", "--detach", `refs/tags/${target.name}`];
+      return ["switch", "--detach", `refs/tags/${target.name}`];
   }
 }
 

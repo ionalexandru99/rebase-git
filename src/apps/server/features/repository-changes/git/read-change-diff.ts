@@ -1,3 +1,6 @@
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import type { ReadChangeDiff } from "@rebase/contracts";
 import { Effect } from "effect";
 import type { GitCommandRunner } from "#server/domain/git-command.contract";
@@ -8,6 +11,7 @@ import {
 } from "#server/features/repository-changes/git/change-files";
 import {
   changeGit,
+  changeIo,
   changesError,
 } from "#server/features/repository-changes/git/change-git";
 import {
@@ -68,19 +72,31 @@ function cleanFileContent(
   path: string,
   content: Buffer,
 ) {
-  return Effect.gen(function* () {
-    const oid = (yield* changeGit(
-      git,
-      directory,
-      ["hash-object", "-w", `--path=${path}`, "--stdin"],
-      { input: content.toString("utf8") },
-    )).trim();
-    return Buffer.from(
-      yield* changeGit(git, directory, ["cat-file", "blob", oid], {
-        outputEncoding: "base64",
-        maxOutputBytes: previewByteLimit,
-      }),
-      "base64",
-    );
-  });
+  return Effect.scoped(
+    Effect.gen(function* () {
+      const objectDirectory = yield* scratchObjectDirectory;
+      const oid = (yield* changeGit(
+        git,
+        directory,
+        ["hash-object", "-w", `--path=${path}`, "--stdin"],
+        { input: content.toString("utf8"), objectDirectory },
+      )).trim();
+      return Buffer.from(
+        yield* changeGit(git, directory, ["cat-file", "blob", oid], {
+          objectDirectory,
+          outputEncoding: "base64",
+          maxOutputBytes: previewByteLimit,
+        }),
+        "base64",
+      );
+    }),
+  );
 }
+
+const scratchObjectDirectory = Effect.acquireRelease(
+  changeIo(() => mkdtemp(join(tmpdir(), "rebase-objects-"))),
+  (path) =>
+    changeIo(() => rm(path, { recursive: true, force: true })).pipe(
+      Effect.ignore,
+    ),
+);

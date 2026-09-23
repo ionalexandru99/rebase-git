@@ -152,6 +152,9 @@ function gitEnvironment(command: GitCommand) {
     ...(command.indexFile === undefined
       ? {}
       : { GIT_INDEX_FILE: command.indexFile }),
+    ...(command.objectDirectory === undefined
+      ? {}
+      : { GIT_OBJECT_DIRECTORY: command.objectDirectory }),
   };
 }
 

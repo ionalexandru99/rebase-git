@@ -77,7 +77,7 @@ it.each([
                   events.push("mutation-end");
                   return result;
                 }
-                if (command.arguments[0] === "checkout") {
+                if (command.arguments[0] === "switch") {
                   events.push("checkout");
                   yield* Deferred.succeed(checkoutEntered, undefined);
                 }
