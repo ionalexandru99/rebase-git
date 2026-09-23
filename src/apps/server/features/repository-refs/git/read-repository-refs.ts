@@ -6,10 +6,6 @@ import type {
 import { Effect } from "effect";
 import type { GitCommandRunner } from "#server/domain/git-command.contract";
 import type { RepositoryRefsError } from "#server/domain/repository-refs.contract";
-import {
-  canonicalizeWorktrees,
-  readWorktrees,
-} from "#server/features/repository-access/index";
 import { fitRepositoryRefs } from "#server/features/repository-refs/git/fit-repository-refs";
 import {
   forEachRefFormat,
@@ -25,6 +21,10 @@ import {
   requireSuccessfulOutput,
   worktreeReadFailed,
 } from "#server/features/repository-refs/git/repository-refs-failures";
+import {
+  canonicalizeWorktrees,
+  readWorktrees,
+} from "#server/repository/access/index";
 
 const readTimeoutMilliseconds = 15_000;
 const maximumRefsOutputBytes = 16 * 1_048_576;

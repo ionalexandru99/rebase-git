@@ -1,12 +1,12 @@
+import type {
+  RepositoryHistoryCacheAction,
+  RepositoryHistoryStorageDiagnostics,
+} from "#web/domain/history-storage.contract";
 import {
   clearHistoryCache,
   describeHistoryCaches,
 } from "#web/features/repository-history/cache/repository-history-storage";
 import { queueHistoryStorageWrite as queueStorageWrite } from "#web/features/repository-history/cache/repository-history-storage-maintenance";
-import type {
-  RepositoryHistoryCacheAction,
-  RepositoryHistoryStorageDiagnostics,
-} from "#web/features/repository-history/repository-history-storage.contract";
 import { readHistory } from "#web/features/repository-history/worker/history-pages";
 import type {
   ConnectedReader,

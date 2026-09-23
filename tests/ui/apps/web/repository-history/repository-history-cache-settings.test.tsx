@@ -1,10 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { render } from "vitest-browser-react";
-import type { RepositoryHistoryCacheReader } from "#web/features/repository-history/diagnostics/history-cache.contract";
+import type { RepositoryHistoryStorageDiagnostics } from "#web/domain/history-storage.contract";
+import type { RepositoryHistoryCacheReader } from "#web/features/history-storage/history-cache.contract";
 import type { RepositoryHistorySnapshot } from "#web/features/repository-history/repository-history-reader.contract";
 import { RepositoryHistoryStorageUnavailable } from "#web/features/repository-history/repository-history-reader.contract";
-import type { RepositoryHistoryStorageDiagnostics } from "#web/features/repository-history/repository-history-storage.contract";
 import { RepositoryCacheSettings } from "#web-ui/features/repository-settings/components/repository-cache-settings";
 
 const identity = {

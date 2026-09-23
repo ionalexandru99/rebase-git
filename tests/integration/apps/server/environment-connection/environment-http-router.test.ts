@@ -6,6 +6,7 @@ import {
 } from "@rebase/contracts";
 import { Effect } from "effect";
 import { describe, expect, it } from "vite-plus/test";
+import type { EnvironmentFeature } from "#server/adapters/environment-transport/environment-feature.contract";
 import { createEnvironmentEventPublisher } from "#server/adapters/environment-transport/events/environment-event-publisher";
 import { httpRoute } from "#server/adapters/environment-transport/http/environment-http-route-handler";
 import { acquireEnvironmentListener } from "#server/app/server/environment-listener";
@@ -57,6 +58,30 @@ const routes = [
 ];
 
 describe("Environment HTTP router", () => {
+  it("rejects duplicate HTTP registrations before opening a listener", async () => {
+    await expect(
+      withListener(async () => {}, [
+        { capabilities: [], httpRoutes: routes },
+        { capabilities: [], httpRoutes: routes },
+      ]),
+    ).rejects.toThrow("Duplicate HTTP route: GET /api/repositories");
+  });
+
+  it("rejects duplicate and transport-owned RPC registrations before opening a listener", async () => {
+    const feature: EnvironmentFeature = {
+      capabilities: [],
+      httpRoutes: [],
+      rpc: { names: ["ReadRefs"], handlers: () => ({}) },
+    };
+    await expect(
+      withListener(async () => {}, [feature, feature]),
+    ).rejects.toThrow("Duplicate RPC: ReadRefs");
+    await expect(
+      withListener(async () => {}, [
+        { ...feature, rpc: { names: ["Hello"], handlers: () => ({}) } },
+      ]),
+    ).rejects.toThrow("Reserved RPC: Hello");
+  });
   it("answers unknown paths and unsupported methods from the route table", async () => {
     await withListener(async (origin) => {
       expect((await fetch(`${origin}/api/unknown`)).status).toBe(404);
@@ -131,7 +156,12 @@ function postJson(origin: string, body: unknown) {
   });
 }
 
-function withListener(use: (origin: string) => Promise<void>) {
+function withListener(
+  use: (origin: string) => Promise<void>,
+  features: readonly EnvironmentFeature[] = [
+    { capabilities: [], httpRoutes: routes },
+  ],
+) {
   return Effect.runPromise(
     Effect.scoped(
       Effect.gen(function* () {
@@ -139,9 +169,7 @@ function withListener(use: (origin: string) => Promise<void>) {
           authorization: createTestAuthorization(),
           environmentId: "00000000-0000-4000-8000-000000000001",
           events: createEnvironmentEventPublisher(),
-          features: [
-            { capabilities: [], httpRoutes: routes, rpcHandlers: () => ({}) },
-          ],
+          features,
           productVersion: "0.0.0",
         });
         listener.readiness.value = true;

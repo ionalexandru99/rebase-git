@@ -5,7 +5,7 @@ import type {
   GitCommandRunner,
 } from "#server/domain/git-command.contract";
 import { RepositoryChangesError } from "#server/domain/repository-changes.contract";
-import { runRepositoryGit } from "#server/features/repository-access/index";
+import { runRepositoryGit } from "#server/repository/access/index";
 
 export function changesError(reason: ChangesFailure["reason"], detail: string) {
   return new RepositoryChangesError({

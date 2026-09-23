@@ -1,4 +1,4 @@
-import type { HistoryStorageRequest } from "#web/features/repository-history/diagnostics/history-storage.contract";
+import type { HistoryStorageRequest } from "#web/features/repository-history/storage/history-storage.contract";
 import { clearingAllCaches } from "#web/features/repository-history/worker/cache-lifecycle";
 import {
   failHistoryStorageRequests,

@@ -14,7 +14,7 @@ import { Schema } from "effect";
 import { Rpc, RpcGroup } from "effect/unstable/rpc";
 
 const RepositoryId = ReadRepositoryHistory.fields.repositoryId;
-export const RepositoryHistoryRpc = RpcGroup.make(
+export const RepositoryHistoryReadRpc = RpcGroup.make(
   Rpc.make("ReadHistory", {
     payload: ReadRepositoryHistory,
     success: JsonMessageFragment,
@@ -31,6 +31,9 @@ export const RepositoryHistoryRpc = RpcGroup.make(
     payload: AcknowledgeRepositoryHistoryBatch,
     error: RepositoryHistoryOperationFailure,
   }),
+);
+
+export const RepositoryFreshnessRpc = RpcGroup.make(
   Rpc.make("WatchFreshness", {
     payload: { repositoryId: RepositoryId },
     success: RepositoryFreshness,
@@ -47,4 +50,8 @@ export const RepositoryHistoryRpc = RpcGroup.make(
     success: RepositoryFreshness,
     error: RepositoryHistoryOperationFailure,
   }),
+);
+
+export const RepositoryHistoryRpc = RepositoryHistoryReadRpc.merge(
+  RepositoryFreshnessRpc,
 );

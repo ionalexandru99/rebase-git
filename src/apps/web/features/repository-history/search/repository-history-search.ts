@@ -1,4 +1,8 @@
 import type { RepositoryCommit } from "@rebase/contracts";
+import type {
+  RepositoryHistorySearchQuery,
+  RepositoryHistorySearchResult,
+} from "#web/domain/history-search.contract";
 import {
   matchingHistoryMetadata,
   normalizeHistorySearch,
@@ -7,10 +11,6 @@ import {
   decodeHistorySearchCursor,
   encodeHistorySearchCursor,
 } from "#web/features/repository-history/search/history-search-cursor";
-import type {
-  RepositoryHistorySearchQuery,
-  RepositoryHistorySearchResult,
-} from "#web/features/repository-history/search/repository-history-search.contract";
 import { withHistorySearchRecords } from "#web/persistence/repository-history/repository-history-search-records";
 import type { RepositoryHistorySearchRecords } from "#web/persistence/repository-history/repository-history-transaction.contract";
 

@@ -8,6 +8,5 @@ export function repositoryChangesFeature(
   return {
     capabilities: [],
     httpRoutes: repositoryChangesHttpRoutes(changes),
-    rpcHandlers: () => ({}),
   };
 }

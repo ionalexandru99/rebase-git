@@ -13,12 +13,12 @@ import type {
 } from "@rebase/contracts";
 import type { EnvironmentConnectionFailure } from "@rebase/environment-client";
 import { Data, type Effect } from "effect";
+import type { RepositoryHistorySearch } from "#web/domain/history-search.contract";
+import type { RepositoryHistoryCacheManagement } from "#web/domain/history-storage.contract";
 import type {
   HistoryAncestryRoute,
   HistoryParentEdge,
 } from "#web/features/repository-history/query/history-order.contract";
-import type { RepositoryHistoryCacheManagement } from "#web/features/repository-history/repository-history-storage.contract";
-import type { RepositoryHistorySearch } from "#web/features/repository-history/search/repository-history-search.contract";
 import type {
   RepositoryFreshnessGateway,
   RepositoryFreshnessTransport,

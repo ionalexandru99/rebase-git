@@ -15,7 +15,7 @@ import {
   type RepositoryWatcher,
   RepositoryWatching,
 } from "#server/domain/repository-watcher.contract";
-import { readGitCommonDirectory } from "#server/features/repository-access/index";
+import { readGitCommonDirectory } from "#server/repository/access/index";
 
 const maximumWatchedRepositories = 32;
 const publishDelayMilliseconds = 150;

@@ -8,6 +8,5 @@ export function environmentFilesystemFeature(
   return {
     capabilities: [],
     httpRoutes: environmentFilesystemHttpRoutes(filesystem),
-    rpcHandlers: () => ({}),
   };
 }

@@ -8,6 +8,5 @@ export function environmentAuthorizationFeature(
   return {
     capabilities: [],
     httpRoutes: environmentAuthorizationHttpRoutes(authorization),
-    rpcHandlers: () => ({}),
   };
 }

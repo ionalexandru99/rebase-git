@@ -31,7 +31,6 @@ import {
 } from "#server/domain/repository-history.contract";
 import type { EnvironmentAuthorization } from "#server/features/environment-authorization/environment-authorization.contract";
 import { environmentAuthorizationFeature } from "#server/features/environment-authorization/index";
-import { createRepositoryAccess } from "#server/features/repository-access/index";
 import { createRepositoryCatalog } from "#server/features/repository-catalog/repository-catalog";
 import { readRepositoryHistorySnapshot } from "#server/features/repository-history/git/read-repository-history-snapshot";
 import { synchronizeRepositoryHistory } from "#server/features/repository-history/git/synchronize-repository-history";
@@ -41,6 +40,7 @@ import {
 } from "#server/features/repository-history/index";
 import { acquireEnvironmentContext } from "#server/persistence/environment-context";
 import { environmentPaths } from "#server/persistence/storage/environment-paths";
+import { createRepositoryAccess } from "#server/repository/access/index";
 import { createRepositoryHistoryRpc } from "#web/features/repository-history/transport/repository-history-rpc";
 
 const execFilePromise = promisify(execFile);

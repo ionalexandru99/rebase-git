@@ -1,7 +1,5 @@
-import type {
-  RepositoryHistoryCacheReader,
-  RepositoryHistoryFetchCommands,
-} from "#web/features/repository-history/index";
+import type { RepositoryHistoryCacheReader } from "#web/features/history-storage/index";
+import type { RepositoryHistoryFetchCommands } from "#web/features/repository-history/index";
 
 export type RepositoryHistorySettingsClient = RepositoryHistoryCacheReader &
   Pick<RepositoryHistoryFetchCommands, "configureFetch">;

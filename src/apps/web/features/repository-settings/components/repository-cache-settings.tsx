@@ -1,9 +1,9 @@
-import type { RepositoryHistoryCacheProps } from "#web/features/repository-history/index";
+import type { RepositoryHistoryCacheProps } from "#web/features/history-storage/index";
 import {
   formatCacheSize,
   historyCacheActions,
   useHistoryCacheManagement,
-} from "#web/features/repository-history/index";
+} from "#web/features/history-storage/index";
 import {
   AlertDialog,
   AlertDialogAction,

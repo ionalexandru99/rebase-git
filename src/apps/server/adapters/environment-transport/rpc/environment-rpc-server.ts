@@ -87,7 +87,7 @@ function registeredRpcHandlers(
 ): EnvironmentRpcHandlers {
   const handlers = unregisteredRpcHandlers();
   for (const feature of features) {
-    Object.assign(handlers, feature.rpcHandlers(session));
+    Object.assign(handlers, feature.rpc?.handlers(session));
   }
   return handlers;
 }

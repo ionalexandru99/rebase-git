@@ -8,6 +8,7 @@ import { formatHostAddress } from "#server/adapters/environment-transport/enviro
 import { createEnvironmentTransportDiscovery } from "#server/adapters/environment-transport/environment-transport-discovery";
 import { createEnvironmentHttpHandler } from "#server/adapters/environment-transport/http/environment-http-handler";
 import type { EnvironmentHttpRouteHandler } from "#server/adapters/environment-transport/http/environment-http-route-handler.contract";
+import { validateEnvironmentFeatures } from "#server/adapters/environment-transport/validate-environment-features";
 import { attachEnvironmentWebSocketServer } from "#server/adapters/environment-transport/websocket/environment-websocket-server";
 import type { EnvironmentListenerOptions } from "#server/app/server/environment-server.contract";
 import { EnvironmentServerStartError } from "#server/app/server/environment-server-error.contract";
@@ -21,6 +22,10 @@ export function acquireEnvironmentListener(
   return Effect.gen(function* () {
     const host = options.host ?? loopbackHost;
     const port = options.port ?? 0;
+    yield* Effect.try({
+      try: () => validateEnvironmentFeatures(options.features),
+      catch: (cause) => environmentServerError(cause, host, port),
+    });
     const readiness = { value: false };
     const state: EnvironmentTransportState = {
       discovery: createEnvironmentTransportDiscovery(

@@ -5,7 +5,7 @@ import type {
 } from "#server/domain/git-command.contract";
 import type { RepositoryGitError } from "#server/domain/repository-git.contract";
 import { RepositoryHistoryError } from "#server/domain/repository-history.contract";
-import { runRepositoryGit } from "#server/features/repository-access/index";
+import { runRepositoryGit } from "#server/repository/access/index";
 
 const historyTimeoutMilliseconds = 30_000;
 

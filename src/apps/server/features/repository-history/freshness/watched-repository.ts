@@ -8,12 +8,12 @@ import type { GitCommandRunner } from "#server/domain/git-command.contract";
 import type { RepositoryCoordinationService } from "#server/domain/repository-coordination.contract";
 import { RepositoryHistoryError } from "#server/domain/repository-history.contract";
 import type { RepositoryWatcher } from "#server/domain/repository-watcher.contract";
-import { readGitCommonDirectory } from "#server/features/repository-access/index";
 import {
   readRepositoryFetchSetting,
   writeRepositoryFetchSetting,
 } from "#server/features/repository-history/freshness/repository-fetch-settings";
 import type { FreshnessSubscription } from "#server/features/repository-history/freshness/watched-repository.contract";
+import { readGitCommonDirectory } from "#server/repository/access/index";
 
 export function acquireWatchedRepository(
   entry: RepositoryCatalogEntry,

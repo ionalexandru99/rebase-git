@@ -17,7 +17,6 @@ import {
   pruneHistoryCache,
 } from "#web/features/repository-history/cache/repository-history-storage";
 import { writeHistoryUnderPressure } from "#web/features/repository-history/cache/repository-history-storage-maintenance";
-import { manageBrowserHistoryStorage } from "#web/features/repository-history/diagnostics/browser-history-storage";
 import { readRepositoryCommits } from "#web/features/repository-history/query/repository-history-query";
 import {
   completeStoredRepositoryHistory,
@@ -31,6 +30,7 @@ import {
   RepositoryHistoryStorageUnavailable,
   RepositoryHistoryUnavailable,
 } from "#web/features/repository-history/repository-history-reader.contract";
+import { manageBrowserHistoryStorage } from "#web/features/repository-history/storage/browser-history-storage";
 import { readHistoryCacheRecords } from "#web/persistence/repository-history/repository-history-cache-records";
 import {
   repositoryStoreName,

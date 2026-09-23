@@ -8,13 +8,13 @@ import { Deferred, Effect, Fiber, Option } from "effect";
 import { afterEach, expect, it } from "vite-plus/test";
 import { createLocalGitCommandRunner } from "#server/adapters/local-git/local-git-command-runner";
 import type { GitCommandRunner } from "#server/domain/git-command.contract";
-import {
-  createRepositoryAccess,
-  createRepositoryCoordination,
-} from "#server/features/repository-access/index";
 import { createRepositoryChangesService } from "#server/features/repository-changes/index";
 import { acquireWatchedRepository } from "#server/features/repository-history/freshness/watched-repository";
 import { createRepositoryRefsService } from "#server/features/repository-refs/repository-refs";
+import {
+  createRepositoryAccess,
+  createRepositoryCoordination,
+} from "#server/repository/access/index";
 
 const directories: string[] = [];
 const execute = promisify(execFile);

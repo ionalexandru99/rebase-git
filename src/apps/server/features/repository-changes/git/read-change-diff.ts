@@ -14,7 +14,7 @@ import {
   binary,
   buildChangeDiff,
   objectFile,
-} from "#server/features/repository-comparison/index";
+} from "#server/repository/comparison/index";
 
 export function readChangeDiff(
   git: GitCommandRunner,

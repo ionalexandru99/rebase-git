@@ -1,4 +1,9 @@
+import {
+  RepositoryFreshnessRpc,
+  RepositoryHistoryReadRpc,
+} from "@rebase/contracts";
 import type { EnvironmentFeature } from "#server/adapters/environment-transport/environment-feature.contract";
+import { environmentFeatureRpc } from "#server/adapters/environment-transport/rpc/environment-feature-rpc";
 import type { RepositoryFreshnessService } from "#server/domain/repository-freshness.contract";
 import type { RepositoryHistoryService } from "#server/domain/repository-history.contract";
 import { repositoryFreshnessRpc } from "#server/features/repository-history/rpc/repository-freshness-rpc";
@@ -10,7 +15,9 @@ export function repositoryHistoryFeature(
   return {
     capabilities: ["repository-history"],
     httpRoutes: [],
-    rpcHandlers: (session) => repositoryHistoryRpc(session, history),
+    rpc: environmentFeatureRpc(RepositoryHistoryReadRpc, (session) =>
+      repositoryHistoryRpc(session, history),
+    ),
   };
 }
 
@@ -20,6 +27,8 @@ export function repositoryFreshnessFeature(
   return {
     capabilities: ["repository-history-freshness"],
     httpRoutes: [],
-    rpcHandlers: (session) => repositoryFreshnessRpc(session, freshness),
+    rpc: environmentFeatureRpc(RepositoryFreshnessRpc, (session) =>
+      repositoryFreshnessRpc(session, freshness),
+    ),
   };
 }

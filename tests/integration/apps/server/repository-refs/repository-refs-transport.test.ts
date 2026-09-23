@@ -25,10 +25,6 @@ import { acquireEnvironmentListener } from "#server/app/server/environment-liste
 import { createEnvironmentAuthorization } from "#server/features/environment-authorization/environment-authorization";
 import { environmentAuthorizationFeature } from "#server/features/environment-authorization/index";
 import {
-  createRepositoryAccess,
-  createRepositoryCoordination,
-} from "#server/features/repository-access/index";
-import {
   createRepositoryCatalog,
   repositoryCatalogFeature,
 } from "#server/features/repository-catalog/index";
@@ -39,6 +35,10 @@ import {
 import { acquireRepositoryChangePublisher } from "#server/features/repository-refs/repository-change-publisher";
 import { acquireEnvironmentContext } from "#server/persistence/environment-context";
 import { environmentPaths } from "#server/persistence/storage/environment-paths";
+import {
+  createRepositoryAccess,
+  createRepositoryCoordination,
+} from "#server/repository/access/index";
 import { createBrowserLocalEnvironmentSession } from "#web/app/environment/browser-local-environment-session";
 import { createRepositoryRefsRpc } from "#web/features/repository-refs/transport/repository-refs-rpc";
 

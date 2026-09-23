@@ -5,20 +5,20 @@ import type {
   RepositoryHistoryOperationFailure,
   SynchronizeRepositoryHistory,
 } from "@rebase/contracts";
+import type {
+  RepositoryHistorySearchQuery,
+  RepositoryHistorySearchResult,
+} from "#web/domain/history-search.contract";
+import type {
+  RepositoryHistoryCacheAction,
+  RepositoryHistoryStorageDiagnostics,
+} from "#web/domain/history-storage.contract";
 import type { HistoryAncestryRoute } from "#web/features/repository-history/query/history-order.contract";
 import type {
   RepositoryHistoryPosition,
   RepositoryHistoryQuery,
   RepositoryHistoryRefTarget,
 } from "#web/features/repository-history/repository-history-reader.contract";
-import type {
-  RepositoryHistoryCacheAction,
-  RepositoryHistoryStorageDiagnostics,
-} from "#web/features/repository-history/repository-history-storage.contract";
-import type {
-  RepositoryHistorySearchQuery,
-  RepositoryHistorySearchResult,
-} from "#web/features/repository-history/search/repository-history-search.contract";
 
 export type RepositoryHistoryWorkerFailure =
   | {

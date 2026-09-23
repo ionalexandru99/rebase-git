@@ -10,7 +10,7 @@ import {
   changeGit,
   changesError,
 } from "#server/features/repository-changes/git/change-git";
-import { fingerprint } from "#server/features/repository-comparison/index";
+import { fingerprint } from "#server/repository/comparison/index";
 
 export function readChanges(git: GitCommandRunner, scope: ChangesScope) {
   return Effect.gen(function* () {
