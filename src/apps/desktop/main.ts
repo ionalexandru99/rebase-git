@@ -81,7 +81,10 @@ async function start() {
   desktopApplication = await startDesktopApplication({
     host,
     renderer,
-    startEnvironment: startManagedEnvironmentServer,
+    startEnvironment: () =>
+      startManagedEnvironmentServer((error) =>
+        reportFailure("Rebase stopped", error),
+      ),
   });
   void applicationUpdater.start();
 }
@@ -199,8 +202,12 @@ function resolveRenderer(
 }
 
 function reportStartupFailure(error: unknown) {
+  reportFailure("Rebase could not start", error);
+}
+
+function reportFailure(title: string, error: unknown) {
   const message = error instanceof Error ? error.message : String(error);
   process.exitCode = 1;
-  dialog.showErrorBox("Rebase could not start", message);
+  dialog.showErrorBox(title, message);
   app.quit();
 }
