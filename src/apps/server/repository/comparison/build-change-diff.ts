@@ -6,12 +6,19 @@ import {
 } from "#server/domain/repository-comparison.contract";
 import { fingerprint } from "#server/repository/comparison/fingerprint";
 
+const patchTimeoutMilliseconds = 250;
+
+export interface ChangeDiffSource {
+  readonly previousPath?: string;
+  readonly patch?: string | undefined;
+}
+
 export function buildChangeDiff(
   path: string,
   base: string,
   before: RepositoryFileContent,
   after: RepositoryFileContent,
-  previousPath = path,
+  { previousPath = path, patch }: ChangeDiffSource = {},
 ): ChangeDiff {
   const mime = imageMime(path);
   const kind: ChangeDiff["kind"] =
@@ -30,6 +37,10 @@ export function buildChangeDiff(
                 : "text";
   const oldText = before.content?.toString("utf8") ?? "";
   const newText = after.content?.toString("utf8") ?? "";
+  const textPatch =
+    kind === "text"
+      ? (patch ?? boundedPatch(previousPath, path, oldText, newText))
+      : "";
   const diff: ChangeDiff = {
     path: path,
     kind,
@@ -61,20 +72,12 @@ export function buildChangeDiff(
           : kind === "text"
             ? newText
             : null,
-    patch:
-      kind === "text"
-        ? createTwoFilesPatch(
-            JSON.stringify(previousPath),
-            JSON.stringify(path),
-            oldText,
-            newText,
-            "",
-            "",
-            { context: 3 },
-          )
-        : "",
+    patch: textPatch ?? "",
   };
-  if (Buffer.byteLength(JSON.stringify(diff)) > 900_000)
+  if (
+    textPatch === undefined ||
+    Buffer.byteLength(JSON.stringify(diff)) > 900_000
+  )
     return {
       ...diff,
       kind: "large" as const,
@@ -83,6 +86,23 @@ export function buildChangeDiff(
       patch: "",
     };
   return diff;
+}
+
+function boundedPatch(
+  previousPath: string,
+  path: string,
+  oldText: string,
+  newText: string,
+) {
+  return createTwoFilesPatch(
+    JSON.stringify(previousPath),
+    JSON.stringify(path),
+    oldText,
+    newText,
+    "",
+    "",
+    { context: 3, timeout: patchTimeoutMilliseconds },
+  );
 }
 
 export function binary(content: Buffer | null) {
