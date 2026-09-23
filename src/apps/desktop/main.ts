@@ -1,4 +1,4 @@
-import { join, resolve } from "node:path";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { app, BrowserWindow, dialog } from "electron";
 import electronUpdater, { type AppUpdater } from "electron-updater";
@@ -18,6 +18,10 @@ import { registerApplicationUpdaterIpc } from "#desktop/features/application-upd
 import { createElectronRepositoryFilesystem } from "#desktop/features/repository-filesystem/electron-repository-filesystem";
 import { registerRepositoryFilesystemIpc } from "#desktop/features/repository-filesystem/repository-filesystem-ipc";
 import { startManagedEnvironmentServer } from "#desktop/platform/environment/environment-supervisor";
+import {
+  createTrustedIpcHandler,
+  isTrustedRendererLocation,
+} from "#desktop/platform/renderer-trust/renderer-trust";
 
 let desktopApplication: DesktopApplication | undefined;
 const desktopIconPath = fileURLToPath(
@@ -63,11 +67,20 @@ async function start() {
     saveSettings: updateSettings.write,
     settings: await updateSettings.read(),
   });
-  registerApplicationUpdaterIpc(applicationUpdater);
-  registerRepositoryFilesystemIpc(createElectronRepositoryFilesystem());
+  const renderer = resolveRenderer(
+    process.argv,
+    import.meta.url,
+    app.isPackaged,
+  );
+  const trusted = createTrustedIpcHandler(renderer);
+  registerApplicationUpdaterIpc(applicationUpdater, trusted);
+  registerRepositoryFilesystemIpc(
+    createElectronRepositoryFilesystem(),
+    trusted,
+  );
   desktopApplication = await startDesktopApplication({
     host,
-    renderer: resolveRenderer(process.argv, import.meta.url, app.isPackaged),
+    renderer,
     startEnvironment: startManagedEnvironmentServer,
   });
   void applicationUpdater.start();
@@ -117,19 +130,10 @@ function registerEnvironmentCredentialIpc(
   window: BrowserWindow,
   options: DesktopWindowOptions,
 ) {
+  const trusted = createTrustedIpcHandler(options.renderer);
   window.webContents.ipc.handle(
     desktopApplicationIpc.getEnvironmentCredential,
-    (event) => {
-      if (
-        event.senderFrame !== window.webContents.mainFrame ||
-        !isTrustedRendererLocation(options.renderer, event.senderFrame.url)
-      ) {
-        throw new Error(
-          "Environment credentials require the main Rebase window.",
-        );
-      }
-      return options.credential;
-    },
+    trusted(() => options.credential),
   );
 }
 
@@ -142,17 +146,6 @@ function preventUntrustedNavigation(
   };
   window.webContents.on("will-navigate", guardNavigation);
   window.webContents.on("will-redirect", guardNavigation);
-}
-
-function isTrustedRendererLocation(renderer: DesktopRenderer, target: string) {
-  const targetUrl = new URL(target);
-  if (renderer.type === "url") {
-    return targetUrl.origin === new URL(renderer.url).origin;
-  }
-  return (
-    targetUrl.protocol === "file:" &&
-    fileURLToPath(targetUrl) === resolve(renderer.path)
-  );
 }
 
 function configureEnvironmentWebSocketOrigin(

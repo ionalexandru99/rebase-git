@@ -7,7 +7,10 @@ import {
 } from "@rebase/environment-client";
 import { Effect } from "effect";
 import { connectCurrentEnvironmentEffect } from "#web/app/environment/connection/index";
-import type { DesktopHostBridge } from "#web/app/environment/environment-bootstrap.contract";
+import type {
+  DesktopEnvironmentHost,
+  DesktopHostBridge,
+} from "#web/app/environment/environment-bootstrap.contract";
 import { createLocalEnvironmentSession } from "#web/app/environment/local-environment-session";
 import type { LocalEnvironmentGateway } from "#web/app/environment/local-environment-session.contract";
 import { listEnvironmentDirectoryEffect } from "#web/features/environment-filesystem/environment-filesystem-client";
@@ -24,8 +27,10 @@ import { RepositoryRefsResponseError } from "#web/features/repository-refs/repos
 import type { RepositoryRefsGateway } from "#web/features/repository-refs/repository-refs-controller.contract";
 import type { RepositoryRefsTransport } from "#web/features/repository-refs/transport/repository-refs-transport.contract";
 
-export function createBrowserLocalEnvironmentSession(productVersion: string) {
-  const host = window.rebaseHost;
+export function createBrowserLocalEnvironmentSession(
+  productVersion: string,
+  host: DesktopEnvironmentHost | undefined,
+) {
   const bootstrap = resolveLocalEnvironmentBootstrap(window.location, host);
   let repositoryRefs: RepositoryRefsTransport | undefined;
   let changesCredential: EnvironmentCredential | undefined;
@@ -134,7 +139,7 @@ export function resolveLocalEnvironmentBootstrap(
 function createLocalEnvironmentAuthorization(
   origin: string,
   pairingMaterial: string | undefined,
-  host: DesktopHostBridge | undefined,
+  host: DesktopEnvironmentHost | undefined,
 ): LocalEnvironmentGateway["authorize"] {
   return () =>
     Effect.gen(function* () {

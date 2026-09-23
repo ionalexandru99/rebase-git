@@ -1,4 +1,7 @@
-import type { DesktopUpdates } from "@rebase/contracts";
+import type {
+  DesktopUpdates,
+  RepositoryFilesystemHost,
+} from "@rebase/contracts";
 import { IconDeviceLaptop } from "@tabler/icons-react";
 import {
   type JSX,
@@ -46,10 +49,12 @@ const projectSidebarSize = {
 export function ApplicationShell({
   desktopUpdates,
   productVersion,
+  repositoryFilesystem,
   session,
 }: {
   readonly desktopUpdates: DesktopUpdates | undefined;
   readonly productVersion: string;
+  readonly repositoryFilesystem: RepositoryFilesystemHost | undefined;
   readonly session: LocalEnvironmentSession;
 }): JSX.Element {
   const sessionState = useSyncExternalStore(
@@ -168,6 +173,7 @@ export function ApplicationShell({
   } = useProjectRepositoryActions({
     availability: environmentStatus.availability,
     environmentId: localEnvironmentId,
+    repositoryFilesystem,
     session,
     setNavigation,
     onRepositoryOpened: closeRepositorySettings,
@@ -345,7 +351,7 @@ export function ApplicationShell({
                   canRemove={canWrite}
                   copyPath={() => copyRepositoryPath(settingsTarget)}
                   reveal={
-                    window.rebaseHost?.revealRepository === undefined
+                    revealRepository === undefined
                       ? undefined
                       : () => revealRepository(settingsTarget)
                   }

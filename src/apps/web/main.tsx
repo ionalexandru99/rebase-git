@@ -1,6 +1,7 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { createBrowserLocalEnvironmentSession } from "#web/app/environment/browser-local-environment-session";
+import { readDesktopHostBridge } from "#web/app/environment/desktop-host-bridge";
 import { NotificationsProvider } from "#web/features/notifications/index";
 import { ApplicationShell } from "#web-ui/app/shell/application-shell";
 import "@rebase/web/styles.css";
@@ -12,15 +13,20 @@ if (!(rootElement instanceof HTMLElement)) {
 }
 
 const productVersion = import.meta.env.REBASE_PRODUCT_VERSION;
-const session = createBrowserLocalEnvironmentSession(productVersion);
+const desktopHost = readDesktopHostBridge();
+const session = createBrowserLocalEnvironmentSession(
+  productVersion,
+  desktopHost,
+);
 session.start();
 
 createRoot(rootElement).render(
   <StrictMode>
     <NotificationsProvider>
       <ApplicationShell
-        desktopUpdates={window.rebaseHost?.updates}
+        desktopUpdates={desktopHost?.updates}
         productVersion={productVersion}
+        repositoryFilesystem={desktopHost}
         session={session}
       />
     </NotificationsProvider>

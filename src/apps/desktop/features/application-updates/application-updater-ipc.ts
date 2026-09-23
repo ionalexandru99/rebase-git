@@ -3,26 +3,30 @@ import {
   ReleaseChannelSchema,
 } from "@rebase/contracts";
 import { Schema } from "effect";
-import { BrowserWindow, type IpcMainInvokeEvent, ipcMain } from "electron";
+import { BrowserWindow, ipcMain } from "electron";
 import type { ApplicationUpdater } from "#desktop/features/application-updates/application-updater.contract";
 import { applicationUpdaterIpc } from "#desktop/features/application-updates/application-updater-ipc.contract";
+import type { TrustedIpcHandler } from "#desktop/platform/renderer-trust/renderer-trust.contract";
 
-export function registerApplicationUpdaterIpc(updater: ApplicationUpdater) {
+export function registerApplicationUpdaterIpc(
+  updater: ApplicationUpdater,
+  trusted: TrustedIpcHandler,
+) {
   ipcMain.handle(
     applicationUpdaterIpc.snapshot,
-    trustedHandler(() => updater.getSnapshot()),
+    trusted(() => updater.getSnapshot()),
   );
   ipcMain.handle(
     applicationUpdaterIpc.check,
-    trustedHandler(() => updater.checkForUpdates()),
+    trusted(() => updater.checkForUpdates()),
   );
   ipcMain.handle(
     applicationUpdaterIpc.install,
-    trustedHandler(() => updater.installUpdate()),
+    trusted(() => updater.installUpdate()),
   );
   ipcMain.handle(
     applicationUpdaterIpc.selectReleaseChannel,
-    trustedHandler((_event, value: unknown) =>
+    trusted((_event, value: unknown) =>
       updater.selectReleaseChannel(
         Schema.decodeUnknownSync(ReleaseChannelSchema)(value),
       ),
@@ -30,7 +34,7 @@ export function registerApplicationUpdaterIpc(updater: ApplicationUpdater) {
   );
   ipcMain.handle(
     applicationUpdaterIpc.setCheckAutomatically,
-    trustedHandler((_event, value: unknown) => {
+    trusted((_event, value: unknown) => {
       if (typeof value !== "boolean") {
         throw new TypeError("checkAutomatically must be a boolean.");
       }
@@ -39,22 +43,6 @@ export function registerApplicationUpdaterIpc(updater: ApplicationUpdater) {
   );
 
   return updater.subscribe(sendSnapshot);
-}
-
-function trustedHandler<Arguments extends readonly unknown[], Result>(
-  handler: (event: IpcMainInvokeEvent, ...arguments_: Arguments) => Result,
-) {
-  return (event: IpcMainInvokeEvent, ...arguments_: Arguments) => {
-    const window = BrowserWindow.fromWebContents(event.sender);
-    if (
-      window === null ||
-      window.isDestroyed() ||
-      event.senderFrame !== event.sender.mainFrame
-    ) {
-      throw new Error("Updater commands require the main Rebase window.");
-    }
-    return handler(event, ...arguments_);
-  };
 }
 
 function sendSnapshot(snapshot: DesktopUpdateSnapshot) {

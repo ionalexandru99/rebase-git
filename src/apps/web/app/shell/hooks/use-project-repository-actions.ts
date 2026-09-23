@@ -1,7 +1,9 @@
+import type { RepositoryFilesystemHost } from "@rebase/contracts";
 import {
   type Dispatch,
   type SetStateAction,
   useCallback,
+  useMemo,
   useState,
 } from "react";
 import type { LocalEnvironmentSession } from "#web/app/environment/local-environment-session.contract";
@@ -20,12 +22,14 @@ import {
 export function useProjectRepositoryActions({
   availability,
   environmentId,
+  repositoryFilesystem,
   session,
   setNavigation,
   onRepositoryOpened,
 }: {
   readonly availability: EnvironmentAvailability;
   readonly environmentId: string;
+  readonly repositoryFilesystem: RepositoryFilesystemHost | undefined;
   readonly session: LocalEnvironmentSession;
   readonly onRepositoryOpened: () => void;
   readonly setNavigation: Dispatch<SetStateAction<ProjectNavigationState>>;
@@ -120,12 +124,14 @@ export function useProjectRepositoryActions({
     [],
   );
 
-  const revealRepository = useCallback((repository: OpenProjectRepository) => {
-    return (
-      window.rebaseHost?.revealRepository(repository.path) ??
-      Promise.reject(new Error("Reveal is unavailable in this client."))
-    );
-  }, []);
+  const revealRepository = useMemo(
+    () =>
+      repositoryFilesystem === undefined
+        ? undefined
+        : (repository: OpenProjectRepository) =>
+            repositoryFilesystem.revealRepository(repository.path),
+    [repositoryFilesystem],
+  );
 
   const closeSidebarRepository = useCallback(
     (

@@ -96,14 +96,11 @@ describe("repository refs transport", () => {
       const remembered = await Effect.runPromise(
         rememberEnvironmentRepositoryEffect(origin, owner, repositoryPath),
       );
-      vi.stubGlobal("window", {
-        location: new URL(origin),
-        rebaseHost: {
-          environmentOrigin: origin,
-          getEnvironmentCredential: async () => owner.value,
-        },
+      vi.stubGlobal("window", { location: new URL(origin) });
+      const session = createBrowserLocalEnvironmentSession("0.0.0", {
+        environmentOrigin: origin,
+        getEnvironmentCredential: async () => owner.value,
       });
-      const session = createBrowserLocalEnvironmentSession("0.0.0");
       const refs = () => session.repositoryRefs.getSnapshot().refs;
       session.start();
       try {
