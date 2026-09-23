@@ -9,6 +9,7 @@ import { Effect } from "effect";
 import type { GitCommandRunner } from "#server/domain/git-command.contract";
 import type { RepositoryAccessService } from "#server/domain/repository-access.contract";
 import type {
+  RepositoryCoordinationError,
   RepositoryCoordinationService,
   RepositoryResourceScope,
 } from "#server/domain/repository-coordination.contract";
@@ -30,37 +31,37 @@ export function createRepositoryChangesService(
   git: GitCommandRunner,
   coordination: RepositoryCoordinationService,
 ) {
+  const inWorktree = <A>(
+    scope: ChangesScope,
+    run: Effect.Effect<
+      A,
+      RepositoryChangesError | RepositoryGitError | RepositoryCoordinationError
+    >,
+  ) =>
+    access.requireWorktree(scope).pipe(
+      Effect.mapError((error) => changesError("Missing", error.detail)),
+      Effect.andThen(run),
+      Effect.mapError((error) =>
+        error._tag === "RepositoryChangesError"
+          ? error
+          : changesError("GitFailed", error.detail),
+      ),
+    );
   const locked = <A>(
     scope: ChangesScope,
     run: Effect.Effect<A, RepositoryChangesError | RepositoryGitError>,
     resources: RepositoryResourceScope = "worktree",
-  ) =>
-    Effect.gen(function* () {
-      yield* access
-        .requireWorktree(scope)
-        .pipe(
-          Effect.mapError((error) => changesError("Missing", error.detail)),
-        );
-      return yield* coordination
-        .run(scope.worktreePath, resources, run)
-        .pipe(
-          Effect.mapError((error) =>
-            error._tag === "RepositoryChangesError"
-              ? error
-              : changesError("GitFailed", error.detail),
-          ),
-        );
-    });
+  ) => inWorktree(scope, coordination.run(scope.worktreePath, resources, run));
   return {
     read: (scope: ChangesScope) =>
-      locked(
+      inWorktree(
         scope,
         readChanges(git, scope).pipe(
           Effect.map((value) => fitChanges(value.snapshot)),
         ),
       ),
     diff: (command: ReadChangeDiff) =>
-      locked(
+      inWorktree(
         command,
         Effect.gen(function* () {
           yield* safeChangePath(command.worktreePath, command.path);

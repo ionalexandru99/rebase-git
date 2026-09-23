@@ -175,3 +175,75 @@ it.each([
     );
   },
 );
+
+it("reads changes while a commit holds the worktree", async () => {
+  const directory = await realpath(
+    await mkdtemp(join(tmpdir(), "rebase-coordination-")),
+  );
+  directories.push(directory);
+  const git = (...args: string[]) => execute("git", ["-C", directory, ...args]);
+  await git("init", "-b", "main");
+  await git("config", "user.name", "Test");
+  await git("config", "user.email", "test@example.test");
+  await git("config", "commit.gpgsign", "false");
+  await writeFile(join(directory, "file.txt"), "initial\n");
+  await git("add", ".");
+  await git("commit", "-m", "Initial");
+  await writeFile(join(directory, "file.txt"), "committed\n");
+  await git("add", ".");
+
+  await Effect.runPromise(
+    Effect.scoped(
+      Effect.gen(function* () {
+        const commitEntered = yield* Deferred.make<void>();
+        const releaseCommit = yield* Deferred.make<void>();
+        const local = createLocalGitCommandRunner();
+        const runner: GitCommandRunner = {
+          ...local,
+          run: (command) =>
+            command.arguments[0] === "commit"
+              ? Deferred.succeed(commitEntered, undefined).pipe(
+                  Effect.andThen(Deferred.await(releaseCommit)),
+                  Effect.andThen(local.run(command)),
+                )
+              : local.run(command),
+        };
+        const repositoryId = randomUUID();
+        const changes = createRepositoryChangesService(
+          createRepositoryAccess(
+            {
+              find: () =>
+                Effect.succeed({
+                  id: repositoryId,
+                  path: directory,
+                  name: "test",
+                  addedAt: "",
+                  lastOpenedAt: "",
+                }),
+            },
+            runner,
+            createLocalRepositoryWatcher(),
+          ),
+          runner,
+          createRepositoryCoordination(runner),
+        );
+        const scope = { repositoryId, worktreePath: directory, amend: false };
+        const snapshot = yield* changes.read(scope);
+        const committing = yield* changes
+          .commit({ ...scope, revision: snapshot.revision, message: "Held" })
+          .pipe(Effect.forkScoped);
+        yield* Deferred.await(commitEntered);
+
+        const reads = yield* Effect.all([
+          changes.read(scope),
+          changes.diff({ ...scope, section: "staged", path: "file.txt" }),
+        ]).pipe(Effect.timeoutOption("5 seconds"));
+        yield* Deferred.succeed(releaseCommit, undefined);
+        yield* Fiber.join(committing);
+
+        expect(Option.isSome(reads)).toBe(true);
+      }),
+    ),
+  );
+  expect((await git("log", "-1", "--format=%s")).stdout.trim()).toBe("Held");
+});
