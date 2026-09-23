@@ -24,7 +24,14 @@ it("allows mutations after stopping and restarting an interrupted operation", as
       truncated: false,
     }),
   );
-  const mutate = vi.fn(() => Effect.never);
+  const interrupted = Promise.withResolvers<void>();
+  const mutate = vi
+    .fn(() => Effect.never)
+    .mockImplementationOnce(() =>
+      Effect.never.pipe(
+        Effect.onInterrupt(() => Effect.promise(() => interrupted.promise)),
+      ),
+    );
   const controller = createWorkingChangesController(
     { read, mutate, diff: () => Effect.never, commit: () => Effect.never },
     { repositoryId: "repository", worktreePath: "/repository", amend: false },
@@ -43,10 +50,15 @@ it("allows mutations after stopping and restarting an interrupted operation", as
     controller.stop();
     expect(controller.getSnapshot().busy).toBe(false);
     controller.start();
-    await vi.waitFor(() => expect(read).toHaveBeenCalledTimes(2));
     controller.mutate("stage", "unstaged", { _tag: "All" });
+    expect(controller.getSnapshot().busy).toBe(true);
+    interrupted.resolve();
     await vi.waitFor(() => expect(mutate).toHaveBeenCalledTimes(2));
+    expect(controller.getSnapshot().busy).toBe(true);
+    controller.mutate("stage", "unstaged", { _tag: "All" });
+    expect(mutate).toHaveBeenCalledTimes(2);
   } finally {
+    interrupted.resolve();
     controller.stop();
     await runtime.dispose();
     vi.unstubAllGlobals();

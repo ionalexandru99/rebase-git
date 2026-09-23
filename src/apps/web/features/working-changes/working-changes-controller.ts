@@ -60,6 +60,7 @@ export function createWorkingChangesController(
   const listeners = new Set<() => void>();
   let active = true;
   let initialized = false;
+  let operationGeneration = 0;
   let polling: Fiber.Fiber<void> | undefined;
   let reading: Fiber.Fiber<unknown> | undefined;
   let normalDraft = emptyCommitDraft;
@@ -156,6 +157,7 @@ export function createWorkingChangesController(
     effect: () => Effect.Effect<void, WorkingChangesFailure>,
   ) => {
     if (state.busy || state.loading) return;
+    const generation = ++operationGeneration;
     publish({ busy: true, error: null, notice: null });
     run(
       lock.withPermit(Effect.suspend(effect)).pipe(
@@ -165,7 +167,11 @@ export function createWorkingChangesController(
           ),
         ),
         Effect.ensuring(
-          Effect.sync(() => publish({ busy: false, loading: false })),
+          Effect.sync(() => {
+            if (generation === operationGeneration) {
+              publish({ busy: false, loading: false });
+            }
+          }),
         ),
       ),
     );
@@ -237,6 +243,7 @@ export function createWorkingChangesController(
       );
     },
     stop: () => {
+      ++operationGeneration;
       work.stop();
       polling = undefined;
       reading = undefined;
