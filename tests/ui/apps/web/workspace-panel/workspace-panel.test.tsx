@@ -168,7 +168,7 @@ async function renderPanel(scopeKey = "panel-test") {
   };
 }
 
-it("migrates existing layouts into independent project sessions and prefers their saved state", async () => {
+it("migrates a shared previous layout into only the first repository", async () => {
   localStorage.clear();
   const scopeKey = JSON.stringify(["environment", "logical", "/repo"]);
   const storageKey = `rebase:workspace-panel:v1:${scopeKey}`;
@@ -212,9 +212,12 @@ it("migrates existing layouts into independent project sessions and prefers thei
   await page.getByRole("button", { name: "Hide side panel" }).click();
   await view.rerender(tree("project-b"));
   await expect
-    .element(page.getByRole("tab", { name: "Commit", exact: true }))
-    .toHaveAttribute("aria-selected", "true");
-  await expect.poll(panelWidth).toBeCloseTo(550, -1);
+    .element(page.getByRole("button", { name: "Show side panel" }))
+    .toBeVisible();
+  await page.getByRole("button", { name: "Show side panel" }).click();
+  await expect
+    .element(page.getByRole("heading", { name: "Open a tab" }))
+    .toBeVisible();
   expect(JSON.parse(localStorage.getItem(storageKey) ?? "null")).toEqual(saved);
   localStorage.setItem(storageKey, JSON.stringify({ ...saved, width: 35 }));
   await view.rerender(tree("project-a"));
@@ -231,7 +234,9 @@ it("migrates existing layouts into independent project sessions and prefers thei
   await expect.poll(panelWidth).toBeCloseTo(550, -1);
   await view.rerender(tree("project-b"));
   await expect
+    .element(page.getByRole("heading", { name: "Open a tab" }))
+    .toBeVisible();
+  await expect
     .element(page.getByRole("tab", { name: "Commit", exact: true }))
-    .toHaveAttribute("aria-selected", "true");
-  await expect.poll(panelWidth).toBeCloseTo(550, -1);
+    .not.toBeInTheDocument();
 });

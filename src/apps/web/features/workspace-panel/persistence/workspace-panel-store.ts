@@ -47,11 +47,16 @@ function readPanelState(
   try {
     let serialized = localStorage.getItem(key);
     if (serialized === null && previousScopeKey !== undefined) {
-      serialized = localStorage.getItem(
-        `rebase:workspace-panel:v1:${previousScopeKey}`,
-      );
-      if (serialized !== null) {
-        savePanelState(key, serialized);
+      const migrationOwnerKey = `rebase:workspace-panel:v1:migration-owner:${previousScopeKey}`;
+      const migrationOwner = localStorage.getItem(migrationOwnerKey);
+      if (migrationOwner === null || migrationOwner === key) {
+        serialized = localStorage.getItem(
+          `rebase:workspace-panel:v1:${previousScopeKey}`,
+        );
+        if (serialized !== null) {
+          savePanelState(migrationOwnerKey, key);
+          savePanelState(key, serialized);
+        }
       }
     }
     const saved: unknown = JSON.parse(serialized ?? "null");
