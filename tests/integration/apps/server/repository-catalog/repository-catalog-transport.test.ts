@@ -3,17 +3,18 @@ import { mkdir, mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
-import { exchangeEnvironmentPairing } from "@rebase/web/environment-connection";
+import {
+  createEnvironmentRequestClient,
+  type EnvironmentCredential,
+} from "@rebase/environment-client";
+import { exchangeEnvironmentPairingEffect } from "@rebase/web/environment-connection";
 import {
   EnvironmentFilesystemRejected,
-  listEnvironmentDirectoryEffect,
+  environmentFilesystemClient,
 } from "@rebase/web/features/environment-filesystem";
 import {
-  listEnvironmentRepositoriesEffect,
   RepositoryCatalogRejected,
-  recordEnvironmentRepositoryOpenedEffect,
-  rememberEnvironmentRepositoryEffect,
-  removeEnvironmentRepositoryEffect,
+  repositoryCatalogClient,
 } from "@rebase/web/features/repository-catalog";
 import { Effect } from "effect";
 import { afterEach, describe, expect, it } from "vite-plus/test";
@@ -55,19 +56,19 @@ describe("repository catalog transport", () => {
       const viewer = await pair(origin, authorization, "viewer");
 
       const remembered = await Effect.runPromise(
-        rememberEnvironmentRepositoryEffect(origin, owner, repositoryPath),
+        catalog(origin, owner).remember({ path: repositoryPath }),
       );
       await expect(
-        Effect.runPromise(listEnvironmentRepositoriesEffect(origin, viewer)),
-      ).resolves.toEqual([remembered]);
+        Effect.runPromise(catalog(origin, viewer).list()),
+      ).resolves.toEqual({ repositories: [remembered] });
       const opened = await Effect.runPromise(
-        recordEnvironmentRepositoryOpenedEffect(origin, viewer, remembered.id),
+        catalog(origin, viewer).recordOpened({ repositoryId: remembered.id }),
       );
       expect(opened.lastOpenedAt >= remembered.lastOpenedAt).toBe(true);
 
       await expect(
         Effect.runPromise(
-          removeEnvironmentRepositoryEffect(origin, viewer, remembered.id),
+          catalog(origin, viewer).remove({ repositoryId: remembered.id }),
         ),
       ).rejects.toEqual(
         new RepositoryCatalogRejected({
@@ -80,14 +81,14 @@ describe("repository catalog transport", () => {
       );
       await expect(
         Effect.runPromise(
-          removeEnvironmentRepositoryEffect(origin, owner, remembered.id),
+          catalog(origin, owner).remove({ repositoryId: remembered.id }),
         ),
       ).resolves.toEqual({
         repositoryId: remembered.id,
       });
       await expect(
-        Effect.runPromise(listEnvironmentRepositoriesEffect(origin, viewer)),
-      ).resolves.toEqual([]);
+        Effect.runPromise(catalog(origin, viewer).list()),
+      ).resolves.toEqual({ repositories: [] });
     });
   });
 
@@ -97,11 +98,7 @@ describe("repository catalog transport", () => {
 
       await expect(
         Effect.runPromise(
-          rememberEnvironmentRepositoryEffect(
-            origin,
-            owner,
-            join(root, "missing"),
-          ),
+          catalog(origin, owner).remember({ path: join(root, "missing") }),
         ),
       ).rejects.toEqual(
         new RepositoryCatalogRejected({
@@ -115,7 +112,7 @@ describe("repository catalog transport", () => {
       const missingId = "00000000-0000-4000-8000-000000000099";
       await expect(
         Effect.runPromise(
-          recordEnvironmentRepositoryOpenedEffect(origin, owner, missingId),
+          catalog(origin, owner).recordOpened({ repositoryId: missingId }),
         ),
       ).rejects.toEqual(
         new RepositoryCatalogRejected({
@@ -134,7 +131,7 @@ describe("repository catalog transport", () => {
       const viewer = await pair(origin, authorization, "viewer");
 
       const listing = await Effect.runPromise(
-        listEnvironmentDirectoryEffect(origin, owner),
+        filesystem(origin, owner).listDirectory({}),
       );
 
       expect(listing.path).toBe(root);
@@ -145,7 +142,9 @@ describe("repository catalog transport", () => {
         ]),
       );
       await expect(
-        Effect.runPromise(listEnvironmentDirectoryEffect(origin, viewer, root)),
+        Effect.runPromise(
+          filesystem(origin, viewer).listDirectory({ path: root }),
+        ),
       ).rejects.toEqual(
         new EnvironmentFilesystemRejected({
           failure: {
@@ -203,13 +202,25 @@ async function pair(
   const pairing = await Effect.runPromise(
     authorization.createPairing({ capabilities: [], role }),
   );
-  const exchanged = (
-    await exchangeEnvironmentPairing(origin, {
+  const exchanged = await Effect.runPromise(
+    exchangeEnvironmentPairingEffect(origin, {
       label: `${role} browser`,
       pairingMaterial: pairing.material,
-    })
-  ).credential;
-  return { type: "bearer" as const, value: exchanged };
+    }),
+  );
+  return { type: "bearer" as const, value: exchanged.credential };
+}
+
+function catalog(origin: string, credential: EnvironmentCredential) {
+  return repositoryCatalogClient(
+    createEnvironmentRequestClient(origin, () => credential),
+  );
+}
+
+function filesystem(origin: string, credential: EnvironmentCredential) {
+  return environmentFilesystemClient(
+    createEnvironmentRequestClient(origin, () => credential),
+  );
 }
 
 async function createRepository(path: string) {

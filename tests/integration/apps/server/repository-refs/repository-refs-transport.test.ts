@@ -4,13 +4,17 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import {
-  connectCurrentEnvironmentEffect,
-  exchangeEnvironmentPairing,
-} from "@rebase/web/environment-connection";
-import { rememberEnvironmentRepositoryEffect } from "@rebase/web/features/repository-catalog";
+  createEnvironmentRequestClient,
+  type EnvironmentCredential,
+} from "@rebase/environment-client";
 import {
-  checkoutRepositoryRefEffect,
+  connectCurrentEnvironmentEffect,
+  exchangeEnvironmentPairingEffect,
+} from "@rebase/web/environment-connection";
+import { repositoryCatalogClient } from "@rebase/web/features/repository-catalog";
+import {
   RepositoryRefsRejected,
+  repositoryRefsClient,
 } from "@rebase/web/features/repository-refs";
 import { Effect } from "effect";
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
@@ -73,7 +77,7 @@ describe("repository refs transport", () => {
       );
       await git(repositoryPath, "tag", "v1");
       const repository = await Effect.runPromise(
-        rememberEnvironmentRepositoryEffect(origin, owner, repositoryPath),
+        remember(origin, owner, repositoryPath),
       );
       const refs = await Effect.runPromise(
         readRefsOverWebSocket(origin, owner, repository.id),
@@ -94,7 +98,7 @@ describe("repository refs transport", () => {
       await createRepository(repositoryPath);
       const owner = await pair(origin, authorization, "owner");
       const remembered = await Effect.runPromise(
-        rememberEnvironmentRepositoryEffect(origin, owner, repositoryPath),
+        remember(origin, owner, repositoryPath),
       );
       vi.stubGlobal("window", { location: new URL(origin) });
       const session = createBrowserLocalEnvironmentSession("0.0.0", {
@@ -180,7 +184,7 @@ describe("repository refs transport", () => {
       const owner = await pair(origin, authorization, "owner");
       const viewer = await pair(origin, authorization, "viewer");
       const remembered = await Effect.runPromise(
-        rememberEnvironmentRepositoryEffect(origin, owner, repositoryPath),
+        remember(origin, owner, repositoryPath),
       );
 
       const refs = await Effect.runPromise(
@@ -194,7 +198,7 @@ describe("repository refs transport", () => {
 
       await expect(
         Effect.runPromise(
-          checkoutRepositoryRefEffect(origin, viewer, {
+          refsClient(origin, viewer).checkout({
             repositoryId: remembered.id,
             target: { _tag: "LocalBranch", name: "feature" },
             worktreePath: repositoryPath,
@@ -208,7 +212,7 @@ describe("repository refs transport", () => {
       );
       await expect(
         Effect.runPromise(
-          checkoutRepositoryRefEffect(origin, owner, {
+          refsClient(origin, owner).checkout({
             repositoryId: remembered.id,
             target: { _tag: "LocalBranch", name: "feature" },
             worktreePath: repositoryPath,
@@ -309,13 +313,29 @@ async function pair(
   const pairing = await Effect.runPromise(
     authorization.createPairing({ capabilities: [], role }),
   );
-  const exchanged = (
-    await exchangeEnvironmentPairing(origin, {
+  const exchanged = await Effect.runPromise(
+    exchangeEnvironmentPairingEffect(origin, {
       label: `${role} browser`,
       pairingMaterial: pairing.material,
-    })
-  ).credential;
-  return { type: "bearer" as const, value: exchanged };
+    }),
+  );
+  return { type: "bearer" as const, value: exchanged.credential };
+}
+
+function remember(
+  origin: string,
+  credential: EnvironmentCredential,
+  path: string,
+) {
+  return repositoryCatalogClient(
+    createEnvironmentRequestClient(origin, () => credential),
+  ).remember({ path });
+}
+
+function refsClient(origin: string, credential: EnvironmentCredential) {
+  return repositoryRefsClient(
+    createEnvironmentRequestClient(origin, () => credential),
+  );
 }
 
 async function createRepository(path: string) {

@@ -1,6 +1,7 @@
+import { EnvironmentHttpApi } from "@rebase/contracts";
 import {
   environmentResponseError,
-  fetchEnvironmentSnapshotWithinLimitEffect,
+  fetchEnvironmentSnapshotEffect,
 } from "@rebase/environment-client";
 import { Effect, Ref, Stream } from "effect";
 import type { EnvironmentRpcEvents } from "#web/platform/environment/rpc/environment-rpc-events.contract";
@@ -54,18 +55,20 @@ function recoverEnvironmentSnapshot(
   minimumSequence: number,
 ) {
   return Effect.gen(function* () {
-    const snapshot = yield* fetchEnvironmentSnapshotWithinLimitEffect(
+    const snapshot = yield* fetchEnvironmentSnapshotEffect(
       session.origin,
       session.discovery,
       session.credential,
-      Math.min(
-        session.negotiated.limits.maxHttpResponseBytes,
-        session.hello.receiveLimits.maxHttpResponseBytes,
-      ),
-      session.signal,
+      {
+        maxResponseBytes: Math.min(
+          session.negotiated.limits.maxHttpResponseBytes,
+          session.hello.receiveLimits.maxHttpResponseBytes,
+        ),
+        signal: session.signal,
+      },
     );
     if (snapshot.sequence < minimumSequence)
-      return yield* environmentResponseError("Snapshot");
+      return yield* environmentResponseError(EnvironmentHttpApi.snapshot.path);
     yield* updateEnvironmentSequence(session.state, snapshot.sequence);
   });
 }

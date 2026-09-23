@@ -1,3 +1,4 @@
+import { EnvironmentAuthorizationHttpApi } from "@rebase/contracts";
 import type { EnvironmentCredential } from "@rebase/environment-client";
 import {
   createEnvironmentBrowserSessionEffect,
@@ -13,16 +14,11 @@ import type {
 } from "#web/app/environment/environment-bootstrap.contract";
 import { createLocalEnvironmentSession } from "#web/app/environment/local-environment-session";
 import type { LocalEnvironmentGateway } from "#web/app/environment/local-environment-session.contract";
-import { listEnvironmentDirectoryEffect } from "#web/features/environment-filesystem/environment-filesystem-client";
+import { environmentFilesystemClient } from "#web/features/environment-filesystem/environment-filesystem-client";
 import type { EnvironmentFilesystemGateway } from "#web/features/environment-filesystem/environment-filesystem-controller.contract";
-import {
-  listEnvironmentRepositoriesEffect,
-  recordEnvironmentRepositoryOpenedEffect,
-  rememberEnvironmentRepositoryEffect,
-  removeEnvironmentRepositoryEffect,
-} from "#web/features/repository-catalog/repository-catalog-client";
+import { repositoryCatalogClient } from "#web/features/repository-catalog/repository-catalog-client";
 import type { RepositoryCatalogGateway } from "#web/features/repository-catalog/repository-catalog-controller.contract";
-import { checkoutRepositoryRefEffect } from "#web/features/repository-refs/repository-refs-client";
+import { repositoryRefsClient } from "#web/features/repository-refs/repository-refs-client";
 import { RepositoryRefsResponseError } from "#web/features/repository-refs/repository-refs-client.contract";
 import type { RepositoryRefsGateway } from "#web/features/repository-refs/repository-refs-controller.contract";
 import type { RepositoryRefsTransport } from "#web/features/repository-refs/transport/repository-refs-transport.contract";
@@ -33,7 +29,14 @@ export function createBrowserLocalEnvironmentSession(
 ) {
   const bootstrap = resolveLocalEnvironmentBootstrap(window.location, host);
   let repositoryRefs: RepositoryRefsTransport | undefined;
-  let changesCredential: EnvironmentCredential | undefined;
+  let credential: EnvironmentCredential | undefined;
+  const requests = createEnvironmentRequestClient(
+    bootstrap.environmentOrigin,
+    () => credential,
+  );
+  const catalog = repositoryCatalogClient(requests);
+  const refs = repositoryRefsClient(requests);
+  const filesystem = environmentFilesystemClient(requests);
   const gateway: LocalEnvironmentGateway = {
     authorize: () =>
       createLocalEnvironmentAuthorization(
@@ -41,9 +44,9 @@ export function createBrowserLocalEnvironmentSession(
         bootstrap.pairingMaterial,
         host,
       )().pipe(
-        Effect.tap((credential) =>
+        Effect.tap((authorized) =>
           Effect.sync(() => {
-            changesCredential = credential;
+            credential = authorized;
           }),
         ),
       ),
@@ -66,37 +69,14 @@ export function createBrowserLocalEnvironmentSession(
       ),
   };
   const repositoryCatalogGateway: RepositoryCatalogGateway = {
-    list: (credential) =>
-      listEnvironmentRepositoriesEffect(
-        bootstrap.environmentOrigin,
-        credential,
-      ),
-    recordOpened: (credential, repositoryId) =>
-      recordEnvironmentRepositoryOpenedEffect(
-        bootstrap.environmentOrigin,
-        credential,
-        repositoryId,
-      ),
-    remember: (credential, path) =>
-      rememberEnvironmentRepositoryEffect(
-        bootstrap.environmentOrigin,
-        credential,
-        path,
-      ),
-    remove: (credential, repositoryId) =>
-      removeEnvironmentRepositoryEffect(
-        bootstrap.environmentOrigin,
-        credential,
-        repositoryId,
-      ),
+    list: () => catalog.list().pipe(Effect.map((it) => it.repositories)),
+    recordOpened: (_credential, repositoryId) =>
+      catalog.recordOpened({ repositoryId }),
+    remember: (_credential, path) => catalog.remember({ path }),
+    remove: (_credential, repositoryId) => catalog.remove({ repositoryId }),
   };
   const repositoryRefsGateway: RepositoryRefsGateway = {
-    checkout: (credential, command) =>
-      checkoutRepositoryRefEffect(
-        bootstrap.environmentOrigin,
-        credential,
-        command,
-      ),
+    checkout: (_credential, command) => refs.checkout(command),
     read: (_credential, repositoryId) =>
       Effect.suspend(
         () =>
@@ -105,19 +85,12 @@ export function createBrowserLocalEnvironmentSession(
       ),
   };
   const filesystemGateway: EnvironmentFilesystemGateway = {
-    listDirectory: (credential, path) =>
-      listEnvironmentDirectoryEffect(
-        bootstrap.environmentOrigin,
-        credential,
-        path,
-      ),
+    listDirectory: (_credential, path) =>
+      filesystem.listDirectory(path === undefined ? {} : { path }),
   };
 
   return createLocalEnvironmentSession({
-    requests: createEnvironmentRequestClient(
-      bootstrap.environmentOrigin,
-      () => changesCredential,
-    ),
+    requests,
     filesystemGateway,
     gateway,
     repositoryCatalogGateway,
@@ -146,7 +119,10 @@ function createLocalEnvironmentAuthorization(
       if (host !== undefined) {
         const value = yield* Effect.tryPromise({
           try: () => host.getEnvironmentCredential(),
-          catch: () => environmentResponseError("Authorization"),
+          catch: () =>
+            environmentResponseError(
+              EnvironmentAuthorizationHttpApi.exchangePairing.path,
+            ),
         });
         return { type: "bearer" as const, value };
       }

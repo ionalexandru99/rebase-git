@@ -5,8 +5,8 @@ import {
   negotiateEnvironmentHello,
 } from "@rebase/contracts";
 import {
-  EnvironmentAuthorizationRejected,
   EnvironmentHelloRejected,
+  EnvironmentHttpRejected,
   type EnvironmentProtocolConnection,
   EnvironmentResponseError,
 } from "@rebase/web/environment-connection";
@@ -128,7 +128,7 @@ describe("local Environment session", () => {
       const gateway = createGateway();
       gateway.authorize.mockReturnValue(
         Effect.fail(
-          new EnvironmentAuthorizationRejected({
+          new EnvironmentHttpRejected({
             failure: { _tag: failure },
             status: 401,
           }),
