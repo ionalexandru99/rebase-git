@@ -20,12 +20,13 @@ async function repository(name: string) {
   return path;
 }
 
-function objectFormatCache(format: string) {
+function objectFormatCache(...formats: string[]) {
   const git: GitCommandRunner = {
     stream: () => Stream.empty,
     run: (command) =>
       Effect.sync(() => {
         reads.push(command.directory);
+        const format = formats[Math.min(reads.length, formats.length) - 1];
         return { exitCode: 0, stderr: "", stdout: `${format}\n` };
       }),
   };
@@ -51,13 +52,14 @@ it("asks Git for each repository's object format once", async () => {
 
 it("asks Git again when the repository is replaced", async () => {
   const path = await repository("replaced");
-  const objectFormat = objectFormatCache("sha1");
-  await Effect.runPromise(objectFormat(path));
+  const objectFormat = objectFormatCache("sha1", "sha256");
+  const before = await Effect.runPromise(objectFormat(path));
 
   await mkdir(join(path, "replacement"));
   await rm(join(path, ".git"), { recursive: true });
   await rename(join(path, "replacement"), join(path, ".git"));
-  await Effect.runPromise(objectFormat(path));
+  const after = await Effect.runPromise(objectFormat(path));
 
+  expect([before, after]).toEqual(["sha1", "sha256"]);
   expect(reads).toEqual([path, path]);
 });
