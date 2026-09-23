@@ -120,10 +120,13 @@ test("prepared corpus stays within server and Git process budgets", async () => 
         ),
       ),
     );
-    await Effect.runPromise(
+    const negotiated = await Effect.runPromise(
       client.Hello(createCurrentEnvironmentHello("0.0.0")),
     );
-    const history = createRepositoryHistoryRpc(client, true, false);
+    if (negotiated._tag === "HelloRejected") {
+      throw new Error("The benchmark server rejected the hello.");
+    }
+    const history = createRepositoryHistoryRpc({ negotiated, rpc: client });
     const firstPages: number[] = [];
     for (let iteration = 0; iteration <= 30; iteration += 1) {
       const start = performance.now();

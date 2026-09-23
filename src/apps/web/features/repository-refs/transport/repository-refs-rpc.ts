@@ -1,17 +1,22 @@
-import { type EnvironmentRpcClient, RepositoryRefs } from "@rebase/contracts";
+import { RepositoryRefs } from "@rebase/contracts";
 import { Effect, Option, Schema, Stream } from "effect";
 import {
   RepositoryRefsRejected,
   RepositoryRefsResponseError,
 } from "#web/features/repository-refs/repository-refs-client.contract";
 import type { RepositoryRefsTransport } from "#web/features/repository-refs/transport/repository-refs-transport.contract";
+import { hasEnvironmentCapability } from "#web/platform/environment/environment-capabilities";
+import type { NegotiatedEnvironmentRpc } from "#web/platform/environment/environment-protocol.contract";
 import { rpcJsonReassembler } from "#web/platform/environment/rpc/environment-rpc-json";
 import { createEnvironmentRequestId } from "#web/platform/environment/websocket/environment-request-id";
 
 export function createRepositoryRefsRpc(
-  client: EnvironmentRpcClient,
-  enabled: boolean,
+  connection: NegotiatedEnvironmentRpc,
 ): RepositoryRefsTransport {
+  const client = connection.rpc;
+  const enabled =
+    hasEnvironmentCapability(connection.negotiated, "json-fragmentation") &&
+    hasEnvironmentCapability(connection.negotiated, "repository-refs");
   return {
     read: (repositoryId) =>
       Effect.gen(function* () {

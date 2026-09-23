@@ -1,48 +1,34 @@
-import type { EnvironmentCredential } from "@rebase/environment-client";
 import { Effect } from "effect";
 import {
+  type EnvironmentFilesystemClientError,
   EnvironmentFilesystemRejected,
   EnvironmentFilesystemResponseError,
 } from "#web/features/environment-filesystem/environment-filesystem-client.contract";
 import type {
-  EnvironmentFilesystemControllerError,
+  EnvironmentFilesystemController,
   EnvironmentFilesystemGateway,
 } from "#web/features/environment-filesystem/environment-filesystem-controller.contract";
-import { EnvironmentFilesystemUnavailable } from "#web/features/environment-filesystem/environment-filesystem-controller.contract";
 
 export function createEnvironmentFilesystemController(
   gateway: EnvironmentFilesystemGateway,
-) {
-  let credential: EnvironmentCredential | undefined;
-
+): EnvironmentFilesystemController {
   return {
-    authorize: (nextCredential: EnvironmentCredential) => {
-      credential = nextCredential;
-    },
-    controller: {
-      listDirectory: async (path?: string) => {
-        if (credential === undefined) {
-          throw new EnvironmentFilesystemUnavailable();
-        }
-        try {
-          return await Effect.runPromise(
-            gateway.listDirectory(credential, path),
-          );
-        } catch (error) {
-          throw normalizeControllerError(error);
-        }
-      },
+    listDirectory: async (path?: string) => {
+      try {
+        return await Effect.runPromise(gateway.listDirectory(path));
+      } catch (error) {
+        throw normalizeControllerError(error);
+      }
     },
   };
 }
 
 function normalizeControllerError(
   error: unknown,
-): EnvironmentFilesystemControllerError {
+): EnvironmentFilesystemClientError {
   if (
     error instanceof EnvironmentFilesystemRejected ||
-    error instanceof EnvironmentFilesystemResponseError ||
-    error instanceof EnvironmentFilesystemUnavailable
+    error instanceof EnvironmentFilesystemResponseError
   ) {
     return error;
   }

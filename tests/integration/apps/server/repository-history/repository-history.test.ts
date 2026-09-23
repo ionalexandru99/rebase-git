@@ -41,6 +41,7 @@ import {
 } from "#server/features/repository-history/index";
 import { acquireEnvironmentContext } from "#server/persistence/environment-context";
 import { environmentPaths } from "#server/persistence/storage/environment-paths";
+import { createRepositoryHistoryRpc } from "#web/features/repository-history/transport/repository-history-rpc";
 
 const execFilePromise = promisify(execFile);
 const directories = new Set<string>();
@@ -773,7 +774,7 @@ function readHistoryPage(
   hello = smallFrameHello(),
 ) {
   return withHistoryConnection(origin, hello, (connection) =>
-    connection.repositoryHistory
+    createRepositoryHistoryRpc(connection)
       .read({
         repositoryId,
         order: "topological",
@@ -787,7 +788,7 @@ function readHistoryPage(
 async function synchronizeHistory(origin: string, repositoryId: string) {
   const commits: RepositoryCommit[] = [];
   await withHistoryConnection(origin, smallFrameHello(), (connection) =>
-    connection.repositoryHistory.synchronize(
+    createRepositoryHistoryRpc(connection).synchronize(
       { repositoryId, priority: "visible" },
       (bytes) =>
         Effect.sync(() => {

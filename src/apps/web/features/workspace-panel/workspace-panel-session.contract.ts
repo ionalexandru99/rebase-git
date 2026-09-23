@@ -1,6 +1,7 @@
 import type { EnvironmentRequestClient } from "@rebase/environment-client";
 import type { ReactNode } from "react";
 import type { WorkspacePanelKind } from "#web/features/workspace-panel/workspace-panel.contract";
+import type { EnvironmentChanges } from "#web/platform/environment/environment-protocol.contract";
 
 export interface WorkspacePanelScope {
   readonly environmentId: string;
@@ -13,6 +14,7 @@ export interface WorkspacePanelEnvironment {
   readonly environmentId: string | undefined;
   readonly visible?: boolean;
   readonly requests?: EnvironmentRequestClient | undefined;
+  readonly changes?: EnvironmentChanges | undefined;
   readonly connected: boolean;
   readonly writable: boolean;
   readonly invalidate: (repositoryId: string) => void;

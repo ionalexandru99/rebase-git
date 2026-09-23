@@ -40,6 +40,7 @@ import { acquireRepositoryChangePublisher } from "#server/features/repository-re
 import { acquireEnvironmentContext } from "#server/persistence/environment-context";
 import { environmentPaths } from "#server/persistence/storage/environment-paths";
 import { createBrowserLocalEnvironmentSession } from "#web/app/environment/browser-local-environment-session";
+import { createRepositoryRefsRpc } from "#web/features/repository-refs/transport/repository-refs-rpc";
 
 const execFilePromise = promisify(execFile);
 const directories = new Set<string>();
@@ -255,7 +256,7 @@ function readRefsOverWebSocket(
         "0.0.0",
         { credential },
       );
-      return yield* connection.repositoryRefs.read(repositoryId);
+      return yield* createRepositoryRefsRpc(connection).read(repositoryId);
     }),
   );
 }

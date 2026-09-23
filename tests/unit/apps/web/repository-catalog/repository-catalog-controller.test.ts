@@ -1,6 +1,6 @@
 import type { RepositoryCatalogEntry } from "@rebase/contracts";
 import { RepositoryCatalogResponseError } from "@rebase/web/features/repository-catalog";
-import { Effect } from "effect";
+import { Effect, Exit, Layer, ManagedRuntime, Scope } from "effect";
 import { describe, expect, it, vi } from "vite-plus/test";
 import { createRepositoryCatalogController } from "#web/features/repository-catalog/repository-catalog-controller";
 import {
@@ -8,8 +8,10 @@ import {
   RepositoryCatalogUnavailable,
 } from "#web/features/repository-catalog/repository-catalog-controller.contract";
 
+const runtime = ManagedRuntime.make(Layer.empty);
+
 describe("repository catalog controller", () => {
-  it("cancels an owner's read and queued mutations without publishing a late response", async () => {
+  it("cancels a connection's read and queued mutations without publishing a late response", async () => {
     const started = Promise.withResolvers<AbortSignal>();
     const response = Promise.withResolvers<readonly RepositoryCatalogEntry[]>();
     const gateway = createGateway({ remembered: repository("alpha") });
@@ -22,8 +24,8 @@ describe("repository catalog controller", () => {
         catch: () => new RepositoryCatalogResponseError(),
       }),
     );
-    const catalog = createRepositoryCatalogController(gateway);
-    catalog.authorize({ type: "bearer", value: "private-credential" });
+    const catalog = createRepositoryCatalogController(gateway, runtime);
+    const connection = await connect(catalog);
     const listener = vi.fn();
     catalog.controller.subscribe(listener);
     const read = catalog.controller.refresh().catch((error: unknown) => error);
@@ -32,7 +34,7 @@ describe("repository catalog controller", () => {
       .remember("/code/alpha")
       .catch((error: unknown) => error);
 
-    await catalog.stop();
+    await connection.close();
     expect(signal.aborted).toBe(true);
     expect(await read).toBeInstanceOf(Error);
     expect(await queued).toBeInstanceOf(Error);
@@ -44,36 +46,34 @@ describe("repository catalog controller", () => {
     expect(catalog.controller.getSnapshot()).toBe(stoppedSnapshot);
     expect(listener).not.toHaveBeenCalled();
 
-    catalog.authorize({ type: "bearer", value: "new-credential" });
+    const reconnected = await connect(catalog);
     await catalog.controller.refresh();
     expect(catalog.controller.getSnapshot()).toEqual({
       repositories: [],
       status: "ready",
     });
-    await catalog.stop();
+    await reconnected.close();
   });
 
-  it("keeps a stable snapshot and refreshes with its private credential", async () => {
+  it("keeps a stable snapshot and refreshes once connected", async () => {
     const repositories = [repository("bravo"), repository("alpha")];
     const gateway = createGateway({ list: repositories });
-    const catalog = createRepositoryCatalogController(gateway);
+    const catalog = createRepositoryCatalogController(gateway, runtime);
     const listener = vi.fn();
     catalog.controller.subscribe(listener);
     const idle = catalog.controller.getSnapshot();
 
-    catalog.authorize({ type: "bearer", value: "private-credential" });
+    const connection = await connect(catalog);
     await catalog.controller.refresh();
 
-    expect(gateway.list).toHaveBeenCalledWith({
-      type: "bearer",
-      value: "private-credential",
-    });
+    expect(gateway.list).toHaveBeenCalledOnce();
     expect(idle).toEqual({ repositories: [], status: "idle" });
     expect(catalog.controller.getSnapshot()).toEqual({
       repositories: [repository("alpha"), repository("bravo")],
       status: "ready",
     });
     expect(listener).toHaveBeenCalledTimes(2);
+    await connection.close();
   });
 
   it("updates the snapshot after remember, open, and remove", async () => {
@@ -83,8 +83,8 @@ describe("repository catalog controller", () => {
       opened,
       remembered: alpha,
     });
-    const catalog = createRepositoryCatalogController(gateway);
-    catalog.authorize({ type: "bearer", value: "private-credential" });
+    const catalog = createRepositoryCatalogController(gateway, runtime);
+    const connection = await connect(catalog);
 
     await catalog.controller.remember(alpha.path);
     expect(catalog.controller.getSnapshot().repositories).toEqual([alpha]);
@@ -95,11 +95,12 @@ describe("repository catalog controller", () => {
       repositories: [],
       status: "ready",
     });
+    await connection.close();
   });
 
-  it("rejects operations before authorization without calling the gateway", async () => {
+  it("rejects operations without a connection without calling the gateway", async () => {
     const gateway = createGateway();
-    const catalog = createRepositoryCatalogController(gateway);
+    const catalog = createRepositoryCatalogController(gateway, runtime);
 
     await expect(catalog.controller.refresh()).rejects.toBeInstanceOf(
       RepositoryCatalogUnavailable,
@@ -114,8 +115,8 @@ describe("repository catalog controller", () => {
   it("retains repositories and publishes a typed error when refresh fails", async () => {
     const alpha = repository("alpha");
     const gateway = createGateway({ list: [alpha] });
-    const catalog = createRepositoryCatalogController(gateway);
-    catalog.authorize({ type: "bearer", value: "private-credential" });
+    const catalog = createRepositoryCatalogController(gateway, runtime);
+    const connection = await connect(catalog);
     await catalog.controller.refresh();
     gateway.list.mockReturnValueOnce(
       Effect.fail(new RepositoryCatalogResponseError()),
@@ -129,8 +130,17 @@ describe("repository catalog controller", () => {
       repositories: [alpha],
       status: "error",
     });
+    await connection.close();
   });
 });
+
+async function connect(
+  catalog: ReturnType<typeof createRepositoryCatalogController>,
+) {
+  const scope = Scope.makeUnsafe();
+  await runtime.runPromise(catalog.connect().pipe(Scope.provide(scope)));
+  return { close: () => runtime.runPromise(Scope.close(scope, Exit.void)) };
+}
 
 function createGateway(
   values: {

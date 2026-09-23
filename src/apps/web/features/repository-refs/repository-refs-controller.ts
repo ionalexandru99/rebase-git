@@ -1,5 +1,4 @@
 import type { RepositoryRefs, RepositoryRefTarget } from "@rebase/contracts";
-import type { EnvironmentCredential } from "@rebase/environment-client";
 import { Effect } from "effect";
 import { applyRepositoryCheckout } from "#web/features/repository-refs/apply-repository-checkout";
 import {
@@ -20,12 +19,13 @@ const idleSnapshot: RepositoryRefsSnapshot = {
   status: "idle",
 };
 
-export function createRepositoryRefsController(gateway: RepositoryRefsGateway) {
+export function createRepositoryRefsController(
+  gateway: RepositoryRefsGateway,
+): RepositoryRefsController {
   const listeners = new Set<() => void>();
   const cache = new Map<string, RepositoryRefs>();
   const checkoutRevisions = new Map<string, number>();
   const stale = new Set<string>();
-  let credential: EnvironmentCredential | undefined;
   let snapshot = idleSnapshot;
   const loading = new Map<string, Promise<void>>();
   let checkoutInFlight = false;
@@ -72,9 +72,7 @@ export function createRepositoryRefsController(gateway: RepositoryRefsGateway) {
   };
 
   const readRefs = (repositoryId: string) =>
-    credential === undefined
-      ? Promise.reject(new RepositoryRefsUnavailable())
-      : Effect.runPromise(gateway.read(credential, repositoryId));
+    Effect.runPromise(gateway.read(repositoryId));
 
   const startLoad = () => {
     const repositoryId = snapshot.repositoryId;
@@ -92,8 +90,7 @@ export function createRepositoryRefsController(gateway: RepositoryRefsGateway) {
     target: RepositoryRefTarget,
   ) => {
     const repositoryId = snapshot.repositoryId;
-    const authorizedCredential = credential;
-    if (repositoryId === undefined || authorizedCredential === undefined) {
+    if (repositoryId === undefined) {
       throw new RepositoryRefsUnavailable();
     }
     if (checkoutInFlight) throw new RepositoryRefsBusy();
@@ -101,11 +98,7 @@ export function createRepositoryRefsController(gateway: RepositoryRefsGateway) {
     publish({ ...withoutCheckoutError(snapshot), checkingOut: true });
     try {
       const result = await Effect.runPromise(
-        gateway.checkout(authorizedCredential, {
-          repositoryId,
-          target,
-          worktreePath,
-        }),
+        gateway.checkout({ repositoryId, target, worktreePath }),
       );
       const cached = cache.get(repositoryId);
       checkoutRevisions.set(
@@ -139,7 +132,7 @@ export function createRepositoryRefsController(gateway: RepositoryRefsGateway) {
     }
   };
 
-  const controller: RepositoryRefsController = {
+  return {
     checkout,
     getSnapshot: () => snapshot,
     invalidate: (repositoryIds) => {
@@ -178,13 +171,6 @@ export function createRepositoryRefsController(gateway: RepositoryRefsGateway) {
       listeners.add(listener);
       return () => listeners.delete(listener);
     },
-  };
-
-  return {
-    authorize: (nextCredential: EnvironmentCredential) => {
-      credential = nextCredential;
-    },
-    controller,
   };
 }
 

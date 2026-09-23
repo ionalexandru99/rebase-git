@@ -1,21 +1,19 @@
 import type { EnvironmentDiscovery } from "@rebase/contracts";
 import type { EnvironmentConnectionFailure } from "@rebase/environment-client";
 import type { Effect } from "effect";
-import type { RepositoryHistoryTransport } from "#web/features/repository-history/repository-history-reader.contract";
-import type { RepositoryRefsTransport } from "#web/features/repository-refs/transport/repository-refs-transport.contract";
+import type {
+  EnvironmentChangeListener,
+  NegotiatedEnvironmentRpc,
+} from "#web/platform/environment/environment-protocol.contract";
 
-import type { NegotiatedEnvironment } from "#web/platform/environment/environment-protocol.contract";
-
-export interface EnvironmentProtocolConnection {
+export interface EnvironmentProtocolConnection
+  extends NegotiatedEnvironmentRpc {
   readonly close: () => void;
   readonly closed: Effect.Effect<EnvironmentConnectionFailure>;
   readonly currentSequence: () => number;
   readonly discovery: EnvironmentDiscovery;
-  readonly negotiated: NegotiatedEnvironment;
-  readonly repositoryHistory: RepositoryHistoryTransport;
-  readonly repositoryRefs: RepositoryRefsTransport;
   readonly subscribeChanges: (
-    listener: (repositoryIds?: readonly string[]) => void,
+    listener: EnvironmentChangeListener,
   ) => () => void;
   readonly waitForSequence: (
     sequence: number,

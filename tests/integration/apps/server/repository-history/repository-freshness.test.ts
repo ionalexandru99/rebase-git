@@ -35,6 +35,7 @@ import {
   repositoryFreshnessLayer,
   repositoryHistoryFeature,
 } from "#server/features/repository-history/index";
+import { createRepositoryHistoryRpc } from "#web/features/repository-history/transport/repository-history-rpc";
 
 const exec = promisify(execFile);
 const directories: string[] = [];
@@ -273,7 +274,7 @@ describe("repository freshness with real Git", { timeout: 30_000 }, () => {
           "0.0.0",
           { credential: { type: "bearer", value: "test" } },
         );
-        const transport = connection.repositoryHistory.freshness;
+        const transport = createRepositoryHistoryRpc(connection).freshness;
         if (transport === undefined)
           throw new Error("Missing freshness transport");
         const observing = yield* Deferred.make<void>();

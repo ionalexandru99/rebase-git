@@ -18,7 +18,8 @@ import type { RepositoryHistoryService } from "#server/domain/repository-history
 import type { EnvironmentAuthorization } from "#server/features/environment-authorization/environment-authorization.contract";
 import { environmentAuthorizationFeature } from "#server/features/environment-authorization/index";
 import { repositoryHistoryFeature } from "#server/features/repository-history/index";
-import type { EnvironmentProtocolConnection } from "#web/app/environment/connection/environment-protocol-connection.contract";
+import type { RepositoryHistoryTransport } from "#web/features/repository-history/repository-history-reader.contract";
+import { createRepositoryHistoryRpc } from "#web/features/repository-history/transport/repository-history-rpc";
 
 const repositoryId = "00000000-0000-4000-8000-000000000001";
 const oid = "a".repeat(40);
@@ -57,11 +58,9 @@ describe("Effect RPC over WebSockets", () => {
           }),
         synchronize: () => Effect.die("unused"),
       },
-      (connection) =>
+      (history) =>
         Effect.gen(function* () {
-          const page = decodeRepositoryHistoryPage(
-            yield* connection.repositoryHistory.read(query),
-          );
+          const page = decodeRepositoryHistoryPage(yield* history.read(query));
           expect(page.commits[0]?.subject).toBe(
             'long "message" 😀'.repeat(4_000),
           );
@@ -87,9 +86,9 @@ describe("Effect RPC over WebSockets", () => {
                 ),
               ),
           },
-          (connection) =>
+          (history) =>
             Effect.gen(function* () {
-              const sync = yield* connection.repositoryHistory
+              const sync = yield* history
                 .synchronize({ repositoryId, priority: "visible" }, (bytes) =>
                   Effect.gen(function* () {
                     expect(decodeRepositoryHistoryBatch(bytes).sequence).toBe(
@@ -124,16 +123,16 @@ describe("Effect RPC over WebSockets", () => {
               ),
             synchronize: () => Effect.succeed(0),
           },
-          (connection) =>
+          (history) =>
             Effect.gen(function* () {
-              const reading = yield* connection.repositoryHistory
+              const reading = yield* history
                 .read(query)
                 .pipe(Effect.forkScoped);
               yield* Deferred.await(started);
               yield* Fiber.interrupt(reading);
               yield* Deferred.await(interrupted);
               expect(
-                yield* connection.repositoryHistory.synchronize(
+                yield* history.synchronize(
                   { repositoryId, priority: "visible" },
                   () => Effect.void,
                 ),
@@ -158,18 +157,12 @@ describe("Effect RPC over WebSockets", () => {
               }),
             synchronize: () => Effect.die("unused"),
           },
-          (connection) =>
+          (history) =>
             Effect.gen(function* () {
-              const first = yield* connection.repositoryHistory
-                .read(query)
-                .pipe(Effect.forkScoped);
-              const second = yield* connection.repositoryHistory
-                .read(query)
-                .pipe(Effect.forkScoped);
+              const first = yield* history.read(query).pipe(Effect.forkScoped);
+              const second = yield* history.read(query).pipe(Effect.forkScoped);
               yield* Deferred.await(occupied);
-              const failure = yield* connection.repositoryHistory
-                .read(query)
-                .pipe(Effect.flip);
+              const failure = yield* history.read(query).pipe(Effect.flip);
               expect(failure).toMatchObject({
                 _tag: "RepositoryHistoryRejected",
                 failure: { _tag: "GitFailed" },
@@ -188,8 +181,8 @@ describe("Effect RPC over WebSockets", () => {
         read: () => Effect.die("must not read"),
         synchronize: () => Effect.die("must not synchronize"),
       },
-      (connection) =>
-        connection.repositoryHistory.read(query).pipe(
+      (history) =>
+        history.read(query).pipe(
           Effect.flip,
           Effect.tap((error) =>
             Effect.sync(() =>
@@ -224,7 +217,7 @@ function batch(requestId: string): RepositoryHistoryBatch {
 
 function withHistory<A, E>(
   history: RepositoryHistoryService,
-  use: (connection: EnvironmentProtocolConnection) => Effect.Effect<A, E>,
+  use: (history: RepositoryHistoryTransport) => Effect.Effect<A, E>,
   capabilities?: readonly EnvironmentAccessCapability[],
 ) {
   return Effect.runPromise(
@@ -237,7 +230,7 @@ function withHistory<A, E>(
 
 function historyConnection<A, E, R>(
   history: RepositoryHistoryService,
-  use: (connection: EnvironmentProtocolConnection) => Effect.Effect<A, E, R>,
+  use: (history: RepositoryHistoryTransport) => Effect.Effect<A, E, R>,
   capabilities: readonly EnvironmentAccessCapability[] = [
     "environment.read",
     "repository.read",
@@ -287,7 +280,7 @@ function historyConnection<A, E, R>(
       },
       { type: "bearer", value: "test" },
     );
-    const result = yield* use(connection);
+    const result = yield* use(createRepositoryHistoryRpc(connection));
     return result;
   });
 }

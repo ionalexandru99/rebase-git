@@ -9,6 +9,8 @@ import type {
   RepositoryFreshnessGateway,
   RepositoryFreshnessTransport,
 } from "#web/features/repository-history/transport/repository-freshness.contract";
+import { createRepositoryHistoryRpc } from "#web/features/repository-history/transport/repository-history-rpc";
+import type { NegotiatedEnvironmentRpc } from "#web/platform/environment/environment-protocol.contract";
 
 export function createRepositoryHistoryGateway() {
   let transport: RepositoryHistoryTransport | undefined;
@@ -44,18 +46,27 @@ export function createRepositoryHistoryGateway() {
       return () => listeners.delete(listener);
     },
   };
+  const connect = (next: RepositoryHistoryTransport) => {
+    transport = next;
+    freshness.connect(next.freshness);
+    for (const listener of listeners) listener();
+  };
+  const disconnect = (current: RepositoryHistoryTransport) => {
+    if (transport === current) {
+      transport = undefined;
+      freshness.disconnect();
+    }
+  };
   return {
-    connect: (next: RepositoryHistoryTransport) => {
-      transport = next;
-      freshness.connect(next.freshness);
-      for (const listener of listeners) listener();
-    },
-    disconnect: (current: RepositoryHistoryTransport) => {
-      if (transport === current) {
-        transport = undefined;
-        freshness.disconnect();
-      }
-    },
+    connect: (connection: NegotiatedEnvironmentRpc) =>
+      Effect.acquireRelease(
+        Effect.sync(() => {
+          const next = createRepositoryHistoryRpc(connection);
+          connect(next);
+          return next;
+        }),
+        (current) => Effect.sync(() => disconnect(current)),
+      ).pipe(Effect.asVoid),
     gateway,
   };
 }
