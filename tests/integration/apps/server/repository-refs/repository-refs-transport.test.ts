@@ -42,6 +42,7 @@ import {
   createRepositoryAccess,
   createRepositoryCoordination,
 } from "#server/repository/access/index";
+import { testEnvironmentFeatures } from "#tests-integration/apps/server/environment-connection/test-environment-features";
 import { createBrowserLocalEnvironmentSession } from "#web/app/environment/browser-local-environment-session";
 import { createRepositoryRefsRpc } from "#web/features/repository-refs/transport/repository-refs-rpc";
 
@@ -308,7 +309,7 @@ function withRefsListener(use: (fixture: ListenerFixture) => Promise<void>) {
           authorization,
           environmentId,
           events,
-          features,
+          features: testEnvironmentFeatures(features),
           productVersion: "0.0.0",
         });
         listener.readiness.value = true;

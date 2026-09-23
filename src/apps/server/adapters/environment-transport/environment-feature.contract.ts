@@ -14,19 +14,17 @@ export type EnvironmentRpcHandlersFor<Group extends RpcGroup.Any> = {
   >;
 };
 
-export type EnvironmentRpcHandlers = EnvironmentRpcHandlersFor<
-  typeof EnvironmentRpc
+export type EnvironmentFeatureRpcHandlers = Omit<
+  EnvironmentRpcHandlersFor<typeof EnvironmentRpc>,
+  "Hello" | "WatchEnvironment"
 >;
 
-export interface EnvironmentFeatureRpc {
-  readonly names: readonly string[];
-  readonly handlers: (
-    session: EnvironmentRpcSession,
-  ) => Partial<EnvironmentRpcHandlers>;
-}
-
-export interface EnvironmentFeature {
+export interface EnvironmentFeature<RpcHandlers = unknown> {
   readonly capabilities: readonly EnvironmentCapabilityName[];
   readonly httpRoutes: readonly EnvironmentHttpRouteHandler[];
-  readonly rpc?: EnvironmentFeatureRpc;
+  readonly rpc?: (session: EnvironmentRpcSession) => RpcHandlers;
 }
+
+export type EnvironmentFeatures = Required<
+  EnvironmentFeature<EnvironmentFeatureRpcHandlers>
+>;

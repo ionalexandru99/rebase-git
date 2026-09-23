@@ -8,7 +8,7 @@ import { formatHostAddress } from "#server/adapters/environment-transport/enviro
 import { createEnvironmentTransportDiscovery } from "#server/adapters/environment-transport/environment-transport-discovery";
 import { createEnvironmentHttpHandler } from "#server/adapters/environment-transport/http/environment-http-handler";
 import type { EnvironmentHttpRouteHandler } from "#server/adapters/environment-transport/http/environment-http-route-handler.contract";
-import { validateEnvironmentFeatures } from "#server/adapters/environment-transport/validate-environment-features";
+import { validateEnvironmentHttpRoutes } from "#server/adapters/environment-transport/http/validate-environment-http-routes";
 import { attachEnvironmentWebSocketServer } from "#server/adapters/environment-transport/websocket/environment-websocket-server";
 import type { EnvironmentListenerOptions } from "#server/app/server/environment-server.contract";
 import { EnvironmentServerStartError } from "#server/app/server/environment-server-error.contract";
@@ -23,7 +23,7 @@ export function acquireEnvironmentListener(
     const host = options.host ?? loopbackHost;
     const port = options.port ?? 0;
     yield* Effect.try({
-      try: () => validateEnvironmentFeatures(options.features),
+      try: () => validateEnvironmentHttpRoutes(options.features.httpRoutes),
       catch: (cause) => environmentServerError(cause, host, port),
     });
     const readiness = { value: false };
@@ -31,7 +31,7 @@ export function acquireEnvironmentListener(
       discovery: createEnvironmentTransportDiscovery(
         options.environmentId,
         options.productVersion,
-        options.features,
+        options.features.capabilities,
       ),
       events: options.events,
     };
@@ -44,7 +44,7 @@ export function acquireEnvironmentListener(
         readiness,
         state,
         options.authorization,
-        options.features.flatMap((feature) => feature.httpRoutes),
+        options.features.httpRoutes,
         host,
         port,
         runEnvironmentEffect,

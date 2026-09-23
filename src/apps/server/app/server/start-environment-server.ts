@@ -9,6 +9,7 @@ import type {
 import { acquireRuntimeMarker } from "#server/app/runtime/runtime-marker";
 import type { RuntimeMarker } from "#server/app/runtime/runtime-marker.contract";
 import { verifyRuntimeRequirements } from "#server/app/runtime/runtime-requirements";
+import { environmentFeatures } from "#server/app/server/environment-features";
 import { acquireEnvironmentListener } from "#server/app/server/environment-listener";
 import type {
   EnvironmentListener,
@@ -19,23 +20,9 @@ import type { EnvironmentServerStartError } from "#server/app/server/environment
 import { EnvironmentAuthorizationAccess } from "#server/domain/environment-authorization.contract";
 import { EnvironmentEvents } from "#server/domain/environment-event-publisher.contract";
 import type { EnvironmentStorageError } from "#server/domain/environment-storage-error.contract";
-import { commitInspectionFeature } from "#server/features/commit-inspection/index";
-import {
-  environmentAuthorizationFeature,
-  environmentAuthorizationLayer,
-} from "#server/features/environment-authorization/index";
-import { environmentFilesystemFeature } from "#server/features/environment-filesystem/index";
+import { environmentAuthorizationLayer } from "#server/features/environment-authorization/index";
 import { createEnvironmentIdentity } from "#server/features/environment-identity/index";
-import {
-  repositoryCatalogFeature,
-  repositoryCatalogLayer,
-} from "#server/features/repository-catalog/index";
-import { repositoryChangesFeature } from "#server/features/repository-changes/index";
-import {
-  repositoryFreshnessFeature,
-  repositoryHistoryFeature,
-} from "#server/features/repository-history/index";
-import { repositoryRefsFeature } from "#server/features/repository-refs/index";
+import { repositoryCatalogLayer } from "#server/features/repository-catalog/index";
 import { environmentContextLayer } from "#server/persistence/environment-context";
 import { EnvironmentStorage } from "#server/persistence/environment-context.contract";
 import { defaultEnvironmentPaths } from "#server/persistence/storage/environment-paths";
@@ -83,17 +70,6 @@ function environmentLayer(paths: EnvironmentPaths) {
     ),
   );
 }
-
-const environmentFeatures = Effect.all([
-  environmentAuthorizationFeature,
-  environmentFilesystemFeature,
-  repositoryCatalogFeature,
-  commitInspectionFeature,
-  repositoryChangesFeature,
-  repositoryHistoryFeature,
-  repositoryFreshnessFeature,
-  repositoryRefsFeature,
-]);
 
 function startEnvironment(
   options: EnvironmentServerOptions,

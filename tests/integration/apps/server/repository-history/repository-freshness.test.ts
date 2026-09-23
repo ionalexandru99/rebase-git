@@ -35,6 +35,7 @@ import {
   repositoryAccessLayer,
   repositoryCoordinationLayer,
 } from "#server/repository/access/index";
+import { testEnvironmentFeatures } from "#tests-integration/apps/server/environment-connection/test-environment-features";
 import { createRepositoryHistoryRpc } from "#web/features/repository-history/transport/repository-history-rpc";
 
 const exec = promisify(execFile);
@@ -264,7 +265,7 @@ describe("repository freshness with real Git", { timeout: 30_000 }, () => {
           authorization: testAuthorization(),
           environmentId: repositoryId,
           events: createEnvironmentEventPublisher(),
-          features,
+          features: testEnvironmentFeatures(features),
           productVersion: "0.0.0",
         });
         listener.readiness.value = true;

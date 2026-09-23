@@ -28,6 +28,7 @@ import { createEnvironmentAuthorization } from "#server/features/environment-aut
 import { environmentAuthorizationFeature } from "#server/features/environment-authorization/index";
 import { acquireEnvironmentContext } from "#server/persistence/environment-context";
 import { environmentPaths } from "#server/persistence/storage/environment-paths";
+import { testEnvironmentFeatures } from "#tests-integration/apps/server/environment-connection/test-environment-features";
 
 const environmentId = "00000000-0000-4000-8000-000000000001";
 const directories = new Set<string>();
@@ -475,13 +476,13 @@ function withAuthorizedListener(
           authorization,
           environmentId,
           events,
-          features: [
+          features: testEnvironmentFeatures([
             yield* Effect.provideService(
               environmentAuthorizationFeature,
               EnvironmentAuthorizationAccess,
               authorization,
             ),
-          ],
+          ]),
           productVersion: "0.0.0",
         });
         listener.readiness.value = true;

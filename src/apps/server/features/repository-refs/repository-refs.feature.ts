@@ -1,8 +1,7 @@
-import { RepositoryRefsHttpApi, RepositoryRefsRpc } from "@rebase/contracts";
+import { RepositoryRefsHttpApi } from "@rebase/contracts";
 import { Effect } from "effect";
 import type { EnvironmentFeature } from "#server/adapters/environment-transport/environment-feature.contract";
 import { httpRoute } from "#server/adapters/environment-transport/http/environment-http-route-handler";
-import { environmentFeatureRpc } from "#server/adapters/environment-transport/rpc/environment-feature-rpc";
 import { EnvironmentEvents } from "#server/domain/environment-event-publisher.contract";
 import { GitCommands } from "#server/domain/git-command.contract";
 import { RepositoryAccess } from "#server/domain/repository-access.contract";
@@ -34,9 +33,7 @@ export const repositoryRefsFeature = Effect.gen(function* () {
         { failureStatus },
       ),
     ],
-    rpc: environmentFeatureRpc(RepositoryRefsRpc, (session) =>
-      repositoryRefsRpc(session, refs),
-    ),
+    rpc: (session) => repositoryRefsRpc(session, refs),
   } satisfies EnvironmentFeature;
 });
 

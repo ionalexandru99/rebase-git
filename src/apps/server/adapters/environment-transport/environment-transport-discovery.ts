@@ -3,7 +3,6 @@ import {
   type EnvironmentCapabilityName,
   type EnvironmentDiscovery,
 } from "@rebase/contracts";
-import type { EnvironmentFeature } from "#server/adapters/environment-transport/environment-feature.contract";
 
 const transportCapabilities: readonly EnvironmentCapabilityName[] = [
   "environment-events",
@@ -15,7 +14,7 @@ const transportCapabilities: readonly EnvironmentCapabilityName[] = [
 export function createEnvironmentTransportDiscovery(
   environmentId: string,
   productVersion: string,
-  features: readonly EnvironmentFeature[],
+  capabilities: readonly EnvironmentCapabilityName[],
 ): EnvironmentDiscovery {
   const discovery = createCurrentEnvironmentDiscovery(
     environmentId,
@@ -23,7 +22,7 @@ export function createEnvironmentTransportDiscovery(
   );
   const advertised = new Set<string>([
     ...transportCapabilities,
-    ...features.flatMap((feature) => feature.capabilities),
+    ...capabilities,
   ]);
   return {
     ...discovery,

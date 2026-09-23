@@ -5,7 +5,6 @@ import {
   decodeRepositoryHistoryPage,
   type EnvironmentAccessCapability,
   type RepositoryHistoryBatch,
-  RepositoryHistoryReadRpc,
 } from "@rebase/contracts";
 import {
   connectEnvironmentEffect,
@@ -14,7 +13,6 @@ import {
 import { Deferred, Effect, Fiber } from "effect";
 import { describe, expect, it } from "vite-plus/test";
 import { createEnvironmentEventPublisher } from "#server/adapters/environment-transport/events/environment-event-publisher";
-import { environmentFeatureRpc } from "#server/adapters/environment-transport/rpc/environment-feature-rpc";
 import { acquireEnvironmentListener } from "#server/app/server/environment-listener";
 import {
   type EnvironmentAuthorization,
@@ -23,6 +21,7 @@ import {
 import { environmentAuthorizationFeature } from "#server/features/environment-authorization/index";
 import type { RepositoryHistoryService } from "#server/features/repository-history/repository-history";
 import { repositoryHistoryRpc } from "#server/features/repository-history/rpc/repository-history-rpc";
+import { testEnvironmentFeatures } from "#tests-integration/apps/server/environment-connection/test-environment-features";
 import type { RepositoryHistoryTransport } from "#web/features/repository-history/repository-history-reader.contract";
 import { createRepositoryHistoryRpc } from "#web/features/repository-history/transport/repository-history-rpc";
 
@@ -264,7 +263,7 @@ function historyConnection<A, E, R>(
       authorization: auth,
       environmentId: repositoryId,
       events: createEnvironmentEventPublisher(),
-      features: [
+      features: testEnvironmentFeatures([
         yield* Effect.provideService(
           environmentAuthorizationFeature,
           EnvironmentAuthorizationAccess,
@@ -273,11 +272,9 @@ function historyConnection<A, E, R>(
         {
           capabilities: ["repository-history"],
           httpRoutes: [],
-          rpc: environmentFeatureRpc(RepositoryHistoryReadRpc, (session) =>
-            repositoryHistoryRpc(session, history),
-          ),
+          rpc: (session) => repositoryHistoryRpc(session, history),
         },
-      ],
+      ]),
       productVersion: "0.0.0",
     });
     listener.readiness.value = true;

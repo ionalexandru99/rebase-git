@@ -32,6 +32,7 @@ import {
 } from "#server/features/repository-catalog/index";
 import { acquireEnvironmentContext } from "#server/persistence/environment-context";
 import { environmentPaths } from "#server/persistence/storage/environment-paths";
+import { testEnvironmentFeatures } from "#tests-integration/apps/server/environment-connection/test-environment-features";
 
 const execFilePromise = promisify(execFile);
 const directories = new Set<string>();
@@ -186,7 +187,7 @@ function withCatalogListener(
           authorization,
           environmentId,
           events: createEnvironmentEventPublisher(),
-          features,
+          features: testEnvironmentFeatures(features),
           productVersion: "0.0.0",
         });
         listener.readiness.value = true;

@@ -23,6 +23,7 @@ import {
   createRepositoryAccess,
   createRepositoryCoordination,
 } from "#server/repository/access/index";
+import { testEnvironmentFeatures } from "#tests-integration/apps/server/environment-connection/test-environment-features";
 import { createCommitInspectionClient } from "#web/features/commit-inspection/transport/commit-inspection-client";
 import { createRepositoryChangesClient } from "#web/features/working-changes/transport/repository-changes-client";
 
@@ -73,7 +74,7 @@ it("authorizes changes reads separately from index mutations across HTTP", async
             authorization,
             environmentId: "00000000-0000-4000-8000-000000000001",
             events: createEnvironmentEventPublisher(),
-            features,
+            features: testEnvironmentFeatures(features),
             productVersion: "0.0.0",
           });
           const credential = (role: "owner" | "viewer") =>
