@@ -5,7 +5,6 @@ import { Button } from "#web-ui/components/ui/button";
 interface RepositoryFetchAction {
   readonly execute: () => void;
   readonly disabled: boolean;
-  readonly disabledReason?: string;
 }
 
 function Frame({ children }: { readonly children: ReactNode }) {
