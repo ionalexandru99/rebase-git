@@ -1,8 +1,11 @@
-import { decodeRepositoryHistoryPage } from "@rebase/contracts";
+import {
+  decodeRepositoryHistoryPage,
+  type RepositoryHistoryPage,
+} from "@rebase/contracts";
 import { isHistoryStorageQuotaError } from "#web/features/repository-history/cache/repository-history-storage-policy";
 import { readCurrentRepositoryHistory } from "#web/features/repository-history/query/read-current-repository-history";
-import { readRepositoryCommits } from "#web/features/repository-history/query/repository-history-query";
 import { storeRepositoryHistoryPage } from "#web/features/repository-history/replica/repository-history-store";
+import type { RepositoryHistoryQuery } from "#web/features/repository-history/repository-history-reader.contract";
 import type {
   ConnectedReader,
   RepositoryReplica,
@@ -23,69 +26,115 @@ export async function acceptHistoryPage(
   requestId: string,
   bytes: Uint8Array,
 ) {
+  let received: { page: RepositoryHistoryPage; query: RepositoryHistoryQuery };
   try {
-    const page = decodeRepositoryHistoryPage(bytes);
-    if (page.repositoryId !== reader.connection.repositoryId) {
-      throw new Error("History page identity does not match the reader");
-    }
-    const query = reader.queries.get(requestId);
-    if (query === undefined) {
-      throw new Error("History page has no matching query");
-    }
-    await writeStoredHistory(() =>
-      !reader.epoch.isCurrent(requestId)
-        ? Promise.resolve()
-        : storeRepositoryHistoryPage(
-            reader.connection.environmentId,
-            reader.connection.logicalRepositoryId,
-            page,
-            query,
-          ),
-    );
-    if (!reader.epoch.finish(requestId)) {
-      return;
-    }
-    invalidateStoredHistory(replica);
-    reader.queries.delete(requestId);
-    const stored = await readRepositoryCommits(
-      reader.connection.environmentId,
-      reader.connection.logicalRepositoryId,
-      page.commits.map((commit) => commit.oid),
-    );
-    if (replica.refTargets.length === 0) {
-      replica.refTargets = page.refTargets;
-    }
-    delete replica.failure;
-    replica.status = stored.length === 0 ? "empty" : "ready";
-    replica.revision += 1;
-    publishSnapshot(replica);
-    post(reader, {
-      _tag: "HistoryResult",
-      commits: stored,
-      requestId,
-    });
-    if (replica.synchronization.status !== "syncing") {
-      try {
-        await startSynchronization(reader, replica);
-      } catch (error) {
-        replica.failure = workerFailure(error);
-        replica.revision += 1;
-        publishSnapshot(replica);
-      }
-    }
+    received = decodeReceivedPage(reader, requestId, bytes);
   } catch (error) {
-    if (!reader.epoch.finish(requestId)) {
-      return;
-    }
-    reader.queries.delete(requestId);
-    const failure = workerFailure(error);
+    failHistoryPage(reader, replica, requestId, error);
+    return;
+  }
+  if (!reader.epoch.finish(requestId)) {
+    return;
+  }
+  reader.queries.delete(requestId);
+  showHistoryPage(reader, replica, requestId, received.page);
+  if (await cacheHistoryPage(reader, replica, received.page, received.query)) {
+    await synchronizeAfterPage(reader, replica);
+  }
+}
+
+function decodeReceivedPage(
+  reader: ConnectedReader,
+  requestId: string,
+  bytes: Uint8Array,
+) {
+  const page = decodeRepositoryHistoryPage(bytes);
+  if (page.repositoryId !== reader.connection.repositoryId) {
+    throw new Error("History page identity does not match the reader");
+  }
+  const query = reader.queries.get(requestId);
+  if (query === undefined) {
+    throw new Error("History page has no matching query");
+  }
+  return { page, query };
+}
+
+function showHistoryPage(
+  reader: ConnectedReader,
+  replica: RepositoryReplica,
+  requestId: string,
+  page: RepositoryHistoryPage,
+) {
+  if (replica.refTargets.length === 0) {
+    replica.refTargets = page.refTargets;
+  }
+  delete replica.failure;
+  replica.status = page.commits.length === 0 ? "empty" : "ready";
+  replica.revision += 1;
+  publishSnapshot(replica);
+  post(reader, {
+    _tag: "HistoryResult",
+    commits: page.commits,
+    requestId,
+  });
+}
+
+async function cacheHistoryPage(
+  reader: ConnectedReader,
+  replica: RepositoryReplica,
+  page: RepositoryHistoryPage,
+  query: RepositoryHistoryQuery,
+) {
+  try {
+    await writeStoredHistory(() =>
+      storeRepositoryHistoryPage(
+        reader.connection.environmentId,
+        reader.connection.logicalRepositoryId,
+        page,
+        query,
+      ),
+    );
+    invalidateStoredHistory(replica);
+    return true;
+  } catch (error) {
     replica.storageExhausted = isHistoryStorageQuotaError(error);
-    replica.failure = failure;
-    replica.status = "error";
+    replica.failure = workerFailure(error);
     replica.revision += 1;
     publishSnapshot(replica);
-    post(reader, { _tag: "RequestFailed", failure, requestId });
+    return false;
   }
+}
+
+async function synchronizeAfterPage(
+  reader: ConnectedReader,
+  replica: RepositoryReplica,
+) {
+  if (replica.synchronization.status === "syncing") return;
+  try {
+    await startSynchronization(reader, replica);
+  } catch (error) {
+    replica.failure = workerFailure(error);
+    replica.revision += 1;
+    publishSnapshot(replica);
+  }
+}
+
+function failHistoryPage(
+  reader: ConnectedReader,
+  replica: RepositoryReplica,
+  requestId: string,
+  error: unknown,
+) {
+  if (!reader.epoch.finish(requestId)) {
+    return;
+  }
+  reader.queries.delete(requestId);
+  const failure = workerFailure(error);
+  replica.failure = failure;
+  replica.status = "error";
+  replica.revision += 1;
+  publishSnapshot(replica);
+  post(reader, { _tag: "RequestFailed", failure, requestId });
 }
 
 export async function readHistory(
