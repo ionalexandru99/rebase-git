@@ -81,7 +81,7 @@ function gitEntryIdentity(directory: string) {
     lstat(join(directory, ".git"), { bigint: true }).then(
       (info) =>
         info.isDirectory()
-          ? `${info.dev}:${info.ino}`
+          ? `${info.dev}:${info.ino}:${info.birthtimeNs}`
           : `${info.dev}:${info.ino}:${info.ctimeNs}`,
       () => undefined,
     ),

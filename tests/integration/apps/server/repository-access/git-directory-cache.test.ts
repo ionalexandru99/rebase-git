@@ -48,8 +48,9 @@ it("resolves the Git directories again when the worktree is replaced", async () 
   const run = coordinationRun();
   await run();
 
+  await mkdir(join(worktree, "replacement"));
   await rm(join(worktree, ".git"), { recursive: true });
-  await mkdir(join(worktree, ".git"));
+  await rename(join(worktree, "replacement"), join(worktree, ".git"));
   await run();
 
   expect(resolutions).toBe(4);
