@@ -41,7 +41,7 @@ export function connectCurrentEnvironmentEffect(
     readonly lastObservedSequence?: number;
   },
 ) {
-  return Effect.acquireRelease(
+  return acquireEnvironmentConnection(
     fetchEnvironmentDiscoveryEffect(origin).pipe(
       Effect.flatMap((discovery) =>
         startEnvironmentConnection(
@@ -55,7 +55,6 @@ export function connectCurrentEnvironmentEffect(
         ),
       ),
     ),
-    closeEnvironmentConnection,
   );
 }
 
@@ -65,9 +64,23 @@ export function connectEnvironmentEffect(
   hello: EnvironmentHello,
   credential: EnvironmentCredential,
 ) {
-  return Effect.acquireRelease(
+  return acquireEnvironmentConnection(
     startEnvironmentConnection(origin, discovery, hello, credential),
-    closeEnvironmentConnection,
+  );
+}
+
+function acquireEnvironmentConnection(
+  start: Effect.Effect<
+    EnvironmentProtocolConnection,
+    EnvironmentConnectionFailure
+  >,
+) {
+  return Effect.uninterruptibleMask((restore) =>
+    restore(start).pipe(
+      Effect.tap((connection) =>
+        Effect.addFinalizer(() => closeEnvironmentConnection(connection)),
+      ),
+    ),
   );
 }
 
