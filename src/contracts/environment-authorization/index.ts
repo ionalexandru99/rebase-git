@@ -1,7 +1,6 @@
 export {
   CapabilityDenied,
   CreateEnvironmentPairing,
-  EnvironmentAccessCapability,
   EnvironmentAuthorizationFailure,
   EnvironmentAuthorizationHttpApi,
   EnvironmentAuthorizationHttpFailure,
@@ -18,7 +17,6 @@ export {
   ExpiredGrant,
   ExpiredPairing,
   ExpiredTicket,
-  environmentAccessCapabilities,
   environmentAuthorizationRevocationPath,
   environmentAuthorizationRoles,
   environmentPairingExchangePath,

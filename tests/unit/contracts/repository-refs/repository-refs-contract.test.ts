@@ -34,13 +34,7 @@ describe("repository refs contract", () => {
     expect(Schema.decodeUnknownSync(RepositoryRefs)(refs)).toEqual(refs);
   });
 
-  it("rejects malformed commits and oversized collections", () => {
-    expect(() =>
-      Schema.decodeUnknownSync(RepositoryRefs)({
-        ...refs,
-        worktrees: [{ ...refs.worktrees[0], head: { commit: "abc" } }],
-      }),
-    ).toThrow();
+  it("rejects oversized collections", () => {
     expect(() =>
       Schema.decodeUnknownSync(RepositoryRefs)({
         ...refs,

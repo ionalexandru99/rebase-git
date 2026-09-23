@@ -1,9 +1,9 @@
 import type {
+  ChangeDiff,
   CommitInspection,
   InspectCommit,
   InspectCommitDiff,
-} from "@rebase/contracts/commit-inspection/commit-inspection.contract";
-import type { ChangeDiff } from "@rebase/contracts/repository-changes/repository-changes.contract";
+} from "@rebase/contracts";
 import { Data, type Effect } from "effect";
 import type { DiffPreferences } from "#web/features/file-diff/file-diff.contract";
 

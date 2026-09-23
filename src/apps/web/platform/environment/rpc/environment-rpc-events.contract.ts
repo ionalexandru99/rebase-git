@@ -1,5 +1,8 @@
-import type { EnvironmentDiscovery, EnvironmentHello } from "@rebase/contracts";
-import type { EnvironmentRpcClient } from "@rebase/contracts/environment-connection/rpc/environment-rpc.contract";
+import type {
+  EnvironmentDiscovery,
+  EnvironmentHello,
+  EnvironmentRpcClient,
+} from "@rebase/contracts";
 import type { EnvironmentCredential } from "@rebase/environment-client";
 import type { Ref } from "effect";
 import type { NegotiatedEnvironment } from "#web/platform/environment/environment-protocol.contract";

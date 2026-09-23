@@ -1,7 +1,7 @@
 import {
   ChangesHttpFailure,
   RepositoryChangesHttpApi,
-} from "@rebase/contracts/repository-changes/repository-changes.contract";
+} from "@rebase/contracts";
 import type {
   EnvironmentCredential,
   EnvironmentRequestClient,

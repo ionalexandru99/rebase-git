@@ -1,4 +1,4 @@
-import { maximumRepositoryHistorySequence } from "@rebase/contracts/repository-history/repository-history-limits.contract";
+import { maximumRepositoryHistorySequence } from "@rebase/contracts";
 import type {
   RepositoryHistoryCompletionBasis,
   RepositoryHistorySynchronizationProgress,

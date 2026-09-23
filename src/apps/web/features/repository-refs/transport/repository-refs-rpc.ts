@@ -1,5 +1,4 @@
-import { RepositoryRefs } from "@rebase/contracts";
-import type { EnvironmentRpcClient } from "@rebase/contracts/environment-connection/rpc/environment-rpc.contract";
+import { type EnvironmentRpcClient, RepositoryRefs } from "@rebase/contracts";
 import { Effect, Option, Schema, Stream } from "effect";
 import {
   RepositoryRefsRejected,

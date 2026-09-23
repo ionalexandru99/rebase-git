@@ -1,4 +1,4 @@
-import { EnvironmentAccessCapability } from "@rebase/contracts/environment-authorization/environment-access-capability.contract";
+import { EnvironmentAccessCapability } from "@rebase/contracts/environment-connection/environment-access-capability.contract";
 import {
   InvalidMessage,
   PayloadTooLarge,

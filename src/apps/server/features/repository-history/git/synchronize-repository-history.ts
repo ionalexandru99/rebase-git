@@ -1,9 +1,9 @@
-import type {
-  RepositoryHistoryBatch,
-  RepositoryHistorySnapshot,
-  SynchronizeRepositoryHistory,
+import {
+  maximumRepositoryHistorySequence,
+  type RepositoryHistoryBatch,
+  type RepositoryHistorySnapshot,
+  type SynchronizeRepositoryHistory,
 } from "@rebase/contracts";
-import { maximumRepositoryHistorySequence } from "@rebase/contracts/repository-history/repository-history-limits.contract";
 import { Effect } from "effect";
 import type { GitCommandRunner } from "#server/domain/git-command.contract";
 import { RepositoryHistoryError } from "#server/domain/repository-history.contract";

@@ -3,7 +3,7 @@ import type {
   CommitChanges,
   MutateChanges,
   RepositoryChanges,
-} from "@rebase/contracts/repository-changes/repository-changes.contract";
+} from "@rebase/contracts";
 import { Effect } from "effect";
 import { describe, expect, it, vi } from "vitest";
 import { page } from "vitest/browser";

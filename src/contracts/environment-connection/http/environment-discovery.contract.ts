@@ -6,6 +6,7 @@ import {
   currentTransportLimits,
   TransportLimits,
 } from "@rebase/contracts/environment-connection/environment-transport-limits.contract";
+import type { EnvironmentHttpRoute } from "@rebase/contracts/environment-connection/http/environment-http-route.contract";
 import {
   currentEnvironmentCapabilities,
   currentEnvironmentProtocol,
@@ -61,22 +62,24 @@ export type EnvironmentDiscoveryHttpFailure =
 
 export const EnvironmentHttpApi = {
   discovery: {
+    capability: null,
     failure: EnvironmentDiscoveryHttpFailure,
-    failureStatuses: [400, 403, 413] as const,
+    failureStatuses: [400, 403, 413],
     method: "GET",
     path: environmentDiscoveryPath,
     success: EnvironmentDiscovery,
     successStatus: 200,
   },
   snapshot: {
+    capability: "environment.read",
     failure: EnvironmentGrantHttpFailure,
-    failureStatuses: [400, 401, 403, 410, 413] as const,
+    failureStatuses: [400, 401, 403, 410, 413],
     method: "GET",
     path: environmentSnapshotPath,
     success: EnvironmentSnapshot,
     successStatus: 200,
   },
-} as const;
+} as const satisfies Record<string, EnvironmentHttpRoute>;
 
 export function createCurrentEnvironmentDiscovery(
   environmentId: string,

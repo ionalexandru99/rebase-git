@@ -1,7 +1,4 @@
-import type {
-  ChangedFile,
-  ChangeSection,
-} from "@rebase/contracts/repository-changes/repository-changes.contract";
+import type { ChangedFile, ChangeSection } from "@rebase/contracts";
 import {
   IconArrowDown,
   IconArrowUp,

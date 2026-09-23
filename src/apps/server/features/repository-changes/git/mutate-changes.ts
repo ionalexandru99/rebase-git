@@ -2,7 +2,7 @@ import type {
   ChangeDiff,
   MutateChanges,
   RepositoryChanges,
-} from "@rebase/contracts/repository-changes/repository-changes.contract";
+} from "@rebase/contracts";
 import { createTwoFilesPatch } from "diff";
 import { Effect } from "effect";
 import type { GitCommandRunner } from "#server/domain/git-command.contract";

@@ -1,5 +1,7 @@
-import { CommitInspectionHttpApi } from "@rebase/contracts/commit-inspection/commit-inspection.contract";
-import { RepositoryChangesHttpApi } from "@rebase/contracts/repository-changes/repository-changes.contract";
+import {
+  CommitInspectionHttpApi,
+  RepositoryChangesHttpApi,
+} from "@rebase/contracts";
 import type { EnvironmentRequestClient } from "@rebase/environment-client";
 import { Effect, Schema } from "effect";
 import { expect, it } from "vitest";

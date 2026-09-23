@@ -3,7 +3,7 @@ import type {
   CommitInspection,
   InspectCommit,
   InspectCommitDiff,
-} from "@rebase/contracts/commit-inspection/commit-inspection.contract";
+} from "@rebase/contracts";
 import { Effect } from "effect";
 import type { GitCommandRunner } from "#server/domain/git-command.contract";
 import { inspectionError } from "#server/features/commit-inspection/git/inspection-error";

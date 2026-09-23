@@ -1,5 +1,7 @@
-import type { CommitInspection as Details } from "@rebase/contracts/commit-inspection/commit-inspection.contract";
-import type { ChangeDiff } from "@rebase/contracts/repository-changes/repository-changes.contract";
+import type {
+  ChangeDiff,
+  CommitInspection as Details,
+} from "@rebase/contracts";
 import { Effect } from "effect";
 import { describe, expect, it, vi } from "vitest";
 import { render } from "vitest-browser-react";

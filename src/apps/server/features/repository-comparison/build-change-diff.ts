@@ -1,4 +1,4 @@
-import type { ChangeDiff } from "@rebase/contracts/repository-comparison/repository-comparison.contract";
+import type { ChangeDiff } from "@rebase/contracts";
 import { createTwoFilesPatch } from "diff";
 import {
   previewByteLimit,

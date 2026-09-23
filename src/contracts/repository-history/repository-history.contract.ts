@@ -1,11 +1,15 @@
 import { EnvironmentRequestId } from "@rebase/contracts/environment-connection/negotiation/environment-protocol.contract";
+import {
+  GitFailed,
+  RepositoryMissing,
+} from "@rebase/contracts/git/git-failures.contract";
+import {
+  ObjectId,
+  RepositoryId,
+} from "@rebase/contracts/git/git-values.contract";
 import { maximumRepositoryHistorySequence } from "@rebase/contracts/repository-history/repository-history-limits.contract";
 import { Schema } from "effect";
 
-const RepositoryId = Schema.String.check(Schema.isUUID(4));
-const ObjectId = Schema.String.check(
-  Schema.isPattern(/^[0-9a-f]{40}(?:[0-9a-f]{24})?$/),
-);
 const SnapshotId = Schema.String.check(Schema.isPattern(/^[0-9a-f]{64}$/));
 const SnapshotRootOids = Schema.Array(ObjectId).check(
   Schema.isMaxLength(40_512),
@@ -90,18 +94,9 @@ export const AcknowledgeRepositoryHistoryBatch = Schema.TaggedStruct(
 
 export const RepositoryHistoryOperationFailure = Schema.Union([
   Schema.TaggedStruct("AuthorizationDenied", {}),
-  Schema.TaggedStruct("RepositoryMissing", { repositoryId: RepositoryId }),
+  RepositoryMissing,
   Schema.TaggedStruct("SnapshotInvalidated", {}),
-  Schema.TaggedStruct("GitFailed", {
-    detail: Schema.optional(Schema.String.check(Schema.isMaxLength(2_048))),
-    reason: Schema.Literals([
-      "GitUnavailable",
-      "NotRepository",
-      "Timeout",
-      "OutputTooLarge",
-      "Failed",
-    ]),
-  }),
+  GitFailed,
 ]);
 export type RepositoryHistoryOperationFailure =
   typeof RepositoryHistoryOperationFailure.Type;

@@ -1,7 +1,4 @@
-import type {
-  ChangeSection,
-  ChangeSelection,
-} from "@rebase/contracts/repository-changes/repository-changes.contract";
+import type { ChangeSection, ChangeSelection } from "@rebase/contracts";
 import { lazy, Suspense, useState } from "react";
 import type { RepositoryChangesClient } from "#web/features/working-changes/working-changes.contract";
 import { usePanelFeature } from "#web/features/workspace-panel/api";

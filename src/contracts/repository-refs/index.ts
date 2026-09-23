@@ -1,4 +1,5 @@
 export * from "@rebase/contracts/repository-refs/repository-refs.contract";
+export { RepositoryRefsRpc } from "@rebase/contracts/repository-refs/repository-refs-rpc.contract";
 export {
   ReadRepositoryRefsMessage,
   RepositoryRefsFailed,

@@ -1,4 +1,4 @@
-import type { ChangesFailure } from "@rebase/contracts/repository-changes/repository-changes.contract";
+import type { ChangesFailure } from "@rebase/contracts";
 import { CommitInspectionError } from "#server/domain/commit-inspection.contract";
 
 export function inspectionError(

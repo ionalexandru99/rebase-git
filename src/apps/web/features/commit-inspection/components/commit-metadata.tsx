@@ -1,4 +1,4 @@
-import type { CommitInspection } from "@rebase/contracts/commit-inspection/commit-inspection.contract";
+import type { CommitInspection } from "@rebase/contracts";
 import { CopyPill } from "#web/features/clipboard/index";
 import { CommitMessage } from "#web-ui/features/commit-inspection/components/commit-message";
 
