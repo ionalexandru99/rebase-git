@@ -23,6 +23,7 @@ import type {
   RepositoryHistoryWorkerResponse,
 } from "#web/features/repository-history/worker/repository-history-worker.contract";
 import { createEnvironmentRequestId } from "#web/platform/environment/websocket/environment-request-id";
+import { createStore } from "#web/platform/store/store";
 
 let sharedWorker: SharedWorker | undefined;
 let persistenceRequested = false;
@@ -67,7 +68,6 @@ function connectBrowserRepositoryHistoryReader(
   requestPersistentStorage();
   const channel = new MessageChannel();
   const port = channel.port1;
-  const listeners = new Set<() => void>();
   const pending = new Map<string, PendingRequest>();
   const loads = new Map<string, AbortController>();
   const synchronizations = new Map<string, AbortController>();
@@ -77,11 +77,11 @@ function connectBrowserRepositoryHistoryReader(
   let closed = false;
   let releaseLease = () => {};
   let unsubscribeAvailability: (() => void) | undefined;
-  let snapshot: RepositoryHistorySnapshot = {
+  const store = createStore<RepositoryHistorySnapshot>({
     revision: 0,
     historyRevision: 0,
     status: "empty",
-  };
+  });
 
   port.onmessage = (event: MessageEvent<RepositoryHistoryWorkerResponse>) => {
     const message = event.data;
@@ -153,7 +153,7 @@ function connectBrowserRepositoryHistoryReader(
     }
     if (message._tag === "SnapshotChanged") {
       onCachePaused(message.cachePaused ?? false);
-      snapshot = {
+      store.set({
         shallowOids: message.shallowOids ?? [],
         ...(message.freshness === undefined
           ? {}
@@ -170,10 +170,7 @@ function connectBrowserRepositoryHistoryReader(
         status: message.status,
         synchronization: message.synchronization,
         synchronizedCommitCount: message.synchronizedCommitCount,
-      };
-      for (const listener of listeners) {
-        listener();
-      }
+      });
       return;
     }
     const request = pending.get(message.requestId);
@@ -199,15 +196,15 @@ function connectBrowserRepositoryHistoryReader(
     discardSharedWorker(worker);
     dispose();
     worker?.port.close();
-    snapshot = {
+    const snapshot = store.getSnapshot();
+    store.set({
       ...snapshot,
       revision: snapshot.revision + 1,
       status: "error",
       synchronization: "idle",
       storingCommits: false,
       error: new RepositoryHistoryUnavailable(),
-    };
-    for (const listener of listeners) listener();
+    });
   }
 
   worker?.addEventListener("error", failWorker);
@@ -516,17 +513,14 @@ function connectBrowserRepositoryHistoryReader(
         _tag: "GetRefTargets",
         requestId: createEnvironmentRequestId(),
       }).then((reply) => reply.refs),
-    getSnapshot: () => snapshot,
+    getSnapshot: store.getSnapshot,
     read: (query) =>
       request({
         _tag: "ReadHistory",
         query,
         requestId: createEnvironmentRequestId(),
       }).then((reply) => reply.commits),
-    subscribe: (listener) => {
-      listeners.add(listener);
-      return () => listeners.delete(listener);
-    },
+    subscribe: store.subscribe,
   };
   return reader;
 }

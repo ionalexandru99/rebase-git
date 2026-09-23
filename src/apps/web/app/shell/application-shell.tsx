@@ -3,14 +3,7 @@ import type {
   RepositoryFilesystemHost,
 } from "@rebase/contracts";
 import { IconDeviceLaptop } from "@tabler/icons-react";
-import {
-  type JSX,
-  useCallback,
-  useEffect,
-  useRef,
-  useState,
-  useSyncExternalStore,
-} from "react";
+import { type JSX, useCallback, useEffect, useRef, useState } from "react";
 import type { PanelImperativeHandle } from "react-resizable-panels";
 import type { LocalEnvironmentSession } from "#web/app/environment/local-environment-session.contract";
 import { environmentSessionPresentation } from "#web/app/shell/environment-session-presentation";
@@ -32,6 +25,7 @@ import { RepositoryFolderPicker } from "#web/features/repository-folder-picker/i
 import { useRepositoryHistoryReader } from "#web/features/repository-history/hooks/use-repository-history-reader";
 import { RepositorySettingsPage } from "#web/features/repository-settings/index";
 import { SettingsPanel } from "#web/features/settings/index";
+import { useStore } from "#web/platform/store/use-store";
 import { RepositoryWorkspace } from "#web-ui/app/workspace/repository-workspace";
 import {
   ResizableHandle,
@@ -59,14 +53,8 @@ export function ApplicationShell({
   readonly repositoryFilesystem: RepositoryFilesystemHost | undefined;
   readonly session: LocalEnvironmentSession;
 }): JSX.Element {
-  const sessionState = useSyncExternalStore(
-    session.subscribe,
-    session.getSnapshot,
-  );
-  const repositoryCatalog = useSyncExternalStore(
-    session.repositoryCatalog.subscribe,
-    session.repositoryCatalog.getSnapshot,
-  );
+  const sessionState = useStore(session);
+  const repositoryCatalog = useStore(session.repositoryCatalog);
   const environmentStatus = environmentSessionPresentation(sessionState);
   const lastConnectedEnvironmentId = useRef<string | undefined>(undefined);
   if (sessionState._tag === "Connected") {

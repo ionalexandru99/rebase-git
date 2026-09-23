@@ -27,6 +27,7 @@ import {
 } from "#web/persistence/working-changes/working-changes-store";
 import type { WorkingChangesStoreUnavailable } from "#web/persistence/working-changes/working-changes-store.contract";
 import { createControllerScope } from "#web/platform/effect/controller-scope";
+import { createStore } from "#web/platform/store/store";
 
 type WorkingChangesFailure =
   | WorkingChangesError
@@ -57,7 +58,6 @@ export function createWorkingChangesController(
   const work = createControllerScope(runtime);
   const lock = Semaphore.makeUnsafe(1);
   const writes = Semaphore.makeUnsafe(1);
-  const listeners = new Set<() => void>();
   let active = true;
   let initialized = false;
   let operationGeneration = 0;
@@ -66,7 +66,7 @@ export function createWorkingChangesController(
   let normalDraft = emptyCommitDraft;
   let amendDraft: CommitDraft | undefined;
   let amendDraftHead: string | null = null;
-  let state: WorkingChangesState = {
+  const store = createStore<WorkingChangesState>({
     changes: null,
     diff: null,
     selection: null,
@@ -77,13 +77,12 @@ export function createWorkingChangesController(
     loading: true,
     error: null,
     notice: null,
-  };
+  });
+  const state = store.getSnapshot;
   const publish = (next: Partial<WorkingChangesState>) => {
-    if (!work.open) return;
-    state = { ...state, ...next };
-    for (const listener of listeners) listener();
+    if (work.open) store.set({ ...state(), ...next });
   };
-  const scope = (): ChangesScope => ({ ...initialScope, amend: state.amend });
+  const scope = (): ChangesScope => ({ ...initialScope, amend: state().amend });
   const fail = (error: WorkingChangesFailure) =>
     Effect.sync(() => publish({ error: error.message }));
   const run = (effect: Effect.Effect<unknown, WorkingChangesFailure>) =>
@@ -99,11 +98,11 @@ export function createWorkingChangesController(
       if (!active) {
         return;
       }
-      const selection = state.selection;
+      const selection = state().selection;
       const currentScope = scope();
       if (
         selection === null ||
-        !state.changes?.[selection.section].some(
+        !state().changes?.[selection.section].some(
           (file) => file.path === selection.path,
         )
       ) {
@@ -113,21 +112,18 @@ export function createWorkingChangesController(
       const diff = yield* client.diff({ ...currentScope, ...selection });
       if (
         active &&
-        selection === state.selection &&
-        currentScope.amend === state.amend
+        selection === state().selection &&
+        currentScope.amend === state().amend
       )
         publish({
-          diff: state.diff?.revision === diff.revision ? state.diff : diff,
+          diff: state().diff?.revision === diff.revision ? state().diff : diff,
         });
     });
   const refresh = () =>
     Effect.gen(function* () {
       let next = yield* client.read(scope());
-      if (
-        state.amend &&
-        state.changes !== null &&
-        state.changes.head !== next.head
-      ) {
+      const { amend, changes } = state();
+      if (amend && changes !== null && changes.head !== next.head) {
         amendDraft = undefined;
         publish({
           amend: false,
@@ -137,9 +133,9 @@ export function createWorkingChangesController(
         });
         next = yield* client.read(scope());
       }
-      const first = state.changes === null;
-      const changed = next.revision !== state.changes?.revision;
-      if (first && state.selection === null) {
+      const first = state().changes === null;
+      const changed = next.revision !== state().changes?.revision;
+      if (first && state().selection === null) {
         const file = next.unstaged[0] ?? next.staged[0];
         if (file)
           publish({
@@ -150,13 +146,13 @@ export function createWorkingChangesController(
           });
       }
       if (changed) publish({ changes: next, diff: null });
-      if (changed || first || state.diff === null) yield* loadDiff();
+      if (changed || first || state().diff === null) yield* loadDiff();
       publish({ loading: false });
     });
   const operation = (
     effect: () => Effect.Effect<void, WorkingChangesFailure>,
   ) => {
-    if (state.busy || state.loading) return;
+    if (state().busy || state().loading) return;
     const generation = ++operationGeneration;
     publish({ busy: true, error: null, notice: null });
     run(
@@ -183,7 +179,7 @@ export function createWorkingChangesController(
     polling = work.fork(
       Effect.forever(
         Effect.suspend(() =>
-          document.visibilityState === "hidden" || state.busy
+          document.visibilityState === "hidden" || state().busy
             ? Effect.void
             : lock
                 .withPermit(refresh())
@@ -211,13 +207,8 @@ export function createWorkingChangesController(
       }
       resume();
     },
-    getSnapshot: () => state,
-    subscribe: (listener: () => void) => {
-      listeners.add(listener);
-      return () => {
-        listeners.delete(listener);
-      };
-    },
+    getSnapshot: store.getSnapshot,
+    subscribe: store.subscribe,
     start: () => {
       if (!work.start()) return;
       work.fork(
@@ -247,10 +238,7 @@ export function createWorkingChangesController(
       work.stop();
       polling = undefined;
       reading = undefined;
-      state = { ...state, busy: false, loading: false };
-      for (const listener of listeners) {
-        listener();
-      }
+      store.set({ ...state(), busy: false, loading: false });
     },
     refresh: () =>
       runRead(
@@ -264,10 +252,10 @@ export function createWorkingChangesController(
     },
     updateDraft: (draft: CommitDraft) => {
       publish({ draft, notice: null });
-      if (state.amend) amendDraft = draft;
+      if (state().amend) amendDraft = draft;
       else normalDraft = draft;
-      const key = state.amend
-        ? `${draftKey}:amend:${state.changes?.head}`
+      const key = state().amend
+        ? `${draftKey}:amend:${state().changes?.head}`
         : draftKey;
       run(writes.withPermit(saveCommitDraft(key, draft)));
     },
@@ -302,14 +290,15 @@ export function createWorkingChangesController(
       action: MutateChanges["action"],
       section: ChangeSection,
       selection: ChangeSelection,
-      revision = state.changes?.revision,
+      revision = state().changes?.revision,
     ) =>
       operation(() =>
         Effect.gen(function* () {
-          if (state.changes === null) return;
+          const changes = state().changes;
+          if (changes === null) return;
           const next = yield* client.mutate({
             ...scope(),
-            revision: revision ?? state.changes.revision,
+            revision: revision ?? changes.revision,
             action,
             section,
             selection,
@@ -321,16 +310,15 @@ export function createWorkingChangesController(
     commit: () =>
       operation(() =>
         Effect.gen(function* () {
-          if (state.changes === null) return;
-          const amendedHead = state.amend ? state.changes.head : null;
+          const { amend, changes, draft } = state();
+          if (changes === null) return;
+          const amendedHead = amend ? changes.head : null;
           const message =
-            state.draft.subject.trim() +
-            (state.draft.description.trim()
-              ? `\n\n${state.draft.description.trim()}`
-              : "");
+            draft.subject.trim() +
+            (draft.description.trim() ? `\n\n${draft.description.trim()}` : "");
           const next = yield* client.commit({
             ...scope(),
-            revision: state.changes.revision,
+            revision: changes.revision,
             message,
           });
           normalDraft = emptyCommitDraft;

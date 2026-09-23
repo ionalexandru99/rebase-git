@@ -6,6 +6,7 @@ import type {
 } from "@rebase/contracts";
 import { Data, type Effect } from "effect";
 import type { RepositoryRefsClientError } from "#web/features/repository-refs/repository-refs-client.contract";
+import type { ReadableStore } from "#web/platform/store/store";
 
 export type RepositoryRefsControllerStatus =
   | "error"
@@ -35,16 +36,15 @@ export interface RepositoryRefsSnapshot {
   readonly status: RepositoryRefsControllerStatus;
 }
 
-export interface RepositoryRefsController {
+export interface RepositoryRefsController
+  extends ReadableStore<RepositoryRefsSnapshot> {
   readonly checkout: (
     worktreePath: string,
     target: RepositoryRefTarget,
   ) => Promise<RepositoryCheckedOut>;
-  readonly getSnapshot: () => RepositoryRefsSnapshot;
   readonly invalidate: (repositoryIds?: readonly string[]) => void;
   readonly refresh: () => Promise<void>;
   readonly select: (repositoryId: string | undefined) => void;
-  readonly subscribe: (listener: () => void) => () => void;
 }
 
 export interface RepositoryRefsGateway {

@@ -1,6 +1,7 @@
 import type { RepositoryCatalogEntry } from "@rebase/contracts";
 import { Data, type Effect } from "effect";
 import type { RepositoryCatalogClientError } from "#web/features/repository-catalog/repository-catalog-client.contract";
+import type { ReadableStore } from "#web/platform/store/store";
 
 export type RepositoryCatalogControllerStatus =
   | "error"
@@ -22,15 +23,14 @@ export interface RepositoryCatalogControllerSnapshot {
   readonly status: RepositoryCatalogControllerStatus;
 }
 
-export interface RepositoryCatalogController {
-  readonly getSnapshot: () => RepositoryCatalogControllerSnapshot;
+export interface RepositoryCatalogController
+  extends ReadableStore<RepositoryCatalogControllerSnapshot> {
   readonly recordOpened: (
     repositoryId: string,
   ) => Promise<RepositoryCatalogEntry>;
   readonly refresh: () => Promise<void>;
   readonly remember: (path: string) => Promise<RepositoryCatalogEntry>;
   readonly remove: (repositoryId: string) => Promise<void>;
-  readonly subscribe: (listener: () => void) => () => void;
 }
 
 export interface RepositoryCatalogGateway {

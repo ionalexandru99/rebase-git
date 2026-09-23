@@ -1,5 +1,6 @@
-import { lazy, Suspense, useSyncExternalStore } from "react";
+import { lazy, Suspense } from "react";
 import type { CommitInspectionController } from "#web/features/commit-inspection/commit-inspection-controller";
+import { useStore } from "#web/platform/store/use-store";
 import { Button } from "#web-ui/components/ui/button";
 import { CommitFiles } from "#web-ui/features/commit-inspection/components/commit-files";
 import { CommitMetadata } from "#web-ui/features/commit-inspection/components/commit-metadata";
@@ -15,11 +16,7 @@ export function CommitInspection({
   readonly controller: CommitInspectionController;
   readonly connected: boolean;
 }) {
-  const state = useSyncExternalStore(
-    controller.subscribe,
-    controller.getSnapshot,
-    controller.getSnapshot,
-  );
+  const state = useStore(controller);
   const details = state.details;
   return (
     <section

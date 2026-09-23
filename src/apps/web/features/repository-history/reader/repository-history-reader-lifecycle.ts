@@ -3,20 +3,19 @@ import type {
   RepositoryHistoryReader,
 } from "#web/features/repository-history/repository-history-reader.contract";
 import { RepositoryHistoryOffline } from "#web/features/repository-history/repository-history-reader.contract";
+import { createStore } from "#web/platform/store/store";
 
 export function maintainRepositoryHistoryReader(
   create: () => RepositoryHistoryReader,
 ): RepositoryHistoryReader {
-  const listeners = new Set<() => void>();
   let reader: RepositoryHistoryReader | undefined = create();
-  let snapshot = reader.getSnapshot();
+  const store = createStore(reader.getSnapshot());
   let unsubscribe = reader.subscribe(publish);
   let lastQuery: RepositoryHistoryQuery | undefined;
   let closed = false;
 
   function publish() {
-    if (reader !== undefined) snapshot = reader.getSnapshot();
-    for (const listener of listeners) listener();
+    if (reader !== undefined) store.set(reader.getSnapshot());
   }
 
   function suspend() {
@@ -58,7 +57,6 @@ export function maintainRepositoryHistoryReader(
       globalThis.removeEventListener("pagehide", suspend);
       globalThis.removeEventListener("pageshow", resume);
       suspend();
-      listeners.clear();
     },
     getCommitSummaries: (oids) =>
       reader?.getCommitSummaries(oids) ??
@@ -74,16 +72,13 @@ export function maintainRepositoryHistoryReader(
     search: (query, signal) =>
       reader?.search(query, signal) ??
       Promise.reject(new RepositoryHistoryOffline()),
-    getSnapshot: () => snapshot,
+    getSnapshot: store.getSnapshot,
     read: (query) => {
       lastQuery = query;
       return (
         reader?.read(query) ?? Promise.reject(new RepositoryHistoryOffline())
       );
     },
-    subscribe: (listener) => {
-      listeners.add(listener);
-      return () => listeners.delete(listener);
-    },
+    subscribe: store.subscribe,
   };
 }

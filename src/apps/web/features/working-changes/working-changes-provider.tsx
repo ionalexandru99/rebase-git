@@ -5,13 +5,13 @@ import {
   useContext,
   useEffect,
   useMemo,
-  useSyncExternalStore,
 } from "react";
 import type { RepositoryChangesClient } from "#web/features/working-changes/working-changes.contract";
 import {
   createWorkingChangesController,
   type WorkingChangesController,
 } from "#web/features/working-changes/working-changes-controller";
+import { useStore } from "#web/platform/store/use-store";
 
 const WorkingChangesContext = createContext<WorkingChangesController | null>(
   null,
@@ -61,10 +61,6 @@ export function useWorkingChanges() {
   const controller = useContext(WorkingChangesContext);
   if (controller === null)
     throw new Error("Working changes require a provider.");
-  const state = useSyncExternalStore(
-    controller.subscribe,
-    controller.getSnapshot,
-    controller.getSnapshot,
-  );
+  const state = useStore(controller);
   return { controller, state };
 }

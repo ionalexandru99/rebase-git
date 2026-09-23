@@ -8,6 +8,7 @@ import type {
   RepositoryHistoryQuery,
   RepositoryHistoryReadModel,
 } from "#web/features/repository-history/index";
+import type { ReadableStore } from "#web/platform/store/store";
 
 export type CommitGraphPageReader = Pick<
   RepositoryHistoryReadModel,
@@ -50,9 +51,8 @@ export interface CommitGraphPageWindowOptions {
   readonly maximumBytes?: number;
 }
 
-export interface CommitGraphPageWindow {
-  readonly getSnapshot: () => CommitGraphPageWindowSnapshot;
-  readonly subscribe: (listener: () => void) => () => void;
+export interface CommitGraphPageWindow
+  extends ReadableStore<CommitGraphPageWindowSnapshot> {
   readonly dispose: () => void;
   readonly discard: () => void;
   readonly loadInitial: (

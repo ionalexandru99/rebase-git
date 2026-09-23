@@ -4,6 +4,7 @@ import type {
   WorkspacePanelInputAction,
   WorkspacePanelKind,
 } from "#web/features/workspace-panel/workspace-panel-definitions";
+import type { ReadableStore } from "#web/platform/store/store";
 
 export type { WorkspacePanelKind } from "#web/features/workspace-panel/workspace-panel-definitions";
 
@@ -34,8 +35,7 @@ export type WorkspacePanelAction =
   | { readonly type: "resize"; readonly width: number }
   | { readonly type: "expand"; readonly expanded: boolean };
 
-export interface WorkspacePanelStore {
-  readonly getSnapshot: () => WorkspacePanelState;
-  readonly subscribe: (listener: () => void) => () => void;
+export interface WorkspacePanelStore
+  extends ReadableStore<WorkspacePanelState> {
   readonly dispatch: (action: WorkspacePanelAction) => void;
 }

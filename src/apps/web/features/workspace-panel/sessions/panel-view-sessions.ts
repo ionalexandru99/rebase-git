@@ -3,32 +3,26 @@ import type {
   PanelViewState,
   WorkspacePanelScope,
 } from "#web/features/workspace-panel/workspace-panel-session.contract";
+import { createStore } from "#web/platform/store/store";
 
 function createPanelSession(
   key: string,
   scope: WorkspacePanelScope | undefined,
   previousScopeKey: string | undefined,
 ) {
-  const store = createWorkspacePanelStore(key, previousScopeKey);
-  let state: PanelViewState = { mounted: false, targets: {}, contents: {} };
-  const listeners = new Set<() => void>();
+  const view = createStore<PanelViewState>({
+    mounted: false,
+    targets: {},
+    contents: {},
+  });
   return {
     key,
     scope,
-    store,
-    getSnapshot: () => state,
-    subscribe: (listener: () => void) => {
-      listeners.add(listener);
-      return () => {
-        listeners.delete(listener);
-      };
-    },
-    update: (next: Partial<PanelViewState>) => {
-      state = { ...state, ...next };
-      for (const listener of listeners) {
-        listener();
-      }
-    },
+    store: createWorkspacePanelStore(key, previousScopeKey),
+    getSnapshot: view.getSnapshot,
+    subscribe: view.subscribe,
+    update: (next: Partial<PanelViewState>) =>
+      view.set({ ...view.getSnapshot(), ...next }),
   };
 }
 
@@ -36,22 +30,11 @@ export type PanelSession = ReturnType<typeof createPanelSession>;
 
 export function createSessionCollection() {
   const sessions = new Map<string, PanelSession>();
-  let snapshot: readonly PanelSession[] = [];
-  const listeners = new Set<() => void>();
-  const publish = () => {
-    snapshot = [...sessions.values()];
-    for (const listener of listeners) {
-      listener();
-    }
-  };
+  const snapshot = createStore<readonly PanelSession[]>([]);
+  const publish = () => snapshot.set([...sessions.values()]);
   return {
-    getSnapshot: () => snapshot,
-    subscribe: (listener: () => void) => {
-      listeners.add(listener);
-      return () => {
-        listeners.delete(listener);
-      };
-    },
+    getSnapshot: snapshot.getSnapshot,
+    subscribe: snapshot.subscribe,
     acquire: (
       key: string,
       scope: WorkspacePanelScope | undefined,
@@ -64,7 +47,7 @@ export function createSessionCollection() {
     attach: (session: PanelSession) => {
       sessions.set(session.key, session);
       session.update({ mounted: true });
-      if (!snapshot.includes(session)) {
+      if (!snapshot.getSnapshot().includes(session)) {
         publish();
       }
       return () => session.update({ mounted: false, targets: {} });

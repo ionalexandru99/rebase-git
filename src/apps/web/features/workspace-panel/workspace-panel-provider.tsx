@@ -5,12 +5,12 @@ import {
   useContext,
   useRef,
   useState,
-  useSyncExternalStore,
 } from "react";
 import type {
   WorkspacePanelAction,
   WorkspacePanelStore,
 } from "#web/features/workspace-panel/workspace-panel.contract";
+import { useStore } from "#web/platform/store/use-store";
 import {
   usePanelSession,
   usePanelSessionOwner,
@@ -120,10 +120,6 @@ export function useWorkspacePanel() {
   const controller = useContext(WorkspacePanelContext);
   if (controller === undefined)
     throw new Error("WorkspacePanel requires its Provider.");
-  const state = useSyncExternalStore(
-    controller.store.subscribe,
-    controller.store.getSnapshot,
-    controller.store.getSnapshot,
-  );
+  const state = useStore(controller.store);
   return { ...controller, state };
 }
