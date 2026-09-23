@@ -11,10 +11,6 @@ import {
   type DiffPreferences,
   defaultDiffPreferences,
 } from "#web/domain/file-diff/diff-preferences.contract";
-import {
-  type CommitDraft,
-  emptyCommitDraft,
-} from "#web/domain/working-changes/commit-draft.contract";
 import type {
   RepositoryChangesClient,
   WorkingChangesError,
@@ -25,7 +21,11 @@ import {
   saveCommitDraft,
   saveDiffPreferences,
 } from "#web/persistence/working-changes/working-changes-store";
-import type { WorkingChangesStoreUnavailable } from "#web/persistence/working-changes/working-changes-store.contract";
+import {
+  type CommitDraft,
+  emptyCommitDraft,
+  type WorkingChangesStoreUnavailable,
+} from "#web/persistence/working-changes/working-changes-store.contract";
 import { createControllerScope } from "#web/platform/effect/controller-scope";
 import { createStore } from "#web/platform/store/store";
 

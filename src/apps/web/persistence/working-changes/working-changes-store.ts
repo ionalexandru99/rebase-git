@@ -4,16 +4,16 @@ import {
   defaultDiffPreferences,
 } from "#web/domain/file-diff/diff-preferences.contract";
 import {
-  type CommitDraft,
-  emptyCommitDraft,
-} from "#web/domain/working-changes/commit-draft.contract";
-import {
   requestResult,
   transactionCompleted,
   withRepositoryHistoryDatabase,
   workingChangesStoreName,
 } from "#web/persistence/repository-history/repository-history-database";
-import { WorkingChangesStoreUnavailable } from "#web/persistence/working-changes/working-changes-store.contract";
+import {
+  type CommitDraft,
+  emptyCommitDraft,
+  WorkingChangesStoreUnavailable,
+} from "#web/persistence/working-changes/working-changes-store.contract";
 
 function access<T>(use: (store: IDBObjectStore) => Promise<T>, write: boolean) {
   return Effect.tryPromise({

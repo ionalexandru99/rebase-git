@@ -1,5 +1,5 @@
 import { Effect, Exit, Fiber, type ManagedRuntime, Scope } from "effect";
-import type { RepositoryHistorySearch } from "#web/domain/history-search.contract";
+import type { RepositoryHistorySearch } from "#web/domain/repository-history/history-search.contract";
 import {
   readNextHistorySearchPage,
   restoreSearchResults,

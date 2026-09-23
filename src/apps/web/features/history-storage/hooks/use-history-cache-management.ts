@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import type {
   RepositoryHistoryCacheAction,
   RepositoryHistoryStorageDiagnostics,
-} from "#web/domain/history-storage.contract";
+} from "#web/domain/repository-history/history-storage.contract";
 import type { RepositoryHistoryCacheProps } from "#web/features/history-storage/history-cache.contract";
 import { historyCacheActions } from "#web/features/history-storage/history-cache-actions";
 import { useStore } from "#web/platform/store/use-store";

@@ -1,10 +1,10 @@
-import type { HistoryTopology } from "#web/domain/repository-history/history-topology.contract";
 import { findHistoryAncestryRoute } from "#web/features/repository-history/query/history-ancestry-route";
 import type {
   HistoryOrderIndexReader,
   HistoryOrderNode,
   HistoryParentEdge,
 } from "#web/features/repository-history/query/history-order.contract";
+import type { HistoryTopology } from "#web/persistence/repository-history/repository-history-topology";
 
 export class HistoryOrderIndex implements HistoryOrderIndexReader {
   private readonly positions: Map<string, number>;

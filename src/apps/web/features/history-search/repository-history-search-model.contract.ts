@@ -3,7 +3,7 @@ import { Context, Data, type Effect } from "effect";
 import type {
   RepositoryHistorySearchQuery,
   RepositoryHistorySearchResult,
-} from "#web/domain/history-search.contract";
+} from "#web/domain/repository-history/history-search.contract";
 import type { ReadableStore } from "#web/platform/store/store";
 
 export class RepositoryHistorySearchFailure extends Data.TaggedError(

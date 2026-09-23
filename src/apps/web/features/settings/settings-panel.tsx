@@ -1,7 +1,7 @@
 import type { DesktopUpdateSnapshot, DesktopUpdates } from "@rebase/contracts";
 import { type ComponentType, type JSX, useEffect, useState } from "react";
-import type { SettingsSectionContext } from "#web/features/settings/settings.contract";
 import {
+  type SettingsSectionContext,
   type SettingsSectionId,
   settingsSections,
 } from "#web/features/settings/settings-sections";

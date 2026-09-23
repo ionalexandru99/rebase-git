@@ -1,5 +1,9 @@
 import type { RepositoryRefs, RepositoryRefTarget } from "@rebase/contracts";
-import type { RepositoryRefActivation } from "#web/features/repository-refs/repository-ref-activation.contract";
+
+export type RepositoryRefActivation =
+  | { readonly _tag: "AlreadyCurrent" }
+  | { readonly _tag: "Checkout"; readonly target: RepositoryRefTarget }
+  | { readonly _tag: "SwitchWorktree"; readonly worktreePath: string };
 
 export function resolveRefActivation(
   refs: RepositoryRefs,

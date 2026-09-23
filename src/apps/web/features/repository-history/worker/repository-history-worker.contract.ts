@@ -8,11 +8,11 @@ import type {
 import type {
   RepositoryHistorySearchQuery,
   RepositoryHistorySearchResult,
-} from "#web/domain/history-search.contract";
+} from "#web/domain/repository-history/history-search.contract";
 import type {
   RepositoryHistoryCacheAction,
   RepositoryHistoryStorageDiagnostics,
-} from "#web/domain/history-storage.contract";
+} from "#web/domain/repository-history/history-storage.contract";
 import type { HistoryAncestryRoute } from "#web/features/repository-history/query/history-order.contract";
 import type {
   RepositoryHistoryPosition,

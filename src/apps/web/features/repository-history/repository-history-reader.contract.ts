@@ -13,8 +13,8 @@ import type {
 } from "@rebase/contracts";
 import type { EnvironmentConnectionFailure } from "@rebase/environment-client";
 import { Data, type Effect } from "effect";
-import type { RepositoryHistorySearch } from "#web/domain/history-search.contract";
-import type { RepositoryHistoryCacheManagement } from "#web/domain/history-storage.contract";
+import type { RepositoryHistorySearch } from "#web/domain/repository-history/history-search.contract";
+import type { RepositoryHistoryCacheManagement } from "#web/domain/repository-history/history-storage.contract";
 import type {
   HistoryAncestryRoute,
   HistoryParentEdge,

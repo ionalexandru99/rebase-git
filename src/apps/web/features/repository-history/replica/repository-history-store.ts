@@ -1,8 +1,14 @@
 import type {
   RepositoryHistoryBatch,
   RepositoryHistoryPage,
+  RepositoryHistoryRefTarget,
+  RepositoryHistorySnapshot,
   SynchronizeRepositoryHistory,
 } from "@rebase/contracts";
+import type {
+  RepositoryHistoryCompletionBasis,
+  RepositoryHistorySynchronizationProgress,
+} from "#web/domain/repository-history/repository-history-completion.contract";
 import {
   historyOrderScopeKey,
   normalizedOids,
@@ -11,7 +17,6 @@ import {
   acceptRepositoryHistoryBatch,
   completeRepositoryHistory,
 } from "#web/features/repository-history/replica/repository-history-completion";
-import type { StoredRepositoryHistoryState } from "#web/features/repository-history/replica/repository-history-state.contract";
 import type { RepositoryHistoryQuery } from "#web/features/repository-history/repository-history-reader.contract";
 import type {
   StoredCommit,
@@ -30,6 +35,14 @@ import {
 } from "#web/persistence/repository-history/repository-history-transactions";
 
 type SynchronizationBasis = NonNullable<SynchronizeRepositoryHistory["basis"]>;
+
+interface StoredRepositoryHistoryState {
+  readonly completion?: RepositoryHistoryCompletionBasis;
+  readonly objectFormat: "sha1" | "sha256";
+  readonly refTargets: readonly RepositoryHistoryRefTarget[];
+  readonly progress: RepositoryHistorySynchronizationProgress;
+  readonly pendingSnapshot?: RepositoryHistorySnapshot;
+}
 
 export function storeRepositoryHistoryPage(
   environmentId: string,

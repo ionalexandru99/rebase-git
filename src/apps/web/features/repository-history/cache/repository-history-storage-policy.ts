@@ -1,4 +1,4 @@
-import type { RepositoryHistoryCacheDiagnostics } from "#web/domain/history-storage.contract";
+import type { RepositoryHistoryCacheDiagnostics } from "#web/domain/repository-history/history-storage.contract";
 import { RepositoryHistoryStorageUnavailable } from "#web/features/repository-history/repository-history-reader.contract";
 
 export function historyCacheCleanupCandidates<

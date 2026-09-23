@@ -1,4 +1,4 @@
-import type { RepositoryHistoryStorageDiagnostics } from "#web/domain/history-storage.contract";
+import type { RepositoryHistoryStorageDiagnostics } from "#web/domain/repository-history/history-storage.contract";
 import { formatCacheSize } from "#web/features/history-storage/format-cache-size";
 
 export function RepositoryHistoryCacheList({

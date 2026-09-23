@@ -1,4 +1,7 @@
-import { EnvironmentAuthorizationHttpApi } from "@rebase/contracts";
+import {
+  type DesktopHostBridge,
+  EnvironmentAuthorizationHttpApi,
+} from "@rebase/contracts";
 import type { EnvironmentCredential } from "@rebase/environment-client";
 import {
   createEnvironmentBrowserSessionEffect,
@@ -8,10 +11,6 @@ import {
 } from "@rebase/environment-client";
 import { Effect, Layer, ManagedRuntime } from "effect";
 import { connectCurrentEnvironmentEffect } from "#web/app/environment/connection/index";
-import type {
-  DesktopEnvironmentHost,
-  DesktopHostBridge,
-} from "#web/app/environment/environment-bootstrap.contract";
 import { createLocalEnvironmentSession } from "#web/app/environment/local-environment-session";
 import type {
   ConnectedFeature,
@@ -30,6 +29,11 @@ import { repositoryRefsClient } from "#web/features/repository-refs/repository-r
 import { createRepositoryRefsController } from "#web/features/repository-refs/repository-refs-controller";
 import type { RepositoryRefsController } from "#web/features/repository-refs/repository-refs-controller.contract";
 import { createRepositoryRefsGateway } from "#web/features/repository-refs/transport/repository-refs-gateway";
+
+type DesktopEnvironmentHost = Pick<
+  DesktopHostBridge,
+  "environmentOrigin" | "getEnvironmentCredential"
+>;
 
 export function createBrowserLocalEnvironmentSession(
   productVersion: string,

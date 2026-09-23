@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import type { RepositoryHistoryCacheDiagnostics } from "#web/domain/history-storage.contract";
+import type { RepositoryHistoryCacheDiagnostics } from "#web/domain/repository-history/history-storage.contract";
 import {
   historyCacheCleanupCandidates,
   writeHistoryWithCleanup,

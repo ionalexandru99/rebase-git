@@ -1,13 +1,33 @@
-import { EnvironmentHttpApi } from "@rebase/contracts";
 import {
+  type EnvironmentDiscovery,
+  type EnvironmentHello,
+  EnvironmentHttpApi,
+  type EnvironmentRpcClient,
+} from "@rebase/contracts";
+import {
+  type EnvironmentCredential,
   environmentResponseError,
   fetchEnvironmentSnapshotEffect,
 } from "@rebase/environment-client";
 import { Effect, Ref, Stream } from "effect";
 import { hasEnvironmentCapability } from "#web/platform/environment/environment-capabilities";
-import type { EnvironmentRpcEvents } from "#web/platform/environment/rpc/environment-rpc-events.contract";
-import { updateEnvironmentSequence } from "#web/platform/environment/websocket/environment-connection-state";
+import type { NegotiatedEnvironment } from "#web/platform/environment/environment-protocol.contract";
+import {
+  type EnvironmentConnectionState,
+  updateEnvironmentSequence,
+} from "#web/platform/environment/websocket/environment-connection-state";
 import { advanceEnvironmentSequence } from "#web/platform/environment/websocket/environment-sequence";
+
+export interface EnvironmentRpcEvents {
+  readonly client: EnvironmentRpcClient;
+  readonly credential: EnvironmentCredential;
+  readonly discovery: EnvironmentDiscovery;
+  readonly hello: EnvironmentHello;
+  readonly negotiated: NegotiatedEnvironment;
+  readonly origin: string;
+  readonly signal: AbortSignal;
+  readonly state: Ref.Ref<EnvironmentConnectionState>;
+}
 
 export function processEnvironmentRpcEvents(session: EnvironmentRpcEvents) {
   if (!hasEnvironmentCapability(session.negotiated, "environment-events"))

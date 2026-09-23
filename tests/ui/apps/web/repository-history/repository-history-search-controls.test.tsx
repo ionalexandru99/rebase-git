@@ -6,7 +6,7 @@ import { render } from "#tests-ui/runtime/render";
 import type {
   RepositoryHistorySearch,
   RepositoryHistorySearchResult,
-} from "#web/domain/history-search.contract";
+} from "#web/domain/repository-history/history-search.contract";
 import { RepositoryHistorySearchControls } from "#web-ui/features/history-search/components/repository-history-search-controls";
 
 const snapshot = {

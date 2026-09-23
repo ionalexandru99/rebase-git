@@ -1,4 +1,4 @@
-import type { RepositoryHistoryStorageDiagnostics } from "#web/domain/history-storage.contract";
+import type { RepositoryHistoryStorageDiagnostics } from "#web/domain/repository-history/history-storage.contract";
 
 export interface HistoryStorageRequest {
   readonly _tag: "HistoryStorageRequest";

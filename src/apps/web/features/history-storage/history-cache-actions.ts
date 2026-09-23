@@ -1,4 +1,4 @@
-import type { RepositoryHistoryCacheAction } from "#web/domain/history-storage.contract";
+import type { RepositoryHistoryCacheAction } from "#web/domain/repository-history/history-storage.contract";
 export const historyCacheActions: Record<
   RepositoryHistoryCacheAction,
   { label: string; description: string; result: string }

@@ -20,10 +20,10 @@ import {
   negotiateEnvironmentRpc,
 } from "#web/platform/environment/rpc/environment-rpc-client";
 import {
+  type EnvironmentRpcEvents,
   initializeEnvironmentRpcEvents,
   processEnvironmentRpcEvents,
 } from "#web/platform/environment/rpc/environment-rpc-events";
-import type { EnvironmentRpcEvents } from "#web/platform/environment/rpc/environment-rpc-events.contract";
 import {
   createEnvironmentConnectionState,
   type EnvironmentConnectionState,

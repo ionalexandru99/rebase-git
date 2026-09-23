@@ -2,7 +2,7 @@ import type { RepositoryCommit } from "@rebase/contracts";
 import type {
   RepositoryHistorySearchQuery,
   RepositoryHistorySearchResult,
-} from "#web/domain/history-search.contract";
+} from "#web/domain/repository-history/history-search.contract";
 import {
   matchingHistoryMetadata,
   normalizeHistorySearch,

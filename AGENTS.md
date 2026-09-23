@@ -49,7 +49,7 @@ A user on WSl should not be required to install the electron app on windows and 
 - Never create documentation files unless Alex explicitly approves their creation.
 - We want the code to be as simple as possible, easy to extend
 - Use workspace package names for cross-package imports. Within a package, use its configured private aliases such as `#server/*`, `#web/*`, `#web-ui/*`, and `#desktop/*` for implementation imports. Do not use relative imports in source or tests, and do not expose implementation wildcards through package `exports` solely to resolve internal modules.
-- Keep cross-module contracts in domain-specific `*.contract.ts` files, separate from their implementations.
+- Keep contracts in domain-specific `*.contract.ts` files only at real boundaries: client and server, worker messages, a feature's public entry point, and persistence. Keep types used by a single module in that module.
 - Keep business modules under `features/<feature-name>`. Keep `domain` and `persistence` as sibling top-level layers outside `features`.
 - Give each feature an explicit public entry point and a small root containing its main composition module and public contracts. Put supporting UI in `components/` and React hooks in `hooks/`; group other implementation code by responsibility when needed. Create only folders that have useful contents. Keep internal imports on private aliases and exports explicit.
 - Name browser feature folders after the browser responsibility. Do not mirror backend ownership with paths such as `state/server` for frontend clients.
