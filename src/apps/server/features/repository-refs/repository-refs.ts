@@ -1,11 +1,22 @@
 import type { RepositoryCatalogEntry } from "@rebase/contracts";
-import { Effect } from "effect";
-import type { GitCommandRunner } from "#server/domain/git-command.contract";
-import type { RepositoryCatalog } from "#server/domain/repository-catalog.contract";
-import type { RepositoryCoordinationService } from "#server/domain/repository-coordination.contract";
-import type {
-  RepositoryChangePublisher,
-  RepositoryRefsService,
+import { Effect, Layer } from "effect";
+import {
+  type GitCommandRunner,
+  GitCommands,
+} from "#server/domain/git-command.contract";
+import {
+  type RepositoryCatalog,
+  RepositoryCatalogAccess,
+} from "#server/domain/repository-catalog.contract";
+import {
+  RepositoryCoordination,
+  type RepositoryCoordinationService,
+} from "#server/domain/repository-coordination.contract";
+import {
+  type RepositoryChangePublisher,
+  RepositoryChangePublishing,
+  RepositoryRefsAccess,
+  type RepositoryRefsService,
 } from "#server/domain/repository-refs.contract";
 import {
   canonicalizeWorktrees,
@@ -72,6 +83,18 @@ export function createRepositoryRefsService(dependencies: {
       }),
   };
 }
+
+export const repositoryRefsLayer = Layer.effect(
+  RepositoryRefsAccess,
+  Effect.gen(function* () {
+    return createRepositoryRefsService({
+      catalog: yield* RepositoryCatalogAccess,
+      changes: yield* RepositoryChangePublishing,
+      git: yield* GitCommands,
+      coordination: yield* RepositoryCoordination,
+    });
+  }),
+);
 
 function requireRepository(
   catalog: Pick<RepositoryCatalog, "find">,

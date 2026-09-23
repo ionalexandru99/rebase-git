@@ -3,15 +3,14 @@ import { mkdir, mkdtemp, readFile, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { DatabaseSync } from "node:sqlite";
-import { and, sql } from "drizzle-orm";
+import { and, isNull, sql } from "drizzle-orm";
 import { type MigrationMeta, readMigrationFiles } from "drizzle-orm/migrator";
 import { Effect } from "effect";
 import { afterEach, describe, expect, it } from "vite-plus/test";
 import {
   hasNoAutomaticPort,
-  isActiveAuthorization,
   isCurrentEnvironment,
-} from "#server/app/environment-state.specifications";
+} from "#server/features/environment-identity/environment-identity.specifications";
 import { acquireEnvironmentContext } from "#server/persistence/environment-context";
 import type { EnvironmentContext } from "#server/persistence/environment-context.contract";
 import {
@@ -185,7 +184,7 @@ describe("Environment state", () => {
                   database
                     .select()
                     .from(authorizationMetadataTable)
-                    .where(isActiveAuthorization())
+                    .where(isNull(authorizationMetadataTable.revokedAt))
                     .orderBy(authorizationMetadataTable.createdAt),
               ),
               environmentId: environment.id,

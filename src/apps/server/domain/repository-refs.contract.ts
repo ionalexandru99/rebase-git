@@ -5,7 +5,7 @@ import type {
   RepositoryRefs,
   RepositoryRefsOperationFailure,
 } from "@rebase/contracts";
-import { Data, type Effect } from "effect";
+import { Context, Data, type Effect } from "effect";
 import type { EnvironmentStorageError } from "#server/domain/environment-storage-error.contract";
 
 export interface RepositoryRefsService {
@@ -33,3 +33,13 @@ export class RepositoryRefsError extends Data.TaggedError(
   readonly cause?: unknown;
   readonly failure: RepositoryRefsOperationFailure;
 }> {}
+
+export class RepositoryRefsAccess extends Context.Service<
+  RepositoryRefsAccess,
+  RepositoryRefsService
+>()("RepositoryRefsAccess") {}
+
+export class RepositoryChangePublishing extends Context.Service<
+  RepositoryChangePublishing,
+  RepositoryChangePublisher
+>()("RepositoryChangePublishing") {}

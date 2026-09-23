@@ -5,13 +5,20 @@ import { basename, isAbsolute } from "node:path";
 import { promisify } from "node:util";
 import type { RepositoryCatalogEntry } from "@rebase/contracts";
 import { asc, eq } from "drizzle-orm";
-import { Effect } from "effect";
-import type { GitCommandRunner } from "#server/domain/git-command.contract";
+import { Effect, Layer } from "effect";
+import {
+  type GitCommandRunner,
+  GitCommands,
+} from "#server/domain/git-command.contract";
 import {
   type RepositoryCatalog,
+  RepositoryCatalogAccess,
   RepositoryCatalogError,
 } from "#server/domain/repository-catalog.contract";
-import type { EnvironmentContext } from "#server/persistence/environment-context.contract";
+import {
+  type EnvironmentContext,
+  EnvironmentStorage,
+} from "#server/persistence/environment-context.contract";
 import { repositoryCatalogTable } from "#server/persistence/environment-state.schema";
 
 const realpathNative = promisify(realpath.native);
@@ -29,6 +36,16 @@ export function createRepositoryCatalog(
     remove: (repositoryId) => removeRepository(context, repositoryId),
   };
 }
+
+export const repositoryCatalogLayer = Layer.effect(
+  RepositoryCatalogAccess,
+  Effect.gen(function* () {
+    return createRepositoryCatalog(
+      yield* EnvironmentStorage,
+      yield* GitCommands,
+    );
+  }),
+);
 
 function listRepositories(context: EnvironmentContext) {
   return context

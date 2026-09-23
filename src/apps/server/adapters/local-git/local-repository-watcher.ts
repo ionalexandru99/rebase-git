@@ -1,10 +1,11 @@
 import { realpathSync, watch } from "node:fs";
 import { join } from "node:path";
-import { Effect } from "effect";
+import { Effect, Layer } from "effect";
 import { watchGitDirectoryTree } from "#server/adapters/local-git/watch-git-directory-tree";
-import type {
-  RepositoryWatcher,
-  RepositoryWatchHandle,
+import {
+  type RepositoryWatcher,
+  type RepositoryWatchHandle,
+  RepositoryWatching,
 } from "#server/domain/repository-watcher.contract";
 
 const watchedRootEntries = new Set([
@@ -59,6 +60,11 @@ export function createLocalRepositoryWatcher(): RepositoryWatcher {
       }),
   };
 }
+
+export const localRepositoryWatcherLayer = Layer.sync(
+  RepositoryWatching,
+  createLocalRepositoryWatcher,
+);
 
 function watchGitDirectory(
   gitDirectory: string,

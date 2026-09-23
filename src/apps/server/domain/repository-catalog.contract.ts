@@ -45,5 +45,5 @@ export class RepositoryCatalogError extends Data.TaggedError(
 
 export class RepositoryCatalogAccess extends Context.Service<
   RepositoryCatalogAccess,
-  Pick<RepositoryCatalog, "find">
+  RepositoryCatalog
 >()("RepositoryCatalogAccess") {}

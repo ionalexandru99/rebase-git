@@ -7,7 +7,7 @@ import type {
   EnvironmentPairingExchanged,
   ExchangeEnvironmentPairing,
 } from "@rebase/contracts";
-import { Data, type Effect } from "effect";
+import { Context, Data, type Effect } from "effect";
 import type { EnvironmentStorageError } from "#server/domain/environment-storage-error.contract";
 
 export interface EnvironmentPairingMaterial {
@@ -57,6 +57,11 @@ export interface EnvironmentAuthorization {
     EnvironmentAuthorizationError | EnvironmentStorageError
   >;
 }
+
+export class EnvironmentAuthorizationAccess extends Context.Service<
+  EnvironmentAuthorizationAccess,
+  EnvironmentAuthorization
+>()("EnvironmentAuthorizationAccess") {}
 
 export interface EnvironmentAuthorizationClock {
   readonly now: () => Date;
