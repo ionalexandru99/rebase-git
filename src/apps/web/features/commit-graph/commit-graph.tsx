@@ -1,5 +1,4 @@
 import type {
-  RepositoryCommit,
   RepositoryHistoryRefTarget,
   RepositoryRefs,
   RepositoryRefTarget,
@@ -8,9 +7,10 @@ import {
   type CSSProperties,
   type JSX,
   type KeyboardEvent,
+  type MouseEvent,
   type ReactNode,
   type Ref,
-  useEffect,
+  type SyntheticEvent,
   useImperativeHandle,
   useLayoutEffect,
   useMemo,
@@ -36,11 +36,7 @@ import { useCommitGraphPages } from "#web/features/commit-graph/hooks/use-commit
 import { useCommitGraphSelection } from "#web/features/commit-graph/hooks/use-commit-graph-selection";
 import { useCommitGraphViewport } from "#web/features/commit-graph/hooks/use-commit-graph-viewport";
 import { useGraphColors } from "#web/features/commit-graph/hooks/use-graph-colors";
-import { graphNodeColor } from "#web/features/commit-graph/layout/graph-colors";
-import {
-  commitGraphGutterWidth,
-  commitGraphNodePosition,
-} from "#web/features/commit-graph/layout/graph-geometry";
+import { commitGraphGutterWidth } from "#web/features/commit-graph/layout/graph-geometry";
 import { graphMetadataColumns } from "#web/features/commit-graph/layout/graph-metrics";
 import { graphRefLabels } from "#web/features/commit-graph/layout/graph-ref-labels";
 import { RepositoryHistorySearchControls } from "#web/features/history-search/index";
@@ -52,8 +48,10 @@ import type { RepositoryHistoryQuery } from "#web/features/repository-history/in
 import { useRepositoryHistoryOrder } from "#web/features/repository-history/index";
 import { Button } from "#web-ui/components/ui/button";
 import { CommitGraphCanvas } from "#web-ui/features/commit-graph/components/commit-graph-canvas";
-import { CommitGraphCommitCells } from "#web-ui/features/commit-graph/components/commit-graph-commit-cells";
-import { CommitGraphMergeControl } from "#web-ui/features/commit-graph/components/commit-graph-merge-controls";
+import {
+  CommitGraphRow,
+  commitRowId,
+} from "#web-ui/features/commit-graph/components/commit-graph-row";
 import {
   CommitGraphFailure,
   CommitGraphLoading,
@@ -153,14 +151,6 @@ export function CommitGraph({
   const visibleCommits = commits;
   const error = paging.snapshot.error;
   const loadHistory = paging.reload;
-  const previousReader = useRef(reader);
-  useEffect(() => {
-    if (previousReader.current !== reader) {
-      previousReader.current = reader;
-      setExpandedMerges(new Map());
-      setPendingNavigation(undefined);
-    }
-  }, [reader]);
   const labelsByOid = useMemo(
     () =>
       graphRefLabels(refTargets, laneRows, paging.snapshot.query?.roots ?? []),
@@ -210,6 +200,7 @@ export function CommitGraph({
     viewEpoch: paging.snapshot.epoch,
     oldestLoadedOffset: Math.max(0, paging.snapshot.knownEndOffset - 1),
     onSelectionIntent: beginNavigation,
+    onActiveCommitChange,
     requestMove: (offset, mode) => {
       const intent = beginNavigation();
       void paging.engine?.requestMove(offset).then((target) => {
@@ -267,9 +258,6 @@ export function CommitGraph({
     scrollRef.current?.focus();
   };
   useImperativeHandle(ref, () => ({ navigateToOid, focusSelection }));
-  useEffect(() => {
-    onActiveCommitChange?.(navigation.selection.activeOid);
-  }, [onActiveCommitChange, navigation.selection.activeOid]);
   selectedOidRef.current = navigation.selection.activeOid;
   const activeCommitOid = visibleOids.includes(
     navigation.selection.activeOid ?? "",
@@ -313,6 +301,31 @@ export function CommitGraph({
     )
       return;
     navigation.onKeyDown(event);
+  };
+  const handleRowClick = (event: MouseEvent<HTMLElement>) => {
+    const oid = eventCommitOid(event);
+    if (oid === undefined) return;
+    if (eventTargetMatches(event, "[data-merge-toggle]")) {
+      toggleMerge(oid, merges.get(oid) !== "expanded");
+      return;
+    }
+    navigation.onClick(oid, event);
+    scrollRef.current?.focus();
+  };
+  const handleRowDoubleClick = (event: MouseEvent<HTMLElement>) => {
+    const oid = eventCommitOid(event);
+    if (oid === undefined || eventTargetMatches(event, "button")) return;
+    void commands.execute("graph.openDetails", commands.context(oid));
+  };
+  const handleRowContextMenu = (event: MouseEvent<HTMLElement>) => {
+    const oid = eventCommitOid(event);
+    if (oid === undefined) return;
+    beginNavigation();
+    setMenuOid(oid);
+    navigation.select(
+      oid,
+      navigation.selected.has(oid) ? "activate" : "replace",
+    );
   };
 
   return (
@@ -387,6 +400,9 @@ export function CommitGraph({
                       }
                       className="absolute inset-0 block h-full w-full overflow-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden focus-visible:outline-2 focus-visible:outline-primary/70 focus-visible:outline-offset-[-2px]"
                       onKeyDown={handleKeyDown}
+                      onClick={handleRowClick}
+                      onContextMenu={handleRowContextMenu}
+                      onDoubleClick={handleRowDoubleClick}
                       onContextMenuCapture={(event) => {
                         if (
                           !(event.target instanceof Element) ||
@@ -474,101 +490,33 @@ export function CommitGraph({
                               </tr>
                             );
                           }
-                          const selected = navigation.selected.has(commit.oid);
-                          const labels =
-                            labelsByOid.get(commit.oid) ?? emptyRefLabels;
-                          const lane = laneRows[virtualRow.index];
                           const merge = merges.get(commit.oid);
                           return (
-                            <tr
+                            <CommitGraphRow
                               key={virtualRow.key}
-                              aria-label={commitAriaLabel(commit, labels)}
-                              aria-rowindex={
+                              commit={commit}
+                              labels={
+                                labelsByOid.get(commit.oid) ?? emptyRefLabels
+                              }
+                              lane={laneRows[virtualRow.index]}
+                              rowIndex={
                                 paging.snapshot.startOffset +
                                 virtualRow.index +
                                 2
                               }
-                              aria-expanded={
-                                merge !== undefined
-                                  ? merge === "expanded"
-                                  : undefined
+                              size={virtualRow.size}
+                              start={virtualRow.start}
+                              selected={navigation.selected.has(commit.oid)}
+                              active={
+                                navigation.selection.activeOid === commit.oid
                               }
-                              aria-busy={
+                              merge={merge}
+                              busy={
                                 merge !== undefined &&
                                 merge !== paging.merges.get(commit.oid) &&
                                 paging.snapshot.error === undefined
-                                  ? true
-                                  : undefined
                               }
-                              aria-selected={selected}
-                              className={`absolute left-0 grid w-full cursor-default items-center bg-[var(--graph-row-background)] text-[.85rem] after:pointer-events-none after:absolute after:inset-0 after:z-[5] data-[active=true]:after:border data-[active=true]:after:border-primary/70 ${
-                                selected
-                                  ? "text-foreground"
-                                  : "text-foreground hover:[--graph-row-background:color-mix(in_oklab,var(--accent)_35%,var(--repository))]"
-                              }`}
-                              data-active={
-                                navigation.selection.activeOid === commit.oid
-                                  ? "true"
-                                  : undefined
-                              }
-                              id={commitRowId(commit.oid)}
-                              onClick={(event) => {
-                                navigation.onClick(commit.oid, event);
-                                scrollRef.current?.focus();
-                              }}
-                              onDoubleClick={(event) => {
-                                if (
-                                  event.target instanceof Element &&
-                                  event.target.closest("button")
-                                )
-                                  return;
-                                void commands.execute(
-                                  "graph.openDetails",
-                                  commands.context(commit.oid),
-                                );
-                              }}
-                              onContextMenu={() => {
-                                beginNavigation();
-                                setMenuOid(commit.oid);
-                                navigation.select(
-                                  commit.oid,
-                                  selected ? "activate" : "replace",
-                                );
-                              }}
-                              onKeyDown={handleKeyDown}
-                              style={
-                                {
-                                  gridTemplateColumns: `${lane === undefined ? 28 : commitGraphGutterWidth([lane])}px minmax(0, 1fr) ${graphMetadataColumns}`,
-                                  height: virtualRow.size,
-                                  top: virtualRow.start,
-                                  ...(selected
-                                    ? {
-                                        "--graph-row-background":
-                                          "color-mix(in oklab, var(--primary) 12%, var(--repository))",
-                                      }
-                                    : {}),
-                                } as CSSProperties
-                              }
-                              tabIndex={-1}
-                            >
-                              <CommitGraphCommitCells
-                                commit={commit}
-                                labels={labels}
-                                graph={
-                                  lane === undefined ||
-                                  merge === undefined ? undefined : (
-                                    <CommitGraphMergeControl
-                                      commit={commit}
-                                      state={merge}
-                                      onToggle={toggleMerge}
-                                      position={commitGraphNodePosition(lane)}
-                                      remote={lane.nodeRemote}
-                                      color={graphNodeColor(lane)}
-                                    />
-                                  )
-                                }
-                              />
-                            </tr>
+                            />
                           );
                         })}
                       </tbody>
@@ -643,22 +591,14 @@ export function CommitGraph({
   );
 }
 
-function commitAriaLabel(
-  commit: RepositoryCommit,
-  labels: readonly RepositoryHistoryRefTarget[],
-) {
-  const parents = commit.parents.length;
-  const refs =
-    labels.length === 0
-      ? ""
-      : `, refs ${labels.map((label) => label.name).join(", ")}`;
-  return `${commit.subject}, ${commit.author.name}, ${shortOid(commit.oid)}, ${parents} ${parents === 1 ? "parent" : "parents"}${refs}`;
+function eventCommitOid(event: SyntheticEvent) {
+  return event.target instanceof Element
+    ? event.target.closest<HTMLElement>("tr[data-oid]")?.dataset.oid
+    : undefined;
 }
 
-function commitRowId(oid: string) {
-  return `commit-${oid}`;
-}
-
-function shortOid(oid: string) {
-  return oid.slice(0, 8);
+function eventTargetMatches(event: SyntheticEvent, selector: string) {
+  return (
+    event.target instanceof Element && event.target.closest(selector) !== null
+  );
 }
