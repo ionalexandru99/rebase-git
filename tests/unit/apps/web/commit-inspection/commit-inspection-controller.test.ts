@@ -69,3 +69,21 @@ it("interrupts the in-flight inspection when stopped", async () => {
   controller.stop();
   await vi.waitFor(() => expect(interrupted).toBe(true));
 });
+
+it("restarts an interrupted inspection when the controller starts again", async () => {
+  const inspect = vi.fn(() => Effect.never);
+  const controller = createCommitInspectionController(
+    { inspect, diff: () => Effect.die("Unused") },
+    scope,
+    runtime,
+  );
+  controller.start();
+  controller.selectCommit("a".repeat(40));
+  controller.stop();
+  controller.start();
+  try {
+    expect(inspect).toHaveBeenCalledTimes(2);
+  } finally {
+    controller.stop();
+  }
+});

@@ -154,7 +154,12 @@ export function createCommitInspectionController(
       };
     },
     start: () => {
-      if (!work.start()) return;
+      if (!work.start()) {
+        return;
+      }
+      if (active && state.oid !== undefined) {
+        load(state.oid);
+      }
       work.fork(
         readDiffPreferences().pipe(
           Effect.match({

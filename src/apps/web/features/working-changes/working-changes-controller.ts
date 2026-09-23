@@ -240,6 +240,10 @@ export function createWorkingChangesController(
       work.stop();
       polling = undefined;
       reading = undefined;
+      state = { ...state, busy: false, loading: false };
+      for (const listener of listeners) {
+        listener();
+      }
     },
     refresh: () =>
       runRead(
