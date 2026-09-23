@@ -24,17 +24,13 @@ export function useGraphCommands({
     [handlers],
   );
   const [error, setError] = useState<string>();
-  const context = (
-    invokingOid?: string,
-    ref?: GraphCommandContext["ref"],
-  ): GraphCommandContext | undefined =>
+  const context = (invokingOid?: string): GraphCommandContext | undefined =>
     environment === undefined
       ? undefined
       : {
           ...environment,
           selectedOids,
           ...(invokingOid === undefined ? {} : { invokingOid }),
-          ...(ref === undefined ? {} : { ref }),
         };
   const execute = async (
     id: GraphCommandId,

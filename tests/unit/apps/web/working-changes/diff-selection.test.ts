@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createChangeDiffModel } from "#web/features/file-diff/api";
+import { createChangeDiffModel } from "#web/features/file-diff/diff-model";
 import { selectedDiffLines } from "#web/features/working-changes/diff/diff-selection";
 
 describe("diff selection coordinates", () => {

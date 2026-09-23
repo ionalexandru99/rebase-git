@@ -16,26 +16,28 @@ import type { LocalEnvironmentSession } from "#web/app/environment/local-environ
 import { environmentSessionPresentation } from "#web/app/shell/environment-session-presentation";
 import { useProjectRepositoryActions } from "#web/app/shell/hooks/use-project-repository-actions";
 import { useRepositoryRefsActions } from "#web/app/shell/hooks/use-repository-refs-actions";
-import type { OpenProjectEnvironment } from "#web/features/open-project/open-project.contract";
-import type { ProjectNavigationState } from "#web/features/project-navigation/project-navigation.contract";
 import {
+  type OpenProjectEnvironment,
+  OpenProjectScreen,
+} from "#web/features/open-project/index";
+import {
+  type ProjectNavigationState,
+  ProjectsSidebar,
   setEnvironmentAvailability,
   setProjectSidebarCollapsed,
   showOpenProject,
   toggleEnvironment,
-} from "#web/features/project-navigation/project-navigation-state";
+} from "#web/features/project-navigation/index";
+import { RepositoryFolderPicker } from "#web/features/repository-folder-picker/index";
 import { useRepositoryHistoryReader } from "#web/features/repository-history/hooks/use-repository-history-reader";
 import { RepositorySettingsPage } from "#web/features/repository-settings/index";
+import { SettingsPanel } from "#web/features/settings/index";
 import { RepositoryWorkspace } from "#web-ui/app/workspace/repository-workspace";
 import {
   ResizableHandle,
   ResizablePanel,
   ResizablePanelGroup,
 } from "#web-ui/components/ui/resizable";
-import { OpenProjectScreen } from "#web-ui/features/open-project/open-project-screen";
-import { ProjectsSidebar } from "#web-ui/features/project-navigation/projects-sidebar";
-import { RepositoryFolderPicker } from "#web-ui/features/repository-folder-picker/repository-folder-picker";
-import { SettingsPanel } from "#web-ui/features/settings/settings-panel";
 import { WorkspacePanel } from "#web-ui/features/workspace-panel/index";
 
 const localEnvironmentId = "local-environment";
@@ -387,6 +389,7 @@ export function ApplicationShell({
         environmentId: historyEnvironmentId,
         requests: session.requests,
         changes: session.changes,
+        runtime: session.runtime,
         connected: sessionState._tag === "Connected",
         writable: canWrite,
         visible: !settingsOpen && !repositorySettingsOpen,

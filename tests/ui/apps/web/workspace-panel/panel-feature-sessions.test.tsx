@@ -7,7 +7,7 @@ import {
   environmentHttpRoutesClient,
   type RequestableEnvironmentHttpRoute,
 } from "@rebase/environment-client";
-import { Effect, Schema } from "effect";
+import { Effect, Layer, ManagedRuntime, Schema } from "effect";
 import { expect, it } from "vitest";
 import { page } from "vitest/browser";
 import { render } from "vitest-browser-react";
@@ -15,6 +15,7 @@ import { ResizablePanel } from "#web-ui/components/ui/resizable";
 import { WorkspacePanel } from "#web-ui/features/workspace-panel/index";
 import { useWorkspacePanel } from "#web-ui/features/workspace-panel/workspace-panel-provider";
 
+const runtime = ManagedRuntime.make(Layer.empty);
 const oid = "a".repeat(40);
 const parentOid = "b".repeat(40);
 
@@ -145,6 +146,7 @@ async function fixture(linkedWorktree = false) {
           requests: environmentId === "environment" ? requests : foreignClient,
           connected,
           writable: connected,
+          runtime,
           invalidate,
         }}
         repositoryIds={repositoryIds}

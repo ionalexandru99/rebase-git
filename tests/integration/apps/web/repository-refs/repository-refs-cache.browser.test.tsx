@@ -2,7 +2,7 @@ import { createBrowserRepositoryHistoryReader } from "#web/features/repository-h
 import "@rebase/web/styles.css";
 import type { RepositoryCommit, RepositoryRefs } from "@rebase/contracts";
 import { expect, it, vi } from "vitest";
-import { render } from "vitest-browser-react";
+import { render } from "#tests-ui/runtime/render";
 import { createBrowserHistoryFilterStore } from "#web/features/commit-graph/scope/browser-history-filter-store";
 import { resolveHistoryScope } from "#web/features/commit-graph/scope/history-scope";
 import { storeRepositoryHistoryPage } from "#web/features/repository-history/replica/repository-history-store";

@@ -1,3 +1,4 @@
+import type { ManagedRuntime } from "effect";
 import {
   createContext,
   type ReactNode,
@@ -22,6 +23,7 @@ export function WorkingChangesProvider({
   repositoryId,
   worktreePath,
   onCommitted,
+  runtime,
   active = true,
 }: {
   readonly children: ReactNode;
@@ -30,6 +32,7 @@ export function WorkingChangesProvider({
   readonly repositoryId: string;
   readonly worktreePath: string;
   readonly onCommitted: () => void;
+  readonly runtime: ManagedRuntime.ManagedRuntime<never, never>;
   readonly active?: boolean;
 }) {
   const controller = useMemo(
@@ -39,8 +42,9 @@ export function WorkingChangesProvider({
         { repositoryId, worktreePath, amend: false },
         JSON.stringify([environmentId, repositoryId, worktreePath]),
         onCommitted,
+        runtime,
       ),
-    [client, environmentId, repositoryId, worktreePath, onCommitted],
+    [client, environmentId, repositoryId, worktreePath, onCommitted, runtime],
   );
   useEffect(() => {
     controller.start();

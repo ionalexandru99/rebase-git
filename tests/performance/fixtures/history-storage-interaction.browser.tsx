@@ -3,6 +3,7 @@ import {
   encodeRepositoryHistoryPage,
   type RepositoryCommit,
 } from "@rebase/contracts";
+import { Layer, ManagedRuntime } from "effect";
 import type { ComponentProps } from "react";
 import { createRoot } from "react-dom/client";
 import { CommitGraph } from "#web/features/commit-graph/index";
@@ -17,6 +18,7 @@ import type {
   RepositoryHistoryGateway,
   RepositoryHistoryReader,
 } from "#web/features/repository-history/repository-history-reader.contract";
+import { ApplicationRuntime } from "#web-ui/platform/effect/application-runtime-context";
 
 const environmentId = crypto.randomUUID();
 const name = crypto.randomUUID();
@@ -205,5 +207,11 @@ declare global {
 }
 
 function StorageGraph(props: ComponentProps<typeof CommitGraph>) {
-  return <CommitGraph {...props} />;
+  return (
+    <ApplicationRuntime value={runtime}>
+      <CommitGraph {...props} />
+    </ApplicationRuntime>
+  );
 }
+
+const runtime = ManagedRuntime.make(Layer.empty);

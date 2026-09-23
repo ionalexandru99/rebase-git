@@ -1,3 +1,4 @@
+import { Effect, Layer, ManagedRuntime } from "effect";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { RepositoryHistorySearch } from "#web/features/repository-history/search/repository-history-search.contract";
 import { createRepositoryHistorySearchModel } from "#web/features/repository-history/search/repository-history-search-model";
@@ -14,7 +15,12 @@ describe("history search typing", () => {
         synchronizedCommitCount: 0,
       })),
     };
-    const model = createRepositoryHistorySearchModel(reader, async () => {});
+    const runtime = ManagedRuntime.make(Layer.empty);
+    const model = createRepositoryHistorySearchModel(
+      reader,
+      async () => {},
+      runtime,
+    );
     try {
       model.setText("fi");
       await vi.advanceTimersByTimeAsync(100);
@@ -34,6 +40,10 @@ describe("history search typing", () => {
       expect(reader.search).toHaveBeenCalledTimes(1);
     } finally {
       await model.dispose();
+      expect(await runtime.runPromise(Effect.succeed("available"))).toBe(
+        "available",
+      );
+      await runtime.dispose();
     }
   });
 });

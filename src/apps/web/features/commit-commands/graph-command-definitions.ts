@@ -4,7 +4,6 @@ import {
   createOpenDetailsCommand,
 } from "#web/features/commit-commands/definitions/commit-commands";
 import { createFetchCommand } from "#web/features/commit-commands/definitions/fetch-command";
-import { createToggleHistoryRefCommand } from "#web/features/commit-commands/definitions/toggle-history-ref-command";
 import type { GraphCommandHandlers } from "#web/features/commit-commands/graph-command.contract";
 
 export function createGraphCommandDefinitions(handlers: GraphCommandHandlers) {
@@ -12,7 +11,6 @@ export function createGraphCommandDefinitions(handlers: GraphCommandHandlers) {
     createOpenDetailsCommand(handlers.openDetails),
     createCopyShaCommand(handlers.writeClipboard),
     createCopySubjectCommand(handlers),
-    createToggleHistoryRefCommand(handlers.toggleHistoryRef),
     createFetchCommand(handlers.fetch),
   ] as const;
 }

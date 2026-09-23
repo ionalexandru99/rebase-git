@@ -5,6 +5,7 @@ import type {
 import type { JSX } from "react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useHistoryRefRefresh } from "#web/app/workspace/use-history-ref-refresh";
+import { BranchesSidebar } from "#web/features/branches-sidebar/index";
 import type {
   CommitGraphHistory,
   HistoryScope,
@@ -24,7 +25,6 @@ import {
   ResizableHandle,
   ResizablePanel,
 } from "#web-ui/components/ui/resizable";
-import { BranchesSidebar } from "#web-ui/features/branches-sidebar/branches-sidebar";
 import { WorkspacePanel } from "#web-ui/features/workspace-panel/index";
 
 const branchesSidebarSize = {

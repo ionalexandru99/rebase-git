@@ -1,7 +1,7 @@
 import type { RepositoryCommit } from "@rebase/contracts";
 import type { ComponentProps } from "react";
 import { vi } from "vitest";
-import { render } from "vitest-browser-react";
+import { render } from "#tests-ui/runtime/render";
 import { CommitGraph } from "#web/features/commit-graph/index";
 import { saveRepositoryHistoryOrder } from "#web/features/repository-history/preferences/repository-history-order";
 import type {

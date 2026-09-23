@@ -1,5 +1,12 @@
-import { Deferred, Effect } from "effect";
-import { describe, expect, it, vi } from "vite-plus/test";
+import { Deferred, Effect, Layer, ManagedRuntime } from "effect";
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from "vite-plus/test";
 import { AvatarUnavailable } from "#web/features/author-avatars/author-avatar.contract";
 import { createAuthorAvatarModel } from "#web/features/author-avatars/author-avatar-model";
 
@@ -14,12 +21,18 @@ const author = {
 };
 const repository = { owner: "alex", name: "rebase" };
 const avatar = "https://avatars.githubusercontent.com/u/123?s=40";
+let runtime: ManagedRuntime.ManagedRuntime<never, never>;
+
+beforeEach(() => {
+  runtime = ManagedRuntime.make(Layer.empty);
+});
+afterEach(() => runtime.dispose());
 
 describe("author avatar loading", () => {
   it("deduplicates a visible author across commits and reuses the completed lookup", async () => {
     const result = Deferred.makeUnsafe<string | undefined>();
     const resolve = vi.fn(() => Deferred.await(result));
-    const model = createAuthorAvatarModel(repository, { resolve });
+    const model = createAuthorAvatarModel(repository, runtime, { resolve });
     try {
       const first = vi.fn();
       const second = vi.fn();
@@ -48,7 +61,7 @@ describe("author avatar loading", () => {
     const resolve = vi.fn(() =>
       Effect.never.pipe(Effect.onInterrupt(() => Effect.sync(interrupted))),
     );
-    const model = createAuthorAvatarModel(repository, { resolve });
+    const model = createAuthorAvatarModel(repository, runtime, { resolve });
     try {
       const leave = model.subscribe(author, vi.fn());
       await vi.waitFor(() => expect(resolve).toHaveBeenCalledOnce());
@@ -66,7 +79,7 @@ describe("author avatar loading", () => {
     const resolve = vi.fn(() =>
       Effect.fail(new AvatarUnavailable({ retryAt: Date.now() + 60_000 })),
     );
-    const model = createAuthorAvatarModel(repository, { resolve });
+    const model = createAuthorAvatarModel(repository, runtime, { resolve });
     try {
       const done = vi.fn();
       model.subscribe(author, done);
@@ -84,5 +97,36 @@ describe("author avatar loading", () => {
     } finally {
       await model.dispose();
     }
+  });
+
+  it("disposes one repository without interrupting another on the shared runtime", async () => {
+    const firstInterrupted = vi.fn();
+    const secondInterrupted = vi.fn();
+    const first = createAuthorAvatarModel(repository, runtime, {
+      resolve: () =>
+        Effect.never.pipe(
+          Effect.onInterrupt(() => Effect.sync(firstInterrupted)),
+        ),
+    });
+    const second = createAuthorAvatarModel(
+      { ...repository, name: "another" },
+      runtime,
+      {
+        resolve: () =>
+          Effect.never.pipe(
+            Effect.onInterrupt(() => Effect.sync(secondInterrupted)),
+          ),
+      },
+    );
+    first.subscribe(author, vi.fn());
+    second.subscribe(author, vi.fn());
+    await first.dispose();
+    expect(firstInterrupted).toHaveBeenCalledOnce();
+    expect(secondInterrupted).not.toHaveBeenCalled();
+    await second.dispose();
+    expect(secondInterrupted).toHaveBeenCalledOnce();
+    expect(await runtime.runPromise(Effect.succeed("available"))).toBe(
+      "available",
+    );
   });
 });

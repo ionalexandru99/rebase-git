@@ -1,4 +1,4 @@
-import { Effect, Layer, ManagedRuntime } from "effect";
+import { Effect, Exit, Fiber, type ManagedRuntime, Scope } from "effect";
 import {
   readNextHistorySearchPage,
   restoreSearchResults,
@@ -26,29 +26,42 @@ export const emptyHistorySearchSnapshot: RepositoryHistorySearchSnapshot = {
 export function createRepositoryHistorySearchModel(
   reader: RepositoryHistorySearch,
   onNavigate: (oid: string, signal: AbortSignal) => Promise<void>,
+  runtime: ManagedRuntime.ManagedRuntime<never, never>,
 ): RepositoryHistorySearchModel & {
   readonly refresh: (revision: number) => void;
   readonly dispose: () => Promise<void>;
 } {
-  const runtime = ManagedRuntime.make(
-    Layer.succeed(RepositoryHistorySearchSource)({
-      search: (query) =>
-        Effect.tryPromise({
-          try: (signal) => reader.search(query, signal),
-          catch: (cause) =>
-            new RepositoryHistorySearchFailure({ operation: "search", cause }),
-        }),
-      navigate: (oid) =>
-        Effect.tryPromise({
-          try: (signal) => onNavigate(oid, signal),
-          catch: (cause) =>
-            new RepositoryHistorySearchFailure({
-              operation: "navigate",
-              cause,
-            }),
-        }),
-    }),
-  );
+  const scope = Scope.makeUnsafe();
+  const source = RepositoryHistorySearchSource.of({
+    search: (query) =>
+      Effect.tryPromise({
+        try: (signal) => reader.search(query, signal),
+        catch: (cause) =>
+          new RepositoryHistorySearchFailure({ operation: "search", cause }),
+      }),
+    navigate: (oid) =>
+      Effect.tryPromise({
+        try: (signal) => onNavigate(oid, signal),
+        catch: (cause) =>
+          new RepositoryHistorySearchFailure({
+            operation: "navigate",
+            cause,
+          }),
+      }),
+  });
+  const run = <A, E>(
+    effect: Effect.Effect<A, E, RepositoryHistorySearchSource>,
+  ) => {
+    const fiber = runtime.runSync(
+      effect.pipe(
+        Effect.provideService(RepositoryHistorySearchSource, source),
+        Effect.forkIn(scope),
+      ),
+    );
+    return () => {
+      runtime.runFork(Fiber.interrupt(fiber));
+    };
+  };
   let snapshot = emptyHistorySearchSnapshot;
   let revision: number | undefined;
   let selectedOid: string | undefined;
@@ -73,7 +86,7 @@ export function createRepositoryHistorySearchModel(
       loading: text.trim() !== "",
     });
     if (text.trim() === "") return;
-    interrupt = runtime.runCallback(
+    interrupt = run(
       restoreSearchResults(text, selectedOid).pipe(
         Effect.delay(delay),
         Effect.match({
@@ -129,7 +142,7 @@ export function createRepositoryHistorySearchModel(
   function navigate(index: number) {
     if (closed || snapshot.loading || snapshot.navigating) return;
     publish({ ...snapshot, navigating: true, error: undefined });
-    interrupt = runtime.runCallback(
+    interrupt = run(
       openResult(index).pipe(
         Effect.match({
           onFailure: (error) =>
@@ -168,7 +181,7 @@ export function createRepositoryHistorySearchModel(
         snapshot.cursor === undefined
       )
         return;
-      interrupt = runtime.runCallback(
+      interrupt = run(
         loadPage().pipe(
           Effect.catch((error) =>
             Effect.sync(() => publish({ ...snapshot, loading: false, error })),
@@ -192,7 +205,7 @@ export function createRepositoryHistorySearchModel(
     dispose: () => {
       closed = true;
       listeners.clear();
-      disposal ??= runtime.dispose();
+      disposal ??= runtime.runPromise(Scope.close(scope, Exit.void));
       return disposal;
     },
   };

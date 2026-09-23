@@ -1,4 +1,11 @@
-import { Effect, Layer, ManagedRuntime, Semaphore } from "effect";
+import {
+  Effect,
+  Exit,
+  Fiber,
+  type ManagedRuntime,
+  Scope,
+  Semaphore,
+} from "effect";
 import {
   type AuthorAvatarModel,
   AuthorAvatarSource,
@@ -8,11 +15,10 @@ import { githubAvatarSource } from "#web/features/author-avatars/github-avatar-s
 
 export function createAuthorAvatarModel(
   repository: GitHubRepository,
+  runtime: ManagedRuntime.ManagedRuntime<never, never>,
   source = githubAvatarSource,
 ): AuthorAvatarModel {
-  const runtime = ManagedRuntime.make(
-    Layer.succeed(AuthorAvatarSource)(source),
-  );
+  const scope = Scope.makeUnsafe();
   const permits = Semaphore.makeUnsafe(2);
   const cache = new Map<
     string,
@@ -36,7 +42,7 @@ export function createAuthorAvatarModel(
         const listeners = new Set([listener]);
         request = { listeners, cancel: () => {} };
         pending.set(key, request);
-        request.cancel = runtime.runCallback(
+        const fiber = runtime.runSync(
           Effect.gen(function* () {
             if (Date.now() < pausedUntil) return undefined;
             const service = yield* AuthorAvatarSource;
@@ -48,6 +54,7 @@ export function createAuthorAvatarModel(
               }),
             );
           }).pipe(
+            Effect.provideService(AuthorAvatarSource, source),
             permits.withPermits(1),
             Effect.tap((url) =>
               Effect.sync(() => {
@@ -66,8 +73,12 @@ export function createAuthorAvatarModel(
                 for (const notify of listeners) notify();
               }),
             ),
+            Effect.forkIn(scope),
           ),
         );
+        request.cancel = () => {
+          runtime.runFork(Fiber.interrupt(fiber));
+        };
       }
       request.listeners.add(listener);
       return () => {
@@ -82,7 +93,7 @@ export function createAuthorAvatarModel(
       closed = true;
       pending.clear();
       cache.clear();
-      return runtime.dispose();
+      return runtime.runPromise(Scope.close(scope, Exit.void));
     },
   };
 }

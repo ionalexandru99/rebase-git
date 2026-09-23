@@ -2,20 +2,22 @@ import type {
   ChangeDiff,
   CommitInspection as Details,
 } from "@rebase/contracts";
-import { Effect } from "effect";
+import { Effect, Layer, ManagedRuntime } from "effect";
 import { describe, expect, it, vi } from "vitest";
-import { render } from "vitest-browser-react";
 import {
   CommitGraphFixture,
   history,
   historyOid,
   historyReader,
 } from "#tests-ui/apps/web/commit-graph/commit-graph-fixture";
+import { render } from "#tests-ui/runtime/render";
 import type { CommitInspectionClient } from "#web/features/commit-inspection/commit-inspection.contract";
 import { CommitInspectionBridge } from "#web-ui/app/workspace/commit-inspection-bridge";
 import { ResizablePanel } from "#web-ui/components/ui/resizable";
 import { CommitInspectionSession } from "#web-ui/features/commit-inspection/commit-inspection-session";
 import { WorkspacePanel } from "#web-ui/features/workspace-panel/index";
+
+const runtime = ManagedRuntime.make(Layer.empty);
 
 function details(oid = historyOid(0), parentOid = historyOid(1)): Details {
   return {
@@ -112,6 +114,7 @@ async function fixture(
                       repositoryId="repository"
                       worktreePath="/repo"
                       connected={connected}
+                      runtime={runtime}
                     />
                   ),
                   changes: (

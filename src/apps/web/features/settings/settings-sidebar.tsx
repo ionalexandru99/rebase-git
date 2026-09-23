@@ -1,22 +1,11 @@
-import {
-  IconArrowLeft,
-  IconDatabase,
-  IconSearch,
-  IconSettings,
-} from "@tabler/icons-react";
+import { IconArrowLeft, IconSearch } from "@tabler/icons-react";
 import { type JSX, useState } from "react";
-import type { SettingsSection } from "#web/features/settings/settings.contract";
+import {
+  type SettingsSectionId,
+  settingsSections,
+} from "#web/features/settings/settings-sections";
 import { Button } from "#web-ui/components/ui/button";
 import { Input } from "#web-ui/components/ui/input";
-
-const sections = [
-  { icon: IconSettings, id: "general", label: "General" },
-  { icon: IconDatabase, id: "history-storage", label: "History storage" },
-] as const satisfies ReadonlyArray<{
-  readonly icon: typeof IconSettings;
-  readonly id: SettingsSection;
-  readonly label: string;
-}>;
 
 export function SettingsSidebar({
   closeSettings,
@@ -24,11 +13,11 @@ export function SettingsSidebar({
   selectSection,
 }: {
   readonly closeSettings: () => void;
-  readonly section: SettingsSection;
-  readonly selectSection: (section: SettingsSection) => void;
+  readonly section: SettingsSectionId;
+  readonly selectSection: (section: SettingsSectionId) => void;
 }): JSX.Element {
   const [query, setQuery] = useState("");
-  const visibleSections = sections.filter(({ label }) =>
+  const visibleSections = settingsSections.filter(({ label }) =>
     label.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase()),
   );
 

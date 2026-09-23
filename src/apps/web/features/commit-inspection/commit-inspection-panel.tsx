@@ -5,12 +5,13 @@ import { CommitInspectionSession } from "#web-ui/features/commit-inspection/comm
 
 export function CommitInspectionPanel() {
   const feature = usePanelFeature();
-  const requests = feature?.environment?.requests;
+  const environment = feature?.environment;
+  const requests = environment?.requests;
   const client = useMemo(
     () => requests && commitInspectionClient(requests),
     [requests],
   );
-  if (!client || !feature?.scope) {
+  if (!client || !feature?.scope || !environment) {
     return (
       <p className="p-4 text-sm text-muted-foreground">
         Connect to the environment to inspect commits.
@@ -22,7 +23,8 @@ export function CommitInspectionPanel() {
       client={client}
       repositoryId={feature.scope.repositoryId}
       worktreePath={feature.scope.worktreePath}
-      connected={feature.environment?.connected ?? false}
+      connected={environment.connected}
+      runtime={environment.runtime}
     />
   );
 }

@@ -151,29 +151,6 @@ describe("graph commands", () => {
       expect(execute).toHaveBeenCalledWith(context);
     },
   );
-
-  it("routes ref inclusion through the supplied history handler", async () => {
-    const toggleHistoryRef = vi.fn(async () => {});
-    const registry = createCommands({
-      readCommit: async () => undefined,
-      writeClipboard: async () => {},
-      toggleHistoryRef,
-    });
-    const target = { _tag: "LocalBranch", name: "main" } as const;
-    const included = { ...context, ref: { target, included: true } };
-    expect(
-      registry
-        .commands(included)
-        .find((item) => item.id === "history.toggleRef")?.label,
-    ).toBe("Remove from history");
-    expect(
-      registry
-        .commands({ ...context, ref: { target, included: false } })
-        .find((item) => item.id === "history.toggleRef")?.label,
-    ).toBe("Add to history");
-    await registry.execute("history.toggleRef", included);
-    expect(toggleHistoryRef).toHaveBeenCalledWith(target, included);
-  });
 });
 
 function createCommands(handlers: GraphCommandHandlers) {

@@ -7,17 +7,15 @@ import {
   useState,
 } from "react";
 import type { LocalEnvironmentSession } from "#web/app/environment/local-environment-session.contract";
-import type { OpenProjectRepository } from "#web/features/open-project/open-project.contract";
-import type {
-  EnvironmentAvailability,
-  ProjectNavigationRepository,
-  ProjectNavigationState,
-} from "#web/features/project-navigation/project-navigation.contract";
+import type { OpenProjectRepository } from "#web/features/open-project/index";
 import {
+  type EnvironmentAvailability,
   openProjectRepository,
+  type ProjectNavigationRepository,
+  type ProjectNavigationState,
   removeProjectRepository,
   setEnvironmentAvailability,
-} from "#web/features/project-navigation/project-navigation-state";
+} from "#web/features/project-navigation/index";
 
 export function useProjectRepositoryActions({
   availability,
