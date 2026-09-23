@@ -9,8 +9,7 @@ export function createRepositoryFilesystem(
 ): RepositoryFilesystem {
   return {
     revealRepository: async (path) => {
-      const repositoryPath = requireAbsoluteRepositoryPath(path);
-      platform.showItemInFolder(repositoryPath);
+      platform.showItemInFolder(path);
     },
   };
 }

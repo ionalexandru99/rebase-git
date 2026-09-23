@@ -22,6 +22,7 @@ describe("application shell", () => {
       <ApplicationShell
         desktopUpdates={undefined}
         productVersion="test"
+        repositoryFilesystem={undefined}
         session={connected.session}
       />,
     );
@@ -52,6 +53,7 @@ describe("application shell", () => {
       <ApplicationShell
         desktopUpdates={undefined}
         productVersion="test"
+        repositoryFilesystem={undefined}
         session={connected.session}
       />,
     );
@@ -179,6 +181,7 @@ describe("application shell", () => {
       <ApplicationShell
         desktopUpdates={undefined}
         productVersion="0.0.2-test"
+        repositoryFilesystem={undefined}
         session={connected.session}
       />,
     );
@@ -207,6 +210,7 @@ async function renderShell() {
     <ApplicationShell
       desktopUpdates={undefined}
       productVersion="0.0.2-test"
+      repositoryFilesystem={undefined}
       session={pairingRequiredSession()}
     />,
   );

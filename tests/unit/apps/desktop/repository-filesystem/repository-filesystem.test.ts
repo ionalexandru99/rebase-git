@@ -1,9 +1,12 @@
 import { describe, expect, it, vi } from "vite-plus/test";
-import { createRepositoryFilesystem } from "#desktop/features/repository-filesystem/repository-filesystem";
+import {
+  createRepositoryFilesystem,
+  requireAbsoluteRepositoryPath,
+} from "#desktop/features/repository-filesystem/repository-filesystem";
 import type { RepositoryFilesystemPlatform } from "#desktop/features/repository-filesystem/repository-filesystem.contract";
 
 describe("repository filesystem", () => {
-  it("reveals a non-empty absolute repository path", async () => {
+  it("reveals a repository path", async () => {
     const platform = new TestRepositoryFilesystemPlatform();
     const filesystem = createRepositoryFilesystem(platform);
 
@@ -12,29 +15,18 @@ describe("repository filesystem", () => {
     expect(platform.showItemInFolder).toHaveBeenCalledWith("/work/rebase-git");
   });
 
-  it.each(["", "   ", "work/rebase-git", "./rebase-git"])(
+  it("accepts a non-empty absolute reveal path", () => {
+    expect(requireAbsoluteRepositoryPath("/work/rebase-git")).toBe(
+      "/work/rebase-git",
+    );
+  });
+
+  it.each(["", "   ", "work/rebase-git", "./rebase-git", undefined, null, 42])(
     "rejects an invalid reveal path: %j",
-    async (path) => {
-      const platform = new TestRepositoryFilesystemPlatform();
-      const filesystem = createRepositoryFilesystem(platform);
-
-      await expect(filesystem.revealRepository(path)).rejects.toThrow(
+    (path) => {
+      expect(() => requireAbsoluteRepositoryPath(path)).toThrow(
         "a non-empty absolute path",
       );
-      expect(platform.showItemInFolder).not.toHaveBeenCalled();
-    },
-  );
-
-  it.each([undefined, null, 42])(
-    "rejects a non-string reveal path: %j",
-    async (path) => {
-      const platform = new TestRepositoryFilesystemPlatform();
-      const filesystem = createRepositoryFilesystem(platform);
-
-      await expect(filesystem.revealRepository(path as never)).rejects.toThrow(
-        "a non-empty absolute path",
-      );
-      expect(platform.showItemInFolder).not.toHaveBeenCalled();
     },
   );
 });

@@ -10,23 +10,25 @@ export const DesktopUpdateSettings = Schema.Struct({
 });
 export type DesktopUpdateSettings = typeof DesktopUpdateSettings.Type;
 
-export type DesktopUpdateStatus =
-  | { readonly _tag: "Idle" }
-  | { readonly _tag: "Checking" }
-  | { readonly _tag: "UpToDate" }
-  | {
-      readonly _tag: "Downloading";
-      readonly percent: number;
-      readonly version: string;
-    }
-  | { readonly _tag: "Ready"; readonly version: string }
-  | { readonly _tag: "Error"; readonly message: string }
-  | { readonly _tag: "Unavailable" };
+export const DesktopUpdateStatus = Schema.Union([
+  Schema.TaggedStruct("Idle", {}),
+  Schema.TaggedStruct("Checking", {}),
+  Schema.TaggedStruct("UpToDate", {}),
+  Schema.TaggedStruct("Downloading", {
+    percent: Schema.Number,
+    version: Schema.String,
+  }),
+  Schema.TaggedStruct("Ready", { version: Schema.String }),
+  Schema.TaggedStruct("Error", { message: Schema.String }),
+  Schema.TaggedStruct("Unavailable", {}),
+]);
+export type DesktopUpdateStatus = typeof DesktopUpdateStatus.Type;
 
-export interface DesktopUpdateSnapshot {
-  readonly settings: DesktopUpdateSettings;
-  readonly status: DesktopUpdateStatus;
-}
+export const DesktopUpdateSnapshot = Schema.Struct({
+  settings: DesktopUpdateSettings,
+  status: DesktopUpdateStatus,
+});
+export type DesktopUpdateSnapshot = typeof DesktopUpdateSnapshot.Type;
 
 export interface DesktopUpdates {
   checkForUpdates(): Promise<void>;
