@@ -31,32 +31,32 @@ import { RepositoryCoordination } from "#server/domain/repository-coordination.c
 import { RepositoryFreshnessState } from "#server/domain/repository-freshness.contract";
 import { RepositoryWatching } from "#server/domain/repository-watcher.contract";
 import {
+  commitInspectionHttpRoutes,
   commitInspectionLayer,
-  createCommitInspectionHttpHandler,
 } from "#server/features/commit-inspection/index";
 import {
   createEnvironmentAuthorization,
-  createEnvironmentAuthorizationHttpHandler,
+  environmentAuthorizationHttpRoutes,
 } from "#server/features/environment-authorization/index";
 import {
   createEnvironmentFilesystem,
-  createEnvironmentFilesystemHttpHandler,
+  environmentFilesystemHttpRoutes,
 } from "#server/features/environment-filesystem/index";
 import { repositoryAccessLayer } from "#server/features/repository-access/index";
 import {
   createRepositoryCatalog,
-  createRepositoryCatalogHttpHandler,
+  repositoryCatalogHttpRoutes,
 } from "#server/features/repository-catalog/index";
 import {
-  createRepositoryChangesHttpHandler,
+  repositoryChangesHttpRoutes,
   repositoryChangesLayer,
 } from "#server/features/repository-changes/index";
 import { repositoryCoordinationLayer } from "#server/features/repository-coordination/index";
 import { repositoryFreshnessLayer } from "#server/features/repository-history/freshness/repository-freshness";
 import { createRepositoryHistoryService } from "#server/features/repository-history/repository-history";
 import {
-  createRepositoryRefsHttpHandler,
   createRepositoryRefsService,
+  repositoryRefsHttpRoutes,
 } from "#server/features/repository-refs/index";
 import { acquireRepositoryChangePublisher } from "#server/features/repository-refs/repository-change-publisher";
 import { acquireEnvironmentContext } from "#server/persistence/environment-context";
@@ -117,22 +117,17 @@ export function startEnvironmentServer(
     });
     const listener = yield* acquireEnvironmentListener({
       authorization,
-      httpHandlers: [
-        createEnvironmentAuthorizationHttpHandler(authorization),
-        createEnvironmentFilesystemHttpHandler(
-          authorization,
-          createEnvironmentFilesystem(),
-        ),
-        createRepositoryCatalogHttpHandler(authorization, catalog),
-        createCommitInspectionHttpHandler(
-          authorization,
+      httpRoutes: [
+        ...environmentAuthorizationHttpRoutes(authorization),
+        ...environmentFilesystemHttpRoutes(createEnvironmentFilesystem()),
+        ...repositoryCatalogHttpRoutes(catalog),
+        ...commitInspectionHttpRoutes(
           Context.get(repositoryServices, CommitInspectionAccess),
         ),
-        createRepositoryChangesHttpHandler(
-          authorization,
+        ...repositoryChangesHttpRoutes(
           Context.get(repositoryServices, RepositoryChangesAccess),
         ),
-        createRepositoryRefsHttpHandler(authorization, refs),
+        ...repositoryRefsHttpRoutes(refs),
       ],
       ...(options.browserAssetsRoot === undefined
         ? {}

@@ -1,4 +1,4 @@
-export { createRepositoryChangesHttpHandler } from "#server/features/repository-changes/http/repository-changes-http-handler";
+export { repositoryChangesHttpRoutes } from "#server/features/repository-changes/http/repository-changes-http-routes";
 export {
   createRepositoryChangesService,
   repositoryChangesLayer,

@@ -1,9 +1,7 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 import {
-  EnvironmentAuthorizationFailure,
   EnvironmentDiscovery,
   EnvironmentHttpApi,
-  EnvironmentHttpFailure,
   EnvironmentSnapshot,
 } from "@rebase/contracts";
 import { Effect } from "effect";
@@ -13,27 +11,28 @@ import type {
   RunEnvironmentEffect,
 } from "#server/adapters/environment-transport/environment-connection.contract";
 import {
-  authorizationFailureStatus,
   readRequestCredential,
   validateRequestHost,
   validateRequestOrigin,
 } from "#server/adapters/environment-transport/environment-request-authorization";
-import type { EnvironmentHttpRequestHandler } from "#server/adapters/environment-transport/http/environment-http-handler.contract";
 import { readEnvironmentHttpRequestBody } from "#server/adapters/environment-transport/http/environment-http-request-body";
 import {
   requireEmptyBody,
   requireMethod,
 } from "#server/adapters/environment-transport/http/environment-http-request-validation";
 import {
+  writeEnvironmentHttpError,
   writeJson,
   writeJsonValue,
 } from "#server/adapters/environment-transport/http/environment-http-response";
+import type { EnvironmentHttpRouteHandler } from "#server/adapters/environment-transport/http/environment-http-route-handler.contract";
+import { routeEnvironmentHttpRequest } from "#server/adapters/environment-transport/http/environment-http-router";
 import type { EnvironmentAuthorization } from "#server/features/environment-authorization/environment-authorization.contract";
 
 export function createEnvironmentHttpHandler(
   state: EnvironmentTransportState,
   authorization: EnvironmentAuthorization,
-  handlers: readonly EnvironmentHttpRequestHandler[],
+  routes: readonly EnvironmentHttpRouteHandler[],
   ready: () => boolean,
   runEnvironmentEffect: RunEnvironmentEffect,
   browserAssetsRoot?: string,
@@ -46,7 +45,7 @@ export function createEnvironmentHttpHandler(
         response,
         state,
         authorization,
-        handlers,
+        routes,
         ready(),
         browserAssetsRoot,
       ).pipe(
@@ -82,7 +81,7 @@ function respondToEnvironmentRequest(
   response: ServerResponse,
   state: EnvironmentTransportState,
   authorization: EnvironmentAuthorization,
-  handlers: readonly EnvironmentHttpRequestHandler[],
+  routes: readonly EnvironmentHttpRouteHandler[],
   ready: boolean,
   browserAssetsRoot?: string,
 ) {
@@ -141,39 +140,12 @@ function respondToEnvironmentRequest(
       );
       return;
     }
-    for (const handle of handlers) {
-      if (yield* handle(request, response, body)) {
-        return;
-      }
-    }
-    response.writeHead(404).end();
+    yield* routeEnvironmentHttpRequest(
+      routes,
+      authorization,
+      request,
+      response,
+      body,
+    );
   });
-}
-
-function writeEnvironmentHttpError(
-  response: ServerResponse,
-  error: Effect.Error<ReturnType<typeof respondToEnvironmentRequest>>,
-) {
-  if (response.writableEnded) {
-    return;
-  }
-  if (error._tag === "EnvironmentAuthorizationError") {
-    writeJson(
-      response,
-      authorizationFailureStatus(error.failure),
-      EnvironmentAuthorizationFailure,
-      error.failure,
-    );
-    return;
-  }
-  if (error._tag === "EnvironmentHttpBodyError") {
-    writeJson(
-      response,
-      error.failure._tag === "PayloadTooLarge" ? 413 : 400,
-      EnvironmentHttpFailure,
-      error.failure,
-    );
-    return;
-  }
-  response.writeHead(500).end();
 }
