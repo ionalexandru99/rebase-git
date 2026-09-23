@@ -1,4 +1,5 @@
 import type { RepositoryCommit } from "@rebase/contracts";
+import { Effect, Layer, ManagedRuntime } from "effect";
 import { describe, expect, it, vi } from "vitest";
 import { createBrowserRepositoryHistoryReader } from "#web/features/repository-history/browser-repository-history-reader";
 import {
@@ -23,7 +24,8 @@ describe("browser metadata search", () => {
       gateway,
     });
     const navigate = vi.fn(async () => {});
-    const model = createRepositoryHistorySearchModel(reader, navigate);
+    const runtime = ManagedRuntime.make(Layer.empty);
+    const model = createRepositoryHistorySearchModel(reader, navigate, runtime);
     try {
       model.setText("Commit");
       await vi.waitFor(() =>
@@ -51,6 +53,10 @@ describe("browser metadata search", () => {
       expect(gateway.synchronize).not.toHaveBeenCalled();
     } finally {
       await model.dispose();
+      expect(await runtime.runPromise(Effect.succeed("available"))).toBe(
+        "available",
+      );
+      await runtime.dispose();
       reader.close();
     }
   });

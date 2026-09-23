@@ -4,13 +4,13 @@ import type {
 } from "@rebase/contracts";
 import { Effect, Layer, ManagedRuntime } from "effect";
 import { describe, expect, it, vi } from "vitest";
-import { render } from "vitest-browser-react";
 import {
   CommitGraphFixture,
   history,
   historyOid,
   historyReader,
 } from "#tests-ui/apps/web/commit-graph/commit-graph-fixture";
+import { render } from "#tests-ui/runtime/render";
 import type { CommitInspectionClient } from "#web/features/commit-inspection/commit-inspection.contract";
 import { CommitInspectionBridge } from "#web-ui/app/workspace/commit-inspection-bridge";
 import { ResizablePanel } from "#web-ui/components/ui/resizable";

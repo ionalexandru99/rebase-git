@@ -1,6 +1,6 @@
 import { Deferred, Effect } from "effect";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { render } from "vitest-browser-react";
+import { render } from "#tests-ui/runtime/render";
 import { githubAvatarSource } from "#web/features/author-avatars/github-avatar-source";
 import {
   AuthorAvatar,

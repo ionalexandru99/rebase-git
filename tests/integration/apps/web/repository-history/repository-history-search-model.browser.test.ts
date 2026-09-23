@@ -1,3 +1,4 @@
+import { Effect, Layer, ManagedRuntime } from "effect";
 import { describe, expect, it, vi } from "vitest";
 import type { RepositoryHistorySearch } from "#web/features/repository-history/search/repository-history-search.contract";
 import { createRepositoryHistorySearchModel } from "#web/features/repository-history/search/repository-history-search-model";
@@ -36,7 +37,12 @@ describe("history search runtime", () => {
           channel.port1.postMessage(query.text);
         }),
     };
-    const model = createRepositoryHistorySearchModel(reader, async () => {});
+    const runtime = ManagedRuntime.make(Layer.empty);
+    const model = createRepositoryHistorySearchModel(
+      reader,
+      async () => {},
+      runtime,
+    );
     const publish = vi.fn();
     model.subscribe(publish);
     try {
@@ -55,6 +61,10 @@ describe("history search runtime", () => {
       expect(model.getSnapshot().error).toBeUndefined();
     } finally {
       await model.dispose();
+      expect(await runtime.runPromise(Effect.succeed("available"))).toBe(
+        "available",
+      );
+      await runtime.dispose();
       channel.port1.close();
       channel.port2.close();
     }

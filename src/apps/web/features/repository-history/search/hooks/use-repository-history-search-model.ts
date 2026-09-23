@@ -1,12 +1,14 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { RepositoryHistorySearch } from "#web/features/repository-history/search/repository-history-search.contract";
 import { createRepositoryHistorySearchModel } from "#web/features/repository-history/search/repository-history-search-model";
+import { useApplicationRuntime } from "#web-ui/platform/effect/application-runtime-context";
 
 export function useRepositoryHistorySearchModel(
   reader: RepositoryHistorySearch,
   revision: number,
   onNavigate: (oid: string, signal: AbortSignal) => Promise<void>,
 ) {
+  const runtime = useApplicationRuntime();
   const navigate = useRef(onNavigate);
   const text = useRef("");
   const contentRevision = useRef(revision);
@@ -19,8 +21,10 @@ export function useRepositoryHistorySearchModel(
     readonly model: ReturnType<typeof createRepositoryHistorySearchModel>;
   }>();
   useEffect(() => {
-    const model = createRepositoryHistorySearchModel(reader, (oid, signal) =>
-      navigate.current(oid, signal),
+    const model = createRepositoryHistorySearchModel(
+      reader,
+      (oid, signal) => navigate.current(oid, signal),
+      runtime,
     );
     model.refresh(contentRevision.current);
     model.setText(text.current);
@@ -29,7 +33,7 @@ export function useRepositoryHistorySearchModel(
       text.current = model.getSnapshot().text;
       void model.dispose();
     };
-  }, [reader]);
+  }, [reader, runtime]);
   const model = owner?.reader === reader ? owner.model : undefined;
   useEffect(() => {
     model?.refresh(revision);

@@ -5,7 +5,6 @@ import type {
 import { act, createRef, useState } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { userEvent } from "vitest/browser";
-import { render } from "vitest-browser-react";
 import {
   CommitGraphFixture,
   history,
@@ -14,6 +13,7 @@ import {
   mergeHistory,
   renderGraph,
 } from "#tests-ui/apps/web/commit-graph/commit-graph-fixture";
+import { render } from "#tests-ui/runtime/render";
 import type { CommitGraphHandle } from "#web/features/commit-graph/commit-graph.contract";
 import { saveRepositoryHistoryOrder } from "#web/features/repository-history/preferences/repository-history-order";
 import { RepositoryHistoryUnavailable } from "#web/features/repository-history/repository-history-reader.contract";

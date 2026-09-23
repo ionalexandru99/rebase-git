@@ -4,6 +4,7 @@ import { createBrowserLocalEnvironmentSession } from "#web/app/environment/brows
 import { readDesktopHostBridge } from "#web/app/environment/desktop-host-bridge";
 import { NotificationsProvider } from "#web/features/notifications/index";
 import { ApplicationShell } from "#web-ui/app/shell/application-shell";
+import { ApplicationRuntime } from "#web-ui/platform/effect/application-runtime-context";
 import "@rebase/web/styles.css";
 
 const rootElement = document.getElementById("root");
@@ -22,13 +23,15 @@ session.start();
 
 createRoot(rootElement).render(
   <StrictMode>
-    <NotificationsProvider>
-      <ApplicationShell
-        desktopUpdates={desktopHost?.updates}
-        productVersion={productVersion}
-        repositoryFilesystem={desktopHost}
-        session={session}
-      />
-    </NotificationsProvider>
+    <ApplicationRuntime value={session.runtime}>
+      <NotificationsProvider>
+        <ApplicationShell
+          desktopUpdates={desktopHost?.updates}
+          productVersion={productVersion}
+          repositoryFilesystem={desktopHost}
+          session={session}
+        />
+      </NotificationsProvider>
+    </ApplicationRuntime>
   </StrictMode>,
 );
