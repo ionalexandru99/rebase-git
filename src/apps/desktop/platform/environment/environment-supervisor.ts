@@ -9,6 +9,7 @@ import type { ManagedEnvironmentServer } from "#desktop/platform/environment/env
 const environmentProcessPath = fileURLToPath(
   new URL("./environment-process.js", import.meta.url),
 );
+const stopGraceMilliseconds = 5_000;
 
 export function startManagedEnvironmentServer(
   onUnexpectedExit: (error: Error) => void,
@@ -58,10 +59,16 @@ function manageServer(
     ...server,
     stop: () => {
       if (shutdown === undefined) {
-        if (child.pid !== undefined)
+        if (child.pid !== undefined) {
           child.postMessage({
             type: "stop",
           } satisfies EnvironmentProcessCommand);
+          const forceStop = setTimeout(
+            () => child.kill(),
+            stopGraceMilliseconds,
+          );
+          void exited.then(() => clearTimeout(forceStop));
+        }
         shutdown = exited.then(() => undefined);
       }
       return shutdown;
