@@ -103,6 +103,8 @@ function startEnvironment(
     yield* acquireRuntimeMarker(runtimeMarker(listener), paths.runtimeMarker);
     const pairing = yield* authorization.createPairing({
       capabilities: [],
+      replacesGrantsWithSameLabel:
+        options.pairingReplacesGrantsWithSameLabel ?? false,
       role: "owner",
     });
     yield* markListenerReady(listener);

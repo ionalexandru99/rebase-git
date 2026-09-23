@@ -15,6 +15,10 @@ export interface EnvironmentPairingMaterial {
   readonly material: string;
 }
 
+export interface EnvironmentPairingRequest extends CreateEnvironmentPairing {
+  readonly replacesGrantsWithSameLabel?: boolean;
+}
+
 export interface EnvironmentTicketMaterial {
   readonly expiresAt: string;
   readonly ticket: string;
@@ -35,7 +39,7 @@ export interface EnvironmentAuthorization {
     EnvironmentAuthorizationError | EnvironmentStorageError
   >;
   readonly createPairing: (
-    pairing: CreateEnvironmentPairing,
+    pairing: EnvironmentPairingRequest,
   ) => Effect.Effect<EnvironmentPairingMaterial>;
   readonly exchangePairing: (
     exchange: ExchangeEnvironmentPairing,

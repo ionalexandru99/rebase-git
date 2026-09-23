@@ -165,6 +165,47 @@ describe("Environment authorization", () => {
     });
   });
 
+  it("replaces earlier grants with the same label when the pairing asks for it", async () => {
+    await withAuthorization(async ({ authorization, context }) => {
+      const browser = await pairDevice(authorization, "owner", "Browser");
+      const earlierDesktop = await pairDevice(
+        authorization,
+        "owner",
+        "Desktop",
+      );
+      const pairing = await run(
+        authorization.createPairing({
+          capabilities: [],
+          replacesGrantsWithSameLabel: true,
+          role: "owner",
+        }),
+      );
+
+      const desktop = await run(
+        authorization.exchangePairing({
+          label: "Desktop",
+          pairingMaterial: pairing.material,
+        }),
+      );
+
+      const grants = await run(
+        context.read("Could not read device grants", (database) =>
+          database
+            .select({ id: authorizationMetadataTable.id })
+            .from(authorizationMetadataTable)
+            .all(),
+        ),
+      );
+      expect(grants.map(({ id }) => id).sort()).toEqual(
+        [browser.authorization.id, desktop.authorization.id].sort(),
+      );
+      await expectFailure(
+        authorization.authorize(earlierDesktop.credential, "environment.read"),
+        "InvalidGrant",
+      );
+    });
+  });
+
   it("allows retrying one-time material after storage failures", async () => {
     await withAuthorization(async ({ clock, context }) => {
       const failing = createFailingContext(context);

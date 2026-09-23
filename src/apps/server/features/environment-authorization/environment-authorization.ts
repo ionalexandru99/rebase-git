@@ -1,6 +1,5 @@
 import { randomUUID } from "node:crypto";
 import type {
-  CreateEnvironmentPairing,
   EnvironmentAccessCapability,
   EnvironmentAuthorizationFailure,
   EnvironmentAuthorizationRole,
@@ -13,6 +12,7 @@ import {
   type EnvironmentAuthorization,
   EnvironmentAuthorizationAccess,
   EnvironmentAuthorizationError,
+  type EnvironmentPairingRequest,
 } from "#server/domain/environment-authorization.contract";
 import type {
   EnvironmentAuthorizationClock,
@@ -80,7 +80,7 @@ export const environmentAuthorizationLayer = Layer.effect(
 function createPairing(
   clock: EnvironmentAuthorizationClock,
   pairings: Map<string, PairingEntry>,
-  pairing: CreateEnvironmentPairing,
+  pairing: EnvironmentPairingRequest,
 ) {
   const now = clock.now().getTime();
   removeOldMaterial(pairings, now);
@@ -89,6 +89,7 @@ function createPairing(
   pairings.set(digestSecretMaterial(material), {
     capabilities: capabilitiesForRole(pairing.role, pairing.capabilities),
     expiresAt,
+    replacesGrantsWithSameLabel: pairing.replacesGrantsWithSameLabel ?? false,
     role: pairing.role,
     used: false,
   });
@@ -128,6 +129,14 @@ function exchangePairing(
       .write("Could not save device authorization", (database) =>
         database.transaction(
           (transaction) => {
+            if (pairing.replacesGrantsWithSameLabel) {
+              transaction
+                .delete(authorizationMetadataTable)
+                .where(
+                  eq(authorizationMetadataTable.label, authorization.label),
+                )
+                .run();
+            }
             transaction
               .insert(authorizationMetadataTable)
               .values({
@@ -405,6 +414,7 @@ interface MaterialEntry {
 
 interface PairingEntry extends MaterialEntry {
   readonly capabilities: ReadonlyArray<EnvironmentAccessCapability>;
+  readonly replacesGrantsWithSameLabel: boolean;
   readonly role: EnvironmentAuthorizationRole;
 }
 

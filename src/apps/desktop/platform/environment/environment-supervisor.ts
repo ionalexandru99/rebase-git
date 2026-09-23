@@ -7,7 +7,10 @@ export async function startManagedEnvironmentServer(): Promise<ManagedEnvironmen
 
   try {
     const server = await Effect.runPromise(
-      Scope.provide(startEnvironmentServer(), scope),
+      Scope.provide(
+        startEnvironmentServer({ pairingReplacesGrantsWithSameLabel: true }),
+        scope,
+      ),
     );
     let shutdown: Promise<void> | undefined;
 
