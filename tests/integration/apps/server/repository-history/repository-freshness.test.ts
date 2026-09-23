@@ -23,7 +23,7 @@ import {
 } from "#server/domain/repository-freshness.contract";
 import { RepositoryWatching } from "#server/domain/repository-watcher.contract";
 import type { EnvironmentAuthorization } from "#server/features/environment-authorization/environment-authorization.contract";
-import { createEnvironmentAuthorizationHttpHandler } from "#server/features/environment-authorization/index";
+import { environmentAuthorizationHttpRoutes } from "#server/features/environment-authorization/index";
 import { repositoryCoordinationLayer } from "#server/features/repository-coordination/index";
 import { repositoryFreshnessLayer } from "#server/features/repository-history/freshness/repository-freshness";
 import { createRepositoryHistoryService } from "#server/features/repository-history/repository-history";
@@ -245,9 +245,7 @@ describe("repository freshness with real Git", { timeout: 30_000 }, () => {
         const freshness = Context.get(context, RepositoryFreshnessState);
         const listener = yield* acquireEnvironmentListener({
           authorization: testAuthorization(),
-          httpHandlers: [
-            createEnvironmentAuthorizationHttpHandler(testAuthorization()),
-          ],
+          httpRoutes: environmentAuthorizationHttpRoutes(testAuthorization()),
           environmentId: repositoryId,
           events: createEnvironmentEventPublisher(),
           history: createRepositoryHistoryService({

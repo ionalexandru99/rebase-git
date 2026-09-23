@@ -21,14 +21,14 @@ import { createEnvironmentEventPublisher } from "#server/adapters/environment-tr
 import { createLocalGitCommandRunner } from "#server/adapters/local-git/local-git-command-runner";
 import { acquireEnvironmentListener } from "#server/app/server/environment-listener";
 import { createEnvironmentAuthorization } from "#server/features/environment-authorization/environment-authorization";
-import { createEnvironmentAuthorizationHttpHandler } from "#server/features/environment-authorization/index";
+import { environmentAuthorizationHttpRoutes } from "#server/features/environment-authorization/index";
 import {
   createEnvironmentFilesystem,
-  createEnvironmentFilesystemHttpHandler,
+  environmentFilesystemHttpRoutes,
 } from "#server/features/environment-filesystem/index";
 import {
   createRepositoryCatalog,
-  createRepositoryCatalogHttpHandler,
+  repositoryCatalogHttpRoutes,
 } from "#server/features/repository-catalog/index";
 import { acquireEnvironmentContext } from "#server/persistence/environment-context";
 import { environmentPaths } from "#server/persistence/storage/environment-paths";
@@ -175,14 +175,12 @@ function withCatalogListener(
         );
         const listener = yield* acquireEnvironmentListener({
           authorization,
-          httpHandlers: [
-            createEnvironmentAuthorizationHttpHandler(authorization),
-            createRepositoryCatalogHttpHandler(
-              authorization,
+          httpRoutes: [
+            ...environmentAuthorizationHttpRoutes(authorization),
+            ...repositoryCatalogHttpRoutes(
               createRepositoryCatalog(context, createLocalGitCommandRunner()),
             ),
-            createEnvironmentFilesystemHttpHandler(
-              authorization,
+            ...environmentFilesystemHttpRoutes(
               createEnvironmentFilesystem(root),
             ),
           ],

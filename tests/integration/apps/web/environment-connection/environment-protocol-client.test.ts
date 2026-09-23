@@ -19,7 +19,7 @@ import { createEnvironmentEventPublisher } from "#server/adapters/environment-tr
 import { acquireEnvironmentListener } from "#server/app/server/environment-listener";
 import type { EnvironmentEventPublisher } from "#server/domain/environment-event-publisher.contract";
 import type { EnvironmentAuthorization } from "#server/features/environment-authorization/environment-authorization.contract";
-import { createEnvironmentAuthorizationHttpHandler } from "#server/features/environment-authorization/index";
+import { environmentAuthorizationHttpRoutes } from "#server/features/environment-authorization/index";
 
 const environmentId = "00000000-0000-4000-8000-000000000001";
 const credential = { type: "bearer", value: "test-device-credential" } as const;
@@ -315,9 +315,7 @@ function withListener(
       Effect.gen(function* () {
         const listener = yield* acquireEnvironmentListener({
           authorization: testAuthorization,
-          httpHandlers: [
-            createEnvironmentAuthorizationHttpHandler(testAuthorization),
-          ],
+          httpRoutes: environmentAuthorizationHttpRoutes(testAuthorization),
           environmentId,
           events,
           productVersion: "0.0.0",

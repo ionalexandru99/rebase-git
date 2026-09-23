@@ -9,16 +9,16 @@ import { createEnvironmentEventPublisher } from "#server/adapters/environment-tr
 import { createLocalGitCommandRunner } from "#server/adapters/local-git/local-git-command-runner";
 import { acquireEnvironmentListener } from "#server/app/server/environment-listener";
 import {
-  createCommitInspectionHttpHandler,
+  commitInspectionHttpRoutes,
   createCommitInspectionService,
 } from "#server/features/commit-inspection/index";
 import { createEnvironmentAuthorization } from "#server/features/environment-authorization/environment-authorization";
-import { createEnvironmentAuthorizationHttpHandler } from "#server/features/environment-authorization/index";
+import { environmentAuthorizationHttpRoutes } from "#server/features/environment-authorization/index";
 import { createRepositoryAccess } from "#server/features/repository-access/index";
 import { createRepositoryCatalog } from "#server/features/repository-catalog/repository-catalog";
 import {
-  createRepositoryChangesHttpHandler,
   createRepositoryChangesService,
+  repositoryChangesHttpRoutes,
 } from "#server/features/repository-changes/index";
 import { createRepositoryCoordination } from "#server/features/repository-coordination/index";
 import { acquireEnvironmentContext } from "#server/persistence/environment-context";
@@ -53,18 +53,16 @@ it("authorizes changes reads separately from index mutations across HTTP", async
           const access = createRepositoryAccess(catalog, runner);
           const listener = yield* acquireEnvironmentListener({
             authorization,
-            httpHandlers: [
-              createEnvironmentAuthorizationHttpHandler(authorization),
-              createRepositoryChangesHttpHandler(
-                authorization,
+            httpRoutes: [
+              ...environmentAuthorizationHttpRoutes(authorization),
+              ...repositoryChangesHttpRoutes(
                 createRepositoryChangesService(
                   access,
                   runner,
                   createRepositoryCoordination(runner),
                 ),
               ),
-              createCommitInspectionHttpHandler(
-                authorization,
+              ...commitInspectionHttpRoutes(
                 createCommitInspectionService(access, runner),
               ),
             ],
