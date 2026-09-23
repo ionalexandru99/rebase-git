@@ -165,6 +165,28 @@ describe("repository refs", { timeout: 30_000 }, () => {
     );
   });
 
+  it("checks out a branch whose name matches a tracked file", async () => {
+    const fixture = await createFixture();
+    await git(fixture.repositoryPath, "branch", "README.md", "feature");
+    await writeFile(join(fixture.repositoryPath, "README.md"), "edited");
+
+    const result = await withRefsService(fixture, ({ refs, repositoryId }) =>
+      refs.checkout({
+        repositoryId,
+        target: { _tag: "LocalBranch", name: "README.md" },
+        worktreePath: fixture.repositoryPath,
+      }),
+    );
+
+    expect(result).toMatchObject({
+      head: { branch: "README.md" },
+      stash: "restored",
+    });
+    await expect(
+      readFile(join(fixture.repositoryPath, "README.md"), "utf8"),
+    ).resolves.toBe("edited");
+  });
+
   it("restores each worktree's own auto-stash when checkouts overlap", async () => {
     const fixture = await createFixture();
     await writeFile(join(fixture.repositoryPath, "README.md"), "user edit");
