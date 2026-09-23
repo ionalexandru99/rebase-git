@@ -1,5 +1,7 @@
-import { readRepositoryHistoryBatchSequence } from "@rebase/contracts";
-import type { EnvironmentRpcClient } from "@rebase/contracts/environment-connection/rpc/environment-rpc.contract";
+import {
+  type EnvironmentRpcClient,
+  readRepositoryHistoryBatchSequence,
+} from "@rebase/contracts";
 import { environmentResponseError } from "@rebase/environment-client";
 import { Effect, Option, Stream } from "effect";
 import {

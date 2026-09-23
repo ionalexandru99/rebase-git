@@ -5,7 +5,7 @@ import type {
   ChangesScope,
   MutateChanges,
   RepositoryChanges,
-} from "@rebase/contracts/repository-changes/repository-changes.contract";
+} from "@rebase/contracts";
 import { Effect, Fiber, Semaphore } from "effect";
 import {
   type CommitDraft,

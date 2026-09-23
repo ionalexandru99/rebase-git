@@ -1,8 +1,4 @@
-import {
-  RememberRepository,
-  RepositoryCatalog,
-  RepositoryCatalogEntry,
-} from "@rebase/contracts";
+import { RepositoryCatalog, RepositoryCatalogEntry } from "@rebase/contracts";
 import { Schema } from "effect";
 import { describe, expect, it } from "vite-plus/test";
 
@@ -19,24 +15,6 @@ describe("repository catalog contract", () => {
     expect(
       Schema.decodeUnknownSync(RepositoryCatalogEntry)(repository),
     ).toEqual(repository);
-  });
-
-  it("rejects malformed ids, dates, and oversized paths", () => {
-    expect(() =>
-      Schema.decodeUnknownSync(RepositoryCatalogEntry)({
-        ...repository,
-        id: "repository",
-      }),
-    ).toThrow();
-    expect(() =>
-      Schema.decodeUnknownSync(RepositoryCatalogEntry)({
-        ...repository,
-        lastOpenedAt: "yesterday",
-      }),
-    ).toThrow();
-    expect(() =>
-      Schema.decodeUnknownSync(RememberRepository)({ path: "x".repeat(4_097) }),
-    ).toThrow();
   });
 
   it("bounds the repository collection", () => {

@@ -1,8 +1,5 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
-import {
-  ChangesFailure,
-  RepositoryChangesHttpApi,
-} from "@rebase/contracts/repository-changes/repository-changes.contract";
+import { ChangesFailure, RepositoryChangesHttpApi } from "@rebase/contracts";
 import { Effect } from "effect";
 import {
   readRequestCredential,
@@ -56,7 +53,7 @@ function respondToRepositoryChangesRequest(
       (key) => api[key].path === request.url,
     );
     if (action === undefined) return false;
-    yield* requireMethod(request, response, "POST");
+    yield* requireMethod(request, response, api[action].method);
     yield* validateRequestOrigin(request, false);
     yield* authorization.authorize(
       readRequestCredential(request),
@@ -68,7 +65,7 @@ function respondToRepositoryChangesRequest(
       case "read":
         writeJson(
           response,
-          200,
+          api.read.successStatus,
           api.read.success,
           yield* changes.read(yield* decodeRequestBody(api.read.request, body)),
         );
@@ -76,7 +73,7 @@ function respondToRepositoryChangesRequest(
       case "diff":
         writeJson(
           response,
-          200,
+          api.diff.successStatus,
           api.diff.success,
           yield* changes.diff(yield* decodeRequestBody(api.diff.request, body)),
         );
@@ -84,7 +81,7 @@ function respondToRepositoryChangesRequest(
       case "mutate":
         writeJson(
           response,
-          200,
+          api.mutate.successStatus,
           api.mutate.success,
           yield* changes.mutate(
             yield* decodeRequestBody(api.mutate.request, body),
@@ -94,7 +91,7 @@ function respondToRepositoryChangesRequest(
       case "commit":
         writeJson(
           response,
-          200,
+          api.commit.successStatus,
           api.commit.success,
           yield* changes.commit(
             yield* decodeRequestBody(api.commit.request, body),

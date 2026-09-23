@@ -1,4 +1,4 @@
-import type { ChangesScope } from "@rebase/contracts/repository-changes/repository-changes.contract";
+import type { ChangesScope } from "@rebase/contracts";
 import { Effect } from "effect";
 import type { GitCommandRunner } from "#server/domain/git-command.contract";
 import { changesError } from "#server/features/repository-changes/git/change-git";

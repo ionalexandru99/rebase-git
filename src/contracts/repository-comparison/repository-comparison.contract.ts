@@ -1,13 +1,10 @@
+import { RepositoryPath } from "@rebase/contracts/git/git-values.contract";
 import { Schema } from "effect";
 
-const Path = Schema.String.check(
-  Schema.isMinLength(1),
-  Schema.isMaxLength(4096),
-);
 const Revision = Schema.String.check(Schema.isMaxLength(128));
 
 export const ChangeDiff = Schema.Struct({
-  path: Path,
+  path: RepositoryPath,
   revision: Revision,
   kind: Schema.Literals([
     "text",

@@ -1,6 +1,8 @@
-import type { EnvironmentAccessCapability } from "@rebase/contracts";
-import { EnvironmentRpc } from "@rebase/contracts/environment-connection/rpc/environment-rpc.contract";
-import { environmentRpcSerialization } from "@rebase/contracts/environment-connection/rpc/environment-rpc-serialization";
+import {
+  type EnvironmentAccessCapability,
+  EnvironmentRpc,
+  environmentRpcSerialization,
+} from "@rebase/contracts";
 import { Deferred, Effect, Fiber, Layer, Option } from "effect";
 import { RpcSerialization, RpcServer } from "effect/unstable/rpc";
 import { Socket, SocketServer } from "effect/unstable/socket";

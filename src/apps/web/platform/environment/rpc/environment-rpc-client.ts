@@ -2,13 +2,11 @@ import {
   type EnvironmentDiscovery,
   type EnvironmentHello,
   EnvironmentHelloResult,
-  negotiateEnvironmentHello,
-} from "@rebase/contracts";
-import {
   EnvironmentRpc,
   type EnvironmentRpcClient,
-} from "@rebase/contracts/environment-connection/rpc/environment-rpc.contract";
-import { environmentRpcSerialization } from "@rebase/contracts/environment-connection/rpc/environment-rpc-serialization";
+  environmentRpcSerialization,
+  negotiateEnvironmentHello,
+} from "@rebase/contracts";
 import {
   EnvironmentHelloRejected,
   environmentResponseError,

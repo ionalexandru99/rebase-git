@@ -1,6 +1,5 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
-import { CommitInspectionHttpApi } from "@rebase/contracts/commit-inspection/commit-inspection.contract";
-import { ChangesFailure } from "@rebase/contracts/repository-changes/repository-changes.contract";
+import { ChangesFailure, CommitInspectionHttpApi } from "@rebase/contracts";
 import { Effect } from "effect";
 import {
   readRequestCredential,
@@ -44,7 +43,7 @@ function respondToCommitInspectionRequest(
     ) {
       return false;
     }
-    yield* requireMethod(request, response, "POST");
+    yield* requireMethod(request, response, api.inspect.method);
     yield* validateRequestOrigin(request, false);
     yield* authorization.authorize(
       readRequestCredential(request),
@@ -53,7 +52,7 @@ function respondToCommitInspectionRequest(
     if (request.url === api.inspect.path) {
       writeJson(
         response,
-        200,
+        api.inspect.successStatus,
         api.inspect.success,
         yield* inspection.inspect(
           yield* decodeRequestBody(api.inspect.request, body),
@@ -62,7 +61,7 @@ function respondToCommitInspectionRequest(
     } else {
       writeJson(
         response,
-        200,
+        api.inspectDiff.successStatus,
         api.inspectDiff.success,
         yield* inspection.inspectDiff(
           yield* decodeRequestBody(api.inspectDiff.request, body),

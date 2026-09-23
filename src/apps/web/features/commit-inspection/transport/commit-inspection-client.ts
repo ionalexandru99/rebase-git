@@ -1,5 +1,4 @@
-import { CommitInspectionHttpApi } from "@rebase/contracts/commit-inspection/commit-inspection.contract";
-import { ChangesHttpFailure } from "@rebase/contracts/repository-changes/repository-changes.contract";
+import { ChangesHttpFailure, CommitInspectionHttpApi } from "@rebase/contracts";
 import type {
   EnvironmentCredential,
   EnvironmentRequestClient,

@@ -1,7 +1,4 @@
-import type {
-  ChangesScope,
-  RepositoryChanges,
-} from "@rebase/contracts/repository-changes/repository-changes.contract";
+import type { ChangesScope, RepositoryChanges } from "@rebase/contracts";
 import { Effect, Layer } from "effect";
 import type { GitCommandRunner } from "#server/domain/git-command.contract";
 import { GitCommands } from "#server/domain/git-command.contract";

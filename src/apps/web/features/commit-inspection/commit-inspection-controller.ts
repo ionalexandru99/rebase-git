@@ -1,4 +1,4 @@
-import type { InspectCommit } from "@rebase/contracts/commit-inspection/commit-inspection.contract";
+import type { InspectCommit } from "@rebase/contracts";
 import { Effect, Fiber } from "effect";
 import type {
   CommitInspectionClient,

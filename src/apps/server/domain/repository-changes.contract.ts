@@ -6,7 +6,7 @@ import type {
   MutateChanges,
   ReadChangeDiff,
   RepositoryChanges,
-} from "@rebase/contracts/repository-changes/repository-changes.contract";
+} from "@rebase/contracts";
 import { Context, Data, type Effect } from "effect";
 
 export class RepositoryChangesError extends Data.TaggedError(

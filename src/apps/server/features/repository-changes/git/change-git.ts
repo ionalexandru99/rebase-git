@@ -1,4 +1,4 @@
-import type { ChangesFailure } from "@rebase/contracts/repository-changes/repository-changes.contract";
+import type { ChangesFailure } from "@rebase/contracts";
 import { Effect } from "effect";
 import type {
   GitCommand,

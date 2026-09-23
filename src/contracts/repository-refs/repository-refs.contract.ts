@@ -1,8 +1,16 @@
 import { EnvironmentGrantHttpFailure } from "@rebase/contracts/environment-authorization/environment-authorization.contract";
-import { RepositoryMissing } from "@rebase/contracts/repository-catalog/repository-catalog.contract";
+import type { EnvironmentHttpRoute } from "@rebase/contracts/environment-connection/http/environment-http-route.contract";
+import {
+  GitFailed,
+  RepositoryMissing,
+} from "@rebase/contracts/git/git-failures.contract";
+import {
+  ObjectId,
+  RepositoryId,
+  RepositoryPath,
+} from "@rebase/contracts/git/git-values.contract";
 import { Schema } from "effect";
 
-const RepositoryId = Schema.String.check(Schema.isUUID(4));
 const RefName = Schema.String.check(
   Schema.isMinLength(1),
   Schema.isMaxLength(1_024),
@@ -11,25 +19,18 @@ const RemoteName = Schema.String.check(
   Schema.isMinLength(1),
   Schema.isMaxLength(255),
 );
-const WorktreePath = Schema.String.check(
-  Schema.isMinLength(1),
-  Schema.isMaxLength(4_096),
-);
-const CommitId = Schema.String.check(
-  Schema.isPattern(/^[0-9a-f]{40}(?:[0-9a-f]{24})?$/),
-);
 const FailureDetail = Schema.String.check(Schema.isMaxLength(2_048));
 
 export const RepositoryHead = Schema.Struct({
   branch: Schema.optional(RefName),
-  commit: CommitId,
+  commit: ObjectId,
 });
 export type RepositoryHead = typeof RepositoryHead.Type;
 
 export const RepositoryWorktree = Schema.Struct({
   head: RepositoryHead,
   main: Schema.Boolean,
-  path: WorktreePath,
+  path: RepositoryPath,
 });
 export type RepositoryWorktree = typeof RepositoryWorktree.Type;
 
@@ -43,16 +44,16 @@ export type BranchUpstream = typeof BranchUpstream.Type;
 
 export const LocalBranch = Schema.Struct({
   name: RefName,
-  target: Schema.optional(CommitId),
+  target: Schema.optional(ObjectId),
   upstream: Schema.optional(BranchUpstream),
-  worktreePath: Schema.optional(WorktreePath),
+  worktreePath: Schema.optional(RepositoryPath),
 });
 export type LocalBranch = typeof LocalBranch.Type;
 
 export const RemoteBranch = Schema.Struct({
   name: RefName,
   remote: RemoteName,
-  target: Schema.optional(CommitId),
+  target: Schema.optional(ObjectId),
 });
 export type RemoteBranch = typeof RemoteBranch.Type;
 
@@ -64,7 +65,7 @@ export type RemoteDefaultBranch = typeof RemoteDefaultBranch.Type;
 
 export const RepositoryTag = Schema.Struct({
   name: RefName,
-  target: Schema.optional(CommitId),
+  target: Schema.optional(ObjectId),
 });
 export type RepositoryTag = typeof RepositoryTag.Type;
 
@@ -123,19 +124,19 @@ export type RepositoryRefTarget = typeof RepositoryRefTarget.Type;
 export const CheckoutRepositoryRef = Schema.Struct({
   repositoryId: RepositoryId,
   target: RepositoryRefTarget,
-  worktreePath: WorktreePath,
+  worktreePath: RepositoryPath,
 });
 export type CheckoutRepositoryRef = typeof CheckoutRepositoryRef.Type;
 
 export const RepositoryCheckedOut = Schema.Struct({
   head: RepositoryHead,
   stash: Schema.Literals(["none", "restored", "kept"]),
-  worktreePath: WorktreePath,
+  worktreePath: RepositoryPath,
 });
 export type RepositoryCheckedOut = typeof RepositoryCheckedOut.Type;
 
 export const WorktreeMissing = Schema.TaggedStruct("WorktreeMissing", {
-  worktreePath: WorktreePath,
+  worktreePath: RepositoryPath,
 });
 export const RefMissing = Schema.TaggedStruct("RefMissing", {
   name: RefName,
@@ -144,22 +145,12 @@ export const BranchCheckedOutElsewhere = Schema.TaggedStruct(
   "BranchCheckedOutElsewhere",
   {
     name: RefName,
-    worktreePath: WorktreePath,
+    worktreePath: RepositoryPath,
   },
 );
 export const CheckoutRejected = Schema.TaggedStruct("CheckoutRejected", {
   detail: FailureDetail,
   reason: Schema.Literals(["LocalChanges", "StashFailed"]),
-});
-export const GitFailed = Schema.TaggedStruct("GitFailed", {
-  detail: Schema.optional(FailureDetail),
-  reason: Schema.Literals([
-    "GitUnavailable",
-    "NotRepository",
-    "Timeout",
-    "OutputTooLarge",
-    "Failed",
-  ]),
 });
 
 export const RepositoryRefsOperationFailure = Schema.Union([
@@ -183,12 +174,13 @@ export const checkoutRepositoryRefPath = "/api/repositories/refs/checkout";
 
 export const RepositoryRefsHttpApi = {
   checkout: {
+    capability: "repository.write",
     failure: RepositoryRefsHttpFailure,
-    failureStatuses: [400, 401, 403, 404, 409, 410, 413, 422] as const,
+    failureStatuses: [400, 401, 403, 404, 409, 410, 413, 422],
     method: "POST",
     path: checkoutRepositoryRefPath,
     request: CheckoutRepositoryRef,
     success: RepositoryCheckedOut,
     successStatus: 200,
   },
-} as const;
+} as const satisfies Record<string, EnvironmentHttpRoute>;

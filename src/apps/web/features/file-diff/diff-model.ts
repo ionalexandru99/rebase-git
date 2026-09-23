@@ -3,7 +3,7 @@ import {
   getFiletypeFromFileName,
   processFile,
 } from "@pierre/diffs";
-import type { ChangeDiff } from "@rebase/contracts/repository-changes/repository-changes.contract";
+import type { ChangeDiff } from "@rebase/contracts";
 
 export function createChangeDiffModel(
   diff: Pick<

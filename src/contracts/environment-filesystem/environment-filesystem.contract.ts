@@ -1,4 +1,6 @@
 import { EnvironmentGrantHttpFailure } from "@rebase/contracts/environment-authorization/environment-authorization.contract";
+import type { EnvironmentHttpRoute } from "@rebase/contracts/environment-connection/http/environment-http-route.contract";
+import { IsoDate } from "@rebase/contracts/environment-connection/iso-date.contract";
 import { Schema } from "effect";
 
 const EnvironmentPath = Schema.String.check(
@@ -12,9 +14,6 @@ const EntryName = Schema.String.check(
 const EntryKind = Schema.String.check(
   Schema.isMinLength(1),
   Schema.isMaxLength(32),
-);
-const IsoDate = Schema.String.check(
-  Schema.isPattern(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/),
 );
 
 export const ListEnvironmentDirectory = Schema.Struct({
@@ -77,12 +76,13 @@ export const environmentDirectoryPath = "/api/filesystem/directory";
 
 export const EnvironmentFilesystemHttpApi = {
   listDirectory: {
+    capability: "repository.write",
     failure: EnvironmentFilesystemHttpFailure,
-    failureStatuses: [400, 401, 403, 404, 410, 413, 422] as const,
+    failureStatuses: [400, 401, 403, 404, 410, 413, 422],
     method: "POST",
     path: environmentDirectoryPath,
     request: ListEnvironmentDirectory,
     success: EnvironmentDirectory,
     successStatus: 200,
   },
-} as const;
+} as const satisfies Record<string, EnvironmentHttpRoute>;

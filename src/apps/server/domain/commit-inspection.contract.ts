@@ -1,12 +1,10 @@
 import type {
+  ChangeDiff,
+  ChangesFailure,
   CommitInspection,
   InspectCommit,
   InspectCommitDiff,
-} from "@rebase/contracts/commit-inspection/commit-inspection.contract";
-import type {
-  ChangeDiff,
-  ChangesFailure,
-} from "@rebase/contracts/repository-changes/repository-changes.contract";
+} from "@rebase/contracts";
 import { Context, Data, type Effect } from "effect";
 
 export class CommitInspectionError extends Data.TaggedError(

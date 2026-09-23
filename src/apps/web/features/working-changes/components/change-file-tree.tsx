@@ -2,7 +2,7 @@ import type {
   ChangeSection,
   ChangeSelection,
   MutateChanges,
-} from "@rebase/contracts/repository-changes/repository-changes.contract";
+} from "@rebase/contracts";
 import { useState } from "react";
 import { Button } from "#web-ui/components/ui/button";
 import { Input } from "#web-ui/components/ui/input";

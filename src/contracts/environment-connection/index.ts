@@ -1,4 +1,8 @@
 export {
+  EnvironmentAccessCapability,
+  environmentAccessCapabilities,
+} from "@rebase/contracts/environment-connection/environment-access-capability.contract";
+export {
   ClientReceiveLimits,
   currentClientReceiveLimits,
   currentTransportLimits,
@@ -15,6 +19,8 @@ export {
   environmentLivePath,
   environmentSnapshotPath,
 } from "@rebase/contracts/environment-connection/http/environment-discovery.contract";
+export type { EnvironmentHttpRoute } from "@rebase/contracts/environment-connection/http/environment-http-route.contract";
+export { IsoDate } from "@rebase/contracts/environment-connection/iso-date.contract";
 export {
   currentEnvironmentCapabilities,
   currentEnvironmentProtocol,
@@ -25,6 +31,11 @@ export {
   ProtocolRange,
 } from "@rebase/contracts/environment-connection/negotiation/environment-protocol.contract";
 export { negotiateEnvironmentHello } from "@rebase/contracts/environment-connection/negotiation/negotiate-environment-protocol";
+export {
+  EnvironmentRpc,
+  type EnvironmentRpcClient,
+} from "@rebase/contracts/environment-connection/rpc/environment-rpc.contract";
+export { environmentRpcSerialization } from "@rebase/contracts/environment-connection/rpc/environment-rpc-serialization";
 export {
   createCurrentEnvironmentHello,
   EnvironmentChanged,

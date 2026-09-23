@@ -2,7 +2,7 @@ import type {
   ChangedFile,
   ChangesScope,
   RepositoryChanges,
-} from "@rebase/contracts/repository-changes/repository-changes.contract";
+} from "@rebase/contracts";
 import { Effect } from "effect";
 import type { GitCommandRunner } from "#server/domain/git-command.contract";
 import { worktreeIdentities } from "#server/features/repository-changes/git/change-files";

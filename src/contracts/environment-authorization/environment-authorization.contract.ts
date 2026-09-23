@@ -1,11 +1,13 @@
 import {
   EnvironmentAccessCapability,
   environmentAccessCapabilities,
-} from "@rebase/contracts/environment-authorization/environment-access-capability.contract";
+} from "@rebase/contracts/environment-connection/environment-access-capability.contract";
 import {
   InvalidMessage,
   PayloadTooLarge,
 } from "@rebase/contracts/environment-connection/environment-request-failure.contract";
+import type { EnvironmentHttpRoute } from "@rebase/contracts/environment-connection/http/environment-http-route.contract";
+import { IsoDate } from "@rebase/contracts/environment-connection/iso-date.contract";
 import { Schema } from "effect";
 
 export const environmentAuthorizationRoles = [
@@ -15,8 +17,6 @@ export const environmentAuthorizationRoles = [
   "owner",
   "custom",
 ] as const;
-
-export { EnvironmentAccessCapability, environmentAccessCapabilities };
 
 export const EnvironmentAuthorizationRole = Schema.Literals(
   environmentAuthorizationRoles,
@@ -34,7 +34,6 @@ const DeviceLabel = Schema.String.check(
   Schema.isMinLength(1),
   Schema.isMaxLength(128),
 );
-const IsoDate = Schema.String;
 
 export const CreateEnvironmentPairing = Schema.Struct({
   role: EnvironmentAuthorizationRole,
@@ -170,8 +169,9 @@ export const environmentAuthorizationRevocationPath =
 
 export const EnvironmentAuthorizationHttpApi = {
   createBrowserSession: {
+    capability: null,
     failure: EnvironmentPairingExchangeHttpFailure,
-    failureStatuses: [400, 401, 403, 409, 410, 413] as const,
+    failureStatuses: [400, 401, 403, 409, 410, 413],
     method: "POST",
     path: "/api/authorization/browser-session",
     request: ExchangeEnvironmentPairing,
@@ -179,16 +179,18 @@ export const EnvironmentAuthorizationHttpApi = {
     successStatus: 201,
   },
   readBrowserSession: {
+    capability: "environment.read",
     failure: EnvironmentGrantHttpFailure,
-    failureStatuses: [400, 401, 403, 410, 413] as const,
+    failureStatuses: [400, 401, 403, 410, 413],
     method: "GET",
     path: "/api/authorization/browser-session",
     success: EnvironmentBrowserSession,
     successStatus: 200,
   },
   createPairing: {
+    capability: "authorization.manage",
     failure: EnvironmentGrantHttpFailure,
-    failureStatuses: [400, 401, 403, 410, 413] as const,
+    failureStatuses: [400, 401, 403, 410, 413],
     method: "POST",
     path: environmentPairingsPath,
     request: CreateEnvironmentPairing,
@@ -196,8 +198,9 @@ export const EnvironmentAuthorizationHttpApi = {
     successStatus: 201,
   },
   exchangePairing: {
+    capability: null,
     failure: EnvironmentPairingExchangeHttpFailure,
-    failureStatuses: [400, 401, 403, 409, 410, 413] as const,
+    failureStatuses: [400, 401, 403, 409, 410, 413],
     method: "POST",
     path: environmentPairingExchangePath,
     request: ExchangeEnvironmentPairing,
@@ -205,20 +208,22 @@ export const EnvironmentAuthorizationHttpApi = {
     successStatus: 201,
   },
   mintWebSocketTicket: {
+    capability: "environment.read",
     failure: EnvironmentGrantHttpFailure,
-    failureStatuses: [400, 401, 403, 410, 413] as const,
+    failureStatuses: [400, 401, 403, 410, 413],
     method: "POST",
     path: environmentWebSocketTicketsPath,
     success: EnvironmentWebSocketTicket,
     successStatus: 201,
   },
   revokeAuthorization: {
+    capability: "authorization.manage",
     failure: EnvironmentGrantHttpFailure,
-    failureStatuses: [400, 401, 403, 410, 413] as const,
+    failureStatuses: [400, 401, 403, 410, 413],
     method: "POST",
     path: environmentAuthorizationRevocationPath,
     request: RevokeEnvironmentAuthorization,
     success: EnvironmentAuthorizationRevoked,
     successStatus: 200,
   },
-} as const;
+} as const satisfies Record<string, EnvironmentHttpRoute>;

@@ -1,4 +1,4 @@
-import { InspectCommit } from "@rebase/contracts/commit-inspection/commit-inspection.contract";
+import { InspectCommit } from "@rebase/contracts";
 import { IconGitCommit } from "@tabler/icons-react";
 import { Schema } from "effect";
 import { lazy } from "react";

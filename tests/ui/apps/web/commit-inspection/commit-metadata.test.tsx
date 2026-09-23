@@ -1,4 +1,4 @@
-import type { CommitInspection } from "@rebase/contracts/commit-inspection/commit-inspection.contract";
+import type { CommitInspection } from "@rebase/contracts";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { userEvent } from "vitest/browser";
 import { render } from "vitest-browser-react";

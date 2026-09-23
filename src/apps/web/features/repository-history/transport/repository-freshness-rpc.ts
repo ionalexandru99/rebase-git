@@ -1,4 +1,4 @@
-import type { EnvironmentRpcClient } from "@rebase/contracts/environment-connection/rpc/environment-rpc.contract";
+import type { EnvironmentRpcClient } from "@rebase/contracts";
 import { Effect, Stream } from "effect";
 import { RepositoryHistoryUnavailable } from "#web/features/repository-history/repository-history-reader.contract";
 import type { RepositoryFreshnessTransport } from "#web/features/repository-history/transport/repository-freshness.contract";

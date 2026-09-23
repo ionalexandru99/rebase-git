@@ -1,4 +1,4 @@
-import type { CommitFile } from "@rebase/contracts/commit-inspection/commit-inspection.contract";
+import type { CommitFile } from "@rebase/contracts";
 import {
   IconChevronDown,
   IconChevronRight,

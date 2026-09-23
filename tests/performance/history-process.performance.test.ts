@@ -9,9 +9,9 @@ import {
   createCurrentEnvironmentHello,
   decodeRepositoryHistoryBatch,
   decodeRepositoryHistoryPage,
+  EnvironmentRpc,
   environmentLivePath,
 } from "@rebase/contracts";
-import { EnvironmentRpc } from "@rebase/contracts/environment-connection/rpc/environment-rpc.contract";
 import { Effect, Exit, Scope } from "effect";
 import { RpcClient, RpcSerialization } from "effect/unstable/rpc";
 import { Socket } from "effect/unstable/socket";
