@@ -17,7 +17,7 @@ export function useOpenedRepository({
   readonly environmentId: string | undefined;
   readonly repository: RepositoryCatalogEntry | undefined;
   readonly session: LocalEnvironmentSession;
-  readonly worktreePathFor: (repositoryId: string) => string;
+  readonly worktreePathFor: (repository: RepositoryCatalogEntry) => string;
 }) {
   const store = useMemo(
     () =>
@@ -30,7 +30,7 @@ export function useOpenedRepository({
   useEffect(() => () => store.open(undefined), [store]);
   const opened = useStore(store);
   const worktreePath =
-    repository === undefined ? "" : worktreePathFor(repository.id);
+    repository === undefined ? "" : worktreePathFor(repository);
   const target = useMemo(
     () =>
       repository === undefined || environmentId === undefined
@@ -48,11 +48,7 @@ export function useOpenedRepository({
         .repositories.find(({ id }) => id === repositoryId);
       if (selected !== undefined && environmentId !== undefined)
         store.open(
-          repositoryTarget(
-            environmentId,
-            selected,
-            worktreePathFor(selected.id),
-          ),
+          repositoryTarget(environmentId, selected, worktreePathFor(selected)),
         );
     },
     [

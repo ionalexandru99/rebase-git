@@ -33,16 +33,15 @@ export function useRepositoryRefsActions({
       ? refs.refs
       : undefined;
   const worktreePathFor = useCallback(
-    (repositoryId: string) =>
-      worktreePaths.get(repositoryId) ??
-      repositories.find((repository) => repository.id === repositoryId)?.path ??
-      "",
-    [repositories, worktreePaths],
+    (repository: RepositoryCatalogEntry) =>
+      worktreePaths.get(repository.id) ?? repository.path,
+    [worktreePaths],
+  );
+  const selectedRepository = repositories.find(
+    (repository) => repository.id === selectedRepositoryId,
   );
   const preferredWorktreePath =
-    selectedRepositoryId === undefined
-      ? ""
-      : worktreePathFor(selectedRepositoryId);
+    selectedRepository === undefined ? "" : worktreePathFor(selectedRepository);
   const activeWorktreePath =
     selectedRefs === undefined
       ? preferredWorktreePath
