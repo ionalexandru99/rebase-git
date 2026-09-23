@@ -5,7 +5,7 @@ import {
   previewByteLimit,
   type RepositoryFileContent,
 } from "#server/domain/repository-comparison.contract";
-import { changeIo } from "#server/features/repository-changes/git/change-git";
+import { changeIo } from "#server/features/repository-changes/git/change-failures";
 
 export function safeChangePath(directory: string, path: string) {
   return changeIo(async () => {

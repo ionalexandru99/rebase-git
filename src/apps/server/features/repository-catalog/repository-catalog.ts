@@ -20,6 +20,10 @@ import {
   EnvironmentStorage,
 } from "#server/persistence/environment-context.contract";
 import { repositoryCatalogTable } from "#server/persistence/environment-state.schema";
+import {
+  isGitRejection,
+  runRepositoryGit,
+} from "#server/repository/access/index";
 
 const realpathNative = promisify(realpath.native);
 
@@ -272,28 +276,25 @@ function inspectPath(path: string) {
 
 function resolveGitPaths(git: GitCommandRunner, path: string) {
   return Effect.gen(function* () {
-    const result = yield* git
-      .run({
-        directory: path,
-        arguments: [
-          "rev-parse",
-          "--path-format=absolute",
-          "--show-toplevel",
-          "--git-common-dir",
-        ],
-        maxOutputBytes: 8_192,
-        timeoutMilliseconds: 5_000,
-      })
-      .pipe(
-        Effect.mapError((cause) =>
-          repositoryPathRejected("InspectionFailed", cause),
-        ),
-      );
-    const [worktreeRoot, commonDirectory, ...extra] = result.stdout
-      .trim()
-      .split("\n");
+    const output = yield* runRepositoryGit(
+      git,
+      path,
+      [
+        "rev-parse",
+        "--path-format=absolute",
+        "--show-toplevel",
+        "--git-common-dir",
+      ],
+      { maxOutputBytes: 8_192, timeoutMilliseconds: 5_000 },
+    ).pipe(
+      Effect.mapError((cause) =>
+        isGitRejection(cause)
+          ? repositoryPathRejected("NotRepository")
+          : repositoryPathRejected("InspectionFailed", cause),
+      ),
+    );
+    const [worktreeRoot, commonDirectory, ...extra] = output.trim().split("\n");
     if (
-      result.exitCode !== 0 ||
       worktreeRoot === undefined ||
       commonDirectory === undefined ||
       extra.length > 0 ||

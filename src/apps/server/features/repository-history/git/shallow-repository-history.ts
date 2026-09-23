@@ -2,8 +2,11 @@ import { open } from "node:fs/promises";
 import type { RepositoryCommit } from "@rebase/contracts";
 import { Effect } from "effect";
 import type { GitCommandRunner } from "#server/domain/git-command.contract";
-import { RepositoryHistoryError } from "#server/domain/repository-history.contract";
-import { historyGit } from "#server/features/repository-history/git/history-git";
+import { isGitObjectId } from "#server/domain/git-object-id";
+import type { RepositoryGitError } from "#server/domain/repository-git.contract";
+import type { RepositoryHistoryError } from "#server/domain/repository-history.contract";
+import { historyFailed } from "#server/features/repository-history/git/history-failures";
+import { runRepositoryGit } from "#server/repository/access/index";
 
 const maximumShallowBytes = 4 * 1_048_576;
 const maximumShallowOutputBytes = 8 * 1_048_576;
@@ -12,7 +15,7 @@ export function readShallowHistoryOids(
   git: GitCommandRunner,
   directory: string,
 ) {
-  return historyGit(
+  return runRepositoryGit(
     git,
     directory,
     ["rev-parse", "--path-format=absolute", "--git-path", "shallow"],
@@ -53,17 +56,15 @@ export function readShallowHistoryOids(
               .trim()
               .split("\n")
               .filter(Boolean);
-            if (
-              oids.length > 40_512 ||
-              oids.some((oid) => !/^[0-9a-f]{40}(?:[0-9a-f]{24})?$/.test(oid))
-            )
+            if (oids.length > 40_512 || oids.some((oid) => !isGitObjectId(oid)))
               throw new Error("Invalid shallow boundary");
             return [...new Set(oids)].sort();
           } finally {
             await file.close();
           }
         },
-        catch: historyError,
+        catch: (cause) =>
+          historyFailed("Could not read shallow repository history", cause),
       }),
     ),
   );
@@ -74,10 +75,13 @@ export function restoreShallowCommitParents(
   directory: string,
   commits: readonly RepositoryCommit[],
   shallowOids: ReadonlySet<string>,
-): Effect.Effect<readonly RepositoryCommit[], RepositoryHistoryError> {
+): Effect.Effect<
+  readonly RepositoryCommit[],
+  RepositoryHistoryError | RepositoryGitError
+> {
   const boundaries = commits.filter((commit) => shallowOids.has(commit.oid));
   if (boundaries.length === 0) return Effect.succeed(commits);
-  return historyGit(
+  return runRepositoryGit(
     git,
     directory,
     [
@@ -96,16 +100,14 @@ export function restoreShallowCommitParents(
       const parentsByOid = new Map<string, string[]>();
       let parents: string[] | undefined;
       for (const line of output.split("\n")) {
-        const oid = /^commit ([0-9a-f]{40}(?:[0-9a-f]{24})?)$/.exec(line)?.[1];
-        if (oid !== undefined) {
+        const separator = line.indexOf(" ");
+        const field = line.slice(0, separator);
+        const oid = line.slice(separator + 1);
+        if (separator < 0 || !isGitObjectId(oid)) continue;
+        if (field === "commit") {
           parents = [];
           parentsByOid.set(oid, parents);
-          continue;
-        }
-        const parent = /^parent ([0-9a-f]{40}(?:[0-9a-f]{24})?)$/.exec(
-          line,
-        )?.[1];
-        if (parent !== undefined) parents?.push(parent);
+        } else if (field === "parent") parents?.push(oid);
       }
       return commits.map((commit) => {
         const restored = parentsByOid.get(commit.oid);
@@ -115,15 +117,4 @@ export function restoreShallowCommitParents(
       });
     }),
   );
-}
-
-function historyError(cause: unknown) {
-  return new RepositoryHistoryError({
-    cause,
-    failure: {
-      _tag: "GitFailed",
-      reason: "Failed",
-      detail: "Could not read shallow repository history",
-    },
-  });
 }

@@ -1,5 +1,8 @@
 import { Effect } from "effect";
-import type { GitCommandRunner } from "#server/domain/git-command.contract";
+import type {
+  GitCommandOptions,
+  GitCommandRunner,
+} from "#server/domain/git-command.contract";
 import {
   previewByteLimit,
   type RepositoryFileContent,
@@ -11,7 +14,7 @@ export function objectFile(
   git: GitCommandRunner,
   directory: string,
   path: string,
-  tree?: string,
+  { tree, ...options }: GitCommandOptions & { readonly tree?: string } = {},
 ) {
   return Effect.gen(function* () {
     const listing = yield* runRepositoryGit(
@@ -20,6 +23,7 @@ export function objectFile(
       tree === undefined
         ? ["ls-files", "--stage", "-z", "--", path]
         : ["ls-tree", "-z", tree, "--", path],
+      options,
     );
     const records = listing.split("\0").filter(Boolean);
     const entry = records.find(
@@ -57,13 +61,19 @@ export function objectFile(
         identity: oid,
       } satisfies RepositoryFileContent;
     const bytes = Number(
-      (yield* runRepositoryGit(git, directory, ["cat-file", "-s", oid])).trim(),
+      (yield* runRepositoryGit(
+        git,
+        directory,
+        ["cat-file", "-s", oid],
+        options,
+      )).trim(),
     );
     const content =
       bytes > previewByteLimit
         ? null
         : Buffer.from(
             yield* runRepositoryGit(git, directory, ["cat-file", "blob", oid], {
+              ...options,
               outputEncoding: "base64",
             }),
             "base64",

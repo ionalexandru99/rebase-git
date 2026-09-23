@@ -1,6 +1,6 @@
 import { Effect } from "effect";
 import type {
-  GitCommand,
+  GitCommandOptions,
   GitCommandRunner,
 } from "#server/domain/git-command.contract";
 import { runRepositoryGit } from "#server/repository/access/run-repository-git";
@@ -8,7 +8,7 @@ import { runRepositoryGit } from "#server/repository/access/run-repository-git";
 export function readGitCommonDirectory(
   git: GitCommandRunner,
   directory: string,
-  options: Partial<GitCommand> = {},
+  options: GitCommandOptions = {},
 ) {
   return runRepositoryGit(
     git,

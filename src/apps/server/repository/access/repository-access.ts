@@ -1,7 +1,6 @@
 import { Effect, Layer } from "effect";
 import type { EnvironmentStorageError } from "#server/domain/environment-storage-error.contract";
 import {
-  type GitCommandError,
   type GitCommandRunner,
   GitCommands,
 } from "#server/domain/git-command.contract";
@@ -14,7 +13,7 @@ import {
   type RepositoryCatalog,
   RepositoryCatalogAccess,
 } from "#server/domain/repository-catalog.contract";
-import type { RepositoryGitExitError } from "#server/domain/repository-git.contract";
+import type { RepositoryGitError } from "#server/domain/repository-git.contract";
 import {
   canonicalizeWorktrees,
   readWorktrees,
@@ -85,7 +84,7 @@ function repositoryMissing(repositoryId: string) {
   });
 }
 
-function worktreesUnreadable(cause: GitCommandError | RepositoryGitExitError) {
+function worktreesUnreadable(cause: RepositoryGitError) {
   return new RepositoryAccessError({
     detail: "Could not read the repository worktrees.",
     failure: { _tag: "WorktreesUnreadable", cause },

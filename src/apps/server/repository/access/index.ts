@@ -11,4 +11,8 @@ export {
   createRepositoryAccess,
   repositoryAccessLayer,
 } from "#server/repository/access/repository-access";
-export { runRepositoryGit } from "#server/repository/access/run-repository-git";
+export {
+  isGitRejection,
+  runRepositoryGit,
+  streamRepositoryGit,
+} from "#server/repository/access/run-repository-git";

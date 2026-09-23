@@ -6,12 +6,12 @@ import type {
 } from "@rebase/contracts";
 import { Effect } from "effect";
 import type { GitCommandRunner } from "#server/domain/git-command.contract";
-import { worktreeIdentities } from "#server/features/repository-changes/git/change-files";
 import {
-  changeGit,
   changeIo,
   changesError,
-} from "#server/features/repository-changes/git/change-git";
+} from "#server/features/repository-changes/git/change-failures";
+import { worktreeIdentities } from "#server/features/repository-changes/git/change-files";
+import { runRepositoryGit } from "#server/repository/access/index";
 import { fingerprint } from "#server/repository/comparison/index";
 
 export function readChanges(git: GitCommandRunner, scope: ChangesScope) {
@@ -25,14 +25,14 @@ export function readChanges(git: GitCommandRunner, scope: ChangesScope) {
     const base = yield* comparisonBase(git, directory, head, scope.amend);
     const [status, stagedOutput, index, message] = yield* Effect.all(
       [
-        changeGit(git, directory, [
+        runRepositoryGit(git, directory, [
           "status",
           "--porcelain=v1",
           "--no-renames",
           "-z",
           "--untracked-files=all",
         ]),
-        changeGit(git, directory, [
+        runRepositoryGit(git, directory, [
           "diff",
           "--cached",
           "--no-renames",
@@ -43,7 +43,12 @@ export function readChanges(git: GitCommandRunner, scope: ChangesScope) {
         indexIdentity(indexPath),
         head === null
           ? Effect.succeed("")
-          : changeGit(git, directory, ["log", "-1", "--format=%B", head]),
+          : runRepositoryGit(git, directory, [
+              "log",
+              "-1",
+              "--format=%B",
+              head,
+            ]),
       ],
       { concurrency: 4 },
     );
@@ -80,30 +85,27 @@ export function readChanges(git: GitCommandRunner, scope: ChangesScope) {
 }
 
 function readHeadAndIndexPath(git: GitCommandRunner, directory: string) {
-  return git
-    .run({
-      directory,
-      arguments: [
-        "rev-parse",
-        "--path-format=absolute",
-        "--git-path",
-        "index",
-        "--verify",
-        "HEAD",
-      ],
-    })
-    .pipe(
-      Effect.mapError(() => changesError("GitFailed", "Could not read HEAD.")),
-      Effect.flatMap((output) => {
-        const [indexPath, head] = output.stdout.split("\n");
-        return indexPath
-          ? Effect.succeed({
-              indexPath,
-              head: output.exitCode === 0 && head ? head.trim() : null,
-            })
-          : Effect.fail(changesError("GitFailed", output.stderr));
-      }),
-    );
+  return runRepositoryGit(
+    git,
+    directory,
+    [
+      "rev-parse",
+      "--path-format=absolute",
+      "--git-path",
+      "index",
+      "--verify",
+      "--quiet",
+      "HEAD",
+    ],
+    { exitCodes: [0, 1] },
+  ).pipe(
+    Effect.flatMap((output) => {
+      const [indexPath, head] = output.split("\n");
+      return indexPath
+        ? Effect.succeed({ indexPath, head: head?.trim() || null })
+        : Effect.fail(changesError("GitFailed", "Could not read HEAD."));
+    }),
+  );
 }
 
 function indexIdentity(indexPath: string) {
@@ -127,7 +129,7 @@ function comparisonBase(
   return Effect.gen(function* () {
     if (head !== null && !amend) return head;
     if (head !== null) {
-      const parents = (yield* changeGit(git, directory, [
+      const parents = (yield* runRepositoryGit(git, directory, [
         "rev-list",
         "--parents",
         "-n",
@@ -138,7 +140,7 @@ function comparisonBase(
         .split(" ");
       if (parents[1]) return parents[1];
     }
-    return (yield* changeGit(
+    return (yield* runRepositoryGit(
       git,
       directory,
       ["hash-object", "-w", "-t", "tree", "--stdin"],

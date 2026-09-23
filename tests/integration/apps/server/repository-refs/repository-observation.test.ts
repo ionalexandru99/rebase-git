@@ -70,7 +70,7 @@ for (const firstRelease of ["refs", "freshness"] as const)
           const linkedEntry = yield* catalog.remember(linked);
           const local = createLocalGitCommandRunner();
           const run = vi.fn(local.run);
-          const runner = { run };
+          const runner = { ...local, run };
           const watcher = createLocalRepositoryWatcher();
           const events = createEnvironmentEventPublisher();
           const changed = vi.fn();

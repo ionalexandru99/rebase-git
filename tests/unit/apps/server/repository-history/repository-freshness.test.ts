@@ -10,6 +10,7 @@ import {
   Fiber,
   Layer,
   type Scope,
+  Stream,
 } from "effect";
 import { TestClock } from "effect/testing";
 import { describe, expect, it, vi } from "vite-plus/test";
@@ -495,6 +496,7 @@ function withService(
                 remove: unusedCatalogOperation,
               }),
               Layer.succeed(GitCommands, {
+                stream: () => Stream.empty,
                 run: (command) =>
                   command.arguments[0] === "fetch"
                     ? git.fetch(command)

@@ -1,10 +1,16 @@
 import type { RepositoryHistorySnapshot } from "@rebase/contracts";
 import { Effect } from "effect";
 import type { GitCommandRunner } from "#server/domain/git-command.contract";
-import { RepositoryHistoryError } from "#server/domain/repository-history.contract";
-import { historyGit } from "#server/features/repository-history/git/history-git";
+import {
+  type GitObjectFormat,
+  isGitObjectId,
+} from "#server/domain/git-object-id";
+import type { RepositoryGitError } from "#server/domain/repository-git.contract";
+import type { RepositoryHistoryError } from "#server/domain/repository-history.contract";
 import { historySnapshotIdentity } from "#server/features/repository-history/git/history-snapshot-identity";
+import { readObjectFormat } from "#server/features/repository-history/git/read-object-format";
 import { readShallowHistoryOids } from "#server/features/repository-history/git/shallow-repository-history";
+import { runRepositoryGit } from "#server/repository/access/index";
 
 const maximumRefsOutputBytes = 16 * 1_048_576;
 const maximumStashRootsBytes = 16 * 1_024;
@@ -20,16 +26,16 @@ const refFormat = [
 export function readRepositoryHistorySnapshot(
   git: GitCommandRunner,
   repositoryPath: string,
-): Effect.Effect<RepositoryHistorySnapshot, RepositoryHistoryError> {
+): Effect.Effect<
+  RepositoryHistorySnapshot,
+  RepositoryHistoryError | RepositoryGitError
+> {
   return Effect.gen(function* () {
-    const [formatOutput, refsOutput, stashTipOutput, worktreesOutput] =
+    const [objectFormat, refsOutput, stashTipOutput, worktreesOutput] =
       yield* Effect.all(
         [
-          historyGit(git, repositoryPath, [
-            "rev-parse",
-            "--show-object-format",
-          ]),
-          historyGit(
+          readObjectFormat(git, repositoryPath),
+          runRepositoryGit(
             git,
             repositoryPath,
             [
@@ -41,12 +47,12 @@ export function readRepositoryHistorySnapshot(
             ],
             { maxOutputBytes: maximumRefsOutputBytes },
           ),
-          historyGit(git, repositoryPath, [
+          runRepositoryGit(git, repositoryPath, [
             "for-each-ref",
             "--format=%(objectname)",
             "refs/stash",
           ]),
-          historyGit(git, repositoryPath, [
+          runRepositoryGit(git, repositoryPath, [
             "worktree",
             "list",
             "--porcelain",
@@ -55,12 +61,11 @@ export function readRepositoryHistorySnapshot(
         ],
         { concurrency: "unbounded" },
       );
-    const objectFormat = yield* parseObjectFormat(formatOutput);
     const shallowOids = yield* readShallowHistoryOids(git, repositoryPath);
     const stashOutput =
       stashTipOutput.trim() === ""
         ? ""
-        : yield* historyGit(
+        : yield* runRepositoryGit(
             git,
             repositoryPath,
             ["reflog", "show", "--format=%H", "refs/stash"],
@@ -105,7 +110,7 @@ function compareRefNames(left: string, right: string) {
 
 export function parseSnapshotRefs(
   output: string,
-  objectFormat: "sha1" | "sha256",
+  objectFormat: GitObjectFormat,
 ): RepositoryHistorySnapshot["refTargets"] {
   const refs: Array<RepositoryHistorySnapshot["refTargets"][number]> = [];
   for (const line of output.split("\n")) {
@@ -123,7 +128,7 @@ export function parseSnapshotRefs(
         : peeledType === "commit"
           ? peeledOid
           : undefined;
-    if (target === undefined || !isOid(target, objectFormat)) {
+    if (target === undefined || !isGitObjectId(target, objectFormat)) {
       continue;
     }
     if (name.startsWith("refs/heads/")) {
@@ -141,42 +146,17 @@ export function parseSnapshotRefs(
   return refs;
 }
 
-function parseWorktreeHeads(output: string, objectFormat: "sha1" | "sha256") {
+function parseWorktreeHeads(output: string, objectFormat: GitObjectFormat) {
   return output
     .split("\0")
     .filter((field) => field.startsWith("HEAD "))
     .map((field) => field.slice(5))
-    .filter((oid) => isOid(oid, objectFormat));
+    .filter((oid) => isGitObjectId(oid, objectFormat));
 }
 
-function parseOids(output: string, objectFormat: "sha1" | "sha256") {
+function parseOids(output: string, objectFormat: GitObjectFormat) {
   return output
     .split("\n")
     .map((line) => line.trim())
-    .filter((oid) => isOid(oid, objectFormat));
-}
-
-function parseObjectFormat(
-  output: string,
-): Effect.Effect<"sha1" | "sha256", RepositoryHistoryError> {
-  const format = output.trim();
-  if (format === "sha1" || format === "sha256") {
-    return Effect.succeed(format);
-  }
-  return Effect.fail(
-    new RepositoryHistoryError({
-      failure: {
-        _tag: "GitFailed",
-        detail: `Unsupported Git object format: ${format}`,
-        reason: "Failed",
-      },
-    }),
-  );
-}
-
-function isOid(oid: string, objectFormat: "sha1" | "sha256") {
-  return (
-    oid.length === (objectFormat === "sha1" ? 40 : 64) &&
-    /^[0-9a-f]+$/.test(oid)
-  );
+    .filter((oid) => isGitObjectId(oid, objectFormat));
 }

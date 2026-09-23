@@ -2,63 +2,75 @@ import { execFile } from "node:child_process";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { setImmediate } from "node:timers/promises";
 import { promisify } from "node:util";
-import { Effect } from "effect";
-import { expect, it } from "vitest";
+import { Effect, Stream } from "effect";
+import { afterAll, beforeAll, expect, it } from "vitest";
 import { createLocalGitCommandRunner } from "#server/adapters/local-git/local-git-command-runner";
 
 const execute = promisify(execFile);
+const git = createLocalGitCommandRunner();
+let directory = "";
 
-it("observes a Git abort while stdout processing is pending and preserves its failure", async () => {
-  const directory = await mkdtemp(join(tmpdir(), "rebase-stream-abort-"));
-  const entered = Promise.withResolvers<void>();
-  const aborted = Promise.withResolvers<void>();
-  const processing = Promise.withResolvers<void>();
-  const failure = new Error("The stdout consumer stopped");
-  try {
-    await createHistory(directory);
-    const stream = createLocalGitCommandRunner().stream;
-    if (stream === undefined) throw new Error("Git streaming is unavailable");
-    const result = Effect.runPromise(
-      Effect.flip(
-        stream(
-          {
-            arguments: ["log", "--format=%H %s", "--all"],
-            directory,
-            timeoutMilliseconds: 2_000,
-          },
-          async (chunk, signal) => {
-            expect(chunk.length).toBeGreaterThan(0);
-            signal.addEventListener("abort", () => aborted.resolve(), {
-              once: true,
-            });
-            entered.resolve();
-            await processing.promise;
-          },
-        ),
+beforeAll(async () => {
+  directory = await mkdtemp(join(tmpdir(), "rebase-stream-"));
+  await createHistory(directory);
+});
+
+afterAll(async () => {
+  await rm(directory, {
+    force: true,
+    recursive: true,
+    maxRetries: 3,
+    retryDelay: 100,
+  });
+});
+
+it("streams stdout and reports a rejected command with its exit code and stderr", async () => {
+  const output = await Effect.runPromise(
+    git
+      .stream({ arguments: ["log", "--format=%H", "--all"], directory })
+      .pipe(Stream.mkString),
+  );
+  const error = await Effect.runPromise(
+    Effect.flip(
+      Stream.runDrain(
+        git.stream({
+          arguments: ["rev-parse", "--verify", "refs/heads/missing"],
+          directory,
+        }),
       ),
-    );
-    try {
-      await entered.promise;
-      await aborted.promise;
-      await setImmediate();
-      processing.reject(failure);
-      const error = await result;
-      expect(error.reason).toBe("Timeout");
-      expect(error.cause).toBe(failure);
-    } finally {
-      processing.resolve();
-      await result;
-    }
-  } finally {
-    await rm(directory, {
-      force: true,
-      recursive: true,
-      maxRetries: 3,
-      retryDelay: 100,
-    });
-  }
+    ),
+  );
+
+  expect(output.trim().split("\n")).toHaveLength(2_000);
+  expect(error).toMatchObject({ exitCode: 128, reason: "Failed" });
+  expect(error.stderr).toContain("Needed a single revision");
+});
+
+it("fails with a timeout when the command outlives its deadline", async () => {
+  const error = await Effect.runPromise(
+    Effect.flip(
+      git
+        .stream({
+          arguments: ["log", "--format=%H %s", "--all"],
+          directory,
+          timeoutMilliseconds: 200,
+        })
+        .pipe(Stream.runForEach(() => Effect.sleep(500))),
+    ),
+  );
+
+  expect(error.reason).toBe("Timeout");
+}, 10_000);
+
+it("stops Git when the consumer finishes early", async () => {
+  const chunks = await Effect.runPromise(
+    git
+      .stream({ arguments: ["log", "--format=%H %s", "--all"], directory })
+      .pipe(Stream.take(1), Stream.runCollect),
+  );
+
+  expect(chunks).toHaveLength(1);
 }, 10_000);
 
 async function createHistory(directory: string) {

@@ -12,6 +12,7 @@ import {
   RepositoryHistoryError,
   type RepositoryHistoryService,
 } from "#server/domain/repository-history.contract";
+import { historyGitFailed } from "#server/features/repository-history/git/history-failures";
 import { readRepositoryHistory } from "#server/features/repository-history/git/read-repository-history";
 import { synchronizeRepositoryHistory } from "#server/features/repository-history/git/synchronize-repository-history";
 
@@ -35,6 +36,9 @@ export function createRepositoryHistoryService(dependencies: {
         Effect.flatMap((repository) =>
           readRepositoryHistory(dependencies.git, repository.path, request),
         ),
+        Effect.catchTag("RepositoryGitError", (error) =>
+          Effect.fail(historyGitFailed(error)),
+        ),
       ),
     synchronize: (request, emit) =>
       findRepository(request.repositoryId).pipe(
@@ -45,6 +49,9 @@ export function createRepositoryHistoryService(dependencies: {
             request,
             emit,
           ),
+        ),
+        Effect.catchTag("RepositoryGitError", (error) =>
+          Effect.fail(historyGitFailed(error)),
         ),
       ),
   };

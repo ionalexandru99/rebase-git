@@ -1,5 +1,6 @@
 import { currentTransportLimits } from "@rebase/contracts";
 import { describe, expect, it } from "vite-plus/test";
+import { RepositoryGitError } from "#server/domain/repository-git.contract";
 import { fitRepositoryRefs } from "#server/features/repository-refs/git/fit-repository-refs";
 import {
   localBranchFromRecord,
@@ -126,7 +127,9 @@ describe("git ref parsing", () => {
   it("maps git checkout errors to typed failures", () => {
     expect(
       checkoutFailure(
-        "fatal: 'feature' is already checked out at '/repo/.worktrees/feature'",
+        rejectedByGit(
+          "fatal: 'feature' is already checked out at '/repo/.worktrees/feature'",
+        ),
         "feature",
       ).failure,
     ).toEqual({
@@ -136,13 +139,17 @@ describe("git ref parsing", () => {
     });
     expect(
       checkoutFailure(
-        "error: pathspec 'missing' did not match any file(s) known to git",
+        rejectedByGit(
+          "error: pathspec 'missing' did not match any file(s) known to git",
+        ),
         "missing",
       ).failure,
     ).toEqual({ _tag: "RefMissing", name: "missing" });
     expect(
       checkoutFailure(
-        "error: Your local changes to the following files would be overwritten by checkout:\n\tREADME.md",
+        rejectedByGit(
+          "error: Your local changes to the following files would be overwritten by checkout:\n\tREADME.md",
+        ),
         "main",
       ).failure,
     ).toMatchObject({ _tag: "CheckoutRejected", reason: "LocalChanges" });
@@ -199,4 +206,8 @@ function record(
     worktreePath,
     symref,
   ].join("\0");
+}
+
+function rejectedByGit(detail: string) {
+  return new RepositoryGitError({ detail, exitCode: 128, reason: "Failed" });
 }

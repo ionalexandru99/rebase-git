@@ -10,7 +10,7 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
-import { Effect } from "effect";
+import { Effect, Stream } from "effect";
 import { afterEach, describe, expect, it } from "vite-plus/test";
 import { createLocalGitCommandRunner } from "#server/adapters/local-git/local-git-command-runner";
 import type { EnvironmentStorageError } from "#server/domain/environment-storage-error.contract";
@@ -42,6 +42,8 @@ describe("repository catalog", () => {
     const root = await createTemporaryDirectory();
     const unavailable: GitCommandRunner = {
       run: () => Effect.fail(new GitCommandError({ reason: "GitUnavailable" })),
+      stream: () =>
+        Stream.fail(new GitCommandError({ reason: "GitUnavailable" })),
     };
     const result = await withCatalog(
       root,

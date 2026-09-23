@@ -13,7 +13,10 @@ import {
   writeRepositoryFetchSetting,
 } from "#server/features/repository-history/freshness/repository-fetch-settings";
 import type { FreshnessSubscription } from "#server/features/repository-history/freshness/watched-repository.contract";
-import { readGitCommonDirectory } from "#server/repository/access/index";
+import {
+  readGitCommonDirectory,
+  runRepositoryGit,
+} from "#server/repository/access/index";
 
 export function acquireWatchedRepository(
   entry: RepositoryCatalogEntry,
@@ -102,18 +105,12 @@ export function acquireWatchedRepository(
         return coordination.run(
           directory,
           "refs",
-          git.run({
-            directory,
-            arguments: ["fetch"],
+          runRepositoryGit(git, directory, ["fetch"], {
             timeoutMilliseconds: 120_000,
           }),
         );
       }).pipe(
-        Effect.map((output): RepositoryFreshness["failure"] =>
-          output.exitCode === 0
-            ? undefined
-            : { _tag: "FetchFailed", reason: "Failed" },
-        ),
+        Effect.as<RepositoryFreshness["failure"]>(undefined),
         Effect.catchCause((cause) => {
           if (Cause.hasInterrupts(cause))
             return Effect.failCause(Cause.interrupt());
@@ -121,7 +118,7 @@ export function acquireWatchedRepository(
           return Effect.succeed({
             _tag: "FetchFailed",
             reason:
-              Option.isSome(error) && error.value._tag === "GitCommandError"
+              Option.isSome(error) && error.value._tag === "RepositoryGitError"
                 ? error.value.reason
                 : "Failed",
           } as const);

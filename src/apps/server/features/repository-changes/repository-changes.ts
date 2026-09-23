@@ -6,33 +6,34 @@ import {
   RepositoryAccess,
   type RepositoryAccessService,
 } from "#server/domain/repository-access.contract";
-import type { RepositoryChangesService } from "#server/domain/repository-changes.contract";
-import { RepositoryChangesAccess } from "#server/domain/repository-changes.contract";
+import {
+  RepositoryChangesAccess,
+  type RepositoryChangesError,
+  type RepositoryChangesService,
+} from "#server/domain/repository-changes.contract";
 import {
   RepositoryCoordination,
-  RepositoryCoordinationError,
   type RepositoryCoordinationService,
   type RepositoryResourceScope,
 } from "#server/domain/repository-coordination.contract";
+import type { RepositoryGitError } from "#server/domain/repository-git.contract";
+import { changesError } from "#server/features/repository-changes/git/change-failures";
 import { safeChangePath } from "#server/features/repository-changes/git/change-files";
-import {
-  changeGit,
-  changesError,
-} from "#server/features/repository-changes/git/change-git";
 import { withChangeIndex } from "#server/features/repository-changes/git/change-index";
 import { mutateChanges } from "#server/features/repository-changes/git/mutate-changes";
 import { readChangeDiff } from "#server/features/repository-changes/git/read-change-diff";
 import { readChanges } from "#server/features/repository-changes/git/read-changes";
 import { verifyChanges } from "#server/features/repository-changes/git/verify-changes";
+import { runRepositoryGit } from "#server/repository/access/index";
 
 export function createRepositoryChangesService(
   access: RepositoryAccessService,
   git: GitCommandRunner,
   coordination: RepositoryCoordinationService,
 ): RepositoryChangesService {
-  const locked = <A, E>(
+  const locked = <A>(
     scope: ChangesScope,
-    run: Effect.Effect<A, E>,
+    run: Effect.Effect<A, RepositoryChangesError | RepositoryGitError>,
     resources: RepositoryResourceScope = "worktree",
   ) =>
     Effect.gen(function* () {
@@ -45,9 +46,9 @@ export function createRepositoryChangesService(
         .run(scope.worktreePath, resources, run)
         .pipe(
           Effect.mapError((error) =>
-            error instanceof RepositoryCoordinationError
-              ? changesError("GitFailed", error.detail)
-              : error,
+            error._tag === "RepositoryChangesError"
+              ? error
+              : changesError("GitFailed", error.detail),
           ),
         );
     });
@@ -74,15 +75,12 @@ export function createRepositoryChangesService(
         Effect.gen(function* () {
           yield* withChangeIndex(git, command.worktreePath, (indexFile) =>
             Effect.gen(function* () {
-              const { snapshot, base } = yield* verifyChanges(git, command);
-              const indexedGit: GitCommandRunner = {
-                run: (request) => git.run({ ...request, indexFile }),
-              };
+              const current = yield* verifyChanges(git, command);
               yield* mutateChanges(
-                indexedGit,
+                git,
+                { indexFile },
                 command,
-                snapshot,
-                base,
+                current,
                 verifyChanges(git, command).pipe(Effect.asVoid),
               );
               if (command.action !== "discard")
@@ -118,7 +116,7 @@ export function createRepositoryChangesService(
                 ),
               );
             yield* Effect.uninterruptible(
-              changeGit(
+              runRepositoryGit(
                 git,
                 command.worktreePath,
                 [

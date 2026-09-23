@@ -7,21 +7,25 @@ import type {
 } from "@rebase/contracts";
 import { Effect } from "effect";
 import type { EnvironmentStorageError } from "#server/domain/environment-storage-error.contract";
-import type {
-  GitCommandOutput,
-  GitCommandRunner,
-} from "#server/domain/git-command.contract";
+import type { GitCommandRunner } from "#server/domain/git-command.contract";
 import type { RepositoryAccessService } from "#server/domain/repository-access.contract";
+import type { RepositoryGitError } from "#server/domain/repository-git.contract";
 import type { RepositoryRefsError } from "#server/domain/repository-refs.contract";
 import {
   checkoutFailure,
-  failureDetail,
-  gitCommandFailed,
+  gitFailed,
   repositoryAccessFailed,
   repositoryRefsFailure,
 } from "#server/features/repository-refs/git/repository-refs-failures";
+import {
+  isGitRejection,
+  runRepositoryGit,
+} from "#server/repository/access/index";
 
-const checkoutTimeoutMilliseconds = 60_000;
+const checkoutCommand = {
+  literalPathspecs: false,
+  timeoutMilliseconds: 60_000,
+};
 
 export function checkoutRepositoryRef(
   git: GitCommandRunner,
@@ -42,7 +46,7 @@ export function checkoutRepositoryRef(
     if (target._tag === "LocalBranch" && worktree.head.branch === target.name) {
       return {
         head: worktree.head,
-        stash: "none",
+        stash: "none" as const,
         worktreePath: worktree.path,
       };
     }
@@ -52,14 +56,21 @@ export function checkoutRepositoryRef(
     );
     const head = yield* readCheckedOutHead(access, worktree.path);
     return { head, stash, worktreePath: worktree.path };
-  });
+  }).pipe(
+    Effect.catchTag("RepositoryGitError", (error) =>
+      Effect.fail(gitFailed(error)),
+    ),
+  );
 }
 
 function checkoutWithAutoStash(
   git: GitCommandRunner,
   directory: string,
   target: CheckoutTarget,
-): Effect.Effect<RepositoryCheckedOut["stash"], RepositoryRefsError> {
+): Effect.Effect<
+  RepositoryCheckedOut["stash"],
+  RepositoryRefsError | RepositoryGitError
+> {
   return Effect.gen(function* () {
     const stash = yield* stashLocalChanges(git, directory, target);
     if (stash === undefined) {
@@ -102,23 +113,25 @@ function resolveTarget(
   git: GitCommandRunner,
   directory: string,
   target: RepositoryRefTarget,
-): Effect.Effect<CheckoutTarget, RepositoryRefsError> {
+): Effect.Effect<CheckoutTarget, RepositoryGitError> {
   if (target._tag !== "RemoteBranch") return Effect.succeed(target);
   return Effect.gen(function* () {
-    const local = yield* runGit(git, directory, [
+    const local = yield* gitAccepts(git, directory, [
       "show-ref",
       "--verify",
       "--quiet",
       `refs/heads/${target.name}`,
     ]);
-    if (local.exitCode !== 0) return target;
-    const upstream = yield* runGit(git, directory, [
-      "rev-parse",
-      "--abbrev-ref",
-      "--quiet",
-      `${target.name}@{upstream}`,
-    ]);
-    const tracked = upstream.exitCode === 0 ? upstream.stdout.trim() : "";
+    if (!local) return target;
+    const tracked = yield* runRepositoryGit(
+      git,
+      directory,
+      ["rev-parse", "--abbrev-ref", "--quiet", `${target.name}@{upstream}`],
+      checkoutCommand,
+    ).pipe(
+      Effect.map((upstream) => upstream.trim()),
+      Effect.catchIf(isGitRejection, () => Effect.succeed("")),
+    );
     return tracked.length === 0 || tracked === `${target.remote}/${target.name}`
       ? { _tag: "LocalBranch", name: target.name }
       : {
@@ -156,30 +169,36 @@ function stashLocalChanges(
   target: CheckoutTarget,
 ) {
   return Effect.gen(function* () {
-    const status = yield* runGit(git, directory, [
-      "status",
-      "--porcelain",
-      "-z",
-    ]);
-    if (status.exitCode !== 0) {
-      return yield* Effect.fail(checkoutFailure(status.stderr, target.name));
-    }
-    if (status.stdout.length === 0) return undefined;
+    const status = yield* runRepositoryGit(
+      git,
+      directory,
+      ["status", "--porcelain", "-z"],
+      checkoutCommand,
+    ).pipe(Effect.mapError((error) => checkoutFailure(error, target.name)));
+    if (status.length === 0) return undefined;
 
     const token = `rebase-auto-stash:${randomUUID()}`;
-    const stash = yield* runGit(git, directory, [
-      "stash",
-      "push",
-      "--include-untracked",
-      "--message",
-      `${token} before checking out ${target.name}`,
-    ]);
+    const stashFailure = yield* runRepositoryGit(
+      git,
+      directory,
+      [
+        "stash",
+        "push",
+        "--include-untracked",
+        "--message",
+        `${token} before checking out ${target.name}`,
+      ],
+      checkoutCommand,
+    ).pipe(
+      Effect.as(""),
+      Effect.catchIf(isGitRejection, (error) => Effect.succeed(error.detail)),
+    );
     const entry = yield* findStash(git, directory, token);
-    if (stash.exitCode !== 0 || entry === undefined) {
+    if (stashFailure !== "" || entry === undefined) {
       return yield* Effect.fail(
         repositoryRefsFailure({
           _tag: "CheckoutRejected",
-          detail: failureDetail(stash.stderr),
+          detail: stashFailure,
           reason: "StashFailed",
         }),
       );
@@ -189,9 +208,14 @@ function stashLocalChanges(
 }
 
 function findStash(git: GitCommandRunner, directory: string, token: string) {
-  return runGit(git, directory, ["stash", "list", "--format=%H%x00%s"]).pipe(
+  return runRepositoryGit(
+    git,
+    directory,
+    ["stash", "list", "--format=%H%x00%s"],
+    checkoutCommand,
+  ).pipe(
     Effect.map((listed) => {
-      const lines = listed.stdout.split("\n");
+      const lines = listed.split("\n");
       const index = lines.findIndex((line) =>
         line.split("\0")[1]?.includes(token),
       );
@@ -206,12 +230,14 @@ function runCheckout(
   directory: string,
   target: CheckoutTarget,
 ) {
-  return runGit(git, directory, checkoutArguments(target)).pipe(
-    Effect.flatMap((output) =>
-      output.exitCode === 0
-        ? Effect.void
-        : Effect.fail(checkoutFailure(output.stderr, target.name)),
-    ),
+  return runRepositoryGit(
+    git,
+    directory,
+    checkoutArguments(target),
+    checkoutCommand,
+  ).pipe(
+    Effect.asVoid,
+    Effect.mapError((error) => checkoutFailure(error, target.name)),
   );
 }
 
@@ -250,20 +276,19 @@ function restoreStash(git: GitCommandRunner, directory: string, token: string) {
   return Effect.gen(function* () {
     const entry = yield* findStash(git, directory, token);
     if (entry === undefined) return false;
-    const applied = yield* runGit(git, directory, [
+    const applied = yield* gitAccepts(git, directory, [
       "stash",
       "apply",
       entry.commit,
     ]);
-    if (applied.exitCode !== 0) return false;
+    if (!applied) return false;
     const current = yield* findStash(git, directory, token);
     if (current === undefined) return true;
-    const dropped = yield* runGit(git, directory, [
+    return yield* gitAccepts(git, directory, [
       "stash",
       "drop",
       `stash@{${current.index}}`,
     ]);
-    return dropped.exitCode === 0;
   });
 }
 
@@ -277,16 +302,13 @@ function readCheckedOutHead(
   );
 }
 
-function runGit(
+function gitAccepts(
   git: GitCommandRunner,
   directory: string,
-  arguments_: readonly string[],
-): Effect.Effect<GitCommandOutput, RepositoryRefsError> {
-  return git
-    .run({
-      arguments: arguments_,
-      directory,
-      timeoutMilliseconds: checkoutTimeoutMilliseconds,
-    })
-    .pipe(Effect.mapError(gitCommandFailed));
+  args: readonly string[],
+) {
+  return runRepositoryGit(git, directory, args, checkoutCommand).pipe(
+    Effect.as(true),
+    Effect.catchIf(isGitRejection, () => Effect.succeed(false)),
+  );
 }

@@ -234,6 +234,7 @@ describe("repository refs", { timeout: 30_000 }, () => {
     await writeFile(join(fixture.repositoryPath, "README.md"), "mine");
     const local = createLocalGitCommandRunner();
     const racing: GitCommandRunner = {
+      ...local,
       run: (command) =>
         local.run(command).pipe(
           Effect.tap(() =>

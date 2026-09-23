@@ -1,7 +1,7 @@
 import type { ChangesScope } from "@rebase/contracts";
 import { Effect } from "effect";
 import type { GitCommandRunner } from "#server/domain/git-command.contract";
-import { changesError } from "#server/features/repository-changes/git/change-git";
+import { changesError } from "#server/features/repository-changes/git/change-failures";
 import { readChanges } from "#server/features/repository-changes/git/read-changes";
 
 export function verifyChanges(

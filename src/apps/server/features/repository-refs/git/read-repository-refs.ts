@@ -16,14 +16,11 @@ import {
   tagFromRecord,
 } from "#server/features/repository-refs/git/parse-for-each-ref";
 import { readRemoteMetadata } from "#server/features/repository-refs/git/read-remote-metadata";
-import {
-  gitCommandFailed,
-  requireSuccessfulOutput,
-  worktreeReadFailed,
-} from "#server/features/repository-refs/git/repository-refs-failures";
+import { gitFailed } from "#server/features/repository-refs/git/repository-refs-failures";
 import {
   canonicalizeWorktrees,
   readWorktrees,
+  runRepositoryGit,
 } from "#server/repository/access/index";
 
 const readTimeoutMilliseconds = 15_000;
@@ -54,7 +51,7 @@ export function readRepositoryRefs(
         ),
         tags: listRefs(git, repository.path, "refs/tags", "-creatordate"),
         worktrees: readWorktrees(git, repository.path).pipe(
-          Effect.mapError(worktreeReadFailed),
+          Effect.mapError(gitFailed),
         ),
         remoteMetadata: readRemoteMetadata(git, repository.path),
       },
@@ -92,23 +89,15 @@ function listRefs(
   pattern: string,
   sort: string,
 ) {
-  return git
-    .run({
-      arguments: [
-        "for-each-ref",
-        `--format=${forEachRefFormat}`,
-        `--sort=${sort}`,
-        pattern,
-      ],
-      directory,
+  return runRepositoryGit(
+    git,
+    directory,
+    ["for-each-ref", `--format=${forEachRefFormat}`, `--sort=${sort}`, pattern],
+    {
       maxOutputBytes: maximumRefsOutputBytes,
       timeoutMilliseconds: readTimeoutMilliseconds,
-    })
-    .pipe(
-      Effect.mapError(gitCommandFailed),
-      Effect.flatMap(requireSuccessfulOutput),
-      Effect.map((output) => parseForEachRef(output.stdout)),
-    );
+    },
+  ).pipe(Effect.mapError(gitFailed), Effect.map(parseForEachRef));
 }
 
 function canonicalizeBranchWorktrees(
