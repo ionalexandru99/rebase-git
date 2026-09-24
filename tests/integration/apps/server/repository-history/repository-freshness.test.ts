@@ -5,7 +5,6 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import type { RepositoryFreshness } from "@rebase/contracts";
-import { connectCurrentEnvironmentEffect } from "@rebase/web/environment-connection";
 import { Deferred, Effect, Layer } from "effect";
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import { createEnvironmentEventPublisher } from "#server/adapters/environment-transport/events/environment-event-publisher";
@@ -36,6 +35,7 @@ import {
   repositoryCoordinationLayer,
 } from "#server/repository/access/index";
 import { testEnvironmentFeatures } from "#tests-integration/apps/server/environment-connection/test-environment-features";
+import { connectCurrentEnvironmentEffect } from "#web/app/environment/connection/index";
 import { createRepositoryHistoryRpc } from "#web/features/repository-history/transport/repository-history-rpc";
 
 const exec = promisify(execFile);

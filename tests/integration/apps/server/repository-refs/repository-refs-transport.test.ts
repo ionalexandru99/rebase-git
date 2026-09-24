@@ -7,15 +7,6 @@ import {
   createEnvironmentRequestClient,
   type EnvironmentCredential,
 } from "@rebase/environment-client";
-import {
-  connectCurrentEnvironmentEffect,
-  exchangeEnvironmentPairingEffect,
-} from "@rebase/web/environment-connection";
-import { repositoryCatalogClient } from "@rebase/web/features/repository-catalog";
-import {
-  RepositoryRefsRejected,
-  repositoryRefsClient,
-} from "@rebase/web/features/repository-refs";
 import { Effect } from "effect";
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import { createEnvironmentEventPublisher } from "#server/adapters/environment-transport/events/environment-event-publisher";
@@ -44,6 +35,15 @@ import {
 } from "#server/repository/access/index";
 import { testEnvironmentFeatures } from "#tests-integration/apps/server/environment-connection/test-environment-features";
 import { createBrowserLocalEnvironmentSession } from "#web/app/environment/browser-local-environment-session";
+import {
+  connectCurrentEnvironmentEffect,
+  exchangeEnvironmentPairingEffect,
+} from "#web/app/environment/connection/index";
+import { repositoryCatalogClient } from "#web/features/repository-catalog/index";
+import {
+  RepositoryRefsRejected,
+  repositoryRefsClient,
+} from "#web/features/repository-refs/index";
 import { createRepositoryRefsRpc } from "#web/features/repository-refs/transport/repository-refs-rpc";
 
 const execFilePromise = promisify(execFile);

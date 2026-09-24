@@ -7,15 +7,6 @@ import {
   createEnvironmentRequestClient,
   type EnvironmentCredential,
 } from "@rebase/environment-client";
-import { exchangeEnvironmentPairingEffect } from "@rebase/web/environment-connection";
-import {
-  EnvironmentFilesystemRejected,
-  environmentFilesystemClient,
-} from "@rebase/web/features/environment-filesystem";
-import {
-  RepositoryCatalogRejected,
-  repositoryCatalogClient,
-} from "@rebase/web/features/repository-catalog";
 import { Effect } from "effect";
 import { afterEach, describe, expect, it } from "vite-plus/test";
 import { createEnvironmentEventPublisher } from "#server/adapters/environment-transport/events/environment-event-publisher";
@@ -33,6 +24,15 @@ import {
 import { acquireEnvironmentContext } from "#server/persistence/environment-context";
 import { environmentPaths } from "#server/persistence/storage/environment-paths";
 import { testEnvironmentFeatures } from "#tests-integration/apps/server/environment-connection/test-environment-features";
+import { exchangeEnvironmentPairingEffect } from "#web/app/environment/connection/index";
+import {
+  EnvironmentFilesystemRejected,
+  environmentFilesystemClient,
+} from "#web/features/environment-filesystem/index";
+import {
+  RepositoryCatalogRejected,
+  repositoryCatalogClient,
+} from "#web/features/repository-catalog/index";
 
 const execFilePromise = promisify(execFile);
 const directories = new Set<string>();

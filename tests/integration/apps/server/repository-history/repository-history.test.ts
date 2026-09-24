@@ -15,11 +15,6 @@ import {
   type RepositoryHistoryBatch,
   type RepositoryHistorySnapshot,
 } from "@rebase/contracts";
-import {
-  connectEnvironmentEffect,
-  type EnvironmentProtocolConnection,
-  fetchEnvironmentDiscoveryEffect,
-} from "@rebase/web/environment-connection";
 import { Effect } from "effect";
 import { afterEach, describe, expect, it } from "vite-plus/test";
 import { createEnvironmentEventPublisher } from "#server/adapters/environment-transport/events/environment-event-publisher";
@@ -45,6 +40,11 @@ import { acquireEnvironmentContext } from "#server/persistence/environment-conte
 import { environmentPaths } from "#server/persistence/storage/environment-paths";
 import { createRepositoryAccess } from "#server/repository/access/index";
 import { testEnvironmentFeatures } from "#tests-integration/apps/server/environment-connection/test-environment-features";
+import {
+  connectEnvironmentEffect,
+  type EnvironmentProtocolConnection,
+  fetchEnvironmentDiscoveryEffect,
+} from "#web/app/environment/connection/index";
 import { createRepositoryHistoryRpc } from "#web/features/repository-history/transport/repository-history-rpc";
 
 const execFilePromise = promisify(execFile);
