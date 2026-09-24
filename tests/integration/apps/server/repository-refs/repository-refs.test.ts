@@ -1,4 +1,3 @@
-import { execFile } from "node:child_process";
 import {
   mkdir,
   mkdtemp,
@@ -9,7 +8,6 @@ import {
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { promisify } from "node:util";
 import { Effect } from "effect";
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import { createEnvironmentEventPublisher } from "#server/adapters/environment-transport/events/environment-event-publisher";
@@ -25,8 +23,8 @@ import {
   createRepositoryAccess,
   createRepositoryCoordination,
 } from "#server/repository/access/index";
+import { git } from "#tests-support/git";
 
-const execFilePromise = promisify(execFile);
 const directories = new Set<string>();
 
 afterEach(async () => {
@@ -226,7 +224,7 @@ describe("repository refs", { timeout: 30_000 }, () => {
     ).resolves.toBe("topic edit");
     await expect(
       git(fixture.repositoryPath, "stash", "list", "--format=%s"),
-    ).resolves.toBe("On main: user stash\n");
+    ).resolves.toBe("On main: user stash");
   });
 
   it("restores its own auto-stash when a foreign stash lands right after it", async () => {
@@ -279,7 +277,7 @@ describe("repository refs", { timeout: 30_000 }, () => {
     ).resolves.toBe("mine");
     await expect(
       git(fixture.repositoryPath, "stash", "list", "--format=%s"),
-    ).resolves.toBe("On main: foreign\n");
+    ).resolves.toBe("On main: foreign");
   });
 
   it("refuses to check out a branch that another worktree holds", async () => {
@@ -368,7 +366,7 @@ describe("repository refs", { timeout: 30_000 }, () => {
     expect(result.head.branch).toBeUndefined();
     await expect(
       git(fixture.repositoryPath, "rev-parse", "upstream/feature"),
-    ).resolves.toBe(`${result.head.commit}\n`);
+    ).resolves.toBe(result.head.commit);
   });
 
   it("returns typed failures for unknown repositories, worktrees, and refs", async () => {
@@ -522,38 +520,19 @@ async function createFixture(): Promise<Fixture> {
   await git(repositoryPath, "remote", "add", "origin", originPath);
   await writeFile(join(repositoryPath, "README.md"), "hello");
   await git(repositoryPath, "add", "README.md");
-  await commit(repositoryPath, "initial");
+  await git(repositoryPath, "commit", "--allow-empty", "-m", "initial");
   await git(repositoryPath, "push", "-u", "origin", "main");
   await git(repositoryPath, "tag", "v1.0.0");
   await git(repositoryPath, "checkout", "-b", "feature");
-  await commit(repositoryPath, "feature base");
+  await git(repositoryPath, "commit", "--allow-empty", "-m", "feature base");
   await git(repositoryPath, "push", "-u", "origin", "feature");
-  await commit(repositoryPath, "feature ahead");
+  await git(repositoryPath, "commit", "--allow-empty", "-m", "feature ahead");
   await git(repositoryPath, "checkout", "-b", "remote-only");
   await git(repositoryPath, "push", "-u", "origin", "remote-only");
   await git(repositoryPath, "checkout", "main");
   await git(repositoryPath, "branch", "-D", "remote-only");
   await git(repositoryPath, "worktree", "add", worktreePath, "-b", "topic");
   return { originPath, repositoryPath, root, worktreePath };
-}
-
-async function commit(path: string, message: string) {
-  await git(
-    path,
-    "-c",
-    "user.name=Rebase test",
-    "-c",
-    "user.email=rebase@example.test",
-    "commit",
-    "--allow-empty",
-    "-m",
-    message,
-  );
-}
-
-async function git(path: string, ...arguments_: string[]) {
-  const { stdout } = await execFilePromise("git", ["-C", path, ...arguments_]);
-  return stdout;
 }
 
 async function createTemporaryDirectory() {

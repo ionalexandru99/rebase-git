@@ -1,8 +1,6 @@
-import { execFile } from "node:child_process";
 import { mkdir, mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { promisify } from "node:util";
 import {
   createEnvironmentRequestClient,
   type EnvironmentCredential,
@@ -24,6 +22,7 @@ import {
 import { acquireEnvironmentContext } from "#server/persistence/environment-context";
 import { environmentPaths } from "#server/persistence/storage/environment-paths";
 import { testEnvironmentFeatures } from "#tests-integration/apps/server/environment-connection/test-environment-features";
+import { createRepository } from "#tests-support/git";
 import { exchangeEnvironmentPairingEffect } from "#web/app/environment/connection/index";
 import {
   EnvironmentFilesystemRejected,
@@ -34,7 +33,6 @@ import {
   repositoryCatalogClient,
 } from "#web/features/repository-catalog/index";
 
-const execFilePromise = promisify(execFile);
 const directories = new Set<string>();
 const environmentId = "00000000-0000-4000-8000-000000000001";
 
@@ -226,26 +224,6 @@ function filesystem(origin: string, credential: EnvironmentCredential) {
   return environmentFilesystemClient(
     createEnvironmentRequestClient(origin, () => credential),
   );
-}
-
-async function createRepository(path: string) {
-  await mkdir(path, { recursive: true });
-  await git(path, "init", "-b", "main");
-  await git(
-    path,
-    "-c",
-    "user.name=Rebase test",
-    "-c",
-    "user.email=rebase@example.test",
-    "commit",
-    "--allow-empty",
-    "-m",
-    "initial",
-  );
-}
-
-async function git(path: string, ...arguments_: string[]) {
-  await execFilePromise("git", ["-C", path, ...arguments_]);
 }
 
 async function createTemporaryDirectory() {

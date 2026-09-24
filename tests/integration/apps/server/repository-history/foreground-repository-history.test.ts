@@ -1,17 +1,15 @@
-import { execFile } from "node:child_process";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
-import { promisify } from "node:util";
 import type { ReadRepositoryHistory } from "@rebase/contracts";
 import { Effect } from "effect";
 import { afterEach, describe, expect, it } from "vite-plus/test";
 import { createLocalGitCommandRunner } from "#server/adapters/local-git/local-git-command-runner";
 import { readObjectFormat } from "#server/features/repository-history/git/read-object-format";
 import { readRepositoryHistory } from "#server/features/repository-history/git/read-repository-history";
+import { fastImport, git } from "#tests-support/git";
 
-const execute = promisify(execFile);
 const directories: string[] = [];
 afterEach(async () => {
   await Promise.all(
@@ -129,14 +127,15 @@ describe("foreground history selection", () => {
     const path = await createHistory("sha1");
     const shallow = `${path}-shallow`;
     directories.push(shallow);
-    await execute("git", [
+    await git(
+      path,
       "clone",
       "--quiet",
       "--depth=2",
       "--branch=main",
       pathToFileURL(path).href,
       shallow,
-    ]);
+    );
     const page = await read(shallow, {});
     expect(page.commits).toHaveLength(2);
     expect(page.commits[1]?.parents).toEqual([
@@ -171,10 +170,6 @@ async function read(path: string, query: Partial<ReadRepositoryHistory>) {
   );
 }
 
-async function git(path: string, ...arguments_: string[]) {
-  return (await execute("git", ["-C", path, ...arguments_])).stdout.trim();
-}
-
 async function createHistory(objectFormat: "sha1" | "sha256") {
   const path = await mkdtemp(join(tmpdir(), "rebase-foreground-"));
   directories.push(path);
@@ -207,8 +202,6 @@ async function createHistory(objectFormat: "sha1" | "sha256") {
     nested = commit("nested", [nested]);
   side = commit("side", [side, nested], 1_700_000_010);
   commit("main", [main, side], 1_700_000_005);
-  const imported = execute("git", ["-C", path, "fast-import", "--quiet"]);
-  imported.child.stdin?.end(`${commands.join("")}done\n`);
-  await imported;
+  await fastImport(path, commands.join(""));
   return path;
 }
