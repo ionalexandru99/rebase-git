@@ -8,15 +8,13 @@ import type {
   CommitInspectionClient,
   CommitInspectionState,
 } from "#web/features/commit-inspection/commit-inspection.contract";
-import {
-  readDiffPreferences,
-  saveDiffPreferences,
-} from "#web/persistence/working-changes/working-changes-store";
+import type { DiffPreferencesStore } from "#web/persistence/working-changes/working-changes-store.contract";
 import { createControllerScope } from "#web/platform/effect/controller-scope";
 import { createStore } from "#web/platform/store/store";
 
 export function createCommitInspectionController(
   client: CommitInspectionClient,
+  persistence: DiffPreferencesStore,
   scope: Pick<InspectCommit, "repositoryId" | "worktreePath">,
   runtime: ManagedRuntime.ManagedRuntime<never, never>,
 ) {
@@ -159,7 +157,7 @@ export function createCommitInspectionController(
         load(state().oid);
       }
       work.fork(
-        readDiffPreferences().pipe(
+        persistence.readDiffPreferences().pipe(
           Effect.match({
             onSuccess: (preferences) => publish({ preferences }),
             onFailure: () => undefined,
@@ -177,7 +175,9 @@ export function createCommitInspectionController(
     preferences: (preferences: DiffPreferences) => {
       publish({ preferences });
       work.fork(
-        saveDiffPreferences(preferences).pipe(Effect.catch(() => Effect.void)),
+        persistence
+          .saveDiffPreferences(preferences)
+          .pipe(Effect.catch(() => Effect.void)),
       );
     },
   };

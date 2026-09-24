@@ -12,8 +12,16 @@ import {
 import {
   type CommitDraft,
   emptyCommitDraft,
+  type WorkingChangesStore,
   WorkingChangesStoreUnavailable,
 } from "#web/persistence/working-changes/working-changes-store.contract";
+
+export const browserWorkingChangesStore: WorkingChangesStore = {
+  readCommitDraft,
+  saveCommitDraft,
+  readDiffPreferences,
+  saveDiffPreferences,
+};
 
 function access<T>(use: (store: IDBObjectStore) => Promise<T>, write: boolean) {
   return Effect.tryPromise({
@@ -37,7 +45,7 @@ function access<T>(use: (store: IDBObjectStore) => Promise<T>, write: boolean) {
       }),
   });
 }
-export function readCommitDraft(key: string) {
+function readCommitDraft(key: string) {
   return access(
     (store) => requestResult<unknown>(store.get(`draft:${key}`)),
     false,
@@ -59,13 +67,13 @@ export function readCommitDraft(key: string) {
     }),
   );
 }
-export function saveCommitDraft(key: string, draft: CommitDraft) {
+function saveCommitDraft(key: string, draft: CommitDraft) {
   return access(
     (store) => requestResult(store.put(draft, `draft:${key}`)),
     true,
   ).pipe(Effect.asVoid);
 }
-export function readDiffPreferences() {
+function readDiffPreferences() {
   return access(
     (store) => requestResult<unknown>(store.get("preferences")),
     false,
@@ -87,7 +95,7 @@ export function readDiffPreferences() {
     }),
   );
 }
-export function saveDiffPreferences(value: DiffPreferences) {
+function saveDiffPreferences(value: DiffPreferences) {
   return access(
     (store) => requestResult(store.put(value, "preferences")),
     true,

@@ -1,11 +1,13 @@
 import { Effect } from "effect";
 import { expect, it } from "vite-plus/test";
-import {
+import { browserWorkingChangesStore } from "#web/persistence/working-changes/working-changes-store";
+
+const {
   readCommitDraft,
   readDiffPreferences,
   saveCommitDraft,
   saveDiffPreferences,
-} from "#web/persistence/working-changes/working-changes-store";
+} = browserWorkingChangesStore;
 
 it("restores drafts per environment, repository, and worktree with client-wide display preferences", async () => {
   const key = JSON.stringify([crypto.randomUUID(), "repository", "/worktree"]);

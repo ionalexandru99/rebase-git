@@ -24,13 +24,9 @@ import type {
   WorkingChangesError,
 } from "#web/features/working-changes/working-changes.contract";
 import {
-  readCommitDraft,
-  readDiffPreferences,
-  saveDiffPreferences,
-} from "#web/persistence/working-changes/working-changes-store";
-import {
   type CommitDraft,
   emptyCommitDraft,
+  type WorkingChangesStore,
   type WorkingChangesStoreUnavailable,
 } from "#web/persistence/working-changes/working-changes-store.contract";
 import { createControllerScope } from "#web/platform/effect/controller-scope";
@@ -58,6 +54,7 @@ export interface WorkingChangesState {
 }
 export function createWorkingChangesController(
   client: RepositoryChangesClient,
+  persistence: WorkingChangesStore,
   initialScope: ChangesScope,
   draftKey: string,
   runtime: ManagedRuntime.ManagedRuntime<never, never>,
@@ -92,7 +89,12 @@ export function createWorkingChangesController(
   const scope = (): ChangesScope => ({ ...initialScope, amend: state().amend });
   const fail = (error: WorkingChangesFailure) =>
     Effect.sync(() => publish({ error: error.message }));
-  const draft = createCommitDraft(work, runtime, fail);
+  const draft = createCommitDraft(
+    persistence.saveCommitDraft,
+    work,
+    runtime,
+    fail,
+  );
   const run = (effect: Effect.Effect<unknown, WorkingChangesFailure>) =>
     work.fork(effect.pipe(Effect.catch(fail)));
   const runRead = (effect: Effect.Effect<unknown, WorkingChangesFailure>) => {
@@ -253,7 +255,7 @@ export function createWorkingChangesController(
       if (!work.start()) return;
       work.fork(
         Effect.gen(function* () {
-          yield* readCommitDraft(draftKey).pipe(
+          yield* persistence.readCommitDraft(draftKey).pipe(
             Effect.tap((restored) =>
               Effect.sync(() => {
                 normalDraft = restored;
@@ -262,7 +264,7 @@ export function createWorkingChangesController(
             ),
             Effect.catch(fail),
           );
-          yield* readDiffPreferences().pipe(
+          yield* persistence.readDiffPreferences().pipe(
             Effect.tap((preferences) =>
               Effect.sync(() => publish({ preferences })),
             ),
@@ -305,7 +307,7 @@ export function createWorkingChangesController(
     },
     preferences: (preferences: DiffPreferences) => {
       publish({ preferences });
-      run(writes.withPermit(saveDiffPreferences(preferences)));
+      run(writes.withPermit(persistence.saveDiffPreferences(preferences)));
     },
     amend: (amend: boolean) =>
       operation(() =>
@@ -314,9 +316,9 @@ export function createWorkingChangesController(
           if (amend) {
             if (amendDraftHead !== next.head) amendDraft = undefined;
             amendDraftHead = next.head;
-            const restored = yield* readCommitDraft(
-              `${draftKey}:amend:${next.head}`,
-            ).pipe(Effect.catch(() => Effect.succeed(emptyCommitDraft)));
+            const restored = yield* persistence
+              .readCommitDraft(`${draftKey}:amend:${next.head}`)
+              .pipe(Effect.catch(() => Effect.succeed(emptyCommitDraft)));
             amendDraft ??= restored.subject
               ? restored
               : splitCommitMessage(next.message);

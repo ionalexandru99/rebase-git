@@ -3,6 +3,7 @@ import { useEffect, useMemo } from "react";
 import type { CommitInspectionClient } from "#web/features/commit-inspection/commit-inspection.contract";
 import { createCommitInspectionController } from "#web/features/commit-inspection/commit-inspection-controller";
 import { usePanelFeature } from "#web/features/workspace-panel/api";
+import { browserWorkingChangesStore } from "#web/persistence/working-changes/working-changes-store";
 import { CommitInspection } from "#web-ui/features/commit-inspection/commit-inspection";
 
 export function CommitInspectionSession({
@@ -23,6 +24,7 @@ export function CommitInspectionSession({
     () =>
       createCommitInspectionController(
         client,
+        browserWorkingChangesStore,
         { repositoryId, worktreePath },
         runtime,
       ),

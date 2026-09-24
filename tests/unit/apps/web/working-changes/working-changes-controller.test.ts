@@ -5,15 +5,20 @@ import {
   createWorkingChangesController,
   type WorkingChangesController,
 } from "#web/features/working-changes/working-changes-controller";
-import { saveCommitDraft } from "#web/persistence/working-changes/working-changes-store";
-import { emptyCommitDraft } from "#web/persistence/working-changes/working-changes-store.contract";
+import {
+  emptyCommitDraft,
+  type WorkingChangesStore,
+} from "#web/persistence/working-changes/working-changes-store.contract";
 
-vi.mock("#web/persistence/working-changes/working-changes-store", () => ({
+const saveCommitDraft = vi.fn<WorkingChangesStore["saveCommitDraft"]>(
+  () => Effect.void,
+);
+const persistence: WorkingChangesStore = {
   readDiffPreferences: () => Effect.succeed(defaultDiffPreferences),
   readCommitDraft: () => Effect.succeed(emptyCommitDraft),
   saveDiffPreferences: () => Effect.void,
-  saveCommitDraft: vi.fn(() => Effect.void),
-}));
+  saveCommitDraft,
+};
 
 const emptyChanges = {
   revision: "one",
@@ -28,7 +33,7 @@ async function withStartedController(
   use: (controller: WorkingChangesController) => Promise<void>,
 ) {
   vi.stubGlobal("document", { visibilityState: "visible" });
-  vi.mocked(saveCommitDraft).mockClear();
+  saveCommitDraft.mockClear();
   const runtime = ManagedRuntime.make(Layer.empty);
   const controller = createWorkingChangesController(
     {
@@ -37,6 +42,7 @@ async function withStartedController(
       diff: () => Effect.never,
       commit: () => Effect.never,
     },
+    persistence,
     { repositoryId: "repository", worktreePath: "/repository", amend: false },
     "draft",
     runtime,
@@ -108,6 +114,7 @@ it("allows mutations after stopping and restarting an interrupted operation", as
     );
   const controller = createWorkingChangesController(
     { read, mutate, diff: () => Effect.never, commit: () => Effect.never },
+    persistence,
     { repositoryId: "repository", worktreePath: "/repository", amend: false },
     "draft",
     runtime,
