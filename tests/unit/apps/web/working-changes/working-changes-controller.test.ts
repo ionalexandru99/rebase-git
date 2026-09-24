@@ -1,4 +1,5 @@
 import { Effect, Layer, ManagedRuntime } from "effect";
+import { TestClock } from "effect/testing";
 import { expect, it, vi } from "vite-plus/test";
 import { defaultDiffPreferences } from "#web/domain/file-diff/diff-preferences.contract";
 import {
@@ -139,6 +140,42 @@ it("allows mutations after stopping and restarting an interrupted operation", as
     expect(mutate).toHaveBeenCalledTimes(2);
   } finally {
     interrupted.resolve();
+    controller.stop();
+    await runtime.dispose();
+    vi.unstubAllGlobals();
+  }
+});
+
+it("stops refreshing while inactive and refreshes again once active", async () => {
+  vi.stubGlobal("document", { visibilityState: "visible" });
+  const runtime = ManagedRuntime.make(TestClock.layer());
+  const read = vi.fn(() => Effect.succeed(emptyChanges));
+  const controller = createWorkingChangesController(
+    {
+      read,
+      mutate: () => Effect.never,
+      diff: () => Effect.never,
+      commit: () => Effect.never,
+    },
+    persistence,
+    { repositoryId: "repository", worktreePath: "/repository", amend: false },
+    "draft",
+    runtime,
+  );
+  try {
+    controller.start();
+    await vi.waitFor(() => expect(read).toHaveBeenCalledTimes(1));
+    await runtime.runPromise(TestClock.adjust(10_000));
+    await vi.waitFor(() => expect(read).toHaveBeenCalledTimes(2));
+
+    controller.setActive(false);
+    controller.invalidate();
+    await runtime.runPromise(TestClock.adjust(60_000));
+    expect(read).toHaveBeenCalledTimes(2);
+
+    controller.setActive(true);
+    await vi.waitFor(() => expect(read).toHaveBeenCalledTimes(3));
+  } finally {
     controller.stop();
     await runtime.dispose();
     vi.unstubAllGlobals();
