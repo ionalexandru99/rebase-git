@@ -26,15 +26,19 @@ export default function ChangeDiffViewer({
   const loading = useWorkingChanges("loading");
   const [selected, setSelected] = useState<SelectedLineRange | null>(null);
   const [expandContext, setExpandContext] = useState(false);
+  const section = selection?.section ?? "unstaged";
+  const file = selection
+    ? changes?.[section].find((file) => file.path === selection.path)
+    : undefined;
+  const previousPath = file?.previousPath ?? null;
   const { metadata, hasHiddenContext } = useMemo(
-    () => createChangeDiffModel(diff),
-    [diff],
+    () => createChangeDiffModel(diff, previousPath),
+    [diff, previousPath],
   );
   const lines = useMemo(
     () => (metadata ? selectedDiffLines(metadata, selected) : []),
     [metadata, selected],
   );
-  const section = selection?.section ?? "unstaged";
   const action = section === "unstaged" ? "stage" : "unstage";
   const label = section === "unstaged" ? "Stage" : "Unstage";
   const disabled = !writable || busy || loading;
@@ -50,10 +54,7 @@ export default function ChangeDiffViewer({
         lines: ids,
       });
   };
-  const empty =
-    changes !== null &&
-    (selection === null ||
-      !changes[section].some((file) => file.path === selection.path));
+  const empty = changes !== null && file === undefined;
   return (
     <section
       className="flex h-full min-h-0 min-w-0 flex-col bg-background"
@@ -112,6 +113,17 @@ export default function ChangeDiffViewer({
         <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
           {loading || selection ? "Loading changes…" : "Select a file"}
         </div>
+      ) : previousPath !== null &&
+        diff.kind === "text" &&
+        diff.before === diff.after ? (
+        <>
+          <div className="shrink-0 break-all border-border border-b px-3 py-2 font-mono text-xs">
+            {previousPath} → {diff.path}
+          </div>
+          <p className="p-4 text-sm text-muted-foreground">
+            File renamed. Content unchanged.
+          </p>
+        </>
       ) : (
         <DiffContent
           diff={diff}

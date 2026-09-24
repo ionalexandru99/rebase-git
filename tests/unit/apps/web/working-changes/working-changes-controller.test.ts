@@ -28,6 +28,7 @@ const emptyChanges = {
   unstaged: [],
   staged: [],
   truncated: false,
+  renamesLimited: false,
 };
 
 async function withStartedController(
@@ -103,6 +104,7 @@ it("allows mutations after stopping and restarting an interrupted operation", as
       unstaged: [],
       staged: [],
       truncated: false,
+      renamesLimited: false,
     }),
   );
   const interrupted = Promise.withResolvers<void>();

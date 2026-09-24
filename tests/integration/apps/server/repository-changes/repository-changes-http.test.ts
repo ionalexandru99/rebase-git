@@ -136,7 +136,7 @@ it("authorizes changes reads separately from index mutations across HTTP", async
           expect(refused).toMatchObject({ status: 403 });
           const staged = yield* owner.mutate(command);
           expect(staged.changes.staged).toEqual([
-            { path: "draft.txt", status: "A" },
+            { path: "draft.txt", previousPath: null, status: "A" },
           ]);
           expect(staged.diff?.after).toBe("draft\n");
           expect(

@@ -56,11 +56,12 @@ async function fixture(linkedWorktree = false) {
           head: oid,
           message: "Previous message",
           unstaged: [
-            { path: "first.bin", status: "M" },
-            { path: "second.bin", status: "M" },
+            { path: "first.bin", previousPath: null, status: "M" },
+            { path: "second.bin", previousPath: null, status: "M" },
           ],
           staged: [],
           truncated: false,
+          renamesLimited: false,
         };
       } else if (endpoint.path === CommitInspectionHttpApi.inspect.path) {
         const scope = Schema.decodeUnknownSync(

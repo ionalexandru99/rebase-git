@@ -23,8 +23,10 @@ export function CommitFiles({
   readonly path: string | null;
   readonly select: (path: string) => void;
 }) {
-  const { rows, collapsed, scrollRef, virtualizer, toggle } =
-    useFileRows(files);
+  const { rows, collapsed, scrollRef, virtualizer, toggle } = useFileRows(
+    files,
+    { rowHeight: (row) => (row.file?.previousPath ? 52 : 32) },
+  );
   return (
     <section
       className="flex min-h-0 flex-col border-border border-l"

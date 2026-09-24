@@ -18,7 +18,8 @@ export const ChangesScope = Schema.Struct({
 export type ChangesScope = typeof ChangesScope.Type;
 export const ChangedFile = Schema.Struct({
   path: RepositoryPath,
-  status: Schema.Literals(["A", "M", "D", "T", "U", "?"]),
+  previousPath: Schema.NullOr(RepositoryPath),
+  status: Schema.Literals(["A", "M", "D", "R", "T", "U", "?"]),
 });
 export type ChangedFile = typeof ChangedFile.Type;
 export const RepositoryChanges = Schema.Struct({
@@ -28,6 +29,7 @@ export const RepositoryChanges = Schema.Struct({
   unstaged: Schema.Array(ChangedFile),
   staged: Schema.Array(ChangedFile),
   truncated: Schema.Boolean,
+  renamesLimited: Schema.Boolean,
 });
 export type RepositoryChanges = typeof RepositoryChanges.Type;
 export const ViewedChange = Schema.Struct({

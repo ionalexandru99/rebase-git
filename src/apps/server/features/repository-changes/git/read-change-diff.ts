@@ -23,7 +23,7 @@ import {
 export function readChangeDiff(
   git: GitCommandRunner,
   command: ReadChangeDiff,
-  base: string,
+  { base, previousPath }: { base: string; previousPath: string | null },
   index: GitCommandOptions = {},
 ) {
   return Effect.gen(function* () {
@@ -33,7 +33,7 @@ export function readChangeDiff(
         objectFile(
           git,
           command.worktreePath,
-          command.path,
+          previousPath ?? command.path,
           command.section === "staged" ? { ...index, tree: base } : index,
         ),
         command.section === "staged"
@@ -58,7 +58,9 @@ export function readChangeDiff(
             ),
           }
         : working;
-    return buildChangeDiff(command.path, base, before, after);
+    return buildChangeDiff(command.path, base, before, after, {
+      previousPath: previousPath ?? command.path,
+    });
   });
 }
 

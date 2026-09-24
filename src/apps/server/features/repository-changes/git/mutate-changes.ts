@@ -60,11 +60,12 @@ export function mutateChanges<E>(
         );
       yield* safeChangePath(command.worktreePath, path);
     }
+    const sources = renameSources(files, paths);
     if (selection._tag === "Lines") {
       const diff = yield* readChangeDiff(
         git,
         { ...command, path: selection.path },
-        base,
+        { base, previousPath: sources[0] ?? null },
         index,
       );
       if (diff.revision !== selection.revision)
@@ -111,11 +112,18 @@ export function mutateChanges<E>(
         command.action === "stage"
           ? ["add"]
           : ["restore", `--source=${base}`, "--staged"],
-        paths,
+        [...paths, ...sources],
       );
       return;
     }
-    yield* discardFiles(git, index, command, { snapshot, base }, paths, verify);
+    yield* discardFiles(
+      git,
+      index,
+      command,
+      { snapshot, base },
+      { paths, sources },
+      verify,
+    );
   });
 }
 
@@ -124,7 +132,7 @@ function discardFiles<E>(
   index: GitCommandOptions,
   command: MutateChanges,
   { snapshot, base }: { snapshot: RepositoryChanges; base: string },
-  paths: readonly string[],
+  { paths, sources }: { paths: readonly string[]; sources: readonly string[] },
   verify: Effect.Effect<void, E>,
 ) {
   return Effect.gen(function* () {
@@ -153,6 +161,13 @@ function discardFiles<E>(
       );
       return;
     }
+    if (sources.some((path) => unstaged.has(path)))
+      return yield* Effect.fail(
+        changesError(
+          "Conflict",
+          "A new file exists at the renamed file's original path. Move it before discarding the rename.",
+        ),
+      );
     const edited = paths.filter((path) => unstaged.has(path));
     const patch =
       edited.length === 0
@@ -173,14 +188,28 @@ function discardFiles<E>(
           );
     yield* verify;
     yield* applyChangePatch(git, index, command, patch, true);
+    const restore = ["restore", `--source=${base}`, "--staged", "--worktree"];
     yield* pathspecGit(
       git,
       index,
       directory,
-      ["restore", `--source=${base}`, "--staged", "--worktree"],
+      restore,
       paths.filter((path) => !unstaged.has(path)),
     );
+    yield* pathspecGit(git, index, directory, restore, sources);
   });
+}
+
+function renameSources(
+  files: RepositoryChanges["staged"],
+  paths: readonly string[],
+) {
+  const selected = new Set(paths);
+  return files.flatMap((file) =>
+    file.previousPath !== null && selected.has(file.path)
+      ? [file.previousPath]
+      : [],
+  );
 }
 
 const patchOptions = [

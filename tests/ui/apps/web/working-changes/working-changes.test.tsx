@@ -23,17 +23,33 @@ const after = 'export const status = "new";\n';
 const patch =
   'Index: "src/read-status.ts"\n===================================================================\n--- "src/read-status.ts"\t\n+++ "src/read-status.ts"\t\n@@ -1,1 +1,1 @@\n-export const status = "old";\n+export const status = "new";\n';
 
-async function fixture(extraPaths: readonly string[] = []) {
+async function fixture(
+  extraPaths: readonly string[] = [],
+  {
+    staged = [],
+    renamesLimited = false,
+    diffs = {},
+  }: {
+    readonly staged?: RepositoryChanges["staged"];
+    readonly renamesLimited?: boolean;
+    readonly diffs?: Readonly<Record<string, ChangeDiff>>;
+  } = {},
+) {
   let snapshot: RepositoryChanges = {
     revision: "one",
     head: "a".repeat(40),
     message: "Old commit message",
     unstaged: [
-      { path, status: "M" },
-      ...extraPaths.map((path) => ({ path, status: "M" as const })),
+      { path, previousPath: null, status: "M" },
+      ...extraPaths.map((path) => ({
+        path,
+        previousPath: null,
+        status: "M" as const,
+      })),
     ],
-    staged: [],
+    staged,
     truncated: false,
+    renamesLimited,
   };
   const diff: ChangeDiff = {
     path,
@@ -64,10 +80,10 @@ async function fixture(extraPaths: readonly string[] = []) {
         reads += 1;
         return snapshot;
       }),
-    diff: () =>
+    diff: (command) =>
       Effect.sync(() => {
         diffReads += 1;
-        return diff;
+        return diffs[command.path] ?? diff;
       }),
     mutate: (command) =>
       Effect.sync(() => {
@@ -75,8 +91,14 @@ async function fixture(extraPaths: readonly string[] = []) {
         snapshot = {
           ...snapshot,
           revision: `revision-${mutations.length}`,
-          unstaged: command.action === "stage" ? [] : [{ path, status: "M" }],
-          staged: command.action === "stage" ? [{ path, status: "M" }] : [],
+          unstaged:
+            command.action === "stage"
+              ? []
+              : [{ path, previousPath: null, status: "M" }],
+          staged:
+            command.action === "stage"
+              ? [{ path, previousPath: null, status: "M" }]
+              : [],
         };
         return {
           changes: snapshot,
@@ -145,6 +167,60 @@ async function fixture(extraPaths: readonly string[] = []) {
 }
 
 describe("working changes", () => {
+  it("shows a staged rename on one row and its source in the diff", async () => {
+    const renamed = "src/ui/Button.tsx";
+    const source = "src/legacy/Button.tsx";
+    await fixture([], {
+      staged: [
+        { path: renamed, previousPath: source, status: "R" },
+        { path: "src/ui/Card.tsx", previousPath: null, status: "M" },
+      ],
+      diffs: {
+        [renamed]: {
+          path: renamed,
+          revision: "renamed",
+          kind: "text",
+          before,
+          after: before,
+          beforeBytes: before.length,
+          afterBytes: before.length,
+          mime: null,
+          patch: "",
+        },
+      },
+    });
+    const row = page.getByRole("button", {
+      name: `Staged ${renamed} renamed from ${source}`,
+      exact: true,
+    });
+    await expect.element(row).toHaveTextContent("Button.tsx← legacy/");
+    const next = page.getByRole("button", {
+      name: "Staged src/ui/Card.tsx",
+      exact: true,
+    });
+    expect(
+      next.element().getBoundingClientRect().top -
+        row.element().getBoundingClientRect().top,
+    ).toBe(32);
+    await row.click();
+    await expect
+      .element(page.getByText(`${source} → ${renamed}`))
+      .toBeVisible();
+    await expect
+      .element(page.getByText("File renamed. Content unchanged."))
+      .toBeVisible();
+    await page.getByRole("button", { name: "List", exact: true }).click();
+    await expect.element(row).toHaveTextContent("src/{legacy → ui}/Button.tsx");
+    await page.getByRole("button", { name: "Tree", exact: true }).click();
+  });
+  it("says when too many files changed to match renames", async () => {
+    await fixture([], { renamesLimited: true });
+    await expect
+      .element(page.getByRole("status").filter({ hasText: "match renames" }))
+      .toHaveTextContent(
+        "Too many changed files to match renames. Moved files show as deleted and added.",
+      );
+  });
   it("collapses folders and sections independently without changing Git state", async () => {
     const f = await fixture(["src/nested/change.ts"]);
     const folder = page.getByRole("button", {

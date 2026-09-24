@@ -21,14 +21,10 @@ export default function CommitDiff({
   const previous = files[index - 1];
   const next = files[index + 1];
   const file = files[index];
-  const { metadata, hasHiddenContext } = useMemo(() => {
-    const model = createChangeDiffModel(state.diff);
-    if (model.metadata && file?.previousPath) {
-      model.metadata.prevName = file.previousPath;
-      model.metadata.type = "rename-changed";
-    }
-    return model;
-  }, [state.diff, file?.previousPath]);
+  const { metadata, hasHiddenContext } = useMemo(
+    () => createChangeDiffModel(state.diff, file?.previousPath ?? null),
+    [state.diff, file?.previousPath],
+  );
   return (
     <section
       className="flex min-h-0 min-w-0 flex-col"

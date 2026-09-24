@@ -1,10 +1,13 @@
 import { execFile } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import {
+  access,
   mkdir,
   mkdtemp,
+  readdir,
   readFile,
   realpath,
+  rename,
   utimes,
   writeFile,
 } from "node:fs/promises";
@@ -450,3 +453,143 @@ describe("working changes through Git", () => {
     expect((await f.read()).staged).toEqual([]);
   });
 });
+
+const caseInsensitive = await caseInsensitiveFileSystem();
+
+describe("renamed files through Git", () => {
+  const original = Array.from({ length: 10 }, (_, i) => `line ${i}\n`).join("");
+  const edited = original.replace("line 1\n", "LINE 1\n");
+  async function renamed() {
+    const f = await fixture();
+    await writeFile(join(f.directory, "file.txt"), original);
+    await f.git("commit", "-am", "Longer file");
+    await f.git("mv", "file.txt", "moved.txt");
+    await writeFile(join(f.directory, "moved.txt"), edited);
+    await f.git("add", "moved.txt");
+    return f;
+  }
+  const exists = (path: string) =>
+    access(path).then(
+      () => true,
+      () => false,
+    );
+
+  it("reads a staged rename with its source and content diff", async () => {
+    const f = await renamed();
+    expect((await f.read()).staged).toEqual([
+      { path: "moved.txt", previousPath: "file.txt", status: "R" },
+    ]);
+    const diff = await f.diff("staged", false, "moved.txt");
+    expect(diff.before).toBe(original);
+    expect(diff.after).toBe(edited);
+  });
+  it("unstages both paths of a rename without touching the worktree", async () => {
+    const f = await renamed();
+    await f.mutate("unstage", "staged", {
+      _tag: "Files",
+      paths: ["moved.txt"],
+    });
+    const changes = await f.read();
+    expect(changes.staged).toEqual([]);
+    expect(
+      changes.unstaged.map((file) => `${file.status} ${file.path}`).sort(),
+    ).toEqual(["? moved.txt", "D file.txt"]);
+    expect(await readFile(join(f.directory, "moved.txt"), "utf8")).toBe(edited);
+  });
+  it("discards a rename by restoring the original file", async () => {
+    const f = await renamed();
+    await f.mutate("discard", "staged");
+    const changes = await f.read();
+    expect([...changes.staged, ...changes.unstaged]).toEqual([]);
+    expect(await readFile(join(f.directory, "file.txt"), "utf8")).toBe(
+      original,
+    );
+    expect(await exists(join(f.directory, "moved.txt"))).toBe(false);
+  });
+  it("keeps the rename staged when unstaging selected lines", async () => {
+    const f = await renamed();
+    const diff = await f.diff("staged", false, "moved.txt");
+    await f.mutate("unstage", "staged", {
+      _tag: "Lines",
+      path: "moved.txt",
+      revision: diff.revision,
+      lines: ["-2", "+2"],
+    });
+    expect((await f.read()).staged).toEqual([
+      { path: "moved.txt", previousPath: "file.txt", status: "R" },
+    ]);
+    expect((await f.git("show", ":moved.txt")).stdout).toBe(original);
+    expect(await readFile(join(f.directory, "moved.txt"), "utf8")).toBe(edited);
+  });
+  it("refuses to discard a rename over a new file at the original path", async () => {
+    const f = await renamed();
+    await writeFile(join(f.directory, "file.txt"), "new file\n");
+    await expect(f.mutate("discard", "staged")).rejects.toMatchObject({
+      failure: { reason: "Conflict" },
+    });
+    expect(await readFile(join(f.directory, "file.txt"), "utf8")).toBe(
+      "new file\n",
+    );
+    expect(await readFile(join(f.directory, "moved.txt"), "utf8")).toBe(edited);
+  });
+  it("shows added and deleted files when too many files changed to match renames", async () => {
+    const f = await fixture();
+    const count = 1001;
+    await mkdir(join(f.directory, "from"));
+    await mkdir(join(f.directory, "to"));
+    for (let i = 0; i < count; i++)
+      await writeFile(
+        join(f.directory, "from", `old-${i}.txt`),
+        `file ${i}\n${original}`,
+      );
+    await f.git("add", ".");
+    await f.git("commit", "-m", "Many files");
+    for (let i = 0; i < count; i++) {
+      await rename(
+        join(f.directory, "from", `old-${i}.txt`),
+        join(f.directory, "to", `new-${i}.txt`),
+      );
+      await writeFile(
+        join(f.directory, "to", `new-${i}.txt`),
+        `file ${i}\n${edited}`,
+      );
+    }
+    await f.git("add", "-A");
+    const changes = await f.read();
+    expect(changes.renamesLimited).toBe(true);
+    expect(changes.staged).toHaveLength(count * 2);
+    expect(changes.staged.every((file) => file.previousPath === null)).toBe(
+      true,
+    );
+  });
+  it.skipIf(!caseInsensitive)(
+    "discards a case-only rename without deleting the file",
+    async () => {
+      const f = await fixture();
+      await f.git("mv", "file.txt", "File.txt");
+      expect((await f.read()).staged).toEqual([
+        { path: "File.txt", previousPath: "file.txt", status: "R" },
+      ]);
+      await f.mutate("discard", "staged");
+      const changes = await f.read();
+      expect([...changes.staged, ...changes.unstaged]).toEqual([]);
+      expect(await readdir(f.directory)).toContain("file.txt");
+      expect(await readFile(join(f.directory, "file.txt"), "utf8")).toBe(
+        "one\ntwo\nthree\n",
+      );
+    },
+  );
+});
+
+async function caseInsensitiveFileSystem() {
+  const directory = await mkdtemp(join(tmpdir(), "rebase-case-"));
+  try {
+    await writeFile(join(directory, "Probe"), "");
+    return await access(join(directory, "probe")).then(
+      () => true,
+      () => false,
+    );
+  } finally {
+    await removeTemporaryDirectory(directory);
+  }
+}
