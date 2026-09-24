@@ -4,7 +4,7 @@ import {
   type RepositoryCommit,
   type RepositoryFreshness,
 } from "@rebase/contracts";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vite-plus/test";
 import { createBrowserRepositoryHistoryReader } from "#web/features/repository-history/browser-repository-history-reader";
 import {
   type RepositoryHistoryGateway,

@@ -1,5 +1,5 @@
 import { Deferred, Effect } from "effect";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import { render } from "#tests-ui/runtime/render";
 import { githubAvatarSource } from "#web/features/author-avatars/github-avatar-source";
 import {

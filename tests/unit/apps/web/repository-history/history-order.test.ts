@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vite-plus/test";
 import { HistoryOrderIndex } from "#web/features/repository-history/query/history-order";
 import type { HistoryOrderNode } from "#web/features/repository-history/query/history-order.contract";
 import { historyOrderScopeKey } from "#web/features/repository-history/query/history-query-scope";

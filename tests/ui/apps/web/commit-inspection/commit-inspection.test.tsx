@@ -3,7 +3,7 @@ import type {
   CommitInspection as Details,
 } from "@rebase/contracts";
 import { Effect, Layer, ManagedRuntime } from "effect";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vite-plus/test";
 import {
   CommitGraphFixture,
   history,

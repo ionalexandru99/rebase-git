@@ -1,5 +1,5 @@
 import type { RepositoryHistoryRefTarget } from "@rebase/contracts";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vite-plus/test";
 import type { CommitGraphPageReader } from "#web/features/commit-graph/paging/commit-graph-page-window.contract";
 import { locateCommitGraphTarget } from "#web/features/commit-graph/paging/locate-commit-graph-target";
 import { HistoryOrderIndex } from "#web/features/repository-history/query/history-order";

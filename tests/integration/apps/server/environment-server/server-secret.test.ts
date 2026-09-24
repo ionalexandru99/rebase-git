@@ -10,7 +10,7 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Effect } from "effect";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import { environmentPaths } from "#server/persistence/storage/environment-paths";
 import { ensureServerSecret } from "#server/persistence/storage/server-secret";
 

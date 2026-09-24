@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vite-plus/test";
 import { createChangeDiffModel } from "#web/features/file-diff/diff-model";
 import { selectedDiffLines } from "#web/features/working-changes/diff/diff-selection";
 

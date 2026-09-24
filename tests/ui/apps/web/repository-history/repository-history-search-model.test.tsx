@@ -1,6 +1,6 @@
 import { act, StrictMode } from "react";
-import { describe, expect, it, vi } from "vitest";
-import { page } from "vitest/browser";
+import { describe, expect, it, vi } from "vite-plus/test";
+import { page } from "vite-plus/test/browser";
 import { render } from "vitest-browser-react";
 import { emptyHistorySearchSnapshot } from "#web/features/history-search/repository-history-search-model";
 import {

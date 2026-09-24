@@ -8,8 +8,8 @@ import {
   type RequestableEnvironmentHttpRoute,
 } from "@rebase/environment-client";
 import { Effect, Layer, ManagedRuntime, Schema } from "effect";
-import { expect, it } from "vitest";
-import { page } from "vitest/browser";
+import { expect, it } from "vite-plus/test";
+import { page } from "vite-plus/test/browser";
 import { render } from "vitest-browser-react";
 import { ResizablePanel } from "#web-ui/components/ui/resizable";
 import { WorkspacePanel } from "#web-ui/features/workspace-panel/index";

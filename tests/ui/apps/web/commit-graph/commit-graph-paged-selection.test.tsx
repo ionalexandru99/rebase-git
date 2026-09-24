@@ -1,7 +1,7 @@
 import type { RepositoryCommit } from "@rebase/contracts";
 import { useMemo } from "react";
-import { describe, expect, it, vi } from "vitest";
-import { page, userEvent } from "vitest/browser";
+import { describe, expect, it, vi } from "vite-plus/test";
+import { page, userEvent } from "vite-plus/test/browser";
 import { render } from "#tests-ui/runtime/render";
 import { useCommitGraphSelection } from "#web/features/commit-graph/hooks/use-commit-graph-selection";
 import type {

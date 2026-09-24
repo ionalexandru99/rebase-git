@@ -1,5 +1,5 @@
 import { Effect } from "effect";
-import { expect, it } from "vitest";
+import { expect, it } from "vite-plus/test";
 import {
   readCommitDraft,
   readDiffPreferences,

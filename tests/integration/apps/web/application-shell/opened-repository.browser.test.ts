@@ -1,6 +1,6 @@
 import type { RepositoryRefs } from "@rebase/contracts";
 import { Effect } from "effect";
-import { expect, it, vi } from "vitest";
+import { expect, it, vi } from "vite-plus/test";
 import { createOpenedRepositoryStore } from "#web/app/shell/opened-repository";
 import { createRepositoryRefsController } from "#web/features/repository-refs/repository-refs-controller";
 

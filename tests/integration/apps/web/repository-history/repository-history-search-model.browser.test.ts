@@ -1,5 +1,5 @@
 import { Effect, Layer, ManagedRuntime } from "effect";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vite-plus/test";
 import type { RepositoryHistorySearch } from "#web/domain/repository-history/history-search.contract";
 import { createRepositoryHistorySearchModel } from "#web/features/history-search/repository-history-search-model";
 

@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vite-plus/test";
 import type { RepositoryHistoryCacheDiagnostics } from "#web/domain/repository-history/history-storage.contract";
 import {
   historyCacheCleanupCandidates,

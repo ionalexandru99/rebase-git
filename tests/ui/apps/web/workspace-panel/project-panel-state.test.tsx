@@ -1,5 +1,5 @@
-import { beforeEach, expect, it, vi } from "vitest";
-import { page } from "vitest/browser";
+import { beforeEach, expect, it, vi } from "vite-plus/test";
+import { page } from "vite-plus/test/browser";
 import { render } from "vitest-browser-react";
 import { ResizablePanel } from "#web-ui/components/ui/resizable";
 import { WorkspacePanel } from "#web-ui/features/workspace-panel/index";

@@ -1,5 +1,5 @@
 import type { RepositoryCommit } from "@rebase/contracts";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vite-plus/test";
 import { clearHistoryCache } from "#web/features/repository-history/cache/repository-history-storage";
 import type { HistoryOrderCache } from "#web/features/repository-history/query/history-order.contract";
 import { readCurrentRepositoryHistory } from "#web/features/repository-history/query/read-current-repository-history";

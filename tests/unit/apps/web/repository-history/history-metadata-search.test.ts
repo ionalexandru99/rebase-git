@@ -1,5 +1,5 @@
 import type { RepositoryCommit } from "@rebase/contracts";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vite-plus/test";
 import { matchingHistoryMetadata } from "#web/features/repository-history/search/history-metadata-search";
 import {
   decodeHistorySearchCursor,
