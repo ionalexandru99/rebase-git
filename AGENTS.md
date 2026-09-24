@@ -22,6 +22,14 @@ The application should also be able to connect to any remote environment via SSH
 - When a change adds, removes, or reorders a subprocess in a cross-platform packaging path, the validation matrix must run that exact command on Windows before the release workflow uses it. `pnpm build:web` and an npm package smoke test do not cover `pnpm build:desktop-package`.
 - Before restoring code removed by a `fix(...)` commit, inspect why it was removed. Preserve the fixed invariant even when the newer feature needs a different implementation.
 
+### Cross-platform tests
+
+- Windows runs Git and process-heavy tests several times slower than Linux. Rely on the shared project timeouts in `vitest.config.ts` and the Playwright configs; do not add per-test timeouts to pass on a slower runner.
+- Remove temporary directories with `removeTemporaryDirectory` from `#tests-support/temporary-directory`. Windows cannot delete or replace a file that Git, SQLite, or Electron still holds open, even briefly after the process closes.
+- Windows file watchers deliver late `change` notifications for directory timestamps, including writes made before the watcher started. Treat a `change` on a directory that has its own watcher as noise, and do not assert that a watcher never reports an unrelated change kind unless the adapter filters that noise.
+- Fixture file names must be valid on Windows: no `"`, `:`, `*`, `?`, `<`, `>`, `|`, or trailing spaces and dots. Skip a case on `win32` only when it tests a name that Windows cannot create.
+- Paths can contain spaces and non-ASCII characters. Pass them as separate process arguments, never inside a shell string.
+
 ## Performance
 
 Performance is one of the corner stones of the application. Speed is the non negotiable aspect of the app. If it is not fast it is bad.

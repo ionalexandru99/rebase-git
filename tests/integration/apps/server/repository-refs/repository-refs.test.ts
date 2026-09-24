@@ -3,7 +3,6 @@ import {
   mkdtemp,
   readFile,
   realpath,
-  rm,
   writeFile,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -24,19 +23,18 @@ import {
   createRepositoryCoordination,
 } from "#server/repository/access/index";
 import { git } from "#tests-support/git";
+import { removeTemporaryDirectory } from "#tests-support/temporary-directory";
 
 const directories = new Set<string>();
 
 afterEach(async () => {
   await Promise.all(
-    [...directories].map((directory) =>
-      rm(directory, { force: true, recursive: true }),
-    ),
+    [...directories].map((directory) => removeTemporaryDirectory(directory)),
   );
   directories.clear();
 });
 
-describe("repository refs", { timeout: 30_000 }, () => {
+describe("repository refs", () => {
   it("reads each remote provider alongside the GitHub avatar repository", async () => {
     const fixture = await createFixture();
     await git(

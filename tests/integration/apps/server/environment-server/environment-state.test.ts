@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { mkdir, mkdtemp, readFile, rm, stat } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { DatabaseSync } from "node:sqlite";
@@ -15,6 +15,7 @@ import {
   repositoryCatalogTable,
 } from "#server/persistence/environment-state.schema";
 import { environmentPaths } from "#server/persistence/storage/environment-paths";
+import { removeTemporaryDirectory } from "#tests-support/temporary-directory";
 
 const directories = new Set<string>();
 const generatedMigrations = readMigrationFiles({
@@ -40,9 +41,7 @@ if (
 
 afterEach(async () => {
   await Promise.all(
-    [...directories].map((directory) =>
-      rm(directory, { force: true, recursive: true }),
-    ),
+    [...directories].map((directory) => removeTemporaryDirectory(directory)),
   );
   directories.clear();
 });
@@ -159,75 +158,71 @@ describe("Environment state", () => {
     }
   });
 
-  it.each([2, 5])(
-    "upgrades a version-%i database",
-    { timeout: 30_000 },
-    async (version) => {
-      const paths = await createTemporaryPaths();
-      const environmentId = randomUUID();
-      await seedLegacyDatabase(paths, environmentId, version);
+  it.each([2, 5])("upgrades a version-%i database", async (version) => {
+    const paths = await createTemporaryPaths();
+    const environmentId = randomUUID();
+    await seedLegacyDatabase(paths, environmentId, version);
 
-      const state = await Effect.runPromise(
-        Effect.scoped(
-          Effect.gen(function* () {
-            const context = yield* acquireEnvironmentContext(paths);
-            const environment = yield* readCurrentEnvironment(context);
-            return {
-              automaticPort: environment.automaticPort,
-              authorizations: yield* context.read(
-                "Could not read authorization metadata",
-                (database) =>
-                  database
-                    .select()
-                    .from(authorizationMetadataTable)
-                    .where(isNull(authorizationMetadataTable.revokedAt))
-                    .orderBy(authorizationMetadataTable.createdAt),
-              ),
-              environmentId: environment.id,
-              repositories: yield* context.read(
-                "Could not read repositories",
-                (database) =>
-                  database
-                    .select({
-                      id: repositoryCatalogTable.id,
-                      logicalRepositoryId:
-                        repositoryCatalogTable.logicalRepositoryId,
-                      gitCommonDirectory:
-                        repositoryCatalogTable.gitCommonDirectory,
-                    })
-                    .from(repositoryCatalogTable),
-              ),
-            };
-          }),
-        ),
-      );
+    const state = await Effect.runPromise(
+      Effect.scoped(
+        Effect.gen(function* () {
+          const context = yield* acquireEnvironmentContext(paths);
+          const environment = yield* readCurrentEnvironment(context);
+          return {
+            automaticPort: environment.automaticPort,
+            authorizations: yield* context.read(
+              "Could not read authorization metadata",
+              (database) =>
+                database
+                  .select()
+                  .from(authorizationMetadataTable)
+                  .where(isNull(authorizationMetadataTable.revokedAt))
+                  .orderBy(authorizationMetadataTable.createdAt),
+            ),
+            environmentId: environment.id,
+            repositories: yield* context.read(
+              "Could not read repositories",
+              (database) =>
+                database
+                  .select({
+                    id: repositoryCatalogTable.id,
+                    logicalRepositoryId:
+                      repositoryCatalogTable.logicalRepositoryId,
+                    gitCommonDirectory:
+                      repositoryCatalogTable.gitCommonDirectory,
+                  })
+                  .from(repositoryCatalogTable),
+            ),
+          };
+        }),
+      ),
+    );
 
-      expect(state).toEqual({
-        automaticPort: 43123,
-        authorizations: [
-          {
-            createdAt: "2026-08-20T10:00:00.000Z",
-            id: "legacy-device",
-            label: "Legacy device",
-            lastSeenAt: null,
-            revokedAt: null,
-            role: "viewer",
-          },
-        ],
-        environmentId,
-        repositories:
-          version === 5
-            ? [
-                {
-                  id: "repo",
-                  logicalRepositoryId: "logical-repo",
-                  gitCommonDirectory: "/repo/.git",
-                },
-              ]
-            : [],
-      });
-    },
-  );
+    expect(state).toEqual({
+      automaticPort: 43123,
+      authorizations: [
+        {
+          createdAt: "2026-08-20T10:00:00.000Z",
+          id: "legacy-device",
+          label: "Legacy device",
+          lastSeenAt: null,
+          revokedAt: null,
+          role: "viewer",
+        },
+      ],
+      environmentId,
+      repositories:
+        version === 5
+          ? [
+              {
+                id: "repo",
+                logicalRepositoryId: "logical-repo",
+                gitCommonDirectory: "/repo/.git",
+              },
+            ]
+          : [],
+    });
+  });
 
   it("rejects changed migration checksums", async () => {
     const checksumPaths = await createTemporaryPaths();

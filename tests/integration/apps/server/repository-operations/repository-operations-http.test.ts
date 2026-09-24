@@ -1,4 +1,3 @@
-import { rm } from "node:fs/promises";
 import { join } from "node:path";
 import { RepositoryOperationsHttpApi } from "@rebase/contracts";
 import { createEnvironmentRequestClient } from "@rebase/environment-client";
@@ -29,6 +28,7 @@ import {
   createDivergedRepository,
   startConflict,
 } from "#tests-support/diverged-repository";
+import { removeTemporaryDirectory } from "#tests-support/temporary-directory";
 
 it("authorizes operation discovery and recovery separately over HTTP", async () => {
   const { directory, git } = await createDivergedRepository();
@@ -125,6 +125,6 @@ it("authorizes operation discovery and recovery separately over HTTP", async () 
       ),
     );
   } finally {
-    await rm(directory, { recursive: true, force: true });
+    await removeTemporaryDirectory(directory);
   }
 });

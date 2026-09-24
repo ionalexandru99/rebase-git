@@ -1,4 +1,4 @@
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -9,18 +9,14 @@ import { createLocalGitCommandRunner } from "#server/adapters/local-git/local-gi
 import { readObjectFormat } from "#server/features/repository-history/git/read-object-format";
 import { readRepositoryHistory } from "#server/features/repository-history/git/read-repository-history";
 import { fastImport, git } from "#tests-support/git";
+import { removeTemporaryDirectory } from "#tests-support/temporary-directory";
 
 const directories: string[] = [];
 afterEach(async () => {
   await Promise.all(
-    directories.splice(0).map((directory) =>
-      rm(directory, {
-        recursive: true,
-        force: true,
-        maxRetries: 3,
-        retryDelay: 100,
-      }),
-    ),
+    directories
+      .splice(0)
+      .map((directory) => removeTemporaryDirectory(directory)),
   );
 });
 

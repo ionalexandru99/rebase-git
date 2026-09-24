@@ -1,9 +1,10 @@
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, type Page, test } from "@playwright/test";
 import { startEnvironmentServer } from "#tests-support/environment-server";
 import { createRepository, git } from "#tests-support/git";
+import { removeTemporaryDirectory } from "#tests-support/temporary-directory";
 
 test("opens a repository and checks out a local branch", async ({ page }) => {
   const testHome = await mkdtemp(join(tmpdir(), "rebase-branches-e2e-"));
@@ -83,7 +84,7 @@ test("opens a repository and checks out a local branch", async ({ page }) => {
       .toBe("feature");
   } finally {
     server.child.kill("SIGTERM");
-    await rm(testHome, { force: true, recursive: true });
+    await removeTemporaryDirectory(testHome);
   }
 });
 
@@ -159,7 +160,7 @@ test("reopens cached history and reveals a merged commit through offline search"
     ).toHaveAttribute("aria-expanded", "true");
   } finally {
     if (server.child.exitCode === null) server.child.kill("SIGTERM");
-    await rm(testHome, { force: true, recursive: true });
+    await removeTemporaryDirectory(testHome);
   }
 });
 

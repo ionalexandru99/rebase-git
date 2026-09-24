@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { mkdir, mkdtemp, rename, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rename, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { RepositoryFreshness } from "@rebase/contracts";
@@ -34,6 +34,7 @@ import {
 } from "#server/repository/access/index";
 import { testEnvironmentFeatures } from "#tests-integration/apps/server/environment-connection/test-environment-features";
 import { git } from "#tests-support/git";
+import { removeTemporaryDirectory } from "#tests-support/temporary-directory";
 import { connectCurrentEnvironmentEffect } from "#web/app/environment/connection/index";
 import { createRepositoryHistoryRpc } from "#web/features/repository-history/transport/repository-history-rpc";
 
@@ -42,18 +43,11 @@ const repositoryId = "00000000-0000-4000-8000-000000000001";
 
 afterEach(async () => {
   await Promise.all(
-    directories.splice(0).map((path) =>
-      rm(path, {
-        force: true,
-        recursive: true,
-        maxRetries: 3,
-        retryDelay: 100,
-      }),
-    ),
+    directories.splice(0).map((path) => removeTemporaryDirectory(path)),
   );
 });
 
-describe("repository freshness with real Git", { timeout: 30_000 }, () => {
+describe("repository freshness with real Git", () => {
   for (const entry of ["logs/refs", "logs"])
     it.skipIf(process.platform === "win32" && entry === "logs")(
       `continues watching stash history after ${entry} is replaced`,

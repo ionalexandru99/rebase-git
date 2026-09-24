@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, realpath, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -39,6 +39,7 @@ import { environmentPaths } from "#server/persistence/storage/environment-paths"
 import { createRepositoryAccess } from "#server/repository/access/index";
 import { testEnvironmentFeatures } from "#tests-integration/apps/server/environment-connection/test-environment-features";
 import { fastImport, git } from "#tests-support/git";
+import { removeTemporaryDirectory } from "#tests-support/temporary-directory";
 import {
   connectEnvironmentEffect,
   type EnvironmentProtocolConnection,
@@ -52,14 +53,12 @@ const requestId = "00000000-0000-4000-8000-000000000011";
 
 afterEach(async () => {
   await Promise.all(
-    [...directories].map((directory) =>
-      rm(directory, { force: true, recursive: true }),
-    ),
+    [...directories].map((directory) => removeTemporaryDirectory(directory)),
   );
   directories.clear();
 });
 
-describe("repository history", { timeout: 30_000 }, () => {
+describe("repository history", () => {
   it("synchronizes a bare repository without a worktree HEAD", async () => {
     const root = await createTemporaryDirectory();
     const source = join(root, "bare-source");

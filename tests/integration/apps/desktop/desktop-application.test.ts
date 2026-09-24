@@ -1,4 +1,4 @@
-import { access, mkdtemp, rm } from "node:fs/promises";
+import { access, mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { startEnvironmentServer } from "@rebase/server";
@@ -13,14 +13,13 @@ import type {
   DesktopWindowOptions,
 } from "#desktop/app/desktop-application.contract";
 import type { ManagedEnvironmentServer } from "#desktop/platform/environment/environment-supervisor.contract";
+import { removeTemporaryDirectory } from "#tests-support/temporary-directory";
 
 const directories = new Set<string>();
 
 afterEach(async () => {
   await Promise.all(
-    [...directories].map((directory) =>
-      rm(directory, { force: true, recursive: true }),
-    ),
+    [...directories].map((directory) => removeTemporaryDirectory(directory)),
   );
   directories.clear();
 });

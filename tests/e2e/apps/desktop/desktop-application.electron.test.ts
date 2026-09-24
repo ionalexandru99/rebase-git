@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import {
@@ -10,6 +10,7 @@ import {
 } from "@playwright/test";
 import type { DesktopHostBridge } from "@rebase/contracts";
 import { createRepository } from "#tests-support/git";
+import { removeTemporaryDirectory } from "#tests-support/temporary-directory";
 
 test("opens, closes, and reopens a recent repository after restart", async () => {
   const testHome = await mkdtemp(join(tmpdir(), "rebase-electron-e2e-"));
@@ -72,7 +73,7 @@ test("opens, closes, and reopens a recent repository after restart", async () =>
       await restartedApplication.close();
     }
   } finally {
-    await rm(testHome, { force: true, recursive: true });
+    await removeTemporaryDirectory(testHome);
   }
 });
 

@@ -24,6 +24,7 @@ const watchedRootEntries = new Set([
   "sequencer",
 ]);
 const recursiveEntries = ["refs", "worktrees"] as const;
+const separatelyWatchedEntries = new Set<string>([...recursiveEntries, "logs"]);
 
 export function createLocalRepositoryWatcher(): RepositoryWatcher {
   const directories = new Map<
@@ -124,12 +125,18 @@ function watchGitDirectory(
       if (refs !== undefined) watchers.set("logs/refs", refs);
     }
   };
-  const root = tryWatch(gitDirectory, false, (fileName) => {
+  const root = tryWatch(gitDirectory, false, (fileName, event) => {
     if (fileName === "index") {
       onChange("Index");
       return;
     }
     if (fileName !== undefined && !watchedRootEntries.has(fileName)) return;
+    if (
+      event === "change" &&
+      fileName !== undefined &&
+      separatelyWatchedEntries.has(fileName)
+    )
+      return;
     for (const entry of recursiveEntries)
       if (fileName === undefined || fileName === entry) {
         removeWatcher(entry);

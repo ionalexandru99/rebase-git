@@ -1,6 +1,6 @@
 import { execFile } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, realpath, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
@@ -16,6 +16,7 @@ import {
   createRepositoryAccess,
   createRepositoryCoordination,
 } from "#server/repository/access/index";
+import { removeTemporaryDirectory } from "#tests-support/temporary-directory";
 
 const directories: string[] = [];
 const execute = promisify(execFile);
@@ -24,7 +25,7 @@ afterEach(async () => {
   await Promise.all(
     directories
       .splice(0)
-      .map((directory) => rm(directory, { recursive: true, force: true })),
+      .map((directory) => removeTemporaryDirectory(directory)),
   );
 });
 

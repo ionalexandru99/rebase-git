@@ -5,7 +5,6 @@ import {
   mkdtemp,
   readFile,
   realpath,
-  rm,
   utimes,
   writeFile,
 } from "node:fs/promises";
@@ -27,14 +26,13 @@ import {
   createRepositoryAccess,
   createRepositoryCoordination,
 } from "#server/repository/access/index";
+import { removeTemporaryDirectory } from "#tests-support/temporary-directory";
 
 const exec = promisify(execFile);
 const directories: string[] = [];
 afterEach(async () => {
   await Promise.all(
-    directories
-      .splice(0)
-      .map((path) => rm(path, { recursive: true, force: true })),
+    directories.splice(0).map((path) => removeTemporaryDirectory(path)),
   );
 });
 async function fixture(
@@ -121,7 +119,7 @@ async function fixture(
   return { directory, git, service, scope, read, diff, mutate };
 }
 
-describe("working changes through Git", { timeout: 30000 }, () => {
+describe("working changes through Git", () => {
   it("rejects external edits while preparing stage", async () => {
     let changed = false;
     const f = await fixture(true, async (command) => {

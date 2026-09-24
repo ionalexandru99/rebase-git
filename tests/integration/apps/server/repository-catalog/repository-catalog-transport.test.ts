@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, realpath, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -25,6 +25,7 @@ import { acquireEnvironmentContext } from "#server/persistence/environment-conte
 import { environmentPaths } from "#server/persistence/storage/environment-paths";
 import { testEnvironmentFeatures } from "#tests-integration/apps/server/environment-connection/test-environment-features";
 import { createRepository } from "#tests-support/git";
+import { removeTemporaryDirectory } from "#tests-support/temporary-directory";
 import { exchangeEnvironmentPairingEffect } from "#web/app/environment/connection/index";
 import {
   EnvironmentFilesystemRejected,
@@ -40,9 +41,7 @@ const environmentId = "00000000-0000-4000-8000-000000000001";
 
 afterEach(async () => {
   await Promise.all(
-    [...directories].map((directory) =>
-      rm(directory, { force: true, recursive: true }),
-    ),
+    [...directories].map((directory) => removeTemporaryDirectory(directory)),
   );
   directories.clear();
 });

@@ -1,6 +1,6 @@
 import { execFile } from "node:child_process";
 import { watch } from "node:fs";
-import { mkdtemp, realpath, rm, symlink } from "node:fs/promises";
+import { mkdtemp, realpath, symlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
@@ -24,6 +24,7 @@ import {
   repositoryAccessLayer,
   repositoryCoordinationLayer,
 } from "#server/repository/access/index";
+import { removeTemporaryDirectory } from "#tests-support/temporary-directory";
 
 vi.mock("node:fs", async (original) => {
   const fs = await original<typeof import("node:fs")>();
@@ -168,7 +169,7 @@ for (const firstRelease of ["refs", "freshness"] as const)
         }).pipe(Effect.scoped),
       );
     } finally {
-      await rm(root, { recursive: true, force: true });
+      await removeTemporaryDirectory(root);
     }
   });
 
@@ -212,6 +213,6 @@ it("shares canonical directory aliases and makes release idempotent", async () =
       second.close();
     }
   } finally {
-    await rm(root, { recursive: true, force: true });
+    await removeTemporaryDirectory(root);
   }
 });
