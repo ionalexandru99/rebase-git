@@ -5,6 +5,7 @@ import {
 } from "@rebase/contracts";
 import { describe, expect, it, vi } from "vitest";
 import { createBrowserRepositoryHistoryReader } from "#web/features/repository-history/browser-repository-history-reader";
+import { clearHistoryCache } from "#web/features/repository-history/cache/repository-history-storage";
 import {
   readRepositoryCommits,
   readRepositoryHistory,
@@ -13,7 +14,6 @@ import {
   beginRepositoryHistorySynchronization,
   completeStoredRepositoryHistory,
   readStoredRepositoryHistoryState,
-  restartRepositoryHistorySynchronization,
   storeRepositoryHistoryBatch,
   storeRepositoryHistoryPage,
 } from "#web/features/repository-history/replica/repository-history-store";
@@ -376,7 +376,7 @@ describe("browser repository history reader", () => {
     }
   });
 
-  it("repairs cached shallow parents and topology when unchanged refs gain ancestors", async () => {
+  it("rebuilds shallow parents and topology when unchanged refs gain ancestors", async () => {
     const environmentId = crypto.randomUUID();
     const repositoryId = crypto.randomUUID();
     const commits = history(3);
@@ -416,7 +416,7 @@ describe("browser repository history reader", () => {
     expect(
       await beginRepositoryHistorySynchronization(environmentId, repositoryId),
     ).toMatchObject({ _tag: "Complete", shallowOids: [boundary.oid] });
-    await restartRepositoryHistorySynchronization(environmentId, repositoryId);
+    await clearHistoryCache(environmentId, repositoryId, false);
     expect(
       await beginRepositoryHistorySynchronization(environmentId, repositoryId),
     ).toBeUndefined();
@@ -734,32 +734,6 @@ describe("browser repository history reader", () => {
     } finally {
       reader.close();
     }
-  });
-
-  it("migrates version-two commit ordering into topological epochs", async () => {
-    const environmentId = crypto.randomUUID();
-    const repositoryId = crypto.randomUUID();
-    const commits = history(2);
-    const latest = commits[0];
-    if (latest === undefined) {
-      throw new Error("Commit fixture is missing");
-    }
-    const main = { ...root("main"), oid: latest.oid };
-    await deleteRepositoryHistoryDatabase();
-    await createVersionTwoRepositoryHistory(
-      environmentId,
-      repositoryId,
-      commits,
-      main,
-    );
-
-    await expect(
-      readRepositoryHistory(environmentId, repositoryId, {
-        limit: 100,
-        order: "topological",
-        roots: [main],
-      }),
-    ).resolves.toEqual(commits);
   });
 
   it("publishes only IndexedDB-committed synchronization progress", async () => {
@@ -1502,7 +1476,7 @@ describe("browser repository history reader", () => {
     resumed.close();
   });
 
-  it("restarts an invalid completed basis without publishing duplicate refs", async () => {
+  it("clears and resynchronizes an invalid completed basis without publishing duplicate refs", async () => {
     const environmentId = crypto.randomUUID();
     const repositoryId = crypto.randomUUID();
     const commit = history(1)[0];
@@ -1510,13 +1484,14 @@ describe("browser repository history reader", () => {
       throw new Error("Commit fixture is missing");
     }
     const oldRef = { ...root("main"), oid: commit.oid };
+    const rewritten = { ...commit, oid: "f".repeat(40), subject: "Rewritten" };
     const oldSnapshot = snapshot("b", oldRef);
     const initialGateway: RepositoryHistoryGateway = {
       read: vi.fn(async () => page(repositoryId, [commit], [oldRef])),
       synchronize: vi.fn(async (_request, accept) => {
         await accept(
           encodeRepositoryHistoryBatch({
-            commits: [commit],
+            commits: [commit, rewritten],
             objectFormat: "sha1",
             repositoryId,
             requestId: crypto.randomUUID(),
@@ -1524,7 +1499,7 @@ describe("browser repository history reader", () => {
             snapshot: oldSnapshot,
           }),
         );
-        return 1;
+        return 2;
       }),
     };
     const initial = createBrowserRepositoryHistoryReader({
@@ -1579,6 +1554,10 @@ describe("browser repository history reader", () => {
     );
 
     await expect(reopened.getRefTargets()).resolves.toEqual([newRef]);
+    expect(reopened.getSnapshot().synchronizedCommitCount).toBe(1);
+    await expect(
+      readRepositoryCommits(environmentId, repositoryId, [rewritten.oid]),
+    ).resolves.toEqual([]);
     reopened.close();
   });
 
@@ -1705,71 +1684,4 @@ function identity(index: number) {
     timestampSeconds: 1_777_777_777 - index,
     timezoneOffsetMinutes: 120,
   };
-}
-
-function deleteRepositoryHistoryDatabase() {
-  return new Promise<void>((resolve, reject) => {
-    const request = indexedDB.deleteDatabase("rebase-repository-history");
-    request.onsuccess = () => resolve();
-    request.onerror = () => reject(request.error);
-  });
-}
-
-function createVersionTwoRepositoryHistory(
-  environmentId: string,
-  repositoryId: string,
-  commits: readonly RepositoryCommit[],
-  main: ReturnType<typeof root>,
-) {
-  return new Promise<void>((resolve, reject) => {
-    const request = indexedDB.open("rebase-repository-history", 2);
-    request.onupgradeneeded = () => {
-      const database = request.result;
-      const commitStore = database.createObjectStore("commits", {
-        keyPath: "key",
-      });
-      commitStore.createIndex("repositoryOrder", [
-        "environmentId",
-        "repositoryId",
-        "topologicalOrder",
-      ]);
-      database.createObjectStore("repositories", { keyPath: "key" });
-    };
-    request.onerror = () => reject(request.error);
-    request.onsuccess = () => {
-      const database = request.result;
-      const transaction = database.transaction(
-        ["commits", "repositories"],
-        "readwrite",
-      );
-      const commitStore = transaction.objectStore("commits");
-      for (const [topologicalOrder, commit] of commits.entries()) {
-        commitStore.put({
-          commit,
-          environmentId,
-          key: `${environmentId}\0${repositoryId}\0${commit.oid}`,
-          repositoryId,
-          topologicalOrder,
-        });
-      }
-      transaction.objectStore("repositories").put({
-        completion: { commitCount: commits.length },
-        environmentId,
-        key: `${environmentId}\0${repositoryId}`,
-        objectFormat: "sha1",
-        progress: {
-          committedCommitCount: commits.length,
-          nextBatchSequence: 1,
-        },
-        refTargets: [main],
-        repositoryId,
-      });
-      transaction.oncomplete = () => {
-        database.close();
-        resolve();
-      };
-      transaction.onerror = () => reject(transaction.error);
-      transaction.onabort = () => reject(transaction.error);
-    };
-  });
 }

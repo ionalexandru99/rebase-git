@@ -10,31 +10,27 @@ import type {
 
 export interface StoredCommit {
   readonly commit: RepositoryCommit;
-  readonly environmentId: string;
-  readonly key: string;
-  readonly repositoryId: string;
   readonly topologicalEpoch?: number;
   readonly topologicalOrder?: number;
 }
 
 export interface StoredHistoryPage {
-  readonly offset?: number;
-  readonly exhausted?: boolean;
-  readonly scopeKey?: string;
+  readonly offset: number;
+  readonly exhausted: boolean;
+  readonly scopeKey: string;
   readonly oids: readonly string[];
   readonly order: "topological" | "chronological";
-  readonly requestedLimit: number;
   readonly rootOids: readonly string[];
 }
 
 export interface StoredRepository {
-  readonly cacheFormatVersion?: number;
-  readonly lastOpenedAt?: number;
+  readonly id: number;
+  readonly commitCount: number;
+  readonly lastOpenedAt: number;
   readonly cachedPage?: StoredHistoryPage;
   readonly foregroundPages?: readonly StoredHistoryPage[];
   readonly completion?: RepositoryHistoryCompletionBasis;
   readonly environmentId: string;
-  readonly key: string;
   readonly minimumTopologicalEpoch: number;
   readonly objectFormat: "sha1" | "sha256";
   readonly pendingTopologicalEpoch?: number;
@@ -44,3 +40,5 @@ export interface StoredRepository {
   readonly refTargets: readonly RepositoryHistoryRefTarget[];
   readonly repositoryId: string;
 }
+
+export type NewStoredRepository = Omit<StoredRepository, "id">;

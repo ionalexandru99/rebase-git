@@ -50,9 +50,7 @@ export function RepositoryHistoryCacheList({
                       Environment: {cache.environmentId}
                     </div>
                     <div className="mt-1 text-muted-foreground">
-                      {cache.lastOpenedAt === undefined
-                        ? "Never opened"
-                        : `Last opened ${new Date(cache.lastOpenedAt).toLocaleString()}`}
+                      {`Last opened ${new Date(cache.lastOpenedAt).toLocaleString()}`}
                     </div>
                     {cache.open && <div className="mt-1">Open · Protected</div>}
                   </td>

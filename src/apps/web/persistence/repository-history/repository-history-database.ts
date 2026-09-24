@@ -1,13 +1,19 @@
-import type { StoredCommit } from "#web/persistence/repository-history/repository-history-database.contract";
+import type { StoredRepository } from "#web/persistence/repository-history/repository-history-database.contract";
 import { RepositoryHistoryStorageUnavailable } from "#web/persistence/repository-history/repository-history-storage.contract";
 
 export const commitStoreName = "commits";
 export const repositoryStoreName = "repositories";
 export const topologyStoreName = "topology";
 export const workingChangesStoreName = "workingChanges";
+const repositoryIdentityIndexName = "identity";
 
 const databaseName = "rebase-repository-history";
-const databaseVersion = 7;
+const databaseVersion = 8;
+const historyStoreNames = [
+  commitStoreName,
+  repositoryStoreName,
+  topologyStoreName,
+];
 
 export function withRepositoryHistoryDatabase<T>(
   indexedDB: IDBFactory | undefined,
@@ -64,11 +70,24 @@ export function transactionCompleted(transaction: IDBTransaction) {
   });
 }
 
-export function repositoryCommitRange(key: string, after?: string) {
+export function repositoryCommitRange(repository: number, after?: string) {
   return IDBKeyRange.bound(
-    after ?? `${key}\0`,
-    `${key}\0\uffff`,
+    [repository, after ?? ""],
+    [repository, []],
     after !== undefined,
+    true,
+  );
+}
+
+export function readRepositoryRecord(
+  repositories: IDBObjectStore,
+  environmentId: string,
+  repositoryId: string,
+) {
+  return requestResult<StoredRepository | undefined>(
+    repositories
+      .index(repositoryIdentityIndexName)
+      .get([environmentId, repositoryId]),
   );
 }
 
@@ -82,25 +101,7 @@ function openDatabase(indexedDB: IDBFactory) {
       rejectDatabase(storageUnavailable(cause));
       return;
     }
-    request.onupgradeneeded = (event) => {
-      const database = request.result;
-      if (!database.objectStoreNames.contains(workingChangesStoreName))
-        database.createObjectStore(workingChangesStoreName);
-      const commits = database.objectStoreNames.contains(commitStoreName)
-        ? request.transaction?.objectStore(commitStoreName)
-        : database.createObjectStore(commitStoreName, { keyPath: "key" });
-      if (commits !== undefined) {
-        if (event.oldVersion < 3) backfillTopologicalEpoch(commits);
-        for (const index of ["repositoryOrder", "repositorySearch"])
-          if (commits.indexNames.contains(index)) commits.deleteIndex(index);
-      }
-      if (!database.objectStoreNames.contains(repositoryStoreName)) {
-        database.createObjectStore(repositoryStoreName, { keyPath: "key" });
-      }
-      if (!database.objectStoreNames.contains(topologyStoreName)) {
-        database.createObjectStore(topologyStoreName);
-      }
-    };
+    request.onupgradeneeded = () => recreateHistoryStores(request.result);
     request.onsuccess = () => {
       if (settled) {
         request.result.close();
@@ -129,22 +130,26 @@ function openDatabase(indexedDB: IDBFactory) {
   });
 }
 
-function backfillTopologicalEpoch(commits: IDBObjectStore) {
-  const request = commits.openCursor();
-  request.onsuccess = () => {
-    const cursor = request.result;
-    if (cursor === null) {
-      return;
-    }
-    const commit = cursor.value as StoredCommit;
-    if (
-      commit.topologicalOrder !== undefined &&
-      commit.topologicalEpoch === undefined
-    ) {
-      cursor.update({ ...commit, topologicalEpoch: 0 } satisfies StoredCommit);
-    }
-    cursor.continue();
-  };
+function recreateHistoryStores(database: IDBDatabase) {
+  for (const name of historyStoreNames)
+    if (database.objectStoreNames.contains(name))
+      database.deleteObjectStore(name);
+  if (!database.objectStoreNames.contains(workingChangesStoreName))
+    database.createObjectStore(workingChangesStoreName);
+  database.createObjectStore(commitStoreName);
+  database.createObjectStore(topologyStoreName);
+  database
+    .createObjectStore(repositoryStoreName, {
+      keyPath: "id",
+      autoIncrement: true,
+    })
+    .createIndex(
+      repositoryIdentityIndexName,
+      ["environmentId", "repositoryId"],
+      {
+        unique: true,
+      },
+    );
 }
 
 function storageUnavailable(cause: unknown) {

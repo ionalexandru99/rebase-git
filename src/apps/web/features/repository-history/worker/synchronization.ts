@@ -1,10 +1,10 @@
 import { decodeRepositoryHistoryBatch } from "@rebase/contracts";
+import { clearHistoryCache } from "#web/features/repository-history/cache/repository-history-storage";
 import { queueHistoryStorageWrite as queueStorageWrite } from "#web/features/repository-history/cache/repository-history-storage-maintenance";
 import { prepareRepositoryHistoryOrder } from "#web/features/repository-history/query/repository-history-query";
 import {
   beginRepositoryHistorySynchronization,
   completeStoredRepositoryHistory,
-  restartRepositoryHistorySynchronization,
   storeRepositoryHistoryBatch,
 } from "#web/features/repository-history/replica/repository-history-store";
 import type {
@@ -179,12 +179,14 @@ export async function failSynchronization(
     message.failure.detail._tag === "SnapshotInvalidated"
   ) {
     await queueStorageWrite(() =>
-      restartRepositoryHistorySynchronization(
+      clearHistoryCache(
         reader.connection.environmentId,
         reader.connection.logicalRepositoryId,
+        false,
       ),
     );
-    invalidateStoredHistory(replica);
+    invalidateStoredHistory(replica, true);
+    replica.synchronizedCommitCount = 0;
     await startSynchronization(reader, replica);
     return;
   }

@@ -1,4 +1,5 @@
 import type {
+  NewStoredRepository,
   StoredCommit,
   StoredRepository,
 } from "#web/persistence/repository-history/repository-history-database.contract";
@@ -6,37 +7,38 @@ import type {
 export interface RepositoryHistoryReadTransaction {
   readonly completed: Promise<void>;
   readonly readRepository: (
-    key: string,
+    environmentId: string,
+    repositoryId: string,
   ) => Promise<StoredRepository | undefined>;
-  readonly readCommit: (key: string) => Promise<StoredCommit | undefined>;
+  readonly readCommit: (
+    repository: number,
+    oid: string,
+  ) => Promise<StoredCommit | undefined>;
 }
 
 export interface RepositoryHistoryRepositoryTransaction {
   readonly completed: Promise<void>;
   readonly readRepository: (
-    key: string,
+    environmentId: string,
+    repositoryId: string,
   ) => Promise<StoredRepository | undefined>;
-  readonly storeRepository: (record: StoredRepository) => void;
+  readonly storeRepository: (
+    record: StoredRepository | NewStoredRepository,
+  ) => Promise<number>;
 }
 
 export interface RepositoryHistoryWriteTransaction
   extends RepositoryHistoryReadTransaction,
     RepositoryHistoryRepositoryTransaction {
-  readonly storeCommit: (record: StoredCommit) => void;
-  readonly readCommitChunk: (
-    key: string,
-    after: string | undefined,
-    limit: number,
-  ) => Promise<StoredCommit[]>;
-  readonly countCommits: (key: string) => Promise<number>;
-  readonly deleteCommit: (key: string) => void;
-  readonly deleteRepositoryCommits: (key: string) => void;
-  readonly deleteRepository: (key: string) => void;
+  readonly storeCommit: (repository: number, record: StoredCommit) => void;
+  readonly deleteRepositoryCommits: (repository: number) => void;
+  readonly deleteRepository: (repository: number) => void;
 }
 
 export interface RepositoryHistorySearchRecords {
   readonly readRepository: () => Promise<StoredRepository | undefined>;
   readonly readChunk: (
+    repository: number,
     after: string | undefined,
     limit: number,
   ) => Promise<StoredCommit[]>;

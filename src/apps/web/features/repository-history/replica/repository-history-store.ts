@@ -1,4 +1,5 @@
 import type {
+  RepositoryCommit,
   RepositoryHistoryBatch,
   RepositoryHistoryPage,
   RepositoryHistoryRefTarget,
@@ -20,14 +21,14 @@ import {
 import type { RepositoryHistoryQuery } from "#web/features/repository-history/repository-history-reader.contract";
 import type {
   StoredCommit,
+  StoredHistoryPage,
   StoredRepository,
 } from "#web/persistence/repository-history/repository-history-database.contract";
 import {
-  commitKey,
   emptyStoredRepository,
-  repositoryKey,
   storedCommit,
 } from "#web/persistence/repository-history/repository-history-records";
+import type { RepositoryHistoryReadTransaction } from "#web/persistence/repository-history/repository-history-transaction.contract";
 import {
   readStoredRepository,
   updateStoredHistory,
@@ -53,36 +54,34 @@ export function storeRepositoryHistoryPage(
 ) {
   return updateStoredHistory(indexedDB, async (transaction) => {
     const { completed } = transaction;
-    const key = repositoryKey(environmentId, repositoryId);
-    const current = await transaction.readRepository(key);
-    const existingCommits = await Promise.all(
-      page.commits.map((commit) =>
-        transaction.readCommit(
-          commitKey(environmentId, repositoryId, commit.oid),
-        ),
-      ),
+    const current = await transaction.readRepository(
+      environmentId,
+      repositoryId,
     );
-    for (const [index, commit] of page.commits.entries()) {
-      transaction.storeCommit(
-        storedCommit(
-          environmentId,
-          repositoryId,
-          commit,
-          topologicalPosition(existingCommits[index]),
-        ),
-      );
-    }
-    transaction.storeRepository({
+    const existingCommits = await readExistingCommits(
+      transaction,
+      current,
+      page.commits,
+    );
+    const repository = await transaction.storeRepository({
       ...emptyStoredRepository(environmentId, repositoryId, page.objectFormat),
       ...current,
       ...cacheForegroundHistoryPage(current, page, query),
+      commitCount:
+        (current?.commitCount ?? 0) + countAddedCommits(existingCommits),
       objectFormat: page.objectFormat,
       refTargets:
         current?.completion !== undefined ||
         current?.pendingSnapshot !== undefined
           ? current.refTargets
           : page.refTargets,
-    } satisfies StoredRepository);
+    });
+    for (const [index, commit] of page.commits.entries()) {
+      transaction.storeCommit(
+        repository,
+        storedCommit(commit, topologicalPosition(existingCommits[index])),
+      );
+    }
     await completed;
   });
 }
@@ -92,13 +91,12 @@ function cacheForegroundHistoryPage(
   page: RepositoryHistoryPage,
   query: RepositoryHistoryQuery,
 ): Pick<StoredRepository, "cachedPage" | "foregroundPages"> {
-  const cachedPage = {
+  const cachedPage: StoredHistoryPage = {
     offset: query.offset ?? 0,
     exhausted: page.commits.length < query.limit,
     scopeKey: historyOrderScopeKey(query),
     oids: page.commits.map((commit) => commit.oid),
     order: query.order,
-    requestedLimit: query.limit,
     rootOids: normalizedOids(page.refTargets.map((ref) => ref.oid)),
   };
   return cachedPage.offset === 0
@@ -124,8 +122,10 @@ export function beginRepositoryHistorySynchronization(
 ) {
   return updateStoredRepository(indexedDB, async (transaction) => {
     const { completed } = transaction;
-    const key = repositoryKey(environmentId, repositoryId);
-    const current = await transaction.readRepository(key);
+    const current = await transaction.readRepository(
+      environmentId,
+      repositoryId,
+    );
     if (current === undefined) {
       throw new Error("Repository history has no initial page");
     }
@@ -136,7 +136,7 @@ export function beginRepositoryHistorySynchronization(
       pendingTopologicalOrder: ___,
       ...withoutPendingSynchronization
     } = current;
-    transaction.storeRepository(
+    await transaction.storeRepository(
       basis?._tag === "Incomplete"
         ? current
         : ({
@@ -153,33 +153,6 @@ export function beginRepositoryHistorySynchronization(
   });
 }
 
-export function restartRepositoryHistorySynchronization(
-  environmentId: string,
-  repositoryId: string,
-  indexedDB: IDBFactory | undefined = globalThis.indexedDB,
-) {
-  return updateStoredRepository(indexedDB, async (transaction) => {
-    const { completed } = transaction;
-    const key = repositoryKey(environmentId, repositoryId);
-    const current = await transaction.readRepository(key);
-    if (current === undefined) {
-      throw new Error("Repository history has no synchronization state");
-    }
-    const {
-      completion: _,
-      pendingSnapshot: __,
-      pendingTopologicalEpoch: ___,
-      pendingTopologicalOrder: ____,
-      ...withoutSynchronizationBasis
-    } = current;
-    transaction.storeRepository({
-      ...withoutSynchronizationBasis,
-      progress: { committedCommitCount: 0, nextBatchSequence: 0 },
-    } satisfies StoredRepository);
-    await completed;
-  });
-}
-
 export function storeRepositoryHistoryBatch(
   environmentId: string,
   repositoryId: string,
@@ -188,8 +161,10 @@ export function storeRepositoryHistoryBatch(
 ) {
   return updateStoredHistory(indexedDB, async (transaction) => {
     const { completed } = transaction;
-    const key = repositoryKey(environmentId, repositoryId);
-    const current = await transaction.readRepository(key);
+    const current = await transaction.readRepository(
+      environmentId,
+      repositoryId,
+    );
     if (current === undefined) {
       throw new Error("Repository history has no synchronization state");
     }
@@ -199,7 +174,7 @@ export function storeRepositoryHistoryBatch(
       batch.commits.length,
     );
     if (progress !== current.progress) {
-      const minimumTopologicalEpoch = current.minimumTopologicalEpoch ?? 0;
+      const minimumTopologicalEpoch = current.minimumTopologicalEpoch;
       const topologicalEpoch =
         batch.snapshot === undefined
           ? (current.pendingTopologicalEpoch ?? minimumTopologicalEpoch - 1)
@@ -208,34 +183,31 @@ export function storeRepositoryHistoryBatch(
         batch.snapshot === undefined
           ? (current.pendingTopologicalOrder ?? 0)
           : 0;
-      const existingCommits = await Promise.all(
-        batch.commits.map((commit) =>
-          transaction.readCommit(
-            commitKey(environmentId, repositoryId, commit.oid),
-          ),
-        ),
+      const existingCommits = await readExistingCommits(
+        transaction,
+        current,
+        batch.commits,
       );
+      const resumable =
+        (batch.snapshot ?? current.pendingSnapshot)?.resumable === true;
       for (const [offset, commit] of batch.commits.entries()) {
-        const existing = existingCommits[offset];
-        const position =
-          (batch.snapshot ?? current.pendingSnapshot)?.resumable === true
-            ? undefined
-            : topologicalPosition(existing);
-        transaction.storeCommit({
-          ...existing,
-          ...storedCommit(
-            environmentId,
-            repositoryId,
+        const position = resumable
+          ? undefined
+          : topologicalPosition(existingCommits[offset]);
+        transaction.storeCommit(
+          current.id,
+          storedCommit(
             commit,
             position ?? {
               epoch: topologicalEpoch,
               order: topologicalOrder + offset,
             },
           ),
-        });
+        );
       }
-      transaction.storeRepository({
+      await transaction.storeRepository({
         ...current,
+        commitCount: current.commitCount + countAddedCommits(existingCommits),
         objectFormat: batch.objectFormat,
         ...(batch.snapshot === undefined
           ? {}
@@ -262,8 +234,10 @@ export function completeStoredRepositoryHistory(
 ) {
   return updateStoredHistory(indexedDB, async (transaction) => {
     const { completed } = transaction;
-    const key = repositoryKey(environmentId, repositoryId);
-    const current = await transaction.readRepository(key);
+    const current = await transaction.readRepository(
+      environmentId,
+      repositoryId,
+    );
     if (current === undefined) {
       throw new Error("Repository history has no synchronization state");
     }
@@ -274,7 +248,7 @@ export function completeStoredRepositoryHistory(
         reportedCommitCount,
         snapshot,
       ),
-      commitCount: await transaction.countCommits(key),
+      commitCount: current.commitCount,
     };
     const {
       pendingSnapshot: _,
@@ -284,7 +258,7 @@ export function completeStoredRepositoryHistory(
       cachedPage,
       ...withoutPendingSynchronization
     } = current;
-    transaction.storeRepository({
+    await transaction.storeRepository({
       ...withoutPendingSynchronization,
       completion,
       ...(cachedPage === undefined
@@ -357,6 +331,24 @@ function synchronizationBasis(
           : { shallowOids: snapshot.shallowOids }),
         snapshotId: snapshot.id,
       };
+}
+
+function readExistingCommits(
+  transaction: RepositoryHistoryReadTransaction,
+  repository: StoredRepository | undefined,
+  commits: readonly RepositoryCommit[],
+) {
+  return repository === undefined
+    ? commits.map(() => undefined)
+    : Promise.all(
+        commits.map((commit) =>
+          transaction.readCommit(repository.id, commit.oid),
+        ),
+      );
+}
+
+function countAddedCommits(existing: readonly (StoredCommit | undefined)[]) {
+  return existing.filter((commit) => commit === undefined).length;
 }
 
 function topologicalPosition(commit: StoredCommit | undefined) {

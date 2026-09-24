@@ -18,7 +18,7 @@ describe("history cache cleanup", () => {
     ).toEqual(["old", "new"]);
   });
 
-  it("prunes before eviction and stops as soon as the write succeeds", async () => {
+  it("evicts caches until the write succeeds", async () => {
     const events: string[] = [];
     let attempt = 0;
     const result = await writeHistoryWithCleanup({
@@ -27,16 +27,13 @@ describe("history cache cleanup", () => {
         if (attempt++ < 2) throw quotaError();
         return 12;
       },
-      prune: async () => {
-        events.push("prune");
-      },
       evictNext: async () => {
         events.push("evict");
         return true;
       },
     });
     expect(result).toBe(12);
-    expect(events).toEqual(["write", "prune", "write", "evict", "write"]);
+    expect(events).toEqual(["write", "evict", "write", "evict", "write"]);
   });
 
   it("reports exhausted storage without discarding the failed batch", async () => {
@@ -45,28 +42,23 @@ describe("history cache cleanup", () => {
       throw error;
     });
     await expect(
-      writeHistoryWithCleanup({
-        write,
-        prune: async () => undefined,
-        evictNext: async () => false,
-      }),
+      writeHistoryWithCleanup({ write, evictNext: async () => false }),
     ).rejects.toBe(error);
-    expect(write).toHaveBeenCalledTimes(2);
+    expect(write).toHaveBeenCalledOnce();
   });
 
   it("leaves unrelated write failures alone", async () => {
-    const prune = vi.fn();
+    const evictNext = vi.fn(async () => true);
     const error = new Error("Disconnected");
     await expect(
       writeHistoryWithCleanup({
         write: async () => {
           throw error;
         },
-        prune,
-        evictNext: async () => true,
+        evictNext,
       }),
     ).rejects.toBe(error);
-    expect(prune).not.toHaveBeenCalled();
+    expect(evictNext).not.toHaveBeenCalled();
   });
 });
 
