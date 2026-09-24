@@ -66,14 +66,14 @@ async function searchHistoryPage(
       state?.completion !== undefined && state.pendingSnapshot === undefined,
     synchronizedCommitCount: state?.progress.committedCommitCount ?? 0,
   };
-  if (normalizeHistorySearch(query.text) === "")
+  if (state === undefined || normalizeHistorySearch(query.text) === "")
     return { ...result, commits: [] };
-  const matches = matchingHistoryMetadata(query.text, state?.refTargets ?? []);
+  const matches = matchingHistoryMetadata(query.text, state.refTargets);
   const commits: RepositoryCommit[] = [];
   let scanned = 0;
   while (scanned < maximumScannedCommits && commits.length < query.limit) {
     signal?.throwIfAborted();
-    const chunk = await records.readChunk(after, chunkSize);
+    const chunk = await records.readChunk(state.id, after, chunkSize);
     signal?.throwIfAborted();
     if (chunk.length === 0) return { ...result, commits };
     for (const record of chunk) {

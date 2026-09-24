@@ -158,13 +158,17 @@ let cacheManagement: Promise<void> = Promise.resolve();
 export let clearingAllCaches: Promise<boolean> | undefined;
 
 export async function readCacheDiagnostics(): Promise<RepositoryHistoryStorageDiagnostics> {
-  const [caches, estimate, persistent] = await Promise.all([
-    describeHistoryCaches((key) => repositories.has(key)),
+  const [records, estimate, persistent] = await Promise.all([
+    readHistoryCacheRecords(),
     navigator.storage?.estimate().catch((): StorageEstimate => ({})),
     navigator.storage?.persisted().catch(() => false),
   ]);
   return {
-    caches,
+    caches: describeHistoryCaches(
+      records,
+      (key) => repositories.has(key),
+      estimate?.usage,
+    ),
     persistent: persistent ?? false,
     ...(estimate?.usage === undefined ? {} : { usageBytes: estimate.usage }),
     ...(estimate?.quota === undefined ? {} : { quotaBytes: estimate.quota }),

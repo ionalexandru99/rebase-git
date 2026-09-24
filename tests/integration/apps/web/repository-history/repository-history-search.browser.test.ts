@@ -10,10 +10,6 @@ import {
 } from "#web/features/repository-history/replica/repository-history-store";
 import { RepositoryHistoryOffline } from "#web/features/repository-history/repository-history-reader.contract";
 import { searchStoredRepositoryHistory } from "#web/features/repository-history/search/repository-history-search";
-import {
-  emptyStoredRepository,
-  storedCommit,
-} from "#web/persistence/repository-history/repository-history-records";
 
 describe("browser metadata search", () => {
   it("runs the search model through the worker and cached storage without network access", async () => {
@@ -99,45 +95,6 @@ describe("browser metadata search", () => {
       if (descriptor !== undefined)
         Object.defineProperty(prototype, "getAll", descriptor);
     }
-  });
-
-  it("searches already cached version-three commits after the compatible upgrade", async () => {
-    const environmentId = crypto.randomUUID();
-    const repositoryId = crypto.randomUUID();
-    const databaseName = `history-search-upgrade-${crypto.randomUUID()}`;
-    const isolatedIndexedDB: IDBFactory = {
-      open: (_name, version) => indexedDB.open(databaseName, version),
-      deleteDatabase: () => indexedDB.deleteDatabase(databaseName),
-      databases: () => indexedDB.databases(),
-      cmp: (first, second) => indexedDB.cmp(first, second),
-    };
-    const identity = {
-      name: "Alex",
-      email: "alex@example.test",
-      timestampSeconds: 1,
-      timezoneOffsetMinutes: 0,
-    };
-    const commit: RepositoryCommit = {
-      oid: "a".repeat(40),
-      parents: [],
-      author: identity,
-      committer: identity,
-      subject: "Before upgrade",
-    };
-    await createVersionThreeCache(
-      environmentId,
-      repositoryId,
-      commit,
-      isolatedIndexedDB,
-    );
-    const result = await searchStoredRepositoryHistory(
-      environmentId,
-      repositoryId,
-      { text: "upgrade", limit: 100 },
-      undefined,
-      isolatedIndexedDB,
-    );
-    expect(result.commits).toEqual([commit]);
   });
 
   it("searches incomplete cached metadata offline without starting a network request", async () => {
@@ -353,48 +310,4 @@ async function seed(count: number, complete = true) {
     await completeStoredRepositoryHistory(environmentId, repositoryId, count);
   }
   return { environmentId, repositoryId, commits };
-}
-
-function createVersionThreeCache(
-  environmentId: string,
-  repositoryId: string,
-  commit: RepositoryCommit,
-  factory: IDBFactory,
-) {
-  return new Promise<void>((resolve, reject) => {
-    const request = factory.open("rebase-repository-history", 3);
-    request.onupgradeneeded = () => {
-      const database = request.result;
-      const commits = database.createObjectStore("commits", { keyPath: "key" });
-      commits.createIndex("repositoryOrder", [
-        "environmentId",
-        "repositoryId",
-        "topologicalEpoch",
-        "topologicalOrder",
-      ]);
-      database.createObjectStore("repositories", { keyPath: "key" });
-    };
-    request.onerror = () => reject(request.error);
-    request.onsuccess = () => {
-      const database = request.result;
-      const transaction = database.transaction(
-        ["commits", "repositories"],
-        "readwrite",
-      );
-      transaction
-        .objectStore("commits")
-        .put(storedCommit(environmentId, repositoryId, commit));
-      transaction
-        .objectStore("repositories")
-        .put(emptyStoredRepository(environmentId, repositoryId, "sha1"));
-      transaction.oncomplete = () => {
-        database.close();
-        resolve();
-      };
-      transaction.onerror = () => {
-        database.close();
-        reject(transaction.error);
-      };
-    };
-  });
 }

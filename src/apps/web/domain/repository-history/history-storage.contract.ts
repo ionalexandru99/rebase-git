@@ -1,11 +1,11 @@
 export interface RepositoryHistoryCacheDiagnostics {
   readonly environmentId: string;
   readonly repositoryId: string;
-  readonly estimatedBytes: number;
+  readonly estimatedBytes?: number;
   readonly commitCount: number;
-  readonly lastOpenedAt: number | undefined;
+  readonly lastOpenedAt: number;
   readonly open: boolean;
-  readonly state: "empty" | "partial" | "complete" | "incompatible";
+  readonly state: "empty" | "partial" | "complete";
 }
 
 export interface RepositoryHistoryStorageDiagnostics {

@@ -15,10 +15,6 @@ import type {
   RepositoryHistoryQuery,
 } from "#web/features/repository-history/repository-history-reader.contract";
 import type { StoredCommit } from "#web/persistence/repository-history/repository-history-database.contract";
-import {
-  commitKey,
-  repositoryKey,
-} from "#web/persistence/repository-history/repository-history-records";
 import { readStoredHistoryTopology } from "#web/persistence/repository-history/repository-history-topology";
 import type { RepositoryHistoryReadTransaction } from "#web/persistence/repository-history/repository-history-transaction.contract";
 import {
@@ -209,7 +205,8 @@ export function readRepositoryHistory(
   return readStoredHistory(indexedDB, async (transaction) => {
     const { completed } = transaction;
     const repository = await transaction.readRepository(
-      repositoryKey(environmentId, repositoryId),
+      environmentId,
+      repositoryId,
     );
     if (repository === undefined) {
       await completed;
@@ -217,9 +214,7 @@ export function readRepositoryHistory(
     }
     const roots = normalizedOids(query.roots.map((root) => root.oid));
     const storedRoots = await Promise.all(
-      roots.map((oid) =>
-        transaction.readCommit(commitKey(environmentId, repositoryId, oid)),
-      ),
+      roots.map((oid) => transaction.readCommit(repository.id, oid)),
     );
     if (storedRoots.some((root) => root === undefined)) {
       await completed;
@@ -237,9 +232,9 @@ export function readRepositoryHistory(
         query.order === page.order &&
         canSelectCachedHistoryPage(query, page.scopeKey) &&
         sameOids(roots, page.rootOids) &&
-        offset >= (page.offset ?? 0) &&
-        (offset + query.limit <= (page.offset ?? 0) + page.oids.length ||
-          (page.exhausted ?? page.oids.length < page.requestedLimit)),
+        offset >= page.offset &&
+        (offset + query.limit <= page.offset + page.oids.length ||
+          page.exhausted),
     );
     if (
       cachedPage !== undefined &&
@@ -249,39 +244,27 @@ export function readRepositoryHistory(
       (previous === undefined ||
         (!previous.complete && previous.basis === basis) ||
         (repository.completion === undefined &&
-          cachedPage.offset !== undefined &&
           cachedPage.scopeKey === key &&
           offset + query.limit <= cachedPage.offset + cachedPage.oids.length))
     ) {
-      const relativeOffset = offset - (cachedPage.offset ?? 0);
-      const cachedOids = cachedPage.oids.slice(
-        relativeOffset,
-        relativeOffset + query.limit,
-      );
+      const relativeOffset = offset - cachedPage.offset;
       const result = await readCommitsByOid(
         transaction,
-        environmentId,
-        repositoryId,
-        cachedOids,
+        repository.id,
+        cachedPage.oids.slice(relativeOffset, relativeOffset + query.limit),
       );
-      if (result.length !== cachedOids.length)
-        throw new Error("Repository history cache is incomplete");
       await completed;
       if (orderCache.revision !== revision) return undefined;
-      const appliedQuery =
-        cachedPage.offset !== undefined && cachedPage.scopeKey === key;
+      const appliedQuery = cachedPage.scopeKey === key;
       const selected = appliedQuery ? result : selectHistoryPage(result, query);
       if (
         !appliedQuery &&
         selected.length < query.limit &&
-        !(
-          cachedPage.exhausted ??
-          cachedPage.oids.length < cachedPage.requestedLimit
-        ) &&
+        !cachedPage.exhausted &&
         hasMissingSelectedParents(selected, query)
       )
         return undefined;
-      if ((cachedPage.offset ?? 0) === 0)
+      if (cachedPage.offset === 0)
         rememberHistoryOrder(orderCache, key, {
           basis,
           oids:
@@ -312,13 +295,8 @@ export function readRepositoryHistory(
       if (orderCache.revision !== revision || orderCache.index === undefined)
         return undefined;
       const cachedPrefix =
-        (repository.cachedPage?.offset ?? 0) === 0 &&
-        repository.cachedPage?.order === query.order &&
-        (repository.cachedPage.scopeKey === key ||
-          (repository.cachedPage.scopeKey === undefined &&
-            query.ancestry !== "first-parent" &&
-            (query.additionalParentEdges?.length ?? 0) === 0 &&
-            sameOids(roots, repository.cachedPage.rootOids)))
+        repository.cachedPage?.offset === 0 &&
+        repository.cachedPage.scopeKey === key
           ? repository.cachedPage.oids
           : undefined;
       const prepared = orderCache.queries.get(key);
@@ -347,8 +325,7 @@ export function readRepositoryHistory(
     }
     const result = await readCommitsByOid(
       transaction,
-      environmentId,
-      repositoryId,
+      repository.id,
       ordered.slice(offset, offset + query.limit),
     );
     await completed;
@@ -375,14 +352,11 @@ export function readRepositoryCommits(
 
 function readCommitsByOid(
   transaction: RepositoryHistoryReadTransaction,
-  environmentId: string,
-  repositoryId: string,
+  repository: number,
   oids: readonly string[],
 ) {
   return Promise.all(
-    oids.map((oid) =>
-      transaction.readCommit(commitKey(environmentId, repositoryId, oid)),
-    ),
+    oids.map((oid) => transaction.readCommit(repository, oid)),
   ).then((records) =>
     records.flatMap((record) => (record === undefined ? [] : [record.commit])),
   );
@@ -415,7 +389,7 @@ async function readHistoryOrderNodes(
     }
     const last = records.at(-1);
     if (records.length < 2_048 || last === undefined) break;
-    after = last.key;
+    after = last.commit.oid;
   }
   return result.sort(
     (left, right) =>
@@ -456,7 +430,8 @@ async function buildRepositoryHistoryOrder(
   indexedDB: IDBFactory | undefined,
 ) {
   const topology = await readStoredHistoryTopology(
-    repositoryKey(environmentId, repositoryId),
+    environmentId,
+    repositoryId,
     indexedDB,
     async (readChunk) =>
       new HistoryOrderIndex(await readHistoryOrderNodes(readChunk)).snapshot(),
@@ -489,25 +464,19 @@ function hasMissingSelectedParents(
 
 function canSelectCachedHistoryPage(
   query: RepositoryHistoryQuery,
-  scopeKey: string | undefined,
+  scopeKey: string,
 ) {
   if (scopeKey === historyOrderScopeKey(query)) return true;
   if ((query.additionalParentEdges?.length ?? 0) > 0) return false;
-  if (query.ancestry !== "first-parent") return scopeKey === undefined;
+  if (query.ancestry !== "first-parent") return false;
   if ((query.offset ?? 0) !== 0) return false;
-  if (scopeKey === undefined) return true;
-  try {
-    const stored: unknown = JSON.parse(scopeKey);
-    return (
-      Array.isArray(stored) &&
-      ((stored.length === 2 && Array.isArray(stored[1])) ||
-        (stored[1] === "all" &&
-          Array.isArray(stored[2]) &&
-          stored[2].length === 0))
-    );
-  } catch {
-    return false;
-  }
+  const stored: unknown = JSON.parse(scopeKey);
+  return (
+    Array.isArray(stored) &&
+    stored[1] === "all" &&
+    Array.isArray(stored[2]) &&
+    stored[2].length === 0
+  );
 }
 
 function sameOids(left: readonly string[], right: readonly string[]) {

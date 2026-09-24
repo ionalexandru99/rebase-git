@@ -5,19 +5,19 @@ import {
 } from "@rebase/contracts";
 import { describe, expect, it, vi } from "vitest";
 import { createBrowserRepositoryHistoryReader } from "#web/features/repository-history/browser-repository-history-reader";
+import { clearHistoryCache } from "#web/features/repository-history/cache/repository-history-storage";
 import { readRepositoryCommits } from "#web/features/repository-history/query/repository-history-query";
 import {
   beginRepositoryHistorySynchronization,
   completeStoredRepositoryHistory,
   readStoredRepositoryHistoryState,
-  restartRepositoryHistorySynchronization,
   storeRepositoryHistoryBatch,
   storeRepositoryHistoryPage,
 } from "#web/features/repository-history/replica/repository-history-store";
 import type { RepositoryHistoryGateway } from "#web/features/repository-history/repository-history-reader.contract";
 
 describe("durable history counts", () => {
-  it("counts stored OIDs after resetting and restoring a tip without changing resume offsets", async () => {
+  it("counts stored OIDs after resetting a tip and resumes a cleared first synchronization", async () => {
     const fixture = await seed();
     const { environmentId, repositoryId, commits, batch } = fixture;
     const [tip, parent, root] = commits;
@@ -66,7 +66,7 @@ describe("durable history counts", () => {
       commitCount: 3,
     });
 
-    await restartRepositoryHistorySynchronization(environmentId, repositoryId);
+    await clearHistoryCache(environmentId, repositoryId, false);
     await storeRepositoryHistoryBatch(
       environmentId,
       repositoryId,

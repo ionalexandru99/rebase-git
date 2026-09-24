@@ -1,7 +1,4 @@
-import {
-  clearHistoryCache,
-  pruneHistoryCache,
-} from "#web/features/repository-history/cache/repository-history-storage";
+import { clearHistoryCache } from "#web/features/repository-history/cache/repository-history-storage";
 import {
   historyCacheCleanupCandidates,
   writeHistoryWithCleanup,
@@ -27,11 +24,6 @@ export function writeHistoryUnderPressure<T>(
     const attempted = new Set<string>();
     return writeHistoryWithCleanup({
       write,
-      prune: async () => {
-        for (const record of await readHistoryCacheRecords()) {
-          await pruneHistoryCache(record, isOpen).catch(() => undefined);
-        }
-      },
       evictNext: () => evictNextHistoryCache(isOpen, attempted),
     });
   });
@@ -42,16 +34,20 @@ async function evictNextHistoryCache(
   attempted: Set<string>,
 ) {
   const candidates = historyCacheCleanupCandidates(
-    (await readHistoryCacheRecords()).map((record) => ({
-      environmentId: record.environmentId,
-      repositoryId: record.repositoryId,
-      lastOpenedAt: record.lastOpenedAt,
-      open: isOpen(record.key) || attempted.has(record.key),
-      state:
-        record.completion === undefined || record.pendingSnapshot !== undefined
-          ? "partial"
-          : "complete",
-    })),
+    (await readHistoryCacheRecords()).map((record) => {
+      const key = repositoryKey(record.environmentId, record.repositoryId);
+      return {
+        environmentId: record.environmentId,
+        repositoryId: record.repositoryId,
+        lastOpenedAt: record.lastOpenedAt,
+        open: isOpen(key) || attempted.has(key),
+        state:
+          record.completion === undefined ||
+          record.pendingSnapshot !== undefined
+            ? "partial"
+            : "complete",
+      };
+    }),
   );
   for (const candidate of candidates) {
     const key = repositoryKey(candidate.environmentId, candidate.repositoryId);

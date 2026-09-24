@@ -14,7 +14,6 @@ import {
   clearHistoryCache,
   describeHistoryCaches,
   markHistoryCacheOpened,
-  pruneHistoryCache,
 } from "#web/features/repository-history/cache/repository-history-storage";
 import { writeHistoryUnderPressure } from "#web/features/repository-history/cache/repository-history-storage-maintenance";
 import { readRepositoryCommits } from "#web/features/repository-history/query/repository-history-query";
@@ -32,13 +31,6 @@ import {
 } from "#web/features/repository-history/repository-history-reader.contract";
 import { manageBrowserHistoryStorage } from "#web/features/repository-history/storage/browser-history-storage";
 import { readHistoryCacheRecords } from "#web/persistence/repository-history/repository-history-cache-records";
-import {
-  repositoryStoreName,
-  requestResult,
-  transactionCompleted,
-  withRepositoryHistoryDatabase,
-} from "#web/persistence/repository-history/repository-history-database";
-import type { StoredRepository } from "#web/persistence/repository-history/repository-history-database.contract";
 import { repositoryKey } from "#web/persistence/repository-history/repository-history-records";
 
 describe("history cache storage", () => {
@@ -492,32 +484,7 @@ describe("history cache storage", () => {
     }
   });
 
-  it("retries a quota-limited write after pruning real IndexedDB records", async () => {
-    const fixture = await seed();
-    let writes = 0;
-    await writeHistoryUnderPressure(
-      async () => {
-        writes += 1;
-        const orphan = await readRepositoryCommits(
-          fixture.environmentId,
-          fixture.repositoryId,
-          [fixture.orphan.oid],
-        );
-        if (orphan.length > 0)
-          throw new DOMException("Quota exceeded", "QuotaExceededError");
-      },
-      (key) => key !== fixture.key,
-    );
-    expect(writes).toBe(2);
-    expect(
-      await readStoredRepositoryHistoryState(
-        fixture.environmentId,
-        fixture.repositoryId,
-      ),
-    ).toBeDefined();
-  });
-
-  it("evicts the oldest complete closed cache after pruning cannot free enough", async () => {
+  it("evicts the oldest complete closed cache until the write fits", async () => {
     const oldest = await seed();
     const newest = await seed();
     const protectedCache = await seed();
@@ -536,7 +503,7 @@ describe("history cache storage", () => {
       },
       (key) => key !== oldest.key && key !== newest.key,
     );
-    expect(writes).toBe(3);
+    expect(writes).toBe(2);
     expect(
       await readStoredRepositoryHistoryState(
         newest.environmentId,
@@ -595,11 +562,13 @@ describe("history cache storage", () => {
     );
     reader.close();
   });
-  it("counts stored bytes and commits and retains identity when cleared", async () => {
+  it("describes stored commits from the repository counter and retains identity when cleared", async () => {
     const fixture = await seed();
     await markHistoryCacheOpened(fixture.environmentId, fixture.repositoryId);
-    const diagnostics = (
-      await describeHistoryCaches((key) => key === fixture.key)
+    const diagnostics = describeHistoryCaches(
+      await readHistoryCacheRecords(),
+      (key) => key === fixture.key,
+      1_000_000,
     ).find((cache) => cache.repositoryId === fixture.repositoryId);
     expect(diagnostics).toMatchObject({
       state: "complete",
@@ -629,37 +598,6 @@ describe("history cache storage", () => {
     });
   });
 
-  it("removes unreachable commits while protecting every open repository", async () => {
-    const fixture = await seed();
-    const record = (await readHistoryCacheRecords()).find(
-      (record) => record.key === fixture.key,
-    );
-    if (record === undefined) throw new Error("Missing fixture");
-    await pruneHistoryCache(record, () => true);
-    expect(
-      await readRepositoryCommits(fixture.environmentId, fixture.repositoryId, [
-        fixture.orphan.oid,
-      ]),
-    ).toEqual([fixture.orphan]);
-
-    await pruneHistoryCache(record, () => false);
-    expect(
-      await readRepositoryCommits(
-        fixture.environmentId,
-        fixture.repositoryId,
-        fixture.commits.map((commit) => commit.oid),
-      ),
-    ).toEqual(fixture.commits.slice(0, 2));
-    expect(
-      (
-        await readStoredRepositoryHistoryState(
-          fixture.environmentId,
-          fixture.repositoryId,
-        )
-      )?.completion,
-    ).toBeDefined();
-  });
-
   it("removes only the requested environment and repository identity", async () => {
     const first = await seed();
     const second = await seed(first.repositoryId);
@@ -678,152 +616,6 @@ describe("history cache storage", () => {
       ),
     ).toEqual(second.commits);
   });
-
-  it("reconciles a delta from the actual remaining count after pruning", async () => {
-    const fixture = await seed();
-    const extra = {
-      ...fixture.orphan,
-      oid: "e".repeat(40),
-      subject: "Foreground-only orphan",
-    };
-    await storeRepositoryHistoryPage(
-      fixture.environmentId,
-      fixture.repositoryId,
-      { ...fixture.page, commits: [...fixture.commits, extra] },
-      { limit: 100, order: "topological", roots: fixture.roots },
-    );
-    const record = (await readHistoryCacheRecords()).find(
-      (cache) => cache.key === fixture.key,
-    );
-    if (record === undefined) throw new Error("Missing fixture");
-    await pruneHistoryCache(record, () => false);
-    expect(
-      await readStoredRepositoryHistoryState(
-        fixture.environmentId,
-        fixture.repositoryId,
-      ),
-    ).toMatchObject({
-      completion: { commitCount: 2 },
-      progress: { committedCommitCount: 2 },
-    });
-    const added = {
-      ...fixture.orphan,
-      oid: "f".repeat(40),
-      parents: ["a".repeat(40)],
-      subject: "New tip",
-    };
-    const roots = [{ name: "main", oid: added.oid, type: "branch" as const }];
-    const gateway = {
-      read: vi.fn(async () => encodeRepositoryHistoryPage(fixture.page)),
-      synchronize: vi.fn<RepositoryHistoryGateway["synchronize"]>(
-        async (request, accept) => {
-          const basis = request.basis;
-          if (basis?._tag !== "Complete")
-            throw new Error("Expected a completed basis");
-          await accept(
-            encodeRepositoryHistoryBatch({
-              commits: [added],
-              objectFormat: "sha1",
-              repositoryId: fixture.repositoryId,
-              requestId: crypto.randomUUID(),
-              sequence: 0,
-              snapshot: {
-                id: "f".repeat(64),
-                objectFormat: "sha1",
-                rootOids: [added.oid],
-                refTargets: roots,
-                resumable: true,
-              },
-            }),
-          );
-          return basis.commitCount + 1;
-        },
-      ),
-    };
-    const reader = createBrowserRepositoryHistoryReader({
-      environmentId: fixture.environmentId,
-      repositoryId: fixture.repositoryId,
-      gateway,
-    });
-    try {
-      await reader.read({
-        limit: 100,
-        order: "chronological",
-        roots: fixture.roots,
-      });
-      await vi.waitFor(() =>
-        expect(reader.getSnapshot()).toMatchObject({
-          synchronization: "complete",
-          synchronizedCommitCount: 3,
-        }),
-      );
-      expect(gateway.synchronize.mock.calls[0]?.[0].basis).toMatchObject({
-        _tag: "Complete",
-        commitCount: 2,
-      });
-      expect(gateway.read).not.toHaveBeenCalled();
-      expect(
-        await reader.read({ limit: 100, order: "chronological", roots }),
-      ).toHaveLength(3);
-      expect(
-        (await reader.getCacheDiagnostics()).caches.find(
-          (cache) => cache.repositoryId === fixture.repositoryId,
-        )?.commitCount,
-      ).toBe(3);
-    } finally {
-      reader.close();
-    }
-  });
-
-  it.each([
-    { cacheFormatVersion: 99 },
-    { progress: null },
-    { completion: null },
-  ])(
-    "recovers incompatible repository metadata %o without damaging a compatible cache",
-    async (corruption) => {
-      const first = await seed();
-      const second = await seed();
-      await withRepositoryHistoryDatabase(indexedDB, async (database) => {
-        const transaction = database.transaction(
-          repositoryStoreName,
-          "readwrite",
-        );
-        const completed = transactionCompleted(transaction);
-        const store = transaction.objectStore(repositoryStoreName);
-        const record = await requestResult<StoredRepository>(
-          store.get(first.key),
-        );
-        store.put({ ...record, ...corruption });
-        await completed;
-      });
-      expect(
-        await markHistoryCacheOpened(first.environmentId, first.repositoryId),
-      ).toBe(false);
-      expect(
-        await markHistoryCacheOpened(second.environmentId, second.repositoryId),
-      ).toBe(true);
-      const reader = createBrowserRepositoryHistoryReader({
-        environmentId: first.environmentId,
-        repositoryId: first.repositoryId,
-        gateway: gatewayFor(first),
-      });
-      await expect(reader.getRefTargets()).resolves.toEqual([]);
-      expect(reader.getSnapshot().historyRevision).toBeGreaterThan(0);
-      await expect(
-        reader.getCommitSummaries([first.orphan.oid]),
-      ).resolves.toEqual([]);
-      expect(
-        await markHistoryCacheOpened(first.environmentId, first.repositoryId),
-      ).toBe(true);
-      expect(
-        await readRepositoryCommits(second.environmentId, second.repositoryId, [
-          second.orphan.oid,
-        ]),
-      ).toEqual([second.orphan]);
-      reader.close();
-    },
-  );
 });
 
 async function seed(repositoryId = crypto.randomUUID()) {

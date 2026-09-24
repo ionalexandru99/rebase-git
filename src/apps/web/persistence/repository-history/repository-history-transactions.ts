@@ -1,6 +1,6 @@
-import type { RepositoryCommit } from "@rebase/contracts";
 import {
   commitStoreName,
+  readRepositoryRecord,
   repositoryCommitRange,
   repositoryStoreName,
   requestResult,
@@ -9,14 +9,10 @@ import {
   withRepositoryHistoryDatabase,
 } from "#web/persistence/repository-history/repository-history-database";
 import type {
+  NewStoredRepository,
   StoredCommit,
   StoredRepository,
 } from "#web/persistence/repository-history/repository-history-database.contract";
-import {
-  commitKey,
-  repositoryKey,
-  storedCommit,
-} from "#web/persistence/repository-history/repository-history-records";
 import type {
   RepositoryHistoryReadTransaction,
   RepositoryHistoryRepositoryTransaction,
@@ -48,40 +44,26 @@ export function updateStoredHistory<T>(
     const commits = transaction.objectStore(commitStoreName);
     const repositories = transaction.objectStore(repositoryStoreName);
     const topologies = transaction.objectStore(topologyStoreName);
-    const invalidated = new Set<string>();
-    const invalidateTopology = (key: string) => {
-      if (invalidated.has(key)) return;
-      invalidated.add(key);
-      topologies.delete(key);
+    const invalidated = new Set<number>();
+    const invalidateTopology = (repository: number) => {
+      if (invalidated.has(repository)) return;
+      invalidated.add(repository);
+      topologies.delete(repository);
     };
-    return update({
+    return abortOnFailure(transaction, update, {
       ...historyReadTransaction(transaction),
-      storeRepository: (record) => {
-        repositories.put(record);
+      storeRepository: (record) => storeRepositoryRecord(repositories, record),
+      storeCommit: (repository, record) => {
+        commits.put(record, [repository, record.commit.oid]);
+        invalidateTopology(repository);
       },
-      storeCommit: (record) => {
-        commits.put(record);
-        invalidateTopology(
-          repositoryKey(record.environmentId, record.repositoryId),
-        );
+      deleteRepositoryCommits: (repository) => {
+        commits.delete(repositoryCommitRange(repository));
+        invalidateTopology(repository);
       },
-      readCommitChunk: (key, after, limit) =>
-        requestResult<StoredCommit[]>(
-          commits.getAll(repositoryCommitRange(key, after), limit),
-        ),
-      countCommits: (key) =>
-        requestResult(commits.count(repositoryCommitRange(key))),
-      deleteCommit: (key) => {
-        commits.delete(key);
-        invalidateTopology(key.slice(0, key.lastIndexOf("\0")));
-      },
-      deleteRepositoryCommits: (key) => {
-        commits.delete(repositoryCommitRange(key));
-        invalidateTopology(key);
-      },
-      deleteRepository: (key) => {
-        repositories.delete(key);
-        invalidateTopology(key);
+      deleteRepository: (repository) => {
+        repositories.delete(repository);
+        invalidateTopology(repository);
       },
     });
   });
@@ -95,13 +77,11 @@ export function updateStoredRepository<T>(
     const transaction = database.transaction(repositoryStoreName, "readwrite");
     const completed = transactionCompleted(transaction);
     const repositories = transaction.objectStore(repositoryStoreName);
-    return update({
+    return abortOnFailure(transaction, update, {
       completed,
-      readRepository: (key) =>
-        requestResult<StoredRepository | undefined>(repositories.get(key)),
-      storeRepository: (record) => {
-        repositories.put(record);
-      },
+      readRepository: (environmentId, repositoryId) =>
+        readRepositoryRecord(repositories, environmentId, repositoryId),
+      storeRepository: (record) => storeRepositoryRecord(repositories, record),
     });
   });
 }
@@ -114,10 +94,10 @@ export function readStoredRepository(
   return withRepositoryHistoryDatabase(indexedDB, async (database) => {
     const transaction = database.transaction(repositoryStoreName, "readonly");
     const completed = transactionCompleted(transaction);
-    const repository = await requestResult<StoredRepository | undefined>(
-      transaction
-        .objectStore(repositoryStoreName)
-        .get(repositoryKey(environmentId, repositoryId)),
+    const repository = await readRepositoryRecord(
+      transaction.objectStore(repositoryStoreName),
+      environmentId,
+      repositoryId,
     );
     await completed;
     return repository;
@@ -130,42 +110,47 @@ export function readStoredCommits(
   oids: readonly string[],
   indexedDB: IDBFactory | undefined = globalThis.indexedDB,
 ) {
-  return withRepositoryHistoryDatabase(indexedDB, async (database) => {
-    const transaction = database.transaction(commitStoreName, "readonly");
-    const completed = transactionCompleted(transaction);
-    const commits = transaction.objectStore(commitStoreName);
-    const records = await Promise.all(
-      oids.map((oid) =>
-        requestResult<StoredCommit | undefined>(
-          commits.get(commitKey(environmentId, repositoryId, oid)),
-        ),
-      ),
+  return readStoredHistory(indexedDB, async (transaction) => {
+    const { completed } = transaction;
+    const repository = await transaction.readRepository(
+      environmentId,
+      repositoryId,
     );
+    const records =
+      repository === undefined
+        ? oids.map(() => undefined)
+        : await Promise.all(
+            oids.map((oid) => transaction.readCommit(repository.id, oid)),
+          );
     await completed;
     return records;
   });
 }
 
-export function storeRepositoryCommits(
-  environmentId: string,
-  repositoryId: string,
-  commits: readonly RepositoryCommit[],
-  indexedDB: IDBFactory | undefined = globalThis.indexedDB,
+async function abortOnFailure<
+  Records extends { readonly completed: Promise<void> },
+  T,
+>(
+  transaction: IDBTransaction,
+  update: (records: Records) => Promise<T>,
+  records: Records,
 ) {
-  return withRepositoryHistoryDatabase(indexedDB, async (database) => {
-    const transaction = database.transaction(
-      [commitStoreName, topologyStoreName],
-      "readwrite",
-    );
-    const completed = transactionCompleted(transaction);
-    const store = transaction.objectStore(commitStoreName);
-    transaction
-      .objectStore(topologyStoreName)
-      .delete(repositoryKey(environmentId, repositoryId));
-    for (const commit of commits)
-      store.put(storedCommit(environmentId, repositoryId, commit));
-    await completed;
-  });
+  try {
+    return await update(records);
+  } catch (error) {
+    records.completed.catch(() => undefined);
+    try {
+      transaction.abort();
+    } catch {}
+    throw error;
+  }
+}
+
+function storeRepositoryRecord(
+  repositories: IDBObjectStore,
+  record: StoredRepository | NewStoredRepository,
+) {
+  return requestResult(repositories.put(record)).then((key) => Number(key));
 }
 
 function historyReadTransaction(
@@ -176,9 +161,9 @@ function historyReadTransaction(
   const repositories = transaction.objectStore(repositoryStoreName);
   return {
     completed,
-    readRepository: (key) =>
-      requestResult<StoredRepository | undefined>(repositories.get(key)),
-    readCommit: (key) =>
-      requestResult<StoredCommit | undefined>(commits.get(key)),
+    readRepository: (environmentId, repositoryId) =>
+      readRepositoryRecord(repositories, environmentId, repositoryId),
+    readCommit: (repository, oid) =>
+      requestResult<StoredCommit | undefined>(commits.get([repository, oid])),
   };
 }

@@ -1,19 +1,13 @@
 import {
   commitStoreName,
+  readRepositoryRecord,
   repositoryCommitRange,
   repositoryStoreName,
   requestResult,
   transactionCompleted,
   withRepositoryHistoryDatabase,
 } from "#web/persistence/repository-history/repository-history-database";
-import type {
-  StoredCommit,
-  StoredRepository,
-} from "#web/persistence/repository-history/repository-history-database.contract";
-import {
-  commitKey,
-  repositoryKey,
-} from "#web/persistence/repository-history/repository-history-records";
+import type { StoredCommit } from "#web/persistence/repository-history/repository-history-database.contract";
 import type { RepositoryHistorySearchRecords } from "#web/persistence/repository-history/repository-history-transaction.contract";
 
 export function withHistorySearchRecords<T>(
@@ -26,8 +20,8 @@ export function withHistorySearchRecords<T>(
     read({
       readRepository: () =>
         readSearchState(environmentId, repositoryId, database),
-      readChunk: (after, limit) =>
-        readSearchChunk(environmentId, repositoryId, after, limit, database),
+      readChunk: (repository, after, limit) =>
+        readSearchChunk(repository, after, limit, database),
     }),
   );
 }
@@ -39,32 +33,27 @@ async function readSearchState(
 ) {
   const transaction = database.transaction(repositoryStoreName, "readonly");
   const completed = transactionCompleted(transaction);
-  const state = await requestResult<StoredRepository | undefined>(
-    transaction
-      .objectStore(repositoryStoreName)
-      .get(repositoryKey(environmentId, repositoryId)),
+  const state = await readRepositoryRecord(
+    transaction.objectStore(repositoryStoreName),
+    environmentId,
+    repositoryId,
   );
   await completed;
   return state;
 }
 
 async function readSearchChunk(
-  environmentId: string,
-  repositoryId: string,
+  repository: number,
   after: string | undefined,
   limit: number,
   database: IDBDatabase,
 ) {
   const transaction = database.transaction(commitStoreName, "readonly");
   const completed = transactionCompleted(transaction);
-  const range = repositoryCommitRange(
-    repositoryKey(environmentId, repositoryId),
-    after === undefined
-      ? undefined
-      : commitKey(environmentId, repositoryId, after),
-  );
   const records = await requestResult<StoredCommit[]>(
-    transaction.objectStore(commitStoreName).getAll(range, limit),
+    transaction
+      .objectStore(commitStoreName)
+      .getAll(repositoryCommitRange(repository, after), limit),
   );
   await completed;
   return records;

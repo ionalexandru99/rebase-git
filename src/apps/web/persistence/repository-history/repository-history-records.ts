@@ -1,18 +1,17 @@
 import type { RepositoryCommit } from "@rebase/contracts";
 import type {
+  NewStoredRepository,
   StoredCommit,
-  StoredRepository,
 } from "#web/persistence/repository-history/repository-history-database.contract";
 
 export function emptyStoredRepository(
   environmentId: string,
   repositoryId: string,
   objectFormat: "sha1" | "sha256",
-): StoredRepository {
+): NewStoredRepository {
   return {
     environmentId,
-    key: repositoryKey(environmentId, repositoryId),
-    cacheFormatVersion: 1,
+    commitCount: 0,
     lastOpenedAt: Date.now(),
     objectFormat,
     minimumTopologicalEpoch: 0,
@@ -23,36 +22,21 @@ export function emptyStoredRepository(
 }
 
 export function storedCommit(
-  environmentId: string,
-  repositoryId: string,
   commit: RepositoryCommit,
   topologicalPosition?: {
     readonly epoch: number;
     readonly order: number;
   },
 ): StoredCommit {
-  return {
-    commit,
-    environmentId,
-    key: commitKey(environmentId, repositoryId, commit.oid),
-    repositoryId,
-    ...(topologicalPosition === undefined
-      ? {}
-      : {
-          topologicalEpoch: topologicalPosition.epoch,
-          topologicalOrder: topologicalPosition.order,
-        }),
-  };
+  return topologicalPosition === undefined
+    ? { commit }
+    : {
+        commit,
+        topologicalEpoch: topologicalPosition.epoch,
+        topologicalOrder: topologicalPosition.order,
+      };
 }
 
 export function repositoryKey(environmentId: string, repositoryId: string) {
   return `${environmentId}\0${repositoryId}`;
-}
-
-export function commitKey(
-  environmentId: string,
-  repositoryId: string,
-  oid: string,
-) {
-  return `${repositoryKey(environmentId, repositoryId)}\0${oid}`;
 }

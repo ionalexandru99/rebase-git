@@ -11,7 +11,7 @@ export function historyCacheCleanupCandidates<
     .filter((cache) => !cache.open && cache.state === "complete")
     .sort(
       (left, right) =>
-        (left.lastOpenedAt ?? 0) - (right.lastOpenedAt ?? 0) ||
+        left.lastOpenedAt - right.lastOpenedAt ||
         left.environmentId.localeCompare(right.environmentId) ||
         left.repositoryId.localeCompare(right.repositoryId),
     );
@@ -26,15 +26,8 @@ export function isHistoryStorageQuotaError(error: unknown): boolean {
 
 export async function writeHistoryWithCleanup<T>(options: {
   readonly write: () => Promise<T>;
-  readonly prune: () => Promise<void>;
   readonly evictNext: () => Promise<boolean>;
 }): Promise<T> {
-  try {
-    return await options.write();
-  } catch (error) {
-    if (!isHistoryStorageQuotaError(error)) throw error;
-  }
-  await options.prune();
   for (;;) {
     try {
       return await options.write();

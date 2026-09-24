@@ -20,7 +20,7 @@ const diagnostics: RepositoryHistoryStorageDiagnostics = {
       ...identity,
       estimatedBytes: 1024,
       commitCount: 12,
-      lastOpenedAt: undefined,
+      lastOpenedAt: 2,
       open: true,
       state: "complete",
     },
