@@ -1,8 +1,14 @@
-import { execFile } from "node:child_process";
 import { mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { promisify } from "node:util";
+import {
+  CommitInspectionHttpApi,
+  RepositoryChangesHttpApi,
+} from "@rebase/contracts";
+import {
+  createEnvironmentRequestClient,
+  type EnvironmentHttpRoutes,
+} from "@rebase/environment-client";
 import { Effect } from "effect";
 import { expect, it } from "vite-plus/test";
 import { createEnvironmentEventPublisher } from "#server/adapters/environment-transport/events/environment-event-publisher";
@@ -14,9 +20,11 @@ import { GitCommands } from "#server/domain/git-command.contract";
 import { RepositoryAccess } from "#server/domain/repository-access.contract";
 import { RepositoryCoordination } from "#server/domain/repository-coordination.contract";
 import { commitInspectionFeature } from "#server/features/commit-inspection/index";
-import { createEnvironmentAuthorization } from "#server/features/environment-authorization/environment-authorization";
-import { environmentAuthorizationFeature } from "#server/features/environment-authorization/index";
-import { createRepositoryCatalog } from "#server/features/repository-catalog/repository-catalog";
+import {
+  createEnvironmentAuthorization,
+  environmentAuthorizationFeature,
+} from "#server/features/environment-authorization/index";
+import { createRepositoryCatalog } from "#server/features/repository-catalog/index";
 import { repositoryChangesFeature } from "#server/features/repository-changes/index";
 import { acquireEnvironmentContext } from "#server/persistence/environment-context";
 import { environmentPaths } from "#server/persistence/storage/environment-paths";
@@ -25,8 +33,7 @@ import {
   createRepositoryCoordination,
 } from "#server/repository/access/index";
 import { testEnvironmentFeatures } from "#tests-integration/apps/server/environment-connection/test-environment-features";
-import { createCommitInspectionClient } from "#web/features/commit-inspection/transport/commit-inspection-client";
-import { createRepositoryChangesClient } from "#web/features/working-changes/transport/repository-changes-client";
+import { git } from "#tests-support/git";
 
 it("authorizes changes reads separately from index mutations across HTTP", async () => {
   const root = await realpath(
@@ -34,7 +41,7 @@ it("authorizes changes reads separately from index mutations across HTTP", async
   );
   const directory = join(root, "repository");
   try {
-    await promisify(execFile)("git", ["init", "-b", "main", directory]);
+    await git(root, "init", "-b", "main", directory);
     await writeFile(join(directory, "draft.txt"), "draft\n");
     await Effect.runPromise(
       Effect.scoped(
@@ -95,14 +102,21 @@ it("authorizes changes reads separately from index mutations across HTTP", async
             });
           const viewerToken = yield* credential("viewer");
           const ownerToken = yield* credential("owner");
-          const viewer = createRepositoryChangesClient(listener.origin, () => ({
-            type: "bearer",
-            value: viewerToken,
-          }));
-          const owner = createRepositoryChangesClient(listener.origin, () => ({
-            type: "bearer",
-            value: ownerToken,
-          }));
+          const client = <Routes extends EnvironmentHttpRoutes>(
+            routes: Routes,
+            token: string,
+          ) =>
+            createEnvironmentRequestClient(listener.origin, () => ({
+              type: "bearer",
+              value: token,
+            }))(routes, {
+              disconnected: () => {
+                throw new Error("Every request carries a credential.");
+              },
+              response: (error) => error,
+            });
+          const viewer = client(RepositoryChangesHttpApi, viewerToken);
+          const owner = client(RepositoryChangesHttpApi, ownerToken);
           const scope = {
             repositoryId: repository.id,
             worktreePath: directory,
@@ -118,7 +132,7 @@ it("authorizes changes reads separately from index mutations across HTTP", async
             viewed: { section: "staged" as const, path: "draft.txt" },
           };
           const refused = yield* viewer.mutate(command).pipe(Effect.flip);
-          expect(refused.message).toContain("Could not complete");
+          expect(refused).toMatchObject({ status: 403 });
           const staged = yield* owner.mutate(command);
           expect(staged.changes.staged).toEqual([
             { path: "draft.txt", status: "A" },
@@ -132,27 +146,19 @@ it("authorizes changes reads separately from index mutations across HTTP", async
             })).after,
           ).toBe("draft\n");
           yield* Effect.promise(() =>
-            promisify(execFile)("git", [
-              "-C",
+            git(
               directory,
-              "-c",
-              "user.name=Test",
-              "-c",
-              "user.email=test@example.test",
               "-c",
               "commit.gpgsign=false",
               "commit",
               "-m",
               "Initial",
-            ]),
+            ),
           );
-          const oid = (yield* Effect.promise(() =>
-            promisify(execFile)("git", ["-C", directory, "rev-parse", "HEAD"]),
-          )).stdout.trim();
-          const inspection = createCommitInspectionClient(
-            listener.origin,
-            () => ({ type: "bearer", value: viewerToken }),
+          const oid = yield* Effect.promise(() =>
+            git(directory, "rev-parse", "HEAD"),
           );
+          const inspection = client(CommitInspectionHttpApi, viewerToken);
           const inspectionScope = {
             repositoryId: repository.id,
             worktreePath: directory,
@@ -165,26 +171,23 @@ it("authorizes changes reads separately from index mutations across HTTP", async
             { path: "draft.txt", previousPath: null, status: "A" },
           ]);
           expect(
-            (yield* inspection.diff({
+            (yield* inspection.inspectDiff({
               ...inspectionScope,
               oid,
               path: "draft.txt",
             })).after,
           ).toBe("draft\n");
           expect(
-            (yield* inspection
+            yield* inspection
               .inspect({ ...inspectionScope, oid: "HEAD" })
-              .pipe(Effect.flip)).message,
-          ).toContain("Could not load");
-          const unauthorized = createCommitInspectionClient(
-            listener.origin,
-            () => ({ type: "bearer", value: "invalid" }),
-          );
+              .pipe(Effect.flip),
+          ).toMatchObject({ _tag: "EnvironmentResponseError" });
+          const unauthorized = client(CommitInspectionHttpApi, "invalid");
           expect(
-            (yield* unauthorized
+            yield* unauthorized
               .inspect({ ...inspectionScope, oid })
-              .pipe(Effect.flip)).message,
-          ).toContain("Could not load");
+              .pipe(Effect.flip),
+          ).toMatchObject({ status: 401 });
         }),
       ),
     );

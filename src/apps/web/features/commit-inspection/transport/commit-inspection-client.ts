@@ -1,22 +1,9 @@
 import { CommitInspectionHttpApi } from "@rebase/contracts";
-import type {
-  EnvironmentCredential,
-  EnvironmentRequestClient,
-} from "@rebase/environment-client";
-import { createEnvironmentRequestClient } from "@rebase/environment-client";
+import type { EnvironmentRequestClient } from "@rebase/environment-client";
 import {
   type CommitInspectionClient,
   CommitInspectionError,
 } from "#web/features/commit-inspection/commit-inspection.contract";
-
-export function createCommitInspectionClient(
-  origin: string,
-  credential: () => EnvironmentCredential | undefined,
-): CommitInspectionClient {
-  return commitInspectionClient(
-    createEnvironmentRequestClient(origin, credential),
-  );
-}
 
 export function commitInspectionClient(
   requests: EnvironmentRequestClient,
