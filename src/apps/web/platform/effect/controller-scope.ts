@@ -27,3 +27,5 @@ export function createControllerScope(
     },
   };
 }
+
+export type ControllerScope = ReturnType<typeof createControllerScope>;

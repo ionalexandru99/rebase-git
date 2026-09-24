@@ -2,6 +2,7 @@ import type { ManagedRuntime } from "effect";
 import {
   createContext,
   type ReactNode,
+  useCallback,
   useContext,
   useEffect,
   useMemo,
@@ -10,6 +11,7 @@ import type { RepositoryChangesClient } from "#web/features/working-changes/work
 import {
   createWorkingChangesController,
   type WorkingChangesController,
+  type WorkingChangesState,
 } from "#web/features/working-changes/working-changes-controller";
 import type { EnvironmentChanges } from "#web/platform/environment/environment-protocol.contract";
 import { useStore } from "#web/platform/store/use-store";
@@ -79,10 +81,18 @@ export function WorkingChangesProvider({
     </WorkingChangesContext.Provider>
   );
 }
-export function useWorkingChanges() {
+export function useWorkingChangesController() {
   const controller = useContext(WorkingChangesContext);
   if (controller === null)
     throw new Error("Working changes require a provider.");
-  const state = useStore(controller);
-  return { controller, state };
+  return controller;
+}
+export function useWorkingChanges<Key extends keyof WorkingChangesState>(
+  key: Key,
+): WorkingChangesState[Key] {
+  const select = useCallback((state: WorkingChangesState) => state[key], [key]);
+  return useStore(useWorkingChangesController(), select);
+}
+export function useCommitDraft() {
+  return useStore(useWorkingChangesController().draft);
 }
