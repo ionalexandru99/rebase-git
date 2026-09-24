@@ -1,6 +1,9 @@
 import type { ReactNode } from "react";
 import { DiffDisplayControls as Controls } from "#web/features/file-diff/index";
-import { useWorkingChanges } from "#web-ui/features/working-changes/working-changes-provider";
+import {
+  useWorkingChanges,
+  useWorkingChangesController,
+} from "#web-ui/features/working-changes/working-changes-provider";
 export function DiffDisplayControls({
   expanded,
   onExpand,
@@ -10,17 +13,20 @@ export function DiffDisplayControls({
   readonly onExpand?: ((expanded: boolean) => void) | undefined;
   readonly children?: ReactNode;
 }) {
-  const { state, controller } = useWorkingChanges();
-  const section = state.selection?.section ?? "unstaged";
-  const files = state.changes?.[section] ?? [];
-  const index = files.findIndex((file) => file.path === state.selection?.path);
+  const controller = useWorkingChangesController();
+  const selection = useWorkingChanges("selection");
+  const changes = useWorkingChanges("changes");
+  const preferences = useWorkingChanges("preferences");
+  const section = selection?.section ?? "unstaged";
+  const files = changes?.[section] ?? [];
+  const index = files.findIndex((file) => file.path === selection?.path);
   const previous = files[index - 1];
   const next = files[index + 1];
   return (
     <Controls
       expanded={expanded}
       onExpand={onExpand}
-      preferences={state.preferences}
+      preferences={preferences}
       onPreferences={controller.preferences}
       previous={
         previous ? () => controller.select(section, previous.path) : undefined

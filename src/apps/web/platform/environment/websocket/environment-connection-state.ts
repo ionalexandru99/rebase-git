@@ -1,11 +1,13 @@
+import type { RepositoryChangeKind } from "@rebase/contracts";
 import type { EnvironmentConnectionFailure } from "@rebase/environment-client";
 import { Deferred, Effect, Ref } from "effect";
+import type { EnvironmentChangeListener } from "#web/platform/environment/environment-protocol.contract";
 
 export interface EnvironmentConnectionState {
   readonly currentSequence: number;
   readonly failure: EnvironmentConnectionFailure | undefined;
   readonly waiters: ReadonlyArray<SequenceWaiter>;
-  readonly changeListeners: Set<(repositoryIds?: readonly string[]) => void>;
+  readonly changeListeners: Set<EnvironmentChangeListener>;
 }
 
 interface SequenceWaiter {
@@ -54,6 +56,7 @@ export function updateEnvironmentSequence(
   state: Ref.Ref<EnvironmentConnectionState>,
   sequence: number,
   repositoryIds?: readonly string[],
+  kind?: RepositoryChangeKind,
 ) {
   return Effect.gen(function* () {
     const completed = yield* Ref.modify(state, (value) => {
@@ -73,7 +76,7 @@ export function updateEnvironmentSequence(
       Deferred.succeed(waiter.deferred, sequence),
     );
     for (const listener of Ref.getUnsafe(state).changeListeners)
-      listener(repositoryIds);
+      listener(repositoryIds, kind);
   });
 }
 

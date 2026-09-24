@@ -3,6 +3,7 @@ import type { ManagedRuntime } from "effect";
 import { lazy, Suspense, useState } from "react";
 import type { RepositoryChangesClient } from "#web/features/working-changes/working-changes.contract";
 import { usePanelFeature } from "#web/features/workspace-panel/api";
+import type { EnvironmentChanges } from "#web/platform/environment/environment-protocol.contract";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -25,6 +26,7 @@ import {
 import { CommitEditor } from "#web-ui/features/working-changes/components/commit-editor";
 import {
   useWorkingChanges,
+  useWorkingChangesController,
   WorkingChangesProvider,
 } from "#web-ui/features/working-changes/working-changes-provider";
 
@@ -37,18 +39,18 @@ export function WorkingChanges({
   environmentId,
   repositoryId,
   worktreePath,
+  changes,
   connected,
   writable,
-  onCommitted,
   runtime,
 }: {
   readonly client: RepositoryChangesClient | undefined;
   readonly environmentId: string | undefined;
   readonly repositoryId: string | undefined;
   readonly worktreePath: string;
+  readonly changes: EnvironmentChanges | undefined;
   readonly connected: boolean;
   readonly writable: boolean;
-  readonly onCommitted: () => void;
   readonly runtime: ManagedRuntime.ManagedRuntime<never, never> | undefined;
 }) {
   const feature = usePanelFeature();
@@ -70,7 +72,7 @@ export function WorkingChanges({
       environmentId={environmentId}
       repositoryId={repositoryId}
       worktreePath={worktreePath}
-      onCommitted={onCommitted}
+      changes={changes}
       runtime={runtime}
     >
       {!connected ? (
@@ -86,45 +88,51 @@ export function WorkingChanges({
 }
 
 function ChangesLayout({ writable }: { readonly writable: boolean }) {
-  const { state, controller } = useWorkingChanges();
+  const controller = useWorkingChangesController();
+  const busy = useWorkingChanges("busy");
+  const error = useWorkingChanges("error");
+  const notice = useWorkingChanges("notice");
+  const selection = useWorkingChanges("selection");
+  const diffRevision = useWorkingChanges("diff")?.revision;
   const [discard, setDiscard] = useState<{
     section: ChangeSection;
     selection: ChangeSelection;
     revision: string;
   } | null>(null);
   const act: ChangeAction = (action, section, selection) => {
-    if (action === "discard" && state.changes !== null)
-      setDiscard({ section, selection, revision: state.changes.revision });
+    const changes = controller.getSnapshot().changes;
+    if (action === "discard" && changes !== null)
+      setDiscard({ section, selection, revision: changes.revision });
     else controller.mutate(action, section, selection);
   };
   return (
     <section
       className="flex h-full min-h-0 flex-col"
       aria-label="Working changes"
-      aria-busy={state.busy}
+      aria-busy={busy}
     >
-      {state.error ? (
+      {error ? (
         <div
           role="alert"
           className="flex shrink-0 items-center gap-2 border-destructive/30 border-b bg-destructive/10 px-3 py-2 text-xs"
         >
-          <span className="flex-1">{state.error}</span>
+          <span className="flex-1">{error}</span>
           <Button
             variant="ghost"
             size="xs"
             onClick={controller.refresh}
-            disabled={state.busy}
+            disabled={busy}
           >
             Refresh
           </Button>
         </div>
       ) : null}
-      {state.notice ? (
+      {notice ? (
         <div
           role="status"
           className="shrink-0 border-border border-b px-3 py-2 text-xs text-muted-foreground"
         >
-          {state.notice}
+          {notice}
         </div>
       ) : null}
       <ResizablePanelGroup orientation="horizontal" className="min-h-0 flex-1">
@@ -137,7 +145,7 @@ function ChangesLayout({ writable }: { readonly writable: boolean }) {
             }
           >
             <ChangeDiffViewer
-              key={`${state.selection?.section}:${state.selection?.path}:${state.diff?.revision}`}
+              key={`${selection?.section}:${selection?.path}:${diffRevision}`}
               writable={writable}
               act={act}
             />

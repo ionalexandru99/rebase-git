@@ -132,7 +132,6 @@ async function fixture(linkedWorktree = false) {
       foreignRequests.push(endpoint.path);
       return respond(endpoint, command, errors.disconnected);
     });
-  const invalidate = () => undefined;
   const tree = (
     project: string,
     repositoryIds: readonly string[] = [projectA, projectB],
@@ -147,7 +146,6 @@ async function fixture(linkedWorktree = false) {
           connected,
           writable: connected,
           runtime,
-          invalidate,
         }}
         repositoryIds={repositoryIds}
       >

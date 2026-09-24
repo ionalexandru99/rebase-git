@@ -3,14 +3,22 @@ import type {
   ChangeSection,
   ChangeSelection,
   ChangesScope,
+  ChangesWritten,
   MutateChanges,
   RepositoryChanges,
 } from "@rebase/contracts";
-import { Effect, type Fiber, type ManagedRuntime, Semaphore } from "effect";
+import {
+  Effect,
+  type Fiber,
+  Latch,
+  type ManagedRuntime,
+  Semaphore,
+} from "effect";
 import {
   type DiffPreferences,
   defaultDiffPreferences,
 } from "#web/domain/file-diff/diff-preferences.contract";
+import { createCommitDraft } from "#web/features/working-changes/draft/commit-draft";
 import type {
   RepositoryChangesClient,
   WorkingChangesError,
@@ -18,7 +26,6 @@ import type {
 import {
   readCommitDraft,
   readDiffPreferences,
-  saveCommitDraft,
   saveDiffPreferences,
 } from "#web/persistence/working-changes/working-changes-store";
 import {
@@ -33,6 +40,8 @@ type WorkingChangesFailure =
   | WorkingChangesError
   | WorkingChangesStoreUnavailable;
 
+const fallbackRefreshMilliseconds = 10_000;
+
 export interface WorkingChangesState {
   readonly changes: RepositoryChanges | null;
   readonly diff: ChangeDiff | null;
@@ -40,7 +49,6 @@ export interface WorkingChangesState {
     readonly path: string;
     readonly section: ChangeSection;
   } | null;
-  readonly draft: CommitDraft;
   readonly preferences: DiffPreferences;
   readonly amend: boolean;
   readonly busy: boolean;
@@ -52,16 +60,16 @@ export function createWorkingChangesController(
   client: RepositoryChangesClient,
   initialScope: ChangesScope,
   draftKey: string,
-  onCommitted: () => void,
   runtime: ManagedRuntime.ManagedRuntime<never, never>,
 ) {
   const work = createControllerScope(runtime);
   const lock = Semaphore.makeUnsafe(1);
   const writes = Semaphore.makeUnsafe(1);
+  const stale = Latch.makeUnsafe(false);
   let active = true;
   let initialized = false;
   let operationGeneration = 0;
-  let polling: Fiber.Fiber<void> | undefined;
+  let watching: Fiber.Fiber<void> | undefined;
   let reading: Fiber.Fiber<unknown> | undefined;
   let normalDraft = emptyCommitDraft;
   let amendDraft: CommitDraft | undefined;
@@ -70,7 +78,6 @@ export function createWorkingChangesController(
     changes: null,
     diff: null,
     selection: null,
-    draft: emptyCommitDraft,
     preferences: defaultDiffPreferences,
     amend: false,
     busy: false,
@@ -85,6 +92,7 @@ export function createWorkingChangesController(
   const scope = (): ChangesScope => ({ ...initialScope, amend: state().amend });
   const fail = (error: WorkingChangesFailure) =>
     Effect.sync(() => publish({ error: error.message }));
+  const draft = createCommitDraft(work, runtime, fail);
   const run = (effect: Effect.Effect<unknown, WorkingChangesFailure>) =>
     work.fork(effect.pipe(Effect.catch(fail)));
   const runRead = (effect: Effect.Effect<unknown, WorkingChangesFailure>) => {
@@ -115,9 +123,36 @@ export function createWorkingChangesController(
         selection === state().selection &&
         currentScope.amend === state().amend
       )
-        publish({
-          diff: state().diff?.revision === diff.revision ? state().diff : diff,
-        });
+        publish({ diff: retainedDiff(diff) });
+    });
+  const retainedDiff = (diff: ChangeDiff | null) =>
+    diff !== null && state().diff?.revision === diff.revision
+      ? state().diff
+      : diff;
+  const viewing = () => {
+    const selection = state().selection;
+    return selection === null ? {} : { viewed: selection };
+  };
+  const applyWritten = (
+    viewed: WorkingChangesState["selection"],
+    written: ChangesWritten,
+    next: Partial<WorkingChangesState> = {},
+  ) =>
+    Effect.suspend(() => {
+      const stillViewed = viewed === state().selection;
+      const diffOmitted =
+        stillViewed &&
+        viewed !== null &&
+        written.diff === null &&
+        written.changes[viewed.section].some(
+          (file) => file.path === viewed.path,
+        );
+      publish({
+        ...next,
+        changes: written.changes,
+        ...(stillViewed ? { diff: retainedDiff(written.diff) } : {}),
+      });
+      return diffOmitted ? loadDiff() : Effect.void;
     });
   const refresh = () =>
     Effect.gen(function* () {
@@ -125,9 +160,9 @@ export function createWorkingChangesController(
       const { amend, changes } = state();
       if (amend && changes !== null && changes.head !== next.head) {
         amendDraft = undefined;
+        draft.show(normalDraft);
         publish({
           amend: false,
-          draft: normalDraft,
           error:
             "HEAD changed while you were amending. Review the latest commit before enabling Amend again.",
         });
@@ -172,27 +207,31 @@ export function createWorkingChangesController(
       ),
     );
   };
+  const refreshVisible = Effect.suspend(() =>
+    document.visibilityState === "hidden"
+      ? Effect.void
+      : lock
+          .withPermit(refresh())
+          .pipe(
+            Effect.catch((error) =>
+              fail(error).pipe(
+                Effect.andThen(Effect.sync(() => publish({ loading: false }))),
+              ),
+            ),
+          ),
+  );
   const resume = () => {
-    if (!active || !initialized || polling || !work.open) {
+    if (!active || !initialized || watching || !work.open) {
       return;
     }
-    polling = work.fork(
+    watching = work.fork(
       Effect.forever(
-        Effect.suspend(() =>
-          document.visibilityState === "hidden" || state().busy
-            ? Effect.void
-            : lock
-                .withPermit(refresh())
-                .pipe(
-                  Effect.catch((error) =>
-                    fail(error).pipe(
-                      Effect.andThen(
-                        Effect.sync(() => publish({ loading: false })),
-                      ),
-                    ),
-                  ),
-                ),
-        ).pipe(Effect.andThen(Effect.sleep(2500))),
+        stale.close.pipe(
+          Effect.andThen(refreshVisible),
+          Effect.andThen(
+            stale.await.pipe(Effect.timeoutOption(fallbackRefreshMilliseconds)),
+          ),
+        ),
       ),
     );
   };
@@ -200,24 +239,25 @@ export function createWorkingChangesController(
     setActive: (next: boolean) => {
       active = next;
       if (!active) {
-        work.interrupt(polling);
+        work.interrupt(watching);
         work.interrupt(reading);
-        polling = undefined;
+        watching = undefined;
         reading = undefined;
       }
       resume();
     },
     getSnapshot: store.getSnapshot,
     subscribe: store.subscribe,
+    draft: { getSnapshot: draft.getSnapshot, subscribe: draft.subscribe },
     start: () => {
       if (!work.start()) return;
       work.fork(
         Effect.gen(function* () {
           yield* readCommitDraft(draftKey).pipe(
-            Effect.tap((draft) =>
+            Effect.tap((restored) =>
               Effect.sync(() => {
-                normalDraft = draft;
-                publish({ draft });
+                normalDraft = restored;
+                draft.show(restored);
               }),
             ),
             Effect.catch(fail),
@@ -235,10 +275,14 @@ export function createWorkingChangesController(
     },
     stop: () => {
       ++operationGeneration;
+      draft.flush();
       work.stop();
-      polling = undefined;
+      watching = undefined;
       reading = undefined;
       store.set({ ...state(), busy: false, loading: false });
+    },
+    invalidate: () => {
+      stale.openUnsafe();
     },
     refresh: () =>
       runRead(
@@ -250,14 +294,14 @@ export function createWorkingChangesController(
       publish({ selection: { section, path }, diff: null });
       runRead(lock.withPermit(loadDiff()));
     },
-    updateDraft: (draft: CommitDraft) => {
-      publish({ draft, notice: null });
-      if (state().amend) amendDraft = draft;
-      else normalDraft = draft;
-      const key = state().amend
-        ? `${draftKey}:amend:${state().changes?.head}`
-        : draftKey;
-      run(writes.withPermit(saveCommitDraft(key, draft)));
+    updateDraft: (next: CommitDraft) => {
+      if (state().notice !== null) publish({ notice: null });
+      if (state().amend) amendDraft = next;
+      else normalDraft = next;
+      draft.edit(
+        state().amend ? `${draftKey}:amend:${state().changes?.head}` : draftKey,
+        next,
+      );
     },
     preferences: (preferences: DiffPreferences) => {
       publish({ preferences });
@@ -277,12 +321,8 @@ export function createWorkingChangesController(
               ? restored
               : splitCommitMessage(next.message);
           }
-          publish({
-            amend,
-            changes: next,
-            draft: amend ? (amendDraft ?? emptyCommitDraft) : normalDraft,
-            diff: null,
-          });
+          draft.show(amend ? (amendDraft ?? emptyCommitDraft) : normalDraft);
+          publish({ amend, changes: next, diff: null });
           yield* loadDiff();
         }),
       ),
@@ -294,56 +334,46 @@ export function createWorkingChangesController(
     ) =>
       operation(() =>
         Effect.gen(function* () {
-          const changes = state().changes;
+          const { changes, selection: viewed } = state();
           if (changes === null) return;
-          const next = yield* client.mutate({
+          const written = yield* client.mutate({
             ...scope(),
+            ...viewing(),
             revision: revision ?? changes.revision,
             action,
             section,
             selection,
           });
-          publish({ changes: next, diff: null });
-          yield* loadDiff();
+          yield* applyWritten(viewed, written);
         }),
       ),
     commit: () =>
       operation(() =>
         Effect.gen(function* () {
-          const { amend, changes, draft } = state();
+          const { amend, changes, selection: viewed } = state();
           if (changes === null) return;
           const amendedHead = amend ? changes.head : null;
+          const { subject, description } = draft.getSnapshot();
           const message =
-            draft.subject.trim() +
-            (draft.description.trim() ? `\n\n${draft.description.trim()}` : "");
-          const next = yield* client.commit({
+            subject.trim() +
+            (description.trim() ? `\n\n${description.trim()}` : "");
+          const written = yield* client.commit({
             ...scope(),
+            ...viewing(),
             revision: changes.revision,
             message,
           });
           normalDraft = emptyCommitDraft;
           amendDraft = undefined;
-          publish({
-            changes: next,
-            diff: null,
-            draft: emptyCommitDraft,
+          yield* applyWritten(viewed, written, {
             amend: false,
             notice: amendedHead ? "Commit amended." : "Changes committed.",
           });
-          onCommitted();
-          yield* writes
-            .withPermit(saveCommitDraft(draftKey, emptyCommitDraft))
-            .pipe(Effect.catch(fail));
-          if (amendedHead)
-            yield* writes
-              .withPermit(
-                saveCommitDraft(
-                  `${draftKey}:amend:${amendedHead}`,
-                  emptyCommitDraft,
-                ),
-              )
-              .pipe(Effect.catch(fail));
-          yield* loadDiff();
+          yield* draft.clear(
+            amendedHead
+              ? [draftKey, `${draftKey}:amend:${amendedHead}`]
+              : [draftKey],
+          );
         }),
       ),
   };

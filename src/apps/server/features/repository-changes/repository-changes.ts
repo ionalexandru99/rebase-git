@@ -1,9 +1,12 @@
-import type {
-  ChangesScope,
-  CommitChanges,
-  MutateChanges,
-  ReadChangeDiff,
-  RepositoryChanges,
+import {
+  type ChangesScope,
+  type ChangesWritten,
+  type CommitChanges,
+  currentTransportLimits,
+  type MutateChanges,
+  type ReadChangeDiff,
+  type RepositoryChanges,
+  type ViewedChange,
 } from "@rebase/contracts";
 import { Effect } from "effect";
 import type { GitCommandRunner } from "#server/domain/git-command.contract";
@@ -93,7 +96,7 @@ export function createRepositoryChangesService(
               if (command.action !== "discard") yield* unchanged;
             }),
           );
-          return fitChanges((yield* readChanges(git, command)).snapshot);
+          return yield* readWritten(git, command, command.viewed);
         }),
       ),
     commit: (command: CommitChanges) =>
@@ -139,12 +142,45 @@ export function createRepositoryChangesService(
             );
           }),
         ).pipe(
-          Effect.andThen(() => readChanges(git, { ...command, amend: false })),
-          Effect.map(({ snapshot }) => fitChanges(snapshot)),
+          Effect.andThen(() =>
+            readWritten(git, { ...command, amend: false }, command.viewed),
+          ),
         ),
         "worktree-and-refs",
       ),
   };
+}
+
+const writtenResponseBytes =
+  currentTransportLimits.maxHttpResponseBytes - 32_768;
+
+function readWritten(
+  git: GitCommandRunner,
+  scope: ChangesScope,
+  viewed: ViewedChange | undefined,
+) {
+  return Effect.gen(function* () {
+    const { snapshot, base } = yield* readChanges(git, scope);
+    const changes = fitChanges(snapshot);
+    const diff =
+      viewed !== undefined &&
+      snapshot[viewed.section].some((file) => file.path === viewed.path)
+        ? yield* readChangeDiff(
+            git,
+            {
+              repositoryId: scope.repositoryId,
+              worktreePath: scope.worktreePath,
+              amend: scope.amend,
+              ...viewed,
+            },
+            base,
+          ).pipe(Effect.catch(() => Effect.succeed(null)))
+        : null;
+    const written: ChangesWritten = { changes, diff };
+    return Buffer.byteLength(JSON.stringify(written)) <= writtenResponseBytes
+      ? written
+      : { changes, diff: null };
+  });
 }
 
 function fitChanges(snapshot: RepositoryChanges): RepositoryChanges {

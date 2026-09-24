@@ -93,7 +93,7 @@ function fakeRepository(initialWorktrees: readonly string[]) {
     {
       watch: (_directory, onChange) =>
         Effect.sync(() => {
-          listeners.push(onChange);
+          listeners.push(() => onChange("Refs"));
           return { close: () => closedWatches++ };
         }),
     },

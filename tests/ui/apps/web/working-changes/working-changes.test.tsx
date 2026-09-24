@@ -5,13 +5,14 @@ import type {
   RepositoryChanges,
 } from "@rebase/contracts";
 import { Effect, Layer, ManagedRuntime } from "effect";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import { page } from "vitest/browser";
 import { render } from "vitest-browser-react";
 import {
   type RepositoryChangesClient,
   WorkingChangesError,
 } from "#web/features/working-changes/working-changes.contract";
+import type { EnvironmentChangeListener } from "#web/platform/environment/environment-protocol.contract";
 import { WorkingChanges } from "#web-ui/features/working-changes/working-changes";
 
 const runtime = ManagedRuntime.make(Layer.empty);
@@ -48,9 +49,26 @@ async function fixture(extraPaths: readonly string[] = []) {
   const mutations: MutateChanges[] = [];
   const commits: CommitChanges[] = [];
   let rejectCommit = false;
+  let reads = 0;
+  let diffReads = 0;
+  const listeners = new Set<EnvironmentChangeListener>();
+  const changes = {
+    subscribe: (listener: EnvironmentChangeListener) => {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    },
+  };
   const client: RepositoryChangesClient = {
-    read: () => Effect.succeed(snapshot),
-    diff: () => Effect.succeed(diff),
+    read: () =>
+      Effect.sync(() => {
+        reads += 1;
+        return snapshot;
+      }),
+    diff: () =>
+      Effect.sync(() => {
+        diffReads += 1;
+        return diff;
+      }),
     mutate: (command) =>
       Effect.sync(() => {
         mutations.push(command);
@@ -60,7 +78,14 @@ async function fixture(extraPaths: readonly string[] = []) {
           unstaged: command.action === "stage" ? [] : [{ path, status: "M" }],
           staged: command.action === "stage" ? [{ path, status: "M" }] : [],
         };
-        return snapshot;
+        return {
+          changes: snapshot,
+          diff:
+            command.viewed !== undefined &&
+            snapshot[command.viewed.section].length > 0
+              ? diff
+              : null,
+        };
       }),
     commit: (command) =>
       Effect.suspend(() => {
@@ -72,12 +97,11 @@ async function fixture(extraPaths: readonly string[] = []) {
             }),
           );
         snapshot = { ...snapshot, revision: "committed", staged: [] };
-        return Effect.succeed(snapshot);
+        return Effect.succeed({ changes: snapshot, diff: null });
       }),
   };
   const environmentId = crypto.randomUUID(),
     repositoryId = crypto.randomUUID();
-  const onCommitted = vi.fn();
   const tree = () => (
     <div className="dark text-foreground" style={{ width: 1100, height: 700 }}>
       <WorkingChanges
@@ -87,7 +111,7 @@ async function fixture(extraPaths: readonly string[] = []) {
         environmentId={environmentId}
         repositoryId={repositoryId}
         worktreePath="/repo"
-        onCommitted={onCommitted}
+        changes={changes}
         runtime={runtime}
       />
     </div>
@@ -101,7 +125,11 @@ async function fixture(extraPaths: readonly string[] = []) {
     tree,
     mutations,
     commits,
-    onCommitted,
+    reads: () => reads,
+    diffReads: () => diffReads,
+    emitChange: () => {
+      for (const listener of listeners) listener([repositoryId], "Index");
+    },
     advanceHead: (message: string) => {
       snapshot = {
         ...snapshot,
@@ -187,11 +215,20 @@ describe("working changes", () => {
     await amend.click();
     await expect.element(subject).toHaveValue("Another commit");
     f.advanceHead("External commit");
+    f.emitChange();
     await expect.element(amend).not.toBeChecked();
     await expect.element(subject).toHaveValue("New commit draft");
     await expect
       .element(page.getByRole("alert"))
       .toHaveTextContent("HEAD changed while you were amending");
+  });
+  it("re-reads changes when the server reports this repository changed or the window regains focus", async () => {
+    const f = await fixture();
+    const initialReads = f.reads();
+    f.emitChange();
+    await expect.poll(f.reads).toBe(initialReads + 1);
+    window.dispatchEvent(new Event("focus"));
+    await expect.poll(f.reads).toBe(initialReads + 2);
   });
   it("places the composer beneath the right tree and renders Shiki with working display controls", async () => {
     await fixture();
@@ -317,6 +354,25 @@ describe("working changes", () => {
     await expect
       .element(page.getByRole("textbox", { name: "Commit subject" }))
       .toHaveValue("");
-    await expect.poll(() => f.onCommitted.mock.calls.length).toBe(1);
+    await expect
+      .element(page.getByRole("status"))
+      .toHaveTextContent("Changes committed.");
+    expect(f.commits).toHaveLength(2);
+  });
+  it("shows the viewed diff returned by a write without reading it again", async () => {
+    const f = await fixture();
+    const diffReads = f.diffReads();
+    await page
+      .getByRole("button", { name: `Discard unstaged ${path}`, exact: true })
+      .click();
+    await page
+      .getByRole("button", { name: "Discard changes", exact: true })
+      .click();
+    await expect.poll(() => f.mutations.length).toBe(1);
+    await expect
+      .element(page.getByRole("button", { name: "Stage entire file" }))
+      .toBeEnabled();
+    expect(f.mutations[0]?.viewed).toEqual({ section: "unstaged", path });
+    expect(f.diffReads()).toBe(diffReads);
   });
 });

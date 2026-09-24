@@ -42,14 +42,17 @@ describe("browser Environment protocol client", () => {
             events.publishChanged([environmentId]);
             events.publishChanged([environmentId]);
             await Effect.runPromise(connection.waitForSequence(2));
-            expect(changed).toHaveBeenCalledExactlyOnceWith(undefined);
-            events.publishChanged([environmentId]);
-            events.publishChanged([environmentId]);
+            expect(changed).toHaveBeenCalledExactlyOnceWith(
+              undefined,
+              undefined,
+            );
+            events.publishChanged([environmentId], "Refs");
+            events.publishChanged([environmentId], "Refs");
             await Effect.runPromise(connection.waitForSequence(4));
             expect(changed.mock.calls).toEqual([
-              [undefined],
-              [[environmentId]],
-              [[environmentId]],
+              [undefined, undefined],
+              [[environmentId], "Refs"],
+              [[environmentId], "Refs"],
             ]);
           } finally {
             unsubscribe();
@@ -58,10 +61,10 @@ describe("browser Environment protocol client", () => {
       {
         ...events,
         subscribe: (listener) =>
-          events.subscribe((sequence, repositoryIds) => {
+          events.subscribe((sequence, repositoryIds, kind) => {
             if (sequence === 1) return;
-            listener(sequence, repositoryIds);
-            listener(sequence, repositoryIds);
+            listener(sequence, repositoryIds, kind);
+            listener(sequence, repositoryIds, kind);
           }),
       },
     );
@@ -86,10 +89,12 @@ describe("browser Environment protocol client", () => {
             const changed = vi.fn();
             const unsubscribe = connection.subscribeChanges(changed);
             try {
-              events.publishChanged([environmentId]);
+              events.publishChanged([environmentId], "Index");
               await Effect.runPromise(connection.waitForSequence(1));
               expect(changed).toHaveBeenCalledExactlyOnceWith(
-                identified ? [environmentId] : undefined,
+                ...(identified
+                  ? [[environmentId], "Index"]
+                  : [undefined, undefined]),
               );
               unsubscribe();
               events.publishChanged([environmentId]);

@@ -48,6 +48,7 @@ export function processEnvironmentRpcEvents(session: EnvironmentRpcEvents) {
                   session.state,
                   message.sequence,
                   message.repositoryIds,
+                  message.kind,
                 )
               : recoverEnvironmentSnapshot(session, message.sequence);
         }),

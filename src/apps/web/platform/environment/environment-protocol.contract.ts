@@ -1,6 +1,7 @@
 import type {
   EnvironmentHelloResult,
   EnvironmentRpcClient,
+  RepositoryChangeKind,
 } from "@rebase/contracts";
 
 export type NegotiatedEnvironment = Exclude<
@@ -15,6 +16,7 @@ export interface NegotiatedEnvironmentRpc {
 
 export type EnvironmentChangeListener = (
   repositoryIds?: readonly string[],
+  kind?: RepositoryChangeKind,
 ) => void;
 
 export interface EnvironmentChanges {

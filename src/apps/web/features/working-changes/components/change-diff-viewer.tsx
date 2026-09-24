@@ -18,10 +18,14 @@ export default function ChangeDiffViewer({
   readonly writable: boolean;
   readonly act: ChangeAction;
 }) {
-  const { state } = useWorkingChanges();
+  const diff = useWorkingChanges("diff");
+  const selection = useWorkingChanges("selection");
+  const changes = useWorkingChanges("changes");
+  const preferences = useWorkingChanges("preferences");
+  const busy = useWorkingChanges("busy");
+  const loading = useWorkingChanges("loading");
   const [selected, setSelected] = useState<SelectedLineRange | null>(null);
   const [expandContext, setExpandContext] = useState(false);
-  const diff = state.diff;
   const { metadata, hasHiddenContext } = useMemo(
     () => createChangeDiffModel(diff),
     [diff],
@@ -30,11 +34,10 @@ export default function ChangeDiffViewer({
     () => (metadata ? selectedDiffLines(metadata, selected) : []),
     [metadata, selected],
   );
-  const selection = state.selection;
   const section = selection?.section ?? "unstaged";
   const action = section === "unstaged" ? "stage" : "unstage";
   const label = section === "unstaged" ? "Stage" : "Unstage";
-  const disabled = !writable || state.busy || state.loading;
+  const disabled = !writable || busy || loading;
   const selectLines = (
     action: "stage" | "unstage" | "discard",
     ids: readonly string[],
@@ -48,9 +51,9 @@ export default function ChangeDiffViewer({
       });
   };
   const empty =
-    state.changes !== null &&
+    changes !== null &&
     (selection === null ||
-      !state.changes[section].some((file) => file.path === selection.path));
+      !changes[section].some((file) => file.path === selection.path));
   return (
     <section
       className="flex h-full min-h-0 min-w-0 flex-col bg-background"
@@ -107,13 +110,13 @@ export default function ChangeDiffViewer({
         </div>
       ) : diff === null ? (
         <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
-          {state.loading || selection ? "Loading changes…" : "Select a file"}
+          {loading || selection ? "Loading changes…" : "Select a file"}
         </div>
       ) : (
         <DiffContent
           diff={diff}
           metadata={metadata}
-          preferences={state.preferences}
+          preferences={preferences}
           expandContext={expandContext}
           selection={{ range: selected, onChange: setSelected }}
         />

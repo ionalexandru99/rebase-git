@@ -7,7 +7,10 @@ import { useState } from "react";
 import { Button } from "#web-ui/components/ui/button";
 import { Input } from "#web-ui/components/ui/input";
 import { ChangeFileSection } from "#web-ui/features/working-changes/components/change-file-section";
-import { useWorkingChanges } from "#web-ui/features/working-changes/working-changes-provider";
+import {
+  useWorkingChanges,
+  useWorkingChangesController,
+} from "#web-ui/features/working-changes/working-changes-provider";
 
 export type ChangeAction = (
   action: MutateChanges["action"],
@@ -21,7 +24,9 @@ export function ChangeFileTree({
   readonly writable: boolean;
   readonly act: ChangeAction;
 }) {
-  const { state, controller } = useWorkingChanges();
+  const controller = useWorkingChangesController();
+  const preferences = useWorkingChanges("preferences");
+  const changes = useWorkingChanges("changes");
   const [filter, setFilter] = useState("");
   return (
     <section
@@ -34,10 +39,10 @@ export function ChangeFileTree({
           <Button
             size="xs"
             variant="ghost"
-            aria-pressed={state.preferences.tree}
+            aria-pressed={preferences.tree}
             className="aria-pressed:bg-sidebar-accent aria-pressed:text-sidebar-accent-foreground"
             onClick={() =>
-              controller.preferences({ ...state.preferences, tree: true })
+              controller.preferences({ ...preferences, tree: true })
             }
           >
             Tree
@@ -45,10 +50,10 @@ export function ChangeFileTree({
           <Button
             size="xs"
             variant="ghost"
-            aria-pressed={!state.preferences.tree}
+            aria-pressed={!preferences.tree}
             className="aria-pressed:bg-sidebar-accent aria-pressed:text-sidebar-accent-foreground"
             onClick={() =>
-              controller.preferences({ ...state.preferences, tree: false })
+              controller.preferences({ ...preferences, tree: false })
             }
           >
             List
@@ -77,7 +82,7 @@ export function ChangeFileTree({
           act={act}
         />
       </div>
-      {state.changes?.truncated ? (
+      {changes?.truncated ? (
         <p role="status" className="p-2 text-xs text-muted-foreground">
           The file list is too large to display completely. All-file actions
           still include every changed file.

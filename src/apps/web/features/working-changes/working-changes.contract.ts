@@ -1,6 +1,7 @@
 import type {
   ChangeDiff,
   ChangesScope,
+  ChangesWritten,
   CommitChanges,
   MutateChanges,
   ReadChangeDiff,
@@ -20,8 +21,8 @@ export interface RepositoryChangesClient {
   ) => Effect.Effect<ChangeDiff, WorkingChangesError>;
   readonly mutate: (
     command: MutateChanges,
-  ) => Effect.Effect<RepositoryChanges, WorkingChangesError>;
+  ) => Effect.Effect<ChangesWritten, WorkingChangesError>;
   readonly commit: (
     command: CommitChanges,
-  ) => Effect.Effect<RepositoryChanges, WorkingChangesError>;
+  ) => Effect.Effect<ChangesWritten, WorkingChangesError>;
 }

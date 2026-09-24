@@ -1,5 +1,6 @@
 import type {
   RepositoryCatalogEntry,
+  RepositoryChangeKind,
   RepositoryFreshness,
 } from "@rebase/contracts";
 import {
@@ -56,7 +57,10 @@ describe("repository freshness", () => {
         expect(fetch).toHaveBeenCalledOnce();
         expect(watch.close).not.toHaveBeenCalled();
         const beforeChange = states.at(-1)?.revision ?? 0;
-        watch.change();
+        watch.change("Index");
+        yield* TestClock.adjust(50);
+        expect(states.at(-1)?.revision ?? 0).toBe(beforeChange);
+        watch.change("Refs");
         yield* TestClock.adjust(50);
         expect(states.at(-1)?.revision).toBeGreaterThan(beforeChange);
         yield* reader;
@@ -318,7 +322,7 @@ describe("repository freshness", () => {
         yield* second;
         expect(watch.close).toHaveBeenCalledOnce();
         const published = publish.mock.calls.length;
-        watch.change();
+        watch.change("Refs");
         yield* TestClock.adjust(60_000);
         expect(publish).toHaveBeenCalledTimes(published);
       }),
@@ -448,7 +452,7 @@ function withService(
     watch: {
       open: ReturnType<typeof vi.fn>;
       close: ReturnType<typeof vi.fn>;
-      change: () => void;
+      change: (kind: RepositoryChangeKind) => void;
     },
     git: {
       fetch: ReturnType<typeof vi.fn<GitCommandRunner["run"]>>;
@@ -470,7 +474,11 @@ function withService(
     ),
     initialize: Effect.void,
   };
-  const watch = { open: vi.fn(), close: vi.fn(), change: () => {} };
+  const watch = {
+    open: vi.fn(),
+    close: vi.fn(),
+    change: (_kind: RepositoryChangeKind) => {},
+  };
   return Effect.runPromise(
     Effect.gen(function* () {
       const service = yield* acquireRepositoryFreshness.pipe(

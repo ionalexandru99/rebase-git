@@ -55,6 +55,7 @@ export {
   HelloRejected,
   InvalidMessage,
   PayloadTooLarge,
+  RepositoryChangeKind,
 } from "@rebase/contracts/environment-connection/websocket/environment-live-connection.contract";
 export * from "@rebase/contracts/environment-connection/websocket/json-message-fragment";
 export * from "@rebase/contracts/environment-connection/websocket/json-message-fragment.contract";

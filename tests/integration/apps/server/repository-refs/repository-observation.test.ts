@@ -135,6 +135,7 @@ for (const firstRelease of ["refs", "freshness"] as const)
               expect(changed).toHaveBeenCalledWith(
                 expect.any(Number),
                 expect.arrayContaining([mainEntry.id, linkedEntry.id]),
+                "Refs",
               );
               expect(fresh.mock.calls.at(-1)?.[0].revision).toBeGreaterThan(0);
             }),

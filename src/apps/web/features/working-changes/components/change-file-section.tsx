@@ -14,7 +14,10 @@ import { useFileRows } from "#web/features/file-diff/index";
 import { Button } from "#web-ui/components/ui/button";
 import { ChangeFileIcon } from "#web-ui/features/working-changes/components/change-file-icon";
 import type { ChangeAction } from "#web-ui/features/working-changes/components/change-file-tree";
-import { useWorkingChanges } from "#web-ui/features/working-changes/working-changes-provider";
+import {
+  useWorkingChanges,
+  useWorkingChangesController,
+} from "#web-ui/features/working-changes/working-changes-provider";
 
 const statusLabels: Record<ChangedFile["status"], string> = {
   A: "Added",
@@ -36,19 +39,24 @@ export function ChangeFileSection({
   readonly writable: boolean;
   readonly act: ChangeAction;
 }) {
-  const { state, controller } = useWorkingChanges();
+  const controller = useWorkingChangesController();
+  const changes = useWorkingChanges("changes");
+  const preferences = useWorkingChanges("preferences");
+  const selection = useWorkingChanges("selection");
+  const busy = useWorkingChanges("busy");
+  const loading = useWorkingChanges("loading");
   const anchor = useRef<string | null>(null);
   const [checked, setChecked] = useState<ReadonlySet<string>>(new Set());
   const [open, setOpen] = useState(true);
-  const files = state.changes?.[section] ?? [];
+  const files = changes?.[section] ?? [];
   const { rows, collapsed, scrollRef, virtualizer, toggle } = useFileRows(
     files,
-    { tree: state.preferences.tree, filter, open },
+    { tree: preferences.tree, filter, open },
   );
   const selected = files
     .filter((file) => checked.has(file.path))
     .map((file) => file.path);
-  const disabled = !writable || state.busy || state.loading;
+  const disabled = !writable || busy || loading;
   const label = section === "unstaged" ? "Unstaged" : "Staged";
   const action = section === "unstaged" ? "stage" : "unstage";
   const actionLabel = section === "unstaged" ? "Stage" : "Unstage";
@@ -94,8 +102,7 @@ export function ChangeFileSection({
             const isFolder = row.file === undefined;
             const chosen =
               checked.has(row.key) ||
-              (state.selection?.section === section &&
-                state.selection.path === row.key);
+              (selection?.section === section && selection.path === row.key);
             return (
               <div
                 key={row.key}

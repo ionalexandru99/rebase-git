@@ -2,6 +2,7 @@ import type { ManagedRuntime } from "effect";
 import {
   createContext,
   type ReactNode,
+  useCallback,
   useContext,
   useEffect,
   useMemo,
@@ -10,7 +11,9 @@ import type { RepositoryChangesClient } from "#web/features/working-changes/work
 import {
   createWorkingChangesController,
   type WorkingChangesController,
+  type WorkingChangesState,
 } from "#web/features/working-changes/working-changes-controller";
+import type { EnvironmentChanges } from "#web/platform/environment/environment-protocol.contract";
 import { useStore } from "#web/platform/store/use-store";
 
 const WorkingChangesContext = createContext<WorkingChangesController | null>(
@@ -22,7 +25,7 @@ export function WorkingChangesProvider({
   environmentId,
   repositoryId,
   worktreePath,
-  onCommitted,
+  changes,
   runtime,
   active = true,
 }: {
@@ -31,7 +34,7 @@ export function WorkingChangesProvider({
   readonly environmentId: string;
   readonly repositoryId: string;
   readonly worktreePath: string;
-  readonly onCommitted: () => void;
+  readonly changes: EnvironmentChanges | undefined;
   readonly runtime: ManagedRuntime.ManagedRuntime<never, never>;
   readonly active?: boolean;
 }) {
@@ -41,26 +44,52 @@ export function WorkingChangesProvider({
         client,
         { repositoryId, worktreePath, amend: false },
         JSON.stringify([environmentId, repositoryId, worktreePath]),
-        onCommitted,
         runtime,
       ),
-    [client, environmentId, repositoryId, worktreePath, onCommitted, runtime],
+    [client, environmentId, repositoryId, worktreePath, runtime],
   );
   useEffect(() => {
     controller.start();
     return controller.stop;
   }, [controller]);
   useEffect(() => controller.setActive(active), [controller, active]);
+  useEffect(
+    () =>
+      changes?.subscribe((repositoryIds) => {
+        if (repositoryIds === undefined || repositoryIds.includes(repositoryId))
+          controller.invalidate();
+      }),
+    [changes, controller, repositoryId],
+  );
+  useEffect(() => {
+    const invalidateWhenVisible = () => {
+      if (document.visibilityState === "visible") controller.invalidate();
+    };
+    window.addEventListener("focus", invalidateWhenVisible);
+    document.addEventListener("visibilitychange", invalidateWhenVisible);
+    return () => {
+      window.removeEventListener("focus", invalidateWhenVisible);
+      document.removeEventListener("visibilitychange", invalidateWhenVisible);
+    };
+  }, [controller]);
   return (
     <WorkingChangesContext.Provider value={controller}>
       {children}
     </WorkingChangesContext.Provider>
   );
 }
-export function useWorkingChanges() {
+export function useWorkingChangesController() {
   const controller = useContext(WorkingChangesContext);
   if (controller === null)
     throw new Error("Working changes require a provider.");
-  const state = useStore(controller);
-  return { controller, state };
+  return controller;
+}
+export function useWorkingChanges<Key extends keyof WorkingChangesState>(
+  key: Key,
+): WorkingChangesState[Key] {
+  const select = useCallback((state: WorkingChangesState) => state[key], [key]);
+  return useStore(useWorkingChangesController(), select);
+}
+export function useCommitDraft() {
+  return useStore(useWorkingChangesController().draft);
 }

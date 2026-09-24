@@ -31,7 +31,8 @@ export function createWorktreePathCache(
     let changed = false;
     return Effect.gen(function* () {
       const directory = yield* readGitCommonDirectory(git, repositoryPath);
-      entry.watch = yield* watcher.watch(directory, () => {
+      entry.watch = yield* watcher.watch(directory, (kind) => {
+        if (kind === "Index") return;
         changed = true;
         forget(repositoryPath, entry);
       });

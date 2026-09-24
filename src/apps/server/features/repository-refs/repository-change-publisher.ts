@@ -1,4 +1,7 @@
-import type { RepositoryCatalogEntry } from "@rebase/contracts";
+import type {
+  RepositoryCatalogEntry,
+  RepositoryChangeKind,
+} from "@rebase/contracts";
 import { Effect, Exit, Queue, Scope, Semaphore } from "effect";
 import type { EnvironmentEventPublisher } from "#server/domain/environment-event-publisher.contract";
 import type { GitCommandRunner } from "#server/domain/git-command.contract";
@@ -21,7 +24,7 @@ export function acquireRepositoryChangePublisher(
     const scope = yield* Effect.scope;
     const mutex = yield* Semaphore.make(1);
     const watches = new Map<string, Scope.Closeable>();
-    const changed = new Set<string>();
+    const changed = new Map<string, RepositoryChangeKind>();
     const pending = yield* Queue.make<void>({
       capacity: 1,
       strategy: "dropping",
@@ -50,8 +53,9 @@ export function acquireRepositoryChangePublisher(
         }
         const owned = yield* Scope.fork(scope);
         yield* Effect.acquireRelease(
-          watcher.watch(directory, () => {
-            changed.add(repositoryId);
+          watcher.watch(directory, (kind) => {
+            if (changed.get(repositoryId) !== "Refs")
+              changed.set(repositoryId, kind);
             Queue.offerUnsafe(pending, undefined);
           }),
           (handle) => Effect.sync(handle.close),
@@ -77,7 +81,7 @@ export function acquireRepositoryChangePublisher(
 
 function publishRepositoryChanges(
   pending: Queue.Queue<void>,
-  changed: Set<string>,
+  changed: Map<string, RepositoryChangeKind>,
   events: EnvironmentEventPublisher,
 ) {
   return Effect.gen(function* () {
@@ -85,9 +89,15 @@ function publishRepositoryChanges(
       yield* Queue.take(pending);
       yield* Effect.sleep(publishDelayMilliseconds);
       yield* Queue.clear(pending);
-      const repositoryIds = [...changed];
+      const batch = [...changed];
       changed.clear();
-      if (repositoryIds.length > 0) events.publishChanged(repositoryIds);
+      for (const kind of ["Refs", "Index"] as const) {
+        const repositoryIds = batch.flatMap(([repositoryId, changedKind]) =>
+          changedKind === kind ? [repositoryId] : [],
+        );
+        if (repositoryIds.length > 0)
+          events.publishChanged(repositoryIds, kind);
+      }
     }
   });
 }
