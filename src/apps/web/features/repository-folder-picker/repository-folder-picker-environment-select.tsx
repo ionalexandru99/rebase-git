@@ -1,12 +1,25 @@
-import { IconCheck, IconChevronDown } from "@tabler/icons-react";
+import {
+  IconCheck,
+  IconChevronDown,
+  type TablerIcon,
+} from "@tabler/icons-react";
 import type { JSX } from "react";
-import type { RepositoryFolderPickerEnvironment } from "#web/features/repository-folder-picker/repository-folder-picker.contract";
+import type { EnvironmentAvailability } from "#web/features/project-navigation/project-navigation.contract";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "#web-ui/components/ui/dropdown-menu";
+
+export interface RepositoryFolderPickerEnvironment {
+  readonly availability: EnvironmentAvailability;
+  readonly icon: TablerIcon;
+  readonly iconColor: string;
+  readonly id: string;
+  readonly name: string;
+  readonly status: string;
+}
 
 export function RepositoryFolderPickerEnvironmentSelect({
   environments,

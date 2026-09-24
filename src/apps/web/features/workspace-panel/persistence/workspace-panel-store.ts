@@ -8,6 +8,7 @@ import {
   isWorkspacePanelKind,
   reduceWorkspacePanel,
 } from "#web/features/workspace-panel/workspace-panel-state";
+import { createStore } from "#web/platform/store/store";
 
 const panelStoragePrefix = "rebase:workspace-panel:v1:";
 
@@ -16,22 +17,16 @@ export function createWorkspacePanelStore(
   previousScopeKey?: string,
 ): WorkspacePanelStore {
   const key = `${panelStoragePrefix}${scopeKey}`;
-  let state = readPanelState(key, previousScopeKey);
-  const listeners = new Set<() => void>();
+  const store = createStore(readPanelState(key, previousScopeKey));
   return {
-    getSnapshot: () => state,
-    subscribe: (listener) => {
-      listeners.add(listener);
-      return () => {
-        listeners.delete(listener);
-      };
-    },
+    getSnapshot: store.getSnapshot,
+    subscribe: store.subscribe,
     dispatch: (action) => {
+      const state = store.getSnapshot();
       const next = reduceWorkspacePanel(state, action);
       if (next === state) return;
-      state = next;
-      savePanelState(key, JSON.stringify(state));
-      for (const notify of listeners) notify();
+      savePanelState(key, JSON.stringify(next));
+      store.set(next);
     },
   };
 }

@@ -15,6 +15,7 @@ import type { RepositoryCatalogController } from "#web/features/repository-catal
 import type { RepositoryHistoryGateway } from "#web/features/repository-history/repository-history-reader.contract";
 import type { RepositoryRefsController } from "#web/features/repository-refs/repository-refs-controller.contract";
 import type { EnvironmentChanges } from "#web/platform/environment/environment-protocol.contract";
+import type { ReadableStore } from "#web/platform/store/store";
 
 export type LocalEnvironmentSessionState =
   | { readonly _tag: "PairingRequired" }
@@ -53,14 +54,14 @@ export interface LocalEnvironmentControllers {
   readonly repositoryRefs: RepositoryRefsController;
 }
 
-export interface LocalEnvironmentSession extends LocalEnvironmentControllers {
+export interface LocalEnvironmentSession
+  extends LocalEnvironmentControllers,
+    ReadableStore<LocalEnvironmentSessionState> {
   readonly changes: EnvironmentChanges;
   readonly requests?: EnvironmentRequestClient;
   readonly runtime: ManagedRuntime.ManagedRuntime<never, never>;
-  readonly getSnapshot: () => LocalEnvironmentSessionState;
   readonly start: () => void;
   readonly stop: () => void;
-  readonly subscribe: (listener: () => void) => () => void;
 }
 
 export interface LocalEnvironmentGateway {

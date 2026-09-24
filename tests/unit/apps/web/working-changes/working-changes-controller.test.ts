@@ -1,8 +1,8 @@
 import { Effect, Layer, ManagedRuntime } from "effect";
 import { expect, it, vi } from "vite-plus/test";
 import { defaultDiffPreferences } from "#web/domain/file-diff/diff-preferences.contract";
-import { emptyCommitDraft } from "#web/domain/working-changes/commit-draft.contract";
 import { createWorkingChangesController } from "#web/features/working-changes/working-changes-controller";
+import { emptyCommitDraft } from "#web/persistence/working-changes/working-changes-store.contract";
 
 vi.mock("#web/persistence/working-changes/working-changes-store", () => ({
   readDiffPreferences: () => Effect.succeed(defaultDiffPreferences),

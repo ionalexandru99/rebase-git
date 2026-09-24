@@ -8,7 +8,6 @@ import {
   useMemo,
   useRef,
   useState,
-  useSyncExternalStore,
 } from "react";
 import { PanelFeatureContext } from "#web/features/workspace-panel/api";
 import {
@@ -22,6 +21,7 @@ import type {
   WorkspacePanelEnvironment,
   WorkspacePanelScope,
 } from "#web/features/workspace-panel/workspace-panel-session.contract";
+import { useStore } from "#web/platform/store/use-store";
 import { RetainedPanelView } from "#web-ui/features/workspace-panel/components/retained-panel-view";
 
 export type {
@@ -63,10 +63,7 @@ function SessionViews({
   readonly collection: ReturnType<typeof createSessionCollection>;
   readonly environment: WorkspacePanelEnvironment | undefined;
 }) {
-  const sessions = useSyncExternalStore(
-    collection.subscribe,
-    collection.getSnapshot,
-  );
+  const sessions = useStore(collection);
   return sessions.map((session) => (
     <ProjectViews
       key={session.key}
@@ -84,12 +81,12 @@ function ProjectViews({
   readonly environment: WorkspacePanelEnvironment | undefined;
 }) {
   const environment = useProjectEnvironment(session.scope, currentEnvironment);
-  const panel = useSyncExternalStore(
-    session.store.subscribe,
-    session.store.getSnapshot,
-  );
-  const view = useSyncExternalStore(session.subscribe, session.getSnapshot);
-  return panel.tabs.map((kind) => (
+  const tabs = useStore(session.store, (panel) => panel.tabs);
+  const open = useStore(session.store, (panel) => panel.open);
+  const active = useStore(session.store, (panel) => panel.active);
+  const inputs = useStore(session.store, (panel) => panel.inputs);
+  const view = useStore(session);
+  return tabs.map((kind) => (
     <RetainedPanelView key={kind} target={view.targets[kind]}>
       <PanelFeatureContext.Provider
         value={{
@@ -98,9 +95,9 @@ function ProjectViews({
           active:
             environment?.visible !== false &&
             view.mounted &&
-            panel.open &&
-            panel.active === kind,
-          input: panel.inputs?.[kind],
+            open &&
+            active === kind,
+          input: inputs?.[kind],
         }}
       >
         {view.contents[kind] ??

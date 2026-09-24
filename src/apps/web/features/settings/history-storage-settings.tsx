@@ -1,6 +1,6 @@
 import { Effect, Fiber } from "effect";
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { RepositoryHistoryStorageDiagnostics } from "#web/domain/history-storage.contract";
+import type { RepositoryHistoryStorageDiagnostics } from "#web/domain/repository-history/history-storage.contract";
 import { RepositoryHistoryCacheList } from "#web/features/history-storage/index";
 import { manageBrowserHistoryStorage } from "#web/features/repository-history/index";
 import { clearAllCachedRepositoryRefs } from "#web/features/repository-refs/index";

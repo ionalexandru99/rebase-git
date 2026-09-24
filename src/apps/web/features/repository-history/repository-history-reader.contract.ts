@@ -13,8 +13,8 @@ import type {
 } from "@rebase/contracts";
 import type { EnvironmentConnectionFailure } from "@rebase/environment-client";
 import { Data, type Effect } from "effect";
-import type { RepositoryHistorySearch } from "#web/domain/history-search.contract";
-import type { RepositoryHistoryCacheManagement } from "#web/domain/history-storage.contract";
+import type { RepositoryHistorySearch } from "#web/domain/repository-history/history-search.contract";
+import type { RepositoryHistoryCacheManagement } from "#web/domain/repository-history/history-storage.contract";
 import type {
   HistoryAncestryRoute,
   HistoryParentEdge,
@@ -23,6 +23,7 @@ import type {
   RepositoryFreshnessGateway,
   RepositoryFreshnessTransport,
 } from "#web/features/repository-history/transport/repository-freshness.contract";
+import type { ReadableStore } from "#web/platform/store/store";
 
 export type { RepositoryHistoryRefTarget } from "@rebase/contracts";
 
@@ -75,10 +76,8 @@ export interface RepositoryHistoryQueries extends RepositoryHistorySearch {
   ) => Promise<readonly RepositoryCommit[]>;
 }
 
-export interface RepositoryHistoryObservation {
-  readonly getSnapshot: () => RepositoryHistorySnapshot;
-  readonly subscribe: (listener: () => void) => () => void;
-}
+export type RepositoryHistoryObservation =
+  ReadableStore<RepositoryHistorySnapshot>;
 
 export interface RepositoryHistoryReadModel
   extends RepositoryHistoryQueries,

@@ -1,4 +1,3 @@
-import type { HistoryTopology } from "#web/domain/repository-history/history-topology.contract";
 import {
   commitStoreName,
   repositoryCommitRange,
@@ -8,6 +7,13 @@ import {
   withRepositoryHistoryDatabase,
 } from "#web/persistence/repository-history/repository-history-database";
 import type { StoredCommit } from "#web/persistence/repository-history/repository-history-database.contract";
+
+export interface HistoryTopology {
+  readonly oids: readonly string[];
+  readonly parents: Uint32Array;
+  readonly offsets: Uint32Array;
+  readonly timestamps: Float64Array;
+}
 
 export function readStoredHistoryTopology(
   key: string,

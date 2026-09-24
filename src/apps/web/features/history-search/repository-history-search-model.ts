@@ -1,5 +1,5 @@
 import { Effect, Exit, Fiber, type ManagedRuntime, Scope } from "effect";
-import type { RepositoryHistorySearch } from "#web/domain/history-search.contract";
+import type { RepositoryHistorySearch } from "#web/domain/repository-history/history-search.contract";
 import {
   readNextHistorySearchPage,
   restoreSearchResults,
@@ -10,6 +10,7 @@ import {
   type RepositoryHistorySearchSnapshot,
   RepositoryHistorySearchSource,
 } from "#web/features/history-search/repository-history-search-model.contract";
+import { createStore } from "#web/platform/store/store";
 
 export const emptyHistorySearchSnapshot: RepositoryHistorySearchSnapshot = {
   text: "",
@@ -62,24 +63,21 @@ export function createRepositoryHistorySearchModel(
       runtime.runFork(Fiber.interrupt(fiber));
     };
   };
-  let snapshot = emptyHistorySearchSnapshot;
+  const store = createStore(emptyHistorySearchSnapshot);
+  const snapshot = store.getSnapshot;
   let revision: number | undefined;
   let selectedOid: string | undefined;
   let interrupt: (() => void) | undefined;
   let disposal: Promise<void> | undefined;
   let closed = false;
-  const listeners = new Set<() => void>();
 
   function publish(next: RepositoryHistorySearchSnapshot) {
-    if (closed) return;
-    snapshot = next;
-    for (const listener of listeners) listener();
+    if (!closed) store.set(next);
   }
 
-  function search(delay = 0) {
+  function search(delay = 0, text = snapshot().text) {
     if (closed) return;
     interrupt?.();
-    const text = snapshot.text;
     publish({
       ...emptyHistorySearchSnapshot,
       text,
@@ -90,14 +88,15 @@ export function createRepositoryHistorySearchModel(
       restoreSearchResults(text, selectedOid).pipe(
         Effect.delay(delay),
         Effect.match({
-          onFailure: (error) => publish({ ...snapshot, loading: false, error }),
+          onFailure: (error) =>
+            publish({ ...snapshot(), loading: false, error }),
           onSuccess: (result) => {
             const selected = result.commits.findIndex(
               (commit) => commit.oid === selectedOid,
             );
             if (selected === -1) selectedOid = undefined;
             publish({
-              ...snapshot,
+              ...snapshot(),
               commits: result.commits,
               cursor: result.nextCursor,
               complete: result.replicaComplete,
@@ -112,15 +111,13 @@ export function createRepositoryHistorySearchModel(
   }
 
   const loadPage = Effect.fn(function* () {
-    if (snapshot.cursor !== undefined) {
-      publish({ ...snapshot, loading: true });
-      const result = yield* readNextHistorySearchPage(
-        snapshot.text,
-        snapshot.cursor,
-      );
+    const { cursor, text } = snapshot();
+    if (cursor !== undefined) {
+      publish({ ...snapshot(), loading: true });
+      const result = yield* readNextHistorySearchPage(text, cursor);
       publish({
-        ...snapshot,
-        commits: [...snapshot.commits, ...result.commits],
+        ...snapshot(),
+        commits: [...snapshot().commits, ...result.commits],
         cursor: result.nextCursor,
         complete: result.replicaComplete,
         count: result.synchronizedCommitCount,
@@ -130,61 +127,61 @@ export function createRepositoryHistorySearchModel(
   });
 
   const openResult = Effect.fn(function* (index: number) {
-    if (index >= snapshot.commits.length) yield* loadPage();
-    const commit = snapshot.commits[index];
+    if (index >= snapshot().commits.length) yield* loadPage();
+    const commit = snapshot().commits[index];
     if (commit === undefined) return;
     selectedOid = commit.oid;
-    publish({ ...snapshot, selected: index });
+    publish({ ...snapshot(), selected: index });
     const source = yield* RepositoryHistorySearchSource;
     yield* source.navigate(commit.oid);
   });
 
   function navigate(index: number) {
-    if (closed || snapshot.loading || snapshot.navigating) return;
-    publish({ ...snapshot, navigating: true, error: undefined });
+    if (closed || snapshot().loading || snapshot().navigating) return;
+    publish({ ...snapshot(), navigating: true, error: undefined });
     interrupt = run(
       openResult(index).pipe(
         Effect.match({
           onFailure: (error) =>
-            publish({ ...snapshot, loading: false, navigating: false, error }),
+            publish({
+              ...snapshot(),
+              loading: false,
+              navigating: false,
+              error,
+            }),
           onSuccess: () =>
-            publish({ ...snapshot, loading: false, navigating: false }),
+            publish({ ...snapshot(), loading: false, navigating: false }),
         }),
       ),
     );
   }
 
   return {
-    getSnapshot: () => snapshot,
-    subscribe: (listener) => {
-      if (closed) return () => {};
-      listeners.add(listener);
-      return () => {
-        listeners.delete(listener);
-      };
-    },
+    getSnapshot: store.getSnapshot,
+    subscribe: store.subscribe,
     setText: (value) => {
       if (closed) return;
       const text = value.slice(0, 256);
-      if (text === snapshot.text) return;
+      if (text === snapshot().text) return;
       selectedOid = undefined;
-      snapshot = { ...snapshot, text };
-      search(200);
+      search(200, text);
     },
     retry: () => search(),
     loadMore: () => {
       if (
         closed ||
-        snapshot.loading ||
-        snapshot.navigating ||
-        snapshot.error !== undefined ||
-        snapshot.cursor === undefined
+        snapshot().loading ||
+        snapshot().navigating ||
+        snapshot().error !== undefined ||
+        snapshot().cursor === undefined
       )
         return;
       interrupt = run(
         loadPage().pipe(
           Effect.catch((error) =>
-            Effect.sync(() => publish({ ...snapshot, loading: false, error })),
+            Effect.sync(() =>
+              publish({ ...snapshot(), loading: false, error }),
+            ),
           ),
         ),
       );
@@ -195,16 +192,15 @@ export function createRepositoryHistorySearchModel(
       search();
     },
     navigate,
-    next: () => navigate(snapshot.selected + 1),
+    next: () => navigate(snapshot().selected + 1),
     previous: () =>
       navigate(
-        snapshot.selected < 0
-          ? snapshot.commits.length - 1
-          : snapshot.selected - 1,
+        snapshot().selected < 0
+          ? snapshot().commits.length - 1
+          : snapshot().selected - 1,
       ),
     dispose: () => {
       closed = true;
-      listeners.clear();
       disposal ??= runtime.runPromise(Scope.close(scope, Exit.void));
       return disposal;
     },

@@ -13,6 +13,7 @@ import type {
 import { locateCommitGraphTarget } from "#web/features/commit-graph/paging/locate-commit-graph-target";
 import { prepareCommitGraphPage } from "#web/features/commit-graph/paging/prepare-commit-graph-page";
 import type { RepositoryHistoryQuery } from "#web/features/repository-history/index";
+import { createStore } from "#web/platform/store/store";
 
 interface PendingPageLoad {
   readonly task: Promise<void>;
@@ -62,7 +63,8 @@ export function createCommitGraphPageWindow(
     maximumBytes < 1
   )
     throw new Error("Invalid graph page cache limits");
-  let snapshot = emptyCommitGraphPageWindowSnapshot;
+  const store = createStore(emptyCommitGraphPageWindowSnapshot);
+  const snapshot = store.getSnapshot;
   let view: PageView | undefined;
   let requestedQuery: RepositoryHistoryQuery | undefined;
   let controller = new AbortController();
@@ -84,21 +86,21 @@ export function createCommitGraphPageWindow(
       }
     | undefined;
   const loads = new Map<number, PendingPageLoad>();
-  const listeners = new Set<() => void>();
 
   const publish = (changes: Partial<CommitGraphPageWindowSnapshot> = {}) => {
+    const { pages: currentPages } = snapshot();
     const nextPages = [...(view?.pages.values() ?? [])].sort(
       (left, right) => left.offset - right.offset,
     );
     const pages =
-      nextPages.length === snapshot.pages.length &&
-      nextPages.every((page, index) => page === snapshot.pages[index])
-        ? snapshot.pages
+      nextPages.length === currentPages.length &&
+      nextPages.every((page, index) => page === currentPages[index])
+        ? currentPages
         : nextPages;
     const first = pages[0];
     const last = pages.at(-1);
-    snapshot = {
-      ...snapshot,
+    store.set({
+      ...snapshot(),
       epoch: view?.epoch ?? 0,
       query: view?.query,
       requestedQuery,
@@ -111,8 +113,7 @@ export function createCommitGraphPageWindow(
       checkpointCount: view?.checkpoints.size ?? 0,
       pendingMove: pendingMove?.offset,
       ...changes,
-    };
-    for (const listener of listeners) listener();
+    });
   };
   const retain = (
     target: PageView,
@@ -177,7 +178,7 @@ export function createCommitGraphPageWindow(
       knownEndOffset: offset,
       hasOlder: query.roots.length > 0,
     };
-    const previousRows = snapshot.pages.flatMap((page) => page.rows);
+    const previousRows = snapshot().pages.flatMap((page) => page.rows);
     requestedQuery = next.query;
     publish({ loading: true, error: undefined });
     try {
@@ -290,12 +291,12 @@ export function createCommitGraphPageWindow(
           checkpoints: new Map(view.checkpoints),
         };
         if (offset < target.originOffset) {
-          const adjacent = offset + pageSize === snapshot.startOffset;
+          const adjacent = offset + pageSize === snapshot().startOffset;
           await replace(
             target.query,
             offset,
-            adjacent ? snapshot.pages[0]?.commits[0]?.oid : undefined,
-            adjacent ? snapshot.startOffset : offset,
+            adjacent ? snapshot().pages[0]?.commits[0]?.oid : undefined,
+            adjacent ? snapshot().startOffset : offset,
           );
           return;
         }
@@ -322,7 +323,7 @@ export function createCommitGraphPageWindow(
           }
           signal.throwIfAborted();
           view = target;
-          const failedOffset = snapshot.error?.offset;
+          const failedOffset = snapshot().error?.offset;
           const recovered =
             failedOffset === undefined ||
             target.pages.has(Math.floor(failedOffset / pageSize) * pageSize);
@@ -424,7 +425,7 @@ export function createCommitGraphPageWindow(
       if (
         callerSignal?.aborted ||
         request !== navigationRequest ||
-        snapshot.error !== undefined ||
+        snapshot().error !== undefined ||
         disposed ||
         view?.epoch !== expectedEpoch
       )
@@ -440,7 +441,7 @@ export function createCommitGraphPageWindow(
       if (request === navigationRequest) {
         jumping = false;
         requestedQuery = view?.query ?? scopeQuery;
-        if (snapshot.loading || snapshot.requestedQuery !== requestedQuery)
+        if (snapshot().loading || snapshot().requestedQuery !== requestedQuery)
           publish({ loading: false });
       }
     }
@@ -482,13 +483,8 @@ export function createCommitGraphPageWindow(
   };
 
   return {
-    getSnapshot: () => snapshot,
-    subscribe: (listener) => {
-      listeners.add(listener);
-      return () => {
-        listeners.delete(listener);
-      };
-    },
+    getSnapshot: store.getSnapshot,
+    subscribe: store.subscribe,
     dispose: () => {
       disposed = true;
       controller.abort();
@@ -499,14 +495,14 @@ export function createCommitGraphPageWindow(
       view = undefined;
       viewport = undefined;
       scrollingBackwards = false;
-      snapshot = emptyCommitGraphPageWindowSnapshot;
-      listeners.clear();
+      store.set(emptyCommitGraphPageWindowSnapshot);
     },
     loadInitial,
     discard,
     reload: loadInitial,
     appendOlder: async () => {
-      if (snapshot.hasOlder) await prefetchOffset(snapshot.endOffset);
+      const { hasOlder, endOffset } = snapshot();
+      if (hasOlder) await prefetchOffset(endOffset);
     },
     prefetchOffset,
     setViewport: (first, last) => {
@@ -514,23 +510,24 @@ export function createCommitGraphPageWindow(
         scrollingBackwards = first < viewport.first;
       viewport = { first, last };
       const lookahead = Math.max(pageSize, (last - first + 1) * 2);
+      const { startOffset, endOffset, hasOlder } = snapshot();
       if (scrollingBackwards) {
-        const offset = Math.max(0, snapshot.startOffset - pageSize);
+        const offset = Math.max(0, startOffset - pageSize);
         const lastVisiblePage = Math.floor(last / pageSize) * pageSize;
         if (
-          first < snapshot.startOffset + lookahead &&
-          snapshot.startOffset > 0 &&
+          first < startOffset + lookahead &&
+          startOffset > 0 &&
           (lastVisiblePage - offset) / pageSize < maximumPages
         )
           void prefetchOffset(offset, true);
       } else {
         const firstVisiblePage = Math.floor(first / pageSize) * pageSize;
         if (
-          last >= snapshot.endOffset - lookahead &&
-          snapshot.hasOlder &&
-          (snapshot.endOffset - firstVisiblePage) / pageSize < maximumPages
+          last >= endOffset - lookahead &&
+          hasOlder &&
+          (endOffset - firstVisiblePage) / pageSize < maximumPages
         )
-          void prefetchOffset(snapshot.endOffset, true);
+          void prefetchOffset(endOffset, true);
       }
     },
     requestMove,

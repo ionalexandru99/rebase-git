@@ -1,7 +1,26 @@
-import { IconDatabase, IconSettings } from "@tabler/icons-react";
-import type { SettingsSectionDefinition } from "#web/features/settings/settings.contract";
+import type { DesktopUpdateSnapshot, DesktopUpdates } from "@rebase/contracts";
+import {
+  IconDatabase,
+  IconSettings,
+  type TablerIcon,
+} from "@tabler/icons-react";
+import type { ComponentType } from "react";
 import { GeneralSettings } from "#web-ui/features/settings/general-settings";
 import { HistoryStorageSettings } from "#web-ui/features/settings/history-storage-settings";
+
+export interface SettingsSectionContext {
+  readonly desktopUpdates: DesktopUpdates | undefined;
+  readonly productVersion: string;
+  readonly updateLoadError: string | undefined;
+  readonly updateSnapshot: DesktopUpdateSnapshot | undefined;
+}
+
+interface SettingsSectionDefinition {
+  readonly id: string;
+  readonly label: string;
+  readonly icon: TablerIcon;
+  readonly Content: ComponentType<SettingsSectionContext>;
+}
 
 export const settingsSections = [
   {

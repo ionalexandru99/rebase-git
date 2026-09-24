@@ -1,11 +1,5 @@
 import type { RepositoryHistoryRefTarget } from "@rebase/contracts";
-import {
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  useSyncExternalStore,
-} from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { CommitGraphViewportAnchor } from "#web/features/commit-graph/commit-graph.contract";
 import {
   createCommitGraphPageWindow,
@@ -15,14 +9,17 @@ import type { CommitGraphPageWindow } from "#web/features/commit-graph/paging/co
 import type {
   RepositoryHistoryQuery,
   RepositoryHistoryReadModel,
+  RepositoryHistorySnapshot,
 } from "#web/features/repository-history/index";
+import { createStore } from "#web/platform/store/store";
+import { useStore } from "#web/platform/store/use-store";
 
-const emptyHistorySnapshot = {
+const emptyPagesStore = createStore(emptyPages);
+const emptyHistoryStore = createStore<RepositoryHistorySnapshot>({
   revision: 0,
   historyRevision: 0,
   status: "empty",
-} as const;
-const noSubscription = () => () => undefined;
+});
 
 export function useCommitGraphPages(
   reader: RepositoryHistoryReadModel | undefined,
@@ -41,14 +38,8 @@ export function useCommitGraphPages(
   }>();
   const [completion, setCompletion] = useState(0);
   const engine = owner?.reader === reader ? owner?.engine : undefined;
-  const snapshot = useSyncExternalStore(
-    engine?.subscribe ?? noSubscription,
-    engine?.getSnapshot ?? (() => emptyPages),
-  );
-  const historySnapshot = useSyncExternalStore(
-    reader?.subscribe ?? noSubscription,
-    reader?.getSnapshot ?? (() => emptyHistorySnapshot),
-  );
+  const snapshot = useStore(engine ?? emptyPagesStore);
+  const historySnapshot = useStore(reader ?? emptyHistoryStore);
   const previousSynchronization = useRef(historySnapshot.synchronization);
   const previousHistoryRevision = useRef(historySnapshot.historyRevision);
   const capture = useRef(captureAnchor);

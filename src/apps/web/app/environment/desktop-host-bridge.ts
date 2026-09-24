@@ -5,6 +5,12 @@ import {
 } from "@rebase/contracts";
 import { Schema } from "effect";
 
+declare global {
+  interface Window {
+    readonly rebaseHost?: DesktopHostBridge;
+  }
+}
+
 const decodeSnapshot = Schema.decodeUnknownSync(DesktopUpdateSnapshotSchema);
 
 export function readDesktopHostBridge(): DesktopHostBridge | undefined {

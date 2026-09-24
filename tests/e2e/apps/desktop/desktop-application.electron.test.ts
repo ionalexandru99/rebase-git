@@ -10,6 +10,7 @@ import {
   type Page,
   test,
 } from "@playwright/test";
+import type { DesktopHostBridge } from "@rebase/contracts";
 
 const execFileAsync = promisify(execFile);
 
@@ -48,20 +49,14 @@ test("opens, closes, and reopens a recent repository after restart", async () =>
     const application = await launchApplication(environment);
     try {
       const window = await connectedWindow(application);
-      const credential = await window.evaluate(() =>
-        globalThis.window.rebaseHost?.getEnvironmentCredential(),
-      );
+      const credential = await environmentCredential(window);
       expect(credential).toMatch(/^rebase\.v1\./);
       await window.reload();
       await expect(window.getByRole("status")).toHaveAttribute(
         "data-connection-state",
         "Connected",
       );
-      expect(
-        await window.evaluate(() =>
-          globalThis.window.rebaseHost?.getEnvironmentCredential(),
-        ),
-      ).toBe(credential);
+      expect(await environmentCredential(window)).toBe(credential);
       await openRepository(window, "rebase-test");
       const commit = window
         .getByRole("grid", { name: "Commit history" })
@@ -162,6 +157,14 @@ async function openRepository(window: Page, repositoryName: string) {
     .getByRole("button", { name: "Open repository", exact: true })
     .click();
   await expect(picker).not.toBeVisible();
+}
+
+function environmentCredential(window: Page) {
+  return window.evaluate(() =>
+    (
+      globalThis as { readonly rebaseHost?: DesktopHostBridge }
+    ).rebaseHost?.getEnvironmentCredential(),
+  );
 }
 
 function recentRepository(window: Page, repositoryName: string) {

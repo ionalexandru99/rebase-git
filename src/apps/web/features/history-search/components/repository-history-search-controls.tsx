@@ -1,7 +1,7 @@
 import { Popover } from "@base-ui/react/popover";
 import { IconSearch, IconX } from "@tabler/icons-react";
 import { type KeyboardEvent, useId, useRef, useState } from "react";
-import type { RepositoryHistorySearch } from "#web/domain/history-search.contract";
+import type { RepositoryHistorySearch } from "#web/domain/repository-history/history-search.contract";
 import { useRepositoryHistorySearch } from "#web/features/history-search/hooks/use-repository-history-search";
 import { useRepositoryHistorySearchModel } from "#web/features/history-search/hooks/use-repository-history-search-model";
 import type { RepositoryHistorySearchModel } from "#web/features/history-search/repository-history-search-model.contract";

@@ -13,24 +13,20 @@ import type {
   LocalEnvironmentSessionState,
 } from "#web/app/environment/local-environment-session.contract";
 import type { EnvironmentChangeListener } from "#web/platform/environment/environment-protocol.contract";
+import { createStore } from "#web/platform/store/store";
 
 export function createLocalEnvironmentSession(
   options: LocalEnvironmentSessionOptions,
 ): LocalEnvironmentSession {
-  const listeners = new Set<() => void>();
+  const state = createStore<LocalEnvironmentSessionState>({
+    _tag: "Authorizing",
+  });
   const changeListeners = new Set<EnvironmentChangeListener>();
   let credential: EnvironmentCredential | undefined;
-  let state: LocalEnvironmentSessionState = { _tag: "Authorizing" };
   let fiber: Fiber.Fiber<void, never> | undefined;
   let running = false;
 
-  const publish: PublishState = (next) =>
-    Effect.sync(() => {
-      state = next;
-      for (const listener of listeners) {
-        listener();
-      }
-    });
+  const publish: PublishState = (next) => Effect.sync(() => state.set(next));
 
   const runSession = Effect.gen(function* () {
     if (credential === undefined) {
@@ -78,14 +74,11 @@ export function createLocalEnvironmentSession(
         return () => changeListeners.delete(listener);
       },
     },
-    getSnapshot: () => state,
+    getSnapshot: state.getSnapshot,
     runtime: options.runtime,
     start,
     stop,
-    subscribe: (listener) => {
-      listeners.add(listener);
-      return () => listeners.delete(listener);
-    },
+    subscribe: state.subscribe,
   };
 }
 

@@ -13,6 +13,7 @@ import {
   saveDiffPreferences,
 } from "#web/persistence/working-changes/working-changes-store";
 import { createControllerScope } from "#web/platform/effect/controller-scope";
+import { createStore } from "#web/platform/store/store";
 
 export function createCommitInspectionController(
   client: CommitInspectionClient,
@@ -20,7 +21,7 @@ export function createCommitInspectionController(
   runtime: ManagedRuntime.ManagedRuntime<never, never>,
 ) {
   const work = createControllerScope(runtime);
-  let state: CommitInspectionState = {
+  const store = createStore<CommitInspectionState>({
     oid: undefined,
     details: null,
     path: null,
@@ -30,23 +31,21 @@ export function createCommitInspectionController(
     error: null,
     diffError: null,
     preferences: defaultDiffPreferences,
-  };
-  const listeners = new Set<() => void>();
+  });
+  const state = store.getSnapshot;
   let detailsFiber: Fiber.Fiber<void> | undefined;
   let diffFiber: Fiber.Fiber<void> | undefined;
   let generation = 0;
   let fileGeneration = 0;
   let active = true;
   const publish = (next: Partial<CommitInspectionState>) => {
-    if (!work.open) return;
-    state = { ...state, ...next };
-    for (const listener of listeners) listener();
+    if (work.open) store.set({ ...state(), ...next });
   };
   const selectFile = (path: string | null) => {
     if (
-      path === state.path &&
-      state.diffError === null &&
-      (state.diff !== null || state.loadingDiff)
+      path === state().path &&
+      state().diffError === null &&
+      (state().diff !== null || state().loadingDiff)
     )
       return;
     const current = ++fileGeneration;
@@ -57,7 +56,7 @@ export function createCommitInspectionController(
       diffError: null,
       loadingDiff: path !== null && active,
     });
-    const details = state.details;
+    const details = state().details;
     if (path === null || details === null || !active) return;
     const previousPath = details.files.find(
       (file) => file.path === path,
@@ -92,7 +91,7 @@ export function createCommitInspectionController(
     ++fileGeneration;
     work.interrupt(detailsFiber);
     work.interrupt(diffFiber);
-    const previousPath = state.oid === oid ? state.path : null;
+    const previousPath = state().oid === oid ? state().path : null;
     publish({
       oid,
       details: null,
@@ -142,27 +141,22 @@ export function createCommitInspectionController(
         work.interrupt(detailsFiber);
         work.interrupt(diffFiber);
         publish({ loading: false, loadingDiff: false });
-      } else if (state.oid !== undefined) {
-        if (state.details === null) {
-          load(state.oid);
-        } else if (state.diff === null) {
-          selectFile(state.path);
+      } else if (state().oid !== undefined) {
+        if (state().details === null) {
+          load(state().oid);
+        } else if (state().diff === null) {
+          selectFile(state().path);
         }
       }
     },
-    getSnapshot: () => state,
-    subscribe: (listener: () => void) => {
-      listeners.add(listener);
-      return () => {
-        listeners.delete(listener);
-      };
-    },
+    getSnapshot: store.getSnapshot,
+    subscribe: store.subscribe,
     start: () => {
       if (!work.start()) {
         return;
       }
-      if (active && state.oid !== undefined) {
-        load(state.oid);
+      if (active && state().oid !== undefined) {
+        load(state().oid);
       }
       work.fork(
         readDiffPreferences().pipe(
@@ -175,11 +169,11 @@ export function createCommitInspectionController(
     },
     stop: work.stop,
     selectCommit: (oid: string | undefined) => {
-      if (oid !== state.oid) load(oid);
+      if (oid !== state().oid) load(oid);
     },
     selectFile,
-    retry: () => load(state.oid),
-    retryDiff: () => selectFile(state.path),
+    retry: () => load(state().oid),
+    retryDiff: () => selectFile(state().path),
     preferences: (preferences: DiffPreferences) => {
       publish({ preferences });
       work.fork(

@@ -1,10 +1,11 @@
-import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useState } from "react";
 import type {
   RepositoryHistoryCacheAction,
   RepositoryHistoryStorageDiagnostics,
-} from "#web/domain/history-storage.contract";
+} from "#web/domain/repository-history/history-storage.contract";
 import type { RepositoryHistoryCacheProps } from "#web/features/history-storage/history-cache.contract";
 import { historyCacheActions } from "#web/features/history-storage/history-cache-actions";
+import { useStore } from "#web/platform/store/use-store";
 
 export function useHistoryCacheManagement({
   reader,
@@ -14,7 +15,7 @@ export function useHistoryCacheManagement({
   RepositoryHistoryCacheProps,
   "reader" | "identity" | "onCacheChanged"
 >) {
-  const snapshot = useSyncExternalStore(reader.subscribe, reader.getSnapshot);
+  const snapshot = useStore(reader);
   const [diagnostics, setDiagnostics] =
     useState<RepositoryHistoryStorageDiagnostics>();
   const [confirmation, setConfirmation] =

@@ -3,7 +3,8 @@ import { Context, Data, type Effect } from "effect";
 import type {
   RepositoryHistorySearchQuery,
   RepositoryHistorySearchResult,
-} from "#web/domain/history-search.contract";
+} from "#web/domain/repository-history/history-search.contract";
+import type { ReadableStore } from "#web/platform/store/store";
 
 export class RepositoryHistorySearchFailure extends Data.TaggedError(
   "RepositoryHistorySearchFailure",
@@ -21,9 +22,8 @@ export interface RepositoryHistorySearchSnapshot {
   readonly selected: number;
 }
 
-export interface RepositoryHistorySearchModel {
-  readonly getSnapshot: () => RepositoryHistorySearchSnapshot;
-  readonly subscribe: (listener: () => void) => () => void;
+export interface RepositoryHistorySearchModel
+  extends ReadableStore<RepositoryHistorySearchSnapshot> {
   readonly setText: (text: string) => void;
   readonly retry: () => void;
   readonly loadMore: () => void;

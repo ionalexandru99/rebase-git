@@ -2,7 +2,6 @@ import type { EnvironmentDirectory } from "@rebase/contracts";
 import { IconArrowUp, IconSearch, IconX } from "@tabler/icons-react";
 import { type JSX, useCallback, useEffect, useRef, useState } from "react";
 import { EnvironmentFilesystemRejected } from "#web/features/environment-filesystem/environment-filesystem-client.contract";
-import type { RepositoryFolderPickerProps } from "#web/features/repository-folder-picker/repository-folder-picker.contract";
 import {
   filterDirectoryEntries,
   repositorySelectionError,
@@ -17,7 +16,24 @@ import {
 } from "#web-ui/components/ui/dialog";
 import { Input } from "#web-ui/components/ui/input";
 import { RepositoryDirectoryList } from "#web-ui/features/repository-folder-picker/repository-directory-list";
-import { RepositoryFolderPickerEnvironmentSelect } from "#web-ui/features/repository-folder-picker/repository-folder-picker-environment-select";
+import {
+  type RepositoryFolderPickerEnvironment,
+  RepositoryFolderPickerEnvironmentSelect,
+} from "#web-ui/features/repository-folder-picker/repository-folder-picker-environment-select";
+
+interface RepositoryFolderPickerProps {
+  readonly environments: readonly RepositoryFolderPickerEnvironment[];
+  readonly listDirectory: (
+    environmentId: string,
+    path?: string,
+  ) => Promise<EnvironmentDirectory>;
+  readonly onOpenChange: (open: boolean) => void;
+  readonly onOpenRepository: (
+    environmentId: string,
+    path: string,
+  ) => Promise<void>;
+  readonly open: boolean;
+}
 
 export function RepositoryFolderPicker({
   environments,

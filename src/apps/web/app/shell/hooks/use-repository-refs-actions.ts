@@ -2,12 +2,13 @@ import type {
   RepositoryCatalogEntry,
   RepositoryRefTarget,
 } from "@rebase/contracts";
-import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useState } from "react";
 import type { LocalEnvironmentSession } from "#web/app/environment/local-environment-session.contract";
 import {
   resolveActiveWorktreePath,
   resolveRefActivation,
 } from "#web/features/repository-refs/index";
+import { useStore } from "#web/platform/store/use-store";
 
 export function useRepositoryRefsActions({
   repositories,
@@ -18,10 +19,7 @@ export function useRepositoryRefsActions({
   readonly selectedRepositoryId: string | undefined;
   readonly session: LocalEnvironmentSession;
 }) {
-  const refs = useSyncExternalStore(
-    session.repositoryRefs.subscribe,
-    session.repositoryRefs.getSnapshot,
-  );
+  const refs = useStore(session.repositoryRefs);
   const [worktreePaths, setWorktreePaths] = useState<
     ReadonlyMap<string, string>
   >(() => new Map());

@@ -1,7 +1,11 @@
-import type {
-  RepositoryHistoryIdentity,
-  RepositoryHistoryOrder,
-} from "#web/features/repository-history/preferences/repository-history-preferences.contract";
+import type { RepositoryHistoryQuery } from "#web/features/repository-history/repository-history-reader.contract";
+
+type RepositoryHistoryOrder = RepositoryHistoryQuery["order"];
+
+interface RepositoryHistoryIdentity {
+  readonly environmentId: string;
+  readonly repositoryId: string;
+}
 
 const listeners = new Map<string, Set<() => void>>();
 

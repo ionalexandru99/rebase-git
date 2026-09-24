@@ -65,9 +65,6 @@ export function useCommitGraphCommands({
       void commands.execute("graph.fetch", commands.context());
     },
     disabled: fetchCommand?.enabled !== true,
-    ...(fetchCommand?.disabledReason === undefined
-      ? {}
-      : { disabledReason: fetchCommand.disabledReason }),
   };
   return { commands, fetchAction };
 }

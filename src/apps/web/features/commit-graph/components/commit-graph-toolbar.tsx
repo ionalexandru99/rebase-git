@@ -1,7 +1,11 @@
 import { IconArrowDown } from "@tabler/icons-react";
 import type { ReactNode } from "react";
-import type { RepositoryFetchAction } from "#web/features/repository-fetch/index";
 import { Button } from "#web-ui/components/ui/button";
+
+interface RepositoryFetchAction {
+  readonly execute: () => void;
+  readonly disabled: boolean;
+}
 
 function Frame({ children }: { readonly children: ReactNode }) {
   return (

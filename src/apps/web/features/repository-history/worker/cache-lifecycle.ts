@@ -1,7 +1,7 @@
 import type {
   RepositoryHistoryCacheAction,
   RepositoryHistoryStorageDiagnostics,
-} from "#web/domain/history-storage.contract";
+} from "#web/domain/repository-history/history-storage.contract";
 import {
   clearHistoryCache,
   describeHistoryCaches,

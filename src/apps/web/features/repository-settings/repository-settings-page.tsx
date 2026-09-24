@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useSyncExternalStore } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import type { OpenProjectRepository } from "#web/features/open-project/open-project.contract";
 import {
   describeRepositoryFetchError,
@@ -9,6 +9,7 @@ import type {
   RepositoryHistorySettingsClient,
   RepositorySettingsIdentity,
 } from "#web/features/repository-settings/repository-settings.contract";
+import { useStore } from "#web/platform/store/use-store";
 import { SettingsSection } from "#web-ui/components/ui/settings-layout";
 import { RepositoryCacheSettings } from "#web-ui/features/repository-settings/components/repository-cache-settings";
 import { RepositoryDetailsSettings } from "#web-ui/features/repository-settings/components/repository-details-settings";
@@ -122,7 +123,7 @@ function RepositoryHistorySettings({
   readonly connected: boolean;
   readonly canConfigure: boolean;
 }) {
-  const snapshot = useSyncExternalStore(reader.subscribe, reader.getSnapshot);
+  const snapshot = useStore(reader);
   const disabledReason = !connected
     ? "Reconnect to the server and try again."
     : snapshot.freshnessError !== undefined

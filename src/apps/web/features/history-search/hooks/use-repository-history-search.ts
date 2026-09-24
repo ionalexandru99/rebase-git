@@ -1,19 +1,15 @@
-import { useSyncExternalStore } from "react";
 import { emptyHistorySearchSnapshot } from "#web/features/history-search/repository-history-search-model";
 import type { RepositoryHistorySearchModel } from "#web/features/history-search/repository-history-search-model.contract";
+import { createStore } from "#web/platform/store/store";
+import { useStore } from "#web/platform/store/use-store";
 
-const subscribeEmpty = () => () => {};
-const readEmpty = () => emptyHistorySearchSnapshot;
+const emptySearch = createStore(emptyHistorySearchSnapshot);
 const ignore = () => {};
 
 export function useRepositoryHistorySearch(
   model: RepositoryHistorySearchModel | undefined,
 ) {
-  const state = useSyncExternalStore(
-    model?.subscribe ?? subscribeEmpty,
-    model?.getSnapshot ?? readEmpty,
-    readEmpty,
-  );
+  const state = useStore(model ?? emptySearch);
   return {
     ...state,
     setText: model?.setText ?? ignore,

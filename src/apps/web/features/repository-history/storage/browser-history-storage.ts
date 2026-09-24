@@ -1,5 +1,5 @@
 import { Effect } from "effect";
-import type { RepositoryHistoryStorageDiagnostics } from "#web/domain/history-storage.contract";
+import type { RepositoryHistoryStorageDiagnostics } from "#web/domain/repository-history/history-storage.contract";
 import {
   acquireSharedWorker,
   discardSharedWorker,

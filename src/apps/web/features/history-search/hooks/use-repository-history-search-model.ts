@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import type { RepositoryHistorySearch } from "#web/domain/history-search.contract";
+import type { RepositoryHistorySearch } from "#web/domain/repository-history/history-search.contract";
 import { createRepositoryHistorySearchModel } from "#web/features/history-search/repository-history-search-model";
 import { useApplicationRuntime } from "#web-ui/platform/effect/application-runtime-context";
 
