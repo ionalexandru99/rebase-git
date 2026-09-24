@@ -1,13 +1,13 @@
 import type { RepositoryCommit } from "@rebase/contracts";
 import { type ComponentProps, useMemo } from "react";
-import { vi } from "vitest";
+import { vi } from "vite-plus/test";
 import { render } from "#tests-ui/runtime/render";
 import {
   CommitGraph,
   type CommitGraphReader,
   openCommitGraphHistory,
 } from "#web/features/commit-graph/index";
-import { saveRepositoryHistoryOrder } from "#web/features/repository-history/preferences/repository-history-order";
+import { saveRepositoryHistoryOrder } from "#web/features/repository-history/index";
 import type {
   RepositoryHistoryQuery,
   RepositoryHistoryReader,

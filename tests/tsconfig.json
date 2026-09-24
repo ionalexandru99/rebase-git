@@ -12,6 +12,7 @@
       "#server/*": ["./../src/apps/server/*.ts"],
       "#tests-integration/*": ["./integration/*.ts"],
       "#tests-performance/*": ["./performance/*.ts"],
+      "#tests-support/*": ["./support/*.ts"],
       "#tests-ui/*": ["./ui/*.tsx"],
       "#web/*": ["./../src/apps/web/*.ts", "./../src/apps/web/*.tsx"],
       "#web-ui/*": ["./../src/apps/web/*.tsx"]

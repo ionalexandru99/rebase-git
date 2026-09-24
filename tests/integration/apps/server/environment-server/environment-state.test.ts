@@ -3,14 +3,10 @@ import { mkdir, mkdtemp, readFile, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { DatabaseSync } from "node:sqlite";
-import { and, isNull, sql } from "drizzle-orm";
+import { and, eq, isNull, sql } from "drizzle-orm";
 import { type MigrationMeta, readMigrationFiles } from "drizzle-orm/migrator";
 import { Effect } from "effect";
 import { afterEach, describe, expect, it } from "vite-plus/test";
-import {
-  hasNoAutomaticPort,
-  isCurrentEnvironment,
-} from "#server/features/environment-identity/environment-identity.specifications";
 import { acquireEnvironmentContext } from "#server/persistence/environment-context";
 import type { EnvironmentContext } from "#server/persistence/environment-context.contract";
 import {
@@ -311,7 +307,7 @@ describe("Environment state", () => {
                   const environment = await database
                     .select()
                     .from(environmentTable)
-                    .where(isCurrentEnvironment())
+                    .where(eq(environmentTable.singleton, 1))
                     .get();
                   if (environment?.automaticPort == null) {
                     throw new Error("Expected the saved port.");
@@ -319,7 +315,7 @@ describe("Environment state", () => {
                   await database
                     .update(environmentTable)
                     .set({ automaticPort: environment.automaticPort + 1 })
-                    .where(isCurrentEnvironment());
+                    .where(eq(environmentTable.singleton, 1));
                 },
               ),
             ),
@@ -339,7 +335,12 @@ function saveAutomaticPort(context: EnvironmentContext) {
     database
       .update(environmentTable)
       .set({ automaticPort: 40123 })
-      .where(and(isCurrentEnvironment(), hasNoAutomaticPort())),
+      .where(
+        and(
+          eq(environmentTable.singleton, 1),
+          isNull(environmentTable.automaticPort),
+        ),
+      ),
   );
 }
 
@@ -491,7 +492,7 @@ function readCurrentEnvironment(context: EnvironmentContext) {
     const environment = await database
       .select()
       .from(environmentTable)
-      .where(isCurrentEnvironment())
+      .where(eq(environmentTable.singleton, 1))
       .get();
     if (environment === undefined) {
       throw new Error("The Environment identity is missing.");

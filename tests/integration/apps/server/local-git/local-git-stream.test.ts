@@ -1,13 +1,11 @@
-import { execFile } from "node:child_process";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { promisify } from "node:util";
 import { Effect, Stream } from "effect";
-import { afterAll, beforeAll, expect, it } from "vitest";
+import { afterAll, beforeAll, expect, it } from "vite-plus/test";
 import { createLocalGitCommandRunner } from "#server/adapters/local-git/local-git-command-runner";
+import { fastImport, git as runGit } from "#tests-support/git";
 
-const execute = promisify(execFile);
 const git = createLocalGitCommandRunner();
 let directory = "";
 
@@ -74,7 +72,7 @@ it("stops Git when the consumer finishes early", async () => {
 }, 10_000);
 
 async function createHistory(directory: string) {
-  await execute("git", ["-C", directory, "init", "-b", "main"]);
+  await runGit(directory, "init", "-b", "main");
   const commands: string[] = [];
   for (let index = 0; index < 2_000; index += 1) {
     const subject = `commit ${index} ${"x".repeat(1_024)}`;
@@ -87,7 +85,5 @@ async function createHistory(directory: string) {
       "\n",
     );
   }
-  const imported = execute("git", ["-C", directory, "fast-import", "--quiet"]);
-  imported.child.stdin?.end(`${commands.join("")}done\n`);
-  await imported;
+  await fastImport(directory, commands.join(""));
 }

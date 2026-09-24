@@ -1,7 +1,7 @@
 import type { RepositoryCatalogEntry } from "@rebase/contracts";
-import { RepositoryCatalogResponseError } from "@rebase/web/features/repository-catalog";
 import { Effect, Exit, Layer, ManagedRuntime, Scope } from "effect";
 import { describe, expect, it, vi } from "vite-plus/test";
+import { RepositoryCatalogResponseError } from "#web/features/repository-catalog/index";
 import { createRepositoryCatalogController } from "#web/features/repository-catalog/repository-catalog-controller";
 import {
   type RepositoryCatalogGateway,

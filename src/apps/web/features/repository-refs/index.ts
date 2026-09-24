@@ -15,6 +15,7 @@ export {
   RepositoryRefsRejected,
   RepositoryRefsResponseError,
 } from "#web/features/repository-refs/repository-refs-client.contract";
+export { createRepositoryRefsController } from "#web/features/repository-refs/repository-refs-controller";
 export {
   RepositoryRefsBusy,
   type RepositoryRefsController,

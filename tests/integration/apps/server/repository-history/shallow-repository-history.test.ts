@@ -1,9 +1,7 @@
-import { execFile } from "node:child_process";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
-import { promisify } from "node:util";
 import type { RepositoryHistoryBatch } from "@rebase/contracts";
 import { Effect } from "effect";
 import { expect, it, vi } from "vite-plus/test";
@@ -13,8 +11,8 @@ import { readObjectFormat } from "#server/features/repository-history/git/read-o
 import { readRepositoryHistory } from "#server/features/repository-history/git/read-repository-history";
 import { readRepositoryHistorySnapshot } from "#server/features/repository-history/git/read-repository-history-snapshot";
 import { synchronizeRepositoryHistory } from "#server/features/repository-history/git/synchronize-repository-history";
+import { git as runGit } from "#tests-support/git";
 
-const exec = promisify(execFile);
 const repositoryId = "00000000-0000-4000-8000-000000000001";
 const requestId = "00000000-0000-4000-8000-000000000002";
 
@@ -25,17 +23,11 @@ it("preserves true shallow parents and invalidates the old basis when external d
   const git = createLocalGitCommandRunner();
   let close: (() => void) | undefined;
   try {
-    await command(root, "init", "-b", "main", source);
+    await runGit(root, "init", "-b", "main", source);
     for (let index = 0; index < 4; index += 1)
-      await command(source, "commit", "--allow-empty", "-m", `commit ${index}`);
-    await command(
-      root,
-      "clone",
-      "--depth=2",
-      pathToFileURL(source).href,
-      clone,
-    );
-    const oids = (await command(source, "rev-list", "HEAD")).split("\n");
+      await runGit(source, "commit", "--allow-empty", "-m", `commit ${index}`);
+    await runGit(root, "clone", "--depth=2", pathToFileURL(source).href, clone);
+    const oids = (await runGit(source, "rev-list", "HEAD")).split("\n");
     const snapshot = await Effect.runPromise(
       readRepositoryHistorySnapshot(git, clone, readObjectFormat(git, clone)),
     );
@@ -85,7 +77,7 @@ it("preserves true shallow parents and invalidates the old basis when external d
         createLocalRepositoryWatcher().watch(join(clone, ".git"), changed),
       )
     ).close;
-    await command(clone, "fetch", "--deepen=1");
+    await runGit(clone, "fetch", "--deepen=1");
     await vi.waitFor(() => expect(changed).toHaveBeenCalled());
     const deepened = await Effect.runPromise(
       readRepositoryHistorySnapshot(git, clone, readObjectFormat(git, clone)),
@@ -144,7 +136,7 @@ it("preserves true shallow parents and invalidates the old basis when external d
     expect(rebuilt.flatMap((batch) => batch.commits).at(-1)?.parents).toEqual([
       oids[3],
     ]);
-    expect(await command(clone, "rev-parse", "--is-shallow-repository")).toBe(
+    expect(await runGit(clone, "rev-parse", "--is-shallow-repository")).toBe(
       "true",
     );
   } finally {
@@ -152,17 +144,3 @@ it("preserves true shallow parents and invalidates the old basis when external d
     await rm(root, { recursive: true, force: true });
   }
 }, 15_000);
-
-async function command(directory: string, ...args: string[]) {
-  return (
-    await exec("git", [
-      "-C",
-      directory,
-      "-c",
-      "user.name=Test",
-      "-c",
-      "user.email=test@example.com",
-      ...args,
-    ])
-  ).stdout.trim();
-}

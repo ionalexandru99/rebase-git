@@ -1,6 +1,6 @@
 import type { CommitInspection } from "@rebase/contracts";
-import { afterEach, describe, expect, it, vi } from "vitest";
-import { userEvent } from "vitest/browser";
+import { afterEach, describe, expect, it, vi } from "vite-plus/test";
+import { userEvent } from "vite-plus/test/browser";
 import { render } from "vitest-browser-react";
 import { CommitMetadata } from "#web-ui/features/commit-inspection/components/commit-metadata";
 

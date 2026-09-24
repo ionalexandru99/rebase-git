@@ -1,5 +1,5 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
-import { userEvent } from "vitest/browser";
+import { afterEach, describe, expect, it, vi } from "vite-plus/test";
+import { userEvent } from "vite-plus/test/browser";
 import { render } from "vitest-browser-react";
 import { CommitRefLabels } from "#web-ui/features/commit-graph/components/commit-ref-labels";
 import { GraphRefAppearance } from "#web-ui/features/commit-graph/components/graph-ref-appearance";

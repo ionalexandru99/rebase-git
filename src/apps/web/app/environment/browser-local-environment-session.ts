@@ -25,8 +25,8 @@ import type { RepositoryCatalogClient } from "#web/features/repository-catalog/r
 import { createRepositoryCatalogController } from "#web/features/repository-catalog/repository-catalog-controller";
 import type { RepositoryCatalogGateway } from "#web/features/repository-catalog/repository-catalog-controller.contract";
 import { createRepositoryHistoryGateway } from "#web/features/repository-history/transport/repository-history-gateway";
+import { createRepositoryRefsController } from "#web/features/repository-refs/index";
 import { repositoryRefsClient } from "#web/features/repository-refs/repository-refs-client";
-import { createRepositoryRefsController } from "#web/features/repository-refs/repository-refs-controller";
 import type { RepositoryRefsController } from "#web/features/repository-refs/repository-refs-controller.contract";
 import { createRepositoryRefsGateway } from "#web/features/repository-refs/transport/repository-refs-gateway";
 

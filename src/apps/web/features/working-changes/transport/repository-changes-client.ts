@@ -1,22 +1,9 @@
 import { RepositoryChangesHttpApi } from "@rebase/contracts";
-import type {
-  EnvironmentCredential,
-  EnvironmentRequestClient,
-} from "@rebase/environment-client";
-import { createEnvironmentRequestClient } from "@rebase/environment-client";
+import type { EnvironmentRequestClient } from "@rebase/environment-client";
 import {
   type RepositoryChangesClient,
   WorkingChangesError,
 } from "#web/features/working-changes/working-changes.contract";
-
-export function createRepositoryChangesClient(
-  origin: string,
-  credential: () => EnvironmentCredential | undefined,
-): RepositoryChangesClient {
-  return repositoryChangesClient(
-    createEnvironmentRequestClient(origin, credential),
-  );
-}
 
 export function repositoryChangesClient(
   requests: EnvironmentRequestClient,

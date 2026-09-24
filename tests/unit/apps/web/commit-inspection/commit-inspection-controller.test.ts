@@ -2,32 +2,37 @@ import { Effect, Layer, ManagedRuntime } from "effect";
 import { expect, it, vi } from "vite-plus/test";
 import { defaultDiffPreferences } from "#web/domain/file-diff/diff-preferences.contract";
 import { createCommitInspectionController } from "#web/features/commit-inspection/commit-inspection-controller";
-import { saveDiffPreferences } from "#web/persistence/working-changes/working-changes-store";
-import { WorkingChangesStoreUnavailable } from "#web/persistence/working-changes/working-changes-store.contract";
-
-vi.mock("#web/persistence/working-changes/working-changes-store", () => ({
-  readDiffPreferences: () => Effect.succeed(defaultDiffPreferences),
-  saveDiffPreferences: vi.fn(),
-}));
+import {
+  type DiffPreferencesStore,
+  WorkingChangesStoreUnavailable,
+} from "#web/persistence/working-changes/working-changes-store.contract";
 
 const runtime = ManagedRuntime.make(Layer.empty);
+const persistence: DiffPreferencesStore = {
+  readDiffPreferences: () => Effect.succeed(defaultDiffPreferences),
+  saveDiffPreferences: () => Effect.void,
+};
 const scope = { repositoryId: "repository", worktreePath: "/repository" };
 
 it("keeps inspection state available when saving display preferences fails", async () => {
   let failed = false;
-  vi.mocked(saveDiffPreferences).mockReturnValue(
-    Effect.fail(
-      new WorkingChangesStoreUnavailable({ message: "Storage unavailable" }),
-    ).pipe(
-      Effect.tapError(() =>
-        Effect.sync(() => {
-          failed = true;
-        }),
-      ),
-    ),
-  );
   const controller = createCommitInspectionController(
     { inspect: () => Effect.die("Unused"), diff: () => Effect.die("Unused") },
+    {
+      ...persistence,
+      saveDiffPreferences: () =>
+        Effect.fail(
+          new WorkingChangesStoreUnavailable({
+            message: "Storage unavailable",
+          }),
+        ).pipe(
+          Effect.tapError(() =>
+            Effect.sync(() => {
+              failed = true;
+            }),
+          ),
+        ),
+    },
     scope,
     runtime,
   );
@@ -60,6 +65,7 @@ it("interrupts the in-flight inspection when stopped", async () => {
         ),
       diff: () => Effect.die("Unused"),
     },
+    persistence,
     scope,
     runtime,
   );
@@ -74,6 +80,7 @@ it("restarts an interrupted inspection when the controller starts again", async 
   const inspect = vi.fn(() => Effect.never);
   const controller = createCommitInspectionController(
     { inspect, diff: () => Effect.die("Unused") },
+    persistence,
     scope,
     runtime,
   );
@@ -107,6 +114,7 @@ it("requests a renamed file's diff with its previous path", async () => {
         }),
       diff,
     },
+    persistence,
     scope,
     runtime,
   );

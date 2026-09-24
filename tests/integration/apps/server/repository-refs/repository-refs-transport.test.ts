@@ -1,21 +1,10 @@
-import { execFile } from "node:child_process";
-import { mkdir, mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { promisify } from "node:util";
 import {
   createEnvironmentRequestClient,
   type EnvironmentCredential,
 } from "@rebase/environment-client";
-import {
-  connectCurrentEnvironmentEffect,
-  exchangeEnvironmentPairingEffect,
-} from "@rebase/web/environment-connection";
-import { repositoryCatalogClient } from "@rebase/web/features/repository-catalog";
-import {
-  RepositoryRefsRejected,
-  repositoryRefsClient,
-} from "@rebase/web/features/repository-refs";
 import { Effect } from "effect";
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import { createEnvironmentEventPublisher } from "#server/adapters/environment-transport/events/environment-event-publisher";
@@ -29,8 +18,10 @@ import { RepositoryAccess } from "#server/domain/repository-access.contract";
 import { RepositoryCatalogAccess } from "#server/domain/repository-catalog.contract";
 import { RepositoryCoordination } from "#server/domain/repository-coordination.contract";
 import { RepositoryWatching } from "#server/domain/repository-watcher.contract";
-import { createEnvironmentAuthorization } from "#server/features/environment-authorization/environment-authorization";
-import { environmentAuthorizationFeature } from "#server/features/environment-authorization/index";
+import {
+  createEnvironmentAuthorization,
+  environmentAuthorizationFeature,
+} from "#server/features/environment-authorization/index";
 import {
   createRepositoryCatalog,
   repositoryCatalogFeature,
@@ -43,10 +34,19 @@ import {
   createRepositoryCoordination,
 } from "#server/repository/access/index";
 import { testEnvironmentFeatures } from "#tests-integration/apps/server/environment-connection/test-environment-features";
+import { createRepository, git } from "#tests-support/git";
 import { createBrowserLocalEnvironmentSession } from "#web/app/environment/browser-local-environment-session";
+import {
+  connectCurrentEnvironmentEffect,
+  exchangeEnvironmentPairingEffect,
+} from "#web/app/environment/connection/index";
+import { repositoryCatalogClient } from "#web/features/repository-catalog/index";
+import {
+  RepositoryRefsRejected,
+  repositoryRefsClient,
+} from "#web/features/repository-refs/index";
 import { createRepositoryRefsRpc } from "#web/features/repository-refs/transport/repository-refs-rpc";
 
-const execFilePromise = promisify(execFile);
 const directories = new Set<string>();
 const environmentId = "00000000-0000-4000-8000-000000000001";
 
@@ -64,14 +64,9 @@ describe("repository refs transport", () => {
   it("reassembles a ref snapshot larger than a WebSocket frame", async () => {
     await withRefsListener(async ({ authorization, origin, root }) => {
       const repositoryPath = join(root, "repository");
-      await createRepository(repositoryPath);
+      await createRepository(repositoryPath, { branches: ["feature"] });
       const owner = await pair(origin, authorization, "owner");
-      const { stdout } = await execFilePromise("git", [
-        "-C",
-        repositoryPath,
-        "rev-parse",
-        "HEAD",
-      ]);
+      const head = await git(repositoryPath, "rev-parse", "HEAD");
       const names = Array.from(
         { length: 8_000 },
         (_, index) =>
@@ -79,9 +74,7 @@ describe("repository refs transport", () => {
       );
       await writeFile(
         join(repositoryPath, ".git", "packed-refs"),
-        names
-          .map((name) => `${stdout.trim()} refs/remotes/origin/${name}\n`)
-          .join(""),
+        names.map((name) => `${head} refs/remotes/origin/${name}\n`).join(""),
       );
       await git(repositoryPath, "tag", "v1");
       const repository = await Effect.runPromise(
@@ -103,7 +96,7 @@ describe("repository refs transport", () => {
   it("automatically updates the client refs after filesystem changes and fetches", async () => {
     await withRefsListener(async ({ authorization, origin, root }) => {
       const repositoryPath = join(root, "repository");
-      await createRepository(repositoryPath);
+      await createRepository(repositoryPath, { branches: ["feature"] });
       const owner = await pair(origin, authorization, "owner");
       const remembered = await Effect.runPromise(
         remember(origin, owner, repositoryPath),
@@ -140,7 +133,7 @@ describe("repository refs transport", () => {
         });
 
         const remotePath = join(root, "remote");
-        await createRepository(remotePath);
+        await createRepository(remotePath, { branches: ["feature"] });
         await git(remotePath, "branch", "fetched-branch");
         await git(remotePath, "tag", "fetched-tag");
         await git(repositoryPath, "remote", "add", "origin", remotePath);
@@ -181,7 +174,7 @@ describe("repository refs transport", () => {
   it("serves refs to readers and reserves checkout for writers", async () => {
     await withRefsListener(async ({ authorization, origin, root }) => {
       const repositoryPath = join(root, "repository");
-      await createRepository(repositoryPath);
+      await createRepository(repositoryPath, { branches: ["feature"] });
       await git(
         repositoryPath,
         "remote",
@@ -356,27 +349,6 @@ function refsClient(origin: string, credential: EnvironmentCredential) {
   return repositoryRefsClient(
     createEnvironmentRequestClient(origin, () => credential),
   );
-}
-
-async function createRepository(path: string) {
-  await mkdir(path, { recursive: true });
-  await git(path, "init", "-b", "main");
-  await git(
-    path,
-    "-c",
-    "user.name=Rebase test",
-    "-c",
-    "user.email=rebase@example.test",
-    "commit",
-    "--allow-empty",
-    "-m",
-    "initial",
-  );
-  await git(path, "branch", "feature");
-}
-
-async function git(path: string, ...arguments_: string[]) {
-  await execFilePromise("git", ["-C", path, ...arguments_]);
 }
 
 async function createTemporaryDirectory() {

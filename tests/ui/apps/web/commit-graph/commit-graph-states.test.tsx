@@ -1,7 +1,7 @@
 import type { RepositoryCommit } from "@rebase/contracts";
 import { act } from "react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
-import { page, userEvent } from "vitest/browser";
+import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
+import { page, userEvent } from "vite-plus/test/browser";
 import {
   CommitGraphFixture,
   history,
@@ -11,7 +11,7 @@ import {
 } from "#tests-ui/apps/web/commit-graph/commit-graph-fixture";
 import { render } from "#tests-ui/runtime/render";
 import { graphRowHeight } from "#web/features/commit-graph/layout/graph-metrics";
-import { saveRepositoryHistoryOrder } from "#web/features/repository-history/preferences/repository-history-order";
+import { saveRepositoryHistoryOrder } from "#web/features/repository-history/index";
 import { RepositoryHistoryUnavailable } from "#web/features/repository-history/repository-history-reader.contract";
 
 describe("commit graph states", () => {

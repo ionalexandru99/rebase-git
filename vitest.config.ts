@@ -59,8 +59,8 @@ export default defineConfig({
       "#tests-integration": fileURLToPath(
         new URL("./tests/integration", import.meta.url),
       ),
-      "#tests-performance": fileURLToPath(
-        new URL("./tests/performance", import.meta.url),
+      "#tests-support": fileURLToPath(
+        new URL("./tests/support", import.meta.url),
       ),
       "#tests-ui": fileURLToPath(new URL("./tests/ui", import.meta.url)),
       "#web": fileURLToPath(new URL("./src/apps/web", import.meta.url)),

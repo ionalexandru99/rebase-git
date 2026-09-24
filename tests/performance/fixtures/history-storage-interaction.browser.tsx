@@ -10,7 +10,7 @@ import {
   CommitGraph,
   openCommitGraphHistory,
 } from "#web/features/commit-graph/index";
-import { createBrowserRepositoryHistoryReader } from "#web/features/repository-history/browser-repository-history-reader";
+import { createBrowserRepositoryHistoryReader } from "#web/features/repository-history/index";
 import {
   beginRepositoryHistorySynchronization,
   completeStoredRepositoryHistory,

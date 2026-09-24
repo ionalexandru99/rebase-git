@@ -1,5 +1,5 @@
 import { maximumRepositoryHistorySequence } from "@rebase/contracts";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vite-plus/test";
 import {
   acceptRepositoryHistoryBatch,
   completeRepositoryHistory,

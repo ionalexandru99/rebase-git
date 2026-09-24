@@ -1,19 +1,25 @@
 import { Effect, Layer, ManagedRuntime } from "effect";
+import { TestClock } from "effect/testing";
 import { expect, it, vi } from "vite-plus/test";
 import { defaultDiffPreferences } from "#web/domain/file-diff/diff-preferences.contract";
 import {
   createWorkingChangesController,
   type WorkingChangesController,
 } from "#web/features/working-changes/working-changes-controller";
-import { saveCommitDraft } from "#web/persistence/working-changes/working-changes-store";
-import { emptyCommitDraft } from "#web/persistence/working-changes/working-changes-store.contract";
+import {
+  emptyCommitDraft,
+  type WorkingChangesStore,
+} from "#web/persistence/working-changes/working-changes-store.contract";
 
-vi.mock("#web/persistence/working-changes/working-changes-store", () => ({
+const saveCommitDraft = vi.fn<WorkingChangesStore["saveCommitDraft"]>(
+  () => Effect.void,
+);
+const persistence: WorkingChangesStore = {
   readDiffPreferences: () => Effect.succeed(defaultDiffPreferences),
   readCommitDraft: () => Effect.succeed(emptyCommitDraft),
   saveDiffPreferences: () => Effect.void,
-  saveCommitDraft: vi.fn(() => Effect.void),
-}));
+  saveCommitDraft,
+};
 
 const emptyChanges = {
   revision: "one",
@@ -28,7 +34,7 @@ async function withStartedController(
   use: (controller: WorkingChangesController) => Promise<void>,
 ) {
   vi.stubGlobal("document", { visibilityState: "visible" });
-  vi.mocked(saveCommitDraft).mockClear();
+  saveCommitDraft.mockClear();
   const runtime = ManagedRuntime.make(Layer.empty);
   const controller = createWorkingChangesController(
     {
@@ -37,6 +43,7 @@ async function withStartedController(
       diff: () => Effect.never,
       commit: () => Effect.never,
     },
+    persistence,
     { repositoryId: "repository", worktreePath: "/repository", amend: false },
     "draft",
     runtime,
@@ -108,6 +115,7 @@ it("allows mutations after stopping and restarting an interrupted operation", as
     );
   const controller = createWorkingChangesController(
     { read, mutate, diff: () => Effect.never, commit: () => Effect.never },
+    persistence,
     { repositoryId: "repository", worktreePath: "/repository", amend: false },
     "draft",
     runtime,
@@ -132,6 +140,42 @@ it("allows mutations after stopping and restarting an interrupted operation", as
     expect(mutate).toHaveBeenCalledTimes(2);
   } finally {
     interrupted.resolve();
+    controller.stop();
+    await runtime.dispose();
+    vi.unstubAllGlobals();
+  }
+});
+
+it("stops refreshing while inactive and refreshes again once active", async () => {
+  vi.stubGlobal("document", { visibilityState: "visible" });
+  const runtime = ManagedRuntime.make(TestClock.layer());
+  const read = vi.fn(() => Effect.succeed(emptyChanges));
+  const controller = createWorkingChangesController(
+    {
+      read,
+      mutate: () => Effect.never,
+      diff: () => Effect.never,
+      commit: () => Effect.never,
+    },
+    persistence,
+    { repositoryId: "repository", worktreePath: "/repository", amend: false },
+    "draft",
+    runtime,
+  );
+  try {
+    controller.start();
+    await vi.waitFor(() => expect(read).toHaveBeenCalledTimes(1));
+    await runtime.runPromise(TestClock.adjust(10_000));
+    await vi.waitFor(() => expect(read).toHaveBeenCalledTimes(2));
+
+    controller.setActive(false);
+    controller.invalidate();
+    await runtime.runPromise(TestClock.adjust(60_000));
+    expect(read).toHaveBeenCalledTimes(2);
+
+    controller.setActive(true);
+    await vi.waitFor(() => expect(read).toHaveBeenCalledTimes(3));
+  } finally {
     controller.stop();
     await runtime.dispose();
     vi.unstubAllGlobals();

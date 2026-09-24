@@ -1,15 +1,9 @@
-import {
-  type ChildProcessWithoutNullStreams,
-  execFile,
-  spawn,
-} from "node:child_process";
 import { once } from "node:events";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
-import { promisify } from "node:util";
 import {
   type CDPSession,
   expect,
@@ -19,9 +13,9 @@ import {
 } from "@playwright/test";
 import { WebSocketServer } from "ws";
 import { assertTimingBudget } from "#tests-performance/timing-budget";
+import { startEnvironmentServer } from "#tests-support/environment-server";
+import { createRepository, git } from "#tests-support/git";
 
-const execFileAsync = promisify(execFile);
-const cliPath = resolve("src/apps/server/cli.ts");
 const megabitsPerSecond = 20;
 const networkBytesPerSecond = (megabitsPerSecond * 1_000_000) / 8;
 
@@ -79,8 +73,11 @@ async function measureCommitGraph(
 ) {
   const testHome = await mkdtemp(join(tmpdir(), "rebase-performance-"));
   const repositoryPath = join(testHome, "rebase-performance");
-  await createRepository(repositoryPath);
-  const server = startServer(testHome);
+  await createRepository(repositoryPath, {
+    commits: Array.from({ length: 100 }, (_, index) => `commit ${index}`),
+  });
+  await git(repositoryPath, "branch", "feature", "HEAD~50");
+  const server = startEnvironmentServer(testHome);
   const session = await page.context().newCDPSession(page);
   let historyReads = 0;
   session.on("Network.webSocketFrameSent", ({ response }) => {
@@ -554,92 +551,6 @@ function required(value: number | undefined) {
     throw new Error("A required browser measurement is missing");
   }
   return value;
-}
-
-async function createRepository(path: string) {
-  await mkdir(path, { recursive: true });
-  await git(path, "init", "-b", "main");
-  for (let index = 0; index < 100; index += 1) {
-    await git(path, "commit", "--allow-empty", "-m", `commit ${index}`);
-  }
-  await git(path, "branch", "feature", "HEAD~50");
-}
-
-async function git(path: string, ...arguments_: string[]) {
-  await execFileAsync("git", [
-    "-C",
-    path,
-    "-c",
-    "user.name=Rebase performance",
-    "-c",
-    "user.email=rebase-performance@example.test",
-    ...arguments_,
-  ]);
-}
-
-function startServer(homeDirectory: string) {
-  const child = spawn(
-    process.execPath,
-    ["--conditions=rebase-source", cliPath, "serve"],
-    {
-      env: {
-        ...process.env,
-        BROWSER: "none",
-        HOME: homeDirectory,
-        USERPROFILE: homeDirectory,
-      },
-      stdio: ["pipe", "pipe", "pipe"],
-    },
-  );
-  let stdout = "";
-  let stderr = "";
-  child.stdout.on("data", (chunk) => {
-    stdout += chunk.toString();
-  });
-  child.stderr.on("data", (chunk) => {
-    stderr += chunk.toString();
-  });
-  return {
-    child,
-    waitForPairingUrl: () =>
-      waitForOutput(
-        child,
-        () => stdout.match(/^Pairing URL: (http:\/\/\S+)$/m)?.[1],
-        () => stderr,
-      ),
-  };
-}
-
-function waitForOutput(
-  child: ChildProcessWithoutNullStreams,
-  read: () => string | undefined,
-  readError: () => string,
-) {
-  return new Promise<string>((resolveOutput, rejectOutput) => {
-    const timeout = setTimeout(() => {
-      cleanup();
-      rejectOutput(new Error("Timed out waiting for server output."));
-    }, 15_000);
-    const inspect = () => {
-      const output = read();
-      if (output !== undefined) {
-        cleanup();
-        resolveOutput(output);
-      }
-    };
-    const exited = () => {
-      cleanup();
-      rejectOutput(new Error(`Server exited before ready. ${readError()}`));
-    };
-    const cleanup = () => {
-      clearTimeout(timeout);
-      child.stdout.off("data", inspect);
-      child.off("exit", exited);
-    };
-    child.stdout.on("data", inspect);
-    child.once("exit", exited);
-    inspect();
-  });
 }
 
 interface GraphMetrics {

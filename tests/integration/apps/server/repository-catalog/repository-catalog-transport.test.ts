@@ -1,21 +1,10 @@
-import { execFile } from "node:child_process";
 import { mkdir, mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { promisify } from "node:util";
 import {
   createEnvironmentRequestClient,
   type EnvironmentCredential,
 } from "@rebase/environment-client";
-import { exchangeEnvironmentPairingEffect } from "@rebase/web/environment-connection";
-import {
-  EnvironmentFilesystemRejected,
-  environmentFilesystemClient,
-} from "@rebase/web/features/environment-filesystem";
-import {
-  RepositoryCatalogRejected,
-  repositoryCatalogClient,
-} from "@rebase/web/features/repository-catalog";
 import { Effect } from "effect";
 import { afterEach, describe, expect, it } from "vite-plus/test";
 import { createEnvironmentEventPublisher } from "#server/adapters/environment-transport/events/environment-event-publisher";
@@ -23,8 +12,10 @@ import { createLocalGitCommandRunner } from "#server/adapters/local-git/local-gi
 import { acquireEnvironmentListener } from "#server/app/server/environment-listener";
 import { EnvironmentAuthorizationAccess } from "#server/domain/environment-authorization.contract";
 import { RepositoryCatalogAccess } from "#server/domain/repository-catalog.contract";
-import { createEnvironmentAuthorization } from "#server/features/environment-authorization/environment-authorization";
-import { environmentAuthorizationFeature } from "#server/features/environment-authorization/index";
+import {
+  createEnvironmentAuthorization,
+  environmentAuthorizationFeature,
+} from "#server/features/environment-authorization/index";
 import { environmentFilesystemFeature } from "#server/features/environment-filesystem/index";
 import {
   createRepositoryCatalog,
@@ -33,8 +24,17 @@ import {
 import { acquireEnvironmentContext } from "#server/persistence/environment-context";
 import { environmentPaths } from "#server/persistence/storage/environment-paths";
 import { testEnvironmentFeatures } from "#tests-integration/apps/server/environment-connection/test-environment-features";
+import { createRepository } from "#tests-support/git";
+import { exchangeEnvironmentPairingEffect } from "#web/app/environment/connection/index";
+import {
+  EnvironmentFilesystemRejected,
+  environmentFilesystemClient,
+} from "#web/features/environment-filesystem/index";
+import {
+  RepositoryCatalogRejected,
+  repositoryCatalogClient,
+} from "#web/features/repository-catalog/index";
 
-const execFilePromise = promisify(execFile);
 const directories = new Set<string>();
 const environmentId = "00000000-0000-4000-8000-000000000001";
 
@@ -226,26 +226,6 @@ function filesystem(origin: string, credential: EnvironmentCredential) {
   return environmentFilesystemClient(
     createEnvironmentRequestClient(origin, () => credential),
   );
-}
-
-async function createRepository(path: string) {
-  await mkdir(path, { recursive: true });
-  await git(path, "init", "-b", "main");
-  await git(
-    path,
-    "-c",
-    "user.name=Rebase test",
-    "-c",
-    "user.email=rebase@example.test",
-    "commit",
-    "--allow-empty",
-    "-m",
-    "initial",
-  );
-}
-
-async function git(path: string, ...arguments_: string[]) {
-  await execFilePromise("git", ["-C", path, ...arguments_]);
 }
 
 async function createTemporaryDirectory() {

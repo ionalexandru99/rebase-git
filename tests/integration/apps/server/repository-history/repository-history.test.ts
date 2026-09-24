@@ -1,9 +1,7 @@
-import { execFile } from "node:child_process";
 import { mkdir, mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
-import { promisify } from "node:util";
 import {
   createCurrentEnvironmentHello,
   decodeRepositoryHistoryBatch,
@@ -15,11 +13,6 @@ import {
   type RepositoryHistoryBatch,
   type RepositoryHistorySnapshot,
 } from "@rebase/contracts";
-import {
-  connectEnvironmentEffect,
-  type EnvironmentProtocolConnection,
-  fetchEnvironmentDiscoveryEffect,
-} from "@rebase/web/environment-connection";
 import { Effect } from "effect";
 import { afterEach, describe, expect, it } from "vite-plus/test";
 import { createEnvironmentEventPublisher } from "#server/adapters/environment-transport/events/environment-event-publisher";
@@ -31,7 +24,7 @@ import {
   EnvironmentAuthorizationAccess,
 } from "#server/domain/environment-authorization.contract";
 import { environmentAuthorizationFeature } from "#server/features/environment-authorization/index";
-import { createRepositoryCatalog } from "#server/features/repository-catalog/repository-catalog";
+import { createRepositoryCatalog } from "#server/features/repository-catalog/index";
 import { RepositoryHistoryError } from "#server/features/repository-history/git/history-failures";
 import { readObjectFormat } from "#server/features/repository-history/git/read-object-format";
 import { readRepositoryHistorySnapshot } from "#server/features/repository-history/git/read-repository-history-snapshot";
@@ -45,9 +38,14 @@ import { acquireEnvironmentContext } from "#server/persistence/environment-conte
 import { environmentPaths } from "#server/persistence/storage/environment-paths";
 import { createRepositoryAccess } from "#server/repository/access/index";
 import { testEnvironmentFeatures } from "#tests-integration/apps/server/environment-connection/test-environment-features";
+import { fastImport, git } from "#tests-support/git";
+import {
+  connectEnvironmentEffect,
+  type EnvironmentProtocolConnection,
+  fetchEnvironmentDiscoveryEffect,
+} from "#web/app/environment/connection/index";
 import { createRepositoryHistoryRpc } from "#web/features/repository-history/transport/repository-history-rpc";
 
-const execFilePromise = promisify(execFile);
 const directories = new Set<string>();
 const environmentId = "00000000-0000-4000-8000-000000000001";
 const requestId = "00000000-0000-4000-8000-000000000011";
@@ -66,8 +64,8 @@ describe("repository history", { timeout: 30_000 }, () => {
     const root = await createTemporaryDirectory();
     const source = join(root, "bare-source");
     const bare = join(root, "repository.git");
-    await createRepository(source, "sha1", 3);
-    await execFilePromise("git", ["clone", "--bare", source, bare]);
+    await importLinearHistory(source, "sha1", 3);
+    await git(root, "clone", "--bare", source, bare);
     const commits: RepositoryCommit[] = [];
 
     const count = await Effect.runPromise(
@@ -99,7 +97,7 @@ describe("repository history", { timeout: 30_000 }, () => {
   it("preserves failures raised while emitting streamed batches", async () => {
     const root = await createTemporaryDirectory();
     const repositoryPath = join(root, "emit-failure");
-    await createRepository(repositoryPath, "sha1", 1);
+    await importLinearHistory(repositoryPath, "sha1", 1);
     const failure = new RepositoryHistoryError({
       failure: {
         _tag: "GitFailed",
@@ -130,10 +128,10 @@ describe("repository history", { timeout: 30_000 }, () => {
     await withHistoryListener(async ({ catalog, origin, root }) => {
       const repositoryPath = join(root, "complete");
       const linkedPath = join(root, "linked");
-      await createRepository(repositoryPath, "sha1", 2);
+      await importLinearHistory(repositoryPath, "sha1", 2);
       await git(repositoryPath, "checkout", "-b", "side");
       await git(repositoryPath, "commit", "--allow-empty", "-m", "side");
-      const side = await gitOutput(repositoryPath, "rev-parse", "HEAD");
+      const side = await git(repositoryPath, "rev-parse", "HEAD");
       await git(repositoryPath, "checkout", "main");
       await git(repositoryPath, "update-ref", "refs/remotes/origin/side", side);
       await git(repositoryPath, "tag", "snapshot");
@@ -152,16 +150,16 @@ describe("repository history", { timeout: 30_000 }, () => {
         "main",
       );
       await git(linkedPath, "commit", "--allow-empty", "-m", "detached linked");
-      const detached = await gitOutput(linkedPath, "rev-parse", "HEAD");
+      const detached = await git(linkedPath, "rev-parse", "HEAD");
       const repository = await Effect.runPromise(
         catalog.remember(repositoryPath),
       );
       const stashRoots = (
-        await gitOutput(repositoryPath, "stash", "list", "--format=%H")
+        await git(repositoryPath, "stash", "list", "--format=%H")
       ).split("\n");
       const expected = new Set(
         (
-          await gitOutput(
+          await git(
             repositoryPath,
             "rev-list",
             "--all",
@@ -196,11 +194,11 @@ describe("repository history", { timeout: 30_000 }, () => {
     async ({ objectFormat, smallFrames }) => {
       await withHistoryListener(async ({ catalog, origin, root }) => {
         const repositoryPath = join(root, objectFormat);
-        await createRepository(repositoryPath, objectFormat, 110);
+        await importLinearHistory(repositoryPath, objectFormat, 110);
         const repository = await Effect.runPromise(
           catalog.remember(repositoryPath),
         );
-        const head = await gitOutput(repositoryPath, "rev-parse", "main");
+        const head = await git(repositoryPath, "rev-parse", "main");
         const hello = smallFrames
           ? smallFrameHello()
           : createCurrentEnvironmentHello("0.0.0");
@@ -226,7 +224,7 @@ describe("repository history", { timeout: 30_000 }, () => {
       const repository = await Effect.runPromise(
         catalog.remember(repositoryPath),
       );
-      const head = await gitOutput(repositoryPath, "rev-parse", "main");
+      const head = await git(repositoryPath, "rev-parse", "main");
 
       const page = await readHistoryPage(origin, repository.id, head);
 
@@ -253,23 +251,24 @@ describe("repository history", { timeout: 30_000 }, () => {
     await withHistoryListener(async ({ catalog, origin, root }) => {
       const source = join(root, "shallow-source");
       const repositoryPath = join(root, "shallow-clone");
-      await createRepository(source, "sha1", 5);
-      await execFilePromise("git", [
+      await importLinearHistory(source, "sha1", 5);
+      await git(
+        root,
         "clone",
         "--branch=main",
         "--depth=2",
         pathToFileURL(source).href,
         repositoryPath,
-      ]);
+      );
       const repository = await Effect.runPromise(
         catalog.remember(repositoryPath),
       );
-      const head = await gitOutput(repositoryPath, "rev-parse", "main");
+      const head = await git(repositoryPath, "rev-parse", "main");
 
       const page = await readHistoryPage(origin, repository.id, head);
 
       expect(page.commits).toHaveLength(2);
-      const missingParent = await gitOutput(source, "rev-parse", "main~2");
+      const missingParent = await git(source, "rev-parse", "main~2");
       expect(page.commits.at(-1)?.parents).toEqual([missingParent]);
       const synchronized: RepositoryCommit[] = [];
       await Effect.runPromise(
@@ -297,7 +296,7 @@ describe("repository history", { timeout: 30_000 }, () => {
   it("coalesces ref movement during traversal before publishing the latest refs", async () => {
     const root = await createTemporaryDirectory();
     const repositoryPath = join(root, "moving-refs");
-    await createRepository(repositoryPath, "sha1", 2);
+    await importLinearHistory(repositoryPath, "sha1", 2);
     const batches: RepositoryHistoryBatch[] = [];
     let moved = false;
 
@@ -329,7 +328,7 @@ describe("repository history", { timeout: 30_000 }, () => {
       ),
     );
 
-    const latestHead = await gitOutput(repositoryPath, "rev-parse", "main");
+    const latestHead = await git(repositoryPath, "rev-parse", "main");
     expect(count).toBe(3);
     expect(batches.flatMap((batch) => batch.commits)).toHaveLength(3);
     expect(batches.at(-2)?.snapshot?.refTargets).toContainEqual({
@@ -345,7 +344,7 @@ describe("repository history", { timeout: 30_000 }, () => {
   it("resumes an unchanged incomplete snapshot from its committed batch", async () => {
     const root = await createTemporaryDirectory();
     const repositoryPath = join(root, "resumable");
-    await createRepository(repositoryPath, "sha1", 300);
+    await importLinearHistory(repositoryPath, "sha1", 300);
     let snapshot: RepositoryHistorySnapshot | undefined;
     const committed: RepositoryHistoryBatch[] = [];
     const interrupted = new RepositoryHistoryError({
@@ -420,7 +419,7 @@ describe("repository history", { timeout: 30_000 }, () => {
   it("resumes across bounded merge pages while captured refs move", async () => {
     const root = await createTemporaryDirectory();
     const path = join(root, "bounded-resume");
-    await createRepository(path, "sha1", 10_001);
+    await importLinearHistory(path, "sha1", 10_001);
     await git(path, "checkout", "-b", "side", "main~7500");
     await git(path, "commit", "--allow-empty", "-m", "side commit");
     await git(path, "checkout", "main");
@@ -431,7 +430,7 @@ describe("repository history", { timeout: 30_000 }, () => {
     expect(commits).toHaveLength(10_003);
     expect(new Set(commits.map((commit) => commit.oid)).size).toBe(10_003);
     const expectedParents = new Map(
-      (await gitOutput(path, "rev-list", "--parents", "main"))
+      (await git(path, "rev-list", "--parents", "main"))
         .split("\n")
         .map((line) => {
           const [oid, ...parents] = line.split(" ");
@@ -478,7 +477,7 @@ describe("repository history", { timeout: 30_000 }, () => {
   it("rejects a legacy traversal basis before skipping any commits", async () => {
     const root = await createTemporaryDirectory();
     const path = join(root, "legacy-traversal");
-    await createRepository(path, "sha1", 3);
+    await importLinearHistory(path, "sha1", 3);
     const snapshot = await Effect.runPromise(
       readRepositoryHistorySnapshot(
         createLocalGitCommandRunner(),
@@ -508,12 +507,12 @@ describe("repository history", { timeout: 30_000 }, () => {
   it("sends only the delta for a completed basis and reconciles force resets", async () => {
     const root = await createTemporaryDirectory();
     const repositoryPath = join(root, "completed-basis");
-    await createRepository(repositoryPath, "sha1", 3);
+    await importLinearHistory(repositoryPath, "sha1", 3);
     await git(repositoryPath, "branch", "side", "main~1");
     const initial: RepositoryHistoryBatch[] = [];
     await runSynchronization(repositoryPath, undefined, initial);
     const initialSnapshot = lastSnapshot(initial);
-    const resetTarget = await gitOutput(repositoryPath, "rev-parse", "main~1");
+    const resetTarget = await git(repositoryPath, "rev-parse", "main~1");
     await git(repositoryPath, "commit", "--allow-empty", "-m", "delta commit");
     const delta: RepositoryHistoryBatch[] = [];
 
@@ -564,7 +563,7 @@ describe("repository history", { timeout: 30_000 }, () => {
   it("rejects a resume basis whose captured roots no longer exist", async () => {
     const root = await createTemporaryDirectory();
     const repositoryPath = join(root, "invalid-basis");
-    await createRepository(repositoryPath, "sha1", 1);
+    await importLinearHistory(repositoryPath, "sha1", 1);
 
     const failure = await Effect.runPromise(
       Effect.flip(
@@ -599,8 +598,8 @@ describe("repository history", { timeout: 30_000 }, () => {
   it("rejects a resume that has exhausted the batch sequence", async () => {
     const root = await createTemporaryDirectory();
     const repositoryPath = join(root, "exhausted-sequence");
-    await createRepository(repositoryPath, "sha1", 1);
-    const oid = await gitOutput(repositoryPath, "rev-parse", "HEAD");
+    await importLinearHistory(repositoryPath, "sha1", 1);
+    const oid = await git(repositoryPath, "rev-parse", "HEAD");
     const snapshot = await Effect.runPromise(
       readRepositoryHistorySnapshot(
         createLocalGitCommandRunner(),
@@ -735,7 +734,7 @@ function withHistoryListener(
   );
 }
 
-async function createRepository(
+async function importLinearHistory(
   path: string,
   objectFormat: "sha1" | "sha256",
   commitCount: number,
@@ -754,14 +753,7 @@ async function createRepository(
       "\n",
     );
   }
-  const imported = execFilePromise("git", [
-    "-C",
-    path,
-    "fast-import",
-    "--quiet",
-  ]);
-  imported.child.stdin?.end(`${commands.join("")}done\n`);
-  await imported;
+  await fastImport(path, commands.join(""));
 }
 
 async function createMergeRepository(path: string) {
@@ -886,23 +878,6 @@ function testAuthorization(
       }),
     revoke: () => Effect.die("unused"),
   };
-}
-
-async function git(path: string, ...arguments_: string[]) {
-  await execFilePromise("git", [
-    "-C",
-    path,
-    "-c",
-    "user.name=Rebase test",
-    "-c",
-    "user.email=rebase@example.test",
-    ...arguments_,
-  ]);
-}
-
-async function gitOutput(path: string, ...arguments_: string[]) {
-  const result = await execFilePromise("git", ["-C", path, ...arguments_]);
-  return result.stdout.trim();
 }
 
 async function createTemporaryDirectory() {

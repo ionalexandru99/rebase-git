@@ -21,42 +21,6 @@
     }
   },
   "exports": {
-    ".": {
-      "rebase-source": "./index.ts",
-      "types": "./dist/types/index.d.ts",
-      "import": "./dist/types/index.js",
-      "default": "./dist/types/index.js"
-    },
-    "./environment-connection": {
-      "rebase-source": "./app/environment/connection/index.ts",
-      "types": "./dist/types/app/environment/connection/index.d.ts",
-      "import": "./dist/types/app/environment/connection/index.js",
-      "default": "./dist/types/app/environment/connection/index.js"
-    },
-    "./features/environment-filesystem": {
-      "rebase-source": "./features/environment-filesystem/index.ts",
-      "types": "./dist/types/features/environment-filesystem/index.d.ts",
-      "import": "./dist/types/features/environment-filesystem/index.js",
-      "default": "./dist/types/features/environment-filesystem/index.js"
-    },
-    "./features/repository-catalog": {
-      "rebase-source": "./features/repository-catalog/index.ts",
-      "types": "./dist/types/features/repository-catalog/index.d.ts",
-      "import": "./dist/types/features/repository-catalog/index.js",
-      "default": "./dist/types/features/repository-catalog/index.js"
-    },
-    "./features/repository-refs": {
-      "rebase-source": "./features/repository-refs/index.ts",
-      "types": "./dist/types/features/repository-refs/index.d.ts",
-      "import": "./dist/types/features/repository-refs/index.js",
-      "default": "./dist/types/features/repository-refs/index.js"
-    },
-    "./features/repository-history": {
-      "rebase-source": "./features/repository-history/index.ts",
-      "types": "./dist/types/features/repository-history/index.d.ts",
-      "import": "./dist/types/features/repository-history/index.js",
-      "default": "./dist/types/features/repository-history/index.js"
-    },
     "./styles.css": "./styles.css"
   },
   "scripts": {

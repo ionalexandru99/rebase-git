@@ -1,8 +1,6 @@
-import { execFile } from "node:child_process";
 import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { promisify } from "node:util";
 import {
   type ElectronApplication,
   _electron as electron,
@@ -11,40 +9,16 @@ import {
   test,
 } from "@playwright/test";
 import type { DesktopHostBridge } from "@rebase/contracts";
-
-const execFileAsync = promisify(execFile);
+import { createRepository } from "#tests-support/git";
 
 test("opens, closes, and reopens a recent repository after restart", async () => {
   const testHome = await mkdtemp(join(tmpdir(), "rebase-electron-e2e-"));
 
   try {
     const repositoryPath = join(testHome, "rebase-test");
-    await mkdir(repositoryPath);
-    await execFileAsync("git", ["init", repositoryPath]);
-    await execFileAsync("git", [
-      "-C",
-      repositoryPath,
-      "-c",
-      "user.name=Rebase test",
-      "-c",
-      "user.email=rebase@example.test",
-      "commit",
-      "--allow-empty",
-      "-m",
-      "initial",
-    ]);
-    await execFileAsync("git", [
-      "-C",
-      repositoryPath,
-      "-c",
-      "user.name=Rebase test",
-      "-c",
-      "user.email=rebase@example.test",
-      "commit",
-      "--allow-empty",
-      "-m",
-      "follow-up",
-    ]);
+    await createRepository(repositoryPath, {
+      commits: ["initial", "follow-up"],
+    });
     const environment = await createTestEnvironment(testHome);
     const application = await launchApplication(environment);
     try {

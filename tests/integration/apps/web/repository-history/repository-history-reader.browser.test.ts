@@ -3,9 +3,9 @@ import {
   encodeRepositoryHistoryPage,
   type RepositoryCommit,
 } from "@rebase/contracts";
-import { describe, expect, it, vi } from "vitest";
-import { createBrowserRepositoryHistoryReader } from "#web/features/repository-history/browser-repository-history-reader";
+import { describe, expect, it, vi } from "vite-plus/test";
 import { clearHistoryCache } from "#web/features/repository-history/cache/repository-history-storage";
+import { createBrowserRepositoryHistoryReader } from "#web/features/repository-history/index";
 import {
   readRepositoryCommits,
   readRepositoryHistory,

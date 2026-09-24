@@ -1,14 +1,14 @@
-import { type ChildProcessWithoutNullStreams, spawn } from "node:child_process";
+import type { ChildProcessWithoutNullStreams } from "node:child_process";
 import { access, mkdtemp, readFile, rm } from "node:fs/promises";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { EnvironmentDiscovery } from "@rebase/contracts";
 import { Schema } from "effect";
 import { afterEach, describe, expect, it } from "vite-plus/test";
+import { startEnvironmentServer } from "#tests-support/environment-server";
 
-const cliPath = resolve("src/apps/server/cli.ts");
 const children = new Set<ChildProcessWithoutNullStreams>();
 const directories = new Set<string>();
 
@@ -304,56 +304,17 @@ function startCli(
   homeDirectory: string,
   environment: NodeJS.ProcessEnv = {},
 ) {
-  const inheritedEnvironment = { ...process.env };
-  if (environment.PATH !== undefined) {
-    for (const name of Object.keys(inheritedEnvironment)) {
-      if (name.toLowerCase() === "path") {
-        delete inheritedEnvironment[name];
-      }
-    }
-  }
-
-  const child = spawn(
-    process.execPath,
-    ["--conditions=rebase-source", cliPath, "serve", ...arguments_],
-    {
-      env: {
-        ...inheritedEnvironment,
-        BROWSER: "none",
-        HOME: homeDirectory,
-        USERPROFILE: homeDirectory,
-        ...environment,
-      },
-      stdio: ["pipe", "pipe", "pipe"],
-    },
-  );
-  children.add(child);
-
-  let stderr = "";
-  let stdout = "";
-  child.stderr.on("data", (chunk) => {
-    stderr += chunk.toString();
-  });
-  child.stdout.on("data", (chunk) => {
-    stdout += chunk.toString();
-  });
-
+  const server = startEnvironmentServer(homeDirectory, arguments_, environment);
+  children.add(server.child);
   return {
-    child,
-    stderr: () => stderr,
-    stdout: () => stdout,
+    ...server,
     waitForListeningUrl: () =>
-      waitForOutput(
-        child,
-        () => {
-          const match = stdout.match(/^Listening URL: (http:\/\/[^\s]+)$/m);
-          const origin = match?.[1];
-          return origin && stdout.includes(`Pairing URL: ${origin}/pair`)
-            ? origin
-            : undefined;
-        },
-        () => stderr,
-      ),
+      server.waitFor((stdout) => {
+        const origin = stdout.match(/^Listening URL: (http:\/\/[^\s]+)$/m)?.[1];
+        return origin && stdout.includes(`Pairing URL: ${origin}/pair`)
+          ? origin
+          : undefined;
+      }),
   };
 }
 
@@ -361,42 +322,6 @@ async function createTemporaryDirectory() {
   const directory = await mkdtemp(join(tmpdir(), "rebase server șț "));
   directories.add(directory);
   return directory;
-}
-
-function waitForOutput<T>(
-  child: ChildProcessWithoutNullStreams,
-  read: () => T | undefined,
-  readError: () => string,
-) {
-  return new Promise<T>((resolveOutput, rejectOutput) => {
-    const timeout = setTimeout(() => {
-      cleanup();
-      rejectOutput(new Error("Timed out waiting for server output."));
-    }, 10_000);
-
-    const inspect = () => {
-      const output = read();
-      if (output !== undefined) {
-        cleanup();
-        resolveOutput(output);
-      }
-    };
-    const exited = () => {
-      cleanup();
-      rejectOutput(
-        new Error(`Server exited before it was ready. ${readError()}`),
-      );
-    };
-    const cleanup = () => {
-      clearTimeout(timeout);
-      child.stdout.off("data", inspect);
-      child.off("exit", exited);
-    };
-
-    child.stdout.on("data", inspect);
-    child.once("exit", exited);
-    inspect();
-  });
 }
 
 function waitForExit(child: ChildProcessWithoutNullStreams) {

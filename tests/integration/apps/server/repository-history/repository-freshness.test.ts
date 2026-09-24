@@ -1,11 +1,8 @@
-import { execFile } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { mkdir, mkdtemp, rename, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { promisify } from "node:util";
 import type { RepositoryFreshness } from "@rebase/contracts";
-import { connectCurrentEnvironmentEffect } from "@rebase/web/environment-connection";
 import { Deferred, Effect, Layer } from "effect";
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import { createEnvironmentEventPublisher } from "#server/adapters/environment-transport/events/environment-event-publisher";
@@ -36,9 +33,10 @@ import {
   repositoryCoordinationLayer,
 } from "#server/repository/access/index";
 import { testEnvironmentFeatures } from "#tests-integration/apps/server/environment-connection/test-environment-features";
+import { git } from "#tests-support/git";
+import { connectCurrentEnvironmentEffect } from "#web/app/environment/connection/index";
 import { createRepositoryHistoryRpc } from "#web/features/repository-history/transport/repository-history-rpc";
 
-const exec = promisify(execFile);
 const directories: string[] = [];
 const repositoryId = "00000000-0000-4000-8000-000000000001";
 
@@ -392,17 +390,4 @@ function testAuthorization(): EnvironmentAuthorization {
       }),
     revoke: () => Effect.die("unused"),
   };
-}
-
-async function git(path: string, ...args: string[]) {
-  const result = await exec("git", [
-    "-C",
-    path,
-    "-c",
-    "user.name=Rebase test",
-    "-c",
-    "user.email=rebase@example.test",
-    ...args,
-  ]);
-  return result.stdout.trim();
 }

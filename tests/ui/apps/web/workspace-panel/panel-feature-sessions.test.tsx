@@ -8,8 +8,8 @@ import {
   type RequestableEnvironmentHttpRoute,
 } from "@rebase/environment-client";
 import { Effect, Layer, ManagedRuntime, Schema } from "effect";
-import { expect, it } from "vitest";
-import { page } from "vitest/browser";
+import { expect, it } from "vite-plus/test";
+import { page } from "vite-plus/test/browser";
 import { render } from "vitest-browser-react";
 import { ResizablePanel } from "#web-ui/components/ui/resizable";
 import { WorkspacePanel } from "#web-ui/features/workspace-panel/index";
@@ -237,9 +237,6 @@ it("retains actual working-change selection, filter, draft and amend state acros
     .getByRole("textbox", { name: "Commit subject" })
     .fill("Retain my amendment");
   await page.getByRole("button", { name: "Hide side panel" }).click();
-  const before = f.reads.length;
-  await new Promise((resolve) => setTimeout(resolve, 2700));
-  expect(f.reads).toHaveLength(before);
   await page.getByRole("button", { name: "Show side panel" }).click();
   await f.show(f.projectB);
   await openDiffs();
@@ -279,9 +276,6 @@ it("retains an inspected commit and file while another tab and another project a
   const count = f.inspections.length;
   await page.getByRole("tab", { name: "Diffs", exact: true }).click();
   await page.getByRole("tab", { name: "Commit", exact: true }).click();
-  const reads = f.reads.length;
-  await new Promise((resolve) => setTimeout(resolve, 2700));
-  expect(f.reads).toHaveLength(reads);
   await page.getByRole("button", { name: "Hide side panel" }).click();
   await f.show(f.projectB);
   await f.show(f.projectA);

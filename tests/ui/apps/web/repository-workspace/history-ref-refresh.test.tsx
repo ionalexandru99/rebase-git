@@ -1,5 +1,5 @@
 import { act } from "react";
-import { expect, it, vi } from "vitest";
+import { expect, it, vi } from "vite-plus/test";
 import { render } from "vitest-browser-react";
 import { useHistoryRefRefresh } from "#web/app/workspace/use-history-ref-refresh";
 import type { RepositoryHistorySnapshot } from "#web/features/repository-history/repository-history-reader.contract";

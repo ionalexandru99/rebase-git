@@ -1,4 +1,3 @@
-import { execFile } from "node:child_process";
 import {
   access,
   mkdir,
@@ -9,7 +8,6 @@ import {
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { promisify } from "node:util";
 import { Effect, Stream } from "effect";
 import { afterEach, describe, expect, it } from "vite-plus/test";
 import { createLocalGitCommandRunner } from "#server/adapters/local-git/local-git-command-runner";
@@ -19,13 +17,13 @@ import {
   type GitCommandRunner,
 } from "#server/domain/git-command.contract";
 import { RepositoryCatalogError } from "#server/domain/repository-catalog.contract";
-import { createRepositoryCatalog } from "#server/features/repository-catalog/repository-catalog";
+import { createRepositoryCatalog } from "#server/features/repository-catalog/index";
 import { acquireEnvironmentContext } from "#server/persistence/environment-context";
 import type { EnvironmentContext } from "#server/persistence/environment-context.contract";
 import { repositoryCatalogTable } from "#server/persistence/environment-state.schema";
 import { environmentPaths } from "#server/persistence/storage/environment-paths";
+import { createRepository, git } from "#tests-support/git";
 
-const execFilePromise = promisify(execFile);
 const directories = new Set<string>();
 
 afterEach(async () => {
@@ -258,26 +256,6 @@ function expectMissing<A>(
       return error;
     }),
   );
-}
-
-async function createRepository(path: string) {
-  await mkdir(path, { recursive: true });
-  await git(path, "init", "-b", "main");
-  await git(
-    path,
-    "-c",
-    "user.name=Rebase test",
-    "-c",
-    "user.email=rebase@example.test",
-    "commit",
-    "--allow-empty",
-    "-m",
-    "initial",
-  );
-}
-
-async function git(path: string, ...arguments_: string[]) {
-  await execFilePromise("git", ["-C", path, ...arguments_]);
 }
 
 async function createTemporaryDirectory() {

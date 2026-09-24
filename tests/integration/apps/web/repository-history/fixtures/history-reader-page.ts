@@ -3,7 +3,7 @@ import {
   encodeRepositoryHistoryPage,
   type RepositoryCommit,
 } from "@rebase/contracts";
-import { createBrowserRepositoryHistoryReader } from "#web/features/repository-history/browser-repository-history-reader";
+import { createBrowserRepositoryHistoryReader } from "#web/features/repository-history/index";
 
 const parameters = new URLSearchParams(location.search);
 const repositoryId = parameters.get("repository") ?? "";

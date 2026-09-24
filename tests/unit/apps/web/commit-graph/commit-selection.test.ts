@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vite-plus/test";
 import { emptyCommitGraphSelection } from "#web/features/commit-graph/commit-selection.contract";
 import {
   clearGraphSelection,

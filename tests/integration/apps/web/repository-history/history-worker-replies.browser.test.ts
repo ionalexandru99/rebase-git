@@ -1,5 +1,5 @@
-import { describe, expect, it } from "vitest";
-import { createBrowserRepositoryHistoryReader } from "#web/features/repository-history/browser-repository-history-reader";
+import { describe, expect, it } from "vite-plus/test";
+import { createBrowserRepositoryHistoryReader } from "#web/features/repository-history/index";
 import { RepositoryHistoryUnavailable } from "#web/features/repository-history/repository-history-reader.contract";
 
 describe("history worker replies", () => {

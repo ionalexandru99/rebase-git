@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vite-plus/test";
 import { describeHistoryCaches } from "#web/features/repository-history/cache/repository-history-storage";
 import type { StoredRepository } from "#web/persistence/repository-history/repository-history-database.contract";
 import {

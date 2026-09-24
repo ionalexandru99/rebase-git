@@ -3,8 +3,8 @@ import type {
   RepositoryHistoryRefTarget,
 } from "@rebase/contracts";
 import { act, createRef, useState } from "react";
-import { describe, expect, it, vi } from "vitest";
-import { userEvent } from "vitest/browser";
+import { describe, expect, it, vi } from "vite-plus/test";
+import { userEvent } from "vite-plus/test/browser";
 import {
   CommitGraphFixture,
   history,
@@ -15,7 +15,7 @@ import {
 } from "#tests-ui/apps/web/commit-graph/commit-graph-fixture";
 import { render } from "#tests-ui/runtime/render";
 import type { CommitGraphHandle } from "#web/features/commit-graph/commit-graph.contract";
-import { saveRepositoryHistoryOrder } from "#web/features/repository-history/preferences/repository-history-order";
+import { saveRepositoryHistoryOrder } from "#web/features/repository-history/index";
 import { RepositoryHistoryUnavailable } from "#web/features/repository-history/repository-history-reader.contract";
 
 describe("commit graph navigation", () => {

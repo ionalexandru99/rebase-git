@@ -13,6 +13,7 @@ import {
   type WorkingChangesController,
   type WorkingChangesState,
 } from "#web/features/working-changes/working-changes-controller";
+import { browserWorkingChangesStore } from "#web/persistence/working-changes/working-changes-store";
 import type { EnvironmentChanges } from "#web/platform/environment/environment-protocol.contract";
 import { useStore } from "#web/platform/store/use-store";
 
@@ -42,6 +43,7 @@ export function WorkingChangesProvider({
     () =>
       createWorkingChangesController(
         client,
+        browserWorkingChangesStore,
         { repositoryId, worktreePath, amend: false },
         JSON.stringify([environmentId, repositoryId, worktreePath]),
         runtime,

@@ -1,22 +1,18 @@
-import {
-  type ChildProcessWithoutNullStreams,
-  execFile,
-  spawn,
-} from "node:child_process";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
-import { promisify } from "node:util";
+import { join } from "node:path";
 import { expect, type Page, test } from "@playwright/test";
-
-const execFileAsync = promisify(execFile);
-const cliPath = resolve("src/apps/server/cli.ts");
+import { startEnvironmentServer } from "#tests-support/environment-server";
+import { createRepository, git } from "#tests-support/git";
 
 test("opens a repository and checks out a local branch", async ({ page }) => {
   const testHome = await mkdtemp(join(tmpdir(), "rebase-branches-e2e-"));
   const repositoryPath = join(testHome, "rebase-test");
-  await createRepository(repositoryPath);
-  const server = startServer(testHome);
+  await createRepository(repositoryPath, {
+    commits: ["initial", "follow-up"],
+    branches: ["feature"],
+  });
+  const server = startEnvironmentServer(testHome);
 
   try {
     const pairingUrl = await server.waitForPairingUrl();
@@ -82,7 +78,9 @@ test("opens a repository and checks out a local branch", async ({ page }) => {
     await feature.dblclick();
     await expect(feature).toHaveAttribute("aria-current", "true");
     await expect(main).not.toHaveAttribute("aria-current");
-    await expect.poll(() => currentBranch(repositoryPath)).toBe("feature");
+    await expect
+      .poll(() => git(repositoryPath, "branch", "--show-current"))
+      .toBe("feature");
   } finally {
     server.child.kill("SIGTERM");
     await rm(testHome, { force: true, recursive: true });
@@ -94,7 +92,10 @@ test("reopens cached history and reveals a merged commit through offline search"
 }) => {
   const testHome = await mkdtemp(join(tmpdir(), "rebase-history-e2e-"));
   const repositoryPath = join(testHome, "rebase-test");
-  await createRepository(repositoryPath);
+  await createRepository(repositoryPath, {
+    commits: ["initial", "follow-up"],
+    branches: ["feature"],
+  });
   await git(repositoryPath, "switch", "-c", "merged-topic", "HEAD~1");
   await git(
     repositoryPath,
@@ -113,7 +114,7 @@ test("reopens cached history and reveals a merged commit through offline search"
     "merge feature",
   );
   await git(repositoryPath, "branch", "-d", "merged-topic");
-  const server = startServer(testHome);
+  const server = startEnvironmentServer(testHome);
 
   try {
     await page.goto(await server.waitForPairingUrl());
@@ -161,23 +162,6 @@ test("reopens cached history and reveals a merged commit through offline search"
     await rm(testHome, { force: true, recursive: true });
   }
 });
-
-async function createRepository(path: string) {
-  await mkdir(path, { recursive: true });
-  await git(path, "init", "-b", "main");
-  await writeFile(join(path, "README.md"), "hello");
-  await git(path, "add", "README.md");
-  await git(path, "commit", "-m", "initial");
-  await writeFile(join(path, "README.md"), "hello again");
-  await git(path, "add", "README.md");
-  await git(path, "commit", "-m", "follow-up");
-  await git(path, "branch", "feature");
-}
-
-async function currentBranch(path: string) {
-  const { stdout } = await git(path, "branch", "--show-current");
-  return stdout.trim();
-}
 
 async function openRepository(page: Page, name: string) {
   await page.getByRole("button", { name: "Browse files" }).click();
@@ -233,81 +217,4 @@ async function hasCompletedHistory(page: Page) {
         };
       }),
   );
-}
-
-async function git(path: string, ...arguments_: string[]) {
-  return execFileAsync("git", [
-    "-C",
-    path,
-    "-c",
-    "user.name=Rebase test",
-    "-c",
-    "user.email=rebase@example.test",
-    ...arguments_,
-  ]);
-}
-
-function startServer(homeDirectory: string) {
-  const child = spawn(
-    process.execPath,
-    ["--conditions=rebase-source", cliPath, "serve"],
-    {
-      env: {
-        ...process.env,
-        BROWSER: "none",
-        HOME: homeDirectory,
-        USERPROFILE: homeDirectory,
-      },
-      stdio: ["pipe", "pipe", "pipe"],
-    },
-  );
-  let stdout = "";
-  let stderr = "";
-  child.stdout.on("data", (chunk) => {
-    stdout += chunk.toString();
-  });
-  child.stderr.on("data", (chunk) => {
-    stderr += chunk.toString();
-  });
-  return {
-    child,
-    waitForPairingUrl: () =>
-      waitForOutput(
-        child,
-        () => stdout.match(/^Pairing URL: (http:\/\/\S+)$/m)?.[1],
-        () => stderr,
-      ),
-  };
-}
-
-function waitForOutput(
-  child: ChildProcessWithoutNullStreams,
-  read: () => string | undefined,
-  readError: () => string,
-) {
-  return new Promise<string>((resolveOutput, rejectOutput) => {
-    const timeout = setTimeout(() => {
-      cleanup();
-      rejectOutput(new Error("Timed out waiting for server output."));
-    }, 15_000);
-    const inspect = () => {
-      const output = read();
-      if (output !== undefined) {
-        cleanup();
-        resolveOutput(output);
-      }
-    };
-    const exited = () => {
-      cleanup();
-      rejectOutput(new Error(`Server exited before ready. ${readError()}`));
-    };
-    const cleanup = () => {
-      clearTimeout(timeout);
-      child.stdout.off("data", inspect);
-      child.off("exit", exited);
-    };
-    child.stdout.on("data", inspect);
-    child.once("exit", exited);
-    inspect();
-  });
 }

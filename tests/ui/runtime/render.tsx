@@ -1,6 +1,6 @@
 import { Layer, ManagedRuntime } from "effect";
 import type { ReactNode } from "react";
-import { afterEach } from "vitest";
+import { afterEach } from "vite-plus/test";
 import {
   cleanup,
   type RenderOptions,

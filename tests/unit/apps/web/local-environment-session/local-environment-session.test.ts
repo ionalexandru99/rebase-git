@@ -5,14 +5,14 @@ import {
   type EnvironmentRpcClient,
   negotiateEnvironmentHello,
 } from "@rebase/contracts";
+import { Effect, Layer, ManagedRuntime } from "effect";
+import { describe, expect, it, vi } from "vite-plus/test";
 import {
   EnvironmentHelloRejected,
   EnvironmentHttpRejected,
   type EnvironmentProtocolConnection,
   EnvironmentResponseError,
-} from "@rebase/web/environment-connection";
-import { Effect, Layer, ManagedRuntime } from "effect";
-import { describe, expect, it, vi } from "vite-plus/test";
+} from "#web/app/environment/connection/index";
 import { createLocalEnvironmentSession } from "#web/app/environment/local-environment-session";
 import type {
   ConnectedFeature,

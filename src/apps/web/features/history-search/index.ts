@@ -1,3 +1,4 @@
+export { createRepositoryHistorySearchModel } from "#web/features/history-search/repository-history-search-model";
 export type {
   RepositoryHistorySearchModel,
   RepositoryHistorySearchSnapshot,

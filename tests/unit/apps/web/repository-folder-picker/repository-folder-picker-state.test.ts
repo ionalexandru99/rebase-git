@@ -1,6 +1,6 @@
 import type { EnvironmentDirectoryEntry } from "@rebase/contracts";
-import { RepositoryCatalogRejected } from "@rebase/web/features/repository-catalog";
 import { describe, expect, it } from "vite-plus/test";
+import { RepositoryCatalogRejected } from "#web/features/repository-catalog/index";
 import {
   filterDirectoryEntries,
   modifiedDateLabel,

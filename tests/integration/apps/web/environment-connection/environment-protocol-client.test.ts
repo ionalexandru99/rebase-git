@@ -2,15 +2,6 @@ import {
   createCurrentEnvironmentHello,
   type EnvironmentHello,
 } from "@rebase/contracts";
-import {
-  connectCurrentEnvironmentEffect,
-  connectEnvironmentEffect,
-  EnvironmentHelloRejected,
-  type EnvironmentProtocolConnection,
-  EnvironmentResponseError,
-  fetchEnvironmentDiscoveryEffect,
-  fetchEnvironmentSnapshotEffect,
-} from "@rebase/web/environment-connection";
 import { Effect } from "effect";
 import { describe, expect, it, vi } from "vite-plus/test";
 import { createEnvironmentEventPublisher } from "#server/adapters/environment-transport/events/environment-event-publisher";
@@ -22,6 +13,15 @@ import {
 import type { EnvironmentEventPublisher } from "#server/domain/environment-event-publisher.contract";
 import { environmentAuthorizationFeature } from "#server/features/environment-authorization/index";
 import { testEnvironmentFeatures } from "#tests-integration/apps/server/environment-connection/test-environment-features";
+import {
+  connectCurrentEnvironmentEffect,
+  connectEnvironmentEffect,
+  EnvironmentHelloRejected,
+  type EnvironmentProtocolConnection,
+  EnvironmentResponseError,
+  fetchEnvironmentDiscoveryEffect,
+  fetchEnvironmentSnapshotEffect,
+} from "#web/app/environment/connection/index";
 
 const environmentId = "00000000-0000-4000-8000-000000000001";
 const credential = { type: "bearer", value: "test-device-credential" } as const;

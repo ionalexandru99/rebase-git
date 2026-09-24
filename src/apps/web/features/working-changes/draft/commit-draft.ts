@@ -1,8 +1,8 @@
 import { Effect, type Fiber, type ManagedRuntime, Semaphore } from "effect";
-import { saveCommitDraft } from "#web/persistence/working-changes/working-changes-store";
 import {
   type CommitDraft,
   emptyCommitDraft,
+  type WorkingChangesStore,
   type WorkingChangesStoreUnavailable,
 } from "#web/persistence/working-changes/working-changes-store.contract";
 import type { ControllerScope } from "#web/platform/effect/controller-scope";
@@ -11,6 +11,7 @@ import { createStore } from "#web/platform/store/store";
 const saveDelayMilliseconds = 300;
 
 export function createCommitDraft(
+  saveCommitDraft: WorkingChangesStore["saveCommitDraft"],
   work: ControllerScope,
   runtime: ManagedRuntime.ManagedRuntime<never, never>,
   onFailure: (error: WorkingChangesStoreUnavailable) => Effect.Effect<void>,
