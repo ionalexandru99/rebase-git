@@ -3,6 +3,7 @@ import type {
   ChangeSection,
   ChangeSelection,
   ChangesScope,
+  ChangesWritten,
   MutateChanges,
   RepositoryChanges,
 } from "@rebase/contracts";
@@ -59,7 +60,6 @@ export function createWorkingChangesController(
   client: RepositoryChangesClient,
   initialScope: ChangesScope,
   draftKey: string,
-  onCommitted: () => void,
   runtime: ManagedRuntime.ManagedRuntime<never, never>,
 ) {
   const work = createControllerScope(runtime);
@@ -123,9 +123,36 @@ export function createWorkingChangesController(
         selection === state().selection &&
         currentScope.amend === state().amend
       )
-        publish({
-          diff: state().diff?.revision === diff.revision ? state().diff : diff,
-        });
+        publish({ diff: retainedDiff(diff) });
+    });
+  const retainedDiff = (diff: ChangeDiff | null) =>
+    diff !== null && state().diff?.revision === diff.revision
+      ? state().diff
+      : diff;
+  const viewing = () => {
+    const selection = state().selection;
+    return selection === null ? {} : { viewed: selection };
+  };
+  const applyWritten = (
+    viewed: WorkingChangesState["selection"],
+    written: ChangesWritten,
+    next: Partial<WorkingChangesState> = {},
+  ) =>
+    Effect.suspend(() => {
+      const stillViewed = viewed === state().selection;
+      const diffOmitted =
+        stillViewed &&
+        viewed !== null &&
+        written.diff === null &&
+        written.changes[viewed.section].some(
+          (file) => file.path === viewed.path,
+        );
+      publish({
+        ...next,
+        changes: written.changes,
+        ...(stillViewed ? { diff: retainedDiff(written.diff) } : {}),
+      });
+      return diffOmitted ? loadDiff() : Effect.void;
     });
   const refresh = () =>
     Effect.gen(function* () {
@@ -307,49 +334,46 @@ export function createWorkingChangesController(
     ) =>
       operation(() =>
         Effect.gen(function* () {
-          const changes = state().changes;
+          const { changes, selection: viewed } = state();
           if (changes === null) return;
-          const next = yield* client.mutate({
+          const written = yield* client.mutate({
             ...scope(),
+            ...viewing(),
             revision: revision ?? changes.revision,
             action,
             section,
             selection,
           });
-          publish({ changes: next, diff: null });
-          yield* loadDiff();
+          yield* applyWritten(viewed, written);
         }),
       ),
     commit: () =>
       operation(() =>
         Effect.gen(function* () {
-          const { amend, changes } = state();
+          const { amend, changes, selection: viewed } = state();
           if (changes === null) return;
           const amendedHead = amend ? changes.head : null;
           const { subject, description } = draft.getSnapshot();
           const message =
             subject.trim() +
             (description.trim() ? `\n\n${description.trim()}` : "");
-          const next = yield* client.commit({
+          const written = yield* client.commit({
             ...scope(),
+            ...viewing(),
             revision: changes.revision,
             message,
           });
           normalDraft = emptyCommitDraft;
           amendDraft = undefined;
-          publish({
-            changes: next,
-            diff: null,
+          yield* applyWritten(viewed, written, {
             amend: false,
             notice: amendedHead ? "Commit amended." : "Changes committed.",
           });
-          onCommitted();
           yield* draft.clear(
             amendedHead
               ? [draftKey, `${draftKey}:amend:${amendedHead}`]
               : [draftKey],
           );
-          yield* loadDiff();
         }),
       ),
   };

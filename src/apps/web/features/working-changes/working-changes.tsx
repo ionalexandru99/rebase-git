@@ -42,7 +42,6 @@ export function WorkingChanges({
   changes,
   connected,
   writable,
-  onCommitted,
   runtime,
 }: {
   readonly client: RepositoryChangesClient | undefined;
@@ -52,7 +51,6 @@ export function WorkingChanges({
   readonly changes: EnvironmentChanges | undefined;
   readonly connected: boolean;
   readonly writable: boolean;
-  readonly onCommitted: () => void;
   readonly runtime: ManagedRuntime.ManagedRuntime<never, never> | undefined;
 }) {
   const feature = usePanelFeature();
@@ -75,7 +73,6 @@ export function WorkingChanges({
       repositoryId={repositoryId}
       worktreePath={worktreePath}
       changes={changes}
-      onCommitted={onCommitted}
       runtime={runtime}
     >
       {!connected ? (

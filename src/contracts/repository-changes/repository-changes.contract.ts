@@ -30,12 +30,21 @@ export const RepositoryChanges = Schema.Struct({
   truncated: Schema.Boolean,
 });
 export type RepositoryChanges = typeof RepositoryChanges.Type;
-export const ReadChangeDiff = Schema.Struct({
-  ...ChangesScope.fields,
+export const ViewedChange = Schema.Struct({
   section: ChangeSection,
   path: RepositoryPath,
 });
+export type ViewedChange = typeof ViewedChange.Type;
+export const ReadChangeDiff = Schema.Struct({
+  ...ChangesScope.fields,
+  ...ViewedChange.fields,
+});
 export type ReadChangeDiff = typeof ReadChangeDiff.Type;
+export const ChangesWritten = Schema.Struct({
+  changes: RepositoryChanges,
+  diff: Schema.NullOr(ChangeDiff),
+});
+export type ChangesWritten = typeof ChangesWritten.Type;
 export const ChangeSelection = Schema.Union([
   Schema.TaggedStruct("All", {}),
   Schema.TaggedStruct("Files", {
@@ -59,6 +68,7 @@ export const MutateChanges = Schema.Struct({
   section: ChangeSection,
   action: Schema.Literals(["stage", "unstage", "discard"]),
   selection: ChangeSelection,
+  viewed: Schema.optionalKey(ViewedChange),
 });
 export type MutateChanges = typeof MutateChanges.Type;
 export const CommitChanges = Schema.Struct({
@@ -68,6 +78,7 @@ export const CommitChanges = Schema.Struct({
     Schema.isMinLength(1),
     Schema.isMaxLength(32000),
   ),
+  viewed: Schema.optionalKey(ViewedChange),
 });
 export type CommitChanges = typeof CommitChanges.Type;
 export const ChangesFailure = Schema.TaggedStruct("ChangesFailed", {
@@ -114,7 +125,7 @@ export const RepositoryChangesHttpApi = {
     method: "POST",
     path: "/api/repositories/changes/mutate",
     request: MutateChanges,
-    success: RepositoryChanges,
+    success: ChangesWritten,
     successStatus: 200,
   },
   commit: {
@@ -124,7 +135,7 @@ export const RepositoryChangesHttpApi = {
     method: "POST",
     path: "/api/repositories/changes/commit",
     request: CommitChanges,
-    success: RepositoryChanges,
+    success: ChangesWritten,
     successStatus: 200,
   },
 } as const satisfies Record<string, EnvironmentHttpRoute>;

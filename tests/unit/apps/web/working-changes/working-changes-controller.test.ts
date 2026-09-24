@@ -39,7 +39,6 @@ async function withStartedController(
     },
     { repositoryId: "repository", worktreePath: "/repository", amend: false },
     "draft",
-    () => undefined,
     runtime,
   );
   try {
@@ -111,7 +110,6 @@ it("allows mutations after stopping and restarting an interrupted operation", as
     { read, mutate, diff: () => Effect.never, commit: () => Effect.never },
     { repositoryId: "repository", worktreePath: "/repository", amend: false },
     "draft",
-    () => undefined,
     runtime,
   );
   try {

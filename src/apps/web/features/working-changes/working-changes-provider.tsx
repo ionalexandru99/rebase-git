@@ -26,7 +26,6 @@ export function WorkingChangesProvider({
   repositoryId,
   worktreePath,
   changes,
-  onCommitted,
   runtime,
   active = true,
 }: {
@@ -36,7 +35,6 @@ export function WorkingChangesProvider({
   readonly repositoryId: string;
   readonly worktreePath: string;
   readonly changes: EnvironmentChanges | undefined;
-  readonly onCommitted: () => void;
   readonly runtime: ManagedRuntime.ManagedRuntime<never, never>;
   readonly active?: boolean;
 }) {
@@ -46,10 +44,9 @@ export function WorkingChangesProvider({
         client,
         { repositoryId, worktreePath, amend: false },
         JSON.stringify([environmentId, repositoryId, worktreePath]),
-        onCommitted,
         runtime,
       ),
-    [client, environmentId, repositoryId, worktreePath, onCommitted, runtime],
+    [client, environmentId, repositoryId, worktreePath, runtime],
   );
   useEffect(() => {
     controller.start();

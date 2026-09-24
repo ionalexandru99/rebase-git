@@ -115,11 +115,15 @@ it("authorizes changes reads separately from index mutations across HTTP", async
             section: "unstaged" as const,
             action: "stage" as const,
             selection: { _tag: "Files" as const, paths: ["draft.txt"] },
+            viewed: { section: "staged" as const, path: "draft.txt" },
           };
           const refused = yield* viewer.mutate(command).pipe(Effect.flip);
           expect(refused.message).toContain("Could not complete");
           const staged = yield* owner.mutate(command);
-          expect(staged.staged).toEqual([{ path: "draft.txt", status: "A" }]);
+          expect(staged.changes.staged).toEqual([
+            { path: "draft.txt", status: "A" },
+          ]);
+          expect(staged.diff?.after).toBe("draft\n");
           expect(
             (yield* owner.diff({
               ...scope,

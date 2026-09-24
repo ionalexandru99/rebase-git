@@ -223,10 +223,6 @@ export function ApplicationShell({
       ? undefined
       : (settingsRepository?.logicalRepositoryId ?? settingsRepository?.id),
   );
-  const invalidateRepository = useCallback(
-    (repositoryId: string) => session.repositoryRefs.invalidate([repositoryId]),
-    [session.repositoryRefs],
-  );
   const connected = sessionState._tag === "Connected";
   const panelVisible = !settingsOpen && !repositorySettingsOpen;
   const panelEnvironment = useMemo(
@@ -238,7 +234,6 @@ export function ApplicationShell({
       connected,
       writable: canWrite,
       visible: panelVisible,
-      invalidate: invalidateRepository,
     }),
     [
       historyEnvironmentId,
@@ -248,7 +243,6 @@ export function ApplicationShell({
       connected,
       canWrite,
       panelVisible,
-      invalidateRepository,
     ],
   );
   const panelRepositoryIds = useMemo(

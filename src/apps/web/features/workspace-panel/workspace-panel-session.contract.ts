@@ -19,7 +19,6 @@ export interface WorkspacePanelEnvironment {
   readonly runtime: ManagedRuntime.ManagedRuntime<never, never>;
   readonly connected: boolean;
   readonly writable: boolean;
-  readonly invalidate: (repositoryId: string) => void;
 }
 
 export interface PanelViewState {
