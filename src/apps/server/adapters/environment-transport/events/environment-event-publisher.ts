@@ -1,21 +1,20 @@
 import { Layer } from "effect";
 import {
+  type EnvironmentChangeSubscriber,
   type EnvironmentEventPublisher,
   EnvironmentEvents,
 } from "#server/domain/environment-event-publisher.contract";
 
 export function createEnvironmentEventPublisher(): EnvironmentEventPublisher {
   let sequence = 0;
-  const subscribers = new Set<
-    (sequence: number, repositoryIds?: readonly string[]) => void
-  >();
+  const subscribers = new Set<EnvironmentChangeSubscriber>();
 
   return {
     currentSequence: () => sequence,
-    publishChanged: (repositoryIds) => {
+    publishChanged: (repositoryIds, kind) => {
       sequence += 1;
       for (const subscriber of subscribers) {
-        subscriber(sequence, repositoryIds);
+        subscriber(sequence, repositoryIds, kind);
       }
       return sequence;
     },

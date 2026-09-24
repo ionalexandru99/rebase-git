@@ -1,3 +1,4 @@
+import type { RepositoryChangeKind } from "@rebase/contracts";
 import { Context, type Effect } from "effect";
 
 export interface RepositoryWatchHandle {
@@ -7,7 +8,7 @@ export interface RepositoryWatchHandle {
 export interface RepositoryWatcher {
   readonly watch: (
     gitDirectory: string,
-    onChange: () => void,
+    onChange: (kind: RepositoryChangeKind) => void,
   ) => Effect.Effect<RepositoryWatchHandle>;
 }
 

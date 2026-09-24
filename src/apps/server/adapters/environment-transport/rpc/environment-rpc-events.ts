@@ -14,11 +14,12 @@ export function acquireEnvironmentEvents(session: EnvironmentRpcSession) {
     yield* Effect.addFinalizer(() => Queue.shutdown(queue));
     yield* Effect.acquireRelease(
       Effect.sync(() =>
-        session.state.events.subscribe((sequence, repositoryIds) => {
+        session.state.events.subscribe((sequence, repositoryIds, kind) => {
           const message: typeof EnvironmentChanged.Type = {
             _tag: "EnvironmentChanged",
             sequence,
             ...(repositoryIds === undefined ? {} : { repositoryIds }),
+            ...(kind === undefined ? {} : { kind }),
           };
           Queue.offerUnsafe(
             queue,
@@ -78,7 +79,7 @@ function boundedChange(
   message: typeof EnvironmentChanged.Type,
   limit: number,
 ): typeof EnvironmentChanged.Type {
-  return Buffer.byteLength(JSON.stringify(message)) <= limit
-    ? message
-    : { _tag: "EnvironmentChanged", sequence: message.sequence };
+  if (Buffer.byteLength(JSON.stringify(message)) <= limit) return message;
+  const { repositoryIds: _dropped, ...unbounded } = message;
+  return unbounded;
 }

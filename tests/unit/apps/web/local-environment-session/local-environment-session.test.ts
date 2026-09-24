@@ -25,7 +25,7 @@ import type {
 const runtime = ManagedRuntime.make(Layer.empty);
 
 describe("local Environment session", () => {
-  it("connects each feature, forwards change events, and releases them on disconnect", async () => {
+  it("connects each feature, forwards change events, invalidates features only for ref changes, and releases them on disconnect", async () => {
     const connection = createConnection();
     const release = vi.fn();
     connection.subscribeChanges.mockReturnValue(release);
@@ -42,9 +42,13 @@ describe("local Environment session", () => {
       await expectState(session.getSnapshot, "Connected");
       expect(feature.connect).toHaveBeenCalledExactlyOnceWith(connection);
       expect(feature.released).not.toHaveBeenCalled();
-      connection.subscribeChanges.mock.calls[0]?.[0](["changed"]);
+      const publish = connection.subscribeChanges.mock.calls[0]?.[0];
+      publish?.(["changed"], "Refs");
       expect(feature.invalidate).toHaveBeenCalledExactlyOnceWith(["changed"]);
-      expect(changed).toHaveBeenCalledExactlyOnceWith(["changed"]);
+      expect(changed).toHaveBeenCalledExactlyOnceWith(["changed"], "Refs");
+      publish?.(["changed"], "Index");
+      expect(feature.invalidate).toHaveBeenCalledOnce();
+      expect(changed).toHaveBeenLastCalledWith(["changed"], "Index");
     } finally {
       session.stop();
     }

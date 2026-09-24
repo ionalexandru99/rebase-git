@@ -1,5 +1,6 @@
 import { realpathSync, watch } from "node:fs";
-import { join } from "node:path";
+import { join, relative, sep } from "node:path";
+import type { RepositoryChangeKind } from "@rebase/contracts";
 import { Effect, Layer } from "effect";
 import { watchGitDirectoryTree } from "#server/adapters/local-git/watch-git-directory-tree";
 import {
@@ -23,7 +24,7 @@ export function createLocalRepositoryWatcher(): RepositoryWatcher {
     string,
     {
       readonly handle: RepositoryWatchHandle;
-      readonly listeners: Set<() => void>;
+      readonly listeners: Set<(kind: RepositoryChangeKind) => void>;
     }
   >();
   return {
@@ -37,17 +38,17 @@ export function createLocalRepositoryWatcher(): RepositoryWatcher {
         }
         let directory = directories.get(canonical);
         if (directory === undefined) {
-          const listeners = new Set<() => void>();
+          const listeners = new Set<(kind: RepositoryChangeKind) => void>();
           directory = {
             listeners,
-            handle: watchGitDirectory(canonical, () => {
-              for (const listener of listeners) listener();
+            handle: watchGitDirectory(canonical, (kind) => {
+              for (const listener of listeners) listener(kind);
             }),
           };
           directories.set(canonical, directory);
         }
         const owned = directory;
-        const listener = () => onChange();
+        const listener = (kind: RepositoryChangeKind) => onChange(kind);
         owned.listeners.add(listener);
         return {
           close: () => {
@@ -68,12 +69,14 @@ export const localRepositoryWatcherLayer = Layer.sync(
 
 function watchGitDirectory(
   gitDirectory: string,
-  onChange: () => void,
+  onChange: (kind: RepositoryChangeKind) => void,
 ): RepositoryWatchHandle {
   const watchers = new Map<string, RepositoryWatchHandle>();
   const watchRecursively = (entry: (typeof recursiveEntries)[number]) => {
     if (watchers.has(entry)) return;
-    const watcher = tryWatch(join(gitDirectory, entry), true, () => onChange());
+    const watcher = tryWatch(join(gitDirectory, entry), true, (path) =>
+      onChange(entry === "worktrees" ? worktreeChange(path) : "Refs"),
+    );
     if (watcher !== undefined) watchers.set(entry, watcher);
   };
   const removeWatcher = (entry: string) => {
@@ -87,7 +90,7 @@ function watchGitDirectory(
       const logs = tryWatch(join(gitDirectory, "logs"), false, (fileName) => {
         if (fileName === undefined || fileName === "refs") {
           watchStashes("logs/refs");
-          onChange();
+          onChange("Refs");
         }
       });
       if (logs !== undefined) watchers.set("logs", logs);
@@ -102,13 +105,17 @@ function watchGitDirectory(
             fileName === "stash" ||
             fileName === "stash.lock"
           )
-            onChange();
+            onChange("Refs");
         },
       );
       if (refs !== undefined) watchers.set("logs/refs", refs);
     }
   };
   const root = tryWatch(gitDirectory, false, (fileName) => {
+    if (fileName === "index") {
+      onChange("Index");
+      return;
+    }
     if (fileName !== undefined && !watchedRootEntries.has(fileName)) return;
     for (const entry of recursiveEntries)
       if (fileName === undefined || fileName === entry) {
@@ -116,7 +123,7 @@ function watchGitDirectory(
         watchRecursively(entry);
       }
     if (fileName === undefined || fileName === "logs") watchStashes("logs");
-    onChange();
+    onChange("Refs");
   });
   if (root !== undefined) watchers.set(".", root);
   for (const entry of recursiveEntries) watchRecursively(entry);
@@ -130,16 +137,27 @@ function watchGitDirectory(
   };
 }
 
+function worktreeChange(path: string | undefined): RepositoryChangeKind {
+  const [, file, ...nested] = path?.split(sep) ?? [];
+  return nested.length === 0 &&
+    file !== undefined &&
+    (file === "index" || file.startsWith("index."))
+    ? "Index"
+    : "Refs";
+}
+
 function tryWatch(
   path: string,
   recursive: boolean,
-  listener: (fileName: string | undefined) => void,
+  listener: (name: string | undefined) => void,
 ) {
   try {
-    if (recursive)
-      return watchGitDirectoryTree(realpathSync.native(path), () =>
-        listener(undefined),
+    if (recursive) {
+      const root = realpathSync.native(path);
+      return watchGitDirectoryTree(root, (changed) =>
+        listener(changed === undefined ? undefined : relative(root, changed)),
       );
+    }
     const watcher = watch(
       realpathSync.native(path),
       { persistent: false, recursive },

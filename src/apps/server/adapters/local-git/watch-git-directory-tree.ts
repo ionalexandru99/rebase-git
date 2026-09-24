@@ -4,7 +4,7 @@ import type { RepositoryWatchHandle } from "#server/domain/repository-watcher.co
 
 export function watchGitDirectoryTree(
   root: string,
-  onChange: () => void,
+  onChange: (path: string | undefined) => void,
 ): RepositoryWatchHandle | undefined {
   const watchers = new Map<string, FSWatcher>();
   const remove = (directory: string) => {
@@ -52,9 +52,10 @@ export function watchGitDirectoryTree(
     try {
       watcher = watch(directory, { persistent: false }, (event, name) => {
         if (watchers.get(directory) !== watcher) return;
-        if (name === null) refresh(directory, true);
-        else refreshChild(join(directory, name), event === "rename");
-        onChange();
+        const path = name === null ? undefined : join(directory, name);
+        if (path === undefined) refresh(directory, true);
+        else refreshChild(path, event === "rename");
+        onChange(path);
       });
     } catch {
       return;

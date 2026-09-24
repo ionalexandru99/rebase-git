@@ -32,9 +32,14 @@ export function createLocalEnvironmentSession(
     if (credential === undefined) {
       credential = yield* authorizeSession(options, publish);
     }
-    yield* maintainConnection(options, credential, publish, (repositoryIds) => {
-      for (const listener of changeListeners) listener(repositoryIds);
-    });
+    yield* maintainConnection(
+      options,
+      credential,
+      publish,
+      (repositoryIds, kind) => {
+        for (const listener of changeListeners) listener(repositoryIds, kind);
+      },
+    );
   });
 
   const start = () => {
@@ -180,9 +185,10 @@ function attachFeatures(
 ) {
   return Effect.acquireRelease(
     Effect.sync(() =>
-      connection.subscribeChanges((repositoryIds) => {
-        for (const feature of features) feature.invalidate?.(repositoryIds);
-        publishChanges(repositoryIds);
+      connection.subscribeChanges((repositoryIds, kind) => {
+        if (kind !== "Index")
+          for (const feature of features) feature.invalidate?.(repositoryIds);
+        publishChanges(repositoryIds, kind);
       }),
     ),
     (unsubscribe) => Effect.sync(unsubscribe),

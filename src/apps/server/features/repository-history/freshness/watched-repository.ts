@@ -179,8 +179,8 @@ export function acquireWatchedRepository(
       strategy: "dropping",
     });
     yield* Effect.acquireRelease(
-      watcher.watch(directory, () => {
-        Queue.offerUnsafe(changes, undefined);
+      watcher.watch(directory, (kind) => {
+        if (kind === "Refs") Queue.offerUnsafe(changes, undefined);
       }),
       (handle) => Effect.sync(handle.close),
     );

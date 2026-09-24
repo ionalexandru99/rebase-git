@@ -429,6 +429,45 @@ describe("repository refs", { timeout: 30_000 }, () => {
 
     expect(events.currentSequence()).toBeGreaterThan(0);
   });
+
+  it("publishes an index change without a ref change when files are staged", async () => {
+    const fixture = await createFixture();
+    const events = createEnvironmentEventPublisher();
+    const changed = vi.fn();
+    events.subscribe(changed);
+
+    await withRefsService(
+      fixture,
+      ({ refs, repositoryId }) =>
+        Effect.gen(function* () {
+          yield* refs.read(repositoryId);
+          yield* Effect.promise(() =>
+            writeFile(join(fixture.repositoryPath, "staged.txt"), "staged\n"),
+          );
+          yield* Effect.promise(() =>
+            git(fixture.repositoryPath, "add", "staged.txt"),
+          );
+          yield* Effect.promise(() =>
+            vi.waitFor(
+              () =>
+                expect(changed).toHaveBeenCalledWith(
+                  expect.any(Number),
+                  [repositoryId],
+                  "Index",
+                ),
+              { timeout: 3_000 },
+            ),
+          );
+        }),
+      events,
+    );
+
+    expect(changed).not.toHaveBeenCalledWith(
+      expect.any(Number),
+      expect.anything(),
+      "Refs",
+    );
+  });
 });
 
 function withRefsService<Value, Failure>(

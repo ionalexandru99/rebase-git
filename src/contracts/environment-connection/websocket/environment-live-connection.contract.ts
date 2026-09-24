@@ -86,11 +86,16 @@ export const HelloRejected = Schema.TaggedStruct("HelloRejected", {
 
 export type HelloRejected = typeof HelloRejected.Type;
 
+export const RepositoryChangeKind = Schema.Literals(["Refs", "Index"]);
+
+export type RepositoryChangeKind = typeof RepositoryChangeKind.Type;
+
 export const EnvironmentChanged = Schema.TaggedStruct("EnvironmentChanged", {
   sequence: Schema.Natural,
   repositoryIds: Schema.optionalKey(
     Schema.Array(Schema.String.check(Schema.isUUID(4))),
   ),
+  kind: Schema.optionalKey(RepositoryChangeKind),
 });
 
 export const EnvironmentHelloResult = Schema.Union([
