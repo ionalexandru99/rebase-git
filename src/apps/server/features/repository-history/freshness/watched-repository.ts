@@ -104,7 +104,7 @@ export function acquireWatchedRepository(
         const directory = path();
         return coordination.run(
           directory,
-          "refs",
+          "fetch",
           runRepositoryGit(git, directory, ["fetch"], {
             timeoutMilliseconds: 120_000,
           }),

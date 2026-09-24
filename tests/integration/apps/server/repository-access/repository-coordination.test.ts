@@ -113,9 +113,10 @@ it.each([
             git: runner,
             changes: { watch: () => Effect.void },
             coordination: {
-              run: (path, scope, operation) =>
+              ...coordination,
+              run: (path, write, operation) =>
                 Deferred.succeed(checkoutRequested, undefined).pipe(
-                  Effect.andThen(coordination.run(path, scope, operation)),
+                  Effect.andThen(coordination.run(path, write, operation)),
                 ),
             },
           });
