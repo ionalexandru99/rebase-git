@@ -33,9 +33,11 @@ export function CommitEditor({ writable }: { readonly writable: boolean }) {
     >
       {blocked && (
         <p className="text-xs text-muted-foreground">
-          {amendAllowed
-            ? "Enable Amend to edit this rebase commit, or use the operation toast to continue."
-            : "Use the operation toast to finish or abort the active Git operation."}
+          {operation == null || operation.kind === "idle"
+            ? "Checking Git state…"
+            : amendAllowed
+              ? "Enable Amend to edit this rebase commit, or use the operation toast to continue."
+              : "Use the operation toast to finish or abort the active Git operation."}
         </p>
       )}
       <Input

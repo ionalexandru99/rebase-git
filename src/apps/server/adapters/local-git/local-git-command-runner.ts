@@ -166,6 +166,7 @@ function gitArguments(command: GitCommand) {
 function gitEnvironment(command: GitCommand) {
   return {
     ...process.env,
+    GIT_EDITOR: "true",
     GIT_OPTIONAL_LOCKS: "0",
     GIT_TERMINAL_PROMPT: "0",
     LC_ALL: "C",

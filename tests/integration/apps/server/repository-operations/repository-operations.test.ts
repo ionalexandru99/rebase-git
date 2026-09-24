@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { promisify } from "node:util";
 import type { OperationAction } from "@rebase/contracts";
 import { Effect } from "effect";
-import { afterEach, describe, expect, it } from "vite-plus/test";
+import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import { createLocalGitCommandRunner } from "#server/adapters/local-git/local-git-command-runner";
 import { createLocalRepositoryWatcher } from "#server/adapters/local-git/local-repository-watcher";
 import {
@@ -25,6 +25,7 @@ const exec = promisify(execFile);
 const directories: string[] = [];
 const repositoryId = "00000000-0000-4000-8000-000000000001";
 afterEach(async () => {
+  vi.unstubAllEnvs();
   await Promise.all(
     directories
       .splice(0)
@@ -85,7 +86,8 @@ describe("Git operation recovery", { timeout: 30000 }, () => {
     },
   );
 
-  it("continues a resolved merge and rejects stale recovery requests", async () => {
+  it("continues a resolved merge without the inherited editor and rejects stale requests", async () => {
+    vi.stubEnv("GIT_EDITOR", "false");
     const f = await fixture();
     await startConflict(f.git, "merge");
     const conflicted = await f.read();

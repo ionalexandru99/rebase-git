@@ -23,12 +23,7 @@ export function recoverRepositoryOperation(
     const output = yield* git
       .run({
         directory: command.worktreePath,
-        arguments: [
-          "-c",
-          "core.editor=true",
-          state.kind,
-          `--${command.action}`,
-        ],
+        arguments: [state.kind, `--${command.action}`],
         timeoutMilliseconds: 120_000,
       })
       .pipe(
