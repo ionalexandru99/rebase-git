@@ -31,7 +31,7 @@ afterEach(async () => {
 describe("fast-forward pull", () => {
   it("fast-forwards the checked-out branch and keeps unrelated local edits", async () => {
     const f = await fixture();
-    const incoming = await f.publish("main", "other.txt", "remote\n");
+    const incoming = await f.publish("main", "other.txt", "remote");
     await git(f.repositoryPath, "fetch");
     await writeFile(join(f.repositoryPath, "file.txt"), "local edit\n");
 
@@ -44,7 +44,7 @@ describe("fast-forward pull", () => {
       "local edit\n",
     );
     expect(await readFile(join(f.repositoryPath, "other.txt"), "utf8")).toBe(
-      "remote\n",
+      "remote",
     );
   });
 
