@@ -1,4 +1,4 @@
-import { realpathSync, watch } from "node:fs";
+import { realpathSync, type WatchEventType, watch } from "node:fs";
 import { join, relative, sep } from "node:path";
 import type { RepositoryChangeKind } from "@rebase/contracts";
 import { Effect, Layer } from "effect";
@@ -87,12 +87,19 @@ function watchGitDirectory(
     if (replace === "logs") removeWatcher("logs");
     if (replace !== undefined) removeWatcher("logs/refs");
     if (!watchers.has("logs")) {
-      const logs = tryWatch(join(gitDirectory, "logs"), false, (fileName) => {
-        if (fileName === undefined || fileName === "refs") {
-          watchStashes("logs/refs");
-          onChange("Refs");
-        }
-      });
+      const logs = tryWatch(
+        join(gitDirectory, "logs"),
+        false,
+        (fileName, event) => {
+          if (
+            fileName === undefined ||
+            (fileName === "refs" && event === "rename")
+          ) {
+            watchStashes("logs/refs");
+            onChange("Refs");
+          }
+        },
+      );
       if (logs !== undefined) watchers.set("logs", logs);
     }
     if (!watchers.has("logs/refs")) {
@@ -149,7 +156,7 @@ function worktreeChange(path: string | undefined): RepositoryChangeKind {
 function tryWatch(
   path: string,
   recursive: boolean,
-  listener: (name: string | undefined) => void,
+  listener: (name: string | undefined, event?: WatchEventType) => void,
 ) {
   try {
     if (recursive) {
@@ -161,7 +168,8 @@ function tryWatch(
     const watcher = watch(
       realpathSync.native(path),
       { persistent: false, recursive },
-      (_, fileName) => listener(fileName === null ? undefined : fileName),
+      (event, fileName) =>
+        listener(fileName === null ? undefined : fileName, event),
     );
     watcher.on("error", () => watcher.close());
     return watcher;

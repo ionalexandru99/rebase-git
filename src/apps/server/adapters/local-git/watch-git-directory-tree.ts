@@ -54,6 +54,7 @@ export function watchGitDirectoryTree(
         if (watchers.get(directory) !== watcher) return;
         const path = name === null ? undefined : join(directory, name);
         if (path === undefined) refresh(directory, true);
+        else if (event === "change" && watchers.has(path)) return;
         else refreshChild(path, event === "rename");
         onChange(path);
       });
