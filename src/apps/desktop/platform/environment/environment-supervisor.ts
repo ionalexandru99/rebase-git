@@ -1,25 +1,77 @@
-import { startEnvironmentServer } from "@rebase/server";
-import { Effect, Exit, Scope } from "effect";
+import { fileURLToPath } from "node:url";
+import { type UtilityProcess, utilityProcess } from "electron";
+import type {
+  EnvironmentProcessCommand,
+  EnvironmentProcessMessage,
+} from "#desktop/platform/environment/environment-process.contract";
 import type { ManagedEnvironmentServer } from "#desktop/platform/environment/environment-supervisor.contract";
 
-export async function startManagedEnvironmentServer(): Promise<ManagedEnvironmentServer> {
-  const scope = Scope.makeUnsafe();
+const environmentProcessPath = fileURLToPath(
+  new URL("./environment-process.js", import.meta.url),
+);
+const stopGraceMilliseconds = 5_000;
 
-  try {
-    const server = await Effect.runPromise(
-      Scope.provide(startEnvironmentServer(), scope),
+export function startManagedEnvironmentServer(
+  onUnexpectedExit: (error: Error) => void,
+): Promise<ManagedEnvironmentServer> {
+  const child = utilityProcess.fork(environmentProcessPath, [], {
+    serviceName: "Rebase environment",
+  });
+  const exited = new Promise<number>((resolve) => child.once("exit", resolve));
+
+  return new Promise((resolve, reject) => {
+    child.once("message", (message: EnvironmentProcessMessage) => {
+      if (message.type === "failed") {
+        child.kill();
+        reject(new Error(message.message));
+        return;
+      }
+      resolve(manageServer(child, exited, message, onUnexpectedExit));
+    });
+    void exited.then((code) =>
+      reject(
+        new Error(
+          `The Rebase environment stopped before it was ready (exit code ${code}).`,
+        ),
+      ),
     );
-    let shutdown: Promise<void> | undefined;
+  });
+}
 
-    return {
-      ...server,
-      stop: () => {
-        shutdown ??= Effect.runPromise(Scope.close(scope, Exit.void));
-        return shutdown;
-      },
-    };
-  } catch (error) {
-    await Effect.runPromise(Scope.close(scope, Exit.void));
-    throw error;
-  }
+function manageServer(
+  child: UtilityProcess,
+  exited: Promise<number>,
+  { server }: Extract<EnvironmentProcessMessage, { type: "ready" }>,
+  onUnexpectedExit: (error: Error) => void,
+): ManagedEnvironmentServer {
+  let shutdown: Promise<void> | undefined;
+  void exited.then((code) => {
+    if (shutdown === undefined) {
+      onUnexpectedExit(
+        new Error(
+          `The Rebase environment stopped unexpectedly (exit code ${code}).`,
+        ),
+      );
+    }
+  });
+
+  return {
+    ...server,
+    stop: () => {
+      if (shutdown === undefined) {
+        if (child.pid !== undefined) {
+          child.postMessage({
+            type: "stop",
+          } satisfies EnvironmentProcessCommand);
+          const forceStop = setTimeout(
+            () => child.kill(),
+            stopGraceMilliseconds,
+          );
+          void exited.then(() => clearTimeout(forceStop));
+        }
+        shutdown = exited.then(() => undefined);
+      }
+      return shutdown;
+    },
+  };
 }

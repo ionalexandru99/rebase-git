@@ -1,6 +1,8 @@
 import { access, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { startEnvironmentServer } from "@rebase/server";
+import { Effect, Exit, Scope } from "effect";
 import { afterEach, describe, expect, it } from "vite-plus/test";
 import {
   type DesktopApplication,
@@ -10,7 +12,7 @@ import type {
   DesktopApplicationHost,
   DesktopWindowOptions,
 } from "#desktop/app/desktop-application.contract";
-import { startManagedEnvironmentServer } from "#desktop/platform/environment/environment-supervisor";
+import type { ManagedEnvironmentServer } from "#desktop/platform/environment/environment-supervisor.contract";
 
 const directories = new Set<string>();
 
@@ -44,7 +46,7 @@ describe("Electron application", () => {
         renderer,
         startEnvironment: async () => {
           serverStarts += 1;
-          return startManagedEnvironmentServer();
+          return startEnvironmentInProcess();
         },
       });
       const firstWindow = host.windows[0];
@@ -114,6 +116,17 @@ class TestDesktopHost implements DesktopApplicationHost {
   quit() {
     this.quitCalls += 1;
   }
+}
+
+async function startEnvironmentInProcess(): Promise<ManagedEnvironmentServer> {
+  const scope = Scope.makeUnsafe();
+  const server = await Effect.runPromise(
+    Scope.provide(startEnvironmentServer(), scope),
+  );
+  return {
+    ...server,
+    stop: () => Effect.runPromise(Scope.close(scope, Exit.void)),
+  };
 }
 
 async function createTemporaryDirectory() {

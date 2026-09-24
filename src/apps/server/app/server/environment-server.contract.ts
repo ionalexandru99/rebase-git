@@ -6,6 +6,7 @@ import type { EnvironmentEventPublisher } from "#server/domain/environment-event
 export interface EnvironmentServerOptions {
   readonly browserAssetsRoot?: string;
   readonly host?: string;
+  readonly pairingReplacesGrantsWithSameLabel?: boolean;
   readonly port?: number;
 }
 

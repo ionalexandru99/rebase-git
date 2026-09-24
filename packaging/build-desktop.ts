@@ -42,11 +42,15 @@ await Promise.all([
       "process.env.NODE_ENV": JSON.stringify("production"),
       REBASE_PRODUCT_VERSION: JSON.stringify(productVersion),
     },
-    entryPoints: ["src/apps/desktop/main.ts"],
+    entryPoints: {
+      "environment-process":
+        "src/apps/desktop/platform/environment/environment-process.ts",
+      main: "src/apps/desktop/main.ts",
+    },
     external: ["drizzle-orm", "drizzle-orm/*", "effect", "electron", "ws"],
     format: "esm",
     minifySyntax: true,
-    outfile: `${outputDirectory}/main.js`,
+    outdir: outputDirectory,
     platform: "node",
     target: "node24",
   }),
