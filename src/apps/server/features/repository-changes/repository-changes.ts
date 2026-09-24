@@ -174,7 +174,7 @@ function readWritten(
               ...viewed,
             },
             base,
-          )
+          ).pipe(Effect.catch(() => Effect.succeed(null)))
         : null;
     const written: ChangesWritten = { changes, diff };
     return Buffer.byteLength(JSON.stringify(written)) <= writtenResponseBytes
