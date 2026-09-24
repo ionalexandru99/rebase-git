@@ -107,8 +107,7 @@ test("the renderer's initial 16-page cache stays below 64 MiB of retained JavaSc
         activeLanesPerCheckpoint: snapshot.pages.map(
           (retained) => retained.outgoingCheckpoint.lanes.length,
         ),
-        checkpointCount: snapshot.checkpointCount,
-        estimatedBytes: snapshot.estimatedBytes,
+        ...window.__historyHeapCache.diagnostics(),
         error: snapshot.error,
       };
     });

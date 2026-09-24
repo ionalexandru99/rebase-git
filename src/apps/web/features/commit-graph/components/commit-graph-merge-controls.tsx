@@ -1,30 +1,24 @@
-import type { RepositoryCommit } from "@rebase/contracts";
 import { graphRemoteOpacity } from "#web/features/commit-graph/layout/graph-colors";
 
 export function CommitGraphMergeControl({
-  commit,
+  subject,
   state,
-  onToggle,
   position,
   color,
   remote,
 }: {
-  readonly commit: RepositoryCommit;
+  readonly subject: string;
   readonly state: "collapsed" | "expanded";
-  readonly onToggle: (oid: string, expand: boolean) => void;
   readonly position: number;
   readonly color: string;
   readonly remote: boolean;
 }) {
   return (
     <button
-      aria-label={`${state === "expanded" ? "Collapse" : "Expand"} merge ${commit.subject}`}
+      aria-label={`${state === "expanded" ? "Collapse" : "Expand"} merge ${subject}`}
       aria-expanded={state === "expanded"}
       className="absolute top-px z-[3] grid size-6 place-items-center"
-      onClick={(event) => {
-        event.stopPropagation();
-        onToggle(commit.oid, state !== "expanded");
-      }}
+      data-merge-toggle
       onPointerDown={(event) => event.preventDefault()}
       style={{ left: position - 12 }}
       tabIndex={-1}

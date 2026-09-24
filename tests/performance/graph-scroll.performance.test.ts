@@ -1,6 +1,7 @@
 import { resolve } from "node:path";
-import { expect, test } from "@playwright/test";
+import { expect, type Page, test } from "@playwright/test";
 import { createServer } from "vite";
+import { assertTimingBudget } from "#tests-performance/timing-budget";
 
 for (const deviceScaleFactor of [1, 2]) {
   test.describe(`DPR ${deviceScaleFactor}`, () => {
@@ -9,51 +10,10 @@ for (const deviceScaleFactor of [1, 2]) {
       page,
     }) => {
       test.skip(Boolean(process.env.CI), "Local performance benchmark");
-      const server = await createServer({
-        configFile: resolve("src/apps/web/vite.config.ts"),
-        root: resolve("."),
-        resolve: {
-          alias: {
-            "#web": resolve("src/apps/web"),
-            "#web-ui": resolve("src/apps/web"),
-          },
-        },
-        server: { host: "127.0.0.1", port: 0, hmr: false },
-        plugins: [
-          {
-            name: "graph-scroll-benchmark",
-            configureServer(server) {
-              server.middlewares.use(
-                "/__graph_scroll__",
-                async (_request, response) => {
-                  response.setHeader("Content-Type", "text/html");
-                  response.end(
-                    await server.transformIndexHtml(
-                      "/__graph_scroll__",
-                      '<!doctype html><html lang="en"><meta charset="utf-8"><title>Graph scroll benchmark</title><body><script type="module">import "/src/apps/web/styles.css";</script></body></html>',
-                    ),
-                  );
-                },
-              );
-            },
-          },
-        ],
-      });
-      await server.listen();
-      try {
-        const baseUrl = server.resolvedUrls?.local[0];
-        if (baseUrl === undefined)
-          throw new Error("Benchmark server has no URL");
-        await page.goto(`${baseUrl}__graph_scroll__`);
+      await withGraphFixture(page, async () => {
         const results = [];
         for (const laneCount of [4, 32, 128]) {
-          await page.evaluate(async (laneCount) => {
-            const path = "/tests/performance/fixtures/graph-scroll.browser.ts";
-            const fixture: typeof import("#tests-performance/fixtures/graph-scroll.browser") =
-              await import(path);
-            fixture.mountGraph(laneCount);
-          }, laneCount);
-          await expect(page.locator("tr[aria-rowindex]").first()).toBeVisible();
+          await mountGraph(page, laneCount);
           await page.screenshot({
             path: test.info().outputPath(`graph-${laneCount}-lanes.png`),
           });
@@ -78,9 +38,78 @@ for (const deviceScaleFactor of [1, 2]) {
           contentType: "application/json",
         });
         process.stdout.write(`${JSON.stringify(results)}\n`);
-      } finally {
-        await server.close();
-      }
+      });
     });
   });
+}
+
+test("moves the keyboard selection through loaded rows", async ({ page }) => {
+  test.skip(Boolean(process.env.CI), "Local performance benchmark");
+  await withGraphFixture(page, async () => {
+    await mountGraph(page, 32);
+    const result = await page.evaluate(async () => {
+      const path = "/tests/performance/fixtures/graph-scroll.browser.ts";
+      const fixture: typeof import("#tests-performance/fixtures/graph-scroll.browser") =
+        await import(path);
+      return fixture.measureKeyboardNavigation(150);
+    });
+    await test.info().attach("keyboard-navigation-results.json", {
+      body: JSON.stringify(result, null, 2),
+      contentType: "application/json",
+    });
+    process.stdout.write(`${JSON.stringify(result)}\n`);
+    assertTimingBudget("keyboard selection p95", result.p95Milliseconds, 16.7);
+  });
+});
+
+async function withGraphFixture(page: Page, measure: () => Promise<void>) {
+  const server = await createServer({
+    configFile: resolve("src/apps/web/vite.config.ts"),
+    root: resolve("."),
+    resolve: {
+      alias: {
+        "#web": resolve("src/apps/web"),
+        "#web-ui": resolve("src/apps/web"),
+      },
+    },
+    server: { host: "127.0.0.1", port: 0, hmr: false },
+    plugins: [
+      {
+        name: "graph-scroll-benchmark",
+        configureServer(server) {
+          server.middlewares.use(
+            "/__graph_scroll__",
+            async (_request, response) => {
+              response.setHeader("Content-Type", "text/html");
+              response.end(
+                await server.transformIndexHtml(
+                  "/__graph_scroll__",
+                  '<!doctype html><html lang="en"><meta charset="utf-8"><title>Graph scroll benchmark</title><body><script type="module">import "/src/apps/web/styles.css";</script></body></html>',
+                ),
+              );
+            },
+          );
+        },
+      },
+    ],
+  });
+  await server.listen();
+  try {
+    const baseUrl = server.resolvedUrls?.local[0];
+    if (baseUrl === undefined) throw new Error("Benchmark server has no URL");
+    await page.goto(`${baseUrl}__graph_scroll__`);
+    await measure();
+  } finally {
+    await server.close();
+  }
+}
+
+async function mountGraph(page: Page, laneCount: number) {
+  await page.evaluate(async (laneCount) => {
+    const path = "/tests/performance/fixtures/graph-scroll.browser.ts";
+    const fixture: typeof import("#tests-performance/fixtures/graph-scroll.browser") =
+      await import(path);
+    fixture.mountGraph(laneCount);
+  }, laneCount);
+  await expect(page.locator("tr[aria-rowindex]").first()).toBeVisible();
 }

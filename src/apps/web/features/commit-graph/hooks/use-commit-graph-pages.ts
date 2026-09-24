@@ -6,6 +6,11 @@ import {
   emptyCommitGraphPageWindowSnapshot as emptyPages,
 } from "#web/features/commit-graph/paging/commit-graph-page-window";
 import type { CommitGraphPageWindow } from "#web/features/commit-graph/paging/commit-graph-page-window.contract";
+import {
+  commitGraphQuery,
+  historyQueriesEqual,
+  refTargetsEqual,
+} from "#web/features/commit-graph/paging/commit-graph-query";
 import type {
   RepositoryHistoryQuery,
   RepositoryHistoryReadModel,
@@ -15,6 +20,7 @@ import { createStore } from "#web/platform/store/store";
 import { useStore } from "#web/platform/store/use-store";
 
 const emptyPagesStore = createStore(emptyPages);
+const emptyRefTargets: readonly RepositoryHistoryRefTarget[] = [];
 const emptyHistoryStore = createStore<RepositoryHistorySnapshot>({
   revision: 0,
   historyRevision: 0,
@@ -44,7 +50,10 @@ export function useCommitGraphPages(
   const previousHistoryRevision = useRef(historySnapshot.historyRevision);
   const capture = useRef(captureAnchor);
   capture.current = captureAnchor;
-  const refTargets = refOwner?.reader === reader ? (refOwner?.refs ?? []) : [];
+  const refTargets =
+    refOwner !== undefined && refOwner.reader === reader
+      ? refOwner.refs
+      : emptyRefTargets;
 
   useEffect(() => {
     if (reader === undefined) return;
@@ -61,8 +70,7 @@ export function useCommitGraphPages(
       .then((refs) => {
         if (current && reader.getSnapshot().historyRevision === revision)
           setRefOwner((previous) =>
-            previous?.reader === reader &&
-            JSON.stringify(previous.refs) === JSON.stringify(refs)
+            previous?.reader === reader && refTargetsEqual(previous.refs, refs)
               ? previous
               : { reader, refs },
           );
@@ -93,32 +101,13 @@ export function useCommitGraphPages(
     historySnapshot.synchronization,
   ]);
 
-  const resolvedRoots = roots?.map(
-    (root) =>
-      refTargets.find(
-        (ref) => ref.name === root.name && ref.type === root.type,
-      ) ?? root,
+  const stableQuery = useMemo(
+    () =>
+      roots === undefined
+        ? undefined
+        : commitGraphQuery(roots, refTargets, order, expanded),
+    [roots, refTargets, order, expanded],
   );
-  const nextQuery =
-    resolvedRoots === undefined
-      ? undefined
-      : {
-          limit: 100,
-          offset: 0,
-          roots: resolvedRoots,
-          order,
-          ancestry: "first-parent" as const,
-          additionalParentEdges: [...expanded].flatMap(([childOid, parents]) =>
-            parents.map((parentOid) => ({ childOid, parentOid })),
-          ),
-        };
-  const key = JSON.stringify(nextQuery);
-  const query = useRef<{
-    key: string | undefined;
-    value: RepositoryHistoryQuery | undefined;
-  }>({ key: undefined, value: undefined });
-  if (query.current.key !== key) query.current = { key, value: nextQuery };
-  const stableQuery = query.current.value;
   const previousCompletion = useRef(completion);
   useEffect(() => {
     if (engine === undefined || stableQuery === undefined) return;
@@ -126,8 +115,7 @@ export function useCommitGraphPages(
     previousCompletion.current = completion;
     if (
       !refreshed &&
-      JSON.stringify(engine.getSnapshot().requestedQuery) ===
-        JSON.stringify(stableQuery)
+      historyQueriesEqual(engine.getSnapshot().requestedQuery, stableQuery)
     )
       return;
     const anchor = capture.current();

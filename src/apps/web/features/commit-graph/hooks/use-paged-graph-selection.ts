@@ -24,6 +24,7 @@ export function usePagedGraphSelection({
   loading,
   startOffset,
   viewEpoch,
+  onActiveCommitChange,
 }: {
   readonly reader:
     | Pick<RepositoryHistoryReadModel, "read" | "locateMany">
@@ -33,6 +34,9 @@ export function usePagedGraphSelection({
   readonly loading: boolean;
   readonly startOffset: number;
   readonly viewEpoch: number;
+  readonly onActiveCommitChange?:
+    | ((oid: string | undefined) => void)
+    | undefined;
 }) {
   const [selection, setSelection] = useState(emptyCommitGraphSelection);
   const selectionRef = useRef(selection);
@@ -40,9 +44,14 @@ export function usePagedGraphSelection({
   const needsReconciliation = useRef(false);
   const currentStartOffset = useRef(startOffset);
   currentStartOffset.current = startOffset;
+  const activeCommitChanged = useRef(onActiveCommitChange);
+  activeCommitChanged.current = onActiveCommitChange;
   const updateSelection = useCallback((next: typeof selection) => {
+    const previousOid = selectionRef.current.activeOid;
     selectionRef.current = next;
     setSelection(next);
+    if (next.activeOid !== previousOid)
+      activeCommitChanged.current?.(next.activeOid);
   }, []);
   const previousWindow = useRef({ startOffset, viewEpoch });
   useEffect(() => {
@@ -94,15 +103,14 @@ export function usePagedGraphSelection({
       } else updateSelection(reconcileGraphSelection(current, oids));
       return;
     }
-    const activeIndex =
+    const residentIndex =
       current.activeOid === undefined ? -1 : oids.indexOf(current.activeOid);
-    updateSelection({
-      ...current,
-      activeIndex:
-        activeIndex >= 0
-          ? activeIndex
-          : current.activeIndex + previous.startOffset - startOffset,
-    });
+    const activeIndex =
+      residentIndex >= 0
+        ? residentIndex
+        : current.activeIndex + previous.startOffset - startOffset;
+    if (activeIndex !== current.activeIndex)
+      updateSelection({ ...current, activeIndex });
   }, [oids, startOffset, viewEpoch, loading, reader, query, updateSelection]);
   const selected = useMemo(
     () => new Set(selection.selectedOids),

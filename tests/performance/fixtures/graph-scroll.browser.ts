@@ -203,3 +203,49 @@ export async function measureGraphScroll(laneCount: number) {
     CanvasRenderingContext2D.prototype.clearRect = original;
   }
 }
+
+export async function measureKeyboardNavigation(presses: number) {
+  const grid = document.querySelector<HTMLTableElement>('table[role="grid"]');
+  if (grid === null) throw new Error("Missing graph grid");
+  grid.focus();
+  const durations: number[] = [];
+  let sameTaskPresses = 0;
+  for (let press = 0; press < presses; press += 1) {
+    const selected = () =>
+      grid.querySelector(
+        `tr[aria-rowindex="${press + 3}"][aria-selected="true"]`,
+      ) !== null;
+    const started = performance.now();
+    grid.dispatchEvent(
+      new KeyboardEvent("keydown", {
+        key: "ArrowDown",
+        bubbles: true,
+        cancelable: true,
+      }),
+    );
+    await new Promise<void>((resolve) => queueMicrotask(resolve));
+    if (selected()) sameTaskPresses += 1;
+    while (!selected()) {
+      if (performance.now() - started > 1_000)
+        throw new Error(`Row ${press} was not selected`);
+      await nextTask();
+    }
+    durations.push(performance.now() - started);
+  }
+  const sorted = durations.toSorted((left, right) => left - right);
+  return {
+    presses,
+    sameTaskPresses,
+    medianMilliseconds: sorted[Math.floor(sorted.length / 2)] ?? 0,
+    p95Milliseconds: sorted[Math.ceil(sorted.length * 0.95) - 1] ?? 0,
+    maximumMilliseconds: sorted.at(-1) ?? 0,
+  };
+}
+
+function nextTask() {
+  return new Promise<void>((resolve) => {
+    const channel = new MessageChannel();
+    channel.port1.onmessage = () => resolve();
+    channel.port2.postMessage(undefined);
+  });
+}

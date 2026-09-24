@@ -1,9 +1,10 @@
 import type {
   DesktopUpdates,
+  EnvironmentAccessCapability,
   RepositoryFilesystemHost,
 } from "@rebase/contracts";
 import { IconDeviceLaptop } from "@tabler/icons-react";
-import { type JSX, useCallback, useEffect, useRef, useState } from "react";
+import { type JSX, useCallback, useMemo, useRef, useState } from "react";
 import type { PanelImperativeHandle } from "react-resizable-panels";
 import type { LocalEnvironmentSession } from "#web/app/environment/local-environment-session.contract";
 import { environmentSessionPresentation } from "#web/app/shell/environment-session-presentation";
@@ -35,6 +36,7 @@ import {
 import { WorkspacePanel } from "#web-ui/features/workspace-panel/index";
 
 const localEnvironmentId = "local-environment";
+const noAccessCapabilities: readonly EnvironmentAccessCapability[] = [];
 const projectSidebarSize = {
   collapsed: "3rem",
   default: "16rem",
@@ -74,16 +76,6 @@ export function ApplicationShell({
     },
     [],
   );
-  useEffect(() => {
-    if (
-      repositorySettingsId !== undefined &&
-      repositoryCatalog.status === "ready" &&
-      !repositoryCatalog.repositories.some(
-        ({ id }) => id === repositorySettingsId,
-      )
-    )
-      closeRepositorySettings();
-  }, [repositorySettingsId, repositoryCatalog, closeRepositorySettings]);
   const [openProjectRequest, setOpenProjectRequest] = useState(0);
   const [navigation, setNavigation] = useState<ProjectNavigationState>(() => ({
     environments: [
@@ -225,6 +217,37 @@ export function ApplicationShell({
     (repositoryId: string) => session.repositoryRefs.invalidate([repositoryId]),
     [session.repositoryRefs],
   );
+  const connected = sessionState._tag === "Connected";
+  const panelVisible = !settingsOpen && !repositorySettingsOpen;
+  const panelEnvironment = useMemo(
+    () => ({
+      environmentId: historyEnvironmentId,
+      requests: session.requests,
+      changes: session.changes,
+      runtime: session.runtime,
+      connected,
+      writable: canWrite,
+      visible: panelVisible,
+      invalidate: invalidateRepository,
+    }),
+    [
+      historyEnvironmentId,
+      session.requests,
+      session.changes,
+      session.runtime,
+      connected,
+      canWrite,
+      panelVisible,
+      invalidateRepository,
+    ],
+  );
+  const panelRepositoryIds = useMemo(
+    () =>
+      navigation.environments.flatMap((environment) =>
+        environment.repositories.map((repository) => repository.id),
+      ),
+    [navigation.environments],
+  );
 
   const content = (
     <div className="h-svh min-h-80 w-full overflow-hidden bg-background">
@@ -300,7 +323,7 @@ export function ApplicationShell({
                     accessCapabilities={
                       sessionState._tag === "Connected"
                         ? sessionState.accessCapabilities
-                        : []
+                        : noAccessCapabilities
                     }
                     connected={sessionState._tag === "Connected"}
                     activeWorktreePath={activeWorktreePath}
@@ -373,19 +396,8 @@ export function ApplicationShell({
   );
   return (
     <WorkspacePanel.Sessions
-      environment={{
-        environmentId: historyEnvironmentId,
-        requests: session.requests,
-        changes: session.changes,
-        runtime: session.runtime,
-        connected: sessionState._tag === "Connected",
-        writable: canWrite,
-        visible: !settingsOpen && !repositorySettingsOpen,
-        invalidate: invalidateRepository,
-      }}
-      repositoryIds={navigation.environments.flatMap((environment) =>
-        environment.repositories.map((repository) => repository.id),
-      )}
+      environment={panelEnvironment}
+      repositoryIds={panelRepositoryIds}
     >
       {content}
     </WorkspacePanel.Sessions>
