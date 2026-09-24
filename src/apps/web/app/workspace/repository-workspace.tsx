@@ -2,6 +2,7 @@ import type {
   EnvironmentAccessCapability,
   RepositoryRefTarget,
 } from "@rebase/contracts";
+import type { EnvironmentRequestClient } from "@rebase/environment-client";
 import type { JSX } from "react";
 import { useCallback, useMemo, useState } from "react";
 import { useHistoryRefRefresh } from "#web/app/workspace/use-history-ref-refresh";
@@ -9,6 +10,7 @@ import { BranchesSidebar } from "#web/features/branches-sidebar/index";
 import type { GraphCommandEnvironment } from "#web/features/commit-commands/index";
 import type {
   CommitGraphHistory,
+  CommitGraphPull,
   HistoryScope,
 } from "#web/features/commit-graph/index";
 import {
@@ -19,10 +21,12 @@ import {
   resolveHistoryScope,
   toggleHistoryRef,
 } from "#web/features/commit-graph/index";
+import { ErrorNotification } from "#web/features/notifications/index";
 import {
   OperationRecovery,
   useOperationCommandState,
 } from "#web/features/operation-recovery/index";
+import { useRepositoryPull } from "#web/features/repository-pull/index";
 import type { RepositoryRefsSnapshot } from "#web/features/repository-refs/repository-refs-controller.contract";
 import { useCachedRepositoryRefs } from "#web/features/repository-refs/use-cached-repository-refs";
 import { CommitInspectionBridge } from "#web-ui/app/workspace/commit-inspection-bridge";
@@ -49,6 +53,7 @@ export function RepositoryWorkspace({
   refs,
   repositoryId,
   repositoryName,
+  requests,
   retryRefs,
   selectRef,
 }: {
@@ -61,6 +66,7 @@ export function RepositoryWorkspace({
   readonly refs: RepositoryRefsSnapshot;
   readonly repositoryId: string | undefined;
   readonly repositoryName: string;
+  readonly requests?: EnvironmentRequestClient | undefined;
   readonly retryRefs: () => void;
   readonly selectRef: (target: RepositoryRefTarget) => void;
 }): JSX.Element {
@@ -87,6 +93,7 @@ export function RepositoryWorkspace({
       refsRestored={cachedRefs.restored}
       repositoryId={repositoryId}
       repositoryName={repositoryName}
+      requests={requests}
       retryRefs={retryRefs}
       selectRef={selectRef}
     />
@@ -104,6 +111,7 @@ function RepositoryWorkspaceContent({
   refsRestored,
   repositoryId,
   repositoryName,
+  requests,
   retryRefs,
   selectRef,
 }: {
@@ -117,6 +125,7 @@ function RepositoryWorkspaceContent({
   readonly refsRestored: boolean;
   readonly repositoryId: string | undefined;
   readonly repositoryName: string;
+  readonly requests: EnvironmentRequestClient | undefined;
   readonly retryRefs: () => void;
   readonly selectRef: (target: RepositoryRefTarget) => void;
 }): JSX.Element {
@@ -138,6 +147,22 @@ function RepositoryWorkspaceContent({
   const activeBranch = refs.refs?.worktrees.find(
     ({ path }) => path === activeWorktreePath,
   )?.head.branch;
+  const pull = useRepositoryPull(requests, repositoryId, history?.reader);
+  const canPull = connected && accessCapabilities.includes("repository.write");
+  const incoming =
+    refs.refs?.branches.find(({ name }) => name === activeBranch)?.upstream
+      ?.behind ?? 0;
+  const graphPull = useMemo<CommitGraphPull | undefined>(
+    () =>
+      pull.pull === undefined
+        ? undefined
+        : {
+            execute: pull.pull,
+            pulling: pull.pulling !== undefined,
+            incoming,
+          },
+    [pull.pull, pull.pulling, incoming],
+  );
   const filterStore = useMemo(() => createBrowserHistoryFilterStore(), []);
   const commandEnvironment = useMemo<GraphCommandEnvironment | undefined>(
     () =>
@@ -229,6 +254,9 @@ function RepositoryWorkspaceContent({
         repositoryName={repositoryName}
         writable={accessCapabilities.includes("repository.write")}
       />
+      {pull.error === undefined ? null : (
+        <ErrorNotification key={pull.error.id} message={pull.error.message} />
+      )}
       <CommitInspectionBridge connected={connected}>
         {(inspection) => (
           <WorkspacePanel.Group>
@@ -242,9 +270,11 @@ function RepositoryWorkspaceContent({
               <BranchesSidebar
                 activeWorktreePath={activeWorktreePath}
                 focusRequest={localBranchesFocusRequest}
+                onPullBranch={canPull ? pull.pull : undefined}
                 onRetry={retryRefs}
                 onSelectRef={selectRef}
                 onToggleHistoryRef={toggleRef}
+                pulling={pull.pulling !== undefined}
                 selectedHistoryRefKeys={
                   resolvedScope?.selectedRefKeys ?? new Set<string>()
                 }
@@ -269,6 +299,7 @@ function RepositoryWorkspaceContent({
                     githubRepository={refs.refs?.githubRepository}
                     remoteProviders={refs.refs?.remoteProviders}
                     commandEnvironment={commandEnvironment}
+                    pull={graphPull}
                     onRemoveHistoryRef={toggleRef}
                     onRevealHistoryRef={toggleRef}
                     onAddHistoryRef={() =>

@@ -43,17 +43,21 @@ const overscanRows = 12;
 export function BranchesSidebar({
   activeWorktreePath,
   focusRequest,
+  onPullBranch,
   onRetry,
   onSelectRef,
   onToggleHistoryRef = () => undefined,
+  pulling = false,
   selectedHistoryRefKeys = new Set<string>(),
   snapshot,
 }: {
   readonly activeWorktreePath: string;
   readonly focusRequest: number;
+  readonly onPullBranch?: ((branch: string) => void) | undefined;
   readonly onRetry: () => void;
   readonly onSelectRef: (target: RepositoryRefTarget) => void;
   readonly onToggleHistoryRef?: (target: RepositoryRefTarget) => void;
+  readonly pulling?: boolean;
   readonly selectedHistoryRefKeys?: ReadonlySet<string>;
   readonly snapshot: RepositoryRefsSnapshot;
 }): JSX.Element {
@@ -164,6 +168,14 @@ export function BranchesSidebar({
 
   const handleTreeKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     const activeRow = rows.find((row) => row.id === activeRowId);
+    if (
+      activeRow?.kind === "ref" &&
+      (event.key === "ContextMenu" || (event.key === "F10" && event.shiftKey))
+    ) {
+      event.preventDefault();
+      openRowMenu(activeRow.id);
+      return;
+    }
     const handled = treeKeyAction(event.key, {
       activeRow,
       collapse: (row) => setRowExpanded(row, false),
@@ -266,8 +278,14 @@ export function BranchesSidebar({
                 active={row.id === activeRowId}
                 key={row.id}
                 onActivate={() => setActiveRowId(row.id)}
+                onPull={
+                  onPullBranch === undefined
+                    ? undefined
+                    : () => onPullBranch(row.name)
+                }
                 onSelect={() => onSelectRef(row.target)}
                 onToggleHistory={() => onToggleHistoryRef(row.target)}
+                pulling={pulling}
                 row={row}
                 selectedInHistory={selectedHistoryRefKeys.has(
                   historyRefKey(row.target),
@@ -294,5 +312,18 @@ export function BranchesSidebar({
         </p>
       )}
     </nav>
+  );
+}
+
+function openRowMenu(rowId: string) {
+  const row = document.getElementById(rowElementId(rowId));
+  if (row === null) return;
+  const bounds = row.getBoundingClientRect();
+  row.dispatchEvent(
+    new MouseEvent("contextmenu", {
+      bubbles: true,
+      clientX: bounds.left + 32,
+      clientY: bounds.top + bounds.height / 2,
+    }),
   );
 }

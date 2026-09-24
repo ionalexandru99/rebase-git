@@ -5,6 +5,7 @@ import type {
   GraphCommandHandlers,
 } from "#web/features/commit-commands/index";
 import { useGraphCommands } from "#web/features/commit-commands/index";
+import type { CommitGraphPull } from "#web/features/commit-graph/commit-graph.contract";
 import type {
   RepositoryHistoryReadModel,
   RepositoryHistorySnapshot,
@@ -15,6 +16,7 @@ export function useCommitGraphCommands({
   reader,
   historySnapshot,
   fetch,
+  pull,
   selectedOids,
   onOpenDetails,
 }: {
@@ -28,16 +30,19 @@ export function useCommitGraphCommands({
     "freshness" | "freshnessError"
   >;
   readonly fetch: { readonly fetching: boolean; readonly execute: () => void };
+  readonly pull: CommitGraphPull | undefined;
   readonly selectedOids: readonly string[];
 }) {
+  const pullBranch = pull?.execute;
   const handlers = useMemo(
     (): GraphCommandHandlers => ({
       ...(onOpenDetails === undefined ? {} : { openDetails: onOpenDetails }),
       readCommit: async (oid) => (await reader?.getCommitSummaries([oid]))?.[0],
       writeClipboard: writeClipboardText,
       ...(reader === undefined ? {} : { fetch: fetch.execute }),
+      ...(pullBranch === undefined ? {} : { pull: pullBranch }),
     }),
-    [onOpenDetails, reader, fetch.execute],
+    [onOpenDetails, reader, fetch.execute, pullBranch],
   );
   const commands = useGraphCommands({
     environment:
@@ -50,21 +55,36 @@ export function useCommitGraphCommands({
               historySnapshot.freshnessError === undefined,
             operationState: fetch.fetching
               ? "fetching"
-              : commandEnvironment.operationState,
+              : pull?.pulling
+                ? "busy"
+                : commandEnvironment.operationState,
           },
     selectedOids,
     handlers,
   });
-  const fetchContext = commands.context();
+  const toolbarContext = commands.context();
   const fetchCommand =
-    fetchContext === undefined
+    toolbarContext === undefined
       ? undefined
-      : commands.registry.describe("graph.fetch", fetchContext);
+      : commands.registry.describe("graph.fetch", toolbarContext);
   const fetchAction = {
     execute: () => {
       void commands.execute("graph.fetch", commands.context());
     },
     disabled: fetchCommand?.enabled !== true,
   };
-  return { commands, fetchAction };
+  const pullCommand =
+    toolbarContext === undefined
+      ? undefined
+      : commands.registry.describe("graph.pull", toolbarContext);
+  const pullAction =
+    pullCommand === undefined
+      ? undefined
+      : {
+          execute: () => {
+            void commands.execute("graph.pull", commands.context());
+          },
+          disabled: !pullCommand.enabled,
+        };
+  return { commands, fetchAction, pullAction };
 }

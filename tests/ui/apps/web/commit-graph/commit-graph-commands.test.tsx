@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vite-plus/test";
 import { userEvent } from "vite-plus/test/browser";
 import {
+  CommitGraphFixture,
   history,
   historyOid,
   historyReader,
@@ -64,6 +65,57 @@ describe("commit graph commands", () => {
     await fetch.click();
     await vi.waitFor(() => expect(reader.fetch).toHaveBeenCalledOnce());
     await expect.element(fetch).toBeEnabled();
+  });
+
+  it("pulls the active branch from the toolbar", async () => {
+    const reader = historyReader({ commits: history(2), status: "ready" });
+    reader.snapshot = {
+      ...reader.snapshot,
+      freshness: {
+        revision: 0,
+        fetching: false,
+        stale: false,
+        defaultIntervalSeconds: 300,
+        setting: { _tag: "Inherit" },
+      },
+    };
+    const execute = vi.fn<(branch: string) => void>();
+    const commandEnvironment = {
+      environmentId: "env",
+      logicalRepositoryId: "logical",
+      repositoryId: "repo",
+      activeBranch: "main",
+      connected: true,
+      capabilities: new Set(["repository.write"] as const),
+      freshnessReady: true,
+      operationState: "idle" as const,
+    };
+    const screen = await renderGraph(reader, undefined, {
+      commandEnvironment,
+      pull: { execute, pulling: false, incoming: 3 },
+    });
+    await screen
+      .getByRole("button", { name: "Pull 3 incoming commits" })
+      .click();
+    expect(execute).toHaveBeenCalledWith("main");
+
+    await screen.rerender(
+      <div style={{ height: 520, width: 900 }}>
+        <CommitGraphFixture
+          reader={reader}
+          repositoryName="rebase-test"
+          roots={[{ name: "main", oid: "0".repeat(40), type: "branch" }]}
+          commandEnvironment={commandEnvironment}
+          pull={{ execute, pulling: true, incoming: 3 }}
+        />
+      </div>,
+    );
+    await expect
+      .element(screen.getByRole("button", { name: "Pulling" }))
+      .toBeDisabled();
+    await expect
+      .element(screen.getByRole("button", { name: "Fetch", exact: true }))
+      .toBeDisabled();
   });
 
   it("selects the invoking commit and opens its menu from the keyboard", async () => {

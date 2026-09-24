@@ -151,6 +151,49 @@ describe("graph commands", () => {
       expect(execute).toHaveBeenCalledWith(context);
     },
   );
+
+  const { activeBranch: _activeBranch, ...detached } = context;
+  it.each<[GraphCommandContext, string]>([
+    [{ ...context, connected: false }, "Reconnect to pull"],
+    [
+      { ...context, capabilities: new Set() },
+      "Repository write access is required",
+    ],
+    [detached, "Check out a branch to pull"],
+    [
+      { ...context, operationState: "busy" },
+      "Wait for the current operation to finish",
+    ],
+    [{ ...context, freshnessReady: false }, "Waiting for repository status"],
+  ])("disables pull when %#", async (unavailable, reason) => {
+    const pull = vi.fn();
+    const registry = createCommands({
+      readCommit: async () => undefined,
+      writeClipboard: async () => {},
+      pull,
+    });
+    expect(await registry.execute("graph.pull", unavailable)).toEqual({
+      _tag: "Unavailable",
+      reason,
+    });
+    expect(pull).not.toHaveBeenCalled();
+  });
+
+  it("pulls the active branch while a fetch is running", async () => {
+    const pull = vi.fn();
+    const registry = createCommands({
+      readCommit: async () => undefined,
+      writeClipboard: async () => {},
+      pull,
+    });
+    expect(
+      await registry.execute("graph.pull", {
+        ...context,
+        operationState: "fetching",
+      }),
+    ).toEqual({ _tag: "Executed" });
+    expect(pull).toHaveBeenCalledWith("main");
+  });
 });
 
 function createCommands(handlers: GraphCommandHandlers) {

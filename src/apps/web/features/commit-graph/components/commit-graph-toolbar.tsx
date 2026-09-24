@@ -1,8 +1,8 @@
-import { IconArrowDown } from "@tabler/icons-react";
+import { IconArrowBarToDown, IconArrowDown } from "@tabler/icons-react";
 import type { ReactNode } from "react";
 import { Button } from "#web-ui/components/ui/button";
 
-interface RepositoryFetchAction {
+interface ToolbarAction {
   readonly execute: () => void;
   readonly disabled: boolean;
 }
@@ -25,7 +25,7 @@ function Fetch({
   fetchAction,
   fetching,
 }: {
-  readonly fetchAction: RepositoryFetchAction;
+  readonly fetchAction: ToolbarAction;
   readonly fetching: boolean;
 }) {
   return (
@@ -41,4 +41,41 @@ function Fetch({
     </Button>
   );
 }
-export const CommitGraphToolbar = { Frame, Title, Fetch };
+function Pull({
+  pullAction,
+  pulling,
+  incoming,
+}: {
+  readonly pullAction: ToolbarAction;
+  readonly pulling: boolean;
+  readonly incoming: number;
+}) {
+  return (
+    <Button
+      aria-label={
+        pulling
+          ? "Pulling"
+          : incoming > 0
+            ? `Pull ${incoming} incoming ${incoming === 1 ? "commit" : "commits"}`
+            : "Pull"
+      }
+      className="h-7 gap-1.5 text-[.85rem] sm:text-[.85rem]"
+      disabled={pullAction.disabled || pulling}
+      onClick={pullAction.execute}
+      size="sm"
+      variant="ghost"
+    >
+      <IconArrowBarToDown aria-hidden="true" className="size-3.5" />
+      {pulling ? "Pulling" : "Pull"}
+      {pulling || incoming === 0 ? null : (
+        <span
+          aria-hidden="true"
+          className="rounded-full bg-primary/15 px-1.5 text-[.75rem] leading-[1.15rem] text-primary tabular-nums"
+        >
+          {incoming}
+        </span>
+      )}
+    </Button>
+  );
+}
+export const CommitGraphToolbar = { Frame, Title, Fetch, Pull };
