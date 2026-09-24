@@ -41,7 +41,9 @@ export function createCommitDraft(
       pending = { key, draft };
       work.interrupt(waiting);
       waiting = work.fork(
-        Effect.sleep(saveDelayMilliseconds).pipe(Effect.andThen(savePending)),
+        Effect.sleep(saveDelayMilliseconds).pipe(
+          Effect.andThen(Effect.uninterruptible(savePending)),
+        ),
       );
     },
     clear: (keys: readonly string[]) =>
