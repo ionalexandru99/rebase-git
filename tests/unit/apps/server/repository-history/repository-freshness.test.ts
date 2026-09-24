@@ -487,7 +487,9 @@ function withService(
             Layer.provideMerge(
               Layer.mergeAll(
                 Layer.succeed(RepositoryCoordination, {
-                  run: (_directory, _scope, operation) => operation,
+                  run: (_directory, _write, operation) => operation,
+                  operation: () =>
+                    Effect.die("Freshness never reads operations."),
                 }),
                 Layer.succeed(RepositoryCatalogAccess, {
                   find: (id) =>

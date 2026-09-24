@@ -1,5 +1,5 @@
 import { realpath } from "node:fs/promises";
-import { Effect, Layer, Semaphore } from "effect";
+import { Effect, Layer, Option, Semaphore } from "effect";
 import {
   type GitCommandRunner,
   GitCommands,
@@ -8,10 +8,32 @@ import {
   RepositoryCoordination,
   RepositoryCoordinationError,
   type RepositoryCoordinationService,
+  type RepositoryWrite,
 } from "#server/domain/repository-coordination.contract";
 import { readGitCommonDirectory } from "#server/repository/access/git/read-git-common-directory";
 import { readGitEntryIdentity } from "#server/repository/access/git/read-git-entry-identity";
 import { runRepositoryGit } from "#server/repository/access/run-repository-git";
+import {
+  type GitDirectories,
+  readRepositoryOperation,
+} from "#server/repository/operation/index";
+
+const worktreeWrites: readonly RepositoryWrite[] = [
+  "checkout",
+  "stage",
+  "unstage",
+  "discard",
+  "commit",
+  "amend",
+  "recover",
+];
+const refWrites: readonly RepositoryWrite[] = [
+  "checkout",
+  "fetch",
+  "commit",
+  "amend",
+  "recover",
+];
 
 export function createRepositoryCoordination(
   git: GitCommandRunner,
@@ -20,7 +42,11 @@ export function createRepositoryCoordination(
     string,
     { semaphore: Semaphore.Semaphore; owners: number }
   >();
-  const withLock = <A, E, R>(key: string, operation: Effect.Effect<A, E, R>) =>
+  const withLock = <A, E, R>(
+    key: string,
+    operation: Effect.Effect<A, E, R>,
+    waitForPermit = true,
+  ) =>
     Effect.acquireUseRelease(
       Effect.sync(() => {
         let entry = locks.get(key);
@@ -31,7 +57,25 @@ export function createRepositoryCoordination(
         entry.owners++;
         return entry;
       }),
-      (entry) => entry.semaphore.withPermit(operation),
+      (entry) =>
+        waitForPermit
+          ? entry.semaphore.withPermit(operation)
+          : entry.semaphore
+              .withPermitsIfAvailable(1)(operation)
+              .pipe(
+                Effect.flatMap(
+                  Option.match({
+                    onSome: Effect.succeed,
+                    onNone: () =>
+                      Effect.fail(
+                        new RepositoryCoordinationError({
+                          reason: "Busy",
+                          detail: "Another repository write is in progress.",
+                        }),
+                      ),
+                  }),
+                ),
+              ),
       (entry) =>
         Effect.sync(() => {
           if (--entry.owners === 0) {
@@ -54,26 +98,80 @@ export function createRepositoryCoordination(
         directories.set(directory, { identity, paths });
       return paths;
     });
+  const forgetOnError = <A, E, R>(
+    directory: string,
+    effect: Effect.Effect<A, E, R>,
+  ) =>
+    effect.pipe(
+      Effect.onError(() => Effect.sync(() => directories.delete(directory))),
+    );
   return {
-    run: (directory, scope, operation) =>
-      Effect.gen(function* () {
-        const paths = yield* gitDirectories(directory);
-        const worktree =
-          scope === "refs"
-            ? operation
-            : withLock(`worktree:${paths.gitDirectory}`, operation);
-        return yield* scope !== "worktree"
-          ? withLock(`refs:${paths.commonDirectory}`, worktree)
-          : worktree;
-      }).pipe(
-        Effect.onError(() => Effect.sync(() => directories.delete(directory))),
+    run: (directory, write, operation) =>
+      forgetOnError(
+        directory,
+        Effect.gen(function* () {
+          const paths = yield* gitDirectories(directory);
+          const guarded = requireCompatibleWrite(
+            git,
+            directory,
+            paths,
+            write,
+          ).pipe(Effect.andThen(operation));
+          const worktree = worktreeWrites.includes(write)
+            ? withLock(`worktree:${paths.gitDirectory}`, guarded)
+            : guarded;
+          return yield* refWrites.includes(write)
+            ? withLock(
+                `refs:${paths.commonDirectory}`,
+                worktree,
+                write !== "fetch",
+              )
+            : worktree;
+        }),
+      ),
+    operation: (directory) =>
+      forgetOnError(
+        directory,
+        gitDirectories(directory).pipe(
+          Effect.flatMap((paths) =>
+            readRepositoryOperation(git, directory, paths),
+          ),
+        ),
       ),
   };
 }
 
-interface GitDirectories {
-  readonly gitDirectory: string;
-  readonly commonDirectory: string;
+function requireCompatibleWrite(
+  git: GitCommandRunner,
+  directory: string,
+  paths: GitDirectories,
+  write: RepositoryWrite,
+) {
+  if (write === "fetch" || write === "recover") return Effect.void;
+  return readRepositoryOperation(git, directory, paths).pipe(
+    Effect.flatMap((state) => {
+      if (state.lock !== null)
+        return Effect.fail(
+          new RepositoryCoordinationError({
+            reason: "Busy",
+            detail: `Git lock exists: ${state.lock}.`,
+          }),
+        );
+      if (
+        state.kind === "idle" ||
+        (state.kind !== "unknown" &&
+          (write === "stage" || write === "unstage")) ||
+        (write === "amend" && state.kind === "rebase" && state.phase === "edit")
+      )
+        return Effect.void;
+      return Effect.fail(
+        new RepositoryCoordinationError({
+          reason: "Incompatible",
+          detail: `Cannot ${write} while ${state.kind === "unknown" ? "an unrecognized Git operation is" : `${state.kind} is`} in progress.`,
+        }),
+      );
+    }),
+  );
 }
 
 function resolveGitDirectories(
@@ -93,13 +191,17 @@ function resolveGitDirectories(
       }),
       catch: () =>
         new RepositoryCoordinationError({
+          reason: "Unavailable",
           detail: "Could not resolve the worktree's Git directories.",
         }),
     });
   }).pipe(
     Effect.mapError((error) =>
       error._tag === "RepositoryGitError"
-        ? new RepositoryCoordinationError({ detail: error.detail })
+        ? new RepositoryCoordinationError({
+            reason: "Unavailable",
+            detail: error.detail,
+          })
         : error,
     ),
   );

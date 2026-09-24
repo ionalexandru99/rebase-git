@@ -16,6 +16,12 @@ const watchedRootEntries = new Set([
   "refs",
   "worktrees",
   "logs",
+  "MERGE_HEAD",
+  "CHERRY_PICK_HEAD",
+  "REVERT_HEAD",
+  "rebase-merge",
+  "rebase-apply",
+  "sequencer",
 ]);
 const recursiveEntries = ["refs", "worktrees"] as const;
 

@@ -1,3 +1,5 @@
+import { useWorktreeOperation } from "#web/features/operation-recovery/index";
+import { usePanelFeature } from "#web/features/workspace-panel/api";
 import { Button } from "#web-ui/components/ui/button";
 import { Input } from "#web-ui/components/ui/input";
 import {
@@ -13,6 +15,15 @@ export function CommitEditor({ writable }: { readonly writable: boolean }) {
   const loading = useWorkingChanges("loading");
   const amend = useWorkingChanges("amend");
   const changes = useWorkingChanges("changes");
+  const recovery = useWorktreeOperation(usePanelFeature()?.scope);
+  const operation = recovery?.operation;
+  const amendAllowed =
+    operation?.kind === "rebase" && operation.phase === "edit";
+  const blocked =
+    recovery !== null &&
+    (recovery.checking ||
+      recovery.busy ||
+      (operation?.kind !== "idle" && !(amendAllowed && amend)));
   const disabled = !writable || busy || loading;
   const count = changes?.staged.length ?? 0;
   return (
@@ -20,6 +31,13 @@ export function CommitEditor({ writable }: { readonly writable: boolean }) {
       className="flex h-full min-h-0 flex-col gap-2 overflow-y-auto border-border border-t bg-background p-3"
       aria-label="Commit editor"
     >
+      {blocked && (
+        <p className="text-xs text-muted-foreground">
+          {amendAllowed
+            ? "Enable Amend to edit this rebase commit, or use the operation toast to continue."
+            : "Use the operation toast to finish or abort the active Git operation."}
+        </p>
+      )}
       <Input
         aria-label="Commit subject"
         placeholder="Commit message"
@@ -47,7 +65,9 @@ export function CommitEditor({ writable }: { readonly writable: boolean }) {
             type="checkbox"
             className="accent-primary"
             checked={amend}
-            disabled={disabled || changes?.head == null}
+            disabled={
+              disabled || changes?.head == null || (blocked && !amendAllowed)
+            }
             onChange={(event) => controller.amend(event.target.checked)}
           />
           Amend
@@ -55,7 +75,10 @@ export function CommitEditor({ writable }: { readonly writable: boolean }) {
         <Button
           size="sm"
           disabled={
-            disabled || !draft.subject.trim() || (!amend && count === 0)
+            disabled ||
+            blocked ||
+            !draft.subject.trim() ||
+            (!amend && count === 0)
           }
           onClick={controller.commit}
         >

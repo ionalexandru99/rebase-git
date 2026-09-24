@@ -27,7 +27,7 @@ function coordinationRun() {
   const coordination = createRepositoryCoordination(git);
   return (operation: Effect.Effect<void, string> = Effect.void) =>
     Effect.runPromise(
-      Effect.exit(coordination.run(worktree, "worktree-and-refs", operation)),
+      Effect.exit(coordination.run(worktree, "recover", operation)),
     );
 }
 

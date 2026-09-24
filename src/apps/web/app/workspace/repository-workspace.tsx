@@ -19,6 +19,10 @@ import {
   resolveHistoryScope,
   toggleHistoryRef,
 } from "#web/features/commit-graph/index";
+import {
+  OperationRecovery,
+  useOperationCommandState,
+} from "#web/features/operation-recovery/index";
 import type { RepositoryRefsSnapshot } from "#web/features/repository-refs/repository-refs-controller.contract";
 import { useCachedRepositoryRefs } from "#web/features/repository-refs/use-cached-repository-refs";
 import { CommitInspectionBridge } from "#web-ui/app/workspace/commit-inspection-bridge";
@@ -117,6 +121,7 @@ function RepositoryWorkspaceContent({
   readonly selectRef: (target: RepositoryRefTarget) => void;
 }): JSX.Element {
   const [localBranchesFocusRequest, setLocalBranchesFocusRequest] = useState(0);
+  const operationState = useOperationCommandState();
   const panelScope = useMemo(
     () =>
       environmentId && repositoryId && logicalRepositoryId
@@ -149,7 +154,7 @@ function RepositoryWorkspaceContent({
             connected,
             capabilities: new Set(accessCapabilities),
             freshnessReady: false,
-            operationState: "idle",
+            operationState,
           },
     [
       environmentId,
@@ -159,6 +164,7 @@ function RepositoryWorkspaceContent({
       activeBranch,
       connected,
       accessCapabilities,
+      operationState,
     ],
   );
   const [historyScope, setHistoryScope] = useState<HistoryScope>(() =>
@@ -219,6 +225,10 @@ function RepositoryWorkspaceContent({
         activeWorktreePath,
       ])}
     >
+      <OperationRecovery
+        repositoryName={repositoryName}
+        writable={accessCapabilities.includes("repository.write")}
+      />
       <CommitInspectionBridge connected={connected}>
         {(inspection) => (
           <WorkspacePanel.Group>

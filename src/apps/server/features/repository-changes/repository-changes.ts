@@ -14,7 +14,7 @@ import type { RepositoryAccessService } from "#server/domain/repository-access.c
 import type {
   RepositoryCoordinationError,
   RepositoryCoordinationService,
-  RepositoryResourceScope,
+  RepositoryWrite,
 } from "#server/domain/repository-coordination.contract";
 import type { RepositoryGitError } from "#server/domain/repository-git.contract";
 import {
@@ -50,14 +50,14 @@ export function createRepositoryChangesService(
       Effect.mapError((error) =>
         error._tag === "RepositoryChangesError"
           ? error
-          : changesError("GitFailed", error.detail),
+          : changesError(failureReason(error), error.detail),
       ),
     );
   const locked = <A>(
     scope: ChangesScope,
+    write: RepositoryWrite,
     run: Effect.Effect<A, RepositoryChangesError | RepositoryGitError>,
-    resources: RepositoryResourceScope = "worktree",
-  ) => inWorktree(scope, coordination.run(scope.worktreePath, resources, run));
+  ) => inWorktree(scope, coordination.run(scope.worktreePath, write, run));
   return {
     read: (scope: ChangesScope) =>
       inWorktree(
@@ -78,6 +78,7 @@ export function createRepositoryChangesService(
     mutate: (command: MutateChanges) =>
       locked(
         command,
+        command.action,
         Effect.gen(function* () {
           yield* withChangeIndex(git, command.worktreePath, (indexFile) =>
             Effect.gen(function* () {
@@ -102,6 +103,7 @@ export function createRepositoryChangesService(
     commit: (command: CommitChanges) =>
       locked(
         command,
+        command.amend ? "amend" : "commit",
         withChangeIndex(git, command.worktreePath, (indexFile) =>
           Effect.gen(function* () {
             const { snapshot } = yield* verifyChanges(git, command);
@@ -146,9 +148,16 @@ export function createRepositoryChangesService(
             readWritten(git, { ...command, amend: false }, command.viewed),
           ),
         ),
-        "worktree-and-refs",
       ),
   };
+}
+
+function failureReason(
+  error: RepositoryGitError | RepositoryCoordinationError,
+): RepositoryChangesError["failure"]["reason"] {
+  if (error._tag === "RepositoryGitError") return "GitFailed";
+  if (error.reason === "Busy") return "Busy";
+  return error.reason === "Incompatible" ? "Unsupported" : "GitFailed";
 }
 
 const writtenResponseBytes =

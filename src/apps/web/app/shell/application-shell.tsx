@@ -15,6 +15,7 @@ import {
   type OpenProjectEnvironment,
   OpenProjectScreen,
 } from "#web/features/open-project/index";
+import { OperationRecoveryProvider } from "#web/features/operation-recovery/index";
 import {
   type ProjectNavigationState,
   ProjectsSidebar,
@@ -399,12 +400,27 @@ export function ApplicationShell({
     </div>
   );
   return (
-    <WorkspacePanel.Sessions
-      environment={panelEnvironment}
-      repositoryIds={panelRepositoryIds}
+    <OperationRecoveryProvider
+      requests={session.requests}
+      changes={session.changes}
+      runtime={session.runtime}
+      connected={connected}
+      scope={
+        graphRepository === undefined
+          ? undefined
+          : {
+              repositoryId: graphRepository.id,
+              worktreePath: activeWorktreePath,
+            }
+      }
     >
-      {content}
-    </WorkspacePanel.Sessions>
+      <WorkspacePanel.Sessions
+        environment={panelEnvironment}
+        repositoryIds={panelRepositoryIds}
+      >
+        {content}
+      </WorkspacePanel.Sessions>
+    </OperationRecoveryProvider>
   );
 }
 

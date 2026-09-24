@@ -9,4 +9,5 @@ export * from "@rebase/contracts/repository-catalog/index";
 export * from "@rebase/contracts/repository-changes/index";
 export * from "@rebase/contracts/repository-comparison/index";
 export * from "@rebase/contracts/repository-history/index";
+export * from "@rebase/contracts/repository-operations/index";
 export * from "@rebase/contracts/repository-refs/index";

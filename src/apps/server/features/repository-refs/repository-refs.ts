@@ -31,7 +31,7 @@ export function createRepositoryRefsService(dependencies: {
         return yield* coordination
           .run(
             command.worktreePath,
-            "worktree-and-refs",
+            "checkout",
             checkoutRepositoryRef(git, access, command),
           )
           .pipe(

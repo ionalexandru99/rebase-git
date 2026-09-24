@@ -173,7 +173,10 @@ export function createWorkingChangesController(
       const first = state().changes === null;
       const changed = next.revision !== state().changes?.revision;
       if (first && state().selection === null) {
-        const file = next.unstaged[0] ?? next.staged[0];
+        const file =
+          next.unstaged.find((candidate) => candidate.status === "U") ??
+          next.unstaged[0] ??
+          next.staged[0];
         if (file)
           publish({
             selection: {
