@@ -1,11 +1,16 @@
 export type {
   CommitGraphHandle,
   CommitGraphHistory,
+  CommitGraphReader,
 } from "#web/features/commit-graph/commit-graph.contract";
 export {
   automaticHistoryScope,
   type HistoryScope,
 } from "#web/features/commit-graph/history-scope.contract";
+export {
+  loadFirstCommitGraphPage,
+  openCommitGraphHistory,
+} from "#web/features/commit-graph/paging/commit-graph-history";
 export { createBrowserHistoryFilterStore } from "#web/features/commit-graph/scope/browser-history-filter-store";
 export {
   historyRefKey,

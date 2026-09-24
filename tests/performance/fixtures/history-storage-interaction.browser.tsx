@@ -6,7 +6,10 @@ import {
 import { Layer, ManagedRuntime } from "effect";
 import type { ComponentProps } from "react";
 import { createRoot } from "react-dom/client";
-import { CommitGraph } from "#web/features/commit-graph/index";
+import {
+  CommitGraph,
+  openCommitGraphHistory,
+} from "#web/features/commit-graph/index";
 import { createBrowserRepositoryHistoryReader } from "#web/features/repository-history/browser-repository-history-reader";
 import {
   beginRepositoryHistorySynchronization,
@@ -163,7 +166,7 @@ export async function prepareStorageInteraction() {
   const root = createRoot(container);
   root.render(
     <StorageGraph
-      reader={visibleReader}
+      history={openCommitGraphHistory(visibleReader)}
       roots={visible.roots}
       repositoryName="Storage interaction"
     />,

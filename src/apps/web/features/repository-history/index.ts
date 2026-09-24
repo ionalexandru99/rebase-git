@@ -1,6 +1,9 @@
 export { createBrowserRepositoryHistoryReader } from "#web/features/repository-history/browser-repository-history-reader";
 export { useRepositoryHistoryOrder } from "#web/features/repository-history/hooks/use-repository-history-order";
-export { saveRepositoryHistoryOrder } from "#web/features/repository-history/preferences/repository-history-order";
+export {
+  readRepositoryHistoryOrder,
+  saveRepositoryHistoryOrder,
+} from "#web/features/repository-history/preferences/repository-history-order";
 export type { HistoryParentEdge } from "#web/features/repository-history/query/history-order.contract";
 export {
   resolveAutomaticHistoryRoots,

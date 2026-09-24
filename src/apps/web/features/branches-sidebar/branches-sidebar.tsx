@@ -5,6 +5,7 @@ import {
   type JSX,
   type KeyboardEvent,
   useCallback,
+  useDeferredValue,
   useEffect,
   useLayoutEffect,
   useMemo,
@@ -57,16 +58,7 @@ export function BranchesSidebar({
   readonly snapshot: RepositoryRefsSnapshot;
 }): JSX.Element {
   const [query, setQuery] = useState("");
-  const [settledQuery, setSettledQuery] = useState("");
-  useEffect(() => {
-    if (query === "") {
-      setSettledQuery("");
-      return;
-    }
-    const timeout = setTimeout(() => setSettledQuery(query), 200);
-    return () => clearTimeout(timeout);
-  }, [query]);
-  const filterQuery = query === "" ? "" : settledQuery;
+  const filterQuery = useDeferredValue(query);
   const [scope, setScope] = useState<BranchesSidebarScope>("all");
   const [expandedSections, setExpandedSections] = useState(
     defaultExpandedSections,

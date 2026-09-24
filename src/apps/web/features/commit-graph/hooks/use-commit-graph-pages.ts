@@ -1,11 +1,10 @@
 import type { RepositoryHistoryRefTarget } from "@rebase/contracts";
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { CommitGraphViewportAnchor } from "#web/features/commit-graph/commit-graph.contract";
-import {
-  createCommitGraphPageWindow,
-  emptyCommitGraphPageWindowSnapshot as emptyPages,
-} from "#web/features/commit-graph/paging/commit-graph-page-window";
-import type { CommitGraphPageWindow } from "#web/features/commit-graph/paging/commit-graph-page-window.contract";
+import type {
+  CommitGraphHistory,
+  CommitGraphViewportAnchor,
+} from "#web/features/commit-graph/commit-graph.contract";
+import { emptyCommitGraphPageWindowSnapshot as emptyPages } from "#web/features/commit-graph/paging/commit-graph-page-window";
 import {
   commitGraphQuery,
   historyQueriesEqual,
@@ -28,22 +27,19 @@ const emptyHistoryStore = createStore<RepositoryHistorySnapshot>({
 });
 
 export function useCommitGraphPages(
-  reader: RepositoryHistoryReadModel | undefined,
+  history: CommitGraphHistory | undefined,
   roots: RepositoryHistoryQuery["roots"] | undefined,
   order: RepositoryHistoryQuery["order"],
   expanded: ReadonlyMap<string, readonly string[]>,
   captureAnchor: () => CommitGraphViewportAnchor | undefined,
 ) {
-  const [owner, setOwner] = useState<{
-    reader: RepositoryHistoryReadModel;
-    engine: CommitGraphPageWindow;
-  }>();
+  const reader = history?.reader;
+  const engine = history?.pages;
   const [refOwner, setRefOwner] = useState<{
     reader: RepositoryHistoryReadModel;
     refs: readonly RepositoryHistoryRefTarget[];
   }>();
   const [completion, setCompletion] = useState(0);
-  const engine = owner?.reader === reader ? owner?.engine : undefined;
   const snapshot = useStore(engine ?? emptyPagesStore);
   const historySnapshot = useStore(reader ?? emptyHistoryStore);
   const previousSynchronization = useRef(historySnapshot.synchronization);
@@ -55,12 +51,6 @@ export function useCommitGraphPages(
       ? refOwner.refs
       : emptyRefTargets;
 
-  useEffect(() => {
-    if (reader === undefined) return;
-    const created = createCommitGraphPageWindow(reader);
-    setOwner({ reader, engine: created });
-    return () => created.dispose();
-  }, [reader]);
   useEffect(() => {
     if (reader === undefined) return;
     const revision = historySnapshot.historyRevision;

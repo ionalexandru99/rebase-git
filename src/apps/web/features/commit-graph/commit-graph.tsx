@@ -72,7 +72,7 @@ export function CommitGraph({
   onRevealHistoryRef,
   onAddHistoryRef,
   onResetHistoryScope,
-  reader,
+  history,
   repositoryName,
   roots,
   scope,
@@ -94,7 +94,7 @@ export function CommitGraph({
   readonly onResetHistoryScope?: (() => void) | undefined;
   readonly onRemoveHistoryRef?: (target: RepositoryRefTarget) => void;
   readonly onRevealHistoryRef?: (target: RepositoryRefTarget) => void;
-  readonly reader: CommitGraphHistory | undefined;
+  readonly history: CommitGraphHistory | undefined;
   readonly repositoryName: string;
   readonly roots: RepositoryHistoryQuery["roots"] | undefined;
   readonly scope?: HistoryScope;
@@ -117,8 +117,9 @@ export function CommitGraph({
     offset: number;
     mode: CommitGraphSelectionMode;
   }>();
+  const reader = history?.reader;
   const paging = useCommitGraphPages(
-    reader,
+    history,
     roots,
     order,
     expandedMerges,

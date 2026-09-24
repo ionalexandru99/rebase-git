@@ -234,7 +234,7 @@ async function renderRepositoryWorkspace() {
       <RepositoryWorkspace
         activeWorktreePath="/repo"
         environmentId={undefined}
-        historyReader={undefined}
+        history={undefined}
         refs={{
           checkingOut: false,
           refs: {

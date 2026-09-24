@@ -461,6 +461,37 @@ describe("history cache storage", () => {
     second.close();
   });
 
+  it("shows a server page that storage could not cache", async () => {
+    const repositoryId = crypto.randomUUID();
+    const fixture = await seed(repositoryId);
+    const worker = new SharedWorker(
+      new URL("./fixtures/history-storage-full-worker.ts", import.meta.url),
+      { type: "module", name: crypto.randomUUID() },
+    );
+    const gateway = gatewayFor(fixture);
+    const reader = createBrowserRepositoryHistoryReader({
+      environmentId: crypto.randomUUID(),
+      repositoryId,
+      gateway,
+      worker,
+    });
+    try {
+      await expect(
+        reader.read({ limit: 100, order: "topological", roots: fixture.roots }),
+      ).resolves.toEqual(fixture.page.commits);
+      expect(gateway.read).toHaveBeenCalledOnce();
+      await vi.waitFor(() =>
+        expect(reader.getSnapshot()).toMatchObject({
+          status: "ready",
+          error: expect.any(RepositoryHistoryStorageUnavailable),
+        }),
+      );
+    } finally {
+      reader.close();
+      worker.port.close();
+    }
+  });
+
   it("retries a quota-limited write after pruning real IndexedDB records", async () => {
     const fixture = await seed();
     let writes = 0;

@@ -3,7 +3,7 @@ import type {
   RepositoryRefTarget,
 } from "@rebase/contracts";
 import type { JSX } from "react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { useHistoryRefRefresh } from "#web/app/workspace/use-history-ref-refresh";
 import { BranchesSidebar } from "#web/features/branches-sidebar/index";
 import type { GraphCommandEnvironment } from "#web/features/commit-commands/index";
@@ -40,7 +40,7 @@ export function RepositoryWorkspace({
   connected = false,
   activeWorktreePath,
   environmentId,
-  historyReader,
+  history,
   logicalRepositoryId: catalogLogicalRepositoryId,
   refs,
   repositoryId,
@@ -52,7 +52,7 @@ export function RepositoryWorkspace({
   readonly connected?: boolean;
   readonly activeWorktreePath: string;
   readonly environmentId: string | undefined;
-  readonly historyReader: CommitGraphHistory | undefined;
+  readonly history: CommitGraphHistory | undefined;
   readonly logicalRepositoryId?: string | undefined;
   readonly refs: RepositoryRefsSnapshot;
   readonly repositoryId: string | undefined;
@@ -76,7 +76,7 @@ export function RepositoryWorkspace({
       connected={connected}
       activeWorktreePath={activeWorktreePath}
       environmentId={environmentId}
-      historyReader={historyReader}
+      history={history}
       key={`${environmentId ?? ""}\0${repositoryId ?? ""}\0${logicalRepositoryId ?? ""}`}
       logicalRepositoryId={logicalRepositoryId}
       refs={cachedRefs.snapshot}
@@ -94,7 +94,7 @@ function RepositoryWorkspaceContent({
   connected,
   activeWorktreePath,
   environmentId,
-  historyReader,
+  history,
   logicalRepositoryId,
   refs,
   refsRestored,
@@ -107,7 +107,7 @@ function RepositoryWorkspaceContent({
   readonly connected: boolean;
   readonly activeWorktreePath: string;
   readonly environmentId: string | undefined;
-  readonly historyReader: CommitGraphHistory | undefined;
+  readonly history: CommitGraphHistory | undefined;
   readonly logicalRepositoryId: string | undefined;
   readonly refs: RepositoryRefsSnapshot;
   readonly refsRestored: boolean;
@@ -129,7 +129,7 @@ function RepositoryWorkspaceContent({
         : undefined,
     [environmentId, repositoryId, logicalRepositoryId, activeWorktreePath],
   );
-  useHistoryRefRefresh(historyReader, connected, retryRefs);
+  useHistoryRefRefresh(history?.reader, connected, retryRefs);
   const activeBranch = refs.refs?.worktrees.find(
     ({ path }) => path === activeWorktreePath,
   )?.head.branch;
@@ -187,47 +187,27 @@ function RepositoryWorkspaceContent({
       { _tag: "Custom", selections: automatic.selections },
     );
   }, [activeWorktreePath, refs.refs, resolvedScope]);
-  useEffect(() => {
-    if (
-      resolvedScope === undefined ||
-      refsRestored ||
-      historyScopesEqual(historyScope, resolvedScope.scope)
-    ) {
-      return;
-    }
-    setHistoryScope(resolvedScope.scope);
-    if (environmentId !== undefined && logicalRepositoryId !== undefined) {
-      filterStore.save(environmentId, logicalRepositoryId, resolvedScope.scope);
-    }
-  }, [
-    environmentId,
-    filterStore,
-    historyScope,
-    logicalRepositoryId,
-    resolvedScope,
-    refsRestored,
-  ]);
-  const toggleRef = useCallback(
-    (target: RepositoryRefTarget) => {
-      if (refs.refs === undefined) return;
-      const next = resolveHistoryScope(
-        toggleHistoryRef(historyScope, target, refs.refs, activeWorktreePath),
-        refs.refs,
-        activeWorktreePath,
-      ).scope;
+  const changeHistoryScope = useCallback(
+    (next: HistoryScope) => {
       setHistoryScope(next);
       if (environmentId !== undefined && logicalRepositoryId !== undefined) {
         filterStore.save(environmentId, logicalRepositoryId, next);
       }
     },
-    [
-      activeWorktreePath,
-      environmentId,
-      filterStore,
-      historyScope,
-      logicalRepositoryId,
-      refs.refs,
-    ],
+    [environmentId, filterStore, logicalRepositoryId],
+  );
+  const toggleRef = useCallback(
+    (target: RepositoryRefTarget) => {
+      if (refs.refs === undefined) return;
+      changeHistoryScope(
+        resolveHistoryScope(
+          toggleHistoryRef(historyScope, target, refs.refs, activeWorktreePath),
+          refs.refs,
+          activeWorktreePath,
+        ).scope,
+      );
+    },
+    [activeWorktreePath, changeHistoryScope, historyScope, refs.refs],
   );
 
   return (
@@ -286,22 +266,10 @@ function RepositoryWorkspaceContent({
                     }
                     onResetHistoryScope={
                       canResetHistoryScope
-                        ? () => {
-                            setHistoryScope(automaticHistoryScope);
-                            if (
-                              environmentId !== undefined &&
-                              logicalRepositoryId !== undefined
-                            ) {
-                              filterStore.save(
-                                environmentId,
-                                logicalRepositoryId,
-                                automaticHistoryScope,
-                              );
-                            }
-                          }
+                        ? () => changeHistoryScope(automaticHistoryScope)
                         : undefined
                     }
-                    reader={historyReader}
+                    history={history}
                     repositoryName={repositoryName}
                     roots={resolvedScope?.roots}
                     scope={resolvedScope?.scope ?? automaticHistoryScope}
