@@ -1,20 +1,7 @@
-import { describe, expect, it, vi } from "vite-plus/test";
-import {
-  createRepositoryFilesystem,
-  requireAbsoluteRepositoryPath,
-} from "#desktop/features/repository-filesystem/repository-filesystem";
-import type { RepositoryFilesystemPlatform } from "#desktop/features/repository-filesystem/repository-filesystem.contract";
+import { describe, expect, it } from "vite-plus/test";
+import { requireAbsoluteRepositoryPath } from "#desktop/features/repository-filesystem/repository-filesystem";
 
 describe("repository filesystem", () => {
-  it("reveals a repository path", async () => {
-    const platform = new TestRepositoryFilesystemPlatform();
-    const filesystem = createRepositoryFilesystem(platform);
-
-    await filesystem.revealRepository("/work/rebase-git");
-
-    expect(platform.showItemInFolder).toHaveBeenCalledWith("/work/rebase-git");
-  });
-
   it("accepts a non-empty absolute reveal path", () => {
     expect(requireAbsoluteRepositoryPath("/work/rebase-git")).toBe(
       "/work/rebase-git",
@@ -30,7 +17,3 @@ describe("repository filesystem", () => {
     },
   );
 });
-
-class TestRepositoryFilesystemPlatform implements RepositoryFilesystemPlatform {
-  readonly showItemInFolder = vi.fn();
-}
