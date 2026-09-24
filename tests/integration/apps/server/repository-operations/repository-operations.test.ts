@@ -20,6 +20,7 @@ import {
   createDivergedRepository,
   startConflict,
 } from "#tests-support/diverged-repository";
+import { removeTemporaryDirectory } from "#tests-support/temporary-directory";
 
 const exec = promisify(execFile);
 const directories: string[] = [];
@@ -27,9 +28,7 @@ const repositoryId = "00000000-0000-4000-8000-000000000001";
 afterEach(async () => {
   vi.unstubAllEnvs();
   await Promise.all(
-    directories
-      .splice(0)
-      .map((path) => rm(path, { recursive: true, force: true })),
+    directories.splice(0).map((path) => removeTemporaryDirectory(path)),
   );
 });
 
@@ -66,7 +65,7 @@ async function fixture() {
   return { directory, git, runner, operations, service, scope, read, execute };
 }
 
-describe("Git operation recovery", { timeout: 30000 }, () => {
+describe("Git operation recovery", () => {
   it.each(["merge", "rebase", "cherry-pick", "revert"] as const)(
     "discovers and aborts an external %s",
     async (kind) => {

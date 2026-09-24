@@ -3,7 +3,6 @@ import {
   mkdtemp,
   readdir,
   readFile,
-  rm,
   stat,
   writeFile,
 } from "node:fs/promises";
@@ -13,6 +12,7 @@ import { Effect } from "effect";
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import { environmentPaths } from "#server/persistence/storage/environment-paths";
 import { ensureServerSecret } from "#server/persistence/storage/server-secret";
+import { removeTemporaryDirectory } from "#tests-support/temporary-directory";
 
 const pendingWrite = vi.hoisted(() => ({
   pause: undefined as (() => Promise<void>) | undefined,
@@ -47,9 +47,7 @@ const directories: string[] = [];
 
 afterEach(async () => {
   await Promise.all(
-    directories
-      .splice(0)
-      .map((path) => rm(path, { recursive: true, force: true })),
+    directories.splice(0).map((path) => removeTemporaryDirectory(path)),
   );
 });
 

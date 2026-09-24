@@ -3,11 +3,12 @@ import {
   execFile,
   spawn,
 } from "node:child_process";
-import { mkdir, mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { promisify } from "node:util";
 import { type Browser, chromium, expect, test } from "@playwright/test";
+import { removeTemporaryDirectory } from "#tests-support/temporary-directory";
 
 const execFileAsync = promisify(execFile);
 
@@ -59,7 +60,7 @@ test("launches the packaged application with its product identity", async () => 
       await closePackagedApplication(application);
     }
   } finally {
-    await rm(testHome, { force: true, recursive: true });
+    await removeTemporaryDirectory(testHome);
   }
 });
 

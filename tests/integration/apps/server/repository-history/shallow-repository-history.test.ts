@@ -1,4 +1,4 @@
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -12,6 +12,7 @@ import { readRepositoryHistory } from "#server/features/repository-history/git/r
 import { readRepositoryHistorySnapshot } from "#server/features/repository-history/git/read-repository-history-snapshot";
 import { synchronizeRepositoryHistory } from "#server/features/repository-history/git/synchronize-repository-history";
 import { git as runGit } from "#tests-support/git";
+import { removeTemporaryDirectory } from "#tests-support/temporary-directory";
 
 const repositoryId = "00000000-0000-4000-8000-000000000001";
 const requestId = "00000000-0000-4000-8000-000000000002";
@@ -141,6 +142,6 @@ it("preserves true shallow parents and invalidates the old basis when external d
     );
   } finally {
     close?.();
-    await rm(root, { recursive: true, force: true });
+    await removeTemporaryDirectory(root);
   }
-}, 15_000);
+});

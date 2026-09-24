@@ -1,4 +1,4 @@
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Effect } from "effect";
@@ -24,6 +24,7 @@ import {
   createRepositoryAccess,
   createRepositoryCoordination,
 } from "#server/repository/access/index";
+import { removeTemporaryDirectory } from "#tests-support/temporary-directory";
 
 const repositoryPath = process.argv[2];
 if (repositoryPath === undefined)
@@ -94,7 +95,7 @@ try {
     if (!controller.signal.aborted) throw error;
   });
 } finally {
-  await rm(temporary, { recursive: true, force: true });
+  await removeTemporaryDirectory(temporary);
 }
 
 function grant() {

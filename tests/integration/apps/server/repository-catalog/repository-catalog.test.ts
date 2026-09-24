@@ -1,11 +1,4 @@
-import {
-  access,
-  mkdir,
-  mkdtemp,
-  realpath,
-  rm,
-  writeFile,
-} from "node:fs/promises";
+import { access, mkdir, mkdtemp, realpath, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Effect, Stream } from "effect";
@@ -23,14 +16,13 @@ import type { EnvironmentContext } from "#server/persistence/environment-context
 import { repositoryCatalogTable } from "#server/persistence/environment-state.schema";
 import { environmentPaths } from "#server/persistence/storage/environment-paths";
 import { createRepository, git } from "#tests-support/git";
+import { removeTemporaryDirectory } from "#tests-support/temporary-directory";
 
 const directories = new Set<string>();
 
 afterEach(async () => {
   await Promise.all(
-    [...directories].map((directory) =>
-      rm(directory, { force: true, recursive: true }),
-    ),
+    [...directories].map((directory) => removeTemporaryDirectory(directory)),
   );
   directories.clear();
 });

@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { rm, writeFile } from "node:fs/promises";
+import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { Deferred, Effect, Fiber } from "effect";
@@ -16,15 +16,14 @@ import {
   createDivergedRepository,
   startConflict,
 } from "#tests-support/diverged-repository";
+import { removeTemporaryDirectory } from "#tests-support/temporary-directory";
 
 const exec = promisify(execFile);
 const directories: string[] = [];
 const repositoryId = "00000000-0000-4000-8000-000000000001";
 afterEach(async () => {
   await Promise.all(
-    directories
-      .splice(0)
-      .map((path) => rm(path, { recursive: true, force: true })),
+    directories.splice(0).map((path) => removeTemporaryDirectory(path)),
   );
 });
 

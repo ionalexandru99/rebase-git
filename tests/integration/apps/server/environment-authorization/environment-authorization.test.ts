@@ -1,4 +1,4 @@
-import { access, mkdtemp, readFile, rm } from "node:fs/promises";
+import { access, mkdtemp, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type {
@@ -16,14 +16,13 @@ import { acquireEnvironmentContext } from "#server/persistence/environment-conte
 import type { EnvironmentContext } from "#server/persistence/environment-context.contract";
 import { authorizationMetadataTable } from "#server/persistence/environment-state.schema";
 import { environmentPaths } from "#server/persistence/storage/environment-paths";
+import { removeTemporaryDirectory } from "#tests-support/temporary-directory";
 
 const directories = new Set<string>();
 
 afterEach(async () => {
   await Promise.all(
-    [...directories].map((directory) =>
-      rm(directory, { force: true, recursive: true }),
-    ),
+    [...directories].map((directory) => removeTemporaryDirectory(directory)),
   );
   directories.clear();
 });

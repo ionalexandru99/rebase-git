@@ -1,6 +1,6 @@
 import { execFile } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, realpath, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
@@ -10,13 +10,12 @@ import { createLocalGitCommandRunner } from "#server/adapters/local-git/local-gi
 import { createLocalRepositoryWatcher } from "#server/adapters/local-git/local-repository-watcher";
 import { createCommitInspectionService } from "#server/features/commit-inspection/commit-inspection";
 import { createRepositoryAccess } from "#server/repository/access/index";
+import { removeTemporaryDirectory } from "#tests-support/temporary-directory";
 
 const directories: string[] = [];
 afterEach(async () => {
   await Promise.all(
-    directories
-      .splice(0)
-      .map((path) => rm(path, { recursive: true, force: true })),
+    directories.splice(0).map((path) => removeTemporaryDirectory(path)),
   );
 });
 

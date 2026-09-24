@@ -5,6 +5,7 @@ import { Effect, Stream } from "effect";
 import { afterEach, beforeEach, expect, it } from "vite-plus/test";
 import type { GitCommandRunner } from "#server/domain/git-command.contract";
 import { createRepositoryCoordination } from "#server/repository/access/index";
+import { removeTemporaryDirectory } from "#tests-support/temporary-directory";
 
 let worktree = "";
 let resolutions = 0;
@@ -13,7 +14,7 @@ beforeEach(async () => {
   await mkdir(join(worktree, ".git"));
   resolutions = 0;
 });
-afterEach(() => rm(worktree, { recursive: true, force: true }));
+afterEach(() => removeTemporaryDirectory(worktree));
 
 function coordinationRun() {
   const git: GitCommandRunner = {

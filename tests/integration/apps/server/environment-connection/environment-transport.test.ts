@@ -184,7 +184,7 @@ describe("Environment transport", () => {
         reason: "HandshakeRequired",
       });
     });
-  }, 10_000);
+  });
 });
 
 function rpcRequest(

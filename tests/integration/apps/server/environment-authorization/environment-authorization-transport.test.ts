@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp } from "node:fs/promises";
 import { request } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -24,6 +24,7 @@ import {
 import { acquireEnvironmentContext } from "#server/persistence/environment-context";
 import { environmentPaths } from "#server/persistence/storage/environment-paths";
 import { testEnvironmentFeatures } from "#tests-integration/apps/server/environment-connection/test-environment-features";
+import { removeTemporaryDirectory } from "#tests-support/temporary-directory";
 import {
   connectCurrentEnvironmentEffect,
   EnvironmentHttpRejected,
@@ -37,9 +38,7 @@ const directories = new Set<string>();
 
 afterEach(async () => {
   await Promise.all(
-    [...directories].map((directory) =>
-      rm(directory, { force: true, recursive: true }),
-    ),
+    [...directories].map((directory) => removeTemporaryDirectory(directory)),
   );
   directories.clear();
 });

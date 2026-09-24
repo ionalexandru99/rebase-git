@@ -1,5 +1,5 @@
 import type { ChildProcessWithoutNullStreams } from "node:child_process";
-import { access, mkdtemp, readFile, rm } from "node:fs/promises";
+import { access, mkdtemp, readFile } from "node:fs/promises";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -8,6 +8,7 @@ import { EnvironmentDiscovery } from "@rebase/contracts";
 import { Schema } from "effect";
 import { afterEach, describe, expect, it } from "vite-plus/test";
 import { startEnvironmentServer } from "#tests-support/environment-server";
+import { removeTemporaryDirectory } from "#tests-support/temporary-directory";
 
 const children = new Set<ChildProcessWithoutNullStreams>();
 const directories = new Set<string>();
@@ -21,7 +22,7 @@ afterEach(async () => {
   }
 
   for (const directory of directories) {
-    await rm(directory, { force: true, recursive: true });
+    await removeTemporaryDirectory(directory);
   }
 
   children.clear();

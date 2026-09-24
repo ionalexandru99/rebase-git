@@ -1,18 +1,17 @@
-import { mkdir, mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, realpath, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import { currentTransportLimits } from "@rebase/contracts";
 import { Effect } from "effect";
 import { afterEach, describe, expect, it } from "vite-plus/test";
 import { createEnvironmentFilesystem } from "#server/features/environment-filesystem/environment-filesystem";
+import { removeTemporaryDirectory } from "#tests-support/temporary-directory";
 
 const directories = new Set<string>();
 
 afterEach(async () => {
   await Promise.all(
-    [...directories].map((directory) =>
-      rm(directory, { force: true, recursive: true }),
-    ),
+    [...directories].map((directory) => removeTemporaryDirectory(directory)),
   );
   directories.clear();
 });

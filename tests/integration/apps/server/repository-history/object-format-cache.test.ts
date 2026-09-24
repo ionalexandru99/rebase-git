@@ -5,6 +5,7 @@ import { Effect, Stream } from "effect";
 import { afterEach, beforeEach, expect, it } from "vite-plus/test";
 import type { GitCommandRunner } from "#server/domain/git-command.contract";
 import { createObjectFormatCache } from "#server/features/repository-history/git/read-object-format";
+import { removeTemporaryDirectory } from "#tests-support/temporary-directory";
 
 let parent = "";
 let reads: string[] = [];
@@ -12,7 +13,7 @@ beforeEach(async () => {
   parent = await mkdtemp(join(tmpdir(), "rebase-object-format-"));
   reads = [];
 });
-afterEach(() => rm(parent, { recursive: true, force: true }));
+afterEach(() => removeTemporaryDirectory(parent));
 
 async function repository(name: string) {
   const path = join(parent, name);

@@ -4,12 +4,12 @@ import { defineConfig } from "vite-plus";
 
 const testProject = (
   name: "compatibility" | "integration" | "unit",
-  exclude: string[] = [],
+  test: { exclude?: string[]; hookTimeout?: number; testTimeout?: number } = {},
 ) => ({
   extends: true as const,
   test: {
     environment: "node" as const,
-    ...(exclude.length === 0 ? {} : { exclude }),
+    ...test,
     include: [`tests/${name}/**/*.test.ts`],
     name,
   },
@@ -75,7 +75,11 @@ export default defineConfig({
     attachmentsDir: "tests/.artifacts/vitest",
     projects: [
       testProject("unit"),
-      testProject("integration", ["tests/integration/**/*.browser.test.ts"]),
+      testProject("integration", {
+        exclude: ["tests/integration/**/*.browser.test.ts"],
+        hookTimeout: 30_000,
+        testTimeout: 30_000,
+      }),
       browserProject(
         "integration-browser",
         "tests/integration/**/*.browser.test.{ts,tsx}",

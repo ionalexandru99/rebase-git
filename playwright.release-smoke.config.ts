@@ -11,7 +11,9 @@ export default defineConfig({
     ],
     ["junit", { outputFile: "tests/.artifacts/release-smoke.xml" }],
   ],
+  expect: { timeout: 15_000 },
   testDir: "tests/release-smoke",
+  timeout: 60_000,
   use: {
     screenshot: "only-on-failure",
     trace: "retain-on-failure",

@@ -1,5 +1,5 @@
 import { once } from "node:events";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, writeFile } from "node:fs/promises";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -15,6 +15,7 @@ import { WebSocketServer } from "ws";
 import { assertTimingBudget } from "#tests-performance/timing-budget";
 import { startEnvironmentServer } from "#tests-support/environment-server";
 import { createRepository, git } from "#tests-support/git";
+import { removeTemporaryDirectory } from "#tests-support/temporary-directory";
 
 const megabitsPerSecond = 20;
 const networkBytesPerSecond = (megabitsPerSecond * 1_000_000) / 8;
@@ -167,7 +168,7 @@ async function measureCommitGraph(
       server.child.kill("SIGTERM");
       await once(server.child, "exit");
     }
-    await rm(testHome, { force: true, recursive: true });
+    await removeTemporaryDirectory(testHome);
   }
 }
 

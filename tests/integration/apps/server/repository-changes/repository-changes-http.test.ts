@@ -1,4 +1,4 @@
-import { mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, realpath, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -34,6 +34,7 @@ import {
 } from "#server/repository/access/index";
 import { testEnvironmentFeatures } from "#tests-integration/apps/server/environment-connection/test-environment-features";
 import { git } from "#tests-support/git";
+import { removeTemporaryDirectory } from "#tests-support/temporary-directory";
 
 it("authorizes changes reads separately from index mutations across HTTP", async () => {
   const root = await realpath(
@@ -192,6 +193,6 @@ it("authorizes changes reads separately from index mutations across HTTP", async
       ),
     );
   } finally {
-    await rm(root, { recursive: true, force: true });
+    await removeTemporaryDirectory(root);
   }
 });

@@ -1,10 +1,11 @@
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Effect, Stream } from "effect";
 import { afterAll, beforeAll, expect, it } from "vite-plus/test";
 import { createLocalGitCommandRunner } from "#server/adapters/local-git/local-git-command-runner";
 import { fastImport, git as runGit } from "#tests-support/git";
+import { removeTemporaryDirectory } from "#tests-support/temporary-directory";
 
 const git = createLocalGitCommandRunner();
 let directory = "";
@@ -15,12 +16,7 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
-  await rm(directory, {
-    force: true,
-    recursive: true,
-    maxRetries: 3,
-    retryDelay: 100,
-  });
+  await removeTemporaryDirectory(directory);
 });
 
 it("streams stdout and reports a rejected command with its exit code and stderr", async () => {
@@ -59,7 +55,7 @@ it("fails with a timeout when the command outlives its deadline", async () => {
   );
 
   expect(error.reason).toBe("Timeout");
-}, 10_000);
+});
 
 it("stops Git when the consumer finishes early", async () => {
   const chunks = await Effect.runPromise(
@@ -69,7 +65,7 @@ it("stops Git when the consumer finishes early", async () => {
   );
 
   expect(chunks).toHaveLength(1);
-}, 10_000);
+});
 
 async function createHistory(directory: string) {
   await runGit(directory, "init", "-b", "main");
