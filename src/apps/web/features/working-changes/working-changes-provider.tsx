@@ -11,6 +11,7 @@ import {
   createWorkingChangesController,
   type WorkingChangesController,
 } from "#web/features/working-changes/working-changes-controller";
+import type { EnvironmentChanges } from "#web/platform/environment/environment-protocol.contract";
 import { useStore } from "#web/platform/store/use-store";
 
 const WorkingChangesContext = createContext<WorkingChangesController | null>(
@@ -22,6 +23,7 @@ export function WorkingChangesProvider({
   environmentId,
   repositoryId,
   worktreePath,
+  changes,
   onCommitted,
   runtime,
   active = true,
@@ -31,6 +33,7 @@ export function WorkingChangesProvider({
   readonly environmentId: string;
   readonly repositoryId: string;
   readonly worktreePath: string;
+  readonly changes: EnvironmentChanges | undefined;
   readonly onCommitted: () => void;
   readonly runtime: ManagedRuntime.ManagedRuntime<never, never>;
   readonly active?: boolean;
@@ -51,6 +54,25 @@ export function WorkingChangesProvider({
     return controller.stop;
   }, [controller]);
   useEffect(() => controller.setActive(active), [controller, active]);
+  useEffect(
+    () =>
+      changes?.subscribe((repositoryIds) => {
+        if (repositoryIds === undefined || repositoryIds.includes(repositoryId))
+          controller.invalidate();
+      }),
+    [changes, controller, repositoryId],
+  );
+  useEffect(() => {
+    const invalidateWhenVisible = () => {
+      if (document.visibilityState === "visible") controller.invalidate();
+    };
+    window.addEventListener("focus", invalidateWhenVisible);
+    document.addEventListener("visibilitychange", invalidateWhenVisible);
+    return () => {
+      window.removeEventListener("focus", invalidateWhenVisible);
+      document.removeEventListener("visibilitychange", invalidateWhenVisible);
+    };
+  }, [controller]);
   return (
     <WorkingChangesContext.Provider value={controller}>
       {children}

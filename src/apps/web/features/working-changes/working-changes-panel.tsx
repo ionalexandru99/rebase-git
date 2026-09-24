@@ -23,6 +23,7 @@ export function WorkingChangesPanel() {
       environmentId={feature?.scope?.environmentId}
       repositoryId={repositoryId}
       worktreePath={feature?.scope?.worktreePath ?? ""}
+      changes={feature?.environment?.changes}
       connected={feature?.environment?.connected ?? false}
       writable={feature?.environment?.writable ?? false}
       onCommitted={onCommitted}

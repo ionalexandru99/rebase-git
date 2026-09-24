@@ -12,6 +12,7 @@ import {
   type RepositoryChangesClient,
   WorkingChangesError,
 } from "#web/features/working-changes/working-changes.contract";
+import type { EnvironmentChangeListener } from "#web/platform/environment/environment-protocol.contract";
 import { WorkingChanges } from "#web-ui/features/working-changes/working-changes";
 
 const runtime = ManagedRuntime.make(Layer.empty);
@@ -48,8 +49,20 @@ async function fixture(extraPaths: readonly string[] = []) {
   const mutations: MutateChanges[] = [];
   const commits: CommitChanges[] = [];
   let rejectCommit = false;
+  let reads = 0;
+  const listeners = new Set<EnvironmentChangeListener>();
+  const changes = {
+    subscribe: (listener: EnvironmentChangeListener) => {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    },
+  };
   const client: RepositoryChangesClient = {
-    read: () => Effect.succeed(snapshot),
+    read: () =>
+      Effect.sync(() => {
+        reads += 1;
+        return snapshot;
+      }),
     diff: () => Effect.succeed(diff),
     mutate: (command) =>
       Effect.sync(() => {
@@ -87,6 +100,7 @@ async function fixture(extraPaths: readonly string[] = []) {
         environmentId={environmentId}
         repositoryId={repositoryId}
         worktreePath="/repo"
+        changes={changes}
         onCommitted={onCommitted}
         runtime={runtime}
       />
@@ -102,6 +116,10 @@ async function fixture(extraPaths: readonly string[] = []) {
     mutations,
     commits,
     onCommitted,
+    reads: () => reads,
+    emitChange: () => {
+      for (const listener of listeners) listener([repositoryId], "Index");
+    },
     advanceHead: (message: string) => {
       snapshot = {
         ...snapshot,
@@ -187,11 +205,20 @@ describe("working changes", () => {
     await amend.click();
     await expect.element(subject).toHaveValue("Another commit");
     f.advanceHead("External commit");
+    f.emitChange();
     await expect.element(amend).not.toBeChecked();
     await expect.element(subject).toHaveValue("New commit draft");
     await expect
       .element(page.getByRole("alert"))
       .toHaveTextContent("HEAD changed while you were amending");
+  });
+  it("re-reads changes when the server reports this repository changed or the window regains focus", async () => {
+    const f = await fixture();
+    const initialReads = f.reads();
+    f.emitChange();
+    await expect.poll(f.reads).toBe(initialReads + 1);
+    window.dispatchEvent(new Event("focus"));
+    await expect.poll(f.reads).toBe(initialReads + 2);
   });
   it("places the composer beneath the right tree and renders Shiki with working display controls", async () => {
     await fixture();

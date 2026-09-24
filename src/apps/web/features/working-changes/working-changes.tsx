@@ -3,6 +3,7 @@ import type { ManagedRuntime } from "effect";
 import { lazy, Suspense, useState } from "react";
 import type { RepositoryChangesClient } from "#web/features/working-changes/working-changes.contract";
 import { usePanelFeature } from "#web/features/workspace-panel/api";
+import type { EnvironmentChanges } from "#web/platform/environment/environment-protocol.contract";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -37,6 +38,7 @@ export function WorkingChanges({
   environmentId,
   repositoryId,
   worktreePath,
+  changes,
   connected,
   writable,
   onCommitted,
@@ -46,6 +48,7 @@ export function WorkingChanges({
   readonly environmentId: string | undefined;
   readonly repositoryId: string | undefined;
   readonly worktreePath: string;
+  readonly changes: EnvironmentChanges | undefined;
   readonly connected: boolean;
   readonly writable: boolean;
   readonly onCommitted: () => void;
@@ -70,6 +73,7 @@ export function WorkingChanges({
       environmentId={environmentId}
       repositoryId={repositoryId}
       worktreePath={worktreePath}
+      changes={changes}
       onCommitted={onCommitted}
       runtime={runtime}
     >

@@ -6,7 +6,13 @@ import type {
   MutateChanges,
   RepositoryChanges,
 } from "@rebase/contracts";
-import { Effect, type Fiber, type ManagedRuntime, Semaphore } from "effect";
+import {
+  Effect,
+  type Fiber,
+  Latch,
+  type ManagedRuntime,
+  Semaphore,
+} from "effect";
 import {
   type DiffPreferences,
   defaultDiffPreferences,
@@ -33,6 +39,8 @@ type WorkingChangesFailure =
   | WorkingChangesError
   | WorkingChangesStoreUnavailable;
 
+const fallbackRefreshMilliseconds = 10_000;
+
 export interface WorkingChangesState {
   readonly changes: RepositoryChanges | null;
   readonly diff: ChangeDiff | null;
@@ -58,10 +66,11 @@ export function createWorkingChangesController(
   const work = createControllerScope(runtime);
   const lock = Semaphore.makeUnsafe(1);
   const writes = Semaphore.makeUnsafe(1);
+  const stale = Latch.makeUnsafe(false);
   let active = true;
   let initialized = false;
   let operationGeneration = 0;
-  let polling: Fiber.Fiber<void> | undefined;
+  let watching: Fiber.Fiber<void> | undefined;
   let reading: Fiber.Fiber<unknown> | undefined;
   let normalDraft = emptyCommitDraft;
   let amendDraft: CommitDraft | undefined;
@@ -172,27 +181,31 @@ export function createWorkingChangesController(
       ),
     );
   };
+  const refreshVisible = Effect.suspend(() =>
+    document.visibilityState === "hidden"
+      ? Effect.void
+      : lock
+          .withPermit(refresh())
+          .pipe(
+            Effect.catch((error) =>
+              fail(error).pipe(
+                Effect.andThen(Effect.sync(() => publish({ loading: false }))),
+              ),
+            ),
+          ),
+  );
   const resume = () => {
-    if (!active || !initialized || polling || !work.open) {
+    if (!active || !initialized || watching || !work.open) {
       return;
     }
-    polling = work.fork(
+    watching = work.fork(
       Effect.forever(
-        Effect.suspend(() =>
-          document.visibilityState === "hidden" || state().busy
-            ? Effect.void
-            : lock
-                .withPermit(refresh())
-                .pipe(
-                  Effect.catch((error) =>
-                    fail(error).pipe(
-                      Effect.andThen(
-                        Effect.sync(() => publish({ loading: false })),
-                      ),
-                    ),
-                  ),
-                ),
-        ).pipe(Effect.andThen(Effect.sleep(2500))),
+        stale.close.pipe(
+          Effect.andThen(refreshVisible),
+          Effect.andThen(
+            stale.await.pipe(Effect.timeoutOption(fallbackRefreshMilliseconds)),
+          ),
+        ),
       ),
     );
   };
@@ -200,9 +213,9 @@ export function createWorkingChangesController(
     setActive: (next: boolean) => {
       active = next;
       if (!active) {
-        work.interrupt(polling);
+        work.interrupt(watching);
         work.interrupt(reading);
-        polling = undefined;
+        watching = undefined;
         reading = undefined;
       }
       resume();
@@ -236,9 +249,12 @@ export function createWorkingChangesController(
     stop: () => {
       ++operationGeneration;
       work.stop();
-      polling = undefined;
+      watching = undefined;
       reading = undefined;
       store.set({ ...state(), busy: false, loading: false });
+    },
+    invalidate: () => {
+      stale.openUnsafe();
     },
     refresh: () =>
       runRead(
