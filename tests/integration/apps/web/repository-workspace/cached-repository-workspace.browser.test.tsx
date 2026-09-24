@@ -1,11 +1,13 @@
-import { createBrowserRepositoryHistoryReader } from "#web/features/repository-history/browser-repository-history-reader";
+import { createBrowserRepositoryHistoryReader } from "#web/features/repository-history/index";
 import "@rebase/web/styles.css";
 import type { RepositoryCommit, RepositoryRefs } from "@rebase/contracts";
 import { expect, it, vi } from "vite-plus/test";
 import { render } from "#tests-ui/runtime/render";
-import { openCommitGraphHistory } from "#web/features/commit-graph/index";
-import { createBrowserHistoryFilterStore } from "#web/features/commit-graph/scope/browser-history-filter-store";
-import { resolveHistoryScope } from "#web/features/commit-graph/scope/history-scope";
+import {
+  createBrowserHistoryFilterStore,
+  openCommitGraphHistory,
+  resolveHistoryScope,
+} from "#web/features/commit-graph/index";
 import { storeRepositoryHistoryPage } from "#web/features/repository-history/replica/repository-history-store";
 import { RepositoryHistoryOffline } from "#web/features/repository-history/repository-history-reader.contract";
 import {

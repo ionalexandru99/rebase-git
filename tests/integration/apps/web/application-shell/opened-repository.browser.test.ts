@@ -2,7 +2,7 @@ import type { RepositoryRefs } from "@rebase/contracts";
 import { Effect } from "effect";
 import { expect, it, vi } from "vite-plus/test";
 import { createOpenedRepositoryStore } from "#web/app/shell/opened-repository";
-import { createRepositoryRefsController } from "#web/features/repository-refs/repository-refs-controller";
+import { createRepositoryRefsController } from "#web/features/repository-refs/index";
 
 it("requests the first history page as soon as refs arrive", async () => {
   const repositoryId = crypto.randomUUID();

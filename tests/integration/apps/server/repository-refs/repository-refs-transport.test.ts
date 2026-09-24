@@ -18,8 +18,10 @@ import { RepositoryAccess } from "#server/domain/repository-access.contract";
 import { RepositoryCatalogAccess } from "#server/domain/repository-catalog.contract";
 import { RepositoryCoordination } from "#server/domain/repository-coordination.contract";
 import { RepositoryWatching } from "#server/domain/repository-watcher.contract";
-import { createEnvironmentAuthorization } from "#server/features/environment-authorization/environment-authorization";
-import { environmentAuthorizationFeature } from "#server/features/environment-authorization/index";
+import {
+  createEnvironmentAuthorization,
+  environmentAuthorizationFeature,
+} from "#server/features/environment-authorization/index";
 import {
   createRepositoryCatalog,
   repositoryCatalogFeature,

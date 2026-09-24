@@ -2,7 +2,7 @@ import type { RepositoryRefs, RepositoryRefTarget } from "@rebase/contracts";
 import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
 import { userEvent } from "vite-plus/test/browser";
 import { render } from "vitest-browser-react";
-import { historyRefKey } from "#web/features/commit-graph/scope/history-scope";
+import { historyRefKey } from "#web/features/commit-graph/index";
 import {
   RepositoryRefsBusy,
   type RepositoryRefsSnapshot,

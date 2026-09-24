@@ -17,8 +17,10 @@ import {
   type EnvironmentAuthorization,
   EnvironmentAuthorizationAccess,
 } from "#server/domain/environment-authorization.contract";
-import { createEnvironmentAuthorization } from "#server/features/environment-authorization/environment-authorization";
-import { environmentAuthorizationFeature } from "#server/features/environment-authorization/index";
+import {
+  createEnvironmentAuthorization,
+  environmentAuthorizationFeature,
+} from "#server/features/environment-authorization/index";
 import { acquireEnvironmentContext } from "#server/persistence/environment-context";
 import { environmentPaths } from "#server/persistence/storage/environment-paths";
 import { testEnvironmentFeatures } from "#tests-integration/apps/server/environment-connection/test-environment-features";

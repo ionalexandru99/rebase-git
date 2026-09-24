@@ -4,8 +4,8 @@ import {
   type RepositoryHistoryBatch,
 } from "@rebase/contracts";
 import { describe, expect, it, vi } from "vite-plus/test";
-import { createBrowserRepositoryHistoryReader } from "#web/features/repository-history/browser-repository-history-reader";
 import { clearHistoryCache } from "#web/features/repository-history/cache/repository-history-storage";
+import { createBrowserRepositoryHistoryReader } from "#web/features/repository-history/index";
 import { readRepositoryCommits } from "#web/features/repository-history/query/repository-history-query";
 import {
   beginRepositoryHistorySynchronization,

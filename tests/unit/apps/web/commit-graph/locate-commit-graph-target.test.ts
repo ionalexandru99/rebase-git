@@ -2,7 +2,6 @@ import type { RepositoryHistoryRefTarget } from "@rebase/contracts";
 import { describe, expect, it, vi } from "vite-plus/test";
 import type { CommitGraphPageReader } from "#web/features/commit-graph/paging/commit-graph-page-window.contract";
 import { locateCommitGraphTarget } from "#web/features/commit-graph/paging/locate-commit-graph-target";
-import { HistoryOrderIndex } from "#web/features/repository-history/query/history-order";
 import type { RepositoryHistoryQuery } from "#web/features/repository-history/repository-history-reader.contract";
 
 describe("search navigation outside the graph scope", () => {
@@ -16,33 +15,22 @@ describe("search navigation outside the graph scope", () => {
       }),
     );
     const main = { type: "branch" as const, name: "main", oid: "main" };
-    const index = new HistoryOrderIndex([
-      { oid: "main", parents: [], timestamp: 0 },
-      ...refs.map((ref, position) => ({
-        oid: ref.oid,
-        parents: position === 259 ? ["main", "target"] : ["main"],
-        timestamp: 1,
-      })),
-      { oid: "target", parents: [], timestamp: 0 },
-    ]);
+    const route = {
+      rootOid: "tip-259",
+      edges: [{ childOid: "tip-259", parentOid: "target" }],
+    };
     const reader = {
       getRefTargets: async () => [main, ...refs],
-      ancestryRoute: vi.fn(async (roots, oid) => {
+      ancestryRoute: vi.fn(async (roots: readonly string[], oid: string) => {
         expect(roots.length).toBeLessThanOrEqual(256);
-        return index.ancestryRoute(roots, oid);
+        return oid === "target" && roots.includes("tip-259")
+          ? route
+          : undefined;
       }),
-      locate: async (query, oid) => {
-        const offset = index
-          .order(
-            query.roots.map((ref) => ref.oid),
-            query.order,
-            [],
-            query.ancestry,
-            query.additionalParentEdges,
-          )
-          .indexOf(oid);
-        return offset < 0 ? undefined : offset;
-      },
+      locate: async (query, oid) =>
+        query.additionalParentEdges?.some((edge) => edge.parentOid === oid)
+          ? 2
+          : undefined,
       read: async () => [],
       locateMany: async () => [],
     } satisfies CommitGraphPageReader;

@@ -14,7 +14,7 @@ import { createEnvironmentEventPublisher } from "#server/adapters/environment-tr
 import { createLocalGitCommandRunner } from "#server/adapters/local-git/local-git-command-runner";
 import { createLocalRepositoryWatcher } from "#server/adapters/local-git/local-repository-watcher";
 import type { GitCommandRunner } from "#server/domain/git-command.contract";
-import { createRepositoryCatalog } from "#server/features/repository-catalog/repository-catalog";
+import { createRepositoryCatalog } from "#server/features/repository-catalog/index";
 import { acquireRepositoryChangePublisher } from "#server/features/repository-refs/repository-change-publisher";
 import { createRepositoryRefsService } from "#server/features/repository-refs/repository-refs";
 import { acquireEnvironmentContext } from "#server/persistence/environment-context";

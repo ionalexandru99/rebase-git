@@ -75,7 +75,7 @@
     "validate:quality": "pnpm check && pnpm typecheck && pnpm test:unit && pnpm build",
     "validate:release": "pnpm exec install-electron && pnpm build:desktop-package && pnpm package:desktop && pnpm test:release-smoke:built",
     "prepack": "pnpm build:package",
-    "check:architecture": "vp lint --tsconfig tests/tsconfig.json src"
+    "check:architecture": "vp lint --tsconfig tests/tsconfig.json src tests"
   },
   "dependencies": {
     "drizzle-orm": "1.0.0-rc.5-169397b",

@@ -12,8 +12,10 @@ import { createLocalGitCommandRunner } from "#server/adapters/local-git/local-gi
 import { acquireEnvironmentListener } from "#server/app/server/environment-listener";
 import { EnvironmentAuthorizationAccess } from "#server/domain/environment-authorization.contract";
 import { RepositoryCatalogAccess } from "#server/domain/repository-catalog.contract";
-import { createEnvironmentAuthorization } from "#server/features/environment-authorization/environment-authorization";
-import { environmentAuthorizationFeature } from "#server/features/environment-authorization/index";
+import {
+  createEnvironmentAuthorization,
+  environmentAuthorizationFeature,
+} from "#server/features/environment-authorization/index";
 import { environmentFilesystemFeature } from "#server/features/environment-filesystem/index";
 import {
   createRepositoryCatalog,

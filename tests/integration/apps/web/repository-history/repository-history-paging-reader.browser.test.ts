@@ -3,7 +3,7 @@ import {
   type RepositoryCommit,
 } from "@rebase/contracts";
 import { describe, expect, it, vi } from "vite-plus/test";
-import { createBrowserRepositoryHistoryReader } from "#web/features/repository-history/browser-repository-history-reader";
+import { createBrowserRepositoryHistoryReader } from "#web/features/repository-history/index";
 import type {
   RepositoryHistoryGateway,
   RepositoryHistoryQuery,

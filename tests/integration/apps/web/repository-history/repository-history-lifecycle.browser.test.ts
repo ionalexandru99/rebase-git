@@ -1,5 +1,5 @@
 import { expect, it } from "vite-plus/test";
-import { createBrowserRepositoryHistoryReader } from "#web/features/repository-history/browser-repository-history-reader";
+import { createBrowserRepositoryHistoryReader } from "#web/features/repository-history/index";
 import { RepositoryHistoryOffline } from "#web/features/repository-history/repository-history-reader.contract";
 
 it.each(["clear", "remove"] as const)(

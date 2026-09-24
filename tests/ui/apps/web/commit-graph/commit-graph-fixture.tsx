@@ -7,7 +7,7 @@ import {
   type CommitGraphReader,
   openCommitGraphHistory,
 } from "#web/features/commit-graph/index";
-import { saveRepositoryHistoryOrder } from "#web/features/repository-history/preferences/repository-history-order";
+import { saveRepositoryHistoryOrder } from "#web/features/repository-history/index";
 import type {
   RepositoryHistoryQuery,
   RepositoryHistoryReader,

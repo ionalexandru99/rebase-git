@@ -14,7 +14,6 @@ import {
   type EnvironmentAuthorization,
   EnvironmentAuthorizationError,
 } from "#server/domain/environment-authorization.contract";
-import { EnvironmentFilesystemError } from "#server/features/environment-filesystem/environment-filesystem";
 import { testEnvironmentFeatures } from "#tests-integration/apps/server/environment-connection/test-environment-features";
 
 const writerCredential = "writer";
@@ -40,14 +39,12 @@ const routes = [
     EnvironmentFilesystemHttpApi.listDirectory,
     (directory) =>
       directory.path === "/missing"
-        ? Effect.fail(
-            new EnvironmentFilesystemError({
-              failure: {
-                _tag: "EnvironmentDirectoryRejected",
-                reason: "NotFound",
-              },
-            }),
-          )
+        ? Effect.fail({
+            failure: {
+              _tag: "EnvironmentDirectoryRejected" as const,
+              reason: "NotFound" as const,
+            },
+          })
         : Effect.succeed({
             breadcrumbs: [],
             entries: [],

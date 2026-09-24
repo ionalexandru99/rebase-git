@@ -24,7 +24,7 @@ import {
   EnvironmentAuthorizationAccess,
 } from "#server/domain/environment-authorization.contract";
 import { environmentAuthorizationFeature } from "#server/features/environment-authorization/index";
-import { createRepositoryCatalog } from "#server/features/repository-catalog/repository-catalog";
+import { createRepositoryCatalog } from "#server/features/repository-catalog/index";
 import { RepositoryHistoryError } from "#server/features/repository-history/git/history-failures";
 import { readObjectFormat } from "#server/features/repository-history/git/read-object-format";
 import { readRepositoryHistorySnapshot } from "#server/features/repository-history/git/read-repository-history-snapshot";

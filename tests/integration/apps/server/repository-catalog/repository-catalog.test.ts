@@ -17,7 +17,7 @@ import {
   type GitCommandRunner,
 } from "#server/domain/git-command.contract";
 import { RepositoryCatalogError } from "#server/domain/repository-catalog.contract";
-import { createRepositoryCatalog } from "#server/features/repository-catalog/repository-catalog";
+import { createRepositoryCatalog } from "#server/features/repository-catalog/index";
 import { acquireEnvironmentContext } from "#server/persistence/environment-context";
 import type { EnvironmentContext } from "#server/persistence/environment-context.contract";
 import { repositoryCatalogTable } from "#server/persistence/environment-state.schema";

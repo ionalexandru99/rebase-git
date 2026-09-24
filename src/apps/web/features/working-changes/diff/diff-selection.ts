@@ -1,6 +1,6 @@
-import type { FileDiffMetadata, SelectedLineRange } from "@pierre/diffs";
+import type { Hunk, SelectedLineRange } from "@pierre/diffs";
 export function selectedDiffLines(
-  diff: FileDiffMetadata,
+  diff: { readonly hunks: readonly Pick<Hunk, "hunkContent">[] },
   range: SelectedLineRange | null,
 ) {
   if (range === null) return [];
