@@ -9,11 +9,6 @@ export default defineConfig({
     ["junit", { outputFile: "tests/.artifacts/e2e.xml" }],
   ],
   testDir: "tests/e2e",
-  webServer: {
-    command: "pnpm dev:web --host 127.0.0.1 --strictPort",
-    reuseExistingServer: !process.env.CI,
-    url: "http://127.0.0.1:4173",
-  },
   use: {
     screenshot: "only-on-failure",
     trace: "retain-on-failure",
@@ -22,10 +17,7 @@ export default defineConfig({
     {
       name: "browser",
       testMatch: "**/*.browser.test.ts",
-      use: {
-        ...devices["Desktop Chrome"],
-        baseURL: process.env.REBASE_E2E_BASE_URL ?? "http://127.0.0.1:4173",
-      },
+      use: devices["Desktop Chrome"],
     },
     {
       name: "electron",
