@@ -185,6 +185,24 @@ describe("pushing branches", () => {
     expect(JSON.stringify(rejected)).toContain("name must match JIRA-123");
   });
 
+  it("refuses to push while a merge is in progress", async () => {
+    const f = await fixture();
+    await writeFile(join(f.local, "file.txt"), "main\n");
+    await git(f.local, "add", "file.txt");
+    await git(f.local, "commit", "-m", "main");
+    await git(f.local, "switch", "-c", "side", "HEAD~1");
+    await writeFile(join(f.local, "file.txt"), "side\n");
+    await git(f.local, "add", "file.txt");
+    await git(f.local, "commit", "-m", "side");
+    await git(f.local, "switch", "main");
+    await git(f.local, "merge", "side").catch(() => undefined);
+
+    expect(await f.failure(f.push("main"))).toMatchObject({ reason: "Busy" });
+    expect(await f.tip(f.remote, "refs/heads/main")).not.toBe(
+      await f.tip(f.local, "refs/heads/main"),
+    );
+  });
+
   it("rejects a remote that does not exist", async () => {
     const f = await fixture();
 

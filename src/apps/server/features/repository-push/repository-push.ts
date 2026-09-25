@@ -23,7 +23,10 @@ export function createRepositoryPushService(
       Effect.andThen(coordination.run(scope.worktreePath, "push", push)),
       Effect.mapError((error) =>
         error._tag === "RepositoryCoordinationError"
-          ? pushError(error.reason === "Busy" ? "Busy" : "Failed", error.detail)
+          ? pushError(
+              error.reason === "Unavailable" ? "Failed" : "Busy",
+              error.detail,
+            )
           : error,
       ),
     );
