@@ -29,6 +29,7 @@ const worktreeWrites: readonly RepositoryWrite[] = [
   "recover",
 ];
 const refWrites: readonly RepositoryWrite[] = [
+  "branch",
   "checkout",
   "fetch",
   "pull",
@@ -150,7 +151,8 @@ function requireCompatibleWrite(
   paths: GitDirectories,
   write: RepositoryWrite,
 ) {
-  if (write === "fetch" || write === "recover") return Effect.void;
+  if (write === "branch" || write === "fetch" || write === "recover")
+    return Effect.void;
   return readRepositoryOperation(git, directory, paths).pipe(
     Effect.flatMap((state) => {
       if (state.lock !== null)

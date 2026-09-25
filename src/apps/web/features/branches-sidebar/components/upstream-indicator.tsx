@@ -8,11 +8,19 @@ export function UpstreamIndicator({
 }) {
   if (upstream.gone)
     return (
-      <span className="shrink-0 text-xs text-status-unavailable">gone</span>
+      <span
+        className="shrink-0 text-xs text-status-unavailable"
+        data-upstream-indicator
+      >
+        gone
+      </span>
     );
   if (upstream.ahead === 0 && upstream.behind === 0) return null;
   return (
-    <span className="flex shrink-0 items-center gap-1 text-xs font-normal tabular-nums">
+    <span
+      className="flex shrink-0 items-center gap-1 text-xs font-normal tabular-nums"
+      data-upstream-indicator
+    >
       {upstream.ahead > 0 ? (
         <span
           role="img"

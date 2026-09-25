@@ -10,6 +10,7 @@ import type {
 } from "@rebase/environment-client";
 import type { Effect, ManagedRuntime, Scope } from "effect";
 import type { EnvironmentProtocolConnection } from "#web/app/environment/connection/environment-protocol-connection.contract";
+import type { BranchManagement } from "#web/features/branch-management/index";
 import type { EnvironmentFilesystemController } from "#web/features/environment-filesystem/environment-filesystem-controller.contract";
 import type { RepositoryCatalogController } from "#web/features/repository-catalog/repository-catalog-controller.contract";
 import type { RepositoryHistoryGateway } from "#web/features/repository-history/repository-history-reader.contract";
@@ -48,6 +49,7 @@ export interface ConnectedFeature {
 }
 
 export interface LocalEnvironmentControllers {
+  readonly branches: BranchManagement;
   readonly filesystem: EnvironmentFilesystemController;
   readonly repositoryCatalog: RepositoryCatalogController;
   readonly repositoryHistory: RepositoryHistoryGateway;

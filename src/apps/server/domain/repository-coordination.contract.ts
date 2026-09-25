@@ -2,6 +2,7 @@ import type { RepositoryOperation } from "@rebase/contracts";
 import { Context, Data, type Effect } from "effect";
 
 export type RepositoryWrite =
+  | "branch"
   | "checkout"
   | "fetch"
   | "pull"

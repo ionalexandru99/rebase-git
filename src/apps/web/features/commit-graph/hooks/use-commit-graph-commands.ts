@@ -13,6 +13,7 @@ import type {
 
 export function useCommitGraphCommands({
   commandEnvironment,
+  onCreateBranch,
   reader,
   historySnapshot,
   fetch,
@@ -20,6 +21,7 @@ export function useCommitGraphCommands({
   selectedOids,
   onOpenDetails,
 }: {
+  readonly onCreateBranch?: ((oid: string) => void) | undefined;
   readonly onOpenDetails?: ((oid: string) => void) | undefined;
   readonly commandEnvironment: GraphCommandEnvironment | undefined;
   readonly reader:
@@ -37,12 +39,13 @@ export function useCommitGraphCommands({
   const handlers = useMemo(
     (): GraphCommandHandlers => ({
       ...(onOpenDetails === undefined ? {} : { openDetails: onOpenDetails }),
+      ...(onCreateBranch === undefined ? {} : { createBranch: onCreateBranch }),
       readCommit: async (oid) => (await reader?.getCommitSummaries([oid]))?.[0],
       writeClipboard: writeClipboardText,
       ...(reader === undefined ? {} : { fetch: fetch.execute }),
       ...(pullBranch === undefined ? {} : { pull: pullBranch }),
     }),
-    [onOpenDetails, reader, fetch.execute, pullBranch],
+    [onCreateBranch, onOpenDetails, reader, fetch.execute, pullBranch],
   );
   const commands = useGraphCommands({
     environment:

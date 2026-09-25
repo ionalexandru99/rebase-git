@@ -1,4 +1,7 @@
-import { RepositoryRefsHttpApi } from "@rebase/contracts";
+import {
+  RepositoryBranchesHttpApi,
+  RepositoryRefsHttpApi,
+} from "@rebase/contracts";
 import { Effect } from "effect";
 import type { EnvironmentFeature } from "#server/adapters/environment-transport/environment-feature.contract";
 import { httpRoute } from "#server/adapters/environment-transport/http/environment-http-route-handler";
@@ -7,23 +10,33 @@ import { GitCommands } from "#server/domain/git-command.contract";
 import { RepositoryAccess } from "#server/domain/repository-access.contract";
 import { RepositoryCoordination } from "#server/domain/repository-coordination.contract";
 import { RepositoryWatching } from "#server/domain/repository-watcher.contract";
+import { branchesFailureStatus } from "#server/features/repository-refs/git/branches/branch-failures";
 import type { RepositoryRefsError } from "#server/features/repository-refs/git/repository-refs-failures";
+import { createRepositoryBranchesService } from "#server/features/repository-refs/repository-branches";
 import { acquireRepositoryChangePublisher } from "#server/features/repository-refs/repository-change-publisher";
 import { createRepositoryRefsService } from "#server/features/repository-refs/repository-refs";
 import { repositoryRefsRpc } from "#server/features/repository-refs/rpc/repository-refs-rpc";
 
 export const repositoryRefsFeature = Effect.gen(function* () {
   const git = yield* GitCommands;
+  const access = yield* RepositoryAccess;
+  const coordination = yield* RepositoryCoordination;
   const refs = createRepositoryRefsService({
-    access: yield* RepositoryAccess,
+    access,
     changes: yield* acquireRepositoryChangePublisher(
       git,
       yield* RepositoryWatching,
       yield* EnvironmentEvents,
     ),
     git,
-    coordination: yield* RepositoryCoordination,
+    coordination,
   });
+  const branches = createRepositoryBranchesService({
+    access,
+    git,
+    coordination,
+  });
+  const branchOptions = { failureStatus: branchesFailureStatus };
   return {
     capabilities: ["repository-refs"],
     httpRoutes: [
@@ -31,6 +44,26 @@ export const repositoryRefsFeature = Effect.gen(function* () {
         RepositoryRefsHttpApi.checkout,
         (command) => refs.checkout(command),
         { failureStatus },
+      ),
+      httpRoute(
+        RepositoryBranchesHttpApi.create,
+        (command) => branches.create(command),
+        branchOptions,
+      ),
+      httpRoute(
+        RepositoryBranchesHttpApi.rename,
+        (command) => branches.rename(command),
+        branchOptions,
+      ),
+      httpRoute(
+        RepositoryBranchesHttpApi.setUpstream,
+        (command) => branches.setUpstream(command),
+        branchOptions,
+      ),
+      httpRoute(
+        RepositoryBranchesHttpApi.delete,
+        (command) => branches.delete(command),
+        branchOptions,
       ),
     ],
     rpc: (session) => repositoryRefsRpc(session, refs),

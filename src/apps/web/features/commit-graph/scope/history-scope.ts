@@ -81,6 +81,22 @@ export function toggleHistoryRef(
     : { _tag: "Custom", selections: uniqueSelections(next) };
 }
 
+export function renameHistoryBranch(
+  scope: HistoryScope,
+  previousName: string,
+  name: string,
+): HistoryScope {
+  if (scope._tag !== "Custom") return scope;
+  return {
+    _tag: "Custom",
+    selections: scope.selections.map((selection) =>
+      selection._tag === "LocalBranch" && selection.name === previousName
+        ? { ...selection, name }
+        : selection,
+    ),
+  };
+}
+
 export function historyRefKey(target: RepositoryRefTarget): string {
   switch (target._tag) {
     case "LocalBranch":

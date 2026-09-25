@@ -35,6 +35,7 @@ export interface GraphCommandDescriptor<Id extends string = string> {
 }
 
 export interface GraphCommandHandlers {
+  readonly createBranch?: (oid: string) => void;
   readonly openDetails?: (oid: string) => void;
   readonly readCommit: (oid: string) => Promise<RepositoryCommit | undefined>;
   readonly writeClipboard: (text: string) => Promise<void>;

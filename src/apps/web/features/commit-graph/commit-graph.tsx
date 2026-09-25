@@ -82,9 +82,11 @@ export function CommitGraph({
   remoteProviders,
   toolbarActions,
   pull,
+  onCreateBranch,
   onOpenDetails,
   onActiveCommitChange,
 }: {
+  readonly onCreateBranch?: ((oid: string) => void) | undefined;
   readonly onOpenDetails?: ((oid: string) => void) | undefined;
   readonly onActiveCommitChange?:
     | ((oid: string | undefined) => void)
@@ -276,6 +278,7 @@ export function CommitGraph({
     fetch,
     pull,
     selectedOids: navigation.selection.selectedOids,
+    onCreateBranch,
     onOpenDetails,
   });
   const handleKeyDown = (event: KeyboardEvent<HTMLElement>) => {

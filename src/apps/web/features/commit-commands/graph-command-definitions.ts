@@ -1,3 +1,4 @@
+import { createBranchHereCommand } from "#web/features/commit-commands/definitions/branch-commands";
 import {
   createCopyShaCommand,
   createCopySubjectCommand,
@@ -12,6 +13,7 @@ export function createGraphCommandDefinitions(handlers: GraphCommandHandlers) {
     createOpenDetailsCommand(handlers.openDetails),
     createCopyShaCommand(handlers.writeClipboard),
     createCopySubjectCommand(handlers),
+    createBranchHereCommand(handlers.createBranch),
     createFetchCommand(handlers.fetch),
     createPullCommand(handlers.pull),
   ] as const;
