@@ -26,6 +26,7 @@ import {
 } from "#web/features/project-navigation/index";
 import { RepositoryFolderPicker } from "#web/features/repository-folder-picker/index";
 import { useRepositoryHistoryReader } from "#web/features/repository-history/hooks/use-repository-history-reader";
+import { RepositoryPush } from "#web/features/repository-push/index";
 import { RepositorySettingsPage } from "#web/features/repository-settings/index";
 import { SettingsPanel } from "#web/features/settings/index";
 import { useStore } from "#web/platform/store/use-store";
@@ -400,27 +401,31 @@ export function ApplicationShell({
       </section>
     </div>
   );
+  const worktreeScope =
+    graphRepository === undefined
+      ? undefined
+      : { repositoryId: graphRepository.id, worktreePath: activeWorktreePath };
   return (
     <OperationRecoveryProvider
       requests={session.requests}
       changes={session.changes}
       runtime={session.runtime}
       connected={connected}
-      scope={
-        graphRepository === undefined
-          ? undefined
-          : {
-              repositoryId: graphRepository.id,
-              worktreePath: activeWorktreePath,
-            }
-      }
+      scope={worktreeScope}
     >
-      <WorkspacePanel.Sessions
-        environment={panelEnvironment}
-        repositoryIds={panelRepositoryIds}
+      <RepositoryPush.Provider
+        requests={session.requests}
+        runtime={session.runtime}
+        connected={connected}
+        scope={worktreeScope}
       >
-        {content}
-      </WorkspacePanel.Sessions>
+        <WorkspacePanel.Sessions
+          environment={panelEnvironment}
+          repositoryIds={panelRepositoryIds}
+        >
+          {content}
+        </WorkspacePanel.Sessions>
+      </RepositoryPush.Provider>
     </OperationRecoveryProvider>
   );
 }

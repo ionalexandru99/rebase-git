@@ -11,4 +11,5 @@ export * from "@rebase/contracts/repository-comparison/index";
 export * from "@rebase/contracts/repository-history/index";
 export * from "@rebase/contracts/repository-operations/index";
 export * from "@rebase/contracts/repository-pull/index";
+export * from "@rebase/contracts/repository-push/index";
 export * from "@rebase/contracts/repository-refs/index";

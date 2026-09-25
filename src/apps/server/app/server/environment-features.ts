@@ -11,6 +11,7 @@ import {
 } from "#server/features/repository-history/index";
 import { repositoryOperationsFeature } from "#server/features/repository-operations/index";
 import { repositoryPullFeature } from "#server/features/repository-pull/index";
+import { repositoryPushFeature } from "#server/features/repository-push/index";
 import { repositoryRefsFeature } from "#server/features/repository-refs/index";
 
 export const environmentFeatures = Effect.map(
@@ -24,6 +25,7 @@ export const environmentFeatures = Effect.map(
     repositoryFreshnessFeature,
     repositoryOperationsFeature,
     repositoryPullFeature,
+    repositoryPushFeature,
     repositoryRefsFeature,
   ]),
   combineEnvironmentFeatures,

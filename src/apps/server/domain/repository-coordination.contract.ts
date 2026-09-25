@@ -5,6 +5,7 @@ export type RepositoryWrite =
   | "checkout"
   | "fetch"
   | "pull"
+  | "push"
   | "stage"
   | "unstage"
   | "discard"
