@@ -93,16 +93,20 @@ export function SectionRow({
 export function RefRow({
   active,
   onActivate,
+  onPull,
   onSelect,
   onToggleHistory,
+  pulling,
   row,
   selectedInHistory,
   style,
 }: {
   readonly active: boolean;
   readonly onActivate: () => void;
+  readonly onPull: (() => void) | undefined;
   readonly onSelect: () => void;
   readonly onToggleHistory: () => void;
+  readonly pulling: boolean;
   readonly row: BranchesSidebarRefRow;
   readonly selectedInHistory: boolean;
   readonly style: CSSProperties;
@@ -169,6 +173,13 @@ export function RefRow({
       />
       <ContextMenuContent>
         <ContextMenuItem onClick={onSelect}>Checkout</ContextMenuItem>
+        {onPull === undefined ||
+        row.target._tag !== "LocalBranch" ||
+        row.upstream === undefined ? null : (
+          <ContextMenuItem disabled={pulling} onClick={onPull}>
+            Pull
+          </ContextMenuItem>
+        )}
       </ContextMenuContent>
     </ContextMenu>
   );

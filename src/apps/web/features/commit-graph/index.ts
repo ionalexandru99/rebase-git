@@ -1,6 +1,7 @@
 export type {
   CommitGraphHandle,
   CommitGraphHistory,
+  CommitGraphPull,
   CommitGraphReader,
 } from "#web/features/commit-graph/commit-graph.contract";
 export {

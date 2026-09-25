@@ -26,6 +26,7 @@ import { CommitCommandMenu } from "#web/features/commit-commands/index";
 import type {
   CommitGraphHandle,
   CommitGraphHistory,
+  CommitGraphPull,
   CommitGraphViewportAnchor,
 } from "#web/features/commit-graph/commit-graph.contract";
 import type { CommitGraphSelectionMode } from "#web/features/commit-graph/commit-selection.contract";
@@ -80,6 +81,7 @@ export function CommitGraph({
   githubRepository,
   remoteProviders,
   toolbarActions,
+  pull,
   onOpenDetails,
   onActiveCommitChange,
 }: {
@@ -88,6 +90,7 @@ export function CommitGraph({
     | ((oid: string | undefined) => void)
     | undefined;
   readonly toolbarActions?: ReactNode;
+  readonly pull?: CommitGraphPull | undefined;
   readonly ref?: Ref<CommitGraphHandle>;
   readonly commandEnvironment?: GraphCommandEnvironment | undefined;
   readonly onAddHistoryRef?: () => void;
@@ -266,11 +269,12 @@ export function CommitGraph({
     ? navigation.selection.activeOid
     : undefined;
 
-  const { commands, fetchAction } = useCommitGraphCommands({
+  const { commands, fetchAction, pullAction } = useCommitGraphCommands({
     commandEnvironment,
     reader,
     historySnapshot,
     fetch,
+    pull,
     selectedOids: navigation.selection.selectedOids,
     onOpenDetails,
   });
@@ -348,6 +352,13 @@ export function CommitGraph({
           fetchAction={fetchAction}
           fetching={fetch.fetching}
         />
+        {pull === undefined || pullAction === undefined ? null : (
+          <CommitGraphToolbar.Pull
+            pullAction={pullAction}
+            pulling={pull.pulling}
+            incoming={pull.incoming}
+          />
+        )}
         {toolbarActions}
       </CommitGraphToolbar.Frame>
       <GraphRefAppearance

@@ -174,6 +174,70 @@ describe("branches sidebar", () => {
     });
   });
 
+  it("pulls a tracked branch from its menu with pointer and keyboard", async () => {
+    const current = refs();
+    const tracked: RepositoryRefs = {
+      ...current,
+      branches: current.branches.map((branch) =>
+        branch.name === "feature"
+          ? {
+              ...branch,
+              upstream: {
+                ahead: 0,
+                behind: 2,
+                gone: false,
+                name: "origin/feature",
+              },
+            }
+          : branch,
+      ),
+    };
+    const onPullBranch = vi.fn<(branch: string) => void>();
+    const callbacks = sidebarCallbacks();
+    const view = (pulling: boolean) => (
+      <div style={{ height: 480, width: 320 }}>
+        <BranchesSidebar
+          activeWorktreePath={mainPath}
+          focusRequest={0}
+          onPullBranch={onPullBranch}
+          onRetry={callbacks.onRetry}
+          onSelectRef={callbacks.onSelectRef}
+          pulling={pulling}
+          snapshot={snapshot({ refs: tracked, status: "ready" })}
+        />
+      </div>
+    );
+    const screen = await render(view(false));
+    const tree = screen.getByRole("tree", { name: "Branches" });
+
+    await tree
+      .getByRole("treeitem", { name: "main, current branch" })
+      .click({ button: "right" });
+    await expect
+      .element(screen.getByRole("menuitem", { name: "Checkout" }))
+      .toBeVisible();
+    await expect
+      .element(screen.getByRole("menuitem", { name: "Pull" }))
+      .not.toBeInTheDocument();
+    await userEvent.keyboard("{Escape}");
+
+    const feature = tree.getByRole("treeitem", { name: "feature" });
+    await feature.click({ button: "right" });
+    await screen.getByRole("menuitem", { name: "Pull" }).click();
+    expect(onPullBranch).toHaveBeenLastCalledWith("feature");
+
+    tree.element().focus();
+    await userEvent.keyboard("{Shift>}{F10}{/Shift}");
+    await screen.getByRole("menuitem", { name: "Pull" }).click();
+    expect(onPullBranch).toHaveBeenCalledTimes(2);
+
+    await screen.rerender(view(true));
+    await feature.click({ button: "right" });
+    await expect
+      .element(screen.getByRole("menuitem", { name: "Pull" }))
+      .toHaveAttribute("aria-disabled", "true");
+  });
+
   it("adds and removes refs from history with pointer and keyboard", async () => {
     const { onToggleHistoryRef, screen } = await renderSidebar({
       selectedHistoryRefKeys: new Set([

@@ -19,7 +19,7 @@ export async function renderGraph(
   roots = [{ name: "main", oid: "0".repeat(40), type: "branch" as const }],
   options: Pick<
     ComponentProps<typeof CommitGraph>,
-    "onRemoveHistoryRef" | "commandEnvironment"
+    "onRemoveHistoryRef" | "commandEnvironment" | "pull"
   > = {},
 ) {
   saveRepositoryHistoryOrder(

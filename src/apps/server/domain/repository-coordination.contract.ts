@@ -4,6 +4,7 @@ import { Context, Data, type Effect } from "effect";
 export type RepositoryWrite =
   | "checkout"
   | "fetch"
+  | "pull"
   | "stage"
   | "unstage"
   | "discard"

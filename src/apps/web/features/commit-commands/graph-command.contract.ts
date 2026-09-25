@@ -39,6 +39,7 @@ export interface GraphCommandHandlers {
   readonly readCommit: (oid: string) => Promise<RepositoryCommit | undefined>;
   readonly writeClipboard: (text: string) => Promise<void>;
   readonly fetch?: (context: GraphCommandContext) => void | Promise<void>;
+  readonly pull?: (branch: string) => void;
 }
 
 export type GraphCommandResult =

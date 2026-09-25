@@ -340,6 +340,7 @@ export function ApplicationShell({
                     refs={repositoryRefs}
                     repositoryId={navigation.selectedRepositoryId}
                     repositoryName={selectedRepository?.name ?? "Repository"}
+                    requests={session.requests}
                     retryRefs={retryRefs}
                     selectRef={selectRef}
                   />

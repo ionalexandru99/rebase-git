@@ -20,6 +20,7 @@ import {
 
 const worktreeWrites: readonly RepositoryWrite[] = [
   "checkout",
+  "pull",
   "stage",
   "unstage",
   "discard",
@@ -30,6 +31,7 @@ const worktreeWrites: readonly RepositoryWrite[] = [
 const refWrites: readonly RepositoryWrite[] = [
   "checkout",
   "fetch",
+  "pull",
   "commit",
   "amend",
   "recover",
