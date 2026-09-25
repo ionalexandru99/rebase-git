@@ -8,6 +8,7 @@ import {
   pullAccessFailed,
   pullBlocked,
 } from "#server/features/repository-pull/git/pull-failures";
+import { pullWritePolicy } from "#server/features/repository-pull/repository-pull.write-policy";
 
 export function createRepositoryPullService(dependencies: {
   readonly access: RepositoryAccessService;
@@ -34,7 +35,7 @@ export function createRepositoryPullService(dependencies: {
         return yield* coordination
           .run(
             directory,
-            "pull",
+            pullWritePolicy,
             findCheckout(repository.path, branch).pipe(
               Effect.flatMap((current) =>
                 current === checkout

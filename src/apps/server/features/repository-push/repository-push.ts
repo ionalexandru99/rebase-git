@@ -8,6 +8,7 @@ import {
   type RepositoryPushError,
 } from "#server/features/repository-push/git/push-failures";
 import { pushRemoteBranch } from "#server/features/repository-push/git/push-remote-branch";
+import { pushWritePolicy } from "#server/features/repository-push/repository-push.write-policy";
 
 export function createRepositoryPushService(
   access: RepositoryAccessService,
@@ -20,7 +21,9 @@ export function createRepositoryPushService(
   ) =>
     access.requireWorktree(scope).pipe(
       Effect.mapError((error) => pushError("Missing", error.detail)),
-      Effect.andThen(coordination.run(scope.worktreePath, "push", push)),
+      Effect.andThen(
+        coordination.run(scope.worktreePath, pushWritePolicy, push),
+      ),
       Effect.mapError((error) =>
         error._tag === "RepositoryCoordinationError"
           ? pushError(

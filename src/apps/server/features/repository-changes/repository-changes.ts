@@ -14,7 +14,7 @@ import type { RepositoryAccessService } from "#server/domain/repository-access.c
 import type {
   RepositoryCoordinationError,
   RepositoryCoordinationService,
-  RepositoryWrite,
+  RepositoryWritePolicy,
 } from "#server/domain/repository-coordination.contract";
 import type { RepositoryGitError } from "#server/domain/repository-git.contract";
 import {
@@ -30,6 +30,7 @@ import {
   verifyChangedFiles,
   verifyChanges,
 } from "#server/features/repository-changes/git/verify-changes";
+import { changesWritePolicies } from "#server/features/repository-changes/repository-changes.write-policy";
 import { runRepositoryGit } from "#server/repository/access/index";
 
 export function createRepositoryChangesService(
@@ -55,9 +56,9 @@ export function createRepositoryChangesService(
     );
   const locked = <A>(
     scope: ChangesScope,
-    write: RepositoryWrite,
+    policy: RepositoryWritePolicy,
     run: Effect.Effect<A, RepositoryChangesError | RepositoryGitError>,
-  ) => inWorktree(scope, coordination.run(scope.worktreePath, write, run));
+  ) => inWorktree(scope, coordination.run(scope.worktreePath, policy, run));
   return {
     read: (scope: ChangesScope) =>
       inWorktree(
@@ -81,7 +82,7 @@ export function createRepositoryChangesService(
     mutate: (command: MutateChanges) =>
       locked(
         command,
-        command.action,
+        changesWritePolicies[command.action],
         Effect.gen(function* () {
           yield* withChangeIndex(git, command.worktreePath, (indexFile) =>
             Effect.gen(function* () {
@@ -106,7 +107,7 @@ export function createRepositoryChangesService(
     commit: (command: CommitChanges) =>
       locked(
         command,
-        command.amend ? "amend" : "commit",
+        changesWritePolicies[command.amend ? "amend" : "commit"],
         withChangeIndex(git, command.worktreePath, (indexFile) =>
           Effect.gen(function* () {
             const { snapshot } = yield* verifyChanges(git, command);

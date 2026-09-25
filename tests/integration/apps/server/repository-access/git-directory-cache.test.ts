@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { Effect, Stream } from "effect";
 import { afterEach, beforeEach, expect, it } from "vite-plus/test";
 import type { GitCommandRunner } from "#server/domain/git-command.contract";
+import { recoverWritePolicy } from "#server/features/repository-operations/repository-operations.write-policy";
 import { createRepositoryCoordination } from "#server/repository/access/index";
 import { removeTemporaryDirectory } from "#tests-support/temporary-directory";
 
@@ -28,7 +29,7 @@ function coordinationRun() {
   const coordination = createRepositoryCoordination(git);
   return (operation: Effect.Effect<void, string> = Effect.void) =>
     Effect.runPromise(
-      Effect.exit(coordination.run(worktree, "recover", operation)),
+      Effect.exit(coordination.run(worktree, recoverWritePolicy, operation)),
     );
 }
 

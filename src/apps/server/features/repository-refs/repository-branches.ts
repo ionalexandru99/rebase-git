@@ -18,6 +18,7 @@ import { createBranch } from "#server/features/repository-refs/git/branches/crea
 import { deleteBranch } from "#server/features/repository-refs/git/branches/delete-branch";
 import { renameBranch } from "#server/features/repository-refs/git/branches/rename-branch";
 import { setBranchUpstream } from "#server/features/repository-refs/git/branches/set-branch-upstream";
+import { branchWritePolicy } from "#server/features/repository-refs/repository-refs.write-policy";
 
 export type RepositoryBranchesService = ReturnType<
   typeof createRepositoryBranchesService
@@ -39,7 +40,9 @@ export function createRepositoryBranchesService(dependencies: {
   ) =>
     access.requireWorktree(scope).pipe(
       Effect.mapError(branchAccessFailed),
-      Effect.andThen(coordination.run(scope.worktreePath, "branch", operation)),
+      Effect.andThen(
+        coordination.run(scope.worktreePath, branchWritePolicy, operation),
+      ),
       Effect.catchTag("RepositoryCoordinationError", (error) =>
         Effect.fail(branchCoordinationFailed(error)),
       ),

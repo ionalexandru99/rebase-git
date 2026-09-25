@@ -9,6 +9,7 @@ import {
   type RepositoryOperationError,
 } from "#server/features/repository-operations/git/operation-failures";
 import { recoverRepositoryOperation } from "#server/features/repository-operations/git/recover-operation";
+import { recoverWritePolicy } from "#server/features/repository-operations/repository-operations.write-policy";
 
 export function createRepositoryOperationsService(
   access: RepositoryAccessService,
@@ -37,7 +38,7 @@ export function createRepositoryOperationsService(
         coordination
           .run(
             command.worktreePath,
-            "recover",
+            recoverWritePolicy,
             recoverRepositoryOperation(git, coordination, command),
           )
           .pipe(

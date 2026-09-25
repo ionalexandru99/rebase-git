@@ -13,6 +13,7 @@ import {
 } from "#server/features/repository-history/freshness/repository-fetch-settings";
 import type { FreshnessSubscription } from "#server/features/repository-history/freshness/watched-repository.contract";
 import { RepositoryHistoryError } from "#server/features/repository-history/git/history-failures";
+import { fetchWritePolicy } from "#server/features/repository-history/repository-history.write-policy";
 import {
   readGitCommonDirectory,
   runRepositoryGit,
@@ -104,7 +105,7 @@ export function acquireWatchedRepository(
         const directory = path();
         return coordination.run(
           directory,
-          "fetch",
+          fetchWritePolicy,
           runRepositoryGit(git, directory, ["fetch"], {
             timeoutMilliseconds: 120_000,
           }),
