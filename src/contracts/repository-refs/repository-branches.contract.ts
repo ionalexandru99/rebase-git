@@ -6,6 +6,8 @@ import {
 } from "@rebase/contracts/git/git-failures.contract";
 import {
   ObjectId,
+  RefName,
+  RemoteName,
   RepositoryId,
   RepositoryPath,
 } from "@rebase/contracts/git/git-values.contract";
@@ -13,8 +15,6 @@ import {
   BranchCheckedOutElsewhere,
   LocalBranch,
   RefMissing,
-  RefName,
-  RemoteName,
   WorktreeMissing,
 } from "@rebase/contracts/repository-refs/repository-refs.contract";
 import { Schema } from "effect";
