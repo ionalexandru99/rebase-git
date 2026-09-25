@@ -12,7 +12,7 @@ interface PullAttempt {
   readonly error?: string;
 }
 
-export function useRepositoryPull(
+export function usePullAttempts(
   requests: EnvironmentRequestClient | undefined,
   repositoryId: string | undefined,
   reader: Pick<RepositoryHistoryFetchCommands, "fetch"> | undefined,
@@ -59,15 +59,19 @@ export function useRepositoryPull(
     },
     [client, repositoryId, reader],
   );
+  const error = useMemo(
+    () =>
+      attempt?.error === undefined
+        ? undefined
+        : { id: attempt.id, message: attempt.error },
+    [attempt],
+  );
   return {
     pull:
       client === undefined || repositoryId === undefined || reader === undefined
         ? undefined
         : pull,
     pulling: attempt?.pending === true ? attempt.branch : undefined,
-    error:
-      attempt?.error === undefined
-        ? undefined
-        : { id: attempt.id, message: attempt.error },
+    error,
   };
 }

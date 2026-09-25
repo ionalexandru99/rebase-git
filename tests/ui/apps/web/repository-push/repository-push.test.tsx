@@ -13,6 +13,7 @@ import {
   type PushTarget,
   RepositoryPush,
 } from "#web/features/repository-push/index";
+import { RepositoryScopeProvider } from "#web/features/repository-scope/index";
 
 const runtime = ManagedRuntime.make(Layer.empty);
 const reviewed = "9c1e2f71".padEnd(40, "0");
@@ -55,15 +56,23 @@ async function fixture(
     });
   await render(
     <NotificationsProvider>
-      <RepositoryPush.Provider
-        requests={client}
-        runtime={runtime}
-        scope={scope}
-        connected
+      <RepositoryScopeProvider
+        scope={{
+          target: {
+            ...scope,
+            requests: client,
+            changes: { subscribe: () => () => {} },
+            runtime,
+          },
+          connected: true,
+          writable: true,
+        }}
       >
-        <RepositoryPush.Button target={target} disabled={false} />
-        <RepositoryPush.Notice />
-      </RepositoryPush.Provider>
+        <RepositoryPush.Provider>
+          <RepositoryPush.Button target={target} disabled={false} />
+          <RepositoryPush.Notice />
+        </RepositoryPush.Provider>
+      </RepositoryScopeProvider>
     </NotificationsProvider>,
   );
   return { requests };

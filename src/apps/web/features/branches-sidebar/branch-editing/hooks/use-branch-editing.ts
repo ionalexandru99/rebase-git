@@ -1,5 +1,6 @@
 import type { BranchUpstreamTarget, RepositoryRefs } from "@rebase/contracts";
 import { useCallback, useEffect, useState } from "react";
+import { useBranchManagement } from "#web/features/branch-management/index";
 import { describeBranchError } from "#web/features/branches-sidebar/branch-editing/branch-edit-messages";
 import type { BranchEdit } from "#web/features/branches-sidebar/branch-editing/branch-edit-state";
 import {
@@ -11,8 +12,6 @@ import {
 } from "#web/features/branches-sidebar/branch-editing/branch-row-actions";
 import { useBranchDeletion } from "#web/features/branches-sidebar/branch-editing/hooks/use-branch-deletion";
 import type {
-  BranchActions,
-  BranchCreateRequest,
   BranchesSidebarRefRow,
   BranchesSidebarRow,
 } from "#web/features/branches-sidebar/branches-sidebar.contract";
@@ -20,20 +19,19 @@ import type {
 export type BranchEditing = ReturnType<typeof useBranchEditing>;
 
 export function useBranchEditing({
-  actions,
   activeWorktreePath,
-  createRequest,
   focusTree,
   refs,
   reveal,
 }: {
-  readonly actions: BranchActions | undefined;
   readonly activeWorktreePath: string;
-  readonly createRequest: BranchCreateRequest | undefined;
   readonly focusTree: () => void;
   readonly refs: RepositoryRefs | undefined;
   readonly reveal: (branchName: string) => void;
 }) {
+  const management = useBranchManagement();
+  const actions = management?.actions;
+  const createRequest = management?.createRequest;
   const [edit, setEdit] = useState<BranchEdit>();
   const [error, setError] = useState<string>();
 

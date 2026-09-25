@@ -16,10 +16,6 @@ import type {
   ConnectedFeature,
   LocalEnvironmentGateway,
 } from "#web/app/environment/local-environment-session.contract";
-import {
-  createBranchManagement,
-  repositoryBranchesClient,
-} from "#web/features/branch-management/index";
 import { environmentFilesystemClient } from "#web/features/environment-filesystem/environment-filesystem-client";
 import type { EnvironmentFilesystemClient } from "#web/features/environment-filesystem/environment-filesystem-client.contract";
 import { createEnvironmentFilesystemController } from "#web/features/environment-filesystem/environment-filesystem-controller";
@@ -89,10 +85,6 @@ export function createBrowserLocalEnvironmentSession(
 
   return createLocalEnvironmentSession({
     controllers: {
-      branches: createBranchManagement(
-        repositoryBranchesClient(requests),
-        repositoryRefsController,
-      ),
       filesystem: createEnvironmentFilesystemController(
         createEnvironmentFilesystemGateway(
           environmentFilesystemClient(requests),

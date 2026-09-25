@@ -15,11 +15,9 @@ import {
   NotificationsProvider,
   PersistentNotification,
 } from "#web/features/notifications/index";
-import {
-  OperationRecovery,
-  OperationRecoveryProvider,
-} from "#web/features/operation-recovery/index";
+import { OperationRecovery } from "#web/features/operation-recovery/index";
 import type { OperationRecoveryState } from "#web/features/operation-recovery/operation-recovery.contract";
+import { RepositoryScopeProvider } from "#web/features/repository-scope/index";
 import { OperationRecoveryToast } from "#web-ui/features/operation-recovery/components/operation-recovery-toast";
 import { WorkspacePanel } from "#web-ui/features/workspace-panel/index";
 
@@ -213,20 +211,22 @@ describe("operation recovery toast", () => {
             : execute(),
         ),
       );
+    const target = {
+      repositoryId: "repo",
+      worktreePath: "/repo",
+      requests,
+      changes: { subscribe: () => () => {} },
+      runtime,
+    };
     const tree = (connected: boolean, key = "first") => (
       <NotificationsProvider>
-        <OperationRecoveryProvider
-          key={key}
-          requests={requests}
-          changes={{ subscribe: () => () => {} }}
-          runtime={runtime}
-          scope={{ repositoryId: "repo", worktreePath: "/repo" }}
-          connected={connected}
-        >
-          <WorkspacePanel.Provider scopeKey="operation-test">
-            <OperationRecovery repositoryName="catalog-api" writable />
-          </WorkspacePanel.Provider>
-        </OperationRecoveryProvider>
+        <RepositoryScopeProvider scope={{ target, connected, writable: true }}>
+          <OperationRecovery.Provider key={key}>
+            <WorkspacePanel.Provider scopeKey="operation-test">
+              <OperationRecovery.Notice repositoryName="catalog-api" />
+            </WorkspacePanel.Provider>
+          </OperationRecovery.Provider>
+        </RepositoryScopeProvider>
       </NotificationsProvider>
     );
     const view = await render(tree(true));

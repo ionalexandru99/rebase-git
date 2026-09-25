@@ -1,10 +1,4 @@
-import type {
-  BranchUpstream,
-  BranchUpstreamTarget,
-  DeleteRepositoryBranch,
-  RepositoryBranchDeleted,
-  RepositoryRefTarget,
-} from "@rebase/contracts";
+import type { BranchUpstream, RepositoryRefTarget } from "@rebase/contracts";
 
 export const localBranchesSectionId = "branches";
 export const tagsSectionId = "tags";
@@ -63,29 +57,3 @@ export type BranchesSidebarRow =
   | BranchesSidebarRefRow
   | BranchesSidebarFolderRow
   | BranchesSidebarSectionRow;
-
-export interface BranchActions {
-  readonly create: (branch: {
-    readonly checkout: boolean;
-    readonly name: string;
-    readonly startPoint: string;
-    readonly track?: BranchUpstreamTarget;
-  }) => Promise<void>;
-  readonly delete: (
-    deletion: Omit<DeleteRepositoryBranch, "repositoryId" | "worktreePath">,
-  ) => Promise<RepositoryBranchDeleted>;
-  readonly rename: (branch: {
-    readonly expectedTarget?: string;
-    readonly name: string;
-    readonly newName: string;
-  }) => Promise<void>;
-  readonly setUpstream: (branch: {
-    readonly name: string;
-    readonly upstream: BranchUpstreamTarget | null;
-  }) => Promise<void>;
-}
-
-export interface BranchCreateRequest {
-  readonly oid: string;
-  readonly sequence: number;
-}

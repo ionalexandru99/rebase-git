@@ -1,13 +1,24 @@
-import type { RepositoryRefs, RepositoryRefTarget } from "@rebase/contracts";
+import type {
+  RepositoryFreshness,
+  RepositoryRefs,
+  RepositoryRefTarget,
+} from "@rebase/contracts";
+import {
+  type EnvironmentRequestClient,
+  environmentHttpRoutesClient,
+} from "@rebase/environment-client";
+import { Effect, Layer, ManagedRuntime } from "effect";
 import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
 import { userEvent } from "vite-plus/test/browser";
 import { render } from "vitest-browser-react";
 import { historyRefKey } from "#web/features/commit-graph/index";
+import { RepositoryPull } from "#web/features/repository-pull/index";
 import {
   RepositoryRefsBusy,
   type RepositoryRefsSnapshot,
   RepositoryRefsUnavailable,
 } from "#web/features/repository-refs/repository-refs-controller.contract";
+import { RepositoryScopeProvider } from "#web/features/repository-scope/index";
 import { BranchesSidebar } from "#web-ui/features/branches-sidebar/branches-sidebar";
 
 const repositoryId = "00000000-0000-4000-8000-000000000001";
@@ -192,22 +203,23 @@ describe("branches sidebar", () => {
           : branch,
       ),
     };
-    const onPullBranch = vi.fn<(branch: string) => void>();
+    const pulls = pullRequests();
     const callbacks = sidebarCallbacks();
-    const view = (pulling: boolean) => (
-      <div style={{ height: 480, width: 320 }}>
-        <BranchesSidebar
-          activeWorktreePath={mainPath}
-          focusRequest={0}
-          onPullBranch={onPullBranch}
-          onRetry={callbacks.onRetry}
-          onSelectRef={callbacks.onSelectRef}
-          pulling={pulling}
-          snapshot={snapshot({ refs: tracked, status: "ready" })}
-        />
-      </div>
+    const screen = await render(
+      <RepositoryScopeProvider scope={pulls.scope}>
+        <RepositoryPull.Provider reader={{ fetch: pulls.fetch }} incoming={0}>
+          <div style={{ height: 480, width: 320 }}>
+            <BranchesSidebar
+              activeWorktreePath={mainPath}
+              focusRequest={0}
+              onRetry={callbacks.onRetry}
+              onSelectRef={callbacks.onSelectRef}
+              snapshot={snapshot({ refs: tracked, status: "ready" })}
+            />
+          </div>
+        </RepositoryPull.Provider>
+      </RepositoryScopeProvider>,
     );
-    const screen = await render(view(false));
     const tree = screen.getByRole("tree", { name: "Branches" });
 
     await tree
@@ -224,18 +236,21 @@ describe("branches sidebar", () => {
     const feature = tree.getByRole("treeitem", { name: "feature" });
     await feature.click({ button: "right" });
     await screen.getByRole("menuitem", { name: "Pull" }).click();
-    expect(onPullBranch).toHaveBeenLastCalledWith("feature");
+    await vi.waitFor(() =>
+      expect(pulls.pulled).toHaveBeenLastCalledWith("feature"),
+    );
 
-    tree.element().focus();
-    await userEvent.keyboard("{Shift>}{F10}{/Shift}");
-    await screen.getByRole("menuitem", { name: "Pull" }).click();
-    expect(onPullBranch).toHaveBeenCalledTimes(2);
-
-    await screen.rerender(view(true));
     await feature.click({ button: "right" });
     await expect
       .element(screen.getByRole("menuitem", { name: "Pull" }))
       .toHaveAttribute("aria-disabled", "true");
+    await userEvent.keyboard("{Escape}");
+    pulls.finish();
+
+    tree.element().focus();
+    await userEvent.keyboard("{Shift>}{F10}{/Shift}");
+    await screen.getByRole("menuitem", { name: "Pull" }).click();
+    await vi.waitFor(() => expect(pulls.pulled).toHaveBeenCalledTimes(2));
   });
 
   it("adds and removes refs from history with pointer and keyboard", async () => {
@@ -368,6 +383,43 @@ describe("branches sidebar", () => {
       .toHaveTextContent("A checkout is still running.");
   });
 });
+
+function pullRequests() {
+  const pulled = vi.fn<(branch: string) => void>();
+  let finish = () => {};
+  const requests: EnvironmentRequestClient = (routes) =>
+    environmentHttpRoutesClient(routes, (_route, command) => {
+      pulled((command as unknown as { readonly branch: string }).branch);
+      return Effect.promise(
+        () =>
+          new Promise<void>((resolve) => {
+            finish = resolve;
+          }),
+      ).pipe(Effect.as({ outcome: "FastForwarded" }));
+    });
+  return {
+    pulled,
+    finish: () => finish(),
+    fetch: async (): Promise<RepositoryFreshness> => ({
+      revision: 1,
+      fetching: false,
+      stale: false,
+      defaultIntervalSeconds: 300,
+      setting: { _tag: "Inherit" },
+    }),
+    scope: {
+      target: {
+        repositoryId,
+        worktreePath: mainPath,
+        requests,
+        changes: { subscribe: () => () => {} },
+        runtime: ManagedRuntime.make(Layer.empty),
+      },
+      connected: true,
+      writable: true,
+    },
+  };
+}
 
 async function renderSidebar({
   focusRequest = 0,

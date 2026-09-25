@@ -232,12 +232,6 @@ function createGateway(...connections: ReturnType<typeof createConnection>[]) {
 }
 
 const unusedControllers: LocalEnvironmentControllers = {
-  branches: {
-    create: () => Promise.reject(new Error("Unused")),
-    delete: () => Promise.reject(new Error("Unused")),
-    rename: () => Promise.reject(new Error("Unused")),
-    setUpstream: () => Promise.reject(new Error("Unused")),
-  },
   filesystem: {
     listDirectory: () => Promise.reject(new Error("Unused")),
   },

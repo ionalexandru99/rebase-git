@@ -1,5 +1,3 @@
-import type { EnvironmentRequestClient } from "@rebase/environment-client";
-import type { ManagedRuntime } from "effect";
 import {
   createContext,
   type ReactNode,
@@ -13,6 +11,7 @@ import {
   type RepositoryPushController,
 } from "#web/features/repository-push/repository-push-controller";
 import { repositoryPushClient } from "#web/features/repository-push/transport/repository-push-client";
+import { useRepositoryScope } from "#web/features/repository-scope/index";
 import { useStore } from "#web/platform/store/use-store";
 
 const RepositoryPushContext = createContext<RepositoryPushController | null>(
@@ -20,34 +19,26 @@ const RepositoryPushContext = createContext<RepositoryPushController | null>(
 );
 
 export function RepositoryPushProvider({
-  requests,
-  runtime,
-  scope,
-  connected,
   children,
 }: {
-  readonly requests: EnvironmentRequestClient | undefined;
-  readonly runtime: ManagedRuntime.ManagedRuntime<never, never>;
-  readonly scope:
-    | { readonly repositoryId: string; readonly worktreePath: string }
-    | undefined;
-  readonly connected: boolean;
   readonly children: ReactNode;
 }) {
-  const repositoryId = scope?.repositoryId;
-  const worktreePath = scope?.worktreePath;
+  const scope = useRepositoryScope();
+  const target = scope?.target;
+  const connected = scope?.connected ?? false;
   const controller = useMemo(
     () =>
-      requests === undefined ||
-      repositoryId === undefined ||
-      worktreePath === undefined
+      target === undefined
         ? null
         : createRepositoryPushController(
-            repositoryPushClient(requests),
-            { repositoryId, worktreePath },
-            runtime,
+            repositoryPushClient(target.requests),
+            {
+              repositoryId: target.repositoryId,
+              worktreePath: target.worktreePath,
+            },
+            target.runtime,
           ),
-    [requests, repositoryId, worktreePath, runtime],
+    [target],
   );
   useEffect(() => {
     if (controller === null) return;

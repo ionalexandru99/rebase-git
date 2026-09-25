@@ -4,13 +4,15 @@ import type {
   RepositoryRefs,
 } from "@rebase/contracts";
 import { useCallback, useState } from "react";
-import { RepositoryBranchesRejected } from "#web/features/branch-management/index";
+import {
+  type BranchActions,
+  RepositoryBranchesRejected,
+} from "#web/features/branch-management/index";
 import { describeBranchError } from "#web/features/branches-sidebar/branch-editing/branch-edit-messages";
 import {
   type BranchDeletion,
   upstreamTarget,
 } from "#web/features/branches-sidebar/branch-editing/branch-row-actions";
-import type { BranchActions } from "#web/features/branches-sidebar/branches-sidebar.contract";
 
 export interface DeletedBranch {
   readonly name: string;

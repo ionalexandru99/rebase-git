@@ -6,16 +6,16 @@ import {
   withRenamedBranch,
 } from "#web/features/branch-management/apply-branch-changes";
 import type {
-  BranchManagement,
   BranchManagementError,
+  BranchWrites,
   RepositoryBranchesClient,
 } from "#web/features/branch-management/branch-management.contract";
 import type { RepositoryRefsController } from "#web/features/repository-refs/index";
 
-export function createBranchManagement(
+export function createBranchWrites(
   client: RepositoryBranchesClient,
   refs: Pick<RepositoryRefsController, "apply">,
-): BranchManagement {
+): BranchWrites {
   const write = async <Result>(
     repositoryId: string,
     request: Effect.Effect<Result, BranchManagementError>,

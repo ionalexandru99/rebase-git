@@ -1,5 +1,3 @@
-import type { EnvironmentRequestClient } from "@rebase/environment-client";
-import type { ManagedRuntime } from "effect";
 import {
   createContext,
   type ReactNode,
@@ -13,7 +11,7 @@ import {
   type OperationRecoveryController,
 } from "#web/features/operation-recovery/operation-recovery-controller";
 import { repositoryOperationsClient } from "#web/features/operation-recovery/transport/repository-operations-client";
-import type { EnvironmentChanges } from "#web/platform/environment/environment-protocol.contract";
+import { useRepositoryScope } from "#web/features/repository-scope/index";
 import { useStore } from "#web/platform/store/use-store";
 
 interface OperationRecoveryScope {
@@ -27,38 +25,28 @@ const OperationRecoveryContext = createContext<{
 } | null>(null);
 
 export function OperationRecoveryProvider({
-  requests,
-  changes,
-  runtime,
-  scope,
-  connected,
   children,
 }: {
-  readonly requests: EnvironmentRequestClient | undefined;
-  readonly changes: EnvironmentChanges;
-  readonly runtime: ManagedRuntime.ManagedRuntime<never, never>;
-  readonly scope: OperationRecoveryScope | undefined;
-  readonly connected: boolean;
   readonly children: ReactNode;
 }) {
-  const repositoryId = scope?.repositoryId;
-  const worktreePath = scope?.worktreePath;
-  const recovery = useMemo(
-    () =>
-      requests === undefined ||
-      repositoryId === undefined ||
-      worktreePath === undefined
-        ? null
-        : {
-            controller: createOperationRecoveryController(
-              repositoryOperationsClient(requests),
-              { repositoryId, worktreePath },
-              runtime,
-            ),
-            scope: { repositoryId, worktreePath },
-          },
-    [requests, repositoryId, worktreePath, runtime],
-  );
+  const repositoryScope = useRepositoryScope();
+  const target = repositoryScope?.target;
+  const connected = repositoryScope?.connected ?? false;
+  const recovery = useMemo(() => {
+    if (target === undefined) return null;
+    const scope = {
+      repositoryId: target.repositoryId,
+      worktreePath: target.worktreePath,
+    };
+    return {
+      controller: createOperationRecoveryController(
+        repositoryOperationsClient(target.requests),
+        scope,
+        target.runtime,
+      ),
+      scope,
+    };
+  }, [target]);
   const controller = recovery?.controller;
   useEffect(() => {
     if (controller === undefined) return;
@@ -67,12 +55,15 @@ export function OperationRecoveryProvider({
   }, [controller]);
   useEffect(() => controller?.connect(connected), [controller, connected]);
   useEffect(() => {
-    if (controller === undefined || repositoryId === undefined) return;
-    return changes.subscribe((repositoryIds) => {
-      if (repositoryIds === undefined || repositoryIds.includes(repositoryId))
+    if (controller === undefined || target === undefined) return;
+    return target.changes.subscribe((repositoryIds) => {
+      if (
+        repositoryIds === undefined ||
+        repositoryIds.includes(target.repositoryId)
+      )
         controller.invalidate();
     });
-  }, [changes, controller, repositoryId]);
+  }, [controller, target]);
   useEffect(() => {
     if (controller === undefined) return;
     const invalidateWhenVisible = () => {

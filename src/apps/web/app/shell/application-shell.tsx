@@ -8,7 +8,6 @@ import { type JSX, useCallback, useMemo, useRef, useState } from "react";
 import type { PanelImperativeHandle } from "react-resizable-panels";
 import type { LocalEnvironmentSession } from "#web/app/environment/local-environment-session.contract";
 import { environmentSessionPresentation } from "#web/app/shell/environment-session-presentation";
-import { useBranchActions } from "#web/app/shell/hooks/use-branch-actions";
 import { useOpenedRepository } from "#web/app/shell/hooks/use-opened-repository";
 import { useProjectRepositoryActions } from "#web/app/shell/hooks/use-project-repository-actions";
 import { useRepositoryRefsActions } from "#web/app/shell/hooks/use-repository-refs-actions";
@@ -16,7 +15,6 @@ import {
   type OpenProjectEnvironment,
   OpenProjectScreen,
 } from "#web/features/open-project/index";
-import { OperationRecoveryProvider } from "#web/features/operation-recovery/index";
 import {
   type ProjectNavigationState,
   ProjectsSidebar,
@@ -27,10 +25,10 @@ import {
 } from "#web/features/project-navigation/index";
 import { RepositoryFolderPicker } from "#web/features/repository-folder-picker/index";
 import { useRepositoryHistoryReader } from "#web/features/repository-history/hooks/use-repository-history-reader";
-import { RepositoryPush } from "#web/features/repository-push/index";
 import { RepositorySettingsPage } from "#web/features/repository-settings/index";
 import { SettingsPanel } from "#web/features/settings/index";
 import { useStore } from "#web/platform/store/use-store";
+import { RepositoryActions } from "#web-ui/app/shell/repository-actions";
 import { RepositoryWorkspace } from "#web-ui/app/workspace/repository-workspace";
 import {
   ResizableHandle,
@@ -153,11 +151,6 @@ export function ApplicationShell({
     selectedRepositoryId: navigation.selectedRepositoryId,
     session,
   });
-  const branchActions = useBranchActions({
-    activeWorktreePath,
-    selectedRepositoryId: navigation.selectedRepositoryId,
-    session,
-  });
   const historyEnvironmentId =
     sessionState._tag === "Connected"
       ? sessionState.environmentId
@@ -253,6 +246,33 @@ export function ApplicationShell({
       panelVisible,
     ],
   );
+  const graphRepositoryId = graphRepository?.id;
+  const repositoryTarget = useMemo(
+    () =>
+      graphRepositoryId === undefined || session.requests === undefined
+        ? undefined
+        : {
+            repositoryId: graphRepositoryId,
+            worktreePath: activeWorktreePath,
+            requests: session.requests,
+            changes: session.changes,
+            runtime: session.runtime,
+          },
+    [
+      graphRepositoryId,
+      activeWorktreePath,
+      session.requests,
+      session.changes,
+      session.runtime,
+    ],
+  );
+  const repositoryScope = useMemo(
+    () =>
+      repositoryTarget === undefined
+        ? undefined
+        : { target: repositoryTarget, connected, writable: canWrite },
+    [repositoryTarget, connected, canWrite],
+  );
   const panelRepositoryIds = useMemo(
     () =>
       navigation.environments.flatMap((environment) =>
@@ -339,7 +359,6 @@ export function ApplicationShell({
                     }
                     connected={sessionState._tag === "Connected"}
                     activeWorktreePath={activeWorktreePath}
-                    branchActions={canWrite ? branchActions : undefined}
                     environmentId={historyEnvironmentId}
                     history={graphHistory}
                     logicalRepositoryId={
@@ -348,7 +367,6 @@ export function ApplicationShell({
                     refs={repositoryRefs}
                     repositoryId={navigation.selectedRepositoryId}
                     repositoryName={selectedRepository?.name ?? "Repository"}
-                    requests={session.requests}
                     retryRefs={retryRefs}
                     selectRef={selectRef}
                   />
@@ -408,32 +426,15 @@ export function ApplicationShell({
       </section>
     </div>
   );
-  const worktreeScope =
-    graphRepository === undefined
-      ? undefined
-      : { repositoryId: graphRepository.id, worktreePath: activeWorktreePath };
   return (
-    <OperationRecoveryProvider
-      requests={session.requests}
-      changes={session.changes}
-      runtime={session.runtime}
-      connected={connected}
-      scope={worktreeScope}
-    >
-      <RepositoryPush.Provider
-        requests={session.requests}
-        runtime={session.runtime}
-        connected={connected}
-        scope={worktreeScope}
+    <RepositoryActions scope={repositoryScope} refs={session.repositoryRefs}>
+      <WorkspacePanel.Sessions
+        environment={panelEnvironment}
+        repositoryIds={panelRepositoryIds}
       >
-        <WorkspacePanel.Sessions
-          environment={panelEnvironment}
-          repositoryIds={panelRepositoryIds}
-        >
-          {content}
-        </WorkspacePanel.Sessions>
-      </RepositoryPush.Provider>
-    </OperationRecoveryProvider>
+        {content}
+      </WorkspacePanel.Sessions>
+    </RepositoryActions>
   );
 }
 

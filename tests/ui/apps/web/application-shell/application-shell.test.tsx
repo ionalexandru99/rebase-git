@@ -272,12 +272,6 @@ function pairingRequiredSession(): LocalEnvironmentSession {
   const refsSnapshot = { checkingOut: false, status: "idle" } as const;
   const unsubscribe = () => undefined;
   return {
-    branches: {
-      create: () => Promise.reject(new Error("Unused")),
-      delete: () => Promise.reject(new Error("Unused")),
-      rename: () => Promise.reject(new Error("Unused")),
-      setUpstream: () => Promise.reject(new Error("Unused")),
-    },
     changes: { subscribe: () => unsubscribe },
     filesystem: {
       listDirectory: async () => ({
@@ -373,12 +367,6 @@ function connectedSession() {
     finishSynchronization = resolve;
   });
   const session: LocalEnvironmentSession = {
-    branches: {
-      create: () => Promise.reject(new Error("Unused")),
-      delete: () => Promise.reject(new Error("Unused")),
-      rename: () => Promise.reject(new Error("Unused")),
-      setUpstream: () => Promise.reject(new Error("Unused")),
-    },
     changes: { subscribe: () => () => undefined },
     filesystem: {
       listDirectory: async () => ({

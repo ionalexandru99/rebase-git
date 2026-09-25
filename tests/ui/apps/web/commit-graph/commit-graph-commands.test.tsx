@@ -1,3 +1,8 @@
+import {
+  type EnvironmentRequestClient,
+  environmentHttpRoutesClient,
+} from "@rebase/environment-client";
+import { Effect, Layer, ManagedRuntime } from "effect";
 import { describe, expect, it, vi } from "vite-plus/test";
 import { userEvent } from "vite-plus/test/browser";
 import {
@@ -8,6 +13,9 @@ import {
   mergeHistory,
   renderGraph,
 } from "#tests-ui/apps/web/commit-graph/commit-graph-fixture";
+import { render } from "#tests-ui/runtime/render";
+import { RepositoryPull } from "#web/features/repository-pull/index";
+import { RepositoryScopeProvider } from "#web/features/repository-scope/index";
 
 describe("commit graph commands", () => {
   it("reveals a hidden result from cached search", async () => {
@@ -69,46 +77,70 @@ describe("commit graph commands", () => {
 
   it("pulls the active branch from the toolbar", async () => {
     const reader = historyReader({ commits: history(2), status: "ready" });
-    reader.snapshot = {
-      ...reader.snapshot,
-      freshness: {
-        revision: 0,
-        fetching: false,
-        stale: false,
-        defaultIntervalSeconds: 300,
-        setting: { _tag: "Inherit" },
-      },
+    const freshness = {
+      revision: 0,
+      fetching: false,
+      stale: false,
+      defaultIntervalSeconds: 300,
+      setting: { _tag: "Inherit" as const },
     };
-    const execute = vi.fn<(branch: string) => void>();
-    const commandEnvironment = {
-      environmentId: "env",
-      logicalRepositoryId: "logical",
-      repositoryId: "repo",
-      activeBranch: "main",
-      connected: true,
-      capabilities: new Set(["repository.write"] as const),
-      freshnessReady: true,
-      operationState: "idle" as const,
-    };
-    const screen = await renderGraph(reader, undefined, {
-      commandEnvironment,
-      pull: { execute, pulling: false, incoming: 3 },
-    });
+    reader.snapshot = { ...reader.snapshot, freshness };
+    reader.fetch.mockResolvedValue(freshness);
+    const pulled = vi.fn<(command: unknown) => void>();
+    let finish = () => {};
+    const requests: EnvironmentRequestClient = (routes) =>
+      environmentHttpRoutesClient(routes, (_route, command) => {
+        pulled(command);
+        return Effect.promise(
+          () =>
+            new Promise<void>((resolve) => {
+              finish = resolve;
+            }),
+        ).pipe(Effect.as({ outcome: "FastForwarded" } as never));
+      });
+    const screen = await render(
+      <div style={{ height: 520, width: 900 }}>
+        <RepositoryScopeProvider
+          scope={{
+            target: {
+              repositoryId: "repo",
+              worktreePath: "/repo",
+              requests,
+              changes: { subscribe: () => () => {} },
+              runtime: ManagedRuntime.make(Layer.empty),
+            },
+            connected: true,
+            writable: true,
+          }}
+        >
+          <RepositoryPull.Provider reader={reader} incoming={3}>
+            <CommitGraphFixture
+              reader={reader}
+              repositoryName="rebase-test"
+              roots={[{ name: "main", oid: "0".repeat(40), type: "branch" }]}
+              commandEnvironment={{
+                environmentId: "env",
+                logicalRepositoryId: "logical",
+                repositoryId: "repo",
+                activeBranch: "main",
+                connected: true,
+                capabilities: new Set(["repository.write"]),
+                freshnessReady: true,
+                operationState: "idle",
+              }}
+            />
+          </RepositoryPull.Provider>
+        </RepositoryScopeProvider>
+      </div>,
+    );
     await screen
       .getByRole("button", { name: "Pull 3 incoming commits" })
       .click();
-    expect(execute).toHaveBeenCalledWith("main");
-
-    await screen.rerender(
-      <div style={{ height: 520, width: 900 }}>
-        <CommitGraphFixture
-          reader={reader}
-          repositoryName="rebase-test"
-          roots={[{ name: "main", oid: "0".repeat(40), type: "branch" }]}
-          commandEnvironment={commandEnvironment}
-          pull={{ execute, pulling: true, incoming: 3 }}
-        />
-      </div>,
+    await vi.waitFor(() =>
+      expect(pulled).toHaveBeenCalledWith({
+        repositoryId: "repo",
+        branch: "main",
+      }),
     );
     await expect
       .element(screen.getByRole("button", { name: "Pulling" }))
@@ -116,6 +148,10 @@ describe("commit graph commands", () => {
     await expect
       .element(screen.getByRole("button", { name: "Fetch", exact: true }))
       .toBeDisabled();
+    finish();
+    await expect
+      .element(screen.getByRole("button", { name: "Pull 3 incoming commits" }))
+      .toBeEnabled();
   });
 
   it("selects the invoking commit and opens its menu from the keyboard", async () => {
