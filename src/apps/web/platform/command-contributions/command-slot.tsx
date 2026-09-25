@@ -1,5 +1,5 @@
 import { createContext, type ReactNode, useContext, useMemo } from "react";
-import type { CommandDefinition } from "#web/platform/command-contributions/command-registry";
+import type { CommandDefinition } from "#web/platform/command-contributions/command-contributions.contract";
 
 export function createCommandSlot<Context>() {
   const Contributions = createContext<readonly CommandDefinition<Context>[]>(

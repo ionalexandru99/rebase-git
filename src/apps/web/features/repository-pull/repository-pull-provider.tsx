@@ -14,7 +14,6 @@ import { useStore } from "#web/platform/store/use-store";
 interface RepositoryPullState {
   readonly execute: (branch: string) => void;
   readonly pulling: boolean;
-  readonly allowed: boolean;
   readonly activeBranch: string | undefined;
   readonly incoming: number;
   readonly freshnessReady: boolean;
@@ -67,12 +66,11 @@ export function RepositoryPullProvider({
         : {
             execute: pull,
             pulling: busy,
-            allowed,
             activeBranch,
             incoming,
             freshnessReady,
           },
-    [pull, busy, allowed, activeBranch, incoming, freshnessReady],
+    [pull, busy, activeBranch, incoming, freshnessReady],
   );
   const refCommands = useMemo(
     () =>

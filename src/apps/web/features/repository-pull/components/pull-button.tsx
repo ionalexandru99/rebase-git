@@ -1,19 +1,24 @@
 import { IconArrowBarToDown } from "@tabler/icons-react";
 import { useOperationCommandState } from "#web/features/operation-recovery/index";
+import { canPull } from "#web/features/repository-pull/can-pull";
+import { useRepositoryScope } from "#web/features/repository-scope/index";
 import { Button } from "#web-ui/components/ui/button";
 import { useRepositoryPull } from "#web-ui/features/repository-pull/repository-pull-provider";
 
 export function PullButton() {
   const pull = useRepositoryPull();
-  const busy = useOperationCommandState() === "busy";
+  const scope = useRepositoryScope();
+  const recoveryBusy = useOperationCommandState() === "busy";
   if (pull === undefined) return null;
   const { activeBranch, incoming, pulling } = pull;
-  const enabled =
-    pull.allowed &&
-    activeBranch !== undefined &&
-    !busy &&
-    !pulling &&
-    pull.freshnessReady;
+  const enabled = canPull({
+    connected: scope?.connected === true,
+    writable: scope?.writable === true,
+    activeBranch,
+    recoveryBusy,
+    pulling,
+    freshnessReady: pull.freshnessReady,
+  });
   return (
     <Button
       aria-label={

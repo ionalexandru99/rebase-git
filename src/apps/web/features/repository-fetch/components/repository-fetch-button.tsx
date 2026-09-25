@@ -1,5 +1,6 @@
 import { IconArrowDown } from "@tabler/icons-react";
 import { useOperationCommandState } from "#web/features/operation-recovery/index";
+import { canFetch } from "#web/features/repository-fetch/can-fetch";
 import type { RepositoryHistorySnapshot } from "#web/features/repository-history/index";
 import { useRepositoryPulling } from "#web/features/repository-pull/index";
 import { useRepositoryScope } from "#web/features/repository-scope/index";
@@ -18,14 +19,15 @@ export function RepositoryFetchButton({
   const scope = useRepositoryScope();
   const recoveryBusy = useOperationCommandState() === "busy";
   const pulling = useRepositoryPulling();
-  const enabled =
-    scope?.connected === true &&
-    scope.writable &&
-    !fetch.fetching &&
-    !recoveryBusy &&
-    !pulling &&
-    snapshot.freshness !== undefined &&
-    snapshot.freshnessError === undefined;
+  const enabled = canFetch({
+    connected: scope?.connected === true,
+    writable: scope?.writable === true,
+    fetching: fetch.fetching,
+    recoveryBusy,
+    pulling,
+    freshnessReady:
+      snapshot.freshness !== undefined && snapshot.freshnessError === undefined,
+  });
   return (
     <Button
       className="h-7 gap-1.5 text-[.85rem] sm:text-[.85rem]"

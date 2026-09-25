@@ -7,7 +7,7 @@ import type {
   CommitCommandHandlers,
   GraphCommandContext,
 } from "#web/features/commit-commands/graph-command.contract";
-import type { CommandResult } from "#web/platform/command-contributions/command-registry";
+import type { CommandResult } from "#web/platform/command-contributions/command-contributions.contract";
 import { createCommandRegistry } from "#web/platform/command-contributions/command-registry";
 
 export type GraphCommandRun = (

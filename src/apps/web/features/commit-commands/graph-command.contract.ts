@@ -1,5 +1,5 @@
 import type { RepositoryCommit } from "@rebase/contracts";
-import type { CommandDefinition } from "#web/platform/command-contributions/command-registry";
+import type { CommandDefinition } from "#web/platform/command-contributions/command-contributions.contract";
 
 export interface GraphCommandContext {
   readonly invokingOid: string;
