@@ -8,7 +8,8 @@ import {
   RepositoryCoordination,
   RepositoryCoordinationError,
   type RepositoryCoordinationService,
-  type RepositoryWrite,
+  type RepositoryLockAcquisition,
+  type RepositoryWritePolicy,
 } from "#server/domain/repository-coordination.contract";
 import { readGitCommonDirectory } from "#server/repository/access/git/read-git-common-directory";
 import { readGitEntryIdentity } from "#server/repository/access/git/read-git-entry-identity";
@@ -17,27 +18,6 @@ import {
   type GitDirectories,
   readRepositoryOperation,
 } from "#server/repository/operation/index";
-
-const worktreeWrites: readonly RepositoryWrite[] = [
-  "checkout",
-  "pull",
-  "stage",
-  "unstage",
-  "discard",
-  "commit",
-  "amend",
-  "recover",
-];
-const refWrites: readonly RepositoryWrite[] = [
-  "branch",
-  "checkout",
-  "fetch",
-  "pull",
-  "push",
-  "commit",
-  "amend",
-  "recover",
-];
 
 export function createRepositoryCoordination(
   git: GitCommandRunner,
@@ -48,8 +28,8 @@ export function createRepositoryCoordination(
   >();
   const withLock = <A, E, R>(
     key: string,
+    acquisition: RepositoryLockAcquisition,
     operation: Effect.Effect<A, E, R>,
-    waitForPermit = true,
   ) =>
     Effect.acquireUseRelease(
       Effect.sync(() => {
@@ -62,7 +42,7 @@ export function createRepositoryCoordination(
         return entry;
       }),
       (entry) =>
-        waitForPermit
+        acquisition === "wait"
           ? entry.semaphore.withPermit(operation)
           : entry.semaphore
               .withPermitsIfAvailable(1)(operation)
@@ -110,27 +90,25 @@ export function createRepositoryCoordination(
       Effect.onError(() => Effect.sync(() => directories.delete(directory))),
     );
   return {
-    run: (directory, write, operation) =>
+    run: (directory, policy, operation) =>
       forgetOnError(
         directory,
         Effect.gen(function* () {
+          const { refs, worktree } = policy.locks;
           const paths = yield* gitDirectories(directory);
           const guarded = requireCompatibleWrite(
             git,
             directory,
             paths,
-            write,
+            policy,
           ).pipe(Effect.andThen(operation));
-          const worktree = worktreeWrites.includes(write)
-            ? withLock(`worktree:${paths.gitDirectory}`, guarded)
-            : guarded;
-          return yield* refWrites.includes(write)
-            ? withLock(
-                `refs:${paths.commonDirectory}`,
-                worktree,
-                write !== "fetch",
-              )
-            : worktree;
+          const inWorktree =
+            worktree === undefined
+              ? guarded
+              : withLock(`worktree:${paths.gitDirectory}`, worktree, guarded);
+          return yield* refs === undefined
+            ? inWorktree
+            : withLock(`refs:${paths.commonDirectory}`, refs, inWorktree);
         }),
       ),
     operation: (directory) =>
@@ -149,10 +127,9 @@ function requireCompatibleWrite(
   git: GitCommandRunner,
   directory: string,
   paths: GitDirectories,
-  write: RepositoryWrite,
+  { name, duringOperation }: RepositoryWritePolicy,
 ) {
-  if (write === "branch" || write === "fetch" || write === "recover")
-    return Effect.void;
+  if (duringOperation === "proceed") return Effect.void;
   return readRepositoryOperation(git, directory, paths).pipe(
     Effect.flatMap((state) => {
       if (state.lock !== null)
@@ -164,15 +141,13 @@ function requireCompatibleWrite(
         );
       if (
         state.kind === "idle" ||
-        (state.kind !== "unknown" &&
-          (write === "stage" || write === "unstage")) ||
-        (write === "amend" && state.kind === "rebase" && state.phase === "edit")
+        (duringOperation !== "block" && duringOperation.allowWhen(state))
       )
         return Effect.void;
       return Effect.fail(
         new RepositoryCoordinationError({
           reason: "Incompatible",
-          detail: `Cannot ${write} while ${state.kind === "unknown" ? "an unrecognized Git operation is" : `${state.kind} is`} in progress.`,
+          detail: `Cannot ${name} while ${state.kind === "unknown" ? "an unrecognized Git operation is" : `${state.kind} is`} in progress.`,
         }),
       );
     }),

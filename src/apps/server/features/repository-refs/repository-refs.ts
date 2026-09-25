@@ -10,6 +10,7 @@ import {
   repositoryRefsFailure,
 } from "#server/features/repository-refs/git/repository-refs-failures";
 import type { RepositoryChangePublisher } from "#server/features/repository-refs/repository-change-publisher";
+import { checkoutWritePolicy } from "#server/features/repository-refs/repository-refs.write-policy";
 
 export type RepositoryRefsService = ReturnType<
   typeof createRepositoryRefsService
@@ -31,7 +32,7 @@ export function createRepositoryRefsService(dependencies: {
         return yield* coordination
           .run(
             command.worktreePath,
-            "checkout",
+            checkoutWritePolicy,
             checkoutRepositoryRef(git, access, command),
           )
           .pipe(

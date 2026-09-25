@@ -1,18 +1,19 @@
 import type { RepositoryOperation } from "@rebase/contracts";
 import { Context, Data, type Effect } from "effect";
 
-export type RepositoryWrite =
-  | "branch"
-  | "checkout"
-  | "fetch"
-  | "pull"
-  | "push"
-  | "stage"
-  | "unstage"
-  | "discard"
-  | "commit"
-  | "amend"
-  | "recover";
+export type RepositoryLockAcquisition = "wait" | "ifAvailable";
+
+export interface RepositoryWritePolicy {
+  readonly name: string;
+  readonly locks: {
+    readonly refs?: RepositoryLockAcquisition;
+    readonly worktree?: RepositoryLockAcquisition;
+  };
+  readonly duringOperation:
+    | "proceed"
+    | "block"
+    | { readonly allowWhen: (operation: RepositoryOperation) => boolean };
+}
 
 export class RepositoryCoordinationError extends Data.TaggedError(
   "RepositoryCoordinationError",
@@ -24,7 +25,7 @@ export class RepositoryCoordinationError extends Data.TaggedError(
 export interface RepositoryCoordinationService {
   readonly run: <A, E, R>(
     directory: string,
-    write: RepositoryWrite,
+    policy: RepositoryWritePolicy,
     operation: Effect.Effect<A, E, R>,
   ) => Effect.Effect<A, E | RepositoryCoordinationError, R>;
   readonly operation: (

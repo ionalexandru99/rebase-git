@@ -7,7 +7,10 @@ import { afterEach, expect, it } from "vite-plus/test";
 import { createLocalGitCommandRunner } from "#server/adapters/local-git/local-git-command-runner";
 import { createLocalRepositoryWatcher } from "#server/adapters/local-git/local-repository-watcher";
 import { createRepositoryChangesService } from "#server/features/repository-changes/repository-changes";
+import { changesWritePolicies } from "#server/features/repository-changes/repository-changes.write-policy";
+import { fetchWritePolicy } from "#server/features/repository-history/repository-history.write-policy";
 import { createRepositoryOperationsService } from "#server/features/repository-operations/repository-operations";
+import { checkoutWritePolicy } from "#server/features/repository-refs/repository-refs.write-policy";
 import {
   createRepositoryAccess,
   createRepositoryCoordination,
@@ -67,9 +70,13 @@ async function fixture() {
 it("rejects incompatible writes during a merge and stages its resolution", async () => {
   const f = await fixture();
   await startConflict(f.git, "merge");
-  for (const write of ["checkout", "commit", "discard"] as const)
+  for (const policy of [
+    checkoutWritePolicy,
+    changesWritePolicies.commit,
+    changesWritePolicies.discard,
+  ])
     await expect(
-      Effect.runPromise(f.coordination.run(f.directory, write, Effect.void)),
+      Effect.runPromise(f.coordination.run(f.directory, policy, Effect.void)),
     ).rejects.toMatchObject({ reason: "Incompatible" });
   await writeFile(join(f.directory, "file.txt"), "resolved\n");
   const scope = { ...f.scope, amend: false };
@@ -136,7 +143,7 @@ it("skips a contended fetch while ref writers queue across worktrees", async () 
         const first = yield* f.coordination
           .run(
             f.directory,
-            "commit",
+            changesWritePolicies.commit,
             Deferred.succeed(entered, undefined).pipe(
               Effect.andThen(Deferred.await(release)),
               Effect.andThen(record("first")),
@@ -145,13 +152,17 @@ it("skips a contended fetch while ref writers queue across worktrees", async () 
           .pipe(Effect.forkScoped);
         yield* Deferred.await(entered);
         const fetch = yield* f.coordination
-          .run(linked, "fetch", Effect.die("Fetch must not start"))
+          .run(linked, fetchWritePolicy, Effect.die("Fetch must not start"))
           .pipe(Effect.flip, Effect.timeout("1 second"));
         expect(fetch.reason).toBe("Busy");
         const second = yield* f.coordination
-          .run(linked, "commit", record("second"))
+          .run(linked, changesWritePolicies.commit, record("second"))
           .pipe(Effect.forkScoped);
-        yield* f.coordination.run(linked, "stage", record("stage"));
+        yield* f.coordination.run(
+          linked,
+          changesWritePolicies.stage,
+          record("stage"),
+        );
         expect(order).toEqual(["stage"]);
         yield* Deferred.succeed(release, undefined);
         yield* Fiber.join(first);

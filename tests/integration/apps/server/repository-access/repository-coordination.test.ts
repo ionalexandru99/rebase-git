@@ -115,9 +115,9 @@ it.each([
             changes: { watch: () => Effect.void },
             coordination: {
               ...coordination,
-              run: (path, write, operation) =>
+              run: (path, policy, operation) =>
                 Deferred.succeed(checkoutRequested, undefined).pipe(
-                  Effect.andThen(coordination.run(path, write, operation)),
+                  Effect.andThen(coordination.run(path, policy, operation)),
                 ),
             },
           });
