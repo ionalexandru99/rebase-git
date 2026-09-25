@@ -4,7 +4,7 @@ import type {
 } from "@rebase/contracts";
 import type { EnvironmentRequestClient } from "@rebase/environment-client";
 import type { JSX } from "react";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { useHistoryRefRefresh } from "#web/app/workspace/use-history-ref-refresh";
 import {
   type BranchActions,
@@ -256,6 +256,8 @@ function RepositoryWorkspaceContent({
       })),
     [],
   );
+  const historyScopeRef = useRef(historyScope);
+  historyScopeRef.current = historyScope;
   const sidebarBranchActions = useMemo<BranchActions | undefined>(
     () =>
       branchActions === undefined
@@ -265,11 +267,15 @@ function RepositoryWorkspaceContent({
             rename: async (branch) => {
               await branchActions.rename(branch);
               changeHistoryScope(
-                renameHistoryBranch(historyScope, branch.name, branch.newName),
+                renameHistoryBranch(
+                  historyScopeRef.current,
+                  branch.name,
+                  branch.newName,
+                ),
               );
             },
           },
-    [branchActions, changeHistoryScope, historyScope],
+    [branchActions, changeHistoryScope],
   );
   const toggleRef = useCallback(
     (target: RepositoryRefTarget) => {
