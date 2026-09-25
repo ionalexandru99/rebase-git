@@ -41,6 +41,10 @@ import {
   connectCurrentEnvironmentEffect,
   exchangeEnvironmentPairingEffect,
 } from "#web/app/environment/connection/index";
+import {
+  RepositoryBranchesRejected,
+  repositoryBranchesClient,
+} from "#web/features/branch-management/index";
 import { repositoryCatalogClient } from "#web/features/repository-catalog/index";
 import {
   RepositoryRefsRejected,
@@ -60,6 +64,54 @@ afterEach(async () => {
 });
 
 describe("repository refs transport", () => {
+  it("reserves branch writes for writers and returns typed branch failures", async () => {
+    await withRefsListener(async ({ authorization, origin, root }) => {
+      const repositoryPath = join(root, "repository");
+      await createRepository(repositoryPath, { commits: ["initial", "next"] });
+      const owner = await pair(origin, authorization, "owner");
+      const viewer = await pair(origin, authorization, "viewer");
+      const remembered = await Effect.runPromise(
+        remember(origin, owner, repositoryPath),
+      );
+      const head = await git(repositoryPath, "rev-parse", "HEAD");
+      const create = {
+        name: "spike",
+        repositoryId: remembered.id,
+        startPoint: head,
+        worktreePath: repositoryPath,
+      };
+
+      await expect(
+        Effect.runPromise(branchesClient(origin, viewer).create(create)),
+      ).rejects.toEqual(
+        new RepositoryBranchesRejected({
+          failure: { _tag: "CapabilityDenied", capability: "repository.write" },
+          status: 403,
+        }),
+      );
+      await expect(
+        Effect.runPromise(branchesClient(origin, owner).create(create)),
+      ).resolves.toEqual({ name: "spike", target: head });
+      await git(repositoryPath, "checkout", "spike");
+      await git(repositoryPath, "commit", "--allow-empty", "-m", "only here");
+      await git(repositoryPath, "checkout", "main");
+      const spike = await git(repositoryPath, "rev-parse", "spike");
+      await expect(
+        Effect.runPromise(
+          branchesClient(origin, owner).delete({
+            force: false,
+            local: { name: "spike", target: spike },
+            repositoryId: remembered.id,
+            worktreePath: repositoryPath,
+          }),
+        ),
+      ).rejects.toMatchObject({
+        failure: { _tag: "BranchNotMerged", count: 1, name: "spike" },
+        status: 409,
+      });
+    });
+  });
+
   it("reassembles a ref snapshot larger than a WebSocket frame", async () => {
     await withRefsListener(async ({ authorization, origin, root }) => {
       const repositoryPath = join(root, "repository");
@@ -342,6 +394,12 @@ function remember(
   return repositoryCatalogClient(
     createEnvironmentRequestClient(origin, () => credential),
   ).remember({ path });
+}
+
+function branchesClient(origin: string, credential: EnvironmentCredential) {
+  return repositoryBranchesClient(
+    createEnvironmentRequestClient(origin, () => credential),
+  );
 }
 
 function refsClient(origin: string, credential: EnvironmentCredential) {

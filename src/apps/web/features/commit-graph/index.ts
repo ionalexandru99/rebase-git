@@ -16,6 +16,7 @@ export { createBrowserHistoryFilterStore } from "#web/features/commit-graph/scop
 export {
   historyRefKey,
   historyScopesEqual,
+  renameHistoryBranch,
   resolveHistoryScope,
   toggleHistoryRef,
 } from "#web/features/commit-graph/scope/history-scope";

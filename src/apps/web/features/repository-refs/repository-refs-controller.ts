@@ -29,19 +29,19 @@ export function createRepositoryRefsController(
     subscribe,
   } = createStore(idleSnapshot);
   const cache = new Map<string, RepositoryRefs>();
-  const checkoutRevisions = new Map<string, number>();
+  const writeRevisions = new Map<string, number>();
   const stale = new Set<string>();
   const loading = new Map<string, Promise<void>>();
   let checkoutInFlight = false;
 
   const load = (repositoryId: string) => {
-    const checkoutRevision = checkoutRevisions.get(repositoryId);
+    const writeRevision = writeRevisions.get(repositoryId);
     stale.delete(repositoryId);
     let failed = false;
     const pending = readRefs(repositoryId)
       .then(
         (refs) => {
-          if (checkoutRevisions.get(repositoryId) !== checkoutRevision) {
+          if (writeRevisions.get(repositoryId) !== writeRevision) {
             return;
           }
           cache.set(repositoryId, refs);
@@ -49,7 +49,7 @@ export function createRepositoryRefsController(
             publish(withRefs(snapshot(), refs));
         },
         (error: unknown) => {
-          if (checkoutRevisions.get(repositoryId) !== checkoutRevision) {
+          if (writeRevisions.get(repositoryId) !== writeRevision) {
             return;
           }
           failed = true;
@@ -84,6 +84,23 @@ export function createRepositoryRefsController(
     return load(repositoryId);
   };
 
+  const apply = (
+    repositoryId: string,
+    change: (refs: RepositoryRefs) => RepositoryRefs,
+  ) => {
+    writeRevisions.set(
+      repositoryId,
+      (writeRevisions.get(repositoryId) ?? 0) + 1,
+    );
+    if (loading.has(repositoryId)) stale.add(repositoryId);
+    const cached = cache.get(repositoryId);
+    if (cached === undefined) return;
+    const refs = change(cached);
+    cache.set(repositoryId, refs);
+    if (snapshot().repositoryId === repositoryId)
+      publish(withRefs(snapshot(), refs));
+  };
+
   const checkout = async (
     worktreePath: string,
     target: RepositoryRefTarget,
@@ -99,25 +116,9 @@ export function createRepositoryRefsController(
       const result = await Effect.runPromise(
         gateway.checkout({ repositoryId, target, worktreePath }),
       );
-      const cached = cache.get(repositoryId);
-      checkoutRevisions.set(
-        repositoryId,
-        (checkoutRevisions.get(repositoryId) ?? 0) + 1,
-      );
-      if (loading.has(repositoryId)) {
-        stale.add(repositoryId);
-      }
-      const refs =
-        cached === undefined
-          ? undefined
-          : applyRepositoryCheckout(cached, result);
-      if (refs !== undefined) cache.set(repositoryId, refs);
+      apply(repositoryId, (refs) => applyRepositoryCheckout(refs, result));
       if (snapshot().repositoryId === repositoryId) {
-        publish(
-          refs === undefined
-            ? { ...snapshot(), checkingOut: false }
-            : { ...withRefs(snapshot(), refs), checkingOut: false },
-        );
+        publish({ ...snapshot(), checkingOut: false });
       }
       return result;
     } catch (error) {
@@ -132,6 +133,7 @@ export function createRepositoryRefsController(
   };
 
   return {
+    apply,
     checkout,
     getSnapshot: snapshot,
     invalidate: (repositoryIds) => {

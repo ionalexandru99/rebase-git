@@ -38,6 +38,10 @@ export interface RepositoryRefsSnapshot {
 
 export interface RepositoryRefsController
   extends ReadableStore<RepositoryRefsSnapshot> {
+  readonly apply: (
+    repositoryId: string,
+    change: (refs: RepositoryRefs) => RepositoryRefs,
+  ) => void;
   readonly checkout: (
     worktreePath: string,
     target: RepositoryRefTarget,

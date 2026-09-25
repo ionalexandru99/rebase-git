@@ -8,6 +8,7 @@ import { type JSX, useCallback, useMemo, useRef, useState } from "react";
 import type { PanelImperativeHandle } from "react-resizable-panels";
 import type { LocalEnvironmentSession } from "#web/app/environment/local-environment-session.contract";
 import { environmentSessionPresentation } from "#web/app/shell/environment-session-presentation";
+import { useBranchActions } from "#web/app/shell/hooks/use-branch-actions";
 import { useOpenedRepository } from "#web/app/shell/hooks/use-opened-repository";
 import { useProjectRepositoryActions } from "#web/app/shell/hooks/use-project-repository-actions";
 import { useRepositoryRefsActions } from "#web/app/shell/hooks/use-repository-refs-actions";
@@ -149,6 +150,11 @@ export function ApplicationShell({
     worktreePathFor,
   } = useRepositoryRefsActions({
     repositories: repositoryCatalog.repositories,
+    selectedRepositoryId: navigation.selectedRepositoryId,
+    session,
+  });
+  const branchActions = useBranchActions({
+    activeWorktreePath,
     selectedRepositoryId: navigation.selectedRepositoryId,
     session,
   });
@@ -333,6 +339,7 @@ export function ApplicationShell({
                     }
                     connected={sessionState._tag === "Connected"}
                     activeWorktreePath={activeWorktreePath}
+                    branchActions={canWrite ? branchActions : undefined}
                     environmentId={historyEnvironmentId}
                     history={graphHistory}
                     logicalRepositoryId={

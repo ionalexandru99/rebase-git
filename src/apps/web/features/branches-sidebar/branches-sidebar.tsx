@@ -12,9 +12,20 @@ import {
   useRef,
   useState,
 } from "react";
-import type {
-  BranchesSidebarRow,
-  BranchesSidebarScope,
+import {
+  branchesSidebarItems,
+  estimateItemHeight,
+  isBranchEditItem,
+  localBranchFolderIds,
+  localBranchRowId,
+} from "#web/features/branches-sidebar/branch-editing/branch-edit-state";
+import { useBranchEditing } from "#web/features/branches-sidebar/branch-editing/hooks/use-branch-editing";
+import {
+  type BranchActions,
+  type BranchCreateRequest,
+  type BranchesSidebarRow,
+  type BranchesSidebarScope,
+  localBranchesSectionId,
 } from "#web/features/branches-sidebar/branches-sidebar.contract";
 import { describeRepositoryRefsError } from "#web/features/branches-sidebar/branches-sidebar-messages";
 import {
@@ -28,6 +39,8 @@ import { treeKeyAction } from "#web/features/branches-sidebar/navigation/branche
 import { historyRefKey } from "#web/features/commit-graph/index";
 import type { RepositoryRefsSnapshot } from "#web/features/repository-refs/repository-refs-controller.contract";
 import { Input } from "#web-ui/components/ui/input";
+import { BranchEditItem } from "#web-ui/features/branches-sidebar/branch-editing/components/branch-edit-item";
+import { BranchEditingStatus } from "#web-ui/features/branches-sidebar/branch-editing/components/branch-editing-status";
 import {
   RefRow,
   rowElementId,
@@ -37,11 +50,12 @@ import { BranchesSidebarScopeFilter } from "#web-ui/features/branches-sidebar/co
 import { BranchesSidebarViewSelector } from "#web-ui/features/branches-sidebar/components/branches-sidebar-view-selector";
 import { SidebarStatus } from "#web-ui/features/branches-sidebar/components/sidebar-status";
 
-const rowHeight = 32;
 const overscanRows = 12;
 
 export function BranchesSidebar({
   activeWorktreePath,
+  branchActions,
+  createBranchRequest,
   focusRequest,
   onPullBranch,
   onRetry,
@@ -52,6 +66,8 @@ export function BranchesSidebar({
   snapshot,
 }: {
   readonly activeWorktreePath: string;
+  readonly branchActions?: BranchActions | undefined;
+  readonly createBranchRequest?: BranchCreateRequest | undefined;
   readonly focusRequest: number;
   readonly onPullBranch?: ((branch: string) => void) | undefined;
   readonly onRetry: () => void;
@@ -102,38 +118,68 @@ export function BranchesSidebar({
       view,
     ],
   );
+  const focusTree = useCallback(() => treeRef.current?.focus(), []);
+  const reveal = useCallback((name: string) => {
+    setExpandedSections((current) =>
+      current.has(localBranchesSectionId)
+        ? current
+        : toggleSection(current, localBranchesSectionId),
+    );
+    setExpandedFolders((current) => {
+      const next = new Map(current);
+      for (const id of localBranchFolderIds(name)) next.set(id, true);
+      return next;
+    });
+    setActiveRowId(localBranchRowId(name));
+    treeRef.current?.focus();
+  }, []);
+  const editing = useBranchEditing({
+    actions: branchActions,
+    activeWorktreePath,
+    createRequest: createBranchRequest,
+    focusTree,
+    refs,
+    reveal,
+  });
+  const items = useMemo(
+    () => branchesSidebarItems(rows, editing.edit),
+    [rows, editing.edit],
+  );
   const getItemKey = useCallback(
-    (index: number) => rows[index]?.id ?? index,
-    [rows],
+    (index: number) => items[index]?.id ?? index,
+    [items],
   );
   const virtualizer = useVirtualizer({
-    count: rows.length,
-    estimateSize: (index) =>
-      rows[index]?.kind === "section" && rows[index].separator
-        ? rowHeight + 12
-        : rowHeight,
+    count: items.length,
+    estimateSize: (index) => estimateItemHeight(items[index]),
     getItemKey,
     getScrollElement: () => treeRef.current,
     overscan: overscanRows,
   });
   useLayoutEffect(() => {
-    if (rows.length > 0) virtualizer.measure();
-  }, [rows, virtualizer]);
+    if (items.length > 0) virtualizer.measure();
+  }, [items, virtualizer]);
 
+  const draftIndex = items.findIndex((item) => item.kind === "draft");
   useEffect(() => {
-    if (
-      activeRowId !== undefined &&
-      !rows.some((row) => row.id === activeRowId)
-    ) {
-      setActiveRowId(undefined);
-    }
+    if (draftIndex >= 0) virtualizer.scrollToIndex(draftIndex);
+  }, [draftIndex, virtualizer]);
+
+  const activeIndexRef = useRef(-1);
+  useEffect(() => {
+    const index = rows.findIndex((row) => row.id === activeRowId);
+    if (index >= 0) activeIndexRef.current = index;
+    else if (activeRowId !== undefined)
+      setActiveRowId(
+        rows[Math.min(activeIndexRef.current, rows.length - 1)]?.id,
+      );
   }, [activeRowId, rows]);
 
   useEffect(() => {
     if (activeRowId === undefined) return;
-    const index = rows.findIndex((row) => row.id === activeRowId);
+    const index = items.findIndex((item) => item.id === activeRowId);
     if (index >= 0) virtualizer.scrollToIndex(index, { align: "auto" });
-  }, [activeRowId, rows, virtualizer]);
+  }, [activeRowId, items, virtualizer]);
 
   const rowsRef = useRef(rows);
   rowsRef.current = rows;
@@ -166,6 +212,19 @@ export function BranchesSidebar({
     else setRowExpanded(row, !row.expanded);
   };
 
+  const openRowMenu = (rowId: string) => {
+    const row = document.getElementById(rowElementId(rowId));
+    if (row === null) return;
+    const bounds = row.getBoundingClientRect();
+    row.dispatchEvent(
+      new MouseEvent("contextmenu", {
+        bubbles: true,
+        clientX: bounds.left + 32,
+        clientY: bounds.bottom,
+      }),
+    );
+  };
+
   const handleTreeKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     const activeRow = rows.find((row) => row.id === activeRowId);
     if (
@@ -174,6 +233,10 @@ export function BranchesSidebar({
     ) {
       event.preventDefault();
       openRowMenu(activeRow.id);
+      return;
+    }
+    if (editing.handleTreeKey(event.key, activeRow)) {
+      event.preventDefault();
       return;
     }
     const handled = treeKeyAction(event.key, {
@@ -257,13 +320,31 @@ export function BranchesSidebar({
           className="relative w-full"
           style={{ height: virtualizer.getTotalSize() }}
         >
-          {virtualizer.getVirtualItems().map((item) => {
-            const row = rows[item.index];
-            if (row === undefined) return null;
-            const style = {
-              height: item.size,
-              transform: `translateY(${item.start}px)`,
+          {virtualizer.getVirtualItems().map((virtualItem) => {
+            const item = items[virtualItem.index];
+            if (item === undefined) return null;
+            const position = {
+              transform: `translateY(${virtualItem.start}px)`,
             };
+            if (isBranchEditItem(item, editing.edit))
+              return (
+                <div
+                  className="absolute top-0 left-0 w-full"
+                  data-index={virtualItem.index}
+                  key={item.id}
+                  ref={virtualizer.measureElement}
+                  style={position}
+                >
+                  <BranchEditItem
+                    branches={refs?.branches ?? []}
+                    editing={editing}
+                    item={item}
+                  />
+                </div>
+              );
+            if (item.kind !== "row") return null;
+            const row = item.row;
+            const style = { ...position, height: virtualItem.size };
             return row.kind !== "ref" ? (
               <SectionRow
                 active={row.id === activeRowId}
@@ -275,8 +356,10 @@ export function BranchesSidebar({
               />
             ) : (
               <RefRow
+                actions={editing.rowActions(row)}
                 active={row.id === activeRowId}
                 key={row.id}
+                onAction={(id) => editing.start(id, row)}
                 onActivate={() => setActiveRowId(row.id)}
                 onPull={
                   onPullBranch === undefined
@@ -303,6 +386,10 @@ export function BranchesSidebar({
           snapshot={snapshot}
         />
       </div>
+      <BranchEditingStatus
+        editing={editing}
+        remoteBranches={refs?.remoteBranches ?? []}
+      />
       {snapshot.checkoutError === undefined ? null : (
         <p
           className="mx-3 mb-3 rounded-md border border-status-unavailable/40 bg-status-unavailable/10 px-3 py-2 text-xs text-foreground"

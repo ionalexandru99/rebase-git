@@ -8,7 +8,11 @@ import {
   IconGitBranch,
   IconTag,
 } from "@tabler/icons-react";
-import type { CSSProperties } from "react";
+import { type CSSProperties, Fragment, useRef } from "react";
+import type {
+  BranchRowAction,
+  BranchRowActionId,
+} from "#web/features/branches-sidebar/branch-editing/branch-row-actions";
 import type {
   BranchesSidebarFolderRow,
   BranchesSidebarRefRow,
@@ -22,6 +26,7 @@ import {
   ContextMenu,
   ContextMenuContent,
   ContextMenuItem,
+  ContextMenuSeparator,
   ContextMenuTrigger,
 } from "#web-ui/components/ui/context-menu";
 import { UpstreamIndicator } from "#web-ui/features/branches-sidebar/components/upstream-indicator";
@@ -91,7 +96,9 @@ export function SectionRow({
 }
 
 export function RefRow({
+  actions,
   active,
+  onAction,
   onActivate,
   onPull,
   onSelect,
@@ -101,6 +108,8 @@ export function RefRow({
   selectedInHistory,
   style,
 }: {
+  readonly actions: readonly BranchRowAction[];
+  readonly onAction: (id: BranchRowActionId) => void;
   readonly active: boolean;
   readonly onActivate: () => void;
   readonly onPull: (() => void) | undefined;
@@ -111,8 +120,13 @@ export function RefRow({
   readonly selectedInHistory: boolean;
   readonly style: CSSProperties;
 }) {
+  const acted = useRef(false);
   return (
-    <ContextMenu>
+    <ContextMenu
+      onOpenChange={(open) => {
+        if (open) acted.current = false;
+      }}
+    >
       <ContextMenuTrigger
         render={
           <div
@@ -130,7 +144,14 @@ export function RefRow({
               className="relative flex h-full min-w-0 flex-1 items-center gap-2 rounded-md pr-8 text-left outline-none"
               style={{ paddingLeft: 10 + (row.level - 2) * 18 }}
               id={rowElementId(row.id)}
-              onClick={onActivate}
+              onClick={(event) => {
+                onActivate();
+                if (
+                  event.target instanceof Element &&
+                  event.target.closest("[data-upstream-indicator]") !== null
+                )
+                  onAction("upstream");
+              }}
               onContextMenu={onActivate}
               onDoubleClick={onSelect}
               role="treeitem"
@@ -171,7 +192,7 @@ export function RefRow({
           </div>
         }
       />
-      <ContextMenuContent>
+      <ContextMenuContent className="w-64" finalFocus={() => !acted.current}>
         <ContextMenuItem onClick={onSelect}>Checkout</ContextMenuItem>
         {onPull === undefined ||
         row.target._tag !== "LocalBranch" ||
@@ -180,6 +201,25 @@ export function RefRow({
             Pull
           </ContextMenuItem>
         )}
+        {actions.map((action, index) => (
+          <Fragment key={action.id}>
+            {action.group !== (actions[index - 1]?.group ?? "create") ? (
+              <ContextMenuSeparator />
+            ) : null}
+            <ContextMenuItem
+              disabled={action.disabledReason !== undefined}
+              onClick={() => {
+                acted.current = true;
+                onAction(action.id);
+              }}
+            >
+              <span className="flex-1">{action.label}</span>
+              <span className="text-[.7rem] text-muted-foreground">
+                {action.disabledReason ?? action.shortcut}
+              </span>
+            </ContextMenuItem>
+          </Fragment>
+        ))}
       </ContextMenuContent>
     </ContextMenu>
   );

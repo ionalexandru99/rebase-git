@@ -6,7 +6,11 @@ import type { EnvironmentRequestClient } from "@rebase/environment-client";
 import type { JSX } from "react";
 import { useCallback, useMemo, useState } from "react";
 import { useHistoryRefRefresh } from "#web/app/workspace/use-history-ref-refresh";
-import { BranchesSidebar } from "#web/features/branches-sidebar/index";
+import {
+  type BranchActions,
+  type BranchCreateRequest,
+  BranchesSidebar,
+} from "#web/features/branches-sidebar/index";
 import type { GraphCommandEnvironment } from "#web/features/commit-commands/index";
 import type {
   CommitGraphHistory,
@@ -18,6 +22,7 @@ import {
   CommitGraph,
   createBrowserHistoryFilterStore,
   historyScopesEqual,
+  renameHistoryBranch,
   resolveHistoryScope,
   toggleHistoryRef,
 } from "#web/features/commit-graph/index";
@@ -51,6 +56,7 @@ export function RepositoryWorkspace({
   accessCapabilities = noAccessCapabilities,
   connected = false,
   activeWorktreePath,
+  branchActions,
   environmentId,
   history,
   logicalRepositoryId: catalogLogicalRepositoryId,
@@ -64,6 +70,7 @@ export function RepositoryWorkspace({
   readonly accessCapabilities?: readonly EnvironmentAccessCapability[];
   readonly connected?: boolean;
   readonly activeWorktreePath: string;
+  readonly branchActions?: BranchActions | undefined;
   readonly environmentId: string | undefined;
   readonly history: CommitGraphHistory | undefined;
   readonly logicalRepositoryId?: string | undefined;
@@ -89,6 +96,7 @@ export function RepositoryWorkspace({
       accessCapabilities={accessCapabilities}
       connected={connected}
       activeWorktreePath={activeWorktreePath}
+      branchActions={branchActions}
       environmentId={environmentId}
       history={history}
       key={`${environmentId ?? ""}\0${repositoryId ?? ""}\0${logicalRepositoryId ?? ""}`}
@@ -108,6 +116,7 @@ function RepositoryWorkspaceContent({
   accessCapabilities,
   connected,
   activeWorktreePath,
+  branchActions,
   environmentId,
   history,
   logicalRepositoryId,
@@ -122,6 +131,7 @@ function RepositoryWorkspaceContent({
   readonly accessCapabilities: readonly EnvironmentAccessCapability[];
   readonly connected: boolean;
   readonly activeWorktreePath: string;
+  readonly branchActions: BranchActions | undefined;
   readonly environmentId: string | undefined;
   readonly history: CommitGraphHistory | undefined;
   readonly logicalRepositoryId: string | undefined;
@@ -236,6 +246,31 @@ function RepositoryWorkspaceContent({
     },
     [environmentId, filterStore, logicalRepositoryId],
   );
+  const [createBranchRequest, setCreateBranchRequest] =
+    useState<BranchCreateRequest>();
+  const createBranchAt = useCallback(
+    (oid: string) =>
+      setCreateBranchRequest((current) => ({
+        oid,
+        sequence: (current?.sequence ?? 0) + 1,
+      })),
+    [],
+  );
+  const sidebarBranchActions = useMemo<BranchActions | undefined>(
+    () =>
+      branchActions === undefined
+        ? undefined
+        : {
+            ...branchActions,
+            rename: async (branch) => {
+              await branchActions.rename(branch);
+              changeHistoryScope(
+                renameHistoryBranch(historyScope, branch.name, branch.newName),
+              );
+            },
+          },
+    [branchActions, changeHistoryScope, historyScope],
+  );
   const toggleRef = useCallback(
     (target: RepositoryRefTarget) => {
       if (refs.refs === undefined) return;
@@ -276,6 +311,8 @@ function RepositoryWorkspaceContent({
             >
               <BranchesSidebar
                 activeWorktreePath={activeWorktreePath}
+                branchActions={sidebarBranchActions}
+                createBranchRequest={createBranchRequest}
                 focusRequest={localBranchesFocusRequest}
                 onPullBranch={canPull ? pull.pull : undefined}
                 onRetry={retryRefs}
@@ -300,6 +337,11 @@ function RepositoryWorkspaceContent({
                 >
                   <CommitGraph
                     ref={inspection.graphRef}
+                    onCreateBranch={
+                      sidebarBranchActions === undefined
+                        ? undefined
+                        : createBranchAt
+                    }
                     onOpenDetails={inspection.open}
                     onActiveCommitChange={inspection.select}
                     toolbarActions={
