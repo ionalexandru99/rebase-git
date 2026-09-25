@@ -58,21 +58,23 @@ describe("repository pull", () => {
 
   it.each<[PullHttpFailure, string]>([
     [
-      { _tag: "PullDiverged", upstream: "origin/main", ahead: 1, behind: 2 },
-      "Can't fast-forward main. It has 1 commit that origin/main doesn't, and origin/main has 2 commits it doesn't. Merge or rebase to combine them.",
+      { _tag: "PullDiverged", upstream: "origin/main" },
+      "main has diverged from origin/main",
+    ],
+    [
+      { _tag: "PullWouldOverwrite", paths: ["src/app.ts"] },
+      "Local changes to src/app.ts block the pull",
     ],
     [
       { _tag: "PullWouldOverwrite", paths: ["src/app.ts", "README.md"] },
-      "Pull stopped. Nothing changed. Your edits to src/app.ts and 1 other file overlap incoming changes. Commit or discard them, then pull again.",
+      "Local changes block the pull",
     ],
+    [{ _tag: "UpstreamMissing" }, "main has no upstream"],
     [
       { _tag: "UpstreamMissing", upstream: "origin/main" },
-      "origin/main no longer exists on the remote.",
+      "origin/main was deleted",
     ],
-    [
-      { _tag: "PullUncertain" },
-      "The pull may not have finished. Check main before pulling again.",
-    ],
+    [{ _tag: "PullUncertain" }, "Pull may not have finished"],
   ])("explains a rejected pull: %j", async (failure, message) => {
     const f = await fixture({ failure });
     await f.pull();

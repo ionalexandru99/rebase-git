@@ -32,11 +32,7 @@ export const PullFailure = Schema.Union([
   Schema.TaggedStruct("UpstreamMissing", {
     upstream: Schema.optional(RefName),
   }),
-  Schema.TaggedStruct("PullDiverged", {
-    upstream: RefName,
-    ahead: Schema.Natural,
-    behind: Schema.Natural,
-  }),
+  Schema.TaggedStruct("PullDiverged", { upstream: RefName }),
   Schema.TaggedStruct("PullWouldOverwrite", {
     paths: Schema.Array(RepositoryPath).check(Schema.isMaxLength(100)),
   }),

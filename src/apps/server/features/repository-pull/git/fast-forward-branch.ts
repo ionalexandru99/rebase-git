@@ -42,8 +42,6 @@ export function fastForwardBranch(
       return yield* pullFailure({
         _tag: "PullDiverged",
         upstream: tracked.upstream,
-        ahead,
-        behind,
       });
     yield* Effect.uninterruptible(
       checkedOut
@@ -214,5 +212,5 @@ function moveBranch(
 }
 
 function branchMoved(tracked: TrackedBranch) {
-  return pullBlocked(`${tracked.name} changed while pulling. Try again.`);
+  return pullBlocked(`${tracked.name} changed while pulling`);
 }

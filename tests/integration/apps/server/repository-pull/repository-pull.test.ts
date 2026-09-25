@@ -64,12 +64,7 @@ describe("fast-forward pull", () => {
     const local = await git(f.repositoryPath, "rev-parse", "HEAD");
 
     await expect(f.pull("main")).rejects.toMatchObject({
-      failure: {
-        _tag: "PullDiverged",
-        upstream: "origin/main",
-        ahead: 1,
-        behind: 1,
-      },
+      failure: { _tag: "PullDiverged", upstream: "origin/main" },
     });
     expect(await git(f.repositoryPath, "rev-parse", "HEAD")).toBe(local);
   });

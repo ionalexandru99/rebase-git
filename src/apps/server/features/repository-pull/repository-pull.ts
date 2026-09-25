@@ -45,9 +45,7 @@ export function createRepositoryPullService(dependencies: {
                       checkout !== undefined,
                     )
                   : Effect.fail(
-                      pullBlocked(
-                        `${branch} was checked out while pulling. Try again.`,
-                      ),
+                      pullBlocked(`${branch} was checked out while pulling`),
                     ),
               ),
             ),
