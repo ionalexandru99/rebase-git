@@ -1,11 +1,13 @@
 import type { RepositoryRefs } from "@rebase/contracts";
 import { Effect } from "effect";
-import { describe, expect, it } from "vite-plus/test";
-import type { RepositoryBranchesClient } from "#web/features/branch-management/branch-management.contract";
-import {
-  createBranchManagement,
-  RepositoryBranchesRejected,
-} from "#web/features/branch-management/index";
+import { describe, expect, it, vi } from "vite-plus/test";
+import type {
+  BranchWrites,
+  RepositoryBranchesClient,
+} from "#web/features/branch-management/branch-management.contract";
+import { createBranchWrites } from "#web/features/branch-management/branch-writes";
+import { RepositoryBranchesRejected } from "#web/features/branch-management/index";
+import { createRepositoryBranches } from "#web/features/branch-management/repository-branches";
 
 const repositoryId = "00000000-0000-4000-8000-000000000001";
 const worktreePath = "/repo";
@@ -70,6 +72,71 @@ describe("branch management", () => {
   });
 });
 
+describe("repository branches", () => {
+  it("checks out a created branch in the scoped worktree", async () => {
+    const writes = fakeWrites();
+    const checkout = vi.fn(async () => ({}) as never);
+    const branches = createRepositoryBranches(writes, { checkout }, scope);
+
+    await branches.actions.create({
+      checkout: true,
+      name: "next",
+      startPoint: main,
+    });
+
+    expect(writes.create).toHaveBeenCalledWith({
+      ...scope,
+      name: "next",
+      startPoint: main,
+    });
+    expect(checkout).toHaveBeenCalledWith(worktreePath, {
+      _tag: "LocalBranch",
+      name: "next",
+    });
+  });
+
+  it("announces a rename only after the Environment accepts it", async () => {
+    const writes = fakeWrites();
+    const branches = createRepositoryBranches(
+      writes,
+      { checkout: vi.fn() },
+      scope,
+    );
+    const renamed = vi.fn();
+    const stop = branches.onRenamed(renamed);
+    const rename = { name: "main", newName: "trunk" };
+
+    writes.rename.mockRejectedValueOnce(new Error("Rejected"));
+    await expect(branches.actions.rename(rename)).rejects.toThrow("Rejected");
+    expect(renamed).not.toHaveBeenCalled();
+
+    await branches.actions.rename(rename);
+    expect(renamed).toHaveBeenCalledWith(rename);
+
+    stop();
+    await branches.actions.rename(rename);
+    expect(renamed).toHaveBeenCalledOnce();
+  });
+});
+
+function fakeWrites() {
+  return {
+    create: vi.fn<BranchWrites["create"]>(async () => ({
+      name: "next",
+      target: main,
+    })),
+    delete: vi.fn<BranchWrites["delete"]>(async () => ({})),
+    rename: vi.fn<BranchWrites["rename"]>(async () => ({
+      branch: { name: "trunk", target: main },
+      previousName: "main",
+    })),
+    setUpstream: vi.fn<BranchWrites["setUpstream"]>(async () => ({
+      name: "main",
+      target: main,
+    })),
+  };
+}
+
 function setup(client: Partial<RepositoryBranchesClient>) {
   let refs: RepositoryRefs = {
     branches: [
@@ -91,7 +158,7 @@ function setup(client: Partial<RepositoryBranchesClient>) {
       },
     ],
   };
-  const branches = createBranchManagement(client as RepositoryBranchesClient, {
+  const branches = createBranchWrites(client as RepositoryBranchesClient, {
     apply: (id, change) => {
       if (id === repositoryId) refs = change(refs);
     },

@@ -21,8 +21,6 @@ import {
 } from "#web/features/branches-sidebar/branch-editing/branch-edit-state";
 import { useBranchEditing } from "#web/features/branches-sidebar/branch-editing/hooks/use-branch-editing";
 import {
-  type BranchActions,
-  type BranchCreateRequest,
   type BranchesSidebarRow,
   type BranchesSidebarScope,
   localBranchesSectionId,
@@ -37,6 +35,7 @@ import {
 import { useBranchesSidebarView } from "#web/features/branches-sidebar/hooks/use-branches-sidebar-view";
 import { treeKeyAction } from "#web/features/branches-sidebar/navigation/branches-sidebar-keyboard";
 import { historyRefKey } from "#web/features/commit-graph/index";
+import { useRepositoryPull } from "#web/features/repository-pull/index";
 import type { RepositoryRefsSnapshot } from "#web/features/repository-refs/repository-refs-controller.contract";
 import { Input } from "#web-ui/components/ui/input";
 import { BranchEditItem } from "#web-ui/features/branches-sidebar/branch-editing/components/branch-edit-item";
@@ -54,26 +53,18 @@ const overscanRows = 12;
 
 export function BranchesSidebar({
   activeWorktreePath,
-  branchActions,
-  createBranchRequest,
   focusRequest,
-  onPullBranch,
   onRetry,
   onSelectRef,
   onToggleHistoryRef = () => undefined,
-  pulling = false,
   selectedHistoryRefKeys = new Set<string>(),
   snapshot,
 }: {
   readonly activeWorktreePath: string;
-  readonly branchActions?: BranchActions | undefined;
-  readonly createBranchRequest?: BranchCreateRequest | undefined;
   readonly focusRequest: number;
-  readonly onPullBranch?: ((branch: string) => void) | undefined;
   readonly onRetry: () => void;
   readonly onSelectRef: (target: RepositoryRefTarget) => void;
   readonly onToggleHistoryRef?: (target: RepositoryRefTarget) => void;
-  readonly pulling?: boolean;
   readonly selectedHistoryRefKeys?: ReadonlySet<string>;
   readonly snapshot: RepositoryRefsSnapshot;
 }): JSX.Element {
@@ -133,10 +124,9 @@ export function BranchesSidebar({
     setActiveRowId(localBranchRowId(name));
     treeRef.current?.focus();
   }, []);
+  const pull = useRepositoryPull();
   const editing = useBranchEditing({
-    actions: branchActions,
     activeWorktreePath,
-    createRequest: createBranchRequest,
     focusTree,
     refs,
     reveal,
@@ -362,13 +352,13 @@ export function BranchesSidebar({
                 onAction={(id) => editing.start(id, row)}
                 onActivate={() => setActiveRowId(row.id)}
                 onPull={
-                  onPullBranch === undefined
-                    ? undefined
-                    : () => onPullBranch(row.name)
+                  pull?.allowed === true
+                    ? () => pull.execute(row.name)
+                    : undefined
                 }
                 onSelect={() => onSelectRef(row.target)}
                 onToggleHistory={() => onToggleHistoryRef(row.target)}
-                pulling={pulling}
+                pulling={pull?.pulling ?? false}
                 row={row}
                 selectedInHistory={selectedHistoryRefKeys.has(
                   historyRefKey(row.target),

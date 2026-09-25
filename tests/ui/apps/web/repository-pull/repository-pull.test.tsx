@@ -4,17 +4,19 @@ import {
   type EnvironmentRequestClient,
   environmentHttpRoutesClient,
 } from "@rebase/environment-client";
-import { Effect } from "effect";
+import { Effect, Layer, ManagedRuntime } from "effect";
 import { describe, expect, it, vi } from "vite-plus/test";
 import { page } from "vite-plus/test/browser";
 import { render } from "vitest-browser-react";
+import { NotificationsProvider } from "#web/features/notifications/index";
 import {
-  ErrorNotification,
-  NotificationsProvider,
-} from "#web/features/notifications/index";
-import { useRepositoryPull } from "#web/features/repository-pull/index";
+  RepositoryPull,
+  useRepositoryPull,
+} from "#web/features/repository-pull/index";
+import { RepositoryScopeProvider } from "#web/features/repository-scope/index";
 
 const repositoryId = "00000000-0000-4000-8000-000000000001";
+const runtime = ManagedRuntime.make(Layer.empty);
 const freshness: RepositoryFreshness = {
   revision: 1,
   fetching: false,
@@ -104,7 +106,24 @@ async function fixture({
     });
   await render(
     <NotificationsProvider>
-      <PullHarness requests={requests} reader={{ fetch }} />
+      <RepositoryScopeProvider
+        scope={{
+          target: {
+            repositoryId,
+            worktreePath: "/repo",
+            requests,
+            changes: { subscribe: () => () => {} },
+            runtime,
+          },
+          connected: true,
+          writable: true,
+        }}
+      >
+        <RepositoryPull.Provider reader={{ fetch }} incoming={0}>
+          <PullButton />
+          <RepositoryPull.Notice />
+        </RepositoryPull.Provider>
+      </RepositoryScopeProvider>
     </NotificationsProvider>,
   );
   return {
@@ -114,26 +133,15 @@ async function fixture({
   };
 }
 
-function PullHarness({
-  requests,
-  reader,
-}: {
-  readonly requests: EnvironmentRequestClient;
-  readonly reader: { readonly fetch: () => Promise<RepositoryFreshness> };
-}) {
-  const pull = useRepositoryPull(requests, repositoryId, reader);
+function PullButton() {
+  const pull = useRepositoryPull();
   return (
-    <>
-      <button
-        disabled={pull.pulling !== undefined}
-        onClick={() => pull.pull?.("main")}
-        type="button"
-      >
-        {pull.pulling === undefined ? "Pull" : "Pulling"}
-      </button>
-      {pull.error === undefined ? null : (
-        <ErrorNotification key={pull.error.id} message={pull.error.message} />
-      )}
-    </>
+    <button
+      disabled={pull?.pulling !== false}
+      onClick={() => pull?.execute("main")}
+      type="button"
+    >
+      {pull?.pulling === true ? "Pulling" : "Pull"}
+    </button>
   );
 }

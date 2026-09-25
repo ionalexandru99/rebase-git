@@ -21,12 +21,12 @@ import {
   AuthorAvatars,
   type GitHubRepository,
 } from "#web/features/author-avatars/index";
+import { useBranchManagement } from "#web/features/branch-management/index";
 import type { GraphCommandEnvironment } from "#web/features/commit-commands/index";
 import { CommitCommandMenu } from "#web/features/commit-commands/index";
 import type {
   CommitGraphHandle,
   CommitGraphHistory,
-  CommitGraphPull,
   CommitGraphViewportAnchor,
 } from "#web/features/commit-graph/commit-graph.contract";
 import type { CommitGraphSelectionMode } from "#web/features/commit-graph/commit-selection.contract";
@@ -47,6 +47,7 @@ import {
 } from "#web/features/repository-fetch/index";
 import type { RepositoryHistoryQuery } from "#web/features/repository-history/index";
 import { useRepositoryHistoryOrder } from "#web/features/repository-history/index";
+import { useRepositoryPull } from "#web/features/repository-pull/index";
 import { Button } from "#web-ui/components/ui/button";
 import { CommitGraphCanvas } from "#web-ui/features/commit-graph/components/commit-graph-canvas";
 import {
@@ -81,18 +82,14 @@ export function CommitGraph({
   githubRepository,
   remoteProviders,
   toolbarActions,
-  pull,
-  onCreateBranch,
   onOpenDetails,
   onActiveCommitChange,
 }: {
-  readonly onCreateBranch?: ((oid: string) => void) | undefined;
   readonly onOpenDetails?: ((oid: string) => void) | undefined;
   readonly onActiveCommitChange?:
     | ((oid: string | undefined) => void)
     | undefined;
   readonly toolbarActions?: ReactNode;
-  readonly pull?: CommitGraphPull | undefined;
   readonly ref?: Ref<CommitGraphHandle>;
   readonly commandEnvironment?: GraphCommandEnvironment | undefined;
   readonly onAddHistoryRef?: () => void;
@@ -271,6 +268,8 @@ export function CommitGraph({
     ? navigation.selection.activeOid
     : undefined;
 
+  const pull = useRepositoryPull();
+  const onCreateBranch = useBranchManagement()?.requestCreate;
   const { commands, fetchAction, pullAction } = useCommitGraphCommands({
     commandEnvironment,
     reader,

@@ -1,13 +1,25 @@
-import type { RepositoryRefs, RepositoryRefTarget } from "@rebase/contracts";
+import {
+  RepositoryBranchesHttpApi,
+  type RepositoryBranchesHttpFailure,
+  type RepositoryRefs,
+  type RepositoryRefTarget,
+} from "@rebase/contracts";
+import {
+  EnvironmentHttpRejected,
+  type EnvironmentRequestClient,
+  environmentHttpRoutesClient,
+} from "@rebase/environment-client";
+import { Effect, Layer, ManagedRuntime } from "effect";
+import { useEffect } from "react";
 import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
 import { userEvent } from "vite-plus/test/browser";
 import { render } from "vitest-browser-react";
-import { RepositoryBranchesRejected } from "#web/features/branch-management/index";
-import type {
-  BranchActions,
-  BranchCreateRequest,
-} from "#web/features/branches-sidebar/index";
+import {
+  BranchManagement,
+  useBranchManagement,
+} from "#web/features/branch-management/index";
 import { NotificationsProvider } from "#web/features/notifications/index";
+import { RepositoryScopeProvider } from "#web/features/repository-scope/index";
 import { BranchesSidebar } from "#web-ui/features/branches-sidebar/branches-sidebar";
 
 const repositoryId = "00000000-0000-4000-8000-000000000001";
@@ -15,15 +27,17 @@ const mainPath = "/repo";
 const topicPath = "/repo/.worktrees/topic";
 const main = "a".repeat(40);
 const spike = "b".repeat(40);
+const scope = { repositoryId, worktreePath: mainPath };
+const runtime = ManagedRuntime.make(Layer.empty);
+
+type BranchRoute = keyof typeof RepositoryBranchesHttpApi;
 
 describe("branch editing", () => {
   beforeEach(() => localStorage.setItem("rebase:branches-view:v1", "linear"));
 
   it("creates a branch at a commit and switches to it", async () => {
-    const actions = branchActions();
-    const screen = await render(
-      sidebar(refs(), actions, { oid: spike, sequence: 1 }),
-    );
+    const environment = branchEnvironment();
+    const screen = await render(sidebar(environment, spike));
     const name = screen.getByRole("textbox", {
       name: `New branch from ${spike.slice(0, 7)}`,
     });
@@ -33,21 +47,25 @@ describe("branch editing", () => {
     await expect
       .element(screen.getByRole("alert"))
       .toHaveTextContent("feature/spike already exists.");
-    expect(actions.create).not.toHaveBeenCalled();
+    expect(environment.requested).not.toHaveBeenCalled();
 
     await name.fill("feature/next");
     await userEvent.keyboard("{Enter}");
-    expect(actions.create).toHaveBeenCalledWith({
-      checkout: true,
+    await expect.element(name).not.toBeInTheDocument();
+    expect(environment.requested).toHaveBeenCalledWith("create", {
+      ...scope,
       name: "feature/next",
       startPoint: spike,
     });
-    await expect.element(name).not.toBeInTheDocument();
+    expect(environment.checkout).toHaveBeenCalledWith(mainPath, {
+      _tag: "LocalBranch",
+      name: "feature/next",
+    });
   });
 
   it("renames the active branch with F2 and cancels with Escape", async () => {
-    const actions = branchActions();
-    const screen = await render(sidebar(refs(), actions));
+    const environment = branchEnvironment();
+    const screen = await render(sidebar(environment));
     const tree = screen.getByRole("tree", { name: "Branches" });
     await tree.getByRole("treeitem", { name: "feature/spike" }).click();
 
@@ -62,54 +80,58 @@ describe("branch editing", () => {
 
     await userEvent.keyboard("{F2}");
     await userEvent.keyboard("{Control>}a{/Control}spike/refs{Enter}");
-    expect(actions.rename).toHaveBeenCalledWith({
-      expectedTarget: spike,
-      name: "feature/spike",
-      newName: "spike/refs",
-    });
+    await vi.waitFor(() =>
+      expect(environment.requested).toHaveBeenCalledWith("rename", {
+        ...scope,
+        expectedTarget: spike,
+        name: "feature/spike",
+        newName: "spike/refs",
+      }),
+    );
   });
 
   it("deletes a merged branch at once and restores it with Undo", async () => {
-    const actions = branchActions();
-    const screen = await render(sidebar(refs(), actions));
+    const environment = branchEnvironment();
+    const screen = await render(sidebar(environment));
     await screen.getByRole("treeitem", { name: "feature/merged" }).click();
 
     await userEvent.keyboard("{Delete}");
     await vi.waitFor(() =>
-      expect(actions.delete).toHaveBeenCalledWith({
+      expect(environment.requested).toHaveBeenCalledWith("delete", {
+        ...scope,
         force: false,
         local: { name: "feature/merged", target: main },
       }),
     );
     await screen.getByRole("button", { name: "Undo" }).click();
     await vi.waitFor(() =>
-      expect(actions.create).toHaveBeenCalledWith({
-        checkout: false,
+      expect(environment.requested).toHaveBeenCalledWith("create", {
+        ...scope,
         name: "feature/merged",
         startPoint: main,
         track: { name: "feature/merged", remote: "origin" },
       }),
     );
+    expect(environment.checkout).not.toHaveBeenCalled();
   });
 
   it("asks in a warning notification before deleting commits that exist only on the branch", async () => {
-    const actions = branchActions();
-    actions.delete.mockRejectedValueOnce(
-      new RepositoryBranchesRejected({
-        failure: {
-          _tag: "BranchNotMerged",
-          commits: [
-            { oid: spike, subject: "Try refs index" },
-            { oid: "c".repeat(40), subject: "Measure refs parse" },
-            { oid: "d".repeat(40), subject: "Spike reader" },
-          ],
-          count: 5,
-          name: "feature/spike",
-        },
-        status: 409,
-      }),
+    const environment = branchEnvironment();
+    environment.rejectNext(
+      "delete",
+      {
+        _tag: "BranchNotMerged",
+        commits: [
+          { oid: spike, subject: "Try refs index" },
+          { oid: "c".repeat(40), subject: "Measure refs parse" },
+          { oid: "d".repeat(40), subject: "Spike reader" },
+        ],
+        count: 5,
+        name: "feature/spike",
+      },
+      409,
     );
-    const screen = await render(sidebar(refs(), actions));
+    const screen = await render(sidebar(environment));
     await screen.getByRole("treeitem", { name: "feature/spike" }).click();
 
     await userEvent.keyboard("{Delete}");
@@ -126,15 +148,18 @@ describe("branch editing", () => {
       .element(warning.getByRole("button", { name: "Cancel" }))
       .toHaveFocus();
     await warning.getByRole("button", { name: "Delete", exact: true }).click();
-    expect(actions.delete).toHaveBeenLastCalledWith({
-      force: true,
-      local: { name: "feature/spike", target: spike },
-    });
+    await vi.waitFor(() =>
+      expect(environment.requested).toHaveBeenLastCalledWith("delete", {
+        ...scope,
+        force: true,
+        local: { name: "feature/spike", target: spike },
+      }),
+    );
   });
 
   it("confirms before deleting a branch locally and on its remote", async () => {
-    const actions = branchActions();
-    const screen = await render(sidebar(refs(), actions));
+    const environment = branchEnvironment();
+    const screen = await render(sidebar(environment));
     await screen
       .getByRole("treeitem", { name: "feature/merged" })
       .click({ button: "right" });
@@ -144,12 +169,13 @@ describe("branch editing", () => {
       name: "Delete feature/merged locally and on origin",
     });
     await expect.element(confirmation).toBeVisible();
-    expect(actions.delete).not.toHaveBeenCalled();
+    expect(environment.requested).not.toHaveBeenCalled();
     await confirmation
       .getByRole("button", { name: "Delete", exact: true })
       .click();
     await vi.waitFor(() =>
-      expect(actions.delete).toHaveBeenCalledWith({
+      expect(environment.requested).toHaveBeenCalledWith("delete", {
+        ...scope,
         force: false,
         local: { name: "feature/merged", target: main },
         remote: { name: "feature/merged", remote: "origin", target: main },
@@ -162,7 +188,7 @@ describe("branch editing", () => {
   });
 
   it("opens the branch menu from the keyboard and shows why checked-out branches cannot change", async () => {
-    const screen = await render(sidebar(refs(), branchActions()));
+    const screen = await render(sidebar(branchEnvironment()));
     await screen
       .getByRole("treeitem", { name: "topic, linked worktree" })
       .click();
@@ -177,8 +203,8 @@ describe("branch editing", () => {
   });
 
   it("sets the upstream from the branch menu", async () => {
-    const actions = branchActions();
-    const screen = await render(sidebar(refs(), actions));
+    const environment = branchEnvironment();
+    const screen = await render(sidebar(environment));
     await screen
       .getByRole("treeitem", { name: "feature/spike" })
       .click({ button: "right" });
@@ -189,20 +215,22 @@ describe("branch editing", () => {
       .toHaveFocus();
     await userEvent.keyboard("main");
     await screen.getByRole("option", { name: "origin/main" }).click();
-    expect(actions.setUpstream).toHaveBeenCalledWith({
-      name: "feature/spike",
-      upstream: { name: "main", remote: "origin" },
-    });
-  });
-  it("shows an upstream failure after the picker closes", async () => {
-    const actions = branchActions();
-    actions.setUpstream.mockRejectedValueOnce(
-      new RepositoryBranchesRejected({
-        failure: { _tag: "RefMissing", name: "origin/main" },
-        status: 404,
+    await vi.waitFor(() =>
+      expect(environment.requested).toHaveBeenCalledWith("setUpstream", {
+        ...scope,
+        name: "feature/spike",
+        upstream: { name: "main", remote: "origin" },
       }),
     );
-    const screen = await render(sidebar(refs(), actions));
+  });
+  it("shows an upstream failure after the picker closes", async () => {
+    const environment = branchEnvironment();
+    environment.rejectNext(
+      "setUpstream",
+      { _tag: "RefMissing", name: "origin/main" },
+      404,
+    );
+    const screen = await render(sidebar(environment));
     await screen
       .getByRole("treeitem", { name: "feature/spike" })
       .click({ button: "right" });
@@ -215,43 +243,114 @@ describe("branch editing", () => {
   });
 });
 
-function branchActions() {
+function branchEnvironment() {
+  const requested = vi.fn<(route: BranchRoute, command: object) => void>();
+  const checkout = vi.fn(async () => ({}) as never);
+  const rejections = new Map<
+    BranchRoute,
+    { readonly failure: RepositoryBranchesHttpFailure; readonly status: number }
+  >();
+  const requests: EnvironmentRequestClient = (routes, errors) =>
+    environmentHttpRoutesClient(routes, (route, command) => {
+      const name = branchRoute(route.path);
+      requested(name, command as unknown as object);
+      const rejection = rejections.get(name);
+      rejections.delete(name);
+      return rejection === undefined
+        ? Effect.succeed(branchResponse(name, command) as never)
+        : Effect.fail(
+            errors.response(new EnvironmentHttpRejected(rejection) as never),
+          );
+    });
   return {
-    create: vi.fn<BranchActions["create"]>(async () => undefined),
-    delete: vi.fn<BranchActions["delete"]>(async ({ local, remote }) => ({
-      ...(local === undefined ? {} : { local }),
-      ...(remote === undefined ? {} : { remote }),
-    })),
-    rename: vi.fn<BranchActions["rename"]>(async () => undefined),
-    setUpstream: vi.fn<BranchActions["setUpstream"]>(async () => undefined),
+    requested,
+    checkout,
+    rejectNext: (
+      route: BranchRoute,
+      failure: RepositoryBranchesHttpFailure,
+      status: number,
+    ) => rejections.set(route, { failure, status }),
+    scope: {
+      target: {
+        ...scope,
+        requests,
+        changes: { subscribe: () => () => {} },
+        runtime,
+      },
+      connected: true,
+      writable: true,
+    },
   };
 }
 
+function branchRoute(path: string) {
+  const route = (Object.keys(RepositoryBranchesHttpApi) as BranchRoute[]).find(
+    (name) => RepositoryBranchesHttpApi[name].path === path,
+  );
+  if (route === undefined) throw new Error(`Unexpected route ${path}`);
+  return route;
+}
+
+function branchResponse(route: BranchRoute, command: unknown) {
+  const request = command as {
+    readonly name?: string;
+    readonly newName?: string;
+    readonly local?: object;
+    readonly remote?: object;
+  };
+  switch (route) {
+    case "delete":
+      return {
+        ...(request.local === undefined ? {} : { local: request.local }),
+        ...(request.remote === undefined ? {} : { remote: request.remote }),
+      };
+    case "rename":
+      return {
+        branch: { name: request.newName, target: spike },
+        previousName: request.name,
+      };
+    default:
+      return { name: request.name, target: main };
+  }
+}
+
 function sidebar(
-  repositoryRefs: RepositoryRefs,
-  actions: BranchActions,
-  createBranchRequest?: BranchCreateRequest,
+  environment: ReturnType<typeof branchEnvironment>,
+  createBranchAt?: string,
 ) {
   return (
     <NotificationsProvider>
-      <div style={{ height: 520, width: 320 }}>
-        <BranchesSidebar
-          activeWorktreePath={mainPath}
-          branchActions={actions}
-          createBranchRequest={createBranchRequest}
-          focusRequest={0}
-          onRetry={() => undefined}
-          onSelectRef={(_target: RepositoryRefTarget) => undefined}
-          snapshot={{
-            checkingOut: false,
-            refs: repositoryRefs,
-            repositoryId,
-            status: "ready",
-          }}
-        />
-      </div>
+      <RepositoryScopeProvider scope={environment.scope}>
+        <BranchManagement.Provider
+          refs={{ apply: () => undefined, checkout: environment.checkout }}
+        >
+          {createBranchAt === undefined ? null : (
+            <RequestBranchAt oid={createBranchAt} />
+          )}
+          <div style={{ height: 520, width: 320 }}>
+            <BranchesSidebar
+              activeWorktreePath={mainPath}
+              focusRequest={0}
+              onRetry={() => undefined}
+              onSelectRef={(_target: RepositoryRefTarget) => undefined}
+              snapshot={{
+                checkingOut: false,
+                refs: refs(),
+                repositoryId,
+                status: "ready",
+              }}
+            />
+          </div>
+        </BranchManagement.Provider>
+      </RepositoryScopeProvider>
     </NotificationsProvider>
   );
+}
+
+function RequestBranchAt({ oid }: { readonly oid: string }) {
+  const requestCreate = useBranchManagement()?.requestCreate;
+  useEffect(() => requestCreate?.(oid), [oid, requestCreate]);
+  return null;
 }
 
 function refs(): RepositoryRefs {

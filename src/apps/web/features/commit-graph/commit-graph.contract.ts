@@ -12,12 +12,6 @@ export interface CommitGraphHistory {
   readonly pages: CommitGraphPageWindow;
 }
 
-export interface CommitGraphPull {
-  readonly execute: (branch: string) => void;
-  readonly pulling: boolean;
-  readonly incoming: number;
-}
-
 export interface CommitGraphHandle {
   readonly focusSelection: () => void;
   readonly navigateToOid: (oid: string) => Promise<void>;

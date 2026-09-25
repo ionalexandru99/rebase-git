@@ -5,11 +5,11 @@ import type {
   GraphCommandHandlers,
 } from "#web/features/commit-commands/index";
 import { useGraphCommands } from "#web/features/commit-commands/index";
-import type { CommitGraphPull } from "#web/features/commit-graph/commit-graph.contract";
 import type {
   RepositoryHistoryReadModel,
   RepositoryHistorySnapshot,
 } from "#web/features/repository-history/index";
+import type { RepositoryPullAction } from "#web/features/repository-pull/index";
 
 export function useCommitGraphCommands({
   commandEnvironment,
@@ -32,7 +32,7 @@ export function useCommitGraphCommands({
     "freshness" | "freshnessError"
   >;
   readonly fetch: { readonly fetching: boolean; readonly execute: () => void };
-  readonly pull: CommitGraphPull | undefined;
+  readonly pull: RepositoryPullAction | undefined;
   readonly selectedOids: readonly string[];
 }) {
   const pullBranch = pull?.execute;

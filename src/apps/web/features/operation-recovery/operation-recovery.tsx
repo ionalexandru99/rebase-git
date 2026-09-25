@@ -1,16 +1,19 @@
 import { PersistentNotification } from "#web/features/notifications/index";
+import { useRepositoryScope } from "#web/features/repository-scope/index";
 import { OperationRecoveryToast } from "#web-ui/features/operation-recovery/components/operation-recovery-toast";
-import { useOperationRecovery } from "#web-ui/features/operation-recovery/operation-recovery-provider";
+import {
+  OperationRecoveryProvider,
+  useOperationRecovery,
+} from "#web-ui/features/operation-recovery/operation-recovery-provider";
 import { useWorkspacePanel } from "#web-ui/features/workspace-panel/index";
 
-export function OperationRecovery({
+function OperationRecoveryNotice({
   repositoryName,
-  writable,
 }: {
   readonly repositoryName: string;
-  readonly writable: boolean;
 }) {
   const recovery = useOperationRecovery();
+  const writable = useRepositoryScope()?.writable ?? false;
   const panel = useWorkspacePanel();
   if (recovery === null) return null;
   const { controller, state } = recovery;
@@ -28,3 +31,8 @@ export function OperationRecovery({
     </PersistentNotification>
   );
 }
+
+export const OperationRecovery = {
+  Provider: OperationRecoveryProvider,
+  Notice: OperationRecoveryNotice,
+};
