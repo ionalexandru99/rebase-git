@@ -14,39 +14,23 @@ import type {
   RepositoryHistorySnapshot,
 } from "#web/features/repository-history/repository-history-reader.contract";
 
+const graphHistoryIdentity = {
+  environmentId: "test-environment",
+  repositoryId: "test-logical-repository",
+};
+
 export async function renderGraph(
   reader: ReturnType<typeof historyReader>,
   roots = [{ name: "main", oid: "0".repeat(40), type: "branch" as const }],
-  options: Pick<
-    ComponentProps<typeof CommitGraph>,
-    "onRemoveHistoryRef" | "commandEnvironment"
-  > = {},
 ) {
-  saveRepositoryHistoryOrder(
-    {
-      environmentId: "test-environment",
-      repositoryId: "test-logical-repository",
-    },
-    "topological",
-  );
+  saveRepositoryHistoryOrder(graphHistoryIdentity, "topological");
   return render(
     <div style={{ height: 520, width: 900 }}>
       <CommitGraphFixture
         reader={reader}
         repositoryName="rebase-test"
         roots={roots}
-        commandEnvironment={{
-          environmentId: "test-environment",
-          logicalRepositoryId: "test-logical-repository",
-          repositoryId: "test-repository",
-          activeBranch: "main",
-          activeWorktreePath: "/repo",
-          capabilities: new Set(),
-          connected: false,
-          freshnessReady: false,
-          operationState: "idle",
-        }}
-        {...options}
+        historyIdentity={graphHistoryIdentity}
       />
     </div>,
   );

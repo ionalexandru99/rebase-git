@@ -35,7 +35,6 @@ import {
 import { useBranchesSidebarView } from "#web/features/branches-sidebar/hooks/use-branches-sidebar-view";
 import { treeKeyAction } from "#web/features/branches-sidebar/navigation/branches-sidebar-keyboard";
 import { historyRefKey } from "#web/features/commit-graph/index";
-import { useRepositoryPull } from "#web/features/repository-pull/index";
 import type { RepositoryRefsSnapshot } from "#web/features/repository-refs/repository-refs-controller.contract";
 import { Input } from "#web-ui/components/ui/input";
 import { BranchEditItem } from "#web-ui/features/branches-sidebar/branch-editing/components/branch-edit-item";
@@ -124,7 +123,6 @@ export function BranchesSidebar({
     setActiveRowId(localBranchRowId(name));
     treeRef.current?.focus();
   }, []);
-  const pull = useRepositoryPull();
   const editing = useBranchEditing({
     activeWorktreePath,
     focusTree,
@@ -351,14 +349,8 @@ export function BranchesSidebar({
                 key={row.id}
                 onAction={(id) => editing.start(id, row)}
                 onActivate={() => setActiveRowId(row.id)}
-                onPull={
-                  pull?.allowed === true
-                    ? () => pull.execute(row.name)
-                    : undefined
-                }
                 onSelect={() => onSelectRef(row.target)}
                 onToggleHistory={() => onToggleHistoryRef(row.target)}
-                pulling={pull?.pulling ?? false}
                 row={row}
                 selectedInHistory={selectedHistoryRefKeys.has(
                   historyRefKey(row.target),

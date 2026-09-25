@@ -1,6 +1,5 @@
 import type {
   DesktopUpdates,
-  EnvironmentAccessCapability,
   RepositoryFilesystemHost,
 } from "@rebase/contracts";
 import { IconDeviceLaptop } from "@tabler/icons-react";
@@ -38,7 +37,6 @@ import {
 import { WorkspacePanel } from "#web-ui/features/workspace-panel/index";
 
 const localEnvironmentId = "local-environment";
-const noAccessCapabilities: readonly EnvironmentAccessCapability[] = [];
 const projectSidebarSize = {
   collapsed: "3rem",
   default: "16rem",
@@ -202,6 +200,9 @@ export function ApplicationShell({
     ({ id }) => id === repositorySettingsId,
   );
   const repositorySettingsOpen = settingsRepository !== undefined;
+  const canRead =
+    sessionState._tag === "Connected" &&
+    sessionState.accessCapabilities.includes("repository.read");
   const canWrite =
     sessionState._tag === "Connected" &&
     sessionState.accessCapabilities.includes("repository.write");
@@ -256,6 +257,7 @@ export function ApplicationShell({
             worktreePath: activeWorktreePath,
             requests: session.requests,
             changes: session.changes,
+            refs: session.repositoryRefs,
             runtime: session.runtime,
           },
     [
@@ -263,6 +265,7 @@ export function ApplicationShell({
       activeWorktreePath,
       session.requests,
       session.changes,
+      session.repositoryRefs,
       session.runtime,
     ],
   );
@@ -270,8 +273,13 @@ export function ApplicationShell({
     () =>
       repositoryTarget === undefined
         ? undefined
-        : { target: repositoryTarget, connected, writable: canWrite },
-    [repositoryTarget, connected, canWrite],
+        : {
+            target: repositoryTarget,
+            connected,
+            readable: canRead,
+            writable: canWrite,
+          },
+    [repositoryTarget, connected, canRead, canWrite],
   );
   const panelRepositoryIds = useMemo(
     () =>
@@ -352,12 +360,6 @@ export function ApplicationShell({
                   />
                 ) : (
                   <RepositoryWorkspace
-                    accessCapabilities={
-                      sessionState._tag === "Connected"
-                        ? sessionState.accessCapabilities
-                        : noAccessCapabilities
-                    }
-                    connected={sessionState._tag === "Connected"}
                     activeWorktreePath={activeWorktreePath}
                     environmentId={historyEnvironmentId}
                     history={graphHistory}
@@ -427,7 +429,7 @@ export function ApplicationShell({
     </div>
   );
   return (
-    <RepositoryActions scope={repositoryScope} refs={session.repositoryRefs}>
+    <RepositoryActions scope={repositoryScope}>
       <WorkspacePanel.Sessions
         environment={panelEnvironment}
         repositoryIds={panelRepositoryIds}

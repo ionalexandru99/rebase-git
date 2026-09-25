@@ -10,14 +10,17 @@ import {
   historyOid,
   historyReader,
 } from "#tests-ui/apps/web/commit-graph/commit-graph-fixture";
+import { repositoryScope } from "#tests-ui/apps/web/repository-scope/repository-scope-fixture";
 import { render } from "#tests-ui/runtime/render";
 import type { CommitInspectionClient } from "#web/features/commit-inspection/commit-inspection.contract";
+import { RepositoryScopeProvider } from "#web/features/repository-scope/index";
 import { CommitInspectionBridge } from "#web-ui/app/workspace/commit-inspection-bridge";
 import { ResizablePanel } from "#web-ui/components/ui/resizable";
 import { CommitInspectionSession } from "#web-ui/features/commit-inspection/commit-inspection-session";
 import { WorkspacePanel } from "#web-ui/features/workspace-panel/index";
 
 const runtime = ManagedRuntime.make(Layer.empty);
+const graphScope = repositoryScope({ writable: false });
 
 function details(oid = historyOid(0), parentOid = historyOid(1)): Details {
   return {
@@ -84,26 +87,19 @@ async function fixture(
               </ResizablePanel>
               <WorkspacePanel.Main>
                 {() => (
-                  <CommitGraphFixture
-                    ref={inspection.graphRef}
-                    reader={reader}
-                    repositoryName="test"
-                    roots={[
-                      { type: "branch", name: "main", oid: historyOid(0) },
-                    ]}
-                    onOpenDetails={inspection.open}
-                    onActiveCommitChange={inspection.select}
-                    toolbarActions={<WorkspacePanel.Toggle />}
-                    commandEnvironment={{
-                      environmentId: "env",
-                      repositoryId: "repo",
-                      logicalRepositoryId: "logical",
-                      connected: true,
-                      capabilities: new Set(["repository.read"]),
-                      operationState: "idle",
-                      freshnessReady: true,
-                    }}
-                  />
+                  <RepositoryScopeProvider scope={graphScope}>
+                    <CommitGraphFixture
+                      ref={inspection.graphRef}
+                      reader={reader}
+                      repositoryName="test"
+                      roots={[
+                        { type: "branch", name: "main", oid: historyOid(0) },
+                      ]}
+                      onOpenDetails={inspection.open}
+                      onActiveCommitChange={inspection.select}
+                      toolbarActions={<WorkspacePanel.Toggle />}
+                    />
+                  </RepositoryScopeProvider>
                 )}
               </WorkspacePanel.Main>
               <WorkspacePanel.Pane

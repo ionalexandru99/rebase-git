@@ -1,24 +1,19 @@
 import type { RepositoryCommit } from "@rebase/contracts";
 import { describe, expect, it, vi } from "vite-plus/test";
+import { createCommitCommandDefinitions } from "#web/features/commit-commands/commit-command-definitions";
 import type {
+  CommitCommandHandlers,
   GraphCommandContext,
-  GraphCommandHandlers,
+  GraphCommandDefinition,
 } from "#web/features/commit-commands/graph-command.contract";
-import { createGraphCommandDefinitions } from "#web/features/commit-commands/graph-command-definitions";
-import { createGraphCommandRegistry } from "#web/features/commit-commands/graph-command-registry";
+import { createCommandRegistry } from "#web/platform/command-contributions/command-registry";
 
 const context: GraphCommandContext = {
-  environmentId: "local",
-  logicalRepositoryId: "logical",
-  repositoryId: "worktree",
-  activeWorktreePath: "/worktree",
-  activeBranch: "main",
-  selectedOids: ["a", "b"],
   invokingOid: "b",
+  selectedOids: ["a", "b"],
   connected: true,
-  freshnessReady: true,
-  operationState: "idle",
-  capabilities: new Set(["repository.write"]),
+  readable: true,
+  writable: true,
 };
 const commit: RepositoryCommit = {
   oid: "b",
@@ -39,53 +34,43 @@ const commit: RepositoryCommit = {
 };
 
 describe("graph commands", () => {
-  it("renders a contributed command in its declared placement and rechecks it before execution", async () => {
+  it("orders contributed commands with commit commands and rechecks them before execution", async () => {
     const execute = vi.fn(async () => ({ _tag: "Executed" as const }));
-    const registry = createGraphCommandRegistry([
-      {
-        id: "commit.inspect",
-        group: "Commit",
-        order: 0,
-        placement: "commit-menu",
-        resolve: (target) => ({
-          label: "Inspect commit",
-          enabled: target.connected,
-          execute,
-        }),
-      },
+    const contributed: GraphCommandDefinition = {
+      id: "feature.inspect",
+      order: 0.5,
+      resolve: (target) => ({
+        label: "Inspect commit",
+        enabled: target.connected,
+        execute,
+      }),
+    };
+    const registry = createCommandRegistry([
+      ...createCommitCommandDefinitions({
+        readCommit: async () => commit,
+        writeClipboard: async () => {},
+        openDetails: () => {},
+      }),
+      contributed,
     ]);
 
-    expect(registry.commands(context, "toolbar")).toEqual([]);
-    expect(registry.commands(context, "commit-menu")).toMatchObject([
-      { id: "commit.inspect", label: "Inspect commit", enabled: true },
+    expect(registry.commands(context).map(({ id }) => id)).toEqual([
+      "graph.openDetails",
+      "graph.copySha",
+      "feature.inspect",
+      "graph.copySubject",
     ]);
     expect(
-      await registry.execute("commit.inspect", {
+      await registry.execute("feature.inspect", {
         ...context,
         connected: false,
       }),
     ).toMatchObject({ _tag: "Unavailable" });
     expect(execute).not.toHaveBeenCalled();
-    expect(await registry.execute("commit.inspect", context)).toEqual({
+    expect(await registry.execute("feature.inspect", context)).toEqual({
       _tag: "Executed",
     });
     expect(execute).toHaveBeenCalledOnce();
-  });
-
-  it("keeps commit actions out of the fetch toolbar and preserves their display order", () => {
-    const registry = createCommands({
-      readCommit: async () => commit,
-      writeClipboard: async () => {},
-      openDetails: () => {},
-      fetch: async () => {},
-    });
-
-    expect(
-      registry.commands(context, "commit-menu").map(({ id }) => id),
-    ).toEqual(["graph.openDetails", "graph.copySha", "graph.copySubject"]);
-    expect(registry.commands(context, "toolbar").map(({ id }) => id)).toEqual([
-      "graph.fetch",
-    ]);
   });
 
   it("copies the invoking commit even when other commits are selected", async () => {
@@ -102,100 +87,40 @@ describe("graph commands", () => {
     expect(writeClipboard).toHaveBeenLastCalledWith("Chosen commit");
   });
 
-  it("hides unsupported and irrelevant actions", async () => {
+  it("hides unsupported actions and explains missing commit metadata", async () => {
     const registry = createCommands({
       readCommit: async () => undefined,
       writeClipboard: async () => {},
     });
-    const { invokingOid: _, ...withoutTarget } = context;
-    expect(registry.commands(withoutTarget)).toEqual([]);
-    expect(await registry.execute("graph.fetch", context)).toMatchObject({
-      _tag: "Unavailable",
-    });
+    expect(registry.commands(context).map(({ id }) => id)).toEqual([
+      "graph.copySha",
+      "graph.copySubject",
+    ]);
     expect(await registry.execute("graph.copySubject", context)).toEqual({
       _tag: "Unavailable",
       reason: "Commit metadata is not available yet",
     });
   });
 
-  it.each([
-    [{ connected: false }, "Reconnect to fetch"],
-    [{ capabilities: new Set<never>() }, "Repository write access is required"],
-    [{ operationState: "fetching" }, "A fetch is already running"],
-    [{ operationState: "busy" }, "Wait for the current operation to finish"],
-    [{ freshnessReady: false }, "Waiting for repository status"],
-  ] as const)(
-    "disables fetch and rechecks execution for %o",
-    async (override, reason) => {
-      const execute = vi.fn(async () => {});
-      const registry = createCommands({
-        readCommit: async () => undefined,
-        writeClipboard: async () => {},
-        fetch: execute,
-      });
-      const unavailable = { ...context, ...override };
-      expect(
-        registry
-          .commands(unavailable)
-          .find((item) => item.id === "graph.fetch"),
-      ).toMatchObject({
-        enabled: false,
-        disabledReason: reason,
-      });
-      expect(await registry.execute("graph.fetch", unavailable)).toEqual({
-        _tag: "Unavailable",
-        reason,
-      });
-      expect(execute).not.toHaveBeenCalled();
-      await registry.execute("graph.fetch", context);
-      expect(execute).toHaveBeenCalledWith(context);
-    },
-  );
-
-  const { activeBranch: _activeBranch, ...detached } = context;
-  it.each<[GraphCommandContext, string]>([
-    [{ ...context, connected: false }, "Reconnect to pull"],
-    [
-      { ...context, capabilities: new Set() },
-      "Repository write access is required",
-    ],
-    [detached, "Check out a branch to pull"],
-    [
-      { ...context, operationState: "busy" },
-      "Wait for the current operation to finish",
-    ],
-    [{ ...context, freshnessReady: false }, "Waiting for repository status"],
-  ])("disables pull when %#", async (unavailable, reason) => {
-    const pull = vi.fn();
+  it("requires a readable connection to open details", async () => {
+    const openDetails = vi.fn();
     const registry = createCommands({
       readCommit: async () => undefined,
       writeClipboard: async () => {},
-      pull,
-    });
-    expect(await registry.execute("graph.pull", unavailable)).toEqual({
-      _tag: "Unavailable",
-      reason,
-    });
-    expect(pull).not.toHaveBeenCalled();
-  });
-
-  it("pulls the active branch while a fetch is running", async () => {
-    const pull = vi.fn();
-    const registry = createCommands({
-      readCommit: async () => undefined,
-      writeClipboard: async () => {},
-      pull,
+      openDetails,
     });
     expect(
-      await registry.execute("graph.pull", {
+      await registry.execute("graph.openDetails", {
         ...context,
-        operationState: "fetching",
+        readable: false,
       }),
-    ).toEqual({ _tag: "Executed" });
-    expect(pull).toHaveBeenCalledWith("main");
+    ).toMatchObject({ _tag: "Unavailable" });
+    expect(openDetails).not.toHaveBeenCalled();
+    await registry.execute("graph.openDetails", context);
+    expect(openDetails).toHaveBeenCalledWith("b");
   });
 });
 
-function createCommands(handlers: GraphCommandHandlers) {
-  return createGraphCommandRegistry(createGraphCommandDefinitions(handlers));
+function createCommands(handlers: CommitCommandHandlers) {
+  return createCommandRegistry(createCommitCommandDefinitions(handlers));
 }

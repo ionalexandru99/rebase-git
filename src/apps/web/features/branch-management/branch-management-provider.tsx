@@ -10,22 +10,21 @@ import type {
   BranchRename,
 } from "#web/features/branch-management/branch-management.contract";
 import { createBranchWrites } from "#web/features/branch-management/branch-writes";
+import { createBranchHereCommand } from "#web/features/branch-management/create-branch-here-command";
 import {
   createRepositoryBranches,
   type RepositoryBranches,
 } from "#web/features/branch-management/repository-branches";
 import { repositoryBranchesClient } from "#web/features/branch-management/repository-branches-client";
-import type { RepositoryRefsController } from "#web/features/repository-refs/index";
+import { GraphCommands } from "#web/features/commit-commands/index";
 import { useRepositoryScope } from "#web/features/repository-scope/index";
 import { useStore } from "#web/platform/store/use-store";
 
 const BranchManagementContext = createContext<RepositoryBranches | null>(null);
 
 export function BranchManagementProvider({
-  refs,
   children,
 }: {
-  readonly refs: Pick<RepositoryRefsController, "apply" | "checkout">;
   readonly children: ReactNode;
 }) {
   const scope = useRepositoryScope();
@@ -36,18 +35,30 @@ export function BranchManagementProvider({
       target === undefined || !writable
         ? null
         : createRepositoryBranches(
-            createBranchWrites(repositoryBranchesClient(target.requests), refs),
-            refs,
+            createBranchWrites(
+              repositoryBranchesClient(target.requests),
+              target.refs,
+            ),
+            target.refs,
             {
               repositoryId: target.repositoryId,
               worktreePath: target.worktreePath,
             },
           ),
-    [target, writable, refs],
+    [target, writable],
+  );
+  const graphCommands = useMemo(
+    () =>
+      branches === null
+        ? []
+        : [createBranchHereCommand(branches.requestCreate)],
+    [branches],
   );
   return (
     <BranchManagementContext.Provider value={branches}>
-      {children}
+      <GraphCommands.Contribute commands={graphCommands}>
+        {children}
+      </GraphCommands.Contribute>
     </BranchManagementContext.Provider>
   );
 }
@@ -57,18 +68,15 @@ const idleStore = {
   subscribe: () => () => {},
 };
 
-export function useBranchManagement() {
+export function useBranchActions() {
+  return useContext(BranchManagementContext)?.actions;
+}
+
+export function useBranchCreateRequest() {
   const branches = useContext(BranchManagementContext);
-  const createRequest = useStore<BranchCreateRequest | undefined>(
+  return useStore<BranchCreateRequest | undefined>(
     branches?.createRequest ?? idleStore,
   );
-  return branches === null
-    ? undefined
-    : {
-        actions: branches.actions,
-        createRequest,
-        requestCreate: branches.requestCreate,
-      };
 }
 
 export function useBranchRenamed(listener: (rename: BranchRename) => void) {

@@ -1,49 +1,39 @@
-import { useMemo, useState } from "react";
-import type {
-  GraphCommandContext,
-  GraphCommandEnvironment,
-  GraphCommandHandlers,
-} from "#web/features/commit-commands/graph-command.contract";
+import { useCallback, useMemo, useState } from "react";
 import {
-  createGraphCommandDefinitions,
-  type GraphCommandId,
-} from "#web/features/commit-commands/graph-command-definitions";
-import { createGraphCommandRegistry } from "#web/features/commit-commands/graph-command-registry";
+  type CommitCommandId,
+  createCommitCommandDefinitions,
+} from "#web/features/commit-commands/commit-command-definitions";
+import type {
+  CommitCommandHandlers,
+  GraphCommandContext,
+} from "#web/features/commit-commands/graph-command.contract";
+import type { CommandResult } from "#web/platform/command-contributions/command-contributions.contract";
+import { createCommandRegistry } from "#web/platform/command-contributions/command-registry";
 
-export function useGraphCommands({
-  environment,
-  selectedOids,
-  handlers,
-}: {
-  readonly environment: GraphCommandEnvironment | undefined;
-  readonly selectedOids: readonly string[];
-  readonly handlers: GraphCommandHandlers;
-}) {
-  const registry = useMemo(
-    () => createGraphCommandRegistry(createGraphCommandDefinitions(handlers)),
+export type GraphCommandRun = (
+  command: () => Promise<CommandResult>,
+) => Promise<void>;
+
+export function useGraphCommands(handlers: CommitCommandHandlers) {
+  const definitions = useMemo(
+    () => createCommitCommandDefinitions(handlers),
     [handlers],
   );
+  const registry = useMemo(
+    () => createCommandRegistry(definitions),
+    [definitions],
+  );
   const [error, setError] = useState<string>();
-  const context = (invokingOid?: string): GraphCommandContext | undefined =>
-    environment === undefined
-      ? undefined
-      : {
-          ...environment,
-          selectedOids,
-          ...(invokingOid === undefined ? {} : { invokingOid }),
-        };
-  const execute = async (
-    id: GraphCommandId,
-    target: GraphCommandContext | undefined,
-  ) => {
-    if (target === undefined) return;
+  const run = useCallback<GraphCommandRun>(async (command) => {
     setError(undefined);
     try {
-      const result = await registry.execute(id, target);
+      const result = await command();
       if (result._tag === "Unavailable") setError(result.reason);
     } catch {
       setError("The command could not be completed. Try again.");
     }
-  };
-  return { registry, context, execute, error };
+  }, []);
+  const execute = (id: CommitCommandId, context: GraphCommandContext) =>
+    run(() => registry.execute(id, context));
+  return { definitions, run, execute, error };
 }

@@ -1,10 +1,8 @@
 export type {
+  CommitCommandHandlers,
   GraphCommandContext,
   GraphCommandDefinition,
-  GraphCommandEnvironment,
-  GraphCommandHandlers,
-  GraphCommandRegistry,
-  GraphCommandResult,
 } from "#web/features/commit-commands/graph-command.contract";
+export { GraphCommands } from "#web/features/commit-commands/graph-command-slot";
 export { useGraphCommands } from "#web/features/commit-commands/use-graph-commands";
 export { CommitCommandMenu } from "#web-ui/features/commit-commands/commit-command-menu";

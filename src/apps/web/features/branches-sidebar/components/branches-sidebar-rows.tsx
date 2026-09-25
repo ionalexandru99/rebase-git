@@ -22,6 +22,7 @@ import {
   localBranchesSectionId,
   tagsSectionId,
 } from "#web/features/branches-sidebar/branches-sidebar.contract";
+import { RefCommands } from "#web/features/ref-commands/index";
 import {
   ContextMenu,
   ContextMenuContent,
@@ -100,10 +101,8 @@ export function RefRow({
   active,
   onAction,
   onActivate,
-  onPull,
   onSelect,
   onToggleHistory,
-  pulling,
   row,
   selectedInHistory,
   style,
@@ -112,10 +111,8 @@ export function RefRow({
   readonly onAction: (id: BranchRowActionId) => void;
   readonly active: boolean;
   readonly onActivate: () => void;
-  readonly onPull: (() => void) | undefined;
   readonly onSelect: () => void;
   readonly onToggleHistory: () => void;
-  readonly pulling: boolean;
   readonly row: BranchesSidebarRefRow;
   readonly selectedInHistory: boolean;
   readonly style: CSSProperties;
@@ -194,13 +191,12 @@ export function RefRow({
       />
       <ContextMenuContent className="w-64" finalFocus={() => !acted.current}>
         <ContextMenuItem onClick={onSelect}>Checkout</ContextMenuItem>
-        {onPull === undefined ||
-        row.target._tag !== "LocalBranch" ||
-        row.upstream === undefined ? null : (
-          <ContextMenuItem disabled={pulling} onClick={onPull}>
-            Pull
-          </ContextMenuItem>
-        )}
+        <RefCommands.Items
+          context={{
+            target: row.target,
+            ...(row.upstream === undefined ? {} : { upstream: row.upstream }),
+          }}
+        />
         {actions.map((action, index) => (
           <Fragment key={action.id}>
             {action.group !== (actions[index - 1]?.group ?? "create") ? (

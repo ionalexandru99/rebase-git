@@ -1,22 +1,15 @@
-import type {
-  EnvironmentAccessCapability,
-  RepositoryRefTarget,
-} from "@rebase/contracts";
+import type { RepositoryRefTarget } from "@rebase/contracts";
 import type { JSX } from "react";
 import { useMemo, useState } from "react";
 import { useHistoryRefRefresh } from "#web/app/workspace/use-history-ref-refresh";
 import { useWorkspaceHistoryScope } from "#web/app/workspace/use-workspace-history-scope";
 import { BranchesSidebar } from "#web/features/branches-sidebar/index";
-import type { GraphCommandEnvironment } from "#web/features/commit-commands/index";
 import type { CommitGraphHistory } from "#web/features/commit-graph/index";
 import {
   automaticHistoryScope,
   CommitGraph,
 } from "#web/features/commit-graph/index";
-import {
-  OperationRecovery,
-  useOperationCommandState,
-} from "#web/features/operation-recovery/index";
+import { OperationRecovery } from "#web/features/operation-recovery/index";
 import { RepositoryPull } from "#web/features/repository-pull/index";
 import {
   RepositoryPush,
@@ -24,6 +17,7 @@ import {
 } from "#web/features/repository-push/index";
 import type { RepositoryRefsSnapshot } from "#web/features/repository-refs/repository-refs-controller.contract";
 import { useCachedRepositoryRefs } from "#web/features/repository-refs/use-cached-repository-refs";
+import { useRepositoryScope } from "#web/features/repository-scope/index";
 import { CommitInspectionBridge } from "#web-ui/app/workspace/commit-inspection-bridge";
 import {
   ResizableHandle,
@@ -31,7 +25,6 @@ import {
 } from "#web-ui/components/ui/resizable";
 import { WorkspacePanel } from "#web-ui/features/workspace-panel/index";
 
-const noAccessCapabilities: readonly EnvironmentAccessCapability[] = [];
 const branchesSidebarSize = {
   default: "16.5rem",
   max: "26rem",
@@ -39,8 +32,6 @@ const branchesSidebarSize = {
 } as const;
 
 interface RepositoryWorkspaceProps {
-  readonly accessCapabilities?: readonly EnvironmentAccessCapability[];
-  readonly connected?: boolean;
   readonly activeWorktreePath: string;
   readonly environmentId: string | undefined;
   readonly history: CommitGraphHistory | undefined;
@@ -76,8 +67,6 @@ export function RepositoryWorkspace(
 }
 
 function RepositoryWorkspaceContent({
-  accessCapabilities = noAccessCapabilities,
-  connected = false,
   activeWorktreePath,
   environmentId,
   history,
@@ -90,7 +79,7 @@ function RepositoryWorkspaceContent({
   selectRef,
 }: RepositoryWorkspaceProps & { readonly refsRestored: boolean }): JSX.Element {
   const [localBranchesFocusRequest, setLocalBranchesFocusRequest] = useState(0);
-  const operationState = useOperationCommandState();
+  const connected = useRepositoryScope()?.connected ?? false;
   const panelScope = useMemo(
     () =>
       environmentId && repositoryId && logicalRepositoryId
@@ -107,41 +96,12 @@ function RepositoryWorkspaceContent({
   const activeBranch = refs.refs?.worktrees.find(
     ({ path }) => path === activeWorktreePath,
   )?.head.branch;
-  const writable = accessCapabilities.includes("repository.write");
   const incoming =
     refs.refs?.branches.find(({ name }) => name === activeBranch)?.upstream
       ?.behind ?? 0;
   const pushTarget = useMemo(
     () => resolvePushTarget(refs.refs, activeBranch),
     [refs.refs, activeBranch],
-  );
-  const commandEnvironment = useMemo<GraphCommandEnvironment | undefined>(
-    () =>
-      environmentId === undefined ||
-      logicalRepositoryId === undefined ||
-      repositoryId === undefined
-        ? undefined
-        : {
-            environmentId,
-            logicalRepositoryId,
-            repositoryId,
-            activeWorktreePath,
-            ...(activeBranch === undefined ? {} : { activeBranch }),
-            connected,
-            capabilities: new Set(accessCapabilities),
-            freshnessReady: false,
-            operationState,
-          },
-    [
-      environmentId,
-      logicalRepositoryId,
-      repositoryId,
-      activeWorktreePath,
-      activeBranch,
-      connected,
-      accessCapabilities,
-      operationState,
-    ],
   );
   const historyScope = useWorkspaceHistoryScope({
     environmentId,
@@ -161,7 +121,11 @@ function RepositoryWorkspaceContent({
         activeWorktreePath,
       ])}
     >
-      <RepositoryPull.Provider reader={history?.reader} incoming={incoming}>
+      <RepositoryPull.Provider
+        reader={history?.reader}
+        activeBranch={activeBranch}
+        incoming={incoming}
+      >
         <OperationRecovery.Notice repositoryName={repositoryName} />
         <RepositoryPull.Notice />
         <RepositoryPush.Notice />
@@ -203,20 +167,22 @@ function RepositoryWorkspaceContent({
                       onActiveCommitChange={inspection.select}
                       toolbarActions={
                         <>
-                          <RepositoryPush.Button
-                            target={pushTarget}
-                            disabled={
-                              !connected ||
-                              !writable ||
-                              operationState === "busy"
-                            }
-                          />
+                          <RepositoryPull.Button />
+                          <RepositoryPush.Button target={pushTarget} />
                           <WorkspacePanel.Toggle />
                         </>
                       }
                       githubRepository={refs.refs?.githubRepository}
                       remoteProviders={refs.refs?.remoteProviders}
-                      commandEnvironment={commandEnvironment}
+                      historyIdentity={
+                        environmentId === undefined ||
+                        logicalRepositoryId === undefined
+                          ? undefined
+                          : {
+                              environmentId,
+                              repositoryId: logicalRepositoryId,
+                            }
+                      }
                       onRemoveHistoryRef={historyScope.toggleRef}
                       onRevealHistoryRef={historyScope.toggleRef}
                       onAddHistoryRef={() =>
