@@ -13,3 +13,15 @@ export const RepositoryPath = Schema.String.check(
   Schema.isMaxLength(4_096),
 );
 export type RepositoryPath = typeof RepositoryPath.Type;
+
+export const RefName = Schema.String.check(
+  Schema.isMinLength(1),
+  Schema.isMaxLength(1_024),
+);
+export type RefName = typeof RefName.Type;
+
+export const RemoteName = Schema.String.check(
+  Schema.isMinLength(1),
+  Schema.isMaxLength(255),
+);
+export type RemoteName = typeof RemoteName.Type;

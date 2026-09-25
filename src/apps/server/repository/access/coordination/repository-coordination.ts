@@ -32,6 +32,7 @@ const refWrites: readonly RepositoryWrite[] = [
   "checkout",
   "fetch",
   "pull",
+  "push",
   "commit",
   "amend",
   "recover",

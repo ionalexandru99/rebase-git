@@ -6,19 +6,13 @@ import {
 } from "@rebase/contracts/git/git-failures.contract";
 import {
   ObjectId,
+  RefName,
+  RemoteName,
   RepositoryId,
   RepositoryPath,
 } from "@rebase/contracts/git/git-values.contract";
 import { Schema } from "effect";
 
-const RefName = Schema.String.check(
-  Schema.isMinLength(1),
-  Schema.isMaxLength(1_024),
-);
-const RemoteName = Schema.String.check(
-  Schema.isMinLength(1),
-  Schema.isMaxLength(255),
-);
 const FailureDetail = Schema.String.check(Schema.isMaxLength(2_048));
 
 export const RepositoryHead = Schema.Struct({

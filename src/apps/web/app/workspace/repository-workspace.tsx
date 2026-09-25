@@ -27,6 +27,10 @@ import {
   useOperationCommandState,
 } from "#web/features/operation-recovery/index";
 import { useRepositoryPull } from "#web/features/repository-pull/index";
+import {
+  RepositoryPush,
+  resolvePushTarget,
+} from "#web/features/repository-push/index";
 import type { RepositoryRefsSnapshot } from "#web/features/repository-refs/repository-refs-controller.contract";
 import { useCachedRepositoryRefs } from "#web/features/repository-refs/use-cached-repository-refs";
 import { CommitInspectionBridge } from "#web-ui/app/workspace/commit-inspection-bridge";
@@ -147,8 +151,9 @@ function RepositoryWorkspaceContent({
   const activeBranch = refs.refs?.worktrees.find(
     ({ path }) => path === activeWorktreePath,
   )?.head.branch;
+  const writable = accessCapabilities.includes("repository.write");
   const pull = useRepositoryPull(requests, repositoryId, history?.reader);
-  const canPull = connected && accessCapabilities.includes("repository.write");
+  const canPull = connected && writable;
   const incoming =
     refs.refs?.branches.find(({ name }) => name === activeBranch)?.upstream
       ?.behind ?? 0;
@@ -162,6 +167,10 @@ function RepositoryWorkspaceContent({
             incoming,
           },
     [pull.pull, pull.pulling, incoming],
+  );
+  const pushTarget = useMemo(
+    () => resolvePushTarget(refs.refs, activeBranch),
+    [refs.refs, activeBranch],
   );
   const filterStore = useMemo(() => createBrowserHistoryFilterStore(), []);
   const commandEnvironment = useMemo<GraphCommandEnvironment | undefined>(
@@ -250,13 +259,11 @@ function RepositoryWorkspaceContent({
         activeWorktreePath,
       ])}
     >
-      <OperationRecovery
-        repositoryName={repositoryName}
-        writable={accessCapabilities.includes("repository.write")}
-      />
+      <OperationRecovery repositoryName={repositoryName} writable={writable} />
       {pull.error === undefined ? null : (
         <ErrorNotification key={pull.error.id} message={pull.error.message} />
       )}
+      <RepositoryPush.Notice />
       <CommitInspectionBridge connected={connected}>
         {(inspection) => (
           <WorkspacePanel.Group>
@@ -295,7 +302,17 @@ function RepositoryWorkspaceContent({
                     ref={inspection.graphRef}
                     onOpenDetails={inspection.open}
                     onActiveCommitChange={inspection.select}
-                    toolbarActions={<WorkspacePanel.Toggle />}
+                    toolbarActions={
+                      <>
+                        <RepositoryPush.Button
+                          target={pushTarget}
+                          disabled={
+                            !connected || !writable || operationState === "busy"
+                          }
+                        />
+                        <WorkspacePanel.Toggle />
+                      </>
+                    }
                     githubRepository={refs.refs?.githubRepository}
                     remoteProviders={refs.refs?.remoteProviders}
                     commandEnvironment={commandEnvironment}
