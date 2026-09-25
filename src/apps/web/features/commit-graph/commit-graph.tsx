@@ -21,8 +21,6 @@ import {
   AuthorAvatars,
   type GitHubRepository,
 } from "#web/features/author-avatars/index";
-import { useBranchManagement } from "#web/features/branch-management/index";
-import type { GraphCommandEnvironment } from "#web/features/commit-commands/index";
 import { CommitCommandMenu } from "#web/features/commit-commands/index";
 import type {
   CommitGraphHandle,
@@ -42,12 +40,13 @@ import { graphMetadataColumns } from "#web/features/commit-graph/layout/graph-me
 import { graphRefLabels } from "#web/features/commit-graph/layout/graph-ref-labels";
 import { RepositoryHistorySearchControls } from "#web/features/history-search/index";
 import {
+  RepositoryFetchButton,
   RepositoryHistoryFreshnessStatus,
   useRepositoryHistoryFetch,
 } from "#web/features/repository-fetch/index";
 import type { RepositoryHistoryQuery } from "#web/features/repository-history/index";
 import { useRepositoryHistoryOrder } from "#web/features/repository-history/index";
-import { useRepositoryPull } from "#web/features/repository-pull/index";
+import { useRepositoryScope } from "#web/features/repository-scope/index";
 import { Button } from "#web-ui/components/ui/button";
 import { CommitGraphCanvas } from "#web-ui/features/commit-graph/components/commit-graph-canvas";
 import {
@@ -69,7 +68,7 @@ const emptyRefLabels: readonly RepositoryHistoryRefTarget[] = [];
 
 export function CommitGraph({
   ref,
-  commandEnvironment,
+  historyIdentity,
   onRemoveHistoryRef,
   onRevealHistoryRef,
   onAddHistoryRef,
@@ -91,7 +90,9 @@ export function CommitGraph({
     | undefined;
   readonly toolbarActions?: ReactNode;
   readonly ref?: Ref<CommitGraphHandle>;
-  readonly commandEnvironment?: GraphCommandEnvironment | undefined;
+  readonly historyIdentity?:
+    | { readonly environmentId: string; readonly repositoryId: string }
+    | undefined;
   readonly onAddHistoryRef?: () => void;
   readonly onResetHistoryScope?: (() => void) | undefined;
   readonly onRemoveHistoryRef?: (target: RepositoryRefTarget) => void;
@@ -109,9 +110,10 @@ export function CommitGraph({
     ReadonlyMap<string, readonly string[]>
   >(new Map());
   const order = useRepositoryHistoryOrder(
-    commandEnvironment?.environmentId,
-    commandEnvironment?.logicalRepositoryId,
+    historyIdentity?.environmentId,
+    historyIdentity?.repositoryId,
   );
+  const connected = useRepositoryScope()?.connected;
   const selectedOidRef = useRef<string | undefined>(undefined);
   const [pageSize, setPageSize] = useState(12);
   const [pendingNavigation, setPendingNavigation] = useState<{
@@ -268,16 +270,9 @@ export function CommitGraph({
     ? navigation.selection.activeOid
     : undefined;
 
-  const pull = useRepositoryPull();
-  const onCreateBranch = useBranchManagement()?.requestCreate;
-  const { commands, fetchAction, pullAction } = useCommitGraphCommands({
-    commandEnvironment,
+  const commands = useCommitGraphCommands({
     reader,
-    historySnapshot,
-    fetch,
-    pull,
     selectedOids: navigation.selection.selectedOids,
-    onCreateBranch,
     onOpenDetails,
   });
   const handleKeyDown = (event: KeyboardEvent<HTMLElement>) => {
@@ -347,20 +342,10 @@ export function CommitGraph({
             reader={reader}
             snapshot={historySnapshot}
             onNavigate={navigateToOid}
-            offline={commandEnvironment?.connected === false}
+            offline={connected === false}
           />
         )}
-        <CommitGraphToolbar.Fetch
-          fetchAction={fetchAction}
-          fetching={fetch.fetching}
-        />
-        {pull === undefined || pullAction === undefined ? null : (
-          <CommitGraphToolbar.Pull
-            pullAction={pullAction}
-            pulling={pull.pulling}
-            incoming={pull.incoming}
-          />
-        )}
+        <RepositoryFetchButton fetch={fetch} snapshot={historySnapshot} />
         {toolbarActions}
       </CommitGraphToolbar.Frame>
       <GraphRefAppearance
@@ -391,9 +376,13 @@ export function CommitGraph({
               <>
                 <div className="relative min-h-0 flex-1">
                   <CommitCommandMenu
-                    context={commands.context(menuOid)}
-                    registry={commands.registry}
-                    execute={commands.execute}
+                    context={
+                      menuOid === undefined
+                        ? undefined
+                        : commands.context(menuOid)
+                    }
+                    commands={commands.definitions}
+                    run={commands.run}
                     tabIndex={0}
                     restoreFocus={() => scrollRef.current?.focus()}
                   >

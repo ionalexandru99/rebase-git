@@ -14,10 +14,3 @@ export type RepositoryPullClient = EnvironmentHttpRoutesClient<
   typeof RepositoryPullHttpApi,
   RepositoryPullRejected | RepositoryPullDisconnected
 >;
-
-export interface RepositoryPullAction {
-  readonly execute: (branch: string) => void;
-  readonly pulling: boolean;
-  readonly incoming: number;
-  readonly allowed: boolean;
-}

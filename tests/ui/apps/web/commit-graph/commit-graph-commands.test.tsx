@@ -2,7 +2,8 @@ import {
   type EnvironmentRequestClient,
   environmentHttpRoutesClient,
 } from "@rebase/environment-client";
-import { Effect, Layer, ManagedRuntime } from "effect";
+import { Effect } from "effect";
+import type { ReactNode } from "react";
 import { describe, expect, it, vi } from "vite-plus/test";
 import { userEvent } from "vite-plus/test/browser";
 import {
@@ -13,9 +14,17 @@ import {
   mergeHistory,
   renderGraph,
 } from "#tests-ui/apps/web/commit-graph/commit-graph-fixture";
+import { repositoryScope } from "#tests-ui/apps/web/repository-scope/repository-scope-fixture";
 import { render } from "#tests-ui/runtime/render";
+import {
+  type GraphCommandDefinition,
+  GraphCommands,
+} from "#web/features/commit-commands/index";
 import { RepositoryPull } from "#web/features/repository-pull/index";
-import { RepositoryScopeProvider } from "#web/features/repository-scope/index";
+import {
+  type RepositoryScope,
+  RepositoryScopeProvider,
+} from "#web/features/repository-scope/index";
 
 describe("commit graph commands", () => {
   it("reveals a hidden result from cached search", async () => {
@@ -48,27 +57,10 @@ describe("commit graph commands", () => {
   });
 
   it("fetches from the toolbar", async () => {
-    const reader = historyReader({ commits: history(2), status: "ready" });
-    const freshness = {
-      revision: 0,
-      fetching: false,
-      stale: false,
-      defaultIntervalSeconds: 300,
-      setting: { _tag: "Inherit" as const },
-    };
-    reader.snapshot = { ...reader.snapshot, freshness };
-    reader.fetch.mockResolvedValue(freshness);
-    const screen = await renderGraph(reader, undefined, {
-      commandEnvironment: {
-        environmentId: "env",
-        logicalRepositoryId: "logical",
-        repositoryId: "repo",
-        connected: true,
-        capabilities: new Set(["repository.write"]),
-        freshnessReady: true,
-        operationState: "idle",
-      },
-    });
+    const reader = readyToFetch();
+    const screen = await render(
+      <ScopedGraph reader={reader} scope={repositoryScope()} />,
+    );
     const fetch = screen.getByRole("button", { name: "Fetch", exact: true });
     await fetch.click();
     await vi.waitFor(() => expect(reader.fetch).toHaveBeenCalledOnce());
@@ -76,16 +68,7 @@ describe("commit graph commands", () => {
   });
 
   it("pulls the active branch from the toolbar", async () => {
-    const reader = historyReader({ commits: history(2), status: "ready" });
-    const freshness = {
-      revision: 0,
-      fetching: false,
-      stale: false,
-      defaultIntervalSeconds: 300,
-      setting: { _tag: "Inherit" as const },
-    };
-    reader.snapshot = { ...reader.snapshot, freshness };
-    reader.fetch.mockResolvedValue(freshness);
+    const reader = readyToFetch();
     const pulled = vi.fn<(command: unknown) => void>();
     let finish = () => {};
     const requests: EnvironmentRequestClient = (routes) =>
@@ -99,39 +82,20 @@ describe("commit graph commands", () => {
         ).pipe(Effect.as({ outcome: "FastForwarded" } as never));
       });
     const screen = await render(
-      <div style={{ height: 520, width: 900 }}>
-        <RepositoryScopeProvider
-          scope={{
-            target: {
-              repositoryId: "repo",
-              worktreePath: "/repo",
-              requests,
-              changes: { subscribe: () => () => {} },
-              runtime: ManagedRuntime.make(Layer.empty),
-            },
-            connected: true,
-            writable: true,
-          }}
-        >
-          <RepositoryPull.Provider reader={reader} incoming={3}>
-            <CommitGraphFixture
-              reader={reader}
-              repositoryName="rebase-test"
-              roots={[{ name: "main", oid: "0".repeat(40), type: "branch" }]}
-              commandEnvironment={{
-                environmentId: "env",
-                logicalRepositoryId: "logical",
-                repositoryId: "repo",
-                activeBranch: "main",
-                connected: true,
-                capabilities: new Set(["repository.write"]),
-                freshnessReady: true,
-                operationState: "idle",
-              }}
-            />
+      <ScopedGraph
+        reader={reader}
+        scope={repositoryScope({ repositoryId: "repo", requests })}
+      >
+        {(graph) => (
+          <RepositoryPull.Provider
+            reader={reader}
+            activeBranch="main"
+            incoming={3}
+          >
+            {graph}
           </RepositoryPull.Provider>
-        </RepositoryScopeProvider>
-      </div>,
+        )}
+      </ScopedGraph>,
     );
     await screen
       .getByRole("button", { name: "Pull 3 incoming commits" })
@@ -152,6 +116,41 @@ describe("commit graph commands", () => {
     await expect
       .element(screen.getByRole("button", { name: "Pull 3 incoming commits" }))
       .toBeEnabled();
+  });
+
+  it("runs commands that features contribute to the commit menu", async () => {
+    const reader = historyReader({ commits: history(2), status: "ready" });
+    const tagged = vi.fn<(oid: string) => void>();
+    const tagCommand: GraphCommandDefinition = {
+      id: "test.tag",
+      order: 5,
+      resolve: (context) => ({
+        label: "Tag commit",
+        enabled: context.writable,
+        execute: async () => {
+          tagged(context.invokingOid);
+          return { _tag: "Executed" };
+        },
+      }),
+    };
+    const screen = await render(
+      <ScopedGraph reader={reader} scope={repositoryScope()}>
+        {(graph) => (
+          <GraphCommands.Contribute commands={[tagCommand]}>
+            {graph}
+          </GraphCommands.Contribute>
+        )}
+      </ScopedGraph>,
+    );
+    await screen
+      .getByRole("grid")
+      .getByRole("row", { name: /^Commit 1,/ })
+      .click({ button: "right" });
+    await expect
+      .element(screen.getByRole("menu"))
+      .toHaveTextContent("Copy commit SHACopy commit subjectTag commit");
+    await screen.getByRole("menuitem", { name: "Tag commit" }).click();
+    expect(tagged).toHaveBeenCalledWith(historyOid(1));
   });
 
   it("selects the invoking commit and opens its menu from the keyboard", async () => {
@@ -199,3 +198,42 @@ describe("commit graph commands", () => {
     copy.mockRestore();
   });
 });
+
+function readyToFetch() {
+  const reader = historyReader({ commits: history(2), status: "ready" });
+  const freshness = {
+    revision: 0,
+    fetching: false,
+    stale: false,
+    defaultIntervalSeconds: 300,
+    setting: { _tag: "Inherit" as const },
+  };
+  reader.snapshot = { ...reader.snapshot, freshness };
+  reader.fetch.mockResolvedValue(freshness);
+  return reader;
+}
+
+function ScopedGraph({
+  reader,
+  scope,
+  children = (graph) => graph,
+}: {
+  readonly reader: ReturnType<typeof historyReader>;
+  readonly scope: RepositoryScope;
+  readonly children?: (graph: ReactNode) => ReactNode;
+}) {
+  return (
+    <div style={{ height: 520, width: 900 }}>
+      <RepositoryScopeProvider scope={scope}>
+        {children(
+          <CommitGraphFixture
+            reader={reader}
+            repositoryName="rebase-test"
+            roots={[{ name: "main", oid: "0".repeat(40), type: "branch" }]}
+            toolbarActions={<RepositoryPull.Button />}
+          />,
+        )}
+      </RepositoryScopeProvider>
+    </div>
+  );
+}

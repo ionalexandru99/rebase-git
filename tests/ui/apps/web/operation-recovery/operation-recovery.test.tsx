@@ -6,10 +6,11 @@ import {
   type EnvironmentRequestClient,
   environmentHttpRoutesClient,
 } from "@rebase/environment-client";
-import { Effect, Layer, ManagedRuntime } from "effect";
+import { Effect } from "effect";
 import { describe, expect, it, vi } from "vite-plus/test";
 import { page, userEvent } from "vite-plus/test/browser";
 import { render } from "vitest-browser-react";
+import { repositoryScope } from "#tests-ui/apps/web/repository-scope/repository-scope-fixture";
 import {
   ErrorNotification,
   NotificationsProvider,
@@ -20,8 +21,6 @@ import type { OperationRecoveryState } from "#web/features/operation-recovery/op
 import { RepositoryScopeProvider } from "#web/features/repository-scope/index";
 import { OperationRecoveryToast } from "#web-ui/features/operation-recovery/components/operation-recovery-toast";
 import { WorkspacePanel } from "#web-ui/features/workspace-panel/index";
-
-const runtime = ManagedRuntime.make(Layer.empty);
 
 function operation(
   patch: Partial<RepositoryOperation> = {},
@@ -211,16 +210,12 @@ describe("operation recovery toast", () => {
             : execute(),
         ),
       );
-    const target = {
-      repositoryId: "repo",
-      worktreePath: "/repo",
-      requests,
-      changes: { subscribe: () => () => {} },
-      runtime,
-    };
+    const { target } = repositoryScope({ repositoryId: "repo", requests });
     const tree = (connected: boolean, key = "first") => (
       <NotificationsProvider>
-        <RepositoryScopeProvider scope={{ target, connected, writable: true }}>
+        <RepositoryScopeProvider
+          scope={{ target, connected, readable: true, writable: true }}
+        >
           <OperationRecovery.Provider key={key}>
             <WorkspacePanel.Provider scopeKey="operation-test">
               <OperationRecovery.Notice repositoryName="catalog-api" />

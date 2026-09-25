@@ -8,6 +8,7 @@ export { branchNameProblem } from "#web/features/branch-management/branch-name";
 export { repositoryBranchesClient } from "#web/features/branch-management/repository-branches-client";
 export { BranchManagement } from "#web-ui/features/branch-management/branch-management";
 export {
-  useBranchManagement,
+  useBranchActions,
+  useBranchCreateRequest,
   useBranchRenamed,
 } from "#web-ui/features/branch-management/branch-management-provider";

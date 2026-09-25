@@ -4,8 +4,10 @@ import {
   IconArrowUp,
   IconChevronDown,
 } from "@tabler/icons-react";
+import { useOperationCommandState } from "#web/features/operation-recovery/index";
 import type { PushTarget } from "#web/features/repository-push/repository-push.contract";
 import { destinationName } from "#web/features/repository-push/resolve-push-target";
+import { useRepositoryScope } from "#web/features/repository-scope/index";
 import { Button } from "#web-ui/components/ui/button";
 import {
   DropdownMenuContent,
@@ -15,17 +17,22 @@ import { useRepositoryPush } from "#web-ui/features/repository-push/repository-p
 
 export function PushButton({
   target,
-  disabled,
 }: {
   readonly target: PushTarget | undefined;
-  readonly disabled: boolean;
 }) {
   const push = useRepositoryPush();
+  const scope = useRepositoryScope();
+  const operationBusy = useOperationCommandState() === "busy";
   if (push === null || target === undefined) return null;
   const { controller, state } = push;
   const upstream = target.upstream;
   const tracked = upstream !== undefined && !upstream.gone;
-  const busy = disabled || !state.connected || state.running !== null;
+  const busy =
+    scope?.connected !== true ||
+    !scope.writable ||
+    operationBusy ||
+    !state.connected ||
+    state.running !== null;
   const canPush = !tracked || upstream.ahead > 0;
   const canForcePush = tracked && upstream.remoteOid !== undefined;
   return (

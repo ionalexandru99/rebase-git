@@ -1,8 +1,11 @@
-import type { ReactElement } from "react";
+import { type ReactElement, useMemo } from "react";
 import type {
   GraphCommandContext,
-  GraphCommandRegistry,
+  GraphCommandDefinition,
 } from "#web/features/commit-commands/graph-command.contract";
+import { graphCommandSlot } from "#web/features/commit-commands/graph-command-slot";
+import type { GraphCommandRun } from "#web/features/commit-commands/use-graph-commands";
+import { createCommandRegistry } from "#web/platform/command-contributions/command-registry";
 import {
   ContextMenu,
   ContextMenuContent,
@@ -10,22 +13,21 @@ import {
   ContextMenuTrigger,
 } from "#web-ui/components/ui/context-menu";
 
-export function CommitCommandMenu<Id extends string>({
+export function CommitCommandMenu({
   children,
   context,
-  registry,
-  execute,
+  commands,
+  run,
   restoreFocus,
   tabIndex = -1,
 }: {
   readonly tabIndex?: number;
   readonly children: ReactElement;
   readonly context: GraphCommandContext | undefined;
-  readonly registry: GraphCommandRegistry<Id>;
-  readonly execute: (id: Id, context: GraphCommandContext) => Promise<void>;
+  readonly commands: readonly GraphCommandDefinition[];
+  readonly run: GraphCommandRun;
   readonly restoreFocus: () => void;
 }) {
-  if (context === undefined) return children;
   return (
     <ContextMenu
       onOpenChange={(open) => {
@@ -34,17 +36,36 @@ export function CommitCommandMenu<Id extends string>({
     >
       <ContextMenuTrigger render={children} tabIndex={tabIndex} />
       <ContextMenuContent>
-        {registry.commands(context, "commit-menu").map((command) => (
-          <ContextMenuItem
-            className="text-[.85rem] sm:text-[.85rem]"
-            key={command.id}
-            disabled={!command.enabled}
-            onClick={() => void execute(command.id, context)}
-          >
-            <span className="flex-1">{command.label}</span>
-          </ContextMenuItem>
-        ))}
+        {context === undefined ? null : (
+          <CommitCommandItems commands={commands} context={context} run={run} />
+        )}
       </ContextMenuContent>
     </ContextMenu>
   );
+}
+
+function CommitCommandItems({
+  commands,
+  context,
+  run,
+}: {
+  readonly commands: readonly GraphCommandDefinition[];
+  readonly context: GraphCommandContext;
+  readonly run: GraphCommandRun;
+}) {
+  const contributed = graphCommandSlot.useContributions();
+  const registry = useMemo(
+    () => createCommandRegistry([...commands, ...contributed]),
+    [commands, contributed],
+  );
+  return registry.commands(context).map((command) => (
+    <ContextMenuItem
+      className="text-[.85rem] sm:text-[.85rem]"
+      key={command.id}
+      disabled={!command.enabled}
+      onClick={() => void run(() => registry.execute(command.id, context))}
+    >
+      <span className="flex-1">{command.label}</span>
+    </ContextMenuItem>
+  ));
 }

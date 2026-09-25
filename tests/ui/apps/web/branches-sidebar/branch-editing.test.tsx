@@ -9,15 +9,13 @@ import {
   type EnvironmentRequestClient,
   environmentHttpRoutesClient,
 } from "@rebase/environment-client";
-import { Effect, Layer, ManagedRuntime } from "effect";
-import { useEffect } from "react";
+import { Effect } from "effect";
 import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
 import { userEvent } from "vite-plus/test/browser";
 import { render } from "vitest-browser-react";
-import {
-  BranchManagement,
-  useBranchManagement,
-} from "#web/features/branch-management/index";
+import { repositoryScope } from "#tests-ui/apps/web/repository-scope/repository-scope-fixture";
+import { BranchManagement } from "#web/features/branch-management/index";
+import { CommitCommandMenu } from "#web/features/commit-commands/index";
 import { NotificationsProvider } from "#web/features/notifications/index";
 import { RepositoryScopeProvider } from "#web/features/repository-scope/index";
 import { BranchesSidebar } from "#web-ui/features/branches-sidebar/branches-sidebar";
@@ -28,7 +26,6 @@ const topicPath = "/repo/.worktrees/topic";
 const main = "a".repeat(40);
 const spike = "b".repeat(40);
 const scope = { repositoryId, worktreePath: mainPath };
-const runtime = ManagedRuntime.make(Layer.empty);
 
 type BranchRoute = keyof typeof RepositoryBranchesHttpApi;
 
@@ -38,6 +35,10 @@ describe("branch editing", () => {
   it("creates a branch at a commit and switches to it", async () => {
     const environment = branchEnvironment();
     const screen = await render(sidebar(environment, spike));
+    await screen
+      .getByRole("button", { name: `Commit ${spike.slice(0, 7)}` })
+      .click({ button: "right" });
+    await screen.getByRole("menuitem", { name: "Create branch here…" }).click();
     const name = screen.getByRole("textbox", {
       name: `New branch from ${spike.slice(0, 7)}`,
     });
@@ -270,16 +271,11 @@ function branchEnvironment() {
       failure: RepositoryBranchesHttpFailure,
       status: number,
     ) => rejections.set(route, { failure, status }),
-    scope: {
-      target: {
-        ...scope,
-        requests,
-        changes: { subscribe: () => () => {} },
-        runtime,
-      },
-      connected: true,
-      writable: true,
-    },
+    scope: repositoryScope({
+      ...scope,
+      requests,
+      refs: { apply: () => undefined, checkout },
+    }),
   };
 }
 
@@ -321,11 +317,9 @@ function sidebar(
   return (
     <NotificationsProvider>
       <RepositoryScopeProvider scope={environment.scope}>
-        <BranchManagement.Provider
-          refs={{ apply: () => undefined, checkout: environment.checkout }}
-        >
+        <BranchManagement.Provider>
           {createBranchAt === undefined ? null : (
-            <RequestBranchAt oid={createBranchAt} />
+            <CommitAt oid={createBranchAt} />
           )}
           <div style={{ height: 520, width: 320 }}>
             <BranchesSidebar
@@ -347,10 +341,25 @@ function sidebar(
   );
 }
 
-function RequestBranchAt({ oid }: { readonly oid: string }) {
-  const requestCreate = useBranchManagement()?.requestCreate;
-  useEffect(() => requestCreate?.(oid), [oid, requestCreate]);
-  return null;
+function CommitAt({ oid }: { readonly oid: string }) {
+  return (
+    <CommitCommandMenu
+      commands={[]}
+      context={{
+        invokingOid: oid,
+        selectedOids: [oid],
+        connected: true,
+        readable: true,
+        writable: true,
+      }}
+      restoreFocus={() => undefined}
+      run={async (command) => {
+        await command();
+      }}
+    >
+      <button type="button">Commit {oid.slice(0, 7)}</button>
+    </CommitCommandMenu>
+  );
 }
 
 function refs(): RepositoryRefs {

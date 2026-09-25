@@ -7,10 +7,11 @@ import {
   type EnvironmentRequestClient,
   environmentHttpRoutesClient,
 } from "@rebase/environment-client";
-import { Effect, Layer, ManagedRuntime } from "effect";
+import { Effect } from "effect";
 import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
 import { userEvent } from "vite-plus/test/browser";
 import { render } from "vitest-browser-react";
+import { repositoryScope } from "#tests-ui/apps/web/repository-scope/repository-scope-fixture";
 import { historyRefKey } from "#web/features/commit-graph/index";
 import { RepositoryPull } from "#web/features/repository-pull/index";
 import {
@@ -25,6 +26,11 @@ const repositoryId = "00000000-0000-4000-8000-000000000001";
 const mainPath = "/repo";
 const topicPath = "/repo/.worktrees/topic";
 const commit = "a".repeat(40);
+const readyHistory = {
+  revision: 0,
+  historyRevision: 0,
+  status: "ready",
+} as const;
 describe("branches sidebar", () => {
   beforeEach(() => localStorage.removeItem("rebase:branches-view:v1"));
 
@@ -207,7 +213,11 @@ describe("branches sidebar", () => {
     const callbacks = sidebarCallbacks();
     const screen = await render(
       <RepositoryScopeProvider scope={pulls.scope}>
-        <RepositoryPull.Provider reader={{ fetch: pulls.fetch }} incoming={0}>
+        <RepositoryPull.Provider
+          reader={pulls.reader}
+          activeBranch="main"
+          incoming={0}
+        >
           <div style={{ height: 480, width: 320 }}>
             <BranchesSidebar
               activeWorktreePath={mainPath}
@@ -400,24 +410,18 @@ function pullRequests() {
   return {
     pulled,
     finish: () => finish(),
-    fetch: async (): Promise<RepositoryFreshness> => ({
-      revision: 1,
-      fetching: false,
-      stale: false,
-      defaultIntervalSeconds: 300,
-      setting: { _tag: "Inherit" },
-    }),
-    scope: {
-      target: {
-        repositoryId,
-        worktreePath: mainPath,
-        requests,
-        changes: { subscribe: () => () => {} },
-        runtime: ManagedRuntime.make(Layer.empty),
-      },
-      connected: true,
-      writable: true,
+    reader: {
+      fetch: async (): Promise<RepositoryFreshness> => ({
+        revision: 1,
+        fetching: false,
+        stale: false,
+        defaultIntervalSeconds: 300,
+        setting: { _tag: "Inherit" },
+      }),
+      getSnapshot: () => readyHistory,
+      subscribe: () => () => {},
     },
+    scope: repositoryScope({ repositoryId, worktreePath: mainPath, requests }),
   };
 }
 

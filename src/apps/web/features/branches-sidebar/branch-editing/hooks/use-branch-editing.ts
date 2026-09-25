@@ -1,6 +1,9 @@
 import type { BranchUpstreamTarget, RepositoryRefs } from "@rebase/contracts";
 import { useCallback, useEffect, useState } from "react";
-import { useBranchManagement } from "#web/features/branch-management/index";
+import {
+  useBranchActions,
+  useBranchCreateRequest,
+} from "#web/features/branch-management/index";
 import { describeBranchError } from "#web/features/branches-sidebar/branch-editing/branch-edit-messages";
 import type { BranchEdit } from "#web/features/branches-sidebar/branch-editing/branch-edit-state";
 import {
@@ -29,9 +32,8 @@ export function useBranchEditing({
   readonly refs: RepositoryRefs | undefined;
   readonly reveal: (branchName: string) => void;
 }) {
-  const management = useBranchManagement();
-  const actions = management?.actions;
-  const createRequest = management?.createRequest;
+  const actions = useBranchActions();
+  const createRequest = useBranchCreateRequest();
   const [edit, setEdit] = useState<BranchEdit>();
   const [error, setError] = useState<string>();
 

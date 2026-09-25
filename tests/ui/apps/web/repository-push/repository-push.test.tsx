@@ -4,10 +4,11 @@ import {
   type EnvironmentRequestClient,
   environmentHttpRoutesClient,
 } from "@rebase/environment-client";
-import { Effect, Layer, ManagedRuntime } from "effect";
+import { Effect } from "effect";
 import { describe, expect, it, vi } from "vite-plus/test";
 import { page } from "vite-plus/test/browser";
 import { render } from "vitest-browser-react";
+import { repositoryScope } from "#tests-ui/apps/web/repository-scope/repository-scope-fixture";
 import { NotificationsProvider } from "#web/features/notifications/index";
 import {
   type PushTarget,
@@ -15,7 +16,6 @@ import {
 } from "#web/features/repository-push/index";
 import { RepositoryScopeProvider } from "#web/features/repository-scope/index";
 
-const runtime = ManagedRuntime.make(Layer.empty);
 const reviewed = "9c1e2f71".padEnd(40, "0");
 const scope = { repositoryId: "repo", worktreePath: "/repo" };
 
@@ -57,19 +57,10 @@ async function fixture(
   await render(
     <NotificationsProvider>
       <RepositoryScopeProvider
-        scope={{
-          target: {
-            ...scope,
-            requests: client,
-            changes: { subscribe: () => () => {} },
-            runtime,
-          },
-          connected: true,
-          writable: true,
-        }}
+        scope={repositoryScope({ ...scope, requests: client })}
       >
         <RepositoryPush.Provider>
-          <RepositoryPush.Button target={target} disabled={false} />
+          <RepositoryPush.Button target={target} />
           <RepositoryPush.Notice />
         </RepositoryPush.Provider>
       </RepositoryScopeProvider>

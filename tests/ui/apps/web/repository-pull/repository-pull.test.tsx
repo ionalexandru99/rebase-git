@@ -4,25 +4,29 @@ import {
   type EnvironmentRequestClient,
   environmentHttpRoutesClient,
 } from "@rebase/environment-client";
-import { Effect, Layer, ManagedRuntime } from "effect";
+import { Effect } from "effect";
 import { describe, expect, it, vi } from "vite-plus/test";
 import { page } from "vite-plus/test/browser";
 import { render } from "vitest-browser-react";
+import { repositoryScope } from "#tests-ui/apps/web/repository-scope/repository-scope-fixture";
 import { NotificationsProvider } from "#web/features/notifications/index";
-import {
-  RepositoryPull,
-  useRepositoryPull,
-} from "#web/features/repository-pull/index";
+import type { RepositoryHistorySnapshot } from "#web/features/repository-history/index";
+import { RepositoryPull } from "#web/features/repository-pull/index";
 import { RepositoryScopeProvider } from "#web/features/repository-scope/index";
 
 const repositoryId = "00000000-0000-4000-8000-000000000001";
-const runtime = ManagedRuntime.make(Layer.empty);
 const freshness: RepositoryFreshness = {
   revision: 1,
   fetching: false,
   stale: false,
   defaultIntervalSeconds: 300,
   setting: { _tag: "Inherit" },
+};
+const history: RepositoryHistorySnapshot = {
+  revision: 0,
+  historyRevision: 0,
+  status: "ready",
+  freshness,
 };
 
 describe("repository pull", () => {
@@ -107,20 +111,18 @@ async function fixture({
   await render(
     <NotificationsProvider>
       <RepositoryScopeProvider
-        scope={{
-          target: {
-            repositoryId,
-            worktreePath: "/repo",
-            requests,
-            changes: { subscribe: () => () => {} },
-            runtime,
-          },
-          connected: true,
-          writable: true,
-        }}
+        scope={repositoryScope({ repositoryId, requests })}
       >
-        <RepositoryPull.Provider reader={{ fetch }} incoming={0}>
-          <PullButton />
+        <RepositoryPull.Provider
+          reader={{
+            fetch,
+            getSnapshot: () => history,
+            subscribe: () => () => {},
+          }}
+          activeBranch="main"
+          incoming={0}
+        >
+          <RepositoryPull.Button />
           <RepositoryPull.Notice />
         </RepositoryPull.Provider>
       </RepositoryScopeProvider>
@@ -131,17 +133,4 @@ async function fixture({
     requested,
     pull: () => page.getByRole("button", { name: "Pull" }).click(),
   };
-}
-
-function PullButton() {
-  const pull = useRepositoryPull();
-  return (
-    <button
-      disabled={pull?.pulling !== false}
-      onClick={() => pull?.execute("main")}
-      type="button"
-    >
-      {pull?.pulling === true ? "Pulling" : "Pull"}
-    </button>
-  );
 }

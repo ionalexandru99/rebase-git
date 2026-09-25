@@ -2,11 +2,12 @@ import type { RepositoryFreshness } from "@rebase/contracts";
 import { StrictMode } from "react";
 import { describe, expect, it, vi } from "vite-plus/test";
 import { page, userEvent } from "vite-plus/test/browser";
+import { repositoryScope } from "#tests-ui/apps/web/repository-scope/repository-scope-fixture";
 import { render } from "#tests-ui/runtime/render";
-import { CommitGraphToolbar } from "#web/features/commit-graph/index";
 import { NotificationsProvider } from "#web/features/notifications/index";
 import {
   describeRepositoryFetchError,
+  RepositoryFetchButton,
   RepositoryFetchSettings,
   RepositoryHistoryFreshnessStatus,
   useRepositoryHistoryFetch,
@@ -17,6 +18,7 @@ import {
   RepositoryHistoryRejected,
   type RepositoryHistorySnapshot,
 } from "#web/features/repository-history/repository-history-reader.contract";
+import { RepositoryScopeProvider } from "#web/features/repository-scope/index";
 
 const fresh: RepositoryFreshness = {
   defaultIntervalSeconds: 300,
@@ -25,6 +27,7 @@ const fresh: RepositoryFreshness = {
   revision: 0,
   setting: { _tag: "Inherit" },
 };
+const scope = repositoryScope();
 const ready: RepositoryHistorySnapshot = {
   historyRevision: 0,
   revision: 0,
@@ -337,19 +340,11 @@ function Controls({
   readonly canConfigure?: boolean;
 }) {
   const fetch = useRepositoryHistoryFetch(reader, snapshot);
-  const fetchAction = {
-    execute: fetch.execute,
-    disabled: snapshot.freshnessError !== undefined,
-  };
   return (
     <NotificationsProvider>
-      <CommitGraphToolbar.Frame>
-        <CommitGraphToolbar.Title repositoryName="Rebase" />
-        <CommitGraphToolbar.Fetch
-          fetchAction={fetchAction}
-          fetching={fetch.fetching}
-        />
-      </CommitGraphToolbar.Frame>
+      <RepositoryScopeProvider scope={scope}>
+        <RepositoryFetchButton fetch={fetch} snapshot={snapshot} />
+      </RepositoryScopeProvider>
       <RepositoryFetchSettings
         reader={reader}
         setting={snapshot.freshness?.setting ?? { _tag: "Inherit" }}
