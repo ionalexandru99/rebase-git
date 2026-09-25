@@ -17,13 +17,24 @@ export function runRepositoryGit(
   git: GitCommandRunner,
   directory: string,
   args: readonly string[],
+  options: RepositoryGitOptions = {},
+) {
+  return runRepositoryGitOutput(git, directory, args, options).pipe(
+    Effect.map((output) => output.stdout),
+  );
+}
+
+export function runRepositoryGitOutput(
+  git: GitCommandRunner,
+  directory: string,
+  args: readonly string[],
   { exitCodes = [0], ...options }: RepositoryGitOptions = {},
 ) {
   return git.run({ ...options, directory, arguments: args }).pipe(
     Effect.mapError(repositoryGitError),
     Effect.flatMap((output) =>
       exitCodes.includes(output.exitCode)
-        ? Effect.succeed(output.stdout)
+        ? Effect.succeed(output)
         : Effect.fail(rejectedByGit(output.exitCode, output.stderr)),
     ),
   );

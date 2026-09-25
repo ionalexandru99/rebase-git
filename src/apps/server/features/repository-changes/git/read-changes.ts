@@ -11,7 +11,10 @@ import {
   changesError,
 } from "#server/features/repository-changes/git/change-failures";
 import { worktreeIdentities } from "#server/features/repository-changes/git/change-files";
-import { runRepositoryGit } from "#server/repository/access/index";
+import {
+  runRepositoryGit,
+  runRepositoryGitOutput,
+} from "#server/repository/access/index";
 import { fingerprint } from "#server/repository/comparison/index";
 
 export function readChanges(git: GitCommandRunner, scope: ChangesScope) {
@@ -23,7 +26,7 @@ export function readChanges(git: GitCommandRunner, scope: ChangesScope) {
         changesError("Unsupported", "There is no commit to amend."),
       );
     const base = yield* comparisonBase(git, directory, head, scope.amend);
-    const [status, stagedOutput, index, message] = yield* Effect.all(
+    const [status, stagedDiff, index, message] = yield* Effect.all(
       [
         runRepositoryGit(git, directory, [
           "status",
@@ -32,10 +35,11 @@ export function readChanges(git: GitCommandRunner, scope: ChangesScope) {
           "-z",
           "--untracked-files=all",
         ]),
-        runRepositoryGit(git, directory, [
+        runRepositoryGitOutput(git, directory, [
           "diff",
           "--cached",
-          "--no-renames",
+          "--find-renames",
+          `-l${renameLimit}`,
           "--name-status",
           "-z",
           base,
@@ -59,16 +63,21 @@ export function readChanges(git: GitCommandRunner, scope: ChangesScope) {
       const path = record.slice(3);
       const conflict = xy.includes("U") || xy === "AA" || xy === "DD";
       if (xy[1] !== " " || conflict)
-        unstaged.push({ path, status: conflict ? "U" : fileStatus(xy[1]) });
+        unstaged.push({
+          path,
+          previousPath: null,
+          status: conflict ? "U" : fileStatus(xy[1]),
+        });
     }
-    const parts = stagedOutput.split("\0");
-    const staged: ChangedFile[] = [];
-    for (let i = 0; i + 1 < parts.length; i += 2) {
-      const path = parts[i + 1];
-      if (path) staged.push({ path, status: fileStatus(parts[i]) });
-    }
+    const staged = stagedFiles(stagedDiff.stdout);
     const paths = [
-      ...new Set([...unstaged, ...staged].map((file) => file.path)),
+      ...new Set(
+        [...unstaged, ...staged].flatMap((file) =>
+          file.previousPath === null
+            ? [file.path]
+            : [file.path, file.previousPath],
+        ),
+      ),
     ];
     const identities = yield* worktreeIdentities(directory, paths);
     return {
@@ -79,6 +88,9 @@ export function readChanges(git: GitCommandRunner, scope: ChangesScope) {
         unstaged,
         staged,
         truncated: false,
+        renamesLimited: stagedDiff.stderr.includes(
+          "rename detection was skipped",
+        ),
       } satisfies RepositoryChanges,
       base,
       files: { paths, identities },
@@ -150,6 +162,26 @@ function comparisonBase(
     )).trim();
   });
 }
+const renameLimit = 1000;
+
+function stagedFiles(output: string) {
+  const fields = output.split("\0");
+  const files: ChangedFile[] = [];
+  for (let i = 0; i + 1 < fields.length; ) {
+    const status = fields[i++] ?? "";
+    const first = fields[i++];
+    const renamed = status.startsWith("R");
+    const path = renamed ? fields[i++] : first;
+    if (path)
+      files.push({
+        path,
+        previousPath: renamed ? (first ?? null) : null,
+        status: renamed ? "R" : fileStatus(status),
+      });
+  }
+  return files;
+}
+
 function fileStatus(status: string | undefined): ChangedFile["status"] {
   return status === "A" ||
     status === "D" ||

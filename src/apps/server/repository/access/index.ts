@@ -15,5 +15,6 @@ export {
 export {
   isGitRejection,
   runRepositoryGit,
+  runRepositoryGitOutput,
   streamRepositoryGit,
 } from "#server/repository/access/run-repository-git";

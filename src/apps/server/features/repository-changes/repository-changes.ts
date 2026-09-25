@@ -71,8 +71,11 @@ export function createRepositoryChangesService(
         command,
         Effect.gen(function* () {
           yield* safeChangePath(command.worktreePath, command.path);
-          const { base } = yield* readChanges(git, command);
-          return yield* readChangeDiff(git, command, base);
+          const { snapshot, base } = yield* readChanges(git, command);
+          return yield* readChangeDiff(git, command, {
+            base,
+            previousPath: previousPathOf(snapshot, command),
+          });
         }),
       ),
     mutate: (command: MutateChanges) =>
@@ -171,9 +174,11 @@ function readWritten(
   return Effect.gen(function* () {
     const { snapshot, base } = yield* readChanges(git, scope);
     const changes = fitChanges(snapshot);
+    const file =
+      viewed &&
+      snapshot[viewed.section].find((file) => file.path === viewed.path);
     const diff =
-      viewed !== undefined &&
-      snapshot[viewed.section].some((file) => file.path === viewed.path)
+      viewed && file
         ? yield* readChangeDiff(
             git,
             {
@@ -182,7 +187,7 @@ function readWritten(
               amend: scope.amend,
               ...viewed,
             },
-            base,
+            { base, previousPath: file.previousPath },
           ).pipe(Effect.catch(() => Effect.succeed(null)))
         : null;
     const written: ChangesWritten = { changes, diff };
@@ -190,6 +195,13 @@ function readWritten(
       ? written
       : { changes, diff: null };
   });
+}
+
+function previousPathOf(snapshot: RepositoryChanges, viewed: ViewedChange) {
+  return (
+    snapshot[viewed.section].find((file) => file.path === viewed.path)
+      ?.previousPath ?? null
+  );
 }
 
 function fitChanges(snapshot: RepositoryChanges): RepositoryChanges {

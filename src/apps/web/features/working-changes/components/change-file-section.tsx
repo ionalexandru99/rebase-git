@@ -11,6 +11,10 @@ import {
 } from "@tabler/icons-react";
 import { useRef, useState } from "react";
 import { useFileRows } from "#web/features/file-diff/index";
+import {
+  compactRename,
+  renameHint,
+} from "#web/features/working-changes/rename/rename-path";
 import { Button } from "#web-ui/components/ui/button";
 import { ChangeFileIcon } from "#web-ui/features/working-changes/components/change-file-icon";
 import type { ChangeAction } from "#web-ui/features/working-changes/components/change-file-tree";
@@ -23,6 +27,7 @@ const statusLabels: Record<ChangedFile["status"], string> = {
   A: "Added",
   M: "Modified",
   D: "Deleted",
+  R: "Renamed",
   T: "Type changed",
   U: "Conflicted",
   "?": "Untracked",
@@ -92,6 +97,15 @@ export function ChangeFileSection({
           <AllArrow />
         </Button>
       </div>
+      {open && section === "staged" && changes?.renamesLimited ? (
+        <p
+          role="status"
+          className="shrink-0 px-3 py-1.5 text-xs text-muted-foreground"
+        >
+          Too many changed files to match renames. Moved files show as deleted
+          and added.
+        </p>
+      ) : null}
       <div ref={scrollRef} className="min-h-0 flex-1 overflow-auto">
         <div
           style={{ height: virtualizer.getTotalSize(), position: "relative" }}
@@ -103,6 +117,7 @@ export function ChangeFileSection({
             const chosen =
               checked.has(row.key) ||
               (selection?.section === section && selection.path === row.key);
+            const previousPath = row.file?.previousPath ?? null;
             return (
               <div
                 key={row.key}
@@ -115,7 +130,7 @@ export function ChangeFileSection({
                 <button
                   type="button"
                   className="flex min-w-0 flex-1 items-center gap-1.5 text-left text-xs"
-                  aria-label={`${isFolder ? "Folder" : label} ${row.key}`}
+                  aria-label={`${isFolder ? "Folder" : label} ${row.key}${previousPath ? ` renamed from ${previousPath}` : ""}`}
                   aria-expanded={isFolder ? !collapsed.has(row.key) : undefined}
                   aria-pressed={row.paths.every((path) => checked.has(path))}
                   onClick={(event) => {
@@ -171,7 +186,16 @@ export function ChangeFileSection({
                   ) : (
                     <ChangeFileIcon path={row.key} />
                   )}
-                  <span className="truncate">{row.name}</span>
+                  <span className="truncate">
+                    {previousPath && !preferences.tree
+                      ? compactRename(previousPath, row.key)
+                      : row.name}
+                  </span>
+                  {previousPath && preferences.tree ? (
+                    <span className="min-w-0 shrink-[100] truncate text-[11px] text-muted-foreground">
+                      ← {renameHint(previousPath, row.key)}
+                    </span>
+                  ) : null}
                 </button>
                 {row.file ? (
                   <span

@@ -10,6 +10,7 @@ export function createChangeDiffModel(
     ChangeDiff,
     "kind" | "patch" | "path" | "revision" | "before" | "after"
   > | null,
+  previousPath: string | null = null,
 ) {
   const metadata =
     diff?.kind === "text"
@@ -26,6 +27,10 @@ export function createChangeDiffModel(
     metadata.lang = getFiletypeFromFileName(diff.path);
     metadata.type =
       diff.before === null ? "new" : diff.after === null ? "deleted" : "change";
+    if (previousPath !== null && previousPath !== diff.path) {
+      metadata.prevName = previousPath;
+      metadata.type = "rename-changed";
+    }
   }
   return { metadata, hasHiddenContext: hasHiddenContext(metadata) };
 }
