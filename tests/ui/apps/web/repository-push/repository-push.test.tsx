@@ -64,15 +64,22 @@ async function fixture(
       return { destination: command.destination, target: reviewed };
     }),
   );
-  await render(
+  const tree = (worktreePath: string) => (
     <NotificationsProvider>
-      <RepositoryScopeProvider scope={repositoryScope(scope)}>
+      <RepositoryScopeProvider
+        scope={repositoryScope({ ...scope, worktreePath })}
+      >
         <Push target={target} />
       </RepositoryScopeProvider>
-    </NotificationsProvider>,
-    { environment: { requests } },
+    </NotificationsProvider>
   );
-  return { pushed };
+  const view = await render(tree(scope.worktreePath), {
+    environment: { requests },
+  });
+  return {
+    pushed,
+    switchWorktree: (worktreePath: string) => view.rerender(tree(worktreePath)),
+  };
 }
 
 describe("repository push", () => {
@@ -163,5 +170,45 @@ describe("repository push", () => {
     await expect
       .element(page.getByRole("button", { name: "Push spike" }))
       .toHaveTextContent("Push");
+  });
+
+  it("cancels the push and clears the review when the worktree changes", async () => {
+    const aborted = vi.fn();
+    const f = await fixture(
+      tracked(3, 2),
+      (_command, signal) =>
+        new Promise((_resolve, reject) =>
+          signal?.addEventListener("abort", () => {
+            aborted();
+            reject(signal.reason);
+          }),
+        ),
+    );
+    const forcePush = page.getByRole("button", {
+      name: /^Force push feature\/444-push/,
+    });
+    const confirmation = page.getByRole("region", {
+      name: "Confirm force push",
+    });
+
+    await forcePush.click();
+    await expect.element(confirmation).toBeVisible();
+    await f.switchWorktree("/other");
+    await expect.element(confirmation).not.toBeInTheDocument();
+
+    await forcePush.click();
+    await confirmation.getByRole("button", { name: "Force push" }).click();
+    await expect
+      .element(page.getByRole("region", { name: "Push progress" }))
+      .toBeVisible();
+    await f.switchWorktree("/repo");
+
+    await expect.poll(() => aborted.mock.calls.length).toBe(1);
+    await expect
+      .element(page.getByRole("region", { name: "Push progress" }))
+      .not.toBeInTheDocument();
+    await expect
+      .element(page.getByText("Cancelled.", { exact: false }))
+      .not.toBeInTheDocument();
   });
 });

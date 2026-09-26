@@ -68,6 +68,7 @@ describe("repository pull", () => {
       },
     });
     await f.pull();
+    await expect.poll(() => f.fetch.mock.calls.length).toBe(1);
     await expect
       .element(page.getByRole("button", { name: "Pull" }))
       .toBeEnabled();

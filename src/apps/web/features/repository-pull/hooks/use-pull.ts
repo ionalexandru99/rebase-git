@@ -6,6 +6,7 @@ import type {
   RepositoryHistoryObservation,
   RepositoryHistorySnapshot,
 } from "#web/features/repository-history/index";
+import { usePulling } from "#web/features/repository-pull/hooks/use-pulling";
 import { createPullBranchCommand } from "#web/features/repository-pull/pull-branch-command";
 import { describePullFailure } from "#web/features/repository-pull/repository-pull-messages";
 import { useRepositoryScope } from "#web/features/repository-scope/index";
@@ -30,7 +31,7 @@ export function usePull(reader: PullReader | undefined) {
   });
   const command = useCommand(RepositoryPullHttpApi.pull, { repository: scope });
   const freshnessReady = useStore(reader ?? idleHistory, isFreshnessReady);
-  const pulling = fetchFirst.isPending || command.isPending;
+  const pulling = usePulling();
   const repositoryId = scope?.repositoryId;
   const worktreePath = scope?.worktreePath;
   const { mutate: fetchBeforePull } = fetchFirst;
