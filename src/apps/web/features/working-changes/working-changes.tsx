@@ -11,6 +11,7 @@ import {
   DiscardConfirmation,
   type DiscardRequest,
 } from "#web/features/working-changes/components/discard-confirmation";
+import { ConflictViewer } from "#web/features/working-changes/conflicts/components/conflict-viewer";
 import {
   type ChangeAction,
   useWorkingChangesView,
@@ -24,9 +25,11 @@ const ChangeDiffViewer = lazy(
 export function WorkingChanges({
   target,
   writable,
+  openMergeView,
 }: {
   readonly target: WorkingChangesTarget;
   readonly writable: boolean;
+  readonly openMergeView?: ((path: string) => void) | undefined;
 }) {
   const view = useWorkingChangesView(target);
   const [discard, setDiscard] = useState<DiscardRequest | null>(null);
@@ -67,20 +70,28 @@ export function WorkingChanges({
       ) : null}
       <ResizablePanelGroup orientation="horizontal" className="min-h-0 flex-1">
         <ResizablePanel id="change-diff" defaultSize="70%" minSize="12rem">
-          <Suspense
-            fallback={
-              <p className="p-4 text-xs text-muted-foreground">
-                Loading diff viewer…
-              </p>
-            }
-          >
-            <ChangeDiffViewer
-              key={`${view.selection?.section}:${view.selection?.path}:${view.diff?.revision}`}
+          {view.selection?.section === "conflicts" ? (
+            <ConflictViewer
               view={view}
               writable={writable}
-              act={act}
+              openMergeView={openMergeView}
             />
-          </Suspense>
+          ) : (
+            <Suspense
+              fallback={
+                <p className="p-4 text-xs text-muted-foreground">
+                  Loading diff viewer…
+                </p>
+              }
+            >
+              <ChangeDiffViewer
+                key={`${view.selection?.section}:${view.selection?.path}:${view.diff?.revision}`}
+                view={view}
+                writable={writable}
+                act={act}
+              />
+            </Suspense>
+          )}
         </ResizablePanel>
         <ResizableHandle aria-label="Resize changed-file tree" />
         <ResizablePanel
@@ -95,7 +106,12 @@ export function WorkingChanges({
             className="border-border border-l"
           >
             <ResizablePanel id="change-files" minSize="10rem">
-              <ChangeFileTree view={view} writable={writable} act={act} />
+              <ChangeFileTree
+                view={view}
+                writable={writable}
+                act={act}
+                openMergeView={openMergeView}
+              />
             </ResizablePanel>
             <ResizableHandle aria-label="Resize commit editor" />
             <ResizablePanel

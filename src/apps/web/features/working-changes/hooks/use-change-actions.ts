@@ -17,7 +17,7 @@ type WrittenScope = ChangesScope & { readonly viewed?: ViewedChange };
 
 export function useChangeActions(repository: CommandScope) {
   const { write, reread } = useChangesCache();
-  const scope = { id: writeScope(repository) };
+  const scope = changesWriteScope(repository);
   const mutate = useCommand(RepositoryChangesHttpApi.mutate, {
     repository,
     scope,
@@ -34,12 +34,13 @@ export function useChangeActions(repository: CommandScope) {
   return { mutate, commit, busy: mutate.isPending || commit.isPending };
 }
 
-function writeScope({ repositoryId, worktreePath }: CommandScope) {
-  return JSON.stringify([
-    "working-changes",
-    repositoryId,
-    worktreePath ?? null,
-  ]);
+export function changesWriteScope({
+  repositoryId,
+  worktreePath,
+}: CommandScope) {
+  return {
+    id: JSON.stringify(["working-changes", repositoryId, worktreePath ?? null]),
+  };
 }
 
 function useChangesCache() {

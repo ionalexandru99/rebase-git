@@ -1,6 +1,7 @@
-import { type JSX, useState } from "react";
+import { type JSX, lazy, Suspense, useMemo, useState } from "react";
 import { useOpenedHistory } from "#web/app/shell/opened-history-context";
 import { CommitInspectionBridge } from "#web/app/workspace/commit-inspection-bridge";
+import { useMergeViewRequest } from "#web/app/workspace/merge-view-request";
 import { RepositoryPanelProvider } from "#web/app/workspace/repository-panel-provider";
 import { useHistoryRefRefresh } from "#web/app/workspace/use-history-ref-refresh";
 import { useWorkspaceHistoryScope } from "#web/app/workspace/use-workspace-history-scope";
@@ -24,6 +25,12 @@ import {
 } from "#web/features/repository-scope/repository-scope-provider";
 import { WorkspacePanel } from "#web/features/workspace-panel/workspace-panel";
 import { useEnvironment } from "#web/platform/query/environment-context";
+
+const WorkingChangesPanel = lazy(() =>
+  import("#web/features/working-changes/working-changes-panel").then(
+    (module) => ({ default: module.WorkingChangesPanel }),
+  ),
+);
 
 export function RepositoryWorkspace(): JSX.Element | null {
   const scope = useRepositoryScope();
@@ -49,6 +56,17 @@ function Workspace({
   readonly scope: RepositoryScope;
 }) {
   const [branchFocusRequest, setBranchFocusRequest] = useState(0);
+  const mergeView = useMergeViewRequest();
+  const panelContents = useMemo(
+    () => ({
+      changes: (
+        <Suspense fallback={null}>
+          <WorkingChangesPanel openMergeView={mergeView.open} />
+        </Suspense>
+      ),
+    }),
+    [mergeView.open],
+  );
   const history = useOpenedHistory();
   const name = useCatalogRepository(scope.repositoryId)?.name ?? "Repository";
   const repositoryRefs = useRepositoryRefs(
@@ -110,7 +128,7 @@ function Workspace({
                 />
               )}
             </WorkspacePanel.Main>
-            <WorkspacePanel.Pane />
+            <WorkspacePanel.Pane contents={panelContents} />
           </WorkspacePanel.Group>
         )}
       </CommitInspectionBridge>

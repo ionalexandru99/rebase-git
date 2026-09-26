@@ -1,4 +1,7 @@
-import type { RepositoryChangesHttpApi } from "@rebase/contracts";
+import type {
+  RepositoryChangesHttpApi,
+  RepositoryConflictsHttpApi,
+} from "@rebase/contracts";
 import type { EnvironmentRouteFailure } from "@rebase/environment-client";
 import type { CommandFailure } from "#web/platform/query/use-command";
 
@@ -6,7 +9,12 @@ type ChangesRoute =
   | typeof RepositoryChangesHttpApi.read
   | typeof RepositoryChangesHttpApi.diff
   | typeof RepositoryChangesHttpApi.mutate
-  | typeof RepositoryChangesHttpApi.commit;
+  | typeof RepositoryChangesHttpApi.commit
+  | typeof RepositoryConflictsHttpApi.list
+  | typeof RepositoryConflictsHttpApi.document
+  | typeof RepositoryConflictsHttpApi.stage
+  | typeof RepositoryConflictsHttpApi.choose
+  | typeof RepositoryConflictsHttpApi.mergeTool;
 
 export const headMovedMessage =
   "HEAD changed while you were amending. Review the latest commit before enabling Amend again.";

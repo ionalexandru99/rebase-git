@@ -36,7 +36,7 @@ export default function ChangeDiffViewer({
   const diff = view.diff ?? null;
   const [selected, setSelected] = useState<SelectedLineRange | null>(null);
   const [expandContext, setExpandContext] = useState(false);
-  const section = selection?.section ?? "unstaged";
+  const section = selection?.section === "staged" ? "staged" : "unstaged";
   const files = changes?.[section] ?? [];
   const index = files.findIndex((file) => file.path === selection?.path);
   const file = files[index];
