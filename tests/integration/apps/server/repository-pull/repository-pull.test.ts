@@ -18,7 +18,7 @@ import {
   createRepositoryCoordination,
 } from "#server/repository/access/index";
 import { repositoryFeatureClient } from "#tests-integration/apps/server/environment-connection/feature-routes-client";
-import { git } from "#tests-support/git";
+import { cloneRepository, createRepository, git } from "#tests-support/git";
 import { removeTemporaryDirectory } from "#tests-support/temporary-directory";
 
 const repositoryId = "00000000-0000-4000-8000-000000000001";
@@ -134,7 +134,7 @@ describe("fast-forward pull", () => {
     });
 
     expect(await git(linked, "rev-parse", "HEAD")).toBe(incoming);
-    expect(await readLines(join(linked, "other.txt"))).toBe("remote\n");
+    expect(await readFile(join(linked, "other.txt"), "utf8")).toBe("remote\n");
     expect(await git(f.repositoryPath, "branch", "--show-current")).toBe(
       "main",
     );
@@ -198,10 +198,6 @@ describe("fast-forward pull", () => {
   });
 });
 
-async function readLines(path: string) {
-  return (await readFile(path, "utf8")).replaceAll("\r\n", "\n");
-}
-
 async function fixture() {
   const root = await realpath(await mkdtemp(join(tmpdir(), "rebase pull ")));
   directories.push(root);
@@ -210,14 +206,13 @@ async function fixture() {
   const writerPath = join(root, "writer");
   await mkdir(originPath);
   await git(originPath, "init", "--bare", "-b", "main");
-  await mkdir(repositoryPath);
-  await git(repositoryPath, "init", "-b", "main");
+  await createRepository(repositoryPath, { commits: [] });
   await git(repositoryPath, "remote", "add", "origin", originPath);
   await writeFile(join(repositoryPath, "file.txt"), "base\n");
   await git(repositoryPath, "add", "file.txt");
   await git(repositoryPath, "commit", "-m", "base");
   await git(repositoryPath, "push", "-u", "origin", "main");
-  await git(root, "clone", originPath, writerPath);
+  await cloneRepository(originPath, writerPath);
 
   const runner = createLocalGitCommandRunner();
   const service = repositoryFeatureClient(

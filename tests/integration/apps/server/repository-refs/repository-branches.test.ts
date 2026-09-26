@@ -21,7 +21,7 @@ import {
   featureRoutesClient,
   provideRepositoryServices,
 } from "#tests-integration/apps/server/environment-connection/feature-routes-client";
-import { git } from "#tests-support/git";
+import { cloneRepository, createRepository, git } from "#tests-support/git";
 import { removeTemporaryDirectory } from "#tests-support/temporary-directory";
 
 const directories = new Set<string>();
@@ -313,7 +313,7 @@ describe("repository branches", () => {
       "origin/shared",
     );
     const teammate = join(fixture.root, "teammate");
-    await git(fixture.root, "clone", "-q", "origin.git", teammate);
+    await cloneRepository(join(fixture.root, "origin.git"), teammate, "-q");
     await git(teammate, "checkout", "-q", "shared");
     await git(teammate, "commit", "--allow-empty", "-m", "teammate work");
     await git(teammate, "push", "-q", "origin", "shared");
@@ -388,8 +388,7 @@ async function createFixture(): Promise<Fixture> {
   const worktreePath = join(root, "topic worktree");
   await mkdir(originPath);
   await git(originPath, "init", "--bare", "-b", "main");
-  await mkdir(repositoryPath);
-  await git(repositoryPath, "init", "-b", "main");
+  await createRepository(repositoryPath, { commits: [] });
   await git(repositoryPath, "remote", "add", "origin", originPath);
   await git(repositoryPath, "commit", "--allow-empty", "-m", "initial");
   await git(repositoryPath, "branch", "merged");

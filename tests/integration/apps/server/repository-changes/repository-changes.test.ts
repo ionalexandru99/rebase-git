@@ -30,7 +30,7 @@ import {
   createRepositoryCoordination,
 } from "#server/repository/access/index";
 import { repositoryFeatureClient } from "#tests-integration/apps/server/environment-connection/feature-routes-client";
-import { fastImport } from "#tests-support/git";
+import { createRepository, fastImport } from "#tests-support/git";
 import { removeTemporaryDirectory } from "#tests-support/temporary-directory";
 
 const exec = promisify(execFile);
@@ -50,11 +50,10 @@ async function fixture(
   );
   directories.push(directory);
   const git = (...args: string[]) => exec("git", ["-C", directory, ...args]);
-  await git("init", "-b", "main");
+  await createRepository(directory, { commits: [] });
   await git("config", "user.name", "Test");
   await git("config", "user.email", "test@example.com");
   await git("config", "commit.gpgsign", "false");
-  await git("config", "core.autocrlf", "false");
   await writeFile(join(directory, "file.txt"), "one\ntwo\nthree\n");
   if (initial) {
     await git("add", ".");

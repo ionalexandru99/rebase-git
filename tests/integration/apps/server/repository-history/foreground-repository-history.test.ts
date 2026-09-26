@@ -8,7 +8,7 @@ import { afterEach, describe, expect, it } from "vite-plus/test";
 import { createLocalGitCommandRunner } from "#server/adapters/local-git/local-git-command-runner";
 import { readObjectFormat } from "#server/features/repository-history/git/read-object-format";
 import { readRepositoryHistory } from "#server/features/repository-history/git/read-repository-history";
-import { fastImport, git } from "#tests-support/git";
+import { cloneRepository, fastImport, git } from "#tests-support/git";
 import { removeTemporaryDirectory } from "#tests-support/temporary-directory";
 
 const directories: string[] = [];
@@ -123,14 +123,12 @@ describe("foreground history selection", () => {
     const path = await createHistory("sha1");
     const shallow = `${path}-shallow`;
     directories.push(shallow);
-    await git(
-      path,
-      "clone",
+    await cloneRepository(
+      pathToFileURL(path).href,
+      shallow,
       "--quiet",
       "--depth=2",
       "--branch=main",
-      pathToFileURL(path).href,
-      shallow,
     );
     const page = await read(shallow, {});
     expect(page.commits).toHaveLength(2);

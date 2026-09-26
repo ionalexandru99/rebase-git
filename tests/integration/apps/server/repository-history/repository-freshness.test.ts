@@ -33,7 +33,7 @@ import {
   repositoryCoordinationLayer,
 } from "#server/repository/access/index";
 import { testEnvironmentFeatures } from "#tests-integration/apps/server/environment-connection/test-environment-features";
-import { git } from "#tests-support/git";
+import { cloneRepository, git } from "#tests-support/git";
 import { removeTemporaryDirectory } from "#tests-support/temporary-directory";
 import { connectCurrentEnvironmentEffect } from "#web/app/environment/connection/index";
 import { createRepositoryHistoryRpc } from "#web/features/repository-history/transport/repository-history-rpc";
@@ -307,12 +307,12 @@ async function createFixture() {
   const source = join(root, "source");
   const local = join(root, "local");
   await git(root, "init", "--bare", "-b", "main", remote);
-  await git(root, "clone", remote, source);
+  await cloneRepository(remote, source);
   await writeFile(join(source, "file.txt"), "base");
   await git(source, "add", "file.txt");
   await git(source, "commit", "-m", "base");
   await git(source, "push", "origin", "main");
-  await git(root, "clone", remote, local);
+  await cloneRepository(remote, local);
   await git(local, "config", "rebase.autoFetchIntervalSeconds", "0");
   const entry = {
     id: repositoryId,

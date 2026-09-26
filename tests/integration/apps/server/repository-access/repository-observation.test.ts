@@ -23,6 +23,7 @@ import {
   repositoryAccessLayer,
   repositoryCoordinationLayer,
 } from "#server/repository/access/index";
+import { createRepository } from "#tests-support/git";
 import { removeTemporaryDirectory } from "#tests-support/temporary-directory";
 
 vi.mock("node:fs", async (original) => {
@@ -42,19 +43,7 @@ for (const firstRelease of ["refs", "freshness"] as const)
     const git = async (...args: string[]) =>
       execute("git", ["-C", root, ...args]);
     try {
-      await git("init", "-b", "main", main);
-      await git(
-        "-C",
-        main,
-        "-c",
-        "user.name=Test",
-        "-c",
-        "user.email=test@example.com",
-        "commit",
-        "--allow-empty",
-        "-m",
-        "initial",
-      );
+      await createRepository(main);
       await git("-C", main, "worktree", "add", "-b", "linked", linked);
       await Effect.runPromise(
         Effect.gen(function* () {
@@ -177,7 +166,7 @@ it("shares canonical directory aliases and makes release idempotent", async () =
   );
   try {
     const directory = join(root, "repository");
-    await execute("git", ["init", directory]);
+    await createRepository(directory, { commits: [] });
     const common = join(directory, ".git");
     const alias = join(root, "alias");
     await symlink(

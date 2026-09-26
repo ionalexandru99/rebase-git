@@ -3,6 +3,7 @@ import { mkdtemp, realpath, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
+import { createRepository } from "#tests-support/git";
 
 const exec = promisify(execFile);
 
@@ -14,7 +15,7 @@ export async function createDivergedRepository() {
     exec("git", ["-C", directory, ...args], {
       env: { ...process.env, GIT_EDITOR: "true", GIT_SEQUENCE_EDITOR: "true" },
     });
-  await git("init", "-b", "main");
+  await createRepository(directory, { commits: [] });
   await git("config", "user.name", "Test");
   await git("config", "user.email", "test@example.com");
   await git("config", "commit.gpgsign", "false");

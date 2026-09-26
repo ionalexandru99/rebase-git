@@ -30,7 +30,7 @@ import {
   featureRoutesClient,
   provideRepositoryServices,
 } from "#tests-integration/apps/server/environment-connection/feature-routes-client";
-import { git } from "#tests-support/git";
+import { createRepository, git } from "#tests-support/git";
 import { removeTemporaryDirectory } from "#tests-support/temporary-directory";
 
 const directories = new Set<string>();
@@ -539,8 +539,7 @@ async function createFixture(): Promise<Fixture> {
   const worktreePath = join(root, "topic worktree");
   await mkdir(originPath);
   await git(originPath, "init", "--bare", "-b", "main");
-  await mkdir(repositoryPath);
-  await git(repositoryPath, "init", "-b", "main");
+  await createRepository(repositoryPath, { commits: [] });
   await git(repositoryPath, "remote", "add", "origin", originPath);
   await writeFile(join(repositoryPath, "README.md"), "hello");
   await git(repositoryPath, "add", "README.md");

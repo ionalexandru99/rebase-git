@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { Effect, Stream } from "effect";
 import { afterAll, beforeAll, expect, it } from "vite-plus/test";
 import { createLocalGitCommandRunner } from "#server/adapters/local-git/local-git-command-runner";
-import { fastImport, git as runGit } from "#tests-support/git";
+import { createRepository, fastImport } from "#tests-support/git";
 import { removeTemporaryDirectory } from "#tests-support/temporary-directory";
 
 const git = createLocalGitCommandRunner();
@@ -68,7 +68,7 @@ it("stops Git when the consumer finishes early", async () => {
 });
 
 async function createHistory(directory: string) {
-  await runGit(directory, "init", "-b", "main");
+  await createRepository(directory, { commits: [] });
   const commands: string[] = [];
   for (let index = 0; index < 2_000; index += 1) {
     const subject = `commit ${index} ${"x".repeat(1_024)}`;
