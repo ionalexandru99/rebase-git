@@ -1,4 +1,7 @@
-import type { EnvironmentAccessCapability } from "@rebase/contracts";
+import type {
+  EnvironmentAccessCapability,
+  EnvironmentRpcClient,
+} from "@rebase/contracts";
 import type {
   EnvironmentAccessDenied,
   EnvironmentConnectionFailure,
@@ -10,8 +13,10 @@ import type { EnvironmentProtocolConnection } from "#web/app/environment/connect
 import type { EnvironmentFilesystemController } from "#web/features/environment-filesystem/environment-filesystem-controller.contract";
 import type { RepositoryCatalogController } from "#web/features/repository-catalog/repository-catalog-controller.contract";
 import type { RepositoryHistoryGateway } from "#web/features/repository-history/repository-history-reader.contract";
-import type { RepositoryRefsController } from "#web/features/repository-refs/repository-refs-controller.contract";
-import type { EnvironmentChanges } from "#web/platform/environment/environment-protocol.contract";
+import type {
+  EnvironmentChanges,
+  NegotiatedEnvironment,
+} from "#web/platform/environment/environment-protocol.contract";
 import type { ReadableStore } from "#web/platform/store/store";
 
 export type LocalEnvironmentSessionState =
@@ -22,6 +27,8 @@ export type LocalEnvironmentSessionState =
       readonly _tag: "Connected";
       readonly environmentId: string;
       readonly accessCapabilities: readonly EnvironmentAccessCapability[];
+      readonly capabilities: NegotiatedEnvironment["capabilities"];
+      readonly rpc: EnvironmentRpcClient;
     }
   | {
       readonly _tag: "Reconnecting";
@@ -41,14 +48,12 @@ export interface ConnectedFeature {
   readonly connect: (
     connection: EnvironmentProtocolConnection,
   ) => Effect.Effect<void, never, Scope.Scope>;
-  readonly invalidate?: (repositoryIds?: readonly string[]) => void;
 }
 
 export interface LocalEnvironmentControllers {
   readonly filesystem: EnvironmentFilesystemController;
   readonly repositoryCatalog: RepositoryCatalogController;
   readonly repositoryHistory: RepositoryHistoryGateway;
-  readonly repositoryRefs: RepositoryRefsController;
 }
 
 export interface LocalEnvironmentSession

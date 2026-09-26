@@ -146,6 +146,8 @@ function maintainConnection(
                 _tag: "Connected",
                 environmentId: active.negotiated.environmentId,
                 accessCapabilities: active.negotiated.accessCapabilities ?? [],
+                capabilities: active.negotiated.capabilities,
+                rpc: active.rpc,
               }),
             ),
             Effect.flatMap((active) =>
@@ -184,13 +186,7 @@ function attachFeatures(
   publishChanges: EnvironmentChangeListener,
 ) {
   return Effect.acquireRelease(
-    Effect.sync(() =>
-      connection.subscribeChanges((repositoryIds, kind) => {
-        if (kind !== "Index")
-          for (const feature of features) feature.invalidate?.(repositoryIds);
-        publishChanges(repositoryIds, kind);
-      }),
-    ),
+    Effect.sync(() => connection.subscribeChanges(publishChanges)),
     (unsubscribe) => Effect.sync(unsubscribe),
   ).pipe(
     Effect.andThen(

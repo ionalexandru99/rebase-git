@@ -1,10 +1,11 @@
+import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef } from "react";
 import type { OpenProjectRepository } from "#web/features/open-project/open-project.contract";
 import {
   describeRepositoryFetchError,
   RepositoryFetchSettings,
 } from "#web/features/repository-fetch/index";
-import { clearCachedRepositoryRefs } from "#web/features/repository-refs/index";
+import { forgetRepositoryRefs } from "#web/features/repository-refs/index";
 import type {
   RepositoryHistorySettingsClient,
   RepositorySettingsIdentity,
@@ -124,6 +125,7 @@ function RepositoryHistorySettings({
   readonly canConfigure: boolean;
 }) {
   const snapshot = useStore(reader);
+  const queryClient = useQueryClient();
   const disabledReason = !connected
     ? "Reconnect to the server and try again."
     : snapshot.freshnessError !== undefined
@@ -155,7 +157,8 @@ function RepositoryHistorySettings({
           identity={identity}
           connected={connected}
           onCacheChanged={() =>
-            clearCachedRepositoryRefs(
+            forgetRepositoryRefs(
+              queryClient,
               identity.environmentId,
               identity.repositoryId,
             )

@@ -17,11 +17,10 @@ import { render } from "#tests-ui/runtime/render";
 import { historyRefKey } from "#web/features/commit-graph/index";
 import { RefCommands } from "#web/features/ref-commands/index";
 import { usePull } from "#web/features/repository-pull/index";
-import {
-  RepositoryRefsBusy,
-  type RepositoryRefsSnapshot,
-  RepositoryRefsUnavailable,
-} from "#web/features/repository-refs/repository-refs-controller.contract";
+import type {
+  RefActivation,
+  RepositoryRefsRead,
+} from "#web/features/repository-refs/index";
 import { RepositoryScopeProvider } from "#web/features/repository-scope/index";
 import { BranchesSidebar } from "#web-ui/features/branches-sidebar/branches-sidebar";
 
@@ -82,7 +81,7 @@ describe("branches sidebar", () => {
 
   it("navigates nested folders and checks out the full branch name", async () => {
     const { screen, onSelectRef } = await renderSidebar({
-      snapshot: snapshot({ refs: nestedRefs(), status: "ready" }),
+      repositoryRefs: loaded(nestedRefs()),
     });
     const tree = screen.getByRole("tree", { name: "Branches" });
     const feature = tree.getByRole("treeitem", {
@@ -134,12 +133,7 @@ describe("branches sidebar", () => {
       ),
     });
     const callbacks = sidebarCallbacks();
-    const screen = await render(
-      sidebarView(
-        snapshot({ refs: withSync(0, 2), status: "ready" }),
-        callbacks,
-      ),
-    );
+    const screen = await render(sidebarView(loaded(withSync(0, 2)), callbacks));
     const topic = screen.getByRole("treeitem", {
       name: "topic, linked worktree",
     });
@@ -154,12 +148,7 @@ describe("branches sidebar", () => {
     expect(
       pull.element().getBoundingClientRect().left - name.right,
     ).toBeLessThan(12);
-    await screen.rerender(
-      sidebarView(
-        snapshot({ refs: withSync(99, 111), status: "ready" }),
-        callbacks,
-      ),
-    );
+    await screen.rerender(sidebarView(loaded(withSync(99, 111)), callbacks));
     await expect
       .element(topic.getByRole("img", { name: "111 commits to pull" }))
       .toBeVisible();
@@ -221,9 +210,8 @@ describe("branches sidebar", () => {
             <BranchesSidebar
               activeWorktreePath={mainPath}
               focusRequest={0}
-              onRetry={callbacks.onRetry}
-              onSelectRef={callbacks.onSelectRef}
-              snapshot={snapshot({ refs: tracked, status: "ready" })}
+              activation={activation(callbacks)}
+              repositoryRefs={loaded(tracked)}
             />
           </div>
         </PullCommands>
@@ -347,42 +335,36 @@ describe("branches sidebar", () => {
 
   it("renders idle, loading, fetch error, and retry states", async () => {
     const callbacks = sidebarCallbacks();
-    const screen = await render(
-      sidebarView(snapshot({ status: "idle" }), callbacks),
-    );
+    const screen = await render(sidebarView(refsRead({}), callbacks));
 
     await expect
       .element(screen.getByRole("status"))
       .toHaveTextContent("No repository selected.");
 
-    await screen.rerender(
-      sidebarView(snapshot({ status: "loading" }), callbacks),
-    );
+    await screen.rerender(sidebarView(refsRead({ loading: true }), callbacks));
     await expect
       .element(screen.getByRole("status"))
       .toHaveTextContent("Loading branches…");
 
     await screen.rerender(
       sidebarView(
-        snapshot({ error: new RepositoryRefsUnavailable(), status: "error" }),
+        refsRead({ error: "The Environment did not answer." }),
         callbacks,
       ),
     );
     await expect
       .element(screen.getByRole("alert"))
-      .toHaveTextContent("The Environment is not connected.");
+      .toHaveTextContent("The Environment did not answer.");
     await screen.getByRole("button", { name: "Retry" }).click();
     expect(callbacks.onRetry).toHaveBeenCalledOnce();
   });
 
   it("announces checkout progress and failures", async () => {
     const { screen } = await renderSidebar({
-      snapshot: snapshot({
+      checkout: {
         checkingOut: true,
-        checkoutError: new RepositoryRefsBusy(),
-        refs: refs(),
-        status: "ready",
-      }),
+        error: "Local changes would be overwritten.",
+      },
     });
 
     await expect
@@ -390,7 +372,7 @@ describe("branches sidebar", () => {
       .toHaveAttribute("aria-busy", "true");
     await expect
       .element(screen.getByRole("alert"))
-      .toHaveTextContent("A checkout is still running.");
+      .toHaveTextContent("Local changes would be overwritten.");
   });
 });
 
@@ -427,21 +409,24 @@ function pullRequests() {
 }
 
 async function renderSidebar({
+  checkout,
   focusRequest = 0,
   selectedHistoryRefKeys,
-  snapshot: currentSnapshot = snapshot({ refs: refs(), status: "ready" }),
+  repositoryRefs = loaded(refs()),
 }: {
+  readonly checkout?: Omit<RefActivation, "select">;
   readonly focusRequest?: number;
   readonly selectedHistoryRefKeys?: ReadonlySet<string>;
-  readonly snapshot?: RepositoryRefsSnapshot;
+  readonly repositoryRefs?: RepositoryRefsRead;
 } = {}) {
   const callbacks = sidebarCallbacks();
   const screen = await render(
     sidebarView(
-      currentSnapshot,
+      repositoryRefs,
       callbacks,
       focusRequest,
       selectedHistoryRefKeys,
+      checkout,
     ),
   );
   return { ...callbacks, screen };
@@ -456,32 +441,51 @@ function sidebarCallbacks() {
 }
 
 function sidebarView(
-  currentSnapshot: RepositoryRefsSnapshot,
+  repositoryRefs: RepositoryRefsRead,
   callbacks: ReturnType<typeof sidebarCallbacks>,
   focusRequest = 0,
   selectedHistoryRefKeys?: ReadonlySet<string>,
+  checkout?: Omit<RefActivation, "select">,
 ) {
   return (
     <div style={{ height: 480, width: 320 }}>
       <BranchesSidebar
+        activation={activation(callbacks, checkout)}
         activeWorktreePath={mainPath}
         focusRequest={focusRequest}
-        onRetry={callbacks.onRetry}
-        onSelectRef={callbacks.onSelectRef}
         onToggleHistoryRef={callbacks.onToggleHistoryRef}
+        repositoryRefs={{ ...repositoryRefs, retry: callbacks.onRetry }}
         {...(selectedHistoryRefKeys === undefined
           ? {}
           : { selectedHistoryRefKeys })}
-        snapshot={currentSnapshot}
       />
     </div>
   );
 }
 
-function snapshot(
-  overrides: Partial<RepositoryRefsSnapshot>,
-): RepositoryRefsSnapshot {
-  return { checkingOut: false, status: "idle", ...overrides };
+function activation(
+  callbacks: ReturnType<typeof sidebarCallbacks>,
+  checkout: Omit<RefActivation, "select"> = {
+    checkingOut: false,
+    error: null,
+  },
+): RefActivation {
+  return { ...checkout, select: callbacks.onSelectRef };
+}
+
+function loaded(current: RepositoryRefs): RepositoryRefsRead {
+  return refsRead({ refs: current });
+}
+
+function refsRead(overrides: Partial<RepositoryRefsRead>): RepositoryRefsRead {
+  return {
+    refs: undefined,
+    restored: false,
+    loading: false,
+    error: null,
+    retry: () => undefined,
+    ...overrides,
+  };
 }
 
 function refs(): RepositoryRefs {

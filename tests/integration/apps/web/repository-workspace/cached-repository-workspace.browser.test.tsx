@@ -1,7 +1,13 @@
 import { createBrowserRepositoryHistoryReader } from "#web/features/repository-history/index";
 import "@rebase/web/styles.css";
 import type { RepositoryCommit, RepositoryRefs } from "@rebase/contracts";
+import {
+  persistQueryClientRestore,
+  persistQueryClientSave,
+} from "@tanstack/react-query-persist-client";
 import { expect, it, vi } from "vite-plus/test";
+import { repositoryScope } from "#tests-ui/apps/web/repository-scope/repository-scope-fixture";
+import { fakeRpc } from "#tests-ui/runtime/fake-rpc";
 import { render } from "#tests-ui/runtime/render";
 import {
   createBrowserHistoryFilterStore,
@@ -11,33 +17,137 @@ import {
 import { storeRepositoryHistoryPage } from "#web/features/repository-history/replica/repository-history-store";
 import { RepositoryHistoryOffline } from "#web/features/repository-history/repository-history-reader.contract";
 import {
-  cacheRepositoryRefs,
-  readCachedRepositoryRefs,
-} from "#web/features/repository-refs/browser-repository-refs-cache";
+  useApplyToRefs,
+  useRepositoryRefs,
+} from "#web/features/repository-refs/index";
+import { RepositoryScopeProvider } from "#web/features/repository-scope/index";
+import { createEnvironmentQueryClient } from "#web/platform/query/environment-query-client";
+import { createEnvironmentQueryPersistence } from "#web/platform/query/environment-query-persistence";
 import { RepositoryWorkspace } from "#web-ui/app/workspace/repository-workspace";
 
-it("restores complete Automatic metadata and isolates real environment and repository identities", async () => {
+it("restores only persisted refs, unconfirmed, for the same protocol", async () => {
+  const persistence = createEnvironmentQueryPersistence();
+  const refs = repositoryRefs();
+  const refsKey = ["repository-refs", crypto.randomUUID(), refs.repositoryId];
+  const refsMeta = {
+    changes: "refs",
+    repositoryId: refs.repositoryId,
+    persist: true,
+  } as const;
+  const saved = createEnvironmentQueryClient();
+  await saved.fetchQuery({
+    queryKey: refsKey,
+    queryFn: async () => refs,
+    meta: refsMeta,
+  });
+  await saved
+    .fetchQuery({
+      queryKey: refsKey,
+      queryFn: () => Promise.reject(new Error("offline")),
+      meta: refsMeta,
+      staleTime: 0,
+    })
+    .catch(() => undefined);
+  await saved.fetchQuery({
+    queryKey: ["operation"],
+    queryFn: async () => "idle",
+    meta: { changes: "index", repositoryId: refs.repositoryId },
+  });
+  await persistQueryClientSave({ ...persistence, queryClient: saved });
+
+  const restored = createEnvironmentQueryClient();
+  await persistQueryClientRestore({ ...persistence, queryClient: restored });
+  const query = restored.getQueryCache().find({ queryKey: refsKey });
+  expect(query?.state.data).toEqual(refs);
+  expect(query?.state.status).toBe("success");
+  expect(query?.isFetched()).toBe(false);
+  expect(query?.state.isInvalidated).toBe(true);
+  expect(restored.getQueryData(["operation"])).toBeUndefined();
+
+  const upgraded = createEnvironmentQueryClient();
+  await persistQueryClientRestore({
+    ...persistence,
+    buster: "protocol-next",
+    queryClient: upgraded,
+  });
+  expect(upgraded.getQueryData(refsKey)).toBeUndefined();
+});
+
+it("keeps restored refs unconfirmed until a live read answers", async () => {
   const environmentId = crypto.randomUUID();
   const refs = repositoryRefs();
   const logicalId = refs.logicalRepositoryId ?? "";
-  await cacheRepositoryRefs(environmentId, logicalId, refs);
-  const cached = await readCachedRepositoryRefs(environmentId, logicalId);
-  expect(cached).toEqual(refs);
-  await expect(
-    readCachedRepositoryRefs(crypto.randomUUID(), logicalId),
-  ).resolves.toBeUndefined();
-  await expect(
-    readCachedRepositoryRefs(environmentId, crypto.randomUUID()),
-  ).resolves.toBeUndefined();
-  if (cached === undefined) throw new Error("Missing cached refs");
-  expect(
-    resolveHistoryScope({ _tag: "Automatic" }, cached, "/feature").roots.map(
-      ({ name }) => name,
-    ),
-  ).toEqual(["feature", "origin/feature", "main", "origin/main"]);
-  expect(
-    resolveHistoryScope({ _tag: "Automatic" }, cached, "/detached").roots,
-  ).toContainEqual({ name: "HEAD", oid, type: "head" });
+  const queryClient = await restoredRefs(environmentId, logicalId, refs);
+  let online = false;
+  const rpc = await fakeRpc(async () => {
+    if (!online) throw new Error("offline");
+    return refs;
+  });
+  const screen = await render(
+    <RefsProbe
+      logicalRepositoryId={logicalId}
+      repositoryId={refs.repositoryId}
+    />,
+    { environment: { environmentId, rpc }, queryClient },
+  );
+
+  await expect
+    .element(screen.getByRole("alert"))
+    .toHaveTextContent("The Environment did not answer.");
+  await expect
+    .element(screen.getByRole("status"))
+    .toHaveTextContent("Restored feature, main");
+
+  online = true;
+  await screen.getByRole("button", { name: "Retry" }).click();
+  await expect
+    .element(screen.getByRole("status"))
+    .toHaveTextContent("Live feature, main");
+});
+
+it("keeps restored refs restored through a branch write until a live read answers", async () => {
+  const environmentId = crypto.randomUUID();
+  const refs = repositoryRefs();
+  const logicalId = refs.logicalRepositoryId ?? "";
+  const queryClient = await restoredRefs(environmentId, logicalId, refs);
+  const reads: PromiseWithResolvers<RepositoryRefs>[] = [];
+  const rpc = await fakeRpc(() => {
+    const read = Promise.withResolvers<RepositoryRefs>();
+    reads.push(read);
+    return read.promise;
+  });
+  const screen = await render(
+    <RepositoryScopeProvider
+      scope={repositoryScope({
+        repositoryId: refs.repositoryId,
+        logicalRepositoryId: logicalId,
+        worktreePath: "/feature",
+      })}
+    >
+      <RefsProbe
+        logicalRepositoryId={logicalId}
+        repositoryId={refs.repositoryId}
+      />
+      <RenameMain />
+    </RepositoryScopeProvider>,
+    { environment: { environmentId, rpc }, queryClient },
+  );
+  await vi.waitFor(() => expect(reads).toHaveLength(1));
+  reads[0]?.reject(new Error("offline"));
+  await expect
+    .element(screen.getByRole("alert"))
+    .toHaveTextContent("The Environment did not answer.");
+
+  await screen.getByRole("button", { name: "Rename main" }).click();
+  await vi.waitFor(() => expect(reads).toHaveLength(2));
+  await expect
+    .element(screen.getByRole("status"))
+    .toHaveTextContent("Restored feature, main");
+
+  reads[1]?.resolve(renameMain(refs));
+  await expect
+    .element(screen.getByRole("status"))
+    .toHaveTextContent("Live feature, trunk");
 });
 
 it.each(["Automatic", "Custom"] as const)(
@@ -46,7 +156,7 @@ it.each(["Automatic", "Custom"] as const)(
     const environmentId = crypto.randomUUID();
     const refs = repositoryRefs();
     const logicalId = refs.logicalRepositoryId ?? "";
-    await cacheRepositoryRefs(environmentId, logicalId, refs);
+    const queryClient = await restoredRefs(environmentId, logicalId, refs);
     const custom = {
       _tag: "Custom",
       selections: [
@@ -94,15 +204,10 @@ it.each(["Automatic", "Custom"] as const)(
           repositoryId={refs.repositoryId}
           repositoryName="Cached repository"
           history={openCommitGraphHistory(reader)}
-          refs={{
-            checkingOut: false,
-            repositoryId: refs.repositoryId,
-            status: "loading",
-          }}
-          retryRefs={() => undefined}
-          selectRef={() => undefined}
+          switchWorktree={() => undefined}
         />
       </div>,
+      { environment: { environmentId }, queryClient },
     );
     await expect
       .element(screen.getByRole("row", { name: /^Cached commit,/ }))
@@ -131,6 +236,67 @@ it.each(["Automatic", "Custom"] as const)(
     );
   },
 );
+
+function RefsProbe({
+  logicalRepositoryId,
+  repositoryId,
+}: {
+  readonly logicalRepositoryId: string;
+  readonly repositoryId: string;
+}) {
+  const { error, refs, restored, retry } = useRepositoryRefs(
+    repositoryId,
+    logicalRepositoryId,
+  );
+  return (
+    <div>
+      <p role="status">
+        {restored ? "Restored" : "Live"}{" "}
+        {refs?.branches.map(({ name }) => name).join(", ")}
+      </p>
+      {error === null ? null : <p role="alert">{error}</p>}
+      <button type="button" onClick={retry}>
+        Retry
+      </button>
+    </div>
+  );
+}
+
+function RenameMain() {
+  const applyToRefs = useApplyToRefs();
+  return (
+    <button type="button" onClick={() => void applyToRefs(renameMain)}>
+      Rename main
+    </button>
+  );
+}
+
+function renameMain(refs: RepositoryRefs): RepositoryRefs {
+  return {
+    ...refs,
+    branches: refs.branches.map((branch) =>
+      branch.name === "main" ? { ...branch, name: "trunk" } : branch,
+    ),
+  };
+}
+
+async function restoredRefs(
+  environmentId: string,
+  logicalId: string,
+  refs: RepositoryRefs,
+) {
+  const persistence = createEnvironmentQueryPersistence();
+  const saved = createEnvironmentQueryClient();
+  await saved.fetchQuery({
+    queryKey: ["repository-refs", environmentId, logicalId],
+    queryFn: async () => refs,
+    meta: { changes: "refs", repositoryId: refs.repositoryId, persist: true },
+  });
+  await persistQueryClientSave({ ...persistence, queryClient: saved });
+  const restored = createEnvironmentQueryClient();
+  await persistQueryClientRestore({ ...persistence, queryClient: restored });
+  return restored;
+}
 
 const oid = "a".repeat(40);
 const identity = {

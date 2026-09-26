@@ -2,8 +2,13 @@ import { mkdtemp, realpath, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
+  RepositoryBranchesHttpApi,
+  RepositoryRefsHttpApi,
+} from "@rebase/contracts";
+import {
   createEnvironmentRequestClient,
   type EnvironmentCredential,
+  EnvironmentHttpRejected,
 } from "@rebase/environment-client";
 import { Effect } from "effect";
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
@@ -41,16 +46,8 @@ import {
   connectCurrentEnvironmentEffect,
   exchangeEnvironmentPairingEffect,
 } from "#web/app/environment/connection/index";
-import {
-  RepositoryBranchesRejected,
-  repositoryBranchesClient,
-} from "#web/features/branch-management/index";
 import { repositoryCatalogClient } from "#web/features/repository-catalog/index";
-import {
-  RepositoryRefsRejected,
-  repositoryRefsClient,
-} from "#web/features/repository-refs/index";
-import { createRepositoryRefsRpc } from "#web/features/repository-refs/transport/repository-refs-rpc";
+import { readRepositoryRefs } from "#web/platform/environment/rpc/read-repository-refs";
 
 const directories = new Set<string>();
 const environmentId = "00000000-0000-4000-8000-000000000001";
@@ -82,28 +79,25 @@ describe("repository refs transport", () => {
       };
 
       await expect(
-        Effect.runPromise(branchesClient(origin, viewer).create(create)),
-      ).rejects.toEqual(
-        new RepositoryBranchesRejected({
-          failure: { _tag: "CapabilityDenied", capability: "repository.write" },
-        }),
-      );
+        requests(origin, viewer)(RepositoryBranchesHttpApi.create, create),
+      ).rejects.toMatchObject({
+        _tag: "EnvironmentAccessDenied",
+        failure: { _tag: "CapabilityDenied", capability: "repository.write" },
+      });
       await expect(
-        Effect.runPromise(branchesClient(origin, owner).create(create)),
+        requests(origin, owner)(RepositoryBranchesHttpApi.create, create),
       ).resolves.toEqual({ name: "spike", target: head });
       await git(repositoryPath, "checkout", "spike");
       await git(repositoryPath, "commit", "--allow-empty", "-m", "only here");
       await git(repositoryPath, "checkout", "main");
       const spike = await git(repositoryPath, "rev-parse", "spike");
       await expect(
-        Effect.runPromise(
-          branchesClient(origin, owner).delete({
-            force: false,
-            local: { name: "spike", target: spike },
-            repositoryId: remembered.id,
-            worktreePath: repositoryPath,
-          }),
-        ),
+        requests(origin, owner)(RepositoryBranchesHttpApi.delete, {
+          force: false,
+          local: { name: "spike", target: spike },
+          repositoryId: remembered.id,
+          worktreePath: repositoryPath,
+        }),
       ).rejects.toMatchObject({
         failure: { _tag: "BranchNotMerged", count: 1, name: "spike" },
       });
@@ -155,15 +149,16 @@ describe("repository refs transport", () => {
         environmentOrigin: origin,
         getEnvironmentCredential: async () => owner.value,
       });
-      const refs = () => session.repositoryRefs.getSnapshot().refs;
+      const refChanges = countRefChanges(session, remembered.id);
+      const refs = () => readConnectedRefs(session, remembered.id);
       session.start();
       try {
         await expect.poll(() => session.getSnapshot()._tag).toBe("Connected");
-        session.repositoryRefs.select(remembered.id);
         await expect
-          .poll(() => refs()?.branches.map((branch) => branch.name))
+          .poll(async () => (await refs()).branches.map(({ name }) => name))
           .toEqual(["feature", "main"]);
 
+        let seen = refChanges();
         await git(repositoryPath, "branch", "added");
         await git(
           repositoryPath,
@@ -173,6 +168,7 @@ describe("repository refs transport", () => {
           "git@github.com:alex/rebase.git",
         );
         await git(repositoryPath, "tag", "v1");
+        await expect.poll(refChanges).toBeGreaterThan(seen);
         await expect.poll(refs).toMatchObject({
           branches: expect.arrayContaining([
             { name: "added", target: expect.any(String) },
@@ -186,7 +182,9 @@ describe("repository refs transport", () => {
         await git(remotePath, "branch", "fetched-branch");
         await git(remotePath, "tag", "fetched-tag");
         await git(repositoryPath, "remote", "add", "origin", remotePath);
+        seen = refChanges();
         await git(repositoryPath, "fetch", "origin", "--tags");
+        await expect.poll(refChanges).toBeGreaterThan(seen);
         await expect.poll(refs).toMatchObject({
           remoteBranches: expect.arrayContaining([
             {
@@ -200,15 +198,20 @@ describe("repository refs transport", () => {
           ]),
         });
 
+        seen = refChanges();
         await git(repositoryPath, "branch", "-D", "added");
         await git(repositoryPath, "tag", "-d", "v1");
         await git(repositoryPath, "remote", "remove", "origin");
+        await expect.poll(refChanges).toBeGreaterThan(seen);
         await expect
-          .poll(() => ({
-            branches: refs()?.branches.map((branch) => branch.name),
-            remotes: refs()?.remoteBranches,
-            tags: refs()?.tags.map((tag) => tag.name),
-          }))
+          .poll(async () => {
+            const current = await refs();
+            return {
+              branches: current.branches.map(({ name }) => name),
+              remotes: current.remoteBranches,
+              tags: current.tags.map(({ name }) => name),
+            };
+          })
           .toEqual({
             branches: ["feature", "main"],
             remotes: [],
@@ -246,27 +249,19 @@ describe("repository refs transport", () => {
         expect.arrayContaining(["main", "feature"]),
       );
 
+      const checkout = {
+        repositoryId: remembered.id,
+        target: { _tag: "LocalBranch", name: "feature" },
+        worktreePath: repositoryPath,
+      } as const;
       await expect(
-        Effect.runPromise(
-          refsClient(origin, viewer).checkout({
-            repositoryId: remembered.id,
-            target: { _tag: "LocalBranch", name: "feature" },
-            worktreePath: repositoryPath,
-          }),
-        ),
-      ).rejects.toEqual(
-        new RepositoryRefsRejected({
-          failure: { _tag: "CapabilityDenied", capability: "repository.write" },
-        }),
-      );
+        requests(origin, viewer)(RepositoryRefsHttpApi.checkout, checkout),
+      ).rejects.toMatchObject({
+        _tag: "EnvironmentAccessDenied",
+        failure: { _tag: "CapabilityDenied", capability: "repository.write" },
+      });
       await expect(
-        Effect.runPromise(
-          refsClient(origin, owner).checkout({
-            repositoryId: remembered.id,
-            target: { _tag: "LocalBranch", name: "feature" },
-            worktreePath: repositoryPath,
-          }),
-        ),
+        requests(origin, owner)(RepositoryRefsHttpApi.checkout, checkout),
       ).resolves.toMatchObject({ head: { branch: "feature" }, stash: "none" });
       await expect(
         Effect.runPromise(
@@ -277,7 +272,7 @@ describe("repository refs transport", () => {
           ),
         ),
       ).rejects.toEqual(
-        new RepositoryRefsRejected({
+        new EnvironmentHttpRejected({
           failure: {
             _tag: "RepositoryRejected",
             reason: "Missing",
@@ -301,8 +296,37 @@ function readRefsOverWebSocket(
         "0.0.0",
         { credential },
       );
-      return yield* createRepositoryRefsRpc(connection).read(repositoryId);
+      return yield* Effect.tryPromise({
+        try: (signal) =>
+          readRepositoryRefs(connection.rpc, repositoryId, signal),
+        catch: (error) => error,
+      });
     }),
+  );
+}
+
+function countRefChanges(
+  session: ReturnType<typeof createBrowserLocalEnvironmentSession>,
+  repositoryId: string,
+) {
+  let changes = 0;
+  session.changes.subscribe((repositoryIds, kind) => {
+    if (kind === "Refs" && repositoryIds?.includes(repositoryId)) changes++;
+  });
+  return () => changes;
+}
+
+function readConnectedRefs(
+  session: ReturnType<typeof createBrowserLocalEnvironmentSession>,
+  repositoryId: string,
+) {
+  const state = session.getSnapshot();
+  if (state._tag !== "Connected")
+    return Promise.reject(new Error("The session is not connected."));
+  return readRepositoryRefs(
+    state.rpc,
+    repositoryId,
+    new AbortController().signal,
   );
 }
 
@@ -393,16 +417,8 @@ function remember(
   ).remember({ path });
 }
 
-function branchesClient(origin: string, credential: EnvironmentCredential) {
-  return repositoryBranchesClient(
-    createEnvironmentRequestClient(origin, () => credential),
-  );
-}
-
-function refsClient(origin: string, credential: EnvironmentCredential) {
-  return repositoryRefsClient(
-    createEnvironmentRequestClient(origin, () => credential),
-  );
+function requests(origin: string, credential: EnvironmentCredential) {
+  return createEnvironmentRequestClient(origin, () => credential);
 }
 
 async function createTemporaryDirectory() {

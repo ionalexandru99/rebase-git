@@ -5,12 +5,14 @@ import type {
 import { IconDeviceLaptop } from "@tabler/icons-react";
 import { type JSX, useCallback, useMemo, useRef, useState } from "react";
 import type { PanelImperativeHandle } from "react-resizable-panels";
-import type { LocalEnvironmentSession } from "#web/app/environment/local-environment-session.contract";
+import type {
+  LocalEnvironmentSession,
+  LocalEnvironmentSessionState,
+} from "#web/app/environment/local-environment-session.contract";
 import { environmentSessionPresentation } from "#web/app/shell/environment-session-presentation";
+import { useActiveWorktree } from "#web/app/shell/hooks/use-active-worktree";
 import { useOpenedRepository } from "#web/app/shell/hooks/use-opened-repository";
 import { useProjectRepositoryActions } from "#web/app/shell/hooks/use-project-repository-actions";
-import { useRepositoryRefsActions } from "#web/app/shell/hooks/use-repository-refs-actions";
-import { BranchManagement } from "#web/features/branch-management/index";
 import {
   type OpenProjectEnvironment,
   OpenProjectScreen,
@@ -36,9 +38,14 @@ import {
   ResizablePanelGroup,
 } from "#web-ui/components/ui/resizable";
 import { WorkspacePanel } from "#web-ui/features/workspace-panel/index";
-import { EnvironmentProvider } from "#web-ui/platform/query/environment-context";
+import {
+  type Environment,
+  EnvironmentProvider,
+  useEnvironment,
+} from "#web-ui/platform/query/environment-context";
 
 const localEnvironmentId = "local-environment";
+const noCapabilities: Environment["capabilities"] = [];
 const projectSidebarSize = {
   collapsed: "3rem",
   default: "16rem",
@@ -46,24 +53,79 @@ const projectSidebarSize = {
   min: "13rem",
 } as const;
 
-export function ApplicationShell({
-  desktopUpdates,
-  productVersion,
-  repositoryFilesystem,
-  session,
-}: {
+interface ApplicationShellProps {
   readonly desktopUpdates: DesktopUpdates | undefined;
   readonly productVersion: string;
   readonly repositoryFilesystem: RepositoryFilesystemHost | undefined;
   readonly session: LocalEnvironmentSession;
-}): JSX.Element {
+}
+
+export function ApplicationShell(props: ApplicationShellProps): JSX.Element {
+  const { session } = props;
   const sessionState = useStore(session);
-  const repositoryCatalog = useStore(session.repositoryCatalog);
-  const environmentStatus = environmentSessionPresentation(sessionState);
   const lastConnectedEnvironmentId = useRef<string | undefined>(undefined);
   if (sessionState._tag === "Connected") {
     lastConnectedEnvironmentId.current = sessionState.environmentId;
   }
+  const environmentId =
+    sessionState._tag === "Connected"
+      ? sessionState.environmentId
+      : sessionState._tag === "Reconnecting"
+        ? (sessionState.environmentId ?? lastConnectedEnvironmentId.current)
+        : lastConnectedEnvironmentId.current;
+  const connected = sessionState._tag === "Connected";
+  const rpc = connected ? sessionState.rpc : undefined;
+  const capabilities = connected ? sessionState.capabilities : noCapabilities;
+  const readable =
+    connected && sessionState.accessCapabilities.includes("repository.read");
+  const writable =
+    connected && sessionState.accessCapabilities.includes("repository.write");
+  const environment = useMemo(
+    () => ({
+      environmentId,
+      requests: session.requests,
+      rpc,
+      capabilities,
+      changes: session.changes,
+      connected,
+      readable,
+      writable,
+    }),
+    [
+      environmentId,
+      session.requests,
+      rpc,
+      capabilities,
+      session.changes,
+      connected,
+      readable,
+      writable,
+    ],
+  );
+  return (
+    <EnvironmentProvider environment={environment}>
+      <ApplicationShellContent {...props} sessionState={sessionState} />
+    </EnvironmentProvider>
+  );
+}
+
+function ApplicationShellContent({
+  desktopUpdates,
+  productVersion,
+  repositoryFilesystem,
+  session,
+  sessionState,
+}: ApplicationShellProps & {
+  readonly sessionState: LocalEnvironmentSessionState;
+}): JSX.Element {
+  const {
+    environmentId: historyEnvironmentId,
+    connected,
+    readable: canRead,
+    writable: canWrite,
+  } = useEnvironment();
+  const repositoryCatalog = useStore(session.repositoryCatalog);
+  const environmentStatus = environmentSessionPresentation(sessionState);
   const sidebarRef = useRef<PanelImperativeHandle>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [repositorySettingsId, setRepositorySettingsId] = useState<string>();
@@ -140,31 +202,19 @@ export function ApplicationShell({
     setNavigation((current) => showOpenProject(current));
     setOpenProjectRequest((current) => current + 1);
   }, []);
-  const {
-    activeWorktreePath,
-    refs: repositoryRefs,
-    retryRefs,
-    selectRef,
-    worktreePathFor,
-  } = useRepositoryRefsActions({
-    repositories: repositoryCatalog.repositories,
-    selectedRepositoryId: navigation.selectedRepositoryId,
-    session,
-  });
-  const historyEnvironmentId =
-    sessionState._tag === "Connected"
-      ? sessionState.environmentId
-      : sessionState._tag === "Reconnecting"
-        ? (sessionState.environmentId ?? lastConnectedEnvironmentId.current)
-        : lastConnectedEnvironmentId.current;
   const selectedRepository = repositoryCatalog.repositories.find(
     (repository) => repository.id === navigation.selectedRepositoryId,
   );
+  const selectedLogicalRepositoryId =
+    selectedRepository?.logicalRepositoryId ?? selectedRepository?.id;
+  const { activeWorktreePath, refs, switchWorktree, worktreePathFor } =
+    useActiveWorktree(selectedRepository, selectedLogicalRepositoryId);
   const graphRepository =
     navigation.workspaceView === "repository" ? selectedRepository : undefined;
   const { history: graphHistory, open: openRepositoryHistory } =
     useOpenedRepository({
       environmentId: historyEnvironmentId,
+      refs,
       repository: graphRepository,
       session,
       worktreePathFor,
@@ -202,12 +252,6 @@ export function ApplicationShell({
     ({ id }) => id === repositorySettingsId,
   );
   const repositorySettingsOpen = settingsRepository !== undefined;
-  const canRead =
-    sessionState._tag === "Connected" &&
-    sessionState.accessCapabilities.includes("repository.read");
-  const canWrite =
-    sessionState._tag === "Connected" &&
-    sessionState.accessCapabilities.includes("repository.write");
   const settingsTarget =
     settingsRepository === undefined
       ? undefined
@@ -227,7 +271,6 @@ export function ApplicationShell({
       ? undefined
       : (settingsRepository?.logicalRepositoryId ?? settingsRepository?.id),
   );
-  const connected = sessionState._tag === "Connected";
   const panelVisible = !settingsOpen && !repositorySettingsOpen;
   const panelEnvironment = useMemo(
     () => ({
@@ -249,37 +292,17 @@ export function ApplicationShell({
       panelVisible,
     ],
   );
-  const environment = useMemo(
-    () => ({
-      environmentId: historyEnvironmentId,
-      requests: session.requests,
-      changes: session.changes,
-      connected,
-      readable: canRead,
-      writable: canWrite,
-    }),
-    [
-      historyEnvironmentId,
-      session.requests,
-      session.changes,
-      connected,
-      canRead,
-      canWrite,
-    ],
-  );
   const graphRepositoryId = graphRepository?.id;
-  const graphLogicalRepositoryId = graphRepository?.logicalRepositoryId;
+  const graphLogicalRepositoryId =
+    graphRepository === undefined ? undefined : selectedLogicalRepositoryId;
   const repositoryScope = useMemo(
     () =>
-      graphRepositoryId === undefined
+      graphRepositoryId === undefined || graphLogicalRepositoryId === undefined
         ? undefined
         : {
             repositoryId: graphRepositoryId,
             worktreePath: activeWorktreePath,
-            ...(graphLogicalRepositoryId === undefined
-              ? {}
-              : { logicalRepositoryId: graphLogicalRepositoryId }),
-            refs: session.repositoryRefs,
+            logicalRepositoryId: graphLogicalRepositoryId,
             connected,
             readable: canRead,
             writable: canWrite,
@@ -288,7 +311,6 @@ export function ApplicationShell({
       graphRepositoryId,
       graphLogicalRepositoryId,
       activeWorktreePath,
-      session.repositoryRefs,
       connected,
       canRead,
       canWrite,
@@ -376,14 +398,10 @@ export function ApplicationShell({
                     activeWorktreePath={activeWorktreePath}
                     environmentId={historyEnvironmentId}
                     history={graphHistory}
-                    logicalRepositoryId={
-                      selectedRepository?.logicalRepositoryId
-                    }
-                    refs={repositoryRefs}
+                    logicalRepositoryId={selectedLogicalRepositoryId}
                     repositoryId={navigation.selectedRepositoryId}
                     repositoryName={selectedRepository?.name ?? "Repository"}
-                    retryRefs={retryRefs}
-                    selectRef={selectRef}
+                    switchWorktree={switchWorktree}
                   />
                 )}
               </div>
@@ -406,7 +424,7 @@ export function ApplicationShell({
                     )?.name ?? "Environment"
                   }
                   reader={sameHistory ? graphReader : settingsReader}
-                  connected={sessionState._tag === "Connected"}
+                  connected={connected}
                   canConfigure={canWrite}
                   canRemove={canWrite}
                   copyPath={() => copyRepositoryPath(settingsTarget)}
@@ -442,18 +460,14 @@ export function ApplicationShell({
     </div>
   );
   return (
-    <EnvironmentProvider environment={environment}>
-      <RepositoryScopeProvider scope={repositoryScope}>
-        <BranchManagement.Provider>
-          <WorkspacePanel.Sessions
-            environment={panelEnvironment}
-            repositoryIds={panelRepositoryIds}
-          >
-            {content}
-          </WorkspacePanel.Sessions>
-        </BranchManagement.Provider>
-      </RepositoryScopeProvider>
-    </EnvironmentProvider>
+    <RepositoryScopeProvider scope={repositoryScope}>
+      <WorkspacePanel.Sessions
+        environment={panelEnvironment}
+        repositoryIds={panelRepositoryIds}
+      >
+        {content}
+      </WorkspacePanel.Sessions>
+    </RepositoryScopeProvider>
   );
 }
 

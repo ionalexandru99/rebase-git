@@ -23,6 +23,8 @@ const offlineEnvironment: Environment = {
   requests: async () => {
     throw new Error("Performance fixtures do not reach an environment.");
   },
+  rpc: undefined,
+  capabilities: [],
   changes: { subscribe: () => () => {} },
   connected: false,
   readable: false,

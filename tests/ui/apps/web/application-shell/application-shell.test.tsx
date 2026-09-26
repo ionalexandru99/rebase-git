@@ -1,13 +1,16 @@
 import {
+  currentEnvironmentCapabilities,
   encodeRepositoryHistoryBatch,
   encodeRepositoryHistoryPage,
   type RepositoryCommit,
+  type RepositoryRefs,
 } from "@rebase/contracts";
 import { Layer, ManagedRuntime } from "effect";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
 import { page, userEvent } from "vite-plus/test/browser";
 import { fakeRequests, idleOperation } from "#tests-ui/runtime/fake-requests";
+import { fakeRpc } from "#tests-ui/runtime/fake-rpc";
 import { render as renderWithRuntime } from "#tests-ui/runtime/render";
 import type { LocalEnvironmentSession } from "#web/app/environment/local-environment-session.contract";
 import { ApplicationShell } from "#web-ui/app/shell/application-shell";
@@ -25,7 +28,7 @@ function render(children: ReactNode) {
 
 describe("application shell", () => {
   it("opens repository settings from the list without opening its graph", async () => {
-    const connected = connectedSession();
+    const connected = await connectedSession();
     const recordOpened = vi.spyOn(
       connected.session.repositoryCatalog,
       "recordOpened",
@@ -60,7 +63,7 @@ describe("application shell", () => {
   });
 
   it("returns to the same graph selection from repository settings and applies saved ordering", async () => {
-    const connected = connectedSession();
+    const connected = await connectedSession();
     connected.finishSynchronization();
     await render(
       <ApplicationShell
@@ -189,7 +192,7 @@ describe("application shell", () => {
   });
 
   it("keeps cached commit rows visible while reconnecting", async () => {
-    const connected = connectedSession();
+    const connected = await connectedSession();
     await render(
       <ApplicationShell
         desktopUpdates={undefined}
@@ -236,32 +239,10 @@ async function renderRepositoryWorkspace() {
         activeWorktreePath="/repo"
         environmentId={undefined}
         history={undefined}
-        refs={{
-          checkingOut: false,
-          refs: {
-            branches: [{ name: "main", worktreePath: "/repo" }],
-            remoteBranches: [],
-            repositoryId: "00000000-0000-4000-8000-000000000001",
-            tags: [],
-            truncated: {
-              branches: false,
-              remoteBranches: false,
-              tags: false,
-            },
-            worktrees: [
-              {
-                head: { branch: "main", commit: "a".repeat(40) },
-                main: true,
-                path: "/repo",
-              },
-            ],
-          },
-          status: "ready",
-        }}
-        retryRefs={() => undefined}
+        logicalRepositoryId="00000000-0000-4000-8000-000000000001"
         repositoryId="00000000-0000-4000-8000-000000000001"
         repositoryName="rebase-test"
-        selectRef={() => undefined}
+        switchWorktree={() => undefined}
       />
     </div>,
   );
@@ -270,7 +251,6 @@ async function renderRepositoryWorkspace() {
 function pairingRequiredSession(): LocalEnvironmentSession {
   const sessionState = { _tag: "PairingRequired" } as const;
   const catalogSnapshot = { repositories: [], status: "idle" } as const;
-  const refsSnapshot = { checkingOut: false, status: "idle" } as const;
   const unsubscribe = () => undefined;
   return {
     changes: { subscribe: () => unsubscribe },
@@ -295,15 +275,6 @@ function pairingRequiredSession(): LocalEnvironmentSession {
       read: async () => Promise.reject(new Error("Unavailable")),
       synchronize: async () => Promise.reject(new Error("Unavailable")),
     },
-    repositoryRefs: {
-      apply: () => undefined,
-      checkout: async () => Promise.reject(new Error("Unavailable")),
-      getSnapshot: () => refsSnapshot,
-      invalidate: () => undefined,
-      refresh: async () => undefined,
-      select: () => undefined,
-      subscribe: () => unsubscribe,
-    },
     requests: fakeRequests(idleOperation),
     runtime,
     start: () => undefined,
@@ -312,7 +283,7 @@ function pairingRequiredSession(): LocalEnvironmentSession {
   };
 }
 
-function connectedSession() {
+async function connectedSession() {
   const environmentId = "00000000-0000-4000-8000-000000000020";
   const repositoryId = "00000000-0000-4000-8000-000000000021";
   const oid = "c".repeat(40);
@@ -335,34 +306,32 @@ function connectedSession() {
     repositories: [repository],
     status: "ready" as const,
   };
-  const refsSnapshot = {
-    checkingOut: false,
-    refs: {
-      branches: [{ name: "main", target: oid, worktreePath: "/repo" }],
-      remoteBranches: [],
-      repositoryId,
-      tags: [],
-      truncated: {
-        branches: false,
-        remoteBranches: false,
-        tags: false,
-      },
-      worktrees: [
-        {
-          head: { branch: "main", commit: oid },
-          main: true,
-          path: "/repo",
-        },
-      ],
-    },
+  const refs: RepositoryRefs = {
+    branches: [{ name: "main", target: oid, worktreePath: "/repo" }],
+    remoteBranches: [],
     repositoryId,
-    status: "ready" as const,
+    tags: [],
+    truncated: {
+      branches: false,
+      remoteBranches: false,
+      tags: false,
+    },
+    worktrees: [
+      {
+        head: { branch: "main", commit: oid },
+        main: true,
+        path: "/repo",
+      },
+    ],
   };
+  const rpc = await fakeRpc(async () => refs);
   const listeners = new Set<() => void>();
   let state: ReturnType<LocalEnvironmentSession["getSnapshot"]> = {
     _tag: "Connected",
     accessCapabilities: [],
+    capabilities: currentEnvironmentCapabilities,
     environmentId,
+    rpc,
   };
   let finishSynchronization: () => void = () => undefined;
   const synchronizationFinished = new Promise<void>((resolve) => {
@@ -410,15 +379,6 @@ function connectedSession() {
         await synchronizationFinished;
         return 1;
       }),
-    },
-    repositoryRefs: {
-      apply: () => undefined,
-      checkout: async () => Promise.reject(new Error("Unused")),
-      getSnapshot: () => refsSnapshot,
-      invalidate: () => undefined,
-      refresh: async () => undefined,
-      select: () => undefined,
-      subscribe: () => () => undefined,
     },
     requests: fakeRequests(idleOperation),
     runtime,

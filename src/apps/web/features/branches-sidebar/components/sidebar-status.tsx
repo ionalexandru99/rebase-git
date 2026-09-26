@@ -3,40 +3,40 @@ import type {
   BranchesSidebarRow,
   BranchesSidebarScope,
 } from "#web/features/branches-sidebar/branches-sidebar.contract";
-import {
-  describeEmptyBranchesSidebar,
-  describeRepositoryRefsError,
-} from "#web/features/branches-sidebar/branches-sidebar-messages";
-import type { RepositoryRefsSnapshot } from "#web/features/repository-refs/repository-refs-controller.contract";
+import { describeEmptyBranchesSidebar } from "#web/features/branches-sidebar/branches-sidebar-messages";
+import type { RepositoryRefsRead } from "#web/features/repository-refs/index";
 import { Button } from "#web-ui/components/ui/button";
 
 export function SidebarStatus({
-  onRetry,
   query,
+  repositoryRefs,
   rows,
   scope,
-  snapshot,
 }: {
-  readonly onRetry: () => void;
   readonly query: string;
+  readonly repositoryRefs: RepositoryRefsRead;
   readonly rows: readonly BranchesSidebarRow[];
   readonly scope: BranchesSidebarScope;
-  readonly snapshot: RepositoryRefsSnapshot;
 }): JSX.Element | null {
-  if (snapshot.error !== undefined) {
+  if (repositoryRefs.error !== null) {
     return (
       <div className="px-2 py-3 text-xs text-status-unavailable" role="alert">
-        <p>{describeRepositoryRefsError(snapshot.error)}</p>
-        <Button className="mt-2" onClick={onRetry} size="xs" variant="outline">
+        <p>{repositoryRefs.error}</p>
+        <Button
+          className="mt-2"
+          onClick={repositoryRefs.retry}
+          size="xs"
+          variant="outline"
+        >
           Retry
         </Button>
       </div>
     );
   }
-  if (snapshot.refs === undefined) {
+  if (repositoryRefs.refs === undefined) {
     return (
       <p className="px-2 py-3 text-xs text-muted-foreground" role="status">
-        {snapshot.status === "loading"
+        {repositoryRefs.loading
           ? "Loading branches…"
           : "No repository selected."}
       </p>

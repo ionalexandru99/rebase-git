@@ -1,11 +1,17 @@
+import type { EnvironmentRpcClient } from "@rebase/contracts";
 import type { EnvironmentRequestClient } from "@rebase/environment-client";
 import { createContext, type ReactNode, useContext } from "react";
-import type { EnvironmentChanges } from "#web/platform/environment/environment-protocol.contract";
+import type {
+  EnvironmentChanges,
+  NegotiatedEnvironment,
+} from "#web/platform/environment/environment-protocol.contract";
 import { useEnvironmentInvalidation } from "#web/platform/query/environment-invalidation";
 
 export interface Environment {
   readonly environmentId: string | undefined;
   readonly requests: EnvironmentRequestClient;
+  readonly rpc: EnvironmentRpcClient | undefined;
+  readonly capabilities: NegotiatedEnvironment["capabilities"];
   readonly changes: EnvironmentChanges;
   readonly connected: boolean;
   readonly readable: boolean;

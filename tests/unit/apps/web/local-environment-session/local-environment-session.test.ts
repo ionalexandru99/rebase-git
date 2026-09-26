@@ -25,7 +25,7 @@ import type {
 const runtime = ManagedRuntime.make(Layer.empty);
 
 describe("local Environment session", () => {
-  it("connects each feature, forwards change events, invalidates features only for ref changes, and releases them on disconnect", async () => {
+  it("connects each feature, forwards change events, and releases them on disconnect", async () => {
     const connection = createConnection();
     const release = vi.fn();
     connection.subscribeChanges.mockReturnValue(release);
@@ -44,10 +44,8 @@ describe("local Environment session", () => {
       expect(feature.released).not.toHaveBeenCalled();
       const publish = connection.subscribeChanges.mock.calls[0]?.[0];
       publish?.(["changed"], "Refs");
-      expect(feature.invalidate).toHaveBeenCalledExactlyOnceWith(["changed"]);
       expect(changed).toHaveBeenCalledExactlyOnceWith(["changed"], "Refs");
       publish?.(["changed"], "Index");
-      expect(feature.invalidate).toHaveBeenCalledOnce();
       expect(changed).toHaveBeenLastCalledWith(["changed"], "Index");
     } finally {
       session.stop();
@@ -208,7 +206,6 @@ function createFeature() {
   );
   return {
     connect,
-    invalidate: vi.fn<NonNullable<ConnectedFeature["invalidate"]>>(),
     released,
   } satisfies ConnectedFeature & { readonly released: typeof released };
 }
@@ -249,15 +246,6 @@ const unusedControllers: LocalEnvironmentControllers = {
   repositoryHistory: {
     read: () => Promise.reject(new Error("Unused")),
     synchronize: () => Promise.reject(new Error("Unused")),
-  },
-  repositoryRefs: {
-    apply: () => undefined,
-    checkout: () => Promise.reject(new Error("Unused")),
-    getSnapshot: () => ({ checkingOut: false, status: "idle" }),
-    invalidate: () => undefined,
-    refresh: () => Promise.reject(new Error("Unused")),
-    select: () => undefined,
-    subscribe: () => () => undefined,
   },
 };
 

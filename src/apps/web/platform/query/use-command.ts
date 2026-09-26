@@ -44,6 +44,15 @@ export function commandKey(
   ];
 }
 
+export function commandFailure<Route extends RequestableEnvironmentHttpRoute>(
+  route: Route,
+  error: unknown,
+): CommandFailure<Route> {
+  return error instanceof CommandCancelled
+    ? error
+    : environmentRouteFailure(route, error);
+}
+
 export function useCommand<Route extends RequestableEnvironmentHttpRoute>(
   route: Route,
   { repository, ...options }: CommandOptions<Route> = {},

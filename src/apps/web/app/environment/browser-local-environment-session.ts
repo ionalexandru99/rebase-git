@@ -25,10 +25,6 @@ import type { RepositoryCatalogClient } from "#web/features/repository-catalog/r
 import { createRepositoryCatalogController } from "#web/features/repository-catalog/repository-catalog-controller";
 import type { RepositoryCatalogGateway } from "#web/features/repository-catalog/repository-catalog-controller.contract";
 import { createRepositoryHistoryGateway } from "#web/features/repository-history/transport/repository-history-gateway";
-import { createRepositoryRefsController } from "#web/features/repository-refs/index";
-import { repositoryRefsClient } from "#web/features/repository-refs/repository-refs-client";
-import type { RepositoryRefsController } from "#web/features/repository-refs/repository-refs-controller.contract";
-import { createRepositoryRefsGateway } from "#web/features/repository-refs/transport/repository-refs-gateway";
 
 type DesktopEnvironmentHost = Pick<
   DesktopHostBridge,
@@ -76,12 +72,6 @@ export function createBrowserLocalEnvironmentSession(
     runtime,
   );
   const repositoryHistory = createRepositoryHistoryGateway();
-  const repositoryRefs = createRepositoryRefsGateway(
-    repositoryRefsClient(requests),
-  );
-  const repositoryRefsController = createRepositoryRefsController(
-    repositoryRefs.gateway,
-  );
 
   return createLocalEnvironmentSession({
     controllers: {
@@ -92,30 +82,15 @@ export function createBrowserLocalEnvironmentSession(
       ),
       repositoryCatalog: repositoryCatalog.controller,
       repositoryHistory: repositoryHistory.gateway,
-      repositoryRefs: repositoryRefsController,
     },
     features: [
       { connect: repositoryHistory.connect },
-      connectedRepositoryRefs(repositoryRefs, repositoryRefsController),
       connectedRepositoryCatalog(repositoryCatalog),
     ],
     gateway,
     requests,
     runtime,
   });
-}
-
-function connectedRepositoryRefs(
-  refs: ReturnType<typeof createRepositoryRefsGateway>,
-  controller: RepositoryRefsController,
-): ConnectedFeature {
-  return {
-    connect: (connection) =>
-      refs
-        .connect(connection)
-        .pipe(Effect.andThen(Effect.sync(controller.invalidate))),
-    invalidate: controller.invalidate,
-  };
 }
 
 function connectedRepositoryCatalog(
