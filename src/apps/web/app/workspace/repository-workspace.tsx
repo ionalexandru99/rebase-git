@@ -8,6 +8,7 @@ import { useWorkspaceHistoryScope } from "#web/app/workspace/use-workspace-histo
 import { WorkspaceBranches } from "#web/app/workspace/workspace-branches";
 import { WorkspaceGraph } from "#web/app/workspace/workspace-graph";
 import { useCreateRefHere } from "#web/features/branches-sidebar/hooks/use-create-ref-here";
+import { MergeView } from "#web/features/merge-view/merge-view";
 import { OperationRecoveryNotice } from "#web/features/operation-recovery/components/operation-recovery-notice";
 import { useCatalogRepository } from "#web/features/repository-catalog/hooks/use-repository-catalog";
 import { PullButton } from "#web/features/repository-pull/components/pull-button";
@@ -56,7 +57,7 @@ function Workspace({
   readonly scope: RepositoryScope;
 }) {
   const [branchFocusRequest, setBranchFocusRequest] = useState(0);
-  const mergeView = useMergeViewRequest();
+  const mergeView = useMergeViewRequest(scope.worktreePath);
   const panelContents = useMemo(
     () => ({
       changes: (
@@ -102,31 +103,39 @@ function Workspace({
               refCommands={pull.commands}
             />
             <WorkspacePanel.Main>
-              {() => (
-                <WorkspaceGraph
-                  scope={scope}
-                  inspection={inspection}
-                  historyScope={historyScope}
-                  extraCommands={refCreation.commands}
-                  onAddHistoryRef={() =>
-                    setBranchFocusRequest((request) => request + 1)
-                  }
-                  toolbarActions={
-                    <>
-                      <PullButton
-                        pull={pull}
-                        activeBranch={activeBranch}
-                        incoming={incoming ?? 0}
-                      />
-                      <PushButton
-                        push={push}
-                        target={resolvePushTarget(refs, activeBranch)}
-                      />
-                      <WorkspacePanel.Toggle />
-                    </>
-                  }
-                />
-              )}
+              {() =>
+                mergeView.path !== null ? (
+                  <MergeView
+                    path={mergeView.path}
+                    onOpen={mergeView.open}
+                    onClose={mergeView.close}
+                  />
+                ) : (
+                  <WorkspaceGraph
+                    scope={scope}
+                    inspection={inspection}
+                    historyScope={historyScope}
+                    extraCommands={refCreation.commands}
+                    onAddHistoryRef={() =>
+                      setBranchFocusRequest((request) => request + 1)
+                    }
+                    toolbarActions={
+                      <>
+                        <PullButton
+                          pull={pull}
+                          activeBranch={activeBranch}
+                          incoming={incoming ?? 0}
+                        />
+                        <PushButton
+                          push={push}
+                          target={resolvePushTarget(refs, activeBranch)}
+                        />
+                        <WorkspacePanel.Toggle />
+                      </>
+                    }
+                  />
+                )
+              }
             </WorkspacePanel.Main>
             <WorkspacePanel.Pane contents={panelContents} />
           </WorkspacePanel.Group>
