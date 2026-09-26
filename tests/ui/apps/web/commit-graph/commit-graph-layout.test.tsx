@@ -1,5 +1,6 @@
-import { describe, expect, it, vi } from "vite-plus/test";
+import { describe, expect, it } from "vite-plus/test";
 import { userEvent } from "vite-plus/test/browser";
+import { waitForObservation } from "#tests-support/observation";
 import {
   history,
   historyReader,
@@ -115,7 +116,7 @@ describe("commit graph layout", () => {
           Number(getComputedStyle(tileRow).zIndex),
         );
       };
-      await vi.waitFor(assertCovered);
+      await waitForObservation(assertCovered);
       await row.getByRole("gridcell", { name: label }).click();
       assertCovered();
       await expect.element(row).toHaveAttribute("aria-expanded", "false");

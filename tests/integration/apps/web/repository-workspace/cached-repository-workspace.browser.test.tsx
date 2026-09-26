@@ -129,14 +129,14 @@ it("keeps restored refs restored through a branch write until a live read answer
     </RepositoryScopeProvider>,
     { environment: { environmentId, rpc }, queryClient },
   );
-  await vi.waitFor(() => expect(reads).toHaveLength(1));
+  await expect.poll(() => reads).toHaveLength(1);
   reads[0]?.reject(new Error("offline"));
   await expect
     .element(screen.getByRole("alert"))
     .toHaveTextContent("The Environment did not answer.");
 
   await screen.getByRole("button", { name: "Rename main" }).click();
-  await vi.waitFor(() => expect(reads).toHaveLength(2));
+  await expect.poll(() => reads).toHaveLength(2);
   await expect
     .element(screen.getByRole("status"))
     .toHaveTextContent("Restored feature, main");

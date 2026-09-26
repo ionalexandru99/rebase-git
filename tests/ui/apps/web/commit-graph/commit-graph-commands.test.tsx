@@ -53,7 +53,7 @@ describe("commit graph commands", () => {
     );
     const fetch = screen.getByRole("button", { name: "Fetch", exact: true });
     await fetch.click();
-    await vi.waitFor(() => expect(reader.fetch).toHaveBeenCalledOnce());
+    await expect.poll(() => reader.fetch).toHaveBeenCalledOnce();
     await expect.element(fetch).toBeEnabled();
   });
 

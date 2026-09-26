@@ -230,9 +230,7 @@ describe("branches sidebar", () => {
     const feature = tree.getByRole("treeitem", { name: "feature" });
     await feature.click({ button: "right" });
     await screen.getByRole("menuitem", { name: "Pull" }).click();
-    await vi.waitFor(() =>
-      expect(pulls.pulled).toHaveBeenLastCalledWith("feature"),
-    );
+    await expect.poll(() => pulls.pulled).toHaveBeenLastCalledWith("feature");
 
     await feature.click({ button: "right" });
     await expect
@@ -244,7 +242,7 @@ describe("branches sidebar", () => {
     tree.element().focus();
     await userEvent.keyboard("{Shift>}{F10}{/Shift}");
     await screen.getByRole("menuitem", { name: "Pull" }).click();
-    await vi.waitFor(() => expect(pulls.pulled).toHaveBeenCalledTimes(2));
+    await expect.poll(() => pulls.pulled).toHaveBeenCalledTimes(2);
   });
 
   it("adds and removes refs from history with pointer and keyboard", async () => {

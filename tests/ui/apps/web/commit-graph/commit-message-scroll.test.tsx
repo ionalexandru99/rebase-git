@@ -38,9 +38,7 @@ describe("commit message scrolling", () => {
     );
     message.element().focus();
     await userEvent.keyboard("{End}");
-    await vi.waitFor(() =>
-      expect(message.element().scrollLeft).toBeGreaterThan(0),
-    );
+    await expect.poll(() => message.element().scrollLeft).toBeGreaterThan(0);
     expect(getComputedStyle(message.element()).scrollbarWidth).toBe("none");
     expect(
       [graph, author, neighbor].map(
@@ -53,11 +51,11 @@ describe("commit message scrolling", () => {
       .toBeVisible();
     row.getByRole("button", { name: "Copy last-ref" }).element().focus();
     await userEvent.keyboard("{Enter}");
-    await vi.waitFor(() => expect(copy).toHaveBeenCalledWith("last-ref"));
+    await expect.poll(() => copy).toHaveBeenCalledWith("last-ref");
     message.element().focus();
     expect(screen.getByRole("grid").element().scrollLeft).toBe(0);
     await userEvent.keyboard("{Home}");
-    await vi.waitFor(() => expect(message.element().scrollLeft).toBe(0));
+    await expect.poll(() => message.element().scrollLeft).toBe(0);
     message.element().dispatchEvent(
       new WheelEvent("wheel", {
         deltaY: 120,
@@ -66,9 +64,7 @@ describe("commit message scrolling", () => {
         cancelable: true,
       }),
     );
-    await vi.waitFor(() =>
-      expect(message.element().scrollLeft).toBeGreaterThan(0),
-    );
+    await expect.poll(() => message.element().scrollLeft).toBeGreaterThan(0);
     await expect.element(row).toHaveAttribute("aria-expanded", "false");
     copy.mockRestore();
   });

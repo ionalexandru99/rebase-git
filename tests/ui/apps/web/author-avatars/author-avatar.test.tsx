@@ -31,7 +31,7 @@ describe("author avatar", () => {
         <AuthorAvatar commit={commit} />
       </AuthorAvatars>,
     );
-    await vi.waitFor(() => expect(resolve).toHaveBeenCalledOnce());
+    await expect.poll(() => resolve).toHaveBeenCalledOnce();
 
     await screen.rerender(
       <AuthorAvatars repository={{ owner: "alex", name: "rebase" }}>
@@ -56,12 +56,8 @@ describe("author avatar", () => {
     result.resolve(
       "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==",
     );
-    await vi.waitFor(() =>
-      expect(githubAvatarSource.resolve).toHaveBeenCalledOnce(),
-    );
-    await vi.waitFor(() =>
-      expect(document.querySelector("img")).not.toBeNull(),
-    );
+    await expect.poll(() => githubAvatarSource.resolve).toHaveBeenCalledOnce();
+    await expect.poll(() => document.querySelector("img")).not.toBeNull();
     document.querySelector("img")?.dispatchEvent(new Event("error"));
     await expect.element(screen.getByText("AI", { exact: true })).toBeVisible();
   });

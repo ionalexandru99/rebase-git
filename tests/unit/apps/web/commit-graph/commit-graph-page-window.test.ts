@@ -28,7 +28,7 @@ describe("commit graph page window", () => {
     );
     const window = createCommitGraphPageWindow(reader);
     const initial = window.loadInitial(query);
-    await vi.waitFor(() => expect(release).toBeDefined());
+    await expect.poll(() => release).toBeDefined();
     await expect(window.jumpToOid(oid(112))).resolves.toMatchObject({
       oid: oid(112),
       offset: 112,
@@ -146,7 +146,7 @@ describe("commit graph page window", () => {
     const window = createCommitGraphPageWindow(reader);
     await window.loadInitial(query);
     window.setViewport(0, 11);
-    await vi.waitFor(() => expect(window.getSnapshot().endOffset).toBe(200));
+    await expect.poll(() => window.getSnapshot().endOffset).toBe(200);
     expect(reader.read.mock.calls.map(([request]) => request.offset)).toEqual([
       0, 100,
     ]);
@@ -214,7 +214,7 @@ describe("commit graph page window", () => {
     reader.read.mockReturnValueOnce(pending.promise);
     const controller = new AbortController();
     const navigation = window.jumpToOid(oid(10), controller.signal);
-    await vi.waitFor(() => expect(reader.read).toHaveBeenCalledTimes(2));
+    await expect.poll(() => reader.read).toHaveBeenCalledTimes(2);
     controller.abort();
     pending.resolve(commits.slice(10));
     await expect(navigation).resolves.toBeUndefined();
@@ -309,10 +309,10 @@ describe("commit graph page window", () => {
       const pending = deferred<readonly RepositoryCommit[]>();
       reader.read.mockReturnValueOnce(pending.promise);
       window.setViewport(100, 139);
-      await vi.waitFor(() => expect(reader.read).toHaveBeenCalledTimes(3));
+      await expect.poll(() => reader.read).toHaveBeenCalledTimes(3);
       window.setViewport(0, last);
       pending.resolve(commits.slice(200));
-      await vi.waitFor(() => expect(window.getSnapshot().loading).toBe(false));
+      await expect.poll(() => window.getSnapshot().loading).toBe(false);
       expect(window.getSnapshot().pages.map((page) => page.offset)).toEqual([
         0, 100,
       ]);
@@ -330,7 +330,7 @@ describe("commit graph page window", () => {
     const pending = deferred<readonly RepositoryCommit[]>();
     reader.read.mockReturnValueOnce(pending.promise);
     const loading = window.appendOlder();
-    await vi.waitFor(() => expect(reader.read).toHaveBeenCalledTimes(3));
+    await expect.poll(() => reader.read).toHaveBeenCalledTimes(3);
     window.setViewport(100, 139);
     window.setViewport(0, 299);
     pending.resolve(commits.slice(200));
@@ -354,7 +354,7 @@ describe("commit graph page window", () => {
     reader.read.mockReturnValueOnce(pending.promise);
     const loading = window.prefetchOffset(5);
     const move = window.requestMove(6);
-    await vi.waitFor(() => expect(reader.read).toHaveBeenCalledTimes(3));
+    await expect.poll(() => reader.read).toHaveBeenCalledTimes(3);
     const epoch = window.getSnapshot().epoch;
 
     window.discard();
@@ -397,7 +397,7 @@ describe("commit graph page window", () => {
     await window.loadInitial(query);
     const initial = window.getSnapshot().pages[0];
     window.setViewport(0, 4);
-    await vi.waitFor(() => expect(window.getSnapshot().endOffset).toBe(10));
+    await expect.poll(() => window.getSnapshot().endOffset).toBe(10);
     expect(window.getSnapshot().pages[0]).toBe(initial);
     const rows = window.getSnapshot().pages.flatMap((page) => page.rows);
     expect(rows).toEqual(
@@ -497,7 +497,7 @@ describe("commit graph page window", () => {
     const first = window.requestMove(5);
     const last = window.requestMove(6);
     await expect(first).resolves.toBeUndefined();
-    await vi.waitFor(() => expect(reader.read).toHaveBeenCalledTimes(2));
+    await expect.poll(() => reader.read).toHaveBeenCalledTimes(2);
     pending.resolve(commits.slice(5, 10));
     await expect(last).resolves.toEqual({ oid: oid(6), offset: 6 });
     expect(reader.read).toHaveBeenCalledTimes(2);
@@ -554,7 +554,7 @@ describe("commit graph page window", () => {
     const pending = deferred<readonly RepositoryCommit[]>();
     reader.read.mockReturnValueOnce(pending.promise);
     const first = window.requestMove(5);
-    await vi.waitFor(() => expect(reader.read).toHaveBeenCalledTimes(2));
+    await expect.poll(() => reader.read).toHaveBeenCalledTimes(2);
     window.cancelNavigation();
     const latest = window.requestMove(7);
     await expect(first).resolves.toBeUndefined();

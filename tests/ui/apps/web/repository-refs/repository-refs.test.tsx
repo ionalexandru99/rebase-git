@@ -66,12 +66,12 @@ describe("repository refs", () => {
       .toHaveTextContent("On main");
 
     environment.publish([repositoryId]);
-    await vi.waitFor(() => expect(reads.pending()).toBe(1));
+    await expect.poll(() => reads.pending()).toBe(1);
     await screen.getByRole("button", { name: "Checkout feature" }).click();
     await expect
       .element(screen.getByRole("status"))
       .toHaveTextContent("On feature");
-    await vi.waitFor(() => expect(reads.pending()).toBe(2));
+    await expect.poll(() => reads.pending()).toBe(2);
     await reads.resolve(refs("main"));
     await reads.resolve(refs("feature"));
     await expect
@@ -139,7 +139,7 @@ describe("repository refs", () => {
       .toHaveTextContent("On main");
 
     await screen.getByRole("button", { name: "Checkout feature" }).click();
-    await vi.waitFor(() => expect(checkout).toHaveBeenCalledOnce());
+    await expect.poll(() => checkout).toHaveBeenCalledOnce();
     await screen.getByRole("button", { name: "Checkout release" }).click();
 
     expect(checkout).toHaveBeenCalledOnce();
@@ -245,7 +245,7 @@ async function refsEnvironment(
 function queuedReads() {
   const waiting: PromiseWithResolvers<RepositoryRefs>[] = [];
   const settle = async () => {
-    await vi.waitFor(() => expect(waiting.length).toBeGreaterThan(0));
+    await expect.poll(() => waiting.length).toBeGreaterThan(0);
     return waiting.shift();
   };
   return {

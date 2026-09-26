@@ -6,6 +6,7 @@ import {
 } from "@rebase/contracts";
 import { Effect } from "effect";
 import { describe, expect, it, vi } from "vite-plus/test";
+import { waitForObservation } from "#tests-support/observation";
 import {
   acquireSharedWorker,
   createBrowserRepositoryHistoryReader,
@@ -61,9 +62,9 @@ describe("history cache storage", () => {
       await reader.getCacheDiagnostics();
       expect(gateway.read).not.toHaveBeenCalled();
       await reader.manageCache("rebuild");
-      await vi.waitFor(() =>
-        expect(reader.getSnapshot().synchronization).toBe("complete"),
-      );
+      await expect
+        .poll(() => reader.getSnapshot().synchronization)
+        .toBe("complete");
       expect(gateway.synchronize).toHaveBeenCalledOnce();
       expect(gateway.read).not.toHaveBeenCalled();
       expect(
@@ -139,9 +140,9 @@ describe("history cache storage", () => {
     };
     try {
       await first.read(query);
-      await vi.waitFor(() =>
-        expect(first.getSnapshot().synchronization).toBe("complete"),
-      );
+      await expect
+        .poll(() => first.getSnapshot().synchronization)
+        .toBe("complete");
       await second.getRefTargets();
       const statuses: string[] = [];
       second.subscribe(() => statuses.push(second.getSnapshot().status));
@@ -254,7 +255,7 @@ describe("history cache storage", () => {
       await expect(first.manageCache("clear")).rejects.toBeInstanceOf(
         RepositoryHistoryStorageUnavailable,
       );
-      await vi.waitFor(() => expect(second.getSnapshot().status).toBe("error"));
+      await expect.poll(() => second.getSnapshot().status).toBe("error");
       const query = {
         limit: 100,
         order: "topological" as const,
@@ -323,7 +324,7 @@ describe("history cache storage", () => {
       roots: fixture.roots,
     };
     await first.read(query);
-    await vi.waitFor(() => {
+    await waitForObservation(() => {
       expect(gateway.synchronize).toHaveBeenCalledOnce();
       expect(first.getSnapshot().synchronization).toBe("complete");
     });
@@ -349,9 +350,9 @@ describe("history cache storage", () => {
     );
     const clearedRevision = second.getSnapshot().historyRevision;
     await first.manageCache("rebuild");
-    await vi.waitFor(() =>
-      expect(second.getSnapshot().synchronization).toBe("complete"),
-    );
+    await expect
+      .poll(() => second.getSnapshot().synchronization)
+      .toBe("complete");
     expect(gateway.read).toHaveBeenCalledOnce();
     expect(second.getSnapshot().historyRevision).toBeGreaterThan(
       clearedRevision,
@@ -374,11 +375,11 @@ describe("history cache storage", () => {
     const second = createBrowserRepositoryHistoryReader(options);
     await second.getRefTargets();
     await first.manageCache("remove");
-    await vi.waitFor(async () => {
-      await expect(second.getCommitSummaries([])).rejects.toBeInstanceOf(
+    await waitForObservation(() =>
+      expect(second.getCommitSummaries([])).rejects.toBeInstanceOf(
         RepositoryHistoryOffline,
-      );
-    });
+      ),
+    );
     expect(
       await readStoredRepositoryHistoryState(
         fixture.environmentId,
@@ -415,16 +416,16 @@ describe("history cache storage", () => {
       order: "topological",
       roots: fixture.roots,
     });
-    await vi.waitFor(() =>
-      expect(reader.getSnapshot().synchronization).toBe("complete"),
-    );
+    await expect
+      .poll(() => reader.getSnapshot().synchronization)
+      .toBe("complete");
     gateway.read.mockRejectedValueOnce(new RepositoryHistoryOffline());
     await reader.manageCache("rebuild");
-    await vi.waitFor(() => expect(reader.getSnapshot().status).toBe("error"));
+    await expect.poll(() => reader.getSnapshot().status).toBe("error");
     await reader.manageCache("rebuild");
-    await vi.waitFor(() =>
-      expect(reader.getSnapshot().synchronization).toBe("complete"),
-    );
+    await expect
+      .poll(() => reader.getSnapshot().synchronization)
+      .toBe("complete");
     reader.close();
   });
 
@@ -472,12 +473,12 @@ describe("history cache storage", () => {
         reader.read({ limit: 100, order: "topological", roots: fixture.roots }),
       ).resolves.toEqual(fixture.page.commits);
       expect(gateway.read).toHaveBeenCalledOnce();
-      await vi.waitFor(() =>
-        expect(reader.getSnapshot()).toMatchObject({
+      await expect
+        .poll(() => reader.getSnapshot())
+        .toMatchObject({
           status: "ready",
           error: expect.any(RepositoryHistoryStorageUnavailable),
-        }),
-      );
+        });
     } finally {
       reader.close();
       worker.port.close();

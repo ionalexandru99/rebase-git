@@ -37,7 +37,7 @@ describe("commit metadata", () => {
     await expect.element(copy).toHaveTextContent(details.oid.slice(0, 8));
     (copy.element() as HTMLButtonElement).focus();
     await userEvent.keyboard("{Enter}");
-    await vi.waitFor(() => expect(write).toHaveBeenCalledWith(details.oid));
+    await expect.poll(() => write).toHaveBeenCalledWith(details.oid);
     await expect
       .element(screen.getByRole("status"))
       .toHaveTextContent(`Copied ${details.oid}`);

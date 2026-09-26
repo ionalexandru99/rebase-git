@@ -116,15 +116,13 @@ describe("durable history counts", () => {
         order: "topological",
         roots: [{ name: "main", type: "branch", oid: tip.oid }],
       });
-      await vi.waitFor(() =>
-        expect(gateway.synchronize).toHaveBeenCalledOnce(),
-      );
-      await vi.waitFor(() =>
-        expect(reader.getSnapshot()).toMatchObject({
+      await expect.poll(() => gateway.synchronize).toHaveBeenCalledOnce();
+      await expect
+        .poll(() => reader.getSnapshot())
+        .toMatchObject({
           synchronization: "complete",
           synchronizedCommitCount: 3,
-        }),
-      );
+        });
     } finally {
       reader.close();
     }

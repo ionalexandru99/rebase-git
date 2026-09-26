@@ -49,7 +49,7 @@ describe("local Environment session", () => {
     } finally {
       session.stop();
     }
-    await vi.waitFor(() => expect(feature.released).toHaveBeenCalledOnce());
+    await expect.poll(() => feature.released).toHaveBeenCalledOnce();
     expect(release).toHaveBeenCalledOnce();
   });
 
@@ -69,7 +69,7 @@ describe("local Environment session", () => {
       undefined,
     );
     session.stop();
-    await vi.waitFor(() => expect(connection.close).toHaveBeenCalledOnce());
+    await expect.poll(() => connection.close).toHaveBeenCalledOnce();
   });
 
   it.each(["InvalidGrant", "RevokedGrant"] as const)(
@@ -266,7 +266,7 @@ async function expectState(
   getSnapshot: () => LocalEnvironmentSessionState,
   tag: LocalEnvironmentSessionState["_tag"],
 ) {
-  await vi.waitFor(() => expect(getSnapshot()._tag).toBe(tag));
+  await expect.poll(() => getSnapshot()._tag).toBe(tag);
 }
 
 function deferred<T>() {

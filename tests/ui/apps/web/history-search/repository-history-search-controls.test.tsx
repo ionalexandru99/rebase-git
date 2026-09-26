@@ -44,19 +44,16 @@ describe("history search controls", () => {
     const element = matches.element();
     element.scrollTop = element.scrollHeight;
     element.dispatchEvent(new Event("scroll"));
-    await vi.waitFor(() => expect(reader.search).toHaveBeenCalledTimes(2));
+    await expect.poll(() => reader.search).toHaveBeenCalledTimes(2);
     expect(onNavigate).not.toHaveBeenCalled();
     element.scrollTop = element.scrollHeight;
     element.dispatchEvent(new Event("scroll"));
     await page
       .getByRole("button", { name: /Repair shallow history 21/ })
       .click();
-    await vi.waitFor(() =>
-      expect(onNavigate).toHaveBeenCalledWith(
-        commit(21).oid,
-        expect.any(AbortSignal),
-      ),
-    );
+    await expect
+      .poll(() => onNavigate)
+      .toHaveBeenCalledWith(commit(21).oid, expect.any(AbortSignal));
   });
 
   it("keeps one request in Strict Mode and transfers the query on repository switching", async () => {
@@ -80,7 +77,7 @@ describe("history search controls", () => {
       </StrictMode>,
     );
     await page.getByRole("searchbox").fill("history");
-    await vi.waitFor(() => expect(search).toHaveBeenCalledTimes(1));
+    await expect.poll(() => search).toHaveBeenCalledTimes(1);
     await screen.rerender(
       <StrictMode>
         <RepositoryHistorySearchControls
@@ -90,7 +87,7 @@ describe("history search controls", () => {
         />
       </StrictMode>,
     );
-    await vi.waitFor(() => expect(search).toHaveBeenCalledTimes(2));
+    await expect.poll(() => search).toHaveBeenCalledTimes(2);
     expect(signals.map((signal) => signal.aborted)).toEqual([true, false]);
     await expect.element(page.getByRole("searchbox")).toHaveValue("history");
     await screen.unmount();
@@ -162,43 +159,28 @@ describe("history search controls", () => {
       .element(page.getByRole("button", { name: /Repair shallow history 1/ }))
       .toBeVisible();
     await userEvent.keyboard("{Enter}");
-    await vi.waitFor(() =>
-      expect(onNavigate).toHaveBeenLastCalledWith(
-        commit(1).oid,
-        expect.any(AbortSignal),
-      ),
-    );
+    await expect
+      .poll(() => onNavigate)
+      .toHaveBeenLastCalledWith(commit(1).oid, expect.any(AbortSignal));
     await page
       .getByRole("button", { name: /Repair shallow history 2/ })
       .click();
-    await vi.waitFor(() =>
-      expect(onNavigate).toHaveBeenLastCalledWith(
-        commit(2).oid,
-        expect.any(AbortSignal),
-      ),
-    );
+    await expect
+      .poll(() => onNavigate)
+      .toHaveBeenLastCalledWith(commit(2).oid, expect.any(AbortSignal));
     await input.click();
     await userEvent.keyboard("{Shift>}{Enter}{/Shift}");
-    await vi.waitFor(() =>
-      expect(onNavigate).toHaveBeenLastCalledWith(
-        commit(1).oid,
-        expect.any(AbortSignal),
-      ),
-    );
+    await expect
+      .poll(() => onNavigate)
+      .toHaveBeenLastCalledWith(commit(1).oid, expect.any(AbortSignal));
     await userEvent.keyboard("{Enter}");
-    await vi.waitFor(() =>
-      expect(onNavigate).toHaveBeenLastCalledWith(
-        commit(2).oid,
-        expect.any(AbortSignal),
-      ),
-    );
+    await expect
+      .poll(() => onNavigate)
+      .toHaveBeenLastCalledWith(commit(2).oid, expect.any(AbortSignal));
     await userEvent.keyboard("{Enter}");
-    await vi.waitFor(() =>
-      expect(onNavigate).toHaveBeenLastCalledWith(
-        commit(3).oid,
-        expect.any(AbortSignal),
-      ),
-    );
+    await expect
+      .poll(() => onNavigate)
+      .toHaveBeenLastCalledWith(commit(3).oid, expect.any(AbortSignal));
     expect(reader.search).toHaveBeenLastCalledWith(
       { text: "history", cursor: "next", limit: 20 },
       expect.any(AbortSignal),
@@ -237,7 +219,7 @@ describe("history search controls", () => {
       />,
     );
     await page.getByRole("searchbox").fill("old");
-    await vi.waitFor(() => expect(reader.search).toHaveBeenCalledTimes(1));
+    await expect.poll(() => reader.search).toHaveBeenCalledTimes(1);
     const signal = reader.search.mock.calls[0]?.[1];
     await expect
       .element(page.getByRole("status"))
@@ -269,7 +251,7 @@ describe("history search controls", () => {
         onNavigate={onNavigate}
       />,
     );
-    await vi.waitFor(() => expect(reader.search).toHaveBeenCalledTimes(3));
+    await expect.poll(() => reader.search).toHaveBeenCalledTimes(3);
   });
 
   it("preserves the selected OID across content updates without navigating again", async () => {
@@ -349,7 +331,7 @@ describe("history search controls", () => {
           onNavigate={onNavigate}
         />,
       );
-      await vi.waitFor(() => expect(reader.search).toHaveBeenCalledTimes(5));
+      await expect.poll(() => reader.search).toHaveBeenCalledTimes(5);
       if (selectedPage === 4) {
         await expect
           .element(

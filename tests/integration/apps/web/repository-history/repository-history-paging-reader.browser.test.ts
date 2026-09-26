@@ -54,9 +54,7 @@ describe("progressive browser history paging", () => {
       });
       try {
         expect(await reader.read(query)).toEqual(commits.slice(0, 100));
-        await vi.waitFor(() =>
-          expect(gateway.synchronize).toHaveBeenCalledOnce(),
-        );
+        await expect.poll(() => gateway.synchronize).toHaveBeenCalledOnce();
         expect(reader.getSnapshot().synchronization).toBe("syncing");
 
         const secondQuery = { ...query, offset: 100 };
