@@ -39,11 +39,13 @@ import {
 } from "#web-ui/components/ui/resizable";
 import { WorkspacePanel } from "#web-ui/features/workspace-panel/index";
 import {
+  type Environment,
   EnvironmentProvider,
   useEnvironment,
 } from "#web-ui/platform/query/environment-context";
 
 const localEnvironmentId = "local-environment";
+const noCapabilities: Environment["capabilities"] = [];
 const projectSidebarSize = {
   collapsed: "3rem",
   default: "16rem",
@@ -73,6 +75,7 @@ export function ApplicationShell(props: ApplicationShellProps): JSX.Element {
         : lastConnectedEnvironmentId.current;
   const connected = sessionState._tag === "Connected";
   const rpc = connected ? sessionState.rpc : undefined;
+  const capabilities = connected ? sessionState.capabilities : noCapabilities;
   const readable =
     connected && sessionState.accessCapabilities.includes("repository.read");
   const writable =
@@ -82,6 +85,7 @@ export function ApplicationShell(props: ApplicationShellProps): JSX.Element {
       environmentId,
       requests: session.requests,
       rpc,
+      capabilities,
       changes: session.changes,
       connected,
       readable,
@@ -91,6 +95,7 @@ export function ApplicationShell(props: ApplicationShellProps): JSX.Element {
       environmentId,
       session.requests,
       rpc,
+      capabilities,
       session.changes,
       connected,
       readable,

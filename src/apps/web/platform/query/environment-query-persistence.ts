@@ -3,10 +3,10 @@ import { createAsyncStoragePersister } from "@tanstack/query-async-storage-persi
 import type { Query } from "@tanstack/react-query";
 import type {
   PersistedClient,
-  Persister,
   PersistQueryClientOptions,
 } from "@tanstack/react-query-persist-client";
 import { createStore, del, get, set } from "idb-keyval";
+import { persistOnlyChanges } from "#web/platform/query/persist-only-changes";
 
 type EnvironmentQueryPersistence = Omit<
   PersistQueryClientOptions,
@@ -38,29 +38,6 @@ export function createEnvironmentQueryPersistence(): EnvironmentQueryPersistence
 
 function persistedQuery(query: Query) {
   return query.meta?.persist === true && query.state.data !== undefined;
-}
-
-function persistOnlyChanges(persister: Persister): Persister {
-  let saved: string | undefined;
-  return {
-    persistClient: (client) => {
-      const version = persistedVersion(client);
-      if (version === saved) return;
-      saved = version;
-      return persister.persistClient(client);
-    },
-    restoreClient: persister.restoreClient,
-    removeClient: () => {
-      saved = undefined;
-      return persister.removeClient();
-    },
-  };
-}
-
-function persistedVersion(client: PersistedClient) {
-  return client.clientState.queries
-    .map(({ queryHash, state }) => `${queryHash}@${state.dataUpdatedAt}`)
-    .join("\n");
 }
 
 function unconfirmedClient(client: PersistedClient): PersistedClient {

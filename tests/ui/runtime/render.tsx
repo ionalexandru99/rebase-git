@@ -1,3 +1,4 @@
+import { currentEnvironmentCapabilities } from "@rebase/contracts";
 import { type QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Layer, ManagedRuntime } from "effect";
 import type { ReactNode } from "react";
@@ -66,6 +67,7 @@ export function testEnvironment(
     environmentId: "00000000-0000-4000-8000-000000000100",
     requests: fakeRequests(idleOperation),
     rpc: undefined,
+    capabilities: currentEnvironmentCapabilities,
     changes: unchanged,
     connected: true,
     readable: true,

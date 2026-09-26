@@ -348,6 +348,7 @@ async function liveFixture(initial: RepositoryOperation) {
         environmentId: "environment",
         requests,
         rpc: undefined,
+        capabilities: [],
         changes,
         connected,
         readable: true,

@@ -1,4 +1,5 @@
 import {
+  currentEnvironmentCapabilities,
   encodeRepositoryHistoryBatch,
   encodeRepositoryHistoryPage,
   type RepositoryCommit,
@@ -328,6 +329,7 @@ async function connectedSession() {
   let state: ReturnType<LocalEnvironmentSession["getSnapshot"]> = {
     _tag: "Connected",
     accessCapabilities: [],
+    capabilities: currentEnvironmentCapabilities,
     environmentId,
     rpc,
   };

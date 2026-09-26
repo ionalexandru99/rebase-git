@@ -6,6 +6,7 @@ import {
   persistQueryClientSave,
 } from "@tanstack/react-query-persist-client";
 import { expect, it, vi } from "vite-plus/test";
+import { repositoryScope } from "#tests-ui/apps/web/repository-scope/repository-scope-fixture";
 import { fakeRpc } from "#tests-ui/runtime/fake-rpc";
 import { render } from "#tests-ui/runtime/render";
 import {
@@ -15,7 +16,11 @@ import {
 } from "#web/features/commit-graph/index";
 import { storeRepositoryHistoryPage } from "#web/features/repository-history/replica/repository-history-store";
 import { RepositoryHistoryOffline } from "#web/features/repository-history/repository-history-reader.contract";
-import { useRepositoryRefs } from "#web/features/repository-refs/index";
+import {
+  useApplyToRefs,
+  useRepositoryRefs,
+} from "#web/features/repository-refs/index";
+import { RepositoryScopeProvider } from "#web/features/repository-scope/index";
 import { createEnvironmentQueryClient } from "#web/platform/query/environment-query-client";
 import { createEnvironmentQueryPersistence } from "#web/platform/query/environment-query-persistence";
 import { RepositoryWorkspace } from "#web-ui/app/workspace/repository-workspace";
@@ -98,6 +103,51 @@ it("keeps restored refs unconfirmed until a live read answers", async () => {
   await expect
     .element(screen.getByRole("status"))
     .toHaveTextContent("Live feature, main");
+});
+
+it("keeps restored refs restored through a branch write until a live read answers", async () => {
+  const environmentId = crypto.randomUUID();
+  const refs = repositoryRefs();
+  const logicalId = refs.logicalRepositoryId ?? "";
+  const queryClient = await restoredRefs(environmentId, logicalId, refs);
+  const reads: PromiseWithResolvers<RepositoryRefs>[] = [];
+  const rpc = await fakeRpc(() => {
+    const read = Promise.withResolvers<RepositoryRefs>();
+    reads.push(read);
+    return read.promise;
+  });
+  const screen = await render(
+    <RepositoryScopeProvider
+      scope={repositoryScope({
+        repositoryId: refs.repositoryId,
+        logicalRepositoryId: logicalId,
+        worktreePath: "/feature",
+      })}
+    >
+      <RefsProbe
+        logicalRepositoryId={logicalId}
+        repositoryId={refs.repositoryId}
+      />
+      <RenameMain />
+    </RepositoryScopeProvider>,
+    { environment: { environmentId, rpc }, queryClient },
+  );
+  await vi.waitFor(() => expect(reads).toHaveLength(1));
+  reads[0]?.reject(new Error("offline"));
+  await expect
+    .element(screen.getByRole("alert"))
+    .toHaveTextContent("The Environment did not answer.");
+
+  await screen.getByRole("button", { name: "Rename main" }).click();
+  await vi.waitFor(() => expect(reads).toHaveLength(2));
+  await expect
+    .element(screen.getByRole("status"))
+    .toHaveTextContent("Restored feature, main");
+
+  reads[1]?.resolve(renameMain(refs));
+  await expect
+    .element(screen.getByRole("status"))
+    .toHaveTextContent("Live feature, trunk");
 });
 
 it.each(["Automatic", "Custom"] as const)(
@@ -210,6 +260,24 @@ function RefsProbe({
       </button>
     </div>
   );
+}
+
+function RenameMain() {
+  const applyToRefs = useApplyToRefs();
+  return (
+    <button type="button" onClick={() => void applyToRefs(renameMain)}>
+      Rename main
+    </button>
+  );
+}
+
+function renameMain(refs: RepositoryRefs): RepositoryRefs {
+  return {
+    ...refs,
+    branches: refs.branches.map((branch) =>
+      branch.name === "main" ? { ...branch, name: "trunk" } : branch,
+    ),
+  };
 }
 
 async function restoredRefs(

@@ -146,6 +146,7 @@ function maintainConnection(
                 _tag: "Connected",
                 environmentId: active.negotiated.environmentId,
                 accessCapabilities: active.negotiated.accessCapabilities ?? [],
+                capabilities: active.negotiated.capabilities,
                 rpc: active.rpc,
               }),
             ),

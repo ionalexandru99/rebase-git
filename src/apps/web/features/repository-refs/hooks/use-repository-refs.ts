@@ -1,18 +1,19 @@
 import type { EnvironmentRpcClient, RepositoryRefs } from "@rebase/contracts";
 import { environmentResponseError } from "@rebase/environment-client";
-import {
-  type QueryClient,
-  useQuery,
-  useQueryClient,
-} from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback } from "react";
 import { describeRefsReadFailure } from "#web/features/repository-refs/refs-messages";
 import { repositoryRefsKey } from "#web/features/repository-refs/repository-refs-query";
+import { hasEnvironmentCapability } from "#web/platform/environment/environment-capabilities";
 import {
   type RepositoryRefsReadFailure,
   readRepositoryRefs,
 } from "#web/platform/environment/rpc/read-repository-refs";
-import { useEnvironment } from "#web-ui/platform/query/environment-context";
+import { hasLiveData } from "#web/platform/query/live-query-data";
+import {
+  type Environment,
+  useEnvironment,
+} from "#web-ui/platform/query/environment-context";
 
 export interface RepositoryRefsRead {
   readonly refs: RepositoryRefs | undefined;
@@ -26,7 +27,9 @@ export function useRepositoryRefs(
   repositoryId: string | undefined,
   logicalRepositoryId: string | undefined,
 ): RepositoryRefsRead {
-  const { environmentId, rpc } = useEnvironment();
+  const environment = useEnvironment();
+  const { environmentId, rpc } = environment;
+  const refsRpc = servesRefs(environment) ? rpc : undefined;
   const queryClient = useQueryClient();
   const queryKey = repositoryRefsKey(environmentId, logicalRepositoryId);
   const query = useQuery<
@@ -36,7 +39,7 @@ export function useRepositoryRefs(
     ReturnType<typeof repositoryRefsKey>
   >({
     queryKey,
-    queryFn: ({ signal }) => readRefs(rpc, repositoryId, signal),
+    queryFn: ({ signal }) => readRefs(refsRpc, repositoryId, signal),
     enabled:
       rpc !== undefined &&
       environmentId !== undefined &&
@@ -60,9 +63,7 @@ export function useRepositoryRefs(
   const retry = useCallback(() => void refetch(), [refetch]);
   return {
     refs: query.data,
-    restored:
-      query.data !== undefined &&
-      !confirmedLive(queryClient, queryKey, query.dataUpdatedAt),
+    restored: query.dataUpdatedAt > 0 && !hasLiveData(queryClient, queryKey),
     loading:
       query.data === undefined && !query.isError && repositoryId !== undefined,
     error: query.isError ? describeRefsReadFailure(query.error) : null,
@@ -80,13 +81,9 @@ function readRefs(
   return readRepositoryRefs(rpc, repositoryId, signal);
 }
 
-function confirmedLive(
-  queryClient: QueryClient,
-  queryKey: ReturnType<typeof repositoryRefsKey>,
-  dataUpdatedAt: number,
-) {
+function servesRefs(environment: Environment) {
   return (
-    dataUpdatedAt > 0 &&
-    (queryClient.getQueryState(queryKey)?.dataUpdateCount ?? 0) > 0
+    hasEnvironmentCapability(environment, "json-fragmentation") &&
+    hasEnvironmentCapability(environment, "repository-refs")
   );
 }

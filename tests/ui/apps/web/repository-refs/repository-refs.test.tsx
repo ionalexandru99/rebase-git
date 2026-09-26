@@ -1,5 +1,6 @@
 import {
   type CheckoutRepositoryRef,
+  currentEnvironmentCapabilities,
   type RepositoryCheckedOut,
   type RepositoryRefs,
   RepositoryRefsHttpApi,
@@ -18,6 +19,7 @@ import { useRefActivation } from "#web/features/repository-refs/hooks/use-ref-ac
 import { useRepositoryRefs } from "#web/features/repository-refs/hooks/use-repository-refs";
 import { RepositoryScopeProvider } from "#web/features/repository-scope/index";
 import type { EnvironmentChangeListener } from "#web/platform/environment/environment-protocol.contract";
+import type { Environment } from "#web-ui/platform/query/environment-context";
 
 const repositoryId = "00000000-0000-4000-8000-000000000001";
 const mainPath = "/repo";
@@ -105,6 +107,24 @@ describe("repository refs", () => {
       .toHaveTextContent("The Environment did not answer.");
   });
 
+  it("does not read refs from an environment that did not negotiate them", async () => {
+    const readRefs = vi.fn(async () => refs("main"));
+    const environment = await refsEnvironment(readRefs);
+    const screen = await renderRefs({
+      value: {
+        ...environment.value,
+        capabilities: currentEnvironmentCapabilities.filter(
+          ({ name }) => name !== "repository-refs",
+        ),
+      },
+    });
+
+    await expect
+      .element(screen.getByRole("alert"))
+      .toHaveTextContent("The Environment did not answer.");
+    expect(readRefs).not.toHaveBeenCalled();
+  });
+
   it("ignores a second checkout while one is in flight", async () => {
     const reads = queuedReads();
     const checkout = vi.fn(
@@ -180,7 +200,7 @@ function Refs({
 }
 
 function renderRefs(
-  environment: Awaited<ReturnType<typeof refsEnvironment>>,
+  environment: { readonly value: Partial<Environment> },
   switchWorktree: (worktreePath: string) => void = () => undefined,
 ) {
   return render(

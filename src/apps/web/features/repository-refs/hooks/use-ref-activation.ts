@@ -1,5 +1,5 @@
 import type { RepositoryRefTarget } from "@rebase/contracts";
-import { useCallback } from "react";
+import { useCallback, useRef } from "react";
 import { resolveRefActivation } from "#web/features/repository-refs/activate-repository-ref";
 import { useCheckout } from "#web/features/repository-refs/hooks/use-checkout";
 import type { RepositoryRefsRead } from "#web/features/repository-refs/hooks/use-repository-refs";
@@ -18,26 +18,41 @@ export function useRefActivation(
 ): RefActivation {
   const scope = useRepositoryScope();
   const checkout = useCheckout();
-  const { isPending, mutate } = checkout;
+  const { mutate } = checkout;
+  const checkingOut = useRef(false);
   const select = useCallback(
     (target: RepositoryRefTarget) => {
-      if (scope === undefined || refs === undefined || restored || isPending)
+      if (
+        scope === undefined ||
+        refs === undefined ||
+        restored ||
+        checkingOut.current
+      )
         return;
       const activation = resolveRefActivation(refs, scope.worktreePath, target);
       if (activation._tag === "SwitchWorktree")
         switchWorktree(activation.worktreePath);
-      else if (activation._tag === "Checkout")
-        mutate({
-          repositoryId: scope.repositoryId,
-          worktreePath: scope.worktreePath,
-          target: activation.target,
-        });
+      else if (activation._tag === "Checkout") {
+        checkingOut.current = true;
+        mutate(
+          {
+            repositoryId: scope.repositoryId,
+            worktreePath: scope.worktreePath,
+            target: activation.target,
+          },
+          {
+            onSettled: () => {
+              checkingOut.current = false;
+            },
+          },
+        );
+      }
     },
-    [isPending, mutate, refs, restored, scope, switchWorktree],
+    [mutate, refs, restored, scope, switchWorktree],
   );
   return {
     select,
-    checkingOut: isPending,
+    checkingOut: checkout.isPending,
     error: checkout.isError ? describeCheckoutFailure(checkout.error) : null,
   };
 }
