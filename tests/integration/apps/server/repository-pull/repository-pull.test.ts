@@ -134,7 +134,7 @@ describe("fast-forward pull", () => {
     });
 
     expect(await git(linked, "rev-parse", "HEAD")).toBe(incoming);
-    expect(await readFile(join(linked, "other.txt"), "utf8")).toBe("remote\n");
+    expect(await readLines(join(linked, "other.txt"))).toBe("remote\n");
     expect(await git(f.repositoryPath, "branch", "--show-current")).toBe(
       "main",
     );
@@ -197,6 +197,10 @@ describe("fast-forward pull", () => {
     });
   });
 });
+
+async function readLines(path: string) {
+  return (await readFile(path, "utf8")).replaceAll("\r\n", "\n");
+}
 
 async function fixture() {
   const root = await realpath(await mkdtemp(join(tmpdir(), "rebase pull ")));
