@@ -16,6 +16,7 @@ const defaultSettings: DesktopUpdateSettings = {
 export function createApplicationUpdateSettingsStore(
   path: string,
 ): ApplicationUpdateSettingsStore {
+  let pendingWrite: Promise<void> = Promise.resolve();
   return {
     read: async () => {
       try {
@@ -32,18 +33,24 @@ export function createApplicationUpdateSettingsStore(
         throw error;
       }
     },
-    write: async (settings) => {
-      await mkdir(dirname(path), { recursive: true });
-      const temporaryPath = `${path}.${randomUUID()}.tmp`;
-      try {
-        await writeFile(temporaryPath, JSON.stringify(settings), "utf8");
-        await rename(temporaryPath, path);
-      } catch (error) {
-        await rm(temporaryPath, { force: true });
-        throw error;
-      }
+    write: (settings) => {
+      const written = pendingWrite.then(() => writeAtomically(path, settings));
+      pendingWrite = written.catch(() => undefined);
+      return written;
     },
   };
+}
+
+async function writeAtomically(path: string, settings: DesktopUpdateSettings) {
+  await mkdir(dirname(path), { recursive: true });
+  const temporaryPath = `${path}.${randomUUID()}.tmp`;
+  try {
+    await writeFile(temporaryPath, JSON.stringify(settings), "utf8");
+    await rename(temporaryPath, path);
+  } catch (error) {
+    await rm(temporaryPath, { force: true });
+    throw error;
+  }
 }
 
 function isMissingFile(error: unknown): error is NodeJS.ErrnoException {

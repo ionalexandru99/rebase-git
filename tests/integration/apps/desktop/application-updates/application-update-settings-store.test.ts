@@ -25,7 +25,7 @@ describe("application update settings store", () => {
 
     await Promise.all(settings.map(store.write));
 
-    expect(settings).toContainEqual(await store.read());
+    expect(await store.read()).toEqual(settings.at(-1));
     expect(JSON.parse(await readFile(path, "utf8"))).toBeDefined();
     expect(await readdir(directory)).toEqual(["update-settings.json"]);
   });
