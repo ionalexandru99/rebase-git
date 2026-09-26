@@ -1,15 +1,13 @@
 import { IconAlertCircle, IconCircleFilled } from "@tabler/icons-react";
 import { type ReactNode, useEffect, useRef } from "react";
-import {
-  ErrorNotification,
-  PersistentNotification,
-} from "#web/features/notifications/index";
+import { Button } from "#web/components/ui/button";
+import { ErrorNotification } from "#web/features/notifications/components/error-notification";
+import { PersistentNotification } from "#web/features/notifications/components/persistent-notification";
 import type {
   ForcePushReview,
   Push,
 } from "#web/features/repository-push/hooks/use-push";
 import { destinationName } from "#web/features/repository-push/resolve-push-target";
-import { Button } from "#web-ui/components/ui/button";
 
 export function PushNotice({ push }: { readonly push: Push }) {
   if (push.running !== null)

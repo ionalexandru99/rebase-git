@@ -4,7 +4,7 @@ import type {
 } from "#web/features/commit-graph/commit-graph.contract";
 import { createCommitGraphPageWindow } from "#web/features/commit-graph/paging/commit-graph-page-window";
 import { commitGraphQuery } from "#web/features/commit-graph/paging/commit-graph-query";
-import type { RepositoryHistoryQuery } from "#web/features/repository-history/index";
+import type { RepositoryHistoryQuery } from "#web/features/repository-history/repository-history-reader.contract";
 
 export function openCommitGraphHistory(
   reader: CommitGraphReader,

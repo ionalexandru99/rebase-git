@@ -4,6 +4,9 @@
     "jsx": "react-jsx",
     "lib": ["ES2024", "DOM", "DOM.Iterable"],
     "outDir": "./dist/types",
+    "paths": {
+      "#web/*": ["./*.ts", "./*.tsx"]
+    },
     "rootDir": ".",
     "skipLibCheck": true,
     "tsBuildInfoFile": "./dist/types/tsconfig.tsbuildinfo",

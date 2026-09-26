@@ -1,9 +1,9 @@
 import type { RemoteBranch } from "@rebase/contracts";
+import { DeleteBranchConfirmation } from "#web/features/branches-sidebar/branch-editing/components/delete-branch-confirmation";
+import { DeletedBranchNotification } from "#web/features/branches-sidebar/branch-editing/components/deleted-branch-notification";
+import { UpstreamPicker } from "#web/features/branches-sidebar/branch-editing/components/upstream-picker";
 import type { BranchEditing } from "#web/features/branches-sidebar/branch-editing/hooks/use-branch-editing";
-import { DeleteBranchConfirmation } from "#web-ui/features/branches-sidebar/branch-editing/components/delete-branch-confirmation";
-import { DeletedBranchNotification } from "#web-ui/features/branches-sidebar/branch-editing/components/deleted-branch-notification";
-import { UpstreamPicker } from "#web-ui/features/branches-sidebar/branch-editing/components/upstream-picker";
-import { rowElementId } from "#web-ui/features/branches-sidebar/components/branches-sidebar-rows";
+import { rowElementId } from "#web/features/branches-sidebar/components/branches-sidebar-rows";
 
 export function BranchEditingStatus({
   editing,

@@ -22,10 +22,10 @@ import {
   keyboardRepositoryItems,
   recentRepositoryItems,
 } from "#web/features/open-project/open-project-state";
-import { OpenProjectToolbar } from "#web-ui/features/open-project/open-project-toolbar";
-import { RecentRepositories } from "#web-ui/features/open-project/recent-repositories";
-import { RepositoryEnvironmentGroup } from "#web-ui/features/open-project/repository-environment-group";
-import { openProjectItemId } from "#web-ui/features/open-project/repository-row";
+import { OpenProjectToolbar } from "#web/features/open-project/open-project-toolbar";
+import { RecentRepositories } from "#web/features/open-project/recent-repositories";
+import { RepositoryEnvironmentGroup } from "#web/features/open-project/repository-environment-group";
+import { openProjectItemId } from "#web/features/open-project/repository-row";
 
 export function OpenProjectScreen({
   browseAvailable,

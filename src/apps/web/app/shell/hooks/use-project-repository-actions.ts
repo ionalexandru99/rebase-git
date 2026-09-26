@@ -9,19 +9,21 @@ import {
   useMemo,
   useState,
 } from "react";
-import type { OpenProjectRepository } from "#web/features/open-project/index";
+import type { OpenProjectRepository } from "#web/features/open-project/open-project.contract";
+import type {
+  EnvironmentAvailability,
+  ProjectNavigationRepository,
+  ProjectNavigationState,
+} from "#web/features/project-navigation/project-navigation.contract";
 import {
-  type EnvironmentAvailability,
   openProjectRepository,
-  type ProjectNavigationRepository,
-  type ProjectNavigationState,
   removeProjectRepository,
   setEnvironmentAvailability,
-} from "#web/features/project-navigation/index";
+} from "#web/features/project-navigation/project-navigation-state";
 import {
   useRecordRepositoryOpened,
   useRemoveRepository,
-} from "#web/features/repository-catalog/index";
+} from "#web/features/repository-catalog/hooks/use-catalog-commands";
 
 export function useProjectRepositoryActions({
   availability,

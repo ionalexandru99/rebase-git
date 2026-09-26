@@ -6,7 +6,7 @@ import {
   IconBrandGithubFilled,
   IconBrandGitlab,
 } from "@tabler/icons-react";
-import { useGraphRefAppearance } from "#web-ui/features/commit-graph/components/graph-ref-appearance";
+import { useGraphRefAppearance } from "#web/features/commit-graph/components/graph-ref-appearance";
 
 export function GitProviderIcon({ remote }: { readonly remote: string }) {
   const provider = useGraphRefAppearance().providers.get(remote) ?? "git";

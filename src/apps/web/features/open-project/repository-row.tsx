@@ -1,7 +1,7 @@
 import type { JSX } from "react";
 import type { OpenProjectRepository } from "#web/features/open-project/open-project.contract";
 import { repositoryInitials } from "#web/features/open-project/open-project-state";
-import { RepositorySettingsButton } from "#web/features/repository-settings/index";
+import { RepositorySettingsButton } from "#web/features/repository-settings/components/repository-settings-button";
 
 export function RepositoryRow({
   active,

@@ -16,10 +16,10 @@ import { createLocalRepositoryWatcher } from "#server/adapters/local-git/local-r
 import { EnvironmentEvents } from "#server/domain/environment-event-publisher.contract";
 import type { GitCommandRunner } from "#server/domain/git-command.contract";
 import { RepositoryWatching } from "#server/domain/repository-watcher.contract";
-import { createRepositoryCatalog } from "#server/features/repository-catalog/index";
-import { repositoryRefsFeature } from "#server/features/repository-refs/index";
+import { createRepositoryCatalog } from "#server/features/repository-catalog/repository-catalog";
 import { acquireRepositoryChangePublisher } from "#server/features/repository-refs/repository-change-publisher";
 import { createRepositoryRefsReader } from "#server/features/repository-refs/repository-refs";
+import { repositoryRefsFeature } from "#server/features/repository-refs/repository-refs.feature";
 import { acquireEnvironmentContext } from "#server/persistence/environment-context";
 import { environmentPaths } from "#server/persistence/storage/environment-paths";
 import {

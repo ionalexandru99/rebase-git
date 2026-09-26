@@ -23,9 +23,9 @@ import {
 import { fakeRpc } from "#tests-ui/runtime/fake-rpc";
 import { render } from "#tests-ui/runtime/render";
 import type { LocalEnvironmentSession } from "#web/app/environment/local-environment-session.contract";
-import type { RepositoryHistoryGateway } from "#web/features/repository-history/index";
-import { ApplicationShell } from "#web-ui/app/shell/application-shell";
-import { RepositoryWorkspace } from "#web-ui/app/workspace/repository-workspace";
+import { ApplicationShell } from "#web/app/shell/application-shell";
+import { RepositoryWorkspace } from "#web/app/workspace/repository-workspace";
+import type { RepositoryHistoryGateway } from "#web/features/repository-history/repository-history-reader.contract";
 
 describe("application shell", () => {
   it("opens repository settings from the list without opening its graph", async () => {

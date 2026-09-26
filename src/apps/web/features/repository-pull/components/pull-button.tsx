@@ -1,9 +1,9 @@
 import { IconArrowBarToDown } from "@tabler/icons-react";
-import { useOperationCommandState } from "#web/features/operation-recovery/index";
+import { Button } from "#web/components/ui/button";
+import { useOperationCommandState } from "#web/features/operation-recovery/hooks/use-operation-status";
 import { canPull } from "#web/features/repository-pull/can-pull";
 import type { Pull } from "#web/features/repository-pull/hooks/use-pull";
-import { useRepositoryScope } from "#web/features/repository-scope/index";
-import { Button } from "#web-ui/components/ui/button";
+import { useRepositoryScope } from "#web/features/repository-scope/repository-scope-provider";
 
 export function PullButton({
   pull,

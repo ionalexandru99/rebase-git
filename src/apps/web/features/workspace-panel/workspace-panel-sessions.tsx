@@ -10,6 +10,7 @@ import {
   useState,
 } from "react";
 import { PanelFeatureContext } from "#web/features/workspace-panel/api";
+import { RetainedPanelView } from "#web/features/workspace-panel/components/retained-panel-view";
 import {
   createSessionCollection,
   type PanelSession,
@@ -22,7 +23,6 @@ import type {
   WorkspacePanelScope,
 } from "#web/features/workspace-panel/workspace-panel-session.contract";
 import { useStore } from "#web/platform/store/use-store";
-import { RetainedPanelView } from "#web-ui/features/workspace-panel/components/retained-panel-view";
 
 export type {
   WorkspacePanelEnvironment,

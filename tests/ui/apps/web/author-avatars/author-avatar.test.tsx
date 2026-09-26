@@ -1,10 +1,10 @@
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import { render } from "#tests-ui/runtime/render";
-import { githubAvatarSource } from "#web/features/author-avatars/github-avatar-source";
 import {
   AuthorAvatar,
   AuthorAvatars,
-} from "#web/features/author-avatars/index";
+} from "#web/features/author-avatars/author-avatar";
+import { githubAvatarSource } from "#web/features/author-avatars/github-avatar-source";
 
 const commit = {
   oid: "a".repeat(40),

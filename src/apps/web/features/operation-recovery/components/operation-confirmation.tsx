@@ -1,6 +1,6 @@
 import type { OperationAction, RepositoryOperation } from "@rebase/contracts";
 import { useEffect, useRef } from "react";
-import { Button } from "#web-ui/components/ui/button";
+import { Button } from "#web/components/ui/button";
 
 export function OperationConfirmation({
   action,

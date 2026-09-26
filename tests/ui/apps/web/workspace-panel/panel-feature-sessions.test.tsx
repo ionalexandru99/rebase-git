@@ -9,9 +9,9 @@ import { expect, it } from "vite-plus/test";
 import { page } from "vite-plus/test/browser";
 import { fakeRequests, respond } from "#tests-ui/runtime/fake-requests";
 import { render } from "#tests-ui/runtime/render";
-import { ResizablePanel } from "#web-ui/components/ui/resizable";
-import { WorkspacePanel } from "#web-ui/features/workspace-panel/index";
-import { useWorkspacePanel } from "#web-ui/features/workspace-panel/workspace-panel-provider";
+import { ResizablePanel } from "#web/components/ui/resizable";
+import { WorkspacePanel } from "#web/features/workspace-panel/workspace-panel";
+import { useWorkspacePanel } from "#web/features/workspace-panel/workspace-panel-provider";
 
 const oid = "a".repeat(40);
 const parentOid = "b".repeat(40);

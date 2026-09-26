@@ -17,18 +17,32 @@ import {
   useRef,
   useState,
 } from "react";
-import {
-  AuthorAvatars,
-  type GitHubRepository,
-} from "#web/features/author-avatars/index";
-import { CommitCommandMenu } from "#web/features/commit-commands/index";
+import { Button } from "#web/components/ui/button";
+import { AuthorAvatars } from "#web/features/author-avatars/author-avatar";
+import type { GitHubRepository } from "#web/features/author-avatars/author-avatar.contract";
+import { CommitCommandMenu } from "#web/features/commit-commands/commit-command-menu";
 import type {
   CommitGraphHandle,
   CommitGraphHistory,
   CommitGraphViewportAnchor,
 } from "#web/features/commit-graph/commit-graph.contract";
 import type { CommitGraphSelectionMode } from "#web/features/commit-graph/commit-selection.contract";
+import { CommitGraphCanvas } from "#web/features/commit-graph/components/commit-graph-canvas";
 import { describeRepositoryHistoryError } from "#web/features/commit-graph/components/commit-graph-messages";
+import {
+  CommitGraphRow,
+  commitRowId,
+} from "#web/features/commit-graph/components/commit-graph-row";
+import {
+  CommitGraphFailure,
+  CommitGraphLoading,
+  CommitGraphPageRetry,
+} from "#web/features/commit-graph/components/commit-graph-status";
+import { CommitGraphToolbar } from "#web/features/commit-graph/components/commit-graph-toolbar";
+import { CommitGraphVirtualWindow } from "#web/features/commit-graph/components/commit-graph-virtual-window";
+import { historyLabelTarget } from "#web/features/commit-graph/components/commit-ref-labels";
+import { GraphRefAppearance } from "#web/features/commit-graph/components/graph-ref-appearance";
+import { HistoryScopeStrip } from "#web/features/commit-graph/components/history-scope-strip";
 import type { HistoryScope } from "#web/features/commit-graph/history-scope.contract";
 import { useCommitGraphCommands } from "#web/features/commit-graph/hooks/use-commit-graph-commands";
 import { useCommitGraphPages } from "#web/features/commit-graph/hooks/use-commit-graph-pages";
@@ -38,31 +52,13 @@ import { useGraphColors } from "#web/features/commit-graph/hooks/use-graph-color
 import { commitGraphGutterWidth } from "#web/features/commit-graph/layout/graph-geometry";
 import { graphMetadataColumns } from "#web/features/commit-graph/layout/graph-metrics";
 import { graphRefLabels } from "#web/features/commit-graph/layout/graph-ref-labels";
-import { RepositoryHistorySearchControls } from "#web/features/history-search/index";
-import {
-  RepositoryFetchButton,
-  RepositoryHistoryFreshnessStatus,
-  useRepositoryHistoryFetch,
-} from "#web/features/repository-fetch/index";
-import type { RepositoryHistoryQuery } from "#web/features/repository-history/index";
-import { useRepositoryHistoryOrder } from "#web/features/repository-history/index";
-import { useRepositoryScope } from "#web/features/repository-scope/index";
-import { Button } from "#web-ui/components/ui/button";
-import { CommitGraphCanvas } from "#web-ui/features/commit-graph/components/commit-graph-canvas";
-import {
-  CommitGraphRow,
-  commitRowId,
-} from "#web-ui/features/commit-graph/components/commit-graph-row";
-import {
-  CommitGraphFailure,
-  CommitGraphLoading,
-  CommitGraphPageRetry,
-} from "#web-ui/features/commit-graph/components/commit-graph-status";
-import { CommitGraphToolbar } from "#web-ui/features/commit-graph/components/commit-graph-toolbar";
-import { CommitGraphVirtualWindow } from "#web-ui/features/commit-graph/components/commit-graph-virtual-window";
-import { historyLabelTarget } from "#web-ui/features/commit-graph/components/commit-ref-labels";
-import { GraphRefAppearance } from "#web-ui/features/commit-graph/components/graph-ref-appearance";
-import { HistoryScopeStrip } from "#web-ui/features/commit-graph/components/history-scope-strip";
+import { RepositoryHistorySearchControls } from "#web/features/history-search/components/repository-history-search-controls";
+import { RepositoryFetchButton } from "#web/features/repository-fetch/components/repository-fetch-button";
+import { RepositoryHistoryFreshnessStatus } from "#web/features/repository-fetch/components/repository-history-freshness-status";
+import { useRepositoryHistoryFetch } from "#web/features/repository-fetch/hooks/use-repository-history-fetch";
+import { useRepositoryHistoryOrder } from "#web/features/repository-history/hooks/use-repository-history-order";
+import type { RepositoryHistoryQuery } from "#web/features/repository-history/repository-history-reader.contract";
+import { useRepositoryScope } from "#web/features/repository-scope/repository-scope-provider";
 
 const emptyRefLabels: readonly RepositoryHistoryRefTarget[] = [];
 

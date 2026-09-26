@@ -1,5 +1,5 @@
 import { useId, useLayoutEffect, useRef, useState } from "react";
-import { Button } from "#web-ui/components/ui/button";
+import { Button } from "#web/components/ui/button";
 
 export function CommitMessage({ body }: { readonly body: string }) {
   const id = useId();

@@ -9,7 +9,7 @@ import {
   tagsSectionId,
 } from "#web/features/branches-sidebar/branches-sidebar.contract";
 import { buildBranchTree } from "#web/features/branches-sidebar/tree/branch-tree";
-import { activeHead } from "#web/features/repository-refs/index";
+import { activeHead } from "#web/features/repository-refs/activate-repository-ref";
 
 export const defaultExpandedSections: ReadonlySet<string> = new Set([
   localBranchesSectionId,

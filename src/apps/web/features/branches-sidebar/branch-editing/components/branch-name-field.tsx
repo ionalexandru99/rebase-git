@@ -6,8 +6,8 @@ import {
   useRef,
   useState,
 } from "react";
-import { branchNameProblem } from "#web/features/branch-management/index";
-import { Input } from "#web-ui/components/ui/input";
+import { Input } from "#web/components/ui/input";
+import { branchNameProblem } from "#web/features/branch-management/branch-name";
 
 export function BranchNameField({
   branches,

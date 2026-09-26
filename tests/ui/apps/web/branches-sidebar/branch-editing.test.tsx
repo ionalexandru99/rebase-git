@@ -20,19 +20,15 @@ import {
 } from "#tests-ui/runtime/fake-requests";
 import { fakeRpc } from "#tests-ui/runtime/fake-rpc";
 import { render } from "#tests-ui/runtime/render";
-import { useCreateBranchHere } from "#web/features/branch-management/index";
+import { useCreateBranchHere } from "#web/features/branch-management/hooks/use-create-branch-here";
 import type { BranchRename } from "#web/features/branches-sidebar/branch-editing/hooks/use-branch-editing";
-import {
-  CommitCommandMenu,
-  GraphCommands,
-} from "#web/features/commit-commands/index";
-import { NotificationsProvider } from "#web/features/notifications/index";
-import {
-  useRefActivation,
-  useRepositoryRefs,
-} from "#web/features/repository-refs/index";
-import { RepositoryScopeProvider } from "#web/features/repository-scope/index";
-import { BranchesSidebar } from "#web-ui/features/branches-sidebar/branches-sidebar";
+import { BranchesSidebar } from "#web/features/branches-sidebar/branches-sidebar";
+import { CommitCommandMenu } from "#web/features/commit-commands/commit-command-menu";
+import { GraphCommands } from "#web/features/commit-commands/graph-command-slot";
+import { NotificationsProvider } from "#web/features/notifications/notifications";
+import { useRefActivation } from "#web/features/repository-refs/hooks/use-ref-activation";
+import { useRepositoryRefs } from "#web/features/repository-refs/hooks/use-repository-refs";
+import { RepositoryScopeProvider } from "#web/features/repository-scope/repository-scope-provider";
 
 const repositoryId = "00000000-0000-4000-8000-000000000001";
 const mainPath = "/repo";

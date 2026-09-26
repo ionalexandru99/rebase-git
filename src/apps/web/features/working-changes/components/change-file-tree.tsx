@@ -1,14 +1,14 @@
 import { useState } from "react";
+import { Button } from "#web/components/ui/button";
+import { Input } from "#web/components/ui/input";
+import {
+  ChangeFileSection,
+  type ChangeFileSectionView,
+} from "#web/features/working-changes/components/change-file-section";
 import type {
   ChangeAction,
   WorkingChangesView,
 } from "#web/features/working-changes/hooks/use-working-changes-view";
-import { Button } from "#web-ui/components/ui/button";
-import { Input } from "#web-ui/components/ui/input";
-import {
-  ChangeFileSection,
-  type ChangeFileSectionView,
-} from "#web-ui/features/working-changes/components/change-file-section";
 
 type FileTreeView = ChangeFileSectionView &
   Pick<WorkingChangesView, "choosePreferences">;

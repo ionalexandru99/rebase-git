@@ -4,13 +4,13 @@ import type {
   RepositoryOperation,
 } from "@rebase/contracts";
 import { useState } from "react";
-import { PersistentNotification } from "#web/features/notifications/index";
+import { PersistentNotification } from "#web/features/notifications/components/persistent-notification";
+import { OperationRecoveryToast } from "#web/features/operation-recovery/components/operation-recovery-toast";
 import { useOperationAction } from "#web/features/operation-recovery/hooks/use-operation";
 import { useOperationStatus } from "#web/features/operation-recovery/hooks/use-operation-status";
 import { describeOperationFailure } from "#web/features/operation-recovery/operation-messages";
-import { useRepositoryScope } from "#web/features/repository-scope/index";
-import { OperationRecoveryToast } from "#web-ui/features/operation-recovery/components/operation-recovery-toast";
-import { useWorkspacePanel } from "#web-ui/features/workspace-panel/index";
+import { useRepositoryScope } from "#web/features/repository-scope/repository-scope-provider";
+import { useWorkspacePanel } from "#web/features/workspace-panel/workspace-panel-provider";
 
 interface CompletedOperation {
   readonly kind: OperationKind;

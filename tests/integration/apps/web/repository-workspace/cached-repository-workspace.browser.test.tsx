@@ -1,4 +1,4 @@
-import { createBrowserRepositoryHistoryReader } from "#web/features/repository-history/index";
+import { createBrowserRepositoryHistoryReader } from "#web/features/repository-history/browser-repository-history-reader";
 import "@rebase/web/styles.css";
 import type { RepositoryCommit, RepositoryRefs } from "@rebase/contracts";
 import {
@@ -9,21 +9,17 @@ import { expect, it, vi } from "vite-plus/test";
 import { repositoryScope } from "#tests-ui/apps/web/repository-scope/repository-scope-fixture";
 import { fakeRpc } from "#tests-ui/runtime/fake-rpc";
 import { render } from "#tests-ui/runtime/render";
-import {
-  createBrowserHistoryFilterStore,
-  openCommitGraphHistory,
-  resolveHistoryScope,
-} from "#web/features/commit-graph/index";
+import { RepositoryWorkspace } from "#web/app/workspace/repository-workspace";
+import { openCommitGraphHistory } from "#web/features/commit-graph/paging/commit-graph-history";
+import { createBrowserHistoryFilterStore } from "#web/features/commit-graph/scope/browser-history-filter-store";
+import { resolveHistoryScope } from "#web/features/commit-graph/scope/history-scope";
 import { storeRepositoryHistoryPage } from "#web/features/repository-history/replica/repository-history-store";
 import { RepositoryHistoryOffline } from "#web/features/repository-history/repository-history-reader.contract";
-import {
-  useApplyToRefs,
-  useRepositoryRefs,
-} from "#web/features/repository-refs/index";
-import { RepositoryScopeProvider } from "#web/features/repository-scope/index";
+import { useApplyToRefs } from "#web/features/repository-refs/hooks/use-apply-to-refs";
+import { useRepositoryRefs } from "#web/features/repository-refs/hooks/use-repository-refs";
+import { RepositoryScopeProvider } from "#web/features/repository-scope/repository-scope-provider";
 import { createEnvironmentQueryClient } from "#web/platform/query/environment-query-client";
 import { createEnvironmentQueryPersistence } from "#web/platform/query/environment-query-persistence";
-import { RepositoryWorkspace } from "#web-ui/app/workspace/repository-workspace";
 
 it("restores only persisted refs, unconfirmed, for the same protocol", async () => {
   const persistence = createEnvironmentQueryPersistence();

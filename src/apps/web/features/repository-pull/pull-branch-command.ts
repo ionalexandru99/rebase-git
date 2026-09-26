@@ -1,4 +1,4 @@
-import type { RefCommandDefinition } from "#web/features/ref-commands/index";
+import type { RefCommandDefinition } from "#web/features/ref-commands/ref-command.contract";
 
 export function createPullBranchCommand(
   pull: (branch: string) => void,

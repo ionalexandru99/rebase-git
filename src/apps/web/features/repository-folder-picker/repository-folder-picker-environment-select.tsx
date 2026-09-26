@@ -4,13 +4,13 @@ import {
   type TablerIcon,
 } from "@tabler/icons-react";
 import type { JSX } from "react";
-import type { EnvironmentAvailability } from "#web/features/project-navigation/project-navigation.contract";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-} from "#web-ui/components/ui/dropdown-menu";
+} from "#web/components/ui/dropdown-menu";
+import type { EnvironmentAvailability } from "#web/features/project-navigation/project-navigation.contract";
 
 export interface RepositoryFolderPickerEnvironment {
   readonly availability: EnvironmentAvailability;

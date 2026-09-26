@@ -14,7 +14,7 @@ import {
   GitCommandError,
   type GitCommandRunner,
 } from "#server/domain/git-command.contract";
-import { repositoryOperationsFeature } from "#server/features/repository-operations/index";
+import { repositoryOperationsFeature } from "#server/features/repository-operations/repository-operations.feature";
 import {
   createRepositoryAccess,
   createRepositoryCoordination,

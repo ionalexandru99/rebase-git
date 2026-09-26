@@ -1,10 +1,8 @@
 import { useId, useState } from "react";
-import {
-  saveRepositoryHistoryOrder,
-  useRepositoryHistoryOrder,
-} from "#web/features/repository-history/index";
+import { SettingsRow } from "#web/components/ui/settings-layout";
+import { useRepositoryHistoryOrder } from "#web/features/repository-history/hooks/use-repository-history-order";
+import { saveRepositoryHistoryOrder } from "#web/features/repository-history/preferences/repository-history-order";
 import type { RepositorySettingsIdentity } from "#web/features/repository-settings/repository-settings.contract";
-import { SettingsRow } from "#web-ui/components/ui/settings-layout";
 
 export function RepositoryOrderSettings({
   identity,

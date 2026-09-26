@@ -1,5 +1,5 @@
 import { expect, it, vi } from "vite-plus/test";
-import { createBrowserRepositoryHistoryReader } from "#web/features/repository-history/index";
+import { createBrowserRepositoryHistoryReader } from "#web/features/repository-history/browser-repository-history-reader";
 import {
   type RepositoryHistoryGateway,
   RepositoryHistoryOffline,

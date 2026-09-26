@@ -6,7 +6,7 @@ import { Effect } from "effect";
 import { afterEach, describe, expect, it } from "vite-plus/test";
 import { createLocalGitCommandRunner } from "#server/adapters/local-git/local-git-command-runner";
 import { createLocalRepositoryWatcher } from "#server/adapters/local-git/local-repository-watcher";
-import { repositoryPullFeature } from "#server/features/repository-pull/index";
+import { repositoryPullFeature } from "#server/features/repository-pull/repository-pull.feature";
 import {
   createRepositoryAccess,
   createRepositoryCoordination,

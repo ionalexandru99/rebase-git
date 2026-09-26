@@ -6,7 +6,7 @@ import type {
   RepositoryHistoryPosition,
   RepositoryHistoryQuery,
   RepositoryHistoryReadModel,
-} from "#web/features/repository-history/index";
+} from "#web/features/repository-history/repository-history-reader.contract";
 
 export async function locateGraphSelection(
   reader: Pick<RepositoryHistoryReadModel, "locateMany">,

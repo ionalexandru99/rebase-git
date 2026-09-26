@@ -1,7 +1,7 @@
 import { IconCircleCheck, IconX } from "@tabler/icons-react";
 import { useEffect } from "react";
-import { PersistentNotification } from "#web/features/notifications/index";
-import { Button } from "#web-ui/components/ui/button";
+import { Button } from "#web/components/ui/button";
+import { PersistentNotification } from "#web/features/notifications/components/persistent-notification";
 
 const visibleMilliseconds = 10_000;
 

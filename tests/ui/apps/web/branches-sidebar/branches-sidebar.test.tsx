@@ -14,15 +14,13 @@ import {
   respond,
 } from "#tests-ui/runtime/fake-requests";
 import { render } from "#tests-ui/runtime/render";
-import { historyRefKey } from "#web/features/commit-graph/index";
-import { RefCommands } from "#web/features/ref-commands/index";
-import { usePull } from "#web/features/repository-pull/index";
-import type {
-  RefActivation,
-  RepositoryRefsRead,
-} from "#web/features/repository-refs/index";
-import { RepositoryScopeProvider } from "#web/features/repository-scope/index";
-import { BranchesSidebar } from "#web-ui/features/branches-sidebar/branches-sidebar";
+import { BranchesSidebar } from "#web/features/branches-sidebar/branches-sidebar";
+import { historyRefKey } from "#web/features/commit-graph/scope/history-scope";
+import { RefCommands } from "#web/features/ref-commands/ref-commands";
+import { usePull } from "#web/features/repository-pull/hooks/use-pull";
+import type { RefActivation } from "#web/features/repository-refs/hooks/use-ref-activation";
+import type { RepositoryRefsRead } from "#web/features/repository-refs/hooks/use-repository-refs";
+import { RepositoryScopeProvider } from "#web/features/repository-scope/repository-scope-provider";
 
 const repositoryId = "00000000-0000-4000-8000-000000000001";
 const mainPath = "/repo";

@@ -1,9 +1,9 @@
+import { Button } from "#web/components/ui/button";
 import {
   workspacePanelDefinitions,
   workspacePanelKinds,
 } from "#web/features/workspace-panel/workspace-panel-definitions";
-import { Button } from "#web-ui/components/ui/button";
-import { useWorkspacePanel } from "#web-ui/features/workspace-panel/workspace-panel-provider";
+import { useWorkspacePanel } from "#web/features/workspace-panel/workspace-panel-provider";
 
 export function WorkspacePanelEmptyState() {
   const panel = useWorkspacePanel();

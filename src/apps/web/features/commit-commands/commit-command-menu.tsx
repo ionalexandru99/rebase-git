@@ -1,4 +1,10 @@
 import { type ReactElement, useMemo } from "react";
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuTrigger,
+} from "#web/components/ui/context-menu";
 import type {
   GraphCommandContext,
   GraphCommandDefinition,
@@ -6,12 +12,6 @@ import type {
 import { graphCommandSlot } from "#web/features/commit-commands/graph-command-slot";
 import type { GraphCommandRun } from "#web/features/commit-commands/use-graph-commands";
 import { createCommandRegistry } from "#web/platform/command-contributions/command-registry";
-import {
-  ContextMenu,
-  ContextMenuContent,
-  ContextMenuItem,
-  ContextMenuTrigger,
-} from "#web-ui/components/ui/context-menu";
 
 export function CommitCommandMenu({
   children,

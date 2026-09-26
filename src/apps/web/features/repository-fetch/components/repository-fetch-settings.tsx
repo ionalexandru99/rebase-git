@@ -1,10 +1,10 @@
 import type { RepositoryFetchSetting } from "@rebase/contracts";
 import { type FormEvent, useId, useState } from "react";
+import { Button } from "#web/components/ui/button";
+import { Input } from "#web/components/ui/input";
+import { SettingsRow } from "#web/components/ui/settings-layout";
 import { describeRepositoryFetchError } from "#web/features/repository-fetch/repository-fetch-error";
 import type { RepositoryHistoryFetchCommands } from "#web/features/repository-history/repository-history-reader.contract";
-import { Button } from "#web-ui/components/ui/button";
-import { Input } from "#web-ui/components/ui/input";
-import { SettingsRow } from "#web-ui/components/ui/settings-layout";
 
 export function RepositoryFetchSettings({
   reader,

@@ -7,7 +7,7 @@ import {
 } from "@rebase/environment-client";
 import { type UseMutationOptions, useMutation } from "@tanstack/react-query";
 import { type RefObject, useCallback, useRef } from "react";
-import { useEnvironment } from "#web-ui/platform/query/environment-context";
+import { useEnvironment } from "#web/platform/query/environment-context";
 
 export class CommandCancelled extends Error {
   readonly _tag = "Cancelled";

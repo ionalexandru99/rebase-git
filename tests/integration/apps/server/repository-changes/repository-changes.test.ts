@@ -24,7 +24,7 @@ import { afterEach, describe, expect, it } from "vite-plus/test";
 import { createLocalGitCommandRunner } from "#server/adapters/local-git/local-git-command-runner";
 import { createLocalRepositoryWatcher } from "#server/adapters/local-git/local-repository-watcher";
 import type { GitCommand } from "#server/domain/git-command.contract";
-import { repositoryChangesFeature } from "#server/features/repository-changes/index";
+import { repositoryChangesFeature } from "#server/features/repository-changes/repository-changes.feature";
 import {
   createRepositoryAccess,
   createRepositoryCoordination,

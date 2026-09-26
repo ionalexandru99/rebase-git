@@ -14,7 +14,7 @@ import { graphRowHeight as rowHeight } from "#web/features/commit-graph/layout/g
 import type {
   RepositoryHistoryQuery,
   RepositoryHistoryReadModel,
-} from "#web/features/repository-history/index";
+} from "#web/features/repository-history/repository-history-reader.contract";
 
 export function useCommitGraphViewport({
   reader,

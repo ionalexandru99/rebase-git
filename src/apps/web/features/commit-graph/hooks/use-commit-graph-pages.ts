@@ -14,7 +14,7 @@ import type {
   RepositoryHistoryQuery,
   RepositoryHistoryReadModel,
   RepositoryHistorySnapshot,
-} from "#web/features/repository-history/index";
+} from "#web/features/repository-history/repository-history-reader.contract";
 import { createStore } from "#web/platform/store/store";
 import { useStore } from "#web/platform/store/use-store";
 

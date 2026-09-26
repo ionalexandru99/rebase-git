@@ -4,7 +4,7 @@ import { usePagedGraphSelection } from "#web/features/commit-graph/hooks/use-pag
 import type {
   RepositoryHistoryQuery,
   RepositoryHistoryReadModel,
-} from "#web/features/repository-history/index";
+} from "#web/features/repository-history/repository-history-reader.contract";
 
 export function useCommitGraphSelection({
   reader,

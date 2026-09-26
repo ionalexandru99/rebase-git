@@ -4,21 +4,19 @@ import { describe, expect, it, vi } from "vite-plus/test";
 import { page, userEvent } from "vite-plus/test/browser";
 import { repositoryScope } from "#tests-ui/apps/web/repository-scope/repository-scope-fixture";
 import { render } from "#tests-ui/runtime/render";
-import { NotificationsProvider } from "#web/features/notifications/index";
-import {
-  describeRepositoryFetchError,
-  RepositoryFetchButton,
-  RepositoryFetchSettings,
-  RepositoryHistoryFreshnessStatus,
-  useRepositoryHistoryFetch,
-} from "#web/features/repository-fetch/index";
+import { NotificationsProvider } from "#web/features/notifications/notifications";
+import { RepositoryFetchButton } from "#web/features/repository-fetch/components/repository-fetch-button";
+import { RepositoryFetchSettings } from "#web/features/repository-fetch/components/repository-fetch-settings";
+import { RepositoryHistoryFreshnessStatus } from "#web/features/repository-fetch/components/repository-history-freshness-status";
+import { useRepositoryHistoryFetch } from "#web/features/repository-fetch/hooks/use-repository-history-fetch";
+import { describeRepositoryFetchError } from "#web/features/repository-fetch/repository-fetch-error";
 import {
   RepositoryHistoryOffline,
   type RepositoryHistoryReader,
   RepositoryHistoryRejected,
   type RepositoryHistorySnapshot,
 } from "#web/features/repository-history/repository-history-reader.contract";
-import { RepositoryScopeProvider } from "#web/features/repository-scope/index";
+import { RepositoryScopeProvider } from "#web/features/repository-scope/repository-scope-provider";
 
 const fresh: RepositoryFreshness = {
   defaultIntervalSeconds: 300,

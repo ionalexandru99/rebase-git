@@ -9,6 +9,12 @@ import {
   environmentLivePath,
   environmentSnapshotPath,
 } from "@rebase/contracts";
+import {
+  EnvironmentAccessDenied,
+  exchangeEnvironmentPairingEffect,
+  fetchEnvironmentDiscoveryEffect,
+  fetchEnvironmentSnapshotEffect,
+} from "@rebase/environment-client";
 import { Effect } from "effect";
 import { afterEach, describe, expect, it } from "vite-plus/test";
 import { createEnvironmentEventPublisher } from "#server/adapters/environment-transport/events/environment-event-publisher";
@@ -17,21 +23,13 @@ import {
   type EnvironmentAuthorization,
   EnvironmentAuthorizationAccess,
 } from "#server/domain/environment-authorization.contract";
-import {
-  createEnvironmentAuthorization,
-  environmentAuthorizationFeature,
-} from "#server/features/environment-authorization/index";
+import { createEnvironmentAuthorization } from "#server/features/environment-authorization/environment-authorization";
+import { environmentAuthorizationFeature } from "#server/features/environment-authorization/environment-authorization.feature";
 import { acquireEnvironmentContext } from "#server/persistence/environment-context";
 import { environmentPaths } from "#server/persistence/storage/environment-paths";
 import { testEnvironmentFeatures } from "#tests-integration/apps/server/environment-connection/test-environment-features";
 import { removeTemporaryDirectory } from "#tests-support/temporary-directory";
-import {
-  connectCurrentEnvironmentEffect,
-  EnvironmentAccessDenied,
-  exchangeEnvironmentPairingEffect,
-  fetchEnvironmentDiscoveryEffect,
-  fetchEnvironmentSnapshotEffect,
-} from "#web/app/environment/connection/index";
+import { connectCurrentEnvironmentEffect } from "#web/app/environment/connection/environment-protocol-client";
 
 const environmentId = "00000000-0000-4000-8000-000000000001";
 const directories = new Set<string>();

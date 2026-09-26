@@ -9,20 +9,18 @@ import { page, userEvent } from "vite-plus/test/browser";
 import { repositoryScope } from "#tests-ui/apps/web/repository-scope/repository-scope-fixture";
 import { fakeRequests, respond } from "#tests-ui/runtime/fake-requests";
 import { render } from "#tests-ui/runtime/render";
-import {
-  ErrorNotification,
-  NotificationsProvider,
-  PersistentNotification,
-} from "#web/features/notifications/index";
-import { RepositoryScopeProvider } from "#web/features/repository-scope/index";
-import type { EnvironmentChangeListener } from "#web/platform/environment/environment-protocol.contract";
-import { OperationRecoveryNotice } from "#web-ui/features/operation-recovery/components/operation-recovery-notice";
+import { ErrorNotification } from "#web/features/notifications/components/error-notification";
+import { PersistentNotification } from "#web/features/notifications/components/persistent-notification";
+import { NotificationsProvider } from "#web/features/notifications/notifications";
+import { OperationRecoveryNotice } from "#web/features/operation-recovery/components/operation-recovery-notice";
 import {
   type OperationRecoveryState,
   OperationRecoveryToast,
-} from "#web-ui/features/operation-recovery/components/operation-recovery-toast";
-import { WorkspacePanel } from "#web-ui/features/workspace-panel/index";
-import { EnvironmentProvider } from "#web-ui/platform/query/environment-context";
+} from "#web/features/operation-recovery/components/operation-recovery-toast";
+import { RepositoryScopeProvider } from "#web/features/repository-scope/repository-scope-provider";
+import { WorkspacePanel } from "#web/features/workspace-panel/workspace-panel";
+import type { EnvironmentChangeListener } from "#web/platform/environment/environment-protocol.contract";
+import { EnvironmentProvider } from "#web/platform/query/environment-context";
 
 function operation(
   patch: Partial<RepositoryOperation> = {},

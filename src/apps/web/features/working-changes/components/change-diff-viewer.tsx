@@ -1,17 +1,15 @@
 import type { SelectedLineRange } from "@pierre/diffs";
 import { IconCheck } from "@tabler/icons-react";
 import { useMemo, useState } from "react";
-import {
-  createChangeDiffModel,
-  DiffContent,
-  DiffDisplayControls,
-} from "#web/features/file-diff/index";
+import { Button } from "#web/components/ui/button";
+import { DiffContent } from "#web/features/file-diff/components/diff-content";
+import { DiffDisplayControls } from "#web/features/file-diff/components/diff-display-controls";
+import { createChangeDiffModel } from "#web/features/file-diff/diff-model";
 import { selectedDiffLines } from "#web/features/working-changes/diff/diff-selection";
 import type {
   ChangeAction,
   WorkingChangesView,
 } from "#web/features/working-changes/hooks/use-working-changes-view";
-import { Button } from "#web-ui/components/ui/button";
 
 type DiffView = Pick<
   WorkingChangesView,

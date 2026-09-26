@@ -1,6 +1,6 @@
 import type { LocalBranch } from "@rebase/contracts";
 import type { BranchStartPoint } from "#web/features/branches-sidebar/branch-editing/branch-row-actions";
-import { BranchNameField } from "#web-ui/features/branches-sidebar/branch-editing/components/branch-name-field";
+import { BranchNameField } from "#web/features/branches-sidebar/branch-editing/components/branch-name-field";
 
 export function BranchDraftRow({
   branches,

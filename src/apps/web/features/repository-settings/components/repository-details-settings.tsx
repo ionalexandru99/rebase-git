@@ -7,9 +7,9 @@ import {
   AlertDialogDescription,
   AlertDialogFooter,
   AlertDialogTitle,
-} from "#web-ui/components/ui/alert-dialog";
-import { Button } from "#web-ui/components/ui/button";
-import { SettingsRow } from "#web-ui/components/ui/settings-layout";
+} from "#web/components/ui/alert-dialog";
+import { Button } from "#web/components/ui/button";
+import { SettingsRow } from "#web/components/ui/settings-layout";
 
 export function RepositoryDetailsSettings({
   name,

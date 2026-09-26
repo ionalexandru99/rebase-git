@@ -1,8 +1,8 @@
-import { useWorktreeOperation } from "#web/features/operation-recovery/index";
+import { Button } from "#web/components/ui/button";
+import { Input } from "#web/components/ui/input";
+import { useWorktreeOperation } from "#web/features/operation-recovery/hooks/use-operation-status";
 import type { WorkingChangesView } from "#web/features/working-changes/hooks/use-working-changes-view";
 import { usePanelFeature } from "#web/features/workspace-panel/api";
-import { Button } from "#web-ui/components/ui/button";
-import { Input } from "#web-ui/components/ui/input";
 
 type CommitEditorView = Pick<
   WorkingChangesView,

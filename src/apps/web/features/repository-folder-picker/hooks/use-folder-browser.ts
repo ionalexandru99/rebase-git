@@ -1,7 +1,7 @@
 import type { RepositoryCatalogEntry } from "@rebase/contracts";
 import { useState } from "react";
-import { useDirectoryListing } from "#web/features/environment-filesystem/index";
-import { useRememberRepository } from "#web/features/repository-catalog/index";
+import { useDirectoryListing } from "#web/features/environment-filesystem/hooks/use-directory-listing";
+import { useRememberRepository } from "#web/features/repository-catalog/hooks/use-catalog-commands";
 import {
   directoryListingError,
   repositorySelectionError,

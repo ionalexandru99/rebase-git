@@ -9,6 +9,13 @@ import {
   IconTag,
 } from "@tabler/icons-react";
 import { type CSSProperties, Fragment, useRef } from "react";
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuSeparator,
+  ContextMenuTrigger,
+} from "#web/components/ui/context-menu";
 import type {
   BranchRowAction,
   BranchRowActionId,
@@ -22,15 +29,8 @@ import {
   localBranchesSectionId,
   tagsSectionId,
 } from "#web/features/branches-sidebar/branches-sidebar.contract";
-import { RefCommands } from "#web/features/ref-commands/index";
-import {
-  ContextMenu,
-  ContextMenuContent,
-  ContextMenuItem,
-  ContextMenuSeparator,
-  ContextMenuTrigger,
-} from "#web-ui/components/ui/context-menu";
-import { UpstreamIndicator } from "#web-ui/features/branches-sidebar/components/upstream-indicator";
+import { UpstreamIndicator } from "#web/features/branches-sidebar/components/upstream-indicator";
+import { RefCommands } from "#web/features/ref-commands/ref-commands";
 
 export function rowElementId(rowId: string): string {
   return `branches-row-${rowId}`;

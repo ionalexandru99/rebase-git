@@ -9,9 +9,9 @@ import {
   IconCircleFilled,
 } from "@tabler/icons-react";
 import { useRef, useState } from "react";
-import { Button } from "#web-ui/components/ui/button";
-import { OperationActionsMenu } from "#web-ui/features/operation-recovery/components/operation-actions-menu";
-import { OperationConfirmation } from "#web-ui/features/operation-recovery/components/operation-confirmation";
+import { Button } from "#web/components/ui/button";
+import { OperationActionsMenu } from "#web/features/operation-recovery/components/operation-actions-menu";
+import { OperationConfirmation } from "#web/features/operation-recovery/components/operation-confirmation";
 
 export interface OperationRecoveryState {
   readonly operation: RepositoryOperation | null;

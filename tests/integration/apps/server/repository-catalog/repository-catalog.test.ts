@@ -8,7 +8,7 @@ import {
   GitCommandError,
   type GitCommandRunner,
 } from "#server/domain/git-command.contract";
-import { createRepositoryCatalog } from "#server/features/repository-catalog/index";
+import { createRepositoryCatalog } from "#server/features/repository-catalog/repository-catalog";
 import { acquireEnvironmentContext } from "#server/persistence/environment-context";
 import type { EnvironmentContext } from "#server/persistence/environment-context.contract";
 import { repositoryCatalogTable } from "#server/persistence/environment-state.schema";

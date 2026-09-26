@@ -16,9 +16,9 @@ import { createLocalRepositoryWatcher } from "#server/adapters/local-git/local-r
 import { EnvironmentEvents } from "#server/domain/environment-event-publisher.contract";
 import type { GitCommandRunner } from "#server/domain/git-command.contract";
 import { RepositoryWatching } from "#server/domain/repository-watcher.contract";
-import { repositoryChangesFeature } from "#server/features/repository-changes/index";
+import { repositoryChangesFeature } from "#server/features/repository-changes/repository-changes.feature";
 import { acquireWatchedRepository } from "#server/features/repository-history/freshness/watched-repository";
-import { repositoryRefsFeature } from "#server/features/repository-refs/index";
+import { repositoryRefsFeature } from "#server/features/repository-refs/repository-refs.feature";
 import {
   createRepositoryAccess,
   createRepositoryCoordination,

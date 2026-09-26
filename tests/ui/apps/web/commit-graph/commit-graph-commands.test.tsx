@@ -11,14 +11,10 @@ import {
 } from "#tests-ui/apps/web/commit-graph/commit-graph-fixture";
 import { repositoryScope } from "#tests-ui/apps/web/repository-scope/repository-scope-fixture";
 import { render } from "#tests-ui/runtime/render";
-import {
-  type GraphCommandDefinition,
-  GraphCommands,
-} from "#web/features/commit-commands/index";
-import {
-  type RepositoryScope,
-  RepositoryScopeProvider,
-} from "#web/features/repository-scope/index";
+import type { GraphCommandDefinition } from "#web/features/commit-commands/graph-command.contract";
+import { GraphCommands } from "#web/features/commit-commands/graph-command-slot";
+import type { RepositoryScope } from "#web/features/repository-scope/repository-scope.contract";
+import { RepositoryScopeProvider } from "#web/features/repository-scope/repository-scope-provider";
 
 describe("commit graph commands", () => {
   it("reveals a hidden result from cached search", async () => {

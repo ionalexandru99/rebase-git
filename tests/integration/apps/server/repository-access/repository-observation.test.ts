@@ -12,7 +12,7 @@ import { createLocalRepositoryWatcher } from "#server/adapters/local-git/local-r
 import { GitCommands } from "#server/domain/git-command.contract";
 import { RepositoryCatalogAccess } from "#server/domain/repository-catalog.contract";
 import { RepositoryWatching } from "#server/domain/repository-watcher.contract";
-import { createRepositoryCatalog } from "#server/features/repository-catalog/index";
+import { createRepositoryCatalog } from "#server/features/repository-catalog/repository-catalog";
 import { acquireRepositoryFreshness } from "#server/features/repository-history/freshness/repository-freshness";
 import { acquireRepositoryChangePublisher } from "#server/features/repository-refs/repository-change-publisher";
 import { createRepositoryRefsReader } from "#server/features/repository-refs/repository-refs";

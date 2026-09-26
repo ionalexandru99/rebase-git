@@ -1,14 +1,14 @@
 import { IconArrowsMaximize, IconArrowsMinimize } from "@tabler/icons-react";
 import { type ReactNode, useLayoutEffect, useRef } from "react";
+import { Button } from "#web/components/ui/button";
+import { Tabs, TabsContent, TabsList } from "#web/components/ui/tabs";
+import { WorkspacePanelEmptyState } from "#web/features/workspace-panel/components/workspace-panel-empty-state";
+import { WorkspacePanelLauncher } from "#web/features/workspace-panel/components/workspace-panel-launcher";
+import { WorkspacePanelTab } from "#web/features/workspace-panel/components/workspace-panel-tab";
 import type { WorkspacePanelKind } from "#web/features/workspace-panel/workspace-panel.contract";
+import { useWorkspacePanel } from "#web/features/workspace-panel/workspace-panel-provider";
+import { PanelSessionTarget } from "#web/features/workspace-panel/workspace-panel-sessions";
 import { isWorkspacePanelKind } from "#web/features/workspace-panel/workspace-panel-state";
-import { Button } from "#web-ui/components/ui/button";
-import { Tabs, TabsContent, TabsList } from "#web-ui/components/ui/tabs";
-import { WorkspacePanelEmptyState } from "#web-ui/features/workspace-panel/components/workspace-panel-empty-state";
-import { WorkspacePanelLauncher } from "#web-ui/features/workspace-panel/components/workspace-panel-launcher";
-import { WorkspacePanelTab } from "#web-ui/features/workspace-panel/components/workspace-panel-tab";
-import { useWorkspacePanel } from "#web-ui/features/workspace-panel/workspace-panel-provider";
-import { PanelSessionTarget } from "#web-ui/features/workspace-panel/workspace-panel-sessions";
 
 export function WorkspacePanelTabs({
   contents,

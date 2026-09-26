@@ -13,38 +13,36 @@ import { environmentSessionPresentation } from "#web/app/shell/environment-sessi
 import { useActiveWorktree } from "#web/app/shell/hooks/use-active-worktree";
 import { useOpenedRepository } from "#web/app/shell/hooks/use-opened-repository";
 import { useProjectRepositoryActions } from "#web/app/shell/hooks/use-project-repository-actions";
-import {
-  type OpenProjectEnvironment,
-  OpenProjectScreen,
-} from "#web/features/open-project/index";
-import {
-  type ProjectNavigationState,
-  ProjectsSidebar,
-  setEnvironmentAvailability,
-  setProjectSidebarCollapsed,
-  showOpenProject,
-  toggleEnvironment,
-} from "#web/features/project-navigation/index";
-import { useRepositoryCatalog } from "#web/features/repository-catalog/index";
-import { RepositoryFolderPicker } from "#web/features/repository-folder-picker/index";
-import { useRepositoryHistoryReader } from "#web/features/repository-history/hooks/use-repository-history-reader";
-import type { RepositoryHistoryGateway } from "#web/features/repository-history/index";
-import { RepositoryScopeProvider } from "#web/features/repository-scope/index";
-import { RepositorySettingsPage } from "#web/features/repository-settings/index";
-import { SettingsPanel } from "#web/features/settings/index";
-import { useStore } from "#web/platform/store/use-store";
-import { RepositoryWorkspace } from "#web-ui/app/workspace/repository-workspace";
+import { RepositoryWorkspace } from "#web/app/workspace/repository-workspace";
 import {
   ResizableHandle,
   ResizablePanel,
   ResizablePanelGroup,
-} from "#web-ui/components/ui/resizable";
-import { WorkspacePanel } from "#web-ui/features/workspace-panel/index";
+} from "#web/components/ui/resizable";
+import type { OpenProjectEnvironment } from "#web/features/open-project/open-project.contract";
+import { OpenProjectScreen } from "#web/features/open-project/open-project-screen";
+import type { ProjectNavigationState } from "#web/features/project-navigation/project-navigation.contract";
+import {
+  setEnvironmentAvailability,
+  setProjectSidebarCollapsed,
+  showOpenProject,
+  toggleEnvironment,
+} from "#web/features/project-navigation/project-navigation-state";
+import { ProjectsSidebar } from "#web/features/project-navigation/projects-sidebar";
+import { useRepositoryCatalog } from "#web/features/repository-catalog/hooks/use-repository-catalog";
+import { RepositoryFolderPicker } from "#web/features/repository-folder-picker/repository-folder-picker";
+import { useRepositoryHistoryReader } from "#web/features/repository-history/hooks/use-repository-history-reader";
+import type { RepositoryHistoryGateway } from "#web/features/repository-history/repository-history-reader.contract";
+import { RepositoryScopeProvider } from "#web/features/repository-scope/repository-scope-provider";
+import { RepositorySettingsPage } from "#web/features/repository-settings/repository-settings-page";
+import { SettingsPanel } from "#web/features/settings/settings-panel";
+import { WorkspacePanel } from "#web/features/workspace-panel/workspace-panel";
 import {
   type Environment,
   EnvironmentProvider,
   useEnvironment,
-} from "#web-ui/platform/query/environment-context";
+} from "#web/platform/query/environment-context";
+import { useStore } from "#web/platform/store/use-store";
 
 const localEnvironmentId = "local-environment";
 const noCapabilities: Environment["capabilities"] = [];

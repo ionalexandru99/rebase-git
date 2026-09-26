@@ -20,9 +20,9 @@ import type { EnvironmentServerStartError } from "#server/app/server/environment
 import { EnvironmentAuthorizationAccess } from "#server/domain/environment-authorization.contract";
 import { EnvironmentEvents } from "#server/domain/environment-event-publisher.contract";
 import type { EnvironmentStorageError } from "#server/domain/environment-storage-error.contract";
-import { environmentAuthorizationLayer } from "#server/features/environment-authorization/index";
-import { createEnvironmentIdentity } from "#server/features/environment-identity/index";
-import { repositoryCatalogLayer } from "#server/features/repository-catalog/index";
+import { environmentAuthorizationLayer } from "#server/features/environment-authorization/environment-authorization";
+import { createEnvironmentIdentity } from "#server/features/environment-identity/environment-identity";
+import { repositoryCatalogLayer } from "#server/features/repository-catalog/repository-catalog";
 import { environmentContextLayer } from "#server/persistence/environment-context";
 import { EnvironmentStorage } from "#server/persistence/environment-context.contract";
 import { defaultEnvironmentPaths } from "#server/persistence/storage/environment-paths";

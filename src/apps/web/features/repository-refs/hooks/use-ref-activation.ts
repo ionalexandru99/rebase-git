@@ -4,7 +4,7 @@ import { resolveRefActivation } from "#web/features/repository-refs/activate-rep
 import { useCheckout } from "#web/features/repository-refs/hooks/use-checkout";
 import type { RepositoryRefsRead } from "#web/features/repository-refs/hooks/use-repository-refs";
 import { describeCheckoutFailure } from "#web/features/repository-refs/refs-messages";
-import { useRepositoryScope } from "#web/features/repository-scope/index";
+import { useRepositoryScope } from "#web/features/repository-scope/repository-scope-provider";
 
 export interface RefActivation {
   readonly select: (target: RepositoryRefTarget) => void;

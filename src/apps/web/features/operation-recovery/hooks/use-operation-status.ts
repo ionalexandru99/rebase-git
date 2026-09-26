@@ -7,9 +7,9 @@ import { useIsMutating } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { useOperation } from "#web/features/operation-recovery/hooks/use-operation";
 import { describeOperationFailure } from "#web/features/operation-recovery/operation-messages";
-import { useRepositoryScope } from "#web/features/repository-scope/index";
+import { useRepositoryScope } from "#web/features/repository-scope/repository-scope-provider";
+import { useEnvironment } from "#web/platform/query/environment-context";
 import { commandKey } from "#web/platform/query/use-command";
-import { useEnvironment } from "#web-ui/platform/query/environment-context";
 
 export interface OperationStatus {
   readonly operation: RepositoryOperation | null;

@@ -1,12 +1,12 @@
 import { useMemo } from "react";
-import { writeClipboardText } from "#web/features/clipboard/index";
-import {
-  type CommitCommandHandlers,
-  type GraphCommandContext,
-  useGraphCommands,
-} from "#web/features/commit-commands/index";
-import type { RepositoryHistoryReadModel } from "#web/features/repository-history/index";
-import { useRepositoryScope } from "#web/features/repository-scope/index";
+import { writeClipboardText } from "#web/features/clipboard/write-clipboard-text";
+import type {
+  CommitCommandHandlers,
+  GraphCommandContext,
+} from "#web/features/commit-commands/graph-command.contract";
+import { useGraphCommands } from "#web/features/commit-commands/use-graph-commands";
+import type { RepositoryHistoryReadModel } from "#web/features/repository-history/repository-history-reader.contract";
+import { useRepositoryScope } from "#web/features/repository-scope/repository-scope-provider";
 
 export function useCommitGraphCommands({
   reader,

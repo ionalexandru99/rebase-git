@@ -1,8 +1,8 @@
 import { useMemo } from "react";
+import { ContextMenuItem } from "#web/components/ui/context-menu";
 import type { RefCommandContext } from "#web/features/ref-commands/ref-command.contract";
 import { refCommandSlot } from "#web/features/ref-commands/ref-command-slot";
 import { createCommandRegistry } from "#web/platform/command-contributions/command-registry";
-import { ContextMenuItem } from "#web-ui/components/ui/context-menu";
 
 export function RefCommandItems({
   context,

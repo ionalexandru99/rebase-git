@@ -1,19 +1,19 @@
 import type { CommitInspection as CommitDetails } from "@rebase/contracts";
 import { lazy, Suspense, useState } from "react";
+import { Button } from "#web/components/ui/button";
+import { CommitFiles } from "#web/features/commit-inspection/components/commit-files";
+import { CommitMetadata } from "#web/features/commit-inspection/components/commit-metadata";
 import { useCommitDiff } from "#web/features/commit-inspection/hooks/use-commit-diff";
 import {
   type InspectionScope,
   useCommitInspection,
 } from "#web/features/commit-inspection/hooks/use-commit-inspection";
 import { describeInspectionFailure } from "#web/features/commit-inspection/inspection-messages";
-import { useDiffPreferences } from "#web/features/file-diff/index";
+import { useDiffPreferences } from "#web/features/file-diff/hooks/use-diff-preferences";
 import { usePanelFeature } from "#web/features/workspace-panel/api";
-import { Button } from "#web-ui/components/ui/button";
-import { CommitFiles } from "#web-ui/features/commit-inspection/components/commit-files";
-import { CommitMetadata } from "#web-ui/features/commit-inspection/components/commit-metadata";
 
 const CommitDiff = lazy(
-  () => import("#web-ui/features/commit-inspection/components/commit-diff"),
+  () => import("#web/features/commit-inspection/components/commit-diff"),
 );
 
 interface SelectedFile {

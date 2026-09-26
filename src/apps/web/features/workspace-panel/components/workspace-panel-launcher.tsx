@@ -1,17 +1,17 @@
 import { IconPlus } from "@tabler/icons-react";
 import { useRef } from "react";
-import {
-  workspacePanelDefinitions,
-  workspacePanelKinds,
-} from "#web/features/workspace-panel/workspace-panel-definitions";
-import { Button } from "#web-ui/components/ui/button";
+import { Button } from "#web/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-} from "#web-ui/components/ui/dropdown-menu";
-import { useWorkspacePanel } from "#web-ui/features/workspace-panel/workspace-panel-provider";
+} from "#web/components/ui/dropdown-menu";
+import {
+  workspacePanelDefinitions,
+  workspacePanelKinds,
+} from "#web/features/workspace-panel/workspace-panel-definitions";
+import { useWorkspacePanel } from "#web/features/workspace-panel/workspace-panel-provider";
 
 export function WorkspacePanelLauncher() {
   const panel = useWorkspacePanel();

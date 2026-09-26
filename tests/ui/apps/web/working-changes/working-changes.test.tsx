@@ -15,10 +15,10 @@ import { page } from "vite-plus/test/browser";
 import { fakeRequests, respond } from "#tests-ui/runtime/fake-requests";
 import { render } from "#tests-ui/runtime/render";
 import { defaultDiffPreferences } from "#web/domain/file-diff/diff-preferences.contract";
+import { WorkingChanges } from "#web/features/working-changes/working-changes";
 import { saveDiffPreferences } from "#web/persistence/working-changes/working-changes-store";
 import type { EnvironmentChangeListener } from "#web/platform/environment/environment-protocol.contract";
 import { createEnvironmentQueryClient } from "#web/platform/query/environment-query-client";
-import { WorkingChanges } from "#web-ui/features/working-changes/working-changes";
 
 const path = "src/read-status.ts";
 const before = 'export const status = "old";\n';

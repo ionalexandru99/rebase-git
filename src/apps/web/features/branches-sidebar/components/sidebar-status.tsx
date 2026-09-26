@@ -1,11 +1,11 @@
 import type { JSX } from "react";
+import { Button } from "#web/components/ui/button";
 import type {
   BranchesSidebarRow,
   BranchesSidebarScope,
 } from "#web/features/branches-sidebar/branches-sidebar.contract";
 import { describeEmptyBranchesSidebar } from "#web/features/branches-sidebar/branches-sidebar-messages";
-import type { RepositoryRefsRead } from "#web/features/repository-refs/index";
-import { Button } from "#web-ui/components/ui/button";
+import type { RepositoryRefsRead } from "#web/features/repository-refs/hooks/use-repository-refs";
 
 export function SidebarStatus({
   query,

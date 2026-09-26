@@ -5,11 +5,11 @@ import {
 } from "@rebase/contracts";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback } from "react";
+import { useEnvironment } from "#web/platform/query/environment-context";
 import {
   environmentQueryKey,
   useEnvironmentQuery,
 } from "#web/platform/query/environment-query";
-import { useEnvironment } from "#web-ui/platform/query/environment-context";
 
 const noRepositories: readonly RepositoryCatalogEntry[] = [];
 

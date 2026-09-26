@@ -1,4 +1,4 @@
-import { ErrorNotification } from "#web/features/notifications/index";
+import { ErrorNotification } from "#web/features/notifications/components/error-notification";
 import type { Pull } from "#web/features/repository-pull/hooks/use-pull";
 
 export function PullNotice({ pull }: { readonly pull: Pull }) {

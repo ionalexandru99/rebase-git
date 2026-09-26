@@ -1,35 +1,28 @@
 import type { JSX } from "react";
 import { useMemo, useState } from "react";
+import { CommitInspectionBridge } from "#web/app/workspace/commit-inspection-bridge";
 import { useHistoryRefRefresh } from "#web/app/workspace/use-history-ref-refresh";
 import { useWorkspaceHistoryScope } from "#web/app/workspace/use-workspace-history-scope";
-import { useCreateBranchHere } from "#web/features/branch-management/index";
-import { BranchesSidebar } from "#web/features/branches-sidebar/index";
-import { GraphCommands } from "#web/features/commit-commands/index";
-import type { CommitGraphHistory } from "#web/features/commit-graph/index";
-import {
-  automaticHistoryScope,
-  CommitGraph,
-} from "#web/features/commit-graph/index";
-import { RefCommands } from "#web/features/ref-commands/index";
+import { ResizableHandle, ResizablePanel } from "#web/components/ui/resizable";
+import { useCreateBranchHere } from "#web/features/branch-management/hooks/use-create-branch-here";
+import { BranchesSidebar } from "#web/features/branches-sidebar/branches-sidebar";
+import { GraphCommands } from "#web/features/commit-commands/graph-command-slot";
+import { CommitGraph } from "#web/features/commit-graph/commit-graph";
+import type { CommitGraphHistory } from "#web/features/commit-graph/commit-graph.contract";
+import { automaticHistoryScope } from "#web/features/commit-graph/history-scope.contract";
+import { OperationRecoveryNotice } from "#web/features/operation-recovery/components/operation-recovery-notice";
+import { RefCommands } from "#web/features/ref-commands/ref-commands";
+import { PullButton } from "#web/features/repository-pull/components/pull-button";
+import { PullNotice } from "#web/features/repository-pull/components/pull-notice";
 import { usePull } from "#web/features/repository-pull/hooks/use-pull";
+import { PushButton } from "#web/features/repository-push/components/push-button";
+import { PushNotice } from "#web/features/repository-push/components/push-notice";
 import { usePush } from "#web/features/repository-push/hooks/use-push";
 import { resolvePushTarget } from "#web/features/repository-push/resolve-push-target";
-import {
-  useRefActivation,
-  useRepositoryRefs,
-} from "#web/features/repository-refs/index";
-import { useRepositoryScope } from "#web/features/repository-scope/index";
-import { CommitInspectionBridge } from "#web-ui/app/workspace/commit-inspection-bridge";
-import {
-  ResizableHandle,
-  ResizablePanel,
-} from "#web-ui/components/ui/resizable";
-import { OperationRecoveryNotice } from "#web-ui/features/operation-recovery/components/operation-recovery-notice";
-import { PullButton } from "#web-ui/features/repository-pull/components/pull-button";
-import { PullNotice } from "#web-ui/features/repository-pull/components/pull-notice";
-import { PushButton } from "#web-ui/features/repository-push/components/push-button";
-import { PushNotice } from "#web-ui/features/repository-push/components/push-notice";
-import { WorkspacePanel } from "#web-ui/features/workspace-panel/index";
+import { useRefActivation } from "#web/features/repository-refs/hooks/use-ref-activation";
+import { useRepositoryRefs } from "#web/features/repository-refs/hooks/use-repository-refs";
+import { useRepositoryScope } from "#web/features/repository-scope/repository-scope-provider";
+import { WorkspacePanel } from "#web/features/workspace-panel/workspace-panel";
 
 const branchesSidebarSize = {
   default: "16.5rem",

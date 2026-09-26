@@ -1,9 +1,7 @@
 import type { RepositoryCatalogEntry } from "@rebase/contracts";
 import { useCallback, useState } from "react";
-import {
-  resolveActiveWorktreePath,
-  useRepositoryRefs,
-} from "#web/features/repository-refs/index";
+import { resolveActiveWorktreePath } from "#web/features/repository-refs/activate-repository-ref";
+import { useRepositoryRefs } from "#web/features/repository-refs/hooks/use-repository-refs";
 
 export function useActiveWorktree(
   repository: RepositoryCatalogEntry | undefined,

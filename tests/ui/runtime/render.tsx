@@ -9,12 +9,12 @@ import {
   render as renderComponent,
 } from "vitest-browser-react";
 import { fakeRequests, idleOperation } from "#tests-ui/runtime/fake-requests";
-import { createEnvironmentQueryClient } from "#web/platform/query/environment-query-client";
-import { ApplicationRuntime } from "#web-ui/platform/effect/application-runtime-context";
+import { ApplicationRuntime } from "#web/platform/effect/application-runtime-context";
 import {
   type Environment,
   EnvironmentProvider,
-} from "#web-ui/platform/query/environment-context";
+} from "#web/platform/query/environment-context";
+import { createEnvironmentQueryClient } from "#web/platform/query/environment-query-client";
 
 const runtimes = new Set<ManagedRuntime.ManagedRuntime<never, never>>();
 const queryClients = new Set<QueryClient>();

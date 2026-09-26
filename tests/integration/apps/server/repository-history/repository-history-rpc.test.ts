@@ -6,6 +6,7 @@ import {
   type EnvironmentAccessCapability,
   type RepositoryHistoryBatch,
 } from "@rebase/contracts";
+import { fetchEnvironmentDiscoveryEffect } from "@rebase/environment-client";
 import { Deferred, Effect, Fiber } from "effect";
 import { describe, expect, it } from "vite-plus/test";
 import { createEnvironmentEventPublisher } from "#server/adapters/environment-transport/events/environment-event-publisher";
@@ -14,14 +15,11 @@ import {
   type EnvironmentAuthorization,
   EnvironmentAuthorizationAccess,
 } from "#server/domain/environment-authorization.contract";
-import { environmentAuthorizationFeature } from "#server/features/environment-authorization/index";
+import { environmentAuthorizationFeature } from "#server/features/environment-authorization/environment-authorization.feature";
 import type { RepositoryHistoryService } from "#server/features/repository-history/repository-history";
 import { repositoryHistoryRpc } from "#server/features/repository-history/rpc/repository-history-rpc";
 import { testEnvironmentFeatures } from "#tests-integration/apps/server/environment-connection/test-environment-features";
-import {
-  connectEnvironmentEffect,
-  fetchEnvironmentDiscoveryEffect,
-} from "#web/app/environment/connection/index";
+import { connectEnvironmentEffect } from "#web/app/environment/connection/environment-protocol-client";
 import type { RepositoryHistoryTransport } from "#web/features/repository-history/repository-history-reader.contract";
 import { createRepositoryHistoryRpc } from "#web/features/repository-history/transport/repository-history-rpc";
 

@@ -18,12 +18,12 @@ import {
   respond,
 } from "#tests-ui/runtime/fake-requests";
 import { render } from "#tests-ui/runtime/render";
-import { NotificationsProvider } from "#web/features/notifications/index";
-import type { RepositoryHistorySnapshot } from "#web/features/repository-history/index";
+import { NotificationsProvider } from "#web/features/notifications/notifications";
+import type { RepositoryHistorySnapshot } from "#web/features/repository-history/repository-history-reader.contract";
+import { PullButton } from "#web/features/repository-pull/components/pull-button";
+import { PullNotice } from "#web/features/repository-pull/components/pull-notice";
 import { usePull } from "#web/features/repository-pull/hooks/use-pull";
-import { RepositoryScopeProvider } from "#web/features/repository-scope/index";
-import { PullButton } from "#web-ui/features/repository-pull/components/pull-button";
-import { PullNotice } from "#web-ui/features/repository-pull/components/pull-notice";
+import { RepositoryScopeProvider } from "#web/features/repository-scope/repository-scope-provider";
 
 const repositoryId = "00000000-0000-4000-8000-000000000001";
 const freshness: RepositoryFreshness = {

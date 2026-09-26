@@ -13,12 +13,12 @@ import {
   respond,
 } from "#tests-ui/runtime/fake-requests";
 import { render } from "#tests-ui/runtime/render";
-import { NotificationsProvider } from "#web/features/notifications/index";
+import { NotificationsProvider } from "#web/features/notifications/notifications";
+import { PushButton } from "#web/features/repository-push/components/push-button";
+import { PushNotice } from "#web/features/repository-push/components/push-notice";
 import { usePush } from "#web/features/repository-push/hooks/use-push";
 import type { PushTarget } from "#web/features/repository-push/resolve-push-target";
-import { RepositoryScopeProvider } from "#web/features/repository-scope/index";
-import { PushButton } from "#web-ui/features/repository-push/components/push-button";
-import { PushNotice } from "#web-ui/features/repository-push/components/push-notice";
+import { RepositoryScopeProvider } from "#web/features/repository-scope/repository-scope-provider";
 
 const reviewed = "9c1e2f71".padEnd(40, "0");
 const scope = { repositoryId: "repo", worktreePath: "/repo" };

@@ -1,6 +1,6 @@
 import { IconCode, IconGitPullRequest } from "@tabler/icons-react";
-import { commitInspectionPanel } from "#web/features/commit-inspection/index";
-import { workingChangesPanel } from "#web/features/working-changes/index";
+import { commitInspectionPanel } from "#web/features/commit-inspection/commit-inspection-panel-definition";
+import { workingChangesPanel } from "#web/features/working-changes/working-changes-panel-definition";
 import type { WorkspacePanelDefinition } from "#web/features/workspace-panel/workspace-panel.contract";
 
 const definitions = {

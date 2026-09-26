@@ -1,20 +1,18 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef } from "react";
+import { SettingsSection } from "#web/components/ui/settings-layout";
 import type { OpenProjectRepository } from "#web/features/open-project/open-project.contract";
-import {
-  describeRepositoryFetchError,
-  RepositoryFetchSettings,
-} from "#web/features/repository-fetch/index";
-import { forgetRepositoryRefs } from "#web/features/repository-refs/index";
+import { RepositoryFetchSettings } from "#web/features/repository-fetch/components/repository-fetch-settings";
+import { describeRepositoryFetchError } from "#web/features/repository-fetch/repository-fetch-error";
+import { forgetRepositoryRefs } from "#web/features/repository-refs/repository-refs-query";
+import { RepositoryCacheSettings } from "#web/features/repository-settings/components/repository-cache-settings";
+import { RepositoryDetailsSettings } from "#web/features/repository-settings/components/repository-details-settings";
+import { RepositoryOrderSettings } from "#web/features/repository-settings/components/repository-order-settings";
 import type {
   RepositoryHistorySettingsClient,
   RepositorySettingsIdentity,
 } from "#web/features/repository-settings/repository-settings.contract";
 import { useStore } from "#web/platform/store/use-store";
-import { SettingsSection } from "#web-ui/components/ui/settings-layout";
-import { RepositoryCacheSettings } from "#web-ui/features/repository-settings/components/repository-cache-settings";
-import { RepositoryDetailsSettings } from "#web-ui/features/repository-settings/components/repository-details-settings";
-import { RepositoryOrderSettings } from "#web-ui/features/repository-settings/components/repository-order-settings";
 
 export function RepositorySettingsPage({
   repository,

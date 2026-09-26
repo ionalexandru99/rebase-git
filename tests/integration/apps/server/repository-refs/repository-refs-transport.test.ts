@@ -10,6 +10,7 @@ import {
   createEnvironmentRequestClient,
   type EnvironmentCredential,
   EnvironmentHttpRejected,
+  exchangeEnvironmentPairingEffect,
 } from "@rebase/environment-client";
 import { Effect, Layer, ManagedRuntime } from "effect";
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
@@ -24,15 +25,11 @@ import { RepositoryAccess } from "#server/domain/repository-access.contract";
 import { RepositoryCatalogAccess } from "#server/domain/repository-catalog.contract";
 import { RepositoryCoordination } from "#server/domain/repository-coordination.contract";
 import { RepositoryWatching } from "#server/domain/repository-watcher.contract";
-import {
-  createEnvironmentAuthorization,
-  environmentAuthorizationFeature,
-} from "#server/features/environment-authorization/index";
-import {
-  createRepositoryCatalog,
-  repositoryCatalogFeature,
-} from "#server/features/repository-catalog/index";
-import { repositoryRefsFeature } from "#server/features/repository-refs/index";
+import { createEnvironmentAuthorization } from "#server/features/environment-authorization/environment-authorization";
+import { environmentAuthorizationFeature } from "#server/features/environment-authorization/environment-authorization.feature";
+import { createRepositoryCatalog } from "#server/features/repository-catalog/repository-catalog";
+import { repositoryCatalogFeature } from "#server/features/repository-catalog/repository-catalog.feature";
+import { repositoryRefsFeature } from "#server/features/repository-refs/repository-refs.feature";
 import { acquireEnvironmentContext } from "#server/persistence/environment-context";
 import { environmentPaths } from "#server/persistence/storage/environment-paths";
 import {
@@ -43,10 +40,7 @@ import { testEnvironmentFeatures } from "#tests-integration/apps/server/environm
 import { createRepository, git } from "#tests-support/git";
 import { removeTemporaryDirectory } from "#tests-support/temporary-directory";
 import { createBrowserLocalEnvironmentSession } from "#web/app/environment/browser-local-environment-session";
-import {
-  connectCurrentEnvironmentEffect,
-  exchangeEnvironmentPairingEffect,
-} from "#web/app/environment/connection/index";
+import { connectCurrentEnvironmentEffect } from "#web/app/environment/connection/environment-protocol-client";
 import { readRepositoryRefs } from "#web/platform/environment/rpc/read-repository-refs";
 
 const directories = new Set<string>();

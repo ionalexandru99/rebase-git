@@ -1,7 +1,7 @@
 import { IconFolder, IconSearch } from "@tabler/icons-react";
 import type { JSX, KeyboardEvent, RefObject } from "react";
-import { Button } from "#web-ui/components/ui/button";
-import { Input } from "#web-ui/components/ui/input";
+import { Button } from "#web/components/ui/button";
+import { Input } from "#web/components/ui/input";
 
 export function OpenProjectToolbar({
   activeDescendant,

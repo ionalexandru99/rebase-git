@@ -9,8 +9,8 @@ import {
   repositoryCatalogKey,
   sortRepositories,
 } from "#web/features/repository-catalog/hooks/use-repository-catalog";
+import { useEnvironment } from "#web/platform/query/environment-context";
 import { useCommand } from "#web/platform/query/use-command";
-import { useEnvironment } from "#web-ui/platform/query/environment-context";
 
 type CatalogChange = (
   repositories: readonly RepositoryCatalogEntry[],

@@ -1,7 +1,7 @@
 import { RepositoryRefsHttpApi } from "@rebase/contracts";
 import { applyRepositoryCheckout } from "#web/features/repository-refs/apply-repository-checkout";
 import { useApplyToRefs } from "#web/features/repository-refs/hooks/use-apply-to-refs";
-import { useRepositoryScope } from "#web/features/repository-scope/index";
+import { useRepositoryScope } from "#web/features/repository-scope/repository-scope-provider";
 import { useCommand } from "#web/platform/query/use-command";
 
 export function useCheckout() {

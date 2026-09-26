@@ -7,9 +7,9 @@ import {
 } from "@rebase/contracts";
 import { IconChevronDown } from "@tabler/icons-react";
 import { type JSX, useState } from "react";
-import { Button } from "#web-ui/components/ui/button";
-import { SettingsRow as SettingRow } from "#web-ui/components/ui/settings-layout";
-import { Switch } from "#web-ui/components/ui/switch";
+import { Button } from "#web/components/ui/button";
+import { SettingsRow as SettingRow } from "#web/components/ui/settings-layout";
+import { Switch } from "#web/components/ui/switch";
 
 const releaseChannelLabels: Record<ReleaseChannel, string> = {
   nightly: "Nightly",

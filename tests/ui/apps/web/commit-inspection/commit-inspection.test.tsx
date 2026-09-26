@@ -15,11 +15,11 @@ import {
 import { repositoryScope } from "#tests-ui/apps/web/repository-scope/repository-scope-fixture";
 import { fakeRequests, respond } from "#tests-ui/runtime/fake-requests";
 import { render } from "#tests-ui/runtime/render";
-import { RepositoryScopeProvider } from "#web/features/repository-scope/index";
-import { CommitInspectionBridge } from "#web-ui/app/workspace/commit-inspection-bridge";
-import { ResizablePanel } from "#web-ui/components/ui/resizable";
-import { CommitInspection } from "#web-ui/features/commit-inspection/commit-inspection";
-import { WorkspacePanel } from "#web-ui/features/workspace-panel/index";
+import { CommitInspectionBridge } from "#web/app/workspace/commit-inspection-bridge";
+import { ResizablePanel } from "#web/components/ui/resizable";
+import { CommitInspection } from "#web/features/commit-inspection/commit-inspection";
+import { RepositoryScopeProvider } from "#web/features/repository-scope/repository-scope-provider";
+import { WorkspacePanel } from "#web/features/workspace-panel/workspace-panel";
 
 interface InspectionClient {
   readonly inspect: (command: InspectCommit) => Details | Promise<Details>;

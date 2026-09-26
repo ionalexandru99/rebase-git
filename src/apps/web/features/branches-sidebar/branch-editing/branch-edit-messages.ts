@@ -1,4 +1,4 @@
-import type { BranchCommandFailure } from "#web/features/branch-management/index";
+import type { BranchCommandFailure } from "#web/features/branch-management/hooks/use-branch-commands";
 
 export function describeBranchError(error: BranchCommandFailure): string {
   switch (error._tag) {

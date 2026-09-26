@@ -2,7 +2,7 @@ import type { CommitGraphPageWindow } from "#web/features/commit-graph/paging/co
 import type {
   RepositoryHistoryFetchCommands,
   RepositoryHistoryReadModel,
-} from "#web/features/repository-history/index";
+} from "#web/features/repository-history/repository-history-reader.contract";
 
 export type CommitGraphReader = RepositoryHistoryReadModel &
   Pick<RepositoryHistoryFetchCommands, "fetch">;

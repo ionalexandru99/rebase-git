@@ -5,8 +5,8 @@ import {
   type OpenProjectRepositoryItem,
   repositoryInitials,
 } from "#web/features/open-project/open-project-state";
-import { RepositorySettingsButton } from "#web/features/repository-settings/index";
-import { openProjectItemId } from "#web-ui/features/open-project/repository-row";
+import { openProjectItemId } from "#web/features/open-project/repository-row";
+import { RepositorySettingsButton } from "#web/features/repository-settings/components/repository-settings-button";
 
 export function RecentRepositories({
   activeKey,

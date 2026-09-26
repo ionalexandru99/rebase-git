@@ -1,9 +1,3 @@
-import type { RepositoryHistoryCacheProps } from "#web/features/history-storage/index";
-import {
-  formatCacheSize,
-  historyCacheActions,
-  useHistoryCacheManagement,
-} from "#web/features/history-storage/index";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -12,9 +6,13 @@ import {
   AlertDialogDescription,
   AlertDialogFooter,
   AlertDialogTitle,
-} from "#web-ui/components/ui/alert-dialog";
-import { Button } from "#web-ui/components/ui/button";
-import { SettingsRow } from "#web-ui/components/ui/settings-layout";
+} from "#web/components/ui/alert-dialog";
+import { Button } from "#web/components/ui/button";
+import { SettingsRow } from "#web/components/ui/settings-layout";
+import { formatCacheSize } from "#web/features/history-storage/format-cache-size";
+import type { RepositoryHistoryCacheProps } from "#web/features/history-storage/history-cache.contract";
+import { historyCacheActions } from "#web/features/history-storage/history-cache-actions";
+import { useHistoryCacheManagement } from "#web/features/history-storage/hooks/use-history-cache-management";
 
 export function RepositoryCacheSettings(
   props: Pick<

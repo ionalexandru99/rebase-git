@@ -1,5 +1,5 @@
+import { CommitInspection } from "#web/features/commit-inspection/commit-inspection";
 import { usePanelFeature } from "#web/features/workspace-panel/api";
-import { CommitInspection } from "#web-ui/features/commit-inspection/commit-inspection";
 
 export function CommitInspectionPanel() {
   const feature = usePanelFeature();

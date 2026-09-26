@@ -1,13 +1,13 @@
 import type { RepositoryHistoryRefTarget } from "@rebase/contracts";
 import { IconChevronLeft, IconChevronRight } from "@tabler/icons-react";
-import { useCommitMessageScroll } from "#web/features/commit-graph/hooks/use-commit-message-scroll";
-import { graphMetadataWidth } from "#web/features/commit-graph/layout/graph-metrics";
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
-} from "#web-ui/components/ui/popover";
-import { CommitRefLabels } from "#web-ui/features/commit-graph/components/commit-ref-labels";
+} from "#web/components/ui/popover";
+import { CommitRefLabels } from "#web/features/commit-graph/components/commit-ref-labels";
+import { useCommitMessageScroll } from "#web/features/commit-graph/hooks/use-commit-message-scroll";
+import { graphMetadataWidth } from "#web/features/commit-graph/layout/graph-metrics";
 
 export function CommitMessage({
   subject,

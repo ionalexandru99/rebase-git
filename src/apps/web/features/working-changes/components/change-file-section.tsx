@@ -10,7 +10,9 @@ import {
   IconTrash,
 } from "@tabler/icons-react";
 import { useRef, useState } from "react";
-import { useFileRows } from "#web/features/file-diff/index";
+import { Button } from "#web/components/ui/button";
+import { useFileRows } from "#web/features/file-diff/hooks/use-file-rows";
+import { ChangeFileIcon } from "#web/features/working-changes/components/change-file-icon";
 import type {
   ChangeAction,
   WorkingChangesView,
@@ -19,8 +21,6 @@ import {
   compactRename,
   renameHint,
 } from "#web/features/working-changes/rename/rename-path";
-import { Button } from "#web-ui/components/ui/button";
-import { ChangeFileIcon } from "#web-ui/features/working-changes/components/change-file-icon";
 
 export type ChangeFileSectionView = Pick<
   WorkingChangesView,

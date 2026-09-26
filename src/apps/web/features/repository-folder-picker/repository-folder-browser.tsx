@@ -1,20 +1,20 @@
 import type { RepositoryCatalogEntry } from "@rebase/contracts";
 import { IconArrowUp, IconSearch, IconX } from "@tabler/icons-react";
 import { type JSX, useEffect, useRef, useState } from "react";
-import { useFolderBrowser } from "#web/features/repository-folder-picker/hooks/use-folder-browser";
-import { filterDirectoryEntries } from "#web/features/repository-folder-picker/repository-folder-picker-state";
-import { Button } from "#web-ui/components/ui/button";
+import { Button } from "#web/components/ui/button";
 import {
   DialogClose,
   DialogDescription,
   DialogTitle,
-} from "#web-ui/components/ui/dialog";
-import { Input } from "#web-ui/components/ui/input";
-import { RepositoryDirectoryList } from "#web-ui/features/repository-folder-picker/repository-directory-list";
+} from "#web/components/ui/dialog";
+import { Input } from "#web/components/ui/input";
+import { useFolderBrowser } from "#web/features/repository-folder-picker/hooks/use-folder-browser";
+import { RepositoryDirectoryList } from "#web/features/repository-folder-picker/repository-directory-list";
 import {
   type RepositoryFolderPickerEnvironment,
   RepositoryFolderPickerEnvironmentSelect,
-} from "#web-ui/features/repository-folder-picker/repository-folder-picker-environment-select";
+} from "#web/features/repository-folder-picker/repository-folder-picker-environment-select";
+import { filterDirectoryEntries } from "#web/features/repository-folder-picker/repository-folder-picker-state";
 
 export function RepositoryFolderBrowser({
   environment,

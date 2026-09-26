@@ -1,9 +1,5 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { RepositoryHistoryStorageDiagnostics } from "#web/domain/repository-history/history-storage.contract";
-import { RepositoryHistoryCacheList } from "#web/features/history-storage/index";
-import { requestBrowserHistoryStorage } from "#web/features/repository-history/index";
-import { forgetAllRepositoryRefs } from "#web/features/repository-refs/index";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -12,8 +8,12 @@ import {
   AlertDialogDescription,
   AlertDialogFooter,
   AlertDialogTitle,
-} from "#web-ui/components/ui/alert-dialog";
-import { Button } from "#web-ui/components/ui/button";
+} from "#web/components/ui/alert-dialog";
+import { Button } from "#web/components/ui/button";
+import type { RepositoryHistoryStorageDiagnostics } from "#web/domain/repository-history/history-storage.contract";
+import { RepositoryHistoryCacheList } from "#web/features/history-storage/components/repository-history-cache-list";
+import { requestBrowserHistoryStorage } from "#web/features/repository-history/storage/browser-history-storage";
+import { forgetAllRepositoryRefs } from "#web/features/repository-refs/repository-refs-query";
 
 export function HistoryStorageSettings() {
   const [diagnostics, setDiagnostics] =

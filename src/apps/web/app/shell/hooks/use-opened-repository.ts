@@ -5,7 +5,7 @@ import {
   type OpenedRepositoryTarget,
   openedRepositoryKey,
 } from "#web/app/shell/opened-repository";
-import type { RepositoryHistoryGateway } from "#web/features/repository-history/index";
+import type { RepositoryHistoryGateway } from "#web/features/repository-history/repository-history-reader.contract";
 import { useStore } from "#web/platform/store/use-store";
 
 export function useOpenedRepository({

@@ -10,8 +10,8 @@ import {
   changeDiffKey,
   changesKey,
 } from "#web/features/working-changes/working-changes-query";
+import { useEnvironment } from "#web/platform/query/environment-context";
 import { type CommandScope, useCommand } from "#web/platform/query/use-command";
-import { useEnvironment } from "#web-ui/platform/query/environment-context";
 
 type WrittenScope = ChangesScope & { readonly viewed?: ViewedChange };
 

@@ -5,11 +5,11 @@ import type {
   RepositoryHistoryFetchCommands,
   RepositoryHistoryObservation,
   RepositoryHistorySnapshot,
-} from "#web/features/repository-history/index";
+} from "#web/features/repository-history/repository-history-reader.contract";
 import { usePulling } from "#web/features/repository-pull/hooks/use-pulling";
 import { createPullBranchCommand } from "#web/features/repository-pull/pull-branch-command";
 import { describePullFailure } from "#web/features/repository-pull/repository-pull-messages";
-import { useRepositoryScope } from "#web/features/repository-scope/index";
+import { useRepositoryScope } from "#web/features/repository-scope/repository-scope-provider";
 import { commandKey, useCommand } from "#web/platform/query/use-command";
 import { createStore } from "#web/platform/store/store";
 import { useStore } from "#web/platform/store/use-store";

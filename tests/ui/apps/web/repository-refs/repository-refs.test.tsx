@@ -17,7 +17,7 @@ import { fakeRpc } from "#tests-ui/runtime/fake-rpc";
 import { render } from "#tests-ui/runtime/render";
 import { useRefActivation } from "#web/features/repository-refs/hooks/use-ref-activation";
 import { useRepositoryRefs } from "#web/features/repository-refs/hooks/use-repository-refs";
-import { RepositoryScopeProvider } from "#web/features/repository-scope/index";
+import { RepositoryScopeProvider } from "#web/features/repository-scope/repository-scope-provider";
 import type { EnvironmentChangeListener } from "#web/platform/environment/environment-protocol.contract";
 import type { Environment } from "#web-ui/platform/query/environment-context";
 

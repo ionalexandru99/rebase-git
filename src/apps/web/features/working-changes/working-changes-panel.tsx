@@ -1,5 +1,5 @@
+import { WorkingChanges } from "#web/features/working-changes/working-changes";
 import { usePanelFeature } from "#web/features/workspace-panel/api";
-import { WorkingChanges } from "#web-ui/features/working-changes/working-changes";
 
 export function WorkingChangesPanel() {
   const feature = usePanelFeature();

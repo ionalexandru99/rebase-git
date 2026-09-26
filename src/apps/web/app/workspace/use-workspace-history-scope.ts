@@ -2,13 +2,15 @@ import type { RepositoryRefs, RepositoryRefTarget } from "@rebase/contracts";
 import { useCallback, useMemo, useRef, useState } from "react";
 import {
   automaticHistoryScope,
-  createBrowserHistoryFilterStore,
   type HistoryScope,
+} from "#web/features/commit-graph/history-scope.contract";
+import { createBrowserHistoryFilterStore } from "#web/features/commit-graph/scope/browser-history-filter-store";
+import {
   historyScopesEqual,
   renameHistoryBranch,
   resolveHistoryScope,
   toggleHistoryRef,
-} from "#web/features/commit-graph/index";
+} from "#web/features/commit-graph/scope/history-scope";
 
 export function useWorkspaceHistoryScope({
   environmentId,

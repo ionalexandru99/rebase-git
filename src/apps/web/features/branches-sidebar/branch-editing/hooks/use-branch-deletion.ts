@@ -7,7 +7,7 @@ import { useCallback, useState } from "react";
 import type {
   BranchCommandFailure,
   BranchCommands,
-} from "#web/features/branch-management/index";
+} from "#web/features/branch-management/hooks/use-branch-commands";
 import { describeBranchError } from "#web/features/branches-sidebar/branch-editing/branch-edit-messages";
 import {
   type BranchDeletion,

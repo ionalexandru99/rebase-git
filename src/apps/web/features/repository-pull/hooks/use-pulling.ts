@@ -1,6 +1,6 @@
 import { RepositoryPullHttpApi } from "@rebase/contracts";
 import { useIsMutating } from "@tanstack/react-query";
-import { useRepositoryScope } from "#web/features/repository-scope/index";
+import { useRepositoryScope } from "#web/features/repository-scope/repository-scope-provider";
 import { commandKey } from "#web/platform/query/use-command";
 
 export function usePulling() {

@@ -5,7 +5,7 @@ import type { RepositoryHistoryStorageDiagnostics } from "#web/domain/repository
 import type { RepositoryHistoryCacheReader } from "#web/features/history-storage/history-cache.contract";
 import type { RepositoryHistorySnapshot } from "#web/features/repository-history/repository-history-reader.contract";
 import { RepositoryHistoryStorageUnavailable } from "#web/features/repository-history/repository-history-reader.contract";
-import { RepositoryCacheSettings } from "#web-ui/features/repository-settings/components/repository-cache-settings";
+import { RepositoryCacheSettings } from "#web/features/repository-settings/components/repository-cache-settings";
 
 const identity = {
   environmentId: "environment-1",

@@ -5,8 +5,8 @@ import {
   type TablerIcon,
 } from "@tabler/icons-react";
 import type { ComponentType } from "react";
-import { GeneralSettings } from "#web-ui/features/settings/general-settings";
-import { HistoryStorageSettings } from "#web-ui/features/settings/history-storage-settings";
+import { GeneralSettings } from "#web/features/settings/general-settings";
+import { HistoryStorageSettings } from "#web/features/settings/history-storage-settings";
 
 export interface SettingsSectionContext {
   readonly desktopUpdates: DesktopUpdates | undefined;
