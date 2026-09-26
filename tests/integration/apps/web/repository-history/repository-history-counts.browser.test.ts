@@ -4,8 +4,8 @@ import {
   type RepositoryHistoryBatch,
 } from "@rebase/contracts";
 import { describe, expect, it, vi } from "vite-plus/test";
+import { createBrowserRepositoryHistoryReader } from "#web/features/repository-history/browser-repository-history-reader";
 import { clearHistoryCache } from "#web/features/repository-history/cache/repository-history-storage";
-import { createBrowserRepositoryHistoryReader } from "#web/features/repository-history/index";
 import { readRepositoryCommits } from "#web/features/repository-history/query/repository-history-query";
 import {
   beginRepositoryHistorySynchronization,
@@ -14,7 +14,7 @@ import {
   storeRepositoryHistoryBatch,
   storeRepositoryHistoryPage,
 } from "#web/features/repository-history/replica/repository-history-store";
-import type { RepositoryHistoryGateway } from "#web/features/repository-history/repository-history-reader.contract";
+import type { RepositoryHistoryGateway } from "#web/features/repository-history/repository-history-reader";
 
 describe("durable history counts", () => {
   it("counts stored OIDs after resetting a tip and resumes a cleared first synchronization", async () => {

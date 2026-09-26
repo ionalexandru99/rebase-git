@@ -4,7 +4,7 @@ import {
   acquireSharedWorker,
   discardSharedWorker,
 } from "#web/features/repository-history/browser-repository-history-reader";
-import { RepositoryHistoryUnavailable } from "#web/features/repository-history/repository-history-reader.contract";
+import { RepositoryHistoryUnavailable } from "#web/features/repository-history/repository-history-reader";
 import type {
   HistoryStorageRequest,
   HistoryStorageResponse,

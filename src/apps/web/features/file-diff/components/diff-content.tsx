@@ -1,26 +1,10 @@
 import type { SelectedLineRange } from "@pierre/diffs";
-import {
-  FileDiff,
-  WorkerPoolContextProvider,
-  type WorkerPoolOptions,
-} from "@pierre/diffs/react";
-import DiffWorker from "@pierre/diffs/worker/worker.js?worker";
+import { FileDiff } from "@pierre/diffs/react";
 import type { ChangeDiff } from "@rebase/contracts";
 import { IconFileDiff } from "@tabler/icons-react";
 import type { CSSProperties } from "react";
 import type { DiffPreferences } from "#web/domain/file-diff/diff-preferences.contract";
 import type { createChangeDiffModel } from "#web/features/file-diff/diff-model";
-
-const poolOptions: WorkerPoolOptions = {
-  workerFactory: () => new DiffWorker(),
-  poolSize: 2,
-  totalASTLRUCacheSize: 8,
-};
-const highlighterOptions = {
-  theme: "pierre-dark",
-  langs: ["typescript", "tsx", "csharp", "json"] as const,
-  tokenizeMaxLineLength: 5000,
-};
 
 export function DiffContent({
   diff,
@@ -39,37 +23,29 @@ export function DiffContent({
   };
 }) {
   return metadata ? (
-    <WorkerPoolContextProvider
-      poolOptions={poolOptions}
-      highlighterOptions={{
-        ...highlighterOptions,
-        langs: [...highlighterOptions.langs],
-      }}
-    >
-      <div className="min-h-0 flex-1 overflow-auto">
-        <FileDiff
-          style={
-            {
-              "--diffs-font-family": "var(--font-mono)",
-              "--diffs-font-size": "12px",
-              "--diffs-line-height": "20px",
-            } as CSSProperties
-          }
-          fileDiff={metadata}
-          selectedLines={selection?.range ?? null}
-          options={{
-            theme: "pierre-dark",
-            diffStyle: preferences.split ? "split" : "unified",
-            overflow: preferences.wrap ? "wrap" : "scroll",
-            expandUnchanged: expandContext,
-            enableLineSelection: selection !== undefined,
-            ...(selection === undefined
-              ? {}
-              : { onLineSelectionEnd: selection.onChange }),
-          }}
-        />
-      </div>
-    </WorkerPoolContextProvider>
+    <div className="min-h-0 flex-1 overflow-auto">
+      <FileDiff
+        style={
+          {
+            "--diffs-font-family": "var(--font-mono)",
+            "--diffs-font-size": "12px",
+            "--diffs-line-height": "20px",
+          } as CSSProperties
+        }
+        fileDiff={metadata}
+        selectedLines={selection?.range ?? null}
+        options={{
+          theme: "pierre-dark",
+          diffStyle: preferences.split ? "split" : "unified",
+          overflow: preferences.wrap ? "wrap" : "scroll",
+          expandUnchanged: expandContext,
+          enableLineSelection: selection !== undefined,
+          ...(selection === undefined
+            ? {}
+            : { onLineSelectionEnd: selection.onChange }),
+        }}
+      />
+    </div>
   ) : diff.kind === "image" ? (
     <div className="grid min-h-0 flex-1 grid-cols-2 gap-3 overflow-auto p-3">
       {(["before", "after"] as const).map((side) => (

@@ -2,7 +2,7 @@ import { createContext, useContext } from "react";
 import type {
   WorkspacePanelEnvironment,
   WorkspacePanelScope,
-} from "#web/features/workspace-panel/workspace-panel-session.contract";
+} from "#web/features/workspace-panel/workspace-panel-session";
 
 export const PanelFeatureContext = createContext<
   | {

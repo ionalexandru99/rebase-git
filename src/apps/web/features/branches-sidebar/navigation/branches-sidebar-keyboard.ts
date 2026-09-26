@@ -1,4 +1,4 @@
-import type { BranchesSidebarRow } from "#web/features/branches-sidebar/branches-sidebar.contract";
+import type { BranchesSidebarRow } from "#web/features/branches-sidebar/branches-sidebar-model";
 import { stepRow } from "#web/features/branches-sidebar/branches-sidebar-state";
 
 type ExpandableRow = Exclude<BranchesSidebarRow, { kind: "ref" }>;

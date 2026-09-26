@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vite-plus/test";
-import type { OpenProjectEnvironment } from "#web/features/open-project/open-project.contract";
+import type { OpenProjectEnvironment } from "#web/features/open-project/open-project-model";
 import {
   catalogRepositoryItems,
   filterOpenProjectEnvironments,

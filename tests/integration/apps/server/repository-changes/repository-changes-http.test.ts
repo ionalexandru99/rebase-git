@@ -15,13 +15,11 @@ import { EnvironmentAuthorizationAccess } from "#server/domain/environment-autho
 import { GitCommands } from "#server/domain/git-command.contract";
 import { RepositoryAccess } from "#server/domain/repository-access.contract";
 import { RepositoryCoordination } from "#server/domain/repository-coordination.contract";
-import { commitInspectionFeature } from "#server/features/commit-inspection/index";
-import {
-  createEnvironmentAuthorization,
-  environmentAuthorizationFeature,
-} from "#server/features/environment-authorization/index";
-import { createRepositoryCatalog } from "#server/features/repository-catalog/index";
-import { repositoryChangesFeature } from "#server/features/repository-changes/index";
+import { commitInspectionFeature } from "#server/features/commit-inspection/commit-inspection.feature";
+import { createEnvironmentAuthorization } from "#server/features/environment-authorization/environment-authorization";
+import { environmentAuthorizationFeature } from "#server/features/environment-authorization/environment-authorization.feature";
+import { createRepositoryCatalog } from "#server/features/repository-catalog/repository-catalog";
+import { repositoryChangesFeature } from "#server/features/repository-changes/repository-changes.feature";
 import { acquireEnvironmentContext } from "#server/persistence/environment-context";
 import { environmentPaths } from "#server/persistence/storage/environment-paths";
 import {

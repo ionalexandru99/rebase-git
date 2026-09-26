@@ -8,17 +8,17 @@ import {
   automaticHistoryScope,
   type HistoryScope,
   type ResolvedHistoryScope,
-} from "#web/features/commit-graph/history-scope.contract";
+} from "#web/features/commit-graph/scope/history-scope-model";
 import {
   resolveAutomaticHistoryRoots,
   resolveAutomaticHistorySelections,
-} from "#web/features/repository-history/index";
+} from "#web/features/repository-history/replica/automatic-history-roots";
 
 export type {
   HistoryScope,
   ResolvedHistoryScope,
-} from "#web/features/commit-graph/history-scope.contract";
-export { automaticHistoryScope } from "#web/features/commit-graph/history-scope.contract";
+} from "#web/features/commit-graph/scope/history-scope-model";
+export { automaticHistoryScope } from "#web/features/commit-graph/scope/history-scope-model";
 
 export function resolveHistoryScope(
   scope: HistoryScope,

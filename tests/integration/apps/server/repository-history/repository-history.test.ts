@@ -13,6 +13,7 @@ import {
   type RepositoryHistoryBatch,
   type RepositoryHistorySnapshot,
 } from "@rebase/contracts";
+import { fetchEnvironmentDiscoveryEffect } from "@rebase/environment-client";
 import { Effect } from "effect";
 import { afterEach, describe, expect, it } from "vite-plus/test";
 import { createEnvironmentEventPublisher } from "#server/adapters/environment-transport/events/environment-event-publisher";
@@ -23,8 +24,8 @@ import {
   type EnvironmentAuthorization,
   EnvironmentAuthorizationAccess,
 } from "#server/domain/environment-authorization.contract";
-import { environmentAuthorizationFeature } from "#server/features/environment-authorization/index";
-import { createRepositoryCatalog } from "#server/features/repository-catalog/index";
+import { environmentAuthorizationFeature } from "#server/features/environment-authorization/environment-authorization.feature";
+import { createRepositoryCatalog } from "#server/features/repository-catalog/repository-catalog";
 import { RepositoryHistoryError } from "#server/features/repository-history/git/history-failures";
 import { readObjectFormat } from "#server/features/repository-history/git/read-object-format";
 import { readRepositoryHistorySnapshot } from "#server/features/repository-history/git/read-repository-history-snapshot";
@@ -48,8 +49,7 @@ import { removeTemporaryDirectory } from "#tests-support/temporary-directory";
 import {
   connectEnvironmentEffect,
   type EnvironmentProtocolConnection,
-  fetchEnvironmentDiscoveryEffect,
-} from "#web/app/environment/connection/index";
+} from "#web/app/environment/connection/environment-protocol-client";
 import { createRepositoryHistoryRpc } from "#web/features/repository-history/transport/repository-history-rpc";
 
 const directories = new Set<string>();

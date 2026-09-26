@@ -1,8 +1,8 @@
 import type { RepositoryCatalogEntry } from "@rebase/contracts";
 import { type JSX, useState } from "react";
-import { Dialog, DialogContent } from "#web-ui/components/ui/dialog";
-import { RepositoryFolderBrowser } from "#web-ui/features/repository-folder-picker/repository-folder-browser";
-import type { RepositoryFolderPickerEnvironment } from "#web-ui/features/repository-folder-picker/repository-folder-picker-environment-select";
+import { Dialog, DialogContent } from "#web/components/ui/dialog";
+import { RepositoryFolderBrowser } from "#web/features/repository-folder-picker/repository-folder-browser";
+import type { RepositoryFolderPickerEnvironment } from "#web/features/repository-folder-picker/repository-folder-picker-environment-select";
 
 interface RepositoryFolderPickerProps {
   readonly environments: readonly RepositoryFolderPickerEnvironment[];

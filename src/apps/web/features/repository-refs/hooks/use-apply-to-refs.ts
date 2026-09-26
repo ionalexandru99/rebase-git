@@ -2,9 +2,9 @@ import type { RepositoryRefs } from "@rebase/contracts";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback } from "react";
 import { repositoryRefsKey } from "#web/features/repository-refs/repository-refs-query";
-import { useRepositoryScope } from "#web/features/repository-scope/index";
+import { useRepositoryScope } from "#web/features/repository-scope/repository-scope-provider";
+import { useEnvironment } from "#web/platform/query/environment-context";
 import { hasLiveData } from "#web/platform/query/live-query-data";
-import { useEnvironment } from "#web-ui/platform/query/environment-context";
 
 export function useApplyToRefs() {
   const queryClient = useQueryClient();

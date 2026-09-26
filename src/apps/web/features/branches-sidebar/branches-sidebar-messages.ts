@@ -1,4 +1,4 @@
-import type { BranchesSidebarScope } from "#web/features/branches-sidebar/branches-sidebar.contract";
+import type { BranchesSidebarScope } from "#web/features/branches-sidebar/branches-sidebar-model";
 
 export function describeEmptyBranchesSidebar(
   scope: BranchesSidebarScope,

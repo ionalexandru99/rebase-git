@@ -4,7 +4,7 @@ import { RepositoryHistoryEpoch } from "#web/features/repository-history/reader/
 import type {
   ConnectedReader,
   HistorySynchronizationState,
-} from "#web/features/repository-history/worker/history-worker.contract";
+} from "#web/features/repository-history/worker/history-worker-state";
 import {
   activeSynchronization,
   beginSynchronization,

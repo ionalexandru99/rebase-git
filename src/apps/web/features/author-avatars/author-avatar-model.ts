@@ -1,11 +1,19 @@
 import {
-  type AuthorAvatarModel,
   type AuthorAvatarSource,
   type AvatarAuthor,
   AvatarUnavailable,
   type GitHubRepository,
-} from "#web/features/author-avatars/author-avatar.contract";
+} from "#web/features/author-avatars/author-avatar-source";
 import { githubAvatarSource } from "#web/features/author-avatars/github-avatar-source";
+
+export interface AuthorAvatarModel {
+  readonly get: (email: string) => string | undefined;
+  readonly subscribe: (
+    author: AvatarAuthor,
+    listener: () => void,
+  ) => () => void;
+  readonly dispose: () => void;
+}
 
 const concurrentLookups = 2;
 const cachedAuthors = 512;

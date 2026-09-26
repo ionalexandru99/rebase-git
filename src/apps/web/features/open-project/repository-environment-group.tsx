@@ -1,15 +1,15 @@
 import { IconChevronDown } from "@tabler/icons-react";
 import type { JSX } from "react";
-import type {
-  OpenProjectEnvironment,
-  OpenProjectRepository,
-} from "#web/features/open-project/open-project.contract";
 import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
-} from "#web-ui/components/ui/collapsible";
-import { RepositoryRow } from "#web-ui/features/open-project/repository-row";
+} from "#web/components/ui/collapsible";
+import type {
+  OpenProjectEnvironment,
+  OpenProjectRepository,
+} from "#web/features/open-project/open-project-model";
+import { RepositoryRow } from "#web/features/open-project/repository-row";
 
 export function RepositoryEnvironmentGroup({
   activeKey,

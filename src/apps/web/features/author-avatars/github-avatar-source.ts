@@ -3,7 +3,7 @@ import {
   type AvatarAuthor,
   AvatarUnavailable,
   type GitHubRepository,
-} from "#web/features/author-avatars/author-avatar.contract";
+} from "#web/features/author-avatars/author-avatar-source";
 
 const lookupTimeoutMilliseconds = 5_000;
 const rateLimitPauseMilliseconds = 60_000;

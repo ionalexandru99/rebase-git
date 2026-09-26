@@ -4,14 +4,14 @@ import type {
   CommitLaneRow,
   CommitLaneSeed,
   CommitTopology,
-} from "#web/features/commit-graph/layout/commit-lanes.contract";
+} from "#web/features/commit-graph/layout/commit-lane-model";
 
 export type {
   CommitLane,
   CommitLaneCheckpoint,
   CommitLaneRow,
   CommitTopology,
-} from "#web/features/commit-graph/layout/commit-lanes.contract";
+} from "#web/features/commit-graph/layout/commit-lane-model";
 
 export function createCommitLaneCheckpoint(): CommitLaneCheckpoint {
   return { lanes: [], nextLaneId: 0 };

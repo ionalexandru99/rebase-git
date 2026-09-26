@@ -1,4 +1,4 @@
-import type { PanelViewTarget } from "#web/features/workspace-panel/workspace-panel-session.contract";
+import type { PanelViewTarget } from "#web/features/workspace-panel/workspace-panel-session";
 
 export function createPanelViewTarget(element: HTMLElement): PanelViewTarget {
   const listeners = new Set<() => void>();

@@ -12,7 +12,8 @@ import {
   useRef,
   useState,
 } from "react";
-import type { BranchCreateRequest } from "#web/features/branch-management/index";
+import { Input } from "#web/components/ui/input";
+import type { BranchCreateRequest } from "#web/features/branch-management/hooks/use-create-branch-here";
 import {
   branchesSidebarItems,
   estimateItemHeight,
@@ -20,6 +21,8 @@ import {
   localBranchFolderIds,
   localBranchRowId,
 } from "#web/features/branches-sidebar/branch-editing/branch-edit-state";
+import { BranchEditItem } from "#web/features/branches-sidebar/branch-editing/components/branch-edit-item";
+import { BranchEditingStatus } from "#web/features/branches-sidebar/branch-editing/components/branch-editing-status";
 import {
   type BranchRename,
   useBranchEditing,
@@ -28,33 +31,30 @@ import {
   type BranchesSidebarRow,
   type BranchesSidebarScope,
   localBranchesSectionId,
-} from "#web/features/branches-sidebar/branches-sidebar.contract";
+} from "#web/features/branches-sidebar/branches-sidebar-model";
 import {
   buildBranchesSidebarRows,
   currentRefRowId,
   defaultExpandedSections,
   toggleSection,
 } from "#web/features/branches-sidebar/branches-sidebar-state";
-import { useBranchesSidebarView } from "#web/features/branches-sidebar/hooks/use-branches-sidebar-view";
-import { treeKeyAction } from "#web/features/branches-sidebar/navigation/branches-sidebar-keyboard";
-import { historyRefKey } from "#web/features/commit-graph/index";
-import type {
-  RefActivation,
-  RepositoryRefsRead,
-} from "#web/features/repository-refs/index";
-import { Input } from "#web-ui/components/ui/input";
-import { BranchEditItem } from "#web-ui/features/branches-sidebar/branch-editing/components/branch-edit-item";
-import { BranchEditingStatus } from "#web-ui/features/branches-sidebar/branch-editing/components/branch-editing-status";
 import {
   RefRow,
   rowElementId,
   SectionRow,
-} from "#web-ui/features/branches-sidebar/components/branches-sidebar-rows";
-import { BranchesSidebarScopeFilter } from "#web-ui/features/branches-sidebar/components/branches-sidebar-scope-filter";
-import { BranchesSidebarViewSelector } from "#web-ui/features/branches-sidebar/components/branches-sidebar-view-selector";
-import { SidebarStatus } from "#web-ui/features/branches-sidebar/components/sidebar-status";
+} from "#web/features/branches-sidebar/components/branches-sidebar-rows";
+import { BranchesSidebarScopeFilter } from "#web/features/branches-sidebar/components/branches-sidebar-scope-filter";
+import { BranchesSidebarViewSelector } from "#web/features/branches-sidebar/components/branches-sidebar-view-selector";
+import { SidebarStatus } from "#web/features/branches-sidebar/components/sidebar-status";
+import { useBranchesSidebarView } from "#web/features/branches-sidebar/hooks/use-branches-sidebar-view";
+import { treeKeyAction } from "#web/features/branches-sidebar/navigation/branches-sidebar-keyboard";
+import { historyRefKey } from "#web/features/commit-graph/scope/history-scope";
+import type { RefCommandDefinition } from "#web/features/ref-commands/ref-command";
+import type { RefActivation } from "#web/features/repository-refs/hooks/use-ref-activation";
+import type { RepositoryRefsRead } from "#web/features/repository-refs/hooks/use-repository-refs";
 
 const overscanRows = 12;
+const noRefCommands: readonly RefCommandDefinition[] = [];
 
 export function BranchesSidebar({
   activation,
@@ -63,6 +63,7 @@ export function BranchesSidebar({
   focusRequest,
   onBranchRenamed = () => undefined,
   onToggleHistoryRef = () => undefined,
+  refCommands = noRefCommands,
   repositoryRefs,
   selectedHistoryRefKeys = new Set<string>(),
 }: {
@@ -72,6 +73,7 @@ export function BranchesSidebar({
   readonly focusRequest: number;
   readonly onBranchRenamed?: (rename: BranchRename) => void;
   readonly onToggleHistoryRef?: (target: RepositoryRefTarget) => void;
+  readonly refCommands?: readonly RefCommandDefinition[];
   readonly repositoryRefs: RepositoryRefsRead;
   readonly selectedHistoryRefKeys?: ReadonlySet<string>;
 }): JSX.Element {
@@ -358,6 +360,7 @@ export function BranchesSidebar({
               <RefRow
                 actions={editing.rowActions(row)}
                 active={row.id === activeRowId}
+                commands={refCommands}
                 key={row.id}
                 onAction={(id) => editing.start(id, row)}
                 onActivate={() => setActiveRowId(row.id)}

@@ -17,7 +17,7 @@ import { RepositoryAccess } from "#server/domain/repository-access.contract";
 import { RepositoryCatalogAccess } from "#server/domain/repository-catalog.contract";
 import { RepositoryCoordination } from "#server/domain/repository-coordination.contract";
 import { RepositoryWatching } from "#server/domain/repository-watcher.contract";
-import { createRepositoryCatalog } from "#server/features/repository-catalog/index";
+import { createRepositoryCatalog } from "#server/features/repository-catalog/repository-catalog";
 import { acquireEnvironmentContext } from "#server/persistence/environment-context";
 import { environmentPaths } from "#server/persistence/storage/environment-paths";
 import {

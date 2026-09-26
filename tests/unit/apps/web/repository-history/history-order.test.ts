@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vite-plus/test";
 import { HistoryOrderIndex } from "#web/features/repository-history/query/history-order";
-import type { HistoryOrderNode } from "#web/features/repository-history/query/history-order.contract";
+import type { HistoryOrderNode } from "#web/features/repository-history/query/history-order-model";
 import { historyOrderScopeKey } from "#web/features/repository-history/query/history-query-scope";
 
 function orderHistory(

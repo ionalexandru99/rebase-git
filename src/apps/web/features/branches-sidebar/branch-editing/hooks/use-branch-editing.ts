@@ -2,9 +2,9 @@ import type { BranchUpstreamTarget, RepositoryRefs } from "@rebase/contracts";
 import { useCallback, useEffect, useState } from "react";
 import {
   type BranchCommandFailure,
-  type BranchCreateRequest,
   useBranchCommands,
-} from "#web/features/branch-management/index";
+} from "#web/features/branch-management/hooks/use-branch-commands";
+import type { BranchCreateRequest } from "#web/features/branch-management/hooks/use-create-branch-here";
 import { describeBranchError } from "#web/features/branches-sidebar/branch-editing/branch-edit-messages";
 import type { BranchEdit } from "#web/features/branches-sidebar/branch-editing/branch-edit-state";
 import {
@@ -18,7 +18,7 @@ import { useBranchDeletion } from "#web/features/branches-sidebar/branch-editing
 import type {
   BranchesSidebarRefRow,
   BranchesSidebarRow,
-} from "#web/features/branches-sidebar/branches-sidebar.contract";
+} from "#web/features/branches-sidebar/branches-sidebar-model";
 
 export type BranchEditing = ReturnType<typeof useBranchEditing>;
 

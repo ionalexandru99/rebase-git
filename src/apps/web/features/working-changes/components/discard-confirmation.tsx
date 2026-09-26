@@ -7,7 +7,7 @@ import {
   AlertDialogDescription,
   AlertDialogFooter,
   AlertDialogTitle,
-} from "#web-ui/components/ui/alert-dialog";
+} from "#web/components/ui/alert-dialog";
 
 export interface DiscardRequest {
   readonly section: ChangeSection;

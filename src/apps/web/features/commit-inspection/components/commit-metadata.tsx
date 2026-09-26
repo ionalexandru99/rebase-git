@@ -1,6 +1,6 @@
 import type { CommitInspection } from "@rebase/contracts";
-import { CopyPill } from "#web/features/clipboard/index";
-import { CommitMessage } from "#web-ui/features/commit-inspection/components/commit-message";
+import { CopyPill } from "#web/features/clipboard/components/copy-pill";
+import { CommitMessage } from "#web/features/commit-inspection/components/commit-message";
 
 const dateFormat = new Intl.DateTimeFormat(undefined, {
   day: "numeric",

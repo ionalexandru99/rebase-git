@@ -32,7 +32,6 @@ const browserProject = (
     alias: {
       "#tests-ui": fileURLToPath(new URL("./tests/ui", import.meta.url)),
       "#web": fileURLToPath(new URL("./src/apps/web", import.meta.url)),
-      "#web-ui": fileURLToPath(new URL("./src/apps/web", import.meta.url)),
     },
   },
   test: {

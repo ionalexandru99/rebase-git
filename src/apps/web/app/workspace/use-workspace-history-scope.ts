@@ -1,33 +1,27 @@
-import type { RepositoryRefs, RepositoryRefTarget } from "@rebase/contracts";
+import type { RepositoryRefTarget } from "@rebase/contracts";
 import { useCallback, useMemo, useRef, useState } from "react";
+import { createBrowserHistoryFilterStore } from "#web/features/commit-graph/scope/browser-history-filter-store";
 import {
-  automaticHistoryScope,
-  createBrowserHistoryFilterStore,
-  type HistoryScope,
   historyScopesEqual,
   renameHistoryBranch,
   resolveHistoryScope,
   toggleHistoryRef,
-} from "#web/features/commit-graph/index";
+} from "#web/features/commit-graph/scope/history-scope";
+import {
+  automaticHistoryScope,
+  type HistoryScope,
+} from "#web/features/commit-graph/scope/history-scope-model";
+import type { RepositoryRefsRead } from "#web/features/repository-refs/hooks/use-repository-refs";
+import type { RepositoryScope } from "#web/features/repository-scope/repository-scope-provider";
 
-export function useWorkspaceHistoryScope({
-  environmentId,
-  logicalRepositoryId,
-  activeWorktreePath,
-  refs,
-  refsRestored,
-}: {
-  readonly environmentId: string | undefined;
-  readonly logicalRepositoryId: string | undefined;
-  readonly activeWorktreePath: string;
-  readonly refs: RepositoryRefs | undefined;
-  readonly refsRestored: boolean;
-}) {
+export function useWorkspaceHistoryScope(
+  environmentId: string,
+  { logicalRepositoryId, worktreePath: activeWorktreePath }: RepositoryScope,
+  { refs, restored: refsRestored }: RepositoryRefsRead,
+) {
   const filterStore = useMemo(() => createBrowserHistoryFilterStore(), []);
   const [historyScope, setHistoryScope] = useState<HistoryScope>(() =>
-    environmentId === undefined || logicalRepositoryId === undefined
-      ? automaticHistoryScope
-      : filterStore.load(environmentId, logicalRepositoryId),
+    filterStore.load(environmentId, logicalRepositoryId),
   );
   const resolvedScope = useMemo(
     () =>
@@ -53,9 +47,7 @@ export function useWorkspaceHistoryScope({
   const change = useCallback(
     (next: HistoryScope) => {
       setHistoryScope(next);
-      if (environmentId !== undefined && logicalRepositoryId !== undefined) {
-        filterStore.save(environmentId, logicalRepositoryId, next);
-      }
+      filterStore.save(environmentId, logicalRepositoryId, next);
     },
     [environmentId, filterStore, logicalRepositoryId],
   );
@@ -93,3 +85,5 @@ export function useWorkspaceHistoryScope({
     reset: canReset ? reset : undefined,
   };
 }
+
+export type WorkspaceHistoryScope = ReturnType<typeof useWorkspaceHistoryScope>;

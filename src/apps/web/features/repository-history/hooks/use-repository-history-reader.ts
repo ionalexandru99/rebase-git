@@ -3,7 +3,7 @@ import { createBrowserRepositoryHistoryReader } from "#web/features/repository-h
 import type {
   RepositoryHistoryGateway,
   RepositoryHistoryReader,
-} from "#web/features/repository-history/repository-history-reader.contract";
+} from "#web/features/repository-history/repository-history-reader";
 
 export function useRepositoryHistoryReader(
   gateway: RepositoryHistoryGateway,

@@ -4,8 +4,8 @@ import {
   type RepositoryCommit,
 } from "@rebase/contracts";
 import { describe, expect, it, vi } from "vite-plus/test";
+import { createBrowserRepositoryHistoryReader } from "#web/features/repository-history/browser-repository-history-reader";
 import { clearHistoryCache } from "#web/features/repository-history/cache/repository-history-storage";
-import { createBrowserRepositoryHistoryReader } from "#web/features/repository-history/index";
 import {
   readRepositoryCommits,
   readRepositoryHistory,
@@ -17,13 +17,13 @@ import {
   storeRepositoryHistoryBatch,
   storeRepositoryHistoryPage,
 } from "#web/features/repository-history/replica/repository-history-store";
-import type { RepositoryHistoryGateway } from "#web/features/repository-history/repository-history-reader.contract";
+import type { RepositoryHistoryGateway } from "#web/features/repository-history/repository-history-reader";
 import {
   RepositoryHistoryOffline,
   RepositoryHistoryRejected,
   RepositoryHistoryStorageUnavailable,
   RepositoryHistoryUnavailable,
-} from "#web/features/repository-history/repository-history-reader.contract";
+} from "#web/features/repository-history/repository-history-reader";
 import { withRepositoryHistoryDatabase } from "#web/persistence/repository-history/repository-history-database";
 
 describe("browser repository history reader", () => {

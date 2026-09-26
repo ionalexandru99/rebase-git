@@ -9,10 +9,10 @@ import type {
   CommitGraphPageWindow,
   CommitGraphPageWindowOptions,
   CommitGraphPageWindowSnapshot,
-} from "#web/features/commit-graph/paging/commit-graph-page-window.contract";
+} from "#web/features/commit-graph/paging/commit-graph-page-window-model";
 import { locateCommitGraphTarget } from "#web/features/commit-graph/paging/locate-commit-graph-target";
 import { prepareCommitGraphPage } from "#web/features/commit-graph/paging/prepare-commit-graph-page";
-import type { RepositoryHistoryQuery } from "#web/features/repository-history/index";
+import type { RepositoryHistoryQuery } from "#web/features/repository-history/repository-history-reader";
 import { createStore } from "#web/platform/store/store";
 
 interface PendingPageLoad {

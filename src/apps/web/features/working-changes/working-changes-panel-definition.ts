@@ -1,10 +1,10 @@
 import { IconFileDiff } from "@tabler/icons-react";
 import { lazy } from "react";
-import type { WorkspacePanelDefinition } from "#web-ui/features/workspace-panel/index";
+import type { WorkspacePanelDefinition } from "#web/features/workspace-panel/workspace-panel-model";
 
 export const workingChangesPanel = {
   Content: lazy(() =>
-    import("#web-ui/features/working-changes/working-changes-panel").then(
+    import("#web/features/working-changes/working-changes-panel").then(
       (module) => ({ default: module.WorkingChangesPanel }),
     ),
   ),

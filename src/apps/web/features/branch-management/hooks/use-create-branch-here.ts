@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { createBranchHereCommand } from "#web/features/branch-management/create-branch-here-command";
-import { useRepositoryScope } from "#web/features/repository-scope/index";
+import { useRepositoryScope } from "#web/features/repository-scope/repository-scope-provider";
 
 export interface BranchCreateRequest {
   readonly oid: string;

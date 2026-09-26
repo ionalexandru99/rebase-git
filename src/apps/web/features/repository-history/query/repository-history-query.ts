@@ -3,7 +3,7 @@ import { HistoryOrderIndex } from "#web/features/repository-history/query/histor
 import type {
   HistoryOrderCache,
   HistoryOrderNode,
-} from "#web/features/repository-history/query/history-order.contract";
+} from "#web/features/repository-history/query/history-order-model";
 import { selectHistoryPage } from "#web/features/repository-history/query/history-page-selection";
 import {
   historyOrderScopeKey,
@@ -13,7 +13,7 @@ import { readStoredRepositoryHistoryState } from "#web/features/repository-histo
 import type {
   RepositoryHistoryPosition,
   RepositoryHistoryQuery,
-} from "#web/features/repository-history/repository-history-reader.contract";
+} from "#web/features/repository-history/repository-history-reader";
 import type { StoredCommit } from "#web/persistence/repository-history/repository-history-database.contract";
 import { readStoredHistoryTopology } from "#web/persistence/repository-history/repository-history-topology";
 import type { RepositoryHistoryReadTransaction } from "#web/persistence/repository-history/repository-history-transaction.contract";

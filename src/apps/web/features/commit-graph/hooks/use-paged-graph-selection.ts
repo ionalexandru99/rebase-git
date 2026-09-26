@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  type CommitGraphSelectionMode,
-  emptyCommitGraphSelection,
-} from "#web/features/commit-graph/commit-selection.contract";
-import {
   reconcileGraphQuerySelection,
   selectGraphQueryCommit,
 } from "#web/features/commit-graph/paging/commit-graph-query-selection";
+import {
+  type CommitGraphSelectionMode,
+  emptyCommitGraphSelection,
+} from "#web/features/commit-graph/selection/commit-graph-selection";
 import {
   clearGraphSelection,
   reconcileGraphSelection,
@@ -15,7 +15,7 @@ import {
 import type {
   RepositoryHistoryQuery,
   RepositoryHistoryReadModel,
-} from "#web/features/repository-history/index";
+} from "#web/features/repository-history/repository-history-reader";
 
 export function usePagedGraphSelection({
   reader,

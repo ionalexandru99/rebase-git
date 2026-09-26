@@ -5,10 +5,10 @@ import {
   useEffect,
   useRef,
 } from "react";
-import type { CommitGraphHandle } from "#web/features/commit-graph/index";
-import { useWorkspacePanel } from "#web-ui/features/workspace-panel/index";
+import type { CommitGraphHandle } from "#web/features/commit-graph/commit-graph-model";
+import { useWorkspacePanel } from "#web/features/workspace-panel/workspace-panel-provider";
 
-interface InspectionGraphActions {
+export interface InspectionGraphActions {
   readonly graphRef: RefObject<CommitGraphHandle | null>;
   readonly open: (oid: string) => void;
   readonly select: (oid: string | undefined) => void;

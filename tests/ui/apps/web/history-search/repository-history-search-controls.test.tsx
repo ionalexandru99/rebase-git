@@ -7,7 +7,7 @@ import type {
   RepositoryHistorySearch,
   RepositoryHistorySearchResult,
 } from "#web/domain/repository-history/history-search.contract";
-import { RepositoryHistorySearchControls } from "#web-ui/features/history-search/components/repository-history-search-controls";
+import { RepositoryHistorySearchControls } from "#web/features/history-search/components/repository-history-search-controls";
 
 const snapshot = {
   historyRevision: 1,

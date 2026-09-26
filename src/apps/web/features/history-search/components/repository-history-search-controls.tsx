@@ -1,14 +1,14 @@
 import { Popover } from "@base-ui/react/popover";
 import { IconSearch, IconX } from "@tabler/icons-react";
 import { type KeyboardEvent, useId, useRef, useState } from "react";
+import { Button } from "#web/components/ui/button";
+import { Input } from "#web/components/ui/input";
 import type { RepositoryHistorySearch } from "#web/domain/repository-history/history-search.contract";
+import { HistorySearchResults } from "#web/features/history-search/components/history-search-results";
 import { useRepositoryHistorySearch } from "#web/features/history-search/hooks/use-repository-history-search";
 import { useRepositoryHistorySearchModel } from "#web/features/history-search/hooks/use-repository-history-search-model";
-import type { RepositoryHistorySearchModel } from "#web/features/history-search/repository-history-search-model.contract";
-import type { RepositoryHistorySnapshot } from "#web/features/repository-history/repository-history-reader.contract";
-import { Button } from "#web-ui/components/ui/button";
-import { Input } from "#web-ui/components/ui/input";
-import { HistorySearchResults } from "#web-ui/features/history-search/components/history-search-results";
+import type { RepositoryHistorySearchModel } from "#web/features/history-search/repository-history-search";
+import type { RepositoryHistorySnapshot } from "#web/features/repository-history/repository-history-reader";
 
 export function RepositoryHistorySearchControls({
   reader,

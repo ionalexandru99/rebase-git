@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vite-plus/test";
-import { AvatarUnavailable } from "#web/features/author-avatars/author-avatar.contract";
 import { createAuthorAvatarModel } from "#web/features/author-avatars/author-avatar-model";
+import { AvatarUnavailable } from "#web/features/author-avatars/author-avatar-source";
 
 const author = {
   oid: "a".repeat(40),

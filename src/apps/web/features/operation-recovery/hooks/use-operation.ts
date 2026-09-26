@@ -4,12 +4,12 @@ import {
   RepositoryOperationsHttpApi,
 } from "@rebase/contracts";
 import { skipToken, useQueryClient } from "@tanstack/react-query";
+import { useEnvironment } from "#web/platform/query/environment-context";
 import {
   environmentQueryKey,
   useEnvironmentQuery,
 } from "#web/platform/query/environment-query";
 import { useCommand } from "#web/platform/query/use-command";
-import { useEnvironment } from "#web-ui/platform/query/environment-context";
 
 const operationRefreshMilliseconds = 10_000;
 

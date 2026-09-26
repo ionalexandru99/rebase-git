@@ -1,18 +1,21 @@
 import { useMemo } from "react";
-import { writeClipboardText } from "#web/features/clipboard/index";
-import {
-  type CommitCommandHandlers,
-  type GraphCommandContext,
-  useGraphCommands,
-} from "#web/features/commit-commands/index";
-import type { RepositoryHistoryReadModel } from "#web/features/repository-history/index";
-import { useRepositoryScope } from "#web/features/repository-scope/index";
+import { writeClipboardText } from "#web/features/clipboard/write-clipboard-text";
+import type {
+  CommitCommandHandlers,
+  GraphCommandContext,
+  GraphCommandDefinition,
+} from "#web/features/commit-commands/graph-command";
+import { useGraphCommands } from "#web/features/commit-commands/use-graph-commands";
+import type { RepositoryHistoryReadModel } from "#web/features/repository-history/repository-history-reader";
+import { useRepositoryScope } from "#web/features/repository-scope/repository-scope-provider";
 
 export function useCommitGraphCommands({
+  extraCommands,
   reader,
   selectedOids,
   onOpenDetails,
 }: {
+  readonly extraCommands: readonly GraphCommandDefinition[] | undefined;
   readonly onOpenDetails?: ((oid: string) => void) | undefined;
   readonly reader:
     | Pick<RepositoryHistoryReadModel, "getCommitSummaries">
@@ -28,7 +31,7 @@ export function useCommitGraphCommands({
     }),
     [onOpenDetails, reader],
   );
-  const commands = useGraphCommands(handlers);
+  const commands = useGraphCommands(handlers, extraCommands);
   const context = (invokingOid: string): GraphCommandContext => ({
     invokingOid,
     selectedOids,

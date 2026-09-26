@@ -5,11 +5,11 @@ import {
   type RepositoryFreshness,
 } from "@rebase/contracts";
 import { describe, expect, it, vi } from "vite-plus/test";
-import { createBrowserRepositoryHistoryReader } from "#web/features/repository-history/index";
+import { createBrowserRepositoryHistoryReader } from "#web/features/repository-history/browser-repository-history-reader";
 import {
   type RepositoryHistoryGateway,
   RepositoryHistoryOffline,
-} from "#web/features/repository-history/repository-history-reader.contract";
+} from "#web/features/repository-history/repository-history-reader";
 
 const fresh: RepositoryFreshness = {
   defaultIntervalSeconds: 300,

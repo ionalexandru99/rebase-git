@@ -28,7 +28,7 @@ import {
   RepositoryHistoryOffline,
   RepositoryHistoryStorageUnavailable,
   RepositoryHistoryUnavailable,
-} from "#web/features/repository-history/repository-history-reader.contract";
+} from "#web/features/repository-history/repository-history-reader";
 import { manageBrowserHistoryStorage } from "#web/features/repository-history/storage/browser-history-storage";
 import { readHistoryCacheRecords } from "#web/persistence/repository-history/repository-history-cache-records";
 import { repositoryKey } from "#web/persistence/repository-history/repository-history-records";

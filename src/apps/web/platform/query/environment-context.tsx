@@ -7,6 +7,27 @@ import type {
 } from "#web/platform/environment/environment-protocol.contract";
 import { useEnvironmentInvalidation } from "#web/platform/query/environment-invalidation";
 
+export type EnvironmentAvailability =
+  | "available"
+  | "connecting"
+  | "unavailable";
+
+export type EnvironmentConnectionState =
+  | "PairingRequired"
+  | "Authorizing"
+  | "Connecting"
+  | "Connected"
+  | "Reconnecting"
+  | "AuthorizationFailed"
+  | "ProtocolMismatch";
+
+export interface EnvironmentStatus {
+  readonly availability: EnvironmentAvailability;
+  readonly connectionState: EnvironmentConnectionState;
+  readonly detail: string;
+  readonly status: string;
+}
+
 export interface Environment {
   readonly environmentId: string | undefined;
   readonly requests: EnvironmentRequestClient;
@@ -16,6 +37,7 @@ export interface Environment {
   readonly connected: boolean;
   readonly readable: boolean;
   readonly writable: boolean;
+  readonly status: EnvironmentStatus;
 }
 
 const EnvironmentContext = createContext<Environment | undefined>(undefined);

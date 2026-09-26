@@ -1,18 +1,18 @@
-import type { RepositoryRefs } from "@rebase/contracts";
+import type { RepositoryCatalogEntry, RepositoryRefs } from "@rebase/contracts";
+import type { CommitGraphHistory } from "#web/features/commit-graph/commit-graph-model";
 import {
-  type CommitGraphHistory,
-  createBrowserHistoryFilterStore,
   loadFirstCommitGraphPage,
   openCommitGraphHistory,
-  resolveHistoryScope,
-} from "#web/features/commit-graph/index";
-import {
-  createBrowserRepositoryHistoryReader,
-  type RepositoryHistoryGateway,
-  type RepositoryHistoryReader,
-  readRepositoryHistoryOrder,
-} from "#web/features/repository-history/index";
-import { resolveActiveWorktreePath } from "#web/features/repository-refs/index";
+} from "#web/features/commit-graph/paging/commit-graph-history";
+import { createBrowserHistoryFilterStore } from "#web/features/commit-graph/scope/browser-history-filter-store";
+import { resolveHistoryScope } from "#web/features/commit-graph/scope/history-scope";
+import { createBrowserRepositoryHistoryReader } from "#web/features/repository-history/browser-repository-history-reader";
+import { readRepositoryHistoryOrder } from "#web/features/repository-history/preferences/repository-history-order";
+import type {
+  RepositoryHistoryGateway,
+  RepositoryHistoryReader,
+} from "#web/features/repository-history/repository-history-reader";
+import { resolveActiveWorktreePath } from "#web/features/repository-refs/activate-repository-ref";
 import { createStore, type ReadableStore } from "#web/platform/store/store";
 
 export interface OpenedRepositoryTarget {
@@ -35,6 +35,19 @@ export interface OpenedRepositoryStore
   extends ReadableStore<OpenedRepository | undefined> {
   readonly open: (target: OpenedRepositoryTarget | undefined) => void;
   readonly refsArrived: (refs: RepositoryRefs) => void;
+}
+
+export function openedRepositoryTarget(
+  environmentId: string,
+  repository: RepositoryCatalogEntry,
+  worktreePath: string,
+): OpenedRepositoryTarget {
+  return {
+    environmentId,
+    repositoryId: repository.id,
+    logicalRepositoryId: repository.logicalRepositoryId ?? repository.id,
+    worktreePath,
+  };
 }
 
 export function openedRepositoryKey(target: OpenedRepositoryTarget) {

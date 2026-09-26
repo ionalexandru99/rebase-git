@@ -1,4 +1,4 @@
-import type { CommitLaneRow } from "#web/features/commit-graph/layout/commit-lanes.contract";
+import type { CommitLaneRow } from "#web/features/commit-graph/layout/commit-lane-model";
 import {
   graphLaneColor,
   graphNodeColor,

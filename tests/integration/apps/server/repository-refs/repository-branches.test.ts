@@ -9,8 +9,8 @@ import { createLocalGitCommandRunner } from "#server/adapters/local-git/local-gi
 import { createLocalRepositoryWatcher } from "#server/adapters/local-git/local-repository-watcher";
 import { EnvironmentEvents } from "#server/domain/environment-event-publisher.contract";
 import { RepositoryWatching } from "#server/domain/repository-watcher.contract";
-import { createRepositoryCatalog } from "#server/features/repository-catalog/index";
-import { repositoryRefsFeature } from "#server/features/repository-refs/index";
+import { createRepositoryCatalog } from "#server/features/repository-catalog/repository-catalog";
+import { repositoryRefsFeature } from "#server/features/repository-refs/repository-refs.feature";
 import { acquireEnvironmentContext } from "#server/persistence/environment-context";
 import { environmentPaths } from "#server/persistence/storage/environment-paths";
 import {

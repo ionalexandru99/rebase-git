@@ -8,6 +8,7 @@ import {
 import {
   createEnvironmentRequestClient,
   type EnvironmentCredential,
+  exchangeEnvironmentPairingEffect,
 } from "@rebase/environment-client";
 import { Effect } from "effect";
 import { afterEach, describe, expect, it } from "vite-plus/test";
@@ -16,21 +17,16 @@ import { createLocalGitCommandRunner } from "#server/adapters/local-git/local-gi
 import { acquireEnvironmentListener } from "#server/app/server/environment-listener";
 import { EnvironmentAuthorizationAccess } from "#server/domain/environment-authorization.contract";
 import { RepositoryCatalogAccess } from "#server/domain/repository-catalog.contract";
-import {
-  createEnvironmentAuthorization,
-  environmentAuthorizationFeature,
-} from "#server/features/environment-authorization/index";
-import { environmentFilesystemFeature } from "#server/features/environment-filesystem/index";
-import {
-  createRepositoryCatalog,
-  repositoryCatalogFeature,
-} from "#server/features/repository-catalog/index";
+import { createEnvironmentAuthorization } from "#server/features/environment-authorization/environment-authorization";
+import { environmentAuthorizationFeature } from "#server/features/environment-authorization/environment-authorization.feature";
+import { environmentFilesystemFeature } from "#server/features/environment-filesystem/environment-filesystem.feature";
+import { createRepositoryCatalog } from "#server/features/repository-catalog/repository-catalog";
+import { repositoryCatalogFeature } from "#server/features/repository-catalog/repository-catalog.feature";
 import { acquireEnvironmentContext } from "#server/persistence/environment-context";
 import { environmentPaths } from "#server/persistence/storage/environment-paths";
 import { testEnvironmentFeatures } from "#tests-integration/apps/server/environment-connection/test-environment-features";
 import { createRepository } from "#tests-support/git";
 import { removeTemporaryDirectory } from "#tests-support/temporary-directory";
-import { exchangeEnvironmentPairingEffect } from "#web/app/environment/connection/index";
 
 const directories = new Set<string>();
 const environmentId = "00000000-0000-4000-8000-000000000001";

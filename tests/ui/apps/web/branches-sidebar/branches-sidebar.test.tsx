@@ -4,7 +4,7 @@ import {
   type RepositoryRefs,
   type RepositoryRefTarget,
 } from "@rebase/contracts";
-import type { ReactNode } from "react";
+import type { ComponentProps } from "react";
 import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
 import { userEvent } from "vite-plus/test/browser";
 import { repositoryScope } from "#tests-ui/apps/web/repository-scope/repository-scope-fixture";
@@ -14,15 +14,12 @@ import {
   respond,
 } from "#tests-ui/runtime/fake-requests";
 import { render } from "#tests-ui/runtime/render";
-import { historyRefKey } from "#web/features/commit-graph/index";
-import { RefCommands } from "#web/features/ref-commands/index";
-import { usePull } from "#web/features/repository-pull/index";
-import type {
-  RefActivation,
-  RepositoryRefsRead,
-} from "#web/features/repository-refs/index";
-import { RepositoryScopeProvider } from "#web/features/repository-scope/index";
-import { BranchesSidebar } from "#web-ui/features/branches-sidebar/branches-sidebar";
+import { BranchesSidebar } from "#web/features/branches-sidebar/branches-sidebar";
+import { historyRefKey } from "#web/features/commit-graph/scope/history-scope";
+import { usePull } from "#web/features/repository-pull/hooks/use-pull";
+import type { RefActivation } from "#web/features/repository-refs/hooks/use-ref-activation";
+import type { RepositoryRefsRead } from "#web/features/repository-refs/hooks/use-repository-refs";
+import { RepositoryScopeProvider } from "#web/features/repository-scope/repository-scope-provider";
 
 const repositoryId = "00000000-0000-4000-8000-000000000001";
 const mainPath = "/repo";
@@ -205,16 +202,15 @@ describe("branches sidebar", () => {
     const callbacks = sidebarCallbacks();
     const screen = await render(
       <RepositoryScopeProvider scope={pulls.scope}>
-        <PullCommands reader={pulls.reader}>
-          <div style={{ height: 480, width: 320 }}>
-            <BranchesSidebar
-              activeWorktreePath={mainPath}
-              focusRequest={0}
-              activation={activation(callbacks)}
-              repositoryRefs={loaded(tracked)}
-            />
-          </div>
-        </PullCommands>
+        <div style={{ height: 480, width: 320 }}>
+          <PullSidebar
+            reader={pulls.reader}
+            activeWorktreePath={mainPath}
+            focusRequest={0}
+            activation={activation(callbacks)}
+            repositoryRefs={loaded(tracked)}
+          />
+        </div>
       </RepositoryScopeProvider>,
       { environment: { requests: pulls.requests } },
     );
@@ -520,17 +516,12 @@ function nestedRefs(): RepositoryRefs {
   };
 }
 
-function PullCommands({
+function PullSidebar({
   reader,
-  children,
-}: {
+  ...sidebar
+}: ComponentProps<typeof BranchesSidebar> & {
   readonly reader: Parameters<typeof usePull>[0];
-  readonly children: ReactNode;
 }) {
   const pull = usePull(reader);
-  return (
-    <RefCommands.Contribute commands={pull.commands}>
-      {children}
-    </RefCommands.Contribute>
-  );
+  return <BranchesSidebar {...sidebar} refCommands={pull.commands} />;
 }

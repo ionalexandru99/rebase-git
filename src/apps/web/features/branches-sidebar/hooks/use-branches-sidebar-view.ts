@@ -1,5 +1,5 @@
 import { useState } from "react";
-import type { BranchesSidebarView } from "#web/features/branches-sidebar/branches-sidebar.contract";
+import type { BranchesSidebarView } from "#web/features/branches-sidebar/branches-sidebar-model";
 
 const storageKey = "rebase:branches-view:v1";
 

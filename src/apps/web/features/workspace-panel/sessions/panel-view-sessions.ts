@@ -2,7 +2,7 @@ import { createWorkspacePanelStore } from "#web/features/workspace-panel/persist
 import type {
   PanelViewState,
   WorkspacePanelScope,
-} from "#web/features/workspace-panel/workspace-panel-session.contract";
+} from "#web/features/workspace-panel/workspace-panel-session";
 import { createStore } from "#web/platform/store/store";
 
 function createPanelSession(

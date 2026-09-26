@@ -37,7 +37,7 @@ test("completed offline history reopens within its timing budget", async ({
         "/features/repository-history/repository-history-reader.contract.ts";
       const {
         RepositoryHistoryOffline,
-      }: typeof import("#web/features/repository-history/repository-history-reader.contract") =
+      }: typeof import("#web/features/repository-history/repository-history-reader") =
         await import(contractPath);
       const environmentId = crypto.randomUUID();
       const repositoryId = crypto.randomUUID();
@@ -88,7 +88,7 @@ test("completed offline history reopens within its timing budget", async ({
         commits.length,
       );
       let networkPageRequests = 0;
-      const gateway: import("#web/features/repository-history/repository-history-reader.contract").RepositoryHistoryGateway =
+      const gateway: import("#web/features/repository-history/repository-history-reader").RepositoryHistoryGateway =
         {
           read: async () => {
             networkPageRequests += 1;

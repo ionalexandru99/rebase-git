@@ -4,12 +4,12 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { createBrowserLocalEnvironmentSession } from "#web/app/environment/browser-local-environment-session";
 import { readDesktopHostBridge } from "#web/app/environment/desktop-host-bridge";
-import { NotificationsProvider } from "#web/features/notifications/index";
+import { ApplicationShell } from "#web/app/shell/application-shell";
+import { NotificationsProvider } from "#web/features/notifications/notifications";
 import { createRepositoryHistoryGateway } from "#web/features/repository-history/transport/repository-history-gateway";
+import { ApplicationRuntime } from "#web/platform/effect/application-runtime-context";
 import { createEnvironmentQueryClient } from "#web/platform/query/environment-query-client";
 import { createEnvironmentQueryPersistence } from "#web/platform/query/environment-query-persistence";
-import { ApplicationShell } from "#web-ui/app/shell/application-shell";
-import { ApplicationRuntime } from "#web-ui/platform/effect/application-runtime-context";
 import "@rebase/web/styles.css";
 
 const rootElement = document.getElementById("root");

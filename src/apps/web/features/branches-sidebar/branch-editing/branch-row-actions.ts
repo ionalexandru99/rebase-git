@@ -4,7 +4,7 @@ import type {
   RemoteBranch,
   RepositoryRefs,
 } from "@rebase/contracts";
-import type { BranchesSidebarRefRow } from "#web/features/branches-sidebar/branches-sidebar.contract";
+import type { BranchesSidebarRefRow } from "#web/features/branches-sidebar/branches-sidebar-model";
 
 export type BranchRowActionId =
   | "delete"

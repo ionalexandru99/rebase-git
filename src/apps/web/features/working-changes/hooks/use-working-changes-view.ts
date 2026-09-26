@@ -7,7 +7,7 @@ import type {
   ViewedChange,
 } from "@rebase/contracts";
 import { useCallback, useState } from "react";
-import { useDiffPreferences } from "#web/features/file-diff/index";
+import { useDiffPreferences } from "#web/features/file-diff/hooks/use-diff-preferences";
 import {
   type ChangesRequestFailure,
   describeChangesFailure,

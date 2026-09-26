@@ -1,5 +1,5 @@
 import type { CommitLaneCheckpoint } from "#web/features/commit-graph/layout/commit-lanes";
-import type { CommitGraphPage } from "#web/features/commit-graph/paging/commit-graph-page-window.contract";
+import type { CommitGraphPage } from "#web/features/commit-graph/paging/commit-graph-page-window-model";
 import { estimateCheckpoint } from "#web/features/commit-graph/paging/prepare-commit-graph-page";
 
 export interface CommitGraphPageCache {

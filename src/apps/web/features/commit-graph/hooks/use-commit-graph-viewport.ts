@@ -9,12 +9,12 @@ import {
 import type {
   CommitGraphViewportAnchor,
   CommitGraphViewportHandle,
-} from "#web/features/commit-graph/commit-graph.contract";
+} from "#web/features/commit-graph/commit-graph-model";
 import { graphRowHeight as rowHeight } from "#web/features/commit-graph/layout/graph-metrics";
 import type {
   RepositoryHistoryQuery,
   RepositoryHistoryReadModel,
-} from "#web/features/repository-history/index";
+} from "#web/features/repository-history/repository-history-reader";
 
 export function useCommitGraphViewport({
   reader,

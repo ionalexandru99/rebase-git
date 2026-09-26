@@ -8,11 +8,11 @@ import {
   useState,
   useSyncExternalStore,
 } from "react";
-import type {
-  AuthorAvatarModel,
-  GitHubRepository,
-} from "#web/features/author-avatars/author-avatar.contract";
-import { createAuthorAvatarModel } from "#web/features/author-avatars/author-avatar-model";
+import {
+  type AuthorAvatarModel,
+  createAuthorAvatarModel,
+} from "#web/features/author-avatars/author-avatar-model";
+import type { GitHubRepository } from "#web/features/author-avatars/author-avatar-source";
 
 const AvatarContext = createContext<AuthorAvatarModel | undefined>(undefined);
 

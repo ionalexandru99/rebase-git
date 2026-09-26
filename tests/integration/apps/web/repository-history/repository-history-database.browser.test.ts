@@ -1,6 +1,6 @@
 import type { RepositoryCommit } from "@rebase/contracts";
 import { expect, it } from "vite-plus/test";
-import type { HistoryOrderCache } from "#web/features/repository-history/query/history-order.contract";
+import type { HistoryOrderCache } from "#web/features/repository-history/query/history-order-model";
 import { prepareRepositoryHistoryOrder } from "#web/features/repository-history/query/repository-history-query";
 import {
   storeRepositoryHistoryBatch,

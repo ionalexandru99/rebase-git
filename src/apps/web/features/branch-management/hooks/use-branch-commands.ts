@@ -10,8 +10,8 @@ import {
   withoutDeletedBranches,
   withRenamedBranch,
 } from "#web/features/branch-management/apply-branch-changes";
-import { useApplyToRefs } from "#web/features/repository-refs/index";
-import { useRepositoryScope } from "#web/features/repository-scope/index";
+import { useApplyToRefs } from "#web/features/repository-refs/hooks/use-apply-to-refs";
+import { useRepositoryScope } from "#web/features/repository-scope/repository-scope-provider";
 import {
   type CommandFailure,
   commandFailure,

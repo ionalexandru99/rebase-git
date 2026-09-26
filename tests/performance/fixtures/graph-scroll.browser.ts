@@ -6,17 +6,15 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { Layer, ManagedRuntime } from "effect";
 import { createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import {
-  CommitGraph,
-  openCommitGraphHistory,
-} from "#web/features/commit-graph/index";
-import type { RepositoryHistoryReader } from "#web/features/repository-history/repository-history-reader.contract";
-import { createEnvironmentQueryClient } from "#web/platform/query/environment-query-client";
-import { ApplicationRuntime } from "#web-ui/platform/effect/application-runtime-context";
+import { CommitGraph } from "#web/features/commit-graph/commit-graph";
+import { openCommitGraphHistory } from "#web/features/commit-graph/paging/commit-graph-history";
+import type { RepositoryHistoryReader } from "#web/features/repository-history/repository-history-reader";
+import { ApplicationRuntime } from "#web/platform/effect/application-runtime-context";
 import {
   type Environment,
   EnvironmentProvider,
-} from "#web-ui/platform/query/environment-context";
+} from "#web/platform/query/environment-context";
+import { createEnvironmentQueryClient } from "#web/platform/query/environment-query-client";
 
 const offlineEnvironment: Environment = {
   environmentId: undefined,
@@ -29,6 +27,12 @@ const offlineEnvironment: Environment = {
   connected: false,
   readable: false,
   writable: false,
+  status: {
+    availability: "unavailable",
+    connectionState: "Connecting",
+    detail: "Performance fixtures run without an environment.",
+    status: "Offline",
+  },
 };
 
 let root: Root | undefined;

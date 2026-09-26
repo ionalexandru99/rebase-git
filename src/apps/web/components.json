@@ -13,8 +13,8 @@
   "iconLibrary": "tabler",
   "rtl": false,
   "aliases": {
-    "components": "#web-ui/components",
-    "ui": "#web-ui/components/ui",
+    "components": "#web/components",
+    "ui": "#web/components/ui",
     "hooks": "#web/hooks",
     "lib": "#web/lib",
     "utils": "#web/lib/utils"

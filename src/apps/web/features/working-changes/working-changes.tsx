@@ -1,25 +1,24 @@
 import { lazy, Suspense, useState } from "react";
+import { Button } from "#web/components/ui/button";
+import {
+  ResizableHandle,
+  ResizablePanel,
+  ResizablePanelGroup,
+} from "#web/components/ui/resizable";
+import { ChangeFileTree } from "#web/features/working-changes/components/change-file-tree";
+import { CommitEditor } from "#web/features/working-changes/components/commit-editor";
+import {
+  DiscardConfirmation,
+  type DiscardRequest,
+} from "#web/features/working-changes/components/discard-confirmation";
 import {
   type ChangeAction,
   useWorkingChangesView,
   type WorkingChangesTarget,
 } from "#web/features/working-changes/hooks/use-working-changes-view";
-import { Button } from "#web-ui/components/ui/button";
-import {
-  ResizableHandle,
-  ResizablePanel,
-  ResizablePanelGroup,
-} from "#web-ui/components/ui/resizable";
-import { ChangeFileTree } from "#web-ui/features/working-changes/components/change-file-tree";
-import { CommitEditor } from "#web-ui/features/working-changes/components/commit-editor";
-import {
-  DiscardConfirmation,
-  type DiscardRequest,
-} from "#web-ui/features/working-changes/components/discard-confirmation";
 
 const ChangeDiffViewer = lazy(
-  () =>
-    import("#web-ui/features/working-changes/components/change-diff-viewer"),
+  () => import("#web/features/working-changes/components/change-diff-viewer"),
 );
 
 export function WorkingChanges({

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vite-plus/test";
-import { branchNameProblem } from "#web/features/branch-management/index";
+import { branchNameProblem } from "#web/features/branch-management/branch-name";
 
 const branches = [{ name: "main" }, { name: "fix/refs-watcher" }];
 

@@ -3,7 +3,7 @@ import { describe, expect, it } from "vite-plus/test";
 import {
   resolveActiveWorktreePath,
   resolveRefActivation,
-} from "#web/features/repository-refs/index";
+} from "#web/features/repository-refs/activate-repository-ref";
 
 const commit = "a".repeat(40);
 const mainPath = "/repo";

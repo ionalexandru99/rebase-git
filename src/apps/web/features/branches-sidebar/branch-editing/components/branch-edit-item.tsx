@@ -1,8 +1,8 @@
 import type { LocalBranch } from "@rebase/contracts";
 import type { BranchesSidebarItem } from "#web/features/branches-sidebar/branch-editing/branch-edit-state";
+import { BranchDraftRow } from "#web/features/branches-sidebar/branch-editing/components/branch-draft-row";
+import { BranchNameField } from "#web/features/branches-sidebar/branch-editing/components/branch-name-field";
 import type { BranchEditing } from "#web/features/branches-sidebar/branch-editing/hooks/use-branch-editing";
-import { BranchDraftRow } from "#web-ui/features/branches-sidebar/branch-editing/components/branch-draft-row";
-import { BranchNameField } from "#web-ui/features/branches-sidebar/branch-editing/components/branch-name-field";
 
 export function BranchEditItem({
   branches,

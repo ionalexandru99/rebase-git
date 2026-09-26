@@ -1,5 +1,5 @@
+import type { RepositoryHistorySearchModel } from "#web/features/history-search/repository-history-search";
 import { emptyHistorySearchSnapshot } from "#web/features/history-search/repository-history-search-model";
-import type { RepositoryHistorySearchModel } from "#web/features/history-search/repository-history-search-model.contract";
 import { createStore } from "#web/platform/store/store";
 import { useStore } from "#web/platform/store/use-store";
 

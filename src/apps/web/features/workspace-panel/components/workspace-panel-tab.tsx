@@ -1,10 +1,10 @@
 import { IconX } from "@tabler/icons-react";
-import type { WorkspacePanelKind } from "#web/features/workspace-panel/workspace-panel.contract";
+import { Button } from "#web/components/ui/button";
+import { TabsTrigger } from "#web/components/ui/tabs";
 import { workspacePanelDefinitions } from "#web/features/workspace-panel/workspace-panel-definitions";
+import type { WorkspacePanelKind } from "#web/features/workspace-panel/workspace-panel-model";
+import { useWorkspacePanel } from "#web/features/workspace-panel/workspace-panel-provider";
 import { cn } from "#web/lib/utils";
-import { Button } from "#web-ui/components/ui/button";
-import { TabsTrigger } from "#web-ui/components/ui/tabs";
-import { useWorkspacePanel } from "#web-ui/features/workspace-panel/workspace-panel-provider";
 
 export function WorkspacePanelTab({
   kind,

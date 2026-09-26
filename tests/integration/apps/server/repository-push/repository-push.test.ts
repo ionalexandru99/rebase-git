@@ -14,7 +14,7 @@ import {
   GitCommandError,
   type GitCommandRunner,
 } from "#server/domain/git-command.contract";
-import { repositoryPushFeature } from "#server/features/repository-push/index";
+import { repositoryPushFeature } from "#server/features/repository-push/repository-push.feature";
 import {
   createRepositoryAccess,
   createRepositoryCoordination,

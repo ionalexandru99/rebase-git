@@ -19,7 +19,7 @@ import {
   RepositoryCatalogAccess,
 } from "#server/domain/repository-catalog.contract";
 import { RepositoryWatching } from "#server/domain/repository-watcher.contract";
-import { environmentAuthorizationFeature } from "#server/features/environment-authorization/index";
+import { environmentAuthorizationFeature } from "#server/features/environment-authorization/environment-authorization.feature";
 import {
   acquireRepositoryFreshness,
   type RepositoryFreshnessService,
@@ -27,7 +27,7 @@ import {
 import {
   repositoryFreshnessFeature,
   repositoryHistoryFeature,
-} from "#server/features/repository-history/index";
+} from "#server/features/repository-history/repository-history.feature";
 import {
   repositoryAccessLayer,
   repositoryCoordinationLayer,
@@ -36,7 +36,7 @@ import { testEnvironmentFeatures } from "#tests-integration/apps/server/environm
 import { cloneRepository, fastImport, git } from "#tests-support/git";
 import { waitForObservation } from "#tests-support/observation";
 import { removeTemporaryDirectory } from "#tests-support/temporary-directory";
-import { connectCurrentEnvironmentEffect } from "#web/app/environment/connection/index";
+import { connectCurrentEnvironmentEffect } from "#web/app/environment/connection/environment-protocol-client";
 import { createRepositoryHistoryRpc } from "#web/features/repository-history/transport/repository-history-rpc";
 
 const directories: string[] = [];

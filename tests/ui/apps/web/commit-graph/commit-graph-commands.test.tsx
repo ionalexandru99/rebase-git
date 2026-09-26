@@ -1,4 +1,3 @@
-import type { ReactNode } from "react";
 import { describe, expect, it, vi } from "vite-plus/test";
 import { userEvent } from "vite-plus/test/browser";
 import {
@@ -11,14 +10,11 @@ import {
 } from "#tests-ui/apps/web/commit-graph/commit-graph-fixture";
 import { repositoryScope } from "#tests-ui/apps/web/repository-scope/repository-scope-fixture";
 import { render } from "#tests-ui/runtime/render";
-import {
-  type GraphCommandDefinition,
-  GraphCommands,
-} from "#web/features/commit-commands/index";
+import type { GraphCommandDefinition } from "#web/features/commit-commands/graph-command";
 import {
   type RepositoryScope,
   RepositoryScopeProvider,
-} from "#web/features/repository-scope/index";
+} from "#web/features/repository-scope/repository-scope-provider";
 
 describe("commit graph commands", () => {
   it("reveals a hidden result from cached search", async () => {
@@ -61,7 +57,7 @@ describe("commit graph commands", () => {
     await expect.element(fetch).toBeEnabled();
   });
 
-  it("runs commands that features contribute to the commit menu", async () => {
+  it("runs commands that the workspace adds to the commit menu", async () => {
     const reader = historyReader({ commits: history(2), status: "ready" });
     const tagged = vi.fn<(oid: string) => void>();
     const tagCommand: GraphCommandDefinition = {
@@ -77,13 +73,11 @@ describe("commit graph commands", () => {
       }),
     };
     const screen = await render(
-      <ScopedGraph reader={reader} scope={repositoryScope()}>
-        {(graph) => (
-          <GraphCommands.Contribute commands={[tagCommand]}>
-            {graph}
-          </GraphCommands.Contribute>
-        )}
-      </ScopedGraph>,
+      <ScopedGraph
+        commands={[tagCommand]}
+        reader={reader}
+        scope={repositoryScope()}
+      />,
     );
     await screen
       .getByRole("grid")
@@ -157,24 +151,23 @@ function readyToFetch() {
 }
 
 function ScopedGraph({
+  commands = [],
   reader,
   scope,
-  children = (graph) => graph,
 }: {
+  readonly commands?: readonly GraphCommandDefinition[];
   readonly reader: ReturnType<typeof historyReader>;
   readonly scope: RepositoryScope;
-  readonly children?: (graph: ReactNode) => ReactNode;
 }) {
   return (
     <div style={{ height: 520, width: 900 }}>
       <RepositoryScopeProvider scope={scope}>
-        {children(
-          <CommitGraphFixture
-            reader={reader}
-            repositoryName="rebase-test"
-            roots={[{ name: "main", oid: "0".repeat(40), type: "branch" }]}
-          />,
-        )}
+        <CommitGraphFixture
+          extraCommands={commands}
+          reader={reader}
+          repositoryName="rebase-test"
+          roots={[{ name: "main", oid: "0".repeat(40), type: "branch" }]}
+        />
       </RepositoryScopeProvider>
     </div>
   );

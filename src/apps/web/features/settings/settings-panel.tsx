@@ -5,7 +5,7 @@ import {
   type SettingsSectionId,
   settingsSections,
 } from "#web/features/settings/settings-sections";
-import { SettingsSidebar } from "#web-ui/features/settings/settings-sidebar";
+import { SettingsSidebar } from "#web/features/settings/settings-sidebar";
 
 export function SettingsPanel({
   closeSettings,

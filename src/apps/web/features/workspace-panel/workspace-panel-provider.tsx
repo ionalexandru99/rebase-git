@@ -9,14 +9,14 @@ import {
 import type {
   WorkspacePanelAction,
   WorkspacePanelStore,
-} from "#web/features/workspace-panel/workspace-panel.contract";
-import { useStore } from "#web/platform/store/use-store";
+} from "#web/features/workspace-panel/workspace-panel-model";
 import {
   usePanelSession,
   usePanelSessionOwner,
   type WorkspacePanelScope,
   WorkspacePanelSessions,
-} from "#web-ui/features/workspace-panel/workspace-panel-sessions";
+} from "#web/features/workspace-panel/workspace-panel-sessions";
+import { useStore } from "#web/platform/store/use-store";
 
 function usePanelController(
   scopeKey: string,

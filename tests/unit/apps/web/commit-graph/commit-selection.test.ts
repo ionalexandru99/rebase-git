@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vite-plus/test";
-import { emptyCommitGraphSelection } from "#web/features/commit-graph/commit-selection.contract";
+import { emptyCommitGraphSelection } from "#web/features/commit-graph/selection/commit-graph-selection";
 import {
   clearGraphSelection,
   moveGraphSelection,

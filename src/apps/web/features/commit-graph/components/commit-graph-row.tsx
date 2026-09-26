@@ -3,6 +3,8 @@ import type {
   RepositoryHistoryRefTarget,
 } from "@rebase/contracts";
 import { type CSSProperties, memo, useMemo } from "react";
+import { CommitGraphCommitCells } from "#web/features/commit-graph/components/commit-graph-commit-cells";
+import { CommitGraphMergeControl } from "#web/features/commit-graph/components/commit-graph-merge-controls";
 import type { CommitLaneRow } from "#web/features/commit-graph/layout/commit-lanes";
 import { graphNodeColor } from "#web/features/commit-graph/layout/graph-colors";
 import {
@@ -10,8 +12,6 @@ import {
   commitGraphNodePosition,
 } from "#web/features/commit-graph/layout/graph-geometry";
 import { graphMetadataColumns } from "#web/features/commit-graph/layout/graph-metrics";
-import { CommitGraphCommitCells } from "#web-ui/features/commit-graph/components/commit-graph-commit-cells";
-import { CommitGraphMergeControl } from "#web-ui/features/commit-graph/components/commit-graph-merge-controls";
 
 const selectedRowStyle = {
   "--graph-row-background":

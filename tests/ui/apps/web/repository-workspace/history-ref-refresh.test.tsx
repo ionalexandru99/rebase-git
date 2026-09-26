@@ -2,7 +2,7 @@ import { act } from "react";
 import { expect, it, vi } from "vite-plus/test";
 import { render } from "vitest-browser-react";
 import { useHistoryRefRefresh } from "#web/app/workspace/use-history-ref-refresh";
-import type { RepositoryHistorySnapshot } from "#web/features/repository-history/repository-history-reader.contract";
+import type { RepositoryHistorySnapshot } from "#web/features/repository-history/repository-history-reader";
 
 it("refreshes sidebar refs after changed history completes without reacting to cached reads", async () => {
   const listeners = new Set<() => void>();

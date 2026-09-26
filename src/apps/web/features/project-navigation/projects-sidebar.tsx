@@ -9,25 +9,27 @@ import {
   IconX,
 } from "@tabler/icons-react";
 import { type JSX, useState } from "react";
-import type {
-  EnvironmentNavigationStatus,
-  ProjectNavigationRepository,
-  ProjectNavigationState,
-} from "#web/features/project-navigation/project-navigation.contract";
-import { filterEnvironmentRepositories } from "#web/features/project-navigation/project-navigation-state";
-import { RepositorySettingsButton } from "#web/features/repository-settings/index";
-import { Button } from "#web-ui/components/ui/button";
+import { Button } from "#web/components/ui/button";
 import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
-} from "#web-ui/components/ui/collapsible";
-import { Input } from "#web-ui/components/ui/input";
+} from "#web/components/ui/collapsible";
+import { Input } from "#web/components/ui/input";
+import type {
+  ProjectNavigationRepository,
+  ProjectNavigationState,
+} from "#web/features/project-navigation/project-navigation";
+import { filterEnvironmentRepositories } from "#web/features/project-navigation/project-navigation-state";
+import { RepositorySettingsButton } from "#web/features/repository-settings/components/repository-settings-button";
+import {
+  type EnvironmentStatus,
+  useEnvironment,
+} from "#web/platform/query/environment-context";
 
 export function ProjectsSidebar({
   closeRepository,
   collapse,
-  environmentStatus,
   expand,
   navigation,
   openProject,
@@ -41,7 +43,6 @@ export function ProjectsSidebar({
     repository: ProjectNavigationRepository,
   ) => void;
   readonly collapse: () => void;
-  readonly environmentStatus: EnvironmentNavigationStatus;
   readonly expand: () => void;
   readonly navigation: ProjectNavigationState;
   readonly openProject: () => void;
@@ -57,6 +58,7 @@ export function ProjectsSidebar({
   readonly toggleEnvironment: (environmentId: string) => void;
 }): JSX.Element {
   const [filterQuery, setFilterQuery] = useState("");
+  const { status: environmentStatus } = useEnvironment();
 
   return (
     <nav
@@ -111,7 +113,7 @@ function ExpandedProjectsSidebar({
     repository: ProjectNavigationRepository,
   ) => void;
   readonly collapse: () => void;
-  readonly environmentStatus: EnvironmentNavigationStatus;
+  readonly environmentStatus: EnvironmentStatus;
   readonly filterQuery: string;
   readonly navigation: ProjectNavigationState;
   readonly openProject: () => void;
@@ -286,7 +288,7 @@ function CollapsedProjectsSidebar({
   selectRepository,
   toggleEnvironment,
 }: {
-  readonly environmentStatus: EnvironmentNavigationStatus;
+  readonly environmentStatus: EnvironmentStatus;
   readonly expand: () => void;
   readonly filterQuery: string;
   readonly navigation: ProjectNavigationState;

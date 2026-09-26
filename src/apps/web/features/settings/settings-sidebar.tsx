@@ -1,11 +1,11 @@
 import { IconArrowLeft, IconSearch } from "@tabler/icons-react";
 import { type JSX, useState } from "react";
+import { Button } from "#web/components/ui/button";
+import { Input } from "#web/components/ui/input";
 import {
   type SettingsSectionId,
   settingsSections,
 } from "#web/features/settings/settings-sections";
-import { Button } from "#web-ui/components/ui/button";
-import { Input } from "#web-ui/components/ui/input";
 
 export function SettingsSidebar({
   closeSettings,

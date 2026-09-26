@@ -5,8 +5,8 @@ import type {
   CommitCommandHandlers,
   GraphCommandContext,
   GraphCommandDefinition,
-} from "#web/features/commit-commands/graph-command.contract";
-import { createCommandRegistry } from "#web/platform/command-contributions/command-registry";
+} from "#web/features/commit-commands/graph-command";
+import { createCommandRegistry } from "#web/platform/menu-commands/menu-command";
 
 const context: GraphCommandContext = {
   invokingOid: "b",
@@ -34,9 +34,9 @@ const commit: RepositoryCommit = {
 };
 
 describe("graph commands", () => {
-  it("orders contributed commands with commit commands and rechecks them before execution", async () => {
+  it("orders extra commands with commit commands and rechecks them before execution", async () => {
     const execute = vi.fn(async () => ({ _tag: "Executed" as const }));
-    const contributed: GraphCommandDefinition = {
+    const extra: GraphCommandDefinition = {
       id: "feature.inspect",
       order: 0.5,
       resolve: (target) => ({
@@ -51,7 +51,7 @@ describe("graph commands", () => {
         writeClipboard: async () => {},
         openDetails: () => {},
       }),
-      contributed,
+      extra,
     ]);
 
     expect(registry.commands(context).map(({ id }) => id)).toEqual([

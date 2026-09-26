@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vite-plus/test";
-import { createBrowserRepositoryHistoryReader } from "#web/features/repository-history/index";
-import { RepositoryHistoryUnavailable } from "#web/features/repository-history/repository-history-reader.contract";
+import { createBrowserRepositoryHistoryReader } from "#web/features/repository-history/browser-repository-history-reader";
+import { RepositoryHistoryUnavailable } from "#web/features/repository-history/repository-history-reader";
 
 describe("history worker replies", () => {
   it("rejects a reply for another operation and keeps correctly matched requests usable", async () => {

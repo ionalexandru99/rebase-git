@@ -4,7 +4,7 @@ import {
   IconChevronRight,
   IconFolder,
 } from "@tabler/icons-react";
-import { useFileRows } from "#web/features/file-diff/index";
+import { useFileRows } from "#web/features/file-diff/hooks/use-file-rows";
 
 const statusLabels: Record<CommitFile["status"], string> = {
   A: "Added",

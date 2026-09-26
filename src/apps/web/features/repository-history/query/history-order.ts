@@ -3,7 +3,7 @@ import type {
   HistoryOrderIndexReader,
   HistoryOrderNode,
   HistoryParentEdge,
-} from "#web/features/repository-history/query/history-order.contract";
+} from "#web/features/repository-history/query/history-order-model";
 import type { HistoryTopology } from "#web/persistence/repository-history/repository-history-topology";
 
 export class HistoryOrderIndex implements HistoryOrderIndexReader {

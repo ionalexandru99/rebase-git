@@ -66,12 +66,6 @@ async function withGraphFixture(page: Page, measure: () => Promise<void>) {
   const server = await createServer({
     configFile: resolve("src/apps/web/vite.config.ts"),
     root: resolve("."),
-    resolve: {
-      alias: {
-        "#web": resolve("src/apps/web"),
-        "#web-ui": resolve("src/apps/web"),
-      },
-    },
     server: { host: "127.0.0.1", port: 0, hmr: false },
     plugins: [
       {

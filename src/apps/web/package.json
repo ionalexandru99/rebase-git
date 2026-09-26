@@ -6,20 +6,6 @@
   "sideEffects": [
     "./styles.css"
   ],
-  "imports": {
-    "#web/*": {
-      "rebase-source": "./*.ts",
-      "types": "./dist/types/*.d.ts",
-      "import": "./dist/types/*.js",
-      "default": "./dist/types/*.js"
-    },
-    "#web-ui/*": {
-      "rebase-source": "./*.tsx",
-      "types": "./dist/types/*.d.ts",
-      "import": "./dist/types/*.js",
-      "default": "./dist/types/*.js"
-    }
-  },
   "exports": {
     "./styles.css": "./styles.css"
   },

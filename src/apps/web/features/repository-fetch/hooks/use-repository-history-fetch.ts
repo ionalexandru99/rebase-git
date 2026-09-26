@@ -3,7 +3,7 @@ import { describeRepositoryFetchError } from "#web/features/repository-fetch/rep
 import type {
   RepositoryHistoryFetchCommands,
   RepositoryHistorySnapshot,
-} from "#web/features/repository-history/repository-history-reader.contract";
+} from "#web/features/repository-history/repository-history-reader";
 
 interface FetchAttempt {
   readonly reader: Pick<RepositoryHistoryFetchCommands, "fetch">;

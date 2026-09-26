@@ -18,7 +18,7 @@ import {
   acceptRepositoryHistoryBatch,
   completeRepositoryHistory,
 } from "#web/features/repository-history/replica/repository-history-completion";
-import type { RepositoryHistoryQuery } from "#web/features/repository-history/repository-history-reader.contract";
+import type { RepositoryHistoryQuery } from "#web/features/repository-history/repository-history-reader";
 import type {
   StoredCommit,
   StoredHistoryPage,

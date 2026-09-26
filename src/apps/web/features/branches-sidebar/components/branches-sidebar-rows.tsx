@@ -9,6 +9,13 @@ import {
   IconTag,
 } from "@tabler/icons-react";
 import { type CSSProperties, Fragment, useRef } from "react";
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuSeparator,
+  ContextMenuTrigger,
+} from "#web/components/ui/context-menu";
 import type {
   BranchRowAction,
   BranchRowActionId,
@@ -17,20 +24,14 @@ import type {
   BranchesSidebarFolderRow,
   BranchesSidebarRefRow,
   BranchesSidebarSectionRow,
-} from "#web/features/branches-sidebar/branches-sidebar.contract";
+} from "#web/features/branches-sidebar/branches-sidebar-model";
 import {
   localBranchesSectionId,
   tagsSectionId,
-} from "#web/features/branches-sidebar/branches-sidebar.contract";
-import { RefCommands } from "#web/features/ref-commands/index";
-import {
-  ContextMenu,
-  ContextMenuContent,
-  ContextMenuItem,
-  ContextMenuSeparator,
-  ContextMenuTrigger,
-} from "#web-ui/components/ui/context-menu";
-import { UpstreamIndicator } from "#web-ui/features/branches-sidebar/components/upstream-indicator";
+} from "#web/features/branches-sidebar/branches-sidebar-model";
+import { UpstreamIndicator } from "#web/features/branches-sidebar/components/upstream-indicator";
+import { RefCommandItems } from "#web/features/ref-commands/components/ref-command-items";
+import type { RefCommandDefinition } from "#web/features/ref-commands/ref-command";
 
 export function rowElementId(rowId: string): string {
   return `branches-row-${rowId}`;
@@ -99,6 +100,7 @@ export function SectionRow({
 export function RefRow({
   actions,
   active,
+  commands,
   onAction,
   onActivate,
   onSelect,
@@ -110,6 +112,7 @@ export function RefRow({
   readonly actions: readonly BranchRowAction[];
   readonly onAction: (id: BranchRowActionId) => void;
   readonly active: boolean;
+  readonly commands: readonly RefCommandDefinition[];
   readonly onActivate: () => void;
   readonly onSelect: () => void;
   readonly onToggleHistory: () => void;
@@ -191,7 +194,8 @@ export function RefRow({
       />
       <ContextMenuContent className="w-64" finalFocus={() => !acted.current}>
         <ContextMenuItem onClick={onSelect}>Checkout</ContextMenuItem>
-        <RefCommands.Items
+        <RefCommandItems
+          commands={commands}
           context={{
             target: row.target,
             ...(row.upstream === undefined ? {} : { upstream: row.upstream }),

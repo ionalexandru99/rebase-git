@@ -14,9 +14,9 @@ import {
   renderGraph,
 } from "#tests-ui/apps/web/commit-graph/commit-graph-fixture";
 import { render } from "#tests-ui/runtime/render";
-import type { CommitGraphHandle } from "#web/features/commit-graph/commit-graph.contract";
-import { saveRepositoryHistoryOrder } from "#web/features/repository-history/index";
-import { RepositoryHistoryUnavailable } from "#web/features/repository-history/repository-history-reader.contract";
+import type { CommitGraphHandle } from "#web/features/commit-graph/commit-graph-model";
+import { saveRepositoryHistoryOrder } from "#web/features/repository-history/preferences/repository-history-order";
+import { RepositoryHistoryUnavailable } from "#web/features/repository-history/repository-history-reader";
 
 describe("commit graph navigation", () => {
   it("selects a loaded row in the same task as the arrow key", async () => {

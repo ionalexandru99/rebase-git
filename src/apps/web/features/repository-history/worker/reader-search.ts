@@ -1,6 +1,6 @@
 import { Effect, Fiber } from "effect";
 import { searchStoredRepositoryHistory } from "#web/features/repository-history/search/repository-history-search";
-import type { ConnectedReader } from "#web/features/repository-history/worker/history-worker.contract";
+import type { ConnectedReader } from "#web/features/repository-history/worker/history-worker-state";
 import {
   post,
   workerFailure,

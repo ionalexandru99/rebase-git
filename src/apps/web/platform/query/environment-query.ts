@@ -14,8 +14,8 @@ import {
   useQueryClient,
 } from "@tanstack/react-query";
 import { useEffect } from "react";
+import { useEnvironment } from "#web/platform/query/environment-context";
 import type { EnvironmentChangeScope } from "#web/platform/query/environment-query-meta";
-import { useEnvironment } from "#web-ui/platform/query/environment-context";
 
 export interface EnvironmentQueryOptions<Data> {
   readonly enabled?: boolean;
@@ -26,6 +26,7 @@ export interface EnvironmentQueryOptions<Data> {
   readonly select?: (data: Data) => Data;
   readonly refetchInterval?: number;
   readonly refetchOnWindowFocus?: boolean | "always";
+  readonly refetchOnMount?: boolean;
   readonly keepPrevious?: boolean;
 }
 

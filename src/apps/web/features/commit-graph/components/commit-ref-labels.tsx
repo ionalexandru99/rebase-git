@@ -3,14 +3,14 @@ import type {
   RepositoryRefTarget,
 } from "@rebase/contracts";
 import { IconTag, IconX } from "@tabler/icons-react";
-import { CopyPill } from "#web/features/clipboard/index";
+import { CopyPill } from "#web/features/clipboard/components/copy-pill";
+import { GitProviderIcon } from "#web/features/commit-graph/components/git-provider-icon";
+import { useGraphRefAppearance } from "#web/features/commit-graph/components/graph-ref-appearance";
 import {
   graphBranchColorIndex,
   graphLaneColor,
   graphRefName,
 } from "#web/features/commit-graph/layout/graph-colors";
-import { GitProviderIcon } from "#web-ui/features/commit-graph/components/git-provider-icon";
-import { useGraphRefAppearance } from "#web-ui/features/commit-graph/components/graph-ref-appearance";
 
 export function CommitRefLabels({
   labels,

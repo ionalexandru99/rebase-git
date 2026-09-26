@@ -10,24 +10,24 @@ import {
   useState,
 } from "react";
 import { PanelFeatureContext } from "#web/features/workspace-panel/api";
+import { RetainedPanelView } from "#web/features/workspace-panel/components/retained-panel-view";
 import {
   createSessionCollection,
   type PanelSession,
 } from "#web/features/workspace-panel/sessions/panel-view-sessions";
 import { createPanelViewTarget } from "#web/features/workspace-panel/sessions/panel-view-target";
-import type { WorkspacePanelKind } from "#web/features/workspace-panel/workspace-panel.contract";
 import { workspacePanelDefinitions } from "#web/features/workspace-panel/workspace-panel-definitions";
+import type { WorkspacePanelKind } from "#web/features/workspace-panel/workspace-panel-model";
 import type {
   WorkspacePanelEnvironment,
   WorkspacePanelScope,
-} from "#web/features/workspace-panel/workspace-panel-session.contract";
+} from "#web/features/workspace-panel/workspace-panel-session";
 import { useStore } from "#web/platform/store/use-store";
-import { RetainedPanelView } from "#web-ui/features/workspace-panel/components/retained-panel-view";
 
 export type {
   WorkspacePanelEnvironment,
   WorkspacePanelScope,
-} from "#web/features/workspace-panel/workspace-panel-session.contract";
+} from "#web/features/workspace-panel/workspace-panel-session";
 
 const SessionsContext = createContext<
   ReturnType<typeof createSessionCollection> | undefined

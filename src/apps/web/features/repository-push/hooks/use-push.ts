@@ -12,7 +12,7 @@ import {
   type PushTarget,
   publishRemote,
 } from "#web/features/repository-push/resolve-push-target";
-import { useRepositoryScope } from "#web/features/repository-scope/index";
+import { useRepositoryScope } from "#web/features/repository-scope/repository-scope-provider";
 import { useCommand } from "#web/platform/query/use-command";
 
 export interface ForcePushReview {

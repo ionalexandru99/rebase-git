@@ -1,15 +1,15 @@
 import { useId, useState } from "react";
+import { SettingsRow } from "#web/components/ui/settings-layout";
+import { useRepositoryHistoryOrder } from "#web/features/repository-history/hooks/use-repository-history-order";
 import {
+  type RepositoryHistoryIdentity,
   saveRepositoryHistoryOrder,
-  useRepositoryHistoryOrder,
-} from "#web/features/repository-history/index";
-import type { RepositorySettingsIdentity } from "#web/features/repository-settings/repository-settings.contract";
-import { SettingsRow } from "#web-ui/components/ui/settings-layout";
+} from "#web/features/repository-history/preferences/repository-history-order";
 
 export function RepositoryOrderSettings({
   identity,
 }: {
-  readonly identity: RepositorySettingsIdentity;
+  readonly identity: RepositoryHistoryIdentity;
 }) {
   const descriptionId = useId();
   const order = useRepositoryHistoryOrder(

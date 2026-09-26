@@ -1,6 +1,6 @@
 import { IconList, IconListTree } from "@tabler/icons-react";
 import { useId } from "react";
-import type { BranchesSidebarView } from "#web/features/branches-sidebar/branches-sidebar.contract";
+import type { BranchesSidebarView } from "#web/features/branches-sidebar/branches-sidebar-model";
 
 const options = [
   { value: "linear", label: "Linear view", Icon: IconList },

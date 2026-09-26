@@ -13,7 +13,7 @@ import {
   useMemo,
   useState,
 } from "react";
-import type { CommitGraphViewportHandle } from "#web/features/commit-graph/commit-graph.contract";
+import type { CommitGraphViewportHandle } from "#web/features/commit-graph/commit-graph-model";
 import {
   graphHeaderHeight,
   graphRowHeight as rowHeight,
@@ -21,7 +21,7 @@ import {
 import type {
   CommitGraphPageWindow,
   CommitGraphPageWindowSnapshot,
-} from "#web/features/commit-graph/paging/commit-graph-page-window.contract";
+} from "#web/features/commit-graph/paging/commit-graph-page-window-model";
 
 const overscanRows = 6;
 const emptyViewport = { width: 0, height: 0 };

@@ -5,11 +5,11 @@ import {
 } from "@rebase/contracts";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback } from "react";
+import { useEnvironment } from "#web/platform/query/environment-context";
 import {
   environmentQueryKey,
   useEnvironmentQuery,
 } from "#web/platform/query/environment-query";
-import { useEnvironment } from "#web-ui/platform/query/environment-context";
 
 const noRepositories: readonly RepositoryCatalogEntry[] = [];
 
@@ -46,6 +46,7 @@ export function useRepositoryCatalog() {
       changes: "none",
       staleTime: 0,
       refetchOnWindowFocus: false,
+      refetchOnMount: false,
       select: sortCatalog,
     },
   );
@@ -60,4 +61,9 @@ export function useRepositoryCatalog() {
     repositories: catalog.data?.repositories ?? noRepositories,
     findRepository,
   };
+}
+
+export function useCatalogRepository(repositoryId: string | undefined) {
+  const { repositories } = useRepositoryCatalog();
+  return repositories.find(({ id }) => id === repositoryId);
 }

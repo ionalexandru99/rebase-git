@@ -1,8 +1,8 @@
 import { expect, it } from "vite-plus/test";
 import { page } from "vite-plus/test/browser";
 import { render } from "vitest-browser-react";
-import { ResizablePanel } from "#web-ui/components/ui/resizable";
-import { WorkspacePanel } from "#web-ui/features/workspace-panel/index";
+import { ResizablePanel } from "#web/components/ui/resizable";
+import { WorkspacePanel } from "#web/features/workspace-panel/workspace-panel";
 
 it("retains nested scroll coordinates when detached views are shown again", async () => {
   localStorage.clear();

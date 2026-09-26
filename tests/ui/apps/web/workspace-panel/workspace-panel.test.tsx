@@ -1,9 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
 import { page } from "vite-plus/test/browser";
 import { render } from "vitest-browser-react";
+import { ResizablePanel } from "#web/components/ui/resizable";
 import { createWorkspacePanelStore } from "#web/features/workspace-panel/persistence/workspace-panel-store";
-import { ResizablePanel } from "#web-ui/components/ui/resizable";
-import { WorkspacePanel } from "#web-ui/features/workspace-panel/index";
+import { WorkspacePanel } from "#web/features/workspace-panel/workspace-panel";
 
 describe("workspace panel", () => {
   beforeEach(() => localStorage.clear());

@@ -1,5 +1,14 @@
 import { createContext, type ReactNode, useContext } from "react";
-import type { RepositoryScope } from "#web/features/repository-scope/repository-scope.contract";
+
+export interface RepositoryScope {
+  readonly repositoryId: string;
+  readonly worktreePath: string;
+  readonly logicalRepositoryId: string;
+  readonly connected: boolean;
+  readonly readable: boolean;
+  readonly writable: boolean;
+  readonly switchWorktree: (worktreePath: string) => void;
+}
 
 const RepositoryScopeContext = createContext<RepositoryScope | undefined>(
   undefined,

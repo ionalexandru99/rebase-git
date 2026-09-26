@@ -1,9 +1,9 @@
 import { IconAlertTriangle } from "@tabler/icons-react";
 import { useLayoutEffect, useRef } from "react";
+import { Button } from "#web/components/ui/button";
 import type { BranchDeletion } from "#web/features/branches-sidebar/branch-editing/branch-row-actions";
 import type { PendingDeletion } from "#web/features/branches-sidebar/branch-editing/hooks/use-branch-deletion";
-import { PersistentNotification } from "#web/features/notifications/index";
-import { Button } from "#web-ui/components/ui/button";
+import { PersistentNotification } from "#web/features/notifications/components/persistent-notification";
 
 const listedCommits = 3;
 

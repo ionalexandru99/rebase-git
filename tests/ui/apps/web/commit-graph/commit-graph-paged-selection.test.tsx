@@ -7,7 +7,7 @@ import { useCommitGraphSelection } from "#web/features/commit-graph/hooks/use-co
 import type {
   RepositoryHistoryQuery,
   RepositoryHistoryReader,
-} from "#web/features/repository-history/repository-history-reader.contract";
+} from "#web/features/repository-history/repository-history-reader";
 
 const query: RepositoryHistoryQuery = {
   limit: 100,

@@ -20,19 +20,15 @@ import {
 } from "#tests-ui/runtime/fake-requests";
 import { fakeRpc } from "#tests-ui/runtime/fake-rpc";
 import { render } from "#tests-ui/runtime/render";
-import { useCreateBranchHere } from "#web/features/branch-management/index";
+import { useCreateBranchHere } from "#web/features/branch-management/hooks/use-create-branch-here";
 import type { BranchRename } from "#web/features/branches-sidebar/branch-editing/hooks/use-branch-editing";
-import {
-  CommitCommandMenu,
-  GraphCommands,
-} from "#web/features/commit-commands/index";
-import { NotificationsProvider } from "#web/features/notifications/index";
-import {
-  useRefActivation,
-  useRepositoryRefs,
-} from "#web/features/repository-refs/index";
-import { RepositoryScopeProvider } from "#web/features/repository-scope/index";
-import { BranchesSidebar } from "#web-ui/features/branches-sidebar/branches-sidebar";
+import { BranchesSidebar } from "#web/features/branches-sidebar/branches-sidebar";
+import { CommitCommandMenu } from "#web/features/commit-commands/commit-command-menu";
+import type { GraphCommandDefinition } from "#web/features/commit-commands/graph-command";
+import { NotificationsProvider } from "#web/features/notifications/notifications";
+import { useRefActivation } from "#web/features/repository-refs/hooks/use-ref-activation";
+import { useRepositoryRefs } from "#web/features/repository-refs/hooks/use-repository-refs";
+import { RepositoryScopeProvider } from "#web/features/repository-scope/repository-scope-provider";
 
 const repositoryId = "00000000-0000-4000-8000-000000000001";
 const mainPath = "/repo";
@@ -366,11 +362,13 @@ function BranchWorkspace({
   readonly onBranchRenamed: (rename: BranchRename) => void;
 }) {
   const repositoryRefs = useRepositoryRefs(repositoryId, repositoryId);
-  const activation = useRefActivation(repositoryRefs, () => undefined);
+  const activation = useRefActivation(repositoryRefs);
   const creation = useCreateBranchHere();
   return (
-    <GraphCommands.Contribute commands={creation.commands}>
-      {createBranchAt === undefined ? null : <CommitAt oid={createBranchAt} />}
+    <>
+      {createBranchAt === undefined ? null : (
+        <CommitAt commands={creation.commands} oid={createBranchAt} />
+      )}
       <div style={{ height: 520, width: 320 }}>
         <BranchesSidebar
           activation={activation}
@@ -381,14 +379,20 @@ function BranchWorkspace({
           repositoryRefs={repositoryRefs}
         />
       </div>
-    </GraphCommands.Contribute>
+    </>
   );
 }
 
-function CommitAt({ oid }: { readonly oid: string }) {
+function CommitAt({
+  commands,
+  oid,
+}: {
+  readonly commands: readonly GraphCommandDefinition[];
+  readonly oid: string;
+}) {
   return (
     <CommitCommandMenu
-      commands={[]}
+      commands={commands}
       context={{
         invokingOid: oid,
         selectedOids: [oid],

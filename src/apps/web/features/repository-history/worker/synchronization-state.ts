@@ -2,7 +2,7 @@ import type {
   ActiveHistorySynchronization,
   ConnectedReader,
   HistorySynchronizationState,
-} from "#web/features/repository-history/worker/history-worker.contract";
+} from "#web/features/repository-history/worker/history-worker-state";
 
 export function activeSynchronization(
   replica: HistorySynchronizationState,

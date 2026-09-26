@@ -10,7 +10,7 @@ import {
   readEnvironmentBrowserSessionEffect,
 } from "@rebase/environment-client";
 import { Effect } from "effect";
-import { connectCurrentEnvironmentEffect } from "#web/app/environment/connection/index";
+import { connectCurrentEnvironmentEffect } from "#web/app/environment/connection/environment-protocol-client";
 import { createLocalEnvironmentSession } from "#web/app/environment/local-environment-session";
 import type {
   LocalEnvironmentGateway,

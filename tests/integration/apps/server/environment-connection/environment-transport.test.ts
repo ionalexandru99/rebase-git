@@ -18,7 +18,7 @@ import {
   EnvironmentAuthorizationAccess,
 } from "#server/domain/environment-authorization.contract";
 import type { EnvironmentEventPublisher } from "#server/domain/environment-event-publisher.contract";
-import { environmentAuthorizationFeature } from "#server/features/environment-authorization/index";
+import { environmentAuthorizationFeature } from "#server/features/environment-authorization/environment-authorization.feature";
 import { testEnvironmentFeatures } from "#tests-integration/apps/server/environment-connection/test-environment-features";
 
 const environmentId = "00000000-0000-4000-8000-000000000001";

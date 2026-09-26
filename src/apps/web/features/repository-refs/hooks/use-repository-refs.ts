@@ -9,11 +9,11 @@ import {
   type RepositoryRefsReadFailure,
   readRepositoryRefs,
 } from "#web/platform/environment/rpc/read-repository-refs";
-import { hasLiveData } from "#web/platform/query/live-query-data";
 import {
   type Environment,
   useEnvironment,
-} from "#web-ui/platform/query/environment-context";
+} from "#web/platform/query/environment-context";
+import { hasLiveData } from "#web/platform/query/live-query-data";
 
 export interface RepositoryRefsRead {
   readonly refs: RepositoryRefs | undefined;

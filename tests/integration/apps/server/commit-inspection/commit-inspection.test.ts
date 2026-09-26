@@ -9,7 +9,7 @@ import { Effect } from "effect";
 import { afterEach, describe, expect, it } from "vite-plus/test";
 import { createLocalGitCommandRunner } from "#server/adapters/local-git/local-git-command-runner";
 import { createLocalRepositoryWatcher } from "#server/adapters/local-git/local-repository-watcher";
-import { commitInspectionFeature } from "#server/features/commit-inspection/index";
+import { commitInspectionFeature } from "#server/features/commit-inspection/commit-inspection.feature";
 import {
   createRepositoryAccess,
   createRepositoryCoordination,

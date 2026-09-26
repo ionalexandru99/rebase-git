@@ -1,7 +1,7 @@
 import type {
   CommitCommandHandlers,
   GraphCommandDefinition,
-} from "#web/features/commit-commands/graph-command.contract";
+} from "#web/features/commit-commands/graph-command";
 
 export function createCommitCommandDefinitions(
   handlers: CommitCommandHandlers,
