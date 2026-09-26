@@ -1,27 +1,26 @@
 import type { ConflictPath, ConflictSide } from "@rebase/contracts";
+import { IconArrowDown, IconArrowLeft, IconArrowUp } from "@tabler/icons-react";
 import { type KeyboardEvent, type ReactNode, useState } from "react";
 import { Button } from "#web/components/ui/button";
-import { MarkersConfirmation } from "#web/features/merge-view/components/markers-confirmation";
-import {
-  MergeViewBar,
-  RegionNavigation,
-} from "#web/features/merge-view/components/merge-view-bar";
 import { ResultEditor } from "#web/features/merge-view/components/result-editor";
 import { SidePanes } from "#web/features/merge-view/components/side-panes";
-import { WholeFileMenu } from "#web/features/merge-view/components/whole-file-menu";
-import { useLineSelection } from "#web/features/merge-view/hooks/use-line-selection";
+import { openRegionCount } from "#web/features/merge-view/conflict-document";
+import { useMergeDocument } from "#web/features/merge-view/hooks/use-merge-document";
 import {
-  type MergeSession,
-  useMergeSession,
-} from "#web/features/merge-view/hooks/use-merge-session";
-import { useRegionNavigation } from "#web/features/merge-view/hooks/use-region-navigation";
-import { useSideSegments } from "#web/features/merge-view/hooks/use-side-segments";
-import { openRegionCount } from "#web/features/merge-view/merge-model";
+  type ResolveFile,
+  useResolveFile,
+} from "#web/features/merge-view/hooks/use-resolve-file";
 import {
-  conflictReason,
-  describeConflictFailure,
-} from "#web/features/merge-view/merge-view-messages";
+  type Selection,
+  useSelection,
+} from "#web/features/merge-view/hooks/use-selection";
 import { useRepositoryScope } from "#web/features/repository-scope/repository-scope-provider";
+import {
+  describeChangesFailure,
+  wholeFileOnly,
+} from "#web/features/working-changes/changes-messages";
+import { MarkersConfirmation } from "#web/features/working-changes/conflicts/components/markers-confirmation";
+import { WholeFileMenu } from "#web/features/working-changes/conflicts/components/whole-file-menu";
 
 export interface MergeViewProps {
   readonly path: string;
@@ -29,6 +28,8 @@ export interface MergeViewProps {
   readonly onClose: () => void;
   readonly toolbarActions?: ReactNode;
 }
+
+type KeyAction = "close" | "previous" | "next" | "current" | "incoming";
 
 export function MergeView({
   path,
@@ -64,41 +65,35 @@ function MergeViewContent({
   readonly onClose: () => void;
   readonly toolbarActions?: ReactNode;
 }) {
-  const session = useMergeSession({ input, onOpen, onClose });
+  const merge = useMergeDocument(input);
+  const resolve = useResolveFile({ input, document: merge, onOpen, onClose });
   const [showBase, setShowBase] = useState(false);
   const leftSide: ConflictSide = showBase ? "base" : "current";
-  const { model, resolution, queries } = session;
-  const document = queries.document.data;
-  const navigation = useRegionNavigation(
-    model,
-    leftSide,
-    session.activeRegion,
-    session.selectRegion,
-  );
-  const selection = useLineSelection(session.choose, session.selectRegion);
-  const segments = useSideSegments(model);
-  const failure = queries.document.error;
-  const reason = conflictReason(failure);
-  const wholeFileOnly = reason === "TooLarge" || reason === "Unsupported";
-  const listed = queries.list.data?.files.find(
-    ({ path }) => path === input.path,
-  );
-  const panes = !wholeFileOnly && model !== null && document !== undefined;
+  const selection = useSelection(merge.model, merge.choose, leftSide);
+  const { model } = merge;
+  const document = merge.document.data;
+  const failure = merge.document.error;
+  const wholeFile = wholeFileOnly(failure);
+  const listed = merge.list.data?.files.find(({ path }) => path === input.path);
+  const panes = !wholeFile && model !== null && document !== undefined;
   const notice =
-    session.notice ??
-    (failure !== null && !wholeFileOnly
-      ? describeConflictFailure(failure)
-      : null);
+    merge.notice ??
+    (failure !== null && !wholeFile ? describeChangesFailure(failure) : null);
 
   return (
     <section
       aria-label="Merge view"
       className="flex h-full min-h-0 flex-col bg-repository"
-      onKeyDown={(event) =>
-        handleKeys(event, session, navigation, resolution, onClose)
-      }
+      onKeyDown={(event) => handleKeys(event, selection, resolve, onClose)}
     >
-      <MergeViewBar path={input.path} onBack={onClose} actions={toolbarActions}>
+      <div className="flex min-h-12 shrink-0 flex-wrap items-center gap-2 border-border/60 border-b px-3 py-1">
+        <Button variant="ghost" size="xs" onClick={onClose}>
+          <IconArrowLeft aria-hidden="true" className="size-3.5" />
+          History
+        </Button>
+        <h1 className="min-w-0 truncate text-[.85rem] font-semibold">
+          {input.path}
+        </h1>
         {panes && (
           <span className="shrink-0 text-xs whitespace-nowrap text-muted-foreground">
             {openRegionCount(model)} of {model.regionCount} open
@@ -116,37 +111,54 @@ function MergeViewContent({
             >
               Base
             </Button>
-            <RegionNavigation
-              hasPrevious={navigation.hasPrevious}
-              hasNext={navigation.hasNext}
-              onPrevious={navigation.previous}
-              onNext={navigation.next}
-            />
+            <Button
+              variant="ghost"
+              size="icon-xs"
+              aria-label="Previous region"
+              aria-keyshortcuts="Alt+ArrowUp"
+              disabled={!selection.hasPrevious}
+              onClick={selection.previous}
+            >
+              <IconArrowUp aria-hidden="true" className="size-3.5" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon-xs"
+              aria-label="Next region"
+              aria-keyshortcuts="Alt+ArrowDown"
+              disabled={!selection.hasNext}
+              onClick={selection.next}
+            >
+              <IconArrowDown aria-hidden="true" className="size-3.5" />
+            </Button>
           </>
         )}
         <WholeFileMenu
           choices={document?.file.choices ?? listed?.choices ?? []}
-          mergeTool={(queries.list.data?.mergeTool ?? null) !== null}
-          disabled={resolution.busy}
-          onChoose={(choice) => void resolution.chooseWholeFile(choice)}
-          onMergeTool={() => void resolution.openMergeTool()}
+          mergeTool={(merge.list.data?.mergeTool ?? null) !== null}
+          disabled={resolve.busy}
+          onChoose={(choice) => void resolve.chooseWholeFile(choice)}
+          onMergeTool={() => void resolve.openMergeTool()}
         />
-        {panes && (
-          <Button
-            size="xs"
-            disabled={resolution.busy}
-            onClick={() => void resolution.markResolved(false)}
-          >
-            Mark resolved
-          </Button>
-        )}
-      </MergeViewBar>
-      {resolution.confirming && (
-        <MarkersConfirmation
-          onCancel={resolution.cancelConfirmation}
-          onConfirm={() => void resolution.markResolved(true)}
-        />
-      )}
+        {panes &&
+          (resolve.confirming ? (
+            <MarkersConfirmation
+              path={input.path}
+              disabled={resolve.busy}
+              cancel={resolve.cancelConfirmation}
+              confirm={() => void resolve.markResolved(true)}
+            />
+          ) : (
+            <Button
+              size="xs"
+              disabled={resolve.busy}
+              onClick={() => void resolve.markResolved(false)}
+            >
+              Mark resolved
+            </Button>
+          ))}
+        {toolbarActions}
+      </div>
       {notice !== null && (
         <p
           role="status"
@@ -158,21 +170,20 @@ function MergeViewContent({
       {panes && (
         <div className="flex min-h-0 flex-1 flex-col">
           <SidePanes
-            segments={segments}
+            model={model}
             sides={document.sides}
             leftSide={leftSide}
-            activeRegion={session.activeRegion}
-            selection={selection}
-            onRegionClick={navigation.selectFromSides}
-            scrollRef={navigation.sidesRef}
+            activeRegion={selection.activeRegion}
+            lines={selection.lines}
+            scrollRef={selection.sidesRef}
           />
           <ResultEditor
             model={model}
-            activeRegion={session.activeRegion}
-            onEdit={session.edit}
-            onUndo={session.undo}
-            onRegionClick={navigation.selectFromResult}
-            scrollRef={navigation.resultRef}
+            activeRegion={selection.activeRegion}
+            onEdit={merge.edit}
+            onUndo={merge.undo}
+            onRegionClick={selection.focusFromResult}
+            scrollRef={selection.resultRef}
           />
         </div>
       )}
@@ -182,9 +193,8 @@ function MergeViewContent({
 
 function handleKeys(
   event: KeyboardEvent<HTMLElement>,
-  session: MergeSession,
-  navigation: ReturnType<typeof useRegionNavigation>,
-  resolution: MergeSession["resolution"],
+  selection: Selection,
+  resolve: ResolveFile,
   onClose: () => void,
 ) {
   if (!event.currentTarget.contains(event.target as Node)) return;
@@ -193,20 +203,18 @@ function handleKeys(
   event.preventDefault();
   switch (action) {
     case "close":
-      return resolution.confirming
-        ? resolution.cancelConfirmation()
-        : onClose();
+      return resolve.confirming ? resolve.cancelConfirmation() : onClose();
     case "previous":
-      return navigation.previous();
+      return selection.previous();
     case "next":
-      return navigation.next();
+      return selection.next();
     case "current":
     case "incoming":
-      return session.selectSide(action);
+      return selection.takeActive(action);
   }
 }
 
-function keyAction(event: KeyboardEvent<HTMLElement>) {
+function keyAction(event: KeyboardEvent<HTMLElement>): KeyAction | null {
   if (event.key === "Escape") return "close";
   if (!event.altKey || event.ctrlKey || event.metaKey) return null;
   if (event.key === "ArrowUp") return "previous";

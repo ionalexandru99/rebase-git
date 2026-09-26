@@ -5,8 +5,8 @@ import type {
 } from "@rebase/contracts";
 import { useMemo } from "react";
 import {
-  type ChangesRequestFailure,
   describeChangesFailure,
+  wholeFileOnly,
 } from "#web/features/working-changes/changes-messages";
 import { useConflictActions } from "#web/features/working-changes/conflicts/hooks/use-conflict-actions";
 import {
@@ -72,13 +72,4 @@ function conflictRows(
 ): readonly ConflictRow[] {
   const files = new Map(list?.files.map((file) => [file.path, file]));
   return conflicted.map((path) => ({ path, file: files.get(path) }));
-}
-
-function wholeFileOnly(error: ChangesRequestFailure) {
-  return (
-    error._tag === "EnvironmentHttpRejected" &&
-    error.failure._tag === "ConflictFailed" &&
-    (error.failure.reason === "Unsupported" ||
-      error.failure.reason === "TooLarge")
-  );
 }

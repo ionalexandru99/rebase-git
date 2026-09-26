@@ -79,9 +79,12 @@ export function ConflictViewer({
           </Button>
           {file ? (
             <WholeFileMenu
-              file={file}
-              conflicts={conflicts}
+              choices={file.choices}
+              mergeTool={(conflicts.list?.mergeTool ?? null) !== null}
               disabled={disabled}
+              onChoose={(choice) => conflicts.choose(file.path, choice)}
+              onResolve={() => conflicts.resolve(file.path, false)}
+              onMergeTool={() => conflicts.openMergeTool(file.path)}
             />
           ) : null}
         </div>

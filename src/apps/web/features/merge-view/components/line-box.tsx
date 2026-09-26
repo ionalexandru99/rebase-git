@@ -1,12 +1,24 @@
+import type { ConflictSide } from "@rebase/contracts";
 import type { KeyboardEvent } from "react";
-import type {
-  LineSelection,
-  LineTarget,
-} from "#web/features/merge-view/hooks/use-line-selection";
-import { pickPosition } from "#web/features/merge-view/line-picks";
-import type { LinePick } from "#web/features/merge-view/merge-model";
-import { checkedBoxes, sideNames } from "#web/features/merge-view/side-styles";
+import type { LinePick } from "#web/features/merge-view/conflict-document";
+import {
+  type LineSelection,
+  type LineTarget,
+  pickPosition,
+} from "#web/features/merge-view/hooks/use-selection";
 import { cn } from "#web/lib/utils";
+
+export const sideNames: Record<ConflictSide, string> = {
+  base: "Base",
+  current: "Current",
+  incoming: "Incoming",
+};
+
+const checkedBoxes: Record<ConflictSide, string> = {
+  base: "border-muted-foreground bg-muted-foreground text-background",
+  current: "border-[#69b1ff] bg-[#69b1ff] text-background",
+  incoming: "border-[#5ecc71] bg-[#5ecc71] text-background",
+};
 
 export function LineBox({
   target,
@@ -15,7 +27,6 @@ export function LineBox({
   ordinal,
   focusable,
   selection,
-  onFocus,
 }: {
   readonly target: LineTarget;
   readonly picks: readonly LinePick[];
@@ -23,7 +34,6 @@ export function LineBox({
   readonly ordinal: number;
   readonly focusable: boolean;
   readonly selection: LineSelection;
-  readonly onFocus: (regionId: string) => void;
 }) {
   const position = pickPosition(picks, target);
   const checked = position !== -1;
@@ -48,7 +58,7 @@ export function LineBox({
         selection.press(target, picks);
       }}
       onPointerEnter={() => selection.enter(target)}
-      onFocus={() => onFocus(target.regionId)}
+      onFocus={() => selection.focusRegion(target.regionId)}
       onClick={(event) => {
         if (event.detail === 0) selection.toggle(target);
       }}

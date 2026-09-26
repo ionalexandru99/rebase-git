@@ -3,9 +3,8 @@ import {
   choicePicks,
   type LinePick,
   type MergeModel,
-  segmentLines,
   type TextSegment,
-} from "#web/features/merge-view/merge-model";
+} from "#web/features/merge-view/conflict-document";
 
 export interface SideRegion {
   readonly kind: "region";
@@ -109,27 +108,6 @@ export function regionRowOffset(
       segment.kind === "text"
         ? segment.lines.length
         : bandHeight(segment.region, leftSide, rightSide);
-  }
-  return null;
-}
-
-export function regionLineOffset(model: MergeModel, regionId: string) {
-  let line = 0;
-  for (const segment of model.segments) {
-    if (segment.kind === "region" && segment.region.id === regionId)
-      return line;
-    line += segmentLines(segment).length;
-  }
-  return null;
-}
-
-export function regionAtLine(model: MergeModel, line: number) {
-  let start = 0;
-  for (const segment of model.segments) {
-    const end = start + segmentLines(segment).length;
-    if (segment.kind === "region" && line >= start && line < end)
-      return segment.region.id;
-    start = end;
   }
   return null;
 }

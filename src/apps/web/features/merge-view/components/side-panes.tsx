@@ -1,19 +1,31 @@
 import type { ConflictSide, ConflictSides, TokenMark } from "@rebase/contracts";
-import { memo, type RefObject, useMemo } from "react";
-import { LineBox } from "#web/features/merge-view/components/line-box";
-import type { LineSelection } from "#web/features/merge-view/hooks/use-line-selection";
+import { memo, type RefObject, useMemo, useState } from "react";
 import {
   type PaneRow,
   paneRows,
   type RegionBand,
   type SideSegment,
-} from "#web/features/merge-view/pane-rows";
+  sideSegments,
+} from "#web/features/merge-view/aligned-rows";
 import {
-  sideMarks,
+  LineBox,
   sideNames,
-  sideRows,
-} from "#web/features/merge-view/side-styles";
+} from "#web/features/merge-view/components/line-box";
+import type { MergeModel } from "#web/features/merge-view/conflict-document";
+import type { LineSelection } from "#web/features/merge-view/hooks/use-selection";
 import { cn } from "#web/lib/utils";
+
+const sideRows: Record<ConflictSide, string> = {
+  base: "bg-muted",
+  current: "bg-[#69b1ff]/10",
+  incoming: "bg-[#5ecc71]/10",
+};
+
+const sideMarks: Record<ConflictSide, string> = {
+  base: "bg-foreground/15",
+  current: "bg-[#69b1ff]/35",
+  incoming: "bg-[#5ecc71]/35",
+};
 
 interface PaneProps {
   readonly rows: readonly PaneRow[];
@@ -21,23 +33,36 @@ interface PaneProps {
   readonly activeRegion: string | null;
 }
 
-export const SidePanes = memo(function SidePanes({
+interface PanesProps {
+  readonly sides: ConflictSides;
+  readonly leftSide: ConflictSide;
+  readonly activeRegion: string | null;
+  readonly lines: LineSelection;
+  readonly scrollRef: RefObject<HTMLDivElement | null>;
+}
+
+export function SidePanes({
+  model,
+  ...props
+}: PanesProps & { readonly model: MergeModel }) {
+  return <AlignedPanes segments={useSideSegments(model)} {...props} />;
+}
+
+function useSideSegments(model: MergeModel) {
+  const [segments, setSegments] = useState<readonly SideSegment[]>([]);
+  const next = sideSegments(model, segments);
+  if (next !== segments) setSegments(next);
+  return next;
+}
+
+const AlignedPanes = memo(function AlignedPanes({
   segments,
   sides,
   leftSide,
   activeRegion,
-  selection,
-  onRegionClick,
+  lines,
   scrollRef,
-}: {
-  readonly segments: readonly SideSegment[];
-  readonly sides: ConflictSides;
-  readonly leftSide: ConflictSide;
-  readonly activeRegion: string | null;
-  readonly selection: LineSelection;
-  readonly onRegionClick: (regionId: string) => void;
-  readonly scrollRef: RefObject<HTMLDivElement | null>;
-}) {
+}: PanesProps & { readonly segments: readonly SideSegment[] }) {
   const rows = useMemo(
     () => paneRows(segments, leftSide, "incoming"),
     [segments, leftSide],
@@ -57,27 +82,25 @@ export const SidePanes = memo(function SidePanes({
             rows={rows.left}
             side={leftSide}
             activeRegion={activeRegion}
-            selection={selection}
-            onRegionClick={onRegionClick}
+            lines={lines}
           />
           <PaneText
             rows={rows.left}
             side={leftSide}
             activeRegion={activeRegion}
-            onRegionClick={onRegionClick}
+            lines={lines}
           />
           <PaneText
             rows={rows.right}
             side="incoming"
             activeRegion={activeRegion}
-            onRegionClick={onRegionClick}
+            lines={lines}
           />
           <LineGutter
             rows={rows.right}
             side="incoming"
             activeRegion={activeRegion}
-            selection={selection}
-            onRegionClick={onRegionClick}
+            lines={lines}
           />
         </div>
       </div>
@@ -115,12 +138,8 @@ function LineGutter({
   rows,
   side,
   activeRegion,
-  selection,
-  onRegionClick,
-}: PaneProps & {
-  readonly selection: LineSelection;
-  readonly onRegionClick: (regionId: string) => void;
-}) {
+  lines,
+}: PaneProps & { readonly lines: LineSelection }) {
   const first = rows.findIndex(({ kind }) => kind === "line");
   return (
     <div data-gutter={side} className="w-7 shrink-0 bg-muted/40 select-none">
@@ -143,8 +162,7 @@ function LineGutter({
               lineCount={row.band.segment.region[side].length}
               ordinal={row.band.ordinal}
               focusable={index === first}
-              selection={selection}
-              onFocus={onRegionClick}
+              selection={lines}
             />
           )}
         </div>
@@ -157,8 +175,8 @@ function PaneText({
   rows,
   side,
   activeRegion,
-  onRegionClick,
-}: PaneProps & { readonly onRegionClick: (regionId: string) => void }) {
+  lines,
+}: PaneProps & { readonly lines: LineSelection }) {
   return (
     <div
       data-pane={side}
@@ -167,7 +185,7 @@ function PaneText({
         const regionId = (event.target as HTMLElement).closest<HTMLElement>(
           "[data-region]",
         )?.dataset.region;
-        if (regionId !== undefined) onRegionClick(regionId);
+        if (regionId !== undefined) lines.focusRegion(regionId);
       }}
     >
       <div className="w-max min-w-full">

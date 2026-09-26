@@ -1,18 +1,23 @@
 import { type CSSProperties, type RefObject, useMemo } from "react";
 import { Button } from "#web/components/ui/button";
+import type { MergeModel } from "#web/features/merge-view/conflict-document";
 import {
   displayText,
-  type MergeModel,
-} from "#web/features/merge-view/merge-model";
-import { regionAtLine } from "#web/features/merge-view/pane-rows";
-import {
+  type LineOrigin,
   type ResultBlock,
+  regionAtLine,
   resultBlocks,
-} from "#web/features/merge-view/result-blocks";
-import { originEdges } from "#web/features/merge-view/side-styles";
+} from "#web/features/merge-view/result-text";
 import { cn } from "#web/lib/utils";
 
 const lineHeight = 20;
+
+const originEdges: Record<LineOrigin, string> = {
+  base: "bg-muted-foreground",
+  current: "bg-[#69b1ff]",
+  incoming: "bg-[#5ecc71]",
+  edited: "bg-foreground/60",
+};
 
 export function ResultEditor({
   model,

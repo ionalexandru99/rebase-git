@@ -5,11 +5,8 @@ import {
   type WholeFileChoice,
 } from "@rebase/contracts";
 import { useState } from "react";
-import type { WriteQueue } from "#web/features/merge-view/hooks/use-write-queue";
-import {
-  type ConflictRequestFailure,
-  conflictReason,
-} from "#web/features/merge-view/merge-view-messages";
+import type { MergeDocument } from "#web/features/merge-view/hooks/use-merge-document";
+import { conflictReason } from "#web/features/working-changes/changes-messages";
 import {
   type SettledCommand,
   settleCommand,
@@ -21,27 +18,17 @@ type ListRoute =
   | typeof RepositoryConflictsHttpApi.choose
   | typeof RepositoryConflictsHttpApi.mergeTool;
 
-export interface ResolutionOptions {
-  readonly input: ConflictPath;
-  readonly queue: WriteQueue;
-  readonly listedRevision: string | undefined;
-  readonly onList: (list: ConflictList) => void;
-  readonly onResolved: (list: ConflictList) => void;
-  readonly onReload: () => void;
-  readonly onStale: () => void;
-  readonly onFailed: (failure: ConflictRequestFailure) => void;
-}
-
-export function useResolution({
+export function useResolveFile({
   input,
-  queue,
-  listedRevision,
-  onList,
-  onResolved,
-  onReload,
-  onStale,
-  onFailed,
-}: ResolutionOptions) {
+  document,
+  onOpen,
+  onClose,
+}: {
+  readonly input: ConflictPath;
+  readonly document: MergeDocument;
+  readonly onOpen: (path: string) => void;
+  readonly onClose: () => void;
+}) {
   const repository = {
     repositoryId: input.repositoryId,
     worktreePath: input.worktreePath,
@@ -52,20 +39,33 @@ export function useResolution({
     repository,
   });
   const [confirming, setConfirming] = useState(false);
-  const revision = () => queue.revision() ?? listedRevision ?? "";
+  const { queue } = document;
+  const revision = () =>
+    queue.revision() ??
+    document.list.data?.files.find(({ path }) => path === input.path)
+      ?.revision ??
+    "";
+
+  function openNext(list: ConflictList) {
+    const next = list.files.find(
+      ({ path, openRegions }) => path !== input.path && openRegions > 0,
+    );
+    if (next === undefined) onClose();
+    else onOpen(next.path);
+  }
 
   function settle(
     result: SettledCommand<ListRoute>,
     onOk: (list: ConflictList) => void,
   ) {
     if (result._tag === "Ok") {
-      onList(result.value);
+      document.storeList(result.value);
       return onOk(result.value);
     }
     const reason = conflictReason(result.failure);
     if (reason === "Markers") return setConfirming(true);
-    if (reason === "Stale") return onStale();
-    onFailed(result.failure);
+    if (reason === "Stale") return document.stale();
+    document.fail(result.failure);
   }
 
   async function markResolved(allowMarkers: boolean) {
@@ -76,7 +76,7 @@ export function useResolution({
       stage.mutateAsync,
       { ...input, revision: revision(), allowMarkers },
     );
-    settle(result, onResolved);
+    settle(result, openNext);
   }
 
   async function chooseWholeFile(choice: WholeFileChoice) {
@@ -86,7 +86,7 @@ export function useResolution({
       choose.mutateAsync,
       { ...input, revision: revision(), choice },
     );
-    settle(result, onResolved);
+    settle(result, openNext);
   }
 
   async function openMergeTool() {
@@ -98,8 +98,8 @@ export function useResolution({
     );
     settle(result, (list) =>
       list.files.some(({ path }) => path === input.path)
-        ? onReload()
-        : onResolved(list),
+        ? document.reload()
+        : openNext(list),
     );
   }
 
@@ -112,3 +112,5 @@ export function useResolution({
     openMergeTool,
   };
 }
+
+export type ResolveFile = ReturnType<typeof useResolveFile>;

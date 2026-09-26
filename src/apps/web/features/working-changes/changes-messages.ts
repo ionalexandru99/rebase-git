@@ -1,4 +1,5 @@
 import type {
+  ConflictFailure,
   RepositoryChangesHttpApi,
   RepositoryConflictsHttpApi,
 } from "@rebase/contracts";
@@ -14,6 +15,7 @@ type ChangesRoute =
   | typeof RepositoryConflictsHttpApi.document
   | typeof RepositoryConflictsHttpApi.stage
   | typeof RepositoryConflictsHttpApi.choose
+  | typeof RepositoryConflictsHttpApi.write
   | typeof RepositoryConflictsHttpApi.mergeTool;
 
 export const headMovedMessage =
@@ -37,4 +39,18 @@ export function describeChangesFailure(error: ChangesRequestFailure) {
     case "EnvironmentResponseError":
       return "Could not complete the request. Check the environment connection and try again.";
   }
+}
+
+export function conflictReason(
+  error: ChangesRequestFailure | null,
+): ConflictFailure["reason"] | null {
+  return error?._tag === "EnvironmentHttpRejected" &&
+    error.failure._tag === "ConflictFailed"
+    ? error.failure.reason
+    : null;
+}
+
+export function wholeFileOnly(error: ChangesRequestFailure | null) {
+  const reason = conflictReason(error);
+  return reason === "Unsupported" || reason === "TooLarge";
 }

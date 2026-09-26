@@ -3,7 +3,6 @@ import type {
   ConflictRegion,
   ConflictSide,
 } from "@rebase/contracts";
-import { markerBlocks } from "#web/features/merge-view/marker-blocks";
 
 export interface LinePick {
   readonly side: ConflictSide;
@@ -45,6 +44,19 @@ interface Anchor {
   readonly segment: RegionSegment;
 }
 
+interface MarkerBlock {
+  readonly start: number;
+  readonly end: number;
+  readonly current: readonly string[];
+  readonly incoming: readonly string[];
+}
+
+const opening = /^<{7,}(?:\s|$)/;
+const baseMarker = /^\|{7,}(?:\s|$)/;
+const separator = /^={7,}$/;
+const closing = /^>{7,}(?:\s|$)/;
+const noPicks: readonly LinePick[] = [];
+
 export function mergeModel(document: ConflictDocument): MergeModel {
   const eol = document.content.includes("\r\n") ? "\r\n" : "\n";
   const lines = document.content.split(eol);
@@ -66,18 +78,10 @@ export function segmentLines(segment: MergeSegment): readonly string[] {
     case "open":
       return marker;
     case "picked":
-      return choice.picks.map((pick) => pickedLine(region, pick));
+      return choice.picks.map((pick) => region[pick.side][pick.index] ?? "");
     case "edited":
       return choice.lines;
   }
-}
-
-export function pickedLine(region: ConflictRegion, pick: LinePick) {
-  return region[pick.side][pick.index] ?? "";
-}
-
-export function displayText(model: MergeModel) {
-  return model.segments.flatMap(segmentLines).join("\n");
 }
 
 export function fileContent(model: MergeModel) {
@@ -95,10 +99,15 @@ export function openRegionCount(model: MergeModel) {
     .length;
 }
 
-const noPicks: readonly LinePick[] = [];
-
 export function choicePicks(choice: RegionChoice): readonly LinePick[] {
   return choice.kind === "open" ? noPicks : choice.picks;
+}
+
+export function regionPicks(model: MergeModel, regionId: string) {
+  const segment = regionSegments(model).find(
+    ({ region }) => region.id === regionId,
+  );
+  return segment === undefined ? noPicks : choicePicks(segment.choice);
 }
 
 export function choosePicks(
@@ -113,21 +122,18 @@ export function choosePicks(
   );
 }
 
-export function chooseSide(
-  model: MergeModel,
-  regionId: string,
-  side: ConflictSide,
-): MergeModel {
-  const segment = regionSegments(model).find(
-    ({ region }) => region.id === regionId,
-  );
-  if (segment === undefined) return model;
-  const picks = segment.region[side].map((_, index) => ({ side, index }));
-  return withChoice(model, regionId, { kind: "picked", picks });
-}
-
 export function restoreRegion(model: MergeModel, regionId: string) {
   return withChoice(model, regionId, { kind: "open" });
+}
+
+export function sameLines(
+  left: readonly string[],
+  right: readonly string[],
+): boolean {
+  return (
+    left.length === right.length &&
+    left.every((line, index) => line === right[index])
+  );
 }
 
 function withChoice(
@@ -176,7 +182,6 @@ function decidedAnchors(
   return document.regions.flatMap((region): Anchor[] => {
     if (region.open || region.line === null) return [];
     const start = Math.min(Math.max(region.line - 1, 0), lines.length);
-    const marker = gitMarker(document, region);
     const side = (["current", "incoming"] as const).find((candidate) =>
       sameLines(
         lines.slice(start, start + region[candidate].length),
@@ -194,7 +199,7 @@ function decidedAnchors(
         segment: {
           kind: "region",
           region,
-          marker,
+          marker: gitMarker(document, region),
           choice:
             side === undefined
               ? { kind: "edited", picks, lines: [] }
@@ -242,12 +247,41 @@ function sideName(document: ConflictDocument, side: ConflictSide) {
     : `${commit.slice(0, 7)} (${subject})`;
 }
 
-export function sameLines(
-  left: readonly string[],
-  right: readonly string[],
-): boolean {
-  return (
-    left.length === right.length &&
-    left.every((line, index) => line === right[index])
-  );
+function markerBlocks(lines: readonly string[]): MarkerBlock[] {
+  const blocks: MarkerBlock[] = [];
+  for (let start = 0; start < lines.length; start += 1) {
+    if (!opening.test(lines[start] ?? "")) continue;
+    const block = readBlock(lines, start);
+    if (block === null) continue;
+    blocks.push(block);
+    start = block.end;
+  }
+  return blocks;
+}
+
+function readBlock(
+  lines: readonly string[],
+  start: number,
+): MarkerBlock | null {
+  let baseLine = -1;
+  let separatorLine = -1;
+  for (let index = start + 1; index < lines.length; index += 1) {
+    const line = lines[index] ?? "";
+    if (opening.test(line)) return null;
+    if (separatorLine === -1 && baseLine === -1 && baseMarker.test(line))
+      baseLine = index;
+    else if (separatorLine === -1 && separator.test(line))
+      separatorLine = index;
+    else if (separatorLine !== -1 && closing.test(line))
+      return {
+        start,
+        end: index,
+        current: lines.slice(
+          start + 1,
+          baseLine === -1 ? separatorLine : baseLine,
+        ),
+        incoming: lines.slice(separatorLine + 1, index),
+      };
+  }
+  return null;
 }
