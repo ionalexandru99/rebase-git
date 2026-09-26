@@ -7,7 +7,6 @@ import {
   readdir,
   readFile,
   realpath,
-  rename,
   utimes,
   writeFile,
 } from "node:fs/promises";
@@ -31,6 +30,7 @@ import {
   createRepositoryCoordination,
 } from "#server/repository/access/index";
 import { repositoryFeatureClient } from "#tests-integration/apps/server/environment-connection/feature-routes-client";
+import { fastImport } from "#tests-support/git";
 import { removeTemporaryDirectory } from "#tests-support/temporary-directory";
 
 const exec = promisify(execFile);
@@ -541,26 +541,28 @@ describe("renamed files through Git", () => {
   it("shows added and deleted files when too many files changed to match renames", async () => {
     const f = await fixture();
     const count = 1001;
-    await mkdir(join(f.directory, "from"));
-    await mkdir(join(f.directory, "to"));
-    for (let i = 0; i < count; i++)
-      await writeFile(
-        join(f.directory, "from", `old-${i}.txt`),
-        `file ${i}\n${original}`,
-      );
-    await f.git("add", ".");
-    await f.git("commit", "-m", "Many files");
-    for (let i = 0; i < count; i++) {
-      await rename(
-        join(f.directory, "from", `old-${i}.txt`),
-        join(f.directory, "to", `new-${i}.txt`),
-      );
-      await writeFile(
-        join(f.directory, "to", `new-${i}.txt`),
-        `file ${i}\n${edited}`,
-      );
-    }
-    await f.git("add", "-A");
+    const data = (content: string) => `data <<END\n${content}END\n`;
+    const blob = (mark: number, content: string) =>
+      `blob\nmark :${mark}\n${data(content)}`;
+    const commit = (ref: string, parent: string, changes: string) =>
+      `commit ${ref}\ncommitter Test <test@example.com> 0 +0000\n${data("Many files\n")}from ${parent}\n${changes}`;
+    const files = (path: string, mark: number) =>
+      Array.from(
+        { length: count },
+        (_, i) => `M 100644 :${mark} ${path}-${i}.txt\n`,
+      ).join("");
+    await fastImport(
+      f.directory,
+      blob(1, original) +
+        blob(2, edited) +
+        commit("refs/heads/main", "refs/heads/main^0", files("from/old", 1)) +
+        commit(
+          "refs/heads/renamed",
+          "refs/heads/main",
+          `D from\n${files("to/new", 2)}`,
+        ),
+    );
+    await f.git("read-tree", "renamed");
     const changes = await f.read();
     expect(changes.renamesLimited).toBe(true);
     expect(changes.staged).toHaveLength(count * 2);
