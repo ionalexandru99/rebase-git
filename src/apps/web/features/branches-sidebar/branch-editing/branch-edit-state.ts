@@ -19,25 +19,37 @@ export type BranchesSidebarItem =
       readonly kind: "row";
       readonly row: BranchesSidebarRow;
     }
-  | { readonly id: "branch-draft"; readonly kind: "draft" };
+  | { readonly id: "ref-draft"; readonly kind: "draft" };
 
 export function branchesSidebarItems(
   rows: readonly BranchesSidebarRow[],
-  edit: BranchEdit | undefined,
+  draftSectionId: string | undefined,
 ): readonly BranchesSidebarItem[] {
   const items: BranchesSidebarItem[] = rows.map((row) => ({
     id: row.id,
     kind: "row",
     row,
   }));
-  if (edit?.kind === "create") {
-    const local = rows.findIndex(
-      (row) =>
-        row.kind === "section" && row.sectionId === localBranchesSectionId,
-    );
-    items.splice(local + 1, 0, { id: "branch-draft", kind: "draft" });
-  }
+  if (draftSectionId !== undefined)
+    items.splice(draftPosition(rows, draftSectionId), 0, {
+      id: "ref-draft",
+      kind: "draft",
+    });
   return items;
+}
+
+function draftPosition(rows: readonly BranchesSidebarRow[], sectionId: string) {
+  return (
+    afterSection(rows, sectionId) ??
+    (sectionId === localBranchesSectionId ? 0 : rows.length)
+  );
+}
+
+function afterSection(rows: readonly BranchesSidebarRow[], sectionId: string) {
+  const index = rows.findIndex(
+    (row) => row.kind === "section" && row.sectionId === sectionId,
+  );
+  return index < 0 ? undefined : index + 1;
 }
 
 export function estimateItemHeight(item: BranchesSidebarItem | undefined) {
@@ -54,14 +66,16 @@ export function isBranchEditItem(
   );
 }
 
-export function localBranchRowId(name: string) {
-  return `ref:${localBranchesSectionId}:${name}`;
+export function refRowId(sectionId: string, name: string) {
+  return `ref:${sectionId}:${name}`;
 }
 
-export function localBranchFolderIds(name: string): readonly string[] {
+export function refFolderIds(
+  sectionId: string,
+  name: string,
+): readonly string[] {
   const parts = name.split("/").slice(0, -1);
   return parts.map(
-    (_, index) =>
-      `folder:${localBranchesSectionId}:${parts.slice(0, index + 1).join("/")}`,
+    (_, index) => `folder:${sectionId}:${parts.slice(0, index + 1).join("/")}`,
   );
 }

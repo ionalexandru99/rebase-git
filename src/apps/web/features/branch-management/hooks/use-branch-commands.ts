@@ -2,9 +2,7 @@ import {
   type OperationScope,
   RepositoryBranchesHttpApi,
   type RouteInput,
-  type RouteSuccess,
 } from "@rebase/contracts";
-import type { RequestableEnvironmentHttpRoute } from "@rebase/environment-client";
 import {
   withBranch,
   withoutDeletedBranches,
@@ -14,7 +12,7 @@ import { useApplyToRefs } from "#web/features/repository-refs/hooks/use-apply-to
 import { useRepositoryScope } from "#web/features/repository-scope/repository-scope-provider";
 import {
   type CommandFailure,
-  commandFailure,
+  settleCommand,
   useCommand,
 } from "#web/platform/query/use-command";
 
@@ -59,41 +57,30 @@ export function useBranchCommands() {
   };
   return {
     create: (branch: BranchRequest<typeof RepositoryBranchesHttpApi.create>) =>
-      settle(RepositoryBranchesHttpApi.create, create.mutateAsync, {
+      settleCommand(RepositoryBranchesHttpApi.create, create.mutateAsync, {
         ...target,
         ...branch,
       }),
     rename: (branch: BranchRequest<typeof RepositoryBranchesHttpApi.rename>) =>
-      settle(RepositoryBranchesHttpApi.rename, rename.mutateAsync, {
+      settleCommand(RepositoryBranchesHttpApi.rename, rename.mutateAsync, {
         ...target,
         ...branch,
       }),
     delete: (branch: BranchRequest<typeof RepositoryBranchesHttpApi.delete>) =>
-      settle(RepositoryBranchesHttpApi.delete, remove.mutateAsync, {
+      settleCommand(RepositoryBranchesHttpApi.delete, remove.mutateAsync, {
         ...target,
         ...branch,
       }),
     setUpstream: (
       branch: BranchRequest<typeof RepositoryBranchesHttpApi.setUpstream>,
     ) =>
-      settle(RepositoryBranchesHttpApi.setUpstream, setUpstream.mutateAsync, {
-        ...target,
-        ...branch,
-      }),
+      settleCommand(
+        RepositoryBranchesHttpApi.setUpstream,
+        setUpstream.mutateAsync,
+        {
+          ...target,
+          ...branch,
+        },
+      ),
   };
-}
-
-async function settle<Route extends RequestableEnvironmentHttpRoute>(
-  route: Route,
-  run: (input: RouteInput<Route>) => Promise<RouteSuccess<Route>>,
-  input: RouteInput<Route>,
-): Promise<
-  | { readonly _tag: "Ok"; readonly value: RouteSuccess<Route> }
-  | { readonly _tag: "Failed"; readonly failure: CommandFailure<Route> }
-> {
-  try {
-    return { _tag: "Ok", value: await run(input) };
-  } catch (error) {
-    return { _tag: "Failed", failure: commandFailure(route, error) };
-  }
 }

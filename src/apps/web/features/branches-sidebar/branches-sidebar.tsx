@@ -1,4 +1,4 @@
-import type { RepositoryRefTarget } from "@rebase/contracts";
+import type { RepositoryRefTarget, RepositoryTag } from "@rebase/contracts";
 import { IconSearch } from "@tabler/icons-react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import {
@@ -13,13 +13,12 @@ import {
   useState,
 } from "react";
 import { Input } from "#web/components/ui/input";
-import type { BranchCreateRequest } from "#web/features/branch-management/hooks/use-create-branch-here";
 import {
   branchesSidebarItems,
   estimateItemHeight,
   isBranchEditItem,
-  localBranchFolderIds,
-  localBranchRowId,
+  refFolderIds,
+  refRowId,
 } from "#web/features/branches-sidebar/branch-editing/branch-edit-state";
 import { BranchEditItem } from "#web/features/branches-sidebar/branch-editing/components/branch-edit-item";
 import { BranchEditingStatus } from "#web/features/branches-sidebar/branch-editing/components/branch-editing-status";
@@ -31,11 +30,13 @@ import {
   type BranchesSidebarRow,
   type BranchesSidebarScope,
   localBranchesSectionId,
+  tagsSectionId,
 } from "#web/features/branches-sidebar/branches-sidebar-model";
 import {
   buildBranchesSidebarRows,
   currentRefRowId,
   defaultExpandedSections,
+  scopeShowing,
   toggleSection,
 } from "#web/features/branches-sidebar/branches-sidebar-state";
 import {
@@ -47,7 +48,11 @@ import { BranchesSidebarScopeFilter } from "#web/features/branches-sidebar/compo
 import { BranchesSidebarViewSelector } from "#web/features/branches-sidebar/components/branches-sidebar-view-selector";
 import { SidebarStatus } from "#web/features/branches-sidebar/components/sidebar-status";
 import { useBranchesSidebarView } from "#web/features/branches-sidebar/hooks/use-branches-sidebar-view";
+import type { RefCreateRequest } from "#web/features/branches-sidebar/hooks/use-create-ref-here";
 import { treeKeyAction } from "#web/features/branches-sidebar/navigation/branches-sidebar-keyboard";
+import { TagDraftRow } from "#web/features/branches-sidebar/tag-editing/components/tag-draft-row";
+import { TagEditingStatus } from "#web/features/branches-sidebar/tag-editing/components/tag-editing-status";
+import { useTagEditing } from "#web/features/branches-sidebar/tag-editing/hooks/use-tag-editing";
 import { historyRefKey } from "#web/features/commit-graph/scope/history-scope";
 import type { RefCommandDefinition } from "#web/features/ref-commands/ref-command";
 import type { RefActivation } from "#web/features/repository-refs/hooks/use-ref-activation";
@@ -55,6 +60,7 @@ import type { RepositoryRefsRead } from "#web/features/repository-refs/hooks/use
 
 const overscanRows = 12;
 const noRefCommands: readonly RefCommandDefinition[] = [];
+const noTags: readonly RepositoryTag[] = [];
 
 export function BranchesSidebar({
   activation,
@@ -69,7 +75,7 @@ export function BranchesSidebar({
 }: {
   readonly activation: RefActivation;
   readonly activeWorktreePath: string;
-  readonly createRequest?: BranchCreateRequest | undefined;
+  readonly createRequest?: RefCreateRequest | undefined;
   readonly focusRequest: number;
   readonly onBranchRenamed?: (rename: BranchRename) => void;
   readonly onToggleHistoryRef?: (target: RepositoryRefTarget) => void;
@@ -120,20 +126,21 @@ export function BranchesSidebar({
     ],
   );
   const focusTree = useCallback(() => treeRef.current?.focus(), []);
-  const reveal = useCallback((name: string) => {
-    setExpandedSections((current) =>
-      current.has(localBranchesSectionId)
-        ? current
-        : toggleSection(current, localBranchesSectionId),
-    );
-    setExpandedFolders((current) => {
-      const next = new Map(current);
-      for (const id of localBranchFolderIds(name)) next.set(id, true);
-      return next;
-    });
-    setActiveRowId(localBranchRowId(name));
-    treeRef.current?.focus();
-  }, []);
+  const reveal = useCallback(
+    (name: string, sectionId = localBranchesSectionId) => {
+      setExpandedSections((current) =>
+        current.has(sectionId) ? current : toggleSection(current, sectionId),
+      );
+      setExpandedFolders((current) => {
+        const next = new Map(current);
+        for (const id of refFolderIds(sectionId, name)) next.set(id, true);
+        return next;
+      });
+      setActiveRowId(refRowId(sectionId, name));
+      treeRef.current?.focus();
+    },
+    [],
+  );
   const editing = useBranchEditing({
     activeWorktreePath,
     createRequest,
@@ -143,9 +150,20 @@ export function BranchesSidebar({
     refs,
     reveal,
   });
+  const tagEditing = useTagEditing({
+    createRequest,
+    focusTree,
+    reveal,
+    tags: refs?.tags ?? noTags,
+  });
+  const draftSectionId = editing.draftSectionId ?? tagEditing.draftSectionId;
+  useEffect(() => {
+    if (draftSectionId !== undefined)
+      setScope((current) => scopeShowing(current, draftSectionId));
+  }, [draftSectionId]);
   const items = useMemo(
-    () => branchesSidebarItems(rows, editing.edit),
-    [rows, editing.edit],
+    () => branchesSidebarItems(rows, draftSectionId),
+    [rows, draftSectionId],
   );
   const getItemKey = useCallback(
     (index: number) => items[index]?.id ?? index,
@@ -237,7 +255,10 @@ export function BranchesSidebar({
       openRowMenu(activeRow.id);
       return;
     }
-    if (editing.handleTreeKey(event.key, activeRow)) {
+    if (
+      editing.handleTreeKey(event.key, activeRow) ||
+      tagEditing.handleTreeKey(event.key, activeRow)
+    ) {
       event.preventDefault();
       return;
     }
@@ -337,11 +358,15 @@ export function BranchesSidebar({
                   ref={virtualizer.measureElement}
                   style={position}
                 >
-                  <BranchEditItem
-                    branches={refs?.branches ?? []}
-                    editing={editing}
-                    item={item}
-                  />
+                  {item.kind === "draft" && draftSectionId === tagsSectionId ? (
+                    <TagDraftRow editing={tagEditing} />
+                  ) : (
+                    <BranchEditItem
+                      branches={refs?.branches ?? []}
+                      editing={editing}
+                      item={item}
+                    />
+                  )}
                 </div>
               );
             if (item.kind !== "row") return null;
@@ -358,11 +383,16 @@ export function BranchesSidebar({
               />
             ) : (
               <RefRow
-                actions={editing.rowActions(row)}
+                actions={[
+                  ...editing.rowActions(row),
+                  ...tagEditing.rowActions(row),
+                ]}
                 active={row.id === activeRowId}
                 commands={refCommands}
                 key={row.id}
-                onAction={(id) => editing.start(id, row)}
+                onAction={(id) => {
+                  if (!tagEditing.start(id, row)) editing.start(id, row);
+                }}
                 onActivate={() => setActiveRowId(row.id)}
                 onSelect={() => onSelectRef(row.target)}
                 onToggleHistory={() => onToggleHistoryRef(row.target)}
@@ -386,6 +416,7 @@ export function BranchesSidebar({
         editing={editing}
         remoteBranches={refs?.remoteBranches ?? []}
       />
+      <TagEditingStatus editing={tagEditing} />
       {activation.error === null ? null : (
         <p
           className="mx-3 mb-3 rounded-md border border-status-unavailable/40 bg-status-unavailable/10 px-3 py-2 text-xs text-foreground"
@@ -395,18 +426,5 @@ export function BranchesSidebar({
         </p>
       )}
     </nav>
-  );
-}
-
-function openRowMenu(rowId: string) {
-  const row = document.getElementById(rowElementId(rowId));
-  if (row === null) return;
-  const bounds = row.getBoundingClientRect();
-  row.dispatchEvent(
-    new MouseEvent("contextmenu", {
-      bubbles: true,
-      clientX: bounds.left + 32,
-      clientY: bounds.top + bounds.height / 2,
-    }),
   );
 }

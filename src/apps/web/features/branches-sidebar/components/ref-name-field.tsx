@@ -1,30 +1,18 @@
-import type { LocalBranch } from "@rebase/contracts";
-import {
-  type ReactNode,
-  useId,
-  useLayoutEffect,
-  useRef,
-  useState,
-} from "react";
+import { useId, useLayoutEffect, useRef, useState } from "react";
 import { Input } from "#web/components/ui/input";
-import { branchNameProblem } from "#web/features/branch-management/branch-name";
 
-export function BranchNameField({
-  branches,
-  children,
-  current,
+export function RefNameField({
   initialName,
   label,
   onCancel,
   onSubmit,
+  problem,
 }: {
-  readonly branches: readonly Pick<LocalBranch, "name">[];
-  readonly children?: ReactNode;
-  readonly current?: string;
   readonly initialName: string;
   readonly label: string;
   readonly onCancel: () => void;
   readonly onSubmit: (name: string) => Promise<string | undefined>;
+  readonly problem: (name: string) => string | undefined;
 }) {
   const [name, setName] = useState(initialName);
   const [failure, setFailure] = useState<string>();
@@ -39,22 +27,18 @@ export function BranchNameField({
       initialName.length,
     );
   }, [initialName]);
-  const message =
-    failure ??
-    (name.length === 0
-      ? undefined
-      : branchNameProblem(name, branches, current));
+  const message = failure ?? (name.length === 0 ? undefined : problem(name));
 
   const submit = async () => {
-    const problem = branchNameProblem(name, branches, current);
-    if (problem !== undefined) {
-      setFailure(problem);
+    const rejected = problem(name);
+    if (rejected !== undefined) {
+      setFailure(rejected);
       return;
     }
     setPending(true);
-    const rejected = await onSubmit(name);
+    const refused = await onSubmit(name);
     setPending(false);
-    if (rejected !== undefined) setFailure(rejected);
+    if (refused !== undefined) setFailure(refused);
   };
 
   return (
@@ -100,7 +84,6 @@ export function BranchNameField({
           {message}
         </p>
       )}
-      {children}
     </fieldset>
   );
 }

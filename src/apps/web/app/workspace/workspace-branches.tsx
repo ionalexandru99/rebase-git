@@ -1,7 +1,7 @@
 import type { WorkspaceHistoryScope } from "#web/app/workspace/use-workspace-history-scope";
 import { ResizableHandle, ResizablePanel } from "#web/components/ui/resizable";
-import type { BranchCreateRequest } from "#web/features/branch-management/hooks/use-create-branch-here";
 import { BranchesSidebar } from "#web/features/branches-sidebar/branches-sidebar";
+import type { RefCreateRequest } from "#web/features/branches-sidebar/hooks/use-create-ref-here";
 import type { RefCommandDefinition } from "#web/features/ref-commands/ref-command";
 import { useRefActivation } from "#web/features/repository-refs/hooks/use-ref-activation";
 import type { RepositoryRefsRead } from "#web/features/repository-refs/hooks/use-repository-refs";
@@ -18,7 +18,7 @@ export function WorkspaceBranches({
 }: {
   readonly repositoryRefs: RepositoryRefsRead;
   readonly historyScope: WorkspaceHistoryScope;
-  readonly createRequest: BranchCreateRequest | undefined;
+  readonly createRequest: RefCreateRequest | undefined;
   readonly focusRequest: number;
   readonly refCommands: readonly RefCommandDefinition[];
 }) {

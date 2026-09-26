@@ -6,6 +6,14 @@ export const tagsSectionId = "tags";
 export type BranchesSidebarScope = "all" | "local" | "remote" | "tags";
 export type BranchesSidebarView = "linear" | "tree";
 
+export interface RefRowAction<Id extends string = string> {
+  readonly disabledReason?: string;
+  readonly group: "create" | "delete" | "edit";
+  readonly id: Id;
+  readonly label: string;
+  readonly shortcut?: string;
+}
+
 export interface BranchesSidebarTreeOptions {
   readonly view: BranchesSidebarView;
   readonly folders: ReadonlyMap<string, boolean>;

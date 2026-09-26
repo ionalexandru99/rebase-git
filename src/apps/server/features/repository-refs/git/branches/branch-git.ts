@@ -14,14 +14,14 @@ import {
   parseForEachRef,
 } from "#server/features/repository-refs/git/parse-for-each-ref";
 import {
+  readRefTarget,
+  refCommand,
+  requireValidRefName,
+} from "#server/features/repository-refs/git/ref-git";
+import {
   isGitRejection,
   runRepositoryGit,
 } from "#server/repository/access/index";
-
-export const branchCommand = {
-  literalPathspecs: false,
-  timeoutMilliseconds: 30_000,
-};
 
 export function branchRef(name: string) {
   return `refs/heads/${name}`;
@@ -37,15 +37,7 @@ export function requireValidBranchName(
     name,
   };
   if (name.startsWith("-") || name === "HEAD") return Effect.fail(invalid);
-  return runRepositoryGit(
-    git,
-    directory,
-    ["check-ref-format", branchRef(name)],
-    branchCommand,
-  ).pipe(
-    Effect.catchIf(isGitRejection, () => Effect.fail(invalid)),
-    Effect.asVoid,
-  );
+  return requireValidRefName(git, directory, branchRef(name), invalid);
 }
 
 export function readBranchTarget(
@@ -53,12 +45,7 @@ export function readBranchTarget(
   directory: string,
   name: string,
 ) {
-  return runRepositoryGit(
-    git,
-    directory,
-    ["rev-parse", "--verify", "--quiet", `${branchRef(name)}^{commit}`],
-    { ...branchCommand, exitCodes: [0, 1] },
-  ).pipe(Effect.map((output) => output.trim() || undefined));
+  return readRefTarget(git, directory, `${branchRef(name)}^{commit}`);
 }
 
 export function requireBranchTarget(
@@ -101,7 +88,7 @@ export function readLocalBranch(
     git,
     directory,
     ["for-each-ref", `--format=${forEachRefFormat}`, branchRef(name)],
-    branchCommand,
+    refCommand,
   ).pipe(
     Effect.map((output): LocalBranch => {
       const record = parseForEachRef(output).find(
@@ -139,7 +126,7 @@ export function requireRemoteBranch(
     git,
     directory,
     ["rev-parse", "--verify", "--quiet", `refs/remotes/${name}`],
-    branchCommand,
+    refCommand,
   ).pipe(
     Effect.mapError(
       (error): RepositoryBranchesOperationFailure | RepositoryRejected =>

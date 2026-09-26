@@ -5,3 +5,4 @@ export {
   ReadRepositoryRefsMessage,
   RepositoryRefsFailed,
 } from "@rebase/contracts/repository-refs/repository-refs-sync.contract";
+export * from "@rebase/contracts/repository-refs/repository-tags.contract";

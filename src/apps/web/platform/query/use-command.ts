@@ -53,6 +53,24 @@ export function commandFailure<Route extends RequestableEnvironmentHttpRoute>(
     : environmentRouteFailure(route, error);
 }
 
+export type SettledCommand<Route extends RequestableEnvironmentHttpRoute> =
+  | { readonly _tag: "Ok"; readonly value: RouteSuccess<Route> }
+  | { readonly _tag: "Failed"; readonly failure: CommandFailure<Route> };
+
+export async function settleCommand<
+  Route extends RequestableEnvironmentHttpRoute,
+>(
+  route: Route,
+  run: (input: RouteInput<Route>) => Promise<RouteSuccess<Route>>,
+  input: RouteInput<Route>,
+): Promise<SettledCommand<Route>> {
+  try {
+    return { _tag: "Ok", value: await run(input) };
+  } catch (error) {
+    return { _tag: "Failed", failure: commandFailure(route, error) };
+  }
+}
+
 export function useCommand<Route extends RequestableEnvironmentHttpRoute>(
   route: Route,
   { repository, ...options }: CommandOptions<Route> = {},

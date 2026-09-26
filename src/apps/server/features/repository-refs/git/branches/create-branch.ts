@@ -8,12 +8,12 @@ import type { GitCommandRunner } from "#server/domain/git-command.contract";
 import type { RepositoryAccessService } from "#server/domain/repository-access.contract";
 import { branchWriteFailed } from "#server/features/repository-refs/git/branches/branch-failures";
 import {
-  branchCommand,
   readLocalBranch,
   requireRemoteBranch,
   requireValidBranchName,
   setUpstreamArguments,
 } from "#server/features/repository-refs/git/branches/branch-git";
+import { refCommand } from "#server/features/repository-refs/git/ref-git";
 import { runRepositoryGit } from "#server/repository/access/index";
 
 export function createBranch(
@@ -30,7 +30,7 @@ export function createBranch(
       git,
       worktreePath,
       ["branch", "--no-track", name, startPoint],
-      branchCommand,
+      refCommand,
     ).pipe(
       Effect.mapError(
         (error): RepositoryBranchesOperationFailure | RepositoryRejected =>
@@ -44,7 +44,7 @@ export function createBranch(
         git,
         worktreePath,
         setUpstreamArguments(name, track),
-        branchCommand,
+        refCommand,
       ).pipe(Effect.mapError((error) => branchWriteFailed(error, name)));
     const worktrees = yield* access.worktrees(worktreePath);
     return yield* readLocalBranch(git, worktreePath, worktrees, name);

@@ -1,14 +1,9 @@
 import type { BranchCommandFailure } from "#web/features/branch-management/hooks/use-branch-commands";
+import { describeUndeliveredCommand } from "#web/platform/query/command-failure-message";
 
 export function describeBranchError(error: BranchCommandFailure): string {
-  switch (error._tag) {
-    case "Cancelled":
-      return "The request was cancelled.";
-    case "EnvironmentResponseError":
-      return "The Environment did not answer.";
-    case "EnvironmentAccessDenied":
-      return "This device may not write to the repository.";
-  }
+  if (error._tag !== "EnvironmentHttpRejected")
+    return describeUndeliveredCommand(error);
   const failure = error.failure;
   switch (failure._tag) {
     case "InvalidBranchName":
