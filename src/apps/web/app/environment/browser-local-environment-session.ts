@@ -13,17 +13,9 @@ import { Effect, Layer, ManagedRuntime } from "effect";
 import { connectCurrentEnvironmentEffect } from "#web/app/environment/connection/index";
 import { createLocalEnvironmentSession } from "#web/app/environment/local-environment-session";
 import type {
-  ConnectedFeature,
   LocalEnvironmentGateway,
+  LocalEnvironmentSession,
 } from "#web/app/environment/local-environment-session.contract";
-import { environmentFilesystemClient } from "#web/features/environment-filesystem/environment-filesystem-client";
-import type { EnvironmentFilesystemClient } from "#web/features/environment-filesystem/environment-filesystem-client.contract";
-import { createEnvironmentFilesystemController } from "#web/features/environment-filesystem/environment-filesystem-controller";
-import type { EnvironmentFilesystemGateway } from "#web/features/environment-filesystem/environment-filesystem-controller.contract";
-import { repositoryCatalogClient } from "#web/features/repository-catalog/repository-catalog-client";
-import type { RepositoryCatalogClient } from "#web/features/repository-catalog/repository-catalog-client.contract";
-import { createRepositoryCatalogController } from "#web/features/repository-catalog/repository-catalog-controller";
-import type { RepositoryCatalogGateway } from "#web/features/repository-catalog/repository-catalog-controller.contract";
 import { createRepositoryHistoryGateway } from "#web/features/repository-history/transport/repository-history-gateway";
 
 type DesktopEnvironmentHost = Pick<
@@ -34,7 +26,7 @@ type DesktopEnvironmentHost = Pick<
 export function createBrowserLocalEnvironmentSession(
   productVersion: string,
   host: DesktopEnvironmentHost | undefined,
-) {
+): LocalEnvironmentSession {
   const bootstrap = resolveLocalEnvironmentBootstrap(window.location, host);
   let credential: EnvironmentCredential | undefined;
   const runtime = ManagedRuntime.make(Layer.empty);
@@ -67,67 +59,14 @@ export function createBrowserLocalEnvironmentSession(
         },
       ),
   };
-  const repositoryCatalog = createRepositoryCatalogController(
-    createRepositoryCatalogGateway(repositoryCatalogClient(requests)),
-    runtime,
-  );
   const repositoryHistory = createRepositoryHistoryGateway();
-
-  return createLocalEnvironmentSession({
-    controllers: {
-      filesystem: createEnvironmentFilesystemController(
-        createEnvironmentFilesystemGateway(
-          environmentFilesystemClient(requests),
-        ),
-      ),
-      repositoryCatalog: repositoryCatalog.controller,
-      repositoryHistory: repositoryHistory.gateway,
-    },
-    features: [
-      { connect: repositoryHistory.connect },
-      connectedRepositoryCatalog(repositoryCatalog),
-    ],
+  const session = createLocalEnvironmentSession({
+    features: [{ connect: repositoryHistory.connect }],
     gateway,
     requests,
     runtime,
   });
-}
-
-function connectedRepositoryCatalog(
-  catalog: ReturnType<typeof createRepositoryCatalogController>,
-): ConnectedFeature {
-  return {
-    connect: () =>
-      catalog
-        .connect()
-        .pipe(
-          Effect.andThen(
-            Effect.promise(() =>
-              catalog.controller.refresh().catch(() => undefined),
-            ),
-          ),
-        ),
-  };
-}
-
-function createRepositoryCatalogGateway(
-  catalog: RepositoryCatalogClient,
-): RepositoryCatalogGateway {
-  return {
-    list: () => catalog.list().pipe(Effect.map((it) => it.repositories)),
-    recordOpened: (repositoryId) => catalog.recordOpened({ repositoryId }),
-    remember: (path) => catalog.remember({ path }),
-    remove: (repositoryId) => catalog.remove({ repositoryId }),
-  };
-}
-
-function createEnvironmentFilesystemGateway(
-  filesystem: EnvironmentFilesystemClient,
-): EnvironmentFilesystemGateway {
-  return {
-    listDirectory: (path) =>
-      filesystem.listDirectory(path === undefined ? {} : { path }),
-  };
+  return { ...session, repositoryHistory: repositoryHistory.gateway };
 }
 
 export function resolveLocalEnvironmentBootstrap(

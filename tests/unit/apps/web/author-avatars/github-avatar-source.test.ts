@@ -1,4 +1,3 @@
-import { Effect } from "effect";
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import { githubAvatarSource } from "#web/features/author-avatars/github-avatar-source";
 
@@ -14,6 +13,10 @@ const author = {
 };
 afterEach(() => vi.unstubAllGlobals());
 
+function signal() {
+  return new AbortController().signal;
+}
+
 describe("GitHub commit avatars", () => {
   it("uses the verified author association without sending credentials", async () => {
     const fetch = vi.fn().mockResolvedValue(
@@ -25,9 +28,9 @@ describe("GitHub commit avatars", () => {
       }),
     );
     vi.stubGlobal("fetch", fetch);
-    expect(
-      await Effect.runPromise(githubAvatarSource.resolve(repository, author)),
-    ).toBe("https://avatars.githubusercontent.com/u/123?v=4&s=40");
+    expect(await githubAvatarSource.resolve(repository, author, signal())).toBe(
+      "https://avatars.githubusercontent.com/u/123?v=4&s=40",
+    );
     expect(fetch).toHaveBeenCalledWith(
       `https://api.github.com/repos/alex/rebase/commits/${author.oid}`,
       expect.objectContaining({
@@ -53,7 +56,7 @@ describe("GitHub commit avatars", () => {
     async (body) => {
       vi.stubGlobal("fetch", vi.fn().mockResolvedValue(Response.json(body)));
       expect(
-        await Effect.runPromise(githubAvatarSource.resolve(repository, author)),
+        await githubAvatarSource.resolve(repository, author, signal()),
       ).toBeUndefined();
     },
   );

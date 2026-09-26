@@ -4,32 +4,46 @@ import { useMemo, useState } from "react";
 import {
   createChangeDiffModel,
   DiffContent,
+  DiffDisplayControls,
 } from "#web/features/file-diff/index";
 import { selectedDiffLines } from "#web/features/working-changes/diff/diff-selection";
+import type {
+  ChangeAction,
+  WorkingChangesView,
+} from "#web/features/working-changes/hooks/use-working-changes-view";
 import { Button } from "#web-ui/components/ui/button";
-import type { ChangeAction } from "#web-ui/features/working-changes/components/change-file-tree";
-import { DiffDisplayControls } from "#web-ui/features/working-changes/components/diff-display-controls";
-import { useWorkingChanges } from "#web-ui/features/working-changes/working-changes-provider";
+
+type DiffView = Pick<
+  WorkingChangesView,
+  | "changes"
+  | "diff"
+  | "selection"
+  | "select"
+  | "preferences"
+  | "choosePreferences"
+  | "busy"
+  | "loading"
+>;
 
 export default function ChangeDiffViewer({
+  view,
   writable,
   act,
 }: {
+  readonly view: DiffView;
   readonly writable: boolean;
   readonly act: ChangeAction;
 }) {
-  const diff = useWorkingChanges("diff");
-  const selection = useWorkingChanges("selection");
-  const changes = useWorkingChanges("changes");
-  const preferences = useWorkingChanges("preferences");
-  const busy = useWorkingChanges("busy");
-  const loading = useWorkingChanges("loading");
+  const { changes, selection, loading } = view;
+  const diff = view.diff ?? null;
   const [selected, setSelected] = useState<SelectedLineRange | null>(null);
   const [expandContext, setExpandContext] = useState(false);
   const section = selection?.section ?? "unstaged";
-  const file = selection
-    ? changes?.[section].find((file) => file.path === selection.path)
-    : undefined;
+  const files = changes?.[section] ?? [];
+  const index = files.findIndex((file) => file.path === selection?.path);
+  const file = files[index];
+  const previous = files[index - 1];
+  const next = files[index + 1];
   const previousPath = file?.previousPath ?? null;
   const { metadata, hasHiddenContext } = useMemo(
     () => createChangeDiffModel(diff, previousPath),
@@ -41,20 +55,20 @@ export default function ChangeDiffViewer({
   );
   const action = section === "unstaged" ? "stage" : "unstage";
   const label = section === "unstaged" ? "Stage" : "Unstage";
-  const disabled = !writable || busy || loading;
+  const disabled = !writable || view.busy || loading;
   const selectLines = (
-    action: "stage" | "unstage" | "discard",
+    lineAction: "stage" | "unstage" | "discard",
     ids: readonly string[],
   ) => {
     if (diff)
-      act(action, section, {
+      act(lineAction, section, {
         _tag: "Lines",
         path: diff.path,
         revision: diff.revision,
         lines: ids,
       });
   };
-  const empty = changes !== null && file === undefined;
+  const empty = changes !== undefined && file === undefined;
   return (
     <section
       className="flex h-full min-h-0 min-w-0 flex-col bg-background"
@@ -63,6 +77,16 @@ export default function ChangeDiffViewer({
       <DiffDisplayControls
         expanded={expandContext}
         onExpand={!empty && hasHiddenContext ? setExpandContext : undefined}
+        preferences={view.preferences}
+        onPreferences={view.choosePreferences}
+        previous={
+          previous
+            ? () => view.select({ section, path: previous.path })
+            : undefined
+        }
+        next={
+          next ? () => view.select({ section, path: next.path }) : undefined
+        }
       >
         {diff && !empty ? (
           <Button
@@ -128,7 +152,7 @@ export default function ChangeDiffViewer({
         <DiffContent
           diff={diff}
           metadata={metadata}
-          preferences={preferences}
+          preferences={view.preferences}
           expandContext={expandContext}
           selection={{ range: selected, onChange: setSelected }}
         />

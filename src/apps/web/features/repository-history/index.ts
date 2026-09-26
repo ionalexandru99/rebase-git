@@ -23,4 +23,4 @@ export type {
   RepositoryHistoryRefTarget,
   RepositoryHistorySnapshot,
 } from "#web/features/repository-history/repository-history-reader.contract";
-export { manageBrowserHistoryStorage } from "#web/features/repository-history/storage/browser-history-storage";
+export { requestBrowserHistoryStorage } from "#web/features/repository-history/storage/browser-history-storage";

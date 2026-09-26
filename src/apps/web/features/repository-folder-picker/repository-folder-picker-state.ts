@@ -1,5 +1,10 @@
-import type { EnvironmentDirectoryEntry } from "@rebase/contracts";
-import { RepositoryCatalogRejected } from "#web/features/repository-catalog/repository-catalog-client.contract";
+import type {
+  EnvironmentDirectoryEntry,
+  EnvironmentFilesystemHttpApi,
+  RepositoryCatalogHttpApi,
+} from "@rebase/contracts";
+import type { EnvironmentRouteFailure } from "@rebase/environment-client";
+import type { CommandFailure } from "#web/platform/query/use-command";
 
 export function filterDirectoryEntries(
   entries: readonly EnvironmentDirectoryEntry[],
@@ -28,9 +33,11 @@ export function modifiedDateLabel(
   }).format(modified);
 }
 
-export function repositorySelectionError(error: unknown) {
+export function repositorySelectionError(
+  error: CommandFailure<typeof RepositoryCatalogHttpApi.remember>,
+) {
   if (
-    error instanceof RepositoryCatalogRejected &&
+    error._tag === "EnvironmentHttpRejected" &&
     error.failure._tag === "RepositoryPathRejected"
   ) {
     switch (error.failure.reason) {
@@ -47,4 +54,29 @@ export function repositorySelectionError(error: unknown) {
     }
   }
   return "Rebase could not open this repository.";
+}
+
+export function directoryListingError(
+  error: EnvironmentRouteFailure<
+    typeof EnvironmentFilesystemHttpApi.listDirectory
+  >,
+) {
+  if (
+    error._tag === "EnvironmentHttpRejected" &&
+    error.failure._tag === "EnvironmentDirectoryRejected"
+  ) {
+    switch (error.failure.reason) {
+      case "NotFound":
+        return "This folder no longer exists.";
+      case "NotDirectory":
+        return "This path is not a folder.";
+      case "PermissionDenied":
+        return "Rebase does not have permission to open this folder.";
+      case "MalformedPath":
+        return "This folder path is invalid.";
+      case "InspectionFailed":
+        return "Rebase could not read this folder.";
+    }
+  }
+  return "The Environment filesystem is unavailable.";
 }

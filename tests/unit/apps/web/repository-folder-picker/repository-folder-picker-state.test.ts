@@ -1,6 +1,6 @@
 import type { EnvironmentDirectoryEntry } from "@rebase/contracts";
+import { EnvironmentHttpRejected } from "@rebase/environment-client";
 import { describe, expect, it } from "vite-plus/test";
-import { RepositoryCatalogRejected } from "#web/features/repository-catalog/index";
 import {
   filterDirectoryEntries,
   modifiedDateLabel,
@@ -34,7 +34,7 @@ describe("repository folder picker state", () => {
   it("explains Git validation only after selection", () => {
     expect(
       repositorySelectionError(
-        new RepositoryCatalogRejected({
+        new EnvironmentHttpRejected({
           failure: {
             _tag: "RepositoryPathRejected",
             reason: "NotRepository",

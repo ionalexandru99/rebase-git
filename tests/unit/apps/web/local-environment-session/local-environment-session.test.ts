@@ -16,7 +16,6 @@ import {
 import { createLocalEnvironmentSession } from "#web/app/environment/local-environment-session";
 import type {
   ConnectedFeature,
-  LocalEnvironmentControllers,
   LocalEnvironmentGateway,
   LocalEnvironmentSessionOptions,
   LocalEnvironmentSessionState,
@@ -189,7 +188,6 @@ function createSession(
     Pick<LocalEnvironmentSessionOptions, "gateway">,
 ) {
   return createLocalEnvironmentSession({
-    controllers: unusedControllers,
     features: [],
     requests: async () => {
       throw new Error("Session tests do not send requests.");
@@ -230,24 +228,6 @@ function createGateway(...connections: ReturnType<typeof createConnection>[]) {
     authorize: ReturnType<typeof vi.fn<LocalEnvironmentGateway["authorize"]>>;
   };
 }
-
-const unusedControllers: LocalEnvironmentControllers = {
-  filesystem: {
-    listDirectory: () => Promise.reject(new Error("Unused")),
-  },
-  repositoryCatalog: {
-    getSnapshot: () => ({ repositories: [], status: "idle" }),
-    recordOpened: () => Promise.reject(new Error("Unused")),
-    refresh: () => Promise.reject(new Error("Unused")),
-    remember: () => Promise.reject(new Error("Unused")),
-    remove: () => Promise.reject(new Error("Unused")),
-    subscribe: () => () => undefined,
-  },
-  repositoryHistory: {
-    read: () => Promise.reject(new Error("Unused")),
-    synchronize: () => Promise.reject(new Error("Unused")),
-  },
-};
 
 function createConnection(
   currentSequence = 0,

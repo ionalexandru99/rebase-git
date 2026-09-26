@@ -8,7 +8,7 @@ import { Effect, Fiber, Result } from "effect";
 import type { EnvironmentProtocolConnection } from "#web/app/environment/connection/environment-protocol-connection.contract";
 import type {
   ConnectedFeature,
-  LocalEnvironmentSession,
+  EnvironmentConnectionSession,
   LocalEnvironmentSessionOptions,
   LocalEnvironmentSessionState,
 } from "#web/app/environment/local-environment-session.contract";
@@ -17,7 +17,7 @@ import { createStore } from "#web/platform/store/store";
 
 export function createLocalEnvironmentSession(
   options: LocalEnvironmentSessionOptions,
-): LocalEnvironmentSession {
+): EnvironmentConnectionSession {
   const state = createStore<LocalEnvironmentSessionState>({
     _tag: "Authorizing",
   });
@@ -71,7 +71,6 @@ export function createLocalEnvironmentSession(
   };
 
   return {
-    ...options.controllers,
     requests: options.requests,
     changes: {
       subscribe: (listener) => {
@@ -80,7 +79,6 @@ export function createLocalEnvironmentSession(
       },
     },
     getSnapshot: state.getSnapshot,
-    runtime: options.runtime,
     start,
     stop,
     subscribe: state.subscribe,

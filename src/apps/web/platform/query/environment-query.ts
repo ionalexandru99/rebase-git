@@ -4,15 +4,27 @@ import {
   environmentRouteFailure,
   type RequestableEnvironmentHttpRoute,
 } from "@rebase/environment-client";
-import { type SkipToken, skipToken, useQuery } from "@tanstack/react-query";
+import {
+  hashKey,
+  keepPreviousData,
+  type QueryClient,
+  type SkipToken,
+  skipToken,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
+import { useEffect } from "react";
 import type { EnvironmentChangeScope } from "#web/platform/query/environment-query-meta";
 import { useEnvironment } from "#web-ui/platform/query/environment-context";
 
 export interface EnvironmentQueryOptions {
   readonly enabled?: boolean;
   readonly changes: EnvironmentChangeScope;
+  readonly version?: string;
+  readonly staleTime?: number;
   readonly refetchInterval?: number;
   readonly refetchOnWindowFocus?: boolean | "always";
+  readonly keepPrevious?: boolean;
 }
 
 export function environmentQueryKey<
@@ -22,6 +34,7 @@ export function environmentQueryKey<
   repositoryId: string | null,
   route: Route,
   input: RouteInput<Route> | null,
+  version?: string,
 ) {
   return [
     "environment",
@@ -29,6 +42,7 @@ export function environmentQueryKey<
     repositoryId,
     route.path,
     input,
+    ...(version === undefined ? [] : [version]),
   ] as const;
 }
 
@@ -37,17 +51,27 @@ export function useEnvironmentQuery<
 >(
   route: Route,
   input: RouteInput<Route> | SkipToken,
-  options: EnvironmentQueryOptions,
+  {
+    enabled = true,
+    changes,
+    version,
+    keepPrevious = false,
+    ...refetch
+  }: EnvironmentQueryOptions,
 ) {
   const { environmentId, requests, connected } = useEnvironment();
   const repositoryId = input === skipToken ? null : inputRepositoryId(input);
-  return useQuery<RouteSuccess<Route>, EnvironmentRouteFailure<Route>>({
-    queryKey: environmentQueryKey(
-      environmentId,
-      repositoryId,
-      route,
-      input === skipToken ? null : input,
-    ),
+  const queryKey = environmentQueryKey(
+    environmentId,
+    repositoryId,
+    route,
+    input === skipToken ? null : input,
+    version,
+  );
+  const active = connected && environmentId !== undefined && enabled;
+  const query = useQuery<RouteSuccess<Route>, EnvironmentRouteFailure<Route>>({
+    ...refetch,
+    queryKey,
     queryFn:
       input === skipToken
         ? skipToken
@@ -58,16 +82,25 @@ export function useEnvironmentQuery<
               throw environmentRouteFailure(route, error);
             }
           },
-    enabled:
-      connected && environmentId !== undefined && (options.enabled ?? true),
-    meta: { changes: options.changes, repositoryId },
-    ...(options.refetchInterval === undefined
-      ? {}
-      : { refetchInterval: options.refetchInterval }),
-    ...(options.refetchOnWindowFocus === undefined
-      ? {}
-      : { refetchOnWindowFocus: options.refetchOnWindowFocus }),
+    enabled: active,
+    meta: { changes, repositoryId },
+    ...(keepPrevious ? { placeholderData: keepPreviousData } : {}),
   });
+  useCancelWhileInactive(useQueryClient(), hashKey(queryKey), active);
+  return query;
+}
+
+function useCancelWhileInactive(
+  queryClient: QueryClient,
+  queryHash: string,
+  active: boolean,
+) {
+  useEffect(() => {
+    if (active) return;
+    const query = queryClient.getQueryCache().get(queryHash);
+    if (query !== undefined && !query.isActive())
+      void query.cancel({ revert: true });
+  }, [active, queryClient, queryHash]);
 }
 
 function inputRepositoryId(input: unknown) {

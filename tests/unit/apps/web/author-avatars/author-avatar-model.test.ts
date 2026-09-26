@@ -1,12 +1,4 @@
-import { Deferred, Effect, Layer, ManagedRuntime } from "effect";
-import {
-  afterEach,
-  beforeEach,
-  describe,
-  expect,
-  it,
-  vi,
-} from "vite-plus/test";
+import { describe, expect, it, vi } from "vite-plus/test";
 import { AvatarUnavailable } from "#web/features/author-avatars/author-avatar.contract";
 import { createAuthorAvatarModel } from "#web/features/author-avatars/author-avatar-model";
 
@@ -21,18 +13,24 @@ const author = {
 };
 const repository = { owner: "alex", name: "rebase" };
 const avatar = "https://avatars.githubusercontent.com/u/123?s=40";
-let runtime: ManagedRuntime.ManagedRuntime<never, never>;
 
-beforeEach(() => {
-  runtime = ManagedRuntime.make(Layer.empty);
-});
-afterEach(() => runtime.dispose());
+function neverResolves(aborted: () => void) {
+  return (_repository: unknown, _author: unknown, signal: AbortSignal) =>
+    new Promise<string | undefined>((_resolve, reject) => {
+      signal.addEventListener("abort", () => {
+        aborted();
+        reject(signal.reason);
+      });
+    });
+}
 
 describe("author avatar loading", () => {
   it("deduplicates a visible author across commits and reuses the completed lookup", async () => {
-    const result = Deferred.makeUnsafe<string | undefined>();
-    const resolve = vi.fn(() => Deferred.await(result));
-    const model = createAuthorAvatarModel(repository, runtime, { resolve });
+    const { promise, resolve: finish } = Promise.withResolvers<
+      string | undefined
+    >();
+    const resolve = vi.fn(() => promise);
+    const model = createAuthorAvatarModel(repository, { resolve });
     try {
       const first = vi.fn();
       const second = vi.fn();
@@ -43,7 +41,7 @@ describe("author avatar loading", () => {
       );
       await vi.waitFor(() => expect(resolve).toHaveBeenCalledOnce());
       expect(model.get(author.author.email)).toBeUndefined();
-      await Effect.runPromise(Deferred.succeed(result, avatar));
+      finish(avatar);
       await vi.waitFor(() => expect(first).toHaveBeenCalledOnce());
       expect(second).toHaveBeenCalledOnce();
       unsubscribe();
@@ -52,34 +50,32 @@ describe("author avatar loading", () => {
       expect(model.get(author.author.email)).toBe(avatar);
       expect(resolve).toHaveBeenCalledOnce();
     } finally {
-      await model.dispose();
+      model.dispose();
     }
   });
 
   it("cancels work when its last visible row leaves and resumes on return", async () => {
-    const interrupted = vi.fn();
-    const resolve = vi.fn(() =>
-      Effect.never.pipe(Effect.onInterrupt(() => Effect.sync(interrupted))),
-    );
-    const model = createAuthorAvatarModel(repository, runtime, { resolve });
+    const aborted = vi.fn();
+    const resolve = vi.fn(neverResolves(aborted));
+    const model = createAuthorAvatarModel(repository, { resolve });
     try {
       const leave = model.subscribe(author, vi.fn());
       await vi.waitFor(() => expect(resolve).toHaveBeenCalledOnce());
       leave();
-      await vi.waitFor(() => expect(interrupted).toHaveBeenCalledOnce());
+      expect(aborted).toHaveBeenCalledOnce();
       model.subscribe(author, vi.fn());
       await vi.waitFor(() => expect(resolve).toHaveBeenCalledTimes(2));
     } finally {
-      await model.dispose();
+      model.dispose();
     }
-    expect(interrupted).toHaveBeenCalledTimes(2);
+    expect(aborted).toHaveBeenCalledTimes(2);
   });
 
   it("pauses further authors after GitHub rate limits the client", async () => {
     const resolve = vi.fn(() =>
-      Effect.fail(new AvatarUnavailable({ retryAt: Date.now() + 60_000 })),
+      Promise.reject(new AvatarUnavailable(Date.now() + 60_000)),
     );
-    const model = createAuthorAvatarModel(repository, runtime, { resolve });
+    const model = createAuthorAvatarModel(repository, { resolve });
     try {
       const done = vi.fn();
       model.subscribe(author, done);
@@ -95,38 +91,32 @@ describe("author avatar loading", () => {
       await vi.waitFor(() => expect(next).toHaveBeenCalledOnce());
       expect(resolve).toHaveBeenCalledOnce();
     } finally {
-      await model.dispose();
+      model.dispose();
     }
   });
 
-  it("disposes one repository without interrupting another on the shared runtime", async () => {
-    const firstInterrupted = vi.fn();
-    const secondInterrupted = vi.fn();
-    const first = createAuthorAvatarModel(repository, runtime, {
-      resolve: () =>
-        Effect.never.pipe(
-          Effect.onInterrupt(() => Effect.sync(firstInterrupted)),
-        ),
+  it("runs at most two lookups at once and starts a queued author when one finishes", async () => {
+    const lookups = new Map<string, PromiseWithResolvers<string | undefined>>();
+    const resolve = vi.fn((_repository: unknown, lookup: { oid: string }) => {
+      const pending = Promise.withResolvers<string | undefined>();
+      lookups.set(lookup.oid, pending);
+      return pending.promise;
     });
-    const second = createAuthorAvatarModel(
-      { ...repository, name: "another" },
-      runtime,
-      {
-        resolve: () =>
-          Effect.never.pipe(
-            Effect.onInterrupt(() => Effect.sync(secondInterrupted)),
-          ),
-      },
-    );
-    first.subscribe(author, vi.fn());
-    second.subscribe(author, vi.fn());
-    await first.dispose();
-    expect(firstInterrupted).toHaveBeenCalledOnce();
-    expect(secondInterrupted).not.toHaveBeenCalled();
-    await second.dispose();
-    expect(secondInterrupted).toHaveBeenCalledOnce();
-    expect(await runtime.runPromise(Effect.succeed("available"))).toBe(
-      "available",
-    );
+    const model = createAuthorAvatarModel(repository, { resolve });
+    try {
+      for (const name of ["first", "second", "third"])
+        model.subscribe(
+          {
+            oid: name,
+            author: { email: `${name}@example.test` },
+          },
+          vi.fn(),
+        );
+      await vi.waitFor(() => expect(resolve).toHaveBeenCalledTimes(2));
+      lookups.get("first")?.resolve(undefined);
+      await vi.waitFor(() => expect(resolve).toHaveBeenCalledTimes(3));
+    } finally {
+      model.dispose();
+    }
   });
 });

@@ -1,8 +1,10 @@
-import type {
-  ChangeDiff,
-  CommitInspection as Details,
+import {
+  type ChangeDiff,
+  CommitInspectionHttpApi,
+  type CommitInspection as Details,
+  type InspectCommit,
+  type InspectCommitDiff,
 } from "@rebase/contracts";
-import { Effect, Layer, ManagedRuntime } from "effect";
 import { describe, expect, it, vi } from "vite-plus/test";
 import {
   CommitGraphFixture,
@@ -11,15 +13,21 @@ import {
   historyReader,
 } from "#tests-ui/apps/web/commit-graph/commit-graph-fixture";
 import { repositoryScope } from "#tests-ui/apps/web/repository-scope/repository-scope-fixture";
+import { fakeRequests, respond } from "#tests-ui/runtime/fake-requests";
 import { render } from "#tests-ui/runtime/render";
-import type { CommitInspectionClient } from "#web/features/commit-inspection/commit-inspection.contract";
 import { RepositoryScopeProvider } from "#web/features/repository-scope/index";
 import { CommitInspectionBridge } from "#web-ui/app/workspace/commit-inspection-bridge";
 import { ResizablePanel } from "#web-ui/components/ui/resizable";
-import { CommitInspectionSession } from "#web-ui/features/commit-inspection/commit-inspection-session";
+import { CommitInspection } from "#web-ui/features/commit-inspection/commit-inspection";
 import { WorkspacePanel } from "#web-ui/features/workspace-panel/index";
 
-const runtime = ManagedRuntime.make(Layer.empty);
+interface InspectionClient {
+  readonly inspect: (command: InspectCommit) => Details | Promise<Details>;
+  readonly diff: (
+    command: InspectCommitDiff,
+  ) => ChangeDiff | Promise<ChangeDiff>;
+}
+
 const graphScope = repositoryScope({ writable: false });
 
 function details(oid = historyOid(0), parentOid = historyOid(1)): Details {
@@ -59,16 +67,26 @@ function diff(path: string, bytes = 100): ChangeDiff {
   };
 }
 async function fixture(
-  overrides: Partial<CommitInspectionClient> = {},
+  overrides: Partial<InspectionClient> = {},
   saved?: object,
 ) {
-  const client: CommitInspectionClient = {
-    inspect: vi.fn((command) =>
-      Effect.succeed(details(command.oid, command.parentOid)),
+  const client = {
+    inspect: vi.fn(
+      overrides.inspect ??
+        ((command: InspectCommit) => details(command.oid, command.parentOid)),
     ),
-    diff: vi.fn((command) => Effect.succeed(diff(command.path))),
-    ...overrides,
+    diff: vi.fn(
+      overrides.diff ?? ((command: InspectCommitDiff) => diff(command.path)),
+    ),
   };
+  const requests = fakeRequests(
+    respond(CommitInspectionHttpApi.inspect, (command) =>
+      client.inspect(command),
+    ),
+    respond(CommitInspectionHttpApi.inspectDiff, (command) =>
+      client.diff(command),
+    ),
+  );
   const reader = historyReader({ commits: history(40), status: "ready" });
   const scopeKey = crypto.randomUUID();
   if (saved)
@@ -105,12 +123,12 @@ async function fixture(
               <WorkspacePanel.Pane
                 contents={{
                   commit: (
-                    <CommitInspectionSession
-                      client={client}
-                      repositoryId="repository"
-                      worktreePath="/repo"
+                    <CommitInspection
+                      scope={{
+                        repositoryId: "repository",
+                        worktreePath: "/repo",
+                      }}
                       connected={connected}
-                      runtime={runtime}
                     />
                   ),
                   changes: (
@@ -127,7 +145,7 @@ async function fixture(
       </WorkspacePanel.Provider>
     </div>
   );
-  const screen = await render(tree());
+  const screen = await render(tree(), { environment: { requests } });
   return {
     screen,
     client,
@@ -140,22 +158,20 @@ async function fixture(
 describe("commit inspection", () => {
   it("renders a root commit's text patch through the shared viewer", async () => {
     const { screen, grid } = await fixture({
-      inspect: (command) =>
-        Effect.succeed({
-          ...details(command.oid),
-          parentOid: null,
-          parents: [],
-          files: [{ path: "src/initial.ts", previousPath: null, status: "A" }],
-        }),
-      diff: (command) =>
-        Effect.succeed({
-          ...diff(command.path),
-          kind: "text",
-          before: null,
-          after: "export const initial = true;\n",
-          patch:
-            '--- "src/initial.ts"\n+++ "src/initial.ts"\n@@ -0,0 +1,1 @@\n+export const initial = true;\n',
-        }),
+      inspect: (command) => ({
+        ...details(command.oid),
+        parentOid: null,
+        parents: [],
+        files: [{ path: "src/initial.ts", previousPath: null, status: "A" }],
+      }),
+      diff: (command) => ({
+        ...diff(command.path),
+        kind: "text",
+        before: null,
+        after: "export const initial = true;\n",
+        patch:
+          '--- "src/initial.ts"\n+++ "src/initial.ts"\n@@ -0,0 +1,1 @@\n+export const initial = true;\n',
+      }),
     });
     await grid.getByRole("row", { name: /^Commit 0,/ }).dblClick();
     await expect
@@ -173,23 +189,22 @@ describe("commit inspection", () => {
   });
   it("shows hidden unchanged lines on demand and omits the control for an added file", async () => {
     const { screen, grid } = await fixture({
-      diff: (command) =>
-        Effect.succeed({
-          ...diff(command.path),
-          kind: "text",
-          before:
-            command.path === "src/first.bin"
-              ? "retained heading\nretained context\nold\n"
-              : null,
-          after:
-            command.path === "src/first.bin"
-              ? "retained heading\nretained context\nnew\n"
-              : "added content\n",
-          patch:
-            command.path === "src/first.bin"
-              ? "--- src/first.bin\n+++ src/first.bin\n@@ -3 +3 @@\n-old\n+new\n"
-              : "--- src/second.bin\n+++ src/second.bin\n@@ -0,0 +1 @@\n+added content\n",
-        }),
+      diff: (command) => ({
+        ...diff(command.path),
+        kind: "text",
+        before:
+          command.path === "src/first.bin"
+            ? "retained heading\nretained context\nold\n"
+            : null,
+        after:
+          command.path === "src/first.bin"
+            ? "retained heading\nretained context\nnew\n"
+            : "added content\n",
+        patch:
+          command.path === "src/first.bin"
+            ? "--- src/first.bin\n+++ src/first.bin\n@@ -3 +3 @@\n-old\n+new\n"
+            : "--- src/second.bin\n+++ src/second.bin\n@@ -0,0 +1 @@\n+added content\n",
+      }),
     });
     await grid.getByRole("row", { name: /^Commit 0,/ }).dblClick();
     const content = () =>
@@ -273,28 +288,18 @@ describe("commit inspection", () => {
     const { screen, grid } = await fixture({
       inspect: (command) =>
         command.oid === historyOid(0)
-          ? Effect.uninterruptible(
-              Effect.promise(() => pendingDetails).pipe(
-                Effect.tap(() =>
-                  Effect.sync(() => {
-                    completed++;
-                  }),
-                ),
-              ),
-            )
-          : Effect.succeed(details(command.oid)),
+          ? pendingDetails.then((value) => {
+              completed++;
+              return value;
+            })
+          : details(command.oid),
       diff: (command) =>
         command.path === "src/first.bin"
-          ? Effect.uninterruptible(
-              Effect.promise(() => pendingDiff).pipe(
-                Effect.tap(() =>
-                  Effect.sync(() => {
-                    completed++;
-                  }),
-                ),
-              ),
-            )
-          : Effect.succeed(diff(command.path, 222)),
+          ? pendingDiff.then((value) => {
+              completed++;
+              return value;
+            })
+          : diff(command.path, 222),
     });
     await grid.getByRole("row", { name: /^Commit 0,/ }).dblClick();
     await expect.element(screen.getByText("Loading commit…")).toBeVisible();

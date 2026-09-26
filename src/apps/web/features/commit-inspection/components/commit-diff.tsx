@@ -1,6 +1,6 @@
+import type { ChangeDiff, CommitFile } from "@rebase/contracts";
 import { useMemo, useState } from "react";
-import type { CommitInspectionState } from "#web/features/commit-inspection/commit-inspection.contract";
-import type { CommitInspectionController } from "#web/features/commit-inspection/commit-inspection-controller";
+import type { DiffPreferences } from "#web/domain/file-diff/diff-preferences.contract";
 import {
   createChangeDiffModel,
   DiffContent,
@@ -8,70 +8,83 @@ import {
 } from "#web/features/file-diff/index";
 import { Button } from "#web-ui/components/ui/button";
 
+export interface CommitDiffRead {
+  readonly value: ChangeDiff | undefined;
+  readonly loading: boolean;
+  readonly error: string | null;
+  readonly retry: () => void;
+}
+
 export default function CommitDiff({
-  state,
-  controller,
+  files,
+  path,
+  select,
+  diff,
+  preferences,
+  choosePreferences,
 }: {
-  readonly state: CommitInspectionState;
-  readonly controller: CommitInspectionController;
+  readonly files: readonly CommitFile[];
+  readonly path: string | null;
+  readonly select: (path: string) => void;
+  readonly diff: CommitDiffRead;
+  readonly preferences: DiffPreferences;
+  readonly choosePreferences: (preferences: DiffPreferences) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
-  const files = state.details?.files ?? [];
-  const index = files.findIndex((file) => file.path === state.path);
+  const index = files.findIndex((file) => file.path === path);
   const previous = files[index - 1];
   const next = files[index + 1];
   const file = files[index];
+  const value = diff.value ?? null;
   const { metadata, hasHiddenContext } = useMemo(
-    () => createChangeDiffModel(state.diff, file?.previousPath ?? null),
-    [state.diff, file?.previousPath],
+    () => createChangeDiffModel(value, file?.previousPath ?? null),
+    [value, file?.previousPath],
   );
   return (
     <section
       className="flex min-h-0 min-w-0 flex-col"
       aria-label="Commit file diff"
-      aria-busy={state.loadingDiff}
+      aria-busy={diff.loading}
     >
       <DiffDisplayControls
         expanded={expanded}
         onExpand={hasHiddenContext ? setExpanded : undefined}
-        preferences={state.preferences}
-        onPreferences={controller.preferences}
-        previous={
-          previous ? () => controller.selectFile(previous.path) : undefined
-        }
-        next={next ? () => controller.selectFile(next.path) : undefined}
+        preferences={preferences}
+        onPreferences={choosePreferences}
+        previous={previous ? () => select(previous.path) : undefined}
+        next={next ? () => select(next.path) : undefined}
       />
-      {file && (!metadata || state.diff?.before === state.diff?.after) ? (
+      {file && (!metadata || value?.before === value?.after) ? (
         <div className="shrink-0 break-all border-border border-b px-3 py-2 font-mono text-xs">
           {file.previousPath ? `${file.previousPath} → ` : ""}
           {file.path}
         </div>
       ) : null}
-      {state.diffError ? (
+      {diff.error ? (
         <div role="alert" className="p-3 text-sm">
-          {state.diffError}{" "}
-          <Button size="xs" variant="ghost" onClick={controller.retryDiff}>
+          {diff.error}{" "}
+          <Button size="xs" variant="ghost" onClick={diff.retry}>
             Retry diff
           </Button>
         </div>
-      ) : state.diff ? (
+      ) : value ? (
         file?.status === "R" &&
-        state.diff.kind === "text" &&
-        state.diff.before === state.diff.after ? (
+        value.kind === "text" &&
+        value.before === value.after ? (
           <p className="p-4 text-sm text-muted-foreground">
             File renamed. Content unchanged.
           </p>
         ) : (
           <DiffContent
-            diff={state.diff}
+            diff={value}
             metadata={metadata}
-            preferences={state.preferences}
+            preferences={preferences}
             expandContext={expanded}
           />
         )
       ) : (
         <p role="status" className="p-4 text-sm text-muted-foreground">
-          {state.loadingDiff ? "Loading diff…" : "Select a file"}
+          {diff.loading ? "Loading diff…" : "Select a file"}
         </p>
       )}
     </section>

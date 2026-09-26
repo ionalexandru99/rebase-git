@@ -144,13 +144,8 @@ function useProjectEnvironment(
       return environment;
     }
     if (environment?.environmentId === scope.environmentId) {
-      retained.current = {
-        ...environment,
-        requests: environment.requests ?? retained.current?.requests,
-        connected: environment.connected && environment.requests !== undefined,
-        writable: environment.writable && environment.requests !== undefined,
-      };
-      return retained.current;
+      retained.current = environment;
+      return environment;
     }
     return retained.current
       ? {

@@ -1,9 +1,8 @@
 import { useQueryClient } from "@tanstack/react-query";
-import { Effect, Fiber } from "effect";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { RepositoryHistoryStorageDiagnostics } from "#web/domain/repository-history/history-storage.contract";
 import { RepositoryHistoryCacheList } from "#web/features/history-storage/index";
-import { manageBrowserHistoryStorage } from "#web/features/repository-history/index";
+import { requestBrowserHistoryStorage } from "#web/features/repository-history/index";
 import { forgetAllRepositoryRefs } from "#web/features/repository-refs/index";
 import {
   AlertDialog,
@@ -23,46 +22,37 @@ export function HistoryStorageSettings() {
   const [pending, setPending] = useState(false);
   const [confirming, setConfirming] = useState(false);
   const [message, setMessage] = useState<string>();
-  const operation = useRef<Fiber.Fiber<void> | undefined>(undefined);
+  const operation = useRef<AbortController | undefined>(undefined);
   const queryClient = useQueryClient();
   const run = useCallback(
-    (action: "inspect" | "clear") => {
-      if (operation.current !== undefined)
-        Effect.runFork(Fiber.interrupt(operation.current));
+    async (action: "inspect" | "clear") => {
+      operation.current?.abort();
+      const current = new AbortController();
+      operation.current = current;
       setPending(true);
       setError(undefined);
       setMessage(undefined);
-      operation.current = Effect.runFork(
-        manageBrowserHistoryStorage(action).pipe(
-          Effect.tap((result) => Effect.sync(() => setDiagnostics(result))),
-          Effect.tap(() =>
-            action === "clear"
-              ? Effect.sync(() => {
-                  forgetAllRepositoryRefs(queryClient);
-                  setMessage(
-                    "All history caches cleared. Rebuild or reopen a repository to load history.",
-                  );
-                })
-              : Effect.void,
-          ),
-          Effect.catch(() =>
-            Effect.sync(() =>
-              setError("History storage could not be updated. Try again."),
-            ),
-          ),
-          Effect.tap(() => Effect.sync(() => setPending(false))),
-          Effect.asVoid,
-        ),
-      );
+      try {
+        setDiagnostics(
+          await requestBrowserHistoryStorage(action, current.signal),
+        );
+        if (action === "clear") {
+          forgetAllRepositoryRefs(queryClient);
+          setMessage(
+            "All history caches cleared. Rebuild or reopen a repository to load history.",
+          );
+        }
+      } catch {
+        if (current.signal.aborted) return;
+        setError("History storage could not be updated. Try again.");
+      }
+      setPending(false);
     },
     [queryClient],
   );
   useEffect(() => {
-    run("inspect");
-    return () => {
-      if (operation.current !== undefined)
-        Effect.runFork(Fiber.interrupt(operation.current));
-    };
+    void run("inspect");
+    return () => operation.current?.abort();
   }, [run]);
   return (
     <div className="mx-auto w-full max-w-4xl px-4 pt-10 pb-16 sm:px-8 sm:pt-12">
@@ -103,7 +93,7 @@ export function HistoryStorageSettings() {
             size="sm"
             variant="outline"
             disabled={pending}
-            onClick={() => run("inspect")}
+            onClick={() => void run("inspect")}
           >
             Refresh
           </Button>
@@ -119,7 +109,7 @@ export function HistoryStorageSettings() {
           </AlertDialogDescription>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={() => run("clear")}>
+            <AlertDialogAction onClick={() => void run("clear")}>
               Clear all caches
             </AlertDialogAction>
           </AlertDialogFooter>

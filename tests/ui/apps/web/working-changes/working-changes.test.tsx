@@ -1,21 +1,18 @@
-import type {
-  ChangeDiff,
-  CommitChanges,
-  MutateChanges,
-  RepositoryChanges,
+import {
+  type ChangeDiff,
+  type CommitChanges,
+  changesFailed,
+  type MutateChanges,
+  type RepositoryChanges,
+  RepositoryChangesHttpApi,
 } from "@rebase/contracts";
-import { Effect, Layer, ManagedRuntime } from "effect";
+import { EnvironmentHttpRejected } from "@rebase/environment-client";
 import { describe, expect, it } from "vite-plus/test";
 import { page } from "vite-plus/test/browser";
+import { fakeRequests, respond } from "#tests-ui/runtime/fake-requests";
 import { render } from "#tests-ui/runtime/render";
-import {
-  type RepositoryChangesClient,
-  WorkingChangesError,
-} from "#web/features/working-changes/working-changes.contract";
 import type { EnvironmentChangeListener } from "#web/platform/environment/environment-protocol.contract";
 import { WorkingChanges } from "#web-ui/features/working-changes/working-changes";
-
-const runtime = ManagedRuntime.make(Layer.empty);
 
 const path = "src/read-status.ts";
 const before = 'export const status = "old";\n';
@@ -65,6 +62,7 @@ async function fixture(
   const mutations: MutateChanges[] = [];
   const commits: CommitChanges[] = [];
   let rejectCommit = false;
+  let staleMutations = false;
   let reads = 0;
   let diffReads = 0;
   const listeners = new Set<EnvironmentChangeListener>();
@@ -74,77 +72,79 @@ async function fixture(
       return () => listeners.delete(listener);
     },
   };
-  const client: RepositoryChangesClient = {
-    read: () =>
-      Effect.sync(() => {
-        reads += 1;
-        return snapshot;
-      }),
-    diff: (command) =>
-      Effect.sync(() => {
-        diffReads += 1;
-        return diffs[command.path] ?? diff;
-      }),
-    mutate: (command) =>
-      Effect.sync(() => {
-        mutations.push(command);
-        snapshot = {
-          ...snapshot,
-          revision: `revision-${mutations.length}`,
-          unstaged:
-            command.action === "stage"
-              ? []
-              : [{ path, previousPath: null, status: "M" }],
-          staged:
-            command.action === "stage"
-              ? [{ path, previousPath: null, status: "M" }]
-              : [],
-        };
-        return {
-          changes: snapshot,
-          diff:
-            command.viewed !== undefined &&
-            snapshot[command.viewed.section].length > 0
-              ? diff
-              : null,
-        };
-      }),
-    commit: (command) =>
-      Effect.suspend(() => {
-        commits.push(command);
-        if (rejectCommit)
-          return Effect.fail(
-            new WorkingChangesError({
-              message: "Commit hook rejected this message.",
-            }),
-          );
-        snapshot = { ...snapshot, revision: "committed", staged: [] };
-        return Effect.succeed({ changes: snapshot, diff: null });
-      }),
-  };
-  const environmentId = crypto.randomUUID(),
-    repositoryId = crypto.randomUUID();
-  const tree = () => (
+  const requests = fakeRequests(
+    respond(RepositoryChangesHttpApi.read, () => {
+      reads += 1;
+      return snapshot;
+    }),
+    respond(RepositoryChangesHttpApi.diff, (command) => {
+      diffReads += 1;
+      return diffs[command.path] ?? diff;
+    }),
+    respond(RepositoryChangesHttpApi.mutate, (command) => {
+      mutations.push(command);
+      if (staleMutations)
+        throw new EnvironmentHttpRejected({
+          failure: changesFailed("Stale", "The changes moved on."),
+        });
+      snapshot = {
+        ...snapshot,
+        revision: `revision-${mutations.length}`,
+        unstaged:
+          command.action === "stage"
+            ? []
+            : [{ path, previousPath: null, status: "M" }],
+        staged:
+          command.action === "stage"
+            ? [{ path, previousPath: null, status: "M" }]
+            : [],
+      };
+      return {
+        changes: snapshot,
+        diff:
+          command.viewed !== undefined &&
+          snapshot[command.viewed.section].length > 0
+            ? diff
+            : null,
+      };
+    }),
+    respond(RepositoryChangesHttpApi.commit, (command) => {
+      commits.push(command);
+      if (rejectCommit)
+        throw new EnvironmentHttpRejected({
+          failure: changesFailed(
+            "Conflict",
+            "Commit hook rejected this message.",
+          ),
+        });
+      snapshot = { ...snapshot, revision: "committed", staged: [] };
+      return { changes: snapshot, diff: null };
+    }),
+  );
+  const repositoryId = crypto.randomUUID();
+  const view = await render(
     <div className="dark text-foreground" style={{ width: 1100, height: 700 }}>
       <WorkingChanges
-        client={client}
-        connected
+        target={{
+          repositoryId,
+          worktreePath: "/repo",
+          draftKey: JSON.stringify([
+            crypto.randomUUID(),
+            repositoryId,
+            "/repo",
+          ]),
+          active: true,
+        }}
         writable
-        environmentId={environmentId}
-        repositoryId={repositoryId}
-        worktreePath="/repo"
-        changes={changes}
-        runtime={runtime}
       />
-    </div>
+    </div>,
+    { environment: { requests, changes } },
   );
-  const view = await render(tree());
   await expect
     .element(page.getByRole("button", { name: "Stage entire file" }))
     .toBeEnabled();
   return {
     view,
-    tree,
     mutations,
     commits,
     reads: () => reads,
@@ -162,6 +162,9 @@ async function fixture(
     },
     rejectCommit: (reject: boolean) => {
       rejectCommit = reject;
+    },
+    rejectMutationsAsStale: () => {
+      staleMutations = true;
     },
   };
 }
@@ -434,6 +437,19 @@ describe("working changes", () => {
       .element(page.getByRole("status"))
       .toHaveTextContent("Changes committed.");
     expect(f.commits).toHaveLength(2);
+  });
+  it("re-reads the changes when a write finds them stale", async () => {
+    const f = await fixture();
+    f.rejectMutationsAsStale();
+    const reads = f.reads();
+    await page.getByRole("button", { name: "Stage entire file" }).click();
+    await expect
+      .element(page.getByRole("alert"))
+      .toHaveTextContent("The changes moved on.");
+    expect(f.reads()).toBeGreaterThan(reads);
+    await expect
+      .element(page.getByRole("button", { name: "Stage entire file" }))
+      .toBeEnabled();
   });
   it("shows the viewed diff returned by a write without reading it again", async () => {
     const f = await fixture();

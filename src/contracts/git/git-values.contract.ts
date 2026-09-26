@@ -7,6 +7,7 @@ export const ObjectId = Schema.String.check(
   Schema.isPattern(/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/),
 );
 export type ObjectId = typeof ObjectId.Type;
+export const isObjectId = Schema.is(ObjectId);
 
 export const RepositoryPath = Schema.String.check(
   Schema.isMinLength(1),

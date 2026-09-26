@@ -1,4 +1,7 @@
-import type { RepositoryFilesystemHost } from "@rebase/contracts";
+import type {
+  RepositoryCatalogEntry,
+  RepositoryFilesystemHost,
+} from "@rebase/contracts";
 import {
   type Dispatch,
   type SetStateAction,
@@ -6,7 +9,6 @@ import {
   useMemo,
   useState,
 } from "react";
-import type { LocalEnvironmentSession } from "#web/app/environment/local-environment-session.contract";
 import type { OpenProjectRepository } from "#web/features/open-project/index";
 import {
   type EnvironmentAvailability,
@@ -16,19 +18,21 @@ import {
   removeProjectRepository,
   setEnvironmentAvailability,
 } from "#web/features/project-navigation/index";
+import {
+  useRecordRepositoryOpened,
+  useRemoveRepository,
+} from "#web/features/repository-catalog/index";
 
 export function useProjectRepositoryActions({
   availability,
   environmentId,
   repositoryFilesystem,
-  session,
   setNavigation,
   onRepositoryOpened,
 }: {
   readonly availability: EnvironmentAvailability;
   readonly environmentId: string;
   readonly repositoryFilesystem: RepositoryFilesystemHost | undefined;
-  readonly session: LocalEnvironmentSession;
   readonly onRepositoryOpened: (repositoryId: string) => void;
   readonly setNavigation: Dispatch<SetStateAction<ProjectNavigationState>>;
 }) {
@@ -36,6 +40,8 @@ export function useProjectRepositoryActions({
   const [expandedEnvironmentIds, setExpandedEnvironmentIds] = useState<
     ReadonlySet<string>
   >(() => new Set([environmentId]));
+  const { mutate: recordOpened } = useRecordRepositoryOpened();
+  const { mutateAsync: removeFromCatalog } = useRemoveRepository();
 
   const openRepository = useCallback(
     (
@@ -45,9 +51,7 @@ export function useProjectRepositoryActions({
       if (availability !== "available") return;
 
       onRepositoryOpened(repository.id);
-      void session.repositoryCatalog
-        .recordOpened(repository.id)
-        .catch(() => undefined);
+      recordOpened({ repositoryId: repository.id });
       setNavigation((current) =>
         openProjectRepository(
           withAvailability(current, environmentId, availability),
@@ -59,7 +63,7 @@ export function useProjectRepositoryActions({
     [
       availability,
       environmentId,
-      session.repositoryCatalog,
+      recordOpened,
       setNavigation,
       onRepositoryOpened,
     ],
@@ -75,44 +79,18 @@ export function useProjectRepositoryActions({
     if (availability === "available") setFolderPickerOpen(true);
   }, [availability]);
 
-  const listRepositoryDirectory = useCallback(
-    (selectedEnvironmentId: string, path?: string) => {
-      if (selectedEnvironmentId !== environmentId) {
-        return Promise.reject(new Error("The Environment is unavailable."));
-      }
-      return session.filesystem.listDirectory(path);
-    },
-    [environmentId, session.filesystem],
-  );
-
-  const openRepositoryFromFolder = useCallback(
-    async (selectedEnvironmentId: string, path: string) => {
-      if (
-        selectedEnvironmentId !== environmentId ||
-        availability !== "available"
-      ) {
-        throw new Error("The Environment is unavailable.");
-      }
-      const remembered = await session.repositoryCatalog.remember(path);
+  const openRememberedRepository = useCallback(
+    (selectedEnvironmentId: string, remembered: RepositoryCatalogEntry) => {
       onRepositoryOpened(remembered.id);
       setNavigation((current) =>
         openProjectRepository(
           withAvailability(current, environmentId, availability),
           selectedEnvironmentId,
-          {
-            id: remembered.id,
-            name: remembered.name,
-          },
+          { id: remembered.id, name: remembered.name },
         ),
       );
     },
-    [
-      availability,
-      environmentId,
-      session.repositoryCatalog,
-      setNavigation,
-      onRepositoryOpened,
-    ],
+    [availability, environmentId, setNavigation, onRepositoryOpened],
   );
 
   const copyRepositoryPath = useCallback(
@@ -145,19 +123,17 @@ export function useProjectRepositoryActions({
 
   const removeRepository = useCallback(
     (repository: OpenProjectRepository) => {
-      return session.repositoryCatalog
-        .remove(repository.id)
-        .then(() =>
-          setNavigation((current) =>
-            removeProjectRepository(
-              current,
-              repository.environmentId,
-              repository.id,
-            ),
+      return removeFromCatalog({ repositoryId: repository.id }).then(() =>
+        setNavigation((current) =>
+          removeProjectRepository(
+            current,
+            repository.environmentId,
+            repository.id,
           ),
-        );
+        ),
+      );
     },
-    [session.repositoryCatalog, setNavigation],
+    [removeFromCatalog, setNavigation],
   );
 
   const setEnvironmentExpanded = useCallback(
@@ -178,8 +154,7 @@ export function useProjectRepositoryActions({
     copyRepositoryPath,
     expandedEnvironmentIds,
     folderPickerOpen,
-    listRepositoryDirectory,
-    openRepositoryFromFolder,
+    openRememberedRepository,
     removeRepository,
     revealRepository,
     selectOpenProjectRepository,

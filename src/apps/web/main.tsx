@@ -1,4 +1,5 @@
 import { PersistQueryClientProvider } from "@tanstack/react-query-persist-client";
+import { Layer, ManagedRuntime } from "effect";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { createBrowserLocalEnvironmentSession } from "#web/app/environment/browser-local-environment-session";
@@ -23,6 +24,7 @@ const session = createBrowserLocalEnvironmentSession(
   desktopHost,
 );
 session.start();
+const runtime = ManagedRuntime.make(Layer.empty);
 const queryClient = createEnvironmentQueryClient();
 const queryPersistence = createEnvironmentQueryPersistence();
 
@@ -32,7 +34,7 @@ createRoot(rootElement).render(
       client={queryClient}
       persistOptions={queryPersistence}
     >
-      <ApplicationRuntime value={session.runtime}>
+      <ApplicationRuntime value={runtime}>
         <NotificationsProvider>
           <ApplicationShell
             desktopUpdates={desktopHost?.updates}

@@ -25,6 +25,7 @@ import {
   showOpenProject,
   toggleEnvironment,
 } from "#web/features/project-navigation/index";
+import { useRepositoryCatalog } from "#web/features/repository-catalog/index";
 import { RepositoryFolderPicker } from "#web/features/repository-folder-picker/index";
 import { useRepositoryHistoryReader } from "#web/features/repository-history/hooks/use-repository-history-reader";
 import { RepositoryScopeProvider } from "#web/features/repository-scope/index";
@@ -124,7 +125,7 @@ function ApplicationShellContent({
     readable: canRead,
     writable: canWrite,
   } = useEnvironment();
-  const repositoryCatalog = useStore(session.repositoryCatalog);
+  const repositoryCatalog = useRepositoryCatalog();
   const environmentStatus = environmentSessionPresentation(sessionState);
   const sidebarRef = useRef<PanelImperativeHandle>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -214,9 +215,10 @@ function ApplicationShellContent({
   const { history: graphHistory, open: openRepositoryHistory } =
     useOpenedRepository({
       environmentId: historyEnvironmentId,
+      findRepository: repositoryCatalog.findRepository,
+      gateway: session.repositoryHistory,
       refs,
       repository: graphRepository,
-      session,
       worktreePathFor,
     });
   const openRepositoryView = useCallback(
@@ -232,8 +234,7 @@ function ApplicationShellContent({
     copyRepositoryPath,
     expandedEnvironmentIds,
     folderPickerOpen,
-    listRepositoryDirectory,
-    openRepositoryFromFolder,
+    openRememberedRepository,
     removeRepository,
     revealRepository,
     selectOpenProjectRepository,
@@ -244,7 +245,6 @@ function ApplicationShellContent({
     availability: environmentStatus.availability,
     environmentId: localEnvironmentId,
     repositoryFilesystem,
-    session,
     setNavigation,
     onRepositoryOpened: openRepositoryView,
   });
@@ -275,22 +275,11 @@ function ApplicationShellContent({
   const panelEnvironment = useMemo(
     () => ({
       environmentId: historyEnvironmentId,
-      requests: session.requests,
-      changes: session.changes,
-      runtime: session.runtime,
       connected,
       writable: canWrite,
       visible: panelVisible,
     }),
-    [
-      historyEnvironmentId,
-      session.requests,
-      session.changes,
-      session.runtime,
-      connected,
-      canWrite,
-      panelVisible,
-    ],
+    [historyEnvironmentId, connected, canWrite, panelVisible],
   );
   const graphRepositoryId = graphRepository?.id;
   const graphLogicalRepositoryId =
@@ -451,9 +440,8 @@ function ApplicationShellContent({
         ) : null}
         <RepositoryFolderPicker
           environments={openProjectEnvironments}
-          listDirectory={listRepositoryDirectory}
           onOpenChange={setFolderPickerOpen}
-          onOpenRepository={openRepositoryFromFolder}
+          onRepositoryOpened={openRememberedRepository}
           open={folderPickerOpen}
         />
       </section>

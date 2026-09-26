@@ -1,5 +1,4 @@
 import type { RepositoryRefs } from "@rebase/contracts";
-import { Context, Data, type Effect } from "effect";
 
 export type GitHubRepository = NonNullable<RepositoryRefs["githubRepository"]>;
 export interface AvatarAuthor {
@@ -7,19 +6,23 @@ export interface AvatarAuthor {
   readonly author: { readonly email: string };
 }
 
-export class AvatarUnavailable extends Data.TaggedError("AvatarUnavailable")<{
-  readonly retryAt?: number;
-}> {}
+export class AvatarUnavailable extends Error {
+  readonly _tag = "AvatarUnavailable";
+  readonly retryAt: number | undefined;
 
-export class AuthorAvatarSource extends Context.Service<
-  AuthorAvatarSource,
-  {
-    readonly resolve: (
-      repository: GitHubRepository,
-      author: AvatarAuthor,
-    ) => Effect.Effect<string | undefined, AvatarUnavailable>;
+  constructor(retryAt?: number) {
+    super("The avatar is unavailable.");
+    this.retryAt = retryAt;
   }
->()("rebase/AuthorAvatarSource") {}
+}
+
+export interface AuthorAvatarSource {
+  readonly resolve: (
+    repository: GitHubRepository,
+    author: AvatarAuthor,
+    signal: AbortSignal,
+  ) => Promise<string | undefined>;
+}
 
 export interface AuthorAvatarModel {
   readonly get: (email: string) => string | undefined;
@@ -27,5 +30,5 @@ export interface AuthorAvatarModel {
     author: AvatarAuthor,
     listener: () => void,
   ) => () => void;
-  readonly dispose: () => Promise<void>;
+  readonly dispose: () => void;
 }

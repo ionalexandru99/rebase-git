@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   RepositoryBranchesHttpApi,
+  RepositoryCatalogHttpApi,
   RepositoryRefsHttpApi,
 } from "@rebase/contracts";
 import {
@@ -46,7 +47,6 @@ import {
   connectCurrentEnvironmentEffect,
   exchangeEnvironmentPairingEffect,
 } from "#web/app/environment/connection/index";
-import { repositoryCatalogClient } from "#web/features/repository-catalog/index";
 import { readRepositoryRefs } from "#web/platform/environment/rpc/read-repository-refs";
 
 const directories = new Set<string>();
@@ -67,9 +67,7 @@ describe("repository refs transport", () => {
       await createRepository(repositoryPath, { commits: ["initial", "next"] });
       const owner = await pair(origin, authorization, "owner");
       const viewer = await pair(origin, authorization, "viewer");
-      const remembered = await Effect.runPromise(
-        remember(origin, owner, repositoryPath),
-      );
+      const remembered = await remember(origin, owner, repositoryPath);
       const head = await git(repositoryPath, "rev-parse", "HEAD");
       const create = {
         name: "spike",
@@ -120,9 +118,7 @@ describe("repository refs transport", () => {
         names.map((name) => `${head} refs/remotes/origin/${name}\n`).join(""),
       );
       await git(repositoryPath, "tag", "v1");
-      const repository = await Effect.runPromise(
-        remember(origin, owner, repositoryPath),
-      );
+      const repository = await remember(origin, owner, repositoryPath);
       const refs = await Effect.runPromise(
         readRefsOverWebSocket(origin, owner, repository.id),
       );
@@ -141,9 +137,7 @@ describe("repository refs transport", () => {
       const repositoryPath = join(root, "repository");
       await createRepository(repositoryPath, { branches: ["feature"] });
       const owner = await pair(origin, authorization, "owner");
-      const remembered = await Effect.runPromise(
-        remember(origin, owner, repositoryPath),
-      );
+      const remembered = await remember(origin, owner, repositoryPath);
       vi.stubGlobal("window", { location: new URL(origin) });
       const session = createBrowserLocalEnvironmentSession("0.0.0", {
         environmentOrigin: origin,
@@ -236,9 +230,7 @@ describe("repository refs transport", () => {
       );
       const owner = await pair(origin, authorization, "owner");
       const viewer = await pair(origin, authorization, "viewer");
-      const remembered = await Effect.runPromise(
-        remember(origin, owner, repositoryPath),
-      );
+      const remembered = await remember(origin, owner, repositoryPath);
 
       const refs = await Effect.runPromise(
         readRefsOverWebSocket(origin, viewer, remembered.id),
@@ -412,9 +404,10 @@ function remember(
   credential: EnvironmentCredential,
   path: string,
 ) {
-  return repositoryCatalogClient(
-    createEnvironmentRequestClient(origin, () => credential),
-  ).remember({ path });
+  return createEnvironmentRequestClient(origin, () => credential)(
+    RepositoryCatalogHttpApi.remember,
+    { path },
+  );
 }
 
 function requests(origin: string, credential: EnvironmentCredential) {
