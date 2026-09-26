@@ -216,9 +216,7 @@
       "includes": [
         "src/apps/web/features/**",
         "!src/apps/web/features/repository-history/**",
-        "!src/apps/web/features/history-storage/**",
-        "!src/apps/web/features/history-search/**",
-        "!src/apps/web/features/commit-graph/**"
+        "!src/apps/web/features/history-search/**"
       ],
       "linter": {
         "rules": {

@@ -6,7 +6,10 @@ import {
   type RepositoryChanges,
   RepositoryChangesHttpApi,
 } from "@rebase/contracts";
-import { EnvironmentHttpRejected } from "@rebase/environment-client";
+import {
+  EnvironmentHttpRejected,
+  EnvironmentResponseError,
+} from "@rebase/environment-client";
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import { page } from "vite-plus/test/browser";
 import { fakeRequests, respond } from "#tests-ui/runtime/fake-requests";
@@ -14,6 +17,7 @@ import { render } from "#tests-ui/runtime/render";
 import { defaultDiffPreferences } from "#web/domain/file-diff/diff-preferences.contract";
 import { saveDiffPreferences } from "#web/persistence/working-changes/working-changes-store";
 import type { EnvironmentChangeListener } from "#web/platform/environment/environment-protocol.contract";
+import { createEnvironmentQueryClient } from "#web/platform/query/environment-query-client";
 import { WorkingChanges } from "#web-ui/features/working-changes/working-changes";
 
 const path = "src/read-status.ts";
@@ -28,12 +32,14 @@ async function fixture(
     staged = [],
     renamesLimited = false,
     diffs = {},
+    rejectDiffs = false,
     repositoryId = crypto.randomUUID(),
     draftKey = JSON.stringify([crypto.randomUUID(), repositoryId, "/repo"]),
   }: {
     readonly staged?: RepositoryChanges["staged"];
     readonly renamesLimited?: boolean;
     readonly diffs?: Readonly<Record<string, ChangeDiff>>;
+    readonly rejectDiffs?: boolean;
     readonly repositoryId?: string;
     readonly draftKey?: string;
   } = {},
@@ -69,6 +75,7 @@ async function fixture(
   const commits: CommitChanges[] = [];
   let rejectCommit = false;
   let rejectAmendReads = false;
+  let diffsRejected = rejectDiffs;
   let staleMutations = false;
   let writesHeld: Promise<void> | undefined;
   let reads = 0;
@@ -91,6 +98,10 @@ async function fixture(
     }),
     respond(RepositoryChangesHttpApi.diff, (command) => {
       diffReads += 1;
+      if (diffsRejected)
+        throw new EnvironmentResponseError({
+          responseTag: RepositoryChangesHttpApi.diff.path,
+        });
       return diffs[command.path] ?? diff;
     }),
     respond(RepositoryChangesHttpApi.mutate, async (command) => {
@@ -137,6 +148,7 @@ async function fixture(
       return { changes: snapshot, diff: null };
     }),
   );
+  const queryClient = createEnvironmentQueryClient();
   const view = await render(
     <div className="dark text-foreground" style={{ width: 1100, height: 700 }}>
       <WorkingChanges
@@ -149,13 +161,15 @@ async function fixture(
         writable
       />
     </div>,
-    { environment: { requests, changes } },
+    { environment: { requests, changes }, queryClient },
   );
-  await expect
-    .element(page.getByRole("button", { name: "Stage entire file" }))
-    .toBeEnabled();
+  if (!rejectDiffs)
+    await expect
+      .element(page.getByRole("button", { name: "Stage entire file" }))
+      .toBeEnabled();
   return {
     view,
+    queryClient,
     mutations,
     commits,
     reads: () => reads,
@@ -179,6 +193,9 @@ async function fixture(
     },
     rejectAmendReads: () => {
       rejectAmendReads = true;
+    },
+    acceptDiffs: () => {
+      diffsRejected = false;
     },
     holdWrites: () => {
       const held = Promise.withResolvers<void>();
@@ -494,6 +511,20 @@ describe("working changes", () => {
     expect(f.mutations[0]?.viewed).toEqual({ section: "unstaged", path });
     expect(f.diffReads()).toBe(diffReads);
   });
+  it("reads the viewed diff again when Refresh follows a failed read", async () => {
+    const f = await fixture([], { rejectDiffs: true });
+    await expect
+      .element(page.getByRole("alert"))
+      .toHaveTextContent("Could not complete the request.");
+    const diffReads = f.diffReads();
+    f.acceptDiffs();
+    await page.getByRole("button", { name: "Refresh", exact: true }).click();
+    await expect
+      .element(page.getByRole("button", { name: "Stage entire file" }))
+      .toBeEnabled();
+    expect(f.diffReads()).toBeGreaterThan(diffReads);
+    await expect.element(page.getByRole("alert")).not.toBeInTheDocument();
+  });
   it("amends without reporting its own HEAD move as an outside change", async () => {
     const f = await fixture([], {
       staged: [{ path: "src/other.ts", previousPath: null, status: "M" }],
@@ -509,7 +540,7 @@ describe("working changes", () => {
     const reads = f.reads();
     f.emitChange();
     await expect.poll(f.reads).toBeGreaterThan(reads);
-    await new Promise(requestAnimationFrame);
+    await expect.poll(() => f.queryClient.isFetching()).toBe(0);
     release();
     await expect
       .element(page.getByRole("status"))

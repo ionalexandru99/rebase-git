@@ -17,11 +17,13 @@ import { useEffect } from "react";
 import type { EnvironmentChangeScope } from "#web/platform/query/environment-query-meta";
 import { useEnvironment } from "#web-ui/platform/query/environment-context";
 
-export interface EnvironmentQueryOptions {
+export interface EnvironmentQueryOptions<Data> {
   readonly enabled?: boolean;
   readonly changes: EnvironmentChangeScope;
   readonly version?: string;
   readonly staleTime?: number;
+  readonly gcTime?: number;
+  readonly select?: (data: Data) => Data;
   readonly refetchInterval?: number;
   readonly refetchOnWindowFocus?: boolean | "always";
   readonly keepPrevious?: boolean;
@@ -56,8 +58,8 @@ export function useEnvironmentQuery<
     changes,
     version,
     keepPrevious = false,
-    ...refetch
-  }: EnvironmentQueryOptions,
+    ...queryOptions
+  }: EnvironmentQueryOptions<RouteSuccess<Route>>,
 ) {
   const { environmentId, requests, connected } = useEnvironment();
   const repositoryId = input === skipToken ? null : inputRepositoryId(input);
@@ -70,7 +72,7 @@ export function useEnvironmentQuery<
   );
   const active = connected && environmentId !== undefined && enabled;
   const query = useQuery<RouteSuccess<Route>, EnvironmentRouteFailure<Route>>({
-    ...refetch,
+    ...queryOptions,
     queryKey,
     queryFn:
       input === skipToken

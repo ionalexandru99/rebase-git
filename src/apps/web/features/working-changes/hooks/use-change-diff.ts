@@ -23,6 +23,7 @@ export function useChangeDiff(
     {
       enabled,
       changes: "none",
+      gcTime: 0,
       ...(changes === undefined ? {} : { version: changes.revision }),
     },
   );

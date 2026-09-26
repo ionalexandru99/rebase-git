@@ -275,6 +275,20 @@ describe("commit inspection", () => {
     await expect.element(grid).toHaveFocus();
   });
 
+  it("reads a renamed file's diff from its previous path", async () => {
+    const { screen, grid, client } = await fixture();
+    await grid.getByRole("row", { name: /^Commit 0,/ }).dblClick();
+    await screen.getByRole("button", { name: /second.bin/ }).click();
+    await vi.waitFor(() =>
+      expect(client.diff).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          path: "src/second.bin",
+          previousPath: "old.bin",
+        }),
+      ),
+    );
+  });
+
   it("discards late metadata and file responses after selection changes", async () => {
     let completed = 0;
     let resolveDetails: (value: Details) => void = () => {};

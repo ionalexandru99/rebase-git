@@ -22,6 +22,20 @@ export function repositoryCatalogKey(environmentId: string | undefined) {
   );
 }
 
+export function sortRepositories(
+  repositories: readonly RepositoryCatalogEntry[],
+) {
+  return [...repositories].sort(
+    (left, right) =>
+      left.name.localeCompare(right.name) ||
+      left.path.localeCompare(right.path),
+  );
+}
+
+function sortCatalog(catalog: RepositoryCatalog): RepositoryCatalog {
+  return { repositories: sortRepositories(catalog.repositories) };
+}
+
 export function useRepositoryCatalog() {
   const queryClient = useQueryClient();
   const { environmentId } = useEnvironment();
@@ -32,6 +46,7 @@ export function useRepositoryCatalog() {
       changes: "none",
       staleTime: 0,
       refetchOnWindowFocus: false,
+      select: sortCatalog,
     },
   );
   const findRepository = useCallback(

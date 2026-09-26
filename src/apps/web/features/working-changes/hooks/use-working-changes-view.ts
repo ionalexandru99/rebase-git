@@ -148,11 +148,14 @@ export function useWorkingChangesView({
     error:
       problem ??
       (read.isError ? describeChangesFailure(read.error) : null) ??
+      (diff.isError ? describeChangesFailure(diff.error) : null) ??
       (draft.unavailable ? storageUnavailableMessage : null),
     notice,
     refresh: () => {
       setProblem(null);
       void read.refetch();
+      if (diff.isError) void diff.refetch();
+      draft.retry();
     },
     act,
     commit,

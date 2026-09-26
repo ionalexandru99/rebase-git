@@ -25,19 +25,28 @@ interface PendingSave {
 
 export function useCommitDraft(key: string | undefined, message?: string) {
   const queryClient = useQueryClient();
-  const [saveFailed, setSaveFailed] = useState(false);
+  const [unavailable, setUnavailable] = useState(false);
   const stored = useQuery({
     queryKey: commitDraftKey(key),
     queryFn:
       key === undefined
         ? skipToken
-        : () => restoreDraft(queryClient, key, message),
+        : async () =>
+            restoredDraft(
+              queryClient,
+              key,
+              await readAvailableDraft(key, setUnavailable),
+              message,
+            ),
     staleTime: Number.POSITIVE_INFINITY,
     placeholderData: keepPreviousData,
   });
   const save = useCallback(
     (saved: string, draft: CommitDraft) =>
-      saveCommitDraft(saved, draft).catch(() => setSaveFailed(true)),
+      saveCommitDraft(saved, draft).then(
+        () => setUnavailable(false),
+        () => setUnavailable(true),
+      ),
     [],
   );
   const saving = useDebouncedSave(save);
@@ -59,11 +68,15 @@ export function useCommitDraft(key: string | undefined, message?: string) {
     },
     [queryClient, save, saving],
   );
+  const retry = () => {
+    if (unavailable && key !== undefined) void stored.refetch();
+  };
   return {
     draft: stored.data ?? emptyCommitDraft,
     edit,
     clear,
-    unavailable: stored.isError || saveFailed,
+    retry,
+    unavailable,
   };
 }
 
@@ -71,12 +84,28 @@ function commitDraftKey(key: string | undefined) {
   return ["commit-draft", key ?? null] as const;
 }
 
-async function restoreDraft(
+function readAvailableDraft(
+  key: string,
+  report: (unavailable: boolean) => void,
+) {
+  return readCommitDraft(key).then(
+    (draft) => {
+      report(false);
+      return draft;
+    },
+    () => {
+      report(true);
+      return emptyCommitDraft;
+    },
+  );
+}
+
+function restoredDraft(
   queryClient: QueryClient,
   key: string,
+  restored: CommitDraft,
   message: string | undefined,
 ) {
-  const restored = await readCommitDraft(key);
   const edited = queryClient.getQueryData<CommitDraft>(commitDraftKey(key));
   if (edited !== undefined) return edited;
   return message !== undefined && restored.subject === ""

@@ -17,18 +17,29 @@ type WrittenScope = ChangesScope & { readonly viewed?: ViewedChange };
 
 export function useChangeActions(repository: CommandScope) {
   const { write, reread } = useChangesCache();
+  const scope = { id: writeScope(repository) };
   const mutate = useCommand(RepositoryChangesHttpApi.mutate, {
     repository,
+    scope,
     onSuccess: (written, command) => write(command, written),
     onError: (_error, command) => reread(command),
   });
   const commit = useCommand(RepositoryChangesHttpApi.commit, {
     repository,
+    scope,
     onSuccess: (written, command) =>
       write({ ...command, amend: false }, written),
     onError: (_error, command) => reread(command),
   });
   return { mutate, commit, busy: mutate.isPending || commit.isPending };
+}
+
+function writeScope({ repositoryId, worktreePath }: CommandScope) {
+  return JSON.stringify([
+    "working-changes",
+    repositoryId,
+    worktreePath ?? null,
+  ]);
 }
 
 function useChangesCache() {
