@@ -15,7 +15,7 @@ import {
   type RepositoryHistoryReader,
   RepositoryHistoryRejected,
   type RepositoryHistorySnapshot,
-} from "#web/features/repository-history/repository-history-reader.contract";
+} from "#web/features/repository-history/repository-history-reader";
 import { RepositoryScopeProvider } from "#web/features/repository-scope/repository-scope-provider";
 
 const fresh: RepositoryFreshness = {

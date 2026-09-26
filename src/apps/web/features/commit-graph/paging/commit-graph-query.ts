@@ -1,6 +1,6 @@
 import type { RepositoryHistoryRefTarget } from "@rebase/contracts";
-import type { HistoryParentEdge } from "#web/features/repository-history/query/history-order.contract";
-import type { RepositoryHistoryQuery } from "#web/features/repository-history/repository-history-reader.contract";
+import type { HistoryParentEdge } from "#web/features/repository-history/query/history-order-model";
+import type { RepositoryHistoryQuery } from "#web/features/repository-history/repository-history-reader";
 
 export function commitGraphQuery(
   roots: RepositoryHistoryQuery["roots"],

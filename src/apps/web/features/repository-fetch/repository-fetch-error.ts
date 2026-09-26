@@ -2,7 +2,7 @@ import {
   RepositoryHistoryOffline,
   RepositoryHistoryRejected,
   RepositoryHistoryUnavailable,
-} from "#web/features/repository-history/repository-history-reader.contract";
+} from "#web/features/repository-history/repository-history-reader";
 
 export function describeRepositoryFetchError(error: unknown) {
   if (error instanceof RepositoryHistoryOffline)

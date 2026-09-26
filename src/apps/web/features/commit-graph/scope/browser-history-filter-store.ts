@@ -2,7 +2,7 @@ import type { RepositoryRefTarget } from "@rebase/contracts";
 import {
   automaticHistoryScope,
   type HistoryScope,
-} from "#web/features/commit-graph/history-scope.contract";
+} from "#web/features/commit-graph/scope/history-scope-model";
 
 const storagePrefix = "rebase:history-filter:v1";
 

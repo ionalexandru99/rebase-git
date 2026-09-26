@@ -13,7 +13,7 @@ import {
   useState,
 } from "react";
 import { useOpenProjectEnvironments } from "#web/features/open-project/hooks/use-open-project-environments";
-import type { OpenProjectRepository } from "#web/features/open-project/open-project.contract";
+import type { OpenProjectRepository } from "#web/features/open-project/open-project-model";
 import {
   catalogRepositoryItems,
   filterOpenProjectEnvironments,
@@ -25,7 +25,7 @@ import { RecentRepositories } from "#web/features/open-project/recent-repositori
 import { RepositoryEnvironmentGroup } from "#web/features/open-project/repository-environment-group";
 import { openProjectItemId } from "#web/features/open-project/repository-row";
 import { localEnvironment } from "#web/features/project-navigation/local-environment";
-import type { ProjectNavigationRepository } from "#web/features/project-navigation/project-navigation.contract";
+import type { ProjectNavigationRepository } from "#web/features/project-navigation/project-navigation";
 import { RepositoryFolderPicker } from "#web/features/repository-folder-picker/repository-folder-picker";
 import { useEnvironment } from "#web/platform/query/environment-context";
 

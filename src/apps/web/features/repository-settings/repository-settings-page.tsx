@@ -2,21 +2,23 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef } from "react";
 import { SettingsSection } from "#web/components/ui/settings-layout";
 import { writeClipboardText } from "#web/features/clipboard/write-clipboard-text";
+import type { RepositoryHistoryCacheReader } from "#web/features/history-storage/history-cache";
 import { localEnvironment } from "#web/features/project-navigation/local-environment";
 import { useRemoveRepository } from "#web/features/repository-catalog/hooks/use-catalog-commands";
 import { useCatalogRepository } from "#web/features/repository-catalog/hooks/use-repository-catalog";
 import { RepositoryFetchSettings } from "#web/features/repository-fetch/components/repository-fetch-settings";
 import { describeRepositoryFetchError } from "#web/features/repository-fetch/repository-fetch-error";
+import type { RepositoryHistoryIdentity } from "#web/features/repository-history/preferences/repository-history-order";
+import type { RepositoryHistoryFetchCommands } from "#web/features/repository-history/repository-history-reader";
 import { forgetRepositoryRefs } from "#web/features/repository-refs/repository-refs-query";
 import { RepositoryCacheSettings } from "#web/features/repository-settings/components/repository-cache-settings";
 import { RepositoryDetailsSettings } from "#web/features/repository-settings/components/repository-details-settings";
 import { RepositoryOrderSettings } from "#web/features/repository-settings/components/repository-order-settings";
-import type {
-  RepositoryHistorySettingsClient,
-  RepositorySettingsIdentity,
-} from "#web/features/repository-settings/repository-settings.contract";
 import { useEnvironment } from "#web/platform/query/environment-context";
 import { useStore } from "#web/platform/store/use-store";
+
+type RepositoryHistorySettingsClient = RepositoryHistoryCacheReader &
+  Pick<RepositoryHistoryFetchCommands, "configureFetch">;
 
 export function RepositorySettingsPage({
   repositoryId,
@@ -116,7 +118,7 @@ function RepositoryHistorySettings({
   canConfigure,
 }: {
   readonly reader: RepositoryHistorySettingsClient;
-  readonly identity: RepositorySettingsIdentity;
+  readonly identity: RepositoryHistoryIdentity;
   readonly connected: boolean;
   readonly canConfigure: boolean;
 }) {

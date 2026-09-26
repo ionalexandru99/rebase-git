@@ -4,7 +4,7 @@ import {
   historyCacheCleanupCandidates,
   writeHistoryWithCleanup,
 } from "#web/features/repository-history/cache/repository-history-storage-policy";
-import { RepositoryHistoryStorageUnavailable } from "#web/features/repository-history/repository-history-reader.contract";
+import { RepositoryHistoryStorageUnavailable } from "#web/features/repository-history/repository-history-reader";
 
 describe("history cache cleanup", () => {
   it("evicts complete closed repositories in last-opened order across environments", () => {

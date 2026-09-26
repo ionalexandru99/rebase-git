@@ -1,12 +1,12 @@
-import type {
-  WorkspacePanelAction,
-  WorkspacePanelKind,
-  WorkspacePanelState,
-} from "#web/features/workspace-panel/workspace-panel.contract";
 import {
   workspacePanelDefinitions,
   workspacePanelKinds,
 } from "#web/features/workspace-panel/workspace-panel-definitions";
+import type {
+  WorkspacePanelAction,
+  WorkspacePanelKind,
+  WorkspacePanelState,
+} from "#web/features/workspace-panel/workspace-panel-model";
 
 export const initialWorkspacePanelState: WorkspacePanelState = {
   tabs: [],

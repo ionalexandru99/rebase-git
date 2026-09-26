@@ -3,7 +3,7 @@ import { ContextMenuItem } from "#web/components/ui/context-menu";
 import type {
   RefCommandContext,
   RefCommandDefinition,
-} from "#web/features/ref-commands/ref-command.contract";
+} from "#web/features/ref-commands/ref-command";
 import { createCommandRegistry } from "#web/platform/menu-commands/menu-command";
 
 export function RefCommandItems({

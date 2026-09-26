@@ -1,9 +1,5 @@
 import type { RepositoryRefTarget } from "@rebase/contracts";
 import { useCallback, useMemo, useRef, useState } from "react";
-import {
-  automaticHistoryScope,
-  type HistoryScope,
-} from "#web/features/commit-graph/history-scope.contract";
 import { createBrowserHistoryFilterStore } from "#web/features/commit-graph/scope/browser-history-filter-store";
 import {
   historyScopesEqual,
@@ -11,6 +7,10 @@ import {
   resolveHistoryScope,
   toggleHistoryRef,
 } from "#web/features/commit-graph/scope/history-scope";
+import {
+  automaticHistoryScope,
+  type HistoryScope,
+} from "#web/features/commit-graph/scope/history-scope-model";
 import type { RepositoryRefsRead } from "#web/features/repository-refs/hooks/use-repository-refs";
 import type { RepositoryScope } from "#web/features/repository-scope/repository-scope-provider";
 

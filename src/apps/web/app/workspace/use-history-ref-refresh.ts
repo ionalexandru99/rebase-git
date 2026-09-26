@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import type { RepositoryHistoryObservation } from "#web/features/repository-history/repository-history-reader.contract";
+import type { RepositoryHistoryObservation } from "#web/features/repository-history/repository-history-reader";
 
 export function useHistoryRefRefresh(
   reader: RepositoryHistoryObservation | undefined,

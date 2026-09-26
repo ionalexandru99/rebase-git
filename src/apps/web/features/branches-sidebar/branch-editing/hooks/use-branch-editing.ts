@@ -18,7 +18,7 @@ import { useBranchDeletion } from "#web/features/branches-sidebar/branch-editing
 import type {
   BranchesSidebarRefRow,
   BranchesSidebarRow,
-} from "#web/features/branches-sidebar/branches-sidebar.contract";
+} from "#web/features/branches-sidebar/branches-sidebar-model";
 
 export type BranchEditing = ReturnType<typeof useBranchEditing>;
 

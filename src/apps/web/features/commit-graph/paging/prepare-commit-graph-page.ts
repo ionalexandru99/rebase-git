@@ -8,9 +8,9 @@ import { graphLaneSeeds } from "#web/features/commit-graph/layout/graph-colors";
 import type {
   CommitGraphPage,
   CommitGraphPageReader,
-} from "#web/features/commit-graph/paging/commit-graph-page-window.contract";
+} from "#web/features/commit-graph/paging/commit-graph-page-window-model";
 import { locateLocalHistory } from "#web/features/commit-graph/paging/locate-local-history";
-import type { RepositoryHistoryQuery } from "#web/features/repository-history/repository-history-reader.contract";
+import type { RepositoryHistoryQuery } from "#web/features/repository-history/repository-history-reader";
 
 export async function prepareCommitGraphPage(
   reader: CommitGraphPageReader,

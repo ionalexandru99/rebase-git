@@ -10,7 +10,7 @@ import type {
   ConnectedReader,
   ReaderMessageHandler,
   RepositoryReplica,
-} from "#web/features/repository-history/worker/history-worker.contract";
+} from "#web/features/repository-history/worker/history-worker-state";
 import {
   post,
   postSnapshot,

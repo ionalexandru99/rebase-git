@@ -4,7 +4,7 @@ import {
   type RepositoryHistoryGateway,
   RepositoryHistoryOffline,
   RepositoryHistoryUnavailable,
-} from "#web/features/repository-history/repository-history-reader.contract";
+} from "#web/features/repository-history/repository-history-reader";
 
 it("settles a connection awaiting cache clear after an unhandled worker rejection", async () => {
   const name = crypto.randomUUID();

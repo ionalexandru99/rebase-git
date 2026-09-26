@@ -1,4 +1,4 @@
-import type { RepositoryHistoryQuery } from "#web/features/repository-history/repository-history-reader.contract";
+import type { RepositoryHistoryQuery } from "#web/features/repository-history/repository-history-reader";
 
 export function normalizedOids(oids: readonly string[]) {
   return [...new Set(oids)].sort();

@@ -2,7 +2,7 @@ import type {
   RepositoryHistoryCacheAction,
   RepositoryHistoryCacheManagement,
 } from "#web/domain/repository-history/history-storage.contract";
-import type { RepositoryHistoryObservation } from "#web/features/repository-history/repository-history-reader.contract";
+import type { RepositoryHistoryObservation } from "#web/features/repository-history/repository-history-reader";
 
 export type RepositoryHistoryCacheReader = RepositoryHistoryCacheManagement &
   RepositoryHistoryObservation;

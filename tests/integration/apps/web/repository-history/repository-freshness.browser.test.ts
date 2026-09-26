@@ -9,7 +9,7 @@ import { createBrowserRepositoryHistoryReader } from "#web/features/repository-h
 import {
   type RepositoryHistoryGateway,
   RepositoryHistoryOffline,
-} from "#web/features/repository-history/repository-history-reader.contract";
+} from "#web/features/repository-history/repository-history-reader";
 
 const fresh: RepositoryFreshness = {
   defaultIntervalSeconds: 300,

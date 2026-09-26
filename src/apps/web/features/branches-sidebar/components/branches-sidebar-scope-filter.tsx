@@ -1,5 +1,5 @@
 import { type JSX, useId } from "react";
-import type { BranchesSidebarScope } from "#web/features/branches-sidebar/branches-sidebar.contract";
+import type { BranchesSidebarScope } from "#web/features/branches-sidebar/branches-sidebar-model";
 
 const scopeOptions: readonly {
   readonly label: string;

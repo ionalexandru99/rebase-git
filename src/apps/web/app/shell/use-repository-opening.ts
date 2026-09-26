@@ -8,10 +8,10 @@ import {
   type Navigation,
   worktreePathFor,
 } from "#web/app/shell/use-navigation";
-import type { ProjectNavigationRepository } from "#web/features/project-navigation/project-navigation.contract";
+import type { ProjectNavigationRepository } from "#web/features/project-navigation/project-navigation";
 import { useRecordRepositoryOpened } from "#web/features/repository-catalog/hooks/use-catalog-commands";
 import { useRepositoryCatalog } from "#web/features/repository-catalog/hooks/use-repository-catalog";
-import type { RepositoryHistoryGateway } from "#web/features/repository-history/repository-history-reader.contract";
+import type { RepositoryHistoryGateway } from "#web/features/repository-history/repository-history-reader";
 import { useEnvironment } from "#web/platform/query/environment-context";
 
 export function useRepositoryOpening(

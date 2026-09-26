@@ -3,7 +3,7 @@ import { localEnvironment } from "#web/features/project-navigation/local-environ
 import type {
   ProjectNavigationRepository,
   ProjectNavigationState,
-} from "#web/features/project-navigation/project-navigation.contract";
+} from "#web/features/project-navigation/project-navigation";
 import {
   openProjectRepository,
   removeProjectRepository,

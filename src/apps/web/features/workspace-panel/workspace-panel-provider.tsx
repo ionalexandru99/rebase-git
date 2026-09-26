@@ -9,7 +9,7 @@ import {
 import type {
   WorkspacePanelAction,
   WorkspacePanelStore,
-} from "#web/features/workspace-panel/workspace-panel.contract";
+} from "#web/features/workspace-panel/workspace-panel-model";
 import {
   usePanelSession,
   usePanelSessionOwner,

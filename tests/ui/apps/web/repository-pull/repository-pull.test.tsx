@@ -19,7 +19,7 @@ import {
 } from "#tests-ui/runtime/fake-requests";
 import { render } from "#tests-ui/runtime/render";
 import { NotificationsProvider } from "#web/features/notifications/notifications";
-import type { RepositoryHistorySnapshot } from "#web/features/repository-history/repository-history-reader.contract";
+import type { RepositoryHistorySnapshot } from "#web/features/repository-history/repository-history-reader";
 import { PullButton } from "#web/features/repository-pull/components/pull-button";
 import { PullNotice } from "#web/features/repository-pull/components/pull-notice";
 import { usePull } from "#web/features/repository-pull/hooks/use-pull";

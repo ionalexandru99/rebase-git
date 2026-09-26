@@ -1,7 +1,7 @@
 import type { RepositoryRefs } from "@rebase/contracts";
 import { describe, expect, it } from "vite-plus/test";
 import { branchRowActions } from "#web/features/branches-sidebar/branch-editing/branch-row-actions";
-import type { BranchesSidebarRefRow } from "#web/features/branches-sidebar/branches-sidebar.contract";
+import type { BranchesSidebarRefRow } from "#web/features/branches-sidebar/branches-sidebar-model";
 import { buildBranchesSidebarRows } from "#web/features/branches-sidebar/branches-sidebar-state";
 
 const mainPath = "/repo";

@@ -1,6 +1,6 @@
 import { expect, it } from "vite-plus/test";
 import { createBrowserRepositoryHistoryReader } from "#web/features/repository-history/browser-repository-history-reader";
-import { RepositoryHistoryOffline } from "#web/features/repository-history/repository-history-reader.contract";
+import { RepositoryHistoryOffline } from "#web/features/repository-history/repository-history-reader";
 
 it.each(["clear", "remove"] as const)(
   "preserves %s when the document returns from the back-forward cache",

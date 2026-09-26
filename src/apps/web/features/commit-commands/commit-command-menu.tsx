@@ -8,7 +8,7 @@ import {
 import type {
   GraphCommandContext,
   GraphCommandDefinition,
-} from "#web/features/commit-commands/graph-command.contract";
+} from "#web/features/commit-commands/graph-command";
 import type { GraphCommandRun } from "#web/features/commit-commands/use-graph-commands";
 import { createCommandRegistry } from "#web/platform/menu-commands/menu-command";
 

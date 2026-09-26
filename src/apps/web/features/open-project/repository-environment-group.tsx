@@ -8,7 +8,7 @@ import {
 import type {
   OpenProjectEnvironment,
   OpenProjectRepository,
-} from "#web/features/open-project/open-project.contract";
+} from "#web/features/open-project/open-project-model";
 import { RepositoryRow } from "#web/features/open-project/repository-row";
 
 export function RepositoryEnvironmentGroup({

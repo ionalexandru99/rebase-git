@@ -1,4 +1,4 @@
-import type { GraphCommandDefinition } from "#web/features/commit-commands/graph-command.contract";
+import type { GraphCommandDefinition } from "#web/features/commit-commands/graph-command";
 
 export function createBranchHereCommand(
   requestCreate: (oid: string) => void,

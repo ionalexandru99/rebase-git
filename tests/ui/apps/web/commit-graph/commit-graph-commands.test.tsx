@@ -10,7 +10,7 @@ import {
 } from "#tests-ui/apps/web/commit-graph/commit-graph-fixture";
 import { repositoryScope } from "#tests-ui/apps/web/repository-scope/repository-scope-fixture";
 import { render } from "#tests-ui/runtime/render";
-import type { GraphCommandDefinition } from "#web/features/commit-commands/graph-command.contract";
+import type { GraphCommandDefinition } from "#web/features/commit-commands/graph-command";
 import {
   type RepositoryScope,
   RepositoryScopeProvider,

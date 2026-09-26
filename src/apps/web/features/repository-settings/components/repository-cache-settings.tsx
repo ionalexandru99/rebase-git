@@ -10,7 +10,7 @@ import {
 import { Button } from "#web/components/ui/button";
 import { SettingsRow } from "#web/components/ui/settings-layout";
 import { formatCacheSize } from "#web/features/history-storage/format-cache-size";
-import type { RepositoryHistoryCacheProps } from "#web/features/history-storage/history-cache.contract";
+import type { RepositoryHistoryCacheProps } from "#web/features/history-storage/history-cache";
 import { historyCacheActions } from "#web/features/history-storage/history-cache-actions";
 import { useHistoryCacheManagement } from "#web/features/history-storage/hooks/use-history-cache-management";
 

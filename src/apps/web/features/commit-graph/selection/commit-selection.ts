@@ -2,7 +2,7 @@ import {
   type CommitGraphSelection,
   type CommitGraphSelectionMode,
   emptyCommitGraphSelection,
-} from "#web/features/commit-graph/commit-selection.contract";
+} from "#web/features/commit-graph/selection/commit-graph-selection";
 
 export function selectGraphCommit(
   state: CommitGraphSelection,

@@ -1,8 +1,8 @@
 import type { RepositoryHistoryRefTarget } from "@rebase/contracts";
 import { describe, expect, it, vi } from "vite-plus/test";
-import type { CommitGraphPageReader } from "#web/features/commit-graph/paging/commit-graph-page-window.contract";
+import type { CommitGraphPageReader } from "#web/features/commit-graph/paging/commit-graph-page-window-model";
 import { locateCommitGraphTarget } from "#web/features/commit-graph/paging/locate-commit-graph-target";
-import type { RepositoryHistoryQuery } from "#web/features/repository-history/repository-history-reader.contract";
+import type { RepositoryHistoryQuery } from "#web/features/repository-history/repository-history-reader";
 
 describe("search navigation outside the graph scope", () => {
   it("finds a containing branch in bounded batches and opens its folded ancestry", async () => {

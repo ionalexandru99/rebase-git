@@ -7,7 +7,7 @@ import type { Effect } from "effect";
 import type {
   RepositoryHistoryRejected,
   RepositoryHistoryUnavailable,
-} from "#web/features/repository-history/repository-history-reader.contract";
+} from "#web/features/repository-history/repository-history-reader";
 
 export type RepositoryFreshnessFailure =
   | EnvironmentConnectionFailure

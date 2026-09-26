@@ -19,7 +19,7 @@ import {
 import type {
   RepositoryHistoryGateway,
   RepositoryHistoryReader,
-} from "#web/features/repository-history/repository-history-reader.contract";
+} from "#web/features/repository-history/repository-history-reader";
 import { ApplicationRuntime } from "#web/platform/effect/application-runtime-context";
 import {
   type Environment,

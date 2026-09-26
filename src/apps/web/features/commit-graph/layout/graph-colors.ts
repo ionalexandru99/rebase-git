@@ -2,7 +2,7 @@ import type { RepositoryHistoryRefTarget } from "@rebase/contracts";
 import type {
   CommitLaneRow,
   CommitLaneSeed,
-} from "#web/features/commit-graph/layout/commit-lanes.contract";
+} from "#web/features/commit-graph/layout/commit-lane-model";
 
 export const graphRemoteOpacity = 0.5;
 

@@ -3,7 +3,7 @@ import { describeRepositoryHistoryError } from "#web/features/commit-graph/compo
 import {
   RepositoryHistoryOffline,
   RepositoryHistoryStorageUnavailable,
-} from "#web/features/repository-history/repository-history-reader.contract";
+} from "#web/features/repository-history/repository-history-reader";
 
 describe("repository history errors", () => {
   it("keeps offline and storage failures distinct", () => {

@@ -10,7 +10,7 @@ import {
 import type {
   ConnectedReader,
   RepositoryReplica,
-} from "#web/features/repository-history/worker/history-worker.contract";
+} from "#web/features/repository-history/worker/history-worker-state";
 import {
   invalidateStoredHistory,
   post,

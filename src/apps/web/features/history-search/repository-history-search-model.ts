@@ -9,7 +9,7 @@ import {
   type RepositoryHistorySearchModel,
   type RepositoryHistorySearchSnapshot,
   RepositoryHistorySearchSource,
-} from "#web/features/history-search/repository-history-search-model.contract";
+} from "#web/features/history-search/repository-history-search";
 import { createStore } from "#web/platform/store/store";
 
 export const emptyHistorySearchSnapshot: RepositoryHistorySearchSnapshot = {

@@ -1,7 +1,7 @@
 import { isObjectId } from "@rebase/contracts";
 import { IconGitCommit } from "@tabler/icons-react";
 import { lazy } from "react";
-import type { WorkspacePanelDefinition } from "#web/features/workspace-panel/workspace-panel.contract";
+import type { WorkspacePanelDefinition } from "#web/features/workspace-panel/workspace-panel-model";
 
 export const commitInspectionPanel = {
   acceptsInput: isObjectId,

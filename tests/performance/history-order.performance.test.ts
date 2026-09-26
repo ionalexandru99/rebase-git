@@ -93,7 +93,7 @@ test("cached order changes on 250,000 merge-heavy commits", async ({
         count,
       );
       console.log("history-order: preparing compact index");
-      const cache: import("#web/features/repository-history/query/history-order.contract").HistoryOrderCache =
+      const cache: import("#web/features/repository-history/query/history-order-model").HistoryOrderCache =
         { queries: new Map(), revision: 0 };
       const indexStarted = performance.now();
       await queries.prepareRepositoryHistoryOrder(

@@ -6,13 +6,13 @@ import type {
   RepositoryHistoryQuery,
   RepositoryHistoryReader,
   RepositoryHistorySnapshot,
-} from "#web/features/repository-history/repository-history-reader.contract";
+} from "#web/features/repository-history/repository-history-reader";
 import {
   RepositoryHistoryOffline,
   RepositoryHistoryRejected,
   RepositoryHistoryStorageUnavailable,
   RepositoryHistoryUnavailable,
-} from "#web/features/repository-history/repository-history-reader.contract";
+} from "#web/features/repository-history/repository-history-reader";
 import { isHistoryWorkerReply } from "#web/features/repository-history/worker/history-worker-replies";
 import type {
   ConnectRepositoryHistoryReader,

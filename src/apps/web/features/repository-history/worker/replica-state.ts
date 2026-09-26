@@ -1,8 +1,8 @@
-import { RepositoryHistoryStorageUnavailable } from "#web/features/repository-history/repository-history-reader.contract";
+import { RepositoryHistoryStorageUnavailable } from "#web/features/repository-history/repository-history-reader";
 import type {
   ConnectedReader,
   RepositoryReplica,
-} from "#web/features/repository-history/worker/history-worker.contract";
+} from "#web/features/repository-history/worker/history-worker-state";
 import type {
   RepositoryHistoryWorkerFailure,
   RepositoryHistoryWorkerResponse,

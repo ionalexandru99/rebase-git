@@ -3,12 +3,12 @@ import { describe, expect, it, vi } from "vite-plus/test";
 import { page } from "vite-plus/test/browser";
 import { render } from "vitest-browser-react";
 import { RepositoryHistorySearchView } from "#web/features/history-search/components/repository-history-search-controls";
-import { emptyHistorySearchSnapshot } from "#web/features/history-search/repository-history-search-model";
 import {
   RepositoryHistorySearchFailure,
   type RepositoryHistorySearchModel,
   type RepositoryHistorySearchSnapshot,
-} from "#web/features/history-search/repository-history-search-model.contract";
+} from "#web/features/history-search/repository-history-search";
+import { emptyHistorySearchSnapshot } from "#web/features/history-search/repository-history-search-model";
 
 describe("history search model view", () => {
   it("subscribes only the search view and exposes typed failures through the same action contract", async () => {

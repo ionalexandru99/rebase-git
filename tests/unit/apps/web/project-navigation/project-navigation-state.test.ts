@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vite-plus/test";
-import type { ProjectNavigationState } from "#web/features/project-navigation/project-navigation.contract";
+import type { ProjectNavigationState } from "#web/features/project-navigation/project-navigation";
 import {
   environmentRepositories,
   filterEnvironmentRepositories,

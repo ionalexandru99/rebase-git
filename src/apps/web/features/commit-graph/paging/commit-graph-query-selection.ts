@@ -1,12 +1,12 @@
 import type {
   CommitGraphSelection,
   CommitGraphSelectionMode,
-} from "#web/features/commit-graph/commit-selection.contract";
+} from "#web/features/commit-graph/selection/commit-graph-selection";
 import type {
   RepositoryHistoryPosition,
   RepositoryHistoryQuery,
   RepositoryHistoryReadModel,
-} from "#web/features/repository-history/repository-history-reader.contract";
+} from "#web/features/repository-history/repository-history-reader";
 
 export async function locateGraphSelection(
   reader: Pick<RepositoryHistoryReadModel, "locateMany">,

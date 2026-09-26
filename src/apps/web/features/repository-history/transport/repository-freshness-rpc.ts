@@ -1,7 +1,7 @@
 import type { EnvironmentRpcClient } from "@rebase/contracts";
 import { Effect, Stream } from "effect";
-import { RepositoryHistoryUnavailable } from "#web/features/repository-history/repository-history-reader.contract";
-import type { RepositoryFreshnessTransport } from "#web/features/repository-history/transport/repository-freshness.contract";
+import { RepositoryHistoryUnavailable } from "#web/features/repository-history/repository-history-reader";
+import type { RepositoryFreshnessTransport } from "#web/features/repository-history/transport/repository-freshness-transport";
 import { historyRpcFailure } from "#web/features/repository-history/transport/repository-history-rpc-error";
 
 export function createRepositoryFreshnessRpc(

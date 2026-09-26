@@ -19,7 +19,7 @@ import { Input } from "#web/components/ui/input";
 import type {
   ProjectNavigationRepository,
   ProjectNavigationState,
-} from "#web/features/project-navigation/project-navigation.contract";
+} from "#web/features/project-navigation/project-navigation";
 import { filterEnvironmentRepositories } from "#web/features/project-navigation/project-navigation-state";
 import { RepositorySettingsButton } from "#web/features/repository-settings/components/repository-settings-button";
 import {

@@ -8,7 +8,7 @@ import { createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { CommitGraph } from "#web/features/commit-graph/commit-graph";
 import { openCommitGraphHistory } from "#web/features/commit-graph/paging/commit-graph-history";
-import type { RepositoryHistoryReader } from "#web/features/repository-history/repository-history-reader.contract";
+import type { RepositoryHistoryReader } from "#web/features/repository-history/repository-history-reader";
 import { ApplicationRuntime } from "#web/platform/effect/application-runtime-context";
 import {
   type Environment,

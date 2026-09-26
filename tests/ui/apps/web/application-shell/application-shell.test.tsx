@@ -27,7 +27,7 @@ import type { LocalEnvironmentSession } from "#web/app/environment/local-environ
 import { ApplicationShell } from "#web/app/shell/application-shell";
 import { RepositoryWorkspace } from "#web/app/workspace/repository-workspace";
 import { repositoryCatalogKey } from "#web/features/repository-catalog/hooks/use-repository-catalog";
-import type { RepositoryHistoryGateway } from "#web/features/repository-history/repository-history-reader.contract";
+import type { RepositoryHistoryGateway } from "#web/features/repository-history/repository-history-reader";
 import { RepositoryScopeProvider } from "#web/features/repository-scope/repository-scope-provider";
 import { createEnvironmentQueryClient } from "#web/platform/query/environment-query-client";
 

@@ -11,7 +11,7 @@ import { readHistory } from "#web/features/repository-history/worker/history-pag
 import type {
   ConnectedReader,
   RepositoryReplica,
-} from "#web/features/repository-history/worker/history-worker.contract";
+} from "#web/features/repository-history/worker/history-worker-state";
 import { cancelReaderSearch } from "#web/features/repository-history/worker/reader-search";
 import {
   invalidateStoredHistory,

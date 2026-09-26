@@ -31,7 +31,7 @@ import {
   type BranchesSidebarRow,
   type BranchesSidebarScope,
   localBranchesSectionId,
-} from "#web/features/branches-sidebar/branches-sidebar.contract";
+} from "#web/features/branches-sidebar/branches-sidebar-model";
 import {
   buildBranchesSidebarRows,
   currentRefRowId,
@@ -49,7 +49,7 @@ import { SidebarStatus } from "#web/features/branches-sidebar/components/sidebar
 import { useBranchesSidebarView } from "#web/features/branches-sidebar/hooks/use-branches-sidebar-view";
 import { treeKeyAction } from "#web/features/branches-sidebar/navigation/branches-sidebar-keyboard";
 import { historyRefKey } from "#web/features/commit-graph/scope/history-scope";
-import type { RefCommandDefinition } from "#web/features/ref-commands/ref-command.contract";
+import type { RefCommandDefinition } from "#web/features/ref-commands/ref-command";
 import type { RefActivation } from "#web/features/repository-refs/hooks/use-ref-activation";
 import type { RepositoryRefsRead } from "#web/features/repository-refs/hooks/use-repository-refs";
 

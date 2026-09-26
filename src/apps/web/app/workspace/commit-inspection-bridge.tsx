@@ -5,7 +5,7 @@ import {
   useEffect,
   useRef,
 } from "react";
-import type { CommitGraphHandle } from "#web/features/commit-graph/commit-graph.contract";
+import type { CommitGraphHandle } from "#web/features/commit-graph/commit-graph-model";
 import { useWorkspacePanel } from "#web/features/workspace-panel/workspace-panel-provider";
 
 export interface InspectionGraphActions {

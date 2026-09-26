@@ -1,8 +1,8 @@
 import type {
   RepositoryHistoryQuery,
   RepositoryHistoryReader,
-} from "#web/features/repository-history/repository-history-reader.contract";
-import { RepositoryHistoryOffline } from "#web/features/repository-history/repository-history-reader.contract";
+} from "#web/features/repository-history/repository-history-reader";
+import { RepositoryHistoryOffline } from "#web/features/repository-history/repository-history-reader";
 import { createStore } from "#web/platform/store/store";
 
 export function maintainRepositoryHistoryReader(

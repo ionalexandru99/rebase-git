@@ -13,12 +13,12 @@ import type {
   RepositoryHistoryCacheAction,
   RepositoryHistoryStorageDiagnostics,
 } from "#web/domain/repository-history/history-storage.contract";
-import type { HistoryAncestryRoute } from "#web/features/repository-history/query/history-order.contract";
+import type { HistoryAncestryRoute } from "#web/features/repository-history/query/history-order-model";
 import type {
   RepositoryHistoryPosition,
   RepositoryHistoryQuery,
   RepositoryHistoryRefTarget,
-} from "#web/features/repository-history/repository-history-reader.contract";
+} from "#web/features/repository-history/repository-history-reader";
 
 export type RepositoryHistoryWorkerFailure =
   | {

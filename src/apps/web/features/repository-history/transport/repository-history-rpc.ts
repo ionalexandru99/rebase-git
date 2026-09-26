@@ -4,7 +4,7 @@ import { Effect, Option, Stream } from "effect";
 import {
   type RepositoryHistoryTransport,
   RepositoryHistoryUnavailable,
-} from "#web/features/repository-history/repository-history-reader.contract";
+} from "#web/features/repository-history/repository-history-reader";
 import { createHistorySyncScheduler } from "#web/features/repository-history/transport/history-sync-scheduler";
 import { createRepositoryFreshnessRpc } from "#web/features/repository-history/transport/repository-freshness-rpc";
 import { historyRpcFailure } from "#web/features/repository-history/transport/repository-history-rpc-error";

@@ -1,8 +1,8 @@
 import { IconX } from "@tabler/icons-react";
 import { Button } from "#web/components/ui/button";
 import { TabsTrigger } from "#web/components/ui/tabs";
-import type { WorkspacePanelKind } from "#web/features/workspace-panel/workspace-panel.contract";
 import { workspacePanelDefinitions } from "#web/features/workspace-panel/workspace-panel-definitions";
+import type { WorkspacePanelKind } from "#web/features/workspace-panel/workspace-panel-model";
 import { useWorkspacePanel } from "#web/features/workspace-panel/workspace-panel-provider";
 import { cn } from "#web/lib/utils";
 

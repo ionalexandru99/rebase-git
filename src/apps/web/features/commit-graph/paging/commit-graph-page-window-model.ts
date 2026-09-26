@@ -7,7 +7,7 @@ import type {
 import type {
   RepositoryHistoryQuery,
   RepositoryHistoryReadModel,
-} from "#web/features/repository-history/repository-history-reader.contract";
+} from "#web/features/repository-history/repository-history-reader";
 import type { ReadableStore } from "#web/platform/store/store";
 
 export type CommitGraphPageReader = Pick<

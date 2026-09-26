@@ -15,7 +15,7 @@ import { openCommitGraphHistory } from "#web/features/commit-graph/paging/commit
 import { createBrowserHistoryFilterStore } from "#web/features/commit-graph/scope/browser-history-filter-store";
 import { resolveHistoryScope } from "#web/features/commit-graph/scope/history-scope";
 import { storeRepositoryHistoryPage } from "#web/features/repository-history/replica/repository-history-store";
-import { RepositoryHistoryOffline } from "#web/features/repository-history/repository-history-reader.contract";
+import { RepositoryHistoryOffline } from "#web/features/repository-history/repository-history-reader";
 import { useApplyToRefs } from "#web/features/repository-refs/hooks/use-apply-to-refs";
 import { useRepositoryRefs } from "#web/features/repository-refs/hooks/use-repository-refs";
 import { RepositoryScopeProvider } from "#web/features/repository-scope/repository-scope-provider";

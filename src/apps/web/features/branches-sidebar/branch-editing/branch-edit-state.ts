@@ -3,7 +3,7 @@ import type { BranchStartPoint } from "#web/features/branches-sidebar/branch-edi
 import {
   type BranchesSidebarRow,
   localBranchesSectionId,
-} from "#web/features/branches-sidebar/branches-sidebar.contract";
+} from "#web/features/branches-sidebar/branches-sidebar-model";
 
 export type BranchEdit =
   | { readonly kind: "create"; readonly startPoint: BranchStartPoint }

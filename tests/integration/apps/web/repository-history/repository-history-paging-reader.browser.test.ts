@@ -7,7 +7,7 @@ import { createBrowserRepositoryHistoryReader } from "#web/features/repository-h
 import type {
   RepositoryHistoryGateway,
   RepositoryHistoryQuery,
-} from "#web/features/repository-history/repository-history-reader.contract";
+} from "#web/features/repository-history/repository-history-reader";
 
 describe("progressive browser history paging", () => {
   it.each(["all", "first-parent"] as const)(

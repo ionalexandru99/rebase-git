@@ -8,7 +8,7 @@ import {
   automaticHistoryScope,
   type HistoryScope,
   type ResolvedHistoryScope,
-} from "#web/features/commit-graph/history-scope.contract";
+} from "#web/features/commit-graph/scope/history-scope-model";
 import {
   resolveAutomaticHistoryRoots,
   resolveAutomaticHistorySelections,
@@ -17,8 +17,8 @@ import {
 export type {
   HistoryScope,
   ResolvedHistoryScope,
-} from "#web/features/commit-graph/history-scope.contract";
-export { automaticHistoryScope } from "#web/features/commit-graph/history-scope.contract";
+} from "#web/features/commit-graph/scope/history-scope-model";
+export { automaticHistoryScope } from "#web/features/commit-graph/scope/history-scope-model";
 
 export function resolveHistoryScope(
   scope: HistoryScope,

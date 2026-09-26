@@ -4,11 +4,11 @@ import {
   RepositoryHistoryOffline,
   type RepositoryHistoryTransport,
   RepositoryHistoryUnavailable,
-} from "#web/features/repository-history/repository-history-reader.contract";
+} from "#web/features/repository-history/repository-history-reader";
 import type {
   RepositoryFreshnessGateway,
   RepositoryFreshnessTransport,
-} from "#web/features/repository-history/transport/repository-freshness.contract";
+} from "#web/features/repository-history/transport/repository-freshness-transport";
 import { createRepositoryHistoryRpc } from "#web/features/repository-history/transport/repository-history-rpc";
 import type { NegotiatedEnvironmentRpc } from "#web/platform/environment/environment-protocol.contract";
 

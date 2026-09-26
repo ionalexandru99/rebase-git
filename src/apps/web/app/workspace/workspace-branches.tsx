@@ -2,7 +2,7 @@ import type { WorkspaceHistoryScope } from "#web/app/workspace/use-workspace-his
 import { ResizableHandle, ResizablePanel } from "#web/components/ui/resizable";
 import type { BranchCreateRequest } from "#web/features/branch-management/hooks/use-create-branch-here";
 import { BranchesSidebar } from "#web/features/branches-sidebar/branches-sidebar";
-import type { RefCommandDefinition } from "#web/features/ref-commands/ref-command.contract";
+import type { RefCommandDefinition } from "#web/features/ref-commands/ref-command";
 import { useRefActivation } from "#web/features/repository-refs/hooks/use-ref-activation";
 import type { RepositoryRefsRead } from "#web/features/repository-refs/hooks/use-repository-refs";
 import { useRepositoryScope } from "#web/features/repository-scope/repository-scope-provider";

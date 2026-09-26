@@ -2,7 +2,7 @@ import { markHistoryCacheOpened } from "#web/features/repository-history/cache/r
 import { writeHistoryUnderPressure } from "#web/features/repository-history/cache/repository-history-storage-maintenance";
 import { prepareRepositoryHistoryOrder } from "#web/features/repository-history/query/repository-history-query";
 import { readStoredRepositoryHistoryState } from "#web/features/repository-history/replica/repository-history-store";
-import type { RepositoryReplica } from "#web/features/repository-history/worker/history-worker.contract";
+import type { RepositoryReplica } from "#web/features/repository-history/worker/history-worker-state";
 import {
   publishSnapshot,
   workerFailure,

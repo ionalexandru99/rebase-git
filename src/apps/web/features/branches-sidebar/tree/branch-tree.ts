@@ -2,7 +2,7 @@ import type {
   BranchesSidebarFolderRow,
   BranchesSidebarRefRow,
   BranchesSidebarRow,
-} from "#web/features/branches-sidebar/branches-sidebar.contract";
+} from "#web/features/branches-sidebar/branches-sidebar-model";
 
 type BranchTreeNode =
   | {

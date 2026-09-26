@@ -1,5 +1,5 @@
 import { ErrorNotification } from "#web/features/notifications/components/error-notification";
-import type { RepositoryHistorySnapshot } from "#web/features/repository-history/repository-history-reader.contract";
+import type { RepositoryHistorySnapshot } from "#web/features/repository-history/repository-history-reader";
 
 export function RepositoryHistoryFreshnessStatus({
   snapshot,

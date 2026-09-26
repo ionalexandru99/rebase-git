@@ -3,7 +3,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type {
   CommitGraphHistory,
   CommitGraphViewportAnchor,
-} from "#web/features/commit-graph/commit-graph.contract";
+} from "#web/features/commit-graph/commit-graph-model";
 import { emptyCommitGraphPageWindowSnapshot as emptyPages } from "#web/features/commit-graph/paging/commit-graph-page-window";
 import {
   commitGraphQuery,
@@ -14,7 +14,7 @@ import type {
   RepositoryHistoryQuery,
   RepositoryHistoryReadModel,
   RepositoryHistorySnapshot,
-} from "#web/features/repository-history/repository-history-reader.contract";
+} from "#web/features/repository-history/repository-history-reader";
 import { createStore } from "#web/platform/store/store";
 import { useStore } from "#web/platform/store/use-store";
 

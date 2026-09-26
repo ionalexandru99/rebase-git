@@ -20,7 +20,7 @@ import type { RepositoryHistoryService } from "#server/features/repository-histo
 import { repositoryHistoryRpc } from "#server/features/repository-history/rpc/repository-history-rpc";
 import { testEnvironmentFeatures } from "#tests-integration/apps/server/environment-connection/test-environment-features";
 import { connectEnvironmentEffect } from "#web/app/environment/connection/environment-protocol-client";
-import type { RepositoryHistoryTransport } from "#web/features/repository-history/repository-history-reader.contract";
+import type { RepositoryHistoryTransport } from "#web/features/repository-history/repository-history-reader";
 import { createRepositoryHistoryRpc } from "#web/features/repository-history/transport/repository-history-rpc";
 
 const repositoryId = "00000000-0000-4000-8000-000000000001";

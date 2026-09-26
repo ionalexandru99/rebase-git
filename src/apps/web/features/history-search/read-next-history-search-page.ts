@@ -2,7 +2,7 @@ import { Effect } from "effect";
 import {
   RepositoryHistorySearchFailure,
   RepositoryHistorySearchSource,
-} from "#web/features/history-search/repository-history-search-model.contract";
+} from "#web/features/history-search/repository-history-search";
 
 export const historySearchPageSize = 20;
 

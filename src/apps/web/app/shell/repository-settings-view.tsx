@@ -1,7 +1,7 @@
 import { useOpenedHistory } from "#web/app/shell/opened-history-context";
 import { useCatalogRepository } from "#web/features/repository-catalog/hooks/use-repository-catalog";
 import { useRepositoryHistoryReader } from "#web/features/repository-history/hooks/use-repository-history-reader";
-import type { RepositoryHistoryGateway } from "#web/features/repository-history/repository-history-reader.contract";
+import type { RepositoryHistoryGateway } from "#web/features/repository-history/repository-history-reader";
 import { useRepositoryScope } from "#web/features/repository-scope/repository-scope-provider";
 import { RepositorySettingsPage } from "#web/features/repository-settings/repository-settings-page";
 import { useEnvironment } from "#web/platform/query/environment-context";

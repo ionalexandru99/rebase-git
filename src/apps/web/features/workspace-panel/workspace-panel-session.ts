@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import type { WorkspacePanelKind } from "#web/features/workspace-panel/workspace-panel.contract";
+import type { WorkspacePanelKind } from "#web/features/workspace-panel/workspace-panel-model";
 
 export interface WorkspacePanelScope {
   readonly environmentId: string;

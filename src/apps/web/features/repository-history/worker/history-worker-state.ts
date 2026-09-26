@@ -1,8 +1,8 @@
 import type { RepositoryFreshness } from "@rebase/contracts";
 import type { Fiber, Scope } from "effect";
-import type { HistoryOrderCache } from "#web/features/repository-history/query/history-order.contract";
+import type { HistoryOrderCache } from "#web/features/repository-history/query/history-order-model";
 import type { RepositoryHistoryEpoch } from "#web/features/repository-history/reader/repository-history-epoch";
-import type { RepositoryHistoryQuery } from "#web/features/repository-history/repository-history-reader.contract";
+import type { RepositoryHistoryQuery } from "#web/features/repository-history/repository-history-reader";
 import type {
   ConnectRepositoryHistoryReader,
   RepositoryHistoryWorkerFailure,

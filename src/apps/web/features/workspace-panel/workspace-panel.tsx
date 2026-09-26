@@ -11,7 +11,7 @@ import {
   ResizablePanelGroup,
 } from "#web/components/ui/resizable";
 import { WorkspacePanelTabs } from "#web/features/workspace-panel/components/workspace-panel-tabs";
-import type { WorkspacePanelKind } from "#web/features/workspace-panel/workspace-panel.contract";
+import type { WorkspacePanelKind } from "#web/features/workspace-panel/workspace-panel-model";
 import {
   useWorkspacePanel,
   WorkspacePanelProvider,

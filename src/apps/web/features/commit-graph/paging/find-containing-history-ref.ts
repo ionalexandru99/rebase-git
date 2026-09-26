@@ -1,5 +1,5 @@
 import type { RepositoryHistoryRefTarget } from "@rebase/contracts";
-import type { CommitGraphPageReader } from "#web/features/commit-graph/paging/commit-graph-page-window.contract";
+import type { CommitGraphPageReader } from "#web/features/commit-graph/paging/commit-graph-page-window-model";
 
 export async function findContainingHistoryRef(
   reader: CommitGraphPageReader,

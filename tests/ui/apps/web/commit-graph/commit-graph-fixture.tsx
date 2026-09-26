@@ -3,14 +3,14 @@ import { type ComponentProps, useMemo } from "react";
 import { vi } from "vite-plus/test";
 import { render } from "#tests-ui/runtime/render";
 import { CommitGraph } from "#web/features/commit-graph/commit-graph";
-import type { CommitGraphReader } from "#web/features/commit-graph/commit-graph.contract";
+import type { CommitGraphReader } from "#web/features/commit-graph/commit-graph-model";
 import { openCommitGraphHistory } from "#web/features/commit-graph/paging/commit-graph-history";
 import { saveRepositoryHistoryOrder } from "#web/features/repository-history/preferences/repository-history-order";
 import type {
   RepositoryHistoryQuery,
   RepositoryHistoryReader,
   RepositoryHistorySnapshot,
-} from "#web/features/repository-history/repository-history-reader.contract";
+} from "#web/features/repository-history/repository-history-reader";
 
 const graphHistoryIdentity = {
   environmentId: "test-environment",

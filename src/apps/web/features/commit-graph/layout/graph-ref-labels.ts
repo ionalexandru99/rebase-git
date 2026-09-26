@@ -1,5 +1,5 @@
 import type { RepositoryHistoryRefTarget } from "@rebase/contracts";
-import type { CommitLaneRow } from "#web/features/commit-graph/layout/commit-lanes.contract";
+import type { CommitLaneRow } from "#web/features/commit-graph/layout/commit-lane-model";
 
 export function graphRefLabels(
   refs: readonly RepositoryHistoryRefTarget[],

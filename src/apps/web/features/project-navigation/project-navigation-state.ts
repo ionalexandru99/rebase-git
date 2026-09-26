@@ -3,7 +3,7 @@ import type {
   ProjectNavigationRepository,
   ProjectNavigationRepositoryItem,
   ProjectNavigationState,
-} from "#web/features/project-navigation/project-navigation.contract";
+} from "#web/features/project-navigation/project-navigation";
 import type { EnvironmentAvailability } from "#web/platform/query/environment-context";
 
 export function environmentRepositories(

@@ -17,13 +17,13 @@ import {
   storeRepositoryHistoryBatch,
   storeRepositoryHistoryPage,
 } from "#web/features/repository-history/replica/repository-history-store";
-import type { RepositoryHistoryGateway } from "#web/features/repository-history/repository-history-reader.contract";
+import type { RepositoryHistoryGateway } from "#web/features/repository-history/repository-history-reader";
 import {
   RepositoryHistoryOffline,
   RepositoryHistoryRejected,
   RepositoryHistoryStorageUnavailable,
   RepositoryHistoryUnavailable,
-} from "#web/features/repository-history/repository-history-reader.contract";
+} from "#web/features/repository-history/repository-history-reader";
 import { withRepositoryHistoryDatabase } from "#web/persistence/repository-history/repository-history-database";
 
 describe("browser repository history reader", () => {

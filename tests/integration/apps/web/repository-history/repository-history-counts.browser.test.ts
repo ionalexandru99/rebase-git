@@ -14,7 +14,7 @@ import {
   storeRepositoryHistoryBatch,
   storeRepositoryHistoryPage,
 } from "#web/features/repository-history/replica/repository-history-store";
-import type { RepositoryHistoryGateway } from "#web/features/repository-history/repository-history-reader.contract";
+import type { RepositoryHistoryGateway } from "#web/features/repository-history/repository-history-reader";
 
 describe("durable history counts", () => {
   it("counts stored OIDs after resetting a tip and resumes a cleared first synchronization", async () => {

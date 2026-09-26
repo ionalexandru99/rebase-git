@@ -12,7 +12,7 @@ import {
 import { render } from "#tests-ui/runtime/render";
 import { graphRowHeight } from "#web/features/commit-graph/layout/graph-metrics";
 import { saveRepositoryHistoryOrder } from "#web/features/repository-history/preferences/repository-history-order";
-import { RepositoryHistoryUnavailable } from "#web/features/repository-history/repository-history-reader.contract";
+import { RepositoryHistoryUnavailable } from "#web/features/repository-history/repository-history-reader";
 
 describe("commit graph states", () => {
   beforeEach(async () => {

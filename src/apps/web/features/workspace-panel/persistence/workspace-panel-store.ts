@@ -1,8 +1,8 @@
+import { workspacePanelDefinitions } from "#web/features/workspace-panel/workspace-panel-definitions";
 import type {
   WorkspacePanelState,
   WorkspacePanelStore,
-} from "#web/features/workspace-panel/workspace-panel.contract";
-import { workspacePanelDefinitions } from "#web/features/workspace-panel/workspace-panel-definitions";
+} from "#web/features/workspace-panel/workspace-panel-model";
 import {
   initialWorkspacePanelState,
   isWorkspacePanelKind,

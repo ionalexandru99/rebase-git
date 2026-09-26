@@ -6,8 +6,8 @@ import {
 } from "#web/features/commit-graph/layout/commit-lanes";
 import { graphColors } from "#web/features/commit-graph/layout/graph-colors";
 import { createCommitGraphPageWindow } from "#web/features/commit-graph/paging/commit-graph-page-window";
-import type { CommitGraphPageReader } from "#web/features/commit-graph/paging/commit-graph-page-window.contract";
-import type { RepositoryHistoryQuery } from "#web/features/repository-history/repository-history-reader.contract";
+import type { CommitGraphPageReader } from "#web/features/commit-graph/paging/commit-graph-page-window-model";
+import type { RepositoryHistoryQuery } from "#web/features/repository-history/repository-history-reader";
 
 const query: RepositoryHistoryQuery = {
   roots: [{ name: "main", oid: oid(0), type: "branch" }],

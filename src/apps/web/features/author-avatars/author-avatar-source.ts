@@ -23,12 +23,3 @@ export interface AuthorAvatarSource {
     signal: AbortSignal,
   ) => Promise<string | undefined>;
 }
-
-export interface AuthorAvatarModel {
-  readonly get: (email: string) => string | undefined;
-  readonly subscribe: (
-    author: AvatarAuthor,
-    listener: () => void,
-  ) => () => void;
-  readonly dispose: () => void;
-}

@@ -18,11 +18,11 @@ import type { RepositoryHistoryCacheManagement } from "#web/domain/repository-hi
 import type {
   HistoryAncestryRoute,
   HistoryParentEdge,
-} from "#web/features/repository-history/query/history-order.contract";
+} from "#web/features/repository-history/query/history-order-model";
 import type {
   RepositoryFreshnessGateway,
   RepositoryFreshnessTransport,
-} from "#web/features/repository-history/transport/repository-freshness.contract";
+} from "#web/features/repository-history/transport/repository-freshness-transport";
 import type { ReadableStore } from "#web/platform/store/store";
 
 export type { RepositoryHistoryRefTarget } from "@rebase/contracts";

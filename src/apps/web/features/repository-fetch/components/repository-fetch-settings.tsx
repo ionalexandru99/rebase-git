@@ -4,7 +4,7 @@ import { Button } from "#web/components/ui/button";
 import { Input } from "#web/components/ui/input";
 import { SettingsRow } from "#web/components/ui/settings-layout";
 import { describeRepositoryFetchError } from "#web/features/repository-fetch/repository-fetch-error";
-import type { RepositoryHistoryFetchCommands } from "#web/features/repository-history/repository-history-reader.contract";
+import type { RepositoryHistoryFetchCommands } from "#web/features/repository-history/repository-history-reader";
 
 export function RepositoryFetchSettings({
   reader,

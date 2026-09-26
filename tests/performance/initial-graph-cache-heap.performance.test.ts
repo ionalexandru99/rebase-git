@@ -1,7 +1,7 @@
 import { resolve } from "node:path";
 import { expect, test } from "@playwright/test";
 import { createServer } from "vite";
-import type { CommitGraphPageWindow } from "#web/features/commit-graph/paging/commit-graph-page-window.contract";
+import type { CommitGraphPageWindow } from "#web/features/commit-graph/paging/commit-graph-page-window-model";
 
 test("the renderer's initial 16-page cache stays below 64 MiB of retained JavaScript heap", async ({
   page,
@@ -33,7 +33,7 @@ test("the renderer's initial 16-page cache stays below 64 MiB of retained JavaSc
       const branches = 256;
       const totalCommits = branches * 16 + 2;
       const oid = (index: number) => index.toString(16).padStart(40, "0");
-      const reader: import("#web/features/commit-graph/paging/commit-graph-page-window.contract").CommitGraphPageReader =
+      const reader: import("#web/features/commit-graph/paging/commit-graph-page-window-model").CommitGraphPageReader =
         {
           getRefTargets: async () => [],
           ancestryRoute: async () => undefined,

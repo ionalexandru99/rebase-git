@@ -5,11 +5,11 @@ import {
 import { isHistoryStorageQuotaError } from "#web/features/repository-history/cache/repository-history-storage-policy";
 import { readCurrentRepositoryHistory } from "#web/features/repository-history/query/read-current-repository-history";
 import { storeRepositoryHistoryPage } from "#web/features/repository-history/replica/repository-history-store";
-import type { RepositoryHistoryQuery } from "#web/features/repository-history/repository-history-reader.contract";
+import type { RepositoryHistoryQuery } from "#web/features/repository-history/repository-history-reader";
 import type {
   ConnectedReader,
   RepositoryReplica,
-} from "#web/features/repository-history/worker/history-worker.contract";
+} from "#web/features/repository-history/worker/history-worker-state";
 import {
   invalidateStoredHistory,
   post,

@@ -1,5 +1,5 @@
 import type { RepositoryCatalogEntry, RepositoryRefs } from "@rebase/contracts";
-import type { CommitGraphHistory } from "#web/features/commit-graph/commit-graph.contract";
+import type { CommitGraphHistory } from "#web/features/commit-graph/commit-graph-model";
 import {
   loadFirstCommitGraphPage,
   openCommitGraphHistory,
@@ -11,7 +11,7 @@ import { readRepositoryHistoryOrder } from "#web/features/repository-history/pre
 import type {
   RepositoryHistoryGateway,
   RepositoryHistoryReader,
-} from "#web/features/repository-history/repository-history-reader.contract";
+} from "#web/features/repository-history/repository-history-reader";
 import { resolveActiveWorktreePath } from "#web/features/repository-refs/activate-repository-ref";
 import { createStore, type ReadableStore } from "#web/platform/store/store";
 

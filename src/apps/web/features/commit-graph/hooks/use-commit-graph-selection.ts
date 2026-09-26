@@ -1,10 +1,10 @@
 import type { KeyboardEvent, MouseEvent } from "react";
-import type { CommitGraphSelectionMode } from "#web/features/commit-graph/commit-selection.contract";
 import { usePagedGraphSelection } from "#web/features/commit-graph/hooks/use-paged-graph-selection";
+import type { CommitGraphSelectionMode } from "#web/features/commit-graph/selection/commit-graph-selection";
 import type {
   RepositoryHistoryQuery,
   RepositoryHistoryReadModel,
-} from "#web/features/repository-history/repository-history-reader.contract";
+} from "#web/features/repository-history/repository-history-reader";
 
 export function useCommitGraphSelection({
   reader,

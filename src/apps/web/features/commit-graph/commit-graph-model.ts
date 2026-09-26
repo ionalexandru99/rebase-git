@@ -1,8 +1,8 @@
-import type { CommitGraphPageWindow } from "#web/features/commit-graph/paging/commit-graph-page-window.contract";
+import type { CommitGraphPageWindow } from "#web/features/commit-graph/paging/commit-graph-page-window-model";
 import type {
   RepositoryHistoryFetchCommands,
   RepositoryHistoryReadModel,
-} from "#web/features/repository-history/repository-history-reader.contract";
+} from "#web/features/repository-history/repository-history-reader";
 
 export type CommitGraphReader = RepositoryHistoryReadModel &
   Pick<RepositoryHistoryFetchCommands, "fetch">;

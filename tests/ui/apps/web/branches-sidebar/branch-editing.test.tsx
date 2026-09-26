@@ -24,7 +24,7 @@ import { useCreateBranchHere } from "#web/features/branch-management/hooks/use-c
 import type { BranchRename } from "#web/features/branches-sidebar/branch-editing/hooks/use-branch-editing";
 import { BranchesSidebar } from "#web/features/branches-sidebar/branches-sidebar";
 import { CommitCommandMenu } from "#web/features/commit-commands/commit-command-menu";
-import type { GraphCommandDefinition } from "#web/features/commit-commands/graph-command.contract";
+import type { GraphCommandDefinition } from "#web/features/commit-commands/graph-command";
 import { NotificationsProvider } from "#web/features/notifications/notifications";
 import { useRefActivation } from "#web/features/repository-refs/hooks/use-ref-activation";
 import { useRepositoryRefs } from "#web/features/repository-refs/hooks/use-repository-refs";

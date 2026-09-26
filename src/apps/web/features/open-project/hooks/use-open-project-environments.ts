@@ -1,6 +1,6 @@
 import { IconDeviceLaptop } from "@tabler/icons-react";
 import { useMemo } from "react";
-import type { OpenProjectEnvironment } from "#web/features/open-project/open-project.contract";
+import type { OpenProjectEnvironment } from "#web/features/open-project/open-project-model";
 import { localEnvironment } from "#web/features/project-navigation/local-environment";
 import { useRepositoryCatalog } from "#web/features/repository-catalog/hooks/use-repository-catalog";
 import { useEnvironment } from "#web/platform/query/environment-context";

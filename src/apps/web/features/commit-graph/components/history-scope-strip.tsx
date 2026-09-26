@@ -3,7 +3,7 @@ import type {
   RepositoryRefTarget,
 } from "@rebase/contracts";
 import { CommitRefPill } from "#web/features/commit-graph/components/commit-ref-labels";
-import type { HistoryScope } from "#web/features/commit-graph/history-scope.contract";
+import type { HistoryScope } from "#web/features/commit-graph/scope/history-scope-model";
 
 export function HistoryScopeStrip({
   onRemove,

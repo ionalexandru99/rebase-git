@@ -7,7 +7,7 @@ import {
   type BranchesSidebarTreeOptions,
   localBranchesSectionId,
   tagsSectionId,
-} from "#web/features/branches-sidebar/branches-sidebar.contract";
+} from "#web/features/branches-sidebar/branches-sidebar-model";
 import { buildBranchTree } from "#web/features/branches-sidebar/tree/branch-tree";
 import { activeHead } from "#web/features/repository-refs/activate-repository-ref";
 

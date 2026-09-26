@@ -4,9 +4,9 @@ import type {
   CommitCommandHandlers,
   GraphCommandContext,
   GraphCommandDefinition,
-} from "#web/features/commit-commands/graph-command.contract";
+} from "#web/features/commit-commands/graph-command";
 import { useGraphCommands } from "#web/features/commit-commands/use-graph-commands";
-import type { RepositoryHistoryReadModel } from "#web/features/repository-history/repository-history-reader.contract";
+import type { RepositoryHistoryReadModel } from "#web/features/repository-history/repository-history-reader";
 import { useRepositoryScope } from "#web/features/repository-scope/repository-scope-provider";
 
 export function useCommitGraphCommands({

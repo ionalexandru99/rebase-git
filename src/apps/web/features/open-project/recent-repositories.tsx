@@ -1,5 +1,5 @@
 import type { JSX } from "react";
-import type { OpenProjectRepository } from "#web/features/open-project/open-project.contract";
+import type { OpenProjectRepository } from "#web/features/open-project/open-project-model";
 import {
   formatLastOpened,
   type OpenProjectRepositoryItem,

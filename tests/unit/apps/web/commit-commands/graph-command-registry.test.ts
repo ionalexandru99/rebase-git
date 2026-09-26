@@ -5,7 +5,7 @@ import type {
   CommitCommandHandlers,
   GraphCommandContext,
   GraphCommandDefinition,
-} from "#web/features/commit-commands/graph-command.contract";
+} from "#web/features/commit-commands/graph-command";
 import { createCommandRegistry } from "#web/platform/menu-commands/menu-command";
 
 const context: GraphCommandContext = {

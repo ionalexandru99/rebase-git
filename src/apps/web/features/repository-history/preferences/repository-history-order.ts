@@ -1,8 +1,8 @@
-import type { RepositoryHistoryQuery } from "#web/features/repository-history/repository-history-reader.contract";
+import type { RepositoryHistoryQuery } from "#web/features/repository-history/repository-history-reader";
 
 type RepositoryHistoryOrder = RepositoryHistoryQuery["order"];
 
-interface RepositoryHistoryIdentity {
+export interface RepositoryHistoryIdentity {
   readonly environmentId: string;
   readonly repositoryId: string;
 }

@@ -5,7 +5,7 @@ import type {
   RepositoryHistoryFetchCommands,
   RepositoryHistoryObservation,
   RepositoryHistorySnapshot,
-} from "#web/features/repository-history/repository-history-reader.contract";
+} from "#web/features/repository-history/repository-history-reader";
 import { usePulling } from "#web/features/repository-pull/hooks/use-pulling";
 import { createPullBranchCommand } from "#web/features/repository-pull/pull-branch-command";
 import { describePullFailure } from "#web/features/repository-pull/repository-pull-messages";

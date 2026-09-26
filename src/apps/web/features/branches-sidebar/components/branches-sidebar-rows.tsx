@@ -24,14 +24,14 @@ import type {
   BranchesSidebarFolderRow,
   BranchesSidebarRefRow,
   BranchesSidebarSectionRow,
-} from "#web/features/branches-sidebar/branches-sidebar.contract";
+} from "#web/features/branches-sidebar/branches-sidebar-model";
 import {
   localBranchesSectionId,
   tagsSectionId,
-} from "#web/features/branches-sidebar/branches-sidebar.contract";
+} from "#web/features/branches-sidebar/branches-sidebar-model";
 import { UpstreamIndicator } from "#web/features/branches-sidebar/components/upstream-indicator";
 import { RefCommandItems } from "#web/features/ref-commands/components/ref-command-items";
-import type { RefCommandDefinition } from "#web/features/ref-commands/ref-command.contract";
+import type { RefCommandDefinition } from "#web/features/ref-commands/ref-command";
 
 export function rowElementId(rowId: string): string {
   return `branches-row-${rowId}`;

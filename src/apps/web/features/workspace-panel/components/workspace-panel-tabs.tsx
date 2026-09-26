@@ -5,7 +5,7 @@ import { Tabs, TabsContent, TabsList } from "#web/components/ui/tabs";
 import { WorkspacePanelEmptyState } from "#web/features/workspace-panel/components/workspace-panel-empty-state";
 import { WorkspacePanelLauncher } from "#web/features/workspace-panel/components/workspace-panel-launcher";
 import { WorkspacePanelTab } from "#web/features/workspace-panel/components/workspace-panel-tab";
-import type { WorkspacePanelKind } from "#web/features/workspace-panel/workspace-panel.contract";
+import type { WorkspacePanelKind } from "#web/features/workspace-panel/workspace-panel-model";
 import { useWorkspacePanel } from "#web/features/workspace-panel/workspace-panel-provider";
 import { PanelSessionTarget } from "#web/features/workspace-panel/workspace-panel-sessions";
 import { isWorkspacePanelKind } from "#web/features/workspace-panel/workspace-panel-state";
