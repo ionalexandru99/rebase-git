@@ -277,6 +277,27 @@ describe("operation recovery toast", () => {
     );
     expect(f.read).toHaveBeenCalledOnce();
   });
+
+  it("forgets a completed operation once another operation starts", async () => {
+    const f = await liveFixture(readyToContinue());
+    f.execute.mockImplementation(() => idle());
+    await page.getByRole("button", { name: "Continue rebase" }).click();
+    await expect
+      .element(page.getByRole("heading", { name: "Rebase completed" }))
+      .toBeVisible();
+
+    f.set(operation({ kind: "merge", progress: null }));
+    f.change("Index");
+    await expect
+      .element(page.getByRole("button", { name: "Review conflicts" }))
+      .toBeVisible();
+    f.set(idle());
+    f.change("Index");
+
+    await expect
+      .element(page.getByRole("region", { name: "Git operation" }))
+      .not.toBeInTheDocument();
+  });
 });
 
 function readyToContinue() {

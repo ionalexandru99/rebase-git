@@ -23,12 +23,14 @@ export function OperationRecoveryNotice({
   readonly repositoryName: string;
 }) {
   const scope = useRepositoryScope();
-  const status = useOperationStatus(scope);
+  const status = useOperationStatus(scope, { polling: true });
   const action = useOperationAction(scope);
   const panel = useWorkspacePanel();
   const [completed, setCompleted] = useState<CompletedOperation | null>(null);
-  if (scope === undefined) return null;
   const operation = status.operation;
+  if (completed !== null && operation !== null && operation.kind !== "idle")
+    setCompleted(null);
+  if (scope === undefined) return null;
   const connected = scope.connected;
 
   const execute = (choice: OperationAction, revision: string) => {

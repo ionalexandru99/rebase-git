@@ -1,6 +1,7 @@
-import { QueryClient } from "@tanstack/react-query";
+import { focusManager, QueryClient } from "@tanstack/react-query";
 
 export function createEnvironmentQueryClient() {
+  focusManager.setEventListener(listenForWindowFocus);
   return new QueryClient({
     defaultOptions: {
       queries: {
@@ -14,4 +15,15 @@ export function createEnvironmentQueryClient() {
       },
     },
   });
+}
+
+function listenForWindowFocus(onFocus: () => void) {
+  if (typeof window === "undefined") return undefined;
+  const listener = () => onFocus();
+  window.addEventListener("visibilitychange", listener);
+  window.addEventListener("focus", listener);
+  return () => {
+    window.removeEventListener("visibilitychange", listener);
+    window.removeEventListener("focus", listener);
+  };
 }

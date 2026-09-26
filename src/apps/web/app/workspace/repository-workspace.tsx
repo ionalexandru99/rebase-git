@@ -127,7 +127,10 @@ function RepositoryWorkspaceContent({
       ])}
     >
       <RefCommands.Contribute commands={pull.commands}>
-        <OperationRecoveryNotice repositoryName={repositoryName} />
+        <OperationRecoveryNotice
+          key={activeWorktreePath}
+          repositoryName={repositoryName}
+        />
         <PullNotice pull={pull} />
         <PushNotice push={push} />
         <CommitInspectionBridge connected={connected}>

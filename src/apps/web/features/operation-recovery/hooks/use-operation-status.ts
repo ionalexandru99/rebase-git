@@ -21,8 +21,9 @@ export interface OperationStatus {
 
 export function useOperationStatus(
   scope: OperationScope | undefined,
+  { polling = false }: { readonly polling?: boolean } = {},
 ): OperationStatus {
-  const query = useOperation(scope);
+  const query = useOperation(scope, polling);
   const disconnectedAt = useDisconnectedAt();
   const busy =
     useIsMutating({

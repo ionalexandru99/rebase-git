@@ -13,14 +13,17 @@ import { useEnvironment } from "#web-ui/platform/query/environment-context";
 
 const operationRefreshMilliseconds = 10_000;
 
-export function useOperation(scope: OperationScope | undefined) {
+export function useOperation(
+  scope: OperationScope | undefined,
+  polling: boolean,
+) {
   return useEnvironmentQuery(
     RepositoryOperationsHttpApi.read,
     scope === undefined ? skipToken : operationScope(scope),
     {
       changes: "index",
       refetchOnWindowFocus: "always",
-      refetchInterval: operationRefreshMilliseconds,
+      ...(polling ? { refetchInterval: operationRefreshMilliseconds } : {}),
     },
   );
 }
