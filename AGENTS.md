@@ -29,6 +29,9 @@ The application should also be able to connect to any remote environment via SSH
 - Windows file watchers deliver late `change` notifications for directory timestamps, including writes made before the watcher started. Treat a `change` on a directory that has its own watcher as noise, and do not assert that a watcher never reports an unrelated change kind unless the adapter filters that noise.
 - Fixture file names must be valid on Windows: no `"`, `:`, `*`, `?`, `<`, `>`, `|`, or trailing spaces and dots. Skip a case on `win32` only when it tests a name that Windows cannot create.
 - Paths can contain spaces and non-ASCII characters. Pass them as separate process arguments, never inside a shell string.
+- Windows file operations and process spawns cost 10 to 100 times more than on Linux. A test that writes hundreds of files or spawns dozens of Git processes exceeds the shared budget there even when it takes 200 ms on Linux. Build large repository states with `fastImport` from `#tests-support/git` and keep Git invocations per test to a handful.
+- Create every fixture repository, including clones, through the helpers in `#tests-support/git` so `core.autocrlf` is off. Never compare a checkout's file contents with a literal unless the fixture guarantees LF.
+- A test that fails intermittently is a bug. Do not rerun the pipeline to get green; find the cause (timing budget, watcher timing, shared state, ordering, platform) and fix it in the same PR or a dedicated one. Wait for conditions, never for durations: poll or subscribe for the observable outcome and let the shared project timeout be the only upper bound. No sleeps, private timers or per-call timeouts in tests or product code.
 
 ## Performance
 
