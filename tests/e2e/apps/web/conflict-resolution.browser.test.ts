@@ -89,9 +89,21 @@ test("resolves a paused rebase line by line and continues it", async ({
     }
 
     const operation = page.getByRole("region", { name: "Operation" });
-    await operation.getByRole("button", { name: "Continue rebase" }).click();
+    const continueRebase = operation.getByRole("button", {
+      name: "Continue rebase",
+    });
+    const stale = operation.getByRole("alert").filter({
+      hasText: "Git state changed",
+    });
+    await expect(operation.getByRole("heading")).toContainText(
+      "ready to continue",
+    );
+    await continueRebase.click();
     await expect
-      .poll(() => git(repositoryPath, "status", "--porcelain"))
+      .poll(async () => {
+        if (await stale.isVisible()) await continueRebase.click();
+        return git(repositoryPath, "status", "--porcelain");
+      })
       .toBe("");
     await expect
       .poll(() => git(repositoryPath, "log", "-1", "--format=%s"))
