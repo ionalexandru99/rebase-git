@@ -13,10 +13,8 @@ import { ErrorNotification } from "#web/features/notifications/components/error-
 import { PersistentNotification } from "#web/features/notifications/components/persistent-notification";
 import { NotificationsProvider } from "#web/features/notifications/notifications";
 import { OperationRecoveryNotice } from "#web/features/operation-recovery/components/operation-recovery-notice";
-import {
-  type OperationRecoveryState,
-  OperationRecoveryToast,
-} from "#web/features/operation-recovery/components/operation-recovery-toast";
+import { OperationRecoveryToast } from "#web/features/operation-recovery/components/operation-recovery-toast";
+import type { OperationRecoveryState } from "#web/features/operation-recovery/hooks/use-operation-recovery";
 import { RepositoryScopeProvider } from "#web/features/repository-scope/repository-scope-provider";
 import { WorkspacePanel } from "#web/features/workspace-panel/workspace-panel";
 import type { EnvironmentChangeListener } from "#web/platform/environment/environment-protocol.contract";

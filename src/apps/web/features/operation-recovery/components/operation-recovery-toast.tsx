@@ -1,8 +1,4 @@
-import type {
-  OperationAction,
-  OperationKind,
-  RepositoryOperation,
-} from "@rebase/contracts";
+import type { OperationAction } from "@rebase/contracts";
 import {
   IconChevronDown,
   IconChevronUp,
@@ -12,28 +8,11 @@ import { useRef, useState } from "react";
 import { Button } from "#web/components/ui/button";
 import { OperationActionsMenu } from "#web/features/operation-recovery/components/operation-actions-menu";
 import { OperationConfirmation } from "#web/features/operation-recovery/components/operation-confirmation";
-
-export interface OperationRecoveryState {
-  readonly operation: RepositoryOperation | null;
-  readonly connected: boolean;
-  readonly checking: boolean;
-  readonly busy: boolean;
-  readonly error: string | null;
-  readonly completed: {
-    readonly kind: OperationKind;
-    readonly aborted: boolean;
-  } | null;
-}
-
-const labels: Record<OperationKind, string> = {
-  idle: "Git operation",
-  merge: "Merge",
-  rebase: "Rebase",
-  "cherry-pick": "Cherry-pick",
-  revert: "Revert",
-  am: "Patch application",
-  unknown: "Unknown Git operation",
-};
+import type { OperationRecoveryState } from "#web/features/operation-recovery/hooks/use-operation-recovery";
+import {
+  operationHeading,
+  operationLabel,
+} from "#web/features/operation-recovery/operation-heading";
 
 export function OperationRecoveryToast({
   state,
@@ -67,29 +46,14 @@ export function OperationRecoveryToast({
     return null;
   if (operation === null && state.error === null) return null;
   const active = operation !== null && operation.kind !== "idle";
-  const label = labels[state.completed?.kind ?? operation?.kind ?? "unknown"];
+  const label = operationLabel(state);
   const unavailable =
     !state.connected || state.checking || state.busy || !writable;
-  const progress = operation?.progress
-    ? ` · ${operation.progress.current}/${operation.progress.total}`
-    : "";
   const conflicts = operation?.unresolvedPaths.length ?? 0;
   const ready = operation?.actions.find(
     (action) => action.action === "continue",
   );
-  const heading = state.completed
-    ? `${label} ${state.completed.aborted ? "aborted" : "completed"}`
-    : !state.connected
-      ? `${label} · Connection lost`
-      : state.busy
-        ? `${label} · Working…`
-        : state.checking
-          ? "Checking Git state…"
-          : operation?.phase === "edit"
-            ? `${label} · Edit commit${progress}`
-            : conflicts
-              ? `${label} · ${conflicts} ${conflicts === 1 ? "conflict" : "conflicts"}${progress}`
-              : `${label}${ready?.enabled ? " ready to continue" : " paused"}${progress}`;
+  const heading = operationHeading(state);
   const openChanges = () => {
     setCollapsed(true);
     review();

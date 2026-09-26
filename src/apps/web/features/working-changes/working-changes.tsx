@@ -5,6 +5,7 @@ import {
   ResizablePanel,
   ResizablePanelGroup,
 } from "#web/components/ui/resizable";
+import { OperationHeader } from "#web/features/operation-recovery/components/operation-header";
 import { ChangeFileTree } from "#web/features/working-changes/components/change-file-tree";
 import { CommitEditor } from "#web/features/working-changes/components/commit-editor";
 import {
@@ -44,6 +45,7 @@ export function WorkingChanges({
       aria-label="Working changes"
       aria-busy={view.busy}
     >
+      <OperationHeader scope={target} />
       {view.error ? (
         <div
           role="alert"
