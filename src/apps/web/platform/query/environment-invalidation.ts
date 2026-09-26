@@ -1,5 +1,9 @@
 import type { RepositoryChangeKind } from "@rebase/contracts";
-import { useQueryClient } from "@tanstack/react-query";
+import {
+  type Query,
+  type QueryClient,
+  useQueryClient,
+} from "@tanstack/react-query";
 import { useEffect, useRef } from "react";
 import type { EnvironmentChanges } from "#web/platform/environment/environment-protocol.contract";
 import type { EnvironmentQueryMeta } from "#web/platform/query/environment-query-meta";
@@ -10,13 +14,7 @@ export function useEnvironmentInvalidation(
 ) {
   const queryClient = useQueryClient();
   useEffect(
-    () =>
-      changes.subscribe((repositoryIds, kind) => {
-        void queryClient.invalidateQueries({
-          predicate: (query) =>
-            invalidatedByChange(query.meta, repositoryIds, kind),
-        });
-      }),
+    () => subscribeChangeInvalidation(queryClient, changes),
     [changes, queryClient],
   );
   const wasConnected = useRef(connected);
@@ -27,6 +25,36 @@ export function useEnvironmentInvalidation(
       });
     wasConnected.current = connected;
   }, [connected, queryClient]);
+}
+
+export function subscribeChangeInvalidation(
+  queryClient: QueryClient,
+  changes: EnvironmentChanges,
+) {
+  const cache = queryClient.getQueryCache();
+  const changedWhileFetching = new WeakSet<Query>();
+  const refetchAfterSettle = cache.subscribe(({ query }) => {
+    if (
+      query.state.fetchStatus === "fetching" ||
+      !changedWhileFetching.delete(query)
+    )
+      return;
+    void queryClient.invalidateQueries(
+      { queryKey: query.queryKey, exact: true },
+      { cancelRefetch: false },
+    );
+  });
+  const invalidateChanged = changes.subscribe((repositoryIds, kind) => {
+    const predicate = (query: Query) =>
+      invalidatedByChange(query.meta, repositoryIds, kind);
+    for (const query of cache.findAll({ predicate, fetchStatus: "fetching" }))
+      changedWhileFetching.add(query);
+    void queryClient.invalidateQueries({ predicate }, { cancelRefetch: false });
+  });
+  return () => {
+    invalidateChanged();
+    refetchAfterSettle();
+  };
 }
 
 export function invalidatedByChange(

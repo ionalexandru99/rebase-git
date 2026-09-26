@@ -201,6 +201,50 @@ describe("browser repository freshness", () => {
       reader.close();
     }
   });
+
+  it("synchronizes once more after a failed synchronization when movements arrived during it", async () => {
+    const repositoryId = crypto.randomUUID();
+    const data = fixture(repositoryId);
+    let fail: ((error: Error) => void) | undefined;
+    const failing = new Promise<never>((_resolve, reject) => {
+      fail = reject;
+    });
+    data.synchronize.mockImplementation(async (request, accept) => {
+      const attempt = data.synchronize.mock.calls.length;
+      if (attempt === 2) await failing;
+      await accept(
+        batch(repositoryId, request.basis === undefined ? [commit()] : []),
+      );
+      return 1;
+    });
+    const reader = createBrowserRepositoryHistoryReader({
+      environmentId: crypto.randomUUID(),
+      repositoryId,
+      gateway: data.gateway,
+    });
+    try {
+      await reader.read({ limit: 100, order: "topological", roots: [ref()] });
+      await vi.waitFor(() =>
+        expect(reader.getSnapshot().synchronization).toBe("complete"),
+      );
+      data.publish({ ...fresh, revision: 1 });
+      await vi.waitFor(() => expect(data.synchronize).toHaveBeenCalledTimes(2));
+      data.publish({ ...fresh, revision: 2 });
+      data.publish({ ...fresh, revision: 3 });
+      await vi.waitFor(() =>
+        expect(reader.getSnapshot().freshness?.revision).toBe(3),
+      );
+      expect(data.synchronize).toHaveBeenCalledTimes(2);
+      fail?.(new Error("Synchronization failed"));
+      await vi.waitFor(() => expect(data.synchronize).toHaveBeenCalledTimes(3));
+      await vi.waitFor(() =>
+        expect(reader.getSnapshot().synchronization).toBe("complete"),
+      );
+      expect(data.synchronize).toHaveBeenCalledTimes(3);
+    } finally {
+      reader.close();
+    }
+  });
 });
 
 function fixture(repositoryId: string) {

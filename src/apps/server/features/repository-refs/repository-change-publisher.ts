@@ -13,7 +13,6 @@ export interface RepositoryChangePublisher {
 }
 
 const maximumWatchedRepositories = 32;
-const publishDelayMilliseconds = 150;
 
 export function acquireRepositoryChangePublisher(
   git: GitCommandRunner,
@@ -87,7 +86,6 @@ function publishRepositoryChanges(
   return Effect.gen(function* () {
     while (true) {
       yield* Queue.take(pending);
-      yield* Effect.sleep(publishDelayMilliseconds);
       yield* Queue.clear(pending);
       const batch = [...changed];
       changed.clear();

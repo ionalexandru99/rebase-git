@@ -191,7 +191,6 @@ export function acquireWatchedRepository(
     yield* Effect.gen(function* () {
       while (true) {
         yield* Queue.take(changes);
-        yield* Effect.sleep(50);
         yield* Queue.clear(changes);
         freshness = { ...freshness, revision: freshness.revision + 1 };
         publish();

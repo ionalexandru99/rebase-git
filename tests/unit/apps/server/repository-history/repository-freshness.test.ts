@@ -58,10 +58,10 @@ describe("repository freshness", () => {
         expect(watch.close).not.toHaveBeenCalled();
         const beforeChange = states.at(-1)?.revision ?? 0;
         watch.change("Index");
-        yield* TestClock.adjust(50);
+        yield* TestClock.adjust(0);
         expect(states.at(-1)?.revision ?? 0).toBe(beforeChange);
         watch.change("Refs");
-        yield* TestClock.adjust(50);
+        yield* TestClock.adjust(0);
         expect(states.at(-1)?.revision).toBeGreaterThan(beforeChange);
         yield* reader;
         expect(watch.close).toHaveBeenCalledOnce();
