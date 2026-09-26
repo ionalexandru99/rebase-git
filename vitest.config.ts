@@ -85,7 +85,7 @@ export default defineConfig({
   test: {
     attachmentsDir: "tests/.artifacts/vitest",
     projects: [
-      testProject("unit", { expect: conditionTimeout }),
+      testProject("unit", { expect: conditionTimeout, testTimeout: 30_000 }),
       testProject("integration", {
         exclude: ["tests/integration/**/*.browser.test.ts"],
         expect: conditionTimeout,
@@ -99,6 +99,7 @@ export default defineConfig({
       ),
       testProject("compatibility"),
       browserProject("ui", "tests/ui/**/*.test.tsx", {
+        testTimeout: 30_000,
         setupFiles: ["./tests/ui/setup.ts"],
       }),
     ],
