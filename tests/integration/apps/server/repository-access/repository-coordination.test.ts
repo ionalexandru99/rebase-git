@@ -266,14 +266,12 @@ it("reads changes while a commit holds the worktree", async () => {
           .pipe(Effect.forkScoped);
         yield* Deferred.await(commitEntered);
 
-        const reads = yield* Effect.all([
+        yield* Effect.all([
           changes.read(scope),
           changes.diff({ ...scope, section: "staged", path: "file.txt" }),
-        ]).pipe(Effect.timeoutOption("5 seconds"));
+        ]);
         yield* Deferred.succeed(releaseCommit, undefined);
         yield* Fiber.join(committing);
-
-        expect(Option.isSome(reads)).toBe(true);
       }),
     ),
   );

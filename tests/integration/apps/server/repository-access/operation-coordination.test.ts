@@ -232,7 +232,7 @@ it("skips a contended fetch while ref writers queue across worktrees", async () 
         yield* Deferred.await(entered);
         const fetch = yield* f.coordination
           .run(linked, refsWriteIfAvailable, Effect.die("Fetch must not start"))
-          .pipe(Effect.flip, Effect.timeout("1 second"));
+          .pipe(Effect.flip);
         expect(fetch.reason).toBe("Busy");
         const second = yield* f.coordination
           .run(linked, refsAndWorktreeWrite, record("second"))

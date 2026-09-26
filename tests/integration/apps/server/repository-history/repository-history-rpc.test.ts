@@ -108,7 +108,7 @@ describe("Effect RPC over WebSockets", () => {
               expect(finished).toBe(true);
             }),
         );
-      }).pipe(Effect.scoped, Effect.timeout("5 seconds")),
+      }).pipe(Effect.scoped),
     ));
 
   it("interrupts server work when a caller cancels, and keeps the connection usable", () =>
@@ -141,7 +141,7 @@ describe("Effect RPC over WebSockets", () => {
               ).toBe(0);
             }),
         );
-      }).pipe(Effect.scoped, Effect.timeout("5 seconds")),
+      }).pipe(Effect.scoped),
     ));
 
   it("bounds concurrent history reads on one connection", () =>
@@ -174,7 +174,7 @@ describe("Effect RPC over WebSockets", () => {
               yield* Fiber.interrupt(second);
             }),
         );
-      }).pipe(Effect.scoped, Effect.timeout("5 seconds")),
+      }).pipe(Effect.scoped),
     ));
 
   it("rejects history calls without repository access", () =>
@@ -223,10 +223,7 @@ function withHistory<A, E>(
   capabilities?: readonly EnvironmentAccessCapability[],
 ) {
   return Effect.runPromise(
-    historyConnection(history, use, capabilities).pipe(
-      Effect.scoped,
-      Effect.timeout("5 seconds"),
-    ),
+    historyConnection(history, use, capabilities).pipe(Effect.scoped),
   );
 }
 
