@@ -18,15 +18,14 @@ export function forgetRepositoryRefs(
   environmentId: string,
   logicalRepositoryId: string,
 ) {
-  queryClient.removeQueries({
-    queryKey: repositoryRefsKey(environmentId, logicalRepositoryId),
-    type: "inactive",
-  });
+  forget(queryClient, repositoryRefsKey(environmentId, logicalRepositoryId));
 }
 
 export function forgetAllRepositoryRefs(queryClient: QueryClient) {
-  queryClient.removeQueries({
-    queryKey: [repositoryRefsRoot],
-    type: "inactive",
-  });
+  forget(queryClient, [repositoryRefsRoot]);
+}
+
+function forget(queryClient: QueryClient, queryKey: readonly unknown[]) {
+  queryClient.removeQueries({ queryKey, type: "inactive" });
+  void queryClient.resetQueries({ queryKey });
 }

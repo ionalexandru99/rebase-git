@@ -94,6 +94,37 @@ describe("repository refs", () => {
       .toHaveTextContent("On feature");
   });
 
+  it("explains a refs read that ends without an answer", async () => {
+    const reads = queuedReads();
+    const screen = await renderRefs(await refsEnvironment(reads.next));
+
+    await reads.fail(new Error("connection closed"));
+
+    await expect
+      .element(screen.getByRole("alert"))
+      .toHaveTextContent("The Environment did not answer.");
+  });
+
+  it("ignores a second checkout while one is in flight", async () => {
+    const reads = queuedReads();
+    const checkout = vi.fn(
+      (): Promise<RepositoryCheckedOut> => new Promise(() => undefined),
+    );
+    const screen = await renderRefs(
+      await refsEnvironment(reads.next, checkout),
+    );
+    await reads.resolve(refs("main"));
+    await expect
+      .element(screen.getByRole("status"))
+      .toHaveTextContent("On main");
+
+    await screen.getByRole("button", { name: "Checkout feature" }).click();
+    await vi.waitFor(() => expect(checkout).toHaveBeenCalledOnce());
+    await screen.getByRole("button", { name: "Checkout release" }).click();
+
+    expect(checkout).toHaveBeenCalledOnce();
+  });
+
   it("switches to the worktree that holds a branch instead of checking it out", async () => {
     const reads = queuedReads();
     const checkout = vi.fn(
@@ -122,7 +153,7 @@ function Refs({
   readonly switchWorktree: (worktreePath: string) => void;
 }) {
   const repositoryRefs = useRepositoryRefs(repositoryId, repositoryId);
-  const activation = useRefActivation(repositoryRefs.refs, switchWorktree);
+  const activation = useRefActivation(repositoryRefs, switchWorktree);
   const head = repositoryRefs.refs?.worktrees.find(
     ({ path }) => path === mainPath,
   )?.head.branch;
@@ -131,6 +162,9 @@ function Refs({
       <p role="status">{head === undefined ? "Loading" : `On ${head}`}</p>
       {activation.error === null ? null : (
         <p role="alert">{activation.error}</p>
+      )}
+      {repositoryRefs.error === null ? null : (
+        <p role="alert">{repositoryRefs.error}</p>
       )}
       {["feature", "release", "topic"].map((name) => (
         <button
@@ -192,17 +226,20 @@ async function refsEnvironment(
 }
 
 function queuedReads() {
-  const waiting: ((refs: RepositoryRefs) => void)[] = [];
+  const waiting: PromiseWithResolvers<RepositoryRefs>[] = [];
+  const settle = async () => {
+    await vi.waitFor(() => expect(waiting.length).toBeGreaterThan(0));
+    return waiting.shift();
+  };
   return {
-    next: () =>
-      new Promise<RepositoryRefs>((resolve) => {
-        waiting.push(resolve);
-      }),
-    pending: () => waiting.length,
-    resolve: async (refs: RepositoryRefs) => {
-      await vi.waitFor(() => expect(waiting.length).toBeGreaterThan(0));
-      waiting.shift()?.(refs);
+    next: () => {
+      const read = Promise.withResolvers<RepositoryRefs>();
+      waiting.push(read);
+      return read.promise;
     },
+    pending: () => waiting.length,
+    resolve: async (refs: RepositoryRefs) => (await settle())?.resolve(refs),
+    fail: async (error: Error) => (await settle())?.reject(error),
   };
 }
 

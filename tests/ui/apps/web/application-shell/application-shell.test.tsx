@@ -238,6 +238,7 @@ async function renderRepositoryWorkspace() {
         activeWorktreePath="/repo"
         environmentId={undefined}
         history={undefined}
+        logicalRepositoryId="00000000-0000-4000-8000-000000000001"
         repositoryId="00000000-0000-4000-8000-000000000001"
         repositoryName="rebase-test"
         switchWorktree={() => undefined}

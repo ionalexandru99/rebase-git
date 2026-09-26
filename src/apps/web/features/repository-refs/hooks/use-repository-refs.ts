@@ -1,6 +1,10 @@
 import type { EnvironmentRpcClient, RepositoryRefs } from "@rebase/contracts";
 import { environmentResponseError } from "@rebase/environment-client";
-import { useQuery } from "@tanstack/react-query";
+import {
+  type QueryClient,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
 import { useCallback } from "react";
 import { describeRefsReadFailure } from "#web/features/repository-refs/refs-messages";
 import { repositoryRefsKey } from "#web/features/repository-refs/repository-refs-query";
@@ -23,13 +27,15 @@ export function useRepositoryRefs(
   logicalRepositoryId: string | undefined,
 ): RepositoryRefsRead {
   const { environmentId, rpc } = useEnvironment();
+  const queryClient = useQueryClient();
+  const queryKey = repositoryRefsKey(environmentId, logicalRepositoryId);
   const query = useQuery<
     RepositoryRefs,
     RepositoryRefsReadFailure,
     RepositoryRefs,
     ReturnType<typeof repositoryRefsKey>
   >({
-    queryKey: repositoryRefsKey(environmentId, logicalRepositoryId),
+    queryKey,
     queryFn: ({ signal }) => readRefs(rpc, repositoryId, signal),
     enabled:
       rpc !== undefined &&
@@ -54,7 +60,9 @@ export function useRepositoryRefs(
   const retry = useCallback(() => void refetch(), [refetch]);
   return {
     refs: query.data,
-    restored: query.data !== undefined && !query.isFetched,
+    restored:
+      query.data !== undefined &&
+      !confirmedLive(queryClient, queryKey, query.dataUpdatedAt),
     loading:
       query.data === undefined && !query.isError && repositoryId !== undefined,
     error: query.isError ? describeRefsReadFailure(query.error) : null,
@@ -70,4 +78,15 @@ function readRefs(
   if (rpc === undefined || repositoryId === undefined)
     return Promise.reject(environmentResponseError("WebSocket"));
   return readRepositoryRefs(rpc, repositoryId, signal);
+}
+
+function confirmedLive(
+  queryClient: QueryClient,
+  queryKey: ReturnType<typeof repositoryRefsKey>,
+  dataUpdatedAt: number,
+) {
+  return (
+    dataUpdatedAt > 0 &&
+    (queryClient.getQueryState(queryKey)?.dataUpdateCount ?? 0) > 0
+  );
 }

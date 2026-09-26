@@ -21,6 +21,7 @@ import {
 import { fakeRpc } from "#tests-ui/runtime/fake-rpc";
 import { render } from "#tests-ui/runtime/render";
 import { useCreateBranchHere } from "#web/features/branch-management/index";
+import type { BranchRename } from "#web/features/branches-sidebar/branch-editing/hooks/use-branch-editing";
 import {
   CommitCommandMenu,
   GraphCommands,
@@ -88,7 +89,8 @@ describe("branch editing", () => {
 
   it("renames the active branch with F2 and cancels with Escape", async () => {
     const environment = await branchEnvironment();
-    const screen = await renderBranches(environment);
+    const renamed = vi.fn();
+    const screen = await renderBranches(environment, undefined, renamed);
     const tree = screen.getByRole("tree", { name: "Branches" });
     await tree.getByRole("treeitem", { name: "feature/spike" }).click();
 
@@ -101,16 +103,34 @@ describe("branch editing", () => {
     await expect.element(name).not.toBeInTheDocument();
     await expect.element(tree).toHaveFocus();
 
+    environment.rejectNext("rename", {
+      _tag: "BranchMoved",
+      name: "feature/spike",
+    });
     await userEvent.keyboard("{F2}");
     await userEvent.keyboard("{Control>}a{/Control}spike/refs{Enter}");
-    await vi.waitFor(() =>
-      expect(environment.requested).toHaveBeenCalledWith("rename", {
-        ...scope,
-        expectedTarget: spike,
-        name: "feature/spike",
-        newName: "spike/refs",
-      }),
-    );
+    await expect
+      .element(screen.getByRole("alert"))
+      .toHaveTextContent("feature/spike changed since it was shown.");
+    expect(renamed).not.toHaveBeenCalled();
+
+    await userEvent.keyboard("{Enter}");
+    await expect
+      .element(tree.getByRole("treeitem", { name: "spike/refs" }))
+      .toBeVisible();
+    await expect
+      .element(tree.getByRole("treeitem", { name: "feature/spike" }))
+      .not.toBeInTheDocument();
+    expect(environment.requested).toHaveBeenLastCalledWith("rename", {
+      ...scope,
+      expectedTarget: spike,
+      name: "feature/spike",
+      newName: "spike/refs",
+    });
+    expect(renamed).toHaveBeenCalledExactlyOnceWith({
+      name: "feature/spike",
+      newName: "spike/refs",
+    });
   });
 
   it("deletes a merged branch at once and restores it with Undo", async () => {
@@ -126,7 +146,10 @@ describe("branch editing", () => {
         local: { name: "feature/merged", target: main },
       }),
     );
+    const merged = screen.getByRole("treeitem", { name: "feature/merged" });
+    await expect.element(merged).not.toBeInTheDocument();
     await screen.getByRole("button", { name: "Undo" }).click();
+    await expect.element(merged).toBeVisible();
     await vi.waitFor(() =>
       expect(environment.requested).toHaveBeenCalledWith("create", {
         ...scope,
@@ -318,13 +341,17 @@ async function branchEnvironment() {
 function renderBranches(
   environment: Awaited<ReturnType<typeof branchEnvironment>>,
   createBranchAt?: string,
+  onBranchRenamed: (rename: BranchRename) => void = () => undefined,
 ) {
   return render(
     <NotificationsProvider>
       <RepositoryScopeProvider
         scope={repositoryScope({ ...scope, logicalRepositoryId: repositoryId })}
       >
-        <BranchWorkspace createBranchAt={createBranchAt} />
+        <BranchWorkspace
+          createBranchAt={createBranchAt}
+          onBranchRenamed={onBranchRenamed}
+        />
       </RepositoryScopeProvider>
     </NotificationsProvider>,
     { environment: environment.environment },
@@ -333,11 +360,13 @@ function renderBranches(
 
 function BranchWorkspace({
   createBranchAt,
+  onBranchRenamed,
 }: {
   readonly createBranchAt: string | undefined;
+  readonly onBranchRenamed: (rename: BranchRename) => void;
 }) {
   const repositoryRefs = useRepositoryRefs(repositoryId, repositoryId);
-  const activation = useRefActivation(repositoryRefs.refs, () => undefined);
+  const activation = useRefActivation(repositoryRefs, () => undefined);
   const creation = useCreateBranchHere();
   return (
     <GraphCommands.Contribute commands={creation.commands}>
@@ -348,6 +377,7 @@ function BranchWorkspace({
           activeWorktreePath={mainPath}
           createRequest={creation.request}
           focusRequest={0}
+          onBranchRenamed={onBranchRenamed}
           repositoryRefs={repositoryRefs}
         />
       </div>

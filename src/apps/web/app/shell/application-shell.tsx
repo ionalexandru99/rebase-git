@@ -200,8 +200,10 @@ function ApplicationShellContent({
   const selectedRepository = repositoryCatalog.repositories.find(
     (repository) => repository.id === navigation.selectedRepositoryId,
   );
+  const selectedLogicalRepositoryId =
+    selectedRepository?.logicalRepositoryId ?? selectedRepository?.id;
   const { activeWorktreePath, refs, switchWorktree, worktreePathFor } =
-    useActiveWorktree(selectedRepository);
+    useActiveWorktree(selectedRepository, selectedLogicalRepositoryId);
   const graphRepository =
     navigation.workspaceView === "repository" ? selectedRepository : undefined;
   const { history: graphHistory, open: openRepositoryHistory } =
@@ -287,7 +289,7 @@ function ApplicationShellContent({
   );
   const graphRepositoryId = graphRepository?.id;
   const graphLogicalRepositoryId =
-    graphRepository?.logicalRepositoryId ?? graphRepositoryId;
+    graphRepository === undefined ? undefined : selectedLogicalRepositoryId;
   const repositoryScope = useMemo(
     () =>
       graphRepositoryId === undefined || graphLogicalRepositoryId === undefined
@@ -391,10 +393,7 @@ function ApplicationShellContent({
                     activeWorktreePath={activeWorktreePath}
                     environmentId={historyEnvironmentId}
                     history={graphHistory}
-                    logicalRepositoryId={
-                      selectedRepository?.logicalRepositoryId ??
-                      selectedRepository?.id
-                    }
+                    logicalRepositoryId={selectedLogicalRepositoryId}
                     repositoryId={navigation.selectedRepositoryId}
                     repositoryName={selectedRepository?.name ?? "Repository"}
                     switchWorktree={switchWorktree}

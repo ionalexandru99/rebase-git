@@ -8,7 +8,7 @@ import {
   type EnvironmentResponseError,
   environmentResponseError,
 } from "@rebase/environment-client";
-import { Effect, Option, Schema, Stream } from "effect";
+import { Cause, Effect, Option, Schema, Stream } from "effect";
 import { rpcJsonReassembler } from "#web/platform/environment/rpc/environment-rpc-json";
 import { createEnvironmentRequestId } from "#web/platform/environment/websocket/environment-request-id";
 
@@ -26,6 +26,9 @@ export function readRepositoryRefs(
   return Effect.runPromise(
     readRefsPayload(rpc, repositoryId).pipe(
       Effect.flatMap((bytes) => decodeRefs(bytes, repositoryId)),
+      Effect.catchCause((cause) =>
+        Effect.fail(Option.getOrElse(Cause.findErrorOption(cause), unanswered)),
+      ),
     ),
     { signal },
   );

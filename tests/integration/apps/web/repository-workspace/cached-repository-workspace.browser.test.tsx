@@ -6,6 +6,7 @@ import {
   persistQueryClientSave,
 } from "@tanstack/react-query-persist-client";
 import { expect, it, vi } from "vite-plus/test";
+import { fakeRpc } from "#tests-ui/runtime/fake-rpc";
 import { render } from "#tests-ui/runtime/render";
 import {
   createBrowserHistoryFilterStore,
@@ -14,6 +15,7 @@ import {
 } from "#web/features/commit-graph/index";
 import { storeRepositoryHistoryPage } from "#web/features/repository-history/replica/repository-history-store";
 import { RepositoryHistoryOffline } from "#web/features/repository-history/repository-history-reader.contract";
+import { useRepositoryRefs } from "#web/features/repository-refs/index";
 import { createEnvironmentQueryClient } from "#web/platform/query/environment-query-client";
 import { createEnvironmentQueryPersistence } from "#web/platform/query/environment-query-persistence";
 import { RepositoryWorkspace } from "#web-ui/app/workspace/repository-workspace";
@@ -22,12 +24,25 @@ it("restores only persisted refs, unconfirmed, for the same protocol", async () 
   const persistence = createEnvironmentQueryPersistence();
   const refs = repositoryRefs();
   const refsKey = ["repository-refs", crypto.randomUUID(), refs.repositoryId];
+  const refsMeta = {
+    changes: "refs",
+    repositoryId: refs.repositoryId,
+    persist: true,
+  } as const;
   const saved = createEnvironmentQueryClient();
   await saved.fetchQuery({
     queryKey: refsKey,
     queryFn: async () => refs,
-    meta: { changes: "refs", repositoryId: refs.repositoryId, persist: true },
+    meta: refsMeta,
   });
+  await saved
+    .fetchQuery({
+      queryKey: refsKey,
+      queryFn: () => Promise.reject(new Error("offline")),
+      meta: refsMeta,
+      staleTime: 0,
+    })
+    .catch(() => undefined);
   await saved.fetchQuery({
     queryKey: ["operation"],
     queryFn: async () => "idle",
@@ -39,6 +54,7 @@ it("restores only persisted refs, unconfirmed, for the same protocol", async () 
   await persistQueryClientRestore({ ...persistence, queryClient: restored });
   const query = restored.getQueryCache().find({ queryKey: refsKey });
   expect(query?.state.data).toEqual(refs);
+  expect(query?.state.status).toBe("success");
   expect(query?.isFetched()).toBe(false);
   expect(query?.state.isInvalidated).toBe(true);
   expect(restored.getQueryData(["operation"])).toBeUndefined();
@@ -50,6 +66,38 @@ it("restores only persisted refs, unconfirmed, for the same protocol", async () 
     queryClient: upgraded,
   });
   expect(upgraded.getQueryData(refsKey)).toBeUndefined();
+});
+
+it("keeps restored refs unconfirmed until a live read answers", async () => {
+  const environmentId = crypto.randomUUID();
+  const refs = repositoryRefs();
+  const logicalId = refs.logicalRepositoryId ?? "";
+  const queryClient = await restoredRefs(environmentId, logicalId, refs);
+  let online = false;
+  const rpc = await fakeRpc(async () => {
+    if (!online) throw new Error("offline");
+    return refs;
+  });
+  const screen = await render(
+    <RefsProbe
+      logicalRepositoryId={logicalId}
+      repositoryId={refs.repositoryId}
+    />,
+    { environment: { environmentId, rpc }, queryClient },
+  );
+
+  await expect
+    .element(screen.getByRole("alert"))
+    .toHaveTextContent("The Environment did not answer.");
+  await expect
+    .element(screen.getByRole("status"))
+    .toHaveTextContent("Restored feature, main");
+
+  online = true;
+  await screen.getByRole("button", { name: "Retry" }).click();
+  await expect
+    .element(screen.getByRole("status"))
+    .toHaveTextContent("Live feature, main");
 });
 
 it.each(["Automatic", "Custom"] as const)(
@@ -138,6 +186,31 @@ it.each(["Automatic", "Custom"] as const)(
     );
   },
 );
+
+function RefsProbe({
+  logicalRepositoryId,
+  repositoryId,
+}: {
+  readonly logicalRepositoryId: string;
+  readonly repositoryId: string;
+}) {
+  const { error, refs, restored, retry } = useRepositoryRefs(
+    repositoryId,
+    logicalRepositoryId,
+  );
+  return (
+    <div>
+      <p role="status">
+        {restored ? "Restored" : "Live"}{" "}
+        {refs?.branches.map(({ name }) => name).join(", ")}
+      </p>
+      {error === null ? null : <p role="alert">{error}</p>}
+      <button type="button" onClick={retry}>
+        Retry
+      </button>
+    </div>
+  );
+}
 
 async function restoredRefs(
   environmentId: string,

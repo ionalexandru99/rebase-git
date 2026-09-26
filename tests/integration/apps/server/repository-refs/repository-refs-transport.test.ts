@@ -2,9 +2,7 @@ import { mkdtemp, realpath, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
-  type EnvironmentRpcClient,
   RepositoryBranchesHttpApi,
-  type RepositoryRefs,
   RepositoryRefsHttpApi,
 } from "@rebase/contracts";
 import {
@@ -151,22 +149,16 @@ describe("repository refs transport", () => {
         environmentOrigin: origin,
         getEnvironmentCredential: async () => owner.value,
       });
-      const latest = latestRefs(remembered.id);
-      const refs = latest.current;
-      session.changes.subscribe((_repositoryIds, kind) => {
-        const state = session.getSnapshot();
-        if (kind !== "Index" && state._tag === "Connected")
-          latest.reload(state.rpc);
-      });
+      const refChanges = countRefChanges(session, remembered.id);
+      const refs = () => readConnectedRefs(session, remembered.id);
       session.start();
       try {
         await expect.poll(() => session.getSnapshot()._tag).toBe("Connected");
-        const connected = session.getSnapshot();
-        if (connected._tag === "Connected") latest.reload(connected.rpc);
         await expect
-          .poll(() => refs()?.branches.map((branch) => branch.name))
+          .poll(async () => (await refs()).branches.map(({ name }) => name))
           .toEqual(["feature", "main"]);
 
+        let seen = refChanges();
         await git(repositoryPath, "branch", "added");
         await git(
           repositoryPath,
@@ -176,6 +168,7 @@ describe("repository refs transport", () => {
           "git@github.com:alex/rebase.git",
         );
         await git(repositoryPath, "tag", "v1");
+        await expect.poll(refChanges).toBeGreaterThan(seen);
         await expect.poll(refs).toMatchObject({
           branches: expect.arrayContaining([
             { name: "added", target: expect.any(String) },
@@ -189,7 +182,9 @@ describe("repository refs transport", () => {
         await git(remotePath, "branch", "fetched-branch");
         await git(remotePath, "tag", "fetched-tag");
         await git(repositoryPath, "remote", "add", "origin", remotePath);
+        seen = refChanges();
         await git(repositoryPath, "fetch", "origin", "--tags");
+        await expect.poll(refChanges).toBeGreaterThan(seen);
         await expect.poll(refs).toMatchObject({
           remoteBranches: expect.arrayContaining([
             {
@@ -203,15 +198,20 @@ describe("repository refs transport", () => {
           ]),
         });
 
+        seen = refChanges();
         await git(repositoryPath, "branch", "-D", "added");
         await git(repositoryPath, "tag", "-d", "v1");
         await git(repositoryPath, "remote", "remove", "origin");
+        await expect.poll(refChanges).toBeGreaterThan(seen);
         await expect
-          .poll(() => ({
-            branches: refs()?.branches.map((branch) => branch.name),
-            remotes: refs()?.remoteBranches,
-            tags: refs()?.tags.map((tag) => tag.name),
-          }))
+          .poll(async () => {
+            const current = await refs();
+            return {
+              branches: current.branches.map(({ name }) => name),
+              remotes: current.remoteBranches,
+              tags: current.tags.map(({ name }) => name),
+            };
+          })
           .toEqual({
             branches: ["feature", "main"],
             remotes: [],
@@ -305,20 +305,29 @@ function readRefsOverWebSocket(
   );
 }
 
-function latestRefs(repositoryId: string) {
-  let refs: RepositoryRefs | undefined;
-  let reads = 0;
-  return {
-    current: () => refs,
-    reload: (rpc: EnvironmentRpcClient) => {
-      const read = ++reads;
-      void readRepositoryRefs(rpc, repositoryId, new AbortController().signal)
-        .then((next) => {
-          if (read === reads) refs = next;
-        })
-        .catch(() => undefined);
-    },
-  };
+function countRefChanges(
+  session: ReturnType<typeof createBrowserLocalEnvironmentSession>,
+  repositoryId: string,
+) {
+  let changes = 0;
+  session.changes.subscribe((repositoryIds, kind) => {
+    if (kind === "Refs" && repositoryIds?.includes(repositoryId)) changes++;
+  });
+  return () => changes;
+}
+
+function readConnectedRefs(
+  session: ReturnType<typeof createBrowserLocalEnvironmentSession>,
+  repositoryId: string,
+) {
+  const state = session.getSnapshot();
+  if (state._tag !== "Connected")
+    return Promise.reject(new Error("The session is not connected."));
+  return readRepositoryRefs(
+    state.rpc,
+    repositoryId,
+    new AbortController().signal,
+  );
 }
 
 function withRefsListener(use: (fixture: ListenerFixture) => Promise<void>) {

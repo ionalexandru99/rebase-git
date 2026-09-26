@@ -7,11 +7,13 @@ import {
 
 export function useActiveWorktree(
   repository: RepositoryCatalogEntry | undefined,
+  logicalRepositoryId: string | undefined,
 ) {
-  const { refs } = useRepositoryRefs(
+  const { refs: readRefs, restored } = useRepositoryRefs(
     repository?.id,
-    repository?.logicalRepositoryId ?? repository?.id,
+    logicalRepositoryId,
   );
+  const refs = restored ? undefined : readRefs;
   const [worktreePaths, setWorktreePaths] = useState<
     ReadonlyMap<string, string>
   >(() => new Map());

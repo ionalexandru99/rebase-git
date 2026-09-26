@@ -37,15 +37,12 @@ export function HistoryStorageSettings() {
           Effect.tap((result) => Effect.sync(() => setDiagnostics(result))),
           Effect.tap(() =>
             action === "clear"
-              ? Effect.sync(() => forgetAllRepositoryRefs(queryClient)).pipe(
-                  Effect.tap(() =>
-                    Effect.sync(() =>
-                      setMessage(
-                        "All history caches cleared. Rebuild or reopen a repository to load history.",
-                      ),
-                    ),
-                  ),
-                )
+              ? Effect.sync(() => {
+                  forgetAllRepositoryRefs(queryClient);
+                  setMessage(
+                    "All history caches cleared. Rebuild or reopen a repository to load history.",
+                  );
+                })
               : Effect.void,
           ),
           Effect.catch(() =>

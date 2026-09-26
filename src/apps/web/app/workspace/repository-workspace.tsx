@@ -41,7 +41,7 @@ interface RepositoryWorkspaceProps {
   readonly activeWorktreePath: string;
   readonly environmentId: string | undefined;
   readonly history: CommitGraphHistory | undefined;
-  readonly logicalRepositoryId?: string | undefined;
+  readonly logicalRepositoryId: string | undefined;
   readonly repositoryId: string | undefined;
   readonly repositoryName: string;
   readonly switchWorktree: (worktreePath: string) => void;
@@ -50,13 +50,11 @@ interface RepositoryWorkspaceProps {
 export function RepositoryWorkspace(
   props: RepositoryWorkspaceProps,
 ): JSX.Element {
-  const { environmentId, repositoryId } = props;
-  const logicalRepositoryId = props.logicalRepositoryId ?? repositoryId;
+  const { environmentId, logicalRepositoryId, repositoryId } = props;
   return (
     <RepositoryWorkspaceContent
       {...props}
       key={`${environmentId ?? ""}\0${repositoryId ?? ""}\0${logicalRepositoryId ?? ""}`}
-      logicalRepositoryId={logicalRepositoryId}
     />
   );
 }
@@ -73,7 +71,7 @@ function RepositoryWorkspaceContent({
   const [localBranchesFocusRequest, setLocalBranchesFocusRequest] = useState(0);
   const repositoryRefs = useRepositoryRefs(repositoryId, logicalRepositoryId);
   const refs = repositoryRefs.refs;
-  const activation = useRefActivation(refs, switchWorktree);
+  const activation = useRefActivation(repositoryRefs, switchWorktree);
   const branchCreation = useCreateBranchHere();
   const connected = useRepositoryScope()?.connected ?? false;
   const panelScope = useMemo(

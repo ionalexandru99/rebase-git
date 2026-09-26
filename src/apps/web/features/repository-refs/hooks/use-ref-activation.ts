@@ -1,7 +1,8 @@
-import type { RepositoryRefs, RepositoryRefTarget } from "@rebase/contracts";
+import type { RepositoryRefTarget } from "@rebase/contracts";
 import { useCallback } from "react";
 import { resolveRefActivation } from "#web/features/repository-refs/activate-repository-ref";
 import { useCheckout } from "#web/features/repository-refs/hooks/use-checkout";
+import type { RepositoryRefsRead } from "#web/features/repository-refs/hooks/use-repository-refs";
 import { describeCheckoutFailure } from "#web/features/repository-refs/refs-messages";
 import { useRepositoryScope } from "#web/features/repository-scope/index";
 
@@ -12,7 +13,7 @@ export interface RefActivation {
 }
 
 export function useRefActivation(
-  refs: RepositoryRefs | undefined,
+  { refs, restored }: RepositoryRefsRead,
   switchWorktree: (worktreePath: string) => void,
 ): RefActivation {
   const scope = useRepositoryScope();
@@ -20,7 +21,8 @@ export function useRefActivation(
   const { isPending, mutate } = checkout;
   const select = useCallback(
     (target: RepositoryRefTarget) => {
-      if (scope === undefined || refs === undefined || isPending) return;
+      if (scope === undefined || refs === undefined || restored || isPending)
+        return;
       const activation = resolveRefActivation(refs, scope.worktreePath, target);
       if (activation._tag === "SwitchWorktree")
         switchWorktree(activation.worktreePath);
@@ -31,7 +33,7 @@ export function useRefActivation(
           target: activation.target,
         });
     },
-    [isPending, mutate, refs, scope, switchWorktree],
+    [isPending, mutate, refs, restored, scope, switchWorktree],
   );
   return {
     select,

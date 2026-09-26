@@ -5,7 +5,6 @@ export {
   resolveRefActivation,
 } from "#web/features/repository-refs/activate-repository-ref";
 export { useApplyToRefs } from "#web/features/repository-refs/hooks/use-apply-to-refs";
-export { useCheckout } from "#web/features/repository-refs/hooks/use-checkout";
 export {
   type RefActivation,
   useRefActivation,
