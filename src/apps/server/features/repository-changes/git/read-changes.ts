@@ -2,15 +2,13 @@ import { stat } from "node:fs/promises";
 import {
   type ChangedFile,
   type ChangesScope,
+  changesFailed,
   type RepositoryChanges,
   repositoryRejected,
 } from "@rebase/contracts";
 import { Effect } from "effect";
 import type { GitCommandRunner } from "#server/domain/git-command.contract";
-import {
-  changeIo,
-  changesError,
-} from "#server/features/repository-changes/git/change-failures";
+import { changeIo } from "#server/features/repository-changes/git/change-failures";
 import { worktreeIdentities } from "#server/features/repository-changes/git/change-files";
 import {
   runRepositoryGit,
@@ -24,7 +22,7 @@ export function readChanges(git: GitCommandRunner, scope: ChangesScope) {
     const { head, indexPath } = yield* readHeadAndIndexPath(git, directory);
     if (scope.amend && head === null)
       return yield* Effect.fail(
-        changesError("Unsupported", "There is no commit to amend."),
+        changesFailed("Unsupported", "There is no commit to amend."),
       );
     const base = yield* comparisonBase(git, directory, head, scope.amend);
     const [status, stagedDiff, index, message] = yield* Effect.all(

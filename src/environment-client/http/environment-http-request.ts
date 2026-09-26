@@ -19,6 +19,22 @@ import type {
 } from "#environment-client/http/environment-http-request.contract";
 import { readBoundedEnvironmentResponseBody } from "#environment-client/http/environment-http-response-body";
 
+type RouteRejection<Route extends RequestableEnvironmentHttpRoute> = [
+  RouteFailure<Route>,
+] extends [never]
+  ? never
+  : EnvironmentHttpRejected<RouteFailure<Route>>;
+
+export function requestEnvironmentHttp<
+  Route extends RequestableEnvironmentHttpRoute,
+>(
+  origin: string,
+  route: Route,
+  options: EnvironmentHttpRequestOptions<Route>,
+): Effect.Effect<
+  RouteSuccess<Route>,
+  EnvironmentResponseError | EnvironmentAccessDenied | RouteRejection<Route>
+>;
 export function requestEnvironmentHttp<
   Route extends RequestableEnvironmentHttpRoute,
 >(

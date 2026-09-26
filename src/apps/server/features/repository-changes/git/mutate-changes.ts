@@ -1,7 +1,8 @@
-import type {
-  ChangeDiff,
-  MutateChanges,
-  RepositoryChanges,
+import {
+  type ChangeDiff,
+  changesFailed,
+  type MutateChanges,
+  type RepositoryChanges,
 } from "@rebase/contracts";
 import { createTwoFilesPatch } from "diff";
 import { Effect } from "effect";
@@ -9,7 +10,6 @@ import type {
   GitCommandOptions,
   GitCommandRunner,
 } from "#server/domain/git-command.contract";
-import { changesError } from "#server/features/repository-changes/git/change-failures";
 import { safeChangePath } from "#server/features/repository-changes/git/change-files";
 import { readChangeDiff } from "#server/features/repository-changes/git/read-change-diff";
 import { selectedChangeText } from "#server/features/repository-changes/patch/selected-change-text";
@@ -28,7 +28,7 @@ export function mutateChanges<E>(
       (command.action === "unstage" && command.section !== "staged")
     )
       return yield* Effect.fail(
-        changesError(
+        changesFailed(
           "Unsupported",
           "This action does not match the selected section.",
         ),
@@ -46,14 +46,14 @@ export function mutateChanges<E>(
       const file = files.find((file) => file.path === path);
       if (file === undefined)
         return yield* Effect.fail(
-          changesError(
+          changesFailed(
             "Stale",
             "A selected file has changed. Refresh the changes and try again.",
           ),
         );
       if (file.status === "U" && command.action !== "stage")
         return yield* Effect.fail(
-          changesError(
+          changesFailed(
             "Conflict",
             "Resolve this file's merge conflict before unstaging or discarding it.",
           ),
@@ -70,14 +70,14 @@ export function mutateChanges<E>(
       );
       if (diff.revision !== selection.revision)
         return yield* Effect.fail(
-          changesError(
+          changesFailed(
             "Stale",
             "The file changed since these lines were selected. Review the updated diff.",
           ),
         );
       if (diff.kind !== "text")
         return yield* Effect.fail(
-          changesError(
+          changesFailed(
             "Unsupported",
             "This file supports whole-file actions only.",
           ),
@@ -92,7 +92,10 @@ export function mutateChanges<E>(
             reverse,
           ),
         catch: () =>
-          changesError("Stale", "The selected lines no longer match the file."),
+          changesFailed(
+            "Stale",
+            "The selected lines no longer match the file.",
+          ),
       });
       const current = reverse ? diff.after : diff.before;
       const destination =
@@ -163,7 +166,7 @@ function discardFiles<E>(
     }
     if (sources.some((path) => unstaged.has(path)))
       return yield* Effect.fail(
-        changesError(
+        changesFailed(
           "Conflict",
           "A new file exists at the renamed file's original path. Move it before discarding the rename.",
         ),
@@ -284,7 +287,7 @@ function applyChangePatch(
   ];
   const directory = command.worktreePath;
   const rejected = () =>
-    changesError(
+    changesFailed(
       "Conflict",
       "These changes overlap other edits or no longer apply. Nothing was discarded. Refresh the diff and review the overlapping lines.",
     );

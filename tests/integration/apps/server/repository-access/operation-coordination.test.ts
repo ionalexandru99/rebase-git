@@ -3,21 +3,31 @@ import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import {
+  type CheckoutRepositoryRef,
   RepositoryChangesHttpApi,
   RepositoryOperationsHttpApi,
+  RepositoryRefsHttpApi,
 } from "@rebase/contracts";
 import { Deferred, Effect, Fiber } from "effect";
 import { afterEach, expect, it } from "vite-plus/test";
+import { createEnvironmentEventPublisher } from "#server/adapters/environment-transport/events/environment-event-publisher";
 import { createLocalGitCommandRunner } from "#server/adapters/local-git/local-git-command-runner";
 import { createLocalRepositoryWatcher } from "#server/adapters/local-git/local-repository-watcher";
+import { EnvironmentEvents } from "#server/domain/environment-event-publisher.contract";
 import type { RepositoryWritePolicy } from "#server/domain/repository-coordination.contract";
+import { RepositoryWatching } from "#server/domain/repository-watcher.contract";
 import { repositoryChangesFeature } from "#server/features/repository-changes/index";
 import { repositoryOperationsFeature } from "#server/features/repository-operations/index";
+import { repositoryRefsFeature } from "#server/features/repository-refs/index";
 import {
   createRepositoryAccess,
   createRepositoryCoordination,
 } from "#server/repository/access/index";
-import { repositoryFeatureClient } from "#tests-integration/apps/server/environment-connection/feature-routes-client";
+import {
+  featureRoutesClient,
+  provideRepositoryServices,
+  repositoryFeatureClient,
+} from "#tests-integration/apps/server/environment-connection/feature-routes-client";
 import {
   createDivergedRepository,
   startConflict,
@@ -25,18 +35,18 @@ import {
 import { removeTemporaryDirectory } from "#tests-support/temporary-directory";
 
 const exec = promisify(execFile);
-const commitPolicy: RepositoryWritePolicy = {
-  name: "commit",
+const refsAndWorktreeWrite: RepositoryWritePolicy = {
+  name: "write refs and worktree",
   locks: { refs: "wait", worktree: "wait" },
   duringOperation: "block",
 };
-const stagePolicy: RepositoryWritePolicy = {
-  name: "stage",
+const worktreeWrite: RepositoryWritePolicy = {
+  name: "write worktree",
   locks: { worktree: "wait" },
   duringOperation: "proceed",
 };
-const fetchPolicy: RepositoryWritePolicy = {
-  name: "fetch",
+const refsWriteIfAvailable: RepositoryWritePolicy = {
+  name: "write refs if available",
   locks: { refs: "ifAvailable" },
   duringOperation: "proceed",
 };
@@ -87,7 +97,37 @@ async function fixture() {
         action: "continue",
       }),
     );
-  return { directory, git, coordination, changes, scope, continueOperation };
+  const checkout = (target: CheckoutRepositoryRef["target"]) =>
+    Effect.runPromise(
+      Effect.scoped(
+        repositoryRefsFeature.pipe(
+          provideRepositoryServices(services),
+          Effect.provideService(
+            RepositoryWatching,
+            createLocalRepositoryWatcher(),
+          ),
+          Effect.provideService(
+            EnvironmentEvents,
+            createEnvironmentEventPublisher(),
+          ),
+          Effect.flatMap((feature) =>
+            featureRoutesClient(
+              RepositoryRefsHttpApi,
+              feature.httpRoutes,
+            ).checkout({ ...scope, target }),
+          ),
+        ),
+      ),
+    );
+  return {
+    directory,
+    git,
+    coordination,
+    changes,
+    checkout,
+    scope,
+    continueOperation,
+  };
 }
 
 it("rejects incompatible writes during a merge and stages its resolution", async () => {
@@ -116,6 +156,9 @@ it("rejects incompatible writes during a merge and stages its resolution", async
         selection: { _tag: "All" },
       }),
     ),
+  ).rejects.toMatchObject(incompatible);
+  await expect(
+    f.checkout({ _tag: "LocalBranch", name: "topic" }),
   ).rejects.toMatchObject(incompatible);
   await Effect.runPromise(
     f.changes.mutate({
@@ -179,7 +222,7 @@ it("skips a contended fetch while ref writers queue across worktrees", async () 
         const first = yield* f.coordination
           .run(
             f.directory,
-            commitPolicy,
+            refsAndWorktreeWrite,
             Deferred.succeed(entered, undefined).pipe(
               Effect.andThen(Deferred.await(release)),
               Effect.andThen(record("first")),
@@ -188,13 +231,13 @@ it("skips a contended fetch while ref writers queue across worktrees", async () 
           .pipe(Effect.forkScoped);
         yield* Deferred.await(entered);
         const fetch = yield* f.coordination
-          .run(linked, fetchPolicy, Effect.die("Fetch must not start"))
+          .run(linked, refsWriteIfAvailable, Effect.die("Fetch must not start"))
           .pipe(Effect.flip, Effect.timeout("1 second"));
         expect(fetch.reason).toBe("Busy");
         const second = yield* f.coordination
-          .run(linked, commitPolicy, record("second"))
+          .run(linked, refsAndWorktreeWrite, record("second"))
           .pipe(Effect.forkScoped);
-        yield* f.coordination.run(linked, stagePolicy, record("stage"));
+        yield* f.coordination.run(linked, worktreeWrite, record("stage"));
         expect(order).toEqual(["stage"]);
         yield* Deferred.succeed(release, undefined);
         yield* Fiber.join(first);

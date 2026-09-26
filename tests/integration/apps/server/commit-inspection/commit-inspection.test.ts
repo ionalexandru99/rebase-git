@@ -249,7 +249,7 @@ describe("historical commit inspection", () => {
     ).rejects.toMatchObject({ reason: "Unsupported" });
     await expect(
       Effect.runPromise(f.service.inspectDiff({ ...scope, path: "../secret" })),
-    ).rejects.toMatchObject({ reason: "Missing" });
+    ).rejects.toMatchObject({ _tag: "ChangesFailed", reason: "Stale" });
     await expect(
       Effect.runPromise(
         f.service.inspect({ ...scope, worktreePath: tmpdir() }),

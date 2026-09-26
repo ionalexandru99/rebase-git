@@ -1,5 +1,5 @@
 import type { RouteResultValue } from "@rebase/contracts";
-import { Effect } from "effect";
+import { Effect, type Schema } from "effect";
 import type {
   EnvironmentHttpRequestContext,
   EnvironmentHttpRouteHandle,
@@ -11,6 +11,14 @@ import type {
 import { EnvironmentAuthorizationError } from "#server/domain/environment-authorization.contract";
 import { EnvironmentStorageError } from "#server/domain/environment-storage-error.contract";
 
+export type ResultHttpRoute<Input, Success, Failure> =
+  ServableEnvironmentHttpRoute & {
+    readonly request: Schema.ConstraintDecoder<Input>;
+    readonly response: {
+      readonly Type: RouteResultValue<Success, Failure>;
+    };
+  };
+
 export function route<Route extends ServableEnvironmentHttpRoute>(
   definition: Route,
   handle: EnvironmentHttpRouteHandle<Route>,
@@ -19,7 +27,19 @@ export function route<Route extends ServableEnvironmentHttpRoute>(
   return routeHandler(definition, handle, options);
 }
 
-export function routeHandler<
+export function resultRoute<Input, Success, Failure>(
+  definition: ResultHttpRoute<Input, Success, Failure>,
+  handle: (
+    input: Input,
+  ) => Effect.Effect<
+    NoInfer<Success>,
+    NoInfer<Failure> | EnvironmentTransportError
+  >,
+): EnvironmentHttpRouteHandler {
+  return routeHandler(definition, handle);
+}
+
+function routeHandler<
   Route extends ServableEnvironmentHttpRoute,
   Input,
   Success,

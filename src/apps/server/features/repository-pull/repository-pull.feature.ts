@@ -14,8 +14,8 @@ export const repositoryPullFeature = Effect.gen(function* () {
         RepositoryPullHttpApi.pull,
         {
           name: "pull",
-          locks: { refs: "wait", worktree: "wait" },
-          duringOperation: "block",
+          locks: { refs: "wait" },
+          duringOperation: "proceed",
         },
         pullBranch(coordination),
       ),

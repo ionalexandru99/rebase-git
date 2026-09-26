@@ -91,6 +91,14 @@ export const ChangesFailure = Schema.TaggedStruct("ChangesFailed", {
   detail: Schema.String.check(Schema.isMaxLength(2048)),
 });
 export type ChangesFailure = typeof ChangesFailure.Type;
+
+export function changesFailed(
+  reason: ChangesFailure["reason"],
+  detail: string,
+): ChangesFailure {
+  return { _tag: "ChangesFailed", reason, detail: detail.slice(0, 2048) };
+}
+
 export const RepositoryChangesHttpApi = {
   read: repositoryQuery("/api/repositories/changes/read", {
     request: ChangesScope,

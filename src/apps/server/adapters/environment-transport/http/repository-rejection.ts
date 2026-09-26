@@ -1,6 +1,10 @@
 import { type RepositoryRejected, repositoryRejected } from "@rebase/contracts";
+import type { EnvironmentStorageError } from "#server/domain/environment-storage-error.contract";
 import { GitCommandError } from "#server/domain/git-command.contract";
-import { RepositoryAccessError } from "#server/domain/repository-access.contract";
+import {
+  accessRejection,
+  RepositoryAccessError,
+} from "#server/domain/repository-access.contract";
 import { RepositoryCoordinationError } from "#server/domain/repository-coordination.contract";
 import { RepositoryGitError } from "#server/domain/repository-git.contract";
 
@@ -10,37 +14,40 @@ export type RepositoryInfrastructureError =
   | GitCommandError
   | RepositoryGitError;
 
-export function worktreeRejection(error: RepositoryAccessError) {
-  return repositoryRejected("Missing", error.detail);
+export function rejectAccess(
+  error: RepositoryAccessError,
+): RepositoryRejected | EnvironmentStorageError {
+  return error.failure._tag === "CatalogUnavailable"
+    ? error.failure.cause
+    : accessRejection(error);
 }
 
 export function rejectInfrastructure<Failure>(
   error: Failure | RepositoryInfrastructureError,
-): Failure | RepositoryRejected {
-  return isInfrastructureError(error) ? gitFailed(error) : error;
+): Failure | RepositoryRejected | EnvironmentStorageError {
+  if (error instanceof RepositoryAccessError) return rejectAccess(error);
+  if (error instanceof RepositoryCoordinationError)
+    return coordinationRejection(error);
+  if (error instanceof GitCommandError || error instanceof RepositoryGitError)
+    return gitFailed(error);
+  return error;
 }
 
 export function rejectCoordination<Failure>(
   error: Failure | RepositoryCoordinationError,
 ): Failure | RepositoryRejected {
-  if (!(error instanceof RepositoryCoordinationError)) return error;
+  return error instanceof RepositoryCoordinationError
+    ? coordinationRejection(error)
+    : error;
+}
+
+function coordinationRejection(error: RepositoryCoordinationError) {
   return error.reason === "Unavailable"
     ? repositoryRejected("GitFailed", error.detail)
     : repositoryRejected(error.reason, error.detail);
 }
 
-function isInfrastructureError(
-  error: unknown,
-): error is RepositoryInfrastructureError {
-  return (
-    error instanceof RepositoryAccessError ||
-    error instanceof RepositoryCoordinationError ||
-    error instanceof GitCommandError ||
-    error instanceof RepositoryGitError
-  );
-}
-
-function gitFailed(error: RepositoryInfrastructureError) {
+function gitFailed(error: GitCommandError | RepositoryGitError) {
   return repositoryRejected(
     "GitFailed",
     error instanceof GitCommandError

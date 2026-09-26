@@ -140,6 +140,29 @@ describe("fast-forward pull", () => {
     );
   });
 
+  it("fast-forwards a clean linked worktree while the active worktree is merging", async () => {
+    const f = await fixture();
+    const linked = join(f.repositoryPath, "..", "linked");
+    await git(f.repositoryPath, "switch", "-c", "feature");
+    await git(f.repositoryPath, "push", "-u", "origin", "feature");
+    await git(f.repositoryPath, "switch", "-c", "topic", "main");
+    await writeFile(join(f.repositoryPath, "file.txt"), "topic\n");
+    await git(f.repositoryPath, "commit", "-am", "topic");
+    await git(f.repositoryPath, "switch", "main");
+    await writeFile(join(f.repositoryPath, "file.txt"), "main\n");
+    await git(f.repositoryPath, "commit", "-am", "main");
+    await git(f.repositoryPath, "worktree", "add", linked, "feature");
+    const incoming = await f.publish("feature", "other.txt", "remote\n");
+    await git(f.repositoryPath, "fetch");
+    await expect(git(f.repositoryPath, "merge", "topic")).rejects.toThrow();
+
+    await expect(f.pull("feature")).resolves.toEqual({
+      outcome: "FastForwarded",
+    });
+
+    expect(await git(linked, "rev-parse", "HEAD")).toBe(incoming);
+  });
+
   it("explains missing and deleted upstreams", async () => {
     const f = await fixture();
     await git(f.repositoryPath, "branch", "untracked");

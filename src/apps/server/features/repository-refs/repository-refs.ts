@@ -2,9 +2,10 @@ import { type RepositoryRejected, repositoryRejected } from "@rebase/contracts";
 import { Effect } from "effect";
 import type { EnvironmentStorageError } from "#server/domain/environment-storage-error.contract";
 import type { GitCommandRunner } from "#server/domain/git-command.contract";
-import type {
-  RepositoryAccessError,
-  RepositoryAccessService,
+import {
+  accessRejection,
+  type RepositoryAccessError,
+  type RepositoryAccessService,
 } from "#server/domain/repository-access.contract";
 import type { RepositoryGitError } from "#server/domain/repository-git.contract";
 import { readRepositoryRefs } from "#server/features/repository-refs/git/read-repository-refs";
@@ -35,10 +36,6 @@ function refsReadRejected(
 ): RepositoryRejected {
   if (error._tag === "EnvironmentStorageError")
     return repositoryRejected("GitFailed", error.message);
-  if (
-    error._tag === "RepositoryAccessError" &&
-    error.failure._tag === "RepositoryMissing"
-  )
-    return repositoryRejected("Missing", error.detail);
+  if (error._tag === "RepositoryAccessError") return accessRejection(error);
   return repositoryRejected("GitFailed", error.detail);
 }

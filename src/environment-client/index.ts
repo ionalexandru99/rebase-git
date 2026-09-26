@@ -30,5 +30,4 @@ export type {
   EnvironmentHttpRoutesFailure,
   EnvironmentRequestClient,
   EnvironmentRequestErrors,
-  EnvironmentRequestFailure,
 } from "#environment-client/http/environment-request-client.contract";

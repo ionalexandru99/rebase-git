@@ -1,21 +1,20 @@
-import type { RouteFailure, RouteSuccess } from "@rebase/contracts";
-import { Effect, type Schema } from "effect";
-import { routeHandler } from "#server/adapters/environment-transport/http/environment-http-route-handler";
-import type { ServableEnvironmentHttpRoute } from "#server/adapters/environment-transport/http/environment-http-route-handler.contract";
+import type { RepositoryRejected } from "@rebase/contracts";
+import { Effect } from "effect";
+import {
+  type ResultHttpRoute,
+  resultRoute,
+} from "#server/adapters/environment-transport/http/environment-http-route-handler";
 import {
   type RepositoryInfrastructureError,
+  rejectAccess,
   rejectCoordination,
   rejectInfrastructure,
-  worktreeRejection,
 } from "#server/adapters/environment-transport/http/repository-rejection";
 import {
   type GitCommandRunner,
   GitCommands,
 } from "#server/domain/git-command.contract";
-import {
-  RepositoryAccess,
-  type RepositoryAccessService,
-} from "#server/domain/repository-access.contract";
+import { RepositoryAccess } from "#server/domain/repository-access.contract";
 import {
   RepositoryCoordination,
   type RepositoryWritePolicy,
@@ -26,58 +25,58 @@ interface WorktreeScope {
   readonly worktreePath: string;
 }
 
-interface RepositoryScope {
-  readonly repositoryId: string;
-  readonly worktreePath?: string;
-}
+type RepositoryHttpRoute<Input, Success, Failure> = ResultHttpRoute<
+  Input,
+  Success,
+  Failure | RepositoryRejected
+>;
 
-type RepositoryHttpRoute<Scope> = ServableEnvironmentHttpRoute & {
-  readonly request: Schema.ConstraintDecoder<Scope>;
-};
-
-type RepositoryHandle<Route extends RepositoryHttpRoute<RepositoryScope>> = (
-  input: Route["request"]["Type"],
+type RepositoryHandle<Input, Success, Failure> = (
+  input: Input,
   git: GitCommandRunner,
 ) => Effect.Effect<
-  RouteSuccess<Route>,
-  RouteFailure<Route> | RepositoryInfrastructureError
+  NoInfer<Success>,
+  NoInfer<Failure> | RepositoryRejected | RepositoryInfrastructureError
 >;
 
 type CommandPolicy<Input> =
   | RepositoryWritePolicy
   | ((input: Input) => RepositoryWritePolicy);
 
-export function query<Route extends RepositoryHttpRoute<RepositoryScope>>(
-  route: Route,
-  handle: RepositoryHandle<Route>,
+export function query<Input extends WorktreeScope, Success, Failure>(
+  route: RepositoryHttpRoute<Input, Success, Failure>,
+  handle: RepositoryHandle<Input, Success, Failure>,
 ) {
   return Effect.gen(function* () {
     const access = yield* RepositoryAccess;
     const git = yield* GitCommands;
-    return routeHandler(route, (input: Route["request"]["Type"]) =>
-      requireScope(access, input).pipe(
-        Effect.andThen(
-          handle(input, git).pipe(Effect.mapError(rejectInfrastructure)),
+    return resultRoute(route, (input) =>
+      access
+        .requireWorktree(input)
+        .pipe(
+          Effect.mapError(rejectAccess),
+          Effect.andThen(
+            handle(input, git).pipe(Effect.mapError(rejectInfrastructure)),
+          ),
         ),
-      ),
     );
   });
 }
 
-export function command<Route extends RepositoryHttpRoute<WorktreeScope>>(
-  route: Route,
-  policy: CommandPolicy<Route["request"]["Type"]>,
-  handle: RepositoryHandle<Route>,
+export function command<Input extends WorktreeScope, Success, Failure>(
+  route: RepositoryHttpRoute<Input, Success, Failure>,
+  policy: CommandPolicy<Input>,
+  handle: RepositoryHandle<Input, Success, Failure>,
 ) {
   return Effect.gen(function* () {
     const access = yield* RepositoryAccess;
     const git = yield* GitCommands;
     const coordination = yield* RepositoryCoordination;
-    return routeHandler(route, (input: Route["request"]["Type"]) =>
+    return resultRoute(route, (input) =>
       access
         .requireWorktree(input)
         .pipe(
-          Effect.mapError(worktreeRejection),
+          Effect.mapError(rejectAccess),
           Effect.andThen(
             coordination.run(
               input.worktreePath,
@@ -89,15 +88,4 @@ export function command<Route extends RepositoryHttpRoute<WorktreeScope>>(
         ),
     );
   });
-}
-
-function requireScope(access: RepositoryAccessService, scope: RepositoryScope) {
-  return scope.worktreePath === undefined
-    ? Effect.void
-    : access
-        .requireWorktree({
-          repositoryId: scope.repositoryId,
-          worktreePath: scope.worktreePath,
-        })
-        .pipe(Effect.mapError(worktreeRejection));
 }

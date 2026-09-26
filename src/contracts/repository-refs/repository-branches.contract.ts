@@ -111,37 +111,25 @@ export const RepositoryBranchesOperationFailure = Schema.Union([
 export type RepositoryBranchesOperationFailure =
   typeof RepositoryBranchesOperationFailure.Type;
 
-function branchCommand<Request extends Schema.Top, Success extends Schema.Top>(
-  path: `/api/${string}`,
-  request: Request,
-  success: Success,
-) {
-  return repositoryCommand(path, {
-    request,
-    success,
-    failure: RepositoryBranchesOperationFailure,
-  });
-}
-
 export const RepositoryBranchesHttpApi = {
-  create: branchCommand(
-    "/api/repositories/branches/create",
-    CreateRepositoryBranch,
-    LocalBranch,
-  ),
-  delete: branchCommand(
-    "/api/repositories/branches/delete",
-    DeleteRepositoryBranch,
-    RepositoryBranchDeleted,
-  ),
-  rename: branchCommand(
-    "/api/repositories/branches/rename",
-    RenameRepositoryBranch,
-    RepositoryBranchRenamed,
-  ),
-  setUpstream: branchCommand(
-    "/api/repositories/branches/upstream",
-    SetRepositoryBranchUpstream,
-    LocalBranch,
-  ),
+  create: repositoryCommand("/api/repositories/branches/create", {
+    request: CreateRepositoryBranch,
+    success: LocalBranch,
+    failure: RepositoryBranchesOperationFailure,
+  }),
+  delete: repositoryCommand("/api/repositories/branches/delete", {
+    request: DeleteRepositoryBranch,
+    success: RepositoryBranchDeleted,
+    failure: RepositoryBranchesOperationFailure,
+  }),
+  rename: repositoryCommand("/api/repositories/branches/rename", {
+    request: RenameRepositoryBranch,
+    success: RepositoryBranchRenamed,
+    failure: RepositoryBranchesOperationFailure,
+  }),
+  setUpstream: repositoryCommand("/api/repositories/branches/upstream", {
+    request: SetRepositoryBranchUpstream,
+    success: LocalBranch,
+    failure: RepositoryBranchesOperationFailure,
+  }),
 } satisfies Record<string, EnvironmentHttpRoute>;

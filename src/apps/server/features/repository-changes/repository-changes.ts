@@ -2,6 +2,7 @@ import {
   type ChangesScope,
   type ChangesWritten,
   type CommitChanges,
+  changesFailed,
   currentTransportLimits,
   type MutateChanges,
   type ReadChangeDiff,
@@ -10,7 +11,6 @@ import {
 } from "@rebase/contracts";
 import { Effect } from "effect";
 import type { GitCommandRunner } from "#server/domain/git-command.contract";
-import { changesError } from "#server/features/repository-changes/git/change-failures";
 import { safeChangePath } from "#server/features/repository-changes/git/change-files";
 import { withChangeIndex } from "#server/features/repository-changes/git/change-index";
 import { mutateChanges } from "#server/features/repository-changes/git/mutate-changes";
@@ -103,11 +103,11 @@ function requireCommittable(
 ) {
   if (!command.message.trim())
     return Effect.fail(
-      changesError("Unsupported", "Write a commit message first."),
+      changesFailed("Unsupported", "Write a commit message first."),
     );
   if (!command.amend && snapshot.staged.length === 0)
     return Effect.fail(
-      changesError("Unsupported", "Stage changes before committing."),
+      changesFailed("Unsupported", "Stage changes before committing."),
     );
   if (
     [...snapshot.unstaged, ...snapshot.staged].some(
@@ -115,7 +115,7 @@ function requireCommittable(
     )
   )
     return Effect.fail(
-      changesError(
+      changesFailed(
         "Conflict",
         "Resolve all merge conflicts before committing.",
       ),
