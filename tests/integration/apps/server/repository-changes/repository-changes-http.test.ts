@@ -133,7 +133,10 @@ it("authorizes changes reads separately from index mutations across HTTP", async
             viewed: { section: "staged" as const, path: "draft.txt" },
           };
           const refused = yield* viewer.mutate(command).pipe(Effect.flip);
-          expect(refused).toMatchObject({ status: 403 });
+          expect(refused).toMatchObject({
+            _tag: "EnvironmentAccessDenied",
+            status: 403,
+          });
           const staged = yield* owner.mutate(command);
           expect(staged.changes.staged).toEqual([
             { path: "draft.txt", previousPath: null, status: "A" },
@@ -188,7 +191,7 @@ it("authorizes changes reads separately from index mutations across HTTP", async
             yield* unauthorized
               .inspect({ ...inspectionScope, oid })
               .pipe(Effect.flip),
-          ).toMatchObject({ status: 401 });
+          ).toMatchObject({ _tag: "EnvironmentAccessDenied", status: 401 });
         }),
       ),
     );

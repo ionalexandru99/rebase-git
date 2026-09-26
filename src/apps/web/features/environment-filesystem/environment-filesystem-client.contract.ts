@@ -1,6 +1,7 @@
 import type {
+  EnvironmentAccessFailure,
+  EnvironmentDirectoryRejected,
   EnvironmentFilesystemHttpApi,
-  EnvironmentFilesystemHttpFailure,
 } from "@rebase/contracts";
 import type { EnvironmentHttpRoutesClient } from "@rebase/environment-client";
 import { Data } from "effect";
@@ -12,8 +13,7 @@ export class EnvironmentFilesystemResponseError extends Data.TaggedError(
 export class EnvironmentFilesystemRejected extends Data.TaggedError(
   "EnvironmentFilesystemRejected",
 )<{
-  readonly failure: EnvironmentFilesystemHttpFailure;
-  readonly status: number;
+  readonly failure: EnvironmentDirectoryRejected | EnvironmentAccessFailure;
 }> {}
 
 export type EnvironmentFilesystemClientError =

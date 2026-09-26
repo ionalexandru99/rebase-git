@@ -1,4 +1,4 @@
-import type { PullHttpFailure, RepositoryFreshness } from "@rebase/contracts";
+import type { PullFailure, RepositoryFreshness } from "@rebase/contracts";
 import {
   EnvironmentHttpRejected,
   type EnvironmentRequestClient,
@@ -36,6 +36,7 @@ describe("repository pull", () => {
     await vi.waitFor(() =>
       expect(f.requested).toHaveBeenCalledWith({
         repositoryId,
+        worktreePath: "/repo",
         branch: "main",
       }),
     );
@@ -62,7 +63,7 @@ describe("repository pull", () => {
     expect(f.requested).not.toHaveBeenCalled();
   });
 
-  it.each<[PullHttpFailure, string]>([
+  it.each<[PullFailure, string]>([
     [
       { _tag: "PullDiverged", upstream: "origin/main" },
       "main has diverged from origin/main",
@@ -93,7 +94,7 @@ async function fixture({
   failure,
 }: {
   readonly fetched?: RepositoryFreshness;
-  readonly failure?: PullHttpFailure;
+  readonly failure?: PullFailure;
 } = {}) {
   const fetch = vi.fn(async () => fetched);
   const requested = vi.fn();
@@ -103,9 +104,7 @@ async function fixture({
       return failure === undefined
         ? Effect.succeed({ outcome: "FastForwarded" })
         : Effect.fail(
-            errors.response(
-              new EnvironmentHttpRejected({ failure, status: 409 }),
-            ),
+            errors.response(new EnvironmentHttpRejected({ failure })),
           );
     });
   await render(

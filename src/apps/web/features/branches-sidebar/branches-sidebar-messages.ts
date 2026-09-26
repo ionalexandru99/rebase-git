@@ -40,14 +40,10 @@ export function describeRepositoryRefsError(
       return failure.reason === "StashFailed"
         ? "Local changes could not be stashed."
         : "Local changes would be overwritten.";
-    case "GitFailed":
-      return failure.detail === undefined || failure.detail.length === 0
+    case "RepositoryRejected":
+      return failure.detail.length === 0
         ? "Git could not complete the operation."
         : failure.detail;
-    case "WorktreeMissing":
-      return "The active worktree is gone.";
-    case "RepositoryMissing":
-      return "The repository is no longer known.";
     case "CapabilityDenied":
       return "This device may not write to the repository.";
     default:

@@ -1,8 +1,9 @@
 import { stat } from "node:fs/promises";
-import type {
-  ChangedFile,
-  ChangesScope,
-  RepositoryChanges,
+import {
+  type ChangedFile,
+  type ChangesScope,
+  type RepositoryChanges,
+  repositoryRejected,
 } from "@rebase/contracts";
 import { Effect } from "effect";
 import type { GitCommandRunner } from "#server/domain/git-command.contract";
@@ -117,7 +118,7 @@ function readHeadAndIndexPath(git: GitCommandRunner, directory: string) {
       const [indexPath, head] = output.split("\n");
       return indexPath
         ? Effect.succeed({ indexPath, head: head?.trim() || null })
-        : Effect.fail(changesError("GitFailed", "Could not read HEAD."));
+        : Effect.fail(repositoryRejected("GitFailed", "Could not read HEAD."));
     }),
   );
 }

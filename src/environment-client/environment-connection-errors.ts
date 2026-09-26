@@ -1,5 +1,5 @@
 import type {
-  EnvironmentAuthorizationHttpFailure,
+  EnvironmentAccessFailure,
   EnvironmentHttpRoute,
   EnvironmentTransportFailure,
 } from "@rebase/contracts";
@@ -15,6 +15,12 @@ export class EnvironmentHttpRejected<Failure> extends Data.TaggedError(
   "EnvironmentHttpRejected",
 )<{
   readonly failure: Failure;
+}> {}
+
+export class EnvironmentAccessDenied extends Data.TaggedError(
+  "EnvironmentAccessDenied",
+)<{
+  readonly failure: EnvironmentAccessFailure;
   readonly status: number;
 }> {}
 
@@ -25,7 +31,7 @@ export class EnvironmentHelloRejected extends Data.TaggedError(
 }> {}
 
 export type EnvironmentConnectionFailure =
-  | EnvironmentHttpRejected<EnvironmentAuthorizationHttpFailure>
+  | EnvironmentAccessDenied
   | EnvironmentHelloRejected
   | EnvironmentResponseError;
 

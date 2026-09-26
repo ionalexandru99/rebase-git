@@ -1,17 +1,15 @@
-import type { PushRejected, PushRejectedReason } from "@rebase/contracts";
-import { Data } from "effect";
+import {
+  type PushRejected,
+  type PushRejectedReason,
+  repositoryRejected,
+} from "@rebase/contracts";
 import type { GitCommandOutput } from "#server/domain/git-command.contract";
 
-export class RepositoryPushError extends Data.TaggedError(
-  "RepositoryPushError",
-)<{
-  readonly failure: PushRejected;
-}> {}
-
-export function pushError(reason: PushRejectedReason, detail: string) {
-  return new RepositoryPushError({
-    failure: { _tag: "PushRejected", reason, detail: detail.slice(0, 2_048) },
-  });
+export function pushError(
+  reason: PushRejectedReason,
+  detail: string,
+): PushRejected {
+  return { _tag: "PushRejected", reason, detail: detail.slice(0, 2_048) };
 }
 
 export function pushRefStatus(stdout: string, destinationRef: string) {
@@ -53,7 +51,7 @@ export function classifyPushFailure(
         "HookDeclined",
         [status.summary, ...remoteMessages].join("\n"),
       );
-    return pushError("Failed", status.summary);
+    return repositoryRejected("GitFailed", status.summary);
   }
   const stderr = output.stderr.trim();
   if (
@@ -76,5 +74,5 @@ export function classifyPushFailure(
       stderr.replace(/^error: failed to push some refs.*$/m, "").trim() ||
         stderr,
     );
-  return pushError("Failed", stderr || "Git rejected the push.");
+  return repositoryRejected("GitFailed", stderr || "Git rejected the push.");
 }

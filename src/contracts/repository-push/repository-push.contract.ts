@@ -1,5 +1,7 @@
-import { EnvironmentGrantHttpFailure } from "@rebase/contracts/environment-authorization/environment-authorization.contract";
-import type { EnvironmentHttpRoute } from "@rebase/contracts/environment-connection/http/environment-http-route.contract";
+import {
+  type EnvironmentHttpRoute,
+  repositoryCommand,
+} from "@rebase/contracts/environment-connection/http/environment-http-route.contract";
 import {
   ObjectId,
   RefName,
@@ -38,17 +40,14 @@ export const RemoteBranchUpdated = Schema.Struct({
 export type RemoteBranchUpdated = typeof RemoteBranchUpdated.Type;
 
 export const PushRejectedReason = Schema.Literals([
-  "Missing",
   "RemoteMissing",
   "InvalidBranch",
-  "Busy",
   "NonFastForward",
   "LeaseRejected",
   "HookDeclined",
   "Authentication",
   "Network",
   "Uncertain",
-  "Failed",
 ]);
 export type PushRejectedReason = typeof PushRejectedReason.Type;
 
@@ -58,20 +57,10 @@ export const PushRejected = Schema.TaggedStruct("PushRejected", {
 });
 export type PushRejected = typeof PushRejected.Type;
 
-export const RepositoryPushHttpFailure = Schema.Union([
-  EnvironmentGrantHttpFailure,
-  PushRejected,
-]);
-
 export const RepositoryPushHttpApi = {
-  push: {
-    capability: "repository.write",
-    failure: RepositoryPushHttpFailure,
-    failureStatuses: [404, 409, 422],
-    method: "POST",
-    path: "/api/repositories/push",
+  push: repositoryCommand("/api/repositories/push", {
     request: PushBranch,
     success: RemoteBranchUpdated,
-    successStatus: 200,
-  },
-} as const satisfies Record<string, EnvironmentHttpRoute>;
+    failure: PushRejected,
+  }),
+} satisfies Record<string, EnvironmentHttpRoute>;

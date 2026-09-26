@@ -1,23 +1,28 @@
 import type {
   EnvironmentDeviceAuthorization,
-  EnvironmentHttpFailureStatus,
   EnvironmentHttpRoute,
+  RouteFailure,
+  RouteInput,
+  RouteResultValue,
+  RouteSuccess,
 } from "@rebase/contracts";
 import type { Effect, Schema } from "effect";
 import type { EnvironmentAuthorizationError } from "#server/domain/environment-authorization.contract";
 import type { EnvironmentStorageError } from "#server/domain/environment-storage-error.contract";
 
 export type ServableEnvironmentHttpRoute = EnvironmentHttpRoute & {
-  readonly failure: Schema.ConstraintEncoder<unknown>;
   readonly request?: Schema.ConstraintDecoder<unknown>;
-  readonly success: Schema.ConstraintEncoder<unknown>;
+  readonly response: Schema.ConstraintCodec<
+    RouteResultValue<unknown, unknown>,
+    unknown,
+    unknown,
+    never
+  >;
 };
 
-export type EnvironmentHttpRouteCommand<
-  Route extends ServableEnvironmentHttpRoute,
-> = Route extends { readonly request?: infer Request }
-  ? CommandOf<Request>
-  : undefined;
+export type EnvironmentTransportError =
+  | EnvironmentAuthorizationError
+  | EnvironmentStorageError;
 
 export interface EnvironmentHttpRequestContext<
   Route extends ServableEnvironmentHttpRoute = ServableEnvironmentHttpRoute,
@@ -28,53 +33,31 @@ export interface EnvironmentHttpRequestContext<
   readonly origin: string;
 }
 
-export interface EnvironmentHttpRouteFailure {
-  readonly failure: unknown;
-}
-
 export type EnvironmentHttpRouteHandle<
   Route extends ServableEnvironmentHttpRoute,
-  Failure extends EnvironmentHttpRouteFailure,
 > = (
-  command: EnvironmentHttpRouteCommand<Route>,
+  input: RouteInput<Route>,
   context: EnvironmentHttpRequestContext<Route>,
 ) => Effect.Effect<
-  Route["success"]["Type"],
-  Failure | EnvironmentAuthorizationError | EnvironmentStorageError
+  RouteSuccess<Route>,
+  RouteFailure<Route> | EnvironmentTransportError
 >;
 
 export interface EnvironmentHttpRouteOptions {
   readonly requiresOrigin?: true;
 }
 
-export interface EnvironmentHttpRouteFailureOptions<
-  Route extends ServableEnvironmentHttpRoute,
-  Failure extends EnvironmentHttpRouteFailure,
-> extends EnvironmentHttpRouteOptions {
-  readonly failureStatus: (
-    failure: Failure,
-  ) => EnvironmentHttpFailureStatus<Route>;
-}
-
-export interface EnvironmentHttpRouteHandler<
-  Route extends ServableEnvironmentHttpRoute = ServableEnvironmentHttpRoute,
-  Failure extends EnvironmentHttpRouteFailure = EnvironmentHttpRouteFailure,
-> {
-  readonly route: Route;
+export interface EnvironmentHttpRouteHandler {
+  readonly route: ServableEnvironmentHttpRoute;
   readonly requiresOrigin: boolean;
-  handle(
-    command: EnvironmentHttpRouteCommand<Route>,
-    context: EnvironmentHttpRequestContext<Route>,
+  respond(
+    input: unknown,
+    context: EnvironmentHttpRequestContext,
   ): Effect.Effect<
-    Route["success"]["Type"],
-    Failure | EnvironmentAuthorizationError | EnvironmentStorageError
+    RouteResultValue<unknown, unknown>,
+    EnvironmentTransportError
   >;
-  failureStatus?(failure: Failure): EnvironmentHttpFailureStatus<Route>;
 }
-
-type CommandOf<Request> = Request extends Schema.Top
-  ? Request["Type"]
-  : undefined;
 
 type DeviceOf<Capability> = Capability extends null
   ? undefined

@@ -1,4 +1,5 @@
 export {
+  EnvironmentAccessDenied,
   type EnvironmentConnectionFailure,
   EnvironmentHelloRejected,
   EnvironmentHttpRejected,
@@ -16,7 +17,6 @@ export {
 } from "#environment-client/http/environment-http-client";
 export { requestEnvironmentHttp } from "#environment-client/http/environment-http-request";
 export type {
-  EnvironmentHttpCommand,
   EnvironmentHttpRequestOptions,
   RequestableEnvironmentHttpRoute,
 } from "#environment-client/http/environment-http-request.contract";
@@ -30,4 +30,5 @@ export type {
   EnvironmentHttpRoutesFailure,
   EnvironmentRequestClient,
   EnvironmentRequestErrors,
+  EnvironmentRequestFailure,
 } from "#environment-client/http/environment-request-client.contract";

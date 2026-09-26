@@ -1,4 +1,3 @@
-import type { PullHttpFailure } from "@rebase/contracts";
 import {
   RepositoryPullDisconnected,
   RepositoryPullRejected,
@@ -11,7 +10,10 @@ export function describeRepositoryPullError(branch: string, error: unknown) {
   return "Pull failed";
 }
 
-function describePullFailure(branch: string, failure: PullHttpFailure) {
+function describePullFailure(
+  branch: string,
+  failure: RepositoryPullRejected["failure"],
+) {
   switch (failure._tag) {
     case "PullDiverged":
       return `${branch} has diverged from ${failure.upstream}`;
@@ -29,8 +31,10 @@ function describePullFailure(branch: string, failure: PullHttpFailure) {
       return "Pull may not have finished";
     case "BranchMissing":
       return `${branch} no longer exists`;
-    case "RepositoryMissing":
-      return "Repository unavailable";
+    case "RepositoryRejected":
+      return failure.reason === "Missing"
+        ? "Repository unavailable"
+        : failure.detail;
     case "CapabilityDenied":
       return "No write access";
     default:

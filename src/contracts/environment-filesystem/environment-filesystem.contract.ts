@@ -1,5 +1,7 @@
-import { EnvironmentGrantHttpFailure } from "@rebase/contracts/environment-authorization/environment-authorization.contract";
-import type { EnvironmentHttpRoute } from "@rebase/contracts/environment-connection/http/environment-http-route.contract";
+import {
+  type EnvironmentHttpRoute,
+  route,
+} from "@rebase/contracts/environment-connection/http/environment-http-route.contract";
 import { IsoDate } from "@rebase/contracts/environment-connection/iso-date.contract";
 import { Schema } from "effect";
 
@@ -65,24 +67,15 @@ export const EnvironmentDirectoryRejected = Schema.TaggedStruct(
 export type EnvironmentDirectoryRejected =
   typeof EnvironmentDirectoryRejected.Type;
 
-export const EnvironmentFilesystemHttpFailure = Schema.Union([
-  EnvironmentGrantHttpFailure,
-  EnvironmentDirectoryRejected,
-]);
-export type EnvironmentFilesystemHttpFailure =
-  typeof EnvironmentFilesystemHttpFailure.Type;
-
 export const environmentDirectoryPath = "/api/filesystem/directory";
 
 export const EnvironmentFilesystemHttpApi = {
-  listDirectory: {
+  listDirectory: route({
     capability: "repository.write",
-    failure: EnvironmentFilesystemHttpFailure,
-    failureStatuses: [404, 422],
     method: "POST",
     path: environmentDirectoryPath,
     request: ListEnvironmentDirectory,
     success: EnvironmentDirectory,
-    successStatus: 200,
-  },
-} as const satisfies Record<string, EnvironmentHttpRoute>;
+    failure: EnvironmentDirectoryRejected,
+  }),
+} satisfies Record<string, EnvironmentHttpRoute>;

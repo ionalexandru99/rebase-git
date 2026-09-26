@@ -1,13 +1,13 @@
-import type { BranchPulled } from "@rebase/contracts";
+import {
+  type BranchPulled,
+  type PullFailure,
+  type RepositoryRejected,
+  repositoryRejected,
+} from "@rebase/contracts";
 import { Effect } from "effect";
 import type { GitCommandRunner } from "#server/domain/git-command.contract";
 import type { RepositoryGitError } from "#server/domain/repository-git.contract";
-import {
-  pullBlocked,
-  pullFailure,
-  pullGitFailed,
-  type RepositoryPullError,
-} from "#server/features/repository-pull/git/pull-failures";
+import { pullBlocked } from "#server/features/repository-pull/git/pull-failures";
 import {
   isGitRejection,
   runRepositoryGit,
@@ -27,7 +27,10 @@ export function fastForwardBranch(
   directory: string,
   branch: string,
   checkedOut: boolean,
-): Effect.Effect<BranchPulled, RepositoryPullError> {
+): Effect.Effect<
+  BranchPulled,
+  PullFailure | RepositoryRejected | RepositoryGitError
+> {
   return Effect.gen(function* () {
     const tracked = yield* readTrackedBranch(git, directory, branch);
     const upstreamTarget = yield* resolveUpstream(git, directory, tracked);
@@ -39,7 +42,7 @@ export function fastForwardBranch(
     );
     if (behind === 0) return { outcome: "UpToDate" } as const;
     if (ahead > 0)
-      return yield* pullFailure({
+      return yield* Effect.fail<PullFailure>({
         _tag: "PullDiverged",
         upstream: tracked.upstream,
       });
@@ -49,11 +52,7 @@ export function fastForwardBranch(
         : moveBranch(git, directory, tracked, upstreamTarget),
     );
     return { outcome: "FastForwarded" } as const;
-  }).pipe(
-    Effect.catchTag("RepositoryGitError", (error) =>
-      Effect.fail(pullGitFailed(error)),
-    ),
-  );
+  });
 }
 
 function readTrackedBranch(
@@ -79,9 +78,9 @@ function readTrackedBranch(
           .map((line) => line.split("\0"))
           .find(([name]) => name === ref) ?? [];
       if (target === undefined)
-        return Effect.fail(pullFailure({ _tag: "BranchMissing" }));
+        return Effect.fail<PullFailure>({ _tag: "BranchMissing" });
       if (!upstreamRef || !upstream)
-        return Effect.fail(pullFailure({ _tag: "UpstreamMissing" }));
+        return Effect.fail<PullFailure>({ _tag: "UpstreamMissing" });
       return Effect.succeed<TrackedBranch>({
         name: branch,
         target,
@@ -105,12 +104,10 @@ function resolveUpstream(
   ).pipe(
     Effect.flatMap((output) =>
       output.trim() === ""
-        ? Effect.fail(
-            pullFailure({
-              _tag: "UpstreamMissing",
-              upstream: tracked.upstream,
-            }),
-          )
+        ? Effect.fail<PullFailure>({
+            _tag: "UpstreamMissing",
+            upstream: tracked.upstream,
+          })
         : Effect.succeed(output.trim()),
     ),
   );
@@ -159,19 +156,22 @@ function mergeFastForward(
   );
 }
 
-function mergeFailure(error: RepositoryGitError, tracked: TrackedBranch) {
+function mergeFailure(
+  error: RepositoryGitError,
+  tracked: TrackedBranch,
+): PullFailure | RepositoryRejected {
   if (!isGitRejection(error))
     return error.reason === "GitUnavailable"
-      ? pullGitFailed(error)
-      : pullFailure({ _tag: "PullUncertain" }, error);
+      ? repositoryRejected("GitFailed", error.detail)
+      : { _tag: "PullUncertain" };
   if (/would be overwritten by merge/i.test(error.detail))
-    return pullFailure(
-      { _tag: "PullWouldOverwrite", paths: overwrittenPaths(error.detail) },
-      error,
-    );
+    return {
+      _tag: "PullWouldOverwrite",
+      paths: overwrittenPaths(error.detail),
+    };
   if (/not possible to fast-forward/i.test(error.detail))
     return branchMoved(tracked);
-  return pullGitFailed(error);
+  return repositoryRejected("GitFailed", error.detail);
 }
 
 function overwrittenPaths(detail: string) {
@@ -203,10 +203,11 @@ function moveBranch(
     pullCommand,
   ).pipe(
     Effect.asVoid,
-    Effect.mapError((error) =>
-      isGitRejection(error)
-        ? branchMoved(tracked)
-        : pullFailure({ _tag: "PullUncertain" }, error),
+    Effect.mapError(
+      (error): PullFailure =>
+        isGitRejection(error)
+          ? branchMoved(tracked)
+          : { _tag: "PullUncertain" },
     ),
   );
 }

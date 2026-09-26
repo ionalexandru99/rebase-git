@@ -1,14 +1,14 @@
-import type { CreateRepositoryBranch } from "@rebase/contracts";
+import type {
+  CreateRepositoryBranch,
+  RepositoryBranchesOperationFailure,
+  RepositoryRejected,
+} from "@rebase/contracts";
 import { Effect } from "effect";
 import type { GitCommandRunner } from "#server/domain/git-command.contract";
 import type { RepositoryAccessService } from "#server/domain/repository-access.contract";
-import {
-  branchesFailure,
-  branchWriteFailed,
-} from "#server/features/repository-refs/git/branches/branch-failures";
+import { branchWriteFailed } from "#server/features/repository-refs/git/branches/branch-failures";
 import {
   branchCommand,
-  readBranchWorktrees,
   readLocalBranch,
   requireRemoteBranch,
   requireValidBranchName,
@@ -32,10 +32,11 @@ export function createBranch(
       ["branch", "--no-track", name, startPoint],
       branchCommand,
     ).pipe(
-      Effect.mapError((error) =>
-        /not a valid object name/i.test(error.detail)
-          ? branchesFailure({ _tag: "RefMissing", name: startPoint }, error)
-          : branchWriteFailed(error, name),
+      Effect.mapError(
+        (error): RepositoryBranchesOperationFailure | RepositoryRejected =>
+          /not a valid object name/i.test(error.detail)
+            ? { _tag: "RefMissing", name: startPoint }
+            : branchWriteFailed(error, name),
       ),
     );
     if (track !== undefined)
@@ -45,7 +46,7 @@ export function createBranch(
         setUpstreamArguments(name, track),
         branchCommand,
       ).pipe(Effect.mapError((error) => branchWriteFailed(error, name)));
-    const worktrees = yield* readBranchWorktrees(access, worktreePath);
+    const worktrees = yield* access.worktrees(worktreePath);
     return yield* readLocalBranch(git, worktreePath, worktrees, name);
   });
 }

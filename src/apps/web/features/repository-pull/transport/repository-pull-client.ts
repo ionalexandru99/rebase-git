@@ -12,8 +12,8 @@ export function repositoryPullClient(
   return requests(RepositoryPullHttpApi, {
     disconnected: () => new RepositoryPullDisconnected(),
     response: (error) =>
-      error._tag === "EnvironmentHttpRejected"
-        ? new RepositoryPullRejected({ failure: error.failure })
-        : new RepositoryPullDisconnected(),
+      error._tag === "EnvironmentResponseError"
+        ? new RepositoryPullDisconnected()
+        : new RepositoryPullRejected({ failure: error.failure }),
   });
 }

@@ -12,11 +12,8 @@ export function repositoryBranchesClient(
   return requests(RepositoryBranchesHttpApi, {
     disconnected: () => new RepositoryBranchesResponseError(),
     response: (error) =>
-      error._tag === "EnvironmentHttpRejected"
-        ? new RepositoryBranchesRejected({
-            failure: error.failure,
-            status: error.status,
-          })
-        : new RepositoryBranchesResponseError(),
+      error._tag === "EnvironmentResponseError"
+        ? new RepositoryBranchesResponseError()
+        : new RepositoryBranchesRejected({ failure: error.failure }),
   });
 }

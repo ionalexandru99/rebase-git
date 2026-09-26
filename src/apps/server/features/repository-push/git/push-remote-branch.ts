@@ -1,7 +1,10 @@
-import type {
-  PushBranch,
-  PushDestination,
-  RemoteBranchUpdated,
+import {
+  type PushBranch,
+  type PushDestination,
+  type PushRejected,
+  type RemoteBranchUpdated,
+  type RepositoryRejected,
+  repositoryRejected,
 } from "@rebase/contracts";
 import { Effect } from "effect";
 import type {
@@ -53,9 +56,7 @@ function requireDestination(
   { remote, branch }: PushDestination,
 ) {
   return Effect.gen(function* () {
-    const remotes = yield* runRepositoryGit(git, directory, ["remote"]).pipe(
-      Effect.mapError((error) => pushError("Failed", error.detail)),
-    );
+    const remotes = yield* runRepositoryGit(git, directory, ["remote"]);
     if (!remotes.split("\n").includes(remote))
       return yield* Effect.fail(
         pushError("RemoteMissing", `The remote "${remote}" does not exist.`),
@@ -103,15 +104,16 @@ function runPush(
       timeoutMilliseconds: pushTimeoutMilliseconds,
     })
     .pipe(
-      Effect.catch((error) =>
-        error.reason === "Timeout"
-          ? uncertainPush(git, directory, destination)
-          : Effect.fail(
-              pushError(
-                "Failed",
-                `Git could not run the push (${error.reason}).`,
+      Effect.catch(
+        (error): Effect.Effect<never, PushRejected | RepositoryRejected> =>
+          error.reason === "Timeout"
+            ? uncertainPush(git, directory, destination)
+            : Effect.fail(
+                repositoryRejected(
+                  "GitFailed",
+                  `Git could not run the push (${error.reason}).`,
+                ),
               ),
-            ),
       ),
       Effect.flatMap((output) => requirePushed(output, destinationRef)),
       Effect.onInterrupt(() =>

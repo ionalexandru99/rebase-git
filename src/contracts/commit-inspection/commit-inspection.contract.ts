@@ -1,10 +1,13 @@
-import type { EnvironmentHttpRoute } from "@rebase/contracts/environment-connection/http/environment-http-route.contract";
+import {
+  type EnvironmentHttpRoute,
+  repositoryQuery,
+} from "@rebase/contracts/environment-connection/http/environment-http-route.contract";
 import {
   ObjectId,
   RepositoryId,
   RepositoryPath,
 } from "@rebase/contracts/git/git-values.contract";
-import { ChangesHttpFailure } from "@rebase/contracts/repository-changes/repository-changes.contract";
+import { ChangesFailure } from "@rebase/contracts/repository-changes/repository-changes.contract";
 import { ChangeDiff } from "@rebase/contracts/repository-comparison/repository-comparison.contract";
 import { Schema } from "effect";
 
@@ -44,24 +47,14 @@ export const CommitInspection = Schema.Struct({
 });
 export type CommitInspection = typeof CommitInspection.Type;
 export const CommitInspectionHttpApi = {
-  inspect: {
-    capability: "repository.read",
-    failure: ChangesHttpFailure,
-    failureStatuses: [404, 409],
-    method: "POST",
-    path: "/api/repositories/commits/inspect",
+  inspect: repositoryQuery("/api/repositories/commits/inspect", {
     request: InspectCommit,
     success: CommitInspection,
-    successStatus: 200,
-  },
-  inspectDiff: {
-    capability: "repository.read",
-    failure: ChangesHttpFailure,
-    failureStatuses: [404, 409],
-    method: "POST",
-    path: "/api/repositories/commits/diff",
+    failure: ChangesFailure,
+  }),
+  inspectDiff: repositoryQuery("/api/repositories/commits/diff", {
     request: InspectCommitDiff,
     success: ChangeDiff,
-    successStatus: 200,
-  },
-} as const satisfies Record<string, EnvironmentHttpRoute>;
+    failure: ChangesFailure,
+  }),
+} satisfies Record<string, EnvironmentHttpRoute>;

@@ -4,18 +4,30 @@ import { mkdtemp, realpath, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
+import {
+  RepositoryChangesHttpApi,
+  RepositoryRefsHttpApi,
+} from "@rebase/contracts";
 import { Deferred, Effect, Fiber, Option } from "effect";
 import { afterEach, expect, it } from "vite-plus/test";
+import { createEnvironmentEventPublisher } from "#server/adapters/environment-transport/events/environment-event-publisher";
 import { createLocalGitCommandRunner } from "#server/adapters/local-git/local-git-command-runner";
 import { createLocalRepositoryWatcher } from "#server/adapters/local-git/local-repository-watcher";
+import { EnvironmentEvents } from "#server/domain/environment-event-publisher.contract";
 import type { GitCommandRunner } from "#server/domain/git-command.contract";
-import { createRepositoryChangesService } from "#server/features/repository-changes/repository-changes";
+import { RepositoryWatching } from "#server/domain/repository-watcher.contract";
+import { repositoryChangesFeature } from "#server/features/repository-changes/index";
 import { acquireWatchedRepository } from "#server/features/repository-history/freshness/watched-repository";
-import { createRepositoryRefsService } from "#server/features/repository-refs/repository-refs";
+import { repositoryRefsFeature } from "#server/features/repository-refs/index";
 import {
   createRepositoryAccess,
   createRepositoryCoordination,
 } from "#server/repository/access/index";
+import {
+  featureRoutesClient,
+  provideRepositoryServices,
+  repositoryFeatureClient,
+} from "#tests-integration/apps/server/environment-connection/feature-routes-client";
 import { removeTemporaryDirectory } from "#tests-support/temporary-directory";
 
 const directories: string[] = [];
@@ -104,23 +116,36 @@ it.each([
             runner,
             createLocalRepositoryWatcher(),
           );
-          const changes = createRepositoryChangesService(
-            access,
-            runner,
-            coordination,
+          const changes = repositoryFeatureClient(
+            RepositoryChangesHttpApi,
+            repositoryChangesFeature,
+            { access, git: runner, coordination },
           );
-          const refs = createRepositoryRefsService({
-            access,
-            git: runner,
-            changes: { watch: () => Effect.void },
-            coordination: {
-              ...coordination,
-              run: (path, policy, operation) =>
-                Deferred.succeed(checkoutRequested, undefined).pipe(
-                  Effect.andThen(coordination.run(path, policy, operation)),
-                ),
-            },
-          });
+          const refsFeature = yield* repositoryRefsFeature.pipe(
+            provideRepositoryServices({
+              access,
+              git: runner,
+              coordination: {
+                ...coordination,
+                run: (path, policy, operation) =>
+                  Deferred.succeed(checkoutRequested, undefined).pipe(
+                    Effect.andThen(coordination.run(path, policy, operation)),
+                  ),
+              },
+            }),
+            Effect.provideService(
+              RepositoryWatching,
+              createLocalRepositoryWatcher(),
+            ),
+            Effect.provideService(
+              EnvironmentEvents,
+              createEnvironmentEventPublisher(),
+            ),
+          );
+          const refs = featureRoutesClient(
+            RepositoryRefsHttpApi,
+            refsFeature.httpRoutes,
+          );
           const scope = { repositoryId, worktreePath: directory, amend: false };
           const snapshot = yield* changes.read(scope);
           const freshness = yield* acquireWatchedRepository(
@@ -211,23 +236,27 @@ it("reads changes while a commit holds the worktree", async () => {
               : local.run(command),
         };
         const repositoryId = randomUUID();
-        const changes = createRepositoryChangesService(
-          createRepositoryAccess(
-            {
-              find: () =>
-                Effect.succeed({
-                  id: repositoryId,
-                  path: directory,
-                  name: "test",
-                  addedAt: "",
-                  lastOpenedAt: "",
-                }),
-            },
-            runner,
-            createLocalRepositoryWatcher(),
-          ),
-          runner,
-          createRepositoryCoordination(runner),
+        const changes = repositoryFeatureClient(
+          RepositoryChangesHttpApi,
+          repositoryChangesFeature,
+          {
+            access: createRepositoryAccess(
+              {
+                find: () =>
+                  Effect.succeed({
+                    id: repositoryId,
+                    path: directory,
+                    name: "test",
+                    addedAt: "",
+                    lastOpenedAt: "",
+                  }),
+              },
+              runner,
+              createLocalRepositoryWatcher(),
+            ),
+            git: runner,
+            coordination: createRepositoryCoordination(runner),
+          },
         );
         const scope = { repositoryId, worktreePath: directory, amend: false };
         const snapshot = yield* changes.read(scope);

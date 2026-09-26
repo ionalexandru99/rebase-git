@@ -14,7 +14,9 @@ interface PullAttempt {
 
 export function usePullAttempts(
   requests: EnvironmentRequestClient | undefined,
-  repositoryId: string | undefined,
+  scope:
+    | { readonly repositoryId: string; readonly worktreePath: string }
+    | undefined,
   reader: Pick<RepositoryHistoryFetchCommands, "fetch"> | undefined,
 ) {
   const client = useMemo(
@@ -28,7 +30,7 @@ export function usePullAttempts(
     (branch: string) => {
       if (
         client === undefined ||
-        repositoryId === undefined ||
+        scope === undefined ||
         reader === undefined ||
         running.current
       )
@@ -40,7 +42,13 @@ export function usePullAttempts(
         .fetch()
         .then((freshness) =>
           freshness.failure === undefined
-            ? Effect.runPromise(client.pull({ repositoryId, branch }))
+            ? Effect.runPromise(
+                client.pull({
+                  repositoryId: scope.repositoryId,
+                  worktreePath: scope.worktreePath,
+                  branch,
+                }),
+              )
             : undefined,
         )
         .then(
@@ -57,7 +65,7 @@ export function usePullAttempts(
           running.current = false;
         });
     },
-    [client, repositoryId, reader],
+    [client, scope, reader],
   );
   const error = useMemo(
     () =>
@@ -68,7 +76,7 @@ export function usePullAttempts(
   );
   return {
     pull:
-      client === undefined || repositoryId === undefined || reader === undefined
+      client === undefined || scope === undefined || reader === undefined
         ? undefined
         : pull,
     pulling: attempt?.pending === true ? attempt.branch : undefined,

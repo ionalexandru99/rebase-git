@@ -1,7 +1,7 @@
 import { EnvironmentAuthorizationHttpApi } from "@rebase/contracts";
 import { Effect } from "effect";
 import type { EnvironmentFeature } from "#server/adapters/environment-transport/environment-feature.contract";
-import { httpRoute } from "#server/adapters/environment-transport/http/environment-http-route-handler";
+import { route } from "#server/adapters/environment-transport/http/environment-http-route-handler";
 import { EnvironmentAuthorizationAccess } from "#server/domain/environment-authorization.contract";
 
 export const environmentAuthorizationFeature = Effect.gen(function* () {
@@ -10,7 +10,7 @@ export const environmentAuthorizationFeature = Effect.gen(function* () {
   return {
     capabilities: [],
     httpRoutes: [
-      httpRoute(
+      route(
         api.createBrowserSession,
         (exchange, context) =>
           Effect.map(authorization.exchangePairing(exchange), (paired) => {
@@ -19,22 +19,22 @@ export const environmentAuthorizationFeature = Effect.gen(function* () {
           }),
         { requiresOrigin: true },
       ),
-      httpRoute(api.readBrowserSession, (_, context) =>
+      route(api.readBrowserSession, (_, context) =>
         Effect.succeed({ authorization: context.device }),
       ),
-      httpRoute(api.createPairing, (pairing, context) =>
+      route(api.createPairing, (pairing, context) =>
         Effect.map(authorization.createPairing(pairing), (created) => ({
           expiresAt: created.expiresAt,
           pairingUrl: `${context.origin}/pair#${created.material}`,
         })),
       ),
-      httpRoute(api.exchangePairing, (exchange) =>
+      route(api.exchangePairing, (exchange) =>
         authorization.exchangePairing(exchange),
       ),
-      httpRoute(api.mintWebSocketTicket, (_, context) =>
+      route(api.mintWebSocketTicket, (_, context) =>
         authorization.mintTicket(context.credential),
       ),
-      httpRoute(api.revokeAuthorization, (revocation, context) =>
+      route(api.revokeAuthorization, (revocation, context) =>
         authorization.revoke(context.credential, revocation.authorizationId),
       ),
     ],

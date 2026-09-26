@@ -10,17 +10,7 @@ import {
 } from "@rebase/contracts";
 import { Effect } from "effect";
 import type { GitCommandRunner } from "#server/domain/git-command.contract";
-import type { RepositoryAccessService } from "#server/domain/repository-access.contract";
-import type {
-  RepositoryCoordinationError,
-  RepositoryCoordinationService,
-  RepositoryWritePolicy,
-} from "#server/domain/repository-coordination.contract";
-import type { RepositoryGitError } from "#server/domain/repository-git.contract";
-import {
-  changesError,
-  type RepositoryChangesError,
-} from "#server/features/repository-changes/git/change-failures";
+import { changesError } from "#server/features/repository-changes/git/change-failures";
 import { safeChangePath } from "#server/features/repository-changes/git/change-files";
 import { withChangeIndex } from "#server/features/repository-changes/git/change-index";
 import { mutateChanges } from "#server/features/repository-changes/git/mutate-changes";
@@ -30,138 +20,107 @@ import {
   verifyChangedFiles,
   verifyChanges,
 } from "#server/features/repository-changes/git/verify-changes";
-import { changesWritePolicies } from "#server/features/repository-changes/repository-changes.write-policy";
 import { runRepositoryGit } from "#server/repository/access/index";
 
-export function createRepositoryChangesService(
-  access: RepositoryAccessService,
+export function readRepositoryChanges(
+  scope: ChangesScope,
   git: GitCommandRunner,
-  coordination: RepositoryCoordinationService,
 ) {
-  const inWorktree = <A>(
-    scope: ChangesScope,
-    run: Effect.Effect<
-      A,
-      RepositoryChangesError | RepositoryGitError | RepositoryCoordinationError
-    >,
-  ) =>
-    access.requireWorktree(scope).pipe(
-      Effect.mapError((error) => changesError("Missing", error.detail)),
-      Effect.andThen(run),
-      Effect.mapError((error) =>
-        error._tag === "RepositoryChangesError"
-          ? error
-          : changesError(failureReason(error), error.detail),
-      ),
-    );
-  const locked = <A>(
-    scope: ChangesScope,
-    policy: RepositoryWritePolicy,
-    run: Effect.Effect<A, RepositoryChangesError | RepositoryGitError>,
-  ) => inWorktree(scope, coordination.run(scope.worktreePath, policy, run));
-  return {
-    read: (scope: ChangesScope) =>
-      inWorktree(
-        scope,
-        readChanges(git, scope).pipe(
-          Effect.map((value) => fitChanges(value.snapshot)),
-        ),
-      ),
-    diff: (command: ReadChangeDiff) =>
-      inWorktree(
-        command,
-        Effect.gen(function* () {
-          yield* safeChangePath(command.worktreePath, command.path);
-          const { snapshot, base } = yield* readChanges(git, command);
-          return yield* readChangeDiff(git, command, {
-            base,
-            previousPath: previousPathOf(snapshot, command),
-          });
-        }),
-      ),
-    mutate: (command: MutateChanges) =>
-      locked(
-        command,
-        changesWritePolicies[command.action],
-        Effect.gen(function* () {
-          yield* withChangeIndex(git, command.worktreePath, (indexFile) =>
-            Effect.gen(function* () {
-              const current = yield* verifyChanges(git, command);
-              const unchanged = verifyChangedFiles(
-                command.worktreePath,
-                current.files,
-              );
-              yield* mutateChanges(
-                git,
-                { indexFile },
-                command,
-                current,
-                unchanged,
-              );
-              if (command.action !== "discard") yield* unchanged;
-            }),
-          );
-          return yield* readWritten(git, command, command.viewed);
-        }),
-      ),
-    commit: (command: CommitChanges) =>
-      locked(
-        command,
-        changesWritePolicies[command.amend ? "amend" : "commit"],
-        withChangeIndex(git, command.worktreePath, (indexFile) =>
-          Effect.gen(function* () {
-            const { snapshot } = yield* verifyChanges(git, command);
-            if (!command.message.trim())
-              return yield* Effect.fail(
-                changesError("Unsupported", "Write a commit message first."),
-              );
-            if (!command.amend && snapshot.staged.length === 0)
-              return yield* Effect.fail(
-                changesError("Unsupported", "Stage changes before committing."),
-              );
-            if (
-              [...snapshot.unstaged, ...snapshot.staged].some(
-                (file) => file.status === "U",
-              )
-            )
-              return yield* Effect.fail(
-                changesError(
-                  "Conflict",
-                  "Resolve all merge conflicts before committing.",
-                ),
-              );
-            yield* Effect.uninterruptible(
-              runRepositoryGit(
-                git,
-                command.worktreePath,
-                [
-                  "commit",
-                  ...(command.amend ? ["--amend", "--allow-empty"] : []),
-                  "--file=-",
-                ],
-                {
-                  indexFile,
-                  input: command.message,
-                  timeoutMilliseconds: 120_000,
-                },
-              ),
-            );
-          }),
-        ).pipe(
-          Effect.andThen(() =>
-            readWritten(git, { ...command, amend: false }, command.viewed),
-          ),
-        ),
-      ),
-  };
+  return readChanges(git, scope).pipe(
+    Effect.map((value) => fitChanges(value.snapshot)),
+  );
 }
 
-function failureReason(
-  error: RepositoryGitError | RepositoryCoordinationError,
-): RepositoryChangesError["failure"]["reason"] {
-  if (error._tag === "RepositoryGitError") return "GitFailed";
-  if (error.reason === "Busy") return "Busy";
-  return error.reason === "Incompatible" ? "Unsupported" : "GitFailed";
+export function readRepositoryChangeDiff(
+  command: ReadChangeDiff,
+  git: GitCommandRunner,
+) {
+  return Effect.gen(function* () {
+    yield* safeChangePath(command.worktreePath, command.path);
+    const { snapshot, base } = yield* readChanges(git, command);
+    return yield* readChangeDiff(git, command, {
+      base,
+      previousPath: previousPathOf(snapshot, command),
+    });
+  });
+}
+
+export function mutateRepositoryChanges(
+  command: MutateChanges,
+  git: GitCommandRunner,
+) {
+  return Effect.gen(function* () {
+    yield* withChangeIndex(git, command.worktreePath, (indexFile) =>
+      Effect.gen(function* () {
+        const current = yield* verifyChanges(git, command);
+        const unchanged = verifyChangedFiles(
+          command.worktreePath,
+          current.files,
+        );
+        yield* mutateChanges(git, { indexFile }, command, current, unchanged);
+        if (command.action !== "discard") yield* unchanged;
+      }),
+    );
+    return yield* readWritten(git, command, command.viewed);
+  });
+}
+
+export function commitRepositoryChanges(
+  command: CommitChanges,
+  git: GitCommandRunner,
+) {
+  return withChangeIndex(git, command.worktreePath, (indexFile) =>
+    Effect.gen(function* () {
+      const { snapshot } = yield* verifyChanges(git, command);
+      yield* requireCommittable(command, snapshot);
+      yield* Effect.uninterruptible(
+        runRepositoryGit(
+          git,
+          command.worktreePath,
+          [
+            "commit",
+            ...(command.amend ? ["--amend", "--allow-empty"] : []),
+            "--file=-",
+          ],
+          {
+            indexFile,
+            input: command.message,
+            timeoutMilliseconds: 120_000,
+          },
+        ),
+      );
+    }),
+  ).pipe(
+    Effect.andThen(() =>
+      readWritten(git, { ...command, amend: false }, command.viewed),
+    ),
+  );
+}
+
+function requireCommittable(
+  command: CommitChanges,
+  snapshot: RepositoryChanges,
+) {
+  if (!command.message.trim())
+    return Effect.fail(
+      changesError("Unsupported", "Write a commit message first."),
+    );
+  if (!command.amend && snapshot.staged.length === 0)
+    return Effect.fail(
+      changesError("Unsupported", "Stage changes before committing."),
+    );
+  if (
+    [...snapshot.unstaged, ...snapshot.staged].some(
+      (file) => file.status === "U",
+    )
+  )
+    return Effect.fail(
+      changesError(
+        "Conflict",
+        "Resolve all merge conflicts before committing.",
+      ),
+    );
+  return Effect.void;
 }
 
 const writtenResponseBytes =

@@ -8,7 +8,7 @@ import { Effect } from "effect";
 import { describe, expect, it } from "vite-plus/test";
 import type { EnvironmentFeature } from "#server/adapters/environment-transport/environment-feature.contract";
 import { createEnvironmentEventPublisher } from "#server/adapters/environment-transport/events/environment-event-publisher";
-import { httpRoute } from "#server/adapters/environment-transport/http/environment-http-route-handler";
+import { route } from "#server/adapters/environment-transport/http/environment-http-route-handler";
 import { acquireEnvironmentListener } from "#server/app/server/environment-listener";
 import {
   type EnvironmentAuthorization,
@@ -29,29 +29,24 @@ const device = {
 };
 
 const routes = [
-  httpRoute(RepositoryCatalogHttpApi.list, () =>
+  route(RepositoryCatalogHttpApi.list, () =>
     Effect.succeed({ repositories: [] }),
   ),
-  httpRoute(EnvironmentAuthorizationHttpApi.mintWebSocketTicket, () =>
+  route(EnvironmentAuthorizationHttpApi.mintWebSocketTicket, () =>
     Effect.succeed({ expiresAt: "2026-08-21T12:00:30.000Z", ticket: "t" }),
   ),
-  httpRoute(
-    EnvironmentFilesystemHttpApi.listDirectory,
-    (directory) =>
-      directory.path === "/missing"
-        ? Effect.fail({
-            failure: {
-              _tag: "EnvironmentDirectoryRejected" as const,
-              reason: "NotFound" as const,
-            },
-          })
-        : Effect.succeed({
-            breadcrumbs: [],
-            entries: [],
-            path: directory.path ?? "/",
-            truncated: directory.includeHidden === true,
-          }),
-    { failureStatus: () => 404 as const },
+  route(EnvironmentFilesystemHttpApi.listDirectory, (directory) =>
+    directory.path === "/missing"
+      ? Effect.fail({
+          _tag: "EnvironmentDirectoryRejected" as const,
+          reason: "NotFound" as const,
+        })
+      : Effect.succeed({
+          breadcrumbs: [],
+          entries: [],
+          path: directory.path ?? "/",
+          truncated: directory.includeHidden === true,
+        }),
   ),
 ];
 
@@ -101,7 +96,7 @@ describe("Environment HTTP router", () => {
     });
   });
 
-  it("decodes the command, encodes the result, and maps feature failures", async () => {
+  it("answers Ok and Rejected at 200 while authorization failures keep their status", async () => {
     await withListener(async (origin) => {
       const listed = await postJson(origin, {
         path: "/home",
@@ -109,29 +104,37 @@ describe("Environment HTTP router", () => {
       });
       expect(listed.status).toBe(200);
       expect(await listed.json()).toEqual({
-        breadcrumbs: [],
-        entries: [],
-        path: "/home",
-        truncated: true,
+        _tag: "Ok",
+        value: { breadcrumbs: [], entries: [], path: "/home", truncated: true },
+      });
+      const missing = await postJson(origin, { path: "/missing" });
+      expect(missing.status).toBe(200);
+      expect(await missing.json()).toEqual({
+        _tag: "Rejected",
+        failure: { _tag: "EnvironmentDirectoryRejected", reason: "NotFound" },
+      });
+      const denied = await postJson(origin, { path: "/home" }, "reader");
+      expect(denied.status).toBe(403);
+      expect(await denied.json()).toEqual({
+        _tag: "CapabilityDenied",
+        capability: "repository.write",
       });
       const malformed = await postJson(origin, { path: "/home", extra: 1 });
       expect(malformed.status).toBe(400);
       expect(await malformed.json()).toEqual({ _tag: "InvalidMessage" });
-      const missing = await postJson(origin, { path: "/missing" });
-      expect(missing.status).toBe(404);
-      expect(await missing.json()).toEqual({
-        _tag: "EnvironmentDirectoryRejected",
-        reason: "NotFound",
-      });
     });
   });
 });
 
-function postJson(origin: string, body: unknown) {
+function postJson(
+  origin: string,
+  body: unknown,
+  credential: string = writerCredential,
+) {
   return fetch(`${origin}${EnvironmentFilesystemHttpApi.listDirectory.path}`, {
     body: JSON.stringify(body),
     headers: {
-      authorization: `Bearer ${writerCredential}`,
+      authorization: `Bearer ${credential}`,
       "content-type": "application/json",
       origin,
     },

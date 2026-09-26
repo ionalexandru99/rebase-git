@@ -1,8 +1,9 @@
-import type {
-  CommitFile,
-  CommitInspection,
-  InspectCommit,
-  InspectCommitDiff,
+import {
+  type CommitFile,
+  type CommitInspection,
+  type InspectCommit,
+  type InspectCommitDiff,
+  repositoryRejected,
 } from "@rebase/contracts";
 import { Effect } from "effect";
 import type { GitCommandRunner } from "#server/domain/git-command.contract";
@@ -52,7 +53,7 @@ export function inspectCommitDiff(
     const change = yield* readCommitChange(git, command, metadata.parentOid);
     if (change === undefined)
       return yield* Effect.fail(
-        inspectionError(
+        repositoryRejected(
           "Missing",
           "This file is not changed in the selected comparison.",
         ),
@@ -151,7 +152,7 @@ function readMetadata(git: GitCommandRunner, command: InspectCommit) {
       oid !== command.oid
     )
       return yield* Effect.fail(
-        inspectionError("GitFailed", "Could not read commit metadata."),
+        repositoryRejected("GitFailed", "Could not read commit metadata."),
       );
     const parents = (parentText ?? "").split(" ").filter(Boolean);
     if (command.parentOid !== undefined && !parents.includes(command.parentOid))

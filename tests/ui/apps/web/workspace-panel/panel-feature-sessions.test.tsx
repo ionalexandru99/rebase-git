@@ -1,6 +1,8 @@
 import {
   CommitInspectionHttpApi,
+  isRouteOk,
   RepositoryChangesHttpApi,
+  type RouteSuccess,
 } from "@rebase/contracts";
 import {
   type EnvironmentRequestClient,
@@ -34,7 +36,7 @@ async function fixture(linkedWorktree = false) {
     endpoint: Route,
     command: unknown,
     disconnected: () => Error,
-  ): Effect.Effect<Route["success"]["Type"], Error> =>
+  ): Effect.Effect<RouteSuccess<Route>, Error> =>
     Effect.suspend(() => {
       let response: unknown;
       if (endpoint.path === RepositoryChangesHttpApi.read.path) {
@@ -120,8 +122,16 @@ async function fixture(linkedWorktree = false) {
           patch: "",
         };
       }
-      return Schema.decodeUnknownEffect(endpoint.success)(response).pipe(
+      return Schema.decodeUnknownEffect(endpoint.response)({
+        _tag: "Ok",
+        value: response,
+      }).pipe(
         Effect.mapError(disconnected),
+        Effect.flatMap((result) =>
+          isRouteOk(result)
+            ? Effect.succeed(result.value)
+            : Effect.fail(disconnected()),
+        ),
       );
     });
   const requests: EnvironmentRequestClient = (routes, errors) =>

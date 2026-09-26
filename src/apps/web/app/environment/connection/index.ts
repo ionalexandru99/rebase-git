@@ -1,7 +1,7 @@
 export type { EnvironmentCredential } from "@rebase/environment-client";
 export {
+  EnvironmentAccessDenied,
   EnvironmentHelloRejected,
-  EnvironmentHttpRejected,
   EnvironmentResponseError,
   exchangeEnvironmentPairingEffect,
   fetchEnvironmentDiscoveryEffect,

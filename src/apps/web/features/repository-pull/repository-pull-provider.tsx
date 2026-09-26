@@ -53,7 +53,7 @@ export function RepositoryPullProvider({
   const scope = useRepositoryScope();
   const { pull, pulling, error } = usePullAttempts(
     scope?.target.requests,
-    scope?.target.repositoryId,
+    scope?.target,
     reader,
   );
   const allowed = scope?.connected === true && scope.writable;

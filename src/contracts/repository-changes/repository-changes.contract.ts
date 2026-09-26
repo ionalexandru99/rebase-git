@@ -1,5 +1,8 @@
-import { EnvironmentGrantHttpFailure } from "@rebase/contracts/environment-authorization/environment-authorization.contract";
-import type { EnvironmentHttpRoute } from "@rebase/contracts/environment-connection/http/environment-http-route.contract";
+import {
+  type EnvironmentHttpRoute,
+  repositoryCommand,
+  repositoryQuery,
+} from "@rebase/contracts/environment-connection/http/environment-http-route.contract";
 import {
   RepositoryId,
   RepositoryPath,
@@ -84,60 +87,29 @@ export const CommitChanges = Schema.Struct({
 });
 export type CommitChanges = typeof CommitChanges.Type;
 export const ChangesFailure = Schema.TaggedStruct("ChangesFailed", {
-  reason: Schema.Literals([
-    "Missing",
-    "Stale",
-    "Conflict",
-    "Unsupported",
-    "Busy",
-    "GitFailed",
-  ]),
+  reason: Schema.Literals(["Stale", "Conflict", "Unsupported"]),
   detail: Schema.String.check(Schema.isMaxLength(2048)),
 });
 export type ChangesFailure = typeof ChangesFailure.Type;
-export const ChangesHttpFailure = Schema.Union([
-  EnvironmentGrantHttpFailure,
-  ChangesFailure,
-]);
 export const RepositoryChangesHttpApi = {
-  read: {
-    capability: "repository.read",
-    failure: ChangesHttpFailure,
-    failureStatuses: [404, 409],
-    method: "POST",
-    path: "/api/repositories/changes/read",
+  read: repositoryQuery("/api/repositories/changes/read", {
     request: ChangesScope,
     success: RepositoryChanges,
-    successStatus: 200,
-  },
-  diff: {
-    capability: "repository.read",
-    failure: ChangesHttpFailure,
-    failureStatuses: [404, 409],
-    method: "POST",
-    path: "/api/repositories/changes/diff",
+    failure: ChangesFailure,
+  }),
+  diff: repositoryQuery("/api/repositories/changes/diff", {
     request: ReadChangeDiff,
     success: ChangeDiff,
-    successStatus: 200,
-  },
-  mutate: {
-    capability: "repository.write",
-    failure: ChangesHttpFailure,
-    failureStatuses: [404, 409],
-    method: "POST",
-    path: "/api/repositories/changes/mutate",
+    failure: ChangesFailure,
+  }),
+  mutate: repositoryCommand("/api/repositories/changes/mutate", {
     request: MutateChanges,
     success: ChangesWritten,
-    successStatus: 200,
-  },
-  commit: {
-    capability: "repository.write",
-    failure: ChangesHttpFailure,
-    failureStatuses: [404, 409],
-    method: "POST",
-    path: "/api/repositories/changes/commit",
+    failure: ChangesFailure,
+  }),
+  commit: repositoryCommand("/api/repositories/changes/commit", {
     request: CommitChanges,
     success: ChangesWritten,
-    successStatus: 200,
-  },
-} as const satisfies Record<string, EnvironmentHttpRoute>;
+    failure: ChangesFailure,
+  }),
+} satisfies Record<string, EnvironmentHttpRoute>;

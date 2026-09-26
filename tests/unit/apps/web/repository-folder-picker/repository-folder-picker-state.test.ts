@@ -39,7 +39,6 @@ describe("repository folder picker state", () => {
             _tag: "RepositoryPathRejected",
             reason: "NotRepository",
           },
-          status: 422,
         }),
       ),
     ).toBe("This folder is not a Git repository.");

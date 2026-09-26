@@ -1,8 +1,8 @@
 import type { EnvironmentCredential } from "@rebase/environment-client";
 import {
+  EnvironmentAccessDenied,
   type EnvironmentConnectionFailure,
   EnvironmentHelloRejected,
-  EnvironmentHttpRejected,
 } from "@rebase/environment-client";
 import { Effect, Fiber, Result } from "effect";
 import type { EnvironmentProtocolConnection } from "#web/app/environment/connection/environment-protocol-connection.contract";
@@ -103,7 +103,7 @@ function authorizeSession(
       }
 
       const terminal =
-        authorized.failure instanceof EnvironmentHttpRejected &&
+        authorized.failure instanceof EnvironmentAccessDenied &&
         authorized.failure.failure._tag === "InvalidGrant"
           ? { _tag: "PairingRequired" as const }
           : terminalState(authorized.failure);
@@ -222,7 +222,7 @@ function reconnectAfter(
 function terminalState(
   failure: EnvironmentConnectionFailure,
 ): LocalEnvironmentSessionState | undefined {
-  if (failure instanceof EnvironmentHttpRejected) {
+  if (failure instanceof EnvironmentAccessDenied) {
     return { _tag: "AuthorizationFailed", failure };
   }
   if (failure instanceof EnvironmentHelloRejected) {

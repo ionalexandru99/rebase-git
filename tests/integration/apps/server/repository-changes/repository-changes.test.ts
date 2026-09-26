@@ -14,21 +14,23 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
-import type {
-  ChangeSelection,
-  ChangesScope,
-  MutateChanges,
+import {
+  type ChangeSelection,
+  type ChangesScope,
+  type MutateChanges,
+  RepositoryChangesHttpApi,
 } from "@rebase/contracts";
 import { Effect } from "effect";
 import { afterEach, describe, expect, it } from "vite-plus/test";
 import { createLocalGitCommandRunner } from "#server/adapters/local-git/local-git-command-runner";
 import { createLocalRepositoryWatcher } from "#server/adapters/local-git/local-repository-watcher";
 import type { GitCommand } from "#server/domain/git-command.contract";
-import { createRepositoryChangesService } from "#server/features/repository-changes/repository-changes";
+import { repositoryChangesFeature } from "#server/features/repository-changes/index";
 import {
   createRepositoryAccess,
   createRepositoryCoordination,
 } from "#server/repository/access/index";
+import { repositoryFeatureClient } from "#tests-integration/apps/server/environment-connection/feature-routes-client";
 import { removeTemporaryDirectory } from "#tests-support/temporary-directory";
 
 const exec = promisify(execFile);
@@ -65,36 +67,40 @@ async function fixture(
     amend: false,
   };
   const runner = createLocalGitCommandRunner();
-  const service = createRepositoryChangesService(
-    createRepositoryAccess(
-      {
-        find: () =>
-          Effect.succeed({
-            id: repositoryId,
-            name: "test",
-            path: directory,
-            addedAt: new Date().toISOString(),
-            lastOpenedAt: new Date().toISOString(),
-          }),
-      },
-      runner,
-      createLocalRepositoryWatcher(),
-    ),
+  const service = repositoryFeatureClient(
+    RepositoryChangesHttpApi,
+    repositoryChangesFeature,
     {
-      ...runner,
-      run: (command) =>
-        Effect.promise(async () => {
-          await beforeCommand?.(command);
-        }).pipe(
-          Effect.andThen(runner.run(command)),
-          Effect.tap(() =>
-            Effect.promise(async () => {
-              await afterCommand?.(command);
+      access: createRepositoryAccess(
+        {
+          find: () =>
+            Effect.succeed({
+              id: repositoryId,
+              name: "test",
+              path: directory,
+              addedAt: new Date().toISOString(),
+              lastOpenedAt: new Date().toISOString(),
             }),
+        },
+        runner,
+        createLocalRepositoryWatcher(),
+      ),
+      git: {
+        ...runner,
+        run: (command) =>
+          Effect.promise(async () => {
+            await beforeCommand?.(command);
+          }).pipe(
+            Effect.andThen(runner.run(command)),
+            Effect.tap(() =>
+              Effect.promise(async () => {
+                await afterCommand?.(command);
+              }),
+            ),
           ),
-        ),
+      },
+      coordination: createRepositoryCoordination(runner),
     },
-    createRepositoryCoordination(runner),
   );
   const read = (amend = false) =>
     Effect.runPromise(service.read({ ...scope, amend }));
@@ -133,7 +139,7 @@ describe("working changes through Git", () => {
     });
     await writeFile(join(f.directory, "file.txt"), "reviewed edit\n");
     await expect(f.mutate("stage", "unstaged")).rejects.toMatchObject({
-      failure: { reason: "Stale" },
+      reason: "Stale",
     });
     expect(changed).toBe(true);
     expect((await f.git("show", ":file.txt")).stdout).toBe("one\ntwo\nthree\n");
@@ -173,7 +179,7 @@ describe("working changes through Git", () => {
         await writeFile(join(command.directory, "file.txt"), "replacement\n");
     });
     await expect(f.mutate("discard", "unstaged")).rejects.toMatchObject({
-      failure: { reason: "Conflict" },
+      reason: "Conflict",
     });
     expect(await readFile(join(f.directory, "file.txt"), "utf8")).toBe(
       "replacement\n",
@@ -306,7 +312,7 @@ describe("working changes through Git", () => {
     await f.git("add", ".");
     await writeFile(join(f.directory, "file.txt"), "working\n");
     await expect(f.mutate("discard", "staged")).rejects.toMatchObject({
-      failure: { reason: "Conflict" },
+      reason: "Conflict",
     });
     expect((await f.git("show", ":file.txt")).stdout).toBe("staged\n");
     expect(await readFile(join(f.directory, "file.txt"), "utf8")).toBe(
@@ -360,10 +366,10 @@ describe("working changes through Git", () => {
           selection: { _tag: "All" },
         }),
       ),
-    ).rejects.toMatchObject({ failure: { reason: "Stale" } });
+    ).rejects.toMatchObject({ reason: "Stale" });
     await expect(
       Effect.runPromise(f.service.read({ ...f.scope, worktreePath: tmpdir() })),
-    ).rejects.toMatchObject({ failure: { reason: "Missing" } });
+    ).rejects.toMatchObject({ reason: "Missing" });
   });
   it.each(["unstaged", "staged"] as const)(
     "discards %s nested edits when Git omits diff prefixes",
@@ -525,7 +531,7 @@ describe("renamed files through Git", () => {
     const f = await renamed();
     await writeFile(join(f.directory, "file.txt"), "new file\n");
     await expect(f.mutate("discard", "staged")).rejects.toMatchObject({
-      failure: { reason: "Conflict" },
+      reason: "Conflict",
     });
     expect(await readFile(join(f.directory, "file.txt"), "utf8")).toBe(
       "new file\n",

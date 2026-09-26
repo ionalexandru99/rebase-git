@@ -7,15 +7,17 @@ import {
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { RepositoryPullHttpApi } from "@rebase/contracts";
 import { Effect } from "effect";
 import { afterEach, describe, expect, it } from "vite-plus/test";
 import { createLocalGitCommandRunner } from "#server/adapters/local-git/local-git-command-runner";
 import { createLocalRepositoryWatcher } from "#server/adapters/local-git/local-repository-watcher";
-import { createRepositoryPullService } from "#server/features/repository-pull/repository-pull";
+import { repositoryPullFeature } from "#server/features/repository-pull/index";
 import {
   createRepositoryAccess,
   createRepositoryCoordination,
 } from "#server/repository/access/index";
+import { repositoryFeatureClient } from "#tests-integration/apps/server/environment-connection/feature-routes-client";
 import { git } from "#tests-support/git";
 import { removeTemporaryDirectory } from "#tests-support/temporary-directory";
 
@@ -64,7 +66,8 @@ describe("fast-forward pull", () => {
     const local = await git(f.repositoryPath, "rev-parse", "HEAD");
 
     await expect(f.pull("main")).rejects.toMatchObject({
-      failure: { _tag: "PullDiverged", upstream: "origin/main" },
+      _tag: "PullDiverged",
+      upstream: "origin/main",
     });
     expect(await git(f.repositoryPath, "rev-parse", "HEAD")).toBe(local);
   });
@@ -77,7 +80,8 @@ describe("fast-forward pull", () => {
     await writeFile(join(f.repositoryPath, "file.txt"), "local edit\n");
 
     await expect(f.pull("main")).rejects.toMatchObject({
-      failure: { _tag: "PullWouldOverwrite", paths: ["file.txt"] },
+      _tag: "PullWouldOverwrite",
+      paths: ["file.txt"],
     });
     expect(await git(f.repositoryPath, "rev-parse", "HEAD")).toBe(local);
     expect(await readFile(join(f.repositoryPath, "file.txt"), "utf8")).toBe(
@@ -115,11 +119,32 @@ describe("fast-forward pull", () => {
     expect(await git(f.repositoryPath, "status", "--porcelain")).toBe("");
   });
 
+  it("fast-forwards the worktree that holds the branch", async () => {
+    const f = await fixture();
+    const linked = join(f.repositoryPath, "..", "linked");
+    await git(f.repositoryPath, "switch", "-c", "feature");
+    await git(f.repositoryPath, "push", "-u", "origin", "feature");
+    await git(f.repositoryPath, "switch", "main");
+    await git(f.repositoryPath, "worktree", "add", linked, "feature");
+    const incoming = await f.publish("feature", "other.txt", "remote\n");
+    await git(f.repositoryPath, "fetch");
+
+    await expect(f.pull("feature")).resolves.toEqual({
+      outcome: "FastForwarded",
+    });
+
+    expect(await git(linked, "rev-parse", "HEAD")).toBe(incoming);
+    expect(await readFile(join(linked, "other.txt"), "utf8")).toBe("remote\n");
+    expect(await git(f.repositoryPath, "branch", "--show-current")).toBe(
+      "main",
+    );
+  });
+
   it("explains missing and deleted upstreams", async () => {
     const f = await fixture();
     await git(f.repositoryPath, "branch", "untracked");
     await expect(f.pull("untracked")).rejects.toMatchObject({
-      failure: { _tag: "UpstreamMissing" },
+      _tag: "UpstreamMissing",
     });
 
     await git(f.repositoryPath, "switch", "-c", "feature");
@@ -127,7 +152,8 @@ describe("fast-forward pull", () => {
     await git(f.repositoryPath, "push", "origin", "--delete", "feature");
     await git(f.repositoryPath, "fetch", "--prune");
     await expect(f.pull("feature")).rejects.toMatchObject({
-      failure: { _tag: "UpstreamMissing", upstream: "origin/feature" },
+      _tag: "UpstreamMissing",
+      upstream: "origin/feature",
     });
   });
 
@@ -142,10 +168,9 @@ describe("fast-forward pull", () => {
     await expect(git(f.repositoryPath, "merge", "topic")).rejects.toThrow();
 
     await expect(f.pull("main")).rejects.toMatchObject({
-      failure: {
-        _tag: "PullBlocked",
-        detail: expect.stringMatching(/merge is in progress/),
-      },
+      _tag: "RepositoryRejected",
+      reason: "Incompatible",
+      detail: expect.stringMatching(/merge is in progress/),
     });
   });
 });
@@ -168,28 +193,34 @@ async function fixture() {
   await git(root, "clone", originPath, writerPath);
 
   const runner = createLocalGitCommandRunner();
-  const service = createRepositoryPullService({
-    access: createRepositoryAccess(
-      {
-        find: () =>
-          Effect.succeed({
-            id: repositoryId,
-            path: repositoryPath,
-            name: "repository",
-            addedAt: "",
-            lastOpenedAt: "",
-          }),
-      },
-      runner,
-      createLocalRepositoryWatcher(),
-    ),
-    git: runner,
-    coordination: createRepositoryCoordination(runner),
-  });
+  const service = repositoryFeatureClient(
+    RepositoryPullHttpApi,
+    repositoryPullFeature,
+    {
+      access: createRepositoryAccess(
+        {
+          find: () =>
+            Effect.succeed({
+              id: repositoryId,
+              path: repositoryPath,
+              name: "repository",
+              addedAt: "",
+              lastOpenedAt: "",
+            }),
+        },
+        runner,
+        createLocalRepositoryWatcher(),
+      ),
+      git: runner,
+      coordination: createRepositoryCoordination(runner),
+    },
+  );
   return {
     repositoryPath,
     pull: (branch: string) =>
-      Effect.runPromise(service.pull({ repositoryId, branch })),
+      Effect.runPromise(
+        service.pull({ repositoryId, worktreePath: repositoryPath, branch }),
+      ),
     publish: async (branch: string, file: string, content: string) => {
       await git(writerPath, "fetch");
       await git(writerPath, "switch", "-C", branch, `origin/${branch}`);

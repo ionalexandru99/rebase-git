@@ -1,9 +1,7 @@
-import { EnvironmentGrantHttpFailure } from "@rebase/contracts/environment-authorization/environment-authorization.contract";
-import type { EnvironmentHttpRoute } from "@rebase/contracts/environment-connection/http/environment-http-route.contract";
 import {
-  GitFailed,
-  RepositoryMissing,
-} from "@rebase/contracts/git/git-failures.contract";
+  type EnvironmentHttpRoute,
+  repositoryCommand,
+} from "@rebase/contracts/environment-connection/http/environment-http-route.contract";
 import {
   ObjectId,
   RefName,
@@ -129,9 +127,6 @@ export const RepositoryCheckedOut = Schema.Struct({
 });
 export type RepositoryCheckedOut = typeof RepositoryCheckedOut.Type;
 
-export const WorktreeMissing = Schema.TaggedStruct("WorktreeMissing", {
-  worktreePath: RepositoryPath,
-});
 export const RefMissing = Schema.TaggedStruct("RefMissing", {
   name: RefName,
 });
@@ -147,34 +142,19 @@ export const CheckoutRejected = Schema.TaggedStruct("CheckoutRejected", {
   reason: Schema.Literals(["LocalChanges", "StashFailed"]),
 });
 
-export const RepositoryRefsOperationFailure = Schema.Union([
-  RepositoryMissing,
-  WorktreeMissing,
+export const RepositoryCheckoutFailure = Schema.Union([
   RefMissing,
   BranchCheckedOutElsewhere,
   CheckoutRejected,
-  GitFailed,
 ]);
-export type RepositoryRefsOperationFailure =
-  typeof RepositoryRefsOperationFailure.Type;
-
-export const RepositoryRefsHttpFailure = Schema.Union([
-  EnvironmentGrantHttpFailure,
-  RepositoryRefsOperationFailure,
-]);
-export type RepositoryRefsHttpFailure = typeof RepositoryRefsHttpFailure.Type;
+export type RepositoryCheckoutFailure = typeof RepositoryCheckoutFailure.Type;
 
 export const checkoutRepositoryRefPath = "/api/repositories/refs/checkout";
 
 export const RepositoryRefsHttpApi = {
-  checkout: {
-    capability: "repository.write",
-    failure: RepositoryRefsHttpFailure,
-    failureStatuses: [404, 409, 422],
-    method: "POST",
-    path: checkoutRepositoryRefPath,
+  checkout: repositoryCommand(checkoutRepositoryRefPath, {
     request: CheckoutRepositoryRef,
     success: RepositoryCheckedOut,
-    successStatus: 200,
-  },
-} as const satisfies Record<string, EnvironmentHttpRoute>;
+    failure: RepositoryCheckoutFailure,
+  }),
+} satisfies Record<string, EnvironmentHttpRoute>;

@@ -2,19 +2,22 @@ import { execFile } from "node:child_process";
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { promisify } from "node:util";
+import {
+  RepositoryChangesHttpApi,
+  RepositoryOperationsHttpApi,
+} from "@rebase/contracts";
 import { Deferred, Effect, Fiber } from "effect";
 import { afterEach, expect, it } from "vite-plus/test";
 import { createLocalGitCommandRunner } from "#server/adapters/local-git/local-git-command-runner";
 import { createLocalRepositoryWatcher } from "#server/adapters/local-git/local-repository-watcher";
-import { createRepositoryChangesService } from "#server/features/repository-changes/repository-changes";
-import { changesWritePolicies } from "#server/features/repository-changes/repository-changes.write-policy";
-import { fetchWritePolicy } from "#server/features/repository-history/repository-history.write-policy";
-import { createRepositoryOperationsService } from "#server/features/repository-operations/repository-operations";
-import { checkoutWritePolicy } from "#server/features/repository-refs/repository-refs.write-policy";
+import type { RepositoryWritePolicy } from "#server/domain/repository-coordination.contract";
+import { repositoryChangesFeature } from "#server/features/repository-changes/index";
+import { repositoryOperationsFeature } from "#server/features/repository-operations/index";
 import {
   createRepositoryAccess,
   createRepositoryCoordination,
 } from "#server/repository/access/index";
+import { repositoryFeatureClient } from "#tests-integration/apps/server/environment-connection/feature-routes-client";
 import {
   createDivergedRepository,
   startConflict,
@@ -22,6 +25,21 @@ import {
 import { removeTemporaryDirectory } from "#tests-support/temporary-directory";
 
 const exec = promisify(execFile);
+const commitPolicy: RepositoryWritePolicy = {
+  name: "commit",
+  locks: { refs: "wait", worktree: "wait" },
+  duringOperation: "block",
+};
+const stagePolicy: RepositoryWritePolicy = {
+  name: "stage",
+  locks: { worktree: "wait" },
+  duringOperation: "proceed",
+};
+const fetchPolicy: RepositoryWritePolicy = {
+  name: "fetch",
+  locks: { refs: "ifAvailable" },
+  duringOperation: "proceed",
+};
 const directories: string[] = [];
 const repositoryId = "00000000-0000-4000-8000-000000000001";
 afterEach(async () => {
@@ -49,11 +67,16 @@ async function fixture() {
     createLocalRepositoryWatcher(),
   );
   const coordination = createRepositoryCoordination(runner);
-  const changes = createRepositoryChangesService(access, runner, coordination);
-  const operations = createRepositoryOperationsService(
-    access,
-    runner,
-    coordination,
+  const services = { access, git: runner, coordination };
+  const changes = repositoryFeatureClient(
+    RepositoryChangesHttpApi,
+    repositoryChangesFeature,
+    services,
+  );
+  const operations = repositoryFeatureClient(
+    RepositoryOperationsHttpApi,
+    repositoryOperationsFeature,
+    services,
   );
   const scope = { repositoryId, worktreePath: directory };
   const continueOperation = async () =>
@@ -70,17 +93,30 @@ async function fixture() {
 it("rejects incompatible writes during a merge and stages its resolution", async () => {
   const f = await fixture();
   await startConflict(f.git, "merge");
-  for (const policy of [
-    checkoutWritePolicy,
-    changesWritePolicies.commit,
-    changesWritePolicies.discard,
-  ])
-    await expect(
-      Effect.runPromise(f.coordination.run(f.directory, policy, Effect.void)),
-    ).rejects.toMatchObject({ reason: "Incompatible" });
   await writeFile(join(f.directory, "file.txt"), "resolved\n");
   const scope = { ...f.scope, amend: false };
   const snapshot = await Effect.runPromise(f.changes.read(scope));
+  const incompatible = { _tag: "RepositoryRejected", reason: "Incompatible" };
+  await expect(
+    Effect.runPromise(
+      f.changes.commit({
+        ...scope,
+        revision: snapshot.revision,
+        message: "during merge",
+      }),
+    ),
+  ).rejects.toMatchObject(incompatible);
+  await expect(
+    Effect.runPromise(
+      f.changes.mutate({
+        ...scope,
+        revision: snapshot.revision,
+        action: "discard",
+        section: "unstaged",
+        selection: { _tag: "All" },
+      }),
+    ),
+  ).rejects.toMatchObject(incompatible);
   await Effect.runPromise(
     f.changes.mutate({
       ...scope,
@@ -143,7 +179,7 @@ it("skips a contended fetch while ref writers queue across worktrees", async () 
         const first = yield* f.coordination
           .run(
             f.directory,
-            changesWritePolicies.commit,
+            commitPolicy,
             Deferred.succeed(entered, undefined).pipe(
               Effect.andThen(Deferred.await(release)),
               Effect.andThen(record("first")),
@@ -152,17 +188,13 @@ it("skips a contended fetch while ref writers queue across worktrees", async () 
           .pipe(Effect.forkScoped);
         yield* Deferred.await(entered);
         const fetch = yield* f.coordination
-          .run(linked, fetchWritePolicy, Effect.die("Fetch must not start"))
+          .run(linked, fetchPolicy, Effect.die("Fetch must not start"))
           .pipe(Effect.flip, Effect.timeout("1 second"));
         expect(fetch.reason).toBe("Busy");
         const second = yield* f.coordination
-          .run(linked, changesWritePolicies.commit, record("second"))
+          .run(linked, commitPolicy, record("second"))
           .pipe(Effect.forkScoped);
-        yield* f.coordination.run(
-          linked,
-          changesWritePolicies.stage,
-          record("stage"),
-        );
+        yield* f.coordination.run(linked, stagePolicy, record("stage"));
         expect(order).toEqual(["stage"]);
         yield* Deferred.succeed(release, undefined);
         yield* Fiber.join(first);

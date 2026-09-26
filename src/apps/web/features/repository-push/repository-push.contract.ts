@@ -3,13 +3,18 @@ import type {
   PushDestination,
   PushRejectedReason,
   RemoteBranchUpdated,
+  RepositoryRejected,
 } from "@rebase/contracts";
 import { Data, type Effect } from "effect";
 
 export class RepositoryPushError extends Data.TaggedError(
   "RepositoryPushError",
 )<{
-  readonly reason: PushRejectedReason | "Denied" | "Disconnected";
+  readonly reason:
+    | PushRejectedReason
+    | RepositoryRejected["reason"]
+    | "Denied"
+    | "Disconnected";
   readonly detail: string;
 }> {}
 

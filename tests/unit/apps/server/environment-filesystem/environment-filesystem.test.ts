@@ -90,18 +90,14 @@ describe("Environment filesystem", () => {
     await expect(
       Effect.runPromise(filesystem.listDirectory("relative")),
     ).rejects.toMatchObject({
-      failure: {
-        _tag: "EnvironmentDirectoryRejected",
-        reason: "MalformedPath",
-      },
+      _tag: "EnvironmentDirectoryRejected",
+      reason: "MalformedPath",
     });
     await expect(
       Effect.runPromise(filesystem.listDirectory(join(root, "missing"))),
     ).rejects.toMatchObject({
-      failure: {
-        _tag: "EnvironmentDirectoryRejected",
-        reason: "NotFound",
-      },
+      _tag: "EnvironmentDirectoryRejected",
+      reason: "NotFound",
     });
   });
 });

@@ -80,7 +80,7 @@ describe("browser Environment protocol client", () => {
               ? hello
               : {
                   ...hello,
-                  protocol: { major: 2, minor: 3, minimumSupportedMinor: 0 },
+                  protocol: { major: 3, minor: 0, minimumSupportedMinor: 0 },
                   capabilities: hello.capabilities.filter(
                     (capability) => capability.name !== "repository-ref-events",
                   ),
@@ -207,7 +207,7 @@ describe("browser Environment protocol client", () => {
           origin,
           (hello) => ({
             ...hello,
-            protocol: { major: 3, minor: 0, minimumSupportedMinor: 0 },
+            protocol: { major: 4, minor: 0, minimumSupportedMinor: 0 },
           }),
           async () => undefined,
         ),
@@ -215,9 +215,9 @@ describe("browser Environment protocol client", () => {
         new EnvironmentHelloRejected({
           failure: {
             _tag: "ProtocolMajorMismatch",
-            clientMajor: 3,
+            clientMajor: 4,
             requiredUpdate: "server",
-            serverMajor: 2,
+            serverMajor: 3,
           },
         }),
       );
@@ -237,7 +237,7 @@ describe("browser Environment protocol client", () => {
               version: 1,
             },
           ],
-          protocol: { major: 2, minor: 0, minimumSupportedMinor: 0 },
+          protocol: { major: 3, minor: 0, minimumSupportedMinor: 0 },
         }),
         async (connection) => {
           expect(connection.currentSequence()).toBe(0);

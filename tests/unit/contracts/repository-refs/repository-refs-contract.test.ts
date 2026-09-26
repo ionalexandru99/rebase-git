@@ -1,7 +1,7 @@
 import {
   CheckoutRepositoryRef,
+  RepositoryCheckoutFailure,
   RepositoryRefs,
-  RepositoryRefsOperationFailure,
 } from "@rebase/contracts";
 import { Schema } from "effect";
 import { describe, expect, it } from "vite-plus/test";
@@ -59,7 +59,7 @@ describe("repository refs contract", () => {
       }),
     ).toThrow();
     expect(
-      Schema.decodeUnknownSync(RepositoryRefsOperationFailure)({
+      Schema.decodeUnknownSync(RepositoryCheckoutFailure)({
         _tag: "BranchCheckedOutElsewhere",
         name: "feature",
         worktreePath: "/home/alex/feature",

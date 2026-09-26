@@ -22,12 +22,8 @@ export function describeBranchError(error: unknown): string {
       return `${failure.name} is checked out in ${failure.worktreePath}.`;
     case "RefMissing":
       return `${failure.name} no longer exists.`;
-    case "WorktreeMissing":
-      return "The active worktree is gone.";
-    case "RepositoryMissing":
-      return "The repository is no longer known.";
-    case "GitFailed":
-      return failure.detail === undefined || failure.detail.length === 0
+    case "RepositoryRejected":
+      return failure.detail.length === 0
         ? "Git could not complete the operation."
         : failure.detail;
     default:

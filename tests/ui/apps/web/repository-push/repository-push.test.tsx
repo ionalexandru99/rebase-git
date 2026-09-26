@@ -49,9 +49,7 @@ async function fixture(
             target: reviewed,
           } as never)
         : Effect.fail(
-            errors.response(
-              new EnvironmentHttpRejected({ failure, status: 409 }) as never,
-            ),
+            errors.response(new EnvironmentHttpRejected({ failure }) as never),
           );
     });
   await render(

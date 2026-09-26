@@ -1,9 +1,7 @@
-import { EnvironmentGrantHttpFailure } from "@rebase/contracts/environment-authorization/environment-authorization.contract";
-import type { EnvironmentHttpRoute } from "@rebase/contracts/environment-connection/http/environment-http-route.contract";
 import {
-  GitFailed,
-  RepositoryMissing,
-} from "@rebase/contracts/git/git-failures.contract";
+  type EnvironmentHttpRoute,
+  repositoryCommand,
+} from "@rebase/contracts/environment-connection/http/environment-http-route.contract";
 import {
   ObjectId,
   RefName,
@@ -15,7 +13,6 @@ import {
   BranchCheckedOutElsewhere,
   LocalBranch,
   RefMissing,
-  WorktreeMissing,
 } from "@rebase/contracts/repository-refs/repository-refs.contract";
 import { Schema } from "effect";
 
@@ -104,57 +101,47 @@ export const BranchNotMerged = Schema.TaggedStruct("BranchNotMerged", {
 export type BranchNotMerged = typeof BranchNotMerged.Type;
 
 export const RepositoryBranchesOperationFailure = Schema.Union([
-  RepositoryMissing,
-  WorktreeMissing,
   RefMissing,
   BranchCheckedOutElsewhere,
   InvalidBranchName,
   BranchExists,
   BranchMoved,
   BranchNotMerged,
-  GitFailed,
 ]);
 export type RepositoryBranchesOperationFailure =
   typeof RepositoryBranchesOperationFailure.Type;
 
-export const RepositoryBranchesHttpFailure = Schema.Union([
-  EnvironmentGrantHttpFailure,
-  RepositoryBranchesOperationFailure,
-]);
-export type RepositoryBranchesHttpFailure =
-  typeof RepositoryBranchesHttpFailure.Type;
-
-const branchRoute = {
-  capability: "repository.write",
-  failure: RepositoryBranchesHttpFailure,
-  failureStatuses: [404, 409, 422],
-  method: "POST",
-  successStatus: 200,
-} as const;
+function branchCommand<Request extends Schema.Top, Success extends Schema.Top>(
+  path: `/api/${string}`,
+  request: Request,
+  success: Success,
+) {
+  return repositoryCommand(path, {
+    request,
+    success,
+    failure: RepositoryBranchesOperationFailure,
+  });
+}
 
 export const RepositoryBranchesHttpApi = {
-  create: {
-    ...branchRoute,
-    path: "/api/repositories/branches/create",
-    request: CreateRepositoryBranch,
-    success: LocalBranch,
-  },
-  delete: {
-    ...branchRoute,
-    path: "/api/repositories/branches/delete",
-    request: DeleteRepositoryBranch,
-    success: RepositoryBranchDeleted,
-  },
-  rename: {
-    ...branchRoute,
-    path: "/api/repositories/branches/rename",
-    request: RenameRepositoryBranch,
-    success: RepositoryBranchRenamed,
-  },
-  setUpstream: {
-    ...branchRoute,
-    path: "/api/repositories/branches/upstream",
-    request: SetRepositoryBranchUpstream,
-    success: LocalBranch,
-  },
-} as const satisfies Record<string, EnvironmentHttpRoute>;
+  create: branchCommand(
+    "/api/repositories/branches/create",
+    CreateRepositoryBranch,
+    LocalBranch,
+  ),
+  delete: branchCommand(
+    "/api/repositories/branches/delete",
+    DeleteRepositoryBranch,
+    RepositoryBranchDeleted,
+  ),
+  rename: branchCommand(
+    "/api/repositories/branches/rename",
+    RenameRepositoryBranch,
+    RepositoryBranchRenamed,
+  ),
+  setUpstream: branchCommand(
+    "/api/repositories/branches/upstream",
+    SetRepositoryBranchUpstream,
+    LocalBranch,
+  ),
+} satisfies Record<string, EnvironmentHttpRoute>;

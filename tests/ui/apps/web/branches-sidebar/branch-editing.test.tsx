@@ -1,8 +1,8 @@
 import {
   RepositoryBranchesHttpApi,
-  type RepositoryBranchesHttpFailure,
   type RepositoryRefs,
   type RepositoryRefTarget,
+  type RouteFailure,
 } from "@rebase/contracts";
 import {
   EnvironmentHttpRejected,
@@ -118,20 +118,16 @@ describe("branch editing", () => {
 
   it("asks in a warning notification before deleting commits that exist only on the branch", async () => {
     const environment = branchEnvironment();
-    environment.rejectNext(
-      "delete",
-      {
-        _tag: "BranchNotMerged",
-        commits: [
-          { oid: spike, subject: "Try refs index" },
-          { oid: "c".repeat(40), subject: "Measure refs parse" },
-          { oid: "d".repeat(40), subject: "Spike reader" },
-        ],
-        count: 5,
-        name: "feature/spike",
-      },
-      409,
-    );
+    environment.rejectNext("delete", {
+      _tag: "BranchNotMerged",
+      commits: [
+        { oid: spike, subject: "Try refs index" },
+        { oid: "c".repeat(40), subject: "Measure refs parse" },
+        { oid: "d".repeat(40), subject: "Spike reader" },
+      ],
+      count: 5,
+      name: "feature/spike",
+    });
     const screen = await render(sidebar(environment));
     await screen.getByRole("treeitem", { name: "feature/spike" }).click();
 
@@ -226,11 +222,10 @@ describe("branch editing", () => {
   });
   it("shows an upstream failure after the picker closes", async () => {
     const environment = branchEnvironment();
-    environment.rejectNext(
-      "setUpstream",
-      { _tag: "RefMissing", name: "origin/main" },
-      404,
-    );
+    environment.rejectNext("setUpstream", {
+      _tag: "RefMissing",
+      name: "origin/main",
+    });
     const screen = await render(sidebar(environment));
     await screen
       .getByRole("treeitem", { name: "feature/spike" })
@@ -244,12 +239,16 @@ describe("branch editing", () => {
   });
 });
 
+type BranchFailure = RouteFailure<
+  (typeof RepositoryBranchesHttpApi)[keyof typeof RepositoryBranchesHttpApi]
+>;
+
 function branchEnvironment() {
   const requested = vi.fn<(route: BranchRoute, command: object) => void>();
   const checkout = vi.fn(async () => ({}) as never);
   const rejections = new Map<
     BranchRoute,
-    { readonly failure: RepositoryBranchesHttpFailure; readonly status: number }
+    { readonly failure: BranchFailure }
   >();
   const requests: EnvironmentRequestClient = (routes, errors) =>
     environmentHttpRoutesClient(routes, (route, command) => {
@@ -266,11 +265,8 @@ function branchEnvironment() {
   return {
     requested,
     checkout,
-    rejectNext: (
-      route: BranchRoute,
-      failure: RepositoryBranchesHttpFailure,
-      status: number,
-    ) => rejections.set(route, { failure, status }),
+    rejectNext: (route: BranchRoute, failure: BranchFailure) =>
+      rejections.set(route, { failure }),
     scope: repositoryScope({
       ...scope,
       requests,

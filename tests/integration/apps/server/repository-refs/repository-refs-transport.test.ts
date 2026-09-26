@@ -86,7 +86,6 @@ describe("repository refs transport", () => {
       ).rejects.toEqual(
         new RepositoryBranchesRejected({
           failure: { _tag: "CapabilityDenied", capability: "repository.write" },
-          status: 403,
         }),
       );
       await expect(
@@ -107,7 +106,6 @@ describe("repository refs transport", () => {
         ),
       ).rejects.toMatchObject({
         failure: { _tag: "BranchNotMerged", count: 1, name: "spike" },
-        status: 409,
       });
     });
   });
@@ -259,7 +257,6 @@ describe("repository refs transport", () => {
       ).rejects.toEqual(
         new RepositoryRefsRejected({
           failure: { _tag: "CapabilityDenied", capability: "repository.write" },
-          status: 403,
         }),
       );
       await expect(
@@ -282,10 +279,10 @@ describe("repository refs transport", () => {
       ).rejects.toEqual(
         new RepositoryRefsRejected({
           failure: {
-            _tag: "RepositoryMissing",
-            repositoryId: "00000000-0000-4000-8000-000000000099",
+            _tag: "RepositoryRejected",
+            reason: "Missing",
+            detail: "This repository is no longer available.",
           },
-          status: 404,
         }),
       );
     });
