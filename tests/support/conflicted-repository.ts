@@ -32,9 +32,9 @@ const incoming = {
   "old-name.txt": lines("line 0 incoming", ...renamed.slice(1)),
 };
 
-export async function createConflictedRebase() {
+export async function createConflictedRebase(parent = tmpdir()) {
   const directory = await realpath(
-    await mkdtemp(join(tmpdir(), "rebase-conflicts-")),
+    await mkdtemp(join(parent, "rebase-conflicts-")),
   );
   await createRepository(directory, { commits: [] });
   await git(directory, "config", "merge.conflictStyle", "zdiff3");
