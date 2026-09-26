@@ -127,7 +127,7 @@ export function ConflictFileSection({
                   ) : (
                     <>
                       {conflict.file ? (
-                        <span className="shrink-0 text-[10px] text-muted-foreground">
+                        <span className="min-w-0 max-w-[45%] truncate text-[10px] text-muted-foreground">
                           {conflictLabel(conflict.file, conflicts.list?.sides)}
                         </span>
                       ) : null}

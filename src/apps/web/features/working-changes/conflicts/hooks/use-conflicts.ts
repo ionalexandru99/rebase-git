@@ -4,7 +4,10 @@ import type {
   ConflictScope,
 } from "@rebase/contracts";
 import { useMemo } from "react";
-import { describeChangesFailure } from "#web/features/working-changes/changes-messages";
+import {
+  type ChangesRequestFailure,
+  describeChangesFailure,
+} from "#web/features/working-changes/changes-messages";
 import { useConflictActions } from "#web/features/working-changes/conflicts/hooks/use-conflict-actions";
 import {
   useConflictDocument,
@@ -45,9 +48,10 @@ export function useConflicts(
     rows,
     list: list.data,
     document: document.data,
-    documentProblem: document.isError
-      ? describeChangesFailure(document.error)
-      : null,
+    documentProblem:
+      document.isError && !wholeFileOnly(document.error)
+        ? describeChangesFailure(document.error)
+        : null,
     problem:
       actions.problem ??
       (list.isError ? describeChangesFailure(list.error) : null),
@@ -67,4 +71,13 @@ function conflictRows(
 ): readonly ConflictRow[] {
   const files = new Map(list?.files.map((file) => [file.path, file]));
   return conflicted.map((path) => ({ path, file: files.get(path) }));
+}
+
+function wholeFileOnly(error: ChangesRequestFailure) {
+  return (
+    error._tag === "EnvironmentHttpRejected" &&
+    error.failure._tag === "ConflictFailed" &&
+    (error.failure.reason === "Unsupported" ||
+      error.failure.reason === "TooLarge")
+  );
 }
