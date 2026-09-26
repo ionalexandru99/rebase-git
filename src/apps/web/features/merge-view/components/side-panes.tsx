@@ -1,37 +1,36 @@
-import type { ConflictSide, ConflictSides, TokenMark } from "@rebase/contracts";
+import type { ConflictSide, ConflictSides } from "@rebase/contracts";
+import { IconArrowBarToDown } from "@tabler/icons-react";
 import { memo, type RefObject, useMemo, useState } from "react";
+import { Button } from "#web/components/ui/button";
 import {
-  type PaneRow,
   paneRows,
   type RegionBand,
   type SideSegment,
   sideSegments,
 } from "#web/features/merge-view/aligned-rows";
 import {
-  LineBox,
+  bandEdges,
+  PaneLines,
+  type PaneProps,
   sideNames,
-} from "#web/features/merge-view/components/line-box";
+} from "#web/features/merge-view/components/pane-lines";
 import type { MergeModel } from "#web/features/merge-view/conflict-document";
-import type { LineSelection } from "#web/features/merge-view/hooks/use-selection";
+import {
+  type LineSelection,
+  sideTaken,
+} from "#web/features/merge-view/hooks/use-selection";
 import { cn } from "#web/lib/utils";
 
-const sideRows: Record<ConflictSide, string> = {
-  base: "bg-muted",
-  current: "bg-[#69b1ff]/10",
-  incoming: "bg-[#5ecc71]/10",
+const sideShortcuts: Partial<Record<ConflictSide, string>> = {
+  current: "Alt+1",
+  incoming: "Alt+2",
 };
 
-const sideMarks: Record<ConflictSide, string> = {
-  base: "bg-foreground/15",
-  current: "bg-[#69b1ff]/35",
-  incoming: "bg-[#5ecc71]/35",
+const takenHunks: Record<ConflictSide, string> = {
+  base: "aria-pressed:bg-muted-foreground",
+  current: "aria-pressed:bg-[#69b1ff]",
+  incoming: "aria-pressed:bg-[#5ecc71]",
 };
-
-interface PaneProps {
-  readonly rows: readonly PaneRow[];
-  readonly side: ConflictSide;
-  readonly activeRegion: string | null;
-}
 
 interface PanesProps {
   readonly sides: ConflictSides;
@@ -67,6 +66,18 @@ const AlignedPanes = memo(function AlignedPanes({
     () => paneRows(segments, leftSide, "incoming"),
     [segments, leftSide],
   );
+  const left: PaneProps = {
+    side: leftSide,
+    activeRegion,
+    lines,
+    rows: rows.left,
+  };
+  const right: PaneProps = {
+    side: "incoming",
+    activeRegion,
+    lines,
+    rows: rows.right,
+  };
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="flex shrink-0 border-border border-b">
@@ -78,30 +89,10 @@ const AlignedPanes = memo(function AlignedPanes({
         className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto"
       >
         <div className="flex font-mono text-xs leading-5">
-          <LineGutter
-            rows={rows.left}
-            side={leftSide}
-            activeRegion={activeRegion}
-            lines={lines}
-          />
-          <PaneText
-            rows={rows.left}
-            side={leftSide}
-            activeRegion={activeRegion}
-            lines={lines}
-          />
-          <PaneText
-            rows={rows.right}
-            side="incoming"
-            activeRegion={activeRegion}
-            lines={lines}
-          />
-          <LineGutter
-            rows={rows.right}
-            side="incoming"
-            activeRegion={activeRegion}
-            lines={lines}
-          />
+          <HunkGutter {...left} />
+          <PaneLines {...left} />
+          <PaneLines {...right} />
+          <HunkGutter {...right} />
         </div>
       </div>
     </div>
@@ -134,16 +125,10 @@ function PaneHeader({
   );
 }
 
-function LineGutter({
-  rows,
-  side,
-  activeRegion,
-  lines,
-}: PaneProps & { readonly lines: LineSelection }) {
-  const first = rows.findIndex(({ kind }) => kind === "line");
+function HunkGutter({ rows, side, activeRegion, lines }: PaneProps) {
   return (
-    <div data-gutter={side} className="w-7 shrink-0 bg-muted/40 select-none">
-      {rows.map((row, index) => (
+    <div className="w-7 shrink-0 bg-muted/40 select-none">
+      {rows.map((row) => (
         <div
           key={row.key}
           className={cn(
@@ -151,133 +136,48 @@ function LineGutter({
             row.kind !== "context" && bandEdges(row.band, activeRegion),
           )}
         >
-          {row.kind === "line" && (
-            <LineBox
-              target={{
-                regionId: row.band.segment.region.id,
-                side,
-                index: row.index,
-              }}
-              picks={row.band.segment.picks}
-              lineCount={row.band.segment.region[side].length}
-              ordinal={row.band.ordinal}
-              focusable={index === first}
-              selection={lines}
-            />
-          )}
+          {row.kind !== "context" &&
+            row.band.first &&
+            row.band.segment.region[side].length > 0 && (
+              <HunkButton
+                band={row.band}
+                side={side}
+                active={row.band.segment.region.id === activeRegion}
+                lines={lines}
+              />
+            )}
         </div>
       ))}
     </div>
   );
 }
 
-function PaneText({
-  rows,
+function HunkButton({
+  band,
   side,
-  activeRegion,
+  active,
   lines,
-}: PaneProps & { readonly lines: LineSelection }) {
-  return (
-    <div
-      data-pane={side}
-      className="min-w-0 flex-1 overflow-x-auto overflow-y-hidden"
-      onPointerDown={(event) => {
-        const regionId = (event.target as HTMLElement).closest<HTMLElement>(
-          "[data-region]",
-        )?.dataset.region;
-        if (regionId !== undefined) lines.focusRegion(regionId);
-      }}
-    >
-      <div className="w-max min-w-full">
-        {rows.map((row) => (
-          <div
-            key={row.key}
-            data-row={row.kind}
-            data-region={
-              row.kind === "context" ? undefined : row.band.segment.region.id
-            }
-            className={cn(
-              "h-5 px-2 whitespace-pre",
-              row.kind === "line" && sideRows[side],
-              row.kind === "padding" && "bg-muted/30",
-              row.kind !== "context" && bandEdges(row.band, activeRegion),
-              row.kind === "line" &&
-                picked(row.band, side, row.index) &&
-                "outline -outline-offset-1 outline-foreground/20",
-            )}
-          >
-            {row.kind === "context" ? (
-              row.text
-            ) : row.kind === "line" ? (
-              <MarkedLine
-                text={row.text}
-                marks={lineMarks(row.band, side, row.index)}
-                markClass={sideMarks[side]}
-              />
-            ) : null}
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function MarkedLine({
-  text,
-  marks,
-  markClass,
 }: {
-  readonly text: string;
-  readonly marks: readonly TokenMark[];
-  readonly markClass: string;
+  readonly band: RegionBand;
+  readonly side: ConflictSide;
+  readonly active: boolean;
+  readonly lines: LineSelection;
 }) {
-  if (marks.length === 0) return text;
-  const parts: { text: string; marked: boolean; start: number }[] = [];
-  let cursor = 0;
-  for (const { start, end } of [...marks].sort((a, b) => a.start - b.start)) {
-    if (start < cursor) continue;
-    if (start > cursor)
-      parts.push({
-        text: text.slice(cursor, start),
-        marked: false,
-        start: cursor,
-      });
-    parts.push({ text: text.slice(start, end), marked: true, start });
-    cursor = end;
-  }
-  if (cursor < text.length)
-    parts.push({ text: text.slice(cursor), marked: false, start: cursor });
-  return parts.map((part) =>
-    part.marked ? (
-      <mark
-        key={part.start}
-        className={cn("rounded-[2px] text-inherit", markClass)}
-      >
-        {part.text}
-      </mark>
-    ) : (
-      <span key={part.start}>{part.text}</span>
-    ),
-  );
-}
-
-function lineMarks(band: RegionBand, side: ConflictSide, index: number) {
-  if (side === "base") return [];
-  return band.segment.region.marks[side].filter(({ line }) => line === index);
-}
-
-function picked(band: RegionBand, side: ConflictSide, index: number) {
-  return band.segment.picks.some(
-    (pick) => pick.side === side && pick.index === index,
-  );
-}
-
-function bandEdges(band: RegionBand, activeRegion: string | null) {
-  return cn(
-    band.first && "border-t",
-    band.last && "border-b",
-    band.segment.region.id === activeRegion
-      ? "border-status-connecting/70"
-      : "border-border",
+  const { region, picks } = band.segment;
+  return (
+    <Button
+      variant="ghost"
+      size="icon-xs"
+      aria-label={`Take ${sideNames[side].toLowerCase()}, region ${band.ordinal}`}
+      aria-pressed={sideTaken(picks, region, side)}
+      aria-keyshortcuts={active ? sideShortcuts[side] : undefined}
+      className={cn(
+        "size-5 border-border bg-background text-muted-foreground aria-pressed:border-transparent aria-pressed:text-background sm:size-5",
+        takenHunks[side],
+      )}
+      onClick={() => lines.take(region, side)}
+    >
+      <IconArrowBarToDown aria-hidden="true" className="size-3.5" />
+    </Button>
   );
 }

@@ -179,7 +179,6 @@ function MergeViewContent({
           />
           <ResultEditor
             model={model}
-            activeRegion={selection.activeRegion}
             onEdit={merge.edit}
             onUndo={merge.undo}
             onRegionClick={selection.focusFromResult}

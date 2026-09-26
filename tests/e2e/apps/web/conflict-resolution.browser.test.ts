@@ -59,7 +59,7 @@ test("resolves a paused rebase line by line and continues it", async ({
 
     await expect(mergeView.getByText("1 of 1 open")).toBeVisible();
     await mergeView
-      .getByRole("button", { name: "Incoming line 1, region 1" })
+      .getByRole("button", { name: "Take incoming, region 1" })
       .click();
     await mergeView.getByRole("button", { name: "Mark resolved" }).click();
 

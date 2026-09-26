@@ -3,6 +3,7 @@ import {
   choicePicks,
   type MergeModel,
   type MergeSegment,
+  openLines,
   type RegionChoice,
   sameLines,
   segmentLines,
@@ -152,8 +153,11 @@ function withLines(
   lines: readonly string[],
 ): MergeSegment {
   if (segment.kind === "text") return { kind: "text", lines };
-  if (sameLines(lines, segment.marker))
-    return { ...segment, choice: { kind: "open" } };
+  if (
+    segment.choice.kind === "open" &&
+    sameLines(lines, openLines(segment.region))
+  )
+    return segment;
   return {
     ...segment,
     choice: { kind: "edited", picks: choicePicks(segment.choice), lines },

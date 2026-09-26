@@ -6,19 +6,29 @@ import {
   initialContent,
   mergeViewFixture,
   path,
-  secondMarker,
 } from "#tests-ui/apps/web/merge-view/merge-view-fixture";
 
-const box = (side: "Current" | "Incoming" | "Base", line: number, region = 1) =>
+type Side = "Current" | "Incoming" | "Base";
+
+const line = (side: Side, index: number, region = 1) =>
   page.getByRole("button", {
-    name: `${side} line ${line}, region ${region}`,
+    name: `${side} line ${index}, region ${region}`,
+    exact: true,
+  });
+const hunk = (side: Side, region = 1) =>
+  page.getByRole("button", {
+    name: `Take ${side.toLowerCase()}, region ${region}`,
     exact: true,
   });
 const result = () => page.getByRole("textbox", { name: "Result" });
+const shown = (
+  first: readonly string[] = ["", ""],
+  second: readonly string[] = [""],
+) => content(first, second);
 
 async function opened() {
   const fixture = await mergeViewFixture();
-  await expect.element(box("Current", 1)).toBeVisible();
+  await expect.element(line("Current", 1)).toBeVisible();
   return fixture;
 }
 
@@ -27,6 +37,13 @@ async function typeAt(offset: number, text: string) {
   area.focus();
   area.setSelectionRange(offset, offset);
   await userEvent.keyboard(text);
+}
+
+function openBlockHeights() {
+  const editor = result().element().parentElement;
+  return [...(editor?.querySelectorAll<HTMLElement>("div") ?? [])]
+    .filter(({ style }) => style.background.includes("repeating-linear"))
+    .map((block) => block.getBoundingClientRect().height);
 }
 
 describe("merge view", () => {
@@ -47,12 +64,22 @@ describe("merge view", () => {
       .toBeVisible();
   });
 
-  it("writes the region block with a single clicked line", async () => {
+  it("renders open regions as empty blocks as tall as the region", async () => {
     const f = await opened();
-    await box("Current", 2).click();
-    await expect.element(box("Current", 2)).toHaveTextContent("1");
+    await expect(result()).toHaveValue(shown());
+    expect(openBlockHeights()).toEqual([40, 20]);
+    await line("Incoming", 1, 2).click();
+    await expect.poll(openBlockHeights).toEqual([40]);
     await expect
-      .element(box("Current", 2))
+      .poll(() => f.text())
+      .toBe(content(firstMarker, ["  return 2;"]));
+  });
+
+  it("selects a single clicked line and removes it on the next click", async () => {
+    const f = await opened();
+    await line("Current", 2).click();
+    await expect
+      .element(line("Current", 2))
       .toHaveAttribute("aria-pressed", "true");
     await expect
       .poll(() => f.writes.at(-1)?.content)
@@ -61,43 +88,71 @@ describe("merge view", () => {
     await expect
       .element(page.getByText("1 of 2 open", { exact: true }))
       .toBeVisible();
+    await line("Current", 2).click();
+    await expect
+      .element(line("Current", 2))
+      .toHaveAttribute("aria-pressed", "false");
+    await expect.poll(() => f.text()).toBe(initialContent);
   });
 
   it("selects a dragged range in drag order", async () => {
     const f = await opened();
-    await box("Current", 2).dropTo(box("Current", 1));
+    await line("Current", 2).dropTo(line("Current", 1));
     await expect
       .poll(() => f.text())
       .toBe(content(["  delay: 100,", "  retries: 3,"]));
-    await expect.element(box("Current", 2)).toHaveTextContent("1");
-    await expect.element(box("Current", 1)).toHaveTextContent("2");
+    await expect
+      .element(line("Current", 1))
+      .toHaveAttribute("aria-pressed", "true");
   });
 
-  it("interleaves alternating clicks across sides and renumbers after a removal", async () => {
+  it("interleaves alternating clicks across sides", async () => {
     const f = await opened();
-    await box("Current", 1).click();
-    await box("Incoming", 1).click();
-    await box("Current", 2).click();
+    await line("Current", 1).click();
+    await line("Incoming", 1).click();
+    await line("Current", 2).click();
     await expect
       .poll(() => f.text())
       .toBe(content(["  retries: 3,", "  retries: 5,", "  delay: 100,"]));
-    await box("Incoming", 1).click();
-    await expect.element(box("Incoming", 1)).toHaveTextContent("");
-    await expect.element(box("Current", 2)).toHaveTextContent("2");
+    await line("Incoming", 1).click();
     await expect
       .poll(() => f.text())
       .toBe(content(["  retries: 3,", "  delay: 100,"]));
   });
 
+  it("takes and releases a whole side with its hunk button", async () => {
+    const f = await opened();
+    await line("Current", 1).click();
+    await expect
+      .element(hunk("Current"))
+      .toHaveAttribute("aria-pressed", "false");
+    await hunk("Incoming").click();
+    await hunk("Current").click();
+    await expect
+      .element(hunk("Current"))
+      .toHaveAttribute("aria-pressed", "true");
+    await expect
+      .element(line("Current", 2))
+      .toHaveAttribute("aria-pressed", "true");
+    await expect
+      .poll(() => f.text())
+      .toBe(content(["  retries: 3,", "  retries: 5,", "  delay: 100,"]));
+    await hunk("Current").click();
+    await expect
+      .element(hunk("Current"))
+      .toHaveAttribute("aria-pressed", "false");
+    await expect.poll(() => f.text()).toBe(content(["  retries: 5,"]));
+  });
+
   it("keeps typed text until the next selection change in that region", async () => {
     const f = await opened();
-    await box("Current", 1).click();
+    await line("Current", 1).click();
     await expect.poll(() => f.text()).toBe(content(["  retries: 3,"]));
-    const end = content(["  retries: 3,"]).indexOf("  retries: 3,") + 13;
+    const end = shown(["  retries: 3,"]).indexOf("  retries: 3,") + 13;
     await typeAt(end, " // two");
     await expect.poll(() => f.text()).toBe(content(["  retries: 3, // two"]));
-    await expect(result()).toHaveValue(content(["  retries: 3, // two"]));
-    await box("Current", 2).click();
+    await expect(result()).toHaveValue(shown(["  retries: 3, // two"]));
+    await line("Current", 2).click();
     await expect
       .poll(() => f.text())
       .toBe(content(["  retries: 3,", "  delay: 100,"]));
@@ -106,10 +161,10 @@ describe("merge view", () => {
   it("coalesces changes made while a write is in flight", async () => {
     const f = await opened();
     f.holdWrites();
-    await box("Current", 1).click();
+    await line("Current", 1).click();
     await expect.poll(() => f.writes.length).toBe(1);
-    await box("Incoming", 1).click();
-    await box("Current", 2).click();
+    await line("Incoming", 1).click();
+    await line("Current", 2).click();
     f.releaseWrites();
     const latest = content(["  retries: 3,", "  retries: 5,", "  delay: 100,"]);
     await expect.poll(() => f.text()).toBe(latest);
@@ -123,13 +178,11 @@ describe("merge view", () => {
   it("reloads the document on a stale write and keeps the file open", async () => {
     const f = await opened();
     f.staleOnNextWrite();
-    await box("Current", 1).click();
+    await line("Current", 1).click();
     await expect
       .element(page.getByText("config.ts changed on disk. Reloaded."))
       .toBeVisible();
-    await expect(result()).toHaveValue(
-      content(["// changed on disk"], secondMarker),
-    );
+    await expect(result()).toHaveValue(shown(["// changed on disk"]));
     expect(f.reads()).toBe(2);
     expect(f.onClose).not.toHaveBeenCalled();
     await expect
@@ -139,13 +192,13 @@ describe("merge view", () => {
 
   it("restores the marker block when a decided region is undone", async () => {
     const f = await opened();
-    await box("Incoming", 1).click();
+    await line("Incoming", 1).click();
     await expect.poll(() => f.text()).toBe(content(["  retries: 5,"]));
     await page.getByRole("button", { name: "Undo region 1" }).click();
-    await expect(result()).toHaveValue(initialContent);
+    await expect(result()).toHaveValue(shown());
     await expect.poll(() => f.text()).toBe(initialContent);
     await expect
-      .element(box("Incoming", 1))
+      .element(line("Incoming", 1))
       .toHaveAttribute("aria-pressed", "false");
   });
 
@@ -184,8 +237,8 @@ describe("merge view", () => {
         },
       ],
     });
-    await box("Current", 1).click();
-    await box("Incoming", 1, 2).click();
+    await line("Current", 1).click();
+    await hunk("Incoming", 2).click();
     await expect
       .poll(() => f.text())
       .toBe(content(["  retries: 3,"], ["  return 2;"]));
@@ -199,16 +252,35 @@ describe("merge view", () => {
     expect(f.onClose).not.toHaveBeenCalled();
   });
 
-  it("drives regions and lines from the keyboard", async () => {
+  it("toggles and extends lines from the keyboard", async () => {
     const f = await opened();
-    (box("Current", 1).element() as HTMLElement).focus();
+    (line("Current", 1).element() as HTMLElement).focus();
     await userEvent.keyboard(" ");
+    await expect
+      .element(line("Current", 1))
+      .toHaveAttribute("aria-pressed", "true");
     await userEvent.keyboard("{Shift>}{ArrowDown}{/Shift}");
     await expect
       .poll(() => f.text())
       .toBe(content(["  retries: 3,", "  delay: 100,"]));
-    await expect.element(box("Current", 2)).toHaveFocus();
+    await expect.element(line("Current", 2)).toHaveFocus();
+    await userEvent.keyboard("{Enter}");
+    await expect.poll(() => f.text()).toBe(content(["  retries: 3,"]));
+    await userEvent.keyboard("{ArrowDown}");
+    await expect.element(line("Current", 1, 2)).toHaveFocus();
+  });
+
+  it("drives regions and hunks from the keyboard", async () => {
+    const f = await opened();
+    (line("Current", 1).element() as HTMLElement).focus();
+    await userEvent.keyboard("{Alt>}1{/Alt}");
+    await expect
+      .poll(() => f.text())
+      .toBe(content(["  retries: 3,", "  delay: 100,"]));
     await userEvent.keyboard("{Alt>}{ArrowDown}{/Alt}");
+    await expect
+      .element(hunk("Incoming", 2))
+      .toHaveAttribute("aria-keyshortcuts", "Alt+2");
     await userEvent.keyboard("{Alt>}2{/Alt}");
     await expect
       .poll(() => f.text())
@@ -217,11 +289,7 @@ describe("merge view", () => {
     await userEvent.keyboard("{Alt>}1{/Alt}");
     await expect
       .poll(() => f.text())
-      .toBe(content(["  retries: 3,", "  delay: 100,"], ["  return 2;"]));
-    await userEvent.keyboard("{Alt>}2{/Alt}");
-    await expect
-      .poll(() => f.text())
-      .toBe(content(["  retries: 5,"], ["  return 2;"]));
+      .toBe(content(firstMarker, ["  return 2;"]));
   });
 
   it("uses the same handlers for the region buttons and swaps base into the left pane", async () => {
@@ -231,11 +299,14 @@ describe("merge view", () => {
       .element(page.getByRole("button", { name: "Next region" }))
       .toBeDisabled();
     await page.getByRole("button", { name: "Base", exact: true }).click();
-    await box("Base", 1, 2).click();
+    await line("Base", 1, 2).click();
     await expect
       .poll(() => f.text())
       .toBe(content(firstMarker, ["  return 0;"]));
-    await expect.element(box("Current", 1)).not.toBeInTheDocument();
+    await expect.element(line("Current", 1)).not.toBeInTheDocument();
+    await expect
+      .element(hunk("Base", 2))
+      .toHaveAttribute("aria-pressed", "true");
   });
 
   it("closes with Escape", async () => {

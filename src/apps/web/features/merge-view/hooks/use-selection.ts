@@ -1,4 +1,4 @@
-import type { ConflictSide } from "@rebase/contracts";
+import type { ConflictRegion, ConflictSide } from "@rebase/contracts";
 import {
   useCallback,
   useEffect,
@@ -27,6 +27,7 @@ export interface LineSelection {
   readonly enter: (target: LineTarget) => void;
   readonly toggle: (target: LineTarget) => void;
   readonly extend: (target: LineTarget, index: number) => void;
+  readonly take: (region: ConflictRegion, side: ConflictSide) => void;
   readonly focusRegion: (regionId: string) => void;
 }
 
@@ -99,10 +100,7 @@ export function useSelection(
     previous: () => move(-1),
     next: () => move(1),
     takeActive: (side: ConflictSide) => {
-      if (active !== undefined)
-        choose(active.region.id, () =>
-          active.region[side].map((_, index) => ({ side, index })),
-        );
+      if (active !== undefined) lines.take(active.region, side);
     },
     focusFromResult: (regionId: string) => {
       setSelectedRegion(regionId);
@@ -181,6 +179,10 @@ function useLineSelection(
           ),
         );
       },
+      take: (region, side) => {
+        selectRegion(region.id);
+        choose(region.id, (picks) => takeSide(picks, region, side));
+      },
       focusRegion,
     }),
     [choose, focusRegion, selectRegion],
@@ -230,4 +232,26 @@ function applyPickRange(
   for (let index = from; index !== to + step; index += step)
     next = applyPick(next, { side, index }, mode);
   return next;
+}
+
+export function sideTaken(
+  picks: readonly LinePick[],
+  region: ConflictRegion,
+  side: ConflictSide,
+) {
+  return (
+    region[side].length > 0 &&
+    region[side].every((_, index) => pickPosition(picks, { side, index }) >= 0)
+  );
+}
+
+function takeSide(
+  picks: readonly LinePick[],
+  region: ConflictRegion,
+  side: ConflictSide,
+): readonly LinePick[] {
+  if (region[side].length === 0) return picks;
+  if (sideTaken(picks, region, side))
+    return picks.filter((pick) => pick.side !== side);
+  return applyPickRange(picks, side, 0, region[side].length - 1, "add");
 }

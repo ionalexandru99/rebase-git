@@ -12,23 +12,28 @@ import { cn } from "#web/lib/utils";
 
 const lineHeight = 20;
 
-const originEdges: Record<LineOrigin, string> = {
+const originEdges: Record<LineOrigin | "open", string> = {
   base: "bg-muted-foreground",
   current: "bg-[#69b1ff]",
   incoming: "bg-[#5ecc71]",
-  edited: "bg-foreground/60",
+  edited: "bg-[rgb(255_255_255/55%)]",
+  open: "bg-[rgb(255_255_255/14%)]",
+};
+
+const openBlock: CSSProperties = {
+  background:
+    "repeating-linear-gradient(135deg, rgb(255 255 255 / 4%) 0 5px, transparent 5px 12px)",
+  boxShadow: "inset 0 0 0 1px rgb(255 255 255 / 5%)",
 };
 
 export function ResultEditor({
   model,
-  activeRegion,
   onEdit,
   onUndo,
   onRegionClick,
   scrollRef,
 }: {
   readonly model: MergeModel;
-  readonly activeRegion: string | null;
   readonly onEdit: (text: string, caret: number) => void;
   readonly onUndo: (regionId: string) => void;
   readonly onRegionClick: (regionId: string) => void;
@@ -65,12 +70,8 @@ export function ResultEditor({
                 <div
                   key={block.regionId}
                   aria-hidden="true"
-                  className={cn(
-                    "absolute inset-x-0 bg-status-connecting/10",
-                    block.regionId === activeRegion &&
-                      "bg-status-connecting/20",
-                  )}
-                  style={blockPosition(block)}
+                  className="absolute inset-x-0"
+                  style={{ ...openBlock, ...blockPosition(block) }}
                 />
               ),
           )}
@@ -114,7 +115,7 @@ function BlockGutter({
     return (
       <div
         aria-hidden="true"
-        className="absolute left-0 w-[3px] bg-status-connecting"
+        className={cn("absolute left-0 w-[3px]", originEdges.open)}
         style={blockPosition(block)}
       />
     );
@@ -123,7 +124,7 @@ function BlockGutter({
       {block.length === 0 ? (
         <div
           aria-hidden="true"
-          className="absolute left-0 h-0.5 w-full bg-foreground/60"
+          className={cn("absolute left-0 h-0.5 w-full", originEdges.edited)}
           style={{ top: block.start * lineHeight - 1 }}
         />
       ) : (

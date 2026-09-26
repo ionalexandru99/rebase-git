@@ -71,12 +71,20 @@ export function mergeModel(document: ConflictDocument): MergeModel {
   };
 }
 
+function regionHeight(region: ConflictRegion) {
+  return Math.max(region.current.length, region.incoming.length, 1);
+}
+
+export function openLines(region: ConflictRegion): readonly string[] {
+  return Array.from({ length: regionHeight(region) }, () => "");
+}
+
 export function segmentLines(segment: MergeSegment): readonly string[] {
   if (segment.kind === "text") return segment.lines;
-  const { choice, region, marker } = segment;
+  const { choice, region } = segment;
   switch (choice.kind) {
     case "open":
-      return marker;
+      return openLines(region);
     case "picked":
       return choice.picks.map((pick) => region[pick.side][pick.index] ?? "");
     case "edited":
@@ -85,7 +93,13 @@ export function segmentLines(segment: MergeSegment): readonly string[] {
 }
 
 export function fileContent(model: MergeModel) {
-  return model.segments.flatMap(segmentLines).join(model.eol);
+  return model.segments
+    .flatMap((segment) =>
+      segment.kind === "region" && segment.choice.kind === "open"
+        ? segment.marker
+        : segmentLines(segment),
+    )
+    .join(model.eol);
 }
 
 export function regionSegments(model: MergeModel): readonly RegionSegment[] {
