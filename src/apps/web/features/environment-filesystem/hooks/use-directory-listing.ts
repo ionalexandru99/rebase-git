@@ -8,6 +8,6 @@ export function useDirectoryListing(
   return useEnvironmentQuery(
     EnvironmentFilesystemHttpApi.listDirectory,
     path === undefined ? {} : { path },
-    { enabled, changes: "none", staleTime: 0 },
+    { enabled, changes: "none", staleTime: 0, refetchOnWindowFocus: false },
   );
 }

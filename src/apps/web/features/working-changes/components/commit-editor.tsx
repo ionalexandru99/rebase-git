@@ -77,7 +77,11 @@ export function CommitEditor({
             className="accent-primary"
             checked={amend}
             disabled={
-              disabled || changes?.head == null || (blocked && !amendAllowed)
+              amend
+                ? !writable || busy
+                : disabled ||
+                  changes?.head == null ||
+                  (blocked && !amendAllowed)
             }
             onChange={(event) => view.toggleAmend(event.target.checked)}
           />

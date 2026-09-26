@@ -16,10 +16,7 @@ import {
 let writes: Promise<unknown> = Promise.resolve();
 
 export async function readCommitDraft(key: string): Promise<CommitDraft> {
-  const value = await access(
-    (store) => requestResult<unknown>(store.get(`draft:${key}`)),
-    "readonly",
-  );
+  const value = await readStored(`draft:${key}`);
   if (
     typeof value !== "object" ||
     value === null ||
@@ -37,10 +34,7 @@ export function saveCommitDraft(key: string, draft: CommitDraft) {
 }
 
 export async function readDiffPreferences(): Promise<DiffPreferences> {
-  const value = await access(
-    (store) => requestResult<unknown>(store.get("preferences")),
-    "readonly",
-  );
+  const value = await readStored("preferences");
   if (typeof value !== "object" || value === null)
     return defaultDiffPreferences;
   const read = (key: keyof DiffPreferences): boolean => {
@@ -52,6 +46,11 @@ export async function readDiffPreferences(): Promise<DiffPreferences> {
 
 export function saveDiffPreferences(preferences: DiffPreferences) {
   return write((store) => store.put(preferences, "preferences"));
+}
+
+async function readStored(key: string) {
+  await writes;
+  return access((store) => requestResult<unknown>(store.get(key)), "readonly");
 }
 
 function write(put: (store: IDBObjectStore) => IDBRequest) {

@@ -11,6 +11,9 @@ type ChangesRoute =
 export const headMovedMessage =
   "HEAD changed while you were amending. Review the latest commit before enabling Amend again.";
 
+export const storageUnavailableMessage =
+  "Could not access changes preferences or the commit draft in this browser.";
+
 export type ChangesRequestFailure =
   | EnvironmentRouteFailure<ChangesRoute>
   | CommandFailure<ChangesRoute>;

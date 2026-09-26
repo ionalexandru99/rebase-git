@@ -9,14 +9,14 @@ import {
   environmentResponseError,
   readEnvironmentBrowserSessionEffect,
 } from "@rebase/environment-client";
-import { Effect, Layer, ManagedRuntime } from "effect";
+import { Effect } from "effect";
 import { connectCurrentEnvironmentEffect } from "#web/app/environment/connection/index";
 import { createLocalEnvironmentSession } from "#web/app/environment/local-environment-session";
 import type {
   LocalEnvironmentGateway,
   LocalEnvironmentSession,
+  LocalEnvironmentSessionOptions,
 } from "#web/app/environment/local-environment-session.contract";
-import { createRepositoryHistoryGateway } from "#web/features/repository-history/transport/repository-history-gateway";
 
 type DesktopEnvironmentHost = Pick<
   DesktopHostBridge,
@@ -26,10 +26,10 @@ type DesktopEnvironmentHost = Pick<
 export function createBrowserLocalEnvironmentSession(
   productVersion: string,
   host: DesktopEnvironmentHost | undefined,
+  lifetime: Pick<LocalEnvironmentSessionOptions, "runtime" | "onConnect">,
 ): LocalEnvironmentSession {
   const bootstrap = resolveLocalEnvironmentBootstrap(window.location, host);
   let credential: EnvironmentCredential | undefined;
-  const runtime = ManagedRuntime.make(Layer.empty);
   const requests = createEnvironmentRequestClient(
     bootstrap.environmentOrigin,
     () => credential,
@@ -59,14 +59,7 @@ export function createBrowserLocalEnvironmentSession(
         },
       ),
   };
-  const repositoryHistory = createRepositoryHistoryGateway();
-  const session = createLocalEnvironmentSession({
-    features: [{ connect: repositoryHistory.connect }],
-    gateway,
-    requests,
-    runtime,
-  });
-  return { ...session, repositoryHistory: repositoryHistory.gateway };
+  return createLocalEnvironmentSession({ ...lifetime, gateway, requests });
 }
 
 export function resolveLocalEnvironmentBootstrap(

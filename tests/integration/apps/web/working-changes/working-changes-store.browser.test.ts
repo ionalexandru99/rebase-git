@@ -44,3 +44,13 @@ it("restores drafts per environment, repository, and worktree with client-wide d
     tree: false,
   });
 });
+
+it("reads a draft whose save is still queued", async () => {
+  const key = JSON.stringify([crypto.randomUUID(), "repository", "/worktree"]);
+  const saved = saveCommitDraft(key, { subject: "Queued", description: "" });
+  expect(await readCommitDraft(key)).toEqual({
+    subject: "Queued",
+    description: "",
+  });
+  await saved;
+});

@@ -5,6 +5,7 @@ import { createRoot } from "react-dom/client";
 import { createBrowserLocalEnvironmentSession } from "#web/app/environment/browser-local-environment-session";
 import { readDesktopHostBridge } from "#web/app/environment/desktop-host-bridge";
 import { NotificationsProvider } from "#web/features/notifications/index";
+import { createRepositoryHistoryGateway } from "#web/features/repository-history/transport/repository-history-gateway";
 import { createEnvironmentQueryClient } from "#web/platform/query/environment-query-client";
 import { createEnvironmentQueryPersistence } from "#web/platform/query/environment-query-persistence";
 import { ApplicationShell } from "#web-ui/app/shell/application-shell";
@@ -19,12 +20,14 @@ if (!(rootElement instanceof HTMLElement)) {
 
 const productVersion = import.meta.env.REBASE_PRODUCT_VERSION;
 const desktopHost = readDesktopHostBridge();
+const runtime = ManagedRuntime.make(Layer.empty);
+const repositoryHistory = createRepositoryHistoryGateway();
 const session = createBrowserLocalEnvironmentSession(
   productVersion,
   desktopHost,
+  { runtime, onConnect: repositoryHistory.connect },
 );
 session.start();
-const runtime = ManagedRuntime.make(Layer.empty);
 const queryClient = createEnvironmentQueryClient();
 const queryPersistence = createEnvironmentQueryPersistence();
 
@@ -40,6 +43,7 @@ createRoot(rootElement).render(
             desktopUpdates={desktopHost?.updates}
             productVersion={productVersion}
             repositoryFilesystem={desktopHost}
+            repositoryHistory={repositoryHistory.gateway}
             session={session}
           />
         </NotificationsProvider>

@@ -10,7 +10,6 @@ import type {
 } from "@rebase/environment-client";
 import type { Effect, ManagedRuntime, Scope } from "effect";
 import type { EnvironmentProtocolConnection } from "#web/app/environment/connection/environment-protocol-connection.contract";
-import type { RepositoryHistoryGateway } from "#web/features/repository-history/index";
 import type {
   EnvironmentChanges,
   NegotiatedEnvironment,
@@ -42,13 +41,7 @@ export type LocalEnvironmentSessionState =
       readonly message: string;
     };
 
-export interface ConnectedFeature {
-  readonly connect: (
-    connection: EnvironmentProtocolConnection,
-  ) => Effect.Effect<void, never, Scope.Scope>;
-}
-
-export interface EnvironmentConnectionSession
+export interface LocalEnvironmentSession
   extends ReadableStore<LocalEnvironmentSessionState> {
   readonly changes: EnvironmentChanges;
   readonly requests: EnvironmentRequestClient;
@@ -56,9 +49,9 @@ export interface EnvironmentConnectionSession
   readonly stop: () => void;
 }
 
-export interface LocalEnvironmentSession extends EnvironmentConnectionSession {
-  readonly repositoryHistory: RepositoryHistoryGateway;
-}
+export type EnvironmentConnected = (
+  connection: EnvironmentProtocolConnection,
+) => Effect.Effect<void, never, Scope.Scope>;
 
 export interface LocalEnvironmentGateway {
   readonly connect: (
@@ -76,7 +69,7 @@ export interface LocalEnvironmentGateway {
 }
 
 export interface LocalEnvironmentSessionOptions {
-  readonly features: readonly ConnectedFeature[];
+  readonly onConnect?: EnvironmentConnected;
   readonly gateway: LocalEnvironmentGateway;
   readonly requests: EnvironmentRequestClient;
   readonly runtime: ManagedRuntime.ManagedRuntime<never, never>;

@@ -7,8 +7,8 @@ import {
 import { Effect, Fiber, Result } from "effect";
 import type { EnvironmentProtocolConnection } from "#web/app/environment/connection/environment-protocol-connection.contract";
 import type {
-  ConnectedFeature,
-  EnvironmentConnectionSession,
+  EnvironmentConnected,
+  LocalEnvironmentSession,
   LocalEnvironmentSessionOptions,
   LocalEnvironmentSessionState,
 } from "#web/app/environment/local-environment-session.contract";
@@ -17,7 +17,7 @@ import { createStore } from "#web/platform/store/store";
 
 export function createLocalEnvironmentSession(
   options: LocalEnvironmentSessionOptions,
-): EnvironmentConnectionSession {
+): LocalEnvironmentSession {
   const state = createStore<LocalEnvironmentSessionState>({
     _tag: "Authorizing",
   });
@@ -137,7 +137,7 @@ function maintainConnection(
               }),
             ),
             Effect.tap((active) =>
-              attachFeatures(options.features, active, publishChanges),
+              attachConnection(options.onConnect, active, publishChanges),
             ),
             Effect.tap((active) =>
               publish({
@@ -178,21 +178,15 @@ function maintainConnection(
   });
 }
 
-function attachFeatures(
-  features: readonly ConnectedFeature[],
+function attachConnection(
+  onConnect: EnvironmentConnected | undefined,
   connection: EnvironmentProtocolConnection,
   publishChanges: EnvironmentChangeListener,
 ) {
   return Effect.acquireRelease(
     Effect.sync(() => connection.subscribeChanges(publishChanges)),
     (unsubscribe) => Effect.sync(unsubscribe),
-  ).pipe(
-    Effect.andThen(
-      Effect.forEach(features, (feature) => feature.connect(connection), {
-        discard: true,
-      }),
-    ),
-  );
+  ).pipe(Effect.andThen(onConnect?.(connection) ?? Effect.void));
 }
 
 function reconnectAfter(

@@ -11,7 +11,7 @@ import {
   type EnvironmentCredential,
   EnvironmentHttpRejected,
 } from "@rebase/environment-client";
-import { Effect } from "effect";
+import { Effect, Layer, ManagedRuntime } from "effect";
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import { createEnvironmentEventPublisher } from "#server/adapters/environment-transport/events/environment-event-publisher";
 import { createLocalGitCommandRunner } from "#server/adapters/local-git/local-git-command-runner";
@@ -139,10 +139,15 @@ describe("repository refs transport", () => {
       const owner = await pair(origin, authorization, "owner");
       const remembered = await remember(origin, owner, repositoryPath);
       vi.stubGlobal("window", { location: new URL(origin) });
-      const session = createBrowserLocalEnvironmentSession("0.0.0", {
-        environmentOrigin: origin,
-        getEnvironmentCredential: async () => owner.value,
-      });
+      const runtime = ManagedRuntime.make(Layer.empty);
+      const session = createBrowserLocalEnvironmentSession(
+        "0.0.0",
+        {
+          environmentOrigin: origin,
+          getEnvironmentCredential: async () => owner.value,
+        },
+        { runtime },
+      );
       const refChanges = countRefChanges(session, remembered.id);
       const refs = () => readConnectedRefs(session, remembered.id);
       session.start();
@@ -213,6 +218,7 @@ describe("repository refs transport", () => {
           });
       } finally {
         session.stop();
+        await runtime.dispose();
       }
     });
   });

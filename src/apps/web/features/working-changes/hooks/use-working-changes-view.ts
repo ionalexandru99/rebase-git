@@ -12,6 +12,7 @@ import {
   type ChangesRequestFailure,
   describeChangesFailure,
   headMovedMessage,
+  storageUnavailableMessage,
 } from "#web/features/working-changes/changes-messages";
 import {
   amendDraftKey,
@@ -56,16 +57,16 @@ export function useWorkingChangesView({
   const read = useWorkingChanges(scope, active);
   const changes = read.isPlaceholderData ? undefined : read.data;
   const headMoved = useCallback(() => setProblem(headMovedMessage), []);
-  useAmendHead(
-    amend,
-    setAmend,
-    read.isFetching ? undefined : changes,
-    headMoved,
-  );
   const [selection, select] = useChangeSelection(read.data);
   const diff = useChangeDiff(scope, selection, changes, active);
   const [preferences, choosePreferences] = useDiffPreferences();
   const actions = useChangeActions({ repositoryId, worktreePath });
+  useAmendHead(
+    amend,
+    setAmend,
+    read.isFetching || actions.busy ? undefined : changes,
+    headMoved,
+  );
   const draft = useCommitDraft(
     currentDraftKey(draftKey, amend),
     amend.on ? changes?.message : undefined,
@@ -133,7 +134,9 @@ export function useWorkingChangesView({
     choosePreferences,
     amend: amend.on,
     toggleAmend: (on: boolean) => {
-      if (begin() !== undefined) setAmend(on ? { on: true } : amendOff);
+      if (!on) {
+        if (!busy) setAmend(amendOff);
+      } else if (begin() !== undefined) setAmend({ on: true });
     },
     draft: draft.draft,
     editDraft: (next: CommitDraft) => {
@@ -143,7 +146,9 @@ export function useWorkingChangesView({
     busy,
     loading,
     error:
-      problem ?? (read.isError ? describeChangesFailure(read.error) : null),
+      problem ??
+      (read.isError ? describeChangesFailure(read.error) : null) ??
+      (draft.unavailable ? storageUnavailableMessage : null),
     notice,
     refresh: () => {
       setProblem(null);

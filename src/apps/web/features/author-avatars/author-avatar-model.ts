@@ -32,16 +32,25 @@ export function createAuthorAvatarModel(
   let pausedUntil = 0;
   let closed = false;
 
-  const lookup = async (author: AvatarAuthor, signal: AbortSignal) => {
+  const resolveUnlessPaused = async (
+    author: AvatarAuthor,
+    signal: AbortSignal,
+  ) => {
     if (Date.now() < pausedUntil) return undefined;
     try {
-      return await permits(signal, () =>
-        source.resolve(repository, author, signal),
-      );
+      return await source.resolve(repository, author, signal);
     } catch (error) {
-      if (signal.aborted) throw error;
       if (error instanceof AvatarUnavailable && error.retryAt !== undefined)
         pausedUntil = Math.max(pausedUntil, error.retryAt);
+      throw error;
+    }
+  };
+
+  const lookup = async (author: AvatarAuthor, signal: AbortSignal) => {
+    try {
+      return await permits(signal, () => resolveUnlessPaused(author, signal));
+    } catch (error) {
+      if (signal.aborted) throw error;
       return undefined;
     }
   };

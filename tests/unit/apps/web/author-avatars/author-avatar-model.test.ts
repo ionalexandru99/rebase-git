@@ -119,4 +119,29 @@ describe("author avatar loading", () => {
       model.dispose();
     }
   });
+
+  it("skips queued authors once GitHub rate limits a running lookup", async () => {
+    const lookups: PromiseWithResolvers<string | undefined>[] = [];
+    const resolve = vi.fn(() => {
+      const pending = Promise.withResolvers<string | undefined>();
+      lookups.push(pending);
+      return pending.promise;
+    });
+    const model = createAuthorAvatarModel(repository, { resolve });
+    try {
+      const queued = vi.fn();
+      for (const name of ["first", "second", "third"])
+        model.subscribe(
+          { oid: name, author: { email: `${name}@example.test` } },
+          name === "third" ? queued : vi.fn(),
+        );
+      await vi.waitFor(() => expect(resolve).toHaveBeenCalledTimes(2));
+      for (const lookup of lookups)
+        lookup.reject(new AvatarUnavailable(Date.now() + 60_000));
+      await vi.waitFor(() => expect(queued).toHaveBeenCalledOnce());
+      expect(resolve).toHaveBeenCalledTimes(2);
+    } finally {
+      model.dispose();
+    }
+  });
 });

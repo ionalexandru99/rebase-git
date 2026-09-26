@@ -28,6 +28,7 @@ import {
 import { useRepositoryCatalog } from "#web/features/repository-catalog/index";
 import { RepositoryFolderPicker } from "#web/features/repository-folder-picker/index";
 import { useRepositoryHistoryReader } from "#web/features/repository-history/hooks/use-repository-history-reader";
+import type { RepositoryHistoryGateway } from "#web/features/repository-history/index";
 import { RepositoryScopeProvider } from "#web/features/repository-scope/index";
 import { RepositorySettingsPage } from "#web/features/repository-settings/index";
 import { SettingsPanel } from "#web/features/settings/index";
@@ -58,6 +59,7 @@ interface ApplicationShellProps {
   readonly desktopUpdates: DesktopUpdates | undefined;
   readonly productVersion: string;
   readonly repositoryFilesystem: RepositoryFilesystemHost | undefined;
+  readonly repositoryHistory: RepositoryHistoryGateway;
   readonly session: LocalEnvironmentSession;
 }
 
@@ -114,7 +116,7 @@ function ApplicationShellContent({
   desktopUpdates,
   productVersion,
   repositoryFilesystem,
-  session,
+  repositoryHistory,
   sessionState,
 }: ApplicationShellProps & {
   readonly sessionState: LocalEnvironmentSessionState;
@@ -216,7 +218,7 @@ function ApplicationShellContent({
     useOpenedRepository({
       environmentId: historyEnvironmentId,
       findRepository: repositoryCatalog.findRepository,
-      gateway: session.repositoryHistory,
+      gateway: repositoryHistory,
       refs,
       repository: graphRepository,
       worktreePathFor,
@@ -264,7 +266,7 @@ function ApplicationShellContent({
     (graphRepository.logicalRepositoryId ?? graphRepository.id) ===
       (settingsRepository.logicalRepositoryId ?? settingsRepository.id);
   const settingsReader = useRepositoryHistoryReader(
-    session.repositoryHistory,
+    repositoryHistory,
     historyEnvironmentId,
     sameHistory ? undefined : settingsRepository?.id,
     sameHistory

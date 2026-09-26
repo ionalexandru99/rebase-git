@@ -258,9 +258,10 @@ it("interrupts reads when a project deactivates and releases its feature session
   const f = await fixture();
   await openDiffs();
   f.holdReads();
+  const readsBefore = f.reads.length;
   await page.getByRole("button", { name: "Hide side panel" }).click();
   await page.getByRole("button", { name: "Show side panel" }).click();
-  await expect.poll(() => f.reads.length).toBe(2);
+  await expect.poll(() => f.reads.length).toBeGreaterThan(readsBefore);
   await f.show(f.projectB);
   await expect.poll(() => f.cancelled.includes(f.projectA)).toBe(true);
   await f.show(f.projectB, [f.projectB]);

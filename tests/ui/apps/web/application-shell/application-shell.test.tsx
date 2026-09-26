@@ -20,6 +20,7 @@ import {
 import { fakeRpc } from "#tests-ui/runtime/fake-rpc";
 import { render } from "#tests-ui/runtime/render";
 import type { LocalEnvironmentSession } from "#web/app/environment/local-environment-session.contract";
+import type { RepositoryHistoryGateway } from "#web/features/repository-history/index";
 import { ApplicationShell } from "#web-ui/app/shell/application-shell";
 import { RepositoryWorkspace } from "#web-ui/app/workspace/repository-workspace";
 
@@ -32,6 +33,7 @@ describe("application shell", () => {
         desktopUpdates={undefined}
         productVersion="test"
         repositoryFilesystem={undefined}
+        repositoryHistory={connected.repositoryHistory}
         session={connected.session}
       />,
     );
@@ -43,7 +45,7 @@ describe("application shell", () => {
       .element(page.getByRole("main", { name: "Repository settings" }))
       .toBeVisible();
     expect(connected.recordOpened).not.toHaveBeenCalled();
-    expect(connected.session.repositoryHistory.read).not.toHaveBeenCalled();
+    expect(connected.repositoryHistory.read).not.toHaveBeenCalled();
     await expect
       .element(page.getByRole("combobox", { name: "History ordering" }))
       .toBeVisible();
@@ -63,6 +65,7 @@ describe("application shell", () => {
         desktopUpdates={undefined}
         productVersion="test"
         repositoryFilesystem={undefined}
+        repositoryHistory={connected.repositoryHistory}
         session={connected.session}
       />,
     );
@@ -114,6 +117,7 @@ describe("application shell", () => {
         desktopUpdates={undefined}
         productVersion="test"
         repositoryFilesystem={undefined}
+        repositoryHistory={connected.repositoryHistory}
         session={connected.session}
       />,
     );
@@ -139,6 +143,7 @@ describe("application shell", () => {
         desktopUpdates={undefined}
         productVersion="test"
         repositoryFilesystem={undefined}
+        repositoryHistory={connected.repositoryHistory}
         session={connected.session}
       />,
     );
@@ -233,6 +238,7 @@ describe("application shell", () => {
         desktopUpdates={undefined}
         productVersion="0.0.2-test"
         repositoryFilesystem={undefined}
+        repositoryHistory={connected.repositoryHistory}
         session={connected.session}
       />,
     );
@@ -254,6 +260,27 @@ describe("application shell", () => {
     await commit.click();
     await expect.element(commit).toHaveAttribute("aria-selected", "true");
   });
+
+  it("lists the repository catalog again after reconnecting", async () => {
+    const connected = await connectedSession();
+    connected.finishSynchronization();
+    await render(
+      <ApplicationShell
+        desktopUpdates={undefined}
+        productVersion="test"
+        repositoryFilesystem={undefined}
+        repositoryHistory={connected.repositoryHistory}
+        session={connected.session}
+      />,
+    );
+    await expect.poll(() => connected.catalogReads.mock.calls.length).toBe(1);
+    connected.disconnect();
+    await expect
+      .element(page.getByRole("status"))
+      .toHaveAttribute("data-connection-state", "Reconnecting");
+    connected.reconnect();
+    await expect.poll(() => connected.catalogReads.mock.calls.length).toBe(2);
+  });
 });
 
 async function chooseFolder(name: string) {
@@ -274,6 +301,7 @@ async function renderShell() {
       desktopUpdates={undefined}
       productVersion="0.0.2-test"
       repositoryFilesystem={undefined}
+      repositoryHistory={unavailableHistory}
       session={pairingRequiredSession()}
     />,
   );
@@ -295,16 +323,17 @@ async function renderRepositoryWorkspace() {
   );
 }
 
+const unavailableHistory: RepositoryHistoryGateway = {
+  read: async () => Promise.reject(new Error("Unavailable")),
+  synchronize: async () => Promise.reject(new Error("Unavailable")),
+};
+
 function pairingRequiredSession(): LocalEnvironmentSession {
   const sessionState = { _tag: "PairingRequired" } as const;
   const unsubscribe = () => undefined;
   return {
     changes: { subscribe: () => unsubscribe },
     getSnapshot: () => sessionState,
-    repositoryHistory: {
-      read: async () => Promise.reject(new Error("Unavailable")),
-      synchronize: async () => Promise.reject(new Error("Unavailable")),
-    },
     requests: fakeRequests(idleOperation),
     start: () => undefined,
     stop: () => undefined,
@@ -375,38 +404,37 @@ async function connectedSession(
   const synchronizationFinished = new Promise<void>((resolve) => {
     finishSynchronization = resolve;
   });
+  const repositoryHistory = {
+    read: vi.fn(async () =>
+      encodeRepositoryHistoryPage({
+        commits: [commit],
+        objectFormat: "sha1",
+        refTargets: [root],
+        repositoryId,
+        requestId: crypto.randomUUID(),
+      }),
+    ),
+    synchronize: vi.fn(async (_request, acceptBatch) => {
+      await acceptBatch(
+        encodeRepositoryHistoryBatch({
+          commits: [commit],
+          objectFormat: "sha1",
+          repositoryId,
+          requestId: crypto.randomUUID(),
+          sequence: 0,
+        }),
+      );
+      await synchronizationFinished;
+      return 1;
+    }),
+  } satisfies RepositoryHistoryGateway;
+  const catalogReads = vi.fn(() => ({ repositories: [repository] }));
   const session: LocalEnvironmentSession = {
     changes: { subscribe: () => () => undefined },
     getSnapshot: () => state,
-    repositoryHistory: {
-      read: vi.fn(async () =>
-        encodeRepositoryHistoryPage({
-          commits: [commit],
-          objectFormat: "sha1",
-          refTargets: [root],
-          repositoryId,
-          requestId: crypto.randomUUID(),
-        }),
-      ),
-      synchronize: vi.fn(async (_request, acceptBatch) => {
-        await acceptBatch(
-          encodeRepositoryHistoryBatch({
-            commits: [commit],
-            objectFormat: "sha1",
-            repositoryId,
-            requestId: crypto.randomUUID(),
-            sequence: 0,
-          }),
-        );
-        await synchronizationFinished;
-        return 1;
-      }),
-    },
     requests: fakeRequests(
       idleOperation,
-      respond(RepositoryCatalogHttpApi.list, () => ({
-        repositories: [repository],
-      })),
+      respond(RepositoryCatalogHttpApi.list, catalogReads),
       respond(RepositoryCatalogHttpApi.recordOpened, recordOpened),
       respond(EnvironmentFilesystemHttpApi.listDirectory, () => home),
       respond(RepositoryCatalogHttpApi.remember, () => remember(repository)),
@@ -418,13 +446,25 @@ async function connectedSession(
       return () => listeners.delete(listener);
     },
   };
+  const publish = (next: typeof state) => {
+    state = next;
+    for (const listener of listeners) listener();
+  };
   return {
-    disconnect: () => {
-      state = { _tag: "Reconnecting", attempt: 1, environmentId };
-      for (const listener of listeners) listener();
-    },
+    catalogReads,
+    disconnect: () =>
+      publish({ _tag: "Reconnecting", attempt: 1, environmentId }),
+    reconnect: () =>
+      publish({
+        _tag: "Connected",
+        accessCapabilities: [],
+        capabilities: currentEnvironmentCapabilities,
+        environmentId,
+        rpc,
+      }),
     finishSynchronization,
     recordOpened,
+    repositoryHistory,
     session,
   };
 }
