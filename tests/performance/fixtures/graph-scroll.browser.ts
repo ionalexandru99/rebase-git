@@ -27,6 +27,12 @@ const offlineEnvironment: Environment = {
   connected: false,
   readable: false,
   writable: false,
+  status: {
+    availability: "unavailable",
+    connectionState: "Offline",
+    detail: "Performance fixtures run without an environment.",
+    status: "Offline",
+  },
 };
 
 let root: Root | undefined;

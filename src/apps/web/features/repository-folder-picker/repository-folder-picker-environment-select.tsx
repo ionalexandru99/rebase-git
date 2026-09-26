@@ -10,7 +10,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "#web/components/ui/dropdown-menu";
-import type { EnvironmentAvailability } from "#web/features/project-navigation/project-navigation.contract";
+import type { EnvironmentAvailability } from "#web/platform/query/environment-context";
 
 export interface RepositoryFolderPickerEnvironment {
   readonly availability: EnvironmentAvailability;

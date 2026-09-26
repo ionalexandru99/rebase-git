@@ -72,6 +72,12 @@ export function testEnvironment(
     connected: true,
     readable: true,
     writable: true,
+    status: {
+      availability: "available",
+      connectionState: "Connected",
+      detail: "Test environment",
+      status: "Available",
+    },
     ...environment,
   };
 }

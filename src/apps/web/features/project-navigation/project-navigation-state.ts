@@ -1,10 +1,10 @@
 import type {
-  EnvironmentAvailability,
   ProjectNavigationEnvironment,
   ProjectNavigationRepository,
   ProjectNavigationRepositoryItem,
   ProjectNavigationState,
 } from "#web/features/project-navigation/project-navigation.contract";
+import type { EnvironmentAvailability } from "#web/platform/query/environment-context";
 
 export function environmentRepositories(
   environment: ProjectNavigationEnvironment,

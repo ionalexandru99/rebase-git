@@ -1,14 +1,4 @@
-export type EnvironmentAvailability =
-  | "available"
-  | "connecting"
-  | "unavailable";
-
-export interface EnvironmentNavigationStatus {
-  readonly availability: EnvironmentAvailability;
-  readonly connectionState: string;
-  readonly detail: string;
-  readonly status: string;
-}
+import type { EnvironmentAvailability } from "#web/platform/query/environment-context";
 
 export interface ProjectNavigationRepository {
   readonly id: string;

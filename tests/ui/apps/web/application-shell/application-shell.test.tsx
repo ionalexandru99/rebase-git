@@ -15,6 +15,7 @@ import {
 } from "@rebase/environment-client";
 import { describe, expect, it, vi } from "vite-plus/test";
 import { page, userEvent } from "vite-plus/test/browser";
+import { repositoryScope } from "#tests-ui/apps/web/repository-scope/repository-scope-fixture";
 import {
   fakeRequests,
   idleOperation,
@@ -26,6 +27,7 @@ import type { LocalEnvironmentSession } from "#web/app/environment/local-environ
 import { ApplicationShell } from "#web/app/shell/application-shell";
 import { RepositoryWorkspace } from "#web/app/workspace/repository-workspace";
 import type { RepositoryHistoryGateway } from "#web/features/repository-history/repository-history-reader.contract";
+import { RepositoryScopeProvider } from "#web/features/repository-scope/repository-scope-provider";
 
 describe("application shell", () => {
   it("opens repository settings from the list without opening its graph", async () => {
@@ -350,15 +352,9 @@ async function renderShell() {
 async function renderRepositoryWorkspace() {
   return render(
     <div style={{ height: 720, width: 900 }}>
-      <RepositoryWorkspace
-        activeWorktreePath="/repo"
-        environmentId={undefined}
-        history={undefined}
-        logicalRepositoryId="00000000-0000-4000-8000-000000000001"
-        repositoryId="00000000-0000-4000-8000-000000000001"
-        repositoryName="rebase-test"
-        switchWorktree={() => undefined}
-      />
+      <RepositoryScopeProvider scope={repositoryScope()}>
+        <RepositoryWorkspace />
+      </RepositoryScopeProvider>
     </div>,
   );
 }

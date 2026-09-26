@@ -8,7 +8,7 @@ import {
 import type { CommitGraphHandle } from "#web/features/commit-graph/commit-graph.contract";
 import { useWorkspacePanel } from "#web/features/workspace-panel/workspace-panel-provider";
 
-interface InspectionGraphActions {
+export interface InspectionGraphActions {
   readonly graphRef: RefObject<CommitGraphHandle | null>;
   readonly open: (oid: string) => void;
   readonly select: (oid: string | undefined) => void;

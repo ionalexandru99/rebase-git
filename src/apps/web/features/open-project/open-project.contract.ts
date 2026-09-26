@@ -1,5 +1,5 @@
 import type { TablerIcon } from "@tabler/icons-react";
-import type { EnvironmentAvailability } from "#web/features/project-navigation/project-navigation.contract";
+import type { EnvironmentAvailability } from "#web/platform/query/environment-context";
 
 export interface OpenProjectRepository {
   readonly environmentId: string;
@@ -17,17 +17,4 @@ export interface OpenProjectEnvironment {
   readonly name: string;
   readonly repositories: readonly OpenProjectRepository[];
   readonly status: string;
-}
-
-export interface OpenProjectScreenProps {
-  readonly browseAvailable: boolean;
-  readonly environments: readonly OpenProjectEnvironment[];
-  readonly expandedEnvironmentIds: ReadonlySet<string>;
-  readonly onBrowse: () => void;
-  readonly onEnvironmentOpenChange: (
-    environmentId: string,
-    open: boolean,
-  ) => void;
-  readonly onOpenSettings: (repository: OpenProjectRepository) => void;
-  readonly onOpenRepository: (repository: OpenProjectRepository) => void;
 }

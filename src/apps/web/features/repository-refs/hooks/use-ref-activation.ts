@@ -12,10 +12,10 @@ export interface RefActivation {
   readonly error: string | null;
 }
 
-export function useRefActivation(
-  { refs, restored }: RepositoryRefsRead,
-  switchWorktree: (worktreePath: string) => void,
-): RefActivation {
+export function useRefActivation({
+  refs,
+  restored,
+}: RepositoryRefsRead): RefActivation {
   const scope = useRepositoryScope();
   const checkout = useCheckout();
   const { mutate } = checkout;
@@ -31,7 +31,7 @@ export function useRefActivation(
         return;
       const activation = resolveRefActivation(refs, scope.worktreePath, target);
       if (activation._tag === "SwitchWorktree")
-        switchWorktree(activation.worktreePath);
+        scope.switchWorktree(activation.worktreePath);
       else if (activation._tag === "Checkout") {
         checkingOut.current = true;
         mutate(
@@ -48,7 +48,7 @@ export function useRefActivation(
         );
       }
     },
-    [mutate, refs, restored, scope, switchWorktree],
+    [mutate, refs, restored, scope],
   );
   return {
     select,

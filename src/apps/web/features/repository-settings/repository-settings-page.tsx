@@ -1,7 +1,10 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef } from "react";
 import { SettingsSection } from "#web/components/ui/settings-layout";
-import type { OpenProjectRepository } from "#web/features/open-project/open-project.contract";
+import { writeClipboardText } from "#web/features/clipboard/write-clipboard-text";
+import { localEnvironment } from "#web/features/project-navigation/local-environment";
+import { useRemoveRepository } from "#web/features/repository-catalog/hooks/use-catalog-commands";
+import { useCatalogRepository } from "#web/features/repository-catalog/hooks/use-repository-catalog";
 import { RepositoryFetchSettings } from "#web/features/repository-fetch/components/repository-fetch-settings";
 import { describeRepositoryFetchError } from "#web/features/repository-fetch/repository-fetch-error";
 import { forgetRepositoryRefs } from "#web/features/repository-refs/repository-refs-query";
@@ -12,33 +15,24 @@ import type {
   RepositoryHistorySettingsClient,
   RepositorySettingsIdentity,
 } from "#web/features/repository-settings/repository-settings.contract";
+import { useEnvironment } from "#web/platform/query/environment-context";
 import { useStore } from "#web/platform/store/use-store";
 
 export function RepositorySettingsPage({
-  repository,
-  environmentId,
-  logicalRepositoryId,
-  environmentName,
+  repositoryId,
   reader,
-  connected,
-  canConfigure,
-  canRemove,
-  copyPath,
   reveal,
-  remove,
+  onRemoved,
 }: {
-  readonly repository: OpenProjectRepository;
-  readonly environmentId: string | undefined;
-  readonly logicalRepositoryId: string;
-  readonly environmentName: string;
+  readonly repositoryId: string;
   readonly reader: RepositoryHistorySettingsClient | undefined;
-  readonly connected: boolean;
-  readonly canConfigure: boolean;
-  readonly canRemove: boolean;
-  readonly copyPath: () => Promise<void>;
-  readonly reveal: (() => Promise<void>) | undefined;
-  readonly remove: () => Promise<void>;
+  readonly reveal: ((path: string) => Promise<void>) | undefined;
+  readonly onRemoved: () => void;
 }) {
+  const repository = useCatalogRepository(repositoryId);
+  const { environmentId, connected, writable } = useEnvironment();
+  const { mutateAsync: removeFromCatalog } = useRemoveRepository();
+  const logicalRepositoryId = repository?.logicalRepositoryId ?? repositoryId;
   const heading = useRef<HTMLHeadingElement>(null);
   const identity = useMemo(
     () =>
@@ -50,6 +44,8 @@ export function RepositorySettingsPage({
   useEffect(() => {
     heading.current?.focus();
   }, []);
+  if (repository === undefined) return null;
+  const path = repository.path;
   return (
     <main
       aria-label="Repository settings"
@@ -70,7 +66,7 @@ export function RepositorySettingsPage({
           Repository settings
         </h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          {repository.name} · {environmentName}
+          {repository.name} · {localEnvironment.name}
         </p>
         <SettingsSection title="History">
           {identity === undefined ? (
@@ -92,18 +88,20 @@ export function RepositorySettingsPage({
             reader={reader}
             identity={identity}
             connected={connected}
-            canConfigure={canConfigure}
+            canConfigure={writable}
           />
         )}
         <SettingsSection title="Repository">
           <RepositoryDetailsSettings
             name={repository.name}
-            path={repository.path}
+            path={path}
             connected={connected}
-            canRemove={canRemove}
-            copyPath={copyPath}
-            reveal={reveal}
-            remove={remove}
+            canRemove={writable}
+            copyPath={() => writeClipboardText(path)}
+            reveal={reveal === undefined ? undefined : () => reveal(path)}
+            remove={() =>
+              removeFromCatalog({ repositoryId }).then(() => onRemoved())
+            }
           />
         </SettingsSection>
       </div>

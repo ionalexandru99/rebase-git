@@ -1,19 +1,19 @@
 import { useMemo } from "react";
 import { ContextMenuItem } from "#web/components/ui/context-menu";
-import type { RefCommandContext } from "#web/features/ref-commands/ref-command.contract";
-import { refCommandSlot } from "#web/features/ref-commands/ref-command-slot";
-import { createCommandRegistry } from "#web/platform/command-contributions/command-registry";
+import { createCommandRegistry } from "#web/features/menu-commands/menu-command";
+import type {
+  RefCommandContext,
+  RefCommandDefinition,
+} from "#web/features/ref-commands/ref-command.contract";
 
 export function RefCommandItems({
+  commands,
   context,
 }: {
+  readonly commands: readonly RefCommandDefinition[];
   readonly context: RefCommandContext;
 }) {
-  const contributions = refCommandSlot.useContributions();
-  const registry = useMemo(
-    () => createCommandRegistry(contributions),
-    [contributions],
-  );
+  const registry = useMemo(() => createCommandRegistry(commands), [commands]);
   return registry.commands(context).map((command) => (
     <ContextMenuItem
       key={command.id}

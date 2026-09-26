@@ -6,22 +6,32 @@ import {
 import type {
   CommitCommandHandlers,
   GraphCommandContext,
+  GraphCommandDefinition,
 } from "#web/features/commit-commands/graph-command.contract";
-import type { CommandResult } from "#web/platform/command-contributions/command-contributions.contract";
-import { createCommandRegistry } from "#web/platform/command-contributions/command-registry";
+import type { CommandResult } from "#web/features/menu-commands/menu-command";
+import { createCommandRegistry } from "#web/features/menu-commands/menu-command";
 
 export type GraphCommandRun = (
   command: () => Promise<CommandResult>,
 ) => Promise<void>;
 
-export function useGraphCommands(handlers: CommitCommandHandlers) {
-  const definitions = useMemo(
+const noCommands: readonly GraphCommandDefinition[] = [];
+
+export function useGraphCommands(
+  handlers: CommitCommandHandlers,
+  contributed = noCommands,
+) {
+  const commitDefinitions = useMemo(
     () => createCommitCommandDefinitions(handlers),
     [handlers],
   );
   const registry = useMemo(
-    () => createCommandRegistry(definitions),
-    [definitions],
+    () => createCommandRegistry(commitDefinitions),
+    [commitDefinitions],
+  );
+  const definitions = useMemo(
+    () => [...commitDefinitions, ...contributed],
+    [commitDefinitions, contributed],
   );
   const [error, setError] = useState<string>();
   const run = useCallback<GraphCommandRun>(async (command) => {

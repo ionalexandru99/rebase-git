@@ -6,7 +6,7 @@ import type {
   GraphCommandContext,
   GraphCommandDefinition,
 } from "#web/features/commit-commands/graph-command.contract";
-import { createCommandRegistry } from "#web/platform/command-contributions/command-registry";
+import { createCommandRegistry } from "#web/features/menu-commands/menu-command";
 
 const context: GraphCommandContext = {
   invokingOid: "b",

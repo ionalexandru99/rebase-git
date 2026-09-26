@@ -9,9 +9,8 @@ import type {
   GraphCommandContext,
   GraphCommandDefinition,
 } from "#web/features/commit-commands/graph-command.contract";
-import { graphCommandSlot } from "#web/features/commit-commands/graph-command-slot";
 import type { GraphCommandRun } from "#web/features/commit-commands/use-graph-commands";
-import { createCommandRegistry } from "#web/platform/command-contributions/command-registry";
+import { createCommandRegistry } from "#web/features/menu-commands/menu-command";
 
 export function CommitCommandMenu({
   children,
@@ -53,11 +52,7 @@ function CommitCommandItems({
   readonly context: GraphCommandContext;
   readonly run: GraphCommandRun;
 }) {
-  const contributed = graphCommandSlot.useContributions();
-  const registry = useMemo(
-    () => createCommandRegistry([...commands, ...contributed]),
-    [commands, contributed],
-  );
+  const registry = useMemo(() => createCommandRegistry(commands), [commands]);
   return registry.commands(context).map((command) => (
     <ContextMenuItem
       className="text-[.85rem] sm:text-[.85rem]"

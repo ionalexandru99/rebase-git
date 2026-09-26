@@ -8,7 +8,7 @@ import { describe, expect, it, vi } from "vite-plus/test";
 import { page, userEvent } from "vite-plus/test/browser";
 import { repositoryScope } from "#tests-ui/apps/web/repository-scope/repository-scope-fixture";
 import { fakeRequests, respond } from "#tests-ui/runtime/fake-requests";
-import { render } from "#tests-ui/runtime/render";
+import { render, testEnvironment } from "#tests-ui/runtime/render";
 import { ErrorNotification } from "#web/features/notifications/components/error-notification";
 import { PersistentNotification } from "#web/features/notifications/components/persistent-notification";
 import { NotificationsProvider } from "#web/features/notifications/notifications";
@@ -342,16 +342,12 @@ async function liveFixture(initial: RepositoryOperation) {
   const scope = repositoryScope({ repositoryId: "repo" });
   const tree = (connected: boolean) => (
     <EnvironmentProvider
-      environment={{
+      environment={testEnvironment({
         environmentId: "environment",
         requests,
-        rpc: undefined,
-        capabilities: [],
         changes,
         connected,
-        readable: true,
-        writable: true,
-      }}
+      })}
     >
       <NotificationsProvider>
         <RepositoryScopeProvider scope={{ ...scope, connected }}>

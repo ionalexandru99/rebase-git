@@ -9,6 +9,7 @@ import { expect, it, vi } from "vite-plus/test";
 import { repositoryScope } from "#tests-ui/apps/web/repository-scope/repository-scope-fixture";
 import { fakeRpc } from "#tests-ui/runtime/fake-rpc";
 import { render } from "#tests-ui/runtime/render";
+import { OpenedHistoryContext } from "#web/app/shell/opened-history-context";
 import { RepositoryWorkspace } from "#web/app/workspace/repository-workspace";
 import { openCommitGraphHistory } from "#web/features/commit-graph/paging/commit-graph-history";
 import { createBrowserHistoryFilterStore } from "#web/features/commit-graph/scope/browser-history-filter-store";
@@ -193,15 +194,20 @@ it.each(["Automatic", "Custom"] as const)(
     });
     const screen = await render(
       <div style={{ height: 720, width: 1280 }}>
-        <RepositoryWorkspace
-          activeWorktreePath="/feature"
-          environmentId={environmentId}
-          logicalRepositoryId={logicalId}
-          repositoryId={refs.repositoryId}
-          repositoryName="Cached repository"
-          history={openCommitGraphHistory(reader)}
-          switchWorktree={() => undefined}
-        />
+        <RepositoryScopeProvider
+          scope={repositoryScope({
+            repositoryId: refs.repositoryId,
+            logicalRepositoryId: logicalId,
+            worktreePath: "/feature",
+            connected: false,
+          })}
+        >
+          <OpenedHistoryContext.Provider
+            value={{ ...openCommitGraphHistory(reader), reader }}
+          >
+            <RepositoryWorkspace />
+          </OpenedHistoryContext.Provider>
+        </RepositoryScopeProvider>
       </div>,
       { environment: { environmentId }, queryClient },
     );

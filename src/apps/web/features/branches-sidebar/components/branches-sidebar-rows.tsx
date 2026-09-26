@@ -30,7 +30,8 @@ import {
   tagsSectionId,
 } from "#web/features/branches-sidebar/branches-sidebar.contract";
 import { UpstreamIndicator } from "#web/features/branches-sidebar/components/upstream-indicator";
-import { RefCommands } from "#web/features/ref-commands/ref-commands";
+import { RefCommandItems } from "#web/features/ref-commands/components/ref-command-items";
+import type { RefCommandDefinition } from "#web/features/ref-commands/ref-command.contract";
 
 export function rowElementId(rowId: string): string {
   return `branches-row-${rowId}`;
@@ -99,6 +100,7 @@ export function SectionRow({
 export function RefRow({
   actions,
   active,
+  commands,
   onAction,
   onActivate,
   onSelect,
@@ -110,6 +112,7 @@ export function RefRow({
   readonly actions: readonly BranchRowAction[];
   readonly onAction: (id: BranchRowActionId) => void;
   readonly active: boolean;
+  readonly commands: readonly RefCommandDefinition[];
   readonly onActivate: () => void;
   readonly onSelect: () => void;
   readonly onToggleHistory: () => void;
@@ -191,7 +194,8 @@ export function RefRow({
       />
       <ContextMenuContent className="w-64" finalFocus={() => !acted.current}>
         <ContextMenuItem onClick={onSelect}>Checkout</ContextMenuItem>
-        <RefCommands.Items
+        <RefCommandItems
+          commands={commands}
           context={{
             target: row.target,
             ...(row.upstream === undefined ? {} : { upstream: row.upstream }),

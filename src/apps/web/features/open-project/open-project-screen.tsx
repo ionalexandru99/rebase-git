@@ -12,10 +12,8 @@ import {
   useRef,
   useState,
 } from "react";
-import type {
-  OpenProjectRepository,
-  OpenProjectScreenProps,
-} from "#web/features/open-project/open-project.contract";
+import { useOpenProjectEnvironments } from "#web/features/open-project/hooks/use-open-project-environments";
+import type { OpenProjectRepository } from "#web/features/open-project/open-project.contract";
 import {
   catalogRepositoryItems,
   filterOpenProjectEnvironments,
@@ -26,16 +24,24 @@ import { OpenProjectToolbar } from "#web/features/open-project/open-project-tool
 import { RecentRepositories } from "#web/features/open-project/recent-repositories";
 import { RepositoryEnvironmentGroup } from "#web/features/open-project/repository-environment-group";
 import { openProjectItemId } from "#web/features/open-project/repository-row";
+import { localEnvironment } from "#web/features/project-navigation/local-environment";
+import type { ProjectNavigationRepository } from "#web/features/project-navigation/project-navigation.contract";
+import { RepositoryFolderPicker } from "#web/features/repository-folder-picker/repository-folder-picker";
+import { useEnvironment } from "#web/platform/query/environment-context";
 
 export function OpenProjectScreen({
-  browseAvailable,
-  environments,
-  expandedEnvironmentIds,
-  onBrowse,
-  onEnvironmentOpenChange,
   onOpenRepository,
   onOpenSettings,
-}: OpenProjectScreenProps): JSX.Element {
+}: {
+  readonly onOpenRepository: (repository: ProjectNavigationRepository) => void;
+  readonly onOpenSettings: (repositoryId: string) => void;
+}): JSX.Element {
+  const environments = useOpenProjectEnvironments();
+  const browseAvailable = useEnvironment().status.availability === "available";
+  const [folderPickerOpen, setFolderPickerOpen] = useState(false);
+  const [expandedEnvironmentIds, setExpandedEnvironmentIds] = useState<
+    ReadonlySet<string>
+  >(() => new Set([localEnvironment.id]));
   const [query, setQuery] = useState("");
   const [activeKey, setActiveKey] = useState<string>();
   const inputRef = useRef<HTMLInputElement>(null);
@@ -86,6 +92,20 @@ export function OpenProjectScreen({
     (repository: OpenProjectRepository) => onOpenRepository(repository),
     [onOpenRepository],
   );
+  const openSettings = useCallback(
+    (repository: OpenProjectRepository) => onOpenSettings(repository.id),
+    [onOpenSettings],
+  );
+  const onBrowse = () => {
+    if (browseAvailable) setFolderPickerOpen(true);
+  };
+  const setEnvironmentExpanded = (environmentId: string, open: boolean) =>
+    setExpandedEnvironmentIds((current) => {
+      const next = new Set(current);
+      if (open) next.add(environmentId);
+      else next.delete(environmentId);
+      return next;
+    });
 
   const handleSearchKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
     if (event.key === "Escape" && query.length > 0) {
@@ -158,7 +178,7 @@ export function OpenProjectScreen({
               items={recentItems}
               onActivate={setActiveKey}
               onOpen={openRepository}
-              onOpenSettings={onOpenSettings}
+              onOpenSettings={openSettings}
             />
             <div className="mt-[2.4rem] space-y-[1.2rem]">
               {filteredEnvironments
@@ -170,10 +190,10 @@ export function OpenProjectScreen({
                     key={environment.id}
                     onActivate={setActiveKey}
                     onOpenChange={(open) =>
-                      onEnvironmentOpenChange(environment.id, open)
+                      setEnvironmentExpanded(environment.id, open)
                     }
                     onOpenRepository={openRepository}
-                    onOpenSettings={onOpenSettings}
+                    onOpenSettings={openSettings}
                     open={expandedEnvironmentIds.has(environment.id)}
                   />
                 ))}
@@ -183,6 +203,12 @@ export function OpenProjectScreen({
           <EmptySearch />
         )}
       </div>
+      <RepositoryFolderPicker
+        environments={environments}
+        onOpenChange={setFolderPickerOpen}
+        onRepositoryOpened={(_, repository) => onOpenRepository(repository)}
+        open={folderPickerOpen}
+      />
     </main>
   );
 }

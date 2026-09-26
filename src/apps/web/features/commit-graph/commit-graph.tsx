@@ -21,6 +21,7 @@ import { Button } from "#web/components/ui/button";
 import { AuthorAvatars } from "#web/features/author-avatars/author-avatar";
 import type { GitHubRepository } from "#web/features/author-avatars/author-avatar.contract";
 import { CommitCommandMenu } from "#web/features/commit-commands/commit-command-menu";
+import type { GraphCommandDefinition } from "#web/features/commit-commands/graph-command.contract";
 import type {
   CommitGraphHandle,
   CommitGraphHistory,
@@ -64,6 +65,7 @@ const emptyRefLabels: readonly RepositoryHistoryRefTarget[] = [];
 
 export function CommitGraph({
   ref,
+  commands: contributedCommands,
   historyIdentity,
   onRemoveHistoryRef,
   onRevealHistoryRef,
@@ -80,6 +82,7 @@ export function CommitGraph({
   onOpenDetails,
   onActiveCommitChange,
 }: {
+  readonly commands?: readonly GraphCommandDefinition[] | undefined;
   readonly onOpenDetails?: ((oid: string) => void) | undefined;
   readonly onActiveCommitChange?:
     | ((oid: string | undefined) => void)
@@ -267,6 +270,7 @@ export function CommitGraph({
     : undefined;
 
   const commands = useCommitGraphCommands({
+    contributed: contributedCommands,
     reader,
     selectedOids: navigation.selection.selectedOids,
     onOpenDetails,

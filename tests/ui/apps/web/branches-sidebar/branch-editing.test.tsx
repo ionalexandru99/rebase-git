@@ -24,7 +24,7 @@ import { useCreateBranchHere } from "#web/features/branch-management/hooks/use-c
 import type { BranchRename } from "#web/features/branches-sidebar/branch-editing/hooks/use-branch-editing";
 import { BranchesSidebar } from "#web/features/branches-sidebar/branches-sidebar";
 import { CommitCommandMenu } from "#web/features/commit-commands/commit-command-menu";
-import { GraphCommands } from "#web/features/commit-commands/graph-command-slot";
+import type { GraphCommandDefinition } from "#web/features/commit-commands/graph-command.contract";
 import { NotificationsProvider } from "#web/features/notifications/notifications";
 import { useRefActivation } from "#web/features/repository-refs/hooks/use-ref-activation";
 import { useRepositoryRefs } from "#web/features/repository-refs/hooks/use-repository-refs";
@@ -362,11 +362,13 @@ function BranchWorkspace({
   readonly onBranchRenamed: (rename: BranchRename) => void;
 }) {
   const repositoryRefs = useRepositoryRefs(repositoryId, repositoryId);
-  const activation = useRefActivation(repositoryRefs, () => undefined);
+  const activation = useRefActivation(repositoryRefs);
   const creation = useCreateBranchHere();
   return (
-    <GraphCommands.Contribute commands={creation.commands}>
-      {createBranchAt === undefined ? null : <CommitAt oid={createBranchAt} />}
+    <>
+      {createBranchAt === undefined ? null : (
+        <CommitAt commands={creation.commands} oid={createBranchAt} />
+      )}
       <div style={{ height: 520, width: 320 }}>
         <BranchesSidebar
           activation={activation}
@@ -377,14 +379,20 @@ function BranchWorkspace({
           repositoryRefs={repositoryRefs}
         />
       </div>
-    </GraphCommands.Contribute>
+    </>
   );
 }
 
-function CommitAt({ oid }: { readonly oid: string }) {
+function CommitAt({
+  commands,
+  oid,
+}: {
+  readonly commands: readonly GraphCommandDefinition[];
+  readonly oid: string;
+}) {
   return (
     <CommitCommandMenu
-      commands={[]}
+      commands={commands}
       context={{
         invokingOid: oid,
         selectedOids: [oid],

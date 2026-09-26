@@ -1,4 +1,4 @@
-import type { RepositoryScope } from "#web/features/repository-scope/repository-scope.contract";
+import type { RepositoryScope } from "#web/features/repository-scope/repository-scope-provider";
 
 export function repositoryScope(
   scope: Partial<RepositoryScope> = {},
@@ -10,6 +10,7 @@ export function repositoryScope(
     connected: true,
     readable: true,
     writable: true,
+    switchWorktree: () => undefined,
     ...scope,
   };
 }

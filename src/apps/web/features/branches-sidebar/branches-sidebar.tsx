@@ -49,10 +49,12 @@ import { SidebarStatus } from "#web/features/branches-sidebar/components/sidebar
 import { useBranchesSidebarView } from "#web/features/branches-sidebar/hooks/use-branches-sidebar-view";
 import { treeKeyAction } from "#web/features/branches-sidebar/navigation/branches-sidebar-keyboard";
 import { historyRefKey } from "#web/features/commit-graph/scope/history-scope";
+import type { RefCommandDefinition } from "#web/features/ref-commands/ref-command.contract";
 import type { RefActivation } from "#web/features/repository-refs/hooks/use-ref-activation";
 import type { RepositoryRefsRead } from "#web/features/repository-refs/hooks/use-repository-refs";
 
 const overscanRows = 12;
+const noRefCommands: readonly RefCommandDefinition[] = [];
 
 export function BranchesSidebar({
   activation,
@@ -61,6 +63,7 @@ export function BranchesSidebar({
   focusRequest,
   onBranchRenamed = () => undefined,
   onToggleHistoryRef = () => undefined,
+  refCommands = noRefCommands,
   repositoryRefs,
   selectedHistoryRefKeys = new Set<string>(),
 }: {
@@ -70,6 +73,7 @@ export function BranchesSidebar({
   readonly focusRequest: number;
   readonly onBranchRenamed?: (rename: BranchRename) => void;
   readonly onToggleHistoryRef?: (target: RepositoryRefTarget) => void;
+  readonly refCommands?: readonly RefCommandDefinition[];
   readonly repositoryRefs: RepositoryRefsRead;
   readonly selectedHistoryRefKeys?: ReadonlySet<string>;
 }): JSX.Element {
@@ -356,6 +360,7 @@ export function BranchesSidebar({
               <RefRow
                 actions={editing.rowActions(row)}
                 active={row.id === activeRowId}
+                commands={refCommands}
                 key={row.id}
                 onAction={(id) => editing.start(id, row)}
                 onActivate={() => setActiveRowId(row.id)}

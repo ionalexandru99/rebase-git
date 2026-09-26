@@ -19,7 +19,7 @@ import { useRefActivation } from "#web/features/repository-refs/hooks/use-ref-ac
 import { useRepositoryRefs } from "#web/features/repository-refs/hooks/use-repository-refs";
 import { RepositoryScopeProvider } from "#web/features/repository-scope/repository-scope-provider";
 import type { EnvironmentChangeListener } from "#web/platform/environment/environment-protocol.contract";
-import type { Environment } from "#web-ui/platform/query/environment-context";
+import type { Environment } from "#web/platform/query/environment-context";
 
 const repositoryId = "00000000-0000-4000-8000-000000000001";
 const mainPath = "/repo";
@@ -167,13 +167,9 @@ describe("repository refs", () => {
   });
 });
 
-function Refs({
-  switchWorktree,
-}: {
-  readonly switchWorktree: (worktreePath: string) => void;
-}) {
+function Refs() {
   const repositoryRefs = useRepositoryRefs(repositoryId, repositoryId);
-  const activation = useRefActivation(repositoryRefs, switchWorktree);
+  const activation = useRefActivation(repositoryRefs);
   const head = repositoryRefs.refs?.worktrees.find(
     ({ path }) => path === mainPath,
   )?.head.branch;
@@ -209,9 +205,10 @@ function renderRefs(
         repositoryId,
         logicalRepositoryId: repositoryId,
         worktreePath: mainPath,
+        switchWorktree,
       })}
     >
-      <Refs switchWorktree={switchWorktree} />
+      <Refs />
     </RepositoryScopeProvider>,
     { environment: environment.value },
   );

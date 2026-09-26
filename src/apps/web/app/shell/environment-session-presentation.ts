@@ -1,9 +1,9 @@
 import type { LocalEnvironmentSessionState } from "#web/app/environment/local-environment-session.contract";
-import type { EnvironmentNavigationStatus } from "#web/features/project-navigation/project-navigation.contract";
+import type { EnvironmentStatus } from "#web/platform/query/environment-context";
 
 export function environmentSessionPresentation(
   state: LocalEnvironmentSessionState,
-): EnvironmentNavigationStatus {
+): EnvironmentStatus {
   switch (state._tag) {
     case "PairingRequired":
       return {

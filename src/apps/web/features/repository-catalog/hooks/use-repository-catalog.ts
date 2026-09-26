@@ -61,3 +61,8 @@ export function useRepositoryCatalog() {
     findRepository,
   };
 }
+
+export function useCatalogRepository(repositoryId: string | undefined) {
+  const { repositories } = useRepositoryCatalog();
+  return repositories.find(({ id }) => id === repositoryId);
+}

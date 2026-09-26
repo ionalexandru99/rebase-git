@@ -1,4 +1,4 @@
-import type { RepositoryRefs } from "@rebase/contracts";
+import type { RepositoryCatalogEntry, RepositoryRefs } from "@rebase/contracts";
 import type { CommitGraphHistory } from "#web/features/commit-graph/commit-graph.contract";
 import {
   loadFirstCommitGraphPage,
@@ -35,6 +35,19 @@ export interface OpenedRepositoryStore
   extends ReadableStore<OpenedRepository | undefined> {
   readonly open: (target: OpenedRepositoryTarget | undefined) => void;
   readonly refsArrived: (refs: RepositoryRefs) => void;
+}
+
+export function openedRepositoryTarget(
+  environmentId: string,
+  repository: RepositoryCatalogEntry,
+  worktreePath: string,
+): OpenedRepositoryTarget {
+  return {
+    environmentId,
+    repositoryId: repository.id,
+    logicalRepositoryId: repository.logicalRepositoryId ?? repository.id,
+    worktreePath,
+  };
 }
 
 export function openedRepositoryKey(target: OpenedRepositoryTarget) {
