@@ -30,6 +30,9 @@ const browserProject = (
   extends: "./src/apps/web/vite.config.ts",
   resolve: {
     alias: {
+      "#tests-support": fileURLToPath(
+        new URL("./tests/support", import.meta.url),
+      ),
       "#tests-ui": fileURLToPath(new URL("./tests/ui", import.meta.url)),
       "#web": fileURLToPath(new URL("./src/apps/web", import.meta.url)),
     },
@@ -82,7 +85,7 @@ export default defineConfig({
   test: {
     attachmentsDir: "tests/.artifacts/vitest",
     projects: [
-      testProject("unit"),
+      testProject("unit", { expect: conditionTimeout }),
       testProject("integration", {
         exclude: ["tests/integration/**/*.browser.test.ts"],
         expect: conditionTimeout,

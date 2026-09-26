@@ -30,7 +30,7 @@ describe("commit reference pills", () => {
     const width = pill.element().getBoundingClientRect().width;
     pill.element().focus();
     await userEvent.keyboard("{Enter}");
-    await vi.waitFor(() => expect(copy).toHaveBeenCalledWith("feature/cache"));
+    await expect.poll(() => copy).toHaveBeenCalledWith("feature/cache");
     await expect
       .element(screen.getByRole("status"))
       .toHaveTextContent("Copied feature/cache");

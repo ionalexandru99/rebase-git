@@ -70,12 +70,12 @@ describe("branch editing", () => {
       name: "feature/next",
       startPoint: spike,
     });
-    await vi.waitFor(() =>
-      expect(environment.requested).toHaveBeenCalledWith("checkout", {
+    await expect
+      .poll(() => environment.requested)
+      .toHaveBeenCalledWith("checkout", {
         ...scope,
         target: { _tag: "LocalBranch", name: "feature/next" },
-      }),
-    );
+      });
     await expect
       .element(
         screen.getByRole("treeitem", { name: "feature/next, current branch" }),
@@ -135,25 +135,25 @@ describe("branch editing", () => {
     await screen.getByRole("treeitem", { name: "feature/merged" }).click();
 
     await userEvent.keyboard("{Delete}");
-    await vi.waitFor(() =>
-      expect(environment.requested).toHaveBeenCalledWith("delete", {
+    await expect
+      .poll(() => environment.requested)
+      .toHaveBeenCalledWith("delete", {
         ...scope,
         force: false,
         local: { name: "feature/merged", target: main },
-      }),
-    );
+      });
     const merged = screen.getByRole("treeitem", { name: "feature/merged" });
     await expect.element(merged).not.toBeInTheDocument();
     await screen.getByRole("button", { name: "Undo" }).click();
     await expect.element(merged).toBeVisible();
-    await vi.waitFor(() =>
-      expect(environment.requested).toHaveBeenCalledWith("create", {
+    await expect
+      .poll(() => environment.requested)
+      .toHaveBeenCalledWith("create", {
         ...scope,
         name: "feature/merged",
         startPoint: main,
         track: { name: "feature/merged", remote: "origin" },
-      }),
-    );
+      });
     expect(environment.requested).not.toHaveBeenCalledWith(
       "checkout",
       expect.anything(),
@@ -189,13 +189,13 @@ describe("branch editing", () => {
       .element(warning.getByRole("button", { name: "Cancel" }))
       .toHaveFocus();
     await warning.getByRole("button", { name: "Delete", exact: true }).click();
-    await vi.waitFor(() =>
-      expect(environment.requested).toHaveBeenLastCalledWith("delete", {
+    await expect
+      .poll(() => environment.requested)
+      .toHaveBeenLastCalledWith("delete", {
         ...scope,
         force: true,
         local: { name: "feature/spike", target: spike },
-      }),
-    );
+      });
   });
 
   it("confirms before deleting a branch locally and on its remote", async () => {
@@ -214,14 +214,14 @@ describe("branch editing", () => {
     await confirmation
       .getByRole("button", { name: "Delete", exact: true })
       .click();
-    await vi.waitFor(() =>
-      expect(environment.requested).toHaveBeenCalledWith("delete", {
+    await expect
+      .poll(() => environment.requested)
+      .toHaveBeenCalledWith("delete", {
         ...scope,
         force: false,
         local: { name: "feature/merged", target: main },
         remote: { name: "feature/merged", remote: "origin", target: main },
-      }),
-    );
+      });
     await expect.element(confirmation).not.toBeInTheDocument();
     await expect
       .element(screen.getByRole("button", { name: "Undo" }))
@@ -256,13 +256,13 @@ describe("branch editing", () => {
       .toHaveFocus();
     await userEvent.keyboard("main");
     await screen.getByRole("option", { name: "origin/main" }).click();
-    await vi.waitFor(() =>
-      expect(environment.requested).toHaveBeenCalledWith("setUpstream", {
+    await expect
+      .poll(() => environment.requested)
+      .toHaveBeenCalledWith("setUpstream", {
         ...scope,
         name: "feature/spike",
         upstream: { name: "main", remote: "origin" },
-      }),
-    );
+      });
   });
   it("shows an upstream failure after the picker closes", async () => {
     const environment = await branchEnvironment();

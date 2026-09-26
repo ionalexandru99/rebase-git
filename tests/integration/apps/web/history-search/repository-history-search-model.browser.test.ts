@@ -47,9 +47,9 @@ describe("history search runtime", () => {
     model.subscribe(publish);
     try {
       model.setText("old");
-      await vi.waitFor(() => expect(requests).toEqual(["old"]));
+      await expect.poll(() => requests).toEqual(["old"]);
       model.setText("new");
-      await vi.waitFor(() => expect(requests).toEqual(["old", "new"]));
+      await expect.poll(() => requests).toEqual(["old", "new"]);
       expect(released).toEqual(["old"]);
       await model.dispose();
       expect(released).toEqual(["old", "new"]);

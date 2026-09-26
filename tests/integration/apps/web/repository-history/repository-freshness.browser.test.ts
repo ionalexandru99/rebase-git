@@ -38,18 +38,14 @@ describe("browser repository freshness", () => {
       | undefined;
     try {
       await first.getRefTargets();
-      await vi.waitFor(() =>
-        expect(first.getSnapshot().freshness).toEqual(fresh),
-      );
+      await expect.poll(() => first.getSnapshot().freshness).toEqual(fresh);
       second = createBrowserRepositoryHistoryReader({
         environmentId,
         logicalRepositoryId,
         repositoryId: secondId,
         gateway: secondGateway.gateway,
       });
-      await vi.waitFor(() =>
-        expect(second?.getSnapshot().freshness).toEqual(fresh),
-      );
+      await expect.poll(() => second?.getSnapshot().freshness).toEqual(fresh);
       expect(firstGateway.subscribe).toHaveBeenCalledOnce();
       expect(secondGateway.subscribe).not.toHaveBeenCalled();
       await second.fetch();
@@ -64,15 +60,13 @@ describe("browser repository freshness", () => {
         { _tag: "Disabled" },
         expect.any(AbortSignal),
       );
-      await vi.waitFor(() =>
-        expect(first.getSnapshot().freshness?.setting).toEqual({
+      await expect
+        .poll(() => first.getSnapshot().freshness?.setting)
+        .toEqual({
           _tag: "Disabled",
-        }),
-      );
+        });
       first.close();
-      await vi.waitFor(() =>
-        expect(secondGateway.subscribe).toHaveBeenCalledOnce(),
-      );
+      await expect.poll(() => secondGateway.subscribe).toHaveBeenCalledOnce();
       expect(firstGateway.release).toHaveBeenCalledOnce();
       await second.fetch();
       expect(secondGateway.fetch).toHaveBeenCalledOnce();
@@ -93,9 +87,9 @@ describe("browser repository freshness", () => {
     });
     try {
       await reader.read({ limit: 100, order: "topological", roots: [ref()] });
-      await vi.waitFor(() =>
-        expect(reader.getSnapshot().synchronization).toBe("complete"),
-      );
+      await expect
+        .poll(() => reader.getSnapshot().synchronization)
+        .toBe("complete");
       const progress: boolean[] = [];
       const unsubscribe = reader.subscribe(() =>
         progress.push(reader.getSnapshot().storingCommits ?? false),
@@ -111,10 +105,10 @@ describe("browser repository freshness", () => {
         return failure;
       });
       await reader.fetch();
-      await vi.waitFor(() => expect(data.synchronize).toHaveBeenCalledTimes(2));
-      await vi.waitFor(() =>
-        expect(reader.getSnapshot().synchronization).toBe("complete"),
-      );
+      await expect.poll(() => data.synchronize).toHaveBeenCalledTimes(2);
+      await expect
+        .poll(() => reader.getSnapshot().synchronization)
+        .toBe("complete");
       expect(reader.getSnapshot()).toMatchObject({
         status: "ready",
         freshness: failure,
@@ -126,16 +120,14 @@ describe("browser repository freshness", () => {
       ]);
       expect(progress.every((value) => !value)).toBe(true);
       data.fail(new RepositoryHistoryOffline());
-      await vi.waitFor(() =>
-        expect(reader.getSnapshot().freshnessError?._tag).toBe(
-          "RepositoryHistoryOffline",
-        ),
-      );
+      await expect
+        .poll(() => reader.getSnapshot().freshnessError?._tag)
+        .toBe("RepositoryHistoryOffline");
       expect(reader.getSnapshot().status).toBe("ready");
       data.publish({ ...fresh, revision: 2 });
-      await vi.waitFor(() =>
-        expect(reader.getSnapshot().freshnessError).toBeUndefined(),
-      );
+      await expect
+        .poll(() => reader.getSnapshot().freshnessError)
+        .toBeUndefined();
       unsubscribe();
     } finally {
       reader.close();
@@ -169,11 +161,11 @@ describe("browser repository freshness", () => {
     });
     try {
       await reader.read({ limit: 100, order: "topological", roots: [ref()] });
-      await vi.waitFor(() =>
-        expect(reader.getSnapshot().synchronization).toBe("complete"),
-      );
+      await expect
+        .poll(() => reader.getSnapshot().synchronization)
+        .toBe("complete");
       data.publish({ ...fresh, revision: 1 });
-      await vi.waitFor(() => expect(data.synchronize).toHaveBeenCalledTimes(2));
+      await expect.poll(() => data.synchronize).toHaveBeenCalledTimes(2);
       expect(data.synchronize.mock.calls[1]?.[0].basis).toMatchObject({
         _tag: "Complete",
         rootOids: [commit().oid],
@@ -181,15 +173,13 @@ describe("browser repository freshness", () => {
       expect(await reader.getRefTargets()).toEqual([ref()]);
       data.publish({ ...fresh, revision: 2 });
       data.publish({ ...fresh, revision: 3 });
-      await vi.waitFor(() =>
-        expect(reader.getSnapshot().freshness?.revision).toBe(3),
-      );
+      await expect.poll(() => reader.getSnapshot().freshness?.revision).toBe(3);
       expect(data.synchronize).toHaveBeenCalledTimes(2);
       finish?.();
-      await vi.waitFor(() => expect(data.synchronize).toHaveBeenCalledTimes(3));
-      await vi.waitFor(() =>
-        expect(reader.getSnapshot().synchronization).toBe("complete"),
-      );
+      await expect.poll(() => data.synchronize).toHaveBeenCalledTimes(3);
+      await expect
+        .poll(() => reader.getSnapshot().synchronization)
+        .toBe("complete");
       expect(data.synchronize.mock.calls[2]?.[0].basis).toMatchObject({
         _tag: "Complete",
         rootOids: [next.oid],
@@ -224,22 +214,20 @@ describe("browser repository freshness", () => {
     });
     try {
       await reader.read({ limit: 100, order: "topological", roots: [ref()] });
-      await vi.waitFor(() =>
-        expect(reader.getSnapshot().synchronization).toBe("complete"),
-      );
+      await expect
+        .poll(() => reader.getSnapshot().synchronization)
+        .toBe("complete");
       data.publish({ ...fresh, revision: 1 });
-      await vi.waitFor(() => expect(data.synchronize).toHaveBeenCalledTimes(2));
+      await expect.poll(() => data.synchronize).toHaveBeenCalledTimes(2);
       data.publish({ ...fresh, revision: 2 });
       data.publish({ ...fresh, revision: 3 });
-      await vi.waitFor(() =>
-        expect(reader.getSnapshot().freshness?.revision).toBe(3),
-      );
+      await expect.poll(() => reader.getSnapshot().freshness?.revision).toBe(3);
       expect(data.synchronize).toHaveBeenCalledTimes(2);
       fail?.(new Error("Synchronization failed"));
-      await vi.waitFor(() => expect(data.synchronize).toHaveBeenCalledTimes(3));
-      await vi.waitFor(() =>
-        expect(reader.getSnapshot().synchronization).toBe("complete"),
-      );
+      await expect.poll(() => data.synchronize).toHaveBeenCalledTimes(3);
+      await expect
+        .poll(() => reader.getSnapshot().synchronization)
+        .toBe("complete");
       expect(data.synchronize).toHaveBeenCalledTimes(3);
     } finally {
       reader.close();

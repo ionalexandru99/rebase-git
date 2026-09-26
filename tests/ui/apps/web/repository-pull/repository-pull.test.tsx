@@ -44,13 +44,13 @@ describe("repository pull", () => {
   it("fetches before fast-forwarding the branch", async () => {
     const f = await fixture();
     await f.pull();
-    await vi.waitFor(() =>
-      expect(f.requested).toHaveBeenCalledWith({
+    await expect
+      .poll(() => f.requested)
+      .toHaveBeenCalledWith({
         repositoryId,
         worktreePath: "/repo",
         branch: "main",
-      }),
-    );
+      });
     expect(f.fetch.mock.invocationCallOrder[0]).toBeLessThan(
       f.requested.mock.invocationCallOrder[0] ?? 0,
     );
@@ -103,13 +103,13 @@ describe("repository pull", () => {
       .element(page.getByRole("button", { name: "Fetch", exact: true }))
       .toBeDisabled();
     fetched.resolve(freshness);
-    await vi.waitFor(() =>
-      expect(pulled).toHaveBeenCalledWith({
+    await expect
+      .poll(() => pulled)
+      .toHaveBeenCalledWith({
         repositoryId,
         worktreePath: "/repo",
         branch: "main",
-      }),
-    );
+      });
     await expect
       .element(page.getByRole("button", { name: "Pulling" }))
       .toBeDisabled();

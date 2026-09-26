@@ -39,10 +39,10 @@ describe("author avatar loading", () => {
         { ...author, oid: "b".repeat(40) },
         second,
       );
-      await vi.waitFor(() => expect(resolve).toHaveBeenCalledOnce());
+      await expect.poll(() => resolve).toHaveBeenCalledOnce();
       expect(model.get(author.author.email)).toBeUndefined();
       finish(avatar);
-      await vi.waitFor(() => expect(first).toHaveBeenCalledOnce());
+      await expect.poll(() => first).toHaveBeenCalledOnce();
       expect(second).toHaveBeenCalledOnce();
       unsubscribe();
       unsubscribeSecond();
@@ -60,11 +60,11 @@ describe("author avatar loading", () => {
     const model = createAuthorAvatarModel(repository, { resolve });
     try {
       const leave = model.subscribe(author, vi.fn());
-      await vi.waitFor(() => expect(resolve).toHaveBeenCalledOnce());
+      await expect.poll(() => resolve).toHaveBeenCalledOnce();
       leave();
       expect(aborted).toHaveBeenCalledOnce();
       model.subscribe(author, vi.fn());
-      await vi.waitFor(() => expect(resolve).toHaveBeenCalledTimes(2));
+      await expect.poll(() => resolve).toHaveBeenCalledTimes(2);
     } finally {
       model.dispose();
     }
@@ -79,7 +79,7 @@ describe("author avatar loading", () => {
     try {
       const done = vi.fn();
       model.subscribe(author, done);
-      await vi.waitFor(() => expect(done).toHaveBeenCalledOnce());
+      await expect.poll(() => done).toHaveBeenCalledOnce();
       const next = vi.fn();
       model.subscribe(
         {
@@ -88,7 +88,7 @@ describe("author avatar loading", () => {
         },
         next,
       );
-      await vi.waitFor(() => expect(next).toHaveBeenCalledOnce());
+      await expect.poll(() => next).toHaveBeenCalledOnce();
       expect(resolve).toHaveBeenCalledOnce();
     } finally {
       model.dispose();
@@ -112,9 +112,9 @@ describe("author avatar loading", () => {
           },
           vi.fn(),
         );
-      await vi.waitFor(() => expect(resolve).toHaveBeenCalledTimes(2));
+      await expect.poll(() => resolve).toHaveBeenCalledTimes(2);
       lookups.get("first")?.resolve(undefined);
-      await vi.waitFor(() => expect(resolve).toHaveBeenCalledTimes(3));
+      await expect.poll(() => resolve).toHaveBeenCalledTimes(3);
     } finally {
       model.dispose();
     }
@@ -135,10 +135,10 @@ describe("author avatar loading", () => {
           { oid: name, author: { email: `${name}@example.test` } },
           name === "third" ? queued : vi.fn(),
         );
-      await vi.waitFor(() => expect(resolve).toHaveBeenCalledTimes(2));
+      await expect.poll(() => resolve).toHaveBeenCalledTimes(2);
       for (const lookup of lookups)
         lookup.reject(new AvatarUnavailable(Date.now() + 60_000));
-      await vi.waitFor(() => expect(queued).toHaveBeenCalledOnce());
+      await expect.poll(() => queued).toHaveBeenCalledOnce();
       expect(resolve).toHaveBeenCalledTimes(2);
     } finally {
       model.dispose();

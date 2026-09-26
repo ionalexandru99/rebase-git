@@ -52,13 +52,11 @@ describe("commit graph states", () => {
           "chronological",
         ),
       );
-      await vi.waitFor(() =>
-        expect(grid.element().scrollHeight > grid.element().clientHeight).toBe(
-          after > 3,
-        ),
-      );
-      await vi.waitFor(() =>
-        expect(
+      await expect
+        .poll(() => grid.element().scrollHeight > grid.element().clientHeight)
+        .toBe(after > 3);
+      await expect
+        .poll(() =>
           Math.abs(
             screen
               .getByText("SHA", { exact: true })
@@ -66,8 +64,8 @@ describe("commit graph states", () => {
               .getBoundingClientRect().left -
               sha.element().getBoundingClientRect().left,
           ),
-        ).toBeLessThan(1),
-      );
+        )
+        .toBeLessThan(1);
     },
   );
   it.each([
@@ -112,8 +110,8 @@ describe("commit graph states", () => {
         .getByRole("row", { name: /^Commit 0,/ })
         .getByText(historyOid(0).slice(0, 8), { exact: true });
       await expect.element(sha).toBeVisible();
-      await vi.waitFor(() =>
-        expect(
+      await expect
+        .poll(() =>
           Math.abs(
             screen
               .getByText("SHA", { exact: true })
@@ -121,8 +119,8 @@ describe("commit graph states", () => {
               .getBoundingClientRect().left -
               sha.element().getBoundingClientRect().left,
           ),
-        ).toBeLessThan(1),
-      );
+        )
+        .toBeLessThan(1);
       element.focus();
       await userEvent.keyboard("{ArrowDown}");
       await expect

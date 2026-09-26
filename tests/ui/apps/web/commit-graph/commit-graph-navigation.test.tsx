@@ -3,8 +3,9 @@ import type {
   RepositoryHistoryRefTarget,
 } from "@rebase/contracts";
 import { act, createRef, useState } from "react";
-import { describe, expect, it, vi } from "vite-plus/test";
+import { describe, expect, it } from "vite-plus/test";
 import { userEvent } from "vite-plus/test/browser";
+import { waitForObservation } from "#tests-support/observation";
 import {
   CommitGraphFixture,
   history,
@@ -54,11 +55,12 @@ describe("commit graph navigation", () => {
       .toBeVisible();
     await screen.getByRole("searchbox").fill("Commit 112");
     await screen.getByRole("button", { name: /Commit 112 Alex/ }).click();
-    await vi.waitFor(() =>
-      expect(
-        reader.read.mock.calls.filter(([query]) => query.offset === 0).length,
-      ).toBeGreaterThan(1),
-    );
+    await expect
+      .poll(
+        () =>
+          reader.read.mock.calls.filter(([query]) => query.offset === 0).length,
+      )
+      .toBeGreaterThan(1);
     await expect.element(grid).toHaveAttribute("aria-busy", "false");
     await new Promise<void>((resolve) =>
       requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
@@ -191,7 +193,7 @@ describe("commit graph navigation", () => {
     await expect.element(collapse).toBeVisible();
     const row = screen.getByRole("row", { name: /^Commit 0,/ });
     await expect.element(row).toHaveAttribute("aria-busy", "true");
-    await vi.waitFor(() => expect(release).toBeDefined());
+    await expect.poll(() => release).toBeDefined();
     await collapse.click();
     await expect.element(expand).toBeVisible();
     await expect.element(row).not.toHaveAttribute("aria-busy", "true");
@@ -273,11 +275,11 @@ describe("commit graph navigation", () => {
       .toBeVisible();
     grid.element().scrollTop = 80 * 26;
     grid.element().dispatchEvent(new Event("scroll"));
-    await vi.waitFor(() =>
-      expect(reader.read).toHaveBeenCalledWith(
+    await expect
+      .poll(() => reader.read)
+      .toHaveBeenCalledWith(
         expect.objectContaining({ offset: 100, limit: 100 }),
-      ),
-    );
+      );
     grid.element().focus();
     await userEvent.keyboard("{End}");
     await expect
@@ -334,7 +336,7 @@ describe("commit graph navigation", () => {
       .toBeVisible();
     grid.element().focus();
     await userEvent.keyboard("{End}{ArrowDown}");
-    await vi.waitFor(() => expect(release).toBeDefined());
+    await expect.poll(() => release).toBeDefined();
     await grid.getByRole("row", { name: /^Commit 98,/ }).click();
     release?.(commits.slice(100, 200));
     await expect.element(grid).toHaveAttribute("aria-rowcount", "131");
@@ -383,7 +385,7 @@ describe("commit graph navigation", () => {
             }),
         );
       const jump = handle.current?.navigateToOid(historyOid(350));
-      await vi.waitFor(() => expect(release).toBeDefined());
+      await expect.poll(() => release).toBeDefined();
       await grid.getByRole("row", { name: /^Commit 1,/ }).click();
       release?.();
       await jump;
@@ -452,17 +454,17 @@ describe("commit graph navigation", () => {
       status: "ready",
       synchronization: "complete",
     };
-    await vi.waitFor(() =>
-      expect(reader.read).toHaveBeenLastCalledWith(
+    await expect
+      .poll(() => reader.read)
+      .toHaveBeenLastCalledWith(
         expect.objectContaining({
           roots: [{ name: "main", type: "branch", oid: commits[10]?.oid }],
         }),
-      ),
-    );
+      );
     await expect
       .element(grid.getByRole("row", { name: /^Commit 22,/ }))
       .toHaveAttribute("aria-selected", "true");
-    await vi.waitFor(() => expect(grid.element().scrollTop).toBe(10 * 26 + 7));
+    await expect.poll(() => grid.element().scrollTop).toBe(10 * 26 + 7);
     const reads = reader.read.mock.calls.length;
     const refReads = reader.getRefTargets.mock.calls.length;
     await act(async () => {
@@ -520,7 +522,7 @@ describe("commit graph navigation", () => {
     await expect
       .element(grid.getByRole("row", { name: /^Commit 350,/ }))
       .toHaveAttribute("aria-selected", "true");
-    await vi.waitFor(() => {
+    await waitForObservation(() => {
       const bounds = grid.element().getBoundingClientRect();
       const target = grid
         .getByRole("row", { name: /^Commit 350,/ })
@@ -544,15 +546,15 @@ describe("commit graph navigation", () => {
       .element(screen.getByRole("button", { name: "Expand merge Commit 0" }))
       .toBeVisible();
     await screen.getByRole("button", { name: "Expand merge Commit 0" }).click();
-    await vi.waitFor(() =>
-      expect(reader.read).toHaveBeenLastCalledWith(
+    await expect
+      .poll(() => reader.read)
+      .toHaveBeenLastCalledWith(
         expect.objectContaining({
           additionalParentEdges: expect.arrayContaining([
             { childOid: historyOid(250), parentOid: historyOid(320) },
           ]),
         }),
-      ),
-    );
+      );
     await handle.current?.navigateToOid(historyOid(350));
     await expect
       .element(grid.getByRole("row", { name: /^Commit 350,/ }))
@@ -821,9 +823,7 @@ describe("commit graph navigation", () => {
           }),
         )
         .toHaveAttribute("aria-selected", "true");
-      await vi.waitFor(() =>
-        expect(grid.element().scrollTop).toBe(scrollTop + 26),
-      );
+      await expect.poll(() => grid.element().scrollTop).toBe(scrollTop + 26);
     },
   );
 

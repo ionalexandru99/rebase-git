@@ -4,6 +4,7 @@ import {
   type RepositoryCommit,
 } from "@rebase/contracts";
 import { describe, expect, it, vi } from "vite-plus/test";
+import { waitForObservation } from "#tests-support/observation";
 import { createBrowserRepositoryHistoryReader } from "#web/features/repository-history/browser-repository-history-reader";
 import { clearHistoryCache } from "#web/features/repository-history/cache/repository-history-storage";
 import {
@@ -221,22 +222,20 @@ describe("browser repository history reader", () => {
     try {
       await Promise.all([first.getRefTargets(), second.getRefTargets()]);
       await second.read({ limit: 100, order: "topological", roots: [main] });
-      await vi.waitFor(() =>
-        expect(second.getSnapshot().error).toBeInstanceOf(
-          RepositoryHistoryOffline,
-        ),
-      );
+      await expect
+        .poll(() => second.getSnapshot().error)
+        .toBeInstanceOf(RepositoryHistoryOffline);
       expect(gateway.synchronize).toHaveBeenCalledTimes(1);
       const revision = second.getSnapshot().revision;
       first.close();
-      await vi.waitFor(async () => {
-        const leases = await navigator.locks.query();
-        expect(
-          [...(leases.held ?? []), ...(leases.pending ?? [])].some(
+      await expect
+        .poll(async () => {
+          const leases = await navigator.locks.query();
+          return [...(leases.held ?? []), ...(leases.pending ?? [])].some(
             ({ name }) => name === firstLease,
-          ),
-        ).toBe(false);
-      });
+          );
+        })
+        .toBe(false);
       await second.getRefTargets();
       expect(second.getSnapshot().revision).toBe(revision);
       expect(second.getSnapshot().synchronization).toBe("idle");
@@ -298,9 +297,9 @@ describe("browser repository history reader", () => {
       gateway,
     });
     await initial.read(query);
-    await vi.waitFor(() =>
-      expect(initial.getSnapshot().synchronization).toBe("complete"),
-    );
+    await expect
+      .poll(() => initial.getSnapshot().synchronization)
+      .toBe("complete");
     const painted = await initial.read(query);
     expect(
       await initial.locate({ ...query, offset: 90, limit: 2 }, oid(80)),
@@ -484,9 +483,9 @@ describe("browser repository history reader", () => {
     });
     try {
       await reader.read({ limit: 100, order: "topological", roots: [main] });
-      await vi.waitFor(() =>
-        expect(linked.getSnapshot().synchronization).toBe("complete"),
-      );
+      await expect
+        .poll(() => linked.getSnapshot().synchronization)
+        .toBe("complete");
       expect(gateway.read).toHaveBeenCalledWith(
         expect.objectContaining({ repositoryId }),
         expect.any(AbortSignal),
@@ -555,7 +554,7 @@ describe("browser repository history reader", () => {
       repositoryId,
     });
     await reader.read({ limit: 100, order: "topological", roots: [main] });
-    await vi.waitFor(() => expect(gateway.synchronize).toHaveBeenCalledOnce());
+    await expect.poll(() => gateway.synchronize).toHaveBeenCalledOnce();
     reader.close();
     const offlineGateway: RepositoryHistoryGateway = {
       read: vi.fn(() => Promise.reject(new RepositoryHistoryOffline())),
@@ -610,9 +609,9 @@ describe("browser repository history reader", () => {
     });
     try {
       await reader.read({ roots, order: "topological", limit: 100 });
-      await vi.waitFor(() =>
-        expect(reader.getSnapshot().synchronization).toBe("complete"),
-      );
+      await expect
+        .poll(() => reader.getSnapshot().synchronization)
+        .toBe("complete");
       expect(
         (await reader.read({ roots, order: "chronological", limit: 2 })).map(
           ({ oid }) => oid,
@@ -711,9 +710,9 @@ describe("browser repository history reader", () => {
         main.oid,
         base.oid,
       ]);
-      await vi.waitFor(() =>
-        expect(reader.getSnapshot().synchronization).toBe("complete"),
-      );
+      await expect
+        .poll(() => reader.getSnapshot().synchronization)
+        .toBe("complete");
       expect(
         (
           await reader.read({
@@ -767,12 +766,12 @@ describe("browser repository history reader", () => {
       order: "topological",
       roots: [root("main")],
     });
-    await vi.waitFor(() =>
-      expect(reader.getSnapshot().synchronization).toBe("syncing"),
-    );
-    await vi.waitFor(() =>
-      expect(otherTab.getSnapshot().synchronization).toBe("syncing"),
-    );
+    await expect
+      .poll(() => reader.getSnapshot().synchronization)
+      .toBe("syncing");
+    await expect
+      .poll(() => otherTab.getSnapshot().synchronization)
+      .toBe("syncing");
     const synchronized = history(3);
 
     const acceptBatch = await synchronizationStarted.promise;
@@ -787,21 +786,21 @@ describe("browser repository history reader", () => {
     );
 
     expect(reader.getSnapshot().synchronizedCommitCount).toBe(3);
-    await vi.waitFor(() =>
-      expect(otherTab.getSnapshot().synchronizedCommitCount).toBe(3),
-    );
+    await expect
+      .poll(() => otherTab.getSnapshot().synchronizedCommitCount)
+      .toBe(3);
     await expect(
       readRepositoryCommits(environmentId, repositoryId, [
         synchronized[2]?.oid ?? "",
       ]),
     ).resolves.toEqual([synchronized[2]]);
     finishSynchronization?.(3);
-    await vi.waitFor(() =>
-      expect(reader.getSnapshot().synchronization).toBe("complete"),
-    );
-    await vi.waitFor(() =>
-      expect(otherTab.getSnapshot().synchronization).toBe("complete"),
-    );
+    await expect
+      .poll(() => reader.getSnapshot().synchronization)
+      .toBe("complete");
+    await expect
+      .poll(() => otherTab.getSnapshot().synchronization)
+      .toBe("complete");
     reader.close();
     otherTab.close();
   });
@@ -826,7 +825,7 @@ describe("browser repository history reader", () => {
       order: "topological",
       roots: [root("main")],
     });
-    await vi.waitFor(() => expect(gateway.synchronize).toHaveBeenCalledOnce());
+    await expect.poll(() => gateway.synchronize).toHaveBeenCalledOnce();
 
     reader.close();
 
@@ -938,7 +937,7 @@ describe("browser repository history reader", () => {
       roots: [root("main")],
     });
 
-    await vi.waitFor(() => expect(second.getSnapshot().status).toBe("ready"));
+    await expect.poll(() => second.getSnapshot().status).toBe("ready");
     expect(secondChanged).toHaveBeenCalled();
     await expect(
       second.getCommitSummaries([commits[1]?.oid ?? ""]),
@@ -997,7 +996,7 @@ describe("browser repository history reader", () => {
         roots: [root("main")],
       }),
     ]);
-    await vi.waitFor(() => expect(gateway.synchronize).toHaveBeenCalledOnce());
+    await expect.poll(() => gateway.synchronize).toHaveBeenCalledOnce();
 
     first.close();
     second.close();
@@ -1060,9 +1059,7 @@ describe("browser repository history reader", () => {
     await batchWasDispatched;
     first.close();
 
-    await vi.waitFor(() =>
-      expect(secondGateway.synchronize).toHaveBeenCalledOnce(),
-    );
+    await expect.poll(() => secondGateway.synchronize).toHaveBeenCalledOnce();
     expect(second.getSnapshot().synchronization).toBe("syncing");
     second.close();
   });
@@ -1132,9 +1129,7 @@ describe("browser repository history reader", () => {
       first.close();
       await closed.promise;
       control.postMessage("release");
-      await vi.waitFor(() =>
-        expect(secondGateway.synchronize).toHaveBeenCalledOnce(),
-      );
+      await expect.poll(() => secondGateway.synchronize).toHaveBeenCalledOnce();
       expect(secondGateway.synchronize).toHaveBeenCalledWith(
         expect.objectContaining({
           basis: expect.objectContaining({
@@ -1193,20 +1188,20 @@ describe("browser repository history reader", () => {
       order: "topological",
       roots: [main],
     });
-    await vi.waitFor(() => {
-      expect(reader.getSnapshot()).toMatchObject({
+    await expect
+      .poll(() => reader.getSnapshot())
+      .toMatchObject({
         error: expect.any(RepositoryHistoryUnavailable),
         status: "error",
         synchronization: "idle",
       });
-    });
 
     await reader.read({
       limit: 100,
       order: "topological",
       roots: [main],
     });
-    await vi.waitFor(() => {
+    await waitForObservation(() => {
       expect(gateway.synchronize).toHaveBeenCalledTimes(2);
       expect(reader.getSnapshot().synchronization).toBe("complete");
     });
@@ -1256,9 +1251,9 @@ describe("browser repository history reader", () => {
         repositoryId,
       });
       await first.read({ limit: 100, order: "topological", roots: [main] });
-      await vi.waitFor(() =>
-        expect(first.getSnapshot().synchronization).toBe("complete"),
-      );
+      await expect
+        .poll(() => first.getSnapshot().synchronization)
+        .toBe("complete");
       first.close();
 
       let recovered = false;
@@ -1289,12 +1284,12 @@ describe("browser repository history reader", () => {
         await expect(
           reopened.read({ limit: 100, order: "topological", roots: [main] }),
         ).resolves.toEqual(commits);
-        await vi.waitFor(() =>
-          expect(reopened.getSnapshot()).toMatchObject({
+        await expect
+          .poll(() => reopened.getSnapshot())
+          .toMatchObject({
             synchronization: "stale",
             synchronizedCommitCount: commits.length,
-          }),
-        );
+          });
         await expect(
           reopened.read({
             limit: 100,
@@ -1306,29 +1301,27 @@ describe("browser repository history reader", () => {
           reopened.getCommitSummaries(["e".repeat(40)]),
         ).resolves.toEqual([]);
         expect(offlineGateway.read).not.toHaveBeenCalled();
-        await vi.waitFor(() =>
-          expect(reopened.getSnapshot()).toMatchObject({
+        await expect
+          .poll(() => reopened.getSnapshot())
+          .toMatchObject({
             status: "ready",
             synchronization: "stale",
-          }),
-        );
-        await vi.waitFor(() =>
-          expect(offlineGateway.synchronize).toHaveBeenCalledTimes(
-            failure === "offline" ? 1 : 2,
-          ),
-        );
+          });
+        await expect
+          .poll(() => offlineGateway.synchronize)
+          .toHaveBeenCalledTimes(failure === "offline" ? 1 : 2);
         await expect(reopened.getRefTargets()).resolves.toEqual([main]);
         expect(reopened.getSnapshot().synchronizedCommitCount).toBe(
           commits.length,
         );
         recovered = true;
         available?.();
-        await vi.waitFor(() =>
-          expect(reopened.getSnapshot()).toMatchObject({
+        await expect
+          .poll(() => reopened.getSnapshot())
+          .toMatchObject({
             synchronization: "complete",
             synchronizedCommitCount: commits.length,
-          }),
-        );
+          });
         expect(offlineGateway.synchronize).toHaveBeenCalledTimes(
           failure === "offline" ? 2 : 3,
         );
@@ -1463,15 +1456,13 @@ describe("browser repository history reader", () => {
       repositoryId,
     });
     await resumed.read({ limit: 100, order: "topological", roots: [nextRef] });
-    await vi.waitFor(() =>
-      expect(secondGateway.synchronize).toHaveBeenCalled(),
-    );
+    await expect.poll(() => secondGateway.synchronize).toHaveBeenCalled();
 
     await expect(resumed.getRefTargets()).resolves.toEqual([oldRef]);
     finish?.();
-    await vi.waitFor(() =>
-      expect(resumed.getSnapshot().synchronization).toBe("complete"),
-    );
+    await expect
+      .poll(() => resumed.getSnapshot().synchronization)
+      .toBe("complete");
     await expect(resumed.getRefTargets()).resolves.toEqual([nextRef]);
     resumed.close();
   });
@@ -1508,9 +1499,9 @@ describe("browser repository history reader", () => {
       repositoryId,
     });
     await initial.read({ limit: 100, order: "topological", roots: [oldRef] });
-    await vi.waitFor(() =>
-      expect(initial.getSnapshot().synchronization).toBe("complete"),
-    );
+    await expect
+      .poll(() => initial.getSnapshot().synchronization)
+      .toBe("complete");
     initial.close();
 
     const newRef = { ...oldRef, name: "trunk" };
@@ -1546,12 +1537,10 @@ describe("browser repository history reader", () => {
       repositoryId,
     });
     await reopened.read({ limit: 100, order: "topological", roots: [oldRef] });
-    await vi.waitFor(() =>
-      expect(gateway.synchronize).toHaveBeenCalledTimes(2),
-    );
-    await vi.waitFor(() =>
-      expect(reopened.getSnapshot().synchronization).toBe("complete"),
-    );
+    await expect.poll(() => gateway.synchronize).toHaveBeenCalledTimes(2);
+    await expect
+      .poll(() => reopened.getSnapshot().synchronization)
+      .toBe("complete");
 
     await expect(reopened.getRefTargets()).resolves.toEqual([newRef]);
     expect(reopened.getSnapshot().synchronizedCommitCount).toBe(1);
@@ -1612,18 +1601,16 @@ describe("browser repository history reader", () => {
       order: "topological",
       roots: [initialRef],
     });
-    await vi.waitFor(() =>
-      expect(reader.getSnapshot().synchronization).toBe("complete"),
-    );
+    await expect
+      .poll(() => reader.getSnapshot().synchronization)
+      .toBe("complete");
 
     connected?.();
 
-    await vi.waitFor(() =>
-      expect(gateway.synchronize).toHaveBeenCalledTimes(2),
-    );
-    await vi.waitFor(() =>
-      expect(reader.getSnapshot().synchronization).toBe("complete"),
-    );
+    await expect.poll(() => gateway.synchronize).toHaveBeenCalledTimes(2);
+    await expect
+      .poll(() => reader.getSnapshot().synchronization)
+      .toBe("complete");
     await expect(reader.getRefTargets()).resolves.toEqual([reconnectedRef]);
     await expect(
       reader.read({

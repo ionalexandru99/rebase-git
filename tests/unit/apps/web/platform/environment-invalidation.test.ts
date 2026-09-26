@@ -62,22 +62,20 @@ describe("environment change invalidation", () => {
       for (const listener of listeners) listener(["one"], "Refs");
     };
     const stopObserving = observer.subscribe(() => {});
-    await vi.waitFor(() => expect(read).toHaveBeenCalledOnce());
+    await expect.poll(() => read).toHaveBeenCalledOnce();
     responses[0]?.(["main"]);
-    await vi.waitFor(() =>
-      expect(observer.getCurrentResult().data).toEqual(["main"]),
-    );
+    await expect.poll(() => observer.getCurrentResult().data).toEqual(["main"]);
 
     change();
-    await vi.waitFor(() => expect(read).toHaveBeenCalledTimes(2));
+    await expect.poll(() => read).toHaveBeenCalledTimes(2);
     for (let burst = 0; burst < 20; burst += 1) change();
     expect(read).toHaveBeenCalledTimes(2);
     responses[1]?.(["main", "stale"]);
-    await vi.waitFor(() => expect(read).toHaveBeenCalledTimes(3));
+    await expect.poll(() => read).toHaveBeenCalledTimes(3);
     responses[2]?.(["main", "feature"]);
-    await vi.waitFor(() =>
-      expect(observer.getCurrentResult().data).toEqual(["main", "feature"]),
-    );
+    await expect
+      .poll(() => observer.getCurrentResult().data)
+      .toEqual(["main", "feature"]);
 
     expect(read).toHaveBeenCalledTimes(3);
     stopObserving();
