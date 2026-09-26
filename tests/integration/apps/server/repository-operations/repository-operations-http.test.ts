@@ -1,6 +1,5 @@
 import { join } from "node:path";
 import { RepositoryOperationsHttpApi } from "@rebase/contracts";
-import { createEnvironmentRequestClient } from "@rebase/environment-client";
 import { Effect } from "effect";
 import { expect, it } from "vite-plus/test";
 import { createEnvironmentEventPublisher } from "#server/adapters/environment-transport/events/environment-event-publisher";
@@ -23,6 +22,7 @@ import {
   createRepositoryAccess,
   createRepositoryCoordination,
 } from "#server/repository/access/index";
+import { bearerRequests } from "#tests-integration/apps/server/environment-connection/bearer-requests";
 import { testEnvironmentFeatures } from "#tests-integration/apps/server/environment-connection/test-environment-features";
 import {
   createDivergedRepository,
@@ -86,15 +86,7 @@ it("authorizes operation discovery and recovery separately over HTTP", async () 
                 pairingMaterial: pairing.material,
                 label: role,
               });
-              return createEnvironmentRequestClient(listener.origin, () => ({
-                type: "bearer",
-                value: credential,
-              }))(RepositoryOperationsHttpApi, {
-                disconnected: () => {
-                  throw new Error("Every request carries a credential.");
-                },
-                response: (error) => error,
-              });
+              return bearerRequests(listener.origin, credential);
             });
           const viewer = yield* client("viewer");
           const owner = yield* client("owner");
@@ -102,7 +94,7 @@ it("authorizes operation discovery and recovery separately over HTTP", async () 
             repositoryId: repository.id,
             worktreePath: directory,
           };
-          const state = yield* viewer.read(scope);
+          const state = yield* viewer(RepositoryOperationsHttpApi.read, scope);
           expect(state.kind).toBe("merge");
           const command = {
             ...scope,
@@ -110,20 +102,25 @@ it("authorizes operation discovery and recovery separately over HTTP", async () 
             action: "abort" as const,
           };
           expect(
-            yield* viewer.execute(command).pipe(Effect.flip),
+            yield* viewer(RepositoryOperationsHttpApi.execute, command).pipe(
+              Effect.flip,
+            ),
           ).toMatchObject({
             _tag: "EnvironmentAccessDenied",
             status: 403,
           });
           expect(
-            yield* owner
-              .read({ ...scope, worktreePath: join(directory, ".git") })
-              .pipe(Effect.flip),
+            yield* owner(RepositoryOperationsHttpApi.read, {
+              ...scope,
+              worktreePath: join(directory, ".git"),
+            }).pipe(Effect.flip),
           ).toMatchObject({
             _tag: "EnvironmentHttpRejected",
             failure: { _tag: "RepositoryRejected", reason: "Missing" },
           });
-          expect((yield* owner.execute(command)).kind).toBe("idle");
+          expect(
+            (yield* owner(RepositoryOperationsHttpApi.execute, command)).kind,
+          ).toBe("idle");
         }),
       ),
     );

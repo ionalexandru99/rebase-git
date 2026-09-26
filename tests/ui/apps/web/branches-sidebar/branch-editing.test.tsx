@@ -3,22 +3,24 @@ import {
   type RepositoryRefs,
   type RepositoryRefTarget,
   type RouteFailure,
+  type RouteInput,
+  type RouteSuccess,
 } from "@rebase/contracts";
 import {
   EnvironmentHttpRejected,
   type EnvironmentRequestClient,
-  environmentHttpRoutesClient,
+  type RequestableEnvironmentHttpRoute,
 } from "@rebase/environment-client";
-import { Effect } from "effect";
 import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
 import { userEvent } from "vite-plus/test/browser";
-import { render } from "vitest-browser-react";
 import { repositoryScope } from "#tests-ui/apps/web/repository-scope/repository-scope-fixture";
+import { render, testEnvironment } from "#tests-ui/runtime/render";
 import { BranchManagement } from "#web/features/branch-management/index";
 import { CommitCommandMenu } from "#web/features/commit-commands/index";
 import { NotificationsProvider } from "#web/features/notifications/index";
 import { RepositoryScopeProvider } from "#web/features/repository-scope/index";
 import { BranchesSidebar } from "#web-ui/features/branches-sidebar/branches-sidebar";
+import { EnvironmentProvider } from "#web-ui/platform/query/environment-context";
 
 const repositoryId = "00000000-0000-4000-8000-000000000001";
 const mainPath = "/repo";
@@ -244,32 +246,33 @@ type BranchFailure = RouteFailure<
 >;
 
 function branchEnvironment() {
-  const requested = vi.fn<(route: BranchRoute, command: object) => void>();
+  const requested = vi.fn<(route: BranchRoute, command: unknown) => void>();
   const checkout = vi.fn(async () => ({}) as never);
   const rejections = new Map<
     BranchRoute,
     { readonly failure: BranchFailure }
   >();
-  const requests: EnvironmentRequestClient = (routes, errors) =>
-    environmentHttpRoutesClient(routes, (route, command) => {
-      const name = branchRoute(route.path);
-      requested(name, command as unknown as object);
-      const rejection = rejections.get(name);
-      rejections.delete(name);
-      return rejection === undefined
-        ? Effect.succeed(branchResponse(name, command) as never)
-        : Effect.fail(
-            errors.response(new EnvironmentHttpRejected(rejection) as never),
-          );
-    });
+  const requests: EnvironmentRequestClient = async <
+    Route extends RequestableEnvironmentHttpRoute,
+  >(
+    route: Route,
+    command: RouteInput<Route>,
+  ) => {
+    const name = branchRoute(route.path);
+    requested(name, command);
+    const rejection = rejections.get(name);
+    rejections.delete(name);
+    if (rejection !== undefined) throw new EnvironmentHttpRejected(rejection);
+    return branchResponse(name, command) as RouteSuccess<Route>;
+  };
   return {
     requested,
     checkout,
+    requests,
     rejectNext: (route: BranchRoute, failure: BranchFailure) =>
       rejections.set(route, { failure }),
     scope: repositoryScope({
       ...scope,
-      requests,
       refs: { apply: () => undefined, checkout },
     }),
   };
@@ -283,7 +286,7 @@ function branchRoute(path: string) {
   return route;
 }
 
-function branchResponse(route: BranchRoute, command: unknown) {
+function branchResponse(route: BranchRoute, command: unknown): unknown {
   const request = command as {
     readonly name?: string;
     readonly newName?: string;
@@ -311,29 +314,33 @@ function sidebar(
   createBranchAt?: string,
 ) {
   return (
-    <NotificationsProvider>
-      <RepositoryScopeProvider scope={environment.scope}>
-        <BranchManagement.Provider>
-          {createBranchAt === undefined ? null : (
-            <CommitAt oid={createBranchAt} />
-          )}
-          <div style={{ height: 520, width: 320 }}>
-            <BranchesSidebar
-              activeWorktreePath={mainPath}
-              focusRequest={0}
-              onRetry={() => undefined}
-              onSelectRef={(_target: RepositoryRefTarget) => undefined}
-              snapshot={{
-                checkingOut: false,
-                refs: refs(),
-                repositoryId,
-                status: "ready",
-              }}
-            />
-          </div>
-        </BranchManagement.Provider>
-      </RepositoryScopeProvider>
-    </NotificationsProvider>
+    <EnvironmentProvider
+      environment={testEnvironment({ requests: environment.requests })}
+    >
+      <NotificationsProvider>
+        <RepositoryScopeProvider scope={environment.scope}>
+          <BranchManagement.Provider>
+            {createBranchAt === undefined ? null : (
+              <CommitAt oid={createBranchAt} />
+            )}
+            <div style={{ height: 520, width: 320 }}>
+              <BranchesSidebar
+                activeWorktreePath={mainPath}
+                focusRequest={0}
+                onRetry={() => undefined}
+                onSelectRef={(_target: RepositoryRefTarget) => undefined}
+                snapshot={{
+                  checkingOut: false,
+                  refs: refs(),
+                  repositoryId,
+                  status: "ready",
+                }}
+              />
+            </div>
+          </BranchManagement.Provider>
+        </RepositoryScopeProvider>
+      </NotificationsProvider>
+    </EnvironmentProvider>
   );
 }
 

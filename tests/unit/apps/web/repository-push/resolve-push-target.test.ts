@@ -1,6 +1,6 @@
 import type { RepositoryRefs } from "@rebase/contracts";
 import { describe, expect, it } from "vite-plus/test";
-import { resolvePushTarget } from "#web/features/repository-push/index";
+import { resolvePushTarget } from "#web/features/repository-push/resolve-push-target";
 
 const remoteTip = "b".repeat(40);
 

@@ -1,8 +1,10 @@
+import { QueryClientProvider } from "@tanstack/react-query";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { createBrowserLocalEnvironmentSession } from "#web/app/environment/browser-local-environment-session";
 import { readDesktopHostBridge } from "#web/app/environment/desktop-host-bridge";
 import { NotificationsProvider } from "#web/features/notifications/index";
+import { createEnvironmentQueryClient } from "#web/platform/query/environment-query-client";
 import { ApplicationShell } from "#web-ui/app/shell/application-shell";
 import { ApplicationRuntime } from "#web-ui/platform/effect/application-runtime-context";
 import "@rebase/web/styles.css";
@@ -20,18 +22,21 @@ const session = createBrowserLocalEnvironmentSession(
   desktopHost,
 );
 session.start();
+const queryClient = createEnvironmentQueryClient();
 
 createRoot(rootElement).render(
   <StrictMode>
-    <ApplicationRuntime value={session.runtime}>
-      <NotificationsProvider>
-        <ApplicationShell
-          desktopUpdates={desktopHost?.updates}
-          productVersion={productVersion}
-          repositoryFilesystem={desktopHost}
-          session={session}
-        />
-      </NotificationsProvider>
-    </ApplicationRuntime>
+    <QueryClientProvider client={queryClient}>
+      <ApplicationRuntime value={session.runtime}>
+        <NotificationsProvider>
+          <ApplicationShell
+            desktopUpdates={desktopHost?.updates}
+            productVersion={productVersion}
+            repositoryFilesystem={desktopHost}
+            session={session}
+          />
+        </NotificationsProvider>
+      </ApplicationRuntime>
+    </QueryClientProvider>
   </StrictMode>,
 );

@@ -2,14 +2,12 @@ import {
   currentClientReceiveLimits,
   EnvironmentAccessFailure,
   isRouteOk,
-  type RouteFailure,
   type RouteSuccess,
 } from "@rebase/contracts";
-import { Effect, Schema } from "effect";
+import { Schema } from "effect";
 import {
   EnvironmentAccessDenied,
   EnvironmentHttpRejected,
-  type EnvironmentResponseError,
   environmentResponseError,
 } from "#environment-client/environment-connection-errors";
 import type { EnvironmentCredential } from "#environment-client/environment-credential.contract";
@@ -19,69 +17,56 @@ import type {
 } from "#environment-client/http/environment-http-request.contract";
 import { readBoundedEnvironmentResponseBody } from "#environment-client/http/environment-http-response-body";
 
-type RouteRejection<Route extends RequestableEnvironmentHttpRoute> = [
-  RouteFailure<Route>,
-] extends [never]
-  ? never
-  : EnvironmentHttpRejected<RouteFailure<Route>>;
-
-export function requestEnvironmentHttp<
+export async function requestEnvironmentHttp<
   Route extends RequestableEnvironmentHttpRoute,
 >(
   origin: string,
   route: Route,
   options: EnvironmentHttpRequestOptions<Route>,
-): Effect.Effect<
-  RouteSuccess<Route>,
-  EnvironmentResponseError | EnvironmentAccessDenied | RouteRejection<Route>
->;
-export function requestEnvironmentHttp<
-  Route extends RequestableEnvironmentHttpRoute,
->(
-  origin: string,
-  route: Route,
-  options: EnvironmentHttpRequestOptions<Route>,
-): Effect.Effect<
-  RouteSuccess<Route>,
-  | EnvironmentResponseError
-  | EnvironmentAccessDenied
-  | EnvironmentHttpRejected<RouteFailure<Route>>
-> {
+): Promise<RouteSuccess<Route>> {
   const responseError = () => environmentResponseError(route.path);
-  return Effect.gen(function* () {
-    const request = yield* Effect.try({
-      try: () => buildRequest(origin, route, options),
-      catch: responseError,
+  const request = await attempt(
+    async () => buildRequest(origin, route, options),
+    responseError,
+  );
+  const response = await attempt(
+    () =>
+      fetch(request.url, {
+        ...request.init,
+        ...(options.signal === undefined ? {} : { signal: options.signal }),
+      }),
+    responseError,
+  );
+  const body = await attempt(
+    async () =>
+      JSON.parse(
+        await readBoundedEnvironmentResponseBody(
+          response,
+          options.maxResponseBytes ??
+            currentClientReceiveLimits.maxHttpResponseBytes,
+        ),
+      ) as unknown,
+    responseError,
+  );
+  if (response.status !== 200)
+    throw new EnvironmentAccessDenied({
+      failure: await decodeBody(EnvironmentAccessFailure, body, responseError),
+      status: response.status,
     });
-    const response = yield* Effect.tryPromise({
-      try: (signal) =>
-        fetch(request.url, {
-          ...request.init,
-          signal: joinSignals(signal, options.signal),
-        }),
-      catch: responseError,
-    });
-    const body = yield* readJsonBody(
-      response,
-      options.maxResponseBytes ??
-        currentClientReceiveLimits.maxHttpResponseBytes,
-      responseError,
-    );
-    if (response.status !== 200) {
-      const failure = yield* decodeBody(
-        EnvironmentAccessFailure,
-        body,
-        responseError,
-      );
-      return yield* new EnvironmentAccessDenied({
-        failure,
-        status: response.status,
-      });
-    }
-    const result = yield* decodeBody(route.response, body, responseError);
-    if (isRouteOk(result)) return result.value;
-    return yield* new EnvironmentHttpRejected({ failure: result.failure });
-  });
+  const result = await decodeBody(route.response, body, responseError);
+  if (isRouteOk(result)) return result.value;
+  throw new EnvironmentHttpRejected({ failure: result.failure });
+}
+
+async function attempt<A>(
+  run: () => Promise<A>,
+  onError: () => Error,
+): Promise<A> {
+  try {
+    return await run();
+  } catch {
+    throw onError();
+  }
 }
 
 function buildRequest<Route extends RequestableEnvironmentHttpRoute>(
@@ -123,37 +108,10 @@ function credentialRequest(credential: EnvironmentCredential | undefined): {
       };
 }
 
-function joinSignals(effectSignal: AbortSignal, external?: AbortSignal) {
-  return external === undefined
-    ? effectSignal
-    : AbortSignal.any([effectSignal, external]);
-}
-
-function readJsonBody(
-  response: Response,
-  byteLimit: number,
-  onError: () => EnvironmentResponseError,
-) {
-  return Effect.scoped(
-    readBoundedEnvironmentResponseBody(response, byteLimit).pipe(
-      Effect.mapError(onError),
-      Effect.flatMap((encoded) =>
-        Effect.try({
-          try: () => JSON.parse(encoded) as unknown,
-          catch: onError,
-        }),
-      ),
-    ),
-  );
-}
-
 function decodeBody<S extends Schema.ConstraintDecoder<unknown>>(
   schema: S,
   body: unknown,
-  onError: () => EnvironmentResponseError,
+  onError: () => Error,
 ) {
-  return Effect.try({
-    try: () => Schema.decodeUnknownSync(schema)(body),
-    catch: onError,
-  });
+  return attempt(async () => Schema.decodeUnknownSync(schema)(body), onError);
 }

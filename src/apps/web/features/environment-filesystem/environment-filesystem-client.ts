@@ -5,15 +5,14 @@ import {
   EnvironmentFilesystemRejected,
   EnvironmentFilesystemResponseError,
 } from "#web/features/environment-filesystem/environment-filesystem-client.contract";
+import { effectRoutesClient } from "#web/platform/environment/effect-routes-client";
 
 export function environmentFilesystemClient(
   requests: EnvironmentRequestClient,
 ): EnvironmentFilesystemClient {
-  return requests(EnvironmentFilesystemHttpApi, {
-    disconnected: () => new EnvironmentFilesystemResponseError(),
-    response: (error) =>
-      error._tag === "EnvironmentResponseError"
-        ? new EnvironmentFilesystemResponseError()
-        : new EnvironmentFilesystemRejected({ failure: error.failure }),
-  });
+  return effectRoutesClient(requests, EnvironmentFilesystemHttpApi, (error) =>
+    error._tag === "EnvironmentResponseError"
+      ? new EnvironmentFilesystemResponseError()
+      : new EnvironmentFilesystemRejected({ failure: error.failure }),
+  );
 }

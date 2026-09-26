@@ -5,10 +5,6 @@ import {
   CommitInspectionHttpApi,
   RepositoryChangesHttpApi,
 } from "@rebase/contracts";
-import {
-  createEnvironmentRequestClient,
-  type EnvironmentHttpRoutes,
-} from "@rebase/environment-client";
 import { Effect } from "effect";
 import { expect, it } from "vite-plus/test";
 import { createEnvironmentEventPublisher } from "#server/adapters/environment-transport/events/environment-event-publisher";
@@ -32,6 +28,7 @@ import {
   createRepositoryAccess,
   createRepositoryCoordination,
 } from "#server/repository/access/index";
+import { bearerRequests } from "#tests-integration/apps/server/environment-connection/bearer-requests";
 import { testEnvironmentFeatures } from "#tests-integration/apps/server/environment-connection/test-environment-features";
 import { git } from "#tests-support/git";
 import { removeTemporaryDirectory } from "#tests-support/temporary-directory";
@@ -103,27 +100,14 @@ it("authorizes changes reads separately from index mutations across HTTP", async
             });
           const viewerToken = yield* credential("viewer");
           const ownerToken = yield* credential("owner");
-          const client = <Routes extends EnvironmentHttpRoutes>(
-            routes: Routes,
-            token: string,
-          ) =>
-            createEnvironmentRequestClient(listener.origin, () => ({
-              type: "bearer",
-              value: token,
-            }))(routes, {
-              disconnected: () => {
-                throw new Error("Every request carries a credential.");
-              },
-              response: (error) => error,
-            });
-          const viewer = client(RepositoryChangesHttpApi, viewerToken);
-          const owner = client(RepositoryChangesHttpApi, ownerToken);
+          const viewer = bearerRequests(listener.origin, viewerToken);
+          const owner = bearerRequests(listener.origin, ownerToken);
           const scope = {
             repositoryId: repository.id,
             worktreePath: directory,
             amend: false,
           };
-          const snapshot = yield* viewer.read(scope);
+          const snapshot = yield* viewer(RepositoryChangesHttpApi.read, scope);
           const command = {
             ...scope,
             revision: snapshot.revision,
@@ -132,18 +116,21 @@ it("authorizes changes reads separately from index mutations across HTTP", async
             selection: { _tag: "Files" as const, paths: ["draft.txt"] },
             viewed: { section: "staged" as const, path: "draft.txt" },
           };
-          const refused = yield* viewer.mutate(command).pipe(Effect.flip);
+          const refused = yield* viewer(
+            RepositoryChangesHttpApi.mutate,
+            command,
+          ).pipe(Effect.flip);
           expect(refused).toMatchObject({
             _tag: "EnvironmentAccessDenied",
             status: 403,
           });
-          const staged = yield* owner.mutate(command);
+          const staged = yield* owner(RepositoryChangesHttpApi.mutate, command);
           expect(staged.changes.staged).toEqual([
             { path: "draft.txt", previousPath: null, status: "A" },
           ]);
           expect(staged.diff?.after).toBe("draft\n");
           expect(
-            (yield* owner.diff({
+            (yield* owner(RepositoryChangesHttpApi.diff, {
               ...scope,
               section: "staged",
               path: "draft.txt",
@@ -162,12 +149,11 @@ it("authorizes changes reads separately from index mutations across HTTP", async
           const oid = yield* Effect.promise(() =>
             git(directory, "rev-parse", "HEAD"),
           );
-          const inspection = client(CommitInspectionHttpApi, viewerToken);
           const inspectionScope = {
             repositoryId: repository.id,
             worktreePath: directory,
           };
-          const details = yield* inspection.inspect({
+          const details = yield* viewer(CommitInspectionHttpApi.inspect, {
             ...inspectionScope,
             oid,
           });
@@ -175,22 +161,24 @@ it("authorizes changes reads separately from index mutations across HTTP", async
             { path: "draft.txt", previousPath: null, status: "A" },
           ]);
           expect(
-            (yield* inspection.inspectDiff({
+            (yield* viewer(CommitInspectionHttpApi.inspectDiff, {
               ...inspectionScope,
               oid,
               path: "draft.txt",
             })).after,
           ).toBe("draft\n");
           expect(
-            yield* inspection
-              .inspect({ ...inspectionScope, oid: "HEAD" })
-              .pipe(Effect.flip),
+            yield* viewer(CommitInspectionHttpApi.inspect, {
+              ...inspectionScope,
+              oid: "HEAD",
+            }).pipe(Effect.flip),
           ).toMatchObject({ _tag: "EnvironmentResponseError" });
-          const unauthorized = client(CommitInspectionHttpApi, "invalid");
+          const unauthorized = bearerRequests(listener.origin, "invalid");
           expect(
-            yield* unauthorized
-              .inspect({ ...inspectionScope, oid })
-              .pipe(Effect.flip),
+            yield* unauthorized(CommitInspectionHttpApi.inspect, {
+              ...inspectionScope,
+              oid,
+            }).pipe(Effect.flip),
           ).toMatchObject({ _tag: "EnvironmentAccessDenied", status: 401 });
         }),
       ),

@@ -7,6 +7,7 @@ import { Layer, ManagedRuntime } from "effect";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
 import { page, userEvent } from "vite-plus/test/browser";
+import { fakeRequests, idleOperation } from "#tests-ui/runtime/fake-requests";
 import { render as renderWithRuntime } from "#tests-ui/runtime/render";
 import type { LocalEnvironmentSession } from "#web/app/environment/local-environment-session.contract";
 import { ApplicationShell } from "#web-ui/app/shell/application-shell";
@@ -303,6 +304,7 @@ function pairingRequiredSession(): LocalEnvironmentSession {
       select: () => undefined,
       subscribe: () => unsubscribe,
     },
+    requests: fakeRequests(idleOperation),
     runtime,
     start: () => undefined,
     stop: () => undefined,
@@ -418,6 +420,7 @@ function connectedSession() {
       select: () => undefined,
       subscribe: () => () => undefined,
     },
+    requests: fakeRequests(idleOperation),
     runtime,
     start: () => undefined,
     stop: () => undefined,

@@ -1,16 +1,23 @@
 import { IconArrowBarToDown } from "@tabler/icons-react";
 import { useOperationCommandState } from "#web/features/operation-recovery/index";
 import { canPull } from "#web/features/repository-pull/can-pull";
+import type { Pull } from "#web/features/repository-pull/hooks/use-pull";
 import { useRepositoryScope } from "#web/features/repository-scope/index";
 import { Button } from "#web-ui/components/ui/button";
-import { useRepositoryPull } from "#web-ui/features/repository-pull/repository-pull-provider";
 
-export function PullButton() {
-  const pull = useRepositoryPull();
+export function PullButton({
+  pull,
+  activeBranch,
+  incoming,
+}: {
+  readonly pull: Pull;
+  readonly activeBranch: string | undefined;
+  readonly incoming: number;
+}) {
   const scope = useRepositoryScope();
   const recoveryBusy = useOperationCommandState() === "busy";
-  if (pull === undefined) return null;
-  const { activeBranch, incoming, pulling } = pull;
+  if (!pull.available) return null;
+  const { pulling } = pull;
   const enabled = canPull({
     connected: scope?.connected === true,
     writable: scope?.writable === true,
@@ -31,7 +38,7 @@ export function PullButton() {
       className="h-7 gap-1.5 text-[.85rem] sm:text-[.85rem]"
       disabled={!enabled}
       onClick={() => {
-        if (activeBranch !== undefined) pull.execute(activeBranch);
+        if (activeBranch !== undefined) pull.pull(activeBranch);
       }}
       size="sm"
       variant="ghost"

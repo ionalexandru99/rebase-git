@@ -7,7 +7,7 @@ import type {
 import { Effect, Layer, ManagedRuntime } from "effect";
 import { describe, expect, it } from "vite-plus/test";
 import { page } from "vite-plus/test/browser";
-import { render } from "vitest-browser-react";
+import { render } from "#tests-ui/runtime/render";
 import {
   type RepositoryChangesClient,
   WorkingChangesError,

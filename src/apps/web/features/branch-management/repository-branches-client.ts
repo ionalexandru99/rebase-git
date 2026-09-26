@@ -5,15 +5,14 @@ import {
   RepositoryBranchesRejected,
   RepositoryBranchesResponseError,
 } from "#web/features/branch-management/branch-management.contract";
+import { effectRoutesClient } from "#web/platform/environment/effect-routes-client";
 
 export function repositoryBranchesClient(
   requests: EnvironmentRequestClient,
 ): RepositoryBranchesClient {
-  return requests(RepositoryBranchesHttpApi, {
-    disconnected: () => new RepositoryBranchesResponseError(),
-    response: (error) =>
-      error._tag === "EnvironmentResponseError"
-        ? new RepositoryBranchesResponseError()
-        : new RepositoryBranchesRejected({ failure: error.failure }),
-  });
+  return effectRoutesClient(requests, RepositoryBranchesHttpApi, (error) =>
+    error._tag === "EnvironmentResponseError"
+      ? new RepositoryBranchesResponseError()
+      : new RepositoryBranchesRejected({ failure: error.failure }),
+  );
 }

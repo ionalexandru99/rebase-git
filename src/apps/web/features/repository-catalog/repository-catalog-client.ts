@@ -5,15 +5,14 @@ import {
   RepositoryCatalogRejected,
   RepositoryCatalogResponseError,
 } from "#web/features/repository-catalog/repository-catalog-client.contract";
+import { effectRoutesClient } from "#web/platform/environment/effect-routes-client";
 
 export function repositoryCatalogClient(
   requests: EnvironmentRequestClient,
 ): RepositoryCatalogClient {
-  return requests(RepositoryCatalogHttpApi, {
-    disconnected: () => new RepositoryCatalogResponseError(),
-    response: (error) =>
-      error._tag === "EnvironmentResponseError"
-        ? new RepositoryCatalogResponseError()
-        : new RepositoryCatalogRejected({ failure: error.failure }),
-  });
+  return effectRoutesClient(requests, RepositoryCatalogHttpApi, (error) =>
+    error._tag === "EnvironmentResponseError"
+      ? new RepositoryCatalogResponseError()
+      : new RepositoryCatalogRejected({ failure: error.failure }),
+  );
 }

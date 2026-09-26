@@ -22,12 +22,11 @@ export type {
 } from "#environment-client/http/environment-http-request.contract";
 export {
   createEnvironmentRequestClient,
-  environmentHttpRoutesClient,
+  environmentRouteFailure,
 } from "#environment-client/http/environment-request-client";
 export type {
-  EnvironmentHttpRoutes,
-  EnvironmentHttpRoutesClient,
-  EnvironmentHttpRoutesFailure,
   EnvironmentRequestClient,
-  EnvironmentRequestErrors,
+  EnvironmentRequestFailure,
+  EnvironmentRequestOptions,
+  EnvironmentRouteFailure,
 } from "#environment-client/http/environment-request-client.contract";

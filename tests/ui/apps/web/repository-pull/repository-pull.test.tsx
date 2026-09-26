@@ -1,18 +1,29 @@
-import type { PullFailure, RepositoryFreshness } from "@rebase/contracts";
 import {
-  EnvironmentHttpRejected,
-  type EnvironmentRequestClient,
-  environmentHttpRoutesClient,
-} from "@rebase/environment-client";
-import { Effect } from "effect";
+  type PullFailure,
+  type RepositoryFreshness,
+  RepositoryPullHttpApi,
+} from "@rebase/contracts";
+import { EnvironmentHttpRejected } from "@rebase/environment-client";
 import { describe, expect, it, vi } from "vite-plus/test";
 import { page } from "vite-plus/test/browser";
-import { render } from "vitest-browser-react";
+import {
+  CommitGraphFixture,
+  history as graphHistory,
+  historyReader,
+} from "#tests-ui/apps/web/commit-graph/commit-graph-fixture";
 import { repositoryScope } from "#tests-ui/apps/web/repository-scope/repository-scope-fixture";
+import {
+  fakeRequests,
+  idleOperation,
+  respond,
+} from "#tests-ui/runtime/fake-requests";
+import { render } from "#tests-ui/runtime/render";
 import { NotificationsProvider } from "#web/features/notifications/index";
 import type { RepositoryHistorySnapshot } from "#web/features/repository-history/index";
-import { RepositoryPull } from "#web/features/repository-pull/index";
+import { usePull } from "#web/features/repository-pull/hooks/use-pull";
 import { RepositoryScopeProvider } from "#web/features/repository-scope/index";
+import { PullButton } from "#web-ui/features/repository-pull/components/pull-button";
+import { PullNotice } from "#web-ui/features/repository-pull/components/pull-notice";
 
 const repositoryId = "00000000-0000-4000-8000-000000000001";
 const freshness: RepositoryFreshness = {
@@ -57,10 +68,58 @@ describe("repository pull", () => {
       },
     });
     await f.pull();
+    await expect.poll(() => f.fetch.mock.calls.length).toBe(1);
     await expect
       .element(page.getByRole("button", { name: "Pull" }))
       .toBeEnabled();
     expect(f.requested).not.toHaveBeenCalled();
+  });
+
+  it("pulls the active branch from the graph toolbar and holds fetch until it finishes", async () => {
+    const reader = historyReader({ commits: graphHistory(2), status: "ready" });
+    reader.snapshot = { ...reader.snapshot, freshness };
+    const fetched = Promise.withResolvers<RepositoryFreshness>();
+    reader.fetch.mockReturnValue(fetched.promise);
+    const pulled = vi.fn<(command: unknown) => void>();
+    const finished = Promise.withResolvers<void>();
+    const requests = fakeRequests(
+      idleOperation,
+      respond(RepositoryPullHttpApi.pull, async (command) => {
+        pulled(command);
+        await finished.promise;
+        return { outcome: "FastForwarded" as const };
+      }),
+    );
+    await render(
+      <div style={{ height: 520, width: 900 }}>
+        <RepositoryScopeProvider scope={repositoryScope({ repositoryId })}>
+          <GraphWithPull reader={reader} />
+        </RepositoryScopeProvider>
+      </div>,
+      { environment: { requests } },
+    );
+    await page.getByRole("button", { name: "Pull 3 incoming commits" }).click();
+    await expect
+      .element(page.getByRole("button", { name: "Fetch", exact: true }))
+      .toBeDisabled();
+    fetched.resolve(freshness);
+    await vi.waitFor(() =>
+      expect(pulled).toHaveBeenCalledWith({
+        repositoryId,
+        worktreePath: "/repo",
+        branch: "main",
+      }),
+    );
+    await expect
+      .element(page.getByRole("button", { name: "Pulling" }))
+      .toBeDisabled();
+    await expect
+      .element(page.getByRole("button", { name: "Fetch", exact: true }))
+      .toBeDisabled();
+    finished.resolve();
+    await expect
+      .element(page.getByRole("button", { name: "Pull 3 incoming commits" }))
+      .toBeEnabled();
   });
 
   it.each<[PullFailure, string]>([
@@ -98,38 +157,58 @@ async function fixture({
 } = {}) {
   const fetch = vi.fn(async () => fetched);
   const requested = vi.fn();
-  const requests: EnvironmentRequestClient = (routes, errors) =>
-    environmentHttpRoutesClient(routes, (_route, command) => {
+  const requests = fakeRequests(
+    idleOperation,
+    respond(RepositoryPullHttpApi.pull, async (command) => {
       requested(command);
-      return failure === undefined
-        ? Effect.succeed({ outcome: "FastForwarded" })
-        : Effect.fail(
-            errors.response(new EnvironmentHttpRejected({ failure })),
-          );
-    });
+      if (failure !== undefined) throw new EnvironmentHttpRejected({ failure });
+      return { outcome: "FastForwarded" as const };
+    }),
+  );
+  const reader = {
+    fetch,
+    getSnapshot: () => history,
+    subscribe: () => () => {},
+  };
   await render(
     <NotificationsProvider>
-      <RepositoryScopeProvider
-        scope={repositoryScope({ repositoryId, requests })}
-      >
-        <RepositoryPull.Provider
-          reader={{
-            fetch,
-            getSnapshot: () => history,
-            subscribe: () => () => {},
-          }}
-          activeBranch="main"
-          incoming={0}
-        >
-          <RepositoryPull.Button />
-          <RepositoryPull.Notice />
-        </RepositoryPull.Provider>
+      <RepositoryScopeProvider scope={repositoryScope({ repositoryId })}>
+        <Pull reader={reader} />
       </RepositoryScopeProvider>
     </NotificationsProvider>,
+    { environment: { requests } },
   );
   return {
     fetch,
     requested,
     pull: () => page.getByRole("button", { name: "Pull" }).click(),
   };
+}
+
+function Pull({ reader }: { readonly reader: Parameters<typeof usePull>[0] }) {
+  const pull = usePull(reader);
+  return (
+    <>
+      <PullButton pull={pull} activeBranch="main" incoming={0} />
+      <PullNotice pull={pull} />
+    </>
+  );
+}
+
+function GraphWithPull({
+  reader,
+}: {
+  readonly reader: ReturnType<typeof historyReader>;
+}) {
+  const pull = usePull(reader);
+  return (
+    <CommitGraphFixture
+      reader={reader}
+      repositoryName="rebase-test"
+      roots={[{ name: "main", oid: "0".repeat(40), type: "branch" }]}
+      toolbarActions={
+        <PullButton pull={pull} activeBranch="main" incoming={3} />
+      }
+    />
+  );
 }

@@ -193,6 +193,9 @@ function createSession(
   return createLocalEnvironmentSession({
     controllers: unusedControllers,
     features: [],
+    requests: async () => {
+      throw new Error("Session tests do not send requests.");
+    },
     runtime,
     ...options,
   });

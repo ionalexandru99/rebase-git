@@ -1,2 +1,2 @@
-export { RepositoryPull } from "#web-ui/features/repository-pull/repository-pull";
-export { useRepositoryPulling } from "#web-ui/features/repository-pull/repository-pull-provider";
+export { usePull } from "#web/features/repository-pull/hooks/use-pull";
+export { usePulling } from "#web/features/repository-pull/hooks/use-pulling";

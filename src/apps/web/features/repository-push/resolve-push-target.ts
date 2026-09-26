@@ -1,5 +1,18 @@
 import type { PushDestination, RepositoryRefs } from "@rebase/contracts";
-import type { PushTarget } from "#web/features/repository-push/repository-push.contract";
+
+export interface PushUpstream {
+  readonly destination: PushDestination;
+  readonly ahead: number;
+  readonly behind: number;
+  readonly gone: boolean;
+  readonly remoteOid?: string;
+}
+
+export interface PushTarget {
+  readonly branch: string;
+  readonly remotes: readonly string[];
+  readonly upstream?: PushUpstream;
+}
 
 export function resolvePushTarget(
   refs: RepositoryRefs | undefined,

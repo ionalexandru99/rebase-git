@@ -1,8 +1,10 @@
-import { isRouteOk, type RouteFailure } from "@rebase/contracts";
 import {
-  type EnvironmentHttpRoutes,
-  environmentHttpRoutesClient,
-} from "@rebase/environment-client";
+  isRouteOk,
+  type RouteFailure,
+  type RouteInput,
+  type RouteSuccess,
+} from "@rebase/contracts";
+import type { RequestableEnvironmentHttpRoute } from "@rebase/environment-client";
 import { Effect, Schema } from "effect";
 import type { EnvironmentFeature } from "#server/adapters/environment-transport/environment-feature.contract";
 import type {
@@ -40,7 +42,22 @@ const context: EnvironmentHttpRequestContext = {
   origin: "http://127.0.0.1",
 };
 
-export function repositoryFeatureClient<Routes extends EnvironmentHttpRoutes>(
+type FeatureRoutes = Record<string, RequestableEnvironmentHttpRoute>;
+
+type FeatureRoutesClient<Routes extends FeatureRoutes> = {
+  readonly [Name in keyof Routes]: Routes[Name] extends {
+    readonly request: Schema.ConstraintEncoder<unknown>;
+  }
+    ? (
+        command: RouteInput<Routes[Name]>,
+      ) => Effect.Effect<RouteSuccess<Routes[Name]>, RouteFailure<Routes[Name]>>
+    : () => Effect.Effect<
+        RouteSuccess<Routes[Name]>,
+        RouteFailure<Routes[Name]>
+      >;
+};
+
+export function repositoryFeatureClient<Routes extends FeatureRoutes>(
   routes: Routes,
   feature: Effect.Effect<
     EnvironmentFeature,
@@ -64,33 +81,42 @@ export function provideRepositoryServices(services: RepositoryServices) {
     );
 }
 
-export function featureRoutesClient<Routes extends EnvironmentHttpRoutes>(
+export function featureRoutesClient<Routes extends FeatureRoutes>(
   routes: Routes,
   handlers: readonly EnvironmentHttpRouteHandler[],
-) {
-  return environmentHttpRoutesClient<
-    Routes,
-    RouteFailure<Routes[keyof Routes]>
-  >(routes, (route, input) => {
-    const handler = handlers.find(
-      (candidate) => candidate.route.path === route.path,
-    );
-    if (handler === undefined)
-      return Effect.die(new Error(`No handler serves ${route.path}.`));
-    return handler.respond(input, context).pipe(
-      Effect.orDie,
-      Effect.map((result) =>
-        Schema.decodeUnknownSync(route.response)(
-          JSON.parse(
-            JSON.stringify(Schema.encodeSync(handler.route.response)(result)),
-          ),
+): FeatureRoutesClient<Routes> {
+  const client: Partial<Record<keyof Routes, unknown>> = {};
+  for (const name of Object.keys(routes) as (keyof Routes)[]) {
+    const route = routes[name];
+    client[name] = (input: RouteInput<typeof route>) =>
+      serveRoute(route, input, handlers);
+  }
+  return client as FeatureRoutesClient<Routes>;
+}
+
+function serveRoute<Route extends RequestableEnvironmentHttpRoute>(
+  route: Route,
+  input: RouteInput<Route>,
+  handlers: readonly EnvironmentHttpRouteHandler[],
+): Effect.Effect<RouteSuccess<Route>, RouteFailure<Route>> {
+  const handler = handlers.find(
+    (candidate) => candidate.route.path === route.path,
+  );
+  if (handler === undefined)
+    return Effect.die(new Error(`No handler serves ${route.path}.`));
+  return handler.respond(input, context).pipe(
+    Effect.orDie,
+    Effect.map((result) =>
+      Schema.decodeUnknownSync(route.response)(
+        JSON.parse(
+          JSON.stringify(Schema.encodeSync(handler.route.response)(result)),
         ),
       ),
-      Effect.flatMap((result) =>
-        isRouteOk(result)
-          ? Effect.succeed(result.value)
-          : Effect.fail(result.failure),
-      ),
-    );
-  });
+    ),
+    Effect.flatMap((result) =>
+      isRouteOk(result)
+        ? Effect.succeed(result.value)
+        : Effect.fail(result.failure),
+    ),
+  );
 }

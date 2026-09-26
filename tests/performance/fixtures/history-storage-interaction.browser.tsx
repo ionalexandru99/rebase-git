@@ -3,6 +3,7 @@ import {
   encodeRepositoryHistoryPage,
   type RepositoryCommit,
 } from "@rebase/contracts";
+import { QueryClientProvider } from "@tanstack/react-query";
 import { Layer, ManagedRuntime } from "effect";
 import type { ComponentProps } from "react";
 import { createRoot } from "react-dom/client";
@@ -21,7 +22,23 @@ import type {
   RepositoryHistoryGateway,
   RepositoryHistoryReader,
 } from "#web/features/repository-history/repository-history-reader.contract";
+import { createEnvironmentQueryClient } from "#web/platform/query/environment-query-client";
 import { ApplicationRuntime } from "#web-ui/platform/effect/application-runtime-context";
+import {
+  type Environment,
+  EnvironmentProvider,
+} from "#web-ui/platform/query/environment-context";
+
+const offlineEnvironment: Environment = {
+  environmentId: undefined,
+  requests: async () => {
+    throw new Error("Performance fixtures do not reach an environment.");
+  },
+  changes: { subscribe: () => () => {} },
+  connected: false,
+  readable: false,
+  writable: false,
+};
 
 const environmentId = crypto.randomUUID();
 const name = crypto.randomUUID();
@@ -211,10 +228,15 @@ declare global {
 
 function StorageGraph(props: ComponentProps<typeof CommitGraph>) {
   return (
-    <ApplicationRuntime value={runtime}>
-      <CommitGraph {...props} />
-    </ApplicationRuntime>
+    <QueryClientProvider client={queryClient}>
+      <ApplicationRuntime value={runtime}>
+        <EnvironmentProvider environment={offlineEnvironment}>
+          <CommitGraph {...props} />
+        </EnvironmentProvider>
+      </ApplicationRuntime>
+    </QueryClientProvider>
   );
 }
 
 const runtime = ManagedRuntime.make(Layer.empty);
+const queryClient = createEnvironmentQueryClient();
