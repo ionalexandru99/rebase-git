@@ -30,7 +30,7 @@ import {
 } from "#server/repository/access/index";
 import { bearerRequests } from "#tests-integration/apps/server/environment-connection/bearer-requests";
 import { testEnvironmentFeatures } from "#tests-integration/apps/server/environment-connection/test-environment-features";
-import { git } from "#tests-support/git";
+import { createRepository, git } from "#tests-support/git";
 import { removeTemporaryDirectory } from "#tests-support/temporary-directory";
 
 it("authorizes changes reads separately from index mutations across HTTP", async () => {
@@ -39,7 +39,7 @@ it("authorizes changes reads separately from index mutations across HTTP", async
   );
   const directory = join(root, "repository");
   try {
-    await git(root, "init", "-b", "main", directory);
+    await createRepository(directory, { commits: [] });
     await writeFile(join(directory, "draft.txt"), "draft\n");
     await Effect.runPromise(
       Effect.scoped(

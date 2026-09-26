@@ -38,7 +38,12 @@ import { acquireEnvironmentContext } from "#server/persistence/environment-conte
 import { environmentPaths } from "#server/persistence/storage/environment-paths";
 import { createRepositoryAccess } from "#server/repository/access/index";
 import { testEnvironmentFeatures } from "#tests-integration/apps/server/environment-connection/test-environment-features";
-import { fastImport, git } from "#tests-support/git";
+import {
+  cloneRepository,
+  createRepository,
+  fastImport,
+  git,
+} from "#tests-support/git";
 import { removeTemporaryDirectory } from "#tests-support/temporary-directory";
 import {
   connectEnvironmentEffect,
@@ -251,13 +256,11 @@ describe("repository history", () => {
       const source = join(root, "shallow-source");
       const repositoryPath = join(root, "shallow-clone");
       await importLinearHistory(source, "sha1", 5);
-      await git(
-        root,
-        "clone",
-        "--branch=main",
-        "--depth=2",
+      await cloneRepository(
         pathToFileURL(source).href,
         repositoryPath,
+        "--branch=main",
+        "--depth=2",
       );
       const repository = await Effect.runPromise(
         catalog.remember(repositoryPath),
@@ -756,8 +759,7 @@ async function importLinearHistory(
 }
 
 async function createMergeRepository(path: string) {
-  await mkdir(path, { recursive: true });
-  await git(path, "init", "-b", "main");
+  await createRepository(path, { commits: [] });
   await commitFile(path, "base.txt", "base", "base");
   await git(path, "checkout", "-b", "feature");
   await commitFile(path, "feature.txt", "one", "feature one");

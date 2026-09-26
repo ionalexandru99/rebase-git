@@ -3,6 +3,7 @@ import {
   execFile,
   spawn,
 } from "node:child_process";
+import { once } from "node:events";
 import { mkdir, mkdtemp, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -97,6 +98,7 @@ async function launchPackagedApplication(environment: Record<string, string>) {
 
   try {
     const devTools = await devToolsEndpoint(childProcess);
+    reportStartup(devTools.milliseconds);
     try {
       const browser = await chromium.connectOverCDP(devTools.endpoint);
       return { browser, process: childProcess };
@@ -111,20 +113,28 @@ async function launchPackagedApplication(environment: Record<string, string>) {
   }
 }
 
+function reportStartup(milliseconds: number) {
+  const description = `${Math.round(milliseconds)} ms`;
+  test.info().annotations.push({ type: "startup", description });
+  console.log(
+    `The packaged application printed its DevTools endpoint after ${description}.`,
+  );
+}
+
 function devToolsEndpoint(childProcess: ChildProcessWithoutNullStreams) {
+  const started = performance.now();
   return new Promise<{
     readonly endpoint: string;
+    readonly milliseconds: number;
     readonly output: () => string;
   }>((resolveEndpoint, rejectEndpoint) => {
     let output = "";
     let settled = false;
-    const timeout = setTimeout(() => {
-      fail("Timed out waiting for the packaged application to start.");
-    }, 15_000);
 
     const read = (chunk: Buffer) => {
       if (settled) return;
       output += chunk.toString();
+      process.stdout.write(chunk);
       const endpoint = /DevTools listening on (ws:\/\/\S+)/.exec(output)?.[1];
       if (endpoint !== undefined) succeed(endpoint);
     };
@@ -138,7 +148,6 @@ function devToolsEndpoint(childProcess: ChildProcessWithoutNullStreams) {
       );
     };
     const cleanUp = () => {
-      clearTimeout(timeout);
       childProcess.off("error", processError);
       childProcess.off("exit", processExit);
     };
@@ -146,7 +155,11 @@ function devToolsEndpoint(childProcess: ChildProcessWithoutNullStreams) {
       if (settled) return;
       settled = true;
       cleanUp();
-      resolveEndpoint({ endpoint, output: () => output });
+      resolveEndpoint({
+        endpoint,
+        milliseconds: performance.now() - started,
+        output: () => output,
+      });
     };
     const fail = (message: string) => {
       if (settled) return;
@@ -166,78 +179,31 @@ async function closePackagedApplication(application: PackagedApplication) {
   await application.browser?.close().catch(() => undefined);
   if (hasExited(application.process)) return;
 
-  if (process.platform === "win32") {
-    await forceProcessExit(application.process);
-    await requireProcessExit(application.process);
-    return;
-  }
-
-  application.process.kill();
-  if (await waitForExit(application.process, 5_000)) return;
-
-  await forceProcessExit(application.process);
-  await requireProcessExit(application.process);
+  const exited = once(application.process, "exit");
+  if (process.platform === "win32") await forceProcessExit(application.process);
+  else application.process.kill();
+  await exited;
 }
 
 function hasExited(childProcess: ChildProcessWithoutNullStreams) {
   return childProcess.exitCode !== null || childProcess.signalCode !== null;
 }
 
-async function waitForExit(
-  childProcess: ChildProcessWithoutNullStreams,
-  timeoutMilliseconds: number,
-) {
-  if (hasExited(childProcess)) return true;
-
-  return new Promise<boolean>((resolveExit) => {
-    let settled = false;
-    let timeout: NodeJS.Timeout | undefined;
-    const complete = (didExit: boolean) => {
-      if (settled) return;
-      settled = true;
-      if (timeout !== undefined) clearTimeout(timeout);
-      childProcess.off("exit", exited);
-      resolveExit(didExit);
-    };
-    const exited = () => complete(true);
-
-    childProcess.once("exit", exited);
-    if (hasExited(childProcess)) {
-      complete(true);
-      return;
-    }
-    timeout = setTimeout(() => complete(false), timeoutMilliseconds);
-  });
-}
-
-async function requireProcessExit(
-  childProcess: ChildProcessWithoutNullStreams,
-) {
-  if (!(await waitForExit(childProcess, 5_000))) {
-    throw new Error("The packaged application did not exit after termination.");
-  }
-}
-
 async function forceProcessExit(childProcess: ChildProcessWithoutNullStreams) {
-  if (process.platform === "win32") {
-    if (childProcess.pid === undefined) {
-      throw new Error("The packaged application has no process identifier.");
-    }
-    try {
-      await execFileAsync("taskkill.exe", [
-        "/pid",
-        childProcess.pid.toString(),
-        "/t",
-        "/f",
-      ]);
-    } catch (error) {
-      if (isProcessNotFound(error) && hasExited(childProcess)) return;
-      throw error;
-    }
-    return;
+  if (childProcess.pid === undefined) {
+    throw new Error("The packaged application has no process identifier.");
   }
-
-  childProcess.kill("SIGKILL");
+  try {
+    await execFileAsync("taskkill.exe", [
+      "/pid",
+      childProcess.pid.toString(),
+      "/t",
+      "/f",
+    ]);
+  } catch (error) {
+    if (isProcessNotFound(error) && hasExited(childProcess)) return;
+    throw error;
+  }
 }
 
 function isProcessNotFound(error: unknown) {

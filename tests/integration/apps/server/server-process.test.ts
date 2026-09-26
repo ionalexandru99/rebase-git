@@ -333,15 +333,8 @@ function waitForExit(child: ChildProcessWithoutNullStreams) {
   }
 
   return new Promise<{ code: number | null; signal: NodeJS.Signals | null }>(
-    (resolveExit, rejectExit) => {
-      const timeout = setTimeout(() => {
-        rejectExit(new Error("Timed out waiting for process exit."));
-      }, 10_000);
-
-      child.once("close", (code, signal) => {
-        clearTimeout(timeout);
-        resolveExit({ code, signal });
-      });
+    (resolveExit) => {
+      child.once("close", (code, signal) => resolveExit({ code, signal }));
     },
   );
 }

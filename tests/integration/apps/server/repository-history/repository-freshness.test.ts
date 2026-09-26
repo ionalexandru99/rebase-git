@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { RepositoryFreshness } from "@rebase/contracts";
 import { Deferred, Effect, Layer } from "effect";
-import { afterEach, describe, expect, it, vi } from "vite-plus/test";
+import { afterEach, describe, expect, it } from "vite-plus/test";
 import { createEnvironmentEventPublisher } from "#server/adapters/environment-transport/events/environment-event-publisher";
 import { createLocalGitCommandRunner } from "#server/adapters/local-git/local-git-command-runner";
 import { createLocalRepositoryWatcher } from "#server/adapters/local-git/local-repository-watcher";
@@ -33,13 +33,15 @@ import {
   repositoryCoordinationLayer,
 } from "#server/repository/access/index";
 import { testEnvironmentFeatures } from "#tests-integration/apps/server/environment-connection/test-environment-features";
-import { git } from "#tests-support/git";
+import { cloneRepository, fastImport, git } from "#tests-support/git";
+import { waitForObservation } from "#tests-support/observation";
 import { removeTemporaryDirectory } from "#tests-support/temporary-directory";
 import { connectCurrentEnvironmentEffect } from "#web/app/environment/connection/index";
 import { createRepositoryHistoryRpc } from "#web/features/repository-history/transport/repository-history-rpc";
 
 const directories: string[] = [];
 const repositoryId = "00000000-0000-4000-8000-000000000001";
+const committer = "committer Rebase test <rebase@example.test> 0 +0000\n";
 
 afterEach(async () => {
   await Promise.all(
@@ -61,18 +63,29 @@ describe("repository freshness with real Git", () => {
           }),
         );
         try {
-          await git(fixture.local, "branch", "watcher-ready");
-          await vi.waitFor(() => expect(changes).toBeGreaterThan(0));
+          await waitForObservation(
+            () => expect(changes).toBeGreaterThan(0),
+            () => git(fixture.local, "branch", "-f", "watcher-ready"),
+          );
           const directory = join(gitDirectory, entry);
           const beforeReplacement = changes;
           await rename(directory, join(fixture.root, "previous-logs"));
           await mkdir(join(gitDirectory, "logs", "refs"), { recursive: true });
-          await vi.waitFor(() =>
+          await waitForObservation(() =>
             expect(changes).toBeGreaterThan(beforeReplacement),
           );
+          let writes = 0;
           const beforeWrite = changes;
-          await writeFile(join(gitDirectory, "logs", "refs", "stash"), "stash");
-          await vi.waitFor(() => expect(changes).toBeGreaterThan(beforeWrite));
+          await waitForObservation(
+            () => expect(changes).toBeGreaterThan(beforeWrite),
+            () => {
+              writes += 1;
+              return writeFile(
+                join(gitDirectory, "logs", "refs", "stash"),
+                `stash ${writes}`,
+              );
+            },
+          );
         } finally {
           watcher.close();
         }
@@ -89,8 +102,10 @@ describe("repository freshness with real Git", () => {
       }),
     );
     try {
-      await git(fixture.local, "branch", "watcher-path");
-      await vi.waitFor(() => expect(changes).toBeGreaterThan(0));
+      await waitForObservation(
+        () => expect(changes).toBeGreaterThan(0),
+        () => git(fixture.local, "branch", "-f", "watcher-path"),
+      );
     } finally {
       watcher.close();
     }
@@ -100,13 +115,12 @@ describe("repository freshness with real Git", () => {
     const fixture = await createFixture();
     await withService(fixture, async (service) => {
       await Effect.runPromise(service.subscribe(repositoryId, () => {}));
-      await git(fixture.source, "branch", "temporary");
-      await git(fixture.source, "push", "origin", "temporary");
+      await git(fixture.remote, "branch", "temporary", "main");
       expect((await Effect.runPromise(service.fetch(repositoryId))).stale).toBe(
         false,
       );
       await git(fixture.local, "rev-parse", "refs/remotes/origin/temporary");
-      await git(fixture.source, "push", "origin", "--delete", "temporary");
+      await git(fixture.remote, "branch", "-D", "temporary");
       await Effect.runPromise(service.fetch(repositoryId));
       await git(fixture.local, "rev-parse", "refs/remotes/origin/temporary");
       await git(fixture.local, "config", "fetch.prune", "true");
@@ -162,9 +176,8 @@ describe("repository freshness with real Git", () => {
       for (const change of changes) {
         const before = states.at(-1)?.revision ?? 0;
         await change();
-        await vi.waitFor(
-          () => expect(states.at(-1)?.revision).toBeGreaterThan(before),
-          { timeout: 1_000, interval: 10 },
+        await waitForObservation(() =>
+          expect(states.at(-1)?.revision).toBeGreaterThan(before),
         );
       }
       const beforeStashes = states.at(-1)?.revision ?? 0;
@@ -172,7 +185,7 @@ describe("repository freshness with real Git", () => {
       await git(fixture.local, "stash", "push", "-m", "first");
       await writeFile(join(fixture.local, "file.txt"), "second stash");
       await git(fixture.local, "stash", "push", "-m", "second");
-      await vi.waitFor(() =>
+      await waitForObservation(() =>
         expect(states.at(-1)?.revision).toBeGreaterThan(beforeStashes),
       );
       const before = states.at(-1)?.revision ?? 0;
@@ -181,7 +194,7 @@ describe("repository freshness with real Git", () => {
       expect(await git(fixture.local, "rev-parse", "refs/stash")).toBe(
         stashHead,
       );
-      await vi.waitFor(() =>
+      await waitForObservation(() =>
         expect(states.at(-1)?.revision).toBeGreaterThan(before),
       );
       expect(states.every((state) => !state.fetching)).toBe(true);
@@ -196,15 +209,7 @@ describe("repository freshness with real Git", () => {
         service.configure(repositoryId, { _tag: "Interval", seconds: 1 }),
       );
     });
-    await git(
-      fixture.source,
-      "commit",
-      "--allow-empty",
-      "-m",
-      "new remote commit",
-    );
-    await git(fixture.source, "push", "origin", "main");
-    const remoteHead = await git(fixture.source, "rev-parse", "HEAD");
+    const remoteHead = await commitToRemote(fixture, "new remote commit");
     const states: RepositoryFreshness[] = [];
     await withService(fixture, async (service) => {
       await Effect.runPromise(
@@ -213,28 +218,23 @@ describe("repository freshness with real Git", () => {
         }),
       );
       expect(states[0]?.setting).toEqual({ _tag: "Interval", seconds: 1 });
-      await vi.waitFor(async () =>
+      await waitForObservation(async () =>
         expect(await git(fixture.local, "rev-parse", "origin/main")).toBe(
           remoteHead,
         ),
       );
-      await git(
-        fixture.source,
-        "commit",
-        "--allow-empty",
-        "-m",
+      const scheduledHead = await commitToRemote(
+        fixture,
         "scheduled remote commit",
       );
-      await git(fixture.source, "push", "origin", "main");
-      const scheduledHead = await git(fixture.source, "rev-parse", "HEAD");
-      await vi.waitFor(
-        async () =>
-          expect(await git(fixture.local, "rev-parse", "origin/main")).toBe(
-            scheduledHead,
-          ),
-        { timeout: 3_000 },
+      await waitForObservation(async () =>
+        expect(await git(fixture.local, "rev-parse", "origin/main")).toBe(
+          scheduledHead,
+        ),
       );
-      await vi.waitFor(() => expect(states.at(-1)?.fetching).toBe(false));
+      await waitForObservation(() =>
+        expect(states.at(-1)?.fetching).toBe(false),
+      );
     });
   });
 
@@ -304,16 +304,18 @@ async function createFixture() {
   const root = await mkdtemp(join(tmpdir(), "rebase freshness "));
   directories.push(root);
   const remote = join(root, "remote.git");
-  const source = join(root, "source");
   const local = join(root, "local");
   await git(root, "init", "--bare", "-b", "main", remote);
-  await git(root, "clone", remote, source);
-  await writeFile(join(source, "file.txt"), "base");
-  await git(source, "add", "file.txt");
-  await git(source, "commit", "-m", "base");
-  await git(source, "push", "origin", "main");
-  await git(root, "clone", remote, local);
-  await git(local, "config", "rebase.autoFetchIntervalSeconds", "0");
+  await fastImport(
+    remote,
+    `commit refs/heads/main\n${committer}data <<END\nbase\nEND\nM 100644 inline file.txt\ndata <<END\nbase\nEND\n`,
+  );
+  await cloneRepository(
+    remote,
+    local,
+    "--config",
+    "rebase.autoFetchIntervalSeconds=0",
+  );
   const entry = {
     id: repositoryId,
     logicalRepositoryId: repositoryId,
@@ -329,7 +331,18 @@ async function createFixture() {
     remember: () => Effect.succeed(entry),
     remove: () => Effect.succeed({ repositoryId }),
   };
-  return { root, remote, source, local, catalog };
+  return { root, remote, local, catalog };
+}
+
+async function commitToRemote(
+  fixture: Awaited<ReturnType<typeof createFixture>>,
+  message: string,
+) {
+  await fastImport(
+    fixture.remote,
+    `commit refs/heads/main\n${committer}data <<END\n${message}\nEND\nfrom refs/heads/main^0\n`,
+  );
+  return git(fixture.remote, "rev-parse", "main");
 }
 
 function withService(

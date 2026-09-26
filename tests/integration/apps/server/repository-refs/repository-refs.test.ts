@@ -30,7 +30,8 @@ import {
   featureRoutesClient,
   provideRepositoryServices,
 } from "#tests-integration/apps/server/environment-connection/feature-routes-client";
-import { git } from "#tests-support/git";
+import { createRepository, git } from "#tests-support/git";
+import { waitForObservation } from "#tests-support/observation";
 import { removeTemporaryDirectory } from "#tests-support/temporary-directory";
 
 const directories = new Set<string>();
@@ -412,12 +413,11 @@ describe("repository refs", () => {
         Effect.gen(function* () {
           yield* refs.read(repositoryId);
           yield* Effect.promise(() =>
-            git(fixture.repositoryPath, "branch", "watched-branch"),
-          );
-          yield* Effect.promise(() =>
-            vi.waitFor(() => expect(changed).toHaveBeenCalled(), {
-              timeout: 3_000,
-            }),
+            waitForObservation(
+              () => expect(changed).toHaveBeenCalled(),
+              () =>
+                git(fixture.repositoryPath, "branch", "-f", "watched-branch"),
+            ),
           );
         }),
       events,
@@ -437,21 +437,23 @@ describe("repository refs", () => {
       ({ refs, repositoryId }) =>
         Effect.gen(function* () {
           yield* refs.read(repositoryId);
+          let stages = 0;
           yield* Effect.promise(() =>
-            writeFile(join(fixture.repositoryPath, "staged.txt"), "staged\n"),
-          );
-          yield* Effect.promise(() =>
-            git(fixture.repositoryPath, "add", "staged.txt"),
-          );
-          yield* Effect.promise(() =>
-            vi.waitFor(
+            waitForObservation(
               () =>
                 expect(changed).toHaveBeenCalledWith(
                   expect.any(Number),
                   [repositoryId],
                   "Index",
                 ),
-              { timeout: 3_000 },
+              async () => {
+                stages += 1;
+                await writeFile(
+                  join(fixture.repositoryPath, "staged.txt"),
+                  `staged ${stages}\n`,
+                );
+                await git(fixture.repositoryPath, "add", "staged.txt");
+              },
             ),
           );
         }),
@@ -539,8 +541,7 @@ async function createFixture(): Promise<Fixture> {
   const worktreePath = join(root, "topic worktree");
   await mkdir(originPath);
   await git(originPath, "init", "--bare", "-b", "main");
-  await mkdir(repositoryPath);
-  await git(repositoryPath, "init", "-b", "main");
+  await createRepository(repositoryPath, { commits: [] });
   await git(repositoryPath, "remote", "add", "origin", originPath);
   await writeFile(join(repositoryPath, "README.md"), "hello");
   await git(repositoryPath, "add", "README.md");

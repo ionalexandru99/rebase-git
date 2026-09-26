@@ -15,6 +15,7 @@ import {
   createRepositoryCoordination,
 } from "#server/repository/access/index";
 import { repositoryFeatureClient } from "#tests-integration/apps/server/environment-connection/feature-routes-client";
+import { createRepository } from "#tests-support/git";
 import { removeTemporaryDirectory } from "#tests-support/temporary-directory";
 
 const directories: string[] = [];
@@ -33,11 +34,10 @@ async function fixture() {
     (
       await promisify(execFile)("git", ["-C", directory, ...args])
     ).stdout.trim();
-  await git("init", "-b", "main");
+  await createRepository(directory, { commits: [] });
   await git("config", "user.name", "Inspector");
   await git("config", "user.email", "inspector@example.test");
   await git("config", "commit.gpgsign", "false");
-  await git("config", "core.autocrlf", "false");
   await writeFile(join(directory, "old.txt"), "one\ntwo\nthree\n");
   await git("add", ".");
   await git("commit", "-m", "Initial\n\nFull commit body.");

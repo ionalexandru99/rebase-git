@@ -11,7 +11,12 @@ import { readObjectFormat } from "#server/features/repository-history/git/read-o
 import { readRepositoryHistory } from "#server/features/repository-history/git/read-repository-history";
 import { readRepositoryHistorySnapshot } from "#server/features/repository-history/git/read-repository-history-snapshot";
 import { synchronizeRepositoryHistory } from "#server/features/repository-history/git/synchronize-repository-history";
-import { git as runGit } from "#tests-support/git";
+import {
+  cloneRepository,
+  createRepository,
+  git as runGit,
+} from "#tests-support/git";
+import { waitForObservation } from "#tests-support/observation";
 import { removeTemporaryDirectory } from "#tests-support/temporary-directory";
 
 const repositoryId = "00000000-0000-4000-8000-000000000001";
@@ -24,10 +29,10 @@ it("preserves true shallow parents and invalidates the old basis when external d
   const git = createLocalGitCommandRunner();
   let close: (() => void) | undefined;
   try {
-    await runGit(root, "init", "-b", "main", source);
+    await createRepository(source, { commits: [] });
     for (let index = 0; index < 4; index += 1)
       await runGit(source, "commit", "--allow-empty", "-m", `commit ${index}`);
-    await runGit(root, "clone", "--depth=2", pathToFileURL(source).href, clone);
+    await cloneRepository(pathToFileURL(source).href, clone, "--depth=2");
     const oids = (await runGit(source, "rev-list", "HEAD")).split("\n");
     const snapshot = await Effect.runPromise(
       readRepositoryHistorySnapshot(git, clone, readObjectFormat(git, clone)),
@@ -79,7 +84,7 @@ it("preserves true shallow parents and invalidates the old basis when external d
       )
     ).close;
     await runGit(clone, "fetch", "--deepen=1");
-    await vi.waitFor(() => expect(changed).toHaveBeenCalled());
+    await waitForObservation(() => expect(changed).toHaveBeenCalled());
     const deepened = await Effect.runPromise(
       readRepositoryHistorySnapshot(git, clone, readObjectFormat(git, clone)),
     );

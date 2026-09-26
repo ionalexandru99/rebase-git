@@ -1,5 +1,6 @@
 import { execFile } from "node:child_process";
 import { mkdir } from "node:fs/promises";
+import { dirname } from "node:path";
 import { promisify } from "node:util";
 
 const execute = promisify(execFile);
@@ -32,9 +33,26 @@ export async function createRepository(
 ) {
   await mkdir(path, { recursive: true });
   await git(path, "init", "-b", "main");
+  await git(path, "config", "core.autocrlf", "false");
   for (const message of commits)
     await git(path, "commit", "--allow-empty", "-m", message);
   for (const branch of branches) await git(path, "branch", branch);
+}
+
+export async function cloneRepository(
+  source: string,
+  destination: string,
+  ...arguments_: string[]
+) {
+  await git(
+    dirname(destination),
+    "clone",
+    "--config",
+    "core.autocrlf=false",
+    ...arguments_,
+    source,
+    destination,
+  );
 }
 
 export async function fastImport(path: string, stream: string) {

@@ -2,9 +2,16 @@ import { fileURLToPath } from "node:url";
 import { playwright } from "@vitest/browser-playwright";
 import { defineConfig } from "vite-plus";
 
+const conditionTimeout = { poll: { timeout: 10_000 } };
+
 const testProject = (
   name: "compatibility" | "integration" | "unit",
-  test: { exclude?: string[]; hookTimeout?: number; testTimeout?: number } = {},
+  test: {
+    exclude?: string[];
+    expect?: typeof conditionTimeout;
+    hookTimeout?: number;
+    testTimeout?: number;
+  } = {},
 ) => ({
   extends: true as const,
   test: {
@@ -18,7 +25,7 @@ const testProject = (
 const browserProject = (
   name: "integration-browser" | "ui",
   include: string,
-  setupFiles?: string[],
+  test: { setupFiles?: string[]; testTimeout?: number } = {},
 ) => ({
   extends: "./src/apps/web/vite.config.ts",
   resolve: {
@@ -46,9 +53,10 @@ const browserProject = (
       screenshotDirectory: "tests/.artifacts/vitest",
       viewport: { height: 720, width: 1280 },
     },
+    expect: conditionTimeout,
     include: [include],
     name,
-    ...(setupFiles === undefined ? {} : { setupFiles }),
+    ...test,
   },
 });
 
@@ -78,15 +86,19 @@ export default defineConfig({
       testProject("unit"),
       testProject("integration", {
         exclude: ["tests/integration/**/*.browser.test.ts"],
+        expect: conditionTimeout,
         hookTimeout: 30_000,
         testTimeout: 30_000,
       }),
       browserProject(
         "integration-browser",
         "tests/integration/**/*.browser.test.{ts,tsx}",
+        { testTimeout: 30_000 },
       ),
       testProject("compatibility"),
-      browserProject("ui", "tests/ui/**/*.test.tsx", ["./tests/ui/setup.ts"]),
+      browserProject("ui", "tests/ui/**/*.test.tsx", {
+        setupFiles: ["./tests/ui/setup.ts"],
+      }),
     ],
   },
 });

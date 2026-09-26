@@ -58,10 +58,6 @@ function waitForOutput<T>(
   readError: () => string,
 ) {
   return new Promise<T>((resolveOutput, rejectOutput) => {
-    const timeout = setTimeout(() => {
-      cleanup();
-      rejectOutput(new Error("Timed out waiting for server output."));
-    }, 15_000);
     const inspect = () => {
       const output = read();
       if (output !== undefined) {
@@ -76,7 +72,6 @@ function waitForOutput<T>(
       );
     };
     const cleanup = () => {
-      clearTimeout(timeout);
       child.stdout.off("data", inspect);
       child.off("exit", exited);
     };

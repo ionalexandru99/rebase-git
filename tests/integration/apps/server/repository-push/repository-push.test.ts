@@ -20,7 +20,7 @@ import {
   createRepositoryCoordination,
 } from "#server/repository/access/index";
 import { repositoryFeatureClient } from "#tests-integration/apps/server/environment-connection/feature-routes-client";
-import { createRepository, git } from "#tests-support/git";
+import { cloneRepository, createRepository, git } from "#tests-support/git";
 import { removeTemporaryDirectory } from "#tests-support/temporary-directory";
 
 const repositoryId = "00000000-0000-4000-8000-000000000001";
@@ -41,7 +41,7 @@ async function fixture(wrap?: (runner: GitCommandRunner) => GitCommandRunner) {
   await createRepository(local);
   await git(local, "remote", "add", "origin", remote);
   await git(local, "push", "-u", "origin", "main");
-  await git(root, "clone", remote, other);
+  await cloneRepository(remote, other);
   const runner = createLocalGitCommandRunner();
   const service = repositoryFeatureClient(
     RepositoryPushHttpApi,

@@ -28,6 +28,7 @@ import {
   provideRepositoryServices,
   repositoryFeatureClient,
 } from "#tests-integration/apps/server/environment-connection/feature-routes-client";
+import { createRepository } from "#tests-support/git";
 import { removeTemporaryDirectory } from "#tests-support/temporary-directory";
 
 const directories: string[] = [];
@@ -56,7 +57,7 @@ it.each([
     const directory = join(root, "repository");
     const git = (...args: string[]) =>
       execute("git", ["-C", directory, ...args]);
-    await execute("git", ["init", "-b", "main", directory]);
+    await createRepository(directory, { commits: [] });
     await git("config", "user.name", "Test");
     await git("config", "user.email", "test@example.test");
     await git("config", "commit.gpgsign", "false");
@@ -209,7 +210,7 @@ it("reads changes while a commit holds the worktree", async () => {
   );
   directories.push(directory);
   const git = (...args: string[]) => execute("git", ["-C", directory, ...args]);
-  await git("init", "-b", "main");
+  await createRepository(directory, { commits: [] });
   await git("config", "user.name", "Test");
   await git("config", "user.email", "test@example.test");
   await git("config", "commit.gpgsign", "false");
