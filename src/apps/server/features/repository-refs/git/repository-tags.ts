@@ -33,7 +33,7 @@ export function createTag(
     yield* runRepositoryGit(
       git,
       worktreePath,
-      ["tag", name, target],
+      ["tag", "--no-sign", name, target],
       refCommand,
     ).pipe(Effect.mapError(tagWriteFailed));
     return { name, target };

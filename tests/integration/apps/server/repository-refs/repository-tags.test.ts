@@ -49,8 +49,8 @@ describe("repository tags", () => {
 
   it("deletes a tag and reports one that is already gone", async () => {
     const { worktreePath, head } = await fixture();
-    await git(worktreePath, "tag", "v1.0");
-    await git(worktreePath, "tag", "snapshot", "HEAD^{tree}");
+    await git(worktreePath, "tag", "--no-sign", "v1.0");
+    await git(worktreePath, "tag", "--no-sign", "snapshot", "HEAD^{tree}");
     const remove = (name: string) =>
       Effect.runPromise(
         deleteTag(runner, { name, repositoryId, worktreePath }),
@@ -76,5 +76,6 @@ async function fixture() {
   directories.push(root);
   const worktreePath = join(root, "repository");
   await createRepository(worktreePath);
+  await git(worktreePath, "config", "tag.gpgSign", "true");
   return { worktreePath, head: await git(worktreePath, "rev-parse", "HEAD") };
 }
