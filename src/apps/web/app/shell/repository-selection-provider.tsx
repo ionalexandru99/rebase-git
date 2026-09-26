@@ -4,7 +4,6 @@ import { OpenedHistoryContext } from "#web/app/shell/opened-history-context";
 import {
   type OpenedRepositoryStore,
   openedRepositoryKey,
-  openedRepositoryTarget,
 } from "#web/app/shell/opened-repository";
 import {
   type Navigate,
@@ -42,9 +41,12 @@ export function RepositorySelectionProvider({
     refs === undefined
       ? preferredWorktreePath
       : resolveActiveWorktreePath(refs, preferredWorktreePath);
+  const repositoryId = repository?.id;
+  const logicalRepositoryId = repository?.logicalRepositoryId ?? repositoryId;
   const history = useOpenedRepositoryHistory(
     opened,
-    repository,
+    repositoryId,
+    logicalRepositoryId,
     preferredWorktreePath,
     refs,
   );
@@ -61,19 +63,26 @@ export function RepositorySelectionProvider({
   );
   const scope = useMemo(
     () =>
-      repository === undefined
+      repositoryId === undefined || logicalRepositoryId === undefined
         ? undefined
         : {
-            repositoryId: repository.id,
-            logicalRepositoryId:
-              repository.logicalRepositoryId ?? repository.id,
+            repositoryId,
+            logicalRepositoryId,
             worktreePath,
             connected,
             readable,
             writable,
             switchWorktree,
           },
-    [repository, worktreePath, connected, readable, writable, switchWorktree],
+    [
+      repositoryId,
+      logicalRepositoryId,
+      worktreePath,
+      connected,
+      readable,
+      writable,
+      switchWorktree,
+    ],
   );
   return (
     <RepositoryScopeProvider scope={scope}>
@@ -94,7 +103,8 @@ function useLiveRefs(repository: RepositoryCatalogEntry | undefined) {
 
 function useOpenedRepositoryHistory(
   opened: OpenedRepositoryStore,
-  repository: RepositoryCatalogEntry | undefined,
+  repositoryId: string | undefined,
+  logicalRepositoryId: string | undefined,
   worktreePath: string,
   refs: RepositoryRefs | undefined,
 ) {
@@ -102,10 +112,12 @@ function useOpenedRepositoryHistory(
   const snapshot = useStore(opened);
   const target = useMemo(
     () =>
-      repository === undefined || environmentId === undefined
+      repositoryId === undefined ||
+      logicalRepositoryId === undefined ||
+      environmentId === undefined
         ? undefined
-        : openedRepositoryTarget(environmentId, repository, worktreePath),
-    [environmentId, repository, worktreePath],
+        : { environmentId, repositoryId, logicalRepositoryId, worktreePath },
+    [environmentId, repositoryId, logicalRepositoryId, worktreePath],
   );
   useEffect(() => opened.open(target), [opened, target]);
   useEffect(() => {
