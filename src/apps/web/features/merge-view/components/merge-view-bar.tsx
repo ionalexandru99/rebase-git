@@ -5,20 +5,23 @@ import { Button } from "#web/components/ui/button";
 export function MergeViewBar({
   path,
   onBack,
+  actions,
   children,
 }: {
   readonly path: string;
   readonly onBack: () => void;
+  readonly actions?: ReactNode;
   readonly children: ReactNode;
 }) {
   return (
-    <div className="flex h-12 shrink-0 items-center gap-2 border-border/60 border-b px-3">
+    <div className="flex min-h-12 shrink-0 flex-wrap items-center gap-2 border-border/60 border-b px-3 py-1">
       <Button variant="ghost" size="xs" onClick={onBack}>
         <IconArrowLeft aria-hidden="true" className="size-3.5" />
         History
       </Button>
       <h1 className="min-w-0 truncate text-[.85rem] font-semibold">{path}</h1>
       {children}
+      {actions}
     </div>
   );
 }

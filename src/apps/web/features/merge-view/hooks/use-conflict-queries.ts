@@ -55,5 +55,17 @@ export function useConflictQueries({
       ),
     [environmentId, queryClient, repositoryId, worktreePath],
   );
-  return { document, list, storeDocument, storeList };
+  const refreshList = useCallback(
+    () =>
+      queryClient.invalidateQueries({
+        queryKey: environmentQueryKey(
+          environmentId,
+          repositoryId,
+          RepositoryConflictsHttpApi.list,
+          { repositoryId, worktreePath },
+        ),
+      }),
+    [environmentId, queryClient, repositoryId, worktreePath],
+  );
+  return { document, list, storeDocument, storeList, refreshList };
 }

@@ -109,6 +109,7 @@ function Workspace({
                     path={mergeView.path}
                     onOpen={mergeView.open}
                     onClose={mergeView.close}
+                    toolbarActions={<WorkspacePanel.Toggle />}
                   />
                 ) : (
                   <WorkspaceGraph
