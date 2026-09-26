@@ -12,6 +12,7 @@ import {
   useRef,
   useState,
 } from "react";
+import type { BranchCreateRequest } from "#web/features/branch-management/index";
 import {
   branchesSidebarItems,
   estimateItemHeight,
@@ -19,13 +20,15 @@ import {
   localBranchFolderIds,
   localBranchRowId,
 } from "#web/features/branches-sidebar/branch-editing/branch-edit-state";
-import { useBranchEditing } from "#web/features/branches-sidebar/branch-editing/hooks/use-branch-editing";
+import {
+  type BranchRename,
+  useBranchEditing,
+} from "#web/features/branches-sidebar/branch-editing/hooks/use-branch-editing";
 import {
   type BranchesSidebarRow,
   type BranchesSidebarScope,
   localBranchesSectionId,
 } from "#web/features/branches-sidebar/branches-sidebar.contract";
-import { describeRepositoryRefsError } from "#web/features/branches-sidebar/branches-sidebar-messages";
 import {
   buildBranchesSidebarRows,
   currentRefRowId,
@@ -35,7 +38,10 @@ import {
 import { useBranchesSidebarView } from "#web/features/branches-sidebar/hooks/use-branches-sidebar-view";
 import { treeKeyAction } from "#web/features/branches-sidebar/navigation/branches-sidebar-keyboard";
 import { historyRefKey } from "#web/features/commit-graph/index";
-import type { RepositoryRefsSnapshot } from "#web/features/repository-refs/repository-refs-controller.contract";
+import type {
+  RefActivation,
+  RepositoryRefsRead,
+} from "#web/features/repository-refs/index";
 import { Input } from "#web-ui/components/ui/input";
 import { BranchEditItem } from "#web-ui/features/branches-sidebar/branch-editing/components/branch-edit-item";
 import { BranchEditingStatus } from "#web-ui/features/branches-sidebar/branch-editing/components/branch-editing-status";
@@ -51,21 +57,23 @@ import { SidebarStatus } from "#web-ui/features/branches-sidebar/components/side
 const overscanRows = 12;
 
 export function BranchesSidebar({
+  activation,
   activeWorktreePath,
+  createRequest,
   focusRequest,
-  onRetry,
-  onSelectRef,
+  onBranchRenamed = () => undefined,
   onToggleHistoryRef = () => undefined,
+  repositoryRefs,
   selectedHistoryRefKeys = new Set<string>(),
-  snapshot,
 }: {
+  readonly activation: RefActivation;
   readonly activeWorktreePath: string;
+  readonly createRequest?: BranchCreateRequest | undefined;
   readonly focusRequest: number;
-  readonly onRetry: () => void;
-  readonly onSelectRef: (target: RepositoryRefTarget) => void;
+  readonly onBranchRenamed?: (rename: BranchRename) => void;
   readonly onToggleHistoryRef?: (target: RepositoryRefTarget) => void;
+  readonly repositoryRefs: RepositoryRefsRead;
   readonly selectedHistoryRefKeys?: ReadonlySet<string>;
-  readonly snapshot: RepositoryRefsSnapshot;
 }): JSX.Element {
   const [query, setQuery] = useState("");
   const filterQuery = useDeferredValue(query);
@@ -79,7 +87,8 @@ export function BranchesSidebar({
   >(() => new Map());
   const [activeRowId, setActiveRowId] = useState<string>();
   const treeRef = useRef<HTMLDivElement>(null);
-  const refs = snapshot.refs;
+  const refs = repositoryRefs.refs;
+  const onSelectRef = activation.select;
   const folderRepositoryRef = useRef(refs?.repositoryId);
   useEffect(() => {
     if (folderRepositoryRef.current === refs?.repositoryId) return;
@@ -125,7 +134,10 @@ export function BranchesSidebar({
   }, []);
   const editing = useBranchEditing({
     activeWorktreePath,
+    createRequest,
     focusTree,
+    onCreated: (name) => onSelectRef({ _tag: "LocalBranch", name }),
+    onRenamed: onBranchRenamed,
     refs,
     reveal,
   });
@@ -295,9 +307,9 @@ export function BranchesSidebar({
         aria-activedescendant={
           activeRowId === undefined ? undefined : rowElementId(activeRowId)
         }
-        aria-busy={snapshot.checkingOut}
+        aria-busy={activation.checkingOut}
         aria-label="Branches"
-        className={`group/tree min-h-0 flex-1 overflow-x-hidden overflow-y-auto [scrollbar-width:none] px-2 pb-2 outline-none [&::-webkit-scrollbar]:hidden focus-visible:ring-2 focus-visible:ring-sidebar-ring/40 ${snapshot.checkingOut ? "cursor-progress opacity-70" : ""}`}
+        className={`group/tree min-h-0 flex-1 overflow-x-hidden overflow-y-auto [scrollbar-width:none] px-2 pb-2 outline-none [&::-webkit-scrollbar]:hidden focus-visible:ring-2 focus-visible:ring-sidebar-ring/40 ${activation.checkingOut ? "cursor-progress opacity-70" : ""}`}
         data-slot="branches-scroll"
         onKeyDown={handleTreeKeyDown}
         ref={treeRef}
@@ -361,23 +373,22 @@ export function BranchesSidebar({
           })}
         </div>
         <SidebarStatus
-          onRetry={onRetry}
           query={query}
+          repositoryRefs={repositoryRefs}
           rows={rows}
           scope={scope}
-          snapshot={snapshot}
         />
       </div>
       <BranchEditingStatus
         editing={editing}
         remoteBranches={refs?.remoteBranches ?? []}
       />
-      {snapshot.checkoutError === undefined ? null : (
+      {activation.error === null ? null : (
         <p
           className="mx-3 mb-3 rounded-md border border-status-unavailable/40 bg-status-unavailable/10 px-3 py-2 text-xs text-foreground"
           role="alert"
         >
-          {describeRepositoryRefsError(snapshot.checkoutError)}
+          {activation.error}
         </p>
       )}
     </nav>

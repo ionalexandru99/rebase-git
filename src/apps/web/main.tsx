@@ -1,10 +1,11 @@
-import { QueryClientProvider } from "@tanstack/react-query";
+import { PersistQueryClientProvider } from "@tanstack/react-query-persist-client";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { createBrowserLocalEnvironmentSession } from "#web/app/environment/browser-local-environment-session";
 import { readDesktopHostBridge } from "#web/app/environment/desktop-host-bridge";
 import { NotificationsProvider } from "#web/features/notifications/index";
 import { createEnvironmentQueryClient } from "#web/platform/query/environment-query-client";
+import { createEnvironmentQueryPersistence } from "#web/platform/query/environment-query-persistence";
 import { ApplicationShell } from "#web-ui/app/shell/application-shell";
 import { ApplicationRuntime } from "#web-ui/platform/effect/application-runtime-context";
 import "@rebase/web/styles.css";
@@ -23,10 +24,14 @@ const session = createBrowserLocalEnvironmentSession(
 );
 session.start();
 const queryClient = createEnvironmentQueryClient();
+const queryPersistence = createEnvironmentQueryPersistence();
 
 createRoot(rootElement).render(
   <StrictMode>
-    <QueryClientProvider client={queryClient}>
+    <PersistQueryClientProvider
+      client={queryClient}
+      persistOptions={queryPersistence}
+    >
       <ApplicationRuntime value={session.runtime}>
         <NotificationsProvider>
           <ApplicationShell
@@ -37,6 +42,6 @@ createRoot(rootElement).render(
           />
         </NotificationsProvider>
       </ApplicationRuntime>
-    </QueryClientProvider>
+    </PersistQueryClientProvider>
   </StrictMode>,
 );

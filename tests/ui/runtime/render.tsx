@@ -31,13 +31,14 @@ export function render(
   {
     runtime = ManagedRuntime.make(Layer.empty),
     environment = {},
+    queryClient = createEnvironmentQueryClient(),
     ...options
   }: RenderOptions & {
     runtime?: ManagedRuntime.ManagedRuntime<never, never>;
     environment?: Partial<Environment>;
+    queryClient?: QueryClient;
   } = {},
 ) {
-  const queryClient = createEnvironmentQueryClient();
   const value = testEnvironment(environment);
   runtimes.add(runtime);
   queryClients.add(queryClient);
@@ -64,6 +65,7 @@ export function testEnvironment(
   return {
     environmentId: "00000000-0000-4000-8000-000000000100",
     requests: fakeRequests(idleOperation),
+    rpc: undefined,
     changes: unchanged,
     connected: true,
     readable: true,

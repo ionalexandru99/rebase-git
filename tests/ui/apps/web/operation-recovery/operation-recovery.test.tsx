@@ -347,6 +347,7 @@ async function liveFixture(initial: RepositoryOperation) {
       environment={{
         environmentId: "environment",
         requests,
+        rpc: undefined,
         changes,
         connected,
         readable: true,

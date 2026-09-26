@@ -4,9 +4,9 @@ import type {
   RepositoryRefs,
 } from "@rebase/contracts";
 import { useCallback, useState } from "react";
-import {
-  type BranchActions,
-  RepositoryBranchesRejected,
+import type {
+  BranchCommandFailure,
+  BranchCommands,
 } from "#web/features/branch-management/index";
 import { describeBranchError } from "#web/features/branches-sidebar/branch-editing/branch-edit-messages";
 import {
@@ -27,13 +27,13 @@ export interface PendingDeletion {
 }
 
 export function useBranchDeletion({
-  actions,
+  commands,
   focusTree,
   refs,
   reportError,
   reveal,
 }: {
-  readonly actions: BranchActions | undefined;
+  readonly commands: BranchCommands | null;
   readonly focusTree: () => void;
   readonly refs: RepositoryRefs | undefined;
   readonly reportError: (message: string | undefined) => void;
@@ -43,41 +43,38 @@ export function useBranchDeletion({
   const [deleted, setDeleted] = useState<DeletedBranch>();
 
   const remove = async (deletion: BranchDeletion, force: boolean) => {
-    if (actions === undefined) return;
+    if (commands === null) return;
     reportError(undefined);
     const { local, remote } = deletion;
-    try {
-      await actions.delete({
-        force,
-        ...(local === undefined
-          ? {}
-          : { local: { name: local.name, target: local.target } }),
-        ...(remote === undefined
-          ? {}
-          : {
-              remote: {
-                name: remote.name,
-                remote: remote.remote,
-                target: remote.target,
-              },
-            }),
-      });
+    const result = await commands.delete({
+      force,
+      ...(local === undefined
+        ? {}
+        : { local: { name: local.name, target: local.target } }),
+      ...(remote === undefined
+        ? {}
+        : {
+            remote: {
+              name: remote.name,
+              remote: remote.remote,
+              target: remote.target,
+            },
+          }),
+    });
+    if (result._tag === "Ok") {
       setPending(undefined);
       if (local !== undefined && remote === undefined)
         setDeleted(deletedBranch(local, refs));
       focusTree();
-    } catch (failure) {
-      if (
-        !force &&
-        failure instanceof RepositoryBranchesRejected &&
-        failure.failure._tag === "BranchNotMerged"
-      ) {
-        setPending({ deletion, failure: failure.failure });
-        return;
-      }
-      setPending(undefined);
-      reportError(describeBranchError(failure));
+      return;
     }
+    const unmerged = force ? undefined : notMerged(result.failure);
+    if (unmerged !== undefined) {
+      setPending({ deletion, failure: unmerged });
+      return;
+    }
+    setPending(undefined);
+    reportError(describeBranchError(result.failure));
   };
 
   const cancel = useCallback(() => {
@@ -102,21 +99,24 @@ export function useBranchDeletion({
       else setPending({ deletion });
     },
     undo: async () => {
-      if (actions === undefined || deleted === undefined) return;
+      if (commands === null || deleted === undefined) return;
       setDeleted(undefined);
-      try {
-        await actions.create({
-          checkout: false,
-          name: deleted.name,
-          startPoint: deleted.target,
-          ...(deleted.track === undefined ? {} : { track: deleted.track }),
-        });
-        reveal(deleted.name);
-      } catch (failure) {
-        reportError(describeBranchError(failure));
-      }
+      const restored = await commands.create({
+        name: deleted.name,
+        startPoint: deleted.target,
+        ...(deleted.track === undefined ? {} : { track: deleted.track }),
+      });
+      if (restored._tag === "Ok") reveal(deleted.name);
+      else reportError(describeBranchError(restored.failure));
     },
   };
+}
+
+function notMerged(failure: BranchCommandFailure) {
+  return failure._tag === "EnvironmentHttpRejected" &&
+    failure.failure._tag === "BranchNotMerged"
+    ? failure.failure
+    : undefined;
 }
 
 function deletedBranch(

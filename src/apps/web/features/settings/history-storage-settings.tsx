@@ -1,9 +1,10 @@
+import { useQueryClient } from "@tanstack/react-query";
 import { Effect, Fiber } from "effect";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { RepositoryHistoryStorageDiagnostics } from "#web/domain/repository-history/history-storage.contract";
 import { RepositoryHistoryCacheList } from "#web/features/history-storage/index";
 import { manageBrowserHistoryStorage } from "#web/features/repository-history/index";
-import { clearAllCachedRepositoryRefs } from "#web/features/repository-refs/index";
+import { forgetAllRepositoryRefs } from "#web/features/repository-refs/index";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -23,38 +24,42 @@ export function HistoryStorageSettings() {
   const [confirming, setConfirming] = useState(false);
   const [message, setMessage] = useState<string>();
   const operation = useRef<Fiber.Fiber<void> | undefined>(undefined);
-  const run = useCallback((action: "inspect" | "clear") => {
-    if (operation.current !== undefined)
-      Effect.runFork(Fiber.interrupt(operation.current));
-    setPending(true);
-    setError(undefined);
-    setMessage(undefined);
-    operation.current = Effect.runFork(
-      manageBrowserHistoryStorage(action).pipe(
-        Effect.tap((result) => Effect.sync(() => setDiagnostics(result))),
-        Effect.tap(() =>
-          action === "clear"
-            ? Effect.tryPromise(() => clearAllCachedRepositoryRefs()).pipe(
-                Effect.tap(() =>
-                  Effect.sync(() =>
-                    setMessage(
-                      "All history caches cleared. Rebuild or reopen a repository to load history.",
+  const queryClient = useQueryClient();
+  const run = useCallback(
+    (action: "inspect" | "clear") => {
+      if (operation.current !== undefined)
+        Effect.runFork(Fiber.interrupt(operation.current));
+      setPending(true);
+      setError(undefined);
+      setMessage(undefined);
+      operation.current = Effect.runFork(
+        manageBrowserHistoryStorage(action).pipe(
+          Effect.tap((result) => Effect.sync(() => setDiagnostics(result))),
+          Effect.tap(() =>
+            action === "clear"
+              ? Effect.sync(() => forgetAllRepositoryRefs(queryClient)).pipe(
+                  Effect.tap(() =>
+                    Effect.sync(() =>
+                      setMessage(
+                        "All history caches cleared. Rebuild or reopen a repository to load history.",
+                      ),
                     ),
                   ),
-                ),
-              )
-            : Effect.void,
-        ),
-        Effect.catch(() =>
-          Effect.sync(() =>
-            setError("History storage could not be updated. Try again."),
+                )
+              : Effect.void,
           ),
+          Effect.catch(() =>
+            Effect.sync(() =>
+              setError("History storage could not be updated. Try again."),
+            ),
+          ),
+          Effect.tap(() => Effect.sync(() => setPending(false))),
+          Effect.asVoid,
         ),
-        Effect.tap(() => Effect.sync(() => setPending(false))),
-        Effect.asVoid,
-      ),
-    );
-  }, []);
+      );
+    },
+    [queryClient],
+  );
   useEffect(() => {
     run("inspect");
     return () => {

@@ -1,8 +1,9 @@
 import type { BranchUpstreamTarget, RepositoryRefs } from "@rebase/contracts";
 import { useCallback, useEffect, useState } from "react";
 import {
-  useBranchActions,
-  useBranchCreateRequest,
+  type BranchCommandFailure,
+  type BranchCreateRequest,
+  useBranchCommands,
 } from "#web/features/branch-management/index";
 import { describeBranchError } from "#web/features/branches-sidebar/branch-editing/branch-edit-messages";
 import type { BranchEdit } from "#web/features/branches-sidebar/branch-editing/branch-edit-state";
@@ -21,19 +22,29 @@ import type {
 
 export type BranchEditing = ReturnType<typeof useBranchEditing>;
 
+export interface BranchRename {
+  readonly name: string;
+  readonly newName: string;
+}
+
 export function useBranchEditing({
   activeWorktreePath,
+  createRequest,
   focusTree,
+  onCreated,
+  onRenamed,
   refs,
   reveal,
 }: {
   readonly activeWorktreePath: string;
+  readonly createRequest: BranchCreateRequest | undefined;
   readonly focusTree: () => void;
+  readonly onCreated: (branchName: string) => void;
+  readonly onRenamed: (rename: BranchRename) => void;
   readonly refs: RepositoryRefs | undefined;
   readonly reveal: (branchName: string) => void;
 }) {
-  const actions = useBranchActions();
-  const createRequest = useBranchCreateRequest();
+  const commands = useBranchCommands();
   const [edit, setEdit] = useState<BranchEdit>();
   const [error, setError] = useState<string>();
 
@@ -53,7 +64,7 @@ export function useBranchEditing({
   const rowActions = (row: BranchesSidebarRefRow) =>
     refs === undefined
       ? []
-      : branchRowActions(row, refs, activeWorktreePath, actions !== undefined);
+      : branchRowActions(row, refs, activeWorktreePath, commands !== null);
 
   const cancel = useCallback(() => {
     setEdit(undefined);
@@ -61,7 +72,7 @@ export function useBranchEditing({
   }, [focusTree]);
 
   const deletion = useBranchDeletion({
-    actions,
+    commands,
     focusTree,
     refs,
     reportError: setError,
@@ -73,13 +84,11 @@ export function useBranchEditing({
     reveal(name);
   };
 
-  const run = async (write: () => Promise<void>) => {
-    try {
-      await write();
-      return undefined;
-    } catch (failure) {
-      return describeBranchError(failure);
-    }
+  const run = async (
+    write: () => Promise<BranchCommandFailure | undefined>,
+  ) => {
+    const failure = await write();
+    return failure === undefined ? undefined : describeBranchError(failure);
   };
 
   const start = (id: BranchRowActionId, row: BranchesSidebarRefRow) => {
@@ -113,15 +122,17 @@ export function useBranchEditing({
     cancel,
     createBranch: (name: string) =>
       run(async () => {
-        if (actions === undefined || edit?.kind !== "create") return;
+        if (commands === null || edit?.kind !== "create") return undefined;
         const { oid, track } = edit.startPoint;
-        await actions.create({
-          checkout: true,
+        const created = await commands.create({
           name,
           startPoint: oid,
           ...(track === undefined ? {} : { track }),
         });
+        if (created._tag === "Failed") return created.failure;
         finish(name);
+        onCreated(name);
+        return undefined;
       }),
     deletion,
     dismissError: () => setError(undefined),
@@ -130,24 +141,27 @@ export function useBranchEditing({
     handleTreeKey,
     renameBranch: (newName: string) =>
       run(async () => {
-        if (actions === undefined || edit?.kind !== "rename") return;
-        if (newName !== edit.branch.name)
-          await actions.rename({
-            ...(edit.branch.target === undefined
-              ? {}
-              : { expectedTarget: edit.branch.target }),
-            name: edit.branch.name,
+        if (commands === null || edit?.kind !== "rename") return undefined;
+        const { name, target } = edit.branch;
+        if (newName !== name) {
+          const renamed = await commands.rename({
+            ...(target === undefined ? {} : { expectedTarget: target }),
+            name,
             newName,
           });
+          if (renamed._tag === "Failed") return renamed.failure;
+          onRenamed({ name, newName });
+        }
         finish(newName);
+        return undefined;
       }),
     rowActions,
     setUpstream: async (upstream: BranchUpstreamTarget | null) => {
-      if (actions === undefined || edit?.kind !== "upstream") return;
+      if (commands === null || edit?.kind !== "upstream") return;
       const { name } = edit.branch;
-      const message = await run(() => actions.setUpstream({ name, upstream }));
-      if (message === undefined) reveal(name);
-      else setError(message);
+      const result = await commands.setUpstream({ name, upstream });
+      if (result._tag === "Ok") reveal(name);
+      else setError(describeBranchError(result.failure));
     },
     start,
   };

@@ -1,3 +1,4 @@
+import type { RepositoryRefs } from "@rebase/contracts";
 import {
   type CommitGraphHistory,
   createBrowserHistoryFilterStore,
@@ -11,10 +12,7 @@ import {
   type RepositoryHistoryReader,
   readRepositoryHistoryOrder,
 } from "#web/features/repository-history/index";
-import {
-  type RepositoryRefsController,
-  resolveActiveWorktreePath,
-} from "#web/features/repository-refs/index";
+import { resolveActiveWorktreePath } from "#web/features/repository-refs/index";
 import { createStore, type ReadableStore } from "#web/platform/store/store";
 
 export interface OpenedRepositoryTarget {
@@ -36,6 +34,7 @@ export interface OpenedRepository {
 export interface OpenedRepositoryStore
   extends ReadableStore<OpenedRepository | undefined> {
   readonly open: (target: OpenedRepositoryTarget | undefined) => void;
+  readonly refsArrived: (refs: RepositoryRefs) => void;
 }
 
 export function openedRepositoryKey(target: OpenedRepositoryTarget) {
@@ -46,15 +45,14 @@ export function openedRepositoryKey(target: OpenedRepositoryTarget) {
   ]);
 }
 
-export function createOpenedRepositoryStore(dependencies: {
-  readonly history: RepositoryHistoryGateway;
-  readonly refs: RepositoryRefsController;
-}): OpenedRepositoryStore {
+export function createOpenedRepositoryStore(
+  gateway: RepositoryHistoryGateway,
+): OpenedRepositoryStore {
   const store = createStore<OpenedRepository | undefined>(undefined);
-  let stopFirstPage = () => {};
+  let awaitingRefs: OpenedRepositoryTarget | undefined;
 
   const close = () => {
-    stopFirstPage();
+    awaitingRefs = undefined;
     const current = store.getSnapshot();
     if (current === undefined) return;
     store.set(undefined);
@@ -71,47 +69,41 @@ export function createOpenedRepositoryStore(dependencies: {
     if (store.getSnapshot()?.key === key) return;
     close();
     const reader = createBrowserRepositoryHistoryReader({
-      gateway: dependencies.history,
+      gateway,
       environmentId: target.environmentId,
       repositoryId: target.repositoryId,
       logicalRepositoryId: target.logicalRepositoryId,
     });
-    const history = { ...openCommitGraphHistory(reader), reader };
-    store.set({ key, history });
-    stopFirstPage = whenRefsArrive(dependencies.refs, target, () =>
-      loadFirstPage(history, target, dependencies.refs),
-    );
+    store.set({ key, history: { ...openCommitGraphHistory(reader), reader } });
+    awaitingRefs = target;
   };
 
-  return { getSnapshot: store.getSnapshot, subscribe: store.subscribe, open };
-}
+  const refsArrived = (refs: RepositoryRefs) => {
+    const target = awaitingRefs;
+    const history = store.getSnapshot()?.history;
+    if (
+      target === undefined ||
+      history === undefined ||
+      refs.repositoryId !== target.repositoryId
+    )
+      return;
+    awaitingRefs = undefined;
+    loadFirstPage(history, target, refs);
+  };
 
-function whenRefsArrive(
-  refs: RepositoryRefsController,
-  target: OpenedRepositoryTarget,
-  arrived: () => void,
-) {
-  const ready = () =>
-    refs.getSnapshot().refs?.repositoryId === target.repositoryId;
-  if (ready()) {
-    arrived();
-    return () => {};
-  }
-  const unsubscribe = refs.subscribe(() => {
-    if (!ready()) return;
-    unsubscribe();
-    arrived();
-  });
-  return unsubscribe;
+  return {
+    getSnapshot: store.getSnapshot,
+    subscribe: store.subscribe,
+    open,
+    refsArrived,
+  };
 }
 
 function loadFirstPage(
   history: OpenedRepositoryHistory,
   target: OpenedRepositoryTarget,
-  refsController: RepositoryRefsController,
+  refs: RepositoryRefs,
 ) {
-  const refs = refsController.getSnapshot().refs;
-  if (refs === undefined) return;
   const scope = createBrowserHistoryFilterStore().load(
     target.environmentId,
     target.logicalRepositoryId,

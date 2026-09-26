@@ -1,6 +1,5 @@
 import type { RepositoryRefs, RepositoryRefTarget } from "@rebase/contracts";
 import { useCallback, useMemo, useRef, useState } from "react";
-import { useBranchRenamed } from "#web/features/branch-management/index";
 import {
   automaticHistoryScope,
   createBrowserHistoryFilterStore,
@@ -62,18 +61,16 @@ export function useWorkspaceHistoryScope({
   );
   const historyScopeRef = useRef(historyScope);
   historyScopeRef.current = historyScope;
-  useBranchRenamed(
-    useCallback(
-      (branch: { readonly name: string; readonly newName: string }) =>
-        change(
-          renameHistoryBranch(
-            historyScopeRef.current,
-            branch.name,
-            branch.newName,
-          ),
+  const renameBranch = useCallback(
+    (branch: { readonly name: string; readonly newName: string }) =>
+      change(
+        renameHistoryBranch(
+          historyScopeRef.current,
+          branch.name,
+          branch.newName,
         ),
-      [change],
-    ),
+      ),
+    [change],
   );
   const toggleRef = useCallback(
     (target: RepositoryRefTarget) => {
@@ -90,6 +87,7 @@ export function useWorkspaceHistoryScope({
   );
   const reset = useCallback(() => change(automaticHistoryScope), [change]);
   return {
+    renameBranch,
     resolvedScope,
     toggleRef,
     reset: canReset ? reset : undefined,

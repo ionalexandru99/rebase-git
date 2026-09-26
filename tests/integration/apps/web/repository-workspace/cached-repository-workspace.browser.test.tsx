@@ -1,6 +1,10 @@
 import { createBrowserRepositoryHistoryReader } from "#web/features/repository-history/index";
 import "@rebase/web/styles.css";
 import type { RepositoryCommit, RepositoryRefs } from "@rebase/contracts";
+import {
+  persistQueryClientRestore,
+  persistQueryClientSave,
+} from "@tanstack/react-query-persist-client";
 import { expect, it, vi } from "vite-plus/test";
 import { render } from "#tests-ui/runtime/render";
 import {
@@ -10,34 +14,42 @@ import {
 } from "#web/features/commit-graph/index";
 import { storeRepositoryHistoryPage } from "#web/features/repository-history/replica/repository-history-store";
 import { RepositoryHistoryOffline } from "#web/features/repository-history/repository-history-reader.contract";
-import {
-  cacheRepositoryRefs,
-  readCachedRepositoryRefs,
-} from "#web/features/repository-refs/browser-repository-refs-cache";
+import { createEnvironmentQueryClient } from "#web/platform/query/environment-query-client";
+import { createEnvironmentQueryPersistence } from "#web/platform/query/environment-query-persistence";
 import { RepositoryWorkspace } from "#web-ui/app/workspace/repository-workspace";
 
-it("restores complete Automatic metadata and isolates real environment and repository identities", async () => {
-  const environmentId = crypto.randomUUID();
+it("restores only persisted refs, unconfirmed, for the same protocol", async () => {
+  const persistence = createEnvironmentQueryPersistence();
   const refs = repositoryRefs();
-  const logicalId = refs.logicalRepositoryId ?? "";
-  await cacheRepositoryRefs(environmentId, logicalId, refs);
-  const cached = await readCachedRepositoryRefs(environmentId, logicalId);
-  expect(cached).toEqual(refs);
-  await expect(
-    readCachedRepositoryRefs(crypto.randomUUID(), logicalId),
-  ).resolves.toBeUndefined();
-  await expect(
-    readCachedRepositoryRefs(environmentId, crypto.randomUUID()),
-  ).resolves.toBeUndefined();
-  if (cached === undefined) throw new Error("Missing cached refs");
-  expect(
-    resolveHistoryScope({ _tag: "Automatic" }, cached, "/feature").roots.map(
-      ({ name }) => name,
-    ),
-  ).toEqual(["feature", "origin/feature", "main", "origin/main"]);
-  expect(
-    resolveHistoryScope({ _tag: "Automatic" }, cached, "/detached").roots,
-  ).toContainEqual({ name: "HEAD", oid, type: "head" });
+  const refsKey = ["repository-refs", crypto.randomUUID(), refs.repositoryId];
+  const saved = createEnvironmentQueryClient();
+  await saved.fetchQuery({
+    queryKey: refsKey,
+    queryFn: async () => refs,
+    meta: { changes: "refs", repositoryId: refs.repositoryId, persist: true },
+  });
+  await saved.fetchQuery({
+    queryKey: ["operation"],
+    queryFn: async () => "idle",
+    meta: { changes: "index", repositoryId: refs.repositoryId },
+  });
+  await persistQueryClientSave({ ...persistence, queryClient: saved });
+
+  const restored = createEnvironmentQueryClient();
+  await persistQueryClientRestore({ ...persistence, queryClient: restored });
+  const query = restored.getQueryCache().find({ queryKey: refsKey });
+  expect(query?.state.data).toEqual(refs);
+  expect(query?.isFetched()).toBe(false);
+  expect(query?.state.isInvalidated).toBe(true);
+  expect(restored.getQueryData(["operation"])).toBeUndefined();
+
+  const upgraded = createEnvironmentQueryClient();
+  await persistQueryClientRestore({
+    ...persistence,
+    buster: "protocol-next",
+    queryClient: upgraded,
+  });
+  expect(upgraded.getQueryData(refsKey)).toBeUndefined();
 });
 
 it.each(["Automatic", "Custom"] as const)(
@@ -46,7 +58,7 @@ it.each(["Automatic", "Custom"] as const)(
     const environmentId = crypto.randomUUID();
     const refs = repositoryRefs();
     const logicalId = refs.logicalRepositoryId ?? "";
-    await cacheRepositoryRefs(environmentId, logicalId, refs);
+    const queryClient = await restoredRefs(environmentId, logicalId, refs);
     const custom = {
       _tag: "Custom",
       selections: [
@@ -94,15 +106,10 @@ it.each(["Automatic", "Custom"] as const)(
           repositoryId={refs.repositoryId}
           repositoryName="Cached repository"
           history={openCommitGraphHistory(reader)}
-          refs={{
-            checkingOut: false,
-            repositoryId: refs.repositoryId,
-            status: "loading",
-          }}
-          retryRefs={() => undefined}
-          selectRef={() => undefined}
+          switchWorktree={() => undefined}
         />
       </div>,
+      { environment: { environmentId }, queryClient },
     );
     await expect
       .element(screen.getByRole("row", { name: /^Cached commit,/ }))
@@ -131,6 +138,24 @@ it.each(["Automatic", "Custom"] as const)(
     );
   },
 );
+
+async function restoredRefs(
+  environmentId: string,
+  logicalId: string,
+  refs: RepositoryRefs,
+) {
+  const persistence = createEnvironmentQueryPersistence();
+  const saved = createEnvironmentQueryClient();
+  await saved.fetchQuery({
+    queryKey: ["repository-refs", environmentId, logicalId],
+    queryFn: async () => refs,
+    meta: { changes: "refs", repositoryId: refs.repositoryId, persist: true },
+  });
+  await persistQueryClientSave({ ...persistence, queryClient: saved });
+  const restored = createEnvironmentQueryClient();
+  await persistQueryClientRestore({ ...persistence, queryClient: restored });
+  return restored;
+}
 
 const oid = "a".repeat(40);
 const identity = {

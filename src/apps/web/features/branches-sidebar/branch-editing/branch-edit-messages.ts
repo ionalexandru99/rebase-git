@@ -1,13 +1,14 @@
-import {
-  RepositoryBranchesRejected,
-  RepositoryBranchesResponseError,
-} from "#web/features/branch-management/index";
+import type { BranchCommandFailure } from "#web/features/branch-management/index";
 
-export function describeBranchError(error: unknown): string {
-  if (error instanceof RepositoryBranchesResponseError)
-    return "The Environment did not answer.";
-  if (!(error instanceof RepositoryBranchesRejected))
-    return "The Environment is not connected.";
+export function describeBranchError(error: BranchCommandFailure): string {
+  switch (error._tag) {
+    case "Cancelled":
+      return "The request was cancelled.";
+    case "EnvironmentResponseError":
+      return "The Environment did not answer.";
+    case "EnvironmentAccessDenied":
+      return "This device may not write to the repository.";
+  }
   const failure = error.failure;
   switch (failure._tag) {
     case "InvalidBranchName":
@@ -26,7 +27,5 @@ export function describeBranchError(error: unknown): string {
       return failure.detail.length === 0
         ? "Git could not complete the operation."
         : failure.detail;
-    default:
-      return "This device may not write to the repository.";
   }
 }
