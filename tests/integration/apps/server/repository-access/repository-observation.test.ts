@@ -159,9 +159,11 @@ for (const firstRelease of ["refs", "freshness"] as const)
             control,
           );
           yield* controlChanges.watch(mainEntry);
-          yield* Effect.promise(() => git("-C", main, "branch", "after-close"));
           yield* Effect.promise(() =>
-            vi.waitFor(() => expect(controlChanged).toHaveBeenCalled()),
+            waitForObservation(
+              () => expect(controlChanged).toHaveBeenCalled(),
+              () => git("-C", main, "branch", "-f", "after-close"),
+            ),
           );
           expect(changed).not.toHaveBeenCalled();
           expect(fresh).not.toHaveBeenCalled();
