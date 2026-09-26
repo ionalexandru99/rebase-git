@@ -12,7 +12,6 @@ import { SessionEnvironmentProvider } from "#web/app/shell/session-environment-p
 import { useNavigation, visibleProjects } from "#web/app/shell/use-navigation";
 import { useRepositoryOpening } from "#web/app/shell/use-repository-opening";
 import { RepositoryWorkspace } from "#web/app/workspace/repository-workspace";
-import { DiffWorkerPool } from "#web/features/file-diff/components/diff-worker-pool";
 import { OpenProjectScreen } from "#web/features/open-project/open-project-screen";
 import { ProjectsSidebar } from "#web/features/project-navigation/projects-sidebar";
 import { useCatalogRepository } from "#web/features/repository-catalog/hooks/use-repository-catalog";
@@ -135,9 +134,7 @@ function Shell({
               }
             />
           ) : (
-            <DiffWorkerPool>
-              <RepositoryWorkspace />
-            </DiffWorkerPool>
+            <RepositoryWorkspace />
           )}
         </ApplicationLayout>
       </PanelSessions>

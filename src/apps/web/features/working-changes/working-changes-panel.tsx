@@ -1,3 +1,4 @@
+import { DiffWorkerPool } from "#web/features/file-diff/components/diff-worker-pool";
 import { WorkingChanges } from "#web/features/working-changes/working-changes";
 import { usePanelFeature } from "#web/features/workspace-panel/api";
 
@@ -9,7 +10,7 @@ export function WorkingChangesPanel() {
   const { connected, writable } = environment;
   const { environmentId, repositoryId, worktreePath } = scope;
   return (
-    <>
+    <DiffWorkerPool>
       {connected ? null : <Disconnected />}
       <div className="h-full min-h-0" hidden={!connected}>
         <WorkingChanges
@@ -26,7 +27,7 @@ export function WorkingChangesPanel() {
           writable={connected && writable}
         />
       </div>
-    </>
+    </DiffWorkerPool>
   );
 }
 

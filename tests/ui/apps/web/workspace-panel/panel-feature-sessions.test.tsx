@@ -5,7 +5,7 @@ import {
   type RepositoryChanges,
   RepositoryChangesHttpApi,
 } from "@rebase/contracts";
-import { expect, it } from "vite-plus/test";
+import { afterEach, expect, it, vi } from "vite-plus/test";
 import { page } from "vite-plus/test/browser";
 import { fakeRequests, respond } from "#tests-ui/runtime/fake-requests";
 import { render } from "#tests-ui/runtime/render";
@@ -159,6 +159,30 @@ async function fixture(linkedWorktree = false) {
       holdInspections = true;
     },
   };
+}
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
+
+function watchWorkers() {
+  const workers = { started: 0, terminated: 0 };
+  const BrowserWorker = globalThis.Worker;
+  vi.stubGlobal(
+    "Worker",
+    class extends BrowserWorker {
+      constructor(url: string | URL, options?: WorkerOptions) {
+        super(url, options);
+        workers.started++;
+      }
+
+      override terminate() {
+        workers.terminated++;
+        super.terminate();
+      }
+    },
+  );
+  return workers;
 }
 
 function Inspect() {
@@ -323,4 +347,23 @@ it("pauses retained sessions while a different environment is current", async ()
     )
     .toHaveAttribute("aria-pressed", "true");
   expect(f.requestCount()).toBe(requests);
+});
+
+it("starts the diff highlighting workers when a diff panel opens and keeps them across projects", async () => {
+  const workers = watchWorkers();
+  const f = await fixture();
+  expect(workers.started).toBe(0);
+  await openDiffs();
+  await expect.poll(() => workers.started).toBe(2);
+  await page.getByRole("button", { name: "Inspect commit" }).click();
+  await expect
+    .element(page.getByRole("tab", { name: "Commit", exact: true }))
+    .toBeVisible();
+  await f.show(f.projectB);
+  await openDiffs();
+  await f.show(f.projectA);
+  await expect
+    .element(page.getByRole("tab", { name: "Commit", exact: true }))
+    .toBeVisible();
+  expect(workers).toEqual({ started: 2, terminated: 0 });
 });
