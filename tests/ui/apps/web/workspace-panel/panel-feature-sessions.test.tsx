@@ -2,17 +2,18 @@ import {
   CommitInspectionHttpApi,
   isRouteOk,
   RepositoryChangesHttpApi,
+  type RouteInput,
   type RouteSuccess,
 } from "@rebase/contracts";
-import {
-  type EnvironmentRequestClient,
-  environmentHttpRoutesClient,
-  type RequestableEnvironmentHttpRoute,
+import type {
+  EnvironmentRequestClient,
+  EnvironmentRequestOptions,
+  RequestableEnvironmentHttpRoute,
 } from "@rebase/environment-client";
 import { Effect, Layer, ManagedRuntime, Schema } from "effect";
 import { expect, it } from "vite-plus/test";
 import { page } from "vite-plus/test/browser";
-import { render } from "vitest-browser-react";
+import { render } from "#tests-ui/runtime/render";
 import { ResizablePanel } from "#web-ui/components/ui/resizable";
 import { WorkspacePanel } from "#web-ui/features/workspace-panel/index";
 import { useWorkspacePanel } from "#web-ui/features/workspace-panel/workspace-panel-provider";
@@ -32,10 +33,10 @@ async function fixture(linkedWorktree = false) {
   const foreignRequests: string[] = [];
   let holdReads = false;
   let holdInspections = false;
-  const respond = <Route extends RequestableEnvironmentHttpRoute, Error>(
+  const disconnected = () => new Error("Disconnected");
+  const respond = <Route extends RequestableEnvironmentHttpRoute>(
     endpoint: Route,
     command: unknown,
-    disconnected: () => Error,
   ): Effect.Effect<RouteSuccess<Route>, Error> =>
     Effect.suspend(() => {
       let response: unknown;
@@ -134,15 +135,24 @@ async function fixture(linkedWorktree = false) {
         ),
       );
     });
-  const requests: EnvironmentRequestClient = (routes, errors) =>
-    environmentHttpRoutesClient(routes, (endpoint, command) =>
-      respond(endpoint, command, errors.disconnected),
+  const run = <Route extends RequestableEnvironmentHttpRoute>(
+    endpoint: Route,
+    command: RouteInput<Route>,
+    options: EnvironmentRequestOptions = {},
+  ) =>
+    Effect.runPromise(
+      respond(endpoint, command),
+      options.signal === undefined ? {} : { signal: options.signal },
     );
-  const foreignClient: EnvironmentRequestClient = (routes, errors) =>
-    environmentHttpRoutesClient(routes, (endpoint, command) => {
-      foreignRequests.push(endpoint.path);
-      return respond(endpoint, command, errors.disconnected);
-    });
+  const requests: EnvironmentRequestClient = run;
+  const foreignClient: EnvironmentRequestClient = (
+    endpoint,
+    command,
+    options,
+  ) => {
+    foreignRequests.push(endpoint.path);
+    return run(endpoint, command, options);
+  };
   const tree = (
     project: string,
     repositoryIds: readonly string[] = [projectA, projectB],

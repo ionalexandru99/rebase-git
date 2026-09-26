@@ -72,7 +72,7 @@ export function createLocalEnvironmentSession(
 
   return {
     ...options.controllers,
-    ...(options.requests === undefined ? {} : { requests: options.requests }),
+    requests: options.requests,
     changes: {
       subscribe: (listener) => {
         changeListeners.add(listener);

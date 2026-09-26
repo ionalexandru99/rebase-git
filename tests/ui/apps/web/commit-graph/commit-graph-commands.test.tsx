@@ -1,8 +1,3 @@
-import {
-  type EnvironmentRequestClient,
-  environmentHttpRoutesClient,
-} from "@rebase/environment-client";
-import { Effect } from "effect";
 import type { ReactNode } from "react";
 import { describe, expect, it, vi } from "vite-plus/test";
 import { userEvent } from "vite-plus/test/browser";
@@ -20,7 +15,6 @@ import {
   type GraphCommandDefinition,
   GraphCommands,
 } from "#web/features/commit-commands/index";
-import { RepositoryPull } from "#web/features/repository-pull/index";
 import {
   type RepositoryScope,
   RepositoryScopeProvider,
@@ -65,58 +59,6 @@ describe("commit graph commands", () => {
     await fetch.click();
     await vi.waitFor(() => expect(reader.fetch).toHaveBeenCalledOnce());
     await expect.element(fetch).toBeEnabled();
-  });
-
-  it("pulls the active branch from the toolbar", async () => {
-    const reader = readyToFetch();
-    const pulled = vi.fn<(command: unknown) => void>();
-    let finish = () => {};
-    const requests: EnvironmentRequestClient = (routes) =>
-      environmentHttpRoutesClient(routes, (_route, command) => {
-        pulled(command);
-        return Effect.promise(
-          () =>
-            new Promise<void>((resolve) => {
-              finish = resolve;
-            }),
-        ).pipe(Effect.as({ outcome: "FastForwarded" } as never));
-      });
-    const screen = await render(
-      <ScopedGraph
-        reader={reader}
-        scope={repositoryScope({ repositoryId: "repo", requests })}
-      >
-        {(graph) => (
-          <RepositoryPull.Provider
-            reader={reader}
-            activeBranch="main"
-            incoming={3}
-          >
-            {graph}
-          </RepositoryPull.Provider>
-        )}
-      </ScopedGraph>,
-    );
-    await screen
-      .getByRole("button", { name: "Pull 3 incoming commits" })
-      .click();
-    await vi.waitFor(() =>
-      expect(pulled).toHaveBeenCalledWith({
-        repositoryId: "repo",
-        worktreePath: "/repo",
-        branch: "main",
-      }),
-    );
-    await expect
-      .element(screen.getByRole("button", { name: "Pulling" }))
-      .toBeDisabled();
-    await expect
-      .element(screen.getByRole("button", { name: "Fetch", exact: true }))
-      .toBeDisabled();
-    finish();
-    await expect
-      .element(screen.getByRole("button", { name: "Pull 3 incoming commits" }))
-      .toBeEnabled();
   });
 
   it("runs commands that features contribute to the commit menu", async () => {
@@ -231,7 +173,6 @@ function ScopedGraph({
             reader={reader}
             repositoryName="rebase-test"
             roots={[{ name: "main", oid: "0".repeat(40), type: "branch" }]}
-            toolbarActions={<RepositoryPull.Button />}
           />,
         )}
       </RepositoryScopeProvider>

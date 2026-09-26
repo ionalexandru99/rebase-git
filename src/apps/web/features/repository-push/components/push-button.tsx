@@ -5,34 +5,35 @@ import {
   IconChevronDown,
 } from "@tabler/icons-react";
 import { useOperationCommandState } from "#web/features/operation-recovery/index";
-import type { PushTarget } from "#web/features/repository-push/repository-push.contract";
-import { destinationName } from "#web/features/repository-push/resolve-push-target";
+import type { Push } from "#web/features/repository-push/hooks/use-push";
+import {
+  destinationName,
+  type PushTarget,
+} from "#web/features/repository-push/resolve-push-target";
 import { useRepositoryScope } from "#web/features/repository-scope/index";
 import { Button } from "#web-ui/components/ui/button";
 import {
   DropdownMenuContent,
   DropdownMenuItem,
 } from "#web-ui/components/ui/dropdown-menu";
-import { useRepositoryPush } from "#web-ui/features/repository-push/repository-push-provider";
 
 export function PushButton({
+  push,
   target,
 }: {
+  readonly push: Push;
   readonly target: PushTarget | undefined;
 }) {
-  const push = useRepositoryPush();
   const scope = useRepositoryScope();
   const operationBusy = useOperationCommandState() === "busy";
-  if (push === null || target === undefined) return null;
-  const { controller, state } = push;
+  if (scope === undefined || target === undefined) return null;
   const upstream = target.upstream;
   const tracked = upstream !== undefined && !upstream.gone;
   const busy =
-    scope?.connected !== true ||
+    !scope.connected ||
     !scope.writable ||
     operationBusy ||
-    !state.connected ||
-    state.running !== null;
+    push.running !== null;
   const canPush = !tracked || upstream.ahead > 0;
   const canForcePush = tracked && upstream.remoteOid !== undefined;
   return (
@@ -41,12 +42,12 @@ export function PushButton({
         aria-label={pushLabel(target)}
         className="h-full gap-1.5 rounded-r-none border-0 text-[.85rem] sm:text-[.85rem]"
         disabled={busy || !canPush}
-        onClick={() => controller.push(target)}
+        onClick={() => push.push(target)}
         size="sm"
         variant="ghost"
       >
         <IconArrowUp aria-hidden="true" className="size-3.5" />
-        {state.running === null ? "Push" : "Pushing"}
+        {push.running === null ? "Push" : "Pushing"}
         {tracked && upstream.ahead > 0 ? (
           <span className="text-status-available tabular-nums">
             {upstream.ahead}
@@ -76,13 +77,13 @@ export function PushButton({
         <DropdownMenuContent>
           <DropdownMenuItem
             disabled={!canPush}
-            onClick={() => controller.push(target)}
+            onClick={() => push.push(target)}
           >
             Push
           </DropdownMenuItem>
           <DropdownMenuItem
             disabled={!canForcePush}
-            onClick={() => controller.requestForcePush(target)}
+            onClick={() => push.requestForcePush(target)}
           >
             Force push…
           </DropdownMenuItem>

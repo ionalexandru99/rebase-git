@@ -1,26 +1,27 @@
 import {
+  type RepositoryChangeKind,
   type RepositoryOperation,
   RepositoryOperationsHttpApi,
 } from "@rebase/contracts";
-import {
-  type EnvironmentRequestClient,
-  environmentHttpRoutesClient,
-} from "@rebase/environment-client";
-import { Effect } from "effect";
 import { describe, expect, it, vi } from "vite-plus/test";
 import { page, userEvent } from "vite-plus/test/browser";
-import { render } from "vitest-browser-react";
 import { repositoryScope } from "#tests-ui/apps/web/repository-scope/repository-scope-fixture";
+import { fakeRequests, respond } from "#tests-ui/runtime/fake-requests";
+import { render } from "#tests-ui/runtime/render";
 import {
   ErrorNotification,
   NotificationsProvider,
   PersistentNotification,
 } from "#web/features/notifications/index";
-import { OperationRecovery } from "#web/features/operation-recovery/index";
-import type { OperationRecoveryState } from "#web/features/operation-recovery/operation-recovery.contract";
 import { RepositoryScopeProvider } from "#web/features/repository-scope/index";
-import { OperationRecoveryToast } from "#web-ui/features/operation-recovery/components/operation-recovery-toast";
+import type { EnvironmentChangeListener } from "#web/platform/environment/environment-protocol.contract";
+import { OperationRecoveryNotice } from "#web-ui/features/operation-recovery/components/operation-recovery-notice";
+import {
+  type OperationRecoveryState,
+  OperationRecoveryToast,
+} from "#web-ui/features/operation-recovery/components/operation-recovery-toast";
 import { WorkspacePanel } from "#web-ui/features/workspace-panel/index";
+import { EnvironmentProvider } from "#web-ui/platform/query/environment-context";
 
 function operation(
   patch: Partial<RepositoryOperation> = {},
@@ -194,61 +195,114 @@ describe("operation recovery toast", () => {
       .toBeVisible();
   });
 
-  it("rediscovers after reconnect and remount without repeating a mutation", async () => {
-    let current = operation({
-      phase: "ready",
-      unresolvedPaths: [],
-      actions: [{ action: "continue", enabled: true, reason: null }],
-    });
-    const read = vi.fn(() => current);
-    const execute = vi.fn(() => current);
-    const requests: EnvironmentRequestClient = (routes) =>
-      environmentHttpRoutesClient(routes, (route) =>
-        Effect.sync(() =>
-          route.path === RepositoryOperationsHttpApi.read.path
-            ? read()
-            : execute(),
-        ),
-      );
-    const { target } = repositoryScope({ repositoryId: "repo", requests });
-    const tree = (connected: boolean, key = "first") => (
-      <NotificationsProvider>
-        <RepositoryScopeProvider
-          scope={{ target, connected, readable: true, writable: true }}
-        >
-          <OperationRecovery.Provider key={key}>
-            <WorkspacePanel.Provider scopeKey="operation-test">
-              <OperationRecovery.Notice repositoryName="catalog-api" />
-            </WorkspacePanel.Provider>
-          </OperationRecovery.Provider>
-        </RepositoryScopeProvider>
-      </NotificationsProvider>
+  it("rediscovers after reconnect and repository changes without repeating a mutation", async () => {
+    const f = await liveFixture(
+      operation({
+        phase: "ready",
+        unresolvedPaths: [],
+        actions: [{ action: "continue", enabled: true, reason: null }],
+      }),
     );
-    const view = await render(tree(true));
     await expect
       .element(page.getByRole("button", { name: "Continue rebase" }))
       .toBeEnabled();
-    await view.rerender(tree(false));
+    await f.connect(false);
     await expect
       .element(page.getByRole("button", { name: "Continue rebase" }))
       .toBeDisabled();
-    current = operation({
-      kind: "idle",
-      phase: "idle",
-      actions: [],
-      unresolvedPaths: [],
-      revision: "finished",
-    });
-    await view.rerender(tree(true));
+    f.set(idle());
+    await f.connect(true);
     await expect
       .element(page.getByRole("region", { name: "Git operation" }))
       .not.toBeInTheDocument();
-    current = operation();
-    await view.rerender(tree(true, "restart"));
+    f.set(operation());
+    f.change("Refs");
     await expect
       .element(page.getByRole("button", { name: "Review conflicts" }))
       .toBeVisible();
-    expect(execute).not.toHaveBeenCalled();
-    expect(read.mock.calls.length).toBeGreaterThanOrEqual(3);
+    expect(f.execute).not.toHaveBeenCalled();
+  });
+
+  it("shows the executed result without waiting for another read", async () => {
+    const f = await liveFixture(
+      operation({
+        phase: "ready",
+        unresolvedPaths: [],
+        actions: [{ action: "continue", enabled: true, reason: null }],
+      }),
+    );
+    f.execute.mockImplementation(() => idle());
+    await page.getByRole("button", { name: "Continue rebase" }).click();
+    await expect
+      .element(page.getByRole("heading", { name: "Rebase completed" }))
+      .toBeVisible();
+    expect(f.execute).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({ action: "continue", revision: "one" }),
+    );
+    expect(f.read).toHaveBeenCalledOnce();
   });
 });
+
+function idle() {
+  return operation({
+    kind: "idle",
+    phase: "idle",
+    actions: [],
+    unresolvedPaths: [],
+    revision: "finished",
+  });
+}
+
+async function liveFixture(initial: RepositoryOperation) {
+  let current = initial;
+  const listeners = new Set<EnvironmentChangeListener>();
+  const read = vi.fn(() => current);
+  const execute = vi.fn<(command: unknown) => RepositoryOperation>(
+    () => current,
+  );
+  const requests = fakeRequests(
+    respond(RepositoryOperationsHttpApi.read, async () => read()),
+    respond(RepositoryOperationsHttpApi.execute, async (command) =>
+      execute(command),
+    ),
+  );
+  const changes = {
+    subscribe: (listener: EnvironmentChangeListener) => {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    },
+  };
+  const scope = repositoryScope({ repositoryId: "repo" });
+  const tree = (connected: boolean) => (
+    <EnvironmentProvider
+      environment={{
+        environmentId: "environment",
+        requests,
+        changes,
+        connected,
+        readable: true,
+        writable: true,
+      }}
+    >
+      <NotificationsProvider>
+        <RepositoryScopeProvider scope={{ ...scope, connected }}>
+          <WorkspacePanel.Provider scopeKey="operation-test">
+            <OperationRecoveryNotice repositoryName="catalog-api" />
+          </WorkspacePanel.Provider>
+        </RepositoryScopeProvider>
+      </NotificationsProvider>
+    </EnvironmentProvider>
+  );
+  const view = await render(tree(true));
+  return {
+    read,
+    execute,
+    set: (next: RepositoryOperation) => {
+      current = next;
+    },
+    connect: (connected: boolean) => view.rerender(tree(connected)),
+    change: (kind: RepositoryChangeKind) => {
+      for (const listener of listeners) listener(["repo"], kind);
+    },
+  };
+}

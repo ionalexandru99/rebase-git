@@ -2,7 +2,7 @@ import { IconArrowDown } from "@tabler/icons-react";
 import { useOperationCommandState } from "#web/features/operation-recovery/index";
 import { canFetch } from "#web/features/repository-fetch/can-fetch";
 import type { RepositoryHistorySnapshot } from "#web/features/repository-history/index";
-import { useRepositoryPulling } from "#web/features/repository-pull/index";
+import { usePulling } from "#web/features/repository-pull/index";
 import { useRepositoryScope } from "#web/features/repository-scope/index";
 import { Button } from "#web-ui/components/ui/button";
 
@@ -18,7 +18,7 @@ export function RepositoryFetchButton({
 }) {
   const scope = useRepositoryScope();
   const recoveryBusy = useOperationCommandState() === "busy";
-  const pulling = useRepositoryPulling();
+  const pulling = usePulling();
   const enabled = canFetch({
     connected: scope?.connected === true,
     writable: scope?.writable === true,

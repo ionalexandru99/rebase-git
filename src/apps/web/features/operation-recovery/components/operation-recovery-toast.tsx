@@ -1,14 +1,29 @@
-import type { OperationAction, OperationKind } from "@rebase/contracts";
+import type {
+  OperationAction,
+  OperationKind,
+  RepositoryOperation,
+} from "@rebase/contracts";
 import {
   IconChevronDown,
   IconChevronUp,
   IconCircleFilled,
 } from "@tabler/icons-react";
 import { useRef, useState } from "react";
-import type { OperationRecoveryState } from "#web/features/operation-recovery/operation-recovery.contract";
 import { Button } from "#web-ui/components/ui/button";
 import { OperationActionsMenu } from "#web-ui/features/operation-recovery/components/operation-actions-menu";
 import { OperationConfirmation } from "#web-ui/features/operation-recovery/components/operation-confirmation";
+
+export interface OperationRecoveryState {
+  readonly operation: RepositoryOperation | null;
+  readonly connected: boolean;
+  readonly checking: boolean;
+  readonly busy: boolean;
+  readonly error: string | null;
+  readonly completed: {
+    readonly kind: OperationKind;
+    readonly aborted: boolean;
+  } | null;
+}
 
 const labels: Record<OperationKind, string> = {
   idle: "Git operation",

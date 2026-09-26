@@ -13,7 +13,6 @@ import {
   EnvironmentResponseError,
   requestEnvironmentHttp,
 } from "@rebase/environment-client";
-import { Effect } from "effect";
 import { describe, expect, it } from "vite-plus/test";
 
 const credential = { type: "bearer", value: "credential" } as const;
@@ -48,20 +47,16 @@ describe("environment HTTP request", () => {
       },
       async (origin) => {
         await expect(
-          Effect.runPromise(
-            requestEnvironmentHttp(origin, RepositoryCatalogHttpApi.remember, {
-              command: { path: entry.path },
-              credential,
-            }),
-          ),
+          requestEnvironmentHttp(origin, RepositoryCatalogHttpApi.remember, {
+            command: { path: entry.path },
+            credential,
+          }),
         ).resolves.toEqual(entry);
         await expect(
-          Effect.runPromise(
-            requestEnvironmentHttp(origin, RepositoryCatalogHttpApi.list, {
-              command: undefined,
-              credential,
-            }),
-          ),
+          requestEnvironmentHttp(origin, RepositoryCatalogHttpApi.list, {
+            command: undefined,
+            credential,
+          }),
         ).resolves.toEqual({ repositories: [entry] });
       },
     );
@@ -92,12 +87,10 @@ describe("environment HTTP request", () => {
       },
       async (origin) => {
         await expect(
-          Effect.runPromise(
-            requestEnvironmentHttp(origin, RepositoryCatalogHttpApi.remember, {
-              command: { path: entry.path },
-              credential,
-            }),
-          ),
+          requestEnvironmentHttp(origin, RepositoryCatalogHttpApi.remember, {
+            command: { path: entry.path },
+            credential,
+          }),
         ).rejects.toEqual(new EnvironmentHttpRejected({ failure }));
       },
     );
@@ -110,12 +103,10 @@ describe("environment HTTP request", () => {
       },
       async (origin) => {
         await expect(
-          Effect.runPromise(
-            requestEnvironmentHttp(origin, RepositoryCatalogHttpApi.list, {
-              command: undefined,
-              credential,
-            }),
-          ),
+          requestEnvironmentHttp(origin, RepositoryCatalogHttpApi.list, {
+            command: undefined,
+            credential,
+          }),
         ).rejects.toEqual(
           new EnvironmentAccessDenied({
             failure: { _tag: "InvalidGrant" },
@@ -147,12 +138,10 @@ describe("environment HTTP request", () => {
       },
       async (origin) => {
         await expect(
-          Effect.runPromise(
-            requestEnvironmentHttp(origin, RepositoryCatalogHttpApi.list, {
-              command: undefined,
-              credential,
-            }),
-          ),
+          requestEnvironmentHttp(origin, RepositoryCatalogHttpApi.list, {
+            command: undefined,
+            credential,
+          }),
         ).rejects.toEqual(
           new EnvironmentResponseError({
             responseTag: RepositoryCatalogHttpApi.list.path,
@@ -182,12 +171,10 @@ describe("environment HTTP request", () => {
         },
         async (origin) => {
           await expect(
-            Effect.runPromise(
-              requestEnvironmentHttp(origin, RepositoryCatalogHttpApi.list, {
-                command: undefined,
-                credential,
-              }),
-            ),
+            requestEnvironmentHttp(origin, RepositoryCatalogHttpApi.list, {
+              command: undefined,
+              credential,
+            }),
           ).rejects.toEqual(
             new EnvironmentResponseError({
               responseTag: RepositoryCatalogHttpApi.list.path,
@@ -214,16 +201,14 @@ describe("environment HTTP request", () => {
         },
         async (origin) => {
           const controller = new AbortController();
-          const result = Effect.runPromiseExit(
-            requestEnvironmentHttp(origin, RepositoryCatalogHttpApi.list, {
-              command: undefined,
-              credential,
-            }),
-            { signal: controller.signal },
+          const result = requestEnvironmentHttp(
+            origin,
+            RepositoryCatalogHttpApi.list,
+            { command: undefined, credential, signal: controller.signal },
           );
           await received.promise;
           controller.abort();
-          expect((await result)._tag).toBe("Failure");
+          await expect(result).rejects.toBeInstanceOf(EnvironmentResponseError);
           await closed.promise;
         },
       );

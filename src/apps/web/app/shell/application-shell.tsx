@@ -10,6 +10,7 @@ import { environmentSessionPresentation } from "#web/app/shell/environment-sessi
 import { useOpenedRepository } from "#web/app/shell/hooks/use-opened-repository";
 import { useProjectRepositoryActions } from "#web/app/shell/hooks/use-project-repository-actions";
 import { useRepositoryRefsActions } from "#web/app/shell/hooks/use-repository-refs-actions";
+import { BranchManagement } from "#web/features/branch-management/index";
 import {
   type OpenProjectEnvironment,
   OpenProjectScreen,
@@ -24,10 +25,10 @@ import {
 } from "#web/features/project-navigation/index";
 import { RepositoryFolderPicker } from "#web/features/repository-folder-picker/index";
 import { useRepositoryHistoryReader } from "#web/features/repository-history/hooks/use-repository-history-reader";
+import { RepositoryScopeProvider } from "#web/features/repository-scope/index";
 import { RepositorySettingsPage } from "#web/features/repository-settings/index";
 import { SettingsPanel } from "#web/features/settings/index";
 import { useStore } from "#web/platform/store/use-store";
-import { RepositoryActions } from "#web-ui/app/shell/repository-actions";
 import { RepositoryWorkspace } from "#web-ui/app/workspace/repository-workspace";
 import {
   ResizableHandle,
@@ -35,6 +36,7 @@ import {
   ResizablePanelGroup,
 } from "#web-ui/components/ui/resizable";
 import { WorkspacePanel } from "#web-ui/features/workspace-panel/index";
+import { EnvironmentProvider } from "#web-ui/platform/query/environment-context";
 
 const localEnvironmentId = "local-environment";
 const projectSidebarSize = {
@@ -247,39 +249,50 @@ export function ApplicationShell({
       panelVisible,
     ],
   );
+  const environment = useMemo(
+    () => ({
+      environmentId: historyEnvironmentId,
+      requests: session.requests,
+      changes: session.changes,
+      connected,
+      readable: canRead,
+      writable: canWrite,
+    }),
+    [
+      historyEnvironmentId,
+      session.requests,
+      session.changes,
+      connected,
+      canRead,
+      canWrite,
+    ],
+  );
   const graphRepositoryId = graphRepository?.id;
-  const repositoryTarget = useMemo(
+  const graphLogicalRepositoryId = graphRepository?.logicalRepositoryId;
+  const repositoryScope = useMemo(
     () =>
-      graphRepositoryId === undefined || session.requests === undefined
+      graphRepositoryId === undefined
         ? undefined
         : {
             repositoryId: graphRepositoryId,
             worktreePath: activeWorktreePath,
-            requests: session.requests,
-            changes: session.changes,
+            ...(graphLogicalRepositoryId === undefined
+              ? {}
+              : { logicalRepositoryId: graphLogicalRepositoryId }),
             refs: session.repositoryRefs,
-            runtime: session.runtime,
-          },
-    [
-      graphRepositoryId,
-      activeWorktreePath,
-      session.requests,
-      session.changes,
-      session.repositoryRefs,
-      session.runtime,
-    ],
-  );
-  const repositoryScope = useMemo(
-    () =>
-      repositoryTarget === undefined
-        ? undefined
-        : {
-            target: repositoryTarget,
             connected,
             readable: canRead,
             writable: canWrite,
           },
-    [repositoryTarget, connected, canRead, canWrite],
+    [
+      graphRepositoryId,
+      graphLogicalRepositoryId,
+      activeWorktreePath,
+      session.repositoryRefs,
+      connected,
+      canRead,
+      canWrite,
+    ],
   );
   const panelRepositoryIds = useMemo(
     () =>
@@ -429,14 +442,18 @@ export function ApplicationShell({
     </div>
   );
   return (
-    <RepositoryActions scope={repositoryScope}>
-      <WorkspacePanel.Sessions
-        environment={panelEnvironment}
-        repositoryIds={panelRepositoryIds}
-      >
-        {content}
-      </WorkspacePanel.Sessions>
-    </RepositoryActions>
+    <EnvironmentProvider environment={environment}>
+      <RepositoryScopeProvider scope={repositoryScope}>
+        <BranchManagement.Provider>
+          <WorkspacePanel.Sessions
+            environment={panelEnvironment}
+            repositoryIds={panelRepositoryIds}
+          >
+            {content}
+          </WorkspacePanel.Sessions>
+        </BranchManagement.Provider>
+      </RepositoryScopeProvider>
+    </EnvironmentProvider>
   );
 }
 

@@ -1,19 +1,22 @@
-import type {
-  RepositoryFreshness,
-  RepositoryRefs,
-  RepositoryRefTarget,
-} from "@rebase/contracts";
 import {
-  type EnvironmentRequestClient,
-  environmentHttpRoutesClient,
-} from "@rebase/environment-client";
-import { Effect } from "effect";
+  type RepositoryFreshness,
+  RepositoryPullHttpApi,
+  type RepositoryRefs,
+  type RepositoryRefTarget,
+} from "@rebase/contracts";
+import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
 import { userEvent } from "vite-plus/test/browser";
-import { render } from "vitest-browser-react";
 import { repositoryScope } from "#tests-ui/apps/web/repository-scope/repository-scope-fixture";
+import {
+  fakeRequests,
+  idleOperation,
+  respond,
+} from "#tests-ui/runtime/fake-requests";
+import { render } from "#tests-ui/runtime/render";
 import { historyRefKey } from "#web/features/commit-graph/index";
-import { RepositoryPull } from "#web/features/repository-pull/index";
+import { RefCommands } from "#web/features/ref-commands/index";
+import { usePull } from "#web/features/repository-pull/index";
 import {
   RepositoryRefsBusy,
   type RepositoryRefsSnapshot,
@@ -213,11 +216,7 @@ describe("branches sidebar", () => {
     const callbacks = sidebarCallbacks();
     const screen = await render(
       <RepositoryScopeProvider scope={pulls.scope}>
-        <RepositoryPull.Provider
-          reader={pulls.reader}
-          activeBranch="main"
-          incoming={0}
-        >
+        <PullCommands reader={pulls.reader}>
           <div style={{ height: 480, width: 320 }}>
             <BranchesSidebar
               activeWorktreePath={mainPath}
@@ -227,8 +226,9 @@ describe("branches sidebar", () => {
               snapshot={snapshot({ refs: tracked, status: "ready" })}
             />
           </div>
-        </RepositoryPull.Provider>
+        </PullCommands>
       </RepositoryScopeProvider>,
+      { environment: { requests: pulls.requests } },
     );
     const tree = screen.getByRole("tree", { name: "Branches" });
 
@@ -397,16 +397,16 @@ describe("branches sidebar", () => {
 function pullRequests() {
   const pulled = vi.fn<(branch: string) => void>();
   let finish = () => {};
-  const requests: EnvironmentRequestClient = (routes) =>
-    environmentHttpRoutesClient(routes, (_route, command) => {
-      pulled((command as unknown as { readonly branch: string }).branch);
-      return Effect.promise(
-        () =>
-          new Promise<void>((resolve) => {
-            finish = resolve;
-          }),
-      ).pipe(Effect.as({ outcome: "FastForwarded" }));
-    });
+  const requests = fakeRequests(
+    idleOperation,
+    respond(RepositoryPullHttpApi.pull, async (command) => {
+      pulled(command.branch);
+      await new Promise<void>((resolve) => {
+        finish = resolve;
+      });
+      return { outcome: "FastForwarded" as const };
+    }),
+  );
   return {
     pulled,
     finish: () => finish(),
@@ -421,7 +421,8 @@ function pullRequests() {
       getSnapshot: () => readyHistory,
       subscribe: () => () => {},
     },
-    scope: repositoryScope({ repositoryId, worktreePath: mainPath, requests }),
+    requests,
+    scope: repositoryScope({ repositoryId, worktreePath: mainPath }),
   };
 }
 
@@ -513,4 +514,19 @@ function nestedRefs(): RepositoryRefs {
       { name: "bugfix/login" },
     ],
   };
+}
+
+function PullCommands({
+  reader,
+  children,
+}: {
+  readonly reader: Parameters<typeof usePull>[0];
+  readonly children: ReactNode;
+}) {
+  const pull = usePull(reader);
+  return (
+    <RefCommands.Contribute commands={pull.commands}>
+      {children}
+    </RefCommands.Contribute>
+  );
 }

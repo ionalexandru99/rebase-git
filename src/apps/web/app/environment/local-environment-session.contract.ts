@@ -55,7 +55,7 @@ export interface LocalEnvironmentSession
   extends LocalEnvironmentControllers,
     ReadableStore<LocalEnvironmentSessionState> {
   readonly changes: EnvironmentChanges;
-  readonly requests?: EnvironmentRequestClient;
+  readonly requests: EnvironmentRequestClient;
   readonly runtime: ManagedRuntime.ManagedRuntime<never, never>;
   readonly start: () => void;
   readonly stop: () => void;
@@ -80,7 +80,7 @@ export interface LocalEnvironmentSessionOptions {
   readonly controllers: LocalEnvironmentControllers;
   readonly features: readonly ConnectedFeature[];
   readonly gateway: LocalEnvironmentGateway;
-  readonly requests?: EnvironmentRequestClient;
+  readonly requests: EnvironmentRequestClient;
   readonly runtime: ManagedRuntime.ManagedRuntime<never, never>;
   readonly waitBeforeReconnect?: (attempt: number) => Effect.Effect<void>;
 }

@@ -3,8 +3,8 @@ import type {
   EnvironmentDirectoryRejected,
   EnvironmentFilesystemHttpApi,
 } from "@rebase/contracts";
-import type { EnvironmentHttpRoutesClient } from "@rebase/environment-client";
 import { Data } from "effect";
+import type { EffectRoutesClient } from "#web/platform/environment/effect-routes-client";
 
 export class EnvironmentFilesystemResponseError extends Data.TaggedError(
   "EnvironmentFilesystemResponseError",
@@ -20,7 +20,7 @@ export type EnvironmentFilesystemClientError =
   | EnvironmentFilesystemRejected
   | EnvironmentFilesystemResponseError;
 
-export type EnvironmentFilesystemClient = EnvironmentHttpRoutesClient<
+export type EnvironmentFilesystemClient = EffectRoutesClient<
   typeof EnvironmentFilesystemHttpApi,
   EnvironmentFilesystemClientError
 >;

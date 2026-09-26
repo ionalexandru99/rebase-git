@@ -1,18 +1,27 @@
-import {
-  RepositoryPullDisconnected,
-  RepositoryPullRejected,
-} from "#web/features/repository-pull/repository-pull.contract";
+import type { RepositoryPullHttpApi, RouteFailure } from "@rebase/contracts";
+import type { CommandFailure } from "#web/platform/query/use-command";
 
-export function describeRepositoryPullError(branch: string, error: unknown) {
-  if (error instanceof RepositoryPullRejected)
-    return describePullFailure(branch, error.failure);
-  if (error instanceof RepositoryPullDisconnected) return "You're offline";
-  return "Pull failed";
+export function describePullFailure(
+  branch: string,
+  error: CommandFailure<typeof RepositoryPullHttpApi.pull>,
+) {
+  switch (error._tag) {
+    case "EnvironmentResponseError":
+      return "You're offline";
+    case "EnvironmentAccessDenied":
+      return error.failure._tag === "CapabilityDenied"
+        ? "No write access"
+        : "Pull failed";
+    case "EnvironmentHttpRejected":
+      return describePullRejection(branch, error.failure);
+    case "Cancelled":
+      return "Pull failed";
+  }
 }
 
-function describePullFailure(
+function describePullRejection(
   branch: string,
-  failure: RepositoryPullRejected["failure"],
+  failure: RouteFailure<typeof RepositoryPullHttpApi.pull>,
 ) {
   switch (failure._tag) {
     case "PullDiverged":
@@ -35,9 +44,5 @@ function describePullFailure(
       return failure.reason === "Missing"
         ? "Repository unavailable"
         : failure.detail;
-    case "CapabilityDenied":
-      return "No write access";
-    default:
-      return "Pull failed";
   }
 }

@@ -4,39 +4,37 @@ import {
   ErrorNotification,
   PersistentNotification,
 } from "#web/features/notifications/index";
-import type { ForcePushReview } from "#web/features/repository-push/repository-push.contract";
+import type {
+  ForcePushReview,
+  Push,
+} from "#web/features/repository-push/hooks/use-push";
 import { destinationName } from "#web/features/repository-push/resolve-push-target";
 import { Button } from "#web-ui/components/ui/button";
-import { useRepositoryPush } from "#web-ui/features/repository-push/repository-push-provider";
 
-export function PushNotice() {
-  const push = useRepositoryPush();
-  if (push === null) return null;
-  const { controller, state } = push;
-  if (state.running !== null)
+export function PushNotice({ push }: { readonly push: Push }) {
+  if (push.running !== null)
     return (
       <PushToast
         label="Push progress"
-        title={state.running.message}
-        onEscape={controller.cancel}
+        title={push.running}
+        onEscape={push.cancel}
         actions={
-          <Button size="xs" variant="ghost" onClick={controller.cancel}>
+          <Button size="xs" variant="ghost" onClick={push.cancel}>
             Cancel
           </Button>
         }
       />
     );
-  if (state.review !== null)
+  if (push.review !== null)
     return (
       <ForcePushToast
-        review={state.review}
-        disabled={!state.connected}
-        cancel={controller.cancel}
-        confirm={controller.confirm}
+        review={push.review}
+        disabled={!push.connected}
+        cancel={push.cancel}
+        confirm={push.confirm}
       />
     );
-  if (state.notice !== null)
-    return <ErrorNotification message={state.notice} />;
+  if (push.notice !== null) return <ErrorNotification message={push.notice} />;
   return null;
 }
 

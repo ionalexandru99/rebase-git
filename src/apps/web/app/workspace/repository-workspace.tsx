@@ -9,12 +9,10 @@ import {
   automaticHistoryScope,
   CommitGraph,
 } from "#web/features/commit-graph/index";
-import { OperationRecovery } from "#web/features/operation-recovery/index";
-import { RepositoryPull } from "#web/features/repository-pull/index";
-import {
-  RepositoryPush,
-  resolvePushTarget,
-} from "#web/features/repository-push/index";
+import { RefCommands } from "#web/features/ref-commands/index";
+import { usePull } from "#web/features/repository-pull/index";
+import { usePush } from "#web/features/repository-push/hooks/use-push";
+import { resolvePushTarget } from "#web/features/repository-push/resolve-push-target";
 import type { RepositoryRefsSnapshot } from "#web/features/repository-refs/repository-refs-controller.contract";
 import { useCachedRepositoryRefs } from "#web/features/repository-refs/use-cached-repository-refs";
 import { useRepositoryScope } from "#web/features/repository-scope/index";
@@ -23,6 +21,11 @@ import {
   ResizableHandle,
   ResizablePanel,
 } from "#web-ui/components/ui/resizable";
+import { OperationRecoveryNotice } from "#web-ui/features/operation-recovery/components/operation-recovery-notice";
+import { PullButton } from "#web-ui/features/repository-pull/components/pull-button";
+import { PullNotice } from "#web-ui/features/repository-pull/components/pull-notice";
+import { PushButton } from "#web-ui/features/repository-push/components/push-button";
+import { PushNotice } from "#web-ui/features/repository-push/components/push-notice";
 import { WorkspacePanel } from "#web-ui/features/workspace-panel/index";
 
 const branchesSidebarSize = {
@@ -111,6 +114,8 @@ function RepositoryWorkspaceContent({
     refsRestored,
   });
   const resolvedScope = historyScope.resolvedScope;
+  const push = usePush();
+  const pull = usePull(history?.reader);
 
   return (
     <WorkspacePanel.Provider
@@ -121,14 +126,10 @@ function RepositoryWorkspaceContent({
         activeWorktreePath,
       ])}
     >
-      <RepositoryPull.Provider
-        reader={history?.reader}
-        activeBranch={activeBranch}
-        incoming={incoming}
-      >
-        <OperationRecovery.Notice repositoryName={repositoryName} />
-        <RepositoryPull.Notice />
-        <RepositoryPush.Notice />
+      <RefCommands.Contribute commands={pull.commands}>
+        <OperationRecoveryNotice repositoryName={repositoryName} />
+        <PullNotice pull={pull} />
+        <PushNotice push={push} />
         <CommitInspectionBridge connected={connected}>
           {(inspection) => (
             <WorkspacePanel.Group>
@@ -167,8 +168,12 @@ function RepositoryWorkspaceContent({
                       onActiveCommitChange={inspection.select}
                       toolbarActions={
                         <>
-                          <RepositoryPull.Button />
-                          <RepositoryPush.Button target={pushTarget} />
+                          <PullButton
+                            pull={pull}
+                            activeBranch={activeBranch}
+                            incoming={incoming}
+                          />
+                          <PushButton push={push} target={pushTarget} />
                           <WorkspacePanel.Toggle />
                         </>
                       }
@@ -202,7 +207,7 @@ function RepositoryWorkspaceContent({
             </WorkspacePanel.Group>
           )}
         </CommitInspectionBridge>
-      </RepositoryPull.Provider>
+      </RefCommands.Contribute>
     </WorkspacePanel.Provider>
   );
 }

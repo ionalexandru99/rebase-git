@@ -4,8 +4,8 @@ import type {
   RepositoryRefsHttpApi,
   RepositoryRejected,
 } from "@rebase/contracts";
-import type { EnvironmentHttpRoutesClient } from "@rebase/environment-client";
 import { Data } from "effect";
+import type { EffectRoutesClient } from "#web/platform/environment/effect-routes-client";
 
 export class RepositoryRefsResponseError extends Data.TaggedError(
   "RepositoryRefsResponseError",
@@ -24,7 +24,7 @@ export type RepositoryRefsClientError =
   | RepositoryRefsRejected
   | RepositoryRefsResponseError;
 
-export type RepositoryRefsClient = EnvironmentHttpRoutesClient<
+export type RepositoryRefsClient = EffectRoutesClient<
   typeof RepositoryRefsHttpApi,
   RepositoryRefsClientError
 >;

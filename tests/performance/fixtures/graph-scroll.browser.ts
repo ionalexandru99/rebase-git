@@ -2,6 +2,7 @@ import type {
   RepositoryCommit,
   RepositoryHistoryRefTarget,
 } from "@rebase/contracts";
+import { QueryClientProvider } from "@tanstack/react-query";
 import { Layer, ManagedRuntime } from "effect";
 import { createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -10,7 +11,23 @@ import {
   openCommitGraphHistory,
 } from "#web/features/commit-graph/index";
 import type { RepositoryHistoryReader } from "#web/features/repository-history/repository-history-reader.contract";
+import { createEnvironmentQueryClient } from "#web/platform/query/environment-query-client";
 import { ApplicationRuntime } from "#web-ui/platform/effect/application-runtime-context";
+import {
+  type Environment,
+  EnvironmentProvider,
+} from "#web-ui/platform/query/environment-context";
+
+const offlineEnvironment: Environment = {
+  environmentId: undefined,
+  requests: async () => {
+    throw new Error("Performance fixtures do not reach an environment.");
+  },
+  changes: { subscribe: () => () => {} },
+  connected: false,
+  readable: false,
+  writable: false,
+};
 
 let root: Root | undefined;
 const runtime = ManagedRuntime.make(Layer.empty);
@@ -103,14 +120,22 @@ export function mountGraph(laneCount: number) {
   root = createRoot(container);
   root.render(
     createElement(
-      ApplicationRuntime,
-      { value: runtime },
-      createElement(CommitGraph, {
-        history: openCommitGraphHistory(reader),
-        roots,
-        repositoryName: "100,000 commits",
-        scope: { _tag: "Automatic" },
-      }),
+      QueryClientProvider,
+      { client: createEnvironmentQueryClient() },
+      createElement(
+        ApplicationRuntime,
+        { value: runtime },
+        createElement(
+          EnvironmentProvider,
+          { environment: offlineEnvironment },
+          createElement(CommitGraph, {
+            history: openCommitGraphHistory(reader),
+            roots,
+            repositoryName: "100,000 commits",
+            scope: { _tag: "Automatic" },
+          }),
+        ),
+      ),
     ),
   );
 }

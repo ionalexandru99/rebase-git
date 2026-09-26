@@ -11,8 +11,8 @@ import type {
   RouteFailure,
   SetRepositoryBranchUpstream,
 } from "@rebase/contracts";
-import type { EnvironmentHttpRoutesClient } from "@rebase/environment-client";
 import { Data } from "effect";
+import type { EffectRoutesClient } from "#web/platform/environment/effect-routes-client";
 
 export class RepositoryBranchesResponseError extends Data.TaggedError(
   "RepositoryBranchesResponseError",
@@ -32,7 +32,7 @@ export type BranchManagementError =
   | RepositoryBranchesRejected
   | RepositoryBranchesResponseError;
 
-export type RepositoryBranchesClient = EnvironmentHttpRoutesClient<
+export type RepositoryBranchesClient = EffectRoutesClient<
   typeof RepositoryBranchesHttpApi,
   BranchManagementError
 >;
