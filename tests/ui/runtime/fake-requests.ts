@@ -10,12 +10,15 @@ import type {
   RequestableEnvironmentHttpRoute,
 } from "@rebase/environment-client";
 
-export interface FakeRoute {
-  readonly path: string;
-  readonly respond: (
-    input: unknown,
+export interface FakeRoute<
+  Route extends
+    RequestableEnvironmentHttpRoute = RequestableEnvironmentHttpRoute,
+> {
+  readonly route: Route;
+  respond(
+    input: RouteInput<Route>,
     options: EnvironmentRequestOptions,
-  ) => unknown;
+  ): RouteSuccess<Route> | Promise<RouteSuccess<Route>>;
 }
 
 export function respond<Route extends RequestableEnvironmentHttpRoute>(
@@ -24,11 +27,8 @@ export function respond<Route extends RequestableEnvironmentHttpRoute>(
     input: RouteInput<Route>,
     options: EnvironmentRequestOptions,
   ) => RouteSuccess<Route> | Promise<RouteSuccess<Route>>,
-): FakeRoute {
-  return {
-    path: route.path,
-    respond: (input, options) => handler(input as RouteInput<Route>, options),
-  };
+): FakeRoute<Route> {
+  return { route, respond: handler };
 }
 
 export function fakeRequests(
@@ -39,11 +39,18 @@ export function fakeRequests(
     input: RouteInput<Route>,
     options: EnvironmentRequestOptions = {},
   ) => {
-    const fake = routes.find((candidate) => candidate.path === route.path);
+    const fake = routes.find((candidate) => handles(candidate, route));
     if (fake === undefined)
       throw new Error(`Unexpected request to ${route.path}`);
-    return (await fake.respond(input, options)) as RouteSuccess<Route>;
+    return fake.respond(input, options);
   };
+}
+
+function handles<Route extends RequestableEnvironmentHttpRoute>(
+  fake: FakeRoute,
+  route: Route,
+): fake is FakeRoute<Route> {
+  return fake.route === route;
 }
 
 export const idleOperation = respond(

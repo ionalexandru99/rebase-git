@@ -29,12 +29,12 @@ export function createEnvironmentRequestClient(
 
 export function environmentRouteFailure<
   Route extends RequestableEnvironmentHttpRoute,
->(route: Route, error: unknown): EnvironmentRouteFailure<Route> {
+>(_route: Route, error: unknown): EnvironmentRouteFailure<Route> {
   if (
     error instanceof EnvironmentHttpRejected ||
     error instanceof EnvironmentAccessDenied ||
     error instanceof EnvironmentResponseError
   )
     return error;
-  return environmentResponseError(route.path);
+  throw error;
 }

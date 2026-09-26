@@ -14,20 +14,18 @@ import { useEnvironment } from "#web-ui/platform/query/environment-context";
 const operationRefreshMilliseconds = 10_000;
 
 export function useOperation(scope: OperationScope | undefined) {
-  const { readable } = useEnvironment();
   return useEnvironmentQuery(
     RepositoryOperationsHttpApi.read,
     scope === undefined ? skipToken : operationScope(scope),
     {
-      enabled: readable,
-      changes: "refs",
+      changes: "index",
       refetchOnWindowFocus: "always",
       refetchInterval: operationRefreshMilliseconds,
     },
   );
 }
 
-export function useOperationAction() {
+export function useOperationAction(scope: OperationScope | undefined) {
   const queryClient = useQueryClient();
   const { environmentId } = useEnvironment();
   const operationKey = (scope: OperationScope) =>
@@ -38,6 +36,7 @@ export function useOperationAction() {
       operationScope(scope),
     );
   return useCommand(RepositoryOperationsHttpApi.execute, {
+    repository: scope,
     onSuccess: async (operation: RepositoryOperation, command) => {
       const queryKey = operationKey(command);
       await queryClient.cancelQueries({ queryKey });

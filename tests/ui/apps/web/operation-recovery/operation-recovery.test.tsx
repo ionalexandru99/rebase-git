@@ -3,6 +3,7 @@ import {
   type RepositoryOperation,
   RepositoryOperationsHttpApi,
 } from "@rebase/contracts";
+import { EnvironmentHttpRejected } from "@rebase/environment-client";
 import { describe, expect, it, vi } from "vite-plus/test";
 import { page, userEvent } from "vite-plus/test/browser";
 import { repositoryScope } from "#tests-ui/apps/web/repository-scope/repository-scope-fixture";
@@ -196,13 +197,7 @@ describe("operation recovery toast", () => {
   });
 
   it("rediscovers after reconnect and repository changes without repeating a mutation", async () => {
-    const f = await liveFixture(
-      operation({
-        phase: "ready",
-        unresolvedPaths: [],
-        actions: [{ action: "continue", enabled: true, reason: null }],
-      }),
-    );
+    const f = await liveFixture(readyToContinue());
     await expect
       .element(page.getByRole("button", { name: "Continue rebase" }))
       .toBeEnabled();
@@ -210,8 +205,16 @@ describe("operation recovery toast", () => {
     await expect
       .element(page.getByRole("button", { name: "Continue rebase" }))
       .toBeDisabled();
-    f.set(idle());
+    const release = f.hold();
     await f.connect(true);
+    await expect
+      .element(page.getByRole("heading", { name: "Checking Git state…" }))
+      .toBeVisible();
+    await expect
+      .element(page.getByRole("button", { name: "Continue rebase" }))
+      .toBeDisabled();
+    f.set(idle());
+    release();
     await expect
       .element(page.getByRole("region", { name: "Git operation" }))
       .not.toBeInTheDocument();
@@ -220,17 +223,50 @@ describe("operation recovery toast", () => {
     await expect
       .element(page.getByRole("button", { name: "Review conflicts" }))
       .toBeVisible();
+    f.set(operation({ revision: "two", unresolvedPaths: ["a.txt", "b.txt"] }));
+    f.change("Index");
+    await expect
+      .element(
+        page.getByRole("heading", { name: "Rebase · 2 conflicts · 3/8" }),
+      )
+      .toBeVisible();
     expect(f.execute).not.toHaveBeenCalled();
   });
 
+  it("keeps a failed action visible when the next read finds the operation finished", async () => {
+    const f = await liveFixture(readyToContinue());
+    f.execute.mockImplementation(() => {
+      f.set(idle());
+      throw new EnvironmentHttpRejected({
+        failure: {
+          _tag: "OperationFailed",
+          reason: "Uncertain",
+          detail: "Git stopped responding.",
+        },
+      });
+    });
+    await page.getByRole("button", { name: "Continue rebase" }).click();
+    await expect
+      .element(page.getByRole("alert"))
+      .toHaveTextContent("Git stopped responding.");
+    const reads = f.read.mock.calls.length;
+    f.change("Refs");
+    await expect.poll(() => f.read.mock.calls.length).toBeGreaterThan(reads);
+    await expect
+      .element(page.getByRole("alert"))
+      .toHaveTextContent("Git stopped responding.");
+    await expect
+      .element(page.getByRole("heading", { name: "Rebase completed" }))
+      .not.toBeInTheDocument();
+    await page.getByRole("button", { name: "Check again" }).click();
+    await expect
+      .element(page.getByRole("region", { name: "Git operation" }))
+      .not.toBeInTheDocument();
+    expect(f.execute).toHaveBeenCalledOnce();
+  });
+
   it("shows the executed result without waiting for another read", async () => {
-    const f = await liveFixture(
-      operation({
-        phase: "ready",
-        unresolvedPaths: [],
-        actions: [{ action: "continue", enabled: true, reason: null }],
-      }),
-    );
+    const f = await liveFixture(readyToContinue());
     f.execute.mockImplementation(() => idle());
     await page.getByRole("button", { name: "Continue rebase" }).click();
     await expect
@@ -242,6 +278,14 @@ describe("operation recovery toast", () => {
     expect(f.read).toHaveBeenCalledOnce();
   });
 });
+
+function readyToContinue() {
+  return operation({
+    phase: "ready",
+    unresolvedPaths: [],
+    actions: [{ action: "continue", enabled: true, reason: null }],
+  });
+}
 
 function idle() {
   return operation({
@@ -255,8 +299,12 @@ function idle() {
 
 async function liveFixture(initial: RepositoryOperation) {
   let current = initial;
+  let gate = Promise.resolve();
   const listeners = new Set<EnvironmentChangeListener>();
-  const read = vi.fn(() => current);
+  const read = vi.fn(async () => {
+    await gate;
+    return current;
+  });
   const execute = vi.fn<(command: unknown) => RepositoryOperation>(
     () => current,
   );
@@ -299,6 +347,11 @@ async function liveFixture(initial: RepositoryOperation) {
     execute,
     set: (next: RepositoryOperation) => {
       current = next;
+    },
+    hold: () => {
+      const released = Promise.withResolvers<void>();
+      gate = released.promise;
+      return () => released.resolve();
     },
     connect: (connected: boolean) => view.rerender(tree(connected)),
     change: (kind: RepositoryChangeKind) => {

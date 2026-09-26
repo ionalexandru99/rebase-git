@@ -17,6 +17,11 @@ export type CommandFailure<Route extends RequestableEnvironmentHttpRoute> =
   | EnvironmentRouteFailure<Route>
   | CommandCancelled;
 
+export interface CommandScope {
+  readonly repositoryId: string;
+  readonly worktreePath?: string;
+}
+
 export type CommandOptions<Route extends RequestableEnvironmentHttpRoute> =
   Omit<
     UseMutationOptions<
@@ -25,15 +30,23 @@ export type CommandOptions<Route extends RequestableEnvironmentHttpRoute> =
       RouteInput<Route>
     >,
     "mutationFn" | "mutationKey"
-  >;
+  > & { readonly repository?: CommandScope | undefined };
 
-export function commandKey(route: RequestableEnvironmentHttpRoute) {
-  return ["command", route.path] as const;
+export function commandKey(
+  route: RequestableEnvironmentHttpRoute,
+  scope?: CommandScope,
+) {
+  return [
+    "command",
+    route.path,
+    ...(scope === undefined ? [] : [scope.repositoryId]),
+    ...(scope?.worktreePath === undefined ? [] : [scope.worktreePath]),
+  ];
 }
 
 export function useCommand<Route extends RequestableEnvironmentHttpRoute>(
   route: Route,
-  options: CommandOptions<Route> = {},
+  { repository, ...options }: CommandOptions<Route> = {},
 ) {
   const { requests } = useEnvironment();
   const running = useRef<AbortController | undefined>(undefined);
@@ -43,7 +56,7 @@ export function useCommand<Route extends RequestableEnvironmentHttpRoute>(
     RouteInput<Route>
   >({
     ...options,
-    mutationKey: commandKey(route),
+    mutationKey: commandKey(route, repository),
     mutationFn: (input) => runCommand(requests, route, input, running),
   });
   const cancel = useCallback(() => running.current?.abort(), []);

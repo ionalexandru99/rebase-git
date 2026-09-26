@@ -10,7 +10,7 @@ import {
   CommitGraph,
 } from "#web/features/commit-graph/index";
 import { RefCommands } from "#web/features/ref-commands/index";
-import { usePull } from "#web/features/repository-pull/index";
+import { usePull } from "#web/features/repository-pull/hooks/use-pull";
 import { usePush } from "#web/features/repository-push/hooks/use-push";
 import { resolvePushTarget } from "#web/features/repository-push/resolve-push-target";
 import type { RepositoryRefsSnapshot } from "#web/features/repository-refs/repository-refs-controller.contract";

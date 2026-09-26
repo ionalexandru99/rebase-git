@@ -126,6 +126,18 @@ describe("repository push", () => {
     );
   });
 
+  it("pushes while the browser reports that it is offline", async () => {
+    const f = await fixture({ branch: "spike", remotes: ["origin"] });
+    window.dispatchEvent(new Event("offline"));
+    try {
+      await page.getByRole("button", { name: "Push spike" }).click();
+
+      await expect.poll(() => f.pushed.mock.calls.length).toBe(1);
+    } finally {
+      window.dispatchEvent(new Event("online"));
+    }
+  });
+
   it("reports a cancelled push as cancelled instead of pushed", async () => {
     await fixture(
       { branch: "spike", remotes: ["origin"] },

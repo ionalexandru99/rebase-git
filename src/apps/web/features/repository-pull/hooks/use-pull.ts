@@ -1,5 +1,6 @@
-import { type PullBranch, RepositoryPullHttpApi } from "@rebase/contracts";
-import { useCallback, useMemo, useRef, useState } from "react";
+import { RepositoryPullHttpApi } from "@rebase/contracts";
+import { useMutation } from "@tanstack/react-query";
+import { useCallback, useMemo } from "react";
 import type {
   RepositoryHistoryFetchCommands,
   RepositoryHistoryObservation,
@@ -8,18 +9,12 @@ import type {
 import { createPullBranchCommand } from "#web/features/repository-pull/pull-branch-command";
 import { describePullFailure } from "#web/features/repository-pull/repository-pull-messages";
 import { useRepositoryScope } from "#web/features/repository-scope/index";
-import { useCommand } from "#web/platform/query/use-command";
+import { commandKey, useCommand } from "#web/platform/query/use-command";
 import { createStore } from "#web/platform/store/store";
 import { useStore } from "#web/platform/store/use-store";
 
 type PullReader = Pick<RepositoryHistoryFetchCommands, "fetch"> &
   RepositoryHistoryObservation;
-
-interface PullAttempt {
-  readonly id: number;
-  readonly fetching: boolean;
-  readonly fetchFailed: boolean;
-}
 
 const idleHistory = createStore<RepositoryHistorySnapshot>({
   revision: 0,
@@ -29,14 +24,17 @@ const idleHistory = createStore<RepositoryHistorySnapshot>({
 
 export function usePull(reader: PullReader | undefined) {
   const scope = useRepositoryScope();
-  const command = useCommand(RepositoryPullHttpApi.pull);
-  const [attempt, setAttempt] = useState<PullAttempt>();
-  const running = useRef(false);
-  const attempts = useRef(0);
+  const fetchFirst = useMutation({
+    mutationKey: commandKey(RepositoryPullHttpApi.pull, scope),
+    mutationFn: (fetcher: PullReader) => fetcher.fetch(),
+  });
+  const command = useCommand(RepositoryPullHttpApi.pull, { repository: scope });
   const freshnessReady = useStore(reader ?? idleHistory, isFreshnessReady);
+  const pulling = fetchFirst.isPending || command.isPending;
   const repositoryId = scope?.repositoryId;
   const worktreePath = scope?.worktreePath;
-  const { mutate, reset } = command;
+  const { mutate: fetchBeforePull } = fetchFirst;
+  const { mutate: pullBranch, reset } = command;
 
   const pull = useCallback(
     (branch: string) => {
@@ -44,60 +42,51 @@ export function usePull(reader: PullReader | undefined) {
         repositoryId === undefined ||
         worktreePath === undefined ||
         reader === undefined ||
-        running.current
+        pulling
       )
         return;
-      running.current = true;
-      const id = ++attempts.current;
-      const settle = (fetchFailed: boolean) => {
-        running.current = false;
-        setAttempt({ id, fetching: false, fetchFailed });
-      };
       reset();
-      setAttempt({ id, fetching: true, fetchFailed: false });
-      void reader.fetch().then(
-        (freshness) => {
-          if (freshness.failure !== undefined) return settle(false);
-          setAttempt({ id, fetching: false, fetchFailed: false });
-          const request: PullBranch = { repositoryId, worktreePath, branch };
-          mutate(request, {
-            onSettled: () => {
-              running.current = false;
-            },
-          });
+      fetchBeforePull(reader, {
+        onSuccess: (freshness) => {
+          if (freshness.failure === undefined)
+            pullBranch({ repositoryId, worktreePath, branch });
         },
-        () => settle(true),
-      );
+      });
     },
-    [repositoryId, worktreePath, reader, mutate, reset],
+    [
+      repositoryId,
+      worktreePath,
+      reader,
+      pulling,
+      reset,
+      fetchBeforePull,
+      pullBranch,
+    ],
   );
 
-  const pulling = attempt?.fetching === true || command.isPending;
   const allowed =
     scope?.connected === true && scope.writable && reader !== undefined;
   const commands = useMemo(
     () => (allowed ? [createPullBranchCommand(pull, pulling)] : []),
     [allowed, pull, pulling],
   );
-  const failedBranch = command.isError ? command.variables?.branch : undefined;
-  const error =
-    attempt === undefined
-      ? undefined
-      : attempt.fetchFailed
-        ? { id: attempt.id, message: "Pull failed" }
-        : failedBranch !== undefined && command.error !== null
-          ? {
-              id: attempt.id,
-              message: describePullFailure(failedBranch, command.error),
-            }
-          : undefined;
 
   return {
     available: scope !== undefined && reader !== undefined,
     pull,
     pulling,
     freshnessReady,
-    error,
+    error: fetchFirst.isError
+      ? { id: fetchFirst.submittedAt, message: "Pull failed" }
+      : command.error !== null && command.variables !== undefined
+        ? {
+            id: command.submittedAt,
+            message: describePullFailure(
+              command.variables.branch,
+              command.error,
+            ),
+          }
+        : undefined,
     commands,
   };
 }

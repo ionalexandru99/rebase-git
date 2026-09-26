@@ -77,7 +77,8 @@ describe("repository pull", () => {
   it("pulls the active branch from the graph toolbar and holds fetch until it finishes", async () => {
     const reader = historyReader({ commits: graphHistory(2), status: "ready" });
     reader.snapshot = { ...reader.snapshot, freshness };
-    reader.fetch.mockResolvedValue(freshness);
+    const fetched = Promise.withResolvers<RepositoryFreshness>();
+    reader.fetch.mockReturnValue(fetched.promise);
     const pulled = vi.fn<(command: unknown) => void>();
     const finished = Promise.withResolvers<void>();
     const requests = fakeRequests(
@@ -97,6 +98,10 @@ describe("repository pull", () => {
       { environment: { requests } },
     );
     await page.getByRole("button", { name: "Pull 3 incoming commits" }).click();
+    await expect
+      .element(page.getByRole("button", { name: "Fetch", exact: true }))
+      .toBeDisabled();
+    fetched.resolve(freshness);
     await vi.waitFor(() =>
       expect(pulled).toHaveBeenCalledWith({
         repositoryId,

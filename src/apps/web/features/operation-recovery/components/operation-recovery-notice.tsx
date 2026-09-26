@@ -24,7 +24,7 @@ export function OperationRecoveryNotice({
 }) {
   const scope = useRepositoryScope();
   const status = useOperationStatus(scope);
-  const action = useOperationAction();
+  const action = useOperationAction(scope);
   const panel = useWorkspacePanel();
   const [completed, setCompleted] = useState<CompletedOperation | null>(null);
   if (scope === undefined) return null;

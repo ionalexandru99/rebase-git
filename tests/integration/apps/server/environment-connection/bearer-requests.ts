@@ -1,6 +1,7 @@
 import type { RouteInput } from "@rebase/contracts";
 import {
   createEnvironmentRequestClient,
+  environmentRouteFailure,
   type RequestableEnvironmentHttpRoute,
 } from "@rebase/environment-client";
 import { Effect } from "effect";
@@ -16,6 +17,6 @@ export function bearerRequests(origin: string, token: string) {
   ) =>
     Effect.tryPromise({
       try: () => requests(route, input),
-      catch: (error) => error,
+      catch: (error) => environmentRouteFailure(route, error),
     });
 }

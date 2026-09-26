@@ -3,7 +3,7 @@ import {
   type PushDestination,
   RepositoryPushHttpApi,
 } from "@rebase/contracts";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   describePushFailure,
   describePushProgress,
@@ -26,8 +26,18 @@ type PushRequest = Omit<PushBranch, "repositoryId" | "worktreePath">;
 
 export function usePush() {
   const scope = useRepositoryScope();
-  const command = useCommand(RepositoryPushHttpApi.push);
+  const command = useCommand(RepositoryPushHttpApi.push, { repository: scope });
   const [review, setReview] = useState<ForcePushReview | null>(null);
+  const worktreePath = scope?.worktreePath;
+  const { cancel, reset } = command;
+  useEffect(() => {
+    if (worktreePath === undefined) return;
+    return () => {
+      cancel();
+      reset();
+      setReview(null);
+    };
+  }, [worktreePath, cancel, reset]);
   const connected = scope?.connected ?? false;
   const running =
     command.isPending && command.variables !== undefined
