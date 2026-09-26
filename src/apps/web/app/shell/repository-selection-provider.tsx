@@ -34,7 +34,9 @@ export function RepositorySelectionProvider({
   const selected = useCatalogRepository(selectedRepositoryId);
   const repository = workspaceView === "repository" ? selected : undefined;
   const preferredWorktreePath =
-    selected === undefined ? "" : worktreePathFor(navigation, selected);
+    selected === undefined
+      ? ""
+      : worktreePathFor(navigation.worktreePaths, selected);
   const refs = useLiveRefs(selected);
   const worktreePath =
     refs === undefined

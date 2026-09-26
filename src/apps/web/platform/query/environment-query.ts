@@ -26,6 +26,7 @@ export interface EnvironmentQueryOptions<Data> {
   readonly select?: (data: Data) => Data;
   readonly refetchInterval?: number;
   readonly refetchOnWindowFocus?: boolean | "always";
+  readonly refetchOnMount?: boolean;
   readonly keepPrevious?: boolean;
 }
 

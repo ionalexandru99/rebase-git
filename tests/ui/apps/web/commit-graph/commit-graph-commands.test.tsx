@@ -163,7 +163,7 @@ function ScopedGraph({
     <div style={{ height: 520, width: 900 }}>
       <RepositoryScopeProvider scope={scope}>
         <CommitGraphFixture
-          commands={commands}
+          extraCommands={commands}
           reader={reader}
           repositoryName="rebase-test"
           roots={[{ name: "main", oid: "0".repeat(40), type: "branch" }]}

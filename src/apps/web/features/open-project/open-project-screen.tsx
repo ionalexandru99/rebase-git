@@ -32,8 +32,12 @@ import { useEnvironment } from "#web/platform/query/environment-context";
 export function OpenProjectScreen({
   onOpenRepository,
   onOpenSettings,
+  onRepositoryRemembered,
 }: {
   readonly onOpenRepository: (repository: ProjectNavigationRepository) => void;
+  readonly onRepositoryRemembered: (
+    repository: ProjectNavigationRepository,
+  ) => void;
   readonly onOpenSettings: (repositoryId: string) => void;
 }): JSX.Element {
   const environments = useOpenProjectEnvironments();
@@ -206,7 +210,9 @@ export function OpenProjectScreen({
       <RepositoryFolderPicker
         environments={environments}
         onOpenChange={setFolderPickerOpen}
-        onRepositoryOpened={(_, repository) => onOpenRepository(repository)}
+        onRepositoryOpened={(_, repository) =>
+          onRepositoryRemembered(repository)
+        }
         open={folderPickerOpen}
       />
     </main>

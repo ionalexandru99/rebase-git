@@ -1,5 +1,5 @@
 import type { BranchUpstream, RepositoryRefTarget } from "@rebase/contracts";
-import type { CommandDefinition } from "#web/features/menu-commands/menu-command";
+import type { CommandDefinition } from "#web/platform/menu-commands/menu-command";
 
 export interface RefCommandContext {
   readonly target: RepositoryRefTarget;

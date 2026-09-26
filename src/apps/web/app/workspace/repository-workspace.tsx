@@ -89,7 +89,7 @@ function Workspace({
                   scope={scope}
                   inspection={inspection}
                   historyScope={historyScope}
-                  commands={branchCreation.commands}
+                  extraCommands={branchCreation.commands}
                   onAddHistoryRef={() =>
                     setBranchFocusRequest((request) => request + 1)
                   }

@@ -72,7 +72,8 @@ describe("repository fetch controls", () => {
     const reader = createReader();
     const screen = await render(<Controls reader={reader} snapshot={ready} />);
     const fetch = page.getByRole("button", { name: "Fetch", exact: true });
-    await userEvent.tab();
+    await expect.element(fetch).toBeEnabled();
+    fetch.element().focus();
     await expect.element(fetch).toHaveFocus();
     await screen.rerender(
       <Controls

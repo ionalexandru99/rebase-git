@@ -14,14 +14,14 @@ export function WorkspaceGraph({
   scope,
   inspection,
   historyScope,
-  commands,
+  extraCommands,
   toolbarActions,
   onAddHistoryRef,
 }: {
   readonly scope: RepositoryScope;
   readonly inspection: InspectionGraphActions;
   readonly historyScope: WorkspaceHistoryScope;
-  readonly commands: readonly GraphCommandDefinition[];
+  readonly extraCommands: readonly GraphCommandDefinition[];
   readonly toolbarActions: ReactNode;
   readonly onAddHistoryRef: () => void;
 }) {
@@ -40,7 +40,7 @@ export function WorkspaceGraph({
     >
       <CommitGraph
         ref={inspection.graphRef}
-        commands={commands}
+        extraCommands={extraCommands}
         onOpenDetails={inspection.open}
         onActiveCommitChange={inspection.select}
         toolbarActions={toolbarActions}

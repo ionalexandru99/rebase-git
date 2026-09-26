@@ -10,7 +10,7 @@ import type {
   GraphCommandDefinition,
 } from "#web/features/commit-commands/graph-command.contract";
 import type { GraphCommandRun } from "#web/features/commit-commands/use-graph-commands";
-import { createCommandRegistry } from "#web/features/menu-commands/menu-command";
+import { createCommandRegistry } from "#web/platform/menu-commands/menu-command";
 
 export function CommitCommandMenu({
   children,

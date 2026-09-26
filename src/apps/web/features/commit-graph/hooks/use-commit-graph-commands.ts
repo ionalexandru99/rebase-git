@@ -10,12 +10,12 @@ import type { RepositoryHistoryReadModel } from "#web/features/repository-histor
 import { useRepositoryScope } from "#web/features/repository-scope/repository-scope-provider";
 
 export function useCommitGraphCommands({
-  contributed,
+  extraCommands,
   reader,
   selectedOids,
   onOpenDetails,
 }: {
-  readonly contributed: readonly GraphCommandDefinition[] | undefined;
+  readonly extraCommands: readonly GraphCommandDefinition[] | undefined;
   readonly onOpenDetails?: ((oid: string) => void) | undefined;
   readonly reader:
     | Pick<RepositoryHistoryReadModel, "getCommitSummaries">
@@ -31,7 +31,7 @@ export function useCommitGraphCommands({
     }),
     [onOpenDetails, reader],
   );
-  const commands = useGraphCommands(handlers, contributed);
+  const commands = useGraphCommands(handlers, extraCommands);
   const context = (invokingOid: string): GraphCommandContext => ({
     invokingOid,
     selectedOids,

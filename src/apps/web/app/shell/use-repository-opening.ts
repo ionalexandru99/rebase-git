@@ -16,7 +16,7 @@ import { useEnvironment } from "#web/platform/query/environment-context";
 
 export function useRepositoryOpening(
   gateway: RepositoryHistoryGateway,
-  navigation: Navigation,
+  worktreePaths: Navigation["worktreePaths"],
   navigate: Navigate,
 ) {
   const opened = useMemo(() => createOpenedRepositoryStore(gateway), [gateway]);
@@ -25,30 +25,28 @@ export function useRepositoryOpening(
   const { findRepository } = useRepositoryCatalog();
   const { mutate: recordOpened } = useRecordRepositoryOpened();
   const available = status.availability === "available";
-  const openRepository = useCallback(
+  const showRepository = useCallback(
     (repository: ProjectNavigationRepository) => {
-      if (!available) return;
       const entry = findRepository(repository.id);
       if (entry !== undefined && environmentId !== undefined)
         opened.open(
           openedRepositoryTarget(
             environmentId,
             entry,
-            worktreePathFor(navigation, entry),
+            worktreePathFor(worktreePaths, entry),
           ),
         );
-      recordOpened({ repositoryId: repository.id });
       navigate({ type: "open-repository", repository });
     },
-    [
-      available,
-      environmentId,
-      findRepository,
-      navigate,
-      navigation,
-      opened,
-      recordOpened,
-    ],
+    [environmentId, findRepository, navigate, opened, worktreePaths],
   );
-  return { opened, openRepository };
+  const openRepository = useCallback(
+    (repository: ProjectNavigationRepository) => {
+      if (!available) return;
+      showRepository(repository);
+      recordOpened({ repositoryId: repository.id });
+    },
+    [available, recordOpened, showRepository],
+  );
+  return { opened, openRepository, showRepository };
 }

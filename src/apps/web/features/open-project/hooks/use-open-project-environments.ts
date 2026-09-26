@@ -7,25 +7,28 @@ import { useEnvironment } from "#web/platform/query/environment-context";
 
 export function useOpenProjectEnvironments(): readonly OpenProjectEnvironment[] {
   const { repositories } = useRepositoryCatalog();
-  const { availability, status } = useEnvironment().status;
+  const { availability, connectionState, status } = useEnvironment().status;
   return useMemo(
-    () => [
-      {
-        availability,
-        icon: IconDeviceLaptop,
-        iconColor: "var(--primary)",
-        id: localEnvironment.id,
-        name: localEnvironment.name,
-        repositories: repositories.map((repository) => ({
-          environmentId: localEnvironment.id,
-          id: repository.id,
-          lastOpenedAt: repository.lastOpenedAt,
-          name: repository.name,
-          path: repository.path,
-        })),
-        status,
-      },
-    ],
-    [availability, repositories, status],
+    () =>
+      connectionState === "PairingRequired"
+        ? []
+        : [
+            {
+              availability,
+              icon: IconDeviceLaptop,
+              iconColor: "var(--primary)",
+              id: localEnvironment.id,
+              name: localEnvironment.name,
+              repositories: repositories.map((repository) => ({
+                environmentId: localEnvironment.id,
+                id: repository.id,
+                lastOpenedAt: repository.lastOpenedAt,
+                name: repository.name,
+                path: repository.path,
+              })),
+              status,
+            },
+          ],
+    [availability, connectionState, repositories, status],
   );
 }

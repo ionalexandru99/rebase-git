@@ -65,7 +65,7 @@ const emptyRefLabels: readonly RepositoryHistoryRefTarget[] = [];
 
 export function CommitGraph({
   ref,
-  commands: contributedCommands,
+  extraCommands,
   historyIdentity,
   onRemoveHistoryRef,
   onRevealHistoryRef,
@@ -82,7 +82,7 @@ export function CommitGraph({
   onOpenDetails,
   onActiveCommitChange,
 }: {
-  readonly commands?: readonly GraphCommandDefinition[] | undefined;
+  readonly extraCommands?: readonly GraphCommandDefinition[] | undefined;
   readonly onOpenDetails?: ((oid: string) => void) | undefined;
   readonly onActiveCommitChange?:
     | ((oid: string | undefined) => void)
@@ -270,7 +270,7 @@ export function CommitGraph({
     : undefined;
 
   const commands = useCommitGraphCommands({
-    contributed: contributedCommands,
+    extraCommands,
     reader,
     selectedOids: navigation.selection.selectedOids,
     onOpenDetails,

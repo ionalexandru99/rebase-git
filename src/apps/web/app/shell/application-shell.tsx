@@ -15,6 +15,7 @@ import { RepositoryWorkspace } from "#web/app/workspace/repository-workspace";
 import { DiffWorkerPool } from "#web/features/file-diff/components/diff-worker-pool";
 import { OpenProjectScreen } from "#web/features/open-project/open-project-screen";
 import { ProjectsSidebar } from "#web/features/project-navigation/projects-sidebar";
+import { useCatalogRepository } from "#web/features/repository-catalog/hooks/use-repository-catalog";
 import type { RepositoryHistoryGateway } from "#web/features/repository-history/repository-history-reader.contract";
 import { SettingsPanel } from "#web/features/settings/settings-panel";
 import { useEnvironment } from "#web/platform/query/environment-context";
@@ -34,9 +35,7 @@ export function ApplicationShell({
 }): JSX.Element {
   return (
     <SessionEnvironmentProvider session={session}>
-      <DiffWorkerPool>
-        <Shell {...props} />
-      </DiffWorkerPool>
+      <Shell {...props} />
     </SessionEnvironmentProvider>
   );
 }
@@ -48,23 +47,28 @@ function Shell({
   repositoryHistory,
 }: ApplicationShellProps): JSX.Element {
   const { navigation, navigate } = useNavigation();
-  const { opened, openRepository } = useRepositoryOpening(
+  const { opened, openRepository, showRepository } = useRepositoryOpening(
     repositoryHistory,
-    navigation,
+    navigation.worktreePaths,
     navigate,
   );
   const projects = visibleProjects(
     navigation.projects,
     useEnvironment().status,
   );
-  const { repositorySettingsId } = navigation;
+  const repositorySettingsId = useCatalogRepository(
+    navigation.repositorySettingsId,
+  )?.id;
   return (
     <RepositorySelectionProvider
       navigation={navigation}
       navigate={navigate}
       opened={opened}
     >
-      <PanelSessions navigation={navigation}>
+      <PanelSessions
+        navigation={navigation}
+        visible={!navigation.settingsOpen && repositorySettingsId === undefined}
+      >
         <ApplicationLayout
           onSidebarCollapsedChange={(collapsed) =>
             navigate({ type: "collapse-sidebar", collapsed })
@@ -125,12 +129,15 @@ function Shell({
             <OpenProjectScreen
               key={navigation.openProjectRequest}
               onOpenRepository={openRepository}
+              onRepositoryRemembered={showRepository}
               onOpenSettings={(repositoryId) =>
                 navigate({ type: "show-repository-settings", repositoryId })
               }
             />
           ) : (
-            <RepositoryWorkspace />
+            <DiffWorkerPool>
+              <RepositoryWorkspace />
+            </DiffWorkerPool>
           )}
         </ApplicationLayout>
       </PanelSessions>

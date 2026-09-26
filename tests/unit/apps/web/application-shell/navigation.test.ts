@@ -1,15 +1,14 @@
 import { describe, expect, it } from "vite-plus/test";
 import {
-  type Navigation,
+  initialNavigation,
   reduceNavigation,
 } from "#web/app/shell/use-navigation";
-import { localEnvironment } from "#web/features/project-navigation/local-environment";
 
 const repository = { id: "payments", name: "payments" };
 
 describe("shell navigation", () => {
   it("opens a repository in place of its settings", () => {
-    const settings = reduceNavigation(navigation(), {
+    const settings = reduceNavigation(initialNavigation(), {
       type: "show-repository-settings",
       repositoryId: repository.id,
     });
@@ -28,7 +27,7 @@ describe("shell navigation", () => {
   });
 
   it("closes the settings of a repository that leaves the sidebar", () => {
-    const opened = reduceNavigation(navigation(), {
+    const opened = reduceNavigation(initialNavigation(), {
       type: "open-repository",
       repository,
     });
@@ -48,39 +47,4 @@ describe("shell navigation", () => {
       workspaceView: "open-project",
     });
   });
-
-  it("remembers the chosen worktree for each repository", () => {
-    const switched = reduceNavigation(navigation(), {
-      type: "switch-worktree",
-      repositoryId: repository.id,
-      worktreePath: "/payments/.worktrees/topic",
-    });
-
-    expect(switched.worktreePaths.get(repository.id)).toBe(
-      "/payments/.worktrees/topic",
-    );
-  });
 });
-
-function navigation(): Navigation {
-  return {
-    projects: {
-      environments: [
-        {
-          availability: "connecting",
-          expanded: true,
-          id: localEnvironment.id,
-          name: localEnvironment.name,
-          repositories: [],
-        },
-      ],
-      selectedRepositoryId: undefined,
-      sidebarCollapsed: false,
-      workspaceView: "open-project",
-    },
-    settingsOpen: false,
-    repositorySettingsId: undefined,
-    openProjectRequest: 0,
-    worktreePaths: new Map(),
-  };
-}

@@ -26,8 +26,10 @@ import { render } from "#tests-ui/runtime/render";
 import type { LocalEnvironmentSession } from "#web/app/environment/local-environment-session.contract";
 import { ApplicationShell } from "#web/app/shell/application-shell";
 import { RepositoryWorkspace } from "#web/app/workspace/repository-workspace";
+import { repositoryCatalogKey } from "#web/features/repository-catalog/hooks/use-repository-catalog";
 import type { RepositoryHistoryGateway } from "#web/features/repository-history/repository-history-reader.contract";
 import { RepositoryScopeProvider } from "#web/features/repository-scope/repository-scope-provider";
+import { createEnvironmentQueryClient } from "#web/platform/query/environment-query-client";
 
 describe("application shell", () => {
   it("opens repository settings from the list without opening its graph", async () => {
@@ -196,7 +198,19 @@ describe("application shell", () => {
   });
 
   it("renders the empty project shell and focuses repository search", async () => {
-    await renderShell();
+    const queryClient = createEnvironmentQueryClient();
+    queryClient.setQueryData(repositoryCatalogKey(undefined), {
+      repositories: [
+        {
+          addedAt: "2026-09-04T12:00:00.000Z",
+          id: "00000000-0000-4000-8000-000000000031",
+          lastOpenedAt: "2026-09-04T12:00:00.000Z",
+          name: "cached-repository",
+          path: "/cached",
+        },
+      ],
+    });
+    await renderShell(queryClient);
 
     await expect
       .element(page.getByRole("region", { name: "Rebase application" }))
@@ -213,6 +227,9 @@ describe("application shell", () => {
     await expect
       .element(page.getByRole("main", { name: "Open project" }))
       .toBeVisible();
+    await expect
+      .element(page.getByText("cached-repository"))
+      .not.toBeInTheDocument();
     await expect
       .element(page.getByRole("searchbox", { name: "Search repositories" }))
       .toHaveFocus();
@@ -337,7 +354,7 @@ async function chooseFolder(name: string) {
   return picker;
 }
 
-async function renderShell() {
+async function renderShell(queryClient = createEnvironmentQueryClient()) {
   return render(
     <ApplicationShell
       desktopUpdates={undefined}
@@ -346,6 +363,7 @@ async function renderShell() {
       repositoryHistory={unavailableHistory}
       session={pairingRequiredSession()}
     />,
+    { queryClient },
   );
 }
 

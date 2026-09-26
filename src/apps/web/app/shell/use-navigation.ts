@@ -54,10 +54,10 @@ export function useNavigation() {
 }
 
 export function worktreePathFor(
-  navigation: Navigation,
+  worktreePaths: Navigation["worktreePaths"],
   repository: { readonly id: string; readonly path: string },
 ) {
-  return navigation.worktreePaths.get(repository.id) ?? repository.path;
+  return worktreePaths.get(repository.id) ?? repository.path;
 }
 
 export function visibleProjects(
@@ -152,7 +152,7 @@ function closeRepository(
   };
 }
 
-function initialNavigation(): Navigation {
+export function initialNavigation(): Navigation {
   return {
     projects: {
       environments: [

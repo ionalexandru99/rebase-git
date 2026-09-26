@@ -46,6 +46,7 @@ export function useRepositoryCatalog() {
       changes: "none",
       staleTime: 0,
       refetchOnWindowFocus: false,
+      refetchOnMount: false,
       select: sortCatalog,
     },
   );

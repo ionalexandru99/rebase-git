@@ -12,9 +12,18 @@ export type EnvironmentAvailability =
   | "connecting"
   | "unavailable";
 
+export type EnvironmentConnectionState =
+  | "PairingRequired"
+  | "Authorizing"
+  | "Connecting"
+  | "Connected"
+  | "Reconnecting"
+  | "AuthorizationFailed"
+  | "ProtocolMismatch";
+
 export interface EnvironmentStatus {
   readonly availability: EnvironmentAvailability;
-  readonly connectionState: string;
+  readonly connectionState: EnvironmentConnectionState;
   readonly detail: string;
   readonly status: string;
 }

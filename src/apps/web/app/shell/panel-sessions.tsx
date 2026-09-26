@@ -5,14 +5,14 @@ import { useEnvironment } from "#web/platform/query/environment-context";
 
 export function PanelSessions({
   navigation,
+  visible,
   children,
 }: {
   readonly navigation: Navigation;
+  readonly visible: boolean;
   readonly children: ReactNode;
 }) {
   const { environmentId, connected, writable } = useEnvironment();
-  const visible =
-    !navigation.settingsOpen && navigation.repositorySettingsId === undefined;
   const environment = useMemo(
     () => ({ environmentId, connected, writable, visible }),
     [environmentId, connected, writable, visible],

@@ -31,15 +31,15 @@ it("requests the first history page as soon as refs arrive", async () => {
   opened.refsArrived(refs);
 
   try {
-    await vi.waitFor(() =>
-      expect(read).toHaveBeenCalledWith(
+    await expect
+      .poll(() => read)
+      .toHaveBeenCalledWith(
         expect.objectContaining({
           repositoryId,
           roots: [{ name: "main", oid, type: "branch" }],
         }),
         expect.any(AbortSignal),
-      ),
-    );
+      );
     opened.refsArrived(refs);
     expect(read).toHaveBeenCalledOnce();
   } finally {

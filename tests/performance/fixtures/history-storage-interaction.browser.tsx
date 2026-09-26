@@ -40,7 +40,7 @@ const offlineEnvironment: Environment = {
   writable: false,
   status: {
     availability: "unavailable",
-    connectionState: "Offline",
+    connectionState: "Connecting",
     detail: "Performance fixtures run without an environment.",
     status: "Offline",
   },
