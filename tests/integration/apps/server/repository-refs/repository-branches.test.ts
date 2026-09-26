@@ -21,7 +21,12 @@ import {
   featureRoutesClient,
   provideRepositoryServices,
 } from "#tests-integration/apps/server/environment-connection/feature-routes-client";
-import { cloneRepository, createRepository, git } from "#tests-support/git";
+import {
+  cloneRepository,
+  createRepository,
+  fastImport,
+  git,
+} from "#tests-support/git";
 import { removeTemporaryDirectory } from "#tests-support/temporary-directory";
 
 const directories = new Set<string>();
@@ -58,29 +63,26 @@ describe("repository branches", () => {
   it("rejects invalid, taken, and folder-clashing names", async () => {
     const fixture = await createFixture();
     const head = await git(fixture.repositoryPath, "rev-parse", "HEAD");
-    const create = (name: string) =>
-      withBranches(fixture, ({ branches, repositoryId }) =>
-        branches.create({
-          name,
-          repositoryId,
-          startPoint: head,
-          worktreePath: fixture.repositoryPath,
-        }),
-      );
+    const invalid = ["bad..name", "-x", "HEAD", "@{-1}"];
 
-    for (const name of ["bad..name", "-x", "HEAD", "@{-1}"])
-      await expect(create(name)).rejects.toMatchObject({
-        _tag: "InvalidBranchName",
-        name,
-      });
-    await expect(create("main")).rejects.toMatchObject({
-      _tag: "BranchExists",
-      name: "main",
-    });
-    await expect(create("spike/deeper")).rejects.toMatchObject({
-      _tag: "BranchExists",
-      name: "spike",
-    });
+    const failures = await withBranches(fixture, ({ branches, repositoryId }) =>
+      Effect.forEach([...invalid, "main", "spike/deeper"], (name) =>
+        branches
+          .create({
+            name,
+            repositoryId,
+            startPoint: head,
+            worktreePath: fixture.repositoryPath,
+          })
+          .pipe(Effect.flip),
+      ),
+    );
+
+    expect(failures).toMatchObject([
+      ...invalid.map((name) => ({ _tag: "InvalidBranchName", name })),
+      { _tag: "BranchExists", name: "main" },
+      { _tag: "BranchExists", name: "spike" },
+    ]);
   });
 
   it("renames the current branch and keeps the worktree on it", async () => {
@@ -390,14 +392,19 @@ async function createFixture(): Promise<Fixture> {
   await git(originPath, "init", "--bare", "-b", "main");
   await createRepository(repositoryPath, { commits: [] });
   await git(repositoryPath, "remote", "add", "origin", originPath);
-  await git(repositoryPath, "commit", "--allow-empty", "-m", "initial");
-  await git(repositoryPath, "branch", "merged");
-  await git(repositoryPath, "commit", "--allow-empty", "-m", "second");
+  const commit = (branch: string, message: string, from?: string) =>
+    `commit refs/heads/${branch}\ncommitter Rebase test <rebase@example.test> 0 +0000\ndata <<END\n${message}\nEND\n${from === undefined ? "" : `from ${from}\n`}\n`;
+  await fastImport(
+    repositoryPath,
+    [
+      commit("main", "initial"),
+      "reset refs/heads/merged\nfrom refs/heads/main\n\n",
+      commit("main", "second"),
+      commit("spike", "spike one", "refs/heads/main"),
+      commit("spike", "spike two"),
+    ].join(""),
+  );
   await git(repositoryPath, "push", "-u", "origin", "main");
-  await git(repositoryPath, "checkout", "-b", "spike");
-  await git(repositoryPath, "commit", "--allow-empty", "-m", "spike one");
-  await git(repositoryPath, "commit", "--allow-empty", "-m", "spike two");
-  await git(repositoryPath, "checkout", "main");
   await git(repositoryPath, "worktree", "add", worktreePath, "-b", "topic");
   return { repositoryPath, root, worktreePath };
 }

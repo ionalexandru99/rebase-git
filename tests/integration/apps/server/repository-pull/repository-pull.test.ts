@@ -1,10 +1,4 @@
-import {
-  mkdir,
-  mkdtemp,
-  readFile,
-  realpath,
-  writeFile,
-} from "node:fs/promises";
+import { mkdtemp, readFile, realpath, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { RepositoryPullHttpApi } from "@rebase/contracts";
@@ -18,7 +12,7 @@ import {
   createRepositoryCoordination,
 } from "#server/repository/access/index";
 import { repositoryFeatureClient } from "#tests-integration/apps/server/environment-connection/feature-routes-client";
-import { cloneRepository, createRepository, git } from "#tests-support/git";
+import { cloneRepository, fastImport, git } from "#tests-support/git";
 import { removeTemporaryDirectory } from "#tests-support/temporary-directory";
 
 const repositoryId = "00000000-0000-4000-8000-000000000001";
@@ -102,9 +96,8 @@ describe("fast-forward pull", () => {
 
   it("fast-forwards a branch that is not checked out", async () => {
     const f = await fixture();
-    await git(f.repositoryPath, "switch", "-c", "feature");
+    await git(f.repositoryPath, "branch", "feature");
     await git(f.repositoryPath, "push", "-u", "origin", "feature");
-    await git(f.repositoryPath, "switch", "main");
     const incoming = await f.publish("feature", "other.txt", "remote\n");
     await git(f.repositoryPath, "fetch");
 
@@ -122,9 +115,8 @@ describe("fast-forward pull", () => {
   it("fast-forwards the worktree that holds the branch", async () => {
     const f = await fixture();
     const linked = join(f.repositoryPath, "..", "linked");
-    await git(f.repositoryPath, "switch", "-c", "feature");
+    await git(f.repositoryPath, "branch", "feature");
     await git(f.repositoryPath, "push", "-u", "origin", "feature");
-    await git(f.repositoryPath, "switch", "main");
     await git(f.repositoryPath, "worktree", "add", linked, "feature");
     const incoming = await f.publish("feature", "other.txt", "remote\n");
     await git(f.repositoryPath, "fetch");
@@ -143,12 +135,14 @@ describe("fast-forward pull", () => {
   it("fast-forwards a clean linked worktree while the active worktree is merging", async () => {
     const f = await fixture();
     const linked = join(f.repositoryPath, "..", "linked");
-    await git(f.repositoryPath, "switch", "-c", "feature");
+    await git(f.repositoryPath, "branch", "feature");
     await git(f.repositoryPath, "push", "-u", "origin", "feature");
-    await git(f.repositoryPath, "switch", "-c", "topic", "main");
-    await writeFile(join(f.repositoryPath, "file.txt"), "topic\n");
-    await git(f.repositoryPath, "commit", "-am", "topic");
-    await git(f.repositoryPath, "switch", "main");
+    await commitFile(f.repositoryPath, {
+      branch: "topic",
+      parent: "main",
+      file: "file.txt",
+      content: "topic\n",
+    });
     await writeFile(join(f.repositoryPath, "file.txt"), "main\n");
     await git(f.repositoryPath, "commit", "-am", "main");
     await git(f.repositoryPath, "worktree", "add", linked, "feature");
@@ -203,16 +197,13 @@ async function fixture() {
   directories.push(root);
   const originPath = join(root, "origin.git");
   const repositoryPath = join(root, "repository");
-  const writerPath = join(root, "writer");
-  await mkdir(originPath);
-  await git(originPath, "init", "--bare", "-b", "main");
-  await createRepository(repositoryPath, { commits: [] });
-  await git(repositoryPath, "remote", "add", "origin", originPath);
-  await writeFile(join(repositoryPath, "file.txt"), "base\n");
-  await git(repositoryPath, "add", "file.txt");
-  await git(repositoryPath, "commit", "-m", "base");
-  await git(repositoryPath, "push", "-u", "origin", "main");
-  await cloneRepository(originPath, writerPath);
+  await git(root, "init", "--bare", "-b", "main", originPath);
+  await commitFile(originPath, {
+    branch: "main",
+    file: "file.txt",
+    content: "base\n",
+  });
+  await cloneRepository(originPath, repositoryPath);
 
   const runner = createLocalGitCommandRunner();
   const service = repositoryFeatureClient(
@@ -243,14 +234,25 @@ async function fixture() {
       Effect.runPromise(
         service.pull({ repositoryId, worktreePath: repositoryPath, branch }),
       ),
-    publish: async (branch: string, file: string, content: string) => {
-      await git(writerPath, "fetch");
-      await git(writerPath, "switch", "-C", branch, `origin/${branch}`);
-      await writeFile(join(writerPath, file), content);
-      await git(writerPath, "add", file);
-      await git(writerPath, "commit", "-m", `update ${file}`);
-      await git(writerPath, "push", "origin", branch);
-      return git(writerPath, "rev-parse", "HEAD");
-    },
+    publish: (branch: string, file: string, content: string) =>
+      commitFile(originPath, { branch, parent: branch, file, content }),
   };
+}
+
+async function commitFile(
+  path: string,
+  commit: {
+    readonly branch: string;
+    readonly parent?: string;
+    readonly file: string;
+    readonly content: string;
+  },
+) {
+  const parent =
+    commit.parent === undefined ? "" : `from refs/heads/${commit.parent}^0\n`;
+  await fastImport(
+    path,
+    `commit refs/heads/${commit.branch}\ncommitter Rebase test <rebase@example.test> 0 +0000\ndata <<END\nupdate ${commit.file}\nEND\n${parent}M 100644 inline ${commit.file}\ndata ${Buffer.byteLength(commit.content)}\n${commit.content}\n`,
+  );
+  return git(path, "rev-parse", `refs/heads/${commit.branch}`);
 }
