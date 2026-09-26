@@ -231,4 +231,152 @@ describe("repository conflicts", () => {
       },
     ]);
   });
+
+  it("saves an edit without staging it and rejects a stale revision", async () => {
+    const f = await fixture();
+    const loaded = await f.document("two.txt");
+    const edited = loaded.content.replace(
+      /<<<<<<< HEAD\nB current\n[\s\S]*?>>>>>>> [^\n]*\n/,
+      "B merged\n",
+    );
+
+    const saved = await Effect.runPromise(
+      f.service.write({
+        ...f.scope,
+        path: "two.txt",
+        revision: loaded.file.revision,
+        content: edited,
+      }),
+    );
+
+    expect(await f.content("two.txt")).toBe(edited);
+    expect(saved.file.openRegions).toBe(1);
+    expect(saved.regions.map(({ open, line }) => ({ open, line }))).toEqual([
+      { open: false, line: null },
+      { open: true, line: 7 },
+    ]);
+    expect((await f.unmerged("two.txt")).split("\n")).toHaveLength(3);
+    await expect(
+      Effect.runPromise(
+        f.service.write({
+          ...f.scope,
+          path: "two.txt",
+          revision: loaded.file.revision,
+          content: "lost\n",
+        }),
+      ),
+    ).rejects.toMatchObject({ reason: "Stale" });
+    expect(await f.content("two.txt")).toBe(edited);
+  });
+
+  it("stages a file with markers only when asked to", async () => {
+    const f = await fixture();
+    const stage = async (allowMarkers: boolean) =>
+      Effect.runPromise(
+        f.service.stage({
+          ...f.scope,
+          path: "two.txt",
+          revision: (await f.file("two.txt")).revision,
+          allowMarkers,
+        }),
+      );
+
+    await expect(stage(false)).rejects.toMatchObject({
+      reason: "Markers",
+      detail: expect.stringContaining("2 conflict blocks"),
+    });
+    const list = await stage(true);
+
+    expect(list.files.map((file) => file.path)).not.toContain("two.txt");
+    expect(list.resolved).toEqual(["two.txt"]);
+    expect(await f.unmerged("two.txt")).toBe("");
+    await expect(f.document("two.txt")).rejects.toMatchObject({
+      reason: "Missing",
+    });
+  });
+
+  it("takes one side of a file and reopens the conflict", async () => {
+    const f = await fixture();
+
+    await f.choose("new-name.txt", "incoming");
+    const chosen = await f.choose("two.txt", "current");
+
+    expect(await f.content("two.txt")).toBe(
+      "a\nB current\nc\nd\ne\nf\nG current\nh\n",
+    );
+    expect(await f.content("new-name.txt")).toMatch(/^line 0 incoming\n/);
+    expect(chosen.resolved).toEqual(["new-name.txt", "two.txt"]);
+    expect(await f.unmerged("two.txt")).toBe("");
+
+    const reopened = await Effect.runPromise(
+      f.service.reopen({ ...f.scope, path: "two.txt" }),
+    );
+
+    expect(reopened.resolved).toEqual(["new-name.txt"]);
+    expect(
+      reopened.files.find((file) => file.path === "two.txt")?.openRegions,
+    ).toBe(2);
+    expect((await f.unmerged("two.txt")).split("\n")).toHaveLength(3);
+  });
+
+  it("deletes or keeps a file removed on one side", async () => {
+    const f = await fixture();
+
+    await expect(f.choose("removed-here.txt", "current")).rejects.toMatchObject(
+      { reason: "Unsupported" },
+    );
+    await f.choose("removed-here.txt", "delete");
+    await f.choose("removed-there.txt", "current");
+
+    await expect(f.content("removed-here.txt")).rejects.toMatchObject({
+      code: "ENOENT",
+    });
+    expect(await git(f.directory, "ls-files", "--", "removed-here.txt")).toBe(
+      "",
+    );
+    expect(await f.content("removed-there.txt")).toBe("kept by current\n");
+    expect(await f.unmerged("removed-there.txt")).toBe("");
+
+    await Effect.runPromise(
+      f.service.reopen({ ...f.scope, path: "removed-here.txt" }),
+    );
+
+    expect(await f.file("removed-here.txt")).toMatchObject({
+      kind: "deleted-in-current",
+    });
+    expect(await f.content("removed-here.txt")).toBe("kept by incoming\n");
+  });
+
+  it("resolves a binary conflict as a whole file only", async () => {
+    const f = await fixture();
+
+    await expect(f.document("image.bin")).rejects.toMatchObject({
+      reason: "Unsupported",
+    });
+    await f.choose("image.bin", "incoming");
+
+    expect(await f.content("image.bin")).toBe("incoming\0binary");
+    expect(await f.unmerged("image.bin")).toBe("");
+  });
+
+  it("hands a file to the configured merge tool", async () => {
+    const f = await fixture();
+    const mergeTool = () =>
+      Effect.runPromise(f.service.mergeTool({ ...f.scope, path: "added.txt" }));
+
+    await expect(mergeTool()).rejects.toMatchObject({ reason: "NoMergeTool" });
+    await git(f.directory, "config", "merge.tool", "copy");
+    await git(
+      f.directory,
+      "config",
+      "mergetool.copy.cmd",
+      'cp "$REMOTE" "$MERGED"',
+    );
+    await git(f.directory, "config", "mergetool.copy.trustExitCode", "true");
+    const list = await mergeTool();
+
+    expect(list.mergeTool).toBe("copy");
+    expect(list.resolved).toEqual(["added.txt"]);
+    expect(await f.content("added.txt")).toBe("added by incoming\n");
+  });
 });
