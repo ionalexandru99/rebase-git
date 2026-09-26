@@ -24,6 +24,7 @@ import {
   repositoryCoordinationLayer,
 } from "#server/repository/access/index";
 import { createRepository } from "#tests-support/git";
+import { waitForObservation } from "#tests-support/observation";
 import { removeTemporaryDirectory } from "#tests-support/temporary-directory";
 
 vi.mock("node:fs", async (original) => {
@@ -119,7 +120,7 @@ for (const firstRelease of ["refs", "freshness"] as const)
             git("-C", linked, "checkout", "--detach"),
           );
           yield* Effect.promise(() =>
-            vi.waitFor(() => {
+            waitForObservation(() => {
               expect(changed).toHaveBeenCalledWith(
                 expect.any(Number),
                 expect.arrayContaining([mainEntry.id, linkedEntry.id]),
@@ -136,7 +137,7 @@ for (const firstRelease of ["refs", "freshness"] as const)
             git("-C", main, "branch", "still-observed"),
           );
           yield* Effect.promise(() =>
-            vi.waitFor(() =>
+            waitForObservation(() =>
               expect(
                 firstRelease === "refs" ? fresh : changed,
               ).toHaveBeenCalled(),
@@ -145,7 +146,7 @@ for (const firstRelease of ["refs", "freshness"] as const)
           expect(closed).not.toHaveBeenCalled();
           yield* firstRelease === "refs" ? unsubscribe : releaseRefs;
           yield* Effect.promise(() =>
-            vi.waitFor(() => expect(closed).toHaveBeenCalledOnce()),
+            waitForObservation(() => expect(closed).toHaveBeenCalledOnce()),
           );
           changed.mockClear();
           fresh.mockClear();
@@ -194,7 +195,7 @@ it("shares canonical directory aliases and makes release idempotent", async () =
         "HEAD",
         "refs/heads/changed",
       ]);
-      await vi.waitFor(() => expect(changed).toHaveBeenCalled());
+      await waitForObservation(() => expect(changed).toHaveBeenCalled());
     } finally {
       first.close();
       second.close();

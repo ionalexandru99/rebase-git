@@ -36,17 +36,13 @@ it.each(["clear", "remove"] as const)(
       "noopener",
     );
     try {
-      await expect
-        .poll(() => events, { timeout: 5_000 })
-        .toContain("cache:committed");
+      await expect.poll(() => events).toContain("cache:committed");
       channel.postMessage(action);
       await expect.poll(() => events).toContain("cache:cache-changed");
       channel.postMessage("navigate");
+      await expect.poll(() => events).toContain("cache:pageshow:true");
       await expect
-        .poll(() => events, { timeout: 5_000 })
-        .toContain("cache:pageshow:true");
-      await expect
-        .poll(() => events, { timeout: 5_000 })
+        .poll(() => events)
         .toContain(
           `cache:restored-read:${action === "clear" ? "0" : "closed"}`,
         );
@@ -59,7 +55,6 @@ it.each(["clear", "remove"] as const)(
       activeReader.close();
     }
   },
-  20_000,
 );
 
 it.each([false, true])(
@@ -80,14 +75,10 @@ it.each([false, true])(
     let second: Window | null = null;
     try {
       expect(first).not.toBeNull();
-      await expect
-        .poll(() => events, { timeout: 5_000 })
-        .toContain("first:committed");
+      await expect.poll(() => events).toContain("first:committed");
       second = window.open(`${url}&name=second&read=false`);
       expect(second).not.toBeNull();
-      await expect
-        .poll(() => second?.document.body.dataset.ready, { timeout: 5_000 })
-        .toBe("true");
+      await expect.poll(() => second?.document.body.dataset.ready).toBe("true");
       if (suppressPageHide)
         first?.addEventListener(
           "pagehide",
@@ -95,20 +86,15 @@ it.each([false, true])(
           { capture: true },
         );
       first?.close();
-      await expect
-        .poll(() => events, { timeout: 5_000 })
-        .toContain("second:committed");
+      await expect.poll(() => events).toContain("second:committed");
       second?.close();
-      await expect
-        .poll(() => events, { timeout: 5_000 })
-        .toContain("second:aborted");
+      await expect.poll(() => events).toContain("second:aborted");
     } finally {
       first?.close();
       second?.close();
       channel.close();
     }
   },
-  20_000,
 );
 
 it("reconnects the same reader when a document returns from the back-forward cache", async () => {
@@ -141,18 +127,15 @@ it("reconnects the same reader when a document returns from the back-forward cac
     "noopener",
   );
   try {
-    await expect
-      .poll(() => events, { timeout: 5_000 })
-      .toContain("restored:committed");
+    await expect.poll(() => events).toContain("restored:committed");
     channel.postMessage("navigate");
     await expect.poll(() => events).toContain("restored:aborted");
     await expect
-      .poll(() => events.join("\n"), { timeout: 5_000 })
+      .poll(() => events.join("\n"))
       .toContain("restored:pageshow:true");
     await expect
       .poll(
         () => events.filter((event) => event === "restored:committed").length,
-        { timeout: 5_000 },
       )
       .toBe(2);
   } finally {
@@ -160,4 +143,4 @@ it("reconnects the same reader when a document returns from the back-forward cac
     channel.close();
     activeReader.close();
   }
-}, 20_000);
+});

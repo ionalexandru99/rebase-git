@@ -162,7 +162,6 @@ describe("commit inspection", () => {
       .poll(
         () =>
           document.querySelector("diffs-container")?.shadowRoot?.textContent,
-        { timeout: 5_000 },
       )
       .toContain("export const initial = true;");
     await expect
@@ -197,7 +196,7 @@ describe("commit inspection", () => {
         .getByRole("region", { name: "Commit file diff" })
         .element()
         .querySelector("diffs-container")?.shadowRoot?.textContent;
-    await expect.poll(content, { timeout: 5_000 }).toContain("new");
+    await expect.poll(content).toContain("new");
     await expect.poll(content).not.toContain("retained heading");
     await screen.getByRole("button", { name: "Show unchanged lines" }).click();
     await expect.poll(content).toContain("retained heading");
@@ -223,11 +222,11 @@ describe("commit inspection", () => {
     await expect.element(row).toBeVisible();
     await expect.element(row).toHaveAttribute("aria-selected", "true");
     await grid.getByRole("row", { name: /^Commit 1,/ }).click();
-    await vi.waitFor(() =>
-      expect(client.inspect).toHaveBeenLastCalledWith(
+    await expect
+      .poll(() => client.inspect)
+      .toHaveBeenLastCalledWith(
         expect.objectContaining({ oid: historyOid(1) }),
-      ),
-    );
+      );
     await screen.getByRole("button", { name: "Close Commit tab" }).click();
     await expect
       .element(screen.getByRole("region", { name: "Commit details" }))
@@ -306,17 +305,13 @@ describe("commit inspection", () => {
     await expect.element(screen.getByText("10 → 222 bytes")).toBeVisible();
     resolveDetails(details());
     resolveDiff(diff("src/first.bin", 999));
-    await vi.waitFor(() => {
-      expect(completed).toBe(2);
-      expect(
-        screen.getByRole("region", { name: "Commit details" }).element()
-          .textContent,
-      ).toContain(`Message ${historyOid(1)}`);
-      expect(
-        screen.getByRole("region", { name: "Commit file diff" }).element()
-          .textContent,
-      ).toContain("10 → 222 bytes");
-    });
+    await expect.poll(() => completed).toBe(2);
+    await expect
+      .element(screen.getByRole("region", { name: "Commit details" }))
+      .toHaveTextContent(`Message ${historyOid(1)}`);
+    await expect
+      .element(screen.getByRole("region", { name: "Commit file diff" }))
+      .toHaveTextContent("10 → 222 bytes");
     await expect
       .element(screen.getByText("10 → 999 bytes"))
       .not.toBeInTheDocument();

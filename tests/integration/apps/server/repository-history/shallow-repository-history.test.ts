@@ -16,6 +16,7 @@ import {
   createRepository,
   git as runGit,
 } from "#tests-support/git";
+import { waitForObservation } from "#tests-support/observation";
 import { removeTemporaryDirectory } from "#tests-support/temporary-directory";
 
 const repositoryId = "00000000-0000-4000-8000-000000000001";
@@ -83,7 +84,7 @@ it("preserves true shallow parents and invalidates the old basis when external d
       )
     ).close;
     await runGit(clone, "fetch", "--deepen=1");
-    await vi.waitFor(() => expect(changed).toHaveBeenCalled());
+    await waitForObservation(() => expect(changed).toHaveBeenCalled());
     const deepened = await Effect.runPromise(
       readRepositoryHistorySnapshot(git, clone, readObjectFormat(git, clone)),
     );

@@ -24,22 +24,22 @@ describe("browser metadata search", () => {
     const model = createRepositoryHistorySearchModel(reader, navigate, runtime);
     try {
       model.setText("Commit");
-      await vi.waitFor(() =>
-        expect(model.getSnapshot()).toMatchObject({
+      await expect
+        .poll(() => model.getSnapshot())
+        .toMatchObject({
           loading: false,
           count: 30,
           complete: true,
-        }),
-      );
+        });
       expect(model.getSnapshot().commits).toHaveLength(20);
       model.navigate(20);
-      await vi.waitFor(() =>
-        expect(model.getSnapshot()).toMatchObject({
+      await expect
+        .poll(() => model.getSnapshot())
+        .toMatchObject({
           loading: false,
           navigating: false,
           selected: 20,
-        }),
-      );
+        });
       expect(model.getSnapshot().commits).toHaveLength(30);
       expect(navigate).toHaveBeenCalledWith(
         fixture.commits[20]?.oid,
