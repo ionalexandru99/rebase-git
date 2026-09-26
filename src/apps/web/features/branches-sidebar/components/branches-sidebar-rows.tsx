@@ -17,13 +17,10 @@ import {
   ContextMenuTrigger,
 } from "#web/components/ui/context-menu";
 import type {
-  BranchRowAction,
-  BranchRowActionId,
-} from "#web/features/branches-sidebar/branch-editing/branch-row-actions";
-import type {
   BranchesSidebarFolderRow,
   BranchesSidebarRefRow,
   BranchesSidebarSectionRow,
+  RefRowAction,
 } from "#web/features/branches-sidebar/branches-sidebar-model";
 import {
   localBranchesSectionId,
@@ -109,8 +106,8 @@ export function RefRow({
   selectedInHistory,
   style,
 }: {
-  readonly actions: readonly BranchRowAction[];
-  readonly onAction: (id: BranchRowActionId) => void;
+  readonly actions: readonly RefRowAction[];
+  readonly onAction: (id: string) => void;
   readonly active: boolean;
   readonly commands: readonly RefCommandDefinition[];
   readonly onActivate: () => void;

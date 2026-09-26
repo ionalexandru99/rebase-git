@@ -1,4 +1,5 @@
 import type { LocalBranch } from "@rebase/contracts";
+import { isValidRefName } from "#web/features/repository-refs/ref-name";
 
 export function branchNameProblem(
   name: string,
@@ -6,7 +7,7 @@ export function branchNameProblem(
   current?: string,
 ): string | undefined {
   if (name.length === 0) return "Enter a branch name.";
-  if (!isValidBranchName(name)) return `${name} is not a valid branch name.`;
+  if (!isValidRefName(name)) return `${name} is not a valid branch name.`;
   for (const { name: existing } of branches) {
     if (existing === current) continue;
     if (existing === name) return `${name} already exists.`;
@@ -16,18 +17,4 @@ export function branchNameProblem(
       return `${name} is a folder of branches.`;
   }
   return undefined;
-}
-
-function isValidBranchName(name: string) {
-  if (name === "HEAD" || name === "@" || name.startsWith("-")) return false;
-  if ([...name].some(isControlOrSpace)) return false;
-  if (/[~^:?*[\\]|\.\.|@\{|\/\/|^\/|\/$|\.$/.test(name)) return false;
-  return name
-    .split("/")
-    .every((part) => !part.startsWith(".") && !part.endsWith(".lock"));
-}
-
-function isControlOrSpace(character: string) {
-  const code = character.charCodeAt(0);
-  return code <= 0x20 || code === 0x7f;
 }

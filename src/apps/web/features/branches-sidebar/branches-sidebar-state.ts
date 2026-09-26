@@ -140,6 +140,19 @@ export function buildBranchesSidebarRows(
   });
 }
 
+export function scopeShowing(
+  scope: BranchesSidebarScope,
+  sectionId: string,
+): BranchesSidebarScope {
+  const sectionScope =
+    sectionId === localBranchesSectionId
+      ? "local"
+      : sectionId === tagsSectionId
+        ? "tags"
+        : "remote";
+  return scope === "all" || scope === sectionScope ? scope : sectionScope;
+}
+
 function sectionMatchesScope(scope: BranchesSidebarScope) {
   return (section: SectionDraft) => scope === "all" || section.scope === scope;
 }

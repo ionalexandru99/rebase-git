@@ -4,12 +4,12 @@ import type { GitCommandRunner } from "#server/domain/git-command.contract";
 import type { RepositoryAccessService } from "#server/domain/repository-access.contract";
 import { branchWriteFailed } from "#server/features/repository-refs/git/branches/branch-failures";
 import {
-  branchCommand,
   readLocalBranch,
   requireBranchTarget,
   requireRemoteBranch,
   setUpstreamArguments,
 } from "#server/features/repository-refs/git/branches/branch-git";
+import { refCommand } from "#server/features/repository-refs/git/ref-git";
 import { runRepositoryGit } from "#server/repository/access/index";
 
 export function setBranchUpstream(
@@ -27,7 +27,7 @@ export function setBranchUpstream(
         git,
         worktreePath,
         setUpstreamArguments(name, upstream),
-        branchCommand,
+        refCommand,
       ).pipe(Effect.mapError((error) => branchWriteFailed(error, name)));
     }
     const worktrees = yield* access.worktrees(worktreePath);
@@ -40,7 +40,7 @@ function unsetUpstream(git: GitCommandRunner, directory: string, name: string) {
     git,
     directory,
     ["branch", "--unset-upstream", name],
-    branchCommand,
+    refCommand,
   ).pipe(
     Effect.asVoid,
     Effect.catchIf(

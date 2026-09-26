@@ -130,6 +130,7 @@ export type RepositoryCheckedOut = typeof RepositoryCheckedOut.Type;
 export const RefMissing = Schema.TaggedStruct("RefMissing", {
   name: RefName,
 });
+export type RefMissing = typeof RefMissing.Type;
 export const BranchCheckedOutElsewhere = Schema.TaggedStruct(
   "BranchCheckedOutElsewhere",
   {

@@ -20,9 +20,9 @@ import {
 } from "#tests-ui/runtime/fake-requests";
 import { fakeRpc } from "#tests-ui/runtime/fake-rpc";
 import { render } from "#tests-ui/runtime/render";
-import { useCreateBranchHere } from "#web/features/branch-management/hooks/use-create-branch-here";
 import type { BranchRename } from "#web/features/branches-sidebar/branch-editing/hooks/use-branch-editing";
 import { BranchesSidebar } from "#web/features/branches-sidebar/branches-sidebar";
+import { useCreateRefHere } from "#web/features/branches-sidebar/hooks/use-create-ref-here";
 import { CommitCommandMenu } from "#web/features/commit-commands/commit-command-menu";
 import type { GraphCommandDefinition } from "#web/features/commit-commands/graph-command";
 import { NotificationsProvider } from "#web/features/notifications/notifications";
@@ -363,7 +363,7 @@ function BranchWorkspace({
 }) {
   const repositoryRefs = useRepositoryRefs(repositoryId, repositoryId);
   const activation = useRefActivation(repositoryRefs);
-  const creation = useCreateBranchHere();
+  const creation = useCreateRefHere();
   return (
     <>
       {createBranchAt === undefined ? null : (

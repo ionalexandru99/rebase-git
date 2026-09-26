@@ -1,6 +1,7 @@
 import {
   RepositoryBranchesHttpApi,
   RepositoryRefsHttpApi,
+  RepositoryTagsHttpApi,
 } from "@rebase/contracts";
 import { Effect } from "effect";
 import type { EnvironmentFeature } from "#server/adapters/environment-transport/environment-feature.contract";
@@ -15,12 +16,22 @@ import { deleteBranch } from "#server/features/repository-refs/git/branches/dele
 import { renameBranch } from "#server/features/repository-refs/git/branches/rename-branch";
 import { setBranchUpstream } from "#server/features/repository-refs/git/branches/set-branch-upstream";
 import { checkoutRepositoryRef } from "#server/features/repository-refs/git/checkout-repository-ref";
+import {
+  createTag,
+  deleteTag,
+} from "#server/features/repository-refs/git/repository-tags";
 import { acquireRepositoryChangePublisher } from "#server/features/repository-refs/repository-change-publisher";
 import { createRepositoryRefsReader } from "#server/features/repository-refs/repository-refs";
 import { repositoryRefsRpc } from "#server/features/repository-refs/rpc/repository-refs-rpc";
 
 const branchPolicy: RepositoryWritePolicy = {
   name: "branch",
+  locks: { refs: "wait" },
+  duringOperation: "proceed",
+};
+
+const tagPolicy: RepositoryWritePolicy = {
+  name: "tag",
   locks: { refs: "wait" },
   duringOperation: "proceed",
 };
@@ -61,6 +72,12 @@ export const repositoryRefsFeature = Effect.gen(function* () {
       ),
       yield* command(branches.delete, branchPolicy, (input, git) =>
         deleteBranch(git, access, input),
+      ),
+      yield* command(RepositoryTagsHttpApi.create, tagPolicy, (input, git) =>
+        createTag(git, input),
+      ),
+      yield* command(RepositoryTagsHttpApi.delete, tagPolicy, (input, git) =>
+        deleteTag(git, input),
       ),
     ],
     rpc: (session) => repositoryRefsRpc(session, refs),

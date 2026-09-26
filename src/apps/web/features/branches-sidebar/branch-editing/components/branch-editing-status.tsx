@@ -1,9 +1,11 @@
 import type { RemoteBranch } from "@rebase/contracts";
-import { DeleteBranchConfirmation } from "#web/features/branches-sidebar/branch-editing/components/delete-branch-confirmation";
+import type { BranchDeletion } from "#web/features/branches-sidebar/branch-editing/branch-row-actions";
 import { DeletedBranchNotification } from "#web/features/branches-sidebar/branch-editing/components/deleted-branch-notification";
+import { UnmergedCommits } from "#web/features/branches-sidebar/branch-editing/components/unmerged-commits";
 import { UpstreamPicker } from "#web/features/branches-sidebar/branch-editing/components/upstream-picker";
 import type { BranchEditing } from "#web/features/branches-sidebar/branch-editing/hooks/use-branch-editing";
 import { rowElementId } from "#web/features/branches-sidebar/components/branches-sidebar-rows";
+import { DeleteRefConfirmation } from "#web/features/branches-sidebar/components/delete-ref-confirmation";
 
 export function BranchEditingStatus({
   editing,
@@ -33,12 +35,17 @@ export function BranchEditingStatus({
         />
       )}
       {deletion.pending === undefined ? null : (
-        <DeleteBranchConfirmation
+        <DeleteRefConfirmation
+          busy={deletion.pending.busy === true}
           key={deletion.pending.failure === undefined ? "confirm" : "unmerged"}
           onCancel={deletion.cancel}
           onConfirm={deletion.confirm}
-          pending={deletion.pending}
-        />
+          title={branchDeletionTitle(deletion.pending.deletion)}
+        >
+          {deletion.pending.failure === undefined ? null : (
+            <UnmergedCommits failure={deletion.pending.failure} />
+          )}
+        </DeleteRefConfirmation>
       )}
       {deletion.deleted === undefined ? null : (
         <DeletedBranchNotification
@@ -49,4 +56,10 @@ export function BranchEditingStatus({
       )}
     </>
   );
+}
+
+function branchDeletionTitle({ local, remote }: BranchDeletion) {
+  if (remote === undefined) return `Delete ${local?.name ?? ""}`;
+  if (local === undefined) return `Delete ${remote.name} on ${remote.remote}`;
+  return `Delete ${local.name} locally and on ${remote.remote}`;
 }

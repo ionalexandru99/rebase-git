@@ -4,7 +4,10 @@ import type {
   RemoteBranch,
   RepositoryRefs,
 } from "@rebase/contracts";
-import type { BranchesSidebarRefRow } from "#web/features/branches-sidebar/branches-sidebar-model";
+import type {
+  BranchesSidebarRefRow,
+  RefRowAction,
+} from "#web/features/branches-sidebar/branches-sidebar-model";
 
 export type BranchRowActionId =
   | "delete"
@@ -14,13 +17,7 @@ export type BranchRowActionId =
   | "rename"
   | "upstream";
 
-export interface BranchRowAction {
-  readonly disabledReason?: string;
-  readonly group: "create" | "delete" | "edit";
-  readonly id: BranchRowActionId;
-  readonly label: string;
-  readonly shortcut?: string;
-}
+export type BranchRowAction = RefRowAction<BranchRowActionId>;
 
 export interface BranchDeletion {
   readonly local?: LocalBranch & { readonly target: string };

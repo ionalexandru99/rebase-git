@@ -6,7 +6,7 @@ import { useHistoryRefRefresh } from "#web/app/workspace/use-history-ref-refresh
 import { useWorkspaceHistoryScope } from "#web/app/workspace/use-workspace-history-scope";
 import { WorkspaceBranches } from "#web/app/workspace/workspace-branches";
 import { WorkspaceGraph } from "#web/app/workspace/workspace-graph";
-import { useCreateBranchHere } from "#web/features/branch-management/hooks/use-create-branch-here";
+import { useCreateRefHere } from "#web/features/branches-sidebar/hooks/use-create-ref-here";
 import { OperationRecoveryNotice } from "#web/features/operation-recovery/components/operation-recovery-notice";
 import { useCatalogRepository } from "#web/features/repository-catalog/hooks/use-repository-catalog";
 import { PullButton } from "#web/features/repository-pull/components/pull-button";
@@ -56,7 +56,7 @@ function Workspace({
     scope.logicalRepositoryId,
   );
   const { refs } = repositoryRefs;
-  const branchCreation = useCreateBranchHere();
+  const refCreation = useCreateRefHere();
   const historyScope = useWorkspaceHistoryScope(
     environmentId,
     scope,
@@ -79,7 +79,7 @@ function Workspace({
             <WorkspaceBranches
               repositoryRefs={repositoryRefs}
               historyScope={historyScope}
-              createRequest={branchCreation.request}
+              createRequest={refCreation.request}
               focusRequest={branchFocusRequest}
               refCommands={pull.commands}
             />
@@ -89,7 +89,7 @@ function Workspace({
                   scope={scope}
                   inspection={inspection}
                   historyScope={historyScope}
-                  extraCommands={branchCreation.commands}
+                  extraCommands={refCreation.commands}
                   onAddHistoryRef={() =>
                     setBranchFocusRequest((request) => request + 1)
                   }

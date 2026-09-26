@@ -14,11 +14,11 @@ import type {
 import type { RepositoryGitError } from "#server/domain/repository-git.contract";
 import { branchWriteFailed } from "#server/features/repository-refs/git/branches/branch-failures";
 import {
-  branchCommand,
   branchRef,
   requireBranchTarget,
   worktreeHolding,
 } from "#server/features/repository-refs/git/branches/branch-git";
+import { refCommand } from "#server/features/repository-refs/git/ref-git";
 import {
   isGitRejection,
   runRepositoryGit,
@@ -84,7 +84,7 @@ function deleteLocal(
     git,
     directory,
     ["update-ref", "-d", branchRef(name), target],
-    branchCommand,
+    refCommand,
   ).pipe(
     Effect.catchIf(isGitRejection, () =>
       Effect.fail<RepositoryBranchesOperationFailure>({
@@ -97,7 +97,7 @@ function deleteLocal(
         git,
         directory,
         ["config", "--remove-section", `branch.${name}`],
-        { ...branchCommand, exitCodes: [0, 1, 128] },
+        { ...refCommand, exitCodes: [0, 1, 128] },
       ),
     ),
     Effect.asVoid,
@@ -114,7 +114,7 @@ function requireRemoteTarget(
     git,
     directory,
     ["rev-parse", "--verify", "--quiet", `refs/remotes/${name}^{commit}`],
-    { ...branchCommand, exitCodes: [0, 1] },
+    { ...refCommand, exitCodes: [0, 1] },
   ).pipe(
     Effect.flatMap((output) => {
       const target = output.trim();
@@ -156,7 +156,7 @@ function rejectUnmergedCommits(
         git,
         directory,
         ["rev-list", "--count", ...onlyOnBranch],
-        branchCommand,
+        refCommand,
       ),
       log: runRepositoryGit(
         git,
@@ -167,7 +167,7 @@ function rejectUnmergedCommits(
           `--max-count=${listedCommits}`,
           ...onlyOnBranch,
         ],
-        branchCommand,
+        refCommand,
       ),
     },
     { concurrency: "unbounded" },

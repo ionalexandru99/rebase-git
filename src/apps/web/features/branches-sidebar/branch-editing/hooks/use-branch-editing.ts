@@ -4,21 +4,21 @@ import {
   type BranchCommandFailure,
   useBranchCommands,
 } from "#web/features/branch-management/hooks/use-branch-commands";
-import type { BranchCreateRequest } from "#web/features/branch-management/hooks/use-create-branch-here";
 import { describeBranchError } from "#web/features/branches-sidebar/branch-editing/branch-edit-messages";
 import type { BranchEdit } from "#web/features/branches-sidebar/branch-editing/branch-edit-state";
 import {
-  type BranchRowActionId,
   branchDeletion,
   branchRowActions,
   branchStartPoint,
   localBranch,
 } from "#web/features/branches-sidebar/branch-editing/branch-row-actions";
 import { useBranchDeletion } from "#web/features/branches-sidebar/branch-editing/hooks/use-branch-deletion";
-import type {
-  BranchesSidebarRefRow,
-  BranchesSidebarRow,
+import {
+  type BranchesSidebarRefRow,
+  type BranchesSidebarRow,
+  localBranchesSectionId,
 } from "#web/features/branches-sidebar/branches-sidebar-model";
+import type { RefCreateRequest } from "#web/features/branches-sidebar/hooks/use-create-ref-here";
 
 export type BranchEditing = ReturnType<typeof useBranchEditing>;
 
@@ -37,7 +37,7 @@ export function useBranchEditing({
   reveal,
 }: {
   readonly activeWorktreePath: string;
-  readonly createRequest: BranchCreateRequest | undefined;
+  readonly createRequest: RefCreateRequest | undefined;
   readonly focusTree: () => void;
   readonly onCreated: (branchName: string) => void;
   readonly onRenamed: (rename: BranchRename) => void;
@@ -51,14 +51,9 @@ export function useBranchEditing({
   useEffect(() => {
     if (createRequest === undefined) return;
     setError(undefined);
-    setEdit({
-      kind: "create",
-      startPoint: {
-        label: createRequest.oid.slice(0, 7),
-        name: "",
-        oid: createRequest.oid,
-      },
-    });
+    setEdit(
+      createRequest.kind === "branch" ? draftAt(createRequest.oid) : undefined,
+    );
   }, [createRequest]);
 
   const rowActions = (row: BranchesSidebarRefRow) =>
@@ -91,22 +86,23 @@ export function useBranchEditing({
     return failure === undefined ? undefined : describeBranchError(failure);
   };
 
-  const start = (id: BranchRowActionId, row: BranchesSidebarRefRow) => {
+  const start = (id: string, row: BranchesSidebarRefRow) => {
     if (refs === undefined) return;
     const action = rowActions(row).find((candidate) => candidate.id === id);
     if (action === undefined || action.disabledReason !== undefined) return;
     setError(undefined);
-    if (id === "newBranch") {
+    if (action.id === "newBranch") {
       const startPoint = branchStartPoint(row, refs);
       if (startPoint !== undefined) setEdit({ kind: "create", startPoint });
       return;
     }
-    if (id === "rename" || id === "upstream") {
+    if (action.id === "rename" || action.id === "upstream") {
       const branch = localBranch(row, refs);
-      if (branch !== undefined) setEdit({ branch, kind: id, rowId: row.id });
+      if (branch !== undefined)
+        setEdit({ branch, kind: action.id, rowId: row.id });
       return;
     }
-    const target = branchDeletion(id, row, refs);
+    const target = branchDeletion(action.id, row, refs);
     if (target !== undefined) deletion.request(target);
   };
 
@@ -136,6 +132,8 @@ export function useBranchEditing({
       }),
     deletion,
     dismissError: () => setError(undefined),
+    draftSectionId:
+      edit?.kind === "create" ? localBranchesSectionId : undefined,
     edit,
     error,
     handleTreeKey,
@@ -164,5 +162,12 @@ export function useBranchEditing({
       else setError(describeBranchError(result.failure));
     },
     start,
+  };
+}
+
+function draftAt(oid: string): BranchEdit {
+  return {
+    kind: "create",
+    startPoint: { label: oid.slice(0, 7), name: "", oid },
   };
 }

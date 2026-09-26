@@ -14,12 +14,12 @@ import type {
 import type { RepositoryGitError } from "#server/domain/repository-git.contract";
 import { branchWriteFailed } from "#server/features/repository-refs/git/branches/branch-failures";
 import {
-  branchCommand,
   readBranchTarget,
   readLocalBranch,
   requireValidBranchName,
   worktreeHolding,
 } from "#server/features/repository-refs/git/branches/branch-git";
+import { refCommand } from "#server/features/repository-refs/git/ref-git";
 import { runRepositoryGit } from "#server/repository/access/index";
 
 export function renameBranch(
@@ -43,7 +43,7 @@ export function renameBranch(
       git,
       worktreePath,
       ["branch", "-m", name, newName],
-      branchCommand,
+      refCommand,
     ).pipe(Effect.mapError((error) => branchWriteFailed(error, newName)));
     const after = yield* access.worktrees(worktreePath);
     const branch = yield* readLocalBranch(git, worktreePath, after, newName);
