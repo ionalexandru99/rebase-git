@@ -35,7 +35,10 @@ function refsReadRejected(
   error: RepositoryAccessError | EnvironmentStorageError | RepositoryGitError,
 ): RepositoryRejected {
   if (error._tag === "EnvironmentStorageError")
-    return repositoryRejected("GitFailed", error.message);
+    return repositoryRejected(
+      "GitFailed",
+      "The repository catalog is unavailable.",
+    );
   if (error._tag === "RepositoryAccessError") return accessRejection(error);
   return repositoryRejected("GitFailed", error.detail);
 }
