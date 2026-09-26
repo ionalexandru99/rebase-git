@@ -1,44 +1,42 @@
 import {
   currentEnvironmentCapabilities,
+  type EnvironmentDirectory,
+  EnvironmentFilesystemHttpApi,
   encodeRepositoryHistoryBatch,
   encodeRepositoryHistoryPage,
+  type RepositoryCatalogEntry,
+  RepositoryCatalogHttpApi,
   type RepositoryCommit,
   type RepositoryRefs,
 } from "@rebase/contracts";
-import { Layer, ManagedRuntime } from "effect";
-import type { ReactNode } from "react";
-import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
+import {
+  EnvironmentHttpRejected,
+  EnvironmentResponseError,
+} from "@rebase/environment-client";
+import { describe, expect, it, vi } from "vite-plus/test";
 import { page, userEvent } from "vite-plus/test/browser";
-import { fakeRequests, idleOperation } from "#tests-ui/runtime/fake-requests";
+import {
+  fakeRequests,
+  idleOperation,
+  respond,
+} from "#tests-ui/runtime/fake-requests";
 import { fakeRpc } from "#tests-ui/runtime/fake-rpc";
-import { render as renderWithRuntime } from "#tests-ui/runtime/render";
+import { render } from "#tests-ui/runtime/render";
 import type { LocalEnvironmentSession } from "#web/app/environment/local-environment-session.contract";
+import type { RepositoryHistoryGateway } from "#web/features/repository-history/index";
 import { ApplicationShell } from "#web-ui/app/shell/application-shell";
 import { RepositoryWorkspace } from "#web-ui/app/workspace/repository-workspace";
-
-let runtime: ManagedRuntime.ManagedRuntime<never, never>;
-
-beforeEach(() => {
-  runtime = ManagedRuntime.make(Layer.empty);
-});
-
-function render(children: ReactNode) {
-  return renderWithRuntime(children, { runtime });
-}
 
 describe("application shell", () => {
   it("opens repository settings from the list without opening its graph", async () => {
     const connected = await connectedSession();
-    const recordOpened = vi.spyOn(
-      connected.session.repositoryCatalog,
-      "recordOpened",
-    );
     connected.finishSynchronization();
     await render(
       <ApplicationShell
         desktopUpdates={undefined}
         productVersion="test"
         repositoryFilesystem={undefined}
+        repositoryHistory={connected.repositoryHistory}
         session={connected.session}
       />,
     );
@@ -49,8 +47,8 @@ describe("application shell", () => {
     await expect
       .element(page.getByRole("main", { name: "Repository settings" }))
       .toBeVisible();
-    expect(recordOpened).not.toHaveBeenCalled();
-    expect(connected.session.repositoryHistory.read).not.toHaveBeenCalled();
+    expect(connected.recordOpened).not.toHaveBeenCalled();
+    expect(connected.repositoryHistory.read).not.toHaveBeenCalled();
     await expect
       .element(page.getByRole("combobox", { name: "History ordering" }))
       .toBeVisible();
@@ -70,6 +68,7 @@ describe("application shell", () => {
         desktopUpdates={undefined}
         productVersion="test"
         repositoryFilesystem={undefined}
+        repositoryHistory={connected.repositoryHistory}
         session={connected.session}
       />,
     );
@@ -111,6 +110,87 @@ describe("application shell", () => {
     await expect
       .element(page.getByRole("combobox", { name: "History ordering" }))
       .toHaveValue("chronological");
+  });
+
+  it("opens the repository chosen in the folder picker", async () => {
+    const connected = await connectedSession();
+    connected.finishSynchronization();
+    await render(
+      <ApplicationShell
+        desktopUpdates={undefined}
+        productVersion="test"
+        repositoryFilesystem={undefined}
+        repositoryHistory={connected.repositoryHistory}
+        session={connected.session}
+      />,
+    );
+    const picker = await chooseFolder("repo");
+    await expect.element(picker).not.toBeInTheDocument();
+    await expect
+      .element(
+        page
+          .getByRole("grid", { name: "Commit history" })
+          .getByRole("row", { name: /^cached commit,/ }),
+      )
+      .toBeVisible();
+  });
+
+  it("opens a newly remembered repository even when the catalog read after it fails", async () => {
+    const connected = await connectedSession();
+    connected.catalogReads
+      .mockReturnValueOnce({ repositories: [] })
+      .mockImplementation(() => {
+        throw new EnvironmentResponseError({
+          responseTag: RepositoryCatalogHttpApi.list.path,
+        });
+      });
+    connected.finishSynchronization();
+    await render(
+      <ApplicationShell
+        desktopUpdates={undefined}
+        productVersion="test"
+        repositoryFilesystem={undefined}
+        repositoryHistory={connected.repositoryHistory}
+        session={connected.session}
+      />,
+    );
+    await chooseFolder("repo");
+    await expect
+      .element(
+        page
+          .getByRole("grid", { name: "Commit history" })
+          .getByRole("row", { name: /^cached commit,/ }),
+      )
+      .toBeVisible();
+    await expect.poll(() => connected.catalogReads.mock.calls.length).toBe(2);
+    await expect
+      .element(
+        page
+          .getByRole("navigation", { name: "Projects" })
+          .getByRole("button", { name: "Repository settings for rebase-test" }),
+      )
+      .toBeVisible();
+  });
+
+  it("explains why a chosen folder cannot be opened", async () => {
+    const connected = await connectedSession(() => {
+      throw new EnvironmentHttpRejected({
+        failure: { _tag: "RepositoryPathRejected", reason: "NotRepository" },
+      });
+    });
+    await render(
+      <ApplicationShell
+        desktopUpdates={undefined}
+        productVersion="test"
+        repositoryFilesystem={undefined}
+        repositoryHistory={connected.repositoryHistory}
+        session={connected.session}
+      />,
+    );
+    const picker = await chooseFolder("repo");
+    await expect
+      .element(picker.getByText("This folder is not a Git repository."))
+      .toBeVisible();
   });
 
   it("renders the empty project shell and focuses repository search", async () => {
@@ -198,6 +278,7 @@ describe("application shell", () => {
         desktopUpdates={undefined}
         productVersion="0.0.2-test"
         repositoryFilesystem={undefined}
+        repositoryHistory={connected.repositoryHistory}
         session={connected.session}
       />,
     );
@@ -219,7 +300,40 @@ describe("application shell", () => {
     await commit.click();
     await expect.element(commit).toHaveAttribute("aria-selected", "true");
   });
+
+  it("lists the repository catalog again after reconnecting", async () => {
+    const connected = await connectedSession();
+    connected.finishSynchronization();
+    await render(
+      <ApplicationShell
+        desktopUpdates={undefined}
+        productVersion="test"
+        repositoryFilesystem={undefined}
+        repositoryHistory={connected.repositoryHistory}
+        session={connected.session}
+      />,
+    );
+    await expect.poll(() => connected.catalogReads.mock.calls.length).toBe(1);
+    connected.disconnect();
+    await expect
+      .element(page.getByRole("status"))
+      .toHaveAttribute("data-connection-state", "Reconnecting");
+    connected.reconnect();
+    await expect.poll(() => connected.catalogReads.mock.calls.length).toBe(2);
+  });
 });
+
+async function chooseFolder(name: string) {
+  await page.getByRole("button", { name: "Browse files" }).click();
+  const picker = page.getByRole("dialog", { name: "Choose repository" });
+  await picker
+    .getByRole("button", { name: new RegExp(`^${name} Folder`) })
+    .click();
+  await picker
+    .getByRole("button", { name: "Open repository", exact: true })
+    .click();
+  return picker;
+}
 
 async function renderShell() {
   return render(
@@ -227,6 +341,7 @@ async function renderShell() {
       desktopUpdates={undefined}
       productVersion="0.0.2-test"
       repositoryFilesystem={undefined}
+      repositoryHistory={unavailableHistory}
       session={pairingRequiredSession()}
     />,
   );
@@ -248,42 +363,29 @@ async function renderRepositoryWorkspace() {
   );
 }
 
+const unavailableHistory: RepositoryHistoryGateway = {
+  read: async () => Promise.reject(new Error("Unavailable")),
+  synchronize: async () => Promise.reject(new Error("Unavailable")),
+};
+
 function pairingRequiredSession(): LocalEnvironmentSession {
   const sessionState = { _tag: "PairingRequired" } as const;
-  const catalogSnapshot = { repositories: [], status: "idle" } as const;
   const unsubscribe = () => undefined;
   return {
     changes: { subscribe: () => unsubscribe },
-    filesystem: {
-      listDirectory: async () => ({
-        breadcrumbs: [],
-        entries: [],
-        path: "/",
-        truncated: false,
-      }),
-    },
     getSnapshot: () => sessionState,
-    repositoryCatalog: {
-      getSnapshot: () => catalogSnapshot,
-      recordOpened: async () => Promise.reject(new Error("Unavailable")),
-      refresh: async () => undefined,
-      remember: async () => Promise.reject(new Error("Unavailable")),
-      remove: async () => undefined,
-      subscribe: () => unsubscribe,
-    },
-    repositoryHistory: {
-      read: async () => Promise.reject(new Error("Unavailable")),
-      synchronize: async () => Promise.reject(new Error("Unavailable")),
-    },
     requests: fakeRequests(idleOperation),
-    runtime,
     start: () => undefined,
     stop: () => undefined,
     subscribe: () => unsubscribe,
   };
 }
 
-async function connectedSession() {
+async function connectedSession(
+  remember: (repository: RepositoryCatalogEntry) => RepositoryCatalogEntry = (
+    repository,
+  ) => repository,
+) {
   const environmentId = "00000000-0000-4000-8000-000000000020";
   const repositoryId = "00000000-0000-4000-8000-000000000021";
   const oid = "c".repeat(40);
@@ -295,16 +397,21 @@ async function connectedSession() {
     subject: "cached commit",
   };
   const root = { name: "main", oid, type: "branch" as const };
-  const repository = {
+  const repository: RepositoryCatalogEntry = {
     addedAt: "2026-09-04T12:00:00.000Z",
     id: repositoryId,
     lastOpenedAt: "2026-09-04T12:00:00.000Z",
     name: "rebase-test",
     path: "/repo",
   };
-  const catalogSnapshot = {
-    repositories: [repository],
-    status: "ready" as const,
+  const recordOpened = vi.fn(() => repository);
+  const home: EnvironmentDirectory = {
+    path: "/",
+    breadcrumbs: [{ name: "/", path: "/" }],
+    entries: [
+      { kind: "Folder", name: "repo", path: "/repo", type: "directory" },
+    ],
+    truncated: false,
   };
   const refs: RepositoryRefs = {
     branches: [{ name: "main", target: oid, worktreePath: "/repo" }],
@@ -337,51 +444,41 @@ async function connectedSession() {
   const synchronizationFinished = new Promise<void>((resolve) => {
     finishSynchronization = resolve;
   });
-  const session: LocalEnvironmentSession = {
-    changes: { subscribe: () => () => undefined },
-    filesystem: {
-      listDirectory: async () => ({
-        breadcrumbs: [],
-        entries: [],
-        path: "/",
-        truncated: false,
+  const repositoryHistory = {
+    read: vi.fn(async () =>
+      encodeRepositoryHistoryPage({
+        commits: [commit],
+        objectFormat: "sha1",
+        refTargets: [root],
+        repositoryId,
+        requestId: crypto.randomUUID(),
       }),
-    },
-    getSnapshot: () => state,
-    repositoryCatalog: {
-      getSnapshot: () => catalogSnapshot,
-      recordOpened: async () => repository,
-      refresh: async () => undefined,
-      remember: async () => repository,
-      remove: async () => undefined,
-      subscribe: () => () => undefined,
-    },
-    repositoryHistory: {
-      read: vi.fn(async () =>
-        encodeRepositoryHistoryPage({
+    ),
+    synchronize: vi.fn(async (_request, acceptBatch) => {
+      await acceptBatch(
+        encodeRepositoryHistoryBatch({
           commits: [commit],
           objectFormat: "sha1",
-          refTargets: [root],
           repositoryId,
           requestId: crypto.randomUUID(),
+          sequence: 0,
         }),
-      ),
-      synchronize: vi.fn(async (_request, acceptBatch) => {
-        await acceptBatch(
-          encodeRepositoryHistoryBatch({
-            commits: [commit],
-            objectFormat: "sha1",
-            repositoryId,
-            requestId: crypto.randomUUID(),
-            sequence: 0,
-          }),
-        );
-        await synchronizationFinished;
-        return 1;
-      }),
-    },
-    requests: fakeRequests(idleOperation),
-    runtime,
+      );
+      await synchronizationFinished;
+      return 1;
+    }),
+  } satisfies RepositoryHistoryGateway;
+  const catalogReads = vi.fn(() => ({ repositories: [repository] }));
+  const session: LocalEnvironmentSession = {
+    changes: { subscribe: () => () => undefined },
+    getSnapshot: () => state,
+    requests: fakeRequests(
+      idleOperation,
+      respond(RepositoryCatalogHttpApi.list, catalogReads),
+      respond(RepositoryCatalogHttpApi.recordOpened, recordOpened),
+      respond(EnvironmentFilesystemHttpApi.listDirectory, () => home),
+      respond(RepositoryCatalogHttpApi.remember, () => remember(repository)),
+    ),
     start: () => undefined,
     stop: () => undefined,
     subscribe: (listener) => {
@@ -389,12 +486,25 @@ async function connectedSession() {
       return () => listeners.delete(listener);
     },
   };
+  const publish = (next: typeof state) => {
+    state = next;
+    for (const listener of listeners) listener();
+  };
   return {
-    disconnect: () => {
-      state = { _tag: "Reconnecting", attempt: 1, environmentId };
-      for (const listener of listeners) listener();
-    },
+    catalogReads,
+    disconnect: () =>
+      publish({ _tag: "Reconnecting", attempt: 1, environmentId }),
+    reconnect: () =>
+      publish({
+        _tag: "Connected",
+        accessCapabilities: [],
+        capabilities: currentEnvironmentCapabilities,
+        environmentId,
+        rpc,
+      }),
     finishSynchronization,
+    recordOpened,
+    repositoryHistory,
     session,
   };
 }

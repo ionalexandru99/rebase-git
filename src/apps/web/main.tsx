@@ -1,9 +1,11 @@
 import { PersistQueryClientProvider } from "@tanstack/react-query-persist-client";
+import { Layer, ManagedRuntime } from "effect";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { createBrowserLocalEnvironmentSession } from "#web/app/environment/browser-local-environment-session";
 import { readDesktopHostBridge } from "#web/app/environment/desktop-host-bridge";
 import { NotificationsProvider } from "#web/features/notifications/index";
+import { createRepositoryHistoryGateway } from "#web/features/repository-history/transport/repository-history-gateway";
 import { createEnvironmentQueryClient } from "#web/platform/query/environment-query-client";
 import { createEnvironmentQueryPersistence } from "#web/platform/query/environment-query-persistence";
 import { ApplicationShell } from "#web-ui/app/shell/application-shell";
@@ -18,9 +20,12 @@ if (!(rootElement instanceof HTMLElement)) {
 
 const productVersion = import.meta.env.REBASE_PRODUCT_VERSION;
 const desktopHost = readDesktopHostBridge();
+const runtime = ManagedRuntime.make(Layer.empty);
+const repositoryHistory = createRepositoryHistoryGateway();
 const session = createBrowserLocalEnvironmentSession(
   productVersion,
   desktopHost,
+  { runtime, onConnect: repositoryHistory.connect },
 );
 session.start();
 const queryClient = createEnvironmentQueryClient();
@@ -32,12 +37,13 @@ createRoot(rootElement).render(
       client={queryClient}
       persistOptions={queryPersistence}
     >
-      <ApplicationRuntime value={session.runtime}>
+      <ApplicationRuntime value={runtime}>
         <NotificationsProvider>
           <ApplicationShell
             desktopUpdates={desktopHost?.updates}
             productVersion={productVersion}
             repositoryFilesystem={desktopHost}
+            repositoryHistory={repositoryHistory.gateway}
             session={session}
           />
         </NotificationsProvider>

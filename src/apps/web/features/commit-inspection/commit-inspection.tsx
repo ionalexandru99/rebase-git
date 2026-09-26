@@ -1,6 +1,13 @@
-import { lazy, Suspense } from "react";
-import type { CommitInspectionController } from "#web/features/commit-inspection/commit-inspection-controller";
-import { useStore } from "#web/platform/store/use-store";
+import type { CommitInspection as CommitDetails } from "@rebase/contracts";
+import { lazy, Suspense, useState } from "react";
+import { useCommitDiff } from "#web/features/commit-inspection/hooks/use-commit-diff";
+import {
+  type InspectionScope,
+  useCommitInspection,
+} from "#web/features/commit-inspection/hooks/use-commit-inspection";
+import { describeInspectionFailure } from "#web/features/commit-inspection/inspection-messages";
+import { useDiffPreferences } from "#web/features/file-diff/index";
+import { usePanelFeature } from "#web/features/workspace-panel/api";
 import { Button } from "#web-ui/components/ui/button";
 import { CommitFiles } from "#web-ui/features/commit-inspection/components/commit-files";
 import { CommitMetadata } from "#web-ui/features/commit-inspection/components/commit-metadata";
@@ -9,19 +16,38 @@ const CommitDiff = lazy(
   () => import("#web-ui/features/commit-inspection/components/commit-diff"),
 );
 
+interface SelectedFile {
+  readonly oid: string;
+  readonly path: string;
+}
+
 export function CommitInspection({
-  controller,
+  scope,
   connected,
 }: {
-  readonly controller: CommitInspectionController;
+  readonly scope: InspectionScope;
   readonly connected: boolean;
 }) {
-  const state = useStore(controller);
-  const details = state.details;
+  const feature = usePanelFeature();
+  const active = connected && feature?.active !== false;
+  const oid = typeof feature?.input === "string" ? feature.input : undefined;
+  const inspection = useCommitInspection(scope, oid, active);
+  const details = inspection.data;
+  const [selected, setSelected] = useState<SelectedFile>();
+  const path = details === undefined ? null : selectedPath(details, selected);
+  const diff = useCommitDiff(scope, details, path, active);
+  const [preferences, choosePreferences] = useDiffPreferences();
+  const error = inspection.isError
+    ? describeInspectionFailure(inspection.error)
+    : null;
+  const retry = () => void inspection.refetch();
+  const select = (next: string) => {
+    if (details !== undefined) setSelected({ oid: details.oid, path: next });
+  };
   return (
     <section
       aria-label="Commit details"
-      aria-busy={state.loading}
+      aria-busy={inspection.isLoading}
       className="@container flex h-full min-h-0 flex-col"
     >
       {!connected ? (
@@ -29,10 +55,10 @@ export function CommitInspection({
           Reconnect to the environment to inspect commits.
         </p>
       ) : null}
-      {state.error ? (
+      {error ? (
         <div role="alert" className="p-3 text-sm">
-          {state.error}{" "}
-          <Button size="xs" variant="ghost" onClick={controller.retry}>
+          {error}{" "}
+          <Button size="xs" variant="ghost" onClick={retry}>
             Retry
           </Button>
         </div>
@@ -45,11 +71,7 @@ export function CommitInspection({
               The changed-file list is too large to show in full.
             </p>
           ) : null}
-          {state.error ? null : state.loading ? (
-            <p role="status" className="p-4 text-sm text-muted-foreground">
-              Loading changed files…
-            </p>
-          ) : details.files.length === 0 ? (
+          {details.files.length === 0 ? (
             <p className="p-4 text-sm text-muted-foreground">
               No file changes.
             </p>
@@ -64,23 +86,44 @@ export function CommitInspection({
               >
                 <CommitDiff
                   key={`${details.oid}:${details.parentOid}`}
-                  state={state}
-                  controller={controller}
+                  files={details.files}
+                  path={path}
+                  select={select}
+                  diff={{
+                    value: diff.data,
+                    loading: diff.isLoading,
+                    error: diff.isError
+                      ? describeInspectionFailure(diff.error)
+                      : null,
+                    retry: () => void diff.refetch(),
+                  }}
+                  preferences={preferences}
+                  choosePreferences={choosePreferences}
                 />
               </Suspense>
-              <CommitFiles
-                files={details.files}
-                path={state.path}
-                select={controller.selectFile}
-              />
+              <CommitFiles files={details.files} path={path} select={select} />
             </div>
           )}
         </>
-      ) : !state.error ? (
+      ) : !error ? (
         <p role="status" className="p-4 text-sm text-muted-foreground">
-          {state.loading ? "Loading commit…" : "Select a commit in the graph."}
+          {inspection.isLoading
+            ? "Loading commit…"
+            : "Select a commit in the graph."}
         </p>
       ) : null}
     </section>
   );
+}
+
+function selectedPath(
+  details: CommitDetails,
+  selected: SelectedFile | undefined,
+) {
+  if (
+    selected?.oid === details.oid &&
+    details.files.some((file) => file.path === selected.path)
+  )
+    return selected.path;
+  return details.files[0]?.path ?? null;
 }

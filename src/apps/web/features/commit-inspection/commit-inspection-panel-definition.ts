@@ -1,11 +1,10 @@
-import { InspectCommit } from "@rebase/contracts";
+import { isObjectId } from "@rebase/contracts";
 import { IconGitCommit } from "@tabler/icons-react";
-import { Schema } from "effect";
 import { lazy } from "react";
 import type { WorkspacePanelDefinition } from "#web-ui/features/workspace-panel/index";
 
 export const commitInspectionPanel = {
-  acceptsInput: Schema.is(InspectCommit.fields.oid),
+  acceptsInput: isObjectId,
   Content: lazy(() =>
     import("#web-ui/features/commit-inspection/commit-inspection-panel").then(
       (module) => ({ default: module.CommitInspectionPanel }),

@@ -15,8 +15,7 @@ import {
 } from "#web/app/environment/connection/index";
 import { createLocalEnvironmentSession } from "#web/app/environment/local-environment-session";
 import type {
-  ConnectedFeature,
-  LocalEnvironmentControllers,
+  EnvironmentConnected,
   LocalEnvironmentGateway,
   LocalEnvironmentSessionOptions,
   LocalEnvironmentSessionState,
@@ -25,14 +24,14 @@ import type {
 const runtime = ManagedRuntime.make(Layer.empty);
 
 describe("local Environment session", () => {
-  it("connects each feature, forwards change events, and releases them on disconnect", async () => {
+  it("runs the connect hook, forwards change events, and releases them on disconnect", async () => {
     const connection = createConnection();
     const release = vi.fn();
     connection.subscribeChanges.mockReturnValue(release);
     const feature = createFeature();
     const changed = vi.fn();
     const session = createSession({
-      features: [feature],
+      onConnect: feature.connect,
       gateway: createGateway(connection),
     });
     session.changes.subscribe(changed);
@@ -116,7 +115,7 @@ describe("local Environment session", () => {
       Effect.promise(() => reconnect.promise),
     );
     const session = createSession({
-      features: [feature],
+      onConnect: feature.connect,
       gateway,
       waitBeforeReconnect,
     });
@@ -169,7 +168,7 @@ describe("local Environment session", () => {
     const waitBeforeReconnect = vi.fn(() => Effect.void);
     const feature = createFeature();
     const session = createSession({
-      features: [feature],
+      onConnect: feature.connect,
       gateway,
       waitBeforeReconnect,
     });
@@ -189,8 +188,6 @@ function createSession(
     Pick<LocalEnvironmentSessionOptions, "gateway">,
 ) {
   return createLocalEnvironmentSession({
-    controllers: unusedControllers,
-    features: [],
     requests: async () => {
       throw new Error("Session tests do not send requests.");
     },
@@ -201,13 +198,10 @@ function createSession(
 
 function createFeature() {
   const released = vi.fn();
-  const connect = vi.fn<ConnectedFeature["connect"]>(() =>
+  const connect = vi.fn<EnvironmentConnected>(() =>
     Effect.acquireRelease(Effect.void, () => Effect.sync(released)),
   );
-  return {
-    connect,
-    released,
-  } satisfies ConnectedFeature & { readonly released: typeof released };
+  return { connect, released };
 }
 
 function createGateway(...connections: ReturnType<typeof createConnection>[]) {
@@ -230,24 +224,6 @@ function createGateway(...connections: ReturnType<typeof createConnection>[]) {
     authorize: ReturnType<typeof vi.fn<LocalEnvironmentGateway["authorize"]>>;
   };
 }
-
-const unusedControllers: LocalEnvironmentControllers = {
-  filesystem: {
-    listDirectory: () => Promise.reject(new Error("Unused")),
-  },
-  repositoryCatalog: {
-    getSnapshot: () => ({ repositories: [], status: "idle" }),
-    recordOpened: () => Promise.reject(new Error("Unused")),
-    refresh: () => Promise.reject(new Error("Unused")),
-    remember: () => Promise.reject(new Error("Unused")),
-    remove: () => Promise.reject(new Error("Unused")),
-    subscribe: () => () => undefined,
-  },
-  repositoryHistory: {
-    read: () => Promise.reject(new Error("Unused")),
-    synchronize: () => Promise.reject(new Error("Unused")),
-  },
-};
 
 function createConnection(
   currentSequence = 0,

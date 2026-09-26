@@ -10,9 +10,6 @@ import type {
 } from "@rebase/environment-client";
 import type { Effect, ManagedRuntime, Scope } from "effect";
 import type { EnvironmentProtocolConnection } from "#web/app/environment/connection/environment-protocol-connection.contract";
-import type { EnvironmentFilesystemController } from "#web/features/environment-filesystem/environment-filesystem-controller.contract";
-import type { RepositoryCatalogController } from "#web/features/repository-catalog/repository-catalog-controller.contract";
-import type { RepositoryHistoryGateway } from "#web/features/repository-history/repository-history-reader.contract";
 import type {
   EnvironmentChanges,
   NegotiatedEnvironment,
@@ -44,27 +41,17 @@ export type LocalEnvironmentSessionState =
       readonly message: string;
     };
 
-export interface ConnectedFeature {
-  readonly connect: (
-    connection: EnvironmentProtocolConnection,
-  ) => Effect.Effect<void, never, Scope.Scope>;
-}
-
-export interface LocalEnvironmentControllers {
-  readonly filesystem: EnvironmentFilesystemController;
-  readonly repositoryCatalog: RepositoryCatalogController;
-  readonly repositoryHistory: RepositoryHistoryGateway;
-}
-
 export interface LocalEnvironmentSession
-  extends LocalEnvironmentControllers,
-    ReadableStore<LocalEnvironmentSessionState> {
+  extends ReadableStore<LocalEnvironmentSessionState> {
   readonly changes: EnvironmentChanges;
   readonly requests: EnvironmentRequestClient;
-  readonly runtime: ManagedRuntime.ManagedRuntime<never, never>;
   readonly start: () => void;
   readonly stop: () => void;
 }
+
+export type EnvironmentConnected = (
+  connection: EnvironmentProtocolConnection,
+) => Effect.Effect<void, never, Scope.Scope>;
 
 export interface LocalEnvironmentGateway {
   readonly connect: (
@@ -82,8 +69,7 @@ export interface LocalEnvironmentGateway {
 }
 
 export interface LocalEnvironmentSessionOptions {
-  readonly controllers: LocalEnvironmentControllers;
-  readonly features: readonly ConnectedFeature[];
+  readonly onConnect?: EnvironmentConnected;
   readonly gateway: LocalEnvironmentGateway;
   readonly requests: EnvironmentRequestClient;
   readonly runtime: ManagedRuntime.ManagedRuntime<never, never>;

@@ -1,13 +1,10 @@
-import { Effect } from "effect";
 import { expect, it } from "vite-plus/test";
-import { browserWorkingChangesStore } from "#web/persistence/working-changes/working-changes-store";
-
-const {
+import {
   readCommitDraft,
   readDiffPreferences,
   saveCommitDraft,
   saveDiffPreferences,
-} = browserWorkingChangesStore;
+} from "#web/persistence/working-changes/working-changes-store";
 
 it("restores drafts per environment, repository, and worktree with client-wide display preferences", async () => {
   const key = JSON.stringify([crypto.randomUUID(), "repository", "/worktree"]);
@@ -16,36 +13,44 @@ it("restores drafts per environment, repository, and worktree with client-wide d
     "repository",
     "/worktree",
   ]);
-  await Effect.runPromise(
-    saveCommitDraft(key, {
-      subject: "Keep this message",
-      description: "Detailed draft",
-    }),
-  );
-  await Effect.runPromise(
-    saveCommitDraft(other, { subject: "Other environment", description: "" }),
-  );
-  await Effect.runPromise(
-    saveDiffPreferences({
-      split: true,
-      wrap: true,
-      tree: false,
-    }),
-  );
-  expect(await Effect.runPromise(readCommitDraft(key))).toEqual({
+  await saveCommitDraft(key, {
     subject: "Keep this message",
     description: "Detailed draft",
   });
-  expect(await Effect.runPromise(readCommitDraft(other))).toEqual({
+  await saveCommitDraft(other, {
     subject: "Other environment",
     description: "",
   });
-  expect(
-    await Effect.runPromise(readCommitDraft(`${key}:other-worktree`)),
-  ).toEqual({ subject: "", description: "" });
-  expect(await Effect.runPromise(readDiffPreferences())).toEqual({
+  await saveDiffPreferences({
     split: true,
     wrap: true,
     tree: false,
   });
+  expect(await readCommitDraft(key)).toEqual({
+    subject: "Keep this message",
+    description: "Detailed draft",
+  });
+  expect(await readCommitDraft(other)).toEqual({
+    subject: "Other environment",
+    description: "",
+  });
+  expect(await readCommitDraft(`${key}:other-worktree`)).toEqual({
+    subject: "",
+    description: "",
+  });
+  expect(await readDiffPreferences()).toEqual({
+    split: true,
+    wrap: true,
+    tree: false,
+  });
+});
+
+it("reads a draft whose save is still queued", async () => {
+  const key = JSON.stringify([crypto.randomUUID(), "repository", "/worktree"]);
+  const saved = saveCommitDraft(key, { subject: "Queued", description: "" });
+  expect(await readCommitDraft(key)).toEqual({
+    subject: "Queued",
+    description: "",
+  });
+  await saved;
 });

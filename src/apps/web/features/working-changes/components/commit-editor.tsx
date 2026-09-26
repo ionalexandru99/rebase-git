@@ -1,20 +1,29 @@
 import { useWorktreeOperation } from "#web/features/operation-recovery/index";
+import type { WorkingChangesView } from "#web/features/working-changes/hooks/use-working-changes-view";
 import { usePanelFeature } from "#web/features/workspace-panel/api";
 import { Button } from "#web-ui/components/ui/button";
 import { Input } from "#web-ui/components/ui/input";
-import {
-  useCommitDraft,
-  useWorkingChanges,
-  useWorkingChangesController,
-} from "#web-ui/features/working-changes/working-changes-provider";
 
-export function CommitEditor({ writable }: { readonly writable: boolean }) {
-  const controller = useWorkingChangesController();
-  const draft = useCommitDraft();
-  const busy = useWorkingChanges("busy");
-  const loading = useWorkingChanges("loading");
-  const amend = useWorkingChanges("amend");
-  const changes = useWorkingChanges("changes");
+type CommitEditorView = Pick<
+  WorkingChangesView,
+  | "changes"
+  | "draft"
+  | "editDraft"
+  | "amend"
+  | "toggleAmend"
+  | "busy"
+  | "loading"
+  | "commit"
+>;
+
+export function CommitEditor({
+  view,
+  writable,
+}: {
+  readonly view: CommitEditorView;
+  readonly writable: boolean;
+}) {
+  const { draft, busy, loading, amend, changes } = view;
   const recovery = useWorktreeOperation(usePanelFeature()?.scope);
   const operation = recovery?.operation;
   const amendAllowed =
@@ -47,7 +56,7 @@ export function CommitEditor({ writable }: { readonly writable: boolean }) {
         disabled={loading || busy}
         maxLength={2000}
         onChange={(event) =>
-          controller.updateDraft({ ...draft, subject: event.target.value })
+          view.editDraft({ ...draft, subject: event.target.value })
         }
       />
       <textarea
@@ -58,7 +67,7 @@ export function CommitEditor({ writable }: { readonly writable: boolean }) {
         disabled={loading || busy}
         maxLength={28000}
         onChange={(event) =>
-          controller.updateDraft({ ...draft, description: event.target.value })
+          view.editDraft({ ...draft, description: event.target.value })
         }
       />
       <div className="mt-auto flex flex-wrap items-center justify-between gap-2">
@@ -68,9 +77,13 @@ export function CommitEditor({ writable }: { readonly writable: boolean }) {
             className="accent-primary"
             checked={amend}
             disabled={
-              disabled || changes?.head == null || (blocked && !amendAllowed)
+              amend
+                ? !writable || busy
+                : disabled ||
+                  changes?.head == null ||
+                  (blocked && !amendAllowed)
             }
-            onChange={(event) => controller.amend(event.target.checked)}
+            onChange={(event) => view.toggleAmend(event.target.checked)}
           />
           Amend
         </label>
@@ -82,7 +95,7 @@ export function CommitEditor({ writable }: { readonly writable: boolean }) {
             !draft.subject.trim() ||
             (!amend && count === 0)
           }
-          onClick={controller.commit}
+          onClick={view.commit}
         >
           {busy
             ? "Working…"

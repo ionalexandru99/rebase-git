@@ -13,7 +13,6 @@ import type {
   GitHubRepository,
 } from "#web/features/author-avatars/author-avatar.contract";
 import { createAuthorAvatarModel } from "#web/features/author-avatars/author-avatar-model";
-import { useApplicationRuntime } from "#web-ui/platform/effect/application-runtime-context";
 
 const AvatarContext = createContext<AuthorAvatarModel | undefined>(undefined);
 
@@ -24,7 +23,6 @@ export function AuthorAvatars({
   readonly repository: GitHubRepository | undefined;
   readonly children: ReactNode;
 }) {
-  const runtime = useApplicationRuntime();
   const [state, setState] = useState<{
     readonly model: AuthorAvatarModel;
     readonly owner: string;
@@ -36,16 +34,14 @@ export function AuthorAvatars({
     const next =
       owner === undefined || name === undefined
         ? undefined
-        : createAuthorAvatarModel({ owner, name }, runtime);
+        : createAuthorAvatarModel({ owner, name });
     setState(
       next === undefined || owner === undefined || name === undefined
         ? undefined
         : { model: next, owner, name },
     );
-    return () => {
-      void next?.dispose();
-    };
-  }, [owner, name, runtime]);
+    return () => next?.dispose();
+  }, [owner, name]);
   return (
     <AvatarContext
       value={

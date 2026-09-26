@@ -1,25 +1,39 @@
-import { useMemo } from "react";
-import { repositoryChangesClient } from "#web/features/working-changes/transport/repository-changes-client";
 import { usePanelFeature } from "#web/features/workspace-panel/api";
 import { WorkingChanges } from "#web-ui/features/working-changes/working-changes";
 
 export function WorkingChangesPanel() {
   const feature = usePanelFeature();
-  const requests = feature?.environment?.requests;
-  const client = useMemo(
-    () => requests && repositoryChangesClient(requests),
-    [requests],
-  );
+  if (feature?.scope === undefined || feature.environment === undefined)
+    return <Disconnected />;
+  const { active, environment, scope } = feature;
+  const { connected, writable } = environment;
+  const { environmentId, repositoryId, worktreePath } = scope;
   return (
-    <WorkingChanges
-      client={client}
-      environmentId={feature?.scope?.environmentId}
-      repositoryId={feature?.scope?.repositoryId}
-      worktreePath={feature?.scope?.worktreePath ?? ""}
-      changes={feature?.environment?.changes}
-      connected={feature?.environment?.connected ?? false}
-      writable={feature?.environment?.writable ?? false}
-      runtime={feature?.environment?.runtime}
-    />
+    <>
+      {connected ? null : <Disconnected />}
+      <div className="h-full min-h-0" hidden={!connected}>
+        <WorkingChanges
+          target={{
+            repositoryId,
+            worktreePath,
+            draftKey: JSON.stringify([
+              environmentId,
+              repositoryId,
+              worktreePath,
+            ]),
+            active: connected && active,
+          }}
+          writable={connected && writable}
+        />
+      </div>
+    </>
+  );
+}
+
+function Disconnected() {
+  return (
+    <div className="flex h-full items-center justify-center p-6 text-sm text-muted-foreground">
+      Connect to the repository to review changes.
+    </div>
   );
 }

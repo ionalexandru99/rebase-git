@@ -2,6 +2,10 @@ import { mkdir, mkdtemp, realpath, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
+  EnvironmentFilesystemHttpApi,
+  RepositoryCatalogHttpApi,
+} from "@rebase/contracts";
+import {
   createEnvironmentRequestClient,
   type EnvironmentCredential,
 } from "@rebase/environment-client";
@@ -27,14 +31,6 @@ import { testEnvironmentFeatures } from "#tests-integration/apps/server/environm
 import { createRepository } from "#tests-support/git";
 import { removeTemporaryDirectory } from "#tests-support/temporary-directory";
 import { exchangeEnvironmentPairingEffect } from "#web/app/environment/connection/index";
-import {
-  EnvironmentFilesystemRejected,
-  environmentFilesystemClient,
-} from "#web/features/environment-filesystem/index";
-import {
-  RepositoryCatalogRejected,
-  repositoryCatalogClient,
-} from "#web/features/repository-catalog/index";
 
 const directories = new Set<string>();
 const environmentId = "00000000-0000-4000-8000-000000000001";
@@ -51,75 +47,69 @@ describe("repository catalog transport", () => {
     await withCatalogListener(async ({ authorization, origin, root }) => {
       const repositoryPath = join(root, "repository");
       await createRepository(repositoryPath);
-      const owner = await pair(origin, authorization, "owner");
-      const viewer = await pair(origin, authorization, "viewer");
+      const owner = requests(
+        origin,
+        await pair(origin, authorization, "owner"),
+      );
+      const viewer = requests(
+        origin,
+        await pair(origin, authorization, "viewer"),
+      );
 
-      const remembered = await Effect.runPromise(
-        catalog(origin, owner).remember({ path: repositoryPath }),
-      );
+      const remembered = await owner(RepositoryCatalogHttpApi.remember, {
+        path: repositoryPath,
+      });
       await expect(
-        Effect.runPromise(catalog(origin, viewer).list()),
+        viewer(RepositoryCatalogHttpApi.list, undefined),
       ).resolves.toEqual({ repositories: [remembered] });
-      const opened = await Effect.runPromise(
-        catalog(origin, viewer).recordOpened({ repositoryId: remembered.id }),
-      );
+      const opened = await viewer(RepositoryCatalogHttpApi.recordOpened, {
+        repositoryId: remembered.id,
+      });
       expect(opened.lastOpenedAt >= remembered.lastOpenedAt).toBe(true);
 
       await expect(
-        Effect.runPromise(
-          catalog(origin, viewer).remove({ repositoryId: remembered.id }),
-        ),
-      ).rejects.toEqual(
-        new RepositoryCatalogRejected({
-          failure: {
-            _tag: "CapabilityDenied",
-            capability: "repository.write",
-          },
+        viewer(RepositoryCatalogHttpApi.remove, {
+          repositoryId: remembered.id,
         }),
-      );
-      await expect(
-        Effect.runPromise(
-          catalog(origin, owner).remove({ repositoryId: remembered.id }),
-        ),
-      ).resolves.toEqual({
-        repositoryId: remembered.id,
+      ).rejects.toMatchObject({
+        failure: { _tag: "CapabilityDenied", capability: "repository.write" },
       });
       await expect(
-        Effect.runPromise(catalog(origin, viewer).list()),
+        owner(RepositoryCatalogHttpApi.remove, { repositoryId: remembered.id }),
+      ).resolves.toEqual({ repositoryId: remembered.id });
+      await expect(
+        viewer(RepositoryCatalogHttpApi.list, undefined),
       ).resolves.toEqual({ repositories: [] });
     });
   });
 
   it("returns typed path and missing-entry failures", async () => {
     await withCatalogListener(async ({ authorization, origin, root }) => {
-      const owner = await pair(origin, authorization, "owner");
+      const owner = requests(
+        origin,
+        await pair(origin, authorization, "owner"),
+      );
 
       await expect(
-        Effect.runPromise(
-          catalog(origin, owner).remember({ path: join(root, "missing") }),
-        ),
-      ).rejects.toEqual(
-        new RepositoryCatalogRejected({
-          failure: {
-            _tag: "RepositoryPathRejected",
-            reason: "NotFound",
-          },
+        owner(RepositoryCatalogHttpApi.remember, {
+          path: join(root, "missing"),
         }),
-      );
-      const missingId = "00000000-0000-4000-8000-000000000099";
+      ).rejects.toMatchObject({
+        _tag: "EnvironmentHttpRejected",
+        failure: { _tag: "RepositoryPathRejected", reason: "NotFound" },
+      });
       await expect(
-        Effect.runPromise(
-          catalog(origin, owner).recordOpened({ repositoryId: missingId }),
-        ),
-      ).rejects.toEqual(
-        new RepositoryCatalogRejected({
-          failure: {
-            _tag: "RepositoryRejected",
-            reason: "Missing",
-            detail: "This repository is no longer available.",
-          },
+        owner(RepositoryCatalogHttpApi.recordOpened, {
+          repositoryId: "00000000-0000-4000-8000-000000000099",
         }),
-      );
+      ).rejects.toMatchObject({
+        _tag: "EnvironmentHttpRejected",
+        failure: {
+          _tag: "RepositoryRejected",
+          reason: "Missing",
+          detail: "This repository is no longer available.",
+        },
+      });
     });
   });
 
@@ -127,12 +117,18 @@ describe("repository catalog transport", () => {
     await withCatalogListener(async ({ authorization, origin, root }) => {
       await mkdir(join(root, "projects"));
       await writeFile(join(root, "notes.md"), "notes");
-      const owner = await pair(origin, authorization, "owner");
-      const viewer = await pair(origin, authorization, "viewer");
-
-      const listing = await Effect.runPromise(
-        filesystem(origin, owner).listDirectory({ path: root }),
+      const owner = requests(
+        origin,
+        await pair(origin, authorization, "owner"),
       );
+      const viewer = requests(
+        origin,
+        await pair(origin, authorization, "viewer"),
+      );
+
+      const listing = await owner(EnvironmentFilesystemHttpApi.listDirectory, {
+        path: root,
+      });
 
       expect(listing.path).toBe(root);
       expect(listing.entries).toEqual(
@@ -142,17 +138,10 @@ describe("repository catalog transport", () => {
         ]),
       );
       await expect(
-        Effect.runPromise(
-          filesystem(origin, viewer).listDirectory({ path: root }),
-        ),
-      ).rejects.toEqual(
-        new EnvironmentFilesystemRejected({
-          failure: {
-            _tag: "CapabilityDenied",
-            capability: "repository.write",
-          },
-        }),
-      );
+        viewer(EnvironmentFilesystemHttpApi.listDirectory, { path: root }),
+      ).rejects.toMatchObject({
+        failure: { _tag: "CapabilityDenied", capability: "repository.write" },
+      });
     });
   });
 });
@@ -215,16 +204,8 @@ async function pair(
   return { type: "bearer" as const, value: exchanged.credential };
 }
 
-function catalog(origin: string, credential: EnvironmentCredential) {
-  return repositoryCatalogClient(
-    createEnvironmentRequestClient(origin, () => credential),
-  );
-}
-
-function filesystem(origin: string, credential: EnvironmentCredential) {
-  return environmentFilesystemClient(
-    createEnvironmentRequestClient(origin, () => credential),
-  );
+function requests(origin: string, credential: EnvironmentCredential) {
+  return createEnvironmentRequestClient(origin, () => credential);
 }
 
 async function createTemporaryDirectory() {

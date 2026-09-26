@@ -11,17 +11,21 @@ import {
 } from "@tabler/icons-react";
 import { useRef, useState } from "react";
 import { useFileRows } from "#web/features/file-diff/index";
+import type {
+  ChangeAction,
+  WorkingChangesView,
+} from "#web/features/working-changes/hooks/use-working-changes-view";
 import {
   compactRename,
   renameHint,
 } from "#web/features/working-changes/rename/rename-path";
 import { Button } from "#web-ui/components/ui/button";
 import { ChangeFileIcon } from "#web-ui/features/working-changes/components/change-file-icon";
-import type { ChangeAction } from "#web-ui/features/working-changes/components/change-file-tree";
-import {
-  useWorkingChanges,
-  useWorkingChangesController,
-} from "#web-ui/features/working-changes/working-changes-provider";
+
+export type ChangeFileSectionView = Pick<
+  WorkingChangesView,
+  "changes" | "preferences" | "selection" | "select" | "busy" | "loading"
+>;
 
 const statusLabels: Record<ChangedFile["status"], string> = {
   A: "Added",
@@ -34,22 +38,19 @@ const statusLabels: Record<ChangedFile["status"], string> = {
 };
 
 export function ChangeFileSection({
+  view,
   section,
   filter,
   writable,
   act,
 }: {
+  readonly view: ChangeFileSectionView;
   readonly section: ChangeSection;
   readonly filter: string;
   readonly writable: boolean;
   readonly act: ChangeAction;
 }) {
-  const controller = useWorkingChangesController();
-  const changes = useWorkingChanges("changes");
-  const preferences = useWorkingChanges("preferences");
-  const selection = useWorkingChanges("selection");
-  const busy = useWorkingChanges("busy");
-  const loading = useWorkingChanges("loading");
+  const { changes, preferences, selection, busy, loading } = view;
   const anchor = useRef<string | null>(null);
   const [checked, setChecked] = useState<ReadonlySet<string>>(new Set());
   const [open, setOpen] = useState(true);
@@ -169,7 +170,7 @@ export function ChangeFileSection({
                     setChecked(new Set(isFolder ? [] : row.paths));
                     isFolder
                       ? toggle(row.key)
-                      : controller.select(section, row.key);
+                      : view.select({ section, path: row.key });
                   }}
                 >
                   {isFolder ? (

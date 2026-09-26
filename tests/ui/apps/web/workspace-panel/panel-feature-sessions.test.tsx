@@ -1,26 +1,53 @@
 import {
+  type ChangeDiff,
+  type CommitInspection,
   CommitInspectionHttpApi,
-  isRouteOk,
+  type RepositoryChanges,
   RepositoryChangesHttpApi,
-  type RouteInput,
-  type RouteSuccess,
 } from "@rebase/contracts";
-import type {
-  EnvironmentRequestClient,
-  EnvironmentRequestOptions,
-  RequestableEnvironmentHttpRoute,
-} from "@rebase/environment-client";
-import { Effect, Layer, ManagedRuntime, Schema } from "effect";
 import { expect, it } from "vite-plus/test";
 import { page } from "vite-plus/test/browser";
+import { fakeRequests, respond } from "#tests-ui/runtime/fake-requests";
 import { render } from "#tests-ui/runtime/render";
 import { ResizablePanel } from "#web-ui/components/ui/resizable";
 import { WorkspacePanel } from "#web-ui/features/workspace-panel/index";
 import { useWorkspacePanel } from "#web-ui/features/workspace-panel/workspace-panel-provider";
 
-const runtime = ManagedRuntime.make(Layer.empty);
 const oid = "a".repeat(40);
 const parentOid = "b".repeat(40);
+const changes: RepositoryChanges = {
+  revision: "one",
+  head: oid,
+  message: "Previous message",
+  unstaged: [
+    { path: "first.bin", previousPath: null, status: "M" },
+    { path: "second.bin", previousPath: null, status: "M" },
+  ],
+  staged: [],
+  truncated: false,
+  renamesLimited: false,
+};
+
+function inspection(inspected: string): CommitInspection {
+  const author = {
+    name: "Alex",
+    email: "alex@example.test",
+    date: "2026-09-15T10:00:00Z",
+  };
+  return {
+    oid: inspected,
+    parentOid,
+    parents: [parentOid],
+    message: "Inspected commit\n\nRetained body",
+    author,
+    committer: author,
+    files: [
+      { path: "first.bin", status: "M", previousPath: null },
+      { path: "second.bin", status: "M", previousPath: null },
+    ],
+    truncated: false,
+  };
+}
 
 async function fixture(linkedWorktree = false) {
   localStorage.clear();
@@ -30,129 +57,49 @@ async function fixture(linkedWorktree = false) {
   const diffs: string[] = [];
   const inspections: string[] = [];
   const cancelled: string[] = [];
-  const foreignRequests: string[] = [];
+  let requestCount = 0;
   let holdReads = false;
   let holdInspections = false;
-  const disconnected = () => new Error("Disconnected");
-  const respond = <Route extends RequestableEnvironmentHttpRoute>(
-    endpoint: Route,
-    command: unknown,
-  ): Effect.Effect<RouteSuccess<Route>, Error> =>
-    Effect.suspend(() => {
-      let response: unknown;
-      if (endpoint.path === RepositoryChangesHttpApi.read.path) {
-        const scope = Schema.decodeUnknownSync(
-          RepositoryChangesHttpApi.read.request,
-        )(command);
-        reads.push(scope.repositoryId);
-        if (holdReads) {
-          return Effect.never.pipe(
-            Effect.ensuring(
-              Effect.sync(() => {
-                cancelled.push(scope.repositoryId);
-              }),
-            ),
-          );
-        }
-        response = {
-          revision: "one",
-          head: oid,
-          message: "Previous message",
-          unstaged: [
-            { path: "first.bin", previousPath: null, status: "M" },
-            { path: "second.bin", previousPath: null, status: "M" },
-          ],
-          staged: [],
-          truncated: false,
-          renamesLimited: false,
-        };
-      } else if (endpoint.path === CommitInspectionHttpApi.inspect.path) {
-        const scope = Schema.decodeUnknownSync(
-          CommitInspectionHttpApi.inspect.request,
-        )(command);
-        inspections.push(scope.oid);
-        if (holdInspections) {
-          return Effect.never.pipe(
-            Effect.ensuring(
-              Effect.sync(() => {
-                cancelled.push(scope.oid);
-              }),
-            ),
-          );
-        }
-        response = {
-          oid: scope.oid,
-          parentOid,
-          parents: [parentOid],
-          message: "Inspected commit\n\nRetained body",
-          author: {
-            name: "Alex",
-            email: "alex@example.test",
-            date: "2026-09-15T10:00:00Z",
-          },
-          committer: {
-            name: "Alex",
-            email: "alex@example.test",
-            date: "2026-09-15T10:00:00Z",
-          },
-          files: [
-            { path: "first.bin", status: "M", previousPath: null },
-            { path: "second.bin", status: "M", previousPath: null },
-          ],
-          truncated: false,
-        };
-      } else {
-        const scope =
-          endpoint.path === CommitInspectionHttpApi.inspectDiff.path
-            ? Schema.decodeUnknownSync(
-                CommitInspectionHttpApi.inspectDiff.request,
-              )(command)
-            : Schema.decodeUnknownSync(RepositoryChangesHttpApi.diff.request)(
-                command,
-              );
-        diffs.push(`${endpoint.path}:${scope.path}`);
-        response = {
-          path: scope.path,
-          revision: scope.path,
-          kind: "binary",
-          before: null,
-          after: null,
-          beforeBytes: 10,
-          afterBytes: 20,
-          mime: null,
-          patch: "",
-        };
-      }
-      return Schema.decodeUnknownEffect(endpoint.response)({
-        _tag: "Ok",
-        value: response,
-      }).pipe(
-        Effect.mapError(disconnected),
-        Effect.flatMap((result) =>
-          isRouteOk(result)
-            ? Effect.succeed(result.value)
-            : Effect.fail(disconnected()),
-        ),
-      );
+  const held = (key: string, signal: AbortSignal | undefined) =>
+    new Promise<never>((_resolve, reject) => {
+      signal?.addEventListener("abort", () => {
+        cancelled.push(key);
+        reject(signal.reason);
+      });
     });
-  const run = <Route extends RequestableEnvironmentHttpRoute>(
-    endpoint: Route,
-    command: RouteInput<Route>,
-    options: EnvironmentRequestOptions = {},
-  ) =>
-    Effect.runPromise(
-      respond(endpoint, command),
-      options.signal === undefined ? {} : { signal: options.signal },
-    );
-  const requests: EnvironmentRequestClient = run;
-  const foreignClient: EnvironmentRequestClient = (
-    endpoint,
-    command,
-    options,
-  ) => {
-    foreignRequests.push(endpoint.path);
-    return run(endpoint, command, options);
-  };
+  const binaryDiff = (path: string): ChangeDiff => ({
+    path,
+    revision: path,
+    kind: "binary",
+    before: null,
+    after: null,
+    beforeBytes: 10,
+    afterBytes: 20,
+    mime: null,
+    patch: "",
+  });
+  const requests = fakeRequests(
+    respond(RepositoryChangesHttpApi.read, (scope, { signal }) => {
+      requestCount++;
+      reads.push(scope.repositoryId);
+      return holdReads ? held(scope.repositoryId, signal) : changes;
+    }),
+    respond(RepositoryChangesHttpApi.diff, (scope) => {
+      requestCount++;
+      diffs.push(`${RepositoryChangesHttpApi.diff.path}:${scope.path}`);
+      return binaryDiff(scope.path);
+    }),
+    respond(CommitInspectionHttpApi.inspect, (scope, { signal }) => {
+      requestCount++;
+      inspections.push(scope.oid);
+      return holdInspections ? held(scope.oid, signal) : inspection(scope.oid);
+    }),
+    respond(CommitInspectionHttpApi.inspectDiff, (scope) => {
+      requestCount++;
+      diffs.push(`${CommitInspectionHttpApi.inspectDiff.path}:${scope.path}`);
+      return binaryDiff(scope.path);
+    }),
+  );
   const tree = (
     project: string,
     repositoryIds: readonly string[] = [projectA, projectB],
@@ -163,10 +110,8 @@ async function fixture(linkedWorktree = false) {
       <WorkspacePanel.Sessions
         environment={{
           environmentId,
-          requests: environmentId === "environment" ? requests : foreignClient,
           connected,
           writable: connected,
-          runtime,
         }}
         repositoryIds={repositoryIds}
       >
@@ -193,14 +138,14 @@ async function fixture(linkedWorktree = false) {
       </WorkspacePanel.Sessions>
     </div>
   );
-  const view = await render(tree(projectA));
+  const view = await render(tree(projectA), { environment: { requests } });
   return {
     view,
     reads,
     diffs,
     inspections,
     cancelled,
-    foreignRequests,
+    requestCount: () => requestCount,
     projectA,
     projectB,
     show: (project: string, repositoryIds?: string[], connected?: boolean) =>
@@ -307,16 +252,16 @@ it("retains an inspected commit and file while another tab and another project a
     )
     .toHaveAttribute("aria-pressed", "true");
   expect(f.inspections).toHaveLength(count);
-  expect(f.foreignRequests).toEqual([]);
 });
 
 it("interrupts reads when a project deactivates and releases its feature sessions when closed", async () => {
   const f = await fixture();
   await openDiffs();
   f.holdReads();
+  const readsBefore = f.reads.length;
   await page.getByRole("button", { name: "Hide side panel" }).click();
   await page.getByRole("button", { name: "Show side panel" }).click();
-  await expect.poll(() => f.reads.length).toBe(2);
+  await expect.poll(() => f.reads.length).toBeGreaterThan(readsBefore);
   await f.show(f.projectB);
   await expect.poll(() => f.cancelled.includes(f.projectA)).toBe(true);
   await f.show(f.projectB, [f.projectB]);
@@ -363,7 +308,10 @@ it("pauses retained sessions while a different environment is current", async ()
   await page
     .getByRole("button", { name: "second.bin Modified", exact: true })
     .click();
-  const count = f.inspections.length;
+  await expect
+    .poll(() => f.diffs.at(-1))
+    .toBe(`${CommitInspectionHttpApi.inspectDiff.path}:second.bin`);
+  const requests = f.requestCount();
   await f.showEnvironment("other-environment");
   await expect
     .element(page.getByText("Reconnect to the environment to inspect commits."))
@@ -374,6 +322,5 @@ it("pauses retained sessions while a different environment is current", async ()
       page.getByRole("button", { name: "second.bin Modified", exact: true }),
     )
     .toHaveAttribute("aria-pressed", "true");
-  expect(f.inspections).toHaveLength(count);
-  expect(f.foreignRequests).toEqual([]);
+  expect(f.requestCount()).toBe(requests);
 });

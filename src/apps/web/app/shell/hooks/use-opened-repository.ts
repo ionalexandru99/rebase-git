@@ -1,30 +1,31 @@
 import type { RepositoryCatalogEntry, RepositoryRefs } from "@rebase/contracts";
 import { useCallback, useEffect, useMemo } from "react";
-import type { LocalEnvironmentSession } from "#web/app/environment/local-environment-session.contract";
 import {
   createOpenedRepositoryStore,
   type OpenedRepositoryTarget,
   openedRepositoryKey,
 } from "#web/app/shell/opened-repository";
+import type { RepositoryHistoryGateway } from "#web/features/repository-history/index";
 import { useStore } from "#web/platform/store/use-store";
 
 export function useOpenedRepository({
   environmentId,
+  findRepository,
+  gateway,
   refs,
   repository,
-  session,
   worktreePathFor,
 }: {
   readonly environmentId: string | undefined;
+  readonly findRepository: (
+    repositoryId: string,
+  ) => RepositoryCatalogEntry | undefined;
+  readonly gateway: RepositoryHistoryGateway;
   readonly refs: RepositoryRefs | undefined;
   readonly repository: RepositoryCatalogEntry | undefined;
-  readonly session: LocalEnvironmentSession;
   readonly worktreePathFor: (repository: RepositoryCatalogEntry) => string;
 }) {
-  const store = useMemo(
-    () => createOpenedRepositoryStore(session.repositoryHistory),
-    [session.repositoryHistory],
-  );
+  const store = useMemo(() => createOpenedRepositoryStore(gateway), [gateway]);
   useEffect(() => () => store.open(undefined), [store]);
   const opened = useStore(store);
   const worktreePath =
@@ -43,15 +44,13 @@ export function useOpenedRepository({
 
   const open = useCallback(
     (repositoryId: string) => {
-      const selected = session.repositoryCatalog
-        .getSnapshot()
-        .repositories.find(({ id }) => id === repositoryId);
+      const selected = findRepository(repositoryId);
       if (selected !== undefined && environmentId !== undefined)
         store.open(
           repositoryTarget(environmentId, selected, worktreePathFor(selected)),
         );
     },
-    [environmentId, session.repositoryCatalog, store, worktreePathFor],
+    [environmentId, findRepository, store, worktreePathFor],
   );
 
   return {

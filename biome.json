@@ -214,6 +214,86 @@
     },
     {
       "includes": [
+        "src/apps/web/features/**",
+        "!src/apps/web/features/repository-history/**",
+        "!src/apps/web/features/history-search/**"
+      ],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "patterns": [
+                  {
+                    "group": [
+                      "@rebase/server/**",
+                      "!@rebase/server/package.json",
+                      "@rebase/desktop/**"
+                    ],
+                    "message": "Use private #server/* or #desktop/* aliases for internal imports and tests. Cross-package consumers must use the public package entry point."
+                  },
+                  {
+                    "group": [
+                      "#web/app/**",
+                      "#web-ui/app/**",
+                      "#server/app/**",
+                      "#desktop/app/**",
+                      "@rebase/server",
+                      "@rebase/web",
+                      "@rebase/web/**",
+                      "@rebase/desktop"
+                    ],
+                    "message": "Features expose capabilities to application composition and must not depend on it."
+                  },
+                  {
+                    "group": ["effect", "effect/**"],
+                    "message": "Browser features and application composition use TanStack Query and plain TypeScript. Keep Effect in the environment connection and the history pipeline."
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "includes": [
+        "src/apps/web/app/shell/**",
+        "src/apps/web/app/workspace/**"
+      ],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "patterns": [
+                  {
+                    "group": [
+                      "@rebase/server/**",
+                      "!@rebase/server/package.json",
+                      "@rebase/desktop/**"
+                    ],
+                    "message": "Use private #server/* or #desktop/* aliases for internal imports and tests. Cross-package consumers must use the public package entry point."
+                  },
+                  {
+                    "group": ["vitest", "vitest/**"],
+                    "message": "Import test APIs from vite-plus/test."
+                  },
+                  {
+                    "group": ["effect", "effect/**"],
+                    "message": "Browser features and application composition use TanStack Query and plain TypeScript. Keep Effect in the environment connection and the history pipeline."
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "includes": [
         "src/apps/desktop/**",
         "src/apps/server/**",
         "!src/apps/*/domain/**",

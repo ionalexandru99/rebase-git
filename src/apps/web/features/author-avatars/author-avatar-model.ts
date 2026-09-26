@@ -1,35 +1,94 @@
 import {
-  Effect,
-  Exit,
-  Fiber,
-  type ManagedRuntime,
-  Scope,
-  Semaphore,
-} from "effect";
-import {
   type AuthorAvatarModel,
-  AuthorAvatarSource,
+  type AuthorAvatarSource,
+  type AvatarAuthor,
+  AvatarUnavailable,
   type GitHubRepository,
 } from "#web/features/author-avatars/author-avatar.contract";
 import { githubAvatarSource } from "#web/features/author-avatars/github-avatar-source";
 
+const concurrentLookups = 2;
+const cachedAuthors = 512;
+const avatarLifetimeMilliseconds = 86_400_000;
+const missingAvatarLifetimeMilliseconds = 60_000;
+
+interface CachedAvatar {
+  readonly url: string | undefined;
+  readonly expires: number;
+}
+
+interface PendingLookup {
+  readonly listeners: Set<() => void>;
+  readonly controller: AbortController;
+}
+
 export function createAuthorAvatarModel(
   repository: GitHubRepository,
-  runtime: ManagedRuntime.ManagedRuntime<never, never>,
-  source = githubAvatarSource,
+  source: AuthorAvatarSource = githubAvatarSource,
 ): AuthorAvatarModel {
-  const scope = Scope.makeUnsafe();
-  const permits = Semaphore.makeUnsafe(2);
-  const cache = new Map<
-    string,
-    { readonly url: string | undefined; readonly expires: number }
-  >();
-  const pending = new Map<
-    string,
-    { readonly listeners: Set<() => void>; cancel: () => void }
-  >();
+  const cache = new Map<string, CachedAvatar>();
+  const pending = new Map<string, PendingLookup>();
+  const permits = createPermits(concurrentLookups);
   let pausedUntil = 0;
   let closed = false;
+
+  const resolveUnlessPaused = async (
+    author: AvatarAuthor,
+    signal: AbortSignal,
+  ) => {
+    if (Date.now() < pausedUntil) return undefined;
+    try {
+      return await source.resolve(repository, author, signal);
+    } catch (error) {
+      if (error instanceof AvatarUnavailable && error.retryAt !== undefined)
+        pausedUntil = Math.max(pausedUntil, error.retryAt);
+      throw error;
+    }
+  };
+
+  const lookup = async (author: AvatarAuthor, signal: AbortSignal) => {
+    try {
+      return await permits(signal, () => resolveUnlessPaused(author, signal));
+    } catch (error) {
+      if (signal.aborted) throw error;
+      return undefined;
+    }
+  };
+
+  const remember = (key: string, url: string | undefined) => {
+    cache.delete(key);
+    cache.set(key, {
+      url,
+      expires:
+        Date.now() +
+        (url === undefined
+          ? missingAvatarLifetimeMilliseconds
+          : avatarLifetimeMilliseconds),
+    });
+    while (cache.size > cachedAuthors) {
+      const oldest = cache.keys().next().value;
+      if (oldest !== undefined) cache.delete(oldest);
+    }
+  };
+
+  const start = (key: string, author: AvatarAuthor) => {
+    const request: PendingLookup = {
+      listeners: new Set(),
+      controller: new AbortController(),
+    };
+    pending.set(key, request);
+    lookup(author, request.controller.signal).then(
+      (url) => {
+        if (closed || pending.get(key) !== request) return;
+        remember(key, url);
+        pending.delete(key);
+        for (const notify of request.listeners) notify();
+      },
+      () => undefined,
+    );
+    return request;
+  };
+
   return {
     get: (email) => cache.get(email.toLowerCase())?.url,
     subscribe: (author, listener) => {
@@ -37,63 +96,58 @@ export function createAuthorAvatarModel(
       const key = author.author.email.toLowerCase();
       const cached = cache.get(key);
       if (cached !== undefined && cached.expires > Date.now()) return () => {};
-      let request = pending.get(key);
-      if (request === undefined) {
-        const listeners = new Set([listener]);
-        request = { listeners, cancel: () => {} };
-        pending.set(key, request);
-        const fiber = runtime.runSync(
-          Effect.gen(function* () {
-            if (Date.now() < pausedUntil) return undefined;
-            const service = yield* AuthorAvatarSource;
-            return yield* service.resolve(repository, author).pipe(
-              Effect.catch((error) => {
-                if (error.retryAt !== undefined)
-                  pausedUntil = Math.max(pausedUntil, error.retryAt);
-                return Effect.succeed(undefined);
-              }),
-            );
-          }).pipe(
-            Effect.provideService(AuthorAvatarSource, source),
-            permits.withPermits(1),
-            Effect.tap((url) =>
-              Effect.sync(() => {
-                if (closed) return;
-                cache.delete(key);
-                cache.set(key, {
-                  url,
-                  expires:
-                    Date.now() + (url === undefined ? 60_000 : 86_400_000),
-                });
-                while (cache.size > 512) {
-                  const oldest = cache.keys().next().value;
-                  if (oldest !== undefined) cache.delete(oldest);
-                }
-                pending.delete(key);
-                for (const notify of listeners) notify();
-              }),
-            ),
-            Effect.forkIn(scope),
-          ),
-        );
-        request.cancel = () => {
-          runtime.runFork(Fiber.interrupt(fiber));
-        };
-      }
+      const request = pending.get(key) ?? start(key, author);
       request.listeners.add(listener);
       return () => {
         request.listeners.delete(listener);
         if (request.listeners.size === 0 && pending.get(key) === request) {
           pending.delete(key);
-          request.cancel();
+          request.controller.abort();
         }
       };
     },
     dispose: () => {
       closed = true;
+      for (const request of pending.values()) request.controller.abort();
       pending.clear();
       cache.clear();
-      return runtime.runPromise(Scope.close(scope, Exit.void));
     },
+  };
+}
+
+function createPermits(count: number) {
+  let available = count;
+  const waiting: (() => void)[] = [];
+  const release = () => {
+    const next = waiting.shift();
+    if (next === undefined) available += 1;
+    else next();
+  };
+  const acquire = (signal: AbortSignal) =>
+    new Promise<void>((resolve, reject) => {
+      if (available > 0) {
+        available -= 1;
+        resolve();
+        return;
+      }
+      const abort = () => {
+        waiting.splice(waiting.indexOf(wake), 1);
+        reject(signal.reason);
+      };
+      const wake = () => {
+        signal.removeEventListener("abort", abort);
+        resolve();
+      };
+      waiting.push(wake);
+      signal.addEventListener("abort", abort, { once: true });
+    });
+  return async <Value>(signal: AbortSignal, use: () => Promise<Value>) => {
+    signal.throwIfAborted();
+    await acquire(signal);
+    try {
+      return await use();
+    } finally {
+      release();
+    }
   };
 }

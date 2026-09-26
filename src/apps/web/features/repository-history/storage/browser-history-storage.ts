@@ -10,6 +10,13 @@ import type {
   HistoryStorageResponse,
 } from "#web/features/repository-history/storage/history-storage.contract";
 
+export function requestBrowserHistoryStorage(
+  operation: HistoryStorageRequest["operation"],
+  signal: AbortSignal,
+) {
+  return Effect.runPromise(manageBrowserHistoryStorage(operation), { signal });
+}
+
 export function manageBrowserHistoryStorage(
   operation: HistoryStorageRequest["operation"],
 ) {

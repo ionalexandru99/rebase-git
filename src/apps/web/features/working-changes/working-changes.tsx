@@ -1,138 +1,69 @@
-import type { ChangeSection, ChangeSelection } from "@rebase/contracts";
-import type { ManagedRuntime } from "effect";
 import { lazy, Suspense, useState } from "react";
-import type { RepositoryChangesClient } from "#web/features/working-changes/working-changes.contract";
-import { usePanelFeature } from "#web/features/workspace-panel/api";
-import type { EnvironmentChanges } from "#web/platform/environment/environment-protocol.contract";
 import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogTitle,
-} from "#web-ui/components/ui/alert-dialog";
+  type ChangeAction,
+  useWorkingChangesView,
+  type WorkingChangesTarget,
+} from "#web/features/working-changes/hooks/use-working-changes-view";
 import { Button } from "#web-ui/components/ui/button";
 import {
   ResizableHandle,
   ResizablePanel,
   ResizablePanelGroup,
 } from "#web-ui/components/ui/resizable";
-import {
-  type ChangeAction,
-  ChangeFileTree,
-} from "#web-ui/features/working-changes/components/change-file-tree";
+import { ChangeFileTree } from "#web-ui/features/working-changes/components/change-file-tree";
 import { CommitEditor } from "#web-ui/features/working-changes/components/commit-editor";
 import {
-  useWorkingChanges,
-  useWorkingChangesController,
-  WorkingChangesProvider,
-} from "#web-ui/features/working-changes/working-changes-provider";
+  DiscardConfirmation,
+  type DiscardRequest,
+} from "#web-ui/features/working-changes/components/discard-confirmation";
 
 const ChangeDiffViewer = lazy(
   () =>
     import("#web-ui/features/working-changes/components/change-diff-viewer"),
 );
-export function WorkingChanges({
-  client,
-  environmentId,
-  repositoryId,
-  worktreePath,
-  changes,
-  connected,
-  writable,
-  runtime,
-}: {
-  readonly client: RepositoryChangesClient | undefined;
-  readonly environmentId: string | undefined;
-  readonly repositoryId: string | undefined;
-  readonly worktreePath: string;
-  readonly changes: EnvironmentChanges | undefined;
-  readonly connected: boolean;
-  readonly writable: boolean;
-  readonly runtime: ManagedRuntime.ManagedRuntime<never, never> | undefined;
-}) {
-  const feature = usePanelFeature();
-  if (
-    client === undefined ||
-    environmentId === undefined ||
-    repositoryId === undefined ||
-    runtime === undefined
-  )
-    return (
-      <div className="flex h-full items-center justify-center p-6 text-sm text-muted-foreground">
-        Connect to the repository to review changes.
-      </div>
-    );
-  return (
-    <WorkingChangesProvider
-      active={connected && (feature?.active ?? true)}
-      client={client}
-      environmentId={environmentId}
-      repositoryId={repositoryId}
-      worktreePath={worktreePath}
-      changes={changes}
-      runtime={runtime}
-    >
-      {!connected ? (
-        <div className="flex h-full items-center justify-center p-6 text-sm text-muted-foreground">
-          Connect to the repository to review changes.
-        </div>
-      ) : null}
-      <div className="h-full min-h-0" hidden={!connected}>
-        <ChangesLayout writable={writable && connected} />
-      </div>
-    </WorkingChangesProvider>
-  );
-}
 
-function ChangesLayout({ writable }: { readonly writable: boolean }) {
-  const controller = useWorkingChangesController();
-  const busy = useWorkingChanges("busy");
-  const error = useWorkingChanges("error");
-  const notice = useWorkingChanges("notice");
-  const selection = useWorkingChanges("selection");
-  const diffRevision = useWorkingChanges("diff")?.revision;
-  const [discard, setDiscard] = useState<{
-    section: ChangeSection;
-    selection: ChangeSelection;
-    revision: string;
-  } | null>(null);
+export function WorkingChanges({
+  target,
+  writable,
+}: {
+  readonly target: WorkingChangesTarget;
+  readonly writable: boolean;
+}) {
+  const view = useWorkingChangesView(target);
+  const [discard, setDiscard] = useState<DiscardRequest | null>(null);
   const act: ChangeAction = (action, section, selection) => {
-    const changes = controller.getSnapshot().changes;
-    if (action === "discard" && changes !== null)
-      setDiscard({ section, selection, revision: changes.revision });
-    else controller.mutate(action, section, selection);
+    if (action === "discard" && view.changes !== undefined)
+      setDiscard({ section, selection, revision: view.changes.revision });
+    else view.act(action, section, selection);
   };
   return (
     <section
       className="flex h-full min-h-0 flex-col"
       aria-label="Working changes"
-      aria-busy={busy}
+      aria-busy={view.busy}
     >
-      {error ? (
+      {view.error ? (
         <div
           role="alert"
           className="flex shrink-0 items-center gap-2 border-destructive/30 border-b bg-destructive/10 px-3 py-2 text-xs"
         >
-          <span className="flex-1">{error}</span>
+          <span className="flex-1">{view.error}</span>
           <Button
             variant="ghost"
             size="xs"
-            onClick={controller.refresh}
-            disabled={busy}
+            onClick={view.refresh}
+            disabled={view.busy}
           >
             Refresh
           </Button>
         </div>
       ) : null}
-      {notice ? (
+      {view.notice ? (
         <div
           role="status"
           className="shrink-0 border-border border-b px-3 py-2 text-xs text-muted-foreground"
         >
-          {notice}
+          {view.notice}
         </div>
       ) : null}
       <ResizablePanelGroup orientation="horizontal" className="min-h-0 flex-1">
@@ -145,7 +76,8 @@ function ChangesLayout({ writable }: { readonly writable: boolean }) {
             }
           >
             <ChangeDiffViewer
-              key={`${selection?.section}:${selection?.path}:${diffRevision}`}
+              key={`${view.selection?.section}:${view.selection?.path}:${view.diff?.revision}`}
+              view={view}
               writable={writable}
               act={act}
             />
@@ -164,7 +96,7 @@ function ChangesLayout({ writable }: { readonly writable: boolean }) {
             className="border-border border-l"
           >
             <ResizablePanel id="change-files" minSize="10rem">
-              <ChangeFileTree writable={writable} act={act} />
+              <ChangeFileTree view={view} writable={writable} act={act} />
             </ResizablePanel>
             <ResizableHandle aria-label="Resize commit editor" />
             <ResizablePanel
@@ -173,49 +105,23 @@ function ChangesLayout({ writable }: { readonly writable: boolean }) {
               minSize="9rem"
               maxSize="60%"
             >
-              <CommitEditor writable={writable} />
+              <CommitEditor view={view} writable={writable} />
             </ResizablePanel>
           </ResizablePanelGroup>
         </ResizablePanel>
       </ResizablePanelGroup>
-      <AlertDialog
-        open={discard !== null}
-        onOpenChange={(open) => {
-          if (!open) setDiscard(null);
-        }}
-      >
-        <AlertDialogContent>
-          <AlertDialogTitle>
-            Discard {discard?.section} changes?
-          </AlertDialogTitle>
-          <AlertDialogDescription>
-            {discard?.selection._tag === "Lines"
-              ? `Discard ${discard.selection.lines.length} selected changed lines in ${discard.selection.path}.`
-              : discard?.selection._tag === "Files"
-                ? `Discard changes in ${discard.selection.paths.length} selected ${discard.selection.paths.length === 1 ? "file" : "files"}.`
-                : "Discard every change in this section, including files hidden by the filter."}{" "}
-            This cannot be undone. Unrelated edits will be preserved;
-            overlapping edits will stop the operation.
-          </AlertDialogDescription>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={() => {
-                if (discard)
-                  controller.mutate(
-                    "discard",
-                    discard.section,
-                    discard.selection,
-                    discard.revision,
-                  );
-                setDiscard(null);
-              }}
-            >
-              Discard changes
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      <DiscardConfirmation
+        request={discard}
+        confirm={(request) =>
+          view.act(
+            "discard",
+            request.section,
+            request.selection,
+            request.revision,
+          )
+        }
+        close={() => setDiscard(null)}
+      />
     </section>
   );
 }

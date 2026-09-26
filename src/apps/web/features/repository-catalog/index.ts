@@ -1,14 +1,6 @@
-export { repositoryCatalogClient } from "#web/features/repository-catalog/repository-catalog-client";
 export {
-  type RepositoryCatalogClient,
-  type RepositoryCatalogClientError,
-  RepositoryCatalogRejected,
-  RepositoryCatalogResponseError,
-} from "#web/features/repository-catalog/repository-catalog-client.contract";
-export {
-  type RepositoryCatalogController,
-  type RepositoryCatalogControllerError,
-  type RepositoryCatalogControllerSnapshot,
-  type RepositoryCatalogControllerStatus,
-  RepositoryCatalogUnavailable,
-} from "#web/features/repository-catalog/repository-catalog-controller.contract";
+  useRecordRepositoryOpened,
+  useRememberRepository,
+  useRemoveRepository,
+} from "#web/features/repository-catalog/hooks/use-catalog-commands";
+export { useRepositoryCatalog } from "#web/features/repository-catalog/hooks/use-repository-catalog";

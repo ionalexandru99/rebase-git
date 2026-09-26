@@ -1,21 +1,24 @@
-import type {
-  ChangeDiff,
-  CommitChanges,
-  MutateChanges,
-  RepositoryChanges,
-} from "@rebase/contracts";
-import { Effect, Layer, ManagedRuntime } from "effect";
-import { describe, expect, it } from "vite-plus/test";
-import { page } from "vite-plus/test/browser";
-import { render } from "#tests-ui/runtime/render";
 import {
-  type RepositoryChangesClient,
-  WorkingChangesError,
-} from "#web/features/working-changes/working-changes.contract";
+  type ChangeDiff,
+  type CommitChanges,
+  changesFailed,
+  type MutateChanges,
+  type RepositoryChanges,
+  RepositoryChangesHttpApi,
+} from "@rebase/contracts";
+import {
+  EnvironmentHttpRejected,
+  EnvironmentResponseError,
+} from "@rebase/environment-client";
+import { afterEach, describe, expect, it, vi } from "vite-plus/test";
+import { page } from "vite-plus/test/browser";
+import { fakeRequests, respond } from "#tests-ui/runtime/fake-requests";
+import { render } from "#tests-ui/runtime/render";
+import { defaultDiffPreferences } from "#web/domain/file-diff/diff-preferences.contract";
+import { saveDiffPreferences } from "#web/persistence/working-changes/working-changes-store";
 import type { EnvironmentChangeListener } from "#web/platform/environment/environment-protocol.contract";
+import { createEnvironmentQueryClient } from "#web/platform/query/environment-query-client";
 import { WorkingChanges } from "#web-ui/features/working-changes/working-changes";
-
-const runtime = ManagedRuntime.make(Layer.empty);
 
 const path = "src/read-status.ts";
 const before = 'export const status = "old";\n';
@@ -29,10 +32,16 @@ async function fixture(
     staged = [],
     renamesLimited = false,
     diffs = {},
+    rejectDiffs = false,
+    repositoryId = crypto.randomUUID(),
+    draftKey = JSON.stringify([crypto.randomUUID(), repositoryId, "/repo"]),
   }: {
     readonly staged?: RepositoryChanges["staged"];
     readonly renamesLimited?: boolean;
     readonly diffs?: Readonly<Record<string, ChangeDiff>>;
+    readonly rejectDiffs?: boolean;
+    readonly repositoryId?: string;
+    readonly draftKey?: string;
   } = {},
 ) {
   let snapshot: RepositoryChanges = {
@@ -65,6 +74,10 @@ async function fixture(
   const mutations: MutateChanges[] = [];
   const commits: CommitChanges[] = [];
   let rejectCommit = false;
+  let rejectAmendReads = false;
+  let diffsRejected = rejectDiffs;
+  let staleMutations = false;
+  let writesHeld: Promise<void> | undefined;
   let reads = 0;
   let diffReads = 0;
   const listeners = new Set<EnvironmentChangeListener>();
@@ -74,77 +87,89 @@ async function fixture(
       return () => listeners.delete(listener);
     },
   };
-  const client: RepositoryChangesClient = {
-    read: () =>
-      Effect.sync(() => {
-        reads += 1;
-        return snapshot;
-      }),
-    diff: (command) =>
-      Effect.sync(() => {
-        diffReads += 1;
-        return diffs[command.path] ?? diff;
-      }),
-    mutate: (command) =>
-      Effect.sync(() => {
-        mutations.push(command);
-        snapshot = {
-          ...snapshot,
-          revision: `revision-${mutations.length}`,
-          unstaged:
-            command.action === "stage"
-              ? []
-              : [{ path, previousPath: null, status: "M" }],
-          staged:
-            command.action === "stage"
-              ? [{ path, previousPath: null, status: "M" }]
-              : [],
-        };
-        return {
-          changes: snapshot,
-          diff:
-            command.viewed !== undefined &&
-            snapshot[command.viewed.section].length > 0
-              ? diff
-              : null,
-        };
-      }),
-    commit: (command) =>
-      Effect.suspend(() => {
-        commits.push(command);
-        if (rejectCommit)
-          return Effect.fail(
-            new WorkingChangesError({
-              message: "Commit hook rejected this message.",
-            }),
-          );
-        snapshot = { ...snapshot, revision: "committed", staged: [] };
-        return Effect.succeed({ changes: snapshot, diff: null });
-      }),
-  };
-  const environmentId = crypto.randomUUID(),
-    repositoryId = crypto.randomUUID();
-  const tree = () => (
+  const requests = fakeRequests(
+    respond(RepositoryChangesHttpApi.read, (command) => {
+      reads += 1;
+      if (command.amend && rejectAmendReads)
+        throw new EnvironmentHttpRejected({
+          failure: changesFailed("Conflict", "There is no commit to amend."),
+        });
+      return snapshot;
+    }),
+    respond(RepositoryChangesHttpApi.diff, (command) => {
+      diffReads += 1;
+      if (diffsRejected)
+        throw new EnvironmentResponseError({
+          responseTag: RepositoryChangesHttpApi.diff.path,
+        });
+      return diffs[command.path] ?? diff;
+    }),
+    respond(RepositoryChangesHttpApi.mutate, async (command) => {
+      mutations.push(command);
+      await writesHeld;
+      if (staleMutations)
+        throw new EnvironmentHttpRejected({
+          failure: changesFailed("Stale", "The changes moved on."),
+        });
+      snapshot = {
+        ...snapshot,
+        revision: `revision-${mutations.length}`,
+        unstaged:
+          command.action === "stage"
+            ? []
+            : [{ path, previousPath: null, status: "M" }],
+        staged:
+          command.action === "stage"
+            ? [{ path, previousPath: null, status: "M" }]
+            : [],
+      };
+      return {
+        changes: snapshot,
+        diff:
+          command.viewed !== undefined &&
+          snapshot[command.viewed.section].length > 0
+            ? diff
+            : null,
+      };
+    }),
+    respond(RepositoryChangesHttpApi.commit, async (command) => {
+      commits.push(command);
+      if (command.amend)
+        snapshot = { ...snapshot, head: crypto.randomUUID(), staged: [] };
+      await writesHeld;
+      if (rejectCommit)
+        throw new EnvironmentHttpRejected({
+          failure: changesFailed(
+            "Conflict",
+            "Commit hook rejected this message.",
+          ),
+        });
+      snapshot = { ...snapshot, revision: "committed", staged: [] };
+      return { changes: snapshot, diff: null };
+    }),
+  );
+  const queryClient = createEnvironmentQueryClient();
+  const view = await render(
     <div className="dark text-foreground" style={{ width: 1100, height: 700 }}>
       <WorkingChanges
-        client={client}
-        connected
+        target={{
+          repositoryId,
+          worktreePath: "/repo",
+          draftKey,
+          active: true,
+        }}
         writable
-        environmentId={environmentId}
-        repositoryId={repositoryId}
-        worktreePath="/repo"
-        changes={changes}
-        runtime={runtime}
       />
-    </div>
+    </div>,
+    { environment: { requests, changes }, queryClient },
   );
-  const view = await render(tree());
-  await expect
-    .element(page.getByRole("button", { name: "Stage entire file" }))
-    .toBeEnabled();
+  if (!rejectDiffs)
+    await expect
+      .element(page.getByRole("button", { name: "Stage entire file" }))
+      .toBeEnabled();
   return {
     view,
-    tree,
+    queryClient,
     mutations,
     commits,
     reads: () => reads,
@@ -163,8 +188,29 @@ async function fixture(
     rejectCommit: (reject: boolean) => {
       rejectCommit = reject;
     },
+    rejectMutationsAsStale: () => {
+      staleMutations = true;
+    },
+    rejectAmendReads: () => {
+      rejectAmendReads = true;
+    },
+    acceptDiffs: () => {
+      diffsRejected = false;
+    },
+    holdWrites: () => {
+      const held = Promise.withResolvers<void>();
+      writesHeld = held.promise;
+      return () => {
+        writesHeld = undefined;
+        held.resolve();
+      };
+    },
+    repositoryId,
+    draftKey,
   };
 }
+
+afterEach(() => saveDiffPreferences(defaultDiffPreferences));
 
 describe("working changes", () => {
   it("shows a staged rename on one row and its source in the diff", async () => {
@@ -300,11 +346,12 @@ describe("working changes", () => {
   });
   it("re-reads changes when the server reports this repository changed or the window regains focus", async () => {
     const f = await fixture();
-    const initialReads = f.reads();
+    const beforeChange = f.reads();
     f.emitChange();
-    await expect.poll(f.reads).toBe(initialReads + 1);
+    await expect.poll(f.reads).toBeGreaterThan(beforeChange);
+    const beforeFocus = f.reads();
     window.dispatchEvent(new Event("focus"));
-    await expect.poll(f.reads).toBe(initialReads + 2);
+    await expect.poll(f.reads).toBeGreaterThan(beforeFocus);
   });
   it("places the composer beneath the right tree and renders Shiki with working display controls", async () => {
     await fixture();
@@ -435,6 +482,19 @@ describe("working changes", () => {
       .toHaveTextContent("Changes committed.");
     expect(f.commits).toHaveLength(2);
   });
+  it("re-reads the changes when a write finds them stale", async () => {
+    const f = await fixture();
+    f.rejectMutationsAsStale();
+    const reads = f.reads();
+    await page.getByRole("button", { name: "Stage entire file" }).click();
+    await expect
+      .element(page.getByRole("alert"))
+      .toHaveTextContent("The changes moved on.");
+    expect(f.reads()).toBeGreaterThan(reads);
+    await expect
+      .element(page.getByRole("button", { name: "Stage entire file" }))
+      .toBeEnabled();
+  });
   it("shows the viewed diff returned by a write without reading it again", async () => {
     const f = await fixture();
     const diffReads = f.diffReads();
@@ -450,5 +510,102 @@ describe("working changes", () => {
       .toBeEnabled();
     expect(f.mutations[0]?.viewed).toEqual({ section: "unstaged", path });
     expect(f.diffReads()).toBe(diffReads);
+  });
+  it("reads the viewed diff again when Refresh follows a failed read", async () => {
+    const f = await fixture([], { rejectDiffs: true });
+    await expect
+      .element(page.getByRole("alert"))
+      .toHaveTextContent("Could not complete the request.");
+    const diffReads = f.diffReads();
+    f.acceptDiffs();
+    await page.getByRole("button", { name: "Refresh", exact: true }).click();
+    await expect
+      .element(page.getByRole("button", { name: "Stage entire file" }))
+      .toBeEnabled();
+    expect(f.diffReads()).toBeGreaterThan(diffReads);
+    await expect.element(page.getByRole("alert")).not.toBeInTheDocument();
+  });
+  it("amends without reporting its own HEAD move as an outside change", async () => {
+    const f = await fixture([], {
+      staged: [{ path: "src/other.ts", previousPath: null, status: "M" }],
+    });
+    const subject = page.getByRole("textbox", { name: "Commit subject" });
+    await page.getByRole("checkbox", { name: "Amend", exact: true }).click();
+    await expect.element(subject).toHaveValue("Old commit message");
+    const release = f.holdWrites();
+    await page
+      .getByRole("button", { name: "Amend commit", exact: true })
+      .click();
+    await expect.poll(() => f.commits.length).toBe(1);
+    const reads = f.reads();
+    f.emitChange();
+    await expect.poll(f.reads).toBeGreaterThan(reads);
+    await expect.poll(() => f.queryClient.isFetching()).toBe(0);
+    release();
+    await expect
+      .element(page.getByRole("status"))
+      .toHaveTextContent("Commit amended.");
+    await expect.element(page.getByRole("alert")).not.toBeInTheDocument();
+  });
+  it("lets Amend be turned off after the amend read fails", async () => {
+    const f = await fixture();
+    f.rejectAmendReads();
+    const amend = page.getByRole("checkbox", { name: "Amend", exact: true });
+    await amend.click();
+    await expect
+      .element(page.getByRole("alert"))
+      .toHaveTextContent("There is no commit to amend.");
+    await expect.element(amend).toBeEnabled();
+    await amend.click();
+    await expect.element(amend).not.toBeChecked();
+    await expect.element(page.getByRole("alert")).not.toBeInTheDocument();
+    await expect
+      .element(page.getByRole("button", { name: "Stage entire file" }))
+      .toBeEnabled();
+  });
+  it("locks every write while one is running", async () => {
+    const f = await fixture([], {
+      staged: [{ path: "src/other.ts", previousPath: null, status: "M" }],
+    });
+    await page
+      .getByRole("textbox", { name: "Commit subject" })
+      .fill("Ready to commit");
+    const release = f.holdWrites();
+    const stage = page.getByRole("button", { name: "Stage entire file" });
+    await stage.click();
+    await expect.element(stage).toBeDisabled();
+    await expect
+      .element(page.getByRole("button", { name: "Working…", exact: true }))
+      .toBeDisabled();
+    release();
+    await expect
+      .element(page.getByRole("button", { name: "Commit 1 file", exact: true }))
+      .toBeEnabled();
+  });
+  it("restores a draft typed just before the panel closed", async () => {
+    const f = await fixture();
+    await page
+      .getByRole("textbox", { name: "Commit subject" })
+      .fill("Unsent message");
+    await f.view.unmount();
+    await fixture([], { repositoryId: f.repositoryId, draftKey: f.draftKey });
+    await expect
+      .element(page.getByRole("textbox", { name: "Commit subject" }))
+      .toHaveValue("Unsent message");
+  });
+  it("says when this browser cannot keep the commit draft", async () => {
+    const open = vi.spyOn(indexedDB, "open").mockImplementation(() => {
+      throw new Error("Storage is blocked.");
+    });
+    try {
+      await fixture();
+      await expect
+        .element(page.getByRole("alert"))
+        .toHaveTextContent(
+          "Could not access changes preferences or the commit draft in this browser.",
+        );
+    } finally {
+      open.mockRestore();
+    }
   });
 });

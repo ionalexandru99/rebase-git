@@ -1,32 +1,28 @@
-import type {
-  ChangeSection,
-  ChangeSelection,
-  MutateChanges,
-} from "@rebase/contracts";
 import { useState } from "react";
+import type {
+  ChangeAction,
+  WorkingChangesView,
+} from "#web/features/working-changes/hooks/use-working-changes-view";
 import { Button } from "#web-ui/components/ui/button";
 import { Input } from "#web-ui/components/ui/input";
-import { ChangeFileSection } from "#web-ui/features/working-changes/components/change-file-section";
 import {
-  useWorkingChanges,
-  useWorkingChangesController,
-} from "#web-ui/features/working-changes/working-changes-provider";
+  ChangeFileSection,
+  type ChangeFileSectionView,
+} from "#web-ui/features/working-changes/components/change-file-section";
 
-export type ChangeAction = (
-  action: MutateChanges["action"],
-  section: ChangeSection,
-  selection: ChangeSelection,
-) => void;
+type FileTreeView = ChangeFileSectionView &
+  Pick<WorkingChangesView, "choosePreferences">;
+
 export function ChangeFileTree({
+  view,
   writable,
   act,
 }: {
+  readonly view: FileTreeView;
   readonly writable: boolean;
   readonly act: ChangeAction;
 }) {
-  const controller = useWorkingChangesController();
-  const preferences = useWorkingChanges("preferences");
-  const changes = useWorkingChanges("changes");
+  const { preferences, changes } = view;
   const [filter, setFilter] = useState("");
   return (
     <section
@@ -42,7 +38,7 @@ export function ChangeFileTree({
             aria-pressed={preferences.tree}
             className="aria-pressed:bg-sidebar-accent aria-pressed:text-sidebar-accent-foreground"
             onClick={() =>
-              controller.preferences({ ...preferences, tree: true })
+              view.choosePreferences({ ...preferences, tree: true })
             }
           >
             Tree
@@ -53,7 +49,7 @@ export function ChangeFileTree({
             aria-pressed={!preferences.tree}
             className="aria-pressed:bg-sidebar-accent aria-pressed:text-sidebar-accent-foreground"
             onClick={() =>
-              controller.preferences({ ...preferences, tree: false })
+              view.choosePreferences({ ...preferences, tree: false })
             }
           >
             List
@@ -70,12 +66,14 @@ export function ChangeFileTree({
       </div>
       <div className="flex min-h-0 flex-1 flex-col">
         <ChangeFileSection
+          view={view}
           section="unstaged"
           filter={filter}
           writable={writable}
           act={act}
         />
         <ChangeFileSection
+          view={view}
           section="staged"
           filter={filter}
           writable={writable}

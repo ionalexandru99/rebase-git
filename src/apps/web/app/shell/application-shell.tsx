@@ -25,8 +25,10 @@ import {
   showOpenProject,
   toggleEnvironment,
 } from "#web/features/project-navigation/index";
+import { useRepositoryCatalog } from "#web/features/repository-catalog/index";
 import { RepositoryFolderPicker } from "#web/features/repository-folder-picker/index";
 import { useRepositoryHistoryReader } from "#web/features/repository-history/hooks/use-repository-history-reader";
+import type { RepositoryHistoryGateway } from "#web/features/repository-history/index";
 import { RepositoryScopeProvider } from "#web/features/repository-scope/index";
 import { RepositorySettingsPage } from "#web/features/repository-settings/index";
 import { SettingsPanel } from "#web/features/settings/index";
@@ -57,6 +59,7 @@ interface ApplicationShellProps {
   readonly desktopUpdates: DesktopUpdates | undefined;
   readonly productVersion: string;
   readonly repositoryFilesystem: RepositoryFilesystemHost | undefined;
+  readonly repositoryHistory: RepositoryHistoryGateway;
   readonly session: LocalEnvironmentSession;
 }
 
@@ -113,7 +116,7 @@ function ApplicationShellContent({
   desktopUpdates,
   productVersion,
   repositoryFilesystem,
-  session,
+  repositoryHistory,
   sessionState,
 }: ApplicationShellProps & {
   readonly sessionState: LocalEnvironmentSessionState;
@@ -124,7 +127,7 @@ function ApplicationShellContent({
     readable: canRead,
     writable: canWrite,
   } = useEnvironment();
-  const repositoryCatalog = useStore(session.repositoryCatalog);
+  const repositoryCatalog = useRepositoryCatalog();
   const environmentStatus = environmentSessionPresentation(sessionState);
   const sidebarRef = useRef<PanelImperativeHandle>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -214,9 +217,10 @@ function ApplicationShellContent({
   const { history: graphHistory, open: openRepositoryHistory } =
     useOpenedRepository({
       environmentId: historyEnvironmentId,
+      findRepository: repositoryCatalog.findRepository,
+      gateway: repositoryHistory,
       refs,
       repository: graphRepository,
-      session,
       worktreePathFor,
     });
   const openRepositoryView = useCallback(
@@ -232,8 +236,7 @@ function ApplicationShellContent({
     copyRepositoryPath,
     expandedEnvironmentIds,
     folderPickerOpen,
-    listRepositoryDirectory,
-    openRepositoryFromFolder,
+    openRememberedRepository,
     removeRepository,
     revealRepository,
     selectOpenProjectRepository,
@@ -244,7 +247,6 @@ function ApplicationShellContent({
     availability: environmentStatus.availability,
     environmentId: localEnvironmentId,
     repositoryFilesystem,
-    session,
     setNavigation,
     onRepositoryOpened: openRepositoryView,
   });
@@ -264,7 +266,7 @@ function ApplicationShellContent({
     (graphRepository.logicalRepositoryId ?? graphRepository.id) ===
       (settingsRepository.logicalRepositoryId ?? settingsRepository.id);
   const settingsReader = useRepositoryHistoryReader(
-    session.repositoryHistory,
+    repositoryHistory,
     historyEnvironmentId,
     sameHistory ? undefined : settingsRepository?.id,
     sameHistory
@@ -275,22 +277,11 @@ function ApplicationShellContent({
   const panelEnvironment = useMemo(
     () => ({
       environmentId: historyEnvironmentId,
-      requests: session.requests,
-      changes: session.changes,
-      runtime: session.runtime,
       connected,
       writable: canWrite,
       visible: panelVisible,
     }),
-    [
-      historyEnvironmentId,
-      session.requests,
-      session.changes,
-      session.runtime,
-      connected,
-      canWrite,
-      panelVisible,
-    ],
+    [historyEnvironmentId, connected, canWrite, panelVisible],
   );
   const graphRepositoryId = graphRepository?.id;
   const graphLogicalRepositoryId =
@@ -451,9 +442,8 @@ function ApplicationShellContent({
         ) : null}
         <RepositoryFolderPicker
           environments={openProjectEnvironments}
-          listDirectory={listRepositoryDirectory}
           onOpenChange={setFolderPickerOpen}
-          onOpenRepository={openRepositoryFromFolder}
+          onRepositoryOpened={openRememberedRepository}
           open={folderPickerOpen}
         />
       </section>

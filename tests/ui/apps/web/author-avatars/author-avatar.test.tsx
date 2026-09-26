@@ -1,4 +1,3 @@
-import { Deferred, Effect } from "effect";
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import { render } from "#tests-ui/runtime/render";
 import { githubAvatarSource } from "#web/features/author-avatars/github-avatar-source";
@@ -21,11 +20,12 @@ afterEach(() => vi.restoreAllMocks());
 describe("author avatar", () => {
   it("keeps an in-flight lookup when a refresh replaces the commit object", async () => {
     const interrupted = vi.fn();
-    const resolve = vi
-      .spyOn(githubAvatarSource, "resolve")
-      .mockReturnValue(
-        Effect.never.pipe(Effect.onInterrupt(() => Effect.sync(interrupted))),
-      );
+    const resolve = vi.spyOn(githubAvatarSource, "resolve").mockImplementation(
+      (_repository, _author, signal) =>
+        new Promise(() => {
+          signal.addEventListener("abort", interrupted);
+        }),
+    );
     const screen = await render(
       <AuthorAvatars repository={{ owner: "alex", name: "rebase" }}>
         <AuthorAvatar commit={commit} />
@@ -45,21 +45,16 @@ describe("author avatar", () => {
   });
 
   it("shows initials immediately and restores them if the resolved image fails", async () => {
-    const result = Deferred.makeUnsafe<string | undefined>();
-    vi.spyOn(githubAvatarSource, "resolve").mockReturnValue(
-      Deferred.await(result),
-    );
+    const result = Promise.withResolvers<string | undefined>();
+    vi.spyOn(githubAvatarSource, "resolve").mockReturnValue(result.promise);
     const screen = await render(
       <AuthorAvatars repository={{ owner: "alex", name: "rebase" }}>
         <AuthorAvatar commit={commit} />
       </AuthorAvatars>,
     );
     await expect.element(screen.getByText("AI", { exact: true })).toBeVisible();
-    await Effect.runPromise(
-      Deferred.succeed(
-        result,
-        "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==",
-      ),
+    result.resolve(
+      "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==",
     );
     await vi.waitFor(() =>
       expect(githubAvatarSource.resolve).toHaveBeenCalledOnce(),
