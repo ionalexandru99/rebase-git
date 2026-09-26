@@ -1,5 +1,5 @@
 import type { ConflictPath, ConflictSide } from "@rebase/contracts";
-import { type KeyboardEvent, useState } from "react";
+import { type KeyboardEvent, type ReactNode, useState } from "react";
 import { Button } from "#web/components/ui/button";
 import { MarkersConfirmation } from "#web/features/merge-view/components/markers-confirmation";
 import {
@@ -27,9 +27,15 @@ export interface MergeViewProps {
   readonly path: string;
   readonly onOpen: (path: string) => void;
   readonly onClose: () => void;
+  readonly toolbarActions?: ReactNode;
 }
 
-export function MergeView({ path, onOpen, onClose }: MergeViewProps) {
+export function MergeView({
+  path,
+  onOpen,
+  onClose,
+  toolbarActions,
+}: MergeViewProps) {
   const scope = useRepositoryScope();
   if (scope === undefined) return null;
   return (
@@ -42,6 +48,7 @@ export function MergeView({ path, onOpen, onClose }: MergeViewProps) {
       }}
       onOpen={onOpen}
       onClose={onClose}
+      toolbarActions={toolbarActions}
     />
   );
 }
@@ -50,10 +57,12 @@ function MergeViewContent({
   input,
   onOpen,
   onClose,
+  toolbarActions,
 }: {
   readonly input: ConflictPath;
   readonly onOpen: (path: string) => void;
   readonly onClose: () => void;
+  readonly toolbarActions?: ReactNode;
 }) {
   const session = useMergeSession({ input, onOpen, onClose });
   const [showBase, setShowBase] = useState(false);
@@ -89,7 +98,7 @@ function MergeViewContent({
         handleKeys(event, session, navigation, resolution, onClose)
       }
     >
-      <MergeViewBar path={input.path} onBack={onClose}>
+      <MergeViewBar path={input.path} onBack={onClose} actions={toolbarActions}>
         {panes && (
           <span className="shrink-0 text-xs whitespace-nowrap text-muted-foreground">
             {openRegionCount(model)} of {model.regionCount} open

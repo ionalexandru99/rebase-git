@@ -44,7 +44,10 @@ export function useMergeSession({
   const fail = (failure: ConflictRequestFailure) =>
     setNotice(describeConflictFailure(failure));
   const queue = useWriteQueue(input, {
-    onWritten: queries.storeDocument,
+    onWritten: (document) => {
+      queries.storeDocument(document);
+      void queries.refreshList();
+    },
     onStale: () => stale(),
     onFailed: fail,
   });
