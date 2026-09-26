@@ -4,12 +4,17 @@ import { mkdtemp, readFile, realpath, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
+import { CommitInspectionHttpApi } from "@rebase/contracts";
 import { Effect } from "effect";
 import { afterEach, describe, expect, it } from "vite-plus/test";
 import { createLocalGitCommandRunner } from "#server/adapters/local-git/local-git-command-runner";
 import { createLocalRepositoryWatcher } from "#server/adapters/local-git/local-repository-watcher";
-import { createCommitInspectionService } from "#server/features/commit-inspection/commit-inspection";
-import { createRepositoryAccess } from "#server/repository/access/index";
+import { commitInspectionFeature } from "#server/features/commit-inspection/index";
+import {
+  createRepositoryAccess,
+  createRepositoryCoordination,
+} from "#server/repository/access/index";
+import { repositoryFeatureClient } from "#tests-integration/apps/server/environment-connection/feature-routes-client";
 import { removeTemporaryDirectory } from "#tests-support/temporary-directory";
 
 const directories: string[] = [];
@@ -39,22 +44,27 @@ async function fixture() {
   const oid = await git("rev-parse", "HEAD");
   const repositoryId = randomUUID();
   const runner = createLocalGitCommandRunner();
-  const service = createCommitInspectionService(
-    createRepositoryAccess(
-      {
-        find: () =>
-          Effect.succeed({
-            id: repositoryId,
-            name: "test",
-            path: directory,
-            addedAt: "",
-            lastOpenedAt: "",
-          }),
-      },
-      runner,
-      createLocalRepositoryWatcher(),
-    ),
-    runner,
+  const service = repositoryFeatureClient(
+    CommitInspectionHttpApi,
+    commitInspectionFeature,
+    {
+      access: createRepositoryAccess(
+        {
+          find: () =>
+            Effect.succeed({
+              id: repositoryId,
+              name: "test",
+              path: directory,
+              addedAt: "",
+              lastOpenedAt: "",
+            }),
+        },
+        runner,
+        createLocalRepositoryWatcher(),
+      ),
+      git: runner,
+      coordination: createRepositoryCoordination(runner),
+    },
   );
   const scope = { repositoryId, worktreePath: directory, oid };
   return { directory, git, service, scope };
@@ -72,8 +82,8 @@ describe("historical commit inspection", () => {
         }),
       ),
     );
-    expect(failure.failure).toEqual({
-      _tag: "ChangesFailed",
+    expect(failure).toEqual({
+      _tag: "RepositoryRejected",
       reason: "Missing",
       detail: "This worktree does not belong to the repository.",
     });
@@ -236,15 +246,15 @@ describe("historical commit inspection", () => {
       Effect.runPromise(
         f.service.inspect({ ...scope, parentOid: f.scope.oid }),
       ),
-    ).rejects.toMatchObject({ failure: { reason: "Unsupported" } });
+    ).rejects.toMatchObject({ reason: "Unsupported" });
     await expect(
       Effect.runPromise(f.service.inspectDiff({ ...scope, path: "../secret" })),
-    ).rejects.toMatchObject({ failure: { reason: "Missing" } });
+    ).rejects.toMatchObject({ _tag: "ChangesFailed", reason: "Stale" });
     await expect(
       Effect.runPromise(
         f.service.inspect({ ...scope, worktreePath: tmpdir() }),
       ),
-    ).rejects.toMatchObject({ failure: { reason: "Missing" } });
+    ).rejects.toMatchObject({ reason: "Missing" });
   });
 
   it("supports empty commits and rejects revision expressions", async () => {
@@ -256,6 +266,6 @@ describe("historical commit inspection", () => {
     );
     await expect(
       Effect.runPromise(f.service.inspect({ ...scope, oid: "HEAD^{tree}" })),
-    ).rejects.toMatchObject({ failure: { reason: "Unsupported" } });
+    ).rejects.toMatchObject({ reason: "Unsupported" });
   });
 });

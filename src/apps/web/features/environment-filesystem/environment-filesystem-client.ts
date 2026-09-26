@@ -12,11 +12,8 @@ export function environmentFilesystemClient(
   return requests(EnvironmentFilesystemHttpApi, {
     disconnected: () => new EnvironmentFilesystemResponseError(),
     response: (error) =>
-      error._tag === "EnvironmentHttpRejected"
-        ? new EnvironmentFilesystemRejected({
-            failure: error.failure,
-            status: error.status,
-          })
-        : new EnvironmentFilesystemResponseError(),
+      error._tag === "EnvironmentResponseError"
+        ? new EnvironmentFilesystemResponseError()
+        : new EnvironmentFilesystemRejected({ failure: error.failure }),
   });
 }

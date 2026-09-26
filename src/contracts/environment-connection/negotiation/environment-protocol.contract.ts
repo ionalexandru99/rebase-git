@@ -53,24 +53,24 @@ export const EnvironmentCapabilities = Schema.Array(
 export const ProductVersionSchema = ProductVersion;
 
 export const currentEnvironmentProtocol = {
-  major: 2,
-  minor: 5,
+  major: 3,
+  minor: 0,
   minimumSupportedMinor: 0,
 } satisfies ProtocolRange;
 
 export const currentEnvironmentCapabilities = [
   {
-    introducedInMinor: 5,
+    introducedInMinor: 0,
     name: "repository-refs",
     version: 1,
   },
   {
-    introducedInMinor: 4,
+    introducedInMinor: 0,
     name: "repository-ref-events",
     version: 1,
   },
   {
-    introducedInMinor: 3,
+    introducedInMinor: 0,
     name: "repository-history-freshness",
     version: 1,
   },
@@ -80,17 +80,17 @@ export const currentEnvironmentCapabilities = [
     version: 1,
   },
   {
-    introducedInMinor: 1,
+    introducedInMinor: 0,
     name: "sequence-resnapshot",
     version: 1,
   },
   {
-    introducedInMinor: 3,
+    introducedInMinor: 0,
     name: "json-fragmentation",
     version: 1,
   },
   {
-    introducedInMinor: 3,
+    introducedInMinor: 0,
     name: "repository-history",
     version: 6,
   },

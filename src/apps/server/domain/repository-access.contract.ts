@@ -1,6 +1,8 @@
-import type {
-  RepositoryCatalogEntry,
-  RepositoryWorktree,
+import {
+  type RepositoryCatalogEntry,
+  type RepositoryRejected,
+  type RepositoryWorktree,
+  repositoryRejected,
 } from "@rebase/contracts";
 import { Context, Data, type Effect } from "effect";
 import type { EnvironmentStorageError } from "#server/domain/environment-storage-error.contract";
@@ -24,6 +26,18 @@ export class RepositoryAccessError extends Data.TaggedError(
   readonly detail: string;
   readonly failure: RepositoryAccessFailure;
 }> {}
+
+export function accessRejection(
+  error: RepositoryAccessError,
+): RepositoryRejected {
+  switch (error.failure._tag) {
+    case "RepositoryMissing":
+    case "WorktreeMissing":
+      return repositoryRejected("Missing", error.detail);
+    default:
+      return repositoryRejected("GitFailed", error.detail);
+  }
+}
 
 export interface RepositoryAccessService {
   readonly repository: (

@@ -1,12 +1,11 @@
+import type { RouteFailure, RouteInput, RouteSuccess } from "@rebase/contracts";
 import type { Effect, Schema } from "effect";
 import type {
+  EnvironmentAccessDenied,
   EnvironmentHttpRejected,
   EnvironmentResponseError,
 } from "#environment-client/environment-connection-errors";
-import type {
-  EnvironmentHttpCommand,
-  RequestableEnvironmentHttpRoute,
-} from "#environment-client/http/environment-http-request.contract";
+import type { RequestableEnvironmentHttpRoute } from "#environment-client/http/environment-http-request.contract";
 
 export type EnvironmentHttpRoutes = Record<
   string,
@@ -14,7 +13,12 @@ export type EnvironmentHttpRoutes = Record<
 >;
 
 export type EnvironmentHttpRoutesFailure<Routes extends EnvironmentHttpRoutes> =
-  Routes[keyof Routes]["failure"]["Type"];
+  RouteFailure<Routes[keyof Routes]>;
+
+export type EnvironmentRequestFailure<Failure> =
+  | EnvironmentResponseError
+  | EnvironmentAccessDenied
+  | EnvironmentHttpRejected<Failure>;
 
 export interface EnvironmentRequestErrors<
   Routes extends EnvironmentHttpRoutes,
@@ -22,9 +26,7 @@ export interface EnvironmentRequestErrors<
 > {
   readonly disconnected: () => Error;
   readonly response: (
-    error:
-      | EnvironmentResponseError
-      | EnvironmentHttpRejected<EnvironmentHttpRoutesFailure<Routes>>,
+    error: EnvironmentRequestFailure<EnvironmentHttpRoutesFailure<Routes>>,
   ) => Error;
 }
 
@@ -36,9 +38,9 @@ export type EnvironmentHttpRoutesClient<
     readonly request: Schema.ConstraintEncoder<unknown>;
   }
     ? (
-        command: EnvironmentHttpCommand<Routes[Name]>,
-      ) => Effect.Effect<Routes[Name]["success"]["Type"], Error>
-    : () => Effect.Effect<Routes[Name]["success"]["Type"], Error>;
+        command: RouteInput<Routes[Name]>,
+      ) => Effect.Effect<RouteSuccess<Routes[Name]>, Error>
+    : () => Effect.Effect<RouteSuccess<Routes[Name]>, Error>;
 };
 
 export type EnvironmentRequestClient = <

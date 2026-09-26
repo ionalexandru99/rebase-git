@@ -58,7 +58,6 @@ describe("branch management", () => {
   it("leaves cached refs untouched when the Environment rejects a write", async () => {
     const rejected = new RepositoryBranchesRejected({
       failure: { _tag: "BranchExists", name: "topic" },
-      status: 409,
     });
     const { branches, current } = setup({
       create: () => Effect.fail(rejected),

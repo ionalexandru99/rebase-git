@@ -2,15 +2,16 @@ import type { RepositoryRefsRpc } from "@rebase/contracts";
 import {
   fragmentJsonMessage,
   type RepositoryRefsFailed,
+  repositoryRejected,
 } from "@rebase/contracts";
 import { Effect, Stream } from "effect";
 import type { EnvironmentRpcHandlersFor } from "#server/adapters/environment-transport/environment-feature.contract";
 import type { EnvironmentRpcSession } from "#server/adapters/environment-transport/rpc/environment-rpc-session.contract";
-import type { RepositoryRefsService } from "#server/features/repository-refs/repository-refs";
+import type { RepositoryRefsReader } from "#server/features/repository-refs/repository-refs";
 
 export function repositoryRefsRpc(
   session: EnvironmentRpcSession,
-  refs: RepositoryRefsService,
+  refs: RepositoryRefsReader,
 ): EnvironmentRpcHandlersFor<typeof RepositoryRefsRpc> {
   let active = 0;
   return {
@@ -28,10 +29,12 @@ export function repositoryRefsRpc(
           yield* Effect.acquireRelease(
             Effect.suspend(() =>
               active >= 2
-                ? Effect.fail<RepositoryRefsFailed["failure"]>({
-                    _tag: "GitFailed",
-                    reason: "Failed",
-                  })
+                ? Effect.fail<RepositoryRefsFailed["failure"]>(
+                    repositoryRejected(
+                      "Busy",
+                      "Another reference read is in progress.",
+                    ),
+                  )
                 : Effect.sync(() => {
                     active += 1;
                   }),
@@ -41,15 +44,7 @@ export function repositoryRefsRpc(
                 active -= 1;
               }),
           );
-          const value = yield* refs
-            .read(repositoryId)
-            .pipe(
-              Effect.mapError((error): RepositoryRefsFailed["failure"] =>
-                error._tag === "RepositoryRefsError"
-                  ? error.failure
-                  : { _tag: "GitFailed", reason: "Failed" },
-              ),
-            );
+          const value = yield* refs.read(repositoryId);
           const fragments = yield* Effect.try({
             try: () =>
               fragmentJsonMessage(
@@ -60,10 +55,11 @@ export function repositoryRefsRpc(
                 },
                 negotiated.limits.maxWebSocketResponseBytes - 512,
               ),
-            catch: (): RepositoryRefsFailed["failure"] => ({
-              _tag: "GitFailed",
-              reason: "OutputTooLarge",
-            }),
+            catch: (): RepositoryRefsFailed["failure"] =>
+              repositoryRejected(
+                "GitFailed",
+                "The references are too large to send.",
+              ),
           });
           return Stream.fromIterable(fragments).pipe(Stream.rechunk(1));
         }),

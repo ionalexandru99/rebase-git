@@ -2,12 +2,13 @@ import type {
   BranchUpstreamTarget,
   CreateRepositoryBranch,
   DeleteRepositoryBranch,
+  EnvironmentAccessFailure,
   LocalBranch,
   RenameRepositoryBranch,
   RepositoryBranchDeleted,
   RepositoryBranchesHttpApi,
-  RepositoryBranchesHttpFailure,
   RepositoryBranchRenamed,
+  RouteFailure,
   SetRepositoryBranchUpstream,
 } from "@rebase/contracts";
 import type { EnvironmentHttpRoutesClient } from "@rebase/environment-client";
@@ -20,8 +21,11 @@ export class RepositoryBranchesResponseError extends Data.TaggedError(
 export class RepositoryBranchesRejected extends Data.TaggedError(
   "RepositoryBranchesRejected",
 )<{
-  readonly failure: RepositoryBranchesHttpFailure;
-  readonly status: number;
+  readonly failure:
+    | RouteFailure<
+        (typeof RepositoryBranchesHttpApi)[keyof typeof RepositoryBranchesHttpApi]
+      >
+    | EnvironmentAccessFailure;
 }> {}
 
 export type BranchManagementError =

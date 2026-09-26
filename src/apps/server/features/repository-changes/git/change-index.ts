@@ -1,11 +1,9 @@
 import { randomUUID } from "node:crypto";
 import { copyFile, open, rename, rm, stat, utimes } from "node:fs/promises";
+import { repositoryRejected } from "@rebase/contracts";
 import { Effect } from "effect";
 import type { GitCommandRunner } from "#server/domain/git-command.contract";
-import {
-  changeIo,
-  changesError,
-} from "#server/features/repository-changes/git/change-failures";
+import { changeIo } from "#server/features/repository-changes/git/change-failures";
 import { runRepositoryGit } from "#server/repository/access/index";
 
 export function withChangeIndex<A, E>(
@@ -29,7 +27,7 @@ export function withChangeIndex<A, E>(
           await lock.close().catch(() => undefined);
         }).pipe(
           Effect.mapError(() =>
-            changesError(
+            repositoryRejected(
               "Busy",
               "The Git index is locked by another operation. Try again when it finishes.",
             ),

@@ -111,14 +111,17 @@ it("authorizes operation discovery and recovery separately over HTTP", async () 
           };
           expect(
             yield* viewer.execute(command).pipe(Effect.flip),
-          ).toMatchObject({ status: 403 });
+          ).toMatchObject({
+            _tag: "EnvironmentAccessDenied",
+            status: 403,
+          });
           expect(
             yield* owner
               .read({ ...scope, worktreePath: join(directory, ".git") })
               .pipe(Effect.flip),
           ).toMatchObject({
-            status: 404,
-            failure: { _tag: "OperationFailed", reason: "Missing" },
+            _tag: "EnvironmentHttpRejected",
+            failure: { _tag: "RepositoryRejected", reason: "Missing" },
           });
           expect((yield* owner.execute(command)).kind).toBe("idle");
         }),

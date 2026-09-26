@@ -15,7 +15,6 @@ import {
 } from "#server/adapters/environment-transport/http/environment-http-response";
 import type {
   EnvironmentHttpRequestContext,
-  EnvironmentHttpRouteFailure,
   EnvironmentHttpRouteHandler,
 } from "#server/adapters/environment-transport/http/environment-http-route-handler.contract";
 import { writeBrowserSessionCookie } from "#server/adapters/environment-transport/http/environment-session-cookie";
@@ -58,11 +57,11 @@ function serveRoute(
       route.capability === null
         ? undefined
         : yield* authorization.authorize(credential, route.capability);
-    const command =
+    const input =
       route.request === undefined
         ? undefined
         : yield* decodeRequestBody(route.request, body);
-    yield* runRouteHandler(handler, command, response, {
+    yield* runRouteHandler(handler, input, response, {
       credential,
       device,
       establishBrowserSession: (sessionCredential) =>
@@ -78,38 +77,17 @@ function serveRoute(
 
 function runRouteHandler(
   handler: EnvironmentHttpRouteHandler,
-  command: unknown,
+  input: unknown,
   response: ServerResponse,
   context: EnvironmentHttpRequestContext,
 ) {
-  const { route } = handler;
-  return handler.handle(command, context).pipe(
-    Effect.map((value) =>
-      writeJson(response, route.successStatus, route.success, value),
-    ),
-    Effect.catchTags({
-      EnvironmentAuthorizationError: (error) =>
-        Effect.sync(() => writeEnvironmentHttpError(response, error)),
-      EnvironmentStorageError: (error) =>
-        Effect.sync(() => writeEnvironmentHttpError(response, error)),
-    }),
-    Effect.catch((failure) =>
-      Effect.sync(() => writeRouteFailure(response, handler, failure)),
-    ),
-  );
-}
-
-function writeRouteFailure(
-  response: ServerResponse,
-  handler: EnvironmentHttpRouteHandler,
-  failure: EnvironmentHttpRouteFailure,
-) {
-  const status = handler.failureStatus?.(failure);
-  if (status === undefined) {
-    response.writeHead(500).end();
-    return;
-  }
-  writeJson(response, status, handler.route.failure, failure.failure);
+  return handler
+    .respond(input, context)
+    .pipe(
+      Effect.map((result) =>
+        writeJson(response, 200, handler.route.response, result),
+      ),
+    );
 }
 
 function rejectUnroutedRequest(

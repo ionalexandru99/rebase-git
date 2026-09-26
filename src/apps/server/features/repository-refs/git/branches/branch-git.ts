@@ -1,17 +1,13 @@
 import type {
   BranchUpstreamTarget,
   LocalBranch,
+  RepositoryBranchesOperationFailure,
+  RepositoryRejected,
   RepositoryWorktree,
 } from "@rebase/contracts";
 import { Effect } from "effect";
 import type { GitCommandRunner } from "#server/domain/git-command.contract";
-import type { RepositoryAccessService } from "#server/domain/repository-access.contract";
-import {
-  branchAccessFailed,
-  branchesFailure,
-  branchGitFailed,
-  branchWriteFailed,
-} from "#server/features/repository-refs/git/branches/branch-failures";
+import { branchWriteFailed } from "#server/features/repository-refs/git/branches/branch-failures";
 import {
   forEachRefFormat,
   localBranchFromRecord,
@@ -36,7 +32,10 @@ export function requireValidBranchName(
   directory: string,
   name: string,
 ) {
-  const invalid = branchesFailure({ _tag: "InvalidBranchName", name });
+  const invalid: RepositoryBranchesOperationFailure = {
+    _tag: "InvalidBranchName",
+    name,
+  };
   if (name.startsWith("-") || name === "HEAD") return Effect.fail(invalid);
   return runRepositoryGit(
     git,
@@ -45,9 +44,6 @@ export function requireValidBranchName(
     branchCommand,
   ).pipe(
     Effect.catchIf(isGitRejection, () => Effect.fail(invalid)),
-    Effect.mapError((error) =>
-      error._tag === "RepositoryGitError" ? branchGitFailed(error) : error,
-    ),
     Effect.asVoid,
   );
 }
@@ -62,10 +58,7 @@ export function readBranchTarget(
     directory,
     ["rev-parse", "--verify", "--quiet", `${branchRef(name)}^{commit}`],
     { ...branchCommand, exitCodes: [0, 1] },
-  ).pipe(
-    Effect.map((output) => output.trim() || undefined),
-    Effect.mapError(branchGitFailed),
-  );
+  ).pipe(Effect.map((output) => output.trim() || undefined));
 }
 
 export function requireBranchTarget(
@@ -77,21 +70,18 @@ export function requireBranchTarget(
   return readBranchTarget(git, directory, name).pipe(
     Effect.flatMap((target) => {
       if (target === undefined)
-        return Effect.fail(branchesFailure({ _tag: "RefMissing", name }));
+        return Effect.fail<RepositoryBranchesOperationFailure>({
+          _tag: "RefMissing",
+          name,
+        });
       if (expectedTarget !== undefined && target !== expectedTarget)
-        return Effect.fail(branchesFailure({ _tag: "BranchMoved", name }));
+        return Effect.fail<RepositoryBranchesOperationFailure>({
+          _tag: "BranchMoved",
+          name,
+        });
       return Effect.succeed(target);
     }),
   );
-}
-
-export function readBranchWorktrees(
-  access: RepositoryAccessService,
-  worktreePath: string,
-) {
-  return access
-    .worktrees(worktreePath)
-    .pipe(Effect.mapError(branchAccessFailed));
 }
 
 export function worktreeHolding(
@@ -113,7 +103,6 @@ export function readLocalBranch(
     ["for-each-ref", `--format=${forEachRefFormat}`, branchRef(name)],
     branchCommand,
   ).pipe(
-    Effect.mapError(branchGitFailed),
     Effect.map((output): LocalBranch => {
       const record = parseForEachRef(output).find(
         (candidate) => candidate.name === branchRef(name),
@@ -152,13 +141,11 @@ export function requireRemoteBranch(
     ["rev-parse", "--verify", "--quiet", `refs/remotes/${name}`],
     branchCommand,
   ).pipe(
-    Effect.catchIf(isGitRejection, (error) =>
-      Effect.fail(branchesFailure({ _tag: "RefMissing", name }, error)),
-    ),
-    Effect.mapError((error) =>
-      error._tag === "RepositoryGitError"
-        ? branchWriteFailed(error, name)
-        : error,
+    Effect.mapError(
+      (error): RepositoryBranchesOperationFailure | RepositoryRejected =>
+        isGitRejection(error)
+          ? { _tag: "RefMissing", name }
+          : branchWriteFailed(error, name),
     ),
     Effect.asVoid,
   );

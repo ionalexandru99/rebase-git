@@ -1,8 +1,9 @@
 import type {
   RepositoryCatalogEntry,
-  RepositoryCatalogOperationFailure,
+  RepositoryPathRejected,
+  RepositoryRejected,
 } from "@rebase/contracts";
-import { Context, Data, type Effect } from "effect";
+import { Context, type Effect } from "effect";
 import type { EnvironmentStorageError } from "#server/domain/environment-storage-error.contract";
 
 export interface RepositoryCatalog {
@@ -20,28 +21,21 @@ export interface RepositoryCatalog {
     repositoryId: string,
   ) => Effect.Effect<
     RepositoryCatalogEntry,
-    EnvironmentStorageError | RepositoryCatalogError
+    EnvironmentStorageError | RepositoryRejected
   >;
   readonly remember: (
     path: string,
   ) => Effect.Effect<
     RepositoryCatalogEntry,
-    EnvironmentStorageError | RepositoryCatalogError
+    EnvironmentStorageError | RepositoryPathRejected
   >;
   readonly remove: (
     repositoryId: string,
   ) => Effect.Effect<
     { readonly repositoryId: string },
-    EnvironmentStorageError | RepositoryCatalogError
+    EnvironmentStorageError | RepositoryRejected
   >;
 }
-
-export class RepositoryCatalogError extends Data.TaggedError(
-  "RepositoryCatalogError",
-)<{
-  readonly cause?: unknown;
-  readonly failure: RepositoryCatalogOperationFailure;
-}> {}
 
 export class RepositoryCatalogAccess extends Context.Service<
   RepositoryCatalogAccess,

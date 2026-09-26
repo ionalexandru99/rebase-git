@@ -16,8 +16,7 @@ export function repositoryChangesClient(
     response: (error) =>
       new WorkingChangesError({
         message:
-          error._tag === "EnvironmentHttpRejected" &&
-          error.failure._tag === "ChangesFailed"
+          error._tag === "EnvironmentHttpRejected"
             ? error.failure.detail
             : "Could not complete the request. Check the environment connection and try again.",
       }),

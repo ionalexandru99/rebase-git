@@ -131,7 +131,7 @@ describe("git ref parsing", () => {
           "fatal: 'feature' is already checked out at '/repo/.worktrees/feature'",
         ),
         "feature",
-      ).failure,
+      ),
     ).toEqual({
       _tag: "BranchCheckedOutElsewhere",
       name: "feature",
@@ -143,7 +143,7 @@ describe("git ref parsing", () => {
           "error: pathspec 'missing' did not match any file(s) known to git",
         ),
         "missing",
-      ).failure,
+      ),
     ).toEqual({ _tag: "RefMissing", name: "missing" });
     expect(
       checkoutFailure(
@@ -151,7 +151,7 @@ describe("git ref parsing", () => {
           "error: Your local changes to the following files would be overwritten by checkout:\n\tREADME.md",
         ),
         "main",
-      ).failure,
+      ),
     ).toMatchObject({ _tag: "CheckoutRejected", reason: "LocalChanges" });
   });
 

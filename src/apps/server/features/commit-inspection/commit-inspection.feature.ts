@@ -1,31 +1,21 @@
 import { CommitInspectionHttpApi } from "@rebase/contracts";
 import { Effect } from "effect";
 import type { EnvironmentFeature } from "#server/adapters/environment-transport/environment-feature.contract";
-import { httpRoute } from "#server/adapters/environment-transport/http/environment-http-route-handler";
-import { GitCommands } from "#server/domain/git-command.contract";
-import { RepositoryAccess } from "#server/domain/repository-access.contract";
-import { createCommitInspectionService } from "#server/features/commit-inspection/commit-inspection";
-import type { CommitInspectionError } from "#server/features/commit-inspection/git/inspection-error";
+import { query } from "#server/adapters/environment-transport/http/repository-http-routes";
+import {
+  inspectCommit,
+  inspectCommitDiff,
+} from "#server/features/commit-inspection/git/inspect-commit";
 
 export const commitInspectionFeature = Effect.gen(function* () {
-  const inspection = createCommitInspectionService(
-    yield* RepositoryAccess,
-    yield* GitCommands,
-  );
   const api = CommitInspectionHttpApi;
   return {
     capabilities: [],
     httpRoutes: [
-      httpRoute(api.inspect, (command) => inspection.inspect(command), {
-        failureStatus,
-      }),
-      httpRoute(api.inspectDiff, (command) => inspection.inspectDiff(command), {
-        failureStatus,
-      }),
+      yield* query(api.inspect, (input, git) => inspectCommit(git, input)),
+      yield* query(api.inspectDiff, (input, git) =>
+        inspectCommitDiff(git, input),
+      ),
     ],
   } satisfies EnvironmentFeature;
 });
-
-function failureStatus(error: CommitInspectionError) {
-  return error.failure.reason === "Missing" ? 404 : 409;
-}

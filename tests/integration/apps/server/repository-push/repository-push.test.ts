@@ -1,7 +1,11 @@
 import { chmod, mkdtemp, realpath, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { PushBranch, PushDestination } from "@rebase/contracts";
+import {
+  type PushBranch,
+  type PushDestination,
+  RepositoryPushHttpApi,
+} from "@rebase/contracts";
 import { Effect, Fiber } from "effect";
 import { afterEach, describe, expect, it } from "vite-plus/test";
 import { createLocalGitCommandRunner } from "#server/adapters/local-git/local-git-command-runner";
@@ -10,11 +14,12 @@ import {
   GitCommandError,
   type GitCommandRunner,
 } from "#server/domain/git-command.contract";
-import { createRepositoryPushService } from "#server/features/repository-push/repository-push";
+import { repositoryPushFeature } from "#server/features/repository-push/index";
 import {
   createRepositoryAccess,
   createRepositoryCoordination,
 } from "#server/repository/access/index";
+import { repositoryFeatureClient } from "#tests-integration/apps/server/environment-connection/feature-routes-client";
 import { createRepository, git } from "#tests-support/git";
 import { removeTemporaryDirectory } from "#tests-support/temporary-directory";
 
@@ -38,23 +43,27 @@ async function fixture(wrap?: (runner: GitCommandRunner) => GitCommandRunner) {
   await git(local, "push", "-u", "origin", "main");
   await git(root, "clone", remote, other);
   const runner = createLocalGitCommandRunner();
-  const service = createRepositoryPushService(
-    createRepositoryAccess(
-      {
-        find: () =>
-          Effect.succeed({
-            id: repositoryId,
-            path: local,
-            name: "test",
-            addedAt: "",
-            lastOpenedAt: "",
-          }),
-      },
-      runner,
-      createLocalRepositoryWatcher(),
-    ),
-    wrap?.(runner) ?? runner,
-    createRepositoryCoordination(runner),
+  const service = repositoryFeatureClient(
+    RepositoryPushHttpApi,
+    repositoryPushFeature,
+    {
+      access: createRepositoryAccess(
+        {
+          find: () =>
+            Effect.succeed({
+              id: repositoryId,
+              path: local,
+              name: "test",
+              addedAt: "",
+              lastOpenedAt: "",
+            }),
+        },
+        runner,
+        createLocalRepositoryWatcher(),
+      ),
+      git: wrap?.(runner) ?? runner,
+      coordination: createRepositoryCoordination(runner),
+    },
   );
   const scope = { repositoryId, worktreePath: local };
   const push = (
@@ -70,13 +79,8 @@ async function fixture(wrap?: (runner: GitCommandRunner) => GitCommandRunner) {
       mode: { _tag: "FastForward" },
       ...options,
     });
-  const failure = <A>(effect: Effect.Effect<A, { failure: unknown }>) =>
-    Effect.runPromise(
-      effect.pipe(
-        Effect.flip,
-        Effect.map((error) => error.failure),
-      ),
-    );
+  const failure = <A, E>(effect: Effect.Effect<A, E>) =>
+    Effect.runPromise(Effect.flip(effect));
   const tip = (path: string, ref: string) => git(path, "rev-parse", ref);
   return { root, remote, local, other, service, scope, push, failure, tip };
 }
@@ -197,7 +201,10 @@ describe("pushing branches", () => {
     await git(f.local, "switch", "main");
     await git(f.local, "merge", "side").catch(() => undefined);
 
-    expect(await f.failure(f.push("main"))).toMatchObject({ reason: "Busy" });
+    expect(await f.failure(f.push("main"))).toMatchObject({
+      _tag: "RepositoryRejected",
+      reason: "Incompatible",
+    });
     expect(await f.tip(f.remote, "refs/heads/main")).not.toBe(
       await f.tip(f.local, "refs/heads/main"),
     );

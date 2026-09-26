@@ -50,8 +50,11 @@ describe("repository refs controller", () => {
     gateway.read.mockReturnValueOnce(
       Effect.fail(
         new RepositoryRefsRejected({
-          status: 404,
-          failure: { _tag: "RepositoryMissing", repositoryId: alphaId },
+          failure: {
+            _tag: "RepositoryRejected",
+            reason: "Missing",
+            detail: "This repository is no longer available.",
+          },
         }),
       ),
     );
@@ -196,7 +199,6 @@ describe("repository refs controller", () => {
 
     const rejected = new RepositoryRefsRejected({
       failure: { _tag: "RefMissing", name: "ghost" },
-      status: 404,
     });
     gateway.checkout.mockReturnValueOnce(Effect.fail(rejected));
     await expect(

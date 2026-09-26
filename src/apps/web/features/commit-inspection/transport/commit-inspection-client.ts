@@ -16,8 +16,7 @@ export function commitInspectionClient(
     response: (error) =>
       new CommitInspectionError({
         message:
-          error._tag === "EnvironmentHttpRejected" &&
-          error.failure._tag === "ChangesFailed"
+          error._tag === "EnvironmentHttpRejected"
             ? error.failure.detail
             : "Could not load this commit. Check the environment connection and try again.",
       }),

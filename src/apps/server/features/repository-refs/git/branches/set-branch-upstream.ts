@@ -5,7 +5,6 @@ import type { RepositoryAccessService } from "#server/domain/repository-access.c
 import { branchWriteFailed } from "#server/features/repository-refs/git/branches/branch-failures";
 import {
   branchCommand,
-  readBranchWorktrees,
   readLocalBranch,
   requireBranchTarget,
   requireRemoteBranch,
@@ -31,7 +30,7 @@ export function setBranchUpstream(
         branchCommand,
       ).pipe(Effect.mapError((error) => branchWriteFailed(error, name)));
     }
-    const worktrees = yield* readBranchWorktrees(access, worktreePath);
+    const worktrees = yield* access.worktrees(worktreePath);
     return yield* readLocalBranch(git, worktreePath, worktrees, name);
   });
 }

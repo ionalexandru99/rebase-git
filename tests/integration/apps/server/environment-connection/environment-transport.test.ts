@@ -2,11 +2,11 @@ import { request } from "node:http";
 import {
   createCurrentEnvironmentHello,
   currentTransportLimits,
-  EnvironmentDiscovery,
-  EnvironmentSnapshot,
+  EnvironmentHttpApi,
   environmentDiscoveryPath,
   environmentLivePath,
   environmentSnapshotPath,
+  type RouteResultValue,
 } from "@rebase/contracts";
 import { Effect, Schema } from "effect";
 import { describe, expect, it } from "vite-plus/test";
@@ -32,13 +32,15 @@ describe("Environment transport", () => {
       );
       expect(discoveryResponse.status).toBe(200);
       expect(discoveryResponse.headers.get("cache-control")).toBe("no-store");
-      const discovery = Schema.decodeUnknownSync(EnvironmentDiscovery)(
-        await discoveryResponse.json(),
+      const discovery = okValue(
+        Schema.decodeUnknownSync(EnvironmentHttpApi.discovery.response)(
+          await discoveryResponse.json(),
+        ),
       );
       expect(discovery).toMatchObject({
         environmentId,
         productVersion: "0.0.0",
-        protocol: { major: 2, minor: 5, minimumSupportedMinor: 0 },
+        protocol: { major: 3, minor: 0, minimumSupportedMinor: 0 },
         limits: currentTransportLimits,
       });
       expect(
@@ -52,8 +54,10 @@ describe("Environment transport", () => {
       );
       expect(snapshotResponse.status).toBe(200);
       expect(
-        Schema.decodeUnknownSync(EnvironmentSnapshot)(
-          await snapshotResponse.json(),
+        okValue(
+          Schema.decodeUnknownSync(EnvironmentHttpApi.snapshot.response)(
+            await snapshotResponse.json(),
+          ),
         ),
       ).toEqual({ environmentId, sequence: 0 });
     });
@@ -67,8 +71,10 @@ describe("Environment transport", () => {
     await withListener(
       async (origin) => {
         const response = await fetch(`${origin}${environmentDiscoveryPath}`);
-        const discovery = Schema.decodeUnknownSync(EnvironmentDiscovery)(
-          await response.json(),
+        const discovery = okValue(
+          Schema.decodeUnknownSync(EnvironmentHttpApi.discovery.response)(
+            await response.json(),
+          ),
         );
         const names = discovery.capabilities.map(({ name }) => name);
         expect(names).toContain("repository-history");
@@ -341,4 +347,9 @@ function sendUnfinishedChunkedBody(url: string, byteLength: number) {
       outgoing.write("x".repeat(byteLength));
     },
   );
+}
+
+function okValue<Value>(result: RouteResultValue<Value, unknown>) {
+  if (result._tag !== "Ok") throw new Error("Expected an Ok response.");
+  return result.value;
 }

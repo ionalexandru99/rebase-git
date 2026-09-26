@@ -1,22 +1,21 @@
 import { randomUUID } from "node:crypto";
-import type {
-  CheckoutRepositoryRef,
-  RepositoryCheckedOut,
-  RepositoryRefTarget,
-  RepositoryWorktree,
+import {
+  type CheckoutRepositoryRef,
+  type RepositoryCheckedOut,
+  type RepositoryCheckoutFailure,
+  type RepositoryRefTarget,
+  type RepositoryRejected,
+  type RepositoryWorktree,
+  repositoryRejected,
 } from "@rebase/contracts";
 import { Effect } from "effect";
-import type { EnvironmentStorageError } from "#server/domain/environment-storage-error.contract";
 import type { GitCommandRunner } from "#server/domain/git-command.contract";
-import type { RepositoryAccessService } from "#server/domain/repository-access.contract";
+import type {
+  RepositoryAccessError,
+  RepositoryAccessService,
+} from "#server/domain/repository-access.contract";
 import type { RepositoryGitError } from "#server/domain/repository-git.contract";
-import {
-  checkoutFailure,
-  gitFailed,
-  type RepositoryRefsError,
-  repositoryAccessFailed,
-  repositoryRefsFailure,
-} from "#server/features/repository-refs/git/repository-refs-failures";
+import { checkoutFailure } from "#server/features/repository-refs/git/repository-refs-failures";
 import {
   isGitRejection,
   runRepositoryGit,
@@ -33,13 +32,13 @@ export function checkoutRepositoryRef(
   command: CheckoutRepositoryRef,
 ): Effect.Effect<
   RepositoryCheckedOut,
-  EnvironmentStorageError | RepositoryRefsError
+  | RepositoryCheckoutFailure
+  | RepositoryRejected
+  | RepositoryAccessError
+  | RepositoryGitError
 > {
   return Effect.gen(function* () {
-    const worktrees = yield* readCanonicalWorktrees(
-      access,
-      command.worktreePath,
-    );
+    const worktrees = yield* access.worktrees(command.worktreePath);
     const worktree = yield* requireWorktree(worktrees, command.worktreePath);
     const target = yield* resolveTarget(git, worktree.path, command.target);
     yield* rejectBranchCheckedOutElsewhere(worktrees, worktree, target);
@@ -56,11 +55,7 @@ export function checkoutRepositoryRef(
     );
     const head = yield* readCheckedOutHead(access, worktree.path);
     return { head, stash, worktreePath: worktree.path };
-  }).pipe(
-    Effect.catchTag("RepositoryGitError", (error) =>
-      Effect.fail(gitFailed(error)),
-    ),
-  );
+  });
 }
 
 function checkoutWithAutoStash(
@@ -69,7 +64,7 @@ function checkoutWithAutoStash(
   target: CheckoutTarget,
 ): Effect.Effect<
   RepositoryCheckedOut["stash"],
-  RepositoryRefsError | RepositoryGitError
+  RepositoryCheckoutFailure | RepositoryRejected | RepositoryGitError
 > {
   return Effect.gen(function* () {
     const stash = yield* stashLocalChanges(git, directory, target);
@@ -86,15 +81,6 @@ function checkoutWithAutoStash(
   });
 }
 
-function readCanonicalWorktrees(
-  access: RepositoryAccessService,
-  directory: string,
-) {
-  return access
-    .worktrees(directory)
-    .pipe(Effect.mapError(repositoryAccessFailed));
-}
-
 function requireWorktree(
   worktrees: readonly RepositoryWorktree[],
   worktreePath: string,
@@ -104,7 +90,10 @@ function requireWorktree(
   );
   return worktree === undefined
     ? Effect.fail(
-        repositoryRefsFailure({ _tag: "WorktreeMissing", worktreePath }),
+        repositoryRejected(
+          "Missing",
+          "This worktree does not belong to the repository.",
+        ),
       )
     : Effect.succeed(worktree);
 }
@@ -154,13 +143,11 @@ function rejectBranchCheckedOutElsewhere(
   );
   return elsewhere === undefined
     ? Effect.void
-    : Effect.fail(
-        repositoryRefsFailure({
-          _tag: "BranchCheckedOutElsewhere",
-          name: target.name,
-          worktreePath: elsewhere.path,
-        }),
-      );
+    : Effect.fail<RepositoryCheckoutFailure>({
+        _tag: "BranchCheckedOutElsewhere",
+        name: target.name,
+        worktreePath: elsewhere.path,
+      });
 }
 
 function stashLocalChanges(
@@ -195,13 +182,11 @@ function stashLocalChanges(
     );
     const entry = yield* findStash(git, directory, token);
     if (stashFailure !== "" || entry === undefined) {
-      return yield* Effect.fail(
-        repositoryRefsFailure({
-          _tag: "CheckoutRejected",
-          detail: stashFailure,
-          reason: "StashFailed",
-        }),
-      );
+      return yield* Effect.fail<RepositoryCheckoutFailure>({
+        _tag: "CheckoutRejected",
+        detail: stashFailure,
+        reason: "StashFailed",
+      });
     }
     return token;
   });
@@ -296,7 +281,7 @@ function readCheckedOutHead(
   access: RepositoryAccessService,
   worktreePath: string,
 ) {
-  return readCanonicalWorktrees(access, worktreePath).pipe(
+  return access.worktrees(worktreePath).pipe(
     Effect.flatMap((worktrees) => requireWorktree(worktrees, worktreePath)),
     Effect.map((worktree) => worktree.head),
   );

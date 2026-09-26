@@ -1,0 +1,65 @@
+{
+  "discovery": {
+    "environmentId": "00000000-0000-4000-8000-000000000001",
+    "productVersion": "0.0.2",
+    "protocol": {
+      "major": 2,
+      "minor": 5,
+      "minimumSupportedMinor": 0
+    },
+    "capabilities": [
+      { "introducedInMinor": 5, "name": "repository-refs", "version": 1 },
+      { "introducedInMinor": 4, "name": "repository-ref-events", "version": 1 },
+      {
+        "introducedInMinor": 3,
+        "name": "repository-history-freshness",
+        "version": 1
+      },
+      { "introducedInMinor": 0, "name": "environment-events", "version": 1 },
+      { "introducedInMinor": 1, "name": "sequence-resnapshot", "version": 1 },
+      { "introducedInMinor": 3, "name": "json-fragmentation", "version": 1 },
+      { "introducedInMinor": 3, "name": "repository-history", "version": 6 }
+    ],
+    "limits": {
+      "helloTimeoutMilliseconds": 5000,
+      "maxCapturedOutputBytes": 1048576,
+      "maxHttpRequestBytes": 65536,
+      "maxHttpResponseBytes": 1048576,
+      "maxQueuedEventBytes": 262144,
+      "maxQueuedEvents": 128,
+      "maxWebSocketRequestBytes": 4194304,
+      "maxWebSocketResponseBytes": 1048576
+    },
+    "routes": {
+      "snapshot": "/api/environment/snapshot",
+      "live": "/api/environment/live"
+    }
+  },
+  "hello": {
+    "_tag": "Hello",
+    "productVersion": "0.0.2",
+    "protocol": {
+      "major": 2,
+      "minor": 5,
+      "minimumSupportedMinor": 0
+    },
+    "capabilities": [
+      { "introducedInMinor": 5, "name": "repository-refs", "version": 1 },
+      { "introducedInMinor": 4, "name": "repository-ref-events", "version": 1 },
+      {
+        "introducedInMinor": 3,
+        "name": "repository-history-freshness",
+        "version": 1
+      },
+      { "introducedInMinor": 0, "name": "environment-events", "version": 1 },
+      { "introducedInMinor": 1, "name": "sequence-resnapshot", "version": 1 },
+      { "introducedInMinor": 3, "name": "json-fragmentation", "version": 1 },
+      { "introducedInMinor": 3, "name": "repository-history", "version": 6 }
+    ],
+    "receiveLimits": {
+      "maxCapturedOutputBytes": 1048576,
+      "maxHttpResponseBytes": 1048576,
+      "maxWebSocketResponseBytes": 1048576
+    }
+  }
+}

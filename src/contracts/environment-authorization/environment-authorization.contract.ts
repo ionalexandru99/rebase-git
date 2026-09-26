@@ -2,11 +2,11 @@ import {
   EnvironmentAccessCapability,
   environmentAccessCapabilities,
 } from "@rebase/contracts/environment-connection/environment-access-capability.contract";
+import { EnvironmentHttpFailure } from "@rebase/contracts/environment-connection/environment-request-failure.contract";
 import {
-  InvalidMessage,
-  PayloadTooLarge,
-} from "@rebase/contracts/environment-connection/environment-request-failure.contract";
-import type { EnvironmentHttpRoute } from "@rebase/contracts/environment-connection/http/environment-http-route.contract";
+  type EnvironmentHttpRoute,
+  route,
+} from "@rebase/contracts/environment-connection/http/environment-http-route.contract";
 import { IsoDate } from "@rebase/contracts/environment-connection/iso-date.contract";
 import { Schema } from "effect";
 
@@ -127,37 +127,11 @@ export const EnvironmentAuthorizationFailure = Schema.Union([
 export type EnvironmentAuthorizationFailure =
   typeof EnvironmentAuthorizationFailure.Type;
 
-export const EnvironmentGrantHttpFailure = Schema.Union([
-  InvalidHost,
-  InvalidOrigin,
-  InvalidGrant,
-  ExpiredGrant,
-  RevokedGrant,
-  CapabilityDenied,
-  InvalidMessage,
-  PayloadTooLarge,
+export const EnvironmentAccessFailure = Schema.Union([
+  EnvironmentAuthorizationFailure,
+  EnvironmentHttpFailure,
 ]);
-export type EnvironmentGrantHttpFailure =
-  typeof EnvironmentGrantHttpFailure.Type;
-
-export const EnvironmentPairingExchangeHttpFailure = Schema.Union([
-  InvalidHost,
-  InvalidOrigin,
-  InvalidPairing,
-  ExpiredPairing,
-  PairingAlreadyUsed,
-  InvalidMessage,
-  PayloadTooLarge,
-]);
-export type EnvironmentPairingExchangeHttpFailure =
-  typeof EnvironmentPairingExchangeHttpFailure.Type;
-
-export const EnvironmentAuthorizationHttpFailure = Schema.Union([
-  EnvironmentGrantHttpFailure,
-  EnvironmentPairingExchangeHttpFailure,
-]);
-export type EnvironmentAuthorizationHttpFailure =
-  typeof EnvironmentAuthorizationHttpFailure.Type;
+export type EnvironmentAccessFailure = typeof EnvironmentAccessFailure.Type;
 
 export const environmentPairingExchangePath =
   "/api/authorization/pairings/exchange";
@@ -168,58 +142,44 @@ export const environmentAuthorizationRevocationPath =
   "/api/authorization/revocations";
 
 export const EnvironmentAuthorizationHttpApi = {
-  createBrowserSession: {
+  createBrowserSession: route({
     capability: null,
-    failure: EnvironmentPairingExchangeHttpFailure,
-    failureStatuses: [409],
     method: "POST",
     path: "/api/authorization/browser-session",
     request: ExchangeEnvironmentPairing,
     success: EnvironmentBrowserSession,
-    successStatus: 201,
-  },
-  readBrowserSession: {
+  }),
+  readBrowserSession: route({
     capability: "environment.read",
-    failure: EnvironmentGrantHttpFailure,
     method: "GET",
     path: "/api/authorization/browser-session",
     success: EnvironmentBrowserSession,
-    successStatus: 200,
-  },
-  createPairing: {
+  }),
+  createPairing: route({
     capability: "authorization.manage",
-    failure: EnvironmentGrantHttpFailure,
     method: "POST",
     path: environmentPairingsPath,
     request: CreateEnvironmentPairing,
     success: EnvironmentPairingCreated,
-    successStatus: 201,
-  },
-  exchangePairing: {
+  }),
+  exchangePairing: route({
     capability: null,
-    failure: EnvironmentPairingExchangeHttpFailure,
-    failureStatuses: [409],
     method: "POST",
     path: environmentPairingExchangePath,
     request: ExchangeEnvironmentPairing,
     success: EnvironmentPairingExchanged,
-    successStatus: 201,
-  },
-  mintWebSocketTicket: {
+  }),
+  mintWebSocketTicket: route({
     capability: "environment.read",
-    failure: EnvironmentGrantHttpFailure,
     method: "POST",
     path: environmentWebSocketTicketsPath,
     success: EnvironmentWebSocketTicket,
-    successStatus: 201,
-  },
-  revokeAuthorization: {
+  }),
+  revokeAuthorization: route({
     capability: "authorization.manage",
-    failure: EnvironmentGrantHttpFailure,
     method: "POST",
     path: environmentAuthorizationRevocationPath,
     request: RevokeEnvironmentAuthorization,
     success: EnvironmentAuthorizationRevoked,
-    successStatus: 200,
-  },
-} as const satisfies Record<string, EnvironmentHttpRoute>;
+  }),
+} satisfies Record<string, EnvironmentHttpRoute>;

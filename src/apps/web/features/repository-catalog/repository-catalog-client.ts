@@ -12,11 +12,8 @@ export function repositoryCatalogClient(
   return requests(RepositoryCatalogHttpApi, {
     disconnected: () => new RepositoryCatalogResponseError(),
     response: (error) =>
-      error._tag === "EnvironmentHttpRejected"
-        ? new RepositoryCatalogRejected({
-            failure: error.failure,
-            status: error.status,
-          })
-        : new RepositoryCatalogResponseError(),
+      error._tag === "EnvironmentResponseError"
+        ? new RepositoryCatalogResponseError()
+        : new RepositoryCatalogRejected({ failure: error.failure }),
   });
 }

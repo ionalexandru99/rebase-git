@@ -1,59 +1,44 @@
-import type { CheckoutRepositoryRef } from "@rebase/contracts";
+import { type RepositoryRejected, repositoryRejected } from "@rebase/contracts";
 import { Effect } from "effect";
+import type { EnvironmentStorageError } from "#server/domain/environment-storage-error.contract";
 import type { GitCommandRunner } from "#server/domain/git-command.contract";
-import type { RepositoryAccessService } from "#server/domain/repository-access.contract";
-import type { RepositoryCoordinationService } from "#server/domain/repository-coordination.contract";
-import { checkoutRepositoryRef } from "#server/features/repository-refs/git/checkout-repository-ref";
-import { readRepositoryRefs } from "#server/features/repository-refs/git/read-repository-refs";
 import {
-  repositoryAccessFailed,
-  repositoryRefsFailure,
-} from "#server/features/repository-refs/git/repository-refs-failures";
+  accessRejection,
+  type RepositoryAccessError,
+  type RepositoryAccessService,
+} from "#server/domain/repository-access.contract";
+import type { RepositoryGitError } from "#server/domain/repository-git.contract";
+import { readRepositoryRefs } from "#server/features/repository-refs/git/read-repository-refs";
 import type { RepositoryChangePublisher } from "#server/features/repository-refs/repository-change-publisher";
-import { checkoutWritePolicy } from "#server/features/repository-refs/repository-refs.write-policy";
 
-export type RepositoryRefsService = ReturnType<
-  typeof createRepositoryRefsService
+export type RepositoryRefsReader = ReturnType<
+  typeof createRepositoryRefsReader
 >;
 
-export function createRepositoryRefsService(dependencies: {
+export function createRepositoryRefsReader(dependencies: {
   readonly access: RepositoryAccessService;
   readonly changes: RepositoryChangePublisher;
   readonly git: GitCommandRunner;
-  readonly coordination: RepositoryCoordinationService;
 }) {
-  const { access, changes, git, coordination } = dependencies;
+  const { access, changes, git } = dependencies;
   return {
-    checkout: (command: CheckoutRepositoryRef) =>
-      Effect.gen(function* () {
-        yield* access
-          .requireWorktree(command)
-          .pipe(Effect.mapError(repositoryAccessFailed));
-        return yield* coordination
-          .run(
-            command.worktreePath,
-            checkoutWritePolicy,
-            checkoutRepositoryRef(git, access, command),
-          )
-          .pipe(
-            Effect.mapError((error) =>
-              error._tag === "RepositoryCoordinationError"
-                ? repositoryRefsFailure({
-                    _tag: "GitFailed",
-                    reason: "Failed",
-                    detail: error.detail,
-                  })
-                : error,
-            ),
-          );
-      }),
     read: (repositoryId: string) =>
       Effect.gen(function* () {
-        const repository = yield* access
-          .repository(repositoryId)
-          .pipe(Effect.mapError(repositoryAccessFailed));
+        const repository = yield* access.repository(repositoryId);
         yield* changes.watch(repository);
         return yield* readRepositoryRefs(git, repository);
-      }),
+      }).pipe(Effect.mapError(refsReadRejected)),
   };
+}
+
+function refsReadRejected(
+  error: RepositoryAccessError | EnvironmentStorageError | RepositoryGitError,
+): RepositoryRejected {
+  if (error._tag === "EnvironmentStorageError")
+    return repositoryRejected(
+      "GitFailed",
+      "The repository catalog is unavailable.",
+    );
+  if (error._tag === "RepositoryAccessError") return accessRejection(error);
+  return repositoryRejected("GitFailed", error.detail);
 }

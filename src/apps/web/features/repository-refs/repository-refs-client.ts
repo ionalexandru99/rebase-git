@@ -12,11 +12,8 @@ export function repositoryRefsClient(
   return requests(RepositoryRefsHttpApi, {
     disconnected: () => new RepositoryRefsResponseError(),
     response: (error) =>
-      error._tag === "EnvironmentHttpRejected"
-        ? new RepositoryRefsRejected({
-            failure: error.failure,
-            status: error.status,
-          })
-        : new RepositoryRefsResponseError(),
+      error._tag === "EnvironmentResponseError"
+        ? new RepositoryRefsResponseError()
+        : new RepositoryRefsRejected({ failure: error.failure }),
   });
 }

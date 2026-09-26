@@ -103,6 +103,7 @@ describe("commit graph commands", () => {
     await vi.waitFor(() =>
       expect(pulled).toHaveBeenCalledWith({
         repositoryId: "repo",
+        worktreePath: "/repo",
         branch: "main",
       }),
     );

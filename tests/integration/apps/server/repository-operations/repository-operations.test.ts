@@ -2,7 +2,10 @@ import { execFile } from "node:child_process";
 import { chmod, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { promisify } from "node:util";
-import type { OperationAction } from "@rebase/contracts";
+import {
+  type OperationAction,
+  RepositoryOperationsHttpApi,
+} from "@rebase/contracts";
 import { Effect } from "effect";
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import { createLocalGitCommandRunner } from "#server/adapters/local-git/local-git-command-runner";
@@ -11,11 +14,12 @@ import {
   GitCommandError,
   type GitCommandRunner,
 } from "#server/domain/git-command.contract";
-import { createRepositoryOperationsService } from "#server/features/repository-operations/repository-operations";
+import { repositoryOperationsFeature } from "#server/features/repository-operations/index";
 import {
   createRepositoryAccess,
   createRepositoryCoordination,
 } from "#server/repository/access/index";
+import { repositoryFeatureClient } from "#tests-integration/apps/server/environment-connection/feature-routes-client";
 import {
   createDivergedRepository,
   startConflict,
@@ -37,23 +41,27 @@ async function fixture() {
   directories.push(directory);
   const runner = createLocalGitCommandRunner();
   const operations = (runGit: GitCommandRunner = runner) =>
-    createRepositoryOperationsService(
-      createRepositoryAccess(
-        {
-          find: () =>
-            Effect.succeed({
-              id: repositoryId,
-              path: directory,
-              name: "test",
-              addedAt: "",
-              lastOpenedAt: "",
-            }),
-        },
-        runner,
-        createLocalRepositoryWatcher(),
-      ),
-      runGit,
-      createRepositoryCoordination(runner),
+    repositoryFeatureClient(
+      RepositoryOperationsHttpApi,
+      repositoryOperationsFeature,
+      {
+        access: createRepositoryAccess(
+          {
+            find: () =>
+              Effect.succeed({
+                id: repositoryId,
+                path: directory,
+                name: "test",
+                addedAt: "",
+                lastOpenedAt: "",
+              }),
+          },
+          runner,
+          createLocalRepositoryWatcher(),
+        ),
+        git: runGit,
+        coordination: createRepositoryCoordination(runner),
+      },
     );
   const service = operations();
   const scope = { repositoryId, worktreePath: directory };
@@ -99,13 +107,9 @@ describe("Git operation recovery", () => {
           action,
         }),
       );
-    await expect(stale("abort")).rejects.toMatchObject({
-      failure: { reason: "Stale" },
-    });
+    await expect(stale("abort")).rejects.toMatchObject({ reason: "Stale" });
     await f.git("add", ".");
-    await expect(stale("continue")).rejects.toMatchObject({
-      failure: { reason: "Stale" },
-    });
+    await expect(stale("continue")).rejects.toMatchObject({ reason: "Stale" });
     expect((await f.execute("continue")).kind).toBe("idle");
     expect(
       (await f.git("rev-list", "--parents", "-n", "1", "HEAD")).stdout
@@ -237,7 +241,8 @@ describe("Git operation recovery", () => {
     await writeFile(lock, "other process");
     expect((await f.read()).lock).toBe("index.lock");
     await expect(f.execute("continue")).rejects.toMatchObject({
-      failure: { reason: "Locked" },
+      _tag: "RepositoryRejected",
+      reason: "Busy",
     });
     expect(await readFile(lock, "utf8")).toBe("other process");
     await rm(lock);
@@ -248,7 +253,7 @@ describe("Git operation recovery", () => {
     );
     await chmod(hook, 0o755);
     await expect(f.execute("continue")).rejects.toMatchObject({
-      failure: { reason: "HookFailed" },
+      reason: "HookFailed",
     });
     expect((await f.read()).kind).toBe("merge");
     await rm(hook);
@@ -273,7 +278,7 @@ describe("Git operation recovery", () => {
           action: "continue",
         }),
       ),
-    ).rejects.toMatchObject({ failure: { reason: "Uncertain" } });
+    ).rejects.toMatchObject({ reason: "Uncertain" });
     expect((await f.read()).kind).toBe("idle");
   });
 });

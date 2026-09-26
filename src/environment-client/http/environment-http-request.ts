@@ -1,9 +1,13 @@
 import {
   currentClientReceiveLimits,
-  isEnvironmentHttpFailureStatus,
+  EnvironmentAccessFailure,
+  isRouteOk,
+  type RouteFailure,
+  type RouteSuccess,
 } from "@rebase/contracts";
 import { Effect, Schema } from "effect";
 import {
+  EnvironmentAccessDenied,
   EnvironmentHttpRejected,
   type EnvironmentResponseError,
   environmentResponseError,
@@ -15,6 +19,12 @@ import type {
 } from "#environment-client/http/environment-http-request.contract";
 import { readBoundedEnvironmentResponseBody } from "#environment-client/http/environment-http-response-body";
 
+type RouteRejection<Route extends RequestableEnvironmentHttpRoute> = [
+  RouteFailure<Route>,
+] extends [never]
+  ? never
+  : EnvironmentHttpRejected<RouteFailure<Route>>;
+
 export function requestEnvironmentHttp<
   Route extends RequestableEnvironmentHttpRoute,
 >(
@@ -22,8 +32,20 @@ export function requestEnvironmentHttp<
   route: Route,
   options: EnvironmentHttpRequestOptions<Route>,
 ): Effect.Effect<
-  Route["success"]["Type"],
-  EnvironmentResponseError | EnvironmentHttpRejected<Route["failure"]["Type"]>
+  RouteSuccess<Route>,
+  EnvironmentResponseError | EnvironmentAccessDenied | RouteRejection<Route>
+>;
+export function requestEnvironmentHttp<
+  Route extends RequestableEnvironmentHttpRoute,
+>(
+  origin: string,
+  route: Route,
+  options: EnvironmentHttpRequestOptions<Route>,
+): Effect.Effect<
+  RouteSuccess<Route>,
+  | EnvironmentResponseError
+  | EnvironmentAccessDenied
+  | EnvironmentHttpRejected<RouteFailure<Route>>
 > {
   const responseError = () => environmentResponseError(route.path);
   return Effect.gen(function* () {
@@ -45,17 +67,20 @@ export function requestEnvironmentHttp<
         currentClientReceiveLimits.maxHttpResponseBytes,
       responseError,
     );
-    if (response.status === route.successStatus) {
-      return yield* decodeBody(route.success, body, responseError);
+    if (response.status !== 200) {
+      const failure = yield* decodeBody(
+        EnvironmentAccessFailure,
+        body,
+        responseError,
+      );
+      return yield* new EnvironmentAccessDenied({
+        failure,
+        status: response.status,
+      });
     }
-    if (!isEnvironmentHttpFailureStatus(route, response.status)) {
-      return yield* responseError();
-    }
-    const failure = yield* decodeBody(route.failure, body, responseError);
-    return yield* new EnvironmentHttpRejected({
-      failure,
-      status: response.status,
-    });
+    const result = yield* decodeBody(route.response, body, responseError);
+    if (isRouteOk(result)) return result.value;
+    return yield* new EnvironmentHttpRejected({ failure: result.failure });
   });
 }
 

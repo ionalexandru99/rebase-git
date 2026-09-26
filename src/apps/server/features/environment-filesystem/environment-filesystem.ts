@@ -10,20 +10,13 @@ import {
   type EnvironmentDirectoryRejected,
   type EnvironmentPathBreadcrumb,
 } from "@rebase/contracts";
-import { Data, Effect } from "effect";
+import { Effect } from "effect";
 
 const maximumEntries = 500;
 const maximumPathLength = 4_096;
 const maximumBreadcrumbBytes = 16_384;
 const responseSizeMargin = 512;
 const realpathNative = promisify(realpath.native);
-
-export class EnvironmentFilesystemError extends Data.TaggedError(
-  "EnvironmentFilesystemError",
-)<{
-  readonly cause?: unknown;
-  readonly failure: EnvironmentDirectoryRejected;
-}> {}
 
 export function createEnvironmentFilesystem(homeDirectory = homedir()) {
   return {
@@ -35,7 +28,7 @@ export function createEnvironmentFilesystem(homeDirectory = homedir()) {
 function listEnvironmentDirectory(
   requestedPath: string,
   includeHidden: boolean,
-): Effect.Effect<EnvironmentDirectory, EnvironmentFilesystemError> {
+): Effect.Effect<EnvironmentDirectory, EnvironmentDirectoryRejected> {
   if (!validPath(requestedPath)) {
     return Effect.fail(directoryRejected("MalformedPath"));
   }
@@ -67,17 +60,16 @@ function canonicalizeDirectory(path: string) {
   return Effect.tryPromise({
     try: async () => {
       const canonicalPath = await realpathNative(path);
-      const metadata = await stat(canonicalPath);
-      if (!metadata.isDirectory()) {
-        throw directoryRejected("NotDirectory");
-      }
-      return canonicalPath;
+      return { canonicalPath, metadata: await stat(canonicalPath) };
     },
-    catch: (cause) =>
-      cause instanceof EnvironmentFilesystemError
-        ? cause
-        : directoryRejected(fileSystemRejectionReason(cause), cause),
-  });
+    catch: (cause) => directoryRejected(fileSystemRejectionReason(cause)),
+  }).pipe(
+    Effect.flatMap(({ canonicalPath, metadata }) =>
+      metadata.isDirectory()
+        ? Effect.succeed(canonicalPath)
+        : Effect.fail(directoryRejected("NotDirectory")),
+    ),
+  );
 }
 
 function readDirectory(path: string, includeHidden: boolean) {
@@ -99,8 +91,7 @@ function readDirectory(path: string, includeHidden: boolean) {
             }),
         );
     },
-    catch: (cause) =>
-      directoryRejected(fileSystemRejectionReason(cause), cause),
+    catch: (cause) => directoryRejected(fileSystemRejectionReason(cause)),
   });
 }
 
@@ -242,10 +233,6 @@ function fileSystemErrorCode(cause: unknown) {
 
 function directoryRejected(
   reason: EnvironmentDirectoryRejected["reason"],
-  cause?: unknown,
-) {
-  return new EnvironmentFilesystemError({
-    ...(cause === undefined ? {} : { cause }),
-    failure: { _tag: "EnvironmentDirectoryRejected", reason },
-  });
+): EnvironmentDirectoryRejected {
+  return { _tag: "EnvironmentDirectoryRejected", reason };
 }

@@ -4,24 +4,31 @@ import {
 } from "@rebase/contracts";
 import { Effect } from "effect";
 import type { EnvironmentFeature } from "#server/adapters/environment-transport/environment-feature.contract";
-import { httpRoute } from "#server/adapters/environment-transport/http/environment-http-route-handler";
+import { command } from "#server/adapters/environment-transport/http/repository-http-routes";
 import { EnvironmentEvents } from "#server/domain/environment-event-publisher.contract";
 import { GitCommands } from "#server/domain/git-command.contract";
 import { RepositoryAccess } from "#server/domain/repository-access.contract";
-import { RepositoryCoordination } from "#server/domain/repository-coordination.contract";
+import type { RepositoryWritePolicy } from "#server/domain/repository-coordination.contract";
 import { RepositoryWatching } from "#server/domain/repository-watcher.contract";
-import { branchesFailureStatus } from "#server/features/repository-refs/git/branches/branch-failures";
-import type { RepositoryRefsError } from "#server/features/repository-refs/git/repository-refs-failures";
-import { createRepositoryBranchesService } from "#server/features/repository-refs/repository-branches";
+import { createBranch } from "#server/features/repository-refs/git/branches/create-branch";
+import { deleteBranch } from "#server/features/repository-refs/git/branches/delete-branch";
+import { renameBranch } from "#server/features/repository-refs/git/branches/rename-branch";
+import { setBranchUpstream } from "#server/features/repository-refs/git/branches/set-branch-upstream";
+import { checkoutRepositoryRef } from "#server/features/repository-refs/git/checkout-repository-ref";
 import { acquireRepositoryChangePublisher } from "#server/features/repository-refs/repository-change-publisher";
-import { createRepositoryRefsService } from "#server/features/repository-refs/repository-refs";
+import { createRepositoryRefsReader } from "#server/features/repository-refs/repository-refs";
 import { repositoryRefsRpc } from "#server/features/repository-refs/rpc/repository-refs-rpc";
+
+const branchPolicy: RepositoryWritePolicy = {
+  name: "branch",
+  locks: { refs: "wait" },
+  duringOperation: "proceed",
+};
 
 export const repositoryRefsFeature = Effect.gen(function* () {
   const git = yield* GitCommands;
   const access = yield* RepositoryAccess;
-  const coordination = yield* RepositoryCoordination;
-  const refs = createRepositoryRefsService({
+  const refs = createRepositoryRefsReader({
     access,
     changes: yield* acquireRepositoryChangePublisher(
       git,
@@ -29,57 +36,33 @@ export const repositoryRefsFeature = Effect.gen(function* () {
       yield* EnvironmentEvents,
     ),
     git,
-    coordination,
   });
-  const branches = createRepositoryBranchesService({
-    access,
-    git,
-    coordination,
-  });
-  const branchOptions = { failureStatus: branchesFailureStatus };
+  const branches = RepositoryBranchesHttpApi;
   return {
     capabilities: ["repository-refs"],
     httpRoutes: [
-      httpRoute(
+      yield* command(
         RepositoryRefsHttpApi.checkout,
-        (command) => refs.checkout(command),
-        { failureStatus },
+        {
+          name: "checkout",
+          locks: { refs: "wait", worktree: "wait" },
+          duringOperation: "block",
+        },
+        (input, git) => checkoutRepositoryRef(git, access, input),
       ),
-      httpRoute(
-        RepositoryBranchesHttpApi.create,
-        (command) => branches.create(command),
-        branchOptions,
+      yield* command(branches.create, branchPolicy, (input, git) =>
+        createBranch(git, access, input),
       ),
-      httpRoute(
-        RepositoryBranchesHttpApi.rename,
-        (command) => branches.rename(command),
-        branchOptions,
+      yield* command(branches.rename, branchPolicy, (input, git) =>
+        renameBranch(git, access, input),
       ),
-      httpRoute(
-        RepositoryBranchesHttpApi.setUpstream,
-        (command) => branches.setUpstream(command),
-        branchOptions,
+      yield* command(branches.setUpstream, branchPolicy, (input, git) =>
+        setBranchUpstream(git, access, input),
       ),
-      httpRoute(
-        RepositoryBranchesHttpApi.delete,
-        (command) => branches.delete(command),
-        branchOptions,
+      yield* command(branches.delete, branchPolicy, (input, git) =>
+        deleteBranch(git, access, input),
       ),
     ],
     rpc: (session) => repositoryRefsRpc(session, refs),
   } satisfies EnvironmentFeature;
 });
-
-function failureStatus(error: RepositoryRefsError) {
-  switch (error.failure._tag) {
-    case "RepositoryMissing":
-    case "WorktreeMissing":
-    case "RefMissing":
-      return 404;
-    case "BranchCheckedOutElsewhere":
-    case "CheckoutRejected":
-      return 409;
-    case "GitFailed":
-      return 422;
-  }
-}

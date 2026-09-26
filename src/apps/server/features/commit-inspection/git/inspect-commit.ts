@@ -1,15 +1,16 @@
-import type {
-  CommitFile,
-  CommitInspection,
-  InspectCommit,
-  InspectCommitDiff,
+import {
+  type CommitFile,
+  type CommitInspection,
+  changesFailed,
+  type InspectCommit,
+  type InspectCommitDiff,
+  repositoryRejected,
 } from "@rebase/contracts";
 import { Effect } from "effect";
 import type { GitCommandRunner } from "#server/domain/git-command.contract";
 import { isGitObjectId } from "#server/domain/git-object-id";
 import type { RepositoryFileContent } from "#server/domain/repository-comparison.contract";
 import type { RepositoryGitError } from "#server/domain/repository-git.contract";
-import { inspectionError } from "#server/features/commit-inspection/git/inspection-error";
 import {
   type CommitSide,
   readCommitChange,
@@ -52,8 +53,8 @@ export function inspectCommitDiff(
     const change = yield* readCommitChange(git, command, metadata.parentOid);
     if (change === undefined)
       return yield* Effect.fail(
-        inspectionError(
-          "Missing",
+        changesFailed(
+          "Stale",
           "This file is not changed in the selected comparison.",
         ),
       );
@@ -110,7 +111,7 @@ function readMetadata(git: GitCommandRunner, command: InspectCommit) {
       ].every((oid) => isGitObjectId(oid))
     )
       return yield* Effect.fail(
-        inspectionError("Unsupported", "Select a full commit identity."),
+        changesFailed("Unsupported", "Select a full commit identity."),
       );
     const output = yield* runRepositoryGit(
       git,
@@ -151,15 +152,12 @@ function readMetadata(git: GitCommandRunner, command: InspectCommit) {
       oid !== command.oid
     )
       return yield* Effect.fail(
-        inspectionError("GitFailed", "Could not read commit metadata."),
+        repositoryRejected("GitFailed", "Could not read commit metadata."),
       );
     const parents = (parentText ?? "").split(" ").filter(Boolean);
     if (command.parentOid !== undefined && !parents.includes(command.parentOid))
       return yield* Effect.fail(
-        inspectionError(
-          "Unsupported",
-          "Choose a parent of the selected commit.",
-        ),
+        changesFailed("Unsupported", "Choose a parent of the selected commit."),
       );
     return {
       oid: command.oid,

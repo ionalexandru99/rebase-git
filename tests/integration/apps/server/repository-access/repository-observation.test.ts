@@ -15,12 +15,11 @@ import { RepositoryWatching } from "#server/domain/repository-watcher.contract";
 import { createRepositoryCatalog } from "#server/features/repository-catalog/index";
 import { acquireRepositoryFreshness } from "#server/features/repository-history/freshness/repository-freshness";
 import { acquireRepositoryChangePublisher } from "#server/features/repository-refs/repository-change-publisher";
-import { createRepositoryRefsService } from "#server/features/repository-refs/repository-refs";
+import { createRepositoryRefsReader } from "#server/features/repository-refs/repository-refs";
 import { acquireEnvironmentContext } from "#server/persistence/environment-context";
 import { environmentPaths } from "#server/persistence/storage/environment-paths";
 import {
   createRepositoryAccess,
-  createRepositoryCoordination,
   repositoryAccessLayer,
   repositoryCoordinationLayer,
 } from "#server/repository/access/index";
@@ -81,8 +80,7 @@ for (const firstRelease of ["refs", "freshness"] as const)
             watcher,
             events,
           ).pipe(Effect.provideService(Scope.Scope, refsScope));
-          const refs = createRepositoryRefsService({
-            coordination: createRepositoryCoordination(runner),
+          const refs = createRepositoryRefsReader({
             access: createRepositoryAccess(
               catalog,
               runner,

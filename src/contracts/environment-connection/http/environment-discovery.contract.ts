@@ -1,12 +1,11 @@
 import {
-  EnvironmentGrantHttpFailure,
-  InvalidHost,
-} from "@rebase/contracts/environment-authorization/environment-authorization.contract";
-import {
   currentTransportLimits,
   TransportLimits,
 } from "@rebase/contracts/environment-connection/environment-transport-limits.contract";
-import type { EnvironmentHttpRoute } from "@rebase/contracts/environment-connection/http/environment-http-route.contract";
+import {
+  type EnvironmentHttpRoute,
+  route,
+} from "@rebase/contracts/environment-connection/http/environment-http-route.contract";
 import {
   currentEnvironmentCapabilities,
   currentEnvironmentProtocol,
@@ -14,10 +13,6 @@ import {
   ProductVersionSchema,
   ProtocolRange,
 } from "@rebase/contracts/environment-connection/negotiation/environment-protocol.contract";
-import {
-  InvalidMessage,
-  PayloadTooLarge,
-} from "@rebase/contracts/environment-connection/websocket/environment-live-connection.contract";
 import { Schema } from "effect";
 
 export const environmentDiscoveryPath = "/api/discovery";
@@ -45,39 +40,20 @@ export const EnvironmentSnapshot = Schema.Struct({
 
 export type EnvironmentSnapshot = typeof EnvironmentSnapshot.Type;
 
-export const EnvironmentHttpFailure = Schema.Union([
-  InvalidMessage,
-  PayloadTooLarge,
-]);
-
-export type EnvironmentHttpFailure = typeof EnvironmentHttpFailure.Type;
-
-export const EnvironmentDiscoveryHttpFailure = Schema.Union([
-  EnvironmentHttpFailure,
-  InvalidHost,
-]);
-
-export type EnvironmentDiscoveryHttpFailure =
-  typeof EnvironmentDiscoveryHttpFailure.Type;
-
 export const EnvironmentHttpApi = {
-  discovery: {
+  discovery: route({
     capability: null,
-    failure: EnvironmentDiscoveryHttpFailure,
     method: "GET",
     path: environmentDiscoveryPath,
     success: EnvironmentDiscovery,
-    successStatus: 200,
-  },
-  snapshot: {
+  }),
+  snapshot: route({
     capability: "environment.read",
-    failure: EnvironmentGrantHttpFailure,
     method: "GET",
     path: environmentSnapshotPath,
     success: EnvironmentSnapshot,
-    successStatus: 200,
-  },
-} as const satisfies Record<string, EnvironmentHttpRoute>;
+  }),
+} satisfies Record<string, EnvironmentHttpRoute>;
 
 export function createCurrentEnvironmentDiscovery(
   environmentId: string,

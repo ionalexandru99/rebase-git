@@ -3,7 +3,11 @@ import { realpath } from "node:fs";
 import { stat } from "node:fs/promises";
 import { basename, isAbsolute } from "node:path";
 import { promisify } from "node:util";
-import type { RepositoryCatalogEntry } from "@rebase/contracts";
+import {
+  type RepositoryCatalogEntry,
+  type RepositoryPathRejected,
+  repositoryRejected,
+} from "@rebase/contracts";
 import { asc, eq } from "drizzle-orm";
 import { Effect, Layer } from "effect";
 import {
@@ -13,7 +17,6 @@ import {
 import {
   type RepositoryCatalog,
   RepositoryCatalogAccess,
-  RepositoryCatalogError,
 } from "#server/domain/repository-catalog.contract";
 import {
   type EnvironmentContext,
@@ -209,7 +212,7 @@ function recordRepositoryOpened(
     .pipe(
       Effect.flatMap((repository) =>
         repository === undefined
-          ? Effect.fail(repositoryMissing(repositoryId))
+          ? Effect.fail(repositoryMissing())
           : Effect.succeed(catalogEntry(repository)),
       ),
     );
@@ -227,7 +230,7 @@ function removeRepository(context: EnvironmentContext, repositoryId: string) {
     .pipe(
       Effect.flatMap((removed) =>
         removed === undefined
-          ? Effect.fail(repositoryMissing(repositoryId))
+          ? Effect.fail(repositoryMissing())
           : Effect.succeed(removed),
       ),
     );
@@ -261,16 +264,14 @@ function resolveRepository(git: GitCommandRunner, requestedPath: string) {
 function canonicalizePath(path: string) {
   return Effect.tryPromise({
     try: () => realpathNative(path),
-    catch: (cause) =>
-      repositoryPathRejected(fileSystemRejectionReason(cause), cause),
+    catch: (cause) => repositoryPathRejected(fileSystemRejectionReason(cause)),
   });
 }
 
 function inspectPath(path: string) {
   return Effect.tryPromise({
     try: () => stat(path),
-    catch: (cause) =>
-      repositoryPathRejected(fileSystemRejectionReason(cause), cause),
+    catch: (cause) => repositoryPathRejected(fileSystemRejectionReason(cause)),
   });
 }
 
@@ -290,7 +291,7 @@ function resolveGitPaths(git: GitCommandRunner, path: string) {
       Effect.mapError((cause) =>
         isGitRejection(cause)
           ? repositoryPathRejected("NotRepository")
-          : repositoryPathRejected("InspectionFailed", cause),
+          : repositoryPathRejected("InspectionFailed"),
       ),
     );
     const [worktreeRoot, commonDirectory, ...extra] = output.trim().split("\n");
@@ -320,24 +321,16 @@ function fileSystemErrorCode(cause: unknown) {
 }
 
 function repositoryPathRejected(
-  reason:
-    | "InspectionFailed"
-    | "MalformedPath"
-    | "NotDirectory"
-    | "NotFound"
-    | "NotRepository",
-  cause?: unknown,
-) {
-  return new RepositoryCatalogError({
-    ...(cause === undefined ? {} : { cause }),
-    failure: { _tag: "RepositoryPathRejected", reason },
-  });
+  reason: RepositoryPathRejected["reason"],
+): RepositoryPathRejected {
+  return { _tag: "RepositoryPathRejected", reason };
 }
 
-function repositoryMissing(repositoryId: string) {
-  return new RepositoryCatalogError({
-    failure: { _tag: "RepositoryMissing", repositoryId },
-  });
+function repositoryMissing() {
+  return repositoryRejected(
+    "Missing",
+    "This repository is no longer available.",
+  );
 }
 
 function requireStoredRepository(

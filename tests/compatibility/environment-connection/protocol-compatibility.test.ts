@@ -10,13 +10,12 @@ import {
 import { Schema } from "effect";
 import { describe, expect, it } from "vite-plus/test";
 
-const oldestFixture = JSON.parse(
+const previousMajor = JSON.parse(
   readFileSync(
-    new URL("./fixtures/protocol-minor-0.json", import.meta.url),
+    new URL("./fixtures/protocol-major-2.json", import.meta.url),
     "utf8",
   ),
 ) as {
-  readonly accepted: unknown;
   readonly discovery: unknown;
   readonly hello: unknown;
 };
@@ -39,17 +38,17 @@ describe("Environment protocol compatibility", () => {
       _tag: "HelloAccepted",
       capabilities: [
         {
-          introducedInMinor: 5,
+          introducedInMinor: 0,
           name: "repository-refs",
           version: 1,
         },
         {
-          introducedInMinor: 4,
+          introducedInMinor: 0,
           name: "repository-ref-events",
           version: 1,
         },
         {
-          introducedInMinor: 3,
+          introducedInMinor: 0,
           name: "repository-history-freshness",
           version: 1,
         },
@@ -59,22 +58,22 @@ describe("Environment protocol compatibility", () => {
           version: 1,
         },
         {
-          introducedInMinor: 1,
+          introducedInMinor: 0,
           name: "sequence-resnapshot",
           version: 1,
         },
         {
-          introducedInMinor: 3,
+          introducedInMinor: 0,
           name: "json-fragmentation",
           version: 1,
         },
         {
-          introducedInMinor: 3,
+          introducedInMinor: 0,
           name: "repository-history",
           version: 6,
         },
       ],
-      protocol: { major: 2, minor: 5 },
+      protocol: { major: 3, minor: 0 },
     });
   });
 
@@ -117,14 +116,14 @@ describe("Environment protocol compatibility", () => {
       "0.0.0",
     );
     const hello = Schema.decodeUnknownSync(EnvironmentHello)(
-      oldestFixture.hello,
+      previousMajor.hello,
     );
     expect(negotiateEnvironmentHello(discovery, hello, 0)).toMatchObject({
       _tag: "HelloRejected",
       failure: {
         _tag: "ProtocolMajorMismatch",
-        clientMajor: 1,
-        serverMajor: 2,
+        clientMajor: 2,
+        serverMajor: 3,
         requiredUpdate: "client",
       },
     });
@@ -132,7 +131,7 @@ describe("Environment protocol compatibility", () => {
 
   it("requires a server update for the previous WebSocket protocol", () => {
     const discovery = Schema.decodeUnknownSync(EnvironmentDiscovery)(
-      oldestFixture.discovery,
+      previousMajor.discovery,
     );
     expect(
       negotiateEnvironmentHello(
@@ -144,8 +143,8 @@ describe("Environment protocol compatibility", () => {
       _tag: "HelloRejected",
       failure: {
         _tag: "ProtocolMajorMismatch",
-        clientMajor: 2,
-        serverMajor: 1,
+        clientMajor: 3,
+        serverMajor: 2,
         requiredUpdate: "server",
       },
     });
@@ -158,16 +157,16 @@ describe("Environment protocol compatibility", () => {
     );
     const hello = {
       ...createCurrentEnvironmentHello("0.0.0"),
-      protocol: { major: 3, minor: 0, minimumSupportedMinor: 0 },
+      protocol: { major: 4, minor: 0, minimumSupportedMinor: 0 },
     };
 
     expect(negotiateThroughJson(discovery, hello)).toEqual({
       _tag: "HelloRejected",
       failure: {
         _tag: "ProtocolMajorMismatch",
-        clientMajor: 3,
+        clientMajor: 4,
         requiredUpdate: "server",
-        serverMajor: 2,
+        serverMajor: 3,
       },
     });
   });
@@ -195,7 +194,7 @@ describe("Environment protocol compatibility", () => {
     );
     const hello = {
       ...createCurrentEnvironmentHello("0.0.0"),
-      protocol: { major: 2, minor: 6, minimumSupportedMinor: 6 },
+      protocol: { major: 3, minor: 1, minimumSupportedMinor: 1 },
     };
 
     expect(negotiateThroughJson(discovery, hello)).toMatchObject({

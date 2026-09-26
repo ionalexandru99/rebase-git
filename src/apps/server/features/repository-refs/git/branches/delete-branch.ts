@@ -2,21 +2,20 @@ import type {
   BranchCommitSummary,
   DeleteRepositoryBranch,
   RepositoryBranchDeleted,
+  RepositoryBranchesOperationFailure,
+  RepositoryRejected,
 } from "@rebase/contracts";
 import { Effect } from "effect";
-import type { EnvironmentStorageError } from "#server/domain/environment-storage-error.contract";
 import type { GitCommandRunner } from "#server/domain/git-command.contract";
-import type { RepositoryAccessService } from "#server/domain/repository-access.contract";
-import {
-  branchesFailure,
-  branchGitFailed,
-  branchWriteFailed,
-  type RepositoryBranchesError,
-} from "#server/features/repository-refs/git/branches/branch-failures";
+import type {
+  RepositoryAccessError,
+  RepositoryAccessService,
+} from "#server/domain/repository-access.contract";
+import type { RepositoryGitError } from "#server/domain/repository-git.contract";
+import { branchWriteFailed } from "#server/features/repository-refs/git/branches/branch-failures";
 import {
   branchCommand,
   branchRef,
-  readBranchWorktrees,
   requireBranchTarget,
   worktreeHolding,
 } from "#server/features/repository-refs/git/branches/branch-git";
@@ -37,7 +36,10 @@ export function deleteBranch(
   command: DeleteRepositoryBranch,
 ): Effect.Effect<
   RepositoryBranchDeleted,
-  RepositoryBranchesError | EnvironmentStorageError
+  | RepositoryBranchesOperationFailure
+  | RepositoryRejected
+  | RepositoryAccessError
+  | RepositoryGitError
 > {
   const { force, local, remote, worktreePath } = command;
   return Effect.gen(function* () {
@@ -62,12 +64,9 @@ function requireDeletableLocal(
   { name, target }: LocalTarget,
 ) {
   return Effect.gen(function* () {
-    const holder = worktreeHolding(
-      yield* readBranchWorktrees(access, worktreePath),
-      name,
-    );
+    const holder = worktreeHolding(yield* access.worktrees(worktreePath), name);
     if (holder !== undefined)
-      return yield* branchesFailure({
+      return yield* Effect.fail<RepositoryBranchesOperationFailure>({
         _tag: "BranchCheckedOutElsewhere",
         name,
         worktreePath: holder.path,
@@ -87,10 +86,11 @@ function deleteLocal(
     ["update-ref", "-d", branchRef(name), target],
     branchCommand,
   ).pipe(
-    Effect.mapError((error) =>
-      isGitRejection(error)
-        ? branchesFailure({ _tag: "BranchMoved", name }, error)
-        : branchGitFailed(error),
+    Effect.catchIf(isGitRejection, () =>
+      Effect.fail<RepositoryBranchesOperationFailure>({
+        _tag: "BranchMoved",
+        name,
+      }),
     ),
     Effect.andThen(
       runRepositoryGit(
@@ -98,7 +98,7 @@ function deleteLocal(
         directory,
         ["config", "--remove-section", `branch.${name}`],
         { ...branchCommand, exitCodes: [0, 1, 128] },
-      ).pipe(Effect.mapError(branchGitFailed)),
+      ),
     ),
     Effect.asVoid,
   );
@@ -116,14 +116,19 @@ function requireRemoteTarget(
     ["rev-parse", "--verify", "--quiet", `refs/remotes/${name}^{commit}`],
     { ...branchCommand, exitCodes: [0, 1] },
   ).pipe(
-    Effect.mapError(branchGitFailed),
     Effect.flatMap((output) => {
       const target = output.trim();
       if (target.length === 0)
-        return Effect.fail(branchesFailure({ _tag: "RefMissing", name }));
+        return Effect.fail<RepositoryBranchesOperationFailure>({
+          _tag: "RefMissing",
+          name,
+        });
       return target === remote.target
         ? Effect.void
-        : Effect.fail(branchesFailure({ _tag: "BranchMoved", name }));
+        : Effect.fail<RepositoryBranchesOperationFailure>({
+            _tag: "BranchMoved",
+            name,
+          });
     }),
   );
 }
@@ -167,21 +172,17 @@ function rejectUnmergedCommits(
     },
     { concurrency: "unbounded" },
   ).pipe(
-    Effect.mapError(branchGitFailed),
     Effect.flatMap(({ count, log }) => {
       const unmerged = Number.parseInt(count.trim(), 10);
       return unmerged === 0
         ? Effect.void
-        : Effect.fail(
-            branchesFailure({
-              _tag: "BranchNotMerged",
-              commits: parseCommits(log),
-              count: unmerged,
-              name:
-                local?.name ??
-                (remote === undefined ? "" : remoteLabel(remote)),
-            }),
-          );
+        : Effect.fail<RepositoryBranchesOperationFailure>({
+            _tag: "BranchNotMerged",
+            commits: parseCommits(log),
+            count: unmerged,
+            name:
+              local?.name ?? (remote === undefined ? "" : remoteLabel(remote)),
+          });
     }),
   );
 }
@@ -204,13 +205,11 @@ function deleteRemote(
     pushCommand,
   ).pipe(
     Effect.asVoid,
-    Effect.mapError((error) =>
-      isGitRejection(error) && /stale info|fetch first/i.test(error.detail)
-        ? branchesFailure(
-            { _tag: "BranchMoved", name: remoteLabel(remote) },
-            error,
-          )
-        : branchWriteFailed(error, remoteLabel(remote)),
+    Effect.mapError(
+      (error): RepositoryBranchesOperationFailure | RepositoryRejected =>
+        isGitRejection(error) && /stale info|fetch first/i.test(error.detail)
+          ? { _tag: "BranchMoved", name: remoteLabel(remote) }
+          : branchWriteFailed(error, remoteLabel(remote)),
     ),
   );
 }

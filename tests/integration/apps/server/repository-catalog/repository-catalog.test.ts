@@ -4,12 +4,10 @@ import { join } from "node:path";
 import { Effect, Stream } from "effect";
 import { afterEach, describe, expect, it } from "vite-plus/test";
 import { createLocalGitCommandRunner } from "#server/adapters/local-git/local-git-command-runner";
-import type { EnvironmentStorageError } from "#server/domain/environment-storage-error.contract";
 import {
   GitCommandError,
   type GitCommandRunner,
 } from "#server/domain/git-command.contract";
-import { RepositoryCatalogError } from "#server/domain/repository-catalog.contract";
 import { createRepositoryCatalog } from "#server/features/repository-catalog/index";
 import { acquireEnvironmentContext } from "#server/persistence/environment-context";
 import type { EnvironmentContext } from "#server/persistence/environment-context.contract";
@@ -44,9 +42,7 @@ describe("repository catalog", () => {
         }),
       unavailable,
     );
-    expect(result.error).toMatchObject({
-      failure: { reason: "InspectionFailed" },
-    });
+    expect(result.error).toMatchObject({ reason: "InspectionFailed" });
     expect(result.repositories).toEqual([]);
   });
 
@@ -192,8 +188,8 @@ describe("repository catalog", () => {
 
     await withCatalog(root, (catalog) =>
       Effect.gen(function* () {
-        yield* expectMissing(catalog.recordOpened(missingId), missingId);
-        yield* expectMissing(catalog.remove(missingId), missingId);
+        yield* expectMissing(catalog.recordOpened(missingId));
+        yield* expectMissing(catalog.remove(missingId));
       }),
     );
   });
@@ -219,34 +215,29 @@ function withCatalog<A, E>(
   );
 }
 
-function expectFailure<A>(
-  effect: Effect.Effect<A, EnvironmentStorageError | RepositoryCatalogError>,
+function expectFailure<A, E>(
+  effect: Effect.Effect<A, E>,
   reason: "MalformedPath" | "NotDirectory" | "NotFound" | "NotRepository",
 ) {
   return Effect.flip(effect).pipe(
-    Effect.map((error) => {
-      expect(error).toBeInstanceOf(RepositoryCatalogError);
-      if (!(error instanceof RepositoryCatalogError)) return error;
-      expect(error.failure).toEqual({ _tag: "RepositoryPathRejected", reason });
-      return error;
-    }),
+    Effect.tap((error) =>
+      Effect.sync(() =>
+        expect(error).toEqual({ _tag: "RepositoryPathRejected", reason }),
+      ),
+    ),
   );
 }
 
-function expectMissing<A>(
-  effect: Effect.Effect<A, EnvironmentStorageError | RepositoryCatalogError>,
-  repositoryId: string,
-) {
+function expectMissing<A, E>(effect: Effect.Effect<A, E>) {
   return Effect.flip(effect).pipe(
-    Effect.map((error) => {
-      expect(error).toBeInstanceOf(RepositoryCatalogError);
-      if (!(error instanceof RepositoryCatalogError)) return error;
-      expect(error.failure).toEqual({
-        _tag: "RepositoryMissing",
-        repositoryId,
-      });
-      return error;
-    }),
+    Effect.tap((error) =>
+      Effect.sync(() =>
+        expect(error).toMatchObject({
+          _tag: "RepositoryRejected",
+          reason: "Missing",
+        }),
+      ),
+    ),
   );
 }
 

@@ -1,11 +1,8 @@
+import type { EnvironmentAccessCapability } from "@rebase/contracts";
 import type {
-  EnvironmentAccessCapability,
-  EnvironmentAuthorizationHttpFailure,
-} from "@rebase/contracts";
-import type {
+  EnvironmentAccessDenied,
   EnvironmentConnectionFailure,
   EnvironmentCredential,
-  EnvironmentHttpRejected,
   EnvironmentRequestClient,
 } from "@rebase/environment-client";
 import type { Effect, ManagedRuntime, Scope } from "effect";
@@ -33,7 +30,7 @@ export type LocalEnvironmentSessionState =
     }
   | {
       readonly _tag: "AuthorizationFailed";
-      readonly failure: EnvironmentHttpRejected<EnvironmentAuthorizationHttpFailure>;
+      readonly failure: EnvironmentAccessDenied;
     }
   | {
       readonly _tag: "ProtocolMismatch";

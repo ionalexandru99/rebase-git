@@ -2,6 +2,7 @@ export {
   EnvironmentAccessCapability,
   environmentAccessCapabilities,
 } from "@rebase/contracts/environment-connection/environment-access-capability.contract";
+export { EnvironmentHttpFailure } from "@rebase/contracts/environment-connection/environment-request-failure.contract";
 export {
   ClientReceiveLimits,
   currentClientReceiveLimits,
@@ -11,18 +12,23 @@ export {
 export {
   createCurrentEnvironmentDiscovery,
   EnvironmentDiscovery,
-  EnvironmentDiscoveryHttpFailure,
   EnvironmentHttpApi,
-  EnvironmentHttpFailure,
   EnvironmentSnapshot,
   environmentDiscoveryPath,
   environmentLivePath,
   environmentSnapshotPath,
 } from "@rebase/contracts/environment-connection/http/environment-discovery.contract";
 export {
-  type EnvironmentHttpFailureStatus,
   type EnvironmentHttpRoute,
-  isEnvironmentHttpFailureStatus,
+  isRouteOk,
+  type RouteFailure,
+  type RouteInput,
+  RouteResult,
+  type RouteResultValue,
+  type RouteSuccess,
+  repositoryCommand,
+  repositoryQuery,
+  route,
 } from "@rebase/contracts/environment-connection/http/environment-http-route.contract";
 export { IsoDate } from "@rebase/contracts/environment-connection/iso-date.contract";
 export {

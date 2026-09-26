@@ -7,21 +7,29 @@ import {
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { RepositoryRefsHttpApi } from "@rebase/contracts";
 import { Effect } from "effect";
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import { createEnvironmentEventPublisher } from "#server/adapters/environment-transport/events/environment-event-publisher";
 import { createLocalGitCommandRunner } from "#server/adapters/local-git/local-git-command-runner";
 import { createLocalRepositoryWatcher } from "#server/adapters/local-git/local-repository-watcher";
+import { EnvironmentEvents } from "#server/domain/environment-event-publisher.contract";
 import type { GitCommandRunner } from "#server/domain/git-command.contract";
+import { RepositoryWatching } from "#server/domain/repository-watcher.contract";
 import { createRepositoryCatalog } from "#server/features/repository-catalog/index";
+import { repositoryRefsFeature } from "#server/features/repository-refs/index";
 import { acquireRepositoryChangePublisher } from "#server/features/repository-refs/repository-change-publisher";
-import { createRepositoryRefsService } from "#server/features/repository-refs/repository-refs";
+import { createRepositoryRefsReader } from "#server/features/repository-refs/repository-refs";
 import { acquireEnvironmentContext } from "#server/persistence/environment-context";
 import { environmentPaths } from "#server/persistence/storage/environment-paths";
 import {
   createRepositoryAccess,
   createRepositoryCoordination,
 } from "#server/repository/access/index";
+import {
+  featureRoutesClient,
+  provideRepositoryServices,
+} from "#tests-integration/apps/server/environment-connection/feature-routes-client";
 import { git } from "#tests-support/git";
 import { removeTemporaryDirectory } from "#tests-support/temporary-directory";
 
@@ -290,11 +298,9 @@ describe("repository refs", () => {
         }),
       ),
     ).rejects.toMatchObject({
-      failure: {
-        _tag: "BranchCheckedOutElsewhere",
-        name: "topic",
-        worktreePath: fixture.worktreePath,
-      },
+      _tag: "BranchCheckedOutElsewhere",
+      name: "topic",
+      worktreePath: fixture.worktreePath,
     });
   });
 
@@ -373,9 +379,7 @@ describe("repository refs", () => {
 
     await expect(
       withRefsService(fixture, ({ refs }) => refs.read(missingId)),
-    ).rejects.toMatchObject({
-      failure: { _tag: "RepositoryMissing", repositoryId: missingId },
-    });
+    ).rejects.toMatchObject({ _tag: "RepositoryRejected", reason: "Missing" });
     await expect(
       withRefsService(fixture, ({ refs, repositoryId }) =>
         refs.checkout({
@@ -384,9 +388,7 @@ describe("repository refs", () => {
           worktreePath: join(fixture.root, "elsewhere"),
         }),
       ),
-    ).rejects.toMatchObject({
-      failure: { _tag: "WorktreeMissing" },
-    });
+    ).rejects.toMatchObject({ _tag: "RepositoryRejected", reason: "Missing" });
     await expect(
       withRefsService(fixture, ({ refs, repositoryId }) =>
         refs.checkout({
@@ -395,9 +397,7 @@ describe("repository refs", () => {
           worktreePath: fixture.repositoryPath,
         }),
       ),
-    ).rejects.toMatchObject({
-      failure: { _tag: "RefMissing", name: "missing" },
-    });
+    ).rejects.toMatchObject({ _tag: "RefMissing", name: "missing" });
   });
 
   it("publishes an Environment change when refs change on disk", async () => {
@@ -466,10 +466,17 @@ describe("repository refs", () => {
   });
 });
 
+interface RefsUnderTest {
+  readonly checkout: ReturnType<
+    typeof featureRoutesClient<typeof RepositoryRefsHttpApi>
+  >["checkout"];
+  readonly read: ReturnType<typeof createRepositoryRefsReader>["read"];
+}
+
 function withRefsService<Value, Failure>(
   fixture: Fixture,
   use: (dependencies: {
-    readonly refs: ReturnType<typeof createRepositoryRefsService>;
+    readonly refs: RefsUnderTest;
     readonly repositoryId: string;
   }) => Effect.Effect<Value, Failure>,
   events = createEnvironmentEventPublisher(),
@@ -486,13 +493,13 @@ function withRefsService<Value, Failure>(
           createLocalGitCommandRunner(),
         );
         const remembered = yield* catalog.remember(fixture.repositoryPath);
-        const refs = createRepositoryRefsService({
-          coordination: createRepositoryCoordination(git),
-          access: createRepositoryAccess(
-            catalog,
-            git,
-            createLocalRepositoryWatcher(),
-          ),
+        const access = createRepositoryAccess(
+          catalog,
+          git,
+          createLocalRepositoryWatcher(),
+        );
+        const reader = createRepositoryRefsReader({
+          access,
           changes: yield* acquireRepositoryChangePublisher(
             git,
             createLocalRepositoryWatcher(),
@@ -500,6 +507,25 @@ function withRefsService<Value, Failure>(
           ),
           git,
         });
+        const feature = yield* repositoryRefsFeature.pipe(
+          provideRepositoryServices({
+            access,
+            coordination: createRepositoryCoordination(git),
+            git,
+          }),
+          Effect.provideService(
+            RepositoryWatching,
+            createLocalRepositoryWatcher(),
+          ),
+          Effect.provideService(EnvironmentEvents, events),
+        );
+        const refs: RefsUnderTest = {
+          checkout: featureRoutesClient(
+            RepositoryRefsHttpApi,
+            feature.httpRoutes,
+          ).checkout,
+          read: reader.read,
+        };
         return yield* use({ refs, repositoryId: remembered.id });
       }),
     ),

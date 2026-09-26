@@ -1,18 +1,26 @@
 import { mkdir, mkdtemp, realpath } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { RepositoryBranchesHttpApi } from "@rebase/contracts";
 import { Effect } from "effect";
 import { afterEach, describe, expect, it } from "vite-plus/test";
+import { createEnvironmentEventPublisher } from "#server/adapters/environment-transport/events/environment-event-publisher";
 import { createLocalGitCommandRunner } from "#server/adapters/local-git/local-git-command-runner";
 import { createLocalRepositoryWatcher } from "#server/adapters/local-git/local-repository-watcher";
+import { EnvironmentEvents } from "#server/domain/environment-event-publisher.contract";
+import { RepositoryWatching } from "#server/domain/repository-watcher.contract";
 import { createRepositoryCatalog } from "#server/features/repository-catalog/index";
-import { createRepositoryBranchesService } from "#server/features/repository-refs/repository-branches";
+import { repositoryRefsFeature } from "#server/features/repository-refs/index";
 import { acquireEnvironmentContext } from "#server/persistence/environment-context";
 import { environmentPaths } from "#server/persistence/storage/environment-paths";
 import {
   createRepositoryAccess,
   createRepositoryCoordination,
 } from "#server/repository/access/index";
+import {
+  featureRoutesClient,
+  provideRepositoryServices,
+} from "#tests-integration/apps/server/environment-connection/feature-routes-client";
 import { git } from "#tests-support/git";
 import { removeTemporaryDirectory } from "#tests-support/temporary-directory";
 
@@ -62,13 +70,16 @@ describe("repository branches", () => {
 
     for (const name of ["bad..name", "-x", "HEAD", "@{-1}"])
       await expect(create(name)).rejects.toMatchObject({
-        failure: { _tag: "InvalidBranchName", name },
+        _tag: "InvalidBranchName",
+        name,
       });
     await expect(create("main")).rejects.toMatchObject({
-      failure: { _tag: "BranchExists", name: "main" },
+      _tag: "BranchExists",
+      name: "main",
     });
     await expect(create("spike/deeper")).rejects.toMatchObject({
-      failure: { _tag: "BranchExists", name: "spike" },
+      _tag: "BranchExists",
+      name: "spike",
     });
   });
 
@@ -142,14 +153,13 @@ describe("repository branches", () => {
       );
 
     await expect(rename("topic", topic)).rejects.toMatchObject({
-      failure: {
-        _tag: "BranchCheckedOutElsewhere",
-        name: "topic",
-        worktreePath: fixture.worktreePath,
-      },
+      _tag: "BranchCheckedOutElsewhere",
+      name: "topic",
+      worktreePath: fixture.worktreePath,
     });
     await expect(rename("spike", topic)).rejects.toMatchObject({
-      failure: { _tag: "BranchMoved", name: "spike" },
+      _tag: "BranchMoved",
+      name: "spike",
     });
   });
 
@@ -179,9 +189,7 @@ describe("repository branches", () => {
     await expect(setUpstream(null)).resolves.not.toHaveProperty("upstream");
     await expect(
       setUpstream({ name: "missing", remote: "origin" }),
-    ).rejects.toMatchObject({
-      failure: { _tag: "RefMissing", name: "origin/missing" },
-    });
+    ).rejects.toMatchObject({ _tag: "RefMissing", name: "origin/missing" });
   });
 
   it("deletes a merged branch at once and returns its target for undo", async () => {
@@ -217,15 +225,10 @@ describe("repository branches", () => {
       );
 
     await expect(remove(false)).rejects.toMatchObject({
-      failure: {
-        _tag: "BranchNotMerged",
-        commits: [
-          { oid: spike, subject: "spike two" },
-          { subject: "spike one" },
-        ],
-        count: 2,
-        name: "spike",
-      },
+      _tag: "BranchNotMerged",
+      commits: [{ oid: spike, subject: "spike two" }, { subject: "spike one" }],
+      count: 2,
+      name: "spike",
     });
     await expect(remove(true)).resolves.toEqual({
       local: { name: "spike", target: spike },
@@ -247,16 +250,16 @@ describe("repository branches", () => {
       );
 
     await expect(remove("main", main)).rejects.toMatchObject({
-      failure: { _tag: "BranchCheckedOutElsewhere", name: "main" },
+      _tag: "BranchCheckedOutElsewhere",
+      name: "main",
     });
     await expect(remove("topic", topic)).rejects.toMatchObject({
-      failure: {
-        _tag: "BranchCheckedOutElsewhere",
-        worktreePath: fixture.worktreePath,
-      },
+      _tag: "BranchCheckedOutElsewhere",
+      worktreePath: fixture.worktreePath,
     });
     await expect(remove("spike", main)).rejects.toMatchObject({
-      failure: { _tag: "BranchMoved", name: "spike" },
+      _tag: "BranchMoved",
+      name: "spike",
     });
   });
 
@@ -276,7 +279,9 @@ describe("repository branches", () => {
       );
 
     await expect(remove(false)).rejects.toMatchObject({
-      failure: { _tag: "BranchNotMerged", count: 2, name: "spike" },
+      _tag: "BranchNotMerged",
+      count: 2,
+      name: "spike",
     });
     await expect(remove(true)).resolves.toEqual({
       local: { name: "spike", target: spike },
@@ -322,9 +327,7 @@ describe("repository branches", () => {
           worktreePath: fixture.repositoryPath,
         }),
       ),
-    ).rejects.toMatchObject({
-      failure: { _tag: "BranchMoved", name: "origin/shared" },
-    });
+    ).rejects.toMatchObject({ _tag: "BranchMoved", name: "origin/shared" });
     await expect(
       git(fixture.repositoryPath, "ls-remote", "--heads", "origin", "shared"),
     ).resolves.not.toBe("");
@@ -334,7 +337,9 @@ describe("repository branches", () => {
 function withBranches<Value, Failure>(
   fixture: Pick<Fixture, "repositoryPath" | "root">,
   use: (dependencies: {
-    readonly branches: ReturnType<typeof createRepositoryBranchesService>;
+    readonly branches: ReturnType<
+      typeof featureRoutesClient<typeof RepositoryBranchesHttpApi>
+    >;
     readonly repositoryId: string;
   }) => Effect.Effect<Value, Failure>,
 ) {
@@ -347,15 +352,29 @@ function withBranches<Value, Failure>(
         );
         const catalog = createRepositoryCatalog(context, runner);
         const remembered = yield* catalog.remember(fixture.repositoryPath);
-        const branches = createRepositoryBranchesService({
-          access: createRepositoryAccess(
-            catalog,
-            runner,
+        const feature = yield* repositoryRefsFeature.pipe(
+          provideRepositoryServices({
+            access: createRepositoryAccess(
+              catalog,
+              runner,
+              createLocalRepositoryWatcher(),
+            ),
+            coordination: createRepositoryCoordination(runner),
+            git: runner,
+          }),
+          Effect.provideService(
+            RepositoryWatching,
             createLocalRepositoryWatcher(),
           ),
-          coordination: createRepositoryCoordination(runner),
-          git: runner,
-        });
+          Effect.provideService(
+            EnvironmentEvents,
+            createEnvironmentEventPublisher(),
+          ),
+        );
+        const branches = featureRoutesClient(
+          RepositoryBranchesHttpApi,
+          feature.httpRoutes,
+        );
         return yield* use({ branches, repositoryId: remembered.id });
       }),
     ),

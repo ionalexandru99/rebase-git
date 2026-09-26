@@ -1,19 +1,20 @@
-import { RepositoryId } from "@rebase/contracts/git/git-values.contract";
 import { Schema } from "effect";
 
-export const RepositoryMissing = Schema.TaggedStruct("RepositoryMissing", {
-  repositoryId: RepositoryId,
-});
-export type RepositoryMissing = typeof RepositoryMissing.Type;
+const maximumDetailLength = 2_048;
 
-export const GitFailed = Schema.TaggedStruct("GitFailed", {
-  detail: Schema.optional(Schema.String.check(Schema.isMaxLength(2_048))),
-  reason: Schema.Literals([
-    "GitUnavailable",
-    "NotRepository",
-    "Timeout",
-    "OutputTooLarge",
-    "Failed",
-  ]),
+export const RepositoryRejected = Schema.TaggedStruct("RepositoryRejected", {
+  reason: Schema.Literals(["Missing", "Busy", "Incompatible", "GitFailed"]),
+  detail: Schema.String.check(Schema.isMaxLength(maximumDetailLength)),
 });
-export type GitFailed = typeof GitFailed.Type;
+export type RepositoryRejected = typeof RepositoryRejected.Type;
+
+export function repositoryRejected(
+  reason: RepositoryRejected["reason"],
+  detail: string,
+): RepositoryRejected {
+  return {
+    _tag: "RepositoryRejected",
+    reason,
+    detail: detail.slice(0, maximumDetailLength),
+  };
+}

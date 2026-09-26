@@ -24,7 +24,7 @@ describe("push failure classification", () => {
       classifyPushFailure(
         { exitCode: 1, stdout: "", stderr },
         "refs/heads/main",
-      ).failure.reason,
+      ).reason,
     ).toBe(reason);
   });
 });

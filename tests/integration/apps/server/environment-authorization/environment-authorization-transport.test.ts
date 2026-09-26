@@ -27,7 +27,7 @@ import { testEnvironmentFeatures } from "#tests-integration/apps/server/environm
 import { removeTemporaryDirectory } from "#tests-support/temporary-directory";
 import {
   connectCurrentEnvironmentEffect,
-  EnvironmentHttpRejected,
+  EnvironmentAccessDenied,
   exchangeEnvironmentPairingEffect,
   fetchEnvironmentDiscoveryEffect,
   fetchEnvironmentSnapshotEffect,
@@ -57,8 +57,10 @@ describe("Environment authorization transport", () => {
           pairingMaterial: pairing.material,
         },
       );
-      expect(response.status).toBe(201);
-      const session = await response.json();
+      expect(response.status).toBe(200);
+      const session = (await readOk(response)) as {
+        readonly authorization: unknown;
+      };
       expect(session).not.toHaveProperty("credential");
       const cookieHeader = response.headers.get("set-cookie");
       expect(cookieHeader).toContain("HttpOnly");
@@ -73,7 +75,7 @@ describe("Environment authorization transport", () => {
       );
       expect(await responseResult(resumed)).toEqual({
         status: 200,
-        body: session,
+        body: { _tag: "Ok", value: session },
       });
       const snapshot = await fetch(`${origin}${environmentSnapshotPath}`, {
         headers: { cookie },
@@ -87,7 +89,7 @@ describe("Environment authorization transport", () => {
           headers: { cookie, origin },
         },
       );
-      expect(ticket.status).toBe(201);
+      expect(ticket.status).toBe(200);
       await ticket.body?.cancel();
       await withAuthorizedListener(
         async ({ origin: otherOrigin, owner: otherOwner }) => {
@@ -168,7 +170,7 @@ describe("Environment authorization transport", () => {
           body,
         },
       );
-      expect(paired.status).toBe(201);
+      expect(paired.status).toBe(200);
       const cookie = paired.headers.get("set-cookie")?.split(";")[0] ?? "";
       await paired.body?.cancel();
       for (const requestOrigin of [
@@ -258,7 +260,7 @@ describe("Environment authorization transport", () => {
           }),
         ),
       ).rejects.toEqual(
-        new EnvironmentHttpRejected({
+        new EnvironmentAccessDenied({
           failure: { _tag: "InvalidPairing" },
           status: 401,
         }),
@@ -310,8 +312,8 @@ describe("Environment authorization transport", () => {
         { capabilities: [], role: "viewer" },
         owner.credential,
       );
-      expect(viewerPairing.status).toBe(201);
-      const viewerPairingBody = await viewerPairing.json();
+      expect(viewerPairing.status).toBe(200);
+      const viewerPairingBody = await readOk(viewerPairing);
       const pairingUrl = new URL(readString(viewerPairingBody, "pairingUrl"));
       const viewer = await exchangePairing(
         origin,
@@ -371,7 +373,7 @@ describe("Environment authorization transport", () => {
           }),
         ),
       ).rejects.toEqual(
-        new EnvironmentHttpRejected({
+        new EnvironmentAccessDenied({
           failure: { _tag: "RevokedGrant" },
           status: 401,
         }),
@@ -512,8 +514,8 @@ async function exchangePairing(
     EnvironmentAuthorizationHttpApi.exchangePairing.path,
     { label, pairingMaterial },
   );
-  expect(response.status).toBe(201);
-  return (await response.json()) as {
+  expect(response.status).toBe(200);
+  return (await readOk(response)) as {
     readonly authorization: { readonly id: string };
     readonly credential: string;
   };
@@ -525,8 +527,8 @@ async function mintTicket(origin: string, credential: string) {
     EnvironmentAuthorizationHttpApi.mintWebSocketTicket.path,
     credential,
   );
-  expect(response.status).toBe(201);
-  return readString(await response.json(), "ticket");
+  expect(response.status).toBe(200);
+  return readString(await readOk(response), "ticket");
 }
 
 function postJson(
@@ -654,6 +656,14 @@ function nextTextMessage(socket: WebSocket) {
       { once: true },
     );
   });
+}
+
+async function readOk(response: Response) {
+  const body: unknown = await response.json();
+  expect(body).toMatchObject({ _tag: "Ok" });
+  return typeof body === "object" && body !== null && "value" in body
+    ? body.value
+    : undefined;
 }
 
 async function responseResult(response: Response) {

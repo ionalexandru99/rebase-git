@@ -8,6 +8,7 @@ import {
   RepositoryCatalogHttpApi,
 } from "@rebase/contracts";
 import {
+  EnvironmentAccessDenied,
   EnvironmentHttpRejected,
   EnvironmentResponseError,
   requestEnvironmentHttp,
@@ -25,7 +26,7 @@ const entry = {
 };
 
 describe("environment HTTP request", () => {
-  it("sends the route's method, credential and encoded command, then decodes the success status", async () => {
+  it("sends the route's method, credential and encoded command, then decodes the Ok value", async () => {
     const received: { method?: string; body: string; headers: object }[] = [];
     await withServer(
       async (request, response) => {
@@ -38,9 +39,12 @@ describe("environment HTTP request", () => {
           },
         });
         const remember = request.method === "POST";
-        response
-          .writeHead(remember ? 201 : 200)
-          .end(JSON.stringify(remember ? entry : { repositories: [entry] }));
+        response.writeHead(200).end(
+          JSON.stringify({
+            _tag: "Ok",
+            value: remember ? entry : { repositories: [entry] },
+          }),
+        );
       },
       async (origin) => {
         await expect(
@@ -78,7 +82,28 @@ describe("environment HTTP request", () => {
     ]);
   });
 
-  it("decodes a declared failure status into a rejection", async () => {
+  it("decodes a Rejected envelope into the route's failure", async () => {
+    const failure = { _tag: "RepositoryPathRejected", reason: "NotFound" };
+    await withServer(
+      (_, response) => {
+        response
+          .writeHead(200)
+          .end(JSON.stringify({ _tag: "Rejected", failure }));
+      },
+      async (origin) => {
+        await expect(
+          Effect.runPromise(
+            requestEnvironmentHttp(origin, RepositoryCatalogHttpApi.remember, {
+              command: { path: entry.path },
+              credential,
+            }),
+          ),
+        ).rejects.toEqual(new EnvironmentHttpRejected({ failure }));
+      },
+    );
+  });
+
+  it("decodes a transport status into denied access", async () => {
     await withServer(
       (_, response) => {
         response.writeHead(401).end(JSON.stringify({ _tag: "InvalidGrant" }));
@@ -92,7 +117,7 @@ describe("environment HTTP request", () => {
             }),
           ),
         ).rejects.toEqual(
-          new EnvironmentHttpRejected({
+          new EnvironmentAccessDenied({
             failure: { _tag: "InvalidGrant" },
             status: 401,
           }),
@@ -103,13 +128,18 @@ describe("environment HTTP request", () => {
 
   it.each([
     ["a malformed body", 200, "{"],
-    ["a success body that does not match the route", 200, "{}"],
-    ["an undeclared status", 500, '{"_tag":"InvalidGrant"}'],
+    ["a body without the result envelope", 200, "{}"],
+    [
+      "an Ok value that does not match the route",
+      200,
+      '{"_tag":"Ok","value":{}}',
+    ],
     [
       "a failure that does not belong to the route",
-      403,
-      '{"_tag":"InvalidPairing"}',
+      200,
+      '{"_tag":"Rejected","failure":{"_tag":"RepositoryPathRejected","reason":"NotFound"}}',
     ],
+    ["a transport status without a known failure", 500, ""],
   ])("reports %s as a response error", async (_, status, body) => {
     await withServer(
       (_, response) => {
@@ -135,9 +165,10 @@ describe("environment HTTP request", () => {
   it.each(["declared", "streamed"])(
     "rejects a %s oversized response",
     async (mode) => {
-      const body = JSON.stringify({ repositories: [] }).padEnd(
-        currentClientReceiveLimits.maxHttpResponseBytes + 1,
-      );
+      const body = JSON.stringify({
+        _tag: "Ok",
+        value: { repositories: [] },
+      }).padEnd(currentClientReceiveLimits.maxHttpResponseBytes + 1);
       await withServer(
         (_, response) => {
           response.writeHead(

@@ -38,15 +38,7 @@ export function createRepositoryRefsRpc(
             Stream.mapError((error) =>
               error._tag === "RpcClientError"
                 ? new RepositoryRefsResponseError()
-                : new RepositoryRefsRejected({
-                    failure: error,
-                    status:
-                      error._tag === "CapabilityDenied"
-                        ? 403
-                        : error._tag === "RepositoryMissing"
-                          ? 404
-                          : 422,
-                  }),
+                : new RepositoryRefsRejected({ failure: error }),
             ),
             Stream.mapEffect((frame) =>
               accept(frame).pipe(

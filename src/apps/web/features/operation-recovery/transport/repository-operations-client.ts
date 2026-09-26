@@ -17,11 +17,11 @@ export function repositoryOperationsClient(
     response: (error) =>
       new OperationRecoveryError({
         message:
-          error._tag !== "EnvironmentHttpRejected"
-            ? "Could not confirm Git state. Check the environment connection."
-            : error.failure._tag === "OperationFailed"
-              ? error.failure.detail
-              : "The environment rejected the request. Check your access and reconnect.",
+          error._tag === "EnvironmentHttpRejected"
+            ? error.failure.detail
+            : error._tag === "EnvironmentAccessDenied"
+              ? "The environment rejected the request. Check your access and reconnect."
+              : "Could not confirm Git state. Check the environment connection.",
       }),
   });
 }

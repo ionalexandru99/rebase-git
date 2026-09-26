@@ -1,5 +1,8 @@
-import { EnvironmentGrantHttpFailure } from "@rebase/contracts/environment-authorization/environment-authorization.contract";
-import type { EnvironmentHttpRoute } from "@rebase/contracts/environment-connection/http/environment-http-route.contract";
+import {
+  type EnvironmentHttpRoute,
+  repositoryCommand,
+  repositoryQuery,
+} from "@rebase/contracts/environment-connection/http/environment-http-route.contract";
 import {
   RepositoryId,
   RepositoryPath,
@@ -51,41 +54,23 @@ export const ExecuteOperation = Schema.Struct({
 export type ExecuteOperation = typeof ExecuteOperation.Type;
 export const OperationFailure = Schema.TaggedStruct("OperationFailed", {
   reason: Schema.Literals([
-    "Missing",
     "Stale",
     "Incompatible",
-    "Locked",
     "HookFailed",
     "GitRejected",
     "Uncertain",
-    "InspectionFailed",
   ]),
   detail: Schema.String.check(Schema.isMaxLength(2048)),
 });
 export type OperationFailure = typeof OperationFailure.Type;
-export const OperationsHttpFailure = Schema.Union([
-  EnvironmentGrantHttpFailure,
-  OperationFailure,
-]);
 export const RepositoryOperationsHttpApi = {
-  read: {
-    capability: "repository.read",
-    failure: OperationsHttpFailure,
-    failureStatuses: [404, 409],
-    method: "POST",
-    path: "/api/repositories/operations/read",
+  read: repositoryQuery("/api/repositories/operations/read", {
     request: OperationScope,
     success: RepositoryOperation,
-    successStatus: 200,
-  },
-  execute: {
-    capability: "repository.write",
-    failure: OperationsHttpFailure,
-    failureStatuses: [404, 409],
-    method: "POST",
-    path: "/api/repositories/operations/execute",
+  }),
+  execute: repositoryCommand("/api/repositories/operations/execute", {
     request: ExecuteOperation,
     success: RepositoryOperation,
-    successStatus: 200,
-  },
-} as const satisfies Record<string, EnvironmentHttpRoute>;
+    failure: OperationFailure,
+  }),
+} satisfies Record<string, EnvironmentHttpRoute>;

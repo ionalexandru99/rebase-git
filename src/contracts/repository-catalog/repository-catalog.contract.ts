@@ -1,7 +1,9 @@
-import { EnvironmentGrantHttpFailure } from "@rebase/contracts/environment-authorization/environment-authorization.contract";
-import type { EnvironmentHttpRoute } from "@rebase/contracts/environment-connection/http/environment-http-route.contract";
+import {
+  type EnvironmentHttpRoute,
+  route,
+} from "@rebase/contracts/environment-connection/http/environment-http-route.contract";
 import { IsoDate } from "@rebase/contracts/environment-connection/iso-date.contract";
-import { RepositoryMissing } from "@rebase/contracts/git/git-failures.contract";
+import { RepositoryRejected } from "@rebase/contracts/git/git-failures.contract";
 import {
   RepositoryId,
   RepositoryPath,
@@ -64,62 +66,40 @@ export const RepositoryPathRejected = Schema.TaggedStruct(
 );
 export type RepositoryPathRejected = typeof RepositoryPathRejected.Type;
 
-export const RepositoryCatalogOperationFailure = Schema.Union([
-  RepositoryPathRejected,
-  RepositoryMissing,
-]);
-export type RepositoryCatalogOperationFailure =
-  typeof RepositoryCatalogOperationFailure.Type;
-
-export const RepositoryCatalogHttpFailure = Schema.Union([
-  EnvironmentGrantHttpFailure,
-  RepositoryCatalogOperationFailure,
-]);
-export type RepositoryCatalogHttpFailure =
-  typeof RepositoryCatalogHttpFailure.Type;
-
 export const repositoryCatalogPath = "/api/repositories";
 export const rememberRepositoryPath = "/api/repositories/remember";
 export const recordRepositoryOpenedPath = "/api/repositories/opened";
 export const removeRepositoryPath = "/api/repositories/removals";
 
 export const RepositoryCatalogHttpApi = {
-  list: {
+  list: route({
     capability: "repository.read",
-    failure: EnvironmentGrantHttpFailure,
     method: "GET",
     path: repositoryCatalogPath,
     success: RepositoryCatalog,
-    successStatus: 200,
-  },
-  recordOpened: {
+  }),
+  recordOpened: route({
     capability: "repository.read",
-    failure: RepositoryCatalogHttpFailure,
-    failureStatuses: [404, 422],
     method: "POST",
     path: recordRepositoryOpenedPath,
     request: RecordRepositoryOpened,
     success: RepositoryCatalogEntry,
-    successStatus: 200,
-  },
-  remember: {
+    failure: RepositoryRejected,
+  }),
+  remember: route({
     capability: "repository.write",
-    failure: RepositoryCatalogHttpFailure,
-    failureStatuses: [404, 422],
     method: "POST",
     path: rememberRepositoryPath,
     request: RememberRepository,
     success: RepositoryCatalogEntry,
-    successStatus: 201,
-  },
-  remove: {
+    failure: RepositoryPathRejected,
+  }),
+  remove: route({
     capability: "repository.write",
-    failure: RepositoryCatalogHttpFailure,
-    failureStatuses: [404, 422],
     method: "POST",
     path: removeRepositoryPath,
     request: RemoveRepository,
     success: RepositoryRemoved,
-    successStatus: 200,
-  },
-} as const satisfies Record<string, EnvironmentHttpRoute>;
+    failure: RepositoryRejected,
+  }),
+} satisfies Record<string, EnvironmentHttpRoute>;

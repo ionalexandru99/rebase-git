@@ -5,6 +5,7 @@ import type {
 } from "@rebase/contracts";
 import { Effect } from "effect";
 import type { GitCommandRunner } from "#server/domain/git-command.contract";
+import type { RepositoryGitError } from "#server/domain/repository-git.contract";
 import { fitRepositoryRefs } from "#server/features/repository-refs/git/fit-repository-refs";
 import {
   forEachRefFormat,
@@ -15,10 +16,6 @@ import {
   tagFromRecord,
 } from "#server/features/repository-refs/git/parse-for-each-ref";
 import { readRemoteMetadata } from "#server/features/repository-refs/git/read-remote-metadata";
-import {
-  gitFailed,
-  type RepositoryRefsError,
-} from "#server/features/repository-refs/git/repository-refs-failures";
 import {
   canonicalizeWorktrees,
   readWorktrees,
@@ -35,7 +32,7 @@ export function readRepositoryRefs(
     readonly logicalRepositoryId?: string;
     readonly path: string;
   },
-): Effect.Effect<RepositoryRefs, RepositoryRefsError> {
+): Effect.Effect<RepositoryRefs, RepositoryGitError> {
   return Effect.gen(function* () {
     const output = yield* Effect.all(
       {
@@ -52,9 +49,7 @@ export function readRepositoryRefs(
           "refname",
         ),
         tags: listRefs(git, repository.path, "refs/tags", "-creatordate"),
-        worktrees: readWorktrees(git, repository.path).pipe(
-          Effect.mapError(gitFailed),
-        ),
+        worktrees: readWorktrees(git, repository.path),
         remoteMetadata: readRemoteMetadata(git, repository.path),
       },
       { concurrency: "unbounded" },
@@ -99,7 +94,7 @@ function listRefs(
       maxOutputBytes: maximumRefsOutputBytes,
       timeoutMilliseconds: readTimeoutMilliseconds,
     },
-  ).pipe(Effect.mapError(gitFailed), Effect.map(parseForEachRef));
+  ).pipe(Effect.map(parseForEachRef));
 }
 
 function canonicalizeBranchWorktrees(

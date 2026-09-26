@@ -1,63 +1,60 @@
 import type { PullBranch } from "@rebase/contracts";
 import { Effect } from "effect";
 import type { GitCommandRunner } from "#server/domain/git-command.contract";
-import type { RepositoryAccessService } from "#server/domain/repository-access.contract";
 import type { RepositoryCoordinationService } from "#server/domain/repository-coordination.contract";
 import { fastForwardBranch } from "#server/features/repository-pull/git/fast-forward-branch";
+import { pullBlocked } from "#server/features/repository-pull/git/pull-failures";
 import {
-  pullAccessFailed,
-  pullBlocked,
-} from "#server/features/repository-pull/git/pull-failures";
-import { pullWritePolicy } from "#server/features/repository-pull/repository-pull.write-policy";
+  canonicalizeWorktrees,
+  readWorktrees,
+} from "#server/repository/access/index";
 
-export function createRepositoryPullService(dependencies: {
-  readonly access: RepositoryAccessService;
-  readonly git: GitCommandRunner;
-  readonly coordination: RepositoryCoordinationService;
-}) {
-  const { access, git, coordination } = dependencies;
-  const findCheckout = (repositoryPath: string, branch: string) =>
-    access.worktrees(repositoryPath).pipe(
-      Effect.map(
-        (worktrees) =>
-          worktrees.find((worktree) => worktree.head.branch === branch)?.path,
-      ),
-      Effect.mapError(pullAccessFailed),
-    );
-  return {
-    pull: ({ repositoryId, branch }: PullBranch) =>
-      Effect.gen(function* () {
-        const repository = yield* access
-          .repository(repositoryId)
-          .pipe(Effect.mapError(pullAccessFailed));
-        const checkout = yield* findCheckout(repository.path, branch);
-        const directory = checkout ?? repository.path;
-        return yield* coordination
-          .run(
-            directory,
-            pullWritePolicy,
-            findCheckout(repository.path, branch).pipe(
-              Effect.flatMap((current) =>
-                current === checkout
-                  ? fastForwardBranch(
-                      git,
-                      directory,
-                      branch,
-                      checkout !== undefined,
-                    )
-                  : Effect.fail(
-                      pullBlocked(`${branch} was checked out while pulling`),
-                    ),
-              ),
+export function pullBranch(coordination: RepositoryCoordinationService) {
+  return (command: PullBranch, git: GitCommandRunner) =>
+    Effect.gen(function* () {
+      const checkout = yield* findCheckout(git, command);
+      const directory = checkout ?? command.worktreePath;
+      return yield* coordination.run(
+        directory,
+        {
+          name: "pull",
+          locks: { worktree: "wait" },
+          duringOperation: "block",
+        },
+        requireSameCheckout(git, command, checkout).pipe(
+          Effect.andThen(
+            fastForwardBranch(
+              git,
+              directory,
+              command.branch,
+              checkout !== undefined,
             ),
-          )
-          .pipe(
-            Effect.mapError((error) =>
-              error._tag === "RepositoryCoordinationError"
-                ? pullBlocked(error.detail)
-                : error,
-            ),
-          );
-      }),
-  };
+          ),
+        ),
+      );
+    });
+}
+
+function requireSameCheckout(
+  git: GitCommandRunner,
+  command: PullBranch,
+  checkout: string | undefined,
+) {
+  return findCheckout(git, command).pipe(
+    Effect.filterOrFail(
+      (current) => current === checkout,
+      () => pullBlocked(`${command.branch} was checked out while pulling`),
+    ),
+  );
+}
+
+function findCheckout(git: GitCommandRunner, command: PullBranch) {
+  return readWorktrees(git, command.worktreePath).pipe(
+    Effect.flatMap(canonicalizeWorktrees),
+    Effect.map(
+      (worktrees) =>
+        worktrees.find((worktree) => worktree.head.branch === command.branch)
+          ?.path,
+    ),
+  );
 }

@@ -1,7 +1,6 @@
-import type { ChangesScope } from "@rebase/contracts";
+import { type ChangesScope, changesFailed } from "@rebase/contracts";
 import { Effect } from "effect";
 import type { GitCommandRunner } from "#server/domain/git-command.contract";
-import { changesError } from "#server/features/repository-changes/git/change-failures";
 import { worktreeIdentities } from "#server/features/repository-changes/git/change-files";
 import { readChanges } from "#server/features/repository-changes/git/read-changes";
 
@@ -37,7 +36,7 @@ export function verifyChangedFiles(
 }
 
 function staleChanges() {
-  return changesError(
+  return changesFailed(
     "Stale",
     "The repository changed. Review the refreshed changes and try again.",
   );

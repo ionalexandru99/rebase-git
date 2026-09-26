@@ -75,7 +75,6 @@ describe("repository catalog transport", () => {
             _tag: "CapabilityDenied",
             capability: "repository.write",
           },
-          status: 403,
         }),
       );
       await expect(
@@ -105,7 +104,6 @@ describe("repository catalog transport", () => {
             _tag: "RepositoryPathRejected",
             reason: "NotFound",
           },
-          status: 404,
         }),
       );
       const missingId = "00000000-0000-4000-8000-000000000099";
@@ -115,8 +113,11 @@ describe("repository catalog transport", () => {
         ),
       ).rejects.toEqual(
         new RepositoryCatalogRejected({
-          failure: { _tag: "RepositoryMissing", repositoryId: missingId },
-          status: 404,
+          failure: {
+            _tag: "RepositoryRejected",
+            reason: "Missing",
+            detail: "This repository is no longer available.",
+          },
         }),
       );
     });
@@ -150,7 +151,6 @@ describe("repository catalog transport", () => {
             _tag: "CapabilityDenied",
             capability: "repository.write",
           },
-          status: 403,
         }),
       );
     });

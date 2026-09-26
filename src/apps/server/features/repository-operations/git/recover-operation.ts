@@ -1,14 +1,15 @@
-import type { ExecuteOperation, RepositoryOperation } from "@rebase/contracts";
+import {
+  type ExecuteOperation,
+  type RepositoryOperation,
+  repositoryRejected,
+} from "@rebase/contracts";
 import { Effect } from "effect";
 import type {
   GitCommandOutput,
   GitCommandRunner,
 } from "#server/domain/git-command.contract";
 import type { RepositoryCoordinationService } from "#server/domain/repository-coordination.contract";
-import {
-  coordinationFailed,
-  operationError,
-} from "#server/features/repository-operations/git/operation-failures";
+import { operationError } from "#server/features/repository-operations/git/operation-failures";
 
 export function recoverRepositoryOperation(
   git: GitCommandRunner,
@@ -16,9 +17,7 @@ export function recoverRepositoryOperation(
   command: ExecuteOperation,
 ) {
   return Effect.gen(function* () {
-    const state = yield* coordination
-      .operation(command.worktreePath)
-      .pipe(Effect.mapError(coordinationFailed));
+    const state = yield* coordination.operation(command.worktreePath);
     yield* validateRecoveryAction(state, command);
     const output = yield* git
       .run({
@@ -78,15 +77,14 @@ function validateRecoveryAction(
   const action = state.actions.find(
     (candidate) => candidate.action === command.action,
   );
-  return action?.enabled
-    ? Effect.void
-    : Effect.fail(
-        operationError(
-          state.lock ? "Locked" : "Incompatible",
-          action?.reason ??
-            "This action is not supported by the current Git state.",
-        ),
-      );
+  if (action?.enabled) return Effect.void;
+  const detail =
+    action?.reason ?? "This action is not supported by the current Git state.";
+  return Effect.fail(
+    state.lock
+      ? repositoryRejected("Busy", detail)
+      : operationError("Incompatible", detail),
+  );
 }
 
 function requireRecoverySuccess(output: GitCommandOutput) {
@@ -95,10 +93,14 @@ function requireRecoverySuccess(output: GitCommandOutput) {
     output.stderr ||
     output.stdout ||
     "Git rejected the action. Check the worktree and configured hooks.";
-  const reason = /\.lock['\s:]|another git process/i.test(detail)
-    ? "Locked"
-    : /hook|pre-commit|commit-msg|pre-rebase/i.test(detail)
-      ? "HookFailed"
-      : "GitRejected";
-  return Effect.fail(operationError(reason, detail));
+  if (/\.lock['\s:]|another git process/i.test(detail))
+    return Effect.fail(repositoryRejected("Busy", detail));
+  return Effect.fail(
+    operationError(
+      /hook|pre-commit|commit-msg|pre-rebase/i.test(detail)
+        ? "HookFailed"
+        : "GitRejected",
+      detail,
+    ),
+  );
 }

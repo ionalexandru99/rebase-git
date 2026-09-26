@@ -8,8 +8,8 @@ import {
 import { Effect, Layer, ManagedRuntime } from "effect";
 import { describe, expect, it, vi } from "vite-plus/test";
 import {
+  EnvironmentAccessDenied,
   EnvironmentHelloRejected,
-  EnvironmentHttpRejected,
   type EnvironmentProtocolConnection,
   EnvironmentResponseError,
 } from "#web/app/environment/connection/index";
@@ -81,7 +81,7 @@ describe("local Environment session", () => {
       const gateway = createGateway();
       gateway.authorize.mockReturnValue(
         Effect.fail(
-          new EnvironmentHttpRejected({
+          new EnvironmentAccessDenied({
             failure: { _tag: failure },
             status: 401,
           }),
