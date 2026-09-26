@@ -150,8 +150,19 @@ for (const firstRelease of ["refs", "freshness"] as const)
           );
           changed.mockClear();
           fresh.mockClear();
+          const control = createEnvironmentEventPublisher();
+          const controlChanged = vi.fn();
+          control.subscribe(controlChanged);
+          const controlChanges = yield* acquireRepositoryChangePublisher(
+            local,
+            createLocalRepositoryWatcher(),
+            control,
+          );
+          yield* controlChanges.watch(mainEntry);
           yield* Effect.promise(() => git("-C", main, "branch", "after-close"));
-          yield* Effect.sleep(200);
+          yield* Effect.promise(() =>
+            vi.waitFor(() => expect(controlChanged).toHaveBeenCalled()),
+          );
           expect(changed).not.toHaveBeenCalled();
           expect(fresh).not.toHaveBeenCalled();
         }).pipe(Effect.scoped),
