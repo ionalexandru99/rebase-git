@@ -193,4 +193,5 @@ export async function failSynchronization(
   replica.failure = message.failure;
   replica.revision += 1;
   publishSnapshot(replica);
+  if (replica.needsReconciliation) await startSynchronization(reader, replica);
 }
