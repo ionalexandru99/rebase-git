@@ -99,7 +99,9 @@ export function ConflictViewer({
       document.regions.length > 0 ? (
         <ConflictResult content={document.content} />
       ) : file !== undefined &&
-        (document !== undefined || conflicts.documentProblem !== null) ? (
+        (document !== undefined ||
+          conflicts.wholeFileOnly ||
+          conflicts.documentProblem !== null) ? (
         <ConflictStages file={file} labels={labels} />
       ) : conflicts.documentProblem !== null ? null : (
         <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">

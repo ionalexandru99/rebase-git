@@ -52,6 +52,7 @@ export function useConflicts(
       document.isError && !wholeFileOnly(document.error)
         ? describeChangesFailure(document.error)
         : null,
+    wholeFileOnly: document.isError && wholeFileOnly(document.error),
     problem:
       actions.problem ??
       (list.isError ? describeChangesFailure(list.error) : null),
