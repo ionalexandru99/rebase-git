@@ -52,14 +52,17 @@ export function useOperationCommandState(): "busy" | "idle" {
     : "idle";
 }
 
-export function useWorktreeOperation(scope: OperationScope | undefined) {
+export function useWorktreeOperation(
+  scope: OperationScope | undefined,
+  options: { readonly polling?: boolean } = {},
+) {
   const active = useRepositoryScope();
   const matches =
     active !== undefined &&
     scope !== undefined &&
     active.repositoryId === scope.repositoryId &&
     active.worktreePath === scope.worktreePath;
-  const status = useOperationStatus(matches ? scope : undefined);
+  const status = useOperationStatus(matches ? scope : undefined, options);
   return matches ? status : null;
 }
 

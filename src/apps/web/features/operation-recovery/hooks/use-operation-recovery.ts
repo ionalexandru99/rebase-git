@@ -1,13 +1,18 @@
-import type {
-  OperationAction,
-  OperationKind,
-  RepositoryOperation,
+import {
+  type ExecuteOperation,
+  type OperationAction,
+  type OperationKind,
+  type OperationScope,
+  type RepositoryOperation,
+  RepositoryOperationsHttpApi,
 } from "@rebase/contracts";
+import { type MutationState, useMutationState } from "@tanstack/react-query";
 import { useState } from "react";
 import { useOperationAction } from "#web/features/operation-recovery/hooks/use-operation";
-import { useOperationStatus } from "#web/features/operation-recovery/hooks/use-operation-status";
+import { useWorktreeOperation } from "#web/features/operation-recovery/hooks/use-operation-status";
 import { describeOperationFailure } from "#web/features/operation-recovery/operation-messages";
-import type { RepositoryScope } from "#web/features/repository-scope/repository-scope-provider";
+import { useRepositoryScope } from "#web/features/repository-scope/repository-scope-provider";
+import { commandKey } from "#web/platform/query/use-command";
 
 export interface OperationRecoveryState {
   readonly operation: RepositoryOperation | null;
@@ -22,6 +27,10 @@ interface CompletedOperation {
   readonly kind: OperationKind;
   readonly aborted: boolean;
 }
+
+type Execution = MutationState<RepositoryOperation, unknown, ExecuteOperation>;
+
+const executeRoute = RepositoryOperationsHttpApi.execute;
 
 const headerPhases: ReadonlySet<RepositoryOperation["phase"]> = new Set([
   "conflicts",
@@ -38,65 +47,92 @@ export function showsOperationHeader(state: OperationRecoveryState) {
 }
 
 export function useOperationRecovery(
-  scope: RepositoryScope | undefined,
+  scope: OperationScope | undefined,
   options: { readonly polling?: boolean } = {},
 ) {
-  const status = useOperationStatus(scope, options);
-  const action = useOperationAction(scope);
-  const [completed, setCompleted] = useState<CompletedOperation | null>(null);
-  const operation = status.operation;
-  if (completed !== null && operation !== null && operation.kind !== "idle")
-    setCompleted(null);
-  const connected = scope?.connected ?? false;
+  const repository = useRepositoryScope();
+  const status = useWorktreeOperation(scope, options);
+  const matched = status === null ? undefined : scope;
+  const action = useOperationAction(matched);
+  const finished = useLastExecution(matched);
+  const [observedKind, setObservedKind] = useState<OperationKind | null>(null);
+  const [forgotten, setForgotten] = useState(0);
+  const operation = status?.operation ?? null;
+  if (operation !== null && operation.kind !== "idle") {
+    if (operation.kind !== observedKind) setObservedKind(operation.kind);
+    if (finished !== null && finished.submittedAt > forgotten)
+      setForgotten(finished.submittedAt);
+  }
+  const connected = status !== null && (repository?.connected ?? false);
+  const busy = status?.busy ?? false;
 
   const execute = (choice: OperationAction, revision: string) => {
     if (
-      scope === undefined ||
-      status.busy ||
+      matched === undefined ||
+      status === null ||
+      busy ||
       status.checking ||
       !connected ||
       operation === null ||
       !allows(operation, choice)
     )
       return;
-    setCompleted(null);
-    action.mutate(
-      {
-        repositoryId: scope.repositoryId,
-        worktreePath: scope.worktreePath,
-        action: choice,
-        revision,
-      },
-      {
-        onSuccess: (next) => {
-          if (next.kind === "idle")
-            setCompleted({ kind: operation.kind, aborted: choice === "abort" });
-        },
-      },
-    );
+    const command = {
+      repositoryId: matched.repositoryId,
+      worktreePath: matched.worktreePath,
+      action: choice,
+    };
+    action.mutate({ ...command, revision });
   };
 
   const state: OperationRecoveryState = {
     operation,
     connected,
-    checking: status.checking,
-    busy: status.busy,
+    checking: status?.checking ?? true,
+    busy,
     error:
       action.error === null
-        ? status.error
+        ? (status?.error ?? null)
         : describeOperationFailure(action.error),
-    completed: operation?.kind === "idle" ? completed : null,
+    completed:
+      operation?.kind === "idle" &&
+      observedKind !== null &&
+      finished !== null &&
+      finished.submittedAt > forgotten
+        ? { kind: observedKind, aborted: finished.aborted }
+        : null,
   };
   return {
     state,
-    writable: scope?.writable ?? false,
+    writable: repository?.writable ?? false,
     execute,
     refresh: () => {
       action.reset();
-      status.refresh();
+      status?.refresh();
     },
-    dismiss: () => setCompleted(null),
+    dismiss: () => {
+      if (finished !== null) setForgotten(finished.submittedAt);
+    },
   };
+}
+
+function useLastExecution(scope: OperationScope | undefined) {
+  const executions = useMutationState({
+    filters: {
+      mutationKey: commandKey(executeRoute, scope),
+      status: "success",
+    },
+    select: (mutation) => {
+      const { data, variables, submittedAt } = mutation.state as Execution;
+      return {
+        submittedAt,
+        idle: data?.kind === "idle",
+        aborted: variables?.action === "abort",
+      };
+    },
+  });
+  const last = executions.at(-1);
+  return scope !== undefined && last?.idle ? last : null;
 }
 
 function allows(operation: RepositoryOperation, action: OperationAction) {

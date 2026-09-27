@@ -21,12 +21,8 @@ export function OperationRecoveryNotice({
   return (
     <PersistentNotification>
       <OperationRecoveryToast
-        state={recovery.state}
+        {...recovery}
         repositoryName={repositoryName}
-        writable={recovery.writable}
-        execute={recovery.execute}
-        refresh={recovery.refresh}
-        dismiss={recovery.dismiss}
         review={() => panel.execute({ type: "open", kind: "changes" })}
       />
     </PersistentNotification>
