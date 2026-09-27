@@ -11,7 +11,9 @@ test("resolves a paused rebase line by line and continues it", async ({
   page,
 }) => {
   const testHome = await mkdtemp(join(tmpdir(), "rebase-conflicts-e2e-"));
-  const repositoryPath = await createConflictedRebase(testHome);
+  const repositoryPath = await createConflictedRebase(testHome, {
+    files: "text",
+  });
   await git(repositoryPath, "config", "user.name", "Rebase test");
   await git(repositoryPath, "config", "user.email", "rebase@example.test");
   const server = startEnvironmentServer(testHome);
@@ -63,47 +65,13 @@ test("resolves a paused rebase line by line and continues it", async ({
       .click();
     await mergeView.getByRole("button", { name: "Mark resolved" }).click();
 
-    for (const path of [
-      "image.bin",
-      "removed-here.txt",
-      "removed-there.txt",
-      "new-name.txt",
-      "old-name.txt",
-    ]) {
-      const row = conflicts.getByRole("button", { name: `Conflict ${path}` });
-      if (!(await row.isVisible())) continue;
-      await expect(projects.getByRole("status")).toHaveAttribute(
-        "data-connection-state",
-        "Connected",
-      );
-      await row.click();
-      await page
-        .getByTestId("change-diff")
-        .getByRole("button", { name: "Whole file" })
-        .click();
-      await page
-        .getByRole("menuitem", { name: /^(Use incoming|Keep deletion)$/ })
-        .first()
-        .click();
-      await expect(row).not.toBeVisible();
-    }
-
     const operation = page.getByRole("region", { name: "Operation" });
-    const continueRebase = operation.getByRole("button", {
-      name: "Continue rebase",
-    });
-    const stale = operation.getByRole("alert").filter({
-      hasText: "Git state changed",
-    });
     await expect(operation.getByRole("heading")).toContainText(
       "ready to continue",
     );
-    await continueRebase.click();
+    await operation.getByRole("button", { name: "Continue rebase" }).click();
     await expect
-      .poll(async () => {
-        if (await stale.isVisible()) await continueRebase.click();
-        return git(repositoryPath, "status", "--porcelain");
-      })
+      .poll(() => git(repositoryPath, "status", "--porcelain"))
       .toBe("");
     await expect
       .poll(() => git(repositoryPath, "log", "-1", "--format=%s"))

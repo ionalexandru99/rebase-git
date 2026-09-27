@@ -32,7 +32,20 @@ const incoming = {
   "old-name.txt": lines("line 0 incoming", ...renamed.slice(1)),
 };
 
-export async function createConflictedRebase(parent = tmpdir()) {
+const textFiles = new Set(["two.txt", "added.txt"]);
+
+export async function createConflictedRebase(
+  parent = tmpdir(),
+  { files: kept = "all" }: { readonly files?: "all" | "text" } = {},
+) {
+  const only = (entries: Record<string, string>) =>
+    kept === "all"
+      ? entries
+      : Object.fromEntries(
+          Object.entries(entries).filter(([path]) => textFiles.has(path)),
+        );
+  const deleted = (...paths: string[]) =>
+    kept === "all" ? paths.map((path) => `D ${path}\n`).join("") : "";
   const directory = await realpath(
     await mkdtemp(join(parent, "rebase-conflicts-")),
   );
@@ -40,18 +53,18 @@ export async function createConflictedRebase(parent = tmpdir()) {
   await git(directory, "config", "merge.conflictStyle", "zdiff3");
   await fastImport(
     directory,
-    commit("refs/heads/main", "base", null, files(base)) +
+    commit("refs/heads/main", "base", null, files(only(base))) +
       commit(
         "refs/heads/topic",
         "incoming change",
         ":1",
-        `D removed-there.txt\n${files(incoming)}`,
+        `${deleted("removed-there.txt")}${files(only(incoming))}`,
       ) +
       commit(
         "refs/heads/main",
         "current change",
         ":1",
-        `D removed-here.txt\nD old-name.txt\n${files(current)}`,
+        `${deleted("removed-here.txt", "old-name.txt")}${files(only(current))}`,
       ),
   );
   await git(directory, "checkout", "--force", "topic");

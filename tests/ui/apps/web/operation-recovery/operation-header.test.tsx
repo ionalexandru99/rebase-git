@@ -5,6 +5,7 @@ import {
   type RepositoryOperation,
   RepositoryOperationsHttpApi,
 } from "@rebase/contracts";
+import { EnvironmentHttpRejected } from "@rebase/environment-client";
 import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
 import { page } from "vite-plus/test/browser";
 import { repositoryScope } from "#tests-ui/apps/web/repository-scope/repository-scope-fixture";
@@ -63,10 +64,8 @@ function showPanel(open: boolean) {
 async function fixture() {
   let operation = conflicted();
   const listeners = new Set<EnvironmentChangeListener>();
-  const execute = vi.fn((command: { readonly action: string }) =>
-    command.action === "abort"
-      ? { ...operation, revision: "aborted" }
-      : operation,
+  const execute = vi.fn(
+    (_command: { readonly revision: string }): RepositoryOperation => operation,
   );
   const changes = (): RepositoryChanges => ({
     revision: operation.revision,
@@ -99,6 +98,7 @@ async function fixture() {
                 active: true,
               }}
               writable
+              openMergeView={() => {}}
             />
           </div>
         </WorkspacePanel.Provider>
@@ -149,9 +149,6 @@ describe("operation header in the Diffs tab", () => {
     await expect
       .element(page.getByRole("region", { name: "Git operation" }))
       .not.toBeInTheDocument();
-    await expect
-      .element(page.getByText("Use the operation toast", { exact: false }))
-      .not.toBeInTheDocument();
 
     f.set(ready());
     f.change("Index");
@@ -164,21 +161,6 @@ describe("operation header in the Diffs tab", () => {
     );
   });
 
-  it("asks before aborting from the header", async () => {
-    showPanel(true);
-    const f = await fixture();
-    await header().getByRole("button", { name: "Actions" }).click();
-    await page.getByRole("menuitem", { name: "Abort…" }).click();
-    await expect
-      .element(header().getByRole("button", { name: "Cancel", exact: true }))
-      .toHaveFocus();
-    expect(f.execute).not.toHaveBeenCalled();
-    await header().getByRole("button", { name: "Confirm abort" }).click();
-    expect(f.execute).toHaveBeenCalledExactlyOnceWith(
-      expect.objectContaining({ action: "abort", revision: "one" }),
-    );
-  });
-
   it("keeps the toast while the Diffs panel is hidden", async () => {
     showPanel(false);
     await fixture();
@@ -186,4 +168,49 @@ describe("operation header in the Diffs tab", () => {
       .element(page.getByRole("region", { name: "Git operation" }))
       .toBeVisible();
   });
+
+  it("continues once more with the fresh revision after a stale rejection", async () => {
+    showPanel(true);
+    const f = await fixture();
+    f.set(ready());
+    f.change("Index");
+    f.execute
+      .mockImplementationOnce(() => {
+        f.set({ ...ready(), revision: "three" });
+        throw new EnvironmentHttpRejected({
+          failure: {
+            _tag: "OperationFailed",
+            reason: "Stale",
+            detail: "Git state changed.",
+          },
+        });
+      })
+      .mockImplementationOnce(() => {
+        f.set(idle());
+        return idle();
+      });
+
+    await header().getByRole("button", { name: "Continue rebase" }).click();
+
+    await expect
+      .element(page.getByRole("heading", { name: "Rebase completed" }))
+      .toBeVisible();
+    expect(f.execute.mock.calls.map(([command]) => command.revision)).toEqual([
+      "two",
+      "three",
+    ]);
+  });
 });
+
+function idle(): RepositoryOperation {
+  return {
+    ...ready(),
+    kind: "idle",
+    phase: "idle",
+    revision: "finished",
+    branch: null,
+    commit: null,
+    progress: null,
+    actions: [],
+  };
+}

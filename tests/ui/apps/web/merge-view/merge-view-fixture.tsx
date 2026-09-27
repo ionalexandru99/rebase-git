@@ -18,52 +18,40 @@ import { RepositoryScopeProvider } from "#web/features/repository-scope/reposito
 
 export const path = "src/checkout/config.ts";
 
-const currentCommit = "8879921".padEnd(40, "a");
-const incomingCommit = "940c648".padEnd(40, "b");
-
-export const sides: ConflictSides = {
+const sides: ConflictSides = {
   base: { ref: null, commit: "1111111".padEnd(40, "c"), subject: "Add config" },
   current: {
     ref: "HEAD",
-    commit: currentCommit,
+    commit: "8879921".padEnd(40, "a"),
     subject: "Move retries into config",
   },
   incoming: {
     ref: null,
-    commit: incomingCommit,
+    commit: "940c648".padEnd(40, "b"),
     subject: "Increase checkout timeout",
   },
 };
 
-export const firstRegion: ConflictRegion = {
+const firstRegion = {
   id: "region-one",
-  line: 4,
   current: ["  retries: 3,", "  delay: 100,"],
   base: ["  retries: 1,"],
   incoming: ["  retries: 5,"],
-  blame: {
-    current: { commit: currentCommit, subject: "Move retries into config" },
-    incoming: { commit: incomingCommit, subject: "Increase checkout timeout" },
-  },
   marks: {
     current: [{ line: 0, start: 11, end: 12 }],
     incoming: [{ line: 0, start: 11, end: 12 }],
   },
-  open: true,
 };
 
-export const secondRegion: ConflictRegion = {
+const secondRegion = {
   id: "region-two",
-  line: 13,
   current: ["  return 1;"],
   base: ["  return 0;"],
   incoming: ["  return 2;"],
-  blame: { current: null, incoming: null },
   marks: {
     current: [{ line: 0, start: 9, end: 10 }],
     incoming: [{ line: 0, start: 9, end: 10 }],
   },
-  open: true,
 };
 
 export const firstMarker = [
@@ -75,7 +63,7 @@ export const firstMarker = [
   ">>>>>>> 940c648 (Increase checkout timeout)",
 ];
 
-export const secondMarker = [
+const secondMarker = [
   "<<<<<<< HEAD",
   "  return 1;",
   "=======",
@@ -83,13 +71,13 @@ export const secondMarker = [
   ">>>>>>> 940c648 (Increase checkout timeout)",
 ];
 
-export const head = [
+const head = [
   'import { base } from "./base";',
   "",
   "export const checkout = {",
 ];
-export const middle = ["};", "", "export function weight() {"];
-export const tail = ["}", ""];
+const middle = ["};", "", "export function weight() {"];
+const tail = ["}", ""];
 
 export function content(
   first: readonly string[] = firstMarker,
@@ -112,14 +100,15 @@ function conflictFailure(reason: ConflictFailure["reason"]) {
 
 interface FixtureOptions {
   readonly documentFailure?: ConflictFailure["reason"];
-  readonly otherFiles?: ConflictList["files"];
-  readonly mergeTool?: string | null;
+  readonly otherFiles?: readonly {
+    readonly path: string;
+    readonly openRegions: number;
+  }[];
 }
 
 export async function mergeViewFixture({
   documentFailure,
   otherFiles = [],
-  mergeTool = null,
 }: FixtureOptions = {}) {
   let text = initialContent;
   let revision = "revision-0";
@@ -137,29 +126,36 @@ export async function mergeViewFixture({
     revision,
     kind: "both-modified",
     stages: [],
-    openRegions: openRegions().length,
-    choices: ["current", "incoming", "worktree"],
+    openRegions: regions().filter(({ open }) => open).length,
+    choices: ["current", "incoming"],
   });
-  const openRegions = () =>
+  const regions = () =>
     [
       { region: firstRegion, marker: firstMarker },
       { region: secondRegion, marker: secondMarker },
-    ].filter(({ marker }) => text.includes(marker.join("\n")));
+    ].map(({ region, marker }): ConflictRegion => {
+      const at = text.indexOf(marker.join("\n"));
+      const line = at === -1 ? null : text.slice(0, at).split("\n").length;
+      return { ...region, line, open: line !== null };
+    });
+  const others: ConflictList["files"] = otherFiles.map(
+    ({ path, openRegions }) => ({
+      path,
+      revision: path,
+      kind: "both-modified",
+      stages: [],
+      openRegions,
+      choices: [],
+    }),
+  );
   const document = (): ConflictDocument => ({
     file: file(),
-    sides,
     content: text,
-    regions: [firstRegion, secondRegion].map((region) => ({
-      ...region,
-      open: openRegions().some((open) => open.region.id === region.id),
-    })),
+    regions: regions(),
   });
   const list = (files: ConflictList["files"]): ConflictList => ({
-    operation: "rebase",
     sides,
     files,
-    resolved: [],
-    mergeTool,
   });
 
   const requests = fakeRequests(
@@ -168,9 +164,7 @@ export async function mergeViewFixture({
       if (documentFailure !== undefined) throw conflictFailure(documentFailure);
       return document();
     }),
-    respond(RepositoryConflictsHttpApi.list, () =>
-      list([file(), ...otherFiles]),
-    ),
+    respond(RepositoryConflictsHttpApi.list, () => list([file(), ...others])),
     respond(RepositoryConflictsHttpApi.write, async (command) => {
       writes.push(command);
       await heldWrites;
@@ -187,11 +181,11 @@ export async function mergeViewFixture({
     }),
     respond(RepositoryConflictsHttpApi.stage, (command) => {
       stages.push(command);
-      if (!command.allowMarkers && openRegions().length > 0)
+      if (!command.allowMarkers && file().openRegions > 0)
         throw conflictFailure("Markers");
-      return list(otherFiles);
+      return list(others);
     }),
-    respond(RepositoryConflictsHttpApi.choose, () => list(otherFiles)),
+    respond(RepositoryConflictsHttpApi.choose, () => list(others)),
   );
 
   const view = await render(

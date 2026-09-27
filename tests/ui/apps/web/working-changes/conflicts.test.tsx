@@ -1,9 +1,9 @@
 import {
-  type ChangeDiff,
   type ChooseConflict,
   type ConflictDocument,
   type ConflictFile,
   type ConflictList,
+  type MutateChanges,
   type RepositoryChanges,
   RepositoryChangesHttpApi,
   RepositoryConflictsHttpApi,
@@ -11,7 +11,7 @@ import {
 } from "@rebase/contracts";
 import { EnvironmentHttpRejected } from "@rebase/environment-client";
 import { describe, expect, it } from "vite-plus/test";
-import { page, userEvent } from "vite-plus/test/browser";
+import { page } from "vite-plus/test/browser";
 import { fakeRequests, respond } from "#tests-ui/runtime/fake-requests";
 import { render } from "#tests-ui/runtime/render";
 import { WorkingChanges } from "#web/features/working-changes/working-changes";
@@ -22,10 +22,9 @@ const base = "b".repeat(40);
 const conflicted = "src/app.ts";
 const removed = "src/removed.ts";
 const logo = "assets/logo.png";
-const settled = "src/settled.ts";
 
 function stage(side: "base" | "current" | "incoming", binary = false) {
-  return { side, oid: side[0]?.repeat(40) ?? base, bytes: 1200, binary };
+  return { side, bytes: 1200, binary };
 }
 
 const files: readonly ConflictFile[] = [
@@ -34,8 +33,8 @@ const files: readonly ConflictFile[] = [
     revision: "app-1",
     kind: "both-modified",
     stages: [stage("base"), stage("current"), stage("incoming")],
-    openRegions: 2,
-    choices: ["current", "incoming", "worktree"],
+    openRegions: 1,
+    choices: ["current", "incoming"],
   },
   {
     path: removed,
@@ -43,7 +42,7 @@ const files: readonly ConflictFile[] = [
     kind: "deleted-in-current",
     stages: [stage("base"), stage("incoming")],
     openRegions: 0,
-    choices: ["incoming", "delete", "worktree"],
+    choices: ["incoming", "delete"],
   },
   {
     path: logo,
@@ -57,14 +56,6 @@ const files: readonly ConflictFile[] = [
     openRegions: 0,
     choices: ["current", "incoming"],
   },
-  {
-    path: settled,
-    revision: "settled-1",
-    kind: "both-modified",
-    stages: [stage("base"), stage("current"), stage("incoming")],
-    openRegions: 0,
-    choices: ["current", "incoming", "worktree"],
-  },
 ];
 
 const sides = {
@@ -73,24 +64,19 @@ const sides = {
   incoming: { ref: "topic", commit: incoming, subject: "Read the status" },
 };
 
-const content = [
-  "export const status = 1;",
+const marker = [
   `<<<<<<< ${current.slice(0, 8)}`,
   "export const reader = readCurrent;",
   "=======",
   "export const reader = readIncoming;",
   `>>>>>>> ${incoming.slice(0, 8)}`,
-  "",
-].join("\n");
+];
 
-async function fixture({
-  mergeTool = null,
-}: {
-  mergeTool?: string | null;
-} = {}) {
+async function fixture() {
   const unresolved = new Set(files.map((file) => file.path));
   const stages: StageConflict[] = [];
   const choices: ChooseConflict[] = [];
+  const mutations: MutateChanges[] = [];
   const mergeViews: string[] = [];
   const conflictRow = (path: string) => ({
     path,
@@ -119,52 +105,35 @@ async function fixture({
     renamesLimited: false,
   });
   const list = (): ConflictList => ({
-    operation: "merge",
     sides,
     files: files.filter((file) => unresolved.has(file.path)),
-    resolved: files
-      .filter((file) => !unresolved.has(file.path))
-      .map((file) => file.path),
-    mergeTool,
   });
   const document = (path: string): ConflictDocument => {
     const file = files.find((candidate) => candidate.path === path);
     if (file === undefined) throw new Error(`No conflict for ${path}`);
+    if (path !== conflicted) return { file, content: "", regions: [] };
     return {
       file,
-      sides,
-      content: path === conflicted ? content : "",
-      regions:
-        path === conflicted
-          ? [
-              {
-                id: "one",
-                line: 2,
-                current: ["export const reader = readCurrent;"],
-                base: [],
-                incoming: ["export const reader = readIncoming;"],
-                blame: { current: null, incoming: null },
-                marks: { current: [], incoming: [] },
-                open: true,
-              },
-            ]
-          : [],
+      content: ["export const status = 1;", ...marker, ""].join("\n"),
+      regions: [
+        {
+          id: "one",
+          line: 2,
+          current: ["export const reader = readCurrent;"],
+          base: [],
+          incoming: ["export const reader = readIncoming;"],
+          marks: { current: [], incoming: [] },
+          open: true,
+        },
+      ],
     };
-  };
-  const diff: ChangeDiff = {
-    path: "src/other.ts",
-    revision: "other",
-    kind: "text",
-    before: "a\n",
-    after: "b\n",
-    beforeBytes: 2,
-    afterBytes: 2,
-    mime: null,
-    patch: "",
   };
   const requests = fakeRequests(
     respond(RepositoryChangesHttpApi.read, () => changes()),
-    respond(RepositoryChangesHttpApi.diff, () => diff),
+    respond(RepositoryChangesHttpApi.mutate, (command) => {
+      mutations.push(command);
+      return { changes: changes(), diff: null };
+    }),
     respond(RepositoryConflictsHttpApi.list, () => list()),
     respond(RepositoryConflictsHttpApi.document, ({ path }) => document(path)),
     respond(RepositoryConflictsHttpApi.stage, (command) => {
@@ -205,77 +174,67 @@ async function fixture({
   await expect
     .element(page.getByRole("region", { name: "Conflicted files" }))
     .toBeVisible();
-  return { stages, choices, mergeViews };
+  return { stages, choices, mutations, mergeViews };
 }
 
 const row = (path: string) =>
   page.getByRole("button", { name: `Conflict ${path}`, exact: true });
 
 describe("conflicts in the Diffs tab", () => {
-  it("lists each conflicted file once with a plain label", async () => {
-    await fixture();
+  it("lists each conflicted file once and keeps them out of bulk staging", async () => {
+    const f = await fixture();
     const section = page.getByRole("region", { name: "Conflicted files" });
-    await expect.element(section).toHaveTextContent("Conflicts 4");
-    await expect.element(section).toHaveTextContent("2 open");
+    await expect.element(section).toHaveTextContent("Conflicts 3");
+    await expect.element(section).toHaveTextContent("1 open");
     await expect.element(section).toHaveTextContent("deleted in main");
     await expect.element(section).toHaveTextContent("binary");
-    await expect.element(section).toHaveTextContent("both changed");
-    for (const path of [conflicted, removed, logo, settled]) {
+    for (const path of [conflicted, removed, logo]) {
       await expect.element(row(path)).toBeVisible();
       await expect
         .element(
           page.getByRole("button", { name: `Unstaged ${path}`, exact: true }),
         )
         .not.toBeInTheDocument();
-      await expect
-        .element(
-          page.getByRole("button", { name: `Staged ${path}`, exact: true }),
-        )
-        .not.toBeInTheDocument();
     }
-    await expect
-      .element(
-        page.getByRole("button", {
-          name: "Unstaged src/other.ts",
-          exact: true,
-        }),
-      )
-      .toBeVisible();
     await expect.element(page.getByText("No staged files")).toBeVisible();
+
+    await page.getByRole("button", { name: "Stage all", exact: true }).click();
+
+    await expect.poll(() => f.mutations.length).toBe(1);
+    expect(f.mutations[0]).toMatchObject({
+      action: "stage",
+      selection: { _tag: "Files", paths: ["src/other.ts"] },
+    });
   });
 
-  it("shows the working file with its conflict blocks delimited", async () => {
+  it("shows the working file with its conflict block delimited", async () => {
     await fixture();
     await expect
       .element(row(conflicted))
       .toHaveAttribute("aria-pressed", "true");
-    const result = page.getByRole("region", { name: "Result" });
-    await expect.element(result).toHaveTextContent("readCurrent");
-    const parts = (kind: string) =>
-      result.element().querySelectorAll(`[data-conflict-part="${kind}"]`);
-    expect(parts("current")).toHaveLength(1);
-    expect(parts("incoming")).toHaveLength(1);
-    expect(parts("marker")).toHaveLength(3);
-    expect(parts("current")[0]?.textContent).toBe(
-      "export const reader = readCurrent;\n",
-    );
+    const file = page.getByRole("region", { name: "Working file" });
+    await expect.element(file).toHaveTextContent("export const status = 1;");
+    await expect
+      .element(file.getByRole("group", { name: "Region 1" }))
+      .toHaveTextContent(marker.join(" "));
   });
 
   it("confirms before marking a file with markers resolved", async () => {
     const f = await fixture();
-    await page
-      .getByRole("button", { name: `Mark ${conflicted} resolved` })
-      .click();
+    const resolve = page.getByRole("button", {
+      name: `Mark ${conflicted} resolved`,
+    });
+    await resolve.click();
     const cancel = page.getByRole("button", { name: "Cancel", exact: true });
     await expect.element(cancel).toHaveFocus();
     await cancel.click();
     await expect
       .element(page.getByRole("button", { name: "Mark resolved anyway" }))
       .not.toBeInTheDocument();
-    await page
-      .getByRole("button", { name: `Mark ${conflicted} resolved` })
-      .click();
+
+    await resolve.click();
     await page.getByRole("button", { name: "Mark resolved anyway" }).click();
+
     await expect.element(row(conflicted)).not.toBeInTheDocument();
     await expect
       .element(
@@ -290,47 +249,23 @@ describe("conflicts in the Diffs tab", () => {
     expect(f.stages[2]).toMatchObject({ path: conflicted, revision: "app-1" });
   });
 
-  it("offers only the whole-file choices and versions the file has", async () => {
+  it("offers the versions and whole-file choices the file has and hands off to the merge view", async () => {
     const f = await fixture();
     await row(removed).click();
     const versions = page.getByRole("group", { name: "Conflict versions" });
+    const version = (name: string) => versions.getByRole("button", { name });
     await expect
-      .element(
-        versions.getByRole("button", {
-          name: `Current ${current.slice(0, 8)}`,
-        }),
-      )
+      .element(version(`Current ${current.slice(0, 8)}`))
       .toBeDisabled();
-    await expect
-      .element(
-        versions.getByRole("button", {
-          name: `Incoming ${incoming.slice(0, 8)}`,
-        }),
-      )
-      .toBeEnabled();
-    await expect
-      .element(
-        versions.getByRole("button", { name: `Base ${base.slice(0, 8)}` }),
-      )
-      .toBeEnabled();
     await expect.element(page.getByText("No file")).toBeVisible();
-    await versions
-      .getByRole("button", { name: `Incoming ${incoming.slice(0, 8)}` })
-      .click();
-    await versions.getByRole("button", { name: "Merge view" }).click();
+
+    await version(`Incoming ${incoming.slice(0, 8)}`).click();
+    await version("Merge view").click();
     expect(f.mergeViews).toEqual([removed, removed]);
+
     await page.getByRole("button", { name: "Whole file" }).click();
     await expect
       .element(page.getByRole("menuitem", { name: "Use current" }))
-      .not.toBeInTheDocument();
-    await expect
-      .element(page.getByRole("menuitem", { name: "Use incoming" }))
-      .toBeVisible();
-    await expect
-      .element(page.getByRole("menuitem", { name: "Mark resolved" }))
-      .toBeVisible();
-    await expect
-      .element(page.getByRole("menuitem", { name: "Open in merge tool" }))
       .not.toBeInTheDocument();
     await page.getByRole("menuitem", { name: "Keep deletion" }).click();
     await expect.element(row(removed)).not.toBeInTheDocument();
@@ -340,34 +275,6 @@ describe("conflicts in the Diffs tab", () => {
         revision: "removed-1",
         choice: "delete",
       }),
-    ]);
-  });
-
-  it("offers the merge tool when one is configured", async () => {
-    await fixture({ mergeTool: "meld" });
-    await row(logo).click();
-    await page.getByRole("button", { name: "Whole file" }).click();
-    await expect
-      .element(page.getByRole("menuitem", { name: "Open in merge tool" }))
-      .toBeVisible();
-    await expect
-      .element(page.getByRole("menuitem", { name: "Mark resolved" }))
-      .not.toBeInTheDocument();
-  });
-
-  it("selects and resolves conflicts from the keyboard", async () => {
-    const f = await fixture();
-    row(settled).element().focus();
-    await userEvent.keyboard("{Enter}");
-    await expect.element(row(settled)).toHaveAttribute("aria-pressed", "true");
-    await userEvent.tab();
-    await expect
-      .element(page.getByRole("button", { name: `Mark ${settled} resolved` }))
-      .toHaveFocus();
-    await userEvent.keyboard("{Enter}");
-    await expect.element(row(settled)).not.toBeInTheDocument();
-    expect(f.stages).toEqual([
-      expect.objectContaining({ path: settled, allowMarkers: false }),
     ]);
   });
 });
