@@ -54,6 +54,22 @@ describe("Environment authorization transport", () => {
       code: unauthorizedCloseCode,
       reason: "InvalidOrigin",
     });
+    await expect(
+      helloOverSocket(origin, { headers: { cookie } }),
+    ).resolves.toEqual({
+      _tag: "Closed",
+      code: unauthorizedCloseCode,
+      reason: "InvalidOrigin",
+    });
+    await expect(
+      helloOverSocket(origin, {
+        headers: { cookie, origin, host: "attacker.example" },
+      }),
+    ).resolves.toEqual({
+      _tag: "Closed",
+      code: unauthorizedCloseCode,
+      reason: "InvalidHost",
+    });
 
     await requests(owner)(EnvironmentAuthorizationApi.revokeAuthorization, {
       authorizationId: session.authorization.id,

@@ -64,6 +64,7 @@ export function createEnvironmentAuthorization(
 ): EnvironmentAuthorization {
   const pairings = new Map<string, PairingEntry>();
   const revocationWatchers = new Map<string, Set<() => void>>();
+  const revokedAuthorizations = new Set<string>();
 
   return {
     authorize: (credential) => authorizeCredential(context, credential),
@@ -76,12 +77,17 @@ export function createEnvironmentAuthorization(
       revokeAuthorization(context, authorizationId).pipe(
         Effect.tap(() =>
           Effect.sync(() => {
+            revokedAuthorizations.add(authorizationId);
             for (const revoked of revocationWatchers.get(authorizationId) ?? [])
               revoked();
           }),
         ),
       ),
     watchRevocation: (authorizationId, revoked) => {
+      if (revokedAuthorizations.has(authorizationId)) {
+        revoked();
+        return () => {};
+      }
       const watchers = revocationWatchers.get(authorizationId) ?? new Set();
       watchers.add(revoked);
       revocationWatchers.set(authorizationId, watchers);

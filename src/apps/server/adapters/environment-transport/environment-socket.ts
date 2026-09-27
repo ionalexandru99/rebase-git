@@ -55,6 +55,7 @@ export function attachEnvironmentSocket(
     },
   });
   const upgrade = (request: IncomingMessage, socket: Duplex, head: Buffer) => {
+    socket.on("error", () => socket.destroy());
     if (upgradePath(request) !== environmentLivePath) {
       socket.end("HTTP/1.1 404 Not Found\r\nConnection: close\r\n\r\n");
       return;

@@ -71,10 +71,13 @@ export async function exchangeEnvironmentPairing(
       method: "POST",
     },
   );
-  const body: unknown = await response.json();
   if (!response.ok)
-    throw new Error(`The Environment refused pairing: ${JSON.stringify(body)}`);
-  return Schema.decodeUnknownSync(EnvironmentPairingExchanged)(body);
+    throw new Error(
+      `The Environment refused pairing (${response.status}): ${await response.text()}`,
+    );
+  return Schema.decodeUnknownSync(EnvironmentPairingExchanged)(
+    await response.json(),
+  );
 }
 
 export class DesktopApplication {
