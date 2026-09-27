@@ -9,6 +9,7 @@ const packageMetadata = JSON.parse(await readFile("package.json", "utf8")) as {
 const outputDirectory = "src/apps/desktop/dist/package";
 const productVersion = process.env.RELEASE_VERSION ?? packageMetadata.version;
 const execute = promisify(execFile);
+const includesWeb = !process.argv.includes("--without-web");
 const packageManagerCommand =
   process.platform === "win32" ? (process.env.ComSpec ?? "cmd.exe") : "pnpm";
 const packageManagerArguments =
@@ -16,9 +17,11 @@ const packageManagerArguments =
     ? ["/d", "/c", "pnpm.cmd", "build:web"]
     : ["build:web"];
 
-await execute(packageManagerCommand, packageManagerArguments, {
-  env: { ...process.env, REBASE_PRODUCT_VERSION: productVersion },
-});
+if (includesWeb) {
+  await execute(packageManagerCommand, packageManagerArguments, {
+    env: { ...process.env, REBASE_PRODUCT_VERSION: productVersion },
+  });
+}
 
 await rm(outputDirectory, { force: true, recursive: true });
 await mkdir(outputDirectory, { recursive: true });
@@ -31,7 +34,8 @@ await Promise.all([
     `${outputDirectory}/migrations`,
     { recursive: true },
   ),
-  cp("src/apps/web/dist/web", `${outputDirectory}/web`, { recursive: true }),
+  includesWeb &&
+    cp("src/apps/web/dist/web", `${outputDirectory}/web`, { recursive: true }),
   build({
     banner: {
       js: 'import { createRequire as createNodeRequire } from "node:module"; const require = createNodeRequire(import.meta.url);',

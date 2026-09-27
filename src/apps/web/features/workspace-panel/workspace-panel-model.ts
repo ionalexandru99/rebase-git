@@ -6,8 +6,6 @@ import type {
 } from "#web/features/workspace-panel/workspace-panel-definitions.ts";
 import type { ReadableStore } from "#web/platform/store/store.ts";
 
-export type { WorkspacePanelKind } from "#web/features/workspace-panel/workspace-panel-definitions.ts";
-
 export interface WorkspacePanelDefinition {
   readonly acceptsInput?: (input: unknown) => boolean;
   readonly Content?: ComponentType;

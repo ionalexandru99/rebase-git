@@ -32,7 +32,7 @@ import type {
 
 const specialModes = new Set(["120000", "160000"]);
 
-export function writeConflict(git: GitCommandRunner, input: WriteConflict) {
+function writeConflict(git: GitCommandRunner, input: WriteConflict) {
   return Effect.gen(function* () {
     const snapshot = yield* requireConflict(
       git,
@@ -57,7 +57,7 @@ export function writeConflict(git: GitCommandRunner, input: WriteConflict) {
   });
 }
 
-export function chooseWholeFile(
+function chooseWholeFile(
   git: GitCommandRunner,
   coordination: RepositoryCoordination,
   input: ChooseConflict,
@@ -82,7 +82,7 @@ export function chooseWholeFile(
   });
 }
 
-export function stageConflict(
+function stageConflict(
   git: GitCommandRunner,
   coordination: RepositoryCoordination,
   input: StageConflict,

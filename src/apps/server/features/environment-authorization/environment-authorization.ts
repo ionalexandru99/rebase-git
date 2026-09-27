@@ -1,14 +1,19 @@
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { Data, Effect } from "effect";
-import type {
-  EnvironmentAuthorizationFailure,
-  EnvironmentAuthorizationRevoked,
-  EnvironmentDeviceAuthorization,
-  EnvironmentPairingExchanged,
-  ExchangeEnvironmentPairing,
-  InvalidGrant,
+import {
+  EnvironmentAuthorizationApi,
+  type EnvironmentAuthorizationFailure,
+  type EnvironmentAuthorizationRevoked,
+  type EnvironmentDeviceAuthorization,
+  type EnvironmentPairingExchanged,
+  type ExchangeEnvironmentPairing,
+  type InvalidGrant,
 } from "#contracts/environment-authorization/environment-authorization.contract.ts";
+import {
+  type EnvironmentFeature,
+  route,
+} from "#server/adapters/environment-transport/environment-routes.ts";
 import {
   createDeviceCredential,
   createPairingCode,
@@ -57,6 +62,25 @@ export interface EnvironmentAuthorization {
     authorizationId: string,
     revoked: () => void,
   ) => () => void;
+}
+
+export function environmentAuthorizationFeature(
+  authorization: EnvironmentAuthorization,
+): EnvironmentFeature {
+  const api = EnvironmentAuthorizationApi;
+  return {
+    routes: [
+      route(api.createPairing, (_, context) =>
+        Effect.map(authorization.createPairing(), (created) => ({
+          expiresAt: created.expiresAt,
+          pairingUrl: `${context.origin}/pair#${created.material}`,
+        })),
+      ),
+      route(api.revokeAuthorization, (revocation) =>
+        authorization.revoke(revocation.authorizationId),
+      ),
+    ],
+  };
 }
 
 export function createEnvironmentAuthorization(

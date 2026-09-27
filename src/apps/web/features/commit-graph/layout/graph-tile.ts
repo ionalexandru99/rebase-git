@@ -16,7 +16,7 @@ interface LaneStroke {
   readonly opacity: number;
 }
 
-export function graphTilePaths(
+function graphTilePaths(
   rows: readonly CommitLaneRow[],
   left: number,
   width: number,

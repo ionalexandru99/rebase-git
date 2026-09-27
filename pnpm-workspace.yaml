@@ -7,7 +7,12 @@ allowBuilds:
   msgpackr-extract: false
 
 overrides:
+  vite: 'catalog:'
+  vitest: 'catalog:'
+
+catalog:
   vite: npm:@voidzero-dev/vite-plus-core@0.2.9
+  vite-plus: 0.2.9
   vitest: 4.1.10
 
 peerDependencyRules:

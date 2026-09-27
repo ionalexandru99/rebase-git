@@ -13,10 +13,10 @@ import {
 } from "#web/components/ui/tabs.tsx";
 import { WorkspacePanelLauncher } from "#web/features/workspace-panel/components/workspace-panel-launcher.tsx";
 import {
+  type WorkspacePanelKind,
   workspacePanelDefinitions,
   workspacePanelKinds,
 } from "#web/features/workspace-panel/workspace-panel-definitions.ts";
-import type { WorkspacePanelKind } from "#web/features/workspace-panel/workspace-panel-model.ts";
 import { useWorkspacePanel } from "#web/features/workspace-panel/workspace-panel-provider.tsx";
 import { PanelSessionTarget } from "#web/features/workspace-panel/workspace-panel-sessions.tsx";
 import { isWorkspacePanelKind } from "#web/features/workspace-panel/workspace-panel-state.ts";

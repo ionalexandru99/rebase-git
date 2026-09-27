@@ -51,7 +51,7 @@ export function GraphRefAppearance({
   return <Appearance value={value}>{children}</Appearance>;
 }
 
-export function useGraphRefAppearance() {
+function useGraphRefAppearance() {
   return useContext(Appearance);
 }
 

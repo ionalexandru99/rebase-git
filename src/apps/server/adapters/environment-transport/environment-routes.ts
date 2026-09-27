@@ -16,7 +16,7 @@ import type {
   GitCommandRunner,
   GitFailed,
 } from "#server/adapters/local-git/git-commands.ts";
-import { EnvironmentAuthorizationError } from "#server/features/environment-authorization/environment-authorization.ts";
+import type { EnvironmentAuthorizationError } from "#server/features/environment-authorization/environment-authorization.ts";
 import { EnvironmentStorageError } from "#server/persistence/sqlite/storage-operation.ts";
 import type { RepositoryAccess } from "#server/repository/repository-access.ts";
 import type {
@@ -163,16 +163,20 @@ export function repositoryRoutes({
 
 function isTransportError(error: unknown): error is EnvironmentTransportError {
   return (
-    error instanceof EnvironmentAuthorizationError ||
-    error instanceof EnvironmentStorageError
+    error instanceof EnvironmentStorageError ||
+    hasTag(error, "EnvironmentAuthorizationError")
   );
 }
 
 function isGitFailed(error: unknown): error is GitFailed {
+  return hasTag(error, "GitFailed");
+}
+
+function hasTag(error: unknown, tag: string) {
   return (
     typeof error === "object" &&
     error !== null &&
     "_tag" in error &&
-    error._tag === "GitFailed"
+    error._tag === tag
   );
 }

@@ -16,7 +16,7 @@ import {
   useCommand,
 } from "#web/platform/query/use-command.ts";
 
-export function changesScope({
+function changesScope({
   repositoryId,
   worktreePath,
   amend,
@@ -24,7 +24,7 @@ export function changesScope({
   return { repositoryId, worktreePath, amend };
 }
 
-export function changeDiffInput(
+function changeDiffInput(
   scope: ChangesScope,
   { section, path }: ViewedChange,
 ): ReadChangeDiff {

@@ -32,7 +32,7 @@ import {
 
 const pushTimeoutMilliseconds = 120_000;
 
-export function pushRemoteBranch(git: GitCommandRunner, command: PushBranch) {
+function pushRemoteBranch(git: GitCommandRunner, command: PushBranch) {
   const directory = command.worktreePath;
   const destinationRef = `refs/heads/${command.destination.branch}`;
   return Effect.gen(function* () {

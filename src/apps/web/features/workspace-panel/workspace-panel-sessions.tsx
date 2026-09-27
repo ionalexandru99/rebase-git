@@ -20,8 +20,10 @@ import {
   createSessionCollection,
   type PanelSession,
 } from "#web/features/workspace-panel/panel-view-sessions.ts";
-import { workspacePanelDefinitions } from "#web/features/workspace-panel/workspace-panel-definitions.ts";
-import type { WorkspacePanelKind } from "#web/features/workspace-panel/workspace-panel-model.ts";
+import {
+  type WorkspacePanelKind,
+  workspacePanelDefinitions,
+} from "#web/features/workspace-panel/workspace-panel-definitions.ts";
 import type {
   PanelViewTarget,
   WorkspacePanelEnvironment,

@@ -11,7 +11,7 @@ export interface CommitSide {
   readonly oid: string;
 }
 
-export interface CommitChange {
+interface CommitChange {
   readonly path: string;
   readonly previousPath: string;
   readonly status: string;

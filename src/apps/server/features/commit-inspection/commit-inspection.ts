@@ -35,7 +35,7 @@ const originalObjects = { globalArguments: ["--no-replace-objects"] };
 const missingMode = "000000";
 const submoduleMode = "160000";
 
-export function inspectCommit(git: GitCommandRunner, command: InspectCommit) {
+function inspectCommit(git: GitCommandRunner, command: InspectCommit) {
   return Effect.gen(function* () {
     const metadata = yield* readMetadata(git, command);
     const files = yield* readFiles(git, command, metadata.parentOid);
@@ -52,10 +52,7 @@ export function inspectCommit(git: GitCommandRunner, command: InspectCommit) {
   });
 }
 
-export function inspectCommitDiff(
-  git: GitCommandRunner,
-  command: InspectCommitDiff,
-) {
+function inspectCommitDiff(git: GitCommandRunner, command: InspectCommitDiff) {
   return Effect.gen(function* () {
     const metadata = yield* readMetadata(git, command);
     const change = yield* readCommitChange(git, command, metadata.parentOid);

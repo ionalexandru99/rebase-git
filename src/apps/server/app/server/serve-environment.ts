@@ -11,8 +11,10 @@ import {
   type EnvironmentListener,
 } from "#server/app/server/environment-listener.ts";
 import { commitInspectionFeature } from "#server/features/commit-inspection/commit-inspection.ts";
-import { environmentAuthorizationFeature } from "#server/features/environment-authorization/environment-authorization.feature.ts";
-import { createEnvironmentAuthorization } from "#server/features/environment-authorization/environment-authorization.ts";
+import {
+  createEnvironmentAuthorization,
+  environmentAuthorizationFeature,
+} from "#server/features/environment-authorization/environment-authorization.ts";
 import { environmentFilesystemFeature } from "#server/features/environment-filesystem/environment-filesystem.ts";
 import {
   createRepositoryCatalog,
