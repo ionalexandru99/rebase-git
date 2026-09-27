@@ -143,7 +143,6 @@ export function useCommand<Route extends RequestableEnvironmentHttpRoute>(
     canRun:
       environment.connected &&
       environment.environmentId !== undefined &&
-      (route.capability !== "repository.write" || environment.writable) &&
       (!scoped || target !== undefined),
     running: observed.some(({ pending }) => pending),
     lastOk: lastOk(observed),

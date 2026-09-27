@@ -1,7 +1,6 @@
 import type {
   AuthorizationDenied,
   BranchCheckedOutElsewhere,
-  CapabilityDenied,
   EnvironmentAccessFailure,
   RefMissing,
   RepositoryRejected,
@@ -30,7 +29,6 @@ export type FailureMessages<Failure extends TaggedFailure> = {
 };
 
 type SharedFailure =
-  | typeof CapabilityDenied.Type
   | AuthorizationDenied
   | { readonly _tag: "RepositoryMissing" }
   | RepositoryRejected
@@ -86,7 +84,6 @@ function describeRejection<Failure extends TaggedFailure>(
 function sharedWording(failure: TaggedFailure): string {
   const shared = failure as SharedFailure;
   switch (shared._tag) {
-    case "CapabilityDenied":
     case "AuthorizationDenied":
       return accessDenied;
     case "RepositoryMissing":
