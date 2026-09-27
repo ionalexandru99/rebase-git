@@ -1,19 +1,19 @@
-import type { ConflictPath, ConflictSide } from "@rebase/contracts";
+import type {
+  ConflictList,
+  ConflictPath,
+  ConflictSide,
+} from "@rebase/contracts";
 import { IconArrowDown, IconArrowLeft, IconArrowUp } from "@tabler/icons-react";
 import { type KeyboardEvent, type ReactNode, useState } from "react";
 import { Button } from "#web/components/ui/button";
 import { ResultEditor } from "#web/features/merge-view/components/result-editor";
 import { SidePanes } from "#web/features/merge-view/components/side-panes";
-import { openRegionCount } from "#web/features/merge-view/conflict-document";
+import {
+  openCount,
+  regionSegments,
+} from "#web/features/merge-view/conflict-document";
 import { useMergeDocument } from "#web/features/merge-view/hooks/use-merge-document";
-import {
-  type ResolveFile,
-  useResolveFile,
-} from "#web/features/merge-view/hooks/use-resolve-file";
-import {
-  type Selection,
-  useSelection,
-} from "#web/features/merge-view/hooks/use-selection";
+import { useSelection } from "#web/features/merge-view/hooks/use-selection";
 import { useRepositoryScope } from "#web/features/repository-scope/repository-scope-provider";
 import {
   describeChangesFailure,
@@ -21,22 +21,18 @@ import {
 } from "#web/features/working-changes/changes-messages";
 import { MarkersConfirmation } from "#web/features/working-changes/conflicts/components/markers-confirmation";
 import { WholeFileMenu } from "#web/features/working-changes/conflicts/components/whole-file-menu";
+import { useConflictActions } from "#web/features/working-changes/conflicts/hooks/use-conflicts";
 
-export interface MergeViewProps {
-  readonly path: string;
+interface MergeViewHandlers {
   readonly onOpen: (path: string) => void;
   readonly onClose: () => void;
   readonly toolbarActions?: ReactNode;
 }
 
-type KeyAction = "close" | "previous" | "next" | "current" | "incoming";
-
 export function MergeView({
   path,
-  onOpen,
-  onClose,
-  toolbarActions,
-}: MergeViewProps) {
+  ...handlers
+}: MergeViewHandlers & { readonly path: string }) {
   const scope = useRepositoryScope();
   if (scope === undefined) return null;
   return (
@@ -47,9 +43,7 @@ export function MergeView({
         worktreePath: scope.worktreePath,
         path,
       }}
-      onOpen={onOpen}
-      onClose={onClose}
-      toolbarActions={toolbarActions}
+      {...handlers}
     />
   );
 }
@@ -59,32 +53,54 @@ function MergeViewContent({
   onOpen,
   onClose,
   toolbarActions,
-}: {
-  readonly input: ConflictPath;
-  readonly onOpen: (path: string) => void;
-  readonly onClose: () => void;
-  readonly toolbarActions?: ReactNode;
-}) {
+}: MergeViewHandlers & { readonly input: ConflictPath }) {
   const merge = useMergeDocument(input);
-  const resolve = useResolveFile({ input, document: merge, onOpen, onClose });
   const [showBase, setShowBase] = useState(false);
   const leftSide: ConflictSide = showBase ? "base" : "current";
-  const selection = useSelection(merge.model, merge.choose, leftSide);
-  const { model } = merge;
+  const selection = useSelection(merge.model, merge.picks, merge.choose);
+  const listed = merge.list.data?.files.find(({ path }) => path === input.path);
+  const actions = useConflictActions(input, {
+    revision: () => merge.revision() ?? listed?.revision,
+    onResolved: (list: ConflictList) => {
+      const next = list.files.find(
+        ({ path, openRegions }) => path !== input.path && openRegions > 0,
+      );
+      if (next === undefined) onClose();
+      else onOpen(next.path);
+    },
+  });
+  const { loaded, model, picks } = merge;
   const document = merge.document.data;
   const failure = merge.document.error;
   const wholeFile = wholeFileOnly(failure);
-  const listed = merge.list.data?.files.find(({ path }) => path === input.path);
-  const panes = !wholeFile && model !== null && document !== undefined;
+  const panes =
+    !wholeFile && loaded !== null && model !== null && document !== undefined;
+  const confirming = actions.confirming === input.path;
   const notice =
     merge.notice ??
+    actions.problem ??
     (failure !== null && !wholeFile ? describeChangesFailure(failure) : null);
+  const resolve = async (allowMarkers: boolean) => {
+    await merge.settled();
+    actions.resolve(input.path, allowMarkers);
+  };
+
+  const onKeyDown = (event: KeyboardEvent<HTMLElement>) => {
+    const key = keyAction(event);
+    if (key === null || !event.currentTarget.contains(event.target as Node))
+      return;
+    event.preventDefault();
+    if (key === "close") return confirming ? actions.cancel() : onClose();
+    if (key === "previous") return selection.previous();
+    if (key === "next") return selection.next();
+    selection.takeActive(key);
+  };
 
   return (
     <section
       aria-label="Merge view"
       className="flex h-full min-h-0 flex-col bg-repository"
-      onKeyDown={(event) => handleKeys(event, selection, resolve, onClose)}
+      onKeyDown={onKeyDown}
     >
       <div className="flex min-h-12 shrink-0 flex-wrap items-center gap-2 border-border/60 border-b px-3 py-1">
         <Button variant="ghost" size="xs" onClick={onClose}>
@@ -96,7 +112,7 @@ function MergeViewContent({
         </h1>
         {panes && (
           <span className="shrink-0 text-xs whitespace-nowrap text-muted-foreground">
-            {openRegionCount(model)} of {model.regionCount} open
+            {openCount(model, picks)} of {regionSegments(model).length} open
           </span>
         )}
         <span className="flex-1" />
@@ -135,24 +151,25 @@ function MergeViewContent({
         )}
         <WholeFileMenu
           choices={document?.file.choices ?? listed?.choices ?? []}
-          mergeTool={(merge.list.data?.mergeTool ?? null) !== null}
-          disabled={resolve.busy}
-          onChoose={(choice) => void resolve.chooseWholeFile(choice)}
-          onMergeTool={() => void resolve.openMergeTool()}
+          disabled={actions.busy}
+          onChoose={async (choice) => {
+            await merge.settled();
+            actions.choose(input.path, choice);
+          }}
         />
         {panes &&
-          (resolve.confirming ? (
+          (confirming ? (
             <MarkersConfirmation
               path={input.path}
-              disabled={resolve.busy}
-              cancel={resolve.cancelConfirmation}
-              confirm={() => void resolve.markResolved(true)}
+              disabled={actions.busy}
+              cancel={actions.cancel}
+              confirm={() => void resolve(true)}
             />
           ) : (
             <Button
               size="xs"
-              disabled={resolve.busy}
-              onClick={() => void resolve.markResolved(false)}
+              disabled={actions.busy}
+              onClick={() => void resolve(false)}
             >
               Mark resolved
             </Button>
@@ -167,18 +184,20 @@ function MergeViewContent({
           {notice}
         </p>
       )}
-      {panes && (
+      {panes && merge.list.data && (
         <div className="flex min-h-0 flex-1 flex-col">
           <SidePanes
-            model={model}
-            sides={document.sides}
+            loaded={loaded}
+            sides={merge.list.data.sides}
             leftSide={leftSide}
+            picks={picks}
             activeRegion={selection.activeRegion}
             lines={selection.lines}
             scrollRef={selection.sidesRef}
           />
           <ResultEditor
             model={model}
+            picks={picks}
             onEdit={merge.edit}
             onUndo={merge.undo}
             onRegionClick={selection.focusFromResult}
@@ -190,30 +209,7 @@ function MergeViewContent({
   );
 }
 
-function handleKeys(
-  event: KeyboardEvent<HTMLElement>,
-  selection: Selection,
-  resolve: ResolveFile,
-  onClose: () => void,
-) {
-  if (!event.currentTarget.contains(event.target as Node)) return;
-  const action = keyAction(event);
-  if (action === null) return;
-  event.preventDefault();
-  switch (action) {
-    case "close":
-      return resolve.confirming ? resolve.cancelConfirmation() : onClose();
-    case "previous":
-      return selection.previous();
-    case "next":
-      return selection.next();
-    case "current":
-    case "incoming":
-      return selection.takeActive(action);
-  }
-}
-
-function keyAction(event: KeyboardEvent<HTMLElement>): KeyAction | null {
+function keyAction(event: KeyboardEvent<HTMLElement>) {
   if (event.key === "Escape") return "close";
   if (!event.altKey || event.ctrlKey || event.metaKey) return null;
   if (event.key === "ArrowUp") return "previous";

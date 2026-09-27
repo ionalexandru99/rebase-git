@@ -29,12 +29,14 @@ export function WorkingChangesPanel({
             active: connected && active,
           }}
           writable={connected && writable}
-          openMergeView={openMergeView}
+          openMergeView={openMergeView ?? ignoreMergeView}
         />
       </div>
     </DiffWorkerPool>
   );
 }
+
+function ignoreMergeView() {}
 
 function Disconnected() {
   return (

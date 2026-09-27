@@ -15,8 +15,7 @@ type ChangesRoute =
   | typeof RepositoryConflictsHttpApi.document
   | typeof RepositoryConflictsHttpApi.stage
   | typeof RepositoryConflictsHttpApi.choose
-  | typeof RepositoryConflictsHttpApi.write
-  | typeof RepositoryConflictsHttpApi.mergeTool;
+  | typeof RepositoryConflictsHttpApi.write;
 
 export const headMovedMessage =
   "HEAD changed while you were amending. Review the latest commit before enabling Amend again.";

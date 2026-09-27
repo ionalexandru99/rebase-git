@@ -1,41 +1,31 @@
 import type { ConflictRegion, ConflictSide } from "@rebase/contracts";
+import { useCallback, useMemo, useRef, useState } from "react";
 import {
-  useCallback,
-  useEffect,
-  useLayoutEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
-import { regionRowOffset } from "#web/features/merge-view/aligned-rows";
-import {
+  applyPick,
+  isOpen,
   type LinePick,
   type MergeModel,
+  type PickMode,
+  type Picks,
+  pickMode,
+  pickRange,
   regionSegments,
+  takeSide,
+  togglePick,
 } from "#web/features/merge-view/conflict-document";
 import type { ChooseRegion } from "#web/features/merge-view/hooks/use-merge-document";
-import { regionLineOffset } from "#web/features/merge-view/result-text";
 
-export interface LineTarget {
+export interface LineTarget extends LinePick {
   readonly regionId: string;
-  readonly side: ConflictSide;
-  readonly index: number;
 }
 
 export interface LineSelection {
   readonly press: (target: LineTarget, picks: readonly LinePick[]) => void;
-  readonly enter: (target: LineTarget) => void;
+  readonly enter: (target: LineTarget, buttons: number) => void;
   readonly toggle: (target: LineTarget) => void;
   readonly extend: (target: LineTarget, index: number) => void;
   readonly take: (region: ConflictRegion, side: ConflictSide) => void;
   readonly focusRegion: (regionId: string) => void;
-}
-
-type PickMode = "add" | "remove";
-
-interface Drag {
-  readonly target: LineTarget;
-  readonly mode: PickMode;
 }
 
 const lineHeight = 20;
@@ -43,52 +33,31 @@ const contextRows = 2;
 
 export function useSelection(
   model: MergeModel | null,
+  picks: Picks,
   choose: ChooseRegion,
-  leftSide: ConflictSide,
 ) {
   const [selectedRegion, setSelectedRegion] = useState<string | null>(null);
   const sidesRef = useRef<HTMLDivElement>(null);
   const resultRef = useRef<HTMLDivElement>(null);
-  const latest = useRef({ model, leftSide });
-  useLayoutEffect(() => {
-    latest.current = { model, leftSide };
-  });
   const regions = model === null ? [] : regionSegments(model);
   const active =
     regions.find(({ region }) => region.id === selectedRegion) ??
-    regions.find(({ choice }) => choice.kind === "open") ??
+    regions.find((segment) => isOpen(segment, picks)) ??
     regions[0];
   const activeIndex = active === undefined ? -1 : regions.indexOf(active);
-
-  const revealSides = useCallback((regionId: string) => {
-    const { model, leftSide } = latest.current;
-    if (model !== null)
-      scrollTo(
-        sidesRef.current,
-        regionRowOffset(model, regionId, leftSide, "incoming"),
-      );
+  const focusRegion = useCallback((regionId: string) => {
+    setSelectedRegion(regionId);
+    reveal(resultRef.current, regionId);
   }, []);
-  const revealResult = useCallback((regionId: string) => {
-    const { model } = latest.current;
-    if (model !== null)
-      scrollTo(resultRef.current, regionLineOffset(model, regionId));
-  }, []);
-  const focusRegion = useCallback(
-    (regionId: string) => {
-      setSelectedRegion(regionId);
-      revealResult(regionId);
-    },
-    [revealResult],
-  );
   const lines = useLineSelection(choose, setSelectedRegion, focusRegion);
 
-  function move(offset: 1 | -1) {
+  const move = (offset: 1 | -1) => {
     const target = regions[activeIndex + offset];
     if (target === undefined) return;
     setSelectedRegion(target.region.id);
-    revealSides(target.region.id);
-    revealResult(target.region.id);
-  }
+    reveal(sidesRef.current, target.region.id);
+    reveal(resultRef.current, target.region.id);
+  };
 
   return {
     lines,
@@ -104,154 +73,82 @@ export function useSelection(
     },
     focusFromResult: (regionId: string) => {
       setSelectedRegion(regionId);
-      revealSides(regionId);
+      reveal(sidesRef.current, regionId);
     },
   };
 }
-
-export type Selection = ReturnType<typeof useSelection>;
 
 function useLineSelection(
   choose: ChooseRegion,
   selectRegion: (regionId: string) => void,
   focusRegion: (regionId: string) => void,
 ): LineSelection {
-  const drag = useRef<Drag | null>(null);
-  useEffect(() => {
-    const end = () => {
-      drag.current = null;
+  const drag = useRef<{ target: LineTarget; mode: PickMode } | null>(null);
+  return useMemo(() => {
+    const pick = (
+      regionId: string,
+      update: (picks: readonly LinePick[]) => readonly LinePick[],
+    ) => {
+      selectRegion(regionId);
+      choose(regionId, update);
     };
-    window.addEventListener("pointerup", end);
-    window.addEventListener("pointercancel", end);
-    return () => {
-      window.removeEventListener("pointerup", end);
-      window.removeEventListener("pointercancel", end);
-    };
-  }, []);
-  return useMemo(
-    () => ({
+    return {
       press: (target, picks) => {
-        const mode = pickModeFor(picks, linePick(target));
+        const mode = pickMode(picks, target);
         drag.current = { target, mode };
-        selectRegion(target.regionId);
-        choose(target.regionId, (current) =>
-          applyPick(current, linePick(target), mode),
-        );
+        pick(target.regionId, (current) => applyPick(current, target, mode));
       },
-      enter: (target) => {
+      enter: (target, buttons) => {
         const current = drag.current;
+        if (current === null || (buttons & 1) === 0) {
+          drag.current = null;
+          return;
+        }
+        const from = current.target;
         if (
-          current === null ||
-          current.target.regionId !== target.regionId ||
-          current.target.side !== target.side ||
-          current.target.index === target.index
+          from.regionId !== target.regionId ||
+          from.side !== target.side ||
+          from.index === target.index
         )
           return;
         drag.current = { ...current, target };
-        const step = target.index > current.target.index ? 1 : -1;
+        const step = target.index > from.index ? 1 : -1;
         choose(target.regionId, (picks) =>
-          applyPickRange(
+          pickRange(
             picks,
             target.side,
-            current.target.index + step,
+            from.index + step,
             target.index,
             current.mode,
           ),
         );
       },
-      toggle: (target) => {
-        selectRegion(target.regionId);
-        choose(target.regionId, (picks) =>
+      toggle: (target) =>
+        pick(target.regionId, (picks) => togglePick(picks, target)),
+      extend: (target, index) =>
+        pick(target.regionId, (picks) =>
           applyPick(
-            picks,
-            linePick(target),
-            pickModeFor(picks, linePick(target)),
-          ),
-        );
-      },
-      extend: (target, index) => {
-        selectRegion(target.regionId);
-        choose(target.regionId, (picks) =>
-          applyPick(
-            applyPick(picks, linePick(target), "add"),
+            applyPick(picks, target, "add"),
             { side: target.side, index },
             "add",
           ),
-        );
-      },
-      take: (region, side) => {
-        selectRegion(region.id);
-        choose(region.id, (picks) => takeSide(picks, region, side));
-      },
+        ),
+      take: (region, side) =>
+        pick(region.id, (picks) => takeSide(picks, region, side)),
       focusRegion,
-    }),
-    [choose, focusRegion, selectRegion],
+    };
+  }, [choose, focusRegion, selectRegion]);
+}
+
+function reveal(container: HTMLElement | null, regionId: string) {
+  const target = container?.querySelector(
+    `[data-region="${CSS.escape(regionId)}"]`,
   );
-}
-
-function linePick({ side, index }: LineTarget): LinePick {
-  return { side, index };
-}
-
-function scrollTo(element: HTMLDivElement | null, offset: number | null) {
-  if (element === null || offset === null) return;
-  element.scrollTop = Math.max(offset - contextRows, 0) * lineHeight;
-}
-
-export function pickPosition(picks: readonly LinePick[], pick: LinePick) {
-  return picks.findIndex(
-    ({ side, index }) => side === pick.side && index === pick.index,
+  if (container == null || target == null) return;
+  const offset =
+    target.getBoundingClientRect().top - container.getBoundingClientRect().top;
+  container.scrollTop = Math.max(
+    container.scrollTop + offset - contextRows * lineHeight,
+    0,
   );
-}
-
-function pickModeFor(picks: readonly LinePick[], pick: LinePick): PickMode {
-  return pickPosition(picks, pick) === -1 ? "add" : "remove";
-}
-
-function applyPick(
-  picks: readonly LinePick[],
-  pick: LinePick,
-  mode: PickMode,
-): readonly LinePick[] {
-  const position = pickPosition(picks, pick);
-  if (mode === "add") return position === -1 ? [...picks, pick] : picks;
-  return position === -1
-    ? picks
-    : picks.filter((_, candidate) => candidate !== position);
-}
-
-function applyPickRange(
-  picks: readonly LinePick[],
-  side: ConflictSide,
-  from: number,
-  to: number,
-  mode: PickMode,
-): readonly LinePick[] {
-  const step = to >= from ? 1 : -1;
-  let next = picks;
-  for (let index = from; index !== to + step; index += step)
-    next = applyPick(next, { side, index }, mode);
-  return next;
-}
-
-export function sideTaken(
-  picks: readonly LinePick[],
-  region: ConflictRegion,
-  side: ConflictSide,
-) {
-  return (
-    region[side].length > 0 &&
-    region[side].every((_, index) => pickPosition(picks, { side, index }) >= 0)
-  );
-}
-
-function takeSide(
-  picks: readonly LinePick[],
-  region: ConflictRegion,
-  side: ConflictSide,
-): readonly LinePick[] {
-  if (region[side].length === 0) return picks;
-  if (sideTaken(picks, region, side))
-    return picks.filter((pick) => pick.side !== side);
-  return applyPickRange(picks, side, 0, region[side].length - 1, "add");
 }

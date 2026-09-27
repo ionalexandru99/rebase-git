@@ -40,22 +40,12 @@ export function environmentQueryKey<
   version?: string,
 ) {
   return [
-    ...environmentRouteKey(environmentId, repositoryId, route),
-    input,
-    ...(version === undefined ? [] : [version]),
-  ] as const;
-}
-
-export function environmentRouteKey(
-  environmentId: string | undefined,
-  repositoryId: string | null,
-  route: RequestableEnvironmentHttpRoute,
-) {
-  return [
     "environment",
     environmentId ?? null,
     repositoryId,
     route.path,
+    input,
+    ...(version === undefined ? [] : [version]),
   ] as const;
 }
 

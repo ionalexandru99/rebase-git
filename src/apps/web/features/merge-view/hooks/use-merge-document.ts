@@ -1,250 +1,188 @@
 import {
   type ConflictDocument,
-  type ConflictList,
   type ConflictPath,
   RepositoryConflictsHttpApi,
 } from "@rebase/contracts";
 import { useQueryClient } from "@tanstack/react-query";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
-  useCallback,
-  useEffect,
-  useLayoutEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
-import {
-  choosePicks,
   fileContent,
   type LinePick,
   type MergeModel,
   mergeModel,
-  regionPicks,
-  restoreRegion,
+  type Picks,
+  picksOf,
+  withTyped,
 } from "#web/features/merge-view/conflict-document";
 import { editText } from "#web/features/merge-view/result-text";
 import {
-  type ChangesRequestFailure,
   conflictReason,
   describeChangesFailure,
 } from "#web/features/working-changes/changes-messages";
 import {
-  conflictScope,
   useConflictDocument,
   useConflictList,
-} from "#web/features/working-changes/conflicts/hooks/use-conflict-queries";
-import { useEnvironment } from "#web/platform/query/environment-context";
-import { environmentQueryKey } from "#web/platform/query/environment-query";
+} from "#web/features/working-changes/conflicts/hooks/use-conflicts";
+import { invalidatedByChange } from "#web/platform/query/environment-invalidation";
 import { settleCommand, useCommand } from "#web/platform/query/use-command";
 
-export interface WriteQueue {
-  readonly enqueue: (content: string) => void;
-  readonly settled: () => Promise<void>;
-  readonly acknowledge: (revision: string, content: string) => void;
-  readonly revision: () => string | null;
-  readonly idle: () => boolean;
-}
-
-interface WriteHandlers {
-  readonly onWritten: (document: ConflictDocument) => void;
-  readonly onStale: () => void;
-  readonly onFailed: (failure: ChangesRequestFailure) => void;
-}
-
-interface QueueState {
+interface WriteQueue {
   revision: string | null;
-  latest: string | null;
+  sent: string | null;
   pending: string | null;
   running: boolean;
   waiters: (() => void)[];
 }
 
 const writeRoute = RepositoryConflictsHttpApi.write;
+const noPicks: Picks = new Map();
 
 export function useMergeDocument(input: ConflictPath) {
-  const document = useConflictDocument(input, input.path, true);
-  const list = useConflictList(input, true, true);
-  const cache = useConflictCache(input);
-  const [model, setModel] = useState<MergeModel | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
-  const fail = (failure: ChangesRequestFailure) =>
-    setNotice(describeChangesFailure(failure));
-  const queue = useWriteQueue(input, {
-    onWritten: (written) => {
-      cache.storeDocument(written);
-      void cache.refreshList();
-    },
-    onStale: () => stale(),
-    onFailed: fail,
+  const { repositoryId, worktreePath, path } = input;
+  const document = useConflictDocument(input);
+  const list = useConflictList(input);
+  const { mutateAsync } = useCommand(writeRoute, { repository: input });
+  const refreshIndex = useIndexRefresh(repositoryId);
+  const queue = useRef<WriteQueue>({
+    revision: null,
+    sent: null,
+    pending: null,
+    running: false,
+    waiters: [],
   });
-  const load = useCallback(
-    (loaded: ConflictDocument) => {
-      queue.acknowledge(loaded.file.revision, loaded.content);
-      setModel(mergeModel(loaded));
-    },
-    [queue],
-  );
-  const refetchDocument = document.refetch;
-  const reload = useCallback(async () => {
-    const { data } = await refetchDocument();
-    if (data !== undefined) load(data);
-  }, [load, refetchDocument]);
-  const stale = () => {
-    setNotice(
-      `${input.path.split("/").at(-1) ?? input.path} changed on disk. Reloaded.`,
-    );
-    void reload();
-  };
-  useDocumentLoading(document.data, queue, load);
-  useEffect(() => {
-    if (model !== null) queue.enqueue(fileContent(model));
-  }, [model, queue]);
+  const [loaded, setLoaded] = useState<MergeModel | null>(null);
+  const [model, setModel] = useState<MergeModel | null>(null);
+  const [picks, setPicks] = useState<Picks>(noPicks);
+  const [notice, setNotice] = useState<string | null>(null);
 
-  const change = useCallback((update: (model: MergeModel) => MergeModel) => {
-    setNotice(null);
-    setModel((current) => (current === null ? current : update(current)));
+  const load = useCallback((document: ConflictDocument) => {
+    queue.current.revision = document.file.revision;
+    queue.current.sent = document.content;
+    const next = mergeModel(document);
+    setLoaded(next);
+    setModel(next);
+    setPicks(noPicks);
   }, []);
+  const refetch = document.refetch;
+  const reload = useCallback(async () => {
+    const { data } = await refetch();
+    if (data !== undefined) load(data);
+  }, [load, refetch]);
+
+  const send = useCallback(
+    async (content: string) => {
+      const state = queue.current;
+      state.running = true;
+      state.sent = content;
+      const result = await settleCommand(writeRoute, mutateAsync, {
+        repositoryId,
+        worktreePath,
+        path,
+        revision: state.revision ?? "",
+        content,
+      });
+      state.running = false;
+      if (result._tag === "Ok") {
+        state.revision = result.value.file.revision;
+        refreshIndex();
+      } else {
+        state.sent = null;
+        state.pending = null;
+        if (conflictReason(result.failure) !== "Stale")
+          setNotice(describeChangesFailure(result.failure));
+        else {
+          setNotice(
+            `${path.split("/").at(-1) ?? path} changed on disk. Reloaded.`,
+          );
+          void reload();
+        }
+      }
+      const next = state.pending;
+      state.pending = null;
+      if (next !== null) return void send(next);
+      for (const waiter of state.waiters.splice(0)) waiter();
+    },
+    [mutateAsync, path, refreshIndex, reload, repositoryId, worktreePath],
+  );
+
+  const data = document.data;
+  useEffect(() => {
+    const state = queue.current;
+    if (
+      data === undefined ||
+      state.running ||
+      state.pending !== null ||
+      data.file.revision === state.revision
+    )
+      return;
+    load(data);
+  }, [data, load]);
+
+  useEffect(() => {
+    if (model === null) return;
+    const content = fileContent(model, picks);
+    const state = queue.current;
+    if (content === (state.pending ?? state.sent)) return;
+    if (state.running) state.pending = content;
+    else void send(content);
+  }, [model, picks, send]);
+
   const choose = useCallback(
     (
       regionId: string,
       update: (picks: readonly LinePick[]) => readonly LinePick[],
-    ) =>
-      change((current) =>
-        choosePicks(current, regionId, update(regionPicks(current, regionId))),
-      ),
-    [change],
+    ) => {
+      setNotice(null);
+      setPicks((current) =>
+        new Map(current).set(regionId, update(picksOf(current, regionId))),
+      );
+      setModel((current) => current && withTyped(current, regionId, null));
+    },
+    [],
   );
 
   return {
     document,
     list,
+    loaded,
     model,
+    picks,
     notice,
-    queue,
-    storeList: cache.storeList,
-    reload: () => void reload(),
-    stale,
-    fail,
     choose,
-    edit: (text: string, caret: number) =>
-      change((current) => editText(current, text, caret)),
-    undo: (regionId: string) =>
-      change((current) => restoreRegion(current, regionId)),
+    revision: () => queue.current.revision,
+    settled: () => {
+      const state = queue.current;
+      if (!state.running && state.pending === null) return Promise.resolve();
+      return new Promise<void>((resolve) => state.waiters.push(resolve));
+    },
+    edit: (text: string, caret: number) => {
+      setNotice(null);
+      setModel((current) => current && editText(current, picks, text, caret));
+    },
+    undo: (regionId: string) => {
+      setNotice(null);
+      setPicks((current) => {
+        const next = new Map(current);
+        next.delete(regionId);
+        return next;
+      });
+      setModel((current) => current && withTyped(current, regionId, null));
+    },
   };
 }
 
-export type MergeDocument = ReturnType<typeof useMergeDocument>;
+type MergeDocument = ReturnType<typeof useMergeDocument>;
 
 export type ChooseRegion = MergeDocument["choose"];
 
-function useDocumentLoading(
-  document: ConflictDocument | undefined,
-  queue: WriteQueue,
-  load: (document: ConflictDocument) => void,
-) {
-  useEffect(() => {
-    if (
-      document === undefined ||
-      !queue.idle() ||
-      document.file.revision === queue.revision()
-    )
-      return;
-    load(document);
-  }, [document, load, queue]);
-}
-
-function useConflictCache(input: ConflictPath) {
-  const { environmentId } = useEnvironment();
+function useIndexRefresh(repositoryId: string) {
   const queryClient = useQueryClient();
-  const { repositoryId, worktreePath, path } = input;
-  return useMemo(() => {
-    const scope = conflictScope({ repositoryId, worktreePath });
-    const listKey = environmentQueryKey(
-      environmentId,
-      repositoryId,
-      RepositoryConflictsHttpApi.list,
-      scope,
-    );
-    const documentKey = environmentQueryKey(
-      environmentId,
-      repositoryId,
-      RepositoryConflictsHttpApi.document,
-      { ...scope, path },
-    );
-    return {
-      storeDocument: (value: ConflictDocument) =>
-        queryClient.setQueryData(documentKey, value),
-      storeList: (value: ConflictList) =>
-        queryClient.setQueryData(listKey, value),
-      refreshList: () => queryClient.invalidateQueries({ queryKey: listKey }),
-    };
-  }, [environmentId, path, queryClient, repositoryId, worktreePath]);
-}
-
-function useWriteQueue(
-  input: ConflictPath,
-  handlers: WriteHandlers,
-): WriteQueue {
-  const write = useCommand(writeRoute, { repository: input });
-  const state = useRef<QueueState>({
-    revision: null,
-    latest: null,
-    pending: null,
-    running: false,
-    waiters: [],
-  });
-  const current = useRef({ input, handlers, mutate: write.mutateAsync });
-  useLayoutEffect(() => {
-    current.current = { input, handlers, mutate: write.mutateAsync };
-  });
-
-  const send = useCallback(async (content: string) => {
-    const queue = state.current;
-    const { input, mutate } = current.current;
-    queue.running = true;
-    const result = await settleCommand(writeRoute, mutate, {
-      ...input,
-      revision: queue.revision ?? "",
-      content,
-    });
-    queue.running = false;
-    if (result._tag === "Ok") {
-      queue.revision = result.value.file.revision;
-      current.current.handlers.onWritten(result.value);
-    } else {
-      queue.pending = null;
-      queue.latest = null;
-      if (conflictReason(result.failure) === "Stale")
-        current.current.handlers.onStale();
-      else current.current.handlers.onFailed(result.failure);
-    }
-    const next = queue.pending;
-    queue.pending = null;
-    if (next !== null) return void send(next);
-    for (const waiter of queue.waiters.splice(0)) waiter();
-  }, []);
-
-  return useMemo(
-    () => ({
-      enqueue: (content) => {
-        const queue = state.current;
-        if (content === queue.latest) return;
-        queue.latest = content;
-        if (queue.running) queue.pending = content;
-        else void send(content);
-      },
-      settled: () => {
-        const queue = state.current;
-        if (!queue.running && queue.pending === null) return Promise.resolve();
-        return new Promise<void>((resolve) => queue.waiters.push(resolve));
-      },
-      acknowledge: (revision, content) => {
-        state.current.revision = revision;
-        state.current.latest = content;
-      },
-      revision: () => state.current.revision,
-      idle: () => !state.current.running && state.current.pending === null,
-    }),
-    [send],
+  return useCallback(
+    () =>
+      void queryClient.invalidateQueries({
+        predicate: (query) =>
+          invalidatedByChange(query.meta, [repositoryId], "Index"),
+      }),
+    [queryClient, repositoryId],
   );
 }

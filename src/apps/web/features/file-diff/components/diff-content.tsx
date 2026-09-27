@@ -2,8 +2,8 @@ import type { SelectedLineRange } from "@pierre/diffs";
 import { FileDiff } from "@pierre/diffs/react";
 import type { ChangeDiff } from "@rebase/contracts";
 import { IconFileDiff } from "@tabler/icons-react";
+import type { CSSProperties } from "react";
 import type { DiffPreferences } from "#web/domain/file-diff/diff-preferences.contract";
-import { diffFontStyle } from "#web/features/file-diff/diff-font";
 import type { createChangeDiffModel } from "#web/features/file-diff/diff-model";
 
 export function DiffContent({
@@ -25,7 +25,13 @@ export function DiffContent({
   return metadata ? (
     <div className="min-h-0 flex-1 overflow-auto">
       <FileDiff
-        style={diffFontStyle}
+        style={
+          {
+            "--diffs-font-family": "var(--font-mono)",
+            "--diffs-font-size": "12px",
+            "--diffs-line-height": "20px",
+          } as CSSProperties
+        }
         fileDiff={metadata}
         selectedLines={selection?.range ?? null}
         options={{

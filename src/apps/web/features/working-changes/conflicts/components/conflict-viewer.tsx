@@ -1,13 +1,14 @@
 import type {
-  ConflictFile,
+  ConflictDocument,
   ConflictSide,
   ConflictSides,
 } from "@rebase/contracts";
 import { IconFileDiff } from "@tabler/icons-react";
+import { Fragment, useMemo } from "react";
 import { Button } from "#web/components/ui/button";
-import { ConflictResult } from "#web/features/working-changes/conflicts/components/conflict-result";
+import { sideNames } from "#web/features/merge-view/components/pane-lines";
+import { mergeModel } from "#web/features/merge-view/conflict-document";
 import { WholeFileMenu } from "#web/features/working-changes/conflicts/components/whole-file-menu";
-import { versionLabel } from "#web/features/working-changes/conflicts/conflict-labels";
 import type { WorkingChangesView } from "#web/features/working-changes/hooks/use-working-changes-view";
 
 type ConflictView = Pick<
@@ -24,18 +25,14 @@ export function ConflictViewer({
 }: {
   readonly view: ConflictView;
   readonly writable: boolean;
-  readonly openMergeView: ((path: string) => void) | undefined;
+  readonly openMergeView: (path: string) => void;
 }) {
   const { conflicts, selection } = view;
   const path = selection?.section === "conflicts" ? selection.path : null;
   const file = conflicts.rows.find((row) => row.path === path)?.file;
-  const document = conflicts.document;
-  const labels = document?.sides ?? conflicts.list?.sides;
-  const disabled = !writable || view.busy || view.loading;
-  const openMerge =
-    path !== null && openMergeView !== undefined
-      ? () => openMergeView(path)
-      : undefined;
+  const document =
+    conflicts.document?.file.path === path ? conflicts.document : undefined;
+  const openMerge = () => path !== null && openMergeView(path);
   return (
     <section
       className="flex h-full min-h-0 min-w-0 flex-col bg-background"
@@ -45,46 +42,27 @@ export function ConflictViewer({
         className="flex shrink-0 flex-wrap items-center gap-1 border-border border-b p-2"
         aria-label="Conflict versions"
       >
-        <Button
-          size="xs"
-          variant="ghost"
-          aria-pressed
-          className="aria-pressed:bg-sidebar-accent aria-pressed:text-sidebar-accent-foreground"
-        >
-          Result
-        </Button>
         {sides.map((side) => (
           <Button
             key={side}
             size="xs"
             variant="ghost"
             className="font-mono"
-            disabled={
-              openMerge === undefined ||
-              !file?.stages.some((stage) => stage.side === side)
-            }
+            disabled={!file?.stages.some((stage) => stage.side === side)}
             onClick={openMerge}
           >
-            {labels ? versionLabel(side, labels[side]) : side}
+            {versionLabel(side, conflicts.sides)}
           </Button>
         ))}
         <div className="ml-auto flex">
-          <Button
-            size="xs"
-            variant="ghost"
-            disabled={openMerge === undefined}
-            onClick={openMerge}
-          >
+          <Button size="xs" variant="ghost" onClick={openMerge}>
             Merge view
           </Button>
           {file ? (
             <WholeFileMenu
               choices={file.choices}
-              mergeTool={(conflicts.list?.mergeTool ?? null) !== null}
-              disabled={disabled}
+              disabled={!writable || view.busy || view.loading}
               onChoose={(choice) => conflicts.choose(file.path, choice)}
-              onResolve={() => conflicts.resolve(file.path, false)}
-              onMergeTool={() => conflicts.openMergeTool(file.path)}
             />
           ) : null}
         </div>
@@ -97,15 +75,34 @@ export function ConflictViewer({
           {conflicts.documentProblem}
         </p>
       ) : null}
-      {document !== undefined &&
-      document.file.path === path &&
-      document.regions.length > 0 ? (
-        <ConflictResult content={document.content} />
+      {document !== undefined && document.regions.length > 0 ? (
+        <WorkingFile document={document} />
       ) : file !== undefined &&
         (document !== undefined ||
           conflicts.wholeFileOnly ||
           conflicts.documentProblem !== null) ? (
-        <ConflictStages file={file} labels={labels} />
+        <div className="flex flex-1 flex-col items-center justify-center gap-3 p-4 text-center text-muted-foreground">
+          <IconFileDiff className="size-8" />
+          <dl className="grid grid-cols-[auto_auto] gap-x-4 gap-y-1 text-xs">
+            {sides.map((side) => {
+              const stage = file.stages.find(
+                (candidate) => candidate.side === side,
+              );
+              return (
+                <Fragment key={side}>
+                  <dt className="text-left font-mono">
+                    {versionLabel(side, conflicts.sides)}
+                  </dt>
+                  <dd className="text-right">
+                    {stage === undefined
+                      ? "No file"
+                      : `${stage.binary ? "Binary · " : ""}${stage.bytes.toLocaleString()} bytes`}
+                  </dd>
+                </Fragment>
+              );
+            })}
+          </dl>
+        </div>
       ) : conflicts.documentProblem !== null ? null : (
         <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
           Loading conflict…
@@ -115,45 +112,40 @@ export function ConflictViewer({
   );
 }
 
-function ConflictStages({
-  file,
-  labels,
-}: {
-  readonly file: ConflictFile;
-  readonly labels: ConflictSides | undefined;
-}) {
+function WorkingFile({ document }: { readonly document: ConflictDocument }) {
+  const segments = useMemo(() => {
+    const { segments } = mergeModel(document);
+    let ordinal = 0;
+    return segments.map((segment, index) =>
+      segment.kind === "region"
+        ? { key: segment.region.id, region: ++ordinal, lines: segment.marker }
+        : { key: `text-${index}`, region: null, lines: segment.lines },
+    );
+  }, [document]);
   return (
-    <div className="flex flex-1 flex-col items-center justify-center gap-3 p-4 text-center text-muted-foreground">
-      <IconFileDiff className="size-8" />
-      <dl className="grid grid-cols-[auto_auto] gap-x-4 gap-y-1 text-xs">
-        {sides.map((side) => (
-          <StageFacts key={side} side={side} file={file} labels={labels} />
-        ))}
-      </dl>
-    </div>
+    <section aria-label="Working file" className="min-h-0 flex-1 overflow-auto">
+      <div className="min-w-fit py-2 pr-3 font-mono text-xs leading-5 whitespace-pre">
+        {segments.map(({ key, region, lines }) =>
+          region === null ? (
+            <div key={key} className="min-h-5 pl-3">
+              {lines.join("\n")}
+            </div>
+          ) : (
+            <fieldset
+              key={key}
+              aria-label={`Region ${region}`}
+              className="border-status-connecting border-l-2 bg-status-connecting/10 pl-2.5"
+            >
+              {lines.join("\n")}
+            </fieldset>
+          ),
+        )}
+      </div>
+    </section>
   );
 }
 
-function StageFacts({
-  side,
-  file,
-  labels,
-}: {
-  readonly side: ConflictSide;
-  readonly file: ConflictFile;
-  readonly labels: ConflictSides | undefined;
-}) {
-  const stage = file.stages.find((candidate) => candidate.side === side);
-  return (
-    <>
-      <dt className="text-left font-mono">
-        {labels ? versionLabel(side, labels[side]) : side}
-      </dt>
-      <dd className="text-right">
-        {stage === undefined
-          ? "No file"
-          : `${stage.binary ? "Binary · " : ""}${stage.bytes.toLocaleString()} bytes`}
-      </dd>
-    </>
-  );
+function versionLabel(side: ConflictSide, sides: ConflictSides | undefined) {
+  const identity = sides?.[side].commit?.slice(0, 8) ?? sides?.[side].ref;
+  return identity ? `${sideNames[side]} ${identity}` : sideNames[side];
 }

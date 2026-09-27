@@ -1,24 +1,22 @@
 import type { ConflictSide, ConflictSides } from "@rebase/contracts";
 import { IconArrowBarToDown } from "@tabler/icons-react";
-import { memo, type RefObject, useMemo, useState } from "react";
+import { memo, type RefObject, useMemo } from "react";
 import { Button } from "#web/components/ui/button";
-import {
-  paneRows,
-  type RegionBand,
-  type SideSegment,
-  sideSegments,
-} from "#web/features/merge-view/aligned-rows";
 import {
   bandEdges,
   PaneLines,
   type PaneProps,
+  type PaneRow,
+  type RegionBand,
+  sideColours,
   sideNames,
 } from "#web/features/merge-view/components/pane-lines";
-import type { MergeModel } from "#web/features/merge-view/conflict-document";
 import {
-  type LineSelection,
+  type MergeModel,
+  picksOf,
   sideTaken,
-} from "#web/features/merge-view/hooks/use-selection";
+} from "#web/features/merge-view/conflict-document";
+import type { LineSelection } from "#web/features/merge-view/hooks/use-selection";
 import { cn } from "#web/lib/utils";
 
 const sideShortcuts: Partial<Record<ConflictSide, string>> = {
@@ -26,58 +24,21 @@ const sideShortcuts: Partial<Record<ConflictSide, string>> = {
   incoming: "Alt+2",
 };
 
-const takenHunks: Record<ConflictSide, string> = {
-  base: "aria-pressed:bg-muted-foreground",
-  current: "aria-pressed:bg-[#69b1ff]",
-  incoming: "aria-pressed:bg-[#5ecc71]",
-};
-
-interface PanesProps {
-  readonly sides: ConflictSides;
-  readonly leftSide: ConflictSide;
-  readonly activeRegion: string | null;
-  readonly lines: LineSelection;
-  readonly scrollRef: RefObject<HTMLDivElement | null>;
-}
-
-export function SidePanes({
-  model,
-  ...props
-}: PanesProps & { readonly model: MergeModel }) {
-  return <AlignedPanes segments={useSideSegments(model)} {...props} />;
-}
-
-function useSideSegments(model: MergeModel) {
-  const [segments, setSegments] = useState<readonly SideSegment[]>([]);
-  const next = sideSegments(model, segments);
-  if (next !== segments) setSegments(next);
-  return next;
-}
-
-const AlignedPanes = memo(function AlignedPanes({
-  segments,
+export const SidePanes = memo(function SidePanes({
+  loaded,
   sides,
   leftSide,
-  activeRegion,
-  lines,
   scrollRef,
-}: PanesProps & { readonly segments: readonly SideSegment[] }) {
-  const rows = useMemo(
-    () => paneRows(segments, leftSide, "incoming"),
-    [segments, leftSide],
-  );
-  const left: PaneProps = {
-    side: leftSide,
-    activeRegion,
-    lines,
-    rows: rows.left,
-  };
-  const right: PaneProps = {
-    side: "incoming",
-    activeRegion,
-    lines,
-    rows: rows.right,
-  };
+  ...shared
+}: Omit<PaneProps, "rows" | "side"> & {
+  readonly loaded: MergeModel;
+  readonly sides: ConflictSides;
+  readonly leftSide: ConflictSide;
+  readonly scrollRef: RefObject<HTMLDivElement | null>;
+}) {
+  const rows = useMemo(() => paneRows(loaded, leftSide), [loaded, leftSide]);
+  const left: PaneProps = { ...shared, side: leftSide, rows: rows.left };
+  const right: PaneProps = { ...shared, side: "incoming", rows: rows.right };
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="flex shrink-0 border-border border-b">
@@ -98,6 +59,44 @@ const AlignedPanes = memo(function AlignedPanes({
     </div>
   );
 });
+
+function paneRows(model: MergeModel, leftSide: ConflictSide) {
+  const left: PaneRow[] = [];
+  const right: PaneRow[] = [];
+  let ordinal = 0;
+  for (const segment of model.segments) {
+    if (segment.kind === "text") {
+      for (const text of segment.lines) {
+        const key = `line-${left.length}`;
+        left.push({ kind: "context", key, text });
+        right.push({ kind: "context", key, text });
+      }
+      continue;
+    }
+    ordinal += 1;
+    const { region } = segment;
+    const height = Math.max(region[leftSide].length, region.incoming.length, 1);
+    for (let index = 0; index < height; index += 1) {
+      const band = {
+        region,
+        ordinal,
+        first: index === 0,
+        last: index === height - 1,
+      };
+      left.push(bandRow(band, leftSide, index));
+      right.push(bandRow(band, "incoming", index));
+    }
+  }
+  return { left, right };
+}
+
+function bandRow(band: RegionBand, side: ConflictSide, index: number): PaneRow {
+  const text = band.region[side][index];
+  const key = `${band.region.id}-${index}`;
+  return text === undefined
+    ? { kind: "padding", key, band }
+    : { kind: "line", key, band, side, index, text };
+}
 
 function PaneHeader({
   side,
@@ -125,12 +124,17 @@ function PaneHeader({
   );
 }
 
-function HunkGutter({ rows, side, activeRegion, lines }: PaneProps) {
+function HunkGutter({ rows, side, picks, activeRegion, lines }: PaneProps) {
   return (
     <div className="w-7 shrink-0 bg-muted/40 select-none">
       {rows.map((row) => (
         <div
           key={row.key}
+          data-region={
+            row.kind !== "context" && row.band.first
+              ? row.band.region.id
+              : undefined
+          }
           className={cn(
             "flex h-5 items-center justify-center",
             row.kind !== "context" && bandEdges(row.band, activeRegion),
@@ -138,11 +142,16 @@ function HunkGutter({ rows, side, activeRegion, lines }: PaneProps) {
         >
           {row.kind !== "context" &&
             row.band.first &&
-            row.band.segment.region[side].length > 0 && (
+            row.band.region[side].length > 0 && (
               <HunkButton
                 band={row.band}
                 side={side}
-                active={row.band.segment.region.id === activeRegion}
+                taken={sideTaken(
+                  picksOf(picks, row.band.region.id),
+                  row.band.region,
+                  side,
+                )}
+                active={row.band.region.id === activeRegion}
                 lines={lines}
               />
             )}
@@ -155,27 +164,28 @@ function HunkGutter({ rows, side, activeRegion, lines }: PaneProps) {
 function HunkButton({
   band,
   side,
+  taken,
   active,
   lines,
 }: {
   readonly band: RegionBand;
   readonly side: ConflictSide;
+  readonly taken: boolean;
   readonly active: boolean;
   readonly lines: LineSelection;
 }) {
-  const { region, picks } = band.segment;
   return (
     <Button
       variant="ghost"
       size="icon-xs"
       aria-label={`Take ${sideNames[side].toLowerCase()}, region ${band.ordinal}`}
-      aria-pressed={sideTaken(picks, region, side)}
+      aria-pressed={taken}
       aria-keyshortcuts={active ? sideShortcuts[side] : undefined}
       className={cn(
-        "size-5 border-border bg-background text-muted-foreground aria-pressed:border-transparent aria-pressed:text-background sm:size-5",
-        takenHunks[side],
+        "size-5 border-border bg-background text-muted-foreground sm:size-5",
+        taken && ["border-transparent text-background", sideColours[side].edge],
       )}
-      onClick={() => lines.take(region, side)}
+      onClick={() => lines.take(band.region, side)}
     >
       <IconArrowBarToDown aria-hidden="true" className="size-3.5" />
     </Button>

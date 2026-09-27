@@ -30,7 +30,7 @@ export function WorkingChanges({
 }: {
   readonly target: WorkingChangesTarget;
   readonly writable: boolean;
-  readonly openMergeView?: ((path: string) => void) | undefined;
+  readonly openMergeView: (path: string) => void;
 }) {
   const view = useWorkingChangesView(target);
   const [discard, setDiscard] = useState<DiscardRequest | null>(null);
@@ -108,12 +108,7 @@ export function WorkingChanges({
             className="border-border border-l"
           >
             <ResizablePanel id="change-files" minSize="10rem">
-              <ChangeFileTree
-                view={view}
-                writable={writable}
-                act={act}
-                openMergeView={openMergeView}
-              />
+              <ChangeFileTree view={view} writable={writable} act={act} />
             </ResizablePanel>
             <ResizableHandle aria-label="Resize commit editor" />
             <ResizablePanel

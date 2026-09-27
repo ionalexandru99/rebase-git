@@ -8,7 +8,7 @@ import {
   DropdownMenuTrigger,
 } from "#web/components/ui/dropdown-menu";
 
-const choiceLabels: Record<Exclude<WholeFileChoice, "worktree">, string> = {
+const choiceLabels: Record<WholeFileChoice, string> = {
   current: "Use current",
   incoming: "Use incoming",
   delete: "Keep deletion",
@@ -18,22 +18,15 @@ const choiceOrder = ["current", "incoming", "delete"] as const;
 
 export function WholeFileMenu({
   choices,
-  mergeTool,
   disabled,
   onChoose,
-  onResolve,
-  onMergeTool,
 }: {
   readonly choices: readonly WholeFileChoice[];
-  readonly mergeTool: boolean;
   readonly disabled: boolean;
   readonly onChoose: (choice: WholeFileChoice) => void;
-  readonly onResolve?: () => void;
-  readonly onMergeTool: () => void;
 }) {
   const offered = choiceOrder.filter((choice) => choices.includes(choice));
-  const resolvable = onResolve !== undefined && choices.includes("worktree");
-  if (offered.length === 0 && !resolvable && !mergeTool) return null;
+  if (offered.length === 0) return null;
   return (
     <DropdownMenu>
       <DropdownMenuTrigger
@@ -49,14 +42,6 @@ export function WholeFileMenu({
             {choiceLabels[choice]}
           </DropdownMenuItem>
         ))}
-        {resolvable && (
-          <DropdownMenuItem onClick={onResolve}>Mark resolved</DropdownMenuItem>
-        )}
-        {mergeTool && (
-          <DropdownMenuItem onClick={onMergeTool}>
-            Open in merge tool
-          </DropdownMenuItem>
-        )}
       </DropdownMenuContent>
     </DropdownMenu>
   );

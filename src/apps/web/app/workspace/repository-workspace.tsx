@@ -1,7 +1,6 @@
-import { type JSX, lazy, Suspense, useMemo, useState } from "react";
+import { type JSX, Suspense, useCallback, useMemo, useState } from "react";
 import { useOpenedHistory } from "#web/app/shell/opened-history-context";
 import { CommitInspectionBridge } from "#web/app/workspace/commit-inspection-bridge";
-import { useMergeViewRequest } from "#web/app/workspace/merge-view-request";
 import { RepositoryPanelProvider } from "#web/app/workspace/repository-panel-provider";
 import { useHistoryRefRefresh } from "#web/app/workspace/use-history-ref-refresh";
 import { useWorkspaceHistoryScope } from "#web/app/workspace/use-workspace-history-scope";
@@ -24,14 +23,9 @@ import {
   type RepositoryScope,
   useRepositoryScope,
 } from "#web/features/repository-scope/repository-scope-provider";
+import { workingChangesPanel } from "#web/features/working-changes/working-changes-panel-definition";
 import { WorkspacePanel } from "#web/features/workspace-panel/workspace-panel";
 import { useEnvironment } from "#web/platform/query/environment-context";
-
-const WorkingChangesPanel = lazy(() =>
-  import("#web/features/working-changes/working-changes-panel").then(
-    (module) => ({ default: module.WorkingChangesPanel }),
-  ),
-);
 
 export function RepositoryWorkspace(): JSX.Element | null {
   const scope = useRepositoryScope();
@@ -57,16 +51,26 @@ function Workspace({
   readonly scope: RepositoryScope;
 }) {
   const [branchFocusRequest, setBranchFocusRequest] = useState(0);
-  const mergeView = useMergeViewRequest(scope.worktreePath);
+  const { worktreePath } = scope;
+  const [merging, setMerging] = useState<{
+    readonly worktreePath: string;
+    readonly path: string;
+  } | null>(null);
+  const mergePath =
+    merging?.worktreePath === worktreePath ? merging.path : null;
+  const openMergeView = useCallback(
+    (path: string) => setMerging({ worktreePath, path }),
+    [worktreePath],
+  );
   const panelContents = useMemo(
     () => ({
       changes: (
         <Suspense fallback={null}>
-          <WorkingChangesPanel openMergeView={mergeView.open} />
+          <workingChangesPanel.Content openMergeView={openMergeView} />
         </Suspense>
       ),
     }),
-    [mergeView.open],
+    [openMergeView],
   );
   const history = useOpenedHistory();
   const name = useCatalogRepository(scope.repositoryId)?.name ?? "Repository";
@@ -104,11 +108,11 @@ function Workspace({
             />
             <WorkspacePanel.Main>
               {() =>
-                mergeView.path !== null ? (
+                mergePath !== null ? (
                   <MergeView
-                    path={mergeView.path}
-                    onOpen={mergeView.open}
-                    onClose={mergeView.close}
+                    path={mergePath}
+                    onOpen={openMergeView}
+                    onClose={() => setMerging(null)}
                     toolbarActions={<WorkspacePanel.Toggle />}
                   />
                 ) : (

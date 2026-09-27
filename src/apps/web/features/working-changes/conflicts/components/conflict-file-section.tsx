@@ -1,21 +1,11 @@
-import {
-  IconArrowDown,
-  IconChevronDown,
-  IconChevronRight,
-  IconFolder,
-} from "@tabler/icons-react";
-import { useState } from "react";
+import type { ConflictFile, ConflictSides } from "@rebase/contracts";
+import { IconArrowDown } from "@tabler/icons-react";
 import { Button } from "#web/components/ui/button";
 import {
-  ContextMenu,
-  ContextMenuContent,
-  ContextMenuItem,
-  ContextMenuTrigger,
-} from "#web/components/ui/context-menu";
-import { useFileRows } from "#web/features/file-diff/hooks/use-file-rows";
-import { ChangeFileIcon } from "#web/features/working-changes/components/change-file-icon";
+  FileListSection,
+  RowLead,
+} from "#web/features/working-changes/components/file-list-section";
 import { MarkersConfirmation } from "#web/features/working-changes/conflicts/components/markers-confirmation";
-import { conflictLabel } from "#web/features/working-changes/conflicts/conflict-labels";
 import type { WorkingChangesView } from "#web/features/working-changes/hooks/use-working-changes-view";
 
 export type ConflictFileSectionView = Pick<
@@ -27,139 +17,107 @@ export function ConflictFileSection({
   view,
   filter,
   writable,
-  openMergeView,
 }: {
   readonly view: ConflictFileSectionView;
   readonly filter: string;
   readonly writable: boolean;
-  readonly openMergeView: ((path: string) => void) | undefined;
 }) {
-  const { conflicts, preferences, selection } = view;
-  const [open, setOpen] = useState(true);
-  const { rows, collapsed, scrollRef, virtualizer, toggle } = useFileRows(
-    conflicts.rows,
-    { tree: preferences.tree, filter, open },
-  );
+  const { conflicts, selection } = view;
   if (conflicts.rows.length === 0) return null;
   const disabled = !writable || view.busy || view.loading;
+  const chosen = (path: string) =>
+    selection?.section === "conflicts" && selection.path === path;
   return (
-    <section
-      aria-label="Conflicted files"
-      className={`flex min-h-0 flex-col border-border border-t ${open ? "flex-1" : "shrink-0"}`}
+    <FileListSection
+      name="Conflicted files"
+      title="Conflicts"
+      countClassName="text-status-connecting"
+      files={conflicts.rows}
+      tree={view.preferences.tree}
+      filter={filter}
+      emptyLabel="No matching files"
+      chosen={(row) => chosen(row.key)}
     >
-      <div className="flex h-9 shrink-0 items-center gap-1 bg-muted px-2">
-        <Button
-          variant="ghost"
-          size="xs"
-          className="min-w-0 flex-1 justify-start gap-2"
-          aria-label={`${open ? "Collapse" : "Expand"} conflicts`}
-          aria-expanded={open}
-          onClick={() => setOpen(!open)}
-        >
-          {open ? <IconChevronDown /> : <IconChevronRight />}
-          <span>
-            Conflicts{" "}
-            <span className="text-status-connecting">
-              {conflicts.rows.length}
-            </span>
-          </span>
-        </Button>
-      </div>
-      <div ref={scrollRef} className="min-h-0 flex-1 overflow-auto">
-        <div
-          style={{ height: virtualizer.getTotalSize(), position: "relative" }}
-        >
-          {virtualizer.getVirtualItems().map((item) => {
-            const row = rows[item.index];
-            if (!row) return null;
-            const conflict = row.file;
-            const chosen =
-              selection?.section === "conflicts" && selection.path === row.key;
-            const style = {
-              transform: `translateY(${item.start}px)`,
-              paddingLeft: 6 + row.depth * 12,
-            };
-            const className = `group absolute inset-x-0 flex h-8 items-center gap-1 rounded-md pr-1 ${chosen ? "bg-sidebar-accent text-sidebar-accent-foreground" : "hover:bg-sidebar-accent/60"}`;
-            if (conflict === undefined)
-              return (
-                <div key={row.key} className={className} style={style}>
-                  <button
-                    type="button"
-                    className="flex min-w-0 flex-1 items-center gap-1.5 text-left text-xs"
-                    aria-label={`Folder ${row.key}`}
-                    aria-expanded={!collapsed.has(row.key)}
-                    onClick={() => toggle(row.key)}
-                  >
-                    {collapsed.has(row.key) ? (
-                      <IconChevronRight className="size-3 shrink-0 text-muted-foreground" />
-                    ) : (
-                      <IconChevronDown className="size-3 shrink-0 text-muted-foreground" />
-                    )}
-                    <IconFolder className="size-3.5 shrink-0 text-muted-foreground" />
-                    <span className="truncate">{row.name}</span>
-                  </button>
-                </div>
-              );
-            const path = conflict.path;
-            return (
-              <ContextMenu key={row.key}>
-                <ContextMenuTrigger
-                  render={<div className={className} style={style} />}
+      {(row, { collapsed, toggle }) => {
+        const conflict = row.file;
+        if (conflict === undefined)
+          return (
+            <button
+              type="button"
+              className="flex min-w-0 flex-1 items-center gap-1.5 text-left text-xs"
+              aria-label={`Folder ${row.key}`}
+              aria-expanded={!collapsed.has(row.key)}
+              onClick={() => toggle(row.key)}
+            >
+              <RowLead row={row} collapsed={collapsed} />
+              <span className="truncate">{row.name}</span>
+            </button>
+          );
+        const { path, file } = conflict;
+        return (
+          <>
+            <button
+              type="button"
+              className="flex min-w-0 flex-1 items-center gap-1.5 text-left text-xs"
+              aria-label={`Conflict ${path}`}
+              aria-pressed={chosen(path)}
+              onClick={() => view.select({ section: "conflicts", path })}
+            >
+              <RowLead row={row} collapsed={collapsed} />
+              <span className="truncate">{row.name}</span>
+            </button>
+            {conflicts.confirming === path ? (
+              <MarkersConfirmation
+                path={path}
+                disabled={disabled}
+                cancel={conflicts.cancel}
+                confirm={() => conflicts.resolve(path, true)}
+              />
+            ) : (
+              <>
+                {file ? (
+                  <span className="min-w-0 max-w-[45%] truncate text-[10px] text-muted-foreground">
+                    {conflictLabel(file, conflicts.sides)}
+                  </span>
+                ) : null}
+                <Button
+                  variant="ghost"
+                  size="icon-xs"
+                  aria-label={`Mark ${path} resolved`}
+                  disabled={disabled || file === undefined}
+                  onClick={() => conflicts.resolve(path, false)}
                 >
-                  <button
-                    type="button"
-                    className="flex min-w-0 flex-1 items-center gap-1.5 text-left text-xs"
-                    aria-label={`Conflict ${path}`}
-                    aria-pressed={chosen}
-                    onClick={() => view.select({ section: "conflicts", path })}
-                  >
-                    <span className="size-3 shrink-0" />
-                    <ChangeFileIcon path={path} />
-                    <span className="truncate">{row.name}</span>
-                  </button>
-                  {conflicts.pending === path ? (
-                    <MarkersConfirmation
-                      path={path}
-                      disabled={disabled}
-                      cancel={conflicts.cancelResolve}
-                      confirm={() => conflicts.resolve(path, true)}
-                    />
-                  ) : (
-                    <>
-                      {conflict.file ? (
-                        <span className="min-w-0 max-w-[45%] truncate text-[10px] text-muted-foreground">
-                          {conflictLabel(conflict.file, conflicts.list?.sides)}
-                        </span>
-                      ) : null}
-                      <Button
-                        variant="ghost"
-                        size="icon-xs"
-                        aria-label={`Mark ${path} resolved`}
-                        disabled={disabled || conflict.file === undefined}
-                        onClick={() => conflicts.resolve(path, false)}
-                      >
-                        <IconArrowDown />
-                      </Button>
-                      <span className="size-7 shrink-0 sm:size-6" />
-                    </>
-                  )}
-                </ContextMenuTrigger>
-                <ContextMenuContent>
-                  <ContextMenuItem
-                    disabled={openMergeView === undefined}
-                    onClick={() => openMergeView?.(path)}
-                  >
-                    Merge view
-                  </ContextMenuItem>
-                </ContextMenuContent>
-              </ContextMenu>
-            );
-          })}
-        </div>
-        {open && rows.length === 0 ? (
-          <p className="p-3 text-xs text-muted-foreground">No matching files</p>
-        ) : null}
-      </div>
-    </section>
+                  <IconArrowDown />
+                </Button>
+                <span className="size-7 shrink-0 sm:size-6" />
+              </>
+            )}
+          </>
+        );
+      }}
+    </FileListSection>
   );
+}
+
+function conflictLabel(file: ConflictFile, sides: ConflictSides | undefined) {
+  if (file.openRegions > 0) return `${file.openRegions} open`;
+  if (file.stages.some((stage) => stage.binary)) return "binary";
+  const side = (name: "current" | "incoming") =>
+    sides?.[name].ref ?? sides?.[name].commit?.slice(0, 8) ?? name;
+  switch (file.kind) {
+    case "both-modified":
+      return "both changed";
+    case "both-added":
+      return "both added";
+    case "both-deleted":
+      return "both deleted";
+    case "deleted-in-current":
+      return `deleted in ${side("current")}`;
+    case "deleted-in-incoming":
+      return `deleted in ${side("incoming")}`;
+    case "added-in-current":
+      return `added in ${side("current")}`;
+    case "added-in-incoming":
+      return `added in ${side("incoming")}`;
+  }
 }

@@ -22,12 +22,10 @@ export function ChangeFileTree({
   view,
   writable,
   act,
-  openMergeView,
 }: {
   readonly view: FileTreeView;
   readonly writable: boolean;
   readonly act: ChangeAction;
-  readonly openMergeView: ((path: string) => void) | undefined;
 }) {
   const { preferences, changes } = view;
   const [filter, setFilter] = useState("");
@@ -72,12 +70,7 @@ export function ChangeFileTree({
         />
       </div>
       <div className="flex min-h-0 flex-1 flex-col">
-        <ConflictFileSection
-          view={view}
-          filter={filter}
-          writable={writable}
-          openMergeView={openMergeView}
-        />
+        <ConflictFileSection view={view} filter={filter} writable={writable} />
         <ChangeFileSection
           view={view}
           section="unstaged"

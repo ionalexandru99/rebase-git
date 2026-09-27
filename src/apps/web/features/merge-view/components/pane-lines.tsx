@@ -4,14 +4,15 @@ import type {
   TokenMark,
 } from "@rebase/contracts";
 import type { KeyboardEvent } from "react";
-import type {
-  PaneRow,
-  RegionBand,
-} from "#web/features/merge-view/aligned-rows";
 import {
-  type LineSelection,
-  type LineTarget,
+  type LinePick,
+  type Picks,
   pickPosition,
+  picksOf,
+} from "#web/features/merge-view/conflict-document";
+import type {
+  LineSelection,
+  LineTarget,
 } from "#web/features/merge-view/hooks/use-selection";
 import { cn } from "#web/lib/utils";
 
@@ -21,34 +22,75 @@ export const sideNames: Record<ConflictSide, string> = {
   incoming: "Incoming",
 };
 
-const lineTints: Record<ConflictSide, string> = {
-  base: "bg-muted",
-  current: "bg-[#69b1ff]/10",
-  incoming: "bg-[#5ecc71]/10",
+export const sideColours: Record<
+  ConflictSide,
+  {
+    readonly tint: string;
+    readonly picked: string;
+    readonly mark: string;
+    readonly edge: string;
+  }
+> = {
+  base: {
+    tint: "bg-muted",
+    picked:
+      "bg-muted-foreground/25 shadow-[inset_3px_0_0_var(--muted-foreground)]",
+    mark: "bg-muted-foreground/30",
+    edge: "bg-muted-foreground",
+  },
+  current: {
+    tint: "bg-primary/10",
+    picked: "bg-primary/25 shadow-[inset_3px_0_0_var(--primary)]",
+    mark: "bg-primary/35",
+    edge: "bg-primary",
+  },
+  incoming: {
+    tint: "bg-status-available/10",
+    picked:
+      "bg-status-available/25 shadow-[inset_3px_0_0_var(--status-available)]",
+    mark: "bg-status-available/35",
+    edge: "bg-status-available",
+  },
 };
 
-const selectedLines: Record<ConflictSide, string> = {
-  base: "bg-foreground/15 shadow-[inset_3px_0_0_var(--muted-foreground)]",
-  current: "bg-[rgb(105_177_255/26%)] shadow-[inset_3px_0_0_#69b1ff]",
-  incoming: "bg-[rgb(94_204_113/26%)] shadow-[inset_3px_0_0_#5ecc71]",
-};
+export interface RegionBand {
+  readonly region: ConflictRegion;
+  readonly ordinal: number;
+  readonly first: boolean;
+  readonly last: boolean;
+}
 
-const tokenMarks: Record<ConflictSide, string> = {
-  base: "bg-foreground/15",
-  current: "bg-[#69b1ff]/35",
-  incoming: "bg-[#5ecc71]/35",
-};
-
-const selectedMark = "bg-[rgb(255_255_255/22%)]";
+export type PaneRow =
+  | { readonly kind: "context"; readonly key: string; readonly text: string }
+  | {
+      readonly kind: "line";
+      readonly key: string;
+      readonly band: RegionBand;
+      readonly side: ConflictSide;
+      readonly index: number;
+      readonly text: string;
+    }
+  | {
+      readonly kind: "padding";
+      readonly key: string;
+      readonly band: RegionBand;
+    };
 
 export interface PaneProps {
   readonly rows: readonly PaneRow[];
   readonly side: ConflictSide;
+  readonly picks: Picks;
   readonly activeRegion: string | null;
   readonly lines: LineSelection;
 }
 
-export function PaneLines({ rows, side, activeRegion, lines }: PaneProps) {
+export function PaneLines({
+  rows,
+  side,
+  picks,
+  activeRegion,
+  lines,
+}: PaneProps) {
   const first = rows.findIndex(({ kind }) => kind === "line");
   return (
     <div
@@ -61,6 +103,7 @@ export function PaneLines({ rows, side, activeRegion, lines }: PaneProps) {
             <LineRow
               key={row.key}
               row={row}
+              picks={picksOf(picks, row.band.region.id)}
               focusable={index === first}
               activeRegion={activeRegion}
               lines={lines}
@@ -86,19 +129,22 @@ export function PaneLines({ rows, side, activeRegion, lines }: PaneProps) {
 
 function LineRow({
   row,
+  picks,
   focusable,
   activeRegion,
   lines,
 }: {
   readonly row: Extract<PaneRow, { kind: "line" }>;
+  readonly picks: readonly LinePick[];
   readonly focusable: boolean;
   readonly activeRegion: string | null;
   readonly lines: LineSelection;
 }) {
   const { band, side, index } = row;
-  const { region, picks } = band.segment;
+  const { region } = band;
   const target = { regionId: region.id, side, index };
   const selected = pickPosition(picks, target) !== -1;
+  const colours = sideColours[side];
   return (
     <button
       type="button"
@@ -108,7 +154,7 @@ function LineRow({
       tabIndex={focusable ? 0 : -1}
       className={cn(
         "block h-5 w-full cursor-default px-2 text-left whitespace-pre outline-none focus-visible:ring-1 focus-visible:ring-ring focus-visible:ring-inset",
-        selected ? selectedLines[side] : lineTints[side],
+        selected ? colours.picked : colours.tint,
         bandEdges(band, activeRegion),
       )}
       onPointerDown={(event) => {
@@ -117,7 +163,7 @@ function LineRow({
         event.currentTarget.focus();
         lines.press(target, picks);
       }}
-      onPointerEnter={() => lines.enter(target)}
+      onPointerEnter={(event) => lines.enter(target, event.buttons)}
       onFocus={() => lines.focusRegion(region.id)}
       onClick={(event) => {
         if (event.detail === 0) lines.toggle(target);
@@ -131,7 +177,7 @@ function LineRow({
             ? []
             : region.marks[side].filter(({ line }) => line === index)
         }
-        markClass={selected ? selectedMark : tokenMarks[side]}
+        markClass={selected ? "bg-foreground/20" : colours.mark}
       />
     </button>
   );
@@ -149,8 +195,7 @@ function MarkedLine({
   if (marks.length === 0) return text;
   const parts: { text: string; marked: boolean; start: number }[] = [];
   let cursor = 0;
-  for (const { start, end } of [...marks].sort((a, b) => a.start - b.start)) {
-    if (start < cursor) continue;
+  for (const { start, end } of marks) {
     if (start > cursor)
       parts.push({
         text: text.slice(cursor, start),
@@ -203,8 +248,6 @@ export function bandEdges(band: RegionBand, activeRegion: string | null) {
   return cn(
     band.first && "border-t",
     band.last && "border-b",
-    band.segment.region.id === activeRegion
-      ? "border-foreground/30"
-      : "border-border",
+    band.region.id === activeRegion ? "border-foreground/30" : "border-border",
   );
 }

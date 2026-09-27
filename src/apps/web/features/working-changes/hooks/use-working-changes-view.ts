@@ -13,8 +13,10 @@ import {
   headMovedMessage,
   storageUnavailableMessage,
 } from "#web/features/working-changes/changes-messages";
-import { splitConflicts } from "#web/features/working-changes/conflicts/conflicted-changes";
-import { useConflicts } from "#web/features/working-changes/conflicts/hooks/use-conflicts";
+import {
+  splitConflicts,
+  useConflicts,
+} from "#web/features/working-changes/conflicts/hooks/use-conflicts";
 import {
   amendDraftKey,
   commitMessage,

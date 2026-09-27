@@ -1,47 +1,52 @@
-import { type CSSProperties, type RefObject, useMemo } from "react";
+import type { ConflictSide } from "@rebase/contracts";
+import { type RefObject, useMemo } from "react";
 import { Button } from "#web/components/ui/button";
-import type { MergeModel } from "#web/features/merge-view/conflict-document";
+import { sideColours } from "#web/features/merge-view/components/pane-lines";
 import {
-  displayText,
-  type LineOrigin,
-  type ResultBlock,
-  regionAtLine,
-  resultBlocks,
-} from "#web/features/merge-view/result-text";
+  isOpen,
+  type MergeModel,
+  type Picks,
+  picksOf,
+  segmentLines,
+} from "#web/features/merge-view/conflict-document";
 import { cn } from "#web/lib/utils";
 
 const lineHeight = 20;
+const typedEdge = "bg-foreground/55";
 
-const originEdges: Record<LineOrigin | "open", string> = {
-  base: "bg-muted-foreground",
-  current: "bg-[#69b1ff]",
-  incoming: "bg-[#5ecc71]",
-  edited: "bg-[rgb(255_255_255/55%)]",
-  open: "bg-[rgb(255_255_255/14%)]",
-};
+interface Edge {
+  readonly colour: string;
+  readonly line: number;
+  readonly length: number;
+}
 
-const openBlock: CSSProperties = {
-  background:
-    "repeating-linear-gradient(135deg, rgb(255 255 255 / 4%) 0 5px, transparent 5px 12px)",
-  boxShadow: "inset 0 0 0 1px rgb(255 255 255 / 5%)",
-};
+interface ResultBlock {
+  readonly regionId: string;
+  readonly ordinal: number;
+  readonly start: number;
+  readonly length: number;
+  readonly edges: readonly Edge[] | null;
+}
 
 export function ResultEditor({
   model,
+  picks,
   onEdit,
   onUndo,
   onRegionClick,
   scrollRef,
 }: {
   readonly model: MergeModel;
+  readonly picks: Picks;
   readonly onEdit: (text: string, caret: number) => void;
   readonly onUndo: (regionId: string) => void;
   readonly onRegionClick: (regionId: string) => void;
   readonly scrollRef: RefObject<HTMLDivElement | null>;
 }) {
-  const text = useMemo(() => displayText(model), [model]);
-  const blocks = useMemo(() => resultBlocks(model), [model]);
-  const lines = text.split("\n");
+  const { lines, blocks } = useMemo(
+    () => resultLayout(model, picks),
+    [model, picks],
+  );
   const width = lines.reduce(
     (widest, line) => Math.max(widest, line.length),
     0,
@@ -69,15 +74,16 @@ export function ResultEditor({
               block.edges === null && (
                 <div
                   key={block.regionId}
+                  data-open-block
                   aria-hidden="true"
-                  className="absolute inset-x-0"
-                  style={{ ...openBlock, ...blockPosition(block) }}
+                  className="absolute inset-x-0 bg-[repeating-linear-gradient(135deg,rgb(255_255_255/4%)_0_5px,transparent_5px_12px)] shadow-[inset_0_0_0_1px_rgb(255_255_255/5%)]"
+                  style={blockPosition(block)}
                 />
               ),
           )}
           <textarea
             aria-label="Result"
-            value={text}
+            value={lines.join("\n")}
             wrap="off"
             spellCheck={false}
             autoCapitalize="off"
@@ -91,17 +97,57 @@ export function ResultEditor({
             }
             onClick={(event) => {
               const { value, selectionStart } = event.currentTarget;
-              const regionId = regionAtLine(
-                model,
-                value.slice(0, selectionStart).split("\n").length - 1,
+              const line =
+                value.slice(0, selectionStart).split("\n").length - 1;
+              const block = blocks.find(
+                ({ start, length }) => line >= start && line < start + length,
               );
-              if (regionId !== null) onRegionClick(regionId);
+              if (block !== undefined) onRegionClick(block.regionId);
             }}
           />
         </div>
       </div>
     </div>
   );
+}
+
+function resultLayout(model: MergeModel, picks: Picks) {
+  const lines: string[] = [];
+  const blocks: ResultBlock[] = [];
+  for (const segment of model.segments) {
+    const start = lines.length;
+    const shown = segmentLines(segment, picks);
+    lines.push(...shown);
+    if (segment.kind === "text") continue;
+    const { region } = segment;
+    blocks.push({
+      regionId: region.id,
+      ordinal: blocks.length + 1,
+      start,
+      length: shown.length,
+      edges: isOpen(segment, picks)
+        ? null
+        : segment.typed !== null
+          ? [{ colour: typedEdge, line: start, length: shown.length }]
+          : pickEdges(picksOf(picks, region.id), start),
+    });
+  }
+  return { lines, blocks };
+}
+
+function pickEdges(
+  picks: readonly { readonly side: ConflictSide }[],
+  start: number,
+): Edge[] {
+  const edges: Edge[] = [];
+  picks.forEach(({ side }, index) => {
+    const colour = sideColours[side].edge;
+    const last = edges.at(-1);
+    if (last?.colour === colour)
+      edges[edges.length - 1] = { ...last, length: last.length + 1 };
+    else edges.push({ colour, line: start + index, length: 1 });
+  });
+  return edges;
 }
 
 function BlockGutter({
@@ -114,8 +160,9 @@ function BlockGutter({
   if (block.edges === null)
     return (
       <div
+        data-region={block.regionId}
         aria-hidden="true"
-        className={cn("absolute left-0 w-[3px]", originEdges.open)}
+        className="absolute left-0 w-[3px] bg-foreground/15"
         style={blockPosition(block)}
       />
     );
@@ -124,7 +171,7 @@ function BlockGutter({
       {block.length === 0 ? (
         <div
           aria-hidden="true"
-          className={cn("absolute left-0 h-0.5 w-full", originEdges.edited)}
+          className={cn("absolute left-0 h-0.5 w-full", typedEdge)}
           style={{ top: block.start * lineHeight - 1 }}
         />
       ) : (
@@ -132,7 +179,7 @@ function BlockGutter({
           <div
             key={edge.line}
             aria-hidden="true"
-            className={cn("absolute left-0 w-[3px]", originEdges[edge.origin])}
+            className={cn("absolute left-0 w-[3px]", edge.colour)}
             style={{
               top: edge.line * lineHeight,
               height: edge.length * lineHeight,
@@ -141,6 +188,7 @@ function BlockGutter({
         ))
       )}
       <Button
+        data-region={block.regionId}
         variant="ghost"
         size="xs"
         aria-label={`Undo region ${block.ordinal}`}
@@ -159,7 +207,7 @@ function BlockGutter({
   );
 }
 
-function blockPosition(block: ResultBlock): CSSProperties {
+function blockPosition(block: ResultBlock) {
   return {
     top: block.start * lineHeight,
     height: Math.max(block.length, 1) * lineHeight,
