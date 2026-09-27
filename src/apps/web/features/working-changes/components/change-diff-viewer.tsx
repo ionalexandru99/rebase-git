@@ -1,6 +1,6 @@
 import type { Hunk, SelectedLineRange } from "@pierre/diffs";
-import { IconCheck } from "@tabler/icons-react";
-import { useMemo, useState } from "react";
+import { IconCheck, IconChevronDown, IconChevronUp } from "@tabler/icons-react";
+import { useMemo, useRef, useState } from "react";
 import { Button } from "#web/components/ui/button.tsx";
 import { DiffContent } from "#web/features/file-diff/components/diff-content.tsx";
 import { DiffDisplayControls } from "#web/features/file-diff/components/diff-display-controls.tsx";
@@ -26,14 +26,17 @@ export default function ChangeDiffViewer({
   view,
   writable,
   act,
+  hunk,
+  onHunk,
 }: {
   readonly view: DiffView;
   readonly writable: boolean;
   readonly act: ChangeAction;
+  readonly hunk: number | null;
+  readonly onHunk: (index: number | null) => void;
 }) {
   const { changes, selection, loading } = view;
   const diff = view.diff ?? null;
-  const [selected, setSelected] = useState<SelectedLineRange | null>(null);
   const [expandContext, setExpandContext] = useState(false);
   const section = selection?.section === "staged" ? "staged" : "unstaged";
   const files = changes?.[section] ?? [];
@@ -46,14 +49,51 @@ export default function ChangeDiffViewer({
     () => createChangeDiffModel(diff, previousPath),
     [diff, previousPath],
   );
+  const hunks = useMemo(
+    () =>
+      metadata?.hunks.flatMap((content) => {
+        const range = hunkRange(content);
+        return range ? [{ range, lines: hunkLines(content) }] : [];
+      }) ?? [],
+    [metadata],
+  );
+  const current =
+    hunk !== null && hunks.length > 0 ? Math.min(hunk, hunks.length - 1) : null;
+  const [selected, setSelected] = useState<SelectedLineRange | null>(() =>
+    current === null ? null : (hunks[current]?.range ?? null),
+  );
+  const container = useRef<HTMLElement | null>(null);
+  const pendingReveal = useRef(selected);
+  const reveal = (range: SelectedLineRange) => {
+    pendingReveal.current = revealRange(container.current, range)
+      ? null
+      : range;
+  };
+  const selectHunk = (index: number) => {
+    const range = hunks[index]?.range;
+    if (range === undefined) return;
+    setSelected(range);
+    onHunk(index);
+    reveal(range);
+  };
+  const selectLines = (range: SelectedLineRange | null) => {
+    setSelected(range);
+    onHunk(null);
+  };
   const lines = useMemo(
-    () => (metadata ? selectedDiffLines(metadata, selected) : []),
-    [metadata, selected],
+    () =>
+      current !== null
+        ? (hunks[current]?.lines ?? [])
+        : metadata
+          ? selectedDiffLines(metadata, selected)
+          : [],
+    [current, hunks, metadata, selected],
   );
   const action = section === "unstaged" ? "stage" : "unstage";
   const label = section === "unstaged" ? "Stage" : "Unstage";
   const disabled = !writable || view.busy || loading;
-  const selectLines = (
+  const scope = current === null ? "lines" : "hunk";
+  const actOnLines = (
     lineAction: "stage" | "unstage" | "discard",
     ids: readonly string[],
   ) => {
@@ -85,6 +125,35 @@ export default function ChangeDiffViewer({
           next ? () => view.select({ section, path: next.path }) : undefined
         }
       >
+        {hunks.length > 0 && !empty ? (
+          <fieldset aria-label="Hunks" className="mr-1 flex items-center">
+            <Button
+              size="icon-xs"
+              variant="ghost"
+              aria-label="Previous hunk"
+              disabled={current === 0}
+              onClick={() =>
+                selectHunk(current === null ? hunks.length - 1 : current - 1)
+              }
+            >
+              <IconChevronUp />
+            </Button>
+            <span className="px-1 text-xs tabular-nums text-muted-foreground">
+              {current === null
+                ? `${hunks.length} ${hunks.length === 1 ? "hunk" : "hunks"}`
+                : `Hunk ${current + 1}/${hunks.length}`}
+            </span>
+            <Button
+              size="icon-xs"
+              variant="ghost"
+              aria-label="Next hunk"
+              disabled={current === hunks.length - 1}
+              onClick={() => selectHunk(current === null ? 0 : current + 1)}
+            >
+              <IconChevronDown />
+            </Button>
+          </fieldset>
+        ) : null}
         {diff && !empty ? (
           <Button
             size="xs"
@@ -102,24 +171,25 @@ export default function ChangeDiffViewer({
       {lines.length > 0 ? (
         <div className="flex shrink-0 flex-wrap items-center gap-2 border-border border-b bg-accent/40 px-3 py-1.5">
           <span className="mr-auto text-xs">
-            {lines.length} changed {lines.length === 1 ? "line" : "lines"}{" "}
-            selected
+            {current === null
+              ? `${lines.length} changed ${lines.length === 1 ? "line" : "lines"} selected`
+              : `Hunk ${current + 1} of ${hunks.length} · ${lines.length} changed ${lines.length === 1 ? "line" : "lines"}`}
           </span>
           <Button
             size="xs"
             variant="destructive"
             disabled={disabled}
-            onClick={() => selectLines("discard", lines)}
+            onClick={() => actOnLines("discard", lines)}
           >
-            Discard lines
+            Discard {scope}
           </Button>
           <Button
             size="xs"
             variant="outline"
             disabled={disabled}
-            onClick={() => selectLines(action, lines)}
+            onClick={() => actOnLines(action, lines)}
           >
-            {label} lines
+            {label} {scope}
           </Button>
         </div>
       ) : null}
@@ -151,11 +221,75 @@ export default function ChangeDiffViewer({
           metadata={metadata}
           preferences={view.preferences}
           expandContext={expandContext}
-          selection={{ range: selected, onChange: setSelected }}
+          selection={{ range: selected, onChange: selectLines }}
+          onRender={(rendered) => {
+            container.current = rendered;
+            if (pendingReveal.current) reveal(pendingReveal.current);
+          }}
         />
       )}
     </section>
   );
+}
+
+function hunkRows(hunk: Pick<Hunk, "hunkContent">) {
+  return hunk.hunkContent.flatMap((content) =>
+    content.type === "change"
+      ? [
+          ...Array.from({ length: content.deletions }, (_, i) => ({
+            old: content.deletionLineIndex + i + 1,
+            next: 0,
+            id: `-${content.deletionLineIndex + i + 1}`,
+          })),
+          ...Array.from({ length: content.additions }, (_, i) => ({
+            old: 0,
+            next: content.additionLineIndex + i + 1,
+            id: `+${content.additionLineIndex + i + 1}`,
+          })),
+        ]
+      : Array.from({ length: content.lines }, (_, i) => ({
+          old: content.deletionLineIndex + i + 1,
+          next: content.additionLineIndex + i + 1,
+          id: "",
+        })),
+  );
+}
+
+export function hunkLines(hunk: Pick<Hunk, "hunkContent">) {
+  return hunkRows(hunk).flatMap((row) => (row.id ? [row.id] : []));
+}
+
+export function hunkRange(
+  hunk: Pick<Hunk, "hunkContent">,
+): SelectedLineRange | null {
+  const changes = hunk.hunkContent.flatMap((content) =>
+    content.type === "change" ? [content] : [],
+  );
+  const first = changes[0];
+  const last = changes.at(-1);
+  if (!first || !last) return null;
+  return {
+    ...(first.deletions > 0
+      ? { start: first.deletionLineIndex + 1, side: "deletions" }
+      : { start: first.additionLineIndex + 1, side: "additions" }),
+    ...(last.additions > 0
+      ? { end: last.additionLineIndex + last.additions, endSide: "additions" }
+      : { end: last.deletionLineIndex + last.deletions, endSide: "deletions" }),
+  };
+}
+
+function revealRange(container: HTMLElement | null, range: SelectedLineRange) {
+  const row = (line: number, side: SelectedLineRange["side"]) =>
+    container?.shadowRoot?.querySelector(
+      `[data-line="${line}"][data-line-type="${side === "deletions" ? "change-deletion" : "change-addition"}"]`,
+    );
+  const first = row(range.start, range.side);
+  if (!first) return false;
+  row(range.end, range.endSide ?? range.side)?.scrollIntoView({
+    block: "nearest",
+  });
+  first.scrollIntoView({ block: "nearest" });
+  return true;
 }
 
 export function selectedDiffLines(
@@ -165,28 +299,7 @@ export function selectedDiffLines(
   if (range === null) return [];
   const side = range.side ?? "additions";
   const endSide = range.endSide ?? side;
-  const rows = diff.hunks.flatMap((hunk) =>
-    hunk.hunkContent.flatMap((content) =>
-      content.type === "change"
-        ? [
-            ...Array.from({ length: content.deletions }, (_, i) => ({
-              old: content.deletionLineIndex + i + 1,
-              next: 0,
-              id: `-${content.deletionLineIndex + i + 1}`,
-            })),
-            ...Array.from({ length: content.additions }, (_, i) => ({
-              old: 0,
-              next: content.additionLineIndex + i + 1,
-              id: `+${content.additionLineIndex + i + 1}`,
-            })),
-          ]
-        : Array.from({ length: content.lines }, (_, i) => ({
-            old: content.deletionLineIndex + i + 1,
-            next: content.additionLineIndex + i + 1,
-            id: "",
-          })),
-    ),
-  );
+  const rows = diff.hunks.flatMap(hunkRows);
   if (side === endSide)
     return rows
       .filter(

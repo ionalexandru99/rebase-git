@@ -23,6 +23,8 @@ import type { GitCommand } from "#server/adapters/local-git/git-commands.ts";
 import { createRepository, fastImport } from "#tests-support/git.ts";
 import { openTestEnvironment } from "#tests-support/server.ts";
 import { removeTemporaryDirectory } from "#tests-support/temporary-directory.ts";
+import { createChangeDiffModel } from "#web/features/file-diff/diff-model.ts";
+import { hunkLines } from "#web/features/working-changes/components/change-diff-viewer.tsx";
 
 const exec = promisify(execFile);
 async function fixture(
@@ -204,6 +206,33 @@ describe("working changes through Git", () => {
     });
     expect(await readFile(join(f.directory, "file.txt"), "utf8")).toBe(
       "one\r\ntwo\r\nthree\r\n",
+    );
+  });
+  it("stages the last hunk shown by Git without its final newline and leaves the first hunk unstaged", async () => {
+    const f = await fixture();
+    const lines = Array.from({ length: 10 }, (_, i) => `line ${i + 1}`);
+    await writeFile(join(f.directory, "file.txt"), `${lines.join("\n")}\n`);
+    await f.git("add", ".");
+    await f.git("commit", "-m", "Ten lines");
+    const edited = lines.map((line, i) =>
+      i === 1 || i === 9 ? line.toUpperCase() : line,
+    );
+    await writeFile(join(f.directory, "file.txt"), edited.join("\n"));
+    const diff = await f.diff();
+    const hunks = createChangeDiffModel(diff).metadata?.hunks ?? [];
+    expect(hunks).toHaveLength(2);
+    const last = hunks[1];
+    await f.mutate("stage", "unstaged", {
+      _tag: "Lines",
+      path: "file.txt",
+      revision: diff.revision,
+      lines: last ? hunkLines(last) : [],
+    });
+    expect((await f.git("show", ":file.txt")).stdout).toBe(
+      [...lines.slice(0, 9), "LINE 10"].join("\n"),
+    );
+    expect(await readFile(join(f.directory, "file.txt"), "utf8")).toBe(
+      edited.join("\n"),
     );
   });
   it("stages and unstages selected lines without changing the worktree", async () => {

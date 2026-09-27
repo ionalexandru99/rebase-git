@@ -35,7 +35,8 @@ async function fixture(
   {
     staged = [],
     renamesLimited = false,
-    diffs = {},
+    diffs: initialDiffs = {},
+    afterWrite,
     rejectDiffs = false,
     repositoryId = crypto.randomUUID(),
     draftKey = JSON.stringify([crypto.randomUUID(), repositoryId, "/repo"]),
@@ -43,6 +44,7 @@ async function fixture(
     readonly staged?: RepositoryChanges["staged"];
     readonly renamesLimited?: boolean;
     readonly diffs?: Readonly<Record<string, ChangeDiff>>;
+    readonly afterWrite?: ChangeDiff;
     readonly rejectDiffs?: boolean;
     readonly repositoryId?: string;
     readonly draftKey?: string;
@@ -63,6 +65,7 @@ async function fixture(
     afterBytes: after.length,
     patch,
   });
+  let diffs = initialDiffs;
   const mutations: MutateChanges[] = [];
   const commits: CommitChanges[] = [];
   let rejectCommit = false;
@@ -97,12 +100,13 @@ async function fixture(
         unstaged: command.action === "stage" ? [] : [changedFile(path)],
         staged: command.action === "stage" ? [changedFile(path)] : [],
       };
+      if (afterWrite) diffs = { ...diffs, [path]: afterWrite };
       return {
         changes: snapshot,
         diff:
           command.viewed !== undefined &&
           snapshot[command.viewed.section].length > 0
-            ? diff
+            ? (afterWrite ?? diff)
             : null,
       };
     }),
@@ -416,6 +420,71 @@ describe("working changes", () => {
         page.getByRole("button", { name: `Staged ${path}`, exact: true }),
       )
       .toBeVisible();
+  });
+  it("steps through hunks, discards the selected hunk and selects the next one after the write", async () => {
+    const lines = "a\nb\nc\nd\ne\nf\ng\nh\ni\nj\nk\nl\n";
+    const twoHunks = lines.replace("b\n", "B\n").replace("k\n", "K\n");
+    const oneHunk = lines.replace("b\n", "B\n");
+    const firstHunk = "@@ -1,5 +1,5 @@\n a\n-b\n+B\n c\n d\n e\n";
+    const header = `--- a/${path}\n+++ b/${path}\n`;
+    const textDiff = (revision: string, after: string, patch: string) =>
+      changeDiff(path, {
+        revision,
+        kind: "text",
+        before: lines,
+        after,
+        beforeBytes: lines.length,
+        afterBytes: after.length,
+        patch: header + patch,
+      });
+    const f = await fixture([], {
+      diffs: {
+        [path]: textDiff(
+          "two-hunks",
+          twoHunks,
+          `${firstHunk}@@ -8,5 +8,5 @@\n h\n i\n j\n-k\n+K\n l\n`,
+        ),
+      },
+      afterWrite: textDiff("one-hunk", oneHunk, firstHunk),
+    });
+    const next = page.getByRole("button", { name: "Next hunk" });
+    await expect
+      .element(page.getByText("2 hunks", { exact: true }))
+      .toBeVisible();
+    await next.click();
+    await expect
+      .element(page.getByText("Hunk 1 of 2 · 2 changed lines"))
+      .toBeVisible();
+    await next.click();
+    await expect
+      .element(page.getByText("Hunk 2/2", { exact: true }))
+      .toBeVisible();
+    await expect.element(next).toBeDisabled();
+    await page
+      .getByRole("button", { name: "Discard hunk", exact: true })
+      .click();
+    await expect.element(page.getByRole("alertdialog")).toBeVisible();
+    expect(f.mutations).toHaveLength(0);
+    await page
+      .getByRole("button", { name: "Discard changes", exact: true })
+      .click();
+    await expect.poll(() => f.mutations.length).toBe(1);
+    expect(f.mutations[0]).toMatchObject({
+      action: "discard",
+      section: "unstaged",
+      selection: {
+        _tag: "Lines",
+        path,
+        revision: "two-hunks",
+        lines: ["-11", "+11"],
+      },
+    });
+    await expect
+      .element(page.getByText("Hunk 1 of 1 · 2 changed lines"))
+      .toBeVisible();
+    await expect
+      .element(page.getByRole("button", { name: "Stage hunk", exact: true }))
+      .toBeEnabled();
   });
   it("confirms discard and retains the commit draft on failure", async () => {
     const f = await fixture();

@@ -12,6 +12,7 @@ export function DiffContent({
   preferences,
   expandContext,
   selection,
+  onRender,
 }: {
   readonly diff: ChangeDiff;
   readonly metadata: ReturnType<typeof createChangeDiffModel>["metadata"];
@@ -21,6 +22,7 @@ export function DiffContent({
     readonly range: SelectedLineRange | null;
     readonly onChange: (range: SelectedLineRange | null) => void;
   };
+  readonly onRender?: (container: HTMLElement) => void;
 }) {
   return metadata ? (
     <div className="min-h-0 flex-1 overflow-auto">
@@ -43,6 +45,13 @@ export function DiffContent({
           ...(selection === undefined
             ? {}
             : { onLineSelectionEnd: selection.onChange }),
+          ...(onRender === undefined
+            ? {}
+            : {
+                onPostRender: (container, _instance, phase) => {
+                  if (phase !== "unmount") onRender(container);
+                },
+              }),
         }}
       />
     </div>
