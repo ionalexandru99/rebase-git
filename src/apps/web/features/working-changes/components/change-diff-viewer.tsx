@@ -53,14 +53,14 @@ export default function ChangeDiffViewer({
     () =>
       metadata?.hunks.flatMap((content) => {
         const range = hunkRange(content);
-        return range ? [range] : [];
+        return range ? [{ range, lines: hunkLines(content) }] : [];
       }) ?? [],
     [metadata],
   );
   const current =
     hunk !== null && hunks.length > 0 ? Math.min(hunk, hunks.length - 1) : null;
   const [selected, setSelected] = useState<SelectedLineRange | null>(() =>
-    current === null ? null : (hunks[current] ?? null),
+    current === null ? null : (hunks[current]?.range ?? null),
   );
   const container = useRef<HTMLElement | null>(null);
   const pendingReveal = useRef(selected);
@@ -70,7 +70,7 @@ export default function ChangeDiffViewer({
       : range;
   };
   const selectHunk = (index: number) => {
-    const range = hunks[index];
+    const range = hunks[index]?.range;
     if (range === undefined) return;
     setSelected(range);
     onHunk(index);
@@ -81,8 +81,13 @@ export default function ChangeDiffViewer({
     onHunk(null);
   };
   const lines = useMemo(
-    () => (metadata ? selectedDiffLines(metadata, selected) : []),
-    [metadata, selected],
+    () =>
+      current !== null
+        ? (hunks[current]?.lines ?? [])
+        : metadata
+          ? selectedDiffLines(metadata, selected)
+          : [],
+    [current, hunks, metadata, selected],
   );
   const action = section === "unstaged" ? "stage" : "unstage";
   const label = section === "unstaged" ? "Stage" : "Unstage";
@@ -227,6 +232,33 @@ export default function ChangeDiffViewer({
   );
 }
 
+function hunkRows(hunk: Pick<Hunk, "hunkContent">) {
+  return hunk.hunkContent.flatMap((content) =>
+    content.type === "change"
+      ? [
+          ...Array.from({ length: content.deletions }, (_, i) => ({
+            old: content.deletionLineIndex + i + 1,
+            next: 0,
+            id: `-${content.deletionLineIndex + i + 1}`,
+          })),
+          ...Array.from({ length: content.additions }, (_, i) => ({
+            old: 0,
+            next: content.additionLineIndex + i + 1,
+            id: `+${content.additionLineIndex + i + 1}`,
+          })),
+        ]
+      : Array.from({ length: content.lines }, (_, i) => ({
+          old: content.deletionLineIndex + i + 1,
+          next: content.additionLineIndex + i + 1,
+          id: "",
+        })),
+  );
+}
+
+export function hunkLines(hunk: Pick<Hunk, "hunkContent">) {
+  return hunkRows(hunk).flatMap((row) => (row.id ? [row.id] : []));
+}
+
 export function hunkRange(
   hunk: Pick<Hunk, "hunkContent">,
 ): SelectedLineRange | null {
@@ -267,28 +299,7 @@ export function selectedDiffLines(
   if (range === null) return [];
   const side = range.side ?? "additions";
   const endSide = range.endSide ?? side;
-  const rows = diff.hunks.flatMap((hunk) =>
-    hunk.hunkContent.flatMap((content) =>
-      content.type === "change"
-        ? [
-            ...Array.from({ length: content.deletions }, (_, i) => ({
-              old: content.deletionLineIndex + i + 1,
-              next: 0,
-              id: `-${content.deletionLineIndex + i + 1}`,
-            })),
-            ...Array.from({ length: content.additions }, (_, i) => ({
-              old: 0,
-              next: content.additionLineIndex + i + 1,
-              id: `+${content.additionLineIndex + i + 1}`,
-            })),
-          ]
-        : Array.from({ length: content.lines }, (_, i) => ({
-            old: content.deletionLineIndex + i + 1,
-            next: content.additionLineIndex + i + 1,
-            id: "",
-          })),
-    ),
-  );
+  const rows = diff.hunks.flatMap(hunkRows);
   if (side === endSide)
     return rows
       .filter(

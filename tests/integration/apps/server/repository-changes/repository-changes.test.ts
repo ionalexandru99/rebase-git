@@ -24,10 +24,7 @@ import { createRepository, fastImport } from "#tests-support/git.ts";
 import { openTestEnvironment } from "#tests-support/server.ts";
 import { removeTemporaryDirectory } from "#tests-support/temporary-directory.ts";
 import { createChangeDiffModel } from "#web/features/file-diff/diff-model.ts";
-import {
-  hunkRange,
-  selectedDiffLines,
-} from "#web/features/working-changes/components/change-diff-viewer.tsx";
+import { hunkLines } from "#web/features/working-changes/components/change-diff-viewer.tsx";
 
 const exec = promisify(execFile);
 async function fixture(
@@ -229,7 +226,7 @@ describe("working changes through Git", () => {
       _tag: "Lines",
       path: "file.txt",
       revision: diff.revision,
-      lines: selectedDiffLines({ hunks }, last ? hunkRange(last) : null),
+      lines: last ? hunkLines(last) : [],
     });
     expect((await f.git("show", ":file.txt")).stdout).toBe(
       [...lines.slice(0, 9), "LINE 10"].join("\n"),
