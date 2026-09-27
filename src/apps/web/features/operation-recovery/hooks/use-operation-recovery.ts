@@ -12,7 +12,10 @@ import { useOperationAction } from "#web/features/operation-recovery/hooks/use-o
 import { useWorktreeOperation } from "#web/features/operation-recovery/hooks/use-operation-status";
 import { describeOperationFailure } from "#web/features/operation-recovery/operation-messages";
 import { useRepositoryScope } from "#web/features/repository-scope/repository-scope-provider";
-import { commandKey } from "#web/platform/query/use-command";
+import {
+  type CommandFailure,
+  commandKey,
+} from "#web/platform/query/use-command";
 
 export interface OperationRecoveryState {
   readonly operation: RepositoryOperation | null;
@@ -55,6 +58,7 @@ export function useOperationRecovery(
   const matched = status === null ? undefined : scope;
   const action = useOperationAction(matched);
   const finished = useLastExecution(matched);
+  const [retrying, setRetrying] = useState(false);
   const [observedKind, setObservedKind] = useState<OperationKind | null>(null);
   const [forgotten, setForgotten] = useState(0);
   const operation = status?.operation ?? null;
@@ -64,7 +68,7 @@ export function useOperationRecovery(
       setForgotten(finished.submittedAt);
   }
   const connected = status !== null && (repository?.connected ?? false);
-  const busy = status?.busy ?? false;
+  const busy = (status?.busy ?? false) || retrying;
 
   const execute = (choice: OperationAction, revision: string) => {
     if (
@@ -82,7 +86,24 @@ export function useOperationRecovery(
       worktreePath: matched.worktreePath,
       action: choice,
     };
-    action.mutate({ ...command, revision });
+    const continueFresh = async () => {
+      const fresh = await status.read();
+      if (!stillReady(fresh, operation.kind)) return setRetrying(false);
+      action.mutate(
+        { ...command, revision: fresh.revision },
+        { onSettled: () => setRetrying(false) },
+      );
+    };
+    action.mutate(
+      { ...command, revision },
+      {
+        onError: (failure) => {
+          if (choice !== "continue" || !staleRejection(failure)) return;
+          setRetrying(true);
+          void continueFresh();
+        },
+      },
+    );
   };
 
   const state: OperationRecoveryState = {
@@ -91,7 +112,7 @@ export function useOperationRecovery(
     checking: status?.checking ?? true,
     busy,
     error:
-      action.error === null
+      action.error === null || retrying
         ? (status?.error ?? null)
         : describeOperationFailure(action.error),
     completed:
@@ -133,6 +154,25 @@ function useLastExecution(scope: OperationScope | undefined) {
   });
   const last = executions.at(-1);
   return scope !== undefined && last?.idle ? last : null;
+}
+
+function staleRejection(failure: CommandFailure<typeof executeRoute>) {
+  return (
+    failure._tag === "EnvironmentHttpRejected" &&
+    failure.failure.reason === "Stale"
+  );
+}
+
+function stillReady(
+  operation: RepositoryOperation | null,
+  kind: OperationKind,
+): operation is RepositoryOperation {
+  return (
+    operation !== null &&
+    operation.kind === kind &&
+    operation.phase === "ready" &&
+    operation.unresolvedPaths.length === 0
+  );
 }
 
 function allows(operation: RepositoryOperation, action: OperationAction) {

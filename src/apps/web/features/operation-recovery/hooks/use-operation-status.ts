@@ -17,6 +17,7 @@ export interface OperationStatus {
   readonly busy: boolean;
   readonly error: string | null;
   readonly refresh: () => void;
+  readonly read: () => Promise<RepositoryOperation | null>;
 }
 
 export function useOperationStatus(
@@ -38,6 +39,7 @@ export function useOperationStatus(
     busy: scope !== undefined && busy,
     error: query.isError ? describeOperationFailure(query.error) : null,
     refresh: () => void query.refetch(),
+    read: async () => (await query.refetch()).data ?? null,
   };
 }
 
