@@ -10,6 +10,7 @@ import { join, resolve } from "node:path";
 import { promisify } from "node:util";
 import { type Browser, chromium, expect, test } from "@playwright/test";
 import { removeTemporaryDirectory } from "#tests-support/temporary-directory.ts";
+import { runOnVirtualDisplay } from "#tests-support/virtual-display.ts";
 
 const execFileAsync = promisify(execFile);
 
@@ -17,6 +18,8 @@ interface PackagedApplication {
   readonly browser?: Browser;
   readonly process: ChildProcessWithoutNullStreams;
 }
+
+runOnVirtualDisplay();
 
 test("launches the packaged application with its product identity", async () => {
   const packageMetadata = JSON.parse(
@@ -86,7 +89,12 @@ async function createTestEnvironment(testHome: string) {
 async function launchPackagedApplication(environment: Record<string, string>) {
   const childProcess = spawn(
     packagedExecutable(),
-    ["--remote-debugging-port=0", "--disable-gpu-sandbox", "--no-sandbox"],
+    [
+      "--ozone-platform=x11",
+      "--remote-debugging-port=0",
+      "--disable-gpu-sandbox",
+      "--no-sandbox",
+    ],
     {
       env: environment,
     },

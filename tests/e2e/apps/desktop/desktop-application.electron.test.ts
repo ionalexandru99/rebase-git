@@ -11,6 +11,9 @@ import {
 import type { DesktopHostBridge } from "#contracts/desktop-host/desktop-host.contract.ts";
 import { createRepository } from "#tests-support/git.ts";
 import { removeTemporaryDirectory } from "#tests-support/temporary-directory.ts";
+import { runOnVirtualDisplay } from "#tests-support/virtual-display.ts";
+
+runOnVirtualDisplay();
 
 test("opens, closes, and reopens a recent repository after restart", async () => {
   const testHome = await mkdtemp(join(tmpdir(), "rebase-electron-e2e-"));
@@ -99,7 +102,7 @@ function launchApplication(environment: Record<string, string>) {
   return electron.launch({
     args: [
       resolve("src/apps/desktop/dist/package/main.js"),
-      "--headless",
+      "--ozone-platform=x11",
       "--disable-gpu",
       "--no-sandbox",
     ],
