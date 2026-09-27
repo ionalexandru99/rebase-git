@@ -105,7 +105,7 @@ export function useOperationRecovery(
   };
   return {
     state,
-    writable: repository?.writable ?? false,
+    writable: action.canRun,
     execute,
     refresh: () => {
       action.reset();

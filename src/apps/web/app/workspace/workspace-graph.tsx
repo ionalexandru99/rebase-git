@@ -5,7 +5,7 @@ import type { WorkspaceHistoryScope } from "#web/app/workspace/use-workspace-his
 import type { GraphCommandDefinition } from "#web/features/commit-commands/graph-command";
 import { CommitGraph } from "#web/features/commit-graph/commit-graph";
 import { automaticHistoryScope } from "#web/features/commit-graph/scope/history-scope-model";
-import { useCatalogRepository } from "#web/features/repository-catalog/hooks/use-repository-catalog";
+import { useCatalogRepository } from "#web/features/repository-catalog/use-repository-catalog";
 import { useRepositoryRefs } from "#web/features/repository-refs/hooks/use-repository-refs";
 import { useEnvironment } from "#web/platform/query/environment-context";
 import type { RepositoryScope } from "#web/platform/query/repository-scope";

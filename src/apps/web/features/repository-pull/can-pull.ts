@@ -1,6 +1,5 @@
 export interface PullConditions {
-  readonly connected: boolean;
-  readonly writable: boolean;
+  readonly canRun: boolean;
   readonly activeBranch: string | undefined;
   readonly recoveryBusy: boolean;
   readonly pulling: boolean;
@@ -9,8 +8,7 @@ export interface PullConditions {
 
 export function canPull(conditions: PullConditions): boolean {
   return (
-    conditions.connected &&
-    conditions.writable &&
+    conditions.canRun &&
     conditions.activeBranch !== undefined &&
     !conditions.recoveryBusy &&
     !conditions.pulling &&

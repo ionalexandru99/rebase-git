@@ -14,7 +14,7 @@ import { useRepositoryOpening } from "#web/app/shell/use-repository-opening";
 import { RepositoryWorkspace } from "#web/app/workspace/repository-workspace";
 import { OpenProjectScreen } from "#web/features/open-project/open-project-screen";
 import { ProjectsSidebar } from "#web/features/project-navigation/projects-sidebar";
-import { useCatalogRepository } from "#web/features/repository-catalog/hooks/use-repository-catalog";
+import { useCatalogRepository } from "#web/features/repository-catalog/use-repository-catalog";
 import type { RepositoryHistoryGateway } from "#web/features/repository-history/repository-history-reader";
 import { SettingsPanel } from "#web/features/settings/settings-panel";
 import { useEnvironment } from "#web/platform/query/environment-context";

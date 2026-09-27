@@ -266,9 +266,7 @@ describe("repository fetch controls", () => {
     await page.getByRole("button", { name: "Save", exact: true }).click();
     await expect
       .element(page.getByRole("alert"))
-      .toHaveTextContent(
-        "You do not have permission to change this repository.",
-      );
+      .toHaveTextContent("This device has no access to this repository.");
     await expect
       .element(page.getByRole("spinbutton", { name: "Interval in seconds" }))
       .toHaveValue(90);
@@ -307,9 +305,10 @@ describe("repository fetch controls", () => {
       .toBeDisabled();
     await expect
       .element(
-        page.getByText("Reconnect to the server and try again.", {
-          exact: true,
-        }),
+        page.getByText(
+          "The Environment did not answer. Check the connection and try again.",
+          { exact: true },
+        ),
       )
       .toBeVisible();
   });

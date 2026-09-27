@@ -10,7 +10,7 @@ import {
   type Navigation,
   worktreePathFor,
 } from "#web/app/shell/use-navigation";
-import { useCatalogRepository } from "#web/features/repository-catalog/hooks/use-repository-catalog";
+import { useCatalogRepository } from "#web/features/repository-catalog/use-repository-catalog";
 import { resolveActiveWorktreePath } from "#web/features/repository-refs/activate-repository-ref";
 import { useRepositoryRefs } from "#web/features/repository-refs/hooks/use-repository-refs";
 import { useEnvironment } from "#web/platform/query/environment-context";

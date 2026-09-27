@@ -61,7 +61,9 @@ it("fills the repository target, answers rejections as results and rereads the r
 
   // Assert
   await expect.element(page.getByRole("alert")).toHaveTextContent("Ok");
-  expect(operationReads.mock.calls.length).toBeGreaterThan(readsBefore);
+  await expect
+    .poll(() => operationReads.mock.calls.length)
+    .toBeGreaterThan(readsBefore);
 });
 
 function CreateTag() {

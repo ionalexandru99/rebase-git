@@ -30,11 +30,7 @@ export function PushButton({
   if (scope === undefined || target === undefined) return null;
   const upstream = target.upstream;
   const tracked = upstream !== undefined && !upstream.gone;
-  const busy =
-    !scope.connected ||
-    !scope.writable ||
-    operationBusy ||
-    push.running !== null;
+  const busy = !push.canRun || operationBusy || push.running !== null;
   const canPush = !tracked || upstream.ahead > 0;
   const canForcePush = tracked && upstream.remoteOid !== undefined;
   return (

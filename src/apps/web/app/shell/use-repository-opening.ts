@@ -10,7 +10,10 @@ import {
   worktreePathFor,
 } from "#web/app/shell/use-navigation";
 import type { ProjectNavigationRepository } from "#web/features/project-navigation/project-navigation";
-import { useRepositoryCatalog } from "#web/features/repository-catalog/hooks/use-repository-catalog";
+import {
+  catalogWith,
+  useRepositoryCatalog,
+} from "#web/features/repository-catalog/use-repository-catalog";
 import type { RepositoryHistoryGateway } from "#web/features/repository-history/repository-history-reader";
 import { useEnvironment } from "#web/platform/query/environment-context";
 import { useCommand } from "#web/platform/query/use-command";
@@ -26,6 +29,7 @@ export function useRepositoryOpening(
   const { findRepository } = useRepositoryCatalog();
   const { run: recordOpened } = useCommand(
     RepositoryCatalogHttpApi.recordOpened,
+    { answers: catalogWith },
   );
   const available = status.availability === "available";
   const showRepository = useCallback(

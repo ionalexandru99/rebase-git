@@ -7,6 +7,7 @@ export function Confirmation({
   children,
   action,
   busy = false,
+  disabled = false,
   onConfirm,
   onCancel,
   className,
@@ -15,6 +16,7 @@ export function Confirmation({
   readonly children?: ReactNode;
   readonly action: string;
   readonly busy?: boolean;
+  readonly disabled?: boolean;
   readonly onConfirm: () => void;
   readonly onCancel: () => void;
   readonly className?: string;
@@ -60,7 +62,7 @@ export function Confirmation({
           Cancel
         </Button>
         <Button
-          disabled={busy}
+          disabled={busy || disabled}
           onClick={onConfirm}
           size="xs"
           variant="destructive"

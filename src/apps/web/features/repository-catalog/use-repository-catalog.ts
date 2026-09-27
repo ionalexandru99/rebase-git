@@ -10,6 +10,7 @@ import {
   environmentQueryKey,
   useEnvironmentQuery,
 } from "#web/platform/query/environment-query";
+import { answer } from "#web/platform/query/use-command";
 
 const noRepositories: readonly RepositoryCatalogEntry[] = [];
 
@@ -59,6 +60,38 @@ export function useRepositoryCatalog() {
     repositories: catalog.data?.repositories ?? noRepositories,
     findRepository,
   };
+}
+
+export function catalogWith(entry: RepositoryCatalogEntry) {
+  return [
+    answer(
+      RepositoryCatalogHttpApi.list,
+      undefined,
+      (catalog): RepositoryCatalog => ({
+        repositories: [...without(catalog, entry.id), entry],
+      }),
+    ),
+  ];
+}
+
+export function catalogWithout({
+  repositoryId,
+}: {
+  readonly repositoryId: string;
+}) {
+  return [
+    answer(
+      RepositoryCatalogHttpApi.list,
+      undefined,
+      (catalog): RepositoryCatalog => ({
+        repositories: without(catalog, repositoryId),
+      }),
+    ),
+  ];
+}
+
+function without(catalog: RepositoryCatalog | undefined, repositoryId: string) {
+  return (catalog?.repositories ?? []).filter(({ id }) => id !== repositoryId);
 }
 
 export function useCatalogRepository(repositoryId: string | undefined) {

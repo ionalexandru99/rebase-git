@@ -11,7 +11,7 @@ import {
   describeTagFailure,
   useTagDeletion,
 } from "#web/features/branches-sidebar/tag-editing/hooks/use-tag-deletion";
-import { tagNameProblem } from "#web/features/tag-management/tag-name";
+import { tagNameProblem } from "#web/features/branches-sidebar/tag-editing/tag-name";
 import { useCommand } from "#web/platform/query/use-command";
 
 export type TagEditing = ReturnType<typeof useTagEditing>;

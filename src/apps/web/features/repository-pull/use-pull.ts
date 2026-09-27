@@ -1,5 +1,5 @@
 import { RepositoryPullHttpApi } from "@rebase/contracts";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo } from "react";
 import type {
   RepositoryHistoryFetchCommands,
   RepositoryHistoryObservation,
@@ -18,11 +18,6 @@ import { useStore } from "#web/platform/store/use-store";
 type PullReader = Pick<RepositoryHistoryFetchCommands, "fetch"> &
   RepositoryHistoryObservation;
 
-interface PullNotice {
-  readonly id: number;
-  readonly message?: string | undefined;
-}
-
 const idleHistory = createStore<RepositoryHistorySnapshot>({
   revision: 0,
   historyRevision: 0,
@@ -35,7 +30,6 @@ export function usePull(reader: PullReader | undefined) {
     before: async () =>
       reader !== undefined && (await reader.fetch()).failure === undefined,
   });
-  const [notice, setNotice] = useState<PullNotice>({ id: 0 });
   const freshnessReady = useStore(reader ?? idleHistory, isFreshnessReady);
   const pulling = command.running;
   const { run, canRun } = command;
@@ -43,12 +37,7 @@ export function usePull(reader: PullReader | undefined) {
   const pull = useCallback(
     async (branch: string) => {
       if (!canRun || reader === undefined || pulling) return;
-      const show = (message?: string) =>
-        setNotice(({ id }) => ({ id: id + 1, message }));
-      show();
-      const result = await run({ branch });
-      if (result._tag !== "Ok" && result._tag !== "Cancelled")
-        show(describePullFailure(branch, result));
+      await run({ branch });
     },
     [canRun, reader, pulling, run],
   );
@@ -64,13 +53,16 @@ export function usePull(reader: PullReader | undefined) {
 
   return {
     available: scope !== undefined && reader !== undefined,
+    canRun,
     pull,
     pulling,
     freshnessReady,
     error:
-      notice.message === undefined
+      command.failure === undefined ||
+      command.failure._tag === "Cancelled" ||
+      command.input === undefined
         ? undefined
-        : { id: notice.id, message: notice.message },
+        : describePullFailure(command.input.branch, command.failure),
     commands,
   };
 }

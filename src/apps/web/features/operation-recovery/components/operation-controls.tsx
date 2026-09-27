@@ -49,7 +49,8 @@ export function OperationControls({
         <Confirmation
           title={confirmationTitle(pending.action, operation, label)}
           action={`Confirm ${pending.action}`}
-          busy={unavailable}
+          busy={state.busy}
+          disabled={unavailable}
           onCancel={settle}
           onConfirm={() => {
             execute(pending.action, pending.revision);

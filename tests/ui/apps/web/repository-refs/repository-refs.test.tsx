@@ -132,11 +132,21 @@ describe("repository refs", () => {
       .element(screen.getByRole("status"))
       .toHaveTextContent("On main");
 
-    await screen.getByRole("button", { name: "Checkout feature" }).click();
+    const feature = screen
+      .getByRole("button", { name: "Checkout feature" })
+      .element() as HTMLButtonElement;
+    const release = screen
+      .getByRole("button", { name: "Checkout release" })
+      .element() as HTMLButtonElement;
+    feature.click();
+    release.click();
     await expect.poll(() => checkout).toHaveBeenCalledOnce();
     await screen.getByRole("button", { name: "Checkout release" }).click();
 
     expect(checkout).toHaveBeenCalledOnce();
+    expect(checkout.mock.calls[0]?.[0]).toMatchObject({
+      target: { _tag: "LocalBranch", name: "feature" },
+    });
   });
 
   it("switches to the worktree that holds a branch instead of checking it out", async () => {

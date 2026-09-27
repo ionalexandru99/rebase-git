@@ -1,4 +1,5 @@
 import type {
+  AuthorizationDenied,
   BranchCheckedOutElsewhere,
   CapabilityDenied,
   EnvironmentAccessFailure,
@@ -30,11 +31,14 @@ export type FailureMessages<Failure extends TaggedFailure> = {
 
 type SharedFailure =
   | typeof CapabilityDenied.Type
+  | AuthorizationDenied
+  | { readonly _tag: "RepositoryMissing" }
   | RepositoryRejected
   | RefMissing
   | typeof BranchCheckedOutElsewhere.Type;
 
 const accessDenied = "This device has no access to this repository.";
+const repositoryMissing = "The repository is no longer available.";
 
 export function requestFailure<Failure>(
   error: unknown,
@@ -83,10 +87,12 @@ function sharedWording(failure: TaggedFailure): string {
   const shared = failure as SharedFailure;
   switch (shared._tag) {
     case "CapabilityDenied":
+    case "AuthorizationDenied":
       return accessDenied;
+    case "RepositoryMissing":
+      return repositoryMissing;
     case "RepositoryRejected":
-      if (shared.reason === "Missing")
-        return "The repository is no longer available.";
+      if (shared.reason === "Missing") return repositoryMissing;
       if (shared.reason === "Busy") return "Another Git operation is running.";
       return detailOf(shared);
     case "RefMissing":

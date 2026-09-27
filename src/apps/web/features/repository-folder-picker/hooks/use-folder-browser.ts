@@ -4,6 +4,7 @@ import {
 } from "@rebase/contracts";
 import { useState } from "react";
 import { useDirectoryListing } from "#web/features/environment-filesystem/hooks/use-directory-listing";
+import { catalogWith } from "#web/features/repository-catalog/use-repository-catalog";
 import {
   directoryListingError,
   repositorySelectionError,
@@ -24,7 +25,9 @@ export function useFolderBrowser(
   const [location, setLocation] = useState<string>();
   const [selection, setSelection] = useState<FolderSelection>(nothingSelected);
   const listing = useDirectoryListing(location, environment.available);
-  const remember = useCommand(RepositoryCatalogHttpApi.remember);
+  const remember = useCommand(RepositoryCatalogHttpApi.remember, {
+    answers: catalogWith,
+  });
   const directory = listing.isError ? undefined : listing.data;
   const selectedPath =
     directory === undefined

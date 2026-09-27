@@ -17,7 +17,7 @@ export function PushNotice({ push }: { readonly push: Push }) {
       <PersistentNotification>
         <ForcePushConfirmation
           review={push.review}
-          disabled={!push.connected}
+          disabled={!push.canRun}
           cancel={push.cancel}
           confirm={push.confirm}
         />
@@ -42,7 +42,7 @@ function ForcePushConfirmation({
     <Confirmation
       title={`Force push to ${destinationName(review.destination)}?`}
       action="Force push"
-      busy={disabled}
+      disabled={disabled}
       onCancel={cancel}
       onConfirm={confirm}
       className="px-3 py-2"

@@ -1,6 +1,6 @@
 import type { LocalBranch } from "@rebase/contracts";
-import { branchNameProblem } from "#web/features/branch-management/branch-name";
 import type { BranchesSidebarItem } from "#web/features/branches-sidebar/branch-editing/branch-edit-state";
+import { branchNameProblem } from "#web/features/branches-sidebar/branch-editing/branch-name";
 import type { BranchEditing } from "#web/features/branches-sidebar/branch-editing/hooks/use-branch-editing";
 import { RefNameField } from "#web/features/branches-sidebar/components/ref-name-field";
 

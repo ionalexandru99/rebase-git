@@ -16,7 +16,7 @@ import {
 import { render } from "#tests-ui/runtime/render";
 import { BranchesSidebar } from "#web/features/branches-sidebar/branches-sidebar";
 import { historyRefKey } from "#web/features/commit-graph/scope/history-scope";
-import { usePull } from "#web/features/repository-pull/hooks/use-pull";
+import { usePull } from "#web/features/repository-pull/use-pull";
 import type { RefActivation } from "#web/features/repository-refs/hooks/use-ref-activation";
 import type { RepositoryRefsRead } from "#web/features/repository-refs/hooks/use-repository-refs";
 import { RepositoryScopeProvider } from "#web/platform/query/repository-scope";

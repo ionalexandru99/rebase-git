@@ -22,7 +22,7 @@ import { NotificationsProvider } from "#web/features/notifications/notifications
 import type { RepositoryHistorySnapshot } from "#web/features/repository-history/repository-history-reader";
 import { PullButton } from "#web/features/repository-pull/components/pull-button";
 import { PullNotice } from "#web/features/repository-pull/components/pull-notice";
-import { usePull } from "#web/features/repository-pull/hooks/use-pull";
+import { usePull } from "#web/features/repository-pull/use-pull";
 import { RepositoryScopeProvider } from "#web/platform/query/repository-scope";
 
 const repositoryId = "00000000-0000-4000-8000-000000000001";

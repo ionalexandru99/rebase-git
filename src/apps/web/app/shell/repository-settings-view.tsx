@@ -1,5 +1,5 @@
 import { useOpenedHistory } from "#web/app/shell/opened-history-context";
-import { useCatalogRepository } from "#web/features/repository-catalog/hooks/use-repository-catalog";
+import { useCatalogRepository } from "#web/features/repository-catalog/use-repository-catalog";
 import { useRepositoryHistoryReader } from "#web/features/repository-history/hooks/use-repository-history-reader";
 import type { RepositoryHistoryGateway } from "#web/features/repository-history/repository-history-reader";
 import { RepositorySettingsPage } from "#web/features/repository-settings/repository-settings-page";

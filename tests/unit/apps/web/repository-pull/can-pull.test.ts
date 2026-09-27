@@ -5,8 +5,7 @@ import {
 } from "#web/features/repository-pull/can-pull";
 
 const ready: PullConditions = {
-  connected: true,
-  writable: true,
+  canRun: true,
   activeBranch: "main",
   recoveryBusy: false,
   pulling: false,
@@ -19,8 +18,7 @@ describe("pull availability", () => {
   });
 
   it.each<[string, Partial<PullConditions>]>([
-    ["disconnected", { connected: false }],
-    ["without write access", { writable: false }],
+    ["when the command cannot run", { canRun: false }],
     ["without a checked-out branch", { activeBranch: undefined }],
     ["while a repository operation is busy", { recoveryBusy: true }],
     ["while already pulling", { pulling: true }],

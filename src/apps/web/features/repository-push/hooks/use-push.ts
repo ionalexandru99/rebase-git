@@ -63,7 +63,7 @@ export function usePush() {
   };
 
   return {
-    connected: command.canRun,
+    canRun: command.canRun,
     running,
     review,
     notice,

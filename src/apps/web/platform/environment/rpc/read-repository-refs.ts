@@ -12,7 +12,7 @@ import { Cause, Effect, Option, Schema, Stream } from "effect";
 import { rpcJsonReassembler } from "#web/platform/environment/rpc/environment-rpc-json";
 import { createEnvironmentRequestId } from "#web/platform/environment/websocket/environment-request-id";
 
-export type RepositoryRefsReadFailure =
+type RepositoryRefsReadFailure =
   | EnvironmentResponseError
   | EnvironmentHttpRejected<RepositoryRefsFailed["failure"]>;
 

@@ -2,8 +2,7 @@ import { IconArrowBarToDown } from "@tabler/icons-react";
 import { ToolbarButton } from "#web/components/ui/toolbar-button";
 import { useOperationCommandState } from "#web/features/operation-recovery/hooks/use-operation-status";
 import { canPull } from "#web/features/repository-pull/can-pull";
-import type { Pull } from "#web/features/repository-pull/hooks/use-pull";
-import { useRepositoryScope } from "#web/platform/query/repository-scope";
+import type { Pull } from "#web/features/repository-pull/use-pull";
 
 export function PullButton({
   pull,
@@ -14,13 +13,11 @@ export function PullButton({
   readonly activeBranch: string | undefined;
   readonly incoming: number;
 }) {
-  const scope = useRepositoryScope();
   const recoveryBusy = useOperationCommandState() === "busy";
   if (!pull.available) return null;
   const { pulling } = pull;
   const enabled = canPull({
-    connected: scope?.connected === true,
-    writable: scope?.writable === true,
+    canRun: pull.canRun,
     activeBranch,
     recoveryBusy,
     pulling,

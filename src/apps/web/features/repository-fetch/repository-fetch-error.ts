@@ -3,17 +3,14 @@ import {
   RepositoryHistoryRejected,
   RepositoryHistoryUnavailable,
 } from "#web/features/repository-history/repository-history-reader";
+import { describeFailure } from "#web/platform/query/request-failure";
 
 export function describeRepositoryFetchError(error: unknown) {
   if (error instanceof RepositoryHistoryOffline)
-    return "Reconnect to the server and try again.";
+    return describeFailure({ _tag: "Unanswered" });
   if (error instanceof RepositoryHistoryUnavailable)
     return "Fetching is unavailable for this server.";
-  if (error instanceof RepositoryHistoryRejected) {
-    if (error.failure._tag === "AuthorizationDenied")
-      return "You do not have permission to change this repository.";
-    if (error.failure._tag === "RepositoryMissing")
-      return "The repository is no longer available.";
-  }
-  return "Git could not complete the request. Try again.";
+  if (error instanceof RepositoryHistoryRejected)
+    return describeFailure({ _tag: "Rejected", failure: error.failure });
+  return "Git could not complete the operation.";
 }

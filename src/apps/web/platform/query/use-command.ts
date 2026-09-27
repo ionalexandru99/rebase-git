@@ -48,6 +48,10 @@ export interface CommandAnswer {
   readonly version?: string;
 }
 
+type AnswerValue<Read extends RequestableEnvironmentHttpRoute> =
+  | RouteSuccess<Read>
+  | ((current: RouteSuccess<Read> | undefined) => RouteSuccess<Read>);
+
 export interface CommandOptions<Route extends RequestableEnvironmentHttpRoute> {
   readonly target?: CommandTarget | undefined;
   readonly before?: () => Promise<boolean>;
@@ -73,7 +77,7 @@ interface CommandState<Route extends RequestableEnvironmentHttpRoute> {
 export function answer<Read extends RequestableEnvironmentHttpRoute>(
   route: Read,
   input: RouteInput<Read>,
-  value: RouteSuccess<Read>,
+  value: AnswerValue<Read>,
   version?: string,
 ): CommandAnswer {
   return { route, input, value, ...(version === undefined ? {} : { version }) };
@@ -88,7 +92,7 @@ export function useCommand<Route extends RequestableEnvironmentHttpRoute>(
   const queryClient = useQueryClient();
   const scoped = targetsRepository(route);
   const target = scoped ? (explicitTarget ?? scope) : undefined;
-  const key = commandKey(route, target?.repositoryId);
+  const key = commandKey(route, target);
   const running = useRef<AbortController | undefined>(undefined);
   const mutation = useMutation<CommandResult<Route>, never, RouteInput<Route>>({
     mutationKey: key,
@@ -145,7 +149,6 @@ export function useCommand<Route extends RequestableEnvironmentHttpRoute>(
     lastOk: lastOk(observed),
     failure: result === undefined || result._tag === "Ok" ? undefined : result,
     input: mutation.variables,
-    submittedAt: mutation.submittedAt,
   };
 }
 
@@ -155,12 +158,12 @@ export type Command<Route extends RequestableEnvironmentHttpRoute> = ReturnType<
 
 function commandKey(
   route: RequestableEnvironmentHttpRoute,
-  repositoryId: string | undefined,
+  target: CommandTarget | undefined,
 ) {
   return [
     "command",
     route.path,
-    ...(repositoryId === undefined ? [] : [repositoryId]),
+    ...(target === undefined ? [] : [target.repositoryId, target.worktreePath]),
   ];
 }
 
@@ -217,6 +220,7 @@ async function settle<Route extends RequestableEnvironmentHttpRoute>(
     readonly answers: CommandOptions<Route>["answers"];
   },
 ) {
+  if (result._tag === "Cancelled" || result._tag === "AccessDenied") return;
   const answered =
     result._tag === "Ok" && answers !== undefined
       ? await writeAnswers(
@@ -225,11 +229,18 @@ async function settle<Route extends RequestableEnvironmentHttpRoute>(
           answers(result.value, input),
         )
       : new Set<string>();
-  const reread = queryClient.invalidateQueries({
-    predicate: (query) =>
-      !answered.has(query.queryHash) && readsFrom(query, repositoryId),
-  });
-  if (result._tag === "Ok" && answered.size === 0) await reread;
+  const waits = result._tag === "Ok" && answered.size === 0;
+  const stale = (query: Query) =>
+    !answered.has(query.queryHash) && readsFrom(query, repositoryId);
+  void queryClient.invalidateQueries(
+    { predicate: (query) => stale(query) && query.meta?.changes === "index" },
+    { cancelRefetch: false },
+  );
+  const rereads = queryClient.invalidateQueries(
+    { predicate: (query) => stale(query) && query.meta?.changes !== "index" },
+    { cancelRefetch: waits },
+  );
+  if (waits) await rereads;
 }
 
 async function writeAnswers(

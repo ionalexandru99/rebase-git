@@ -70,7 +70,8 @@ export function ConflictFileSection({
               <Confirmation
                 title="Conflict markers remain"
                 action="Mark resolved anyway"
-                busy={disabled}
+                busy={view.busy}
+                disabled={disabled}
                 onCancel={conflicts.cancel}
                 onConfirm={() => void conflicts.resolve(path, true)}
                 className="min-w-0 flex-nowrap"

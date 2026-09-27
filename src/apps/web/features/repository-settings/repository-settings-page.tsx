@@ -5,7 +5,10 @@ import { SettingsSection } from "#web/components/ui/settings-layout";
 import { writeClipboardText } from "#web/features/clipboard/write-clipboard-text";
 import type { RepositoryHistoryCacheReader } from "#web/features/history-storage/history-cache";
 import { localEnvironment } from "#web/features/project-navigation/local-environment";
-import { useCatalogRepository } from "#web/features/repository-catalog/hooks/use-repository-catalog";
+import {
+  catalogWithout,
+  useCatalogRepository,
+} from "#web/features/repository-catalog/use-repository-catalog";
 import { RepositoryFetchSettings } from "#web/features/repository-fetch/components/repository-fetch-settings";
 import { describeRepositoryFetchError } from "#web/features/repository-fetch/repository-fetch-error";
 import type { RepositoryHistoryIdentity } from "#web/features/repository-history/preferences/repository-history-order";
@@ -35,9 +38,9 @@ export function RepositorySettingsPage({
 }) {
   const repository = useCatalogRepository(repositoryId);
   const { environmentId, connected, writable } = useEnvironment();
-  const { run: removeFromCatalog } = useCommand(
-    RepositoryCatalogHttpApi.remove,
-  );
+  const removal = useCommand(RepositoryCatalogHttpApi.remove, {
+    answers: catalogWithout,
+  });
   const logicalRepositoryId = repository?.logicalRepositoryId ?? repositoryId;
   const heading = useRef<HTMLHeadingElement>(null);
   const identity = useMemo(
@@ -102,11 +105,11 @@ export function RepositorySettingsPage({
             name={repository.name}
             path={path}
             connected={connected}
-            canRemove={writable}
+            canRemove={removal.canRun}
             copyPath={() => writeClipboardText(path)}
             reveal={reveal === undefined ? undefined : () => reveal(path)}
             remove={async () => {
-              const result = await removeFromCatalog({ repositoryId });
+              const result = await removal.run({ repositoryId });
               if (result._tag !== "Ok")
                 throw new Error(describeFailure(result));
               onRemoved();
