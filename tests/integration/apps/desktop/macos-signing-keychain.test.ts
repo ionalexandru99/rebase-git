@@ -49,15 +49,18 @@ it.skipIf(process.platform !== "darwin")(
           }
         }
       } finally {
-        await execute("/usr/bin/security", [
-          "list-keychains",
-          "-d",
-          "user",
-          "-s",
-          ...keychains,
-        ]);
-        await temporaryFiles.cleanup();
-        await removeTemporaryDirectory(directory);
+        try {
+          await execute("/usr/bin/security", [
+            "list-keychains",
+            "-d",
+            "user",
+            "-s",
+            ...keychains,
+          ]);
+        } finally {
+          await temporaryFiles.cleanup();
+          await removeTemporaryDirectory(directory);
+        }
       }
     });
 
