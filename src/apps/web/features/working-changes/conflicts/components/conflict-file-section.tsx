@@ -58,7 +58,7 @@ export function ConflictFileSection({
           <>
             <button
               type="button"
-              className="flex min-w-0 flex-1 items-center gap-1.5 text-left text-xs"
+              className="flex min-w-20 flex-1 items-center gap-1.5 text-left text-xs"
               aria-label={`Conflict ${path}`}
               aria-pressed={chosen(path)}
               onClick={() => view.select({ section: "conflicts", path })}
