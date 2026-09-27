@@ -1,8 +1,4 @@
-import {
-  RepositoryOperationsHttpApi,
-  RepositoryTagsHttpApi,
-} from "@rebase/contracts";
-import { EnvironmentHttpRejected } from "@rebase/environment-client";
+import { RepositoryOperationsApi, RepositoryTagsApi } from "@rebase/contracts";
 import { useState } from "react";
 import { expect, it, vi } from "vite-plus/test";
 import { page } from "vite-plus/test/browser";
@@ -10,6 +6,7 @@ import { repositoryScope } from "#tests-ui/apps/web/repository-scope/repository-
 import {
   fakeRequests,
   idleOperation,
+  rejected,
   respond,
 } from "#tests-ui/runtime/fake-requests";
 import { render } from "#tests-ui/runtime/render";
@@ -25,13 +22,11 @@ it("fills the repository target, answers rejections as results and rereads the r
   const created = vi.fn();
   const operationReads = vi.fn(idleOperation.respond);
   const requests = fakeRequests(
-    respond(RepositoryOperationsHttpApi.read, operationReads),
-    respond(RepositoryTagsHttpApi.create, async (command) => {
+    respond(RepositoryOperationsApi.read, operationReads),
+    respond(RepositoryTagsApi.create, async (command) => {
       created(command);
       if (command.name === "taken")
-        throw new EnvironmentHttpRejected({
-          failure: { _tag: "TagRejected", reason: "Exists" },
-        });
+        throw rejected({ _tag: "TagRejected", reason: "Exists" });
       return { name: command.name, target: command.target };
     }),
   );
@@ -67,10 +62,10 @@ it("fills the repository target, answers rejections as results and rereads the r
 });
 
 function CreateTag() {
-  const create = useCommand(RepositoryTagsHttpApi.create);
+  const create = useCommand(RepositoryTagsApi.create);
   const [outcome, setOutcome] = useState<string>();
   useEnvironmentQuery(
-    RepositoryOperationsHttpApi.read,
+    RepositoryOperationsApi.read,
     { repositoryId: scope.repositoryId, worktreePath: scope.worktreePath },
     { changes: "index" },
   );

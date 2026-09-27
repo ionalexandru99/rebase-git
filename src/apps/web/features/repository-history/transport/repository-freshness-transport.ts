@@ -2,15 +2,15 @@ import type {
   RepositoryFetchSetting,
   RepositoryFreshness,
 } from "@rebase/contracts";
-import type { EnvironmentConnectionFailure } from "@rebase/environment-client";
 import type { Effect } from "effect";
 import type {
+  RepositoryHistoryOffline,
   RepositoryHistoryRejected,
   RepositoryHistoryUnavailable,
 } from "#web/features/repository-history/repository-history-reader";
 
 export type RepositoryFreshnessFailure =
-  | EnvironmentConnectionFailure
+  | RepositoryHistoryOffline
   | RepositoryHistoryRejected
   | RepositoryHistoryUnavailable;
 

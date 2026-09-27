@@ -4,9 +4,9 @@ import { join } from "node:path";
 import { promisify } from "node:util";
 import {
   type CheckoutRepositoryRef,
-  RepositoryChangesHttpApi,
-  RepositoryOperationsHttpApi,
-  RepositoryRefsHttpApi,
+  RepositoryChangesApi,
+  RepositoryOperationsApi,
+  RepositoryRefsApi,
 } from "@rebase/contracts";
 import { Deferred, Effect, Fiber } from "effect";
 import { expect, it } from "vite-plus/test";
@@ -38,9 +38,9 @@ async function fixture() {
   const { directory, git } = await createDivergedRepository(environment.home);
   const repositoryId = (await environment.remember(directory)).id;
   const { coordination } = environment;
-  const changes = environment.routes(RepositoryChangesHttpApi);
-  const operations = environment.routes(RepositoryOperationsHttpApi);
-  const refs = environment.routes(RepositoryRefsHttpApi);
+  const changes = environment.routes(RepositoryChangesApi);
+  const operations = environment.routes(RepositoryOperationsApi);
+  const refs = environment.routes(RepositoryRefsApi);
   const scope = { repositoryId, worktreePath: directory };
   const continueOperation = async () =>
     Effect.runPromise(

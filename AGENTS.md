@@ -17,7 +17,7 @@ Rebase is a fast Git client for developers working on large repositories. It run
 
 ## Architecture
 
-- Declare every route once in `src/contracts` with the `route`, `repositoryQuery` and `repositoryCommand` builders. A route answers `{ _tag: "Ok", value }` or `{ _tag: "Rejected", failure }`. Domain failures are plain tagged structs in the route's failure union, created as wire values; no intermediate error classes. Transport statuses belong to transport and authorization only.
+- The application API runs over one WebSocket with Effect RPC; HTTP only serves the web UI files and the pairing exchange that authorizes the socket. Declare every route once in `src/contracts` with the `route`, `repositoryQuery` and `repositoryCommand` builders; each is a procedure of the one `EnvironmentRpc` group and fails through its typed failure channel with plain tagged structs created as wire values, no intermediate error classes.
 - A server feature is a list of `command(route, policy, handler)` and `query(route, handler)` entries plus Git functions. `command` owns worktree validation, locking and the standard `RepositoryRejected` failures.
 - Server code uses Effect for Git processes, streams, cancellation, concurrency and resource lifetimes. Build dependencies once at the entry point as plain objects and pass them as arguments; add a Context service only when two live implementations exist. Run Effects at entry points and adapt Promise or callback libraries once, including cancellation and cleanup.
 - Server SQLite goes through Drizzle: query the tables directly, no repositories, generate migrations with Drizzle Kit.

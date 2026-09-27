@@ -1,7 +1,7 @@
 import {
   type ConflictDocument,
   type ConflictPath,
-  RepositoryConflictsHttpApi,
+  RepositoryConflictsApi,
 } from "@rebase/contracts";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
@@ -30,7 +30,7 @@ interface WriteQueue {
   waiters: (() => void)[];
 }
 
-const writeRoute = RepositoryConflictsHttpApi.write;
+const writeRoute = RepositoryConflictsApi.write;
 const noPicks: Picks = new Map();
 
 export function useMergeDocument(input: ConflictPath) {
@@ -41,7 +41,7 @@ export function useMergeDocument(input: ConflictPath) {
     target: input,
     answers: (written, { repositoryId, worktreePath, path }) => [
       answer(
-        RepositoryConflictsHttpApi.document,
+        RepositoryConflictsApi.document,
         { repositoryId, worktreePath, path },
         written,
       ),

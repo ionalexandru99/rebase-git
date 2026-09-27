@@ -1,4 +1,4 @@
-import { RepositoryPullHttpApi } from "@rebase/contracts";
+import { RepositoryPullApi } from "@rebase/contracts";
 import { useCallback, useState } from "react";
 import type {
   RepositoryHistoryFetchCommands,
@@ -25,7 +25,7 @@ const idleHistory = createStore<RepositoryHistorySnapshot>({
 
 export function usePull(reader: PullReader | undefined) {
   const scope = useRepositoryScope();
-  const command = useCommand(RepositoryPullHttpApi.pull, {
+  const command = useCommand(RepositoryPullApi.pull, {
     before: async () =>
       reader !== undefined && (await reader.fetch()).failure === undefined,
   });
@@ -75,7 +75,7 @@ function isFreshnessReady(snapshot: RepositoryHistorySnapshot) {
 
 function describePullFailure(
   branch: string,
-  failure: CommandFailure<typeof RepositoryPullHttpApi.pull>,
+  failure: CommandFailure<typeof RepositoryPullApi.pull>,
 ) {
   return describeFailure(failure, {
     PullDiverged: ({ upstream }) => `${branch} has diverged from ${upstream}.`,

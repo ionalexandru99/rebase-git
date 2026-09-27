@@ -1,18 +1,21 @@
 import type {
   RepositoryFetchSetting,
   RepositoryFreshness,
-  RepositoryFreshnessRpc,
   RepositoryHistoryOperationFailure,
+  RepositoryHistoryRpc,
 } from "@rebase/contracts";
 import { Effect, Option, Queue, Semaphore, Stream } from "effect";
-import type { EnvironmentRpcHandlersFor } from "#server/adapters/environment-transport/combine-environment-features";
-import type { EnvironmentRpcSession } from "#server/adapters/environment-transport/rpc/environment-rpc-negotiation";
+import type { EnvironmentRpcHandlersFor } from "#server/adapters/environment-transport/environment-routes";
 import type { RepositoryFreshnessService } from "#server/features/repository-history/freshness/repository-freshness";
 
+type FreshnessHandlers = Pick<
+  EnvironmentRpcHandlersFor<typeof RepositoryHistoryRpc>,
+  "WatchFreshness" | "FetchHistory" | "ConfigureFetch"
+>;
+
 export function repositoryFreshnessRpc(
-  session: EnvironmentRpcSession,
   freshness: RepositoryFreshnessService,
-): EnvironmentRpcHandlersFor<typeof RepositoryFreshnessRpc> {
+): FreshnessHandlers {
   const subscriptions = new Set<string>();
   const commands = Semaphore.makeUnsafe(32);
   const runCommand = <A>(
@@ -31,13 +34,10 @@ export function repositoryFreshnessRpc(
         }),
       ),
     );
-  const authorize = () =>
-    session.requireCapability("repository-history-freshness");
   return {
     WatchFreshness: ({ repositoryId }: { repositoryId: string }) =>
       Stream.unwrap(
         Effect.gen(function* () {
-          yield* authorize();
           if (subscriptions.size >= 32 || subscriptions.has(repositoryId))
             return yield* Effect.fail<RepositoryHistoryOperationFailure>({
               _tag: "GitFailed",
@@ -61,20 +61,13 @@ export function repositoryFreshnessRpc(
         }),
       ),
     FetchHistory: ({ repositoryId }: { repositoryId: string }) =>
-      authorize().pipe(
-        Effect.flatMap(() => freshness.fetch(repositoryId)),
-        runCommand,
-      ),
+      runCommand(freshness.fetch(repositoryId)),
     ConfigureFetch: ({
       repositoryId,
       setting,
     }: {
       repositoryId: string;
       setting: RepositoryFetchSetting;
-    }) =>
-      authorize().pipe(
-        Effect.flatMap(() => freshness.configure(repositoryId, setting)),
-        runCommand,
-      ),
+    }) => runCommand(freshness.configure(repositoryId, setting)),
   };
 }

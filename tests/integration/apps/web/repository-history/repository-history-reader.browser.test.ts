@@ -1,10 +1,10 @@
+import type { RepositoryCommit } from "@rebase/contracts";
+import { describe, expect, it, vi } from "vite-plus/test";
+import { waitForObservation } from "#tests-support/observation";
 import {
   encodeRepositoryHistoryBatch,
   encodeRepositoryHistoryPage,
-  type RepositoryCommit,
-} from "@rebase/contracts";
-import { describe, expect, it, vi } from "vite-plus/test";
-import { waitForObservation } from "#tests-support/observation";
+} from "#tests-support/repository-history-bytes";
 import { createBrowserRepositoryHistoryReader } from "#web/features/repository-history/browser-repository-history-reader";
 import { clearHistoryCache } from "#web/features/repository-history/cache/repository-history-storage";
 import {

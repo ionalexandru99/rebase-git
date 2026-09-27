@@ -4,14 +4,17 @@ import {
   type ConflictList,
   type ConflictRegion,
   type ConflictSides,
-  RepositoryConflictsHttpApi,
+  RepositoryConflictsApi,
   type StageConflict,
   type WriteConflict,
 } from "@rebase/contracts";
-import { EnvironmentHttpRejected } from "@rebase/environment-client";
 import { vi } from "vite-plus/test";
 import { repositoryScope } from "#tests-ui/apps/web/repository-scope/repository-scope-fixture";
-import { fakeRequests, respond } from "#tests-ui/runtime/fake-requests";
+import {
+  fakeRequests,
+  rejected,
+  respond,
+} from "#tests-ui/runtime/fake-requests";
 import { render } from "#tests-ui/runtime/render";
 import { MergeView } from "#web/features/merge-view/merge-view";
 import { RepositoryScopeProvider } from "#web/platform/query/repository-scope";
@@ -89,13 +92,11 @@ export function content(
 export const initialContent = content();
 
 function conflictFailure(reason: ConflictFailure["reason"]) {
-  return new EnvironmentHttpRejected({
-    failure: {
-      _tag: "ConflictFailed",
-      reason,
-      detail: `Rejected: ${reason}`,
-    } satisfies ConflictFailure,
-  });
+  return rejected({
+    _tag: "ConflictFailed",
+    reason,
+    detail: `Rejected: ${reason}`,
+  } satisfies ConflictFailure);
 }
 
 interface FixtureOptions {
@@ -159,13 +160,13 @@ export async function mergeViewFixture({
   });
 
   const requests = fakeRequests(
-    respond(RepositoryConflictsHttpApi.document, () => {
+    respond(RepositoryConflictsApi.document, () => {
       reads += 1;
       if (documentFailure !== undefined) throw conflictFailure(documentFailure);
       return document();
     }),
-    respond(RepositoryConflictsHttpApi.list, () => list([file(), ...others])),
-    respond(RepositoryConflictsHttpApi.write, async (command) => {
+    respond(RepositoryConflictsApi.list, () => list([file(), ...others])),
+    respond(RepositoryConflictsApi.write, async (command) => {
       writes.push(command);
       await heldWrites;
       if (staleNext) {
@@ -179,13 +180,13 @@ export async function mergeViewFixture({
       revision = `revision-${writes.length}`;
       return document();
     }),
-    respond(RepositoryConflictsHttpApi.stage, (command) => {
+    respond(RepositoryConflictsApi.stage, (command) => {
       stages.push(command);
       if (!command.allowMarkers && file().openRegions > 0)
         throw conflictFailure("Markers");
       return list(others);
     }),
-    respond(RepositoryConflictsHttpApi.choose, () => list(others)),
+    respond(RepositoryConflictsApi.choose, () => list(others)),
   );
 
   const view = await render(

@@ -1,14 +1,17 @@
 import {
   type RepositoryChangeKind,
   type RepositoryOperation,
-  RepositoryOperationsHttpApi,
+  RepositoryOperationsApi,
 } from "@rebase/contracts";
-import { EnvironmentHttpRejected } from "@rebase/environment-client";
 import { describe, expect, it, vi } from "vite-plus/test";
 import { page, userEvent } from "vite-plus/test/browser";
 import { repositoryScope } from "#tests-ui/apps/web/repository-scope/repository-scope-fixture";
-import { fakeRequests, respond } from "#tests-ui/runtime/fake-requests";
-import { render, testEnvironment } from "#tests-ui/runtime/render";
+import {
+  fakeRequests,
+  rejected,
+  respond,
+} from "#tests-ui/runtime/fake-requests";
+import { render, testChanges, testEnvironment } from "#tests-ui/runtime/render";
 import { ErrorNotification } from "#web/features/notifications/components/error-notification";
 import { PersistentNotification } from "#web/features/notifications/components/persistent-notification";
 import { NotificationsProvider } from "#web/features/notifications/notifications";
@@ -16,7 +19,6 @@ import { OperationRecoveryNotice } from "#web/features/operation-recovery/compon
 import { OperationRecoveryToast } from "#web/features/operation-recovery/components/operation-recovery-toast";
 import type { OperationRecoveryState } from "#web/features/operation-recovery/hooks/use-operation-recovery";
 import { WorkspacePanel } from "#web/features/workspace-panel/workspace-panel";
-import type { EnvironmentChangeListener } from "#web/platform/environment/environment-protocol.contract";
 import { EnvironmentProvider } from "#web/platform/query/environment-context";
 import { RepositoryScopeProvider } from "#web/platform/query/repository-scope";
 
@@ -234,12 +236,10 @@ describe("operation recovery toast", () => {
     const f = await liveFixture(readyToContinue());
     f.execute.mockImplementation(() => {
       f.set(idle());
-      throw new EnvironmentHttpRejected({
-        failure: {
-          _tag: "OperationFailed",
-          reason: "Uncertain",
-          detail: "Git stopped responding.",
-        },
+      throw rejected({
+        _tag: "OperationFailed",
+        reason: "Uncertain",
+        detail: "Git stopped responding.",
       });
     });
     await page.getByRole("button", { name: "Continue rebase" }).click();
@@ -318,7 +318,7 @@ function idle() {
 async function liveFixture(initial: RepositoryOperation) {
   let current = initial;
   let gate = Promise.resolve();
-  const listeners = new Set<EnvironmentChangeListener>();
+  const environmentChanges = testChanges();
   const read = vi.fn(async () => {
     await gate;
     return current;
@@ -327,24 +327,17 @@ async function liveFixture(initial: RepositoryOperation) {
     () => current,
   );
   const requests = fakeRequests(
-    respond(RepositoryOperationsHttpApi.read, async () => read()),
-    respond(RepositoryOperationsHttpApi.execute, async (command) =>
+    respond(RepositoryOperationsApi.read, async () => read()),
+    respond(RepositoryOperationsApi.execute, async (command) =>
       execute(command),
     ),
   );
-  const changes = {
-    subscribe: (listener: EnvironmentChangeListener) => {
-      listeners.add(listener);
-      return () => listeners.delete(listener);
-    },
-  };
   const scope = repositoryScope({ repositoryId: "repo" });
   const tree = (connected: boolean) => (
     <EnvironmentProvider
       environment={testEnvironment({
         environmentId: "environment",
         requests,
-        changes,
         connected,
       })}
     >
@@ -357,7 +350,9 @@ async function liveFixture(initial: RepositoryOperation) {
       </NotificationsProvider>
     </EnvironmentProvider>
   );
-  const view = await render(tree(true));
+  const view = await render(tree(true), {
+    queryClient: environmentChanges.queryClient,
+  });
   return {
     read,
     execute,
@@ -369,9 +364,11 @@ async function liveFixture(initial: RepositoryOperation) {
       gate = released.promise;
       return () => released.resolve();
     },
-    connect: (connected: boolean) => view.rerender(tree(connected)),
-    change: (kind: RepositoryChangeKind) => {
-      for (const listener of listeners) listener(["repo"], kind);
+    connect: (connected: boolean) => {
+      if (connected) environmentChanges.publish();
+      return view.rerender(tree(connected));
     },
+    change: (kind: RepositoryChangeKind) =>
+      environmentChanges.publish(["repo"], kind),
   };
 }

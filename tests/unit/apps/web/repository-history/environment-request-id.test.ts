@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
-import { createEnvironmentRequestId } from "#web/platform/environment/websocket/environment-request-id";
+import { createEnvironmentRequestId } from "#web/features/repository-history/repository-history-reader";
 
 afterEach(() => vi.unstubAllGlobals());
 

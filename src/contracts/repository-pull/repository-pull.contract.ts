@@ -1,7 +1,4 @@
-import {
-  type EnvironmentHttpRoute,
-  repositoryCommand,
-} from "@rebase/contracts/environment-connection/http/environment-http-route.contract";
+import { repositoryCommand } from "@rebase/contracts/environment-connection/environment-route.contract";
 import {
   RepositoryId,
   RepositoryPath,
@@ -41,10 +38,10 @@ export const PullFailure = Schema.Union([
 ]);
 export type PullFailure = typeof PullFailure.Type;
 
-export const RepositoryPullHttpApi = {
-  pull: repositoryCommand("/api/repositories/pull", {
+export const RepositoryPullApi = {
+  pull: repositoryCommand("repositories/pull", {
     request: PullBranch,
     success: BranchPulled,
     failure: PullFailure,
   }),
-} satisfies Record<string, EnvironmentHttpRoute>;
+};

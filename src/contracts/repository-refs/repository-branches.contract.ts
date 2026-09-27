@@ -1,7 +1,4 @@
-import {
-  type EnvironmentHttpRoute,
-  repositoryCommand,
-} from "@rebase/contracts/environment-connection/http/environment-http-route.contract";
+import { repositoryCommand } from "@rebase/contracts/environment-connection/environment-route.contract";
 import {
   ObjectId,
   RefName,
@@ -111,25 +108,25 @@ export const RepositoryBranchesOperationFailure = Schema.Union([
 export type RepositoryBranchesOperationFailure =
   typeof RepositoryBranchesOperationFailure.Type;
 
-export const RepositoryBranchesHttpApi = {
-  create: repositoryCommand("/api/repositories/branches/create", {
+export const RepositoryBranchesApi = {
+  create: repositoryCommand("repositories/branches/create", {
     request: CreateRepositoryBranch,
     success: LocalBranch,
     failure: RepositoryBranchesOperationFailure,
   }),
-  delete: repositoryCommand("/api/repositories/branches/delete", {
+  delete: repositoryCommand("repositories/branches/delete", {
     request: DeleteRepositoryBranch,
     success: RepositoryBranchDeleted,
     failure: RepositoryBranchesOperationFailure,
   }),
-  rename: repositoryCommand("/api/repositories/branches/rename", {
+  rename: repositoryCommand("repositories/branches/rename", {
     request: RenameRepositoryBranch,
     success: RepositoryBranchRenamed,
     failure: RepositoryBranchesOperationFailure,
   }),
-  setUpstream: repositoryCommand("/api/repositories/branches/upstream", {
+  setUpstream: repositoryCommand("repositories/branches/upstream", {
     request: SetRepositoryBranchUpstream,
     success: LocalBranch,
     failure: RepositoryBranchesOperationFailure,
   }),
-} satisfies Record<string, EnvironmentHttpRoute>;
+};

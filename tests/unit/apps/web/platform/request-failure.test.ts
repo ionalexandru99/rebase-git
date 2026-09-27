@@ -18,13 +18,6 @@ const tagMessages = {
 describe("describeFailure", () => {
   it.each<[TagFailure, string]>([
     [{ _tag: "Unanswered" }, "The Environment did not answer."],
-    [
-      {
-        _tag: "AccessDenied",
-        failure: { _tag: "RevokedGrant" },
-      },
-      "This device has no access to this repository.",
-    ],
     [{ _tag: "Cancelled" }, "The request was cancelled."],
   ])("words %j the same for every feature", (failure, message) => {
     expect(describeFailure(failure, tagMessages)).toContain(message);

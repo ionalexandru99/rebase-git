@@ -6,11 +6,12 @@ import { resolve } from "node:path";
 import { promisify } from "node:util";
 import { expect, test } from "@playwright/test";
 import {
-  createCurrentEnvironmentHello,
   decodeRepositoryHistoryBatch,
   decodeRepositoryHistoryPage,
   EnvironmentRpc,
   environmentLivePath,
+  environmentProtocol,
+  environmentSubprotocol,
 } from "@rebase/contracts";
 import { Effect, Exit, Scope } from "effect";
 import { RpcClient, RpcSerialization } from "effect/unstable/rpc";
@@ -52,7 +53,7 @@ test("prepared corpus stays within server and Git process budgets", async () => 
   const started = await new Promise<{
     origin: string;
     repositoryId: string;
-    ticket: string;
+    credential: string;
     idleRssBytes: number;
   }>((resolveStart, reject) => {
     let output = "";
@@ -96,7 +97,8 @@ test("prepared corpus stays within server and Git process budgets", async () => 
     void sample();
   }, 5);
   const socket = new WebSocket(
-    `${started.origin.replace("http://", "ws://")}${environmentLivePath}?ticket=${started.ticket}`,
+    `${started.origin.replace("http://", "ws://")}${environmentLivePath}`,
+    [environmentSubprotocol, started.credential],
   );
   const rpcScope = Effect.runSync(Scope.make());
   try {
@@ -121,13 +123,8 @@ test("prepared corpus stays within server and Git process budgets", async () => 
         ),
       ),
     );
-    const negotiated = await Effect.runPromise(
-      client.Hello(createCurrentEnvironmentHello("0.0.0")),
-    );
-    if (negotiated._tag === "HelloRejected") {
-      throw new Error("The benchmark server rejected the hello.");
-    }
-    const history = createRepositoryHistoryRpc({ negotiated, rpc: client });
+    await Effect.runPromise(client.Hello({ protocol: environmentProtocol }));
+    const history = createRepositoryHistoryRpc(client);
     const firstPages: number[] = [];
     for (let iteration = 0; iteration <= 30; iteration += 1) {
       const start = performance.now();

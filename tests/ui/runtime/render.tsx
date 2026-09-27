@@ -1,4 +1,3 @@
-import { currentEnvironmentCapabilities } from "@rebase/contracts";
 import { type QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Layer, ManagedRuntime } from "effect";
 import type { ReactNode } from "react";
@@ -14,6 +13,7 @@ import {
   type Environment,
   EnvironmentProvider,
 } from "#web/platform/query/environment-context";
+import { createEnvironmentInvalidation } from "#web/platform/query/environment-invalidation";
 import { createEnvironmentQueryClient } from "#web/platform/query/environment-query-client";
 
 const runtimes = new Set<ManagedRuntime.ManagedRuntime<never, never>>();
@@ -58,17 +58,12 @@ export function render(
   });
 }
 
-const unchanged = { subscribe: () => () => {} };
-
 export function testEnvironment(
   environment: Partial<Environment> = {},
 ): Environment {
   return {
     environmentId: "00000000-0000-4000-8000-000000000100",
     requests: fakeRequests(idleOperation),
-    rpc: undefined,
-    capabilities: currentEnvironmentCapabilities,
-    changes: unchanged,
     connected: true,
     readable: true,
     writable: true,
@@ -80,4 +75,9 @@ export function testEnvironment(
     },
     ...environment,
   };
+}
+
+export function testChanges(queryClient = createEnvironmentQueryClient()) {
+  const invalidation = createEnvironmentInvalidation(queryClient);
+  return { queryClient, publish: invalidation.changed };
 }

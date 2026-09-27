@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { promisify } from "node:util";
 import {
   type OperationAction,
-  RepositoryOperationsHttpApi,
+  RepositoryOperationsApi,
 } from "@rebase/contracts";
 import { Effect } from "effect";
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
@@ -39,7 +39,7 @@ async function fixture() {
   });
   const { directory, git } = await createDivergedRepository(environment.home);
   const repositoryId = (await environment.remember(directory)).id;
-  const service = environment.routes(RepositoryOperationsHttpApi);
+  const service = environment.routes(RepositoryOperationsApi);
   const scope = { repositoryId, worktreePath: directory };
   const read = () => Effect.runPromise(service.read(scope));
   const execute = async (action: OperationAction) =>

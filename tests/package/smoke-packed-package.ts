@@ -187,7 +187,7 @@ function assertVersionOutput(output: string, expectedVersion: string) {
   if (!output.split(/\r?\n/).includes(`Rebase ${expectedVersion}`)) {
     throw new Error(`The product version is missing from:\n${output}`);
   }
-  if (!/^Environment protocol \d+\.\d+ \(minimum \d+\.\d+\)$/m.test(output)) {
+  if (!/^Environment protocol \d+$/m.test(output)) {
     throw new Error(`The protocol version is missing from:\n${output}`);
   }
 }

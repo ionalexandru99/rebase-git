@@ -1,19 +1,78 @@
 import {
+  type EnvironmentRpcClient,
+  environmentProtocol,
+} from "@rebase/contracts";
+import { Effect, Fiber, type ManagedRuntime, Result, type Scope } from "effect";
+import {
   EnvironmentAccessDenied,
+  type EnvironmentConnection,
   type EnvironmentConnectionFailure,
   type EnvironmentCredential,
-  EnvironmentHelloRejected,
-} from "@rebase/environment-client";
-import { Effect, Fiber, Result } from "effect";
-import type { EnvironmentProtocolConnection } from "#web/app/environment/connection/environment-protocol-connection.contract";
-import type {
-  EnvironmentConnected,
-  LocalEnvironmentSession,
-  LocalEnvironmentSessionOptions,
-  LocalEnvironmentSessionState,
-} from "#web/app/environment/local-environment-session.contract";
-import type { EnvironmentChangeListener } from "#web/platform/environment/environment-protocol.contract";
-import { createStore } from "#web/platform/store/store";
+  EnvironmentProtocolMismatch,
+  environmentRequests,
+} from "#web/app/environment/environment-connection";
+import type { EnvironmentRequests } from "#web/platform/query/environment-context";
+import type { EnvironmentInvalidation } from "#web/platform/query/environment-invalidation";
+import { createStore, type ReadableStore } from "#web/platform/store/store";
+
+export type LocalEnvironmentSessionState =
+  | { readonly _tag: "PairingRequired" }
+  | { readonly _tag: "Authorizing" }
+  | { readonly _tag: "Connecting" }
+  | {
+      readonly _tag: "Connected";
+      readonly environmentId: string;
+      readonly requests: EnvironmentRequests;
+    }
+  | {
+      readonly _tag: "Reconnecting";
+      readonly attempt: number;
+      readonly environmentId?: string;
+    }
+  | {
+      readonly _tag: "AuthorizationFailed";
+      readonly failure: EnvironmentAccessDenied;
+    }
+  | {
+      readonly _tag: "ProtocolMismatch";
+      readonly message: string;
+    };
+
+export interface LocalEnvironmentSession
+  extends ReadableStore<LocalEnvironmentSessionState> {
+  readonly start: () => void;
+  readonly stop: () => void;
+}
+
+export type EnvironmentConnected = (
+  rpc: EnvironmentRpcClient,
+) => Effect.Effect<void, never, Scope.Scope>;
+
+export interface LocalEnvironmentGateway {
+  readonly authorize: () => Effect.Effect<
+    EnvironmentCredential,
+    EnvironmentConnectionFailure
+  >;
+  readonly connect: (
+    credential: EnvironmentCredential,
+  ) => Effect.Effect<
+    EnvironmentConnection,
+    EnvironmentConnectionFailure,
+    Scope.Scope
+  >;
+}
+
+export interface LocalEnvironmentSessionOptions {
+  readonly gateway: LocalEnvironmentGateway;
+  readonly invalidation: EnvironmentInvalidation;
+  readonly onConnect?: EnvironmentConnected;
+  readonly runtime: ManagedRuntime.ManagedRuntime<never, never>;
+  readonly waitBeforeReconnect?: (attempt: number) => Effect.Effect<void>;
+}
+
+type PublishState = (
+  state: LocalEnvironmentSessionState,
+) => Effect.Effect<void>;
 
 export function createLocalEnvironmentSession(
   options: LocalEnvironmentSessionOptions,
@@ -21,67 +80,33 @@ export function createLocalEnvironmentSession(
   const state = createStore<LocalEnvironmentSessionState>({
     _tag: "Authorizing",
   });
-  const changeListeners = new Set<EnvironmentChangeListener>();
   let credential: EnvironmentCredential | undefined;
   let fiber: Fiber.Fiber<void, never> | undefined;
-  let running = false;
-
   const publish: PublishState = (next) => Effect.sync(() => state.set(next));
 
   const runSession = Effect.gen(function* () {
-    if (credential === undefined) {
-      credential = yield* authorizeSession(options, publish);
-    }
-    yield* maintainConnection(
-      options,
-      credential,
-      publish,
-      (repositoryIds, kind) => {
-        for (const listener of changeListeners) listener(repositoryIds, kind);
-      },
-    );
+    credential ??= yield* authorizeSession(options, publish);
+    yield* maintainConnection(options, credential, publish);
   });
 
-  const start = () => {
-    if (running) {
-      return;
-    }
-
-    running = true;
-    fiber = options.runtime.runFork(
-      Effect.scoped(runSession).pipe(
-        Effect.ensuring(
-          Effect.sync(() => {
-            running = false;
-            fiber = undefined;
-          }),
-        ),
-      ),
-    );
-  };
-
-  const stop = () => {
-    if (!running) {
-      return;
-    }
-    const activeFiber = fiber;
-    if (activeFiber !== undefined) {
-      options.runtime.runFork(Fiber.interrupt(activeFiber));
-    }
-  };
-
   return {
-    requests: options.requests,
-    changes: {
-      subscribe: (listener) => {
-        changeListeners.add(listener);
-        return () => changeListeners.delete(listener);
-      },
-    },
     getSnapshot: state.getSnapshot,
-    start,
-    stop,
     subscribe: state.subscribe,
+    start: () => {
+      if (fiber !== undefined) return;
+      fiber = options.runtime.runFork(
+        runSession.pipe(
+          Effect.ensuring(
+            Effect.sync(() => {
+              fiber = undefined;
+            }),
+          ),
+        ),
+      );
+    },
+    stop: () => {
+      if (fiber !== undefined) options.runtime.runFork(Fiber.interrupt(fiber));
+    },
   };
 }
 
@@ -96,15 +121,10 @@ function authorizeSession(
         ? publish({ _tag: "Authorizing" })
         : reconnectAfter(options, publish, attempt);
       const authorized = yield* Effect.result(options.gateway.authorize());
-      if (Result.isSuccess(authorized)) {
-        return authorized.success;
-      }
-
-      const terminal =
-        authorized.failure instanceof EnvironmentAccessDenied &&
-        authorized.failure.failure._tag === "InvalidGrant"
-          ? { _tag: "PairingRequired" as const }
-          : terminalState(authorized.failure);
+      if (Result.isSuccess(authorized)) return authorized.success;
+      const terminal = terminalState(authorized.failure, {
+        type: "browser-session",
+      });
       if (terminal !== undefined) {
         yield* publish(terminal);
         return yield* Effect.interrupt;
@@ -118,74 +138,51 @@ function maintainConnection(
   options: LocalEnvironmentSessionOptions,
   credential: EnvironmentCredential,
   publish: PublishState,
-  publishChanges: EnvironmentChangeListener,
 ): Effect.Effect<void> {
   return Effect.gen(function* () {
     let attempt = 0;
     let environmentId: string | undefined;
-    let lastObservedSequence: number | undefined;
     while (true) {
       yield* attempt === 0
         ? publish({ _tag: "Connecting" })
         : reconnectAfter(options, publish, attempt, environmentId);
       const connection = yield* Effect.result(
         Effect.scoped(
-          options.gateway.connect(credential, lastObservedSequence).pipe(
+          options.gateway.connect(credential).pipe(
             Effect.tap((active) =>
               Effect.sync(() => {
-                environmentId = active.negotiated.environmentId;
+                environmentId = active.environmentId;
               }),
             ),
-            Effect.tap((active) =>
-              attachConnection(options.onConnect, active, publishChanges),
+            Effect.tap(
+              (active) => options.onConnect?.(active.rpc) ?? Effect.void,
             ),
             Effect.tap((active) =>
-              publish({
-                _tag: "Connected",
-                environmentId: active.negotiated.environmentId,
-                capabilities: active.negotiated.capabilities,
-                rpc: active.rpc,
-              }),
-            ),
-            Effect.flatMap((active) =>
-              active.closed.pipe(
-                Effect.map((failure) => ({
-                  failure,
-                  lastObservedSequence: active.currentSequence(),
-                })),
+              Effect.sync(() => options.invalidation.changed()).pipe(
+                Effect.andThen(
+                  publish({
+                    _tag: "Connected",
+                    environmentId: active.environmentId,
+                    requests: environmentRequests(active.rpc),
+                  }),
+                ),
               ),
             ),
+            Effect.flatMap((active) => active.closed),
           ),
         ),
       );
       const failure = Result.isFailure(connection)
         ? connection.failure
-        : connection.success.failure;
-      const terminal = terminalState(failure);
+        : connection.success;
+      const terminal = terminalState(failure, credential);
       if (terminal !== undefined) {
         yield* publish(terminal);
         return yield* Effect.interrupt;
       }
-
-      if (Result.isSuccess(connection)) {
-        lastObservedSequence = connection.success.lastObservedSequence;
-        attempt = 1;
-      } else {
-        attempt += 1;
-      }
+      attempt = Result.isSuccess(connection) ? 1 : attempt + 1;
     }
   });
-}
-
-function attachConnection(
-  onConnect: EnvironmentConnected | undefined,
-  connection: EnvironmentProtocolConnection,
-  publishChanges: EnvironmentChangeListener,
-) {
-  return Effect.acquireRelease(
-    Effect.sync(() => connection.subscribeChanges(publishChanges)),
-    (unsubscribe) => Effect.sync(unsubscribe),
-  ).pipe(Effect.andThen(onConnect?.(connection) ?? Effect.void));
 }
 
 function reconnectAfter(
@@ -208,29 +205,20 @@ function reconnectAfter(
 
 function terminalState(
   failure: EnvironmentConnectionFailure,
+  credential: EnvironmentCredential,
 ): LocalEnvironmentSessionState | undefined {
-  if (failure instanceof EnvironmentAccessDenied) {
-    return { _tag: "AuthorizationFailed", failure };
-  }
-  if (failure instanceof EnvironmentHelloRejected) {
+  if (failure instanceof EnvironmentAccessDenied)
+    return failure.failure._tag === "InvalidGrant" &&
+      credential.type === "browser-session"
+      ? { _tag: "PairingRequired" }
+      : { _tag: "AuthorizationFailed", failure };
+  if (failure instanceof EnvironmentProtocolMismatch)
     return {
       _tag: "ProtocolMismatch",
-      message: protocolMismatchMessage(failure),
+      message:
+        failure.serverProtocol < environmentProtocol
+          ? "The local Rebase server is older than this browser client. Update the local package and restart Rebase."
+          : "This browser client cannot use the local Rebase protocol. Reload the page, then update the local package if the mismatch remains.",
     };
-  }
   return undefined;
 }
-
-function protocolMismatchMessage(failure: EnvironmentHelloRejected) {
-  if (
-    failure.failure._tag === "ProtocolMajorMismatch" &&
-    failure.failure.requiredUpdate === "server"
-  ) {
-    return "The local Rebase server is older than this browser client. Update the local package and restart Rebase.";
-  }
-  return "This browser client cannot use the local Rebase protocol. Reload the page, then update the local package if the mismatch remains.";
-}
-
-type PublishState = (
-  state: LocalEnvironmentSessionState,
-) => Effect.Effect<void>;

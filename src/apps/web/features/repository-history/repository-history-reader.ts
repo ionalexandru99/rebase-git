@@ -11,7 +11,6 @@ import type {
   RepositoryHistoryRefTarget,
   SynchronizeRepositoryHistory,
 } from "@rebase/contracts";
-import type { EnvironmentConnectionFailure } from "@rebase/environment-client";
 import { Data, type Effect } from "effect";
 import type { RepositoryHistorySearch } from "#web/domain/repository-history/history-search.contract";
 import type { RepositoryHistoryCacheManagement } from "#web/domain/repository-history/history-storage.contract";
@@ -122,23 +121,13 @@ export interface RepositoryHistoryTransport {
   readonly freshness?: RepositoryFreshnessTransport;
   readonly read: (
     request: Omit<ReadRepositoryHistory, "requestId" | "_tag">,
-  ) => Effect.Effect<
-    Uint8Array,
-    | EnvironmentConnectionFailure
-    | RepositoryHistoryRejected
-    | RepositoryHistoryUnavailable
-  >;
+  ) => Effect.Effect<Uint8Array, RepositoryHistoryReaderError>;
   readonly synchronize: (
     request: Omit<SynchronizeRepositoryHistory, "requestId" | "_tag">,
     acceptBatch: (
       bytes: Uint8Array,
     ) => Effect.Effect<void, RepositoryHistoryUnavailable>,
-  ) => Effect.Effect<
-    number,
-    | EnvironmentConnectionFailure
-    | RepositoryHistoryRejected
-    | RepositoryHistoryUnavailable
-  >;
+  ) => Effect.Effect<number, RepositoryHistoryReaderError>;
 }
 
 export interface RepositoryHistoryGateway {
@@ -153,4 +142,17 @@ export interface RepositoryHistoryGateway {
     signal?: AbortSignal,
   ) => Promise<number>;
   readonly subscribeAvailability?: (listener: () => void) => () => void;
+}
+
+export function createEnvironmentRequestId() {
+  if (typeof crypto.randomUUID === "function") return crypto.randomUUID();
+
+  const random = crypto.getRandomValues(new Uint8Array(16));
+  random[6] = ((random[6] ?? 0) & 0x0f) | 0x40;
+  random[8] = ((random[8] ?? 0) & 0x3f) | 0x80;
+  const hex = Array.from(random, (value) =>
+    value.toString(16).padStart(2, "0"),
+  );
+
+  return `${hex.slice(0, 4).join("")}-${hex.slice(4, 6).join("")}-${hex.slice(6, 8).join("")}-${hex.slice(8, 10).join("")}-${hex.slice(10).join("")}`;
 }

@@ -8,6 +8,7 @@ import type {
   RepositoryHistorySnapshot,
 } from "#web/features/repository-history/repository-history-reader";
 import {
+  createEnvironmentRequestId,
   RepositoryHistoryOffline,
   RepositoryHistoryRejected,
   RepositoryHistoryStorageUnavailable,
@@ -22,7 +23,6 @@ import type {
   RepositoryHistoryWorkerRequest,
   RepositoryHistoryWorkerResponse,
 } from "#web/features/repository-history/worker/repository-history-worker.contract";
-import { createEnvironmentRequestId } from "#web/platform/environment/websocket/environment-request-id";
 import { createStore } from "#web/platform/store/store";
 
 let sharedWorker: SharedWorker | undefined;

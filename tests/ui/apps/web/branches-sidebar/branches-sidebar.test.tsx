@@ -2,12 +2,11 @@ import {
   type CheckoutRepositoryRef,
   type RepositoryCheckedOut,
   type RepositoryFreshness,
-  RepositoryPullHttpApi,
+  RepositoryPullApi,
   type RepositoryRefs,
-  RepositoryRefsHttpApi,
+  RepositoryRefsApi,
   type RepositoryRefTarget,
 } from "@rebase/contracts";
-import { EnvironmentHttpRejected } from "@rebase/environment-client";
 import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
 import { userEvent } from "vite-plus/test/browser";
 import { repositoryScope } from "#tests-ui/apps/web/repository-scope/repository-scope-fixture";
@@ -15,15 +14,15 @@ import {
   type FakeRoute,
   fakeRequests,
   idleOperation,
+  rejected,
   respond,
+  unanswered,
 } from "#tests-ui/runtime/fake-requests";
-import { fakeRpc } from "#tests-ui/runtime/fake-rpc";
-import { render } from "#tests-ui/runtime/render";
+import { render, testChanges } from "#tests-ui/runtime/render";
 import { BranchesSidebar } from "#web/features/branches-sidebar/branches-sidebar";
 import { historyRefKey } from "#web/features/commit-graph/scope/history-scope";
 import { requestRefIntent } from "#web/features/refs/ref-actions";
 import type { PullReader } from "#web/features/remote-sync/use-pull";
-import type { EnvironmentChangeListener } from "#web/platform/environment/environment-protocol.contract";
 import {
   type RepositoryScope,
   RepositoryScopeProvider,
@@ -332,11 +331,14 @@ describe("branches sidebar", () => {
 
   it("renders idle, loading, fetch error, and retry states", async () => {
     const reads: PromiseWithResolvers<RepositoryRefs>[] = [];
-    const rpc = await fakeRpc(() => {
-      const read = Promise.withResolvers<RepositoryRefs>();
-      reads.push(read);
-      return read.promise;
-    });
+    const requests = fakeRequests(
+      idleOperation,
+      respond(RepositoryRefsApi.read, () => {
+        const read = Promise.withResolvers<RepositoryRefs>();
+        reads.push(read);
+        return read.promise;
+      }),
+    );
     const view = (scope: RepositoryScope | undefined) => (
       <RepositoryScopeProvider scope={scope}>
         <div style={{ height: 480, width: 320 }}>
@@ -344,7 +346,7 @@ describe("branches sidebar", () => {
         </div>
       </RepositoryScopeProvider>
     );
-    const screen = await render(view(undefined), { environment: { rpc } });
+    const screen = await render(view(undefined), { environment: { requests } });
 
     await expect
       .element(screen.getByRole("status"))
@@ -356,7 +358,7 @@ describe("branches sidebar", () => {
       .toHaveTextContent("Loading branches…");
 
     await expect.poll(() => reads.length).toBe(1);
-    reads[0]?.reject(new Error("connection closed"));
+    reads[0]?.reject(unanswered);
     await expect
       .element(screen.getByRole("alert"))
       .toHaveTextContent("The Environment did not answer.");
@@ -365,12 +367,14 @@ describe("branches sidebar", () => {
   });
 
   it("announces checkout progress and failures", async () => {
-    const rejected = new EnvironmentHttpRejected({
-      failure: { _tag: "CheckoutRejected", detail: "", reason: "LocalChanges" },
+    const refusal = rejected({
+      _tag: "CheckoutRejected",
+      detail: "",
+      reason: "LocalChanges",
     });
-    let answer = (): Promise<RepositoryCheckedOut> => Promise.reject(rejected);
+    let answer = (): Promise<RepositoryCheckedOut> => Promise.reject(refusal);
     const { screen } = await renderSidebar({
-      routes: [respond(RepositoryRefsHttpApi.checkout, () => answer())],
+      routes: [respond(RepositoryRefsApi.checkout, () => answer())],
     });
     const tree = screen.getByRole("tree", { name: "Branches" });
     const feature = tree.getByRole("treeitem", { name: "feature" });
@@ -404,7 +408,7 @@ function pullRequests() {
     pulled,
     finish: () => finish(),
     reader,
-    route: respond(RepositoryPullHttpApi.pull, async (command) => {
+    route: respond(RepositoryPullApi.pull, async (command) => {
       pulled(command.branch);
       await new Promise<void>((resolve) => {
         finish = resolve;
@@ -428,11 +432,11 @@ async function renderSidebar({
   readonly switchWorktree?: (worktreePath: string) => void;
 } = {}) {
   let current = initial;
-  const listeners = new Set<EnvironmentChangeListener>();
+  const changes = testChanges();
   const checkouts = vi.fn<(target: RepositoryRefTarget) => void>();
   const onToggleHistoryRef = vi.fn<(target: RepositoryRefTarget) => void>();
   const checkout = respond(
-    RepositoryRefsHttpApi.checkout,
+    RepositoryRefsApi.checkout,
     async (command: CheckoutRepositoryRef): Promise<RepositoryCheckedOut> => {
       checkouts(command.target);
       return {
@@ -462,15 +466,14 @@ async function renderSidebar({
     </RepositoryScopeProvider>,
     {
       environment: {
-        rpc: await fakeRpc(async () => current),
-        requests: fakeRequests(idleOperation, ...routes, checkout),
-        changes: {
-          subscribe: (listener) => {
-            listeners.add(listener);
-            return () => listeners.delete(listener);
-          },
-        },
+        requests: fakeRequests(
+          idleOperation,
+          respond(RepositoryRefsApi.read, async () => current),
+          ...routes,
+          checkout,
+        ),
       },
+      queryClient: changes.queryClient,
     },
   );
   return {
@@ -479,7 +482,7 @@ async function renderSidebar({
     onToggleHistoryRef,
     publish: (next: RepositoryRefs) => {
       current = next;
-      for (const listener of listeners) listener([repositoryId], "Refs");
+      changes.publish([repositoryId], "Refs");
     },
   };
 }

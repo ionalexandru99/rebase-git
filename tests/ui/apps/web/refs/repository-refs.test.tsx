@@ -1,28 +1,27 @@
 import {
   type CheckoutRepositoryRef,
-  currentEnvironmentCapabilities,
   type RepositoryCheckedOut,
   type RepositoryRefs,
-  RepositoryRefsHttpApi,
+  RepositoryRefsApi,
 } from "@rebase/contracts";
-import { EnvironmentHttpRejected } from "@rebase/environment-client";
+import type { QueryClient } from "@tanstack/react-query";
 import { act } from "react";
 import { describe, expect, it, vi } from "vite-plus/test";
 import { repositoryScope } from "#tests-ui/apps/web/repository-scope/repository-scope-fixture";
 import {
   fakeRequests,
   idleOperation,
+  rejected,
   respond,
+  unanswered,
 } from "#tests-ui/runtime/fake-requests";
-import { fakeRpc } from "#tests-ui/runtime/fake-rpc";
-import { render } from "#tests-ui/runtime/render";
+import { render, testChanges } from "#tests-ui/runtime/render";
 import {
   useHistoryRefRefresh,
   useRefActivation,
   useRepositoryRefs,
 } from "#web/features/refs/repository-refs";
 import type { RepositoryHistorySnapshot } from "#web/features/repository-history/repository-history-reader";
-import type { EnvironmentChangeListener } from "#web/platform/environment/environment-protocol.contract";
 import type { Environment } from "#web/platform/query/environment-context";
 import { RepositoryScopeProvider } from "#web/platform/query/repository-scope";
 
@@ -78,12 +77,10 @@ describe("repository refs", () => {
       .toHaveTextContent("On feature");
 
     checkout.mockRejectedValueOnce(
-      new EnvironmentHttpRejected({
-        failure: {
-          _tag: "CheckoutRejected",
-          detail: "",
-          reason: "LocalChanges",
-        },
+      rejected({
+        _tag: "CheckoutRejected",
+        detail: "",
+        reason: "LocalChanges",
       }),
     );
     await screen.getByRole("button", { name: "Checkout release" }).click();
@@ -99,29 +96,11 @@ describe("repository refs", () => {
     const reads = queuedReads();
     const screen = await renderRefs(await refsEnvironment(reads.next));
 
-    await reads.fail(new Error("connection closed"));
+    await reads.fail(unanswered);
 
     await expect
       .element(screen.getByRole("alert"))
       .toHaveTextContent("The Environment did not answer.");
-  });
-
-  it("does not read refs from an environment that did not negotiate them", async () => {
-    const readRefs = vi.fn(async () => refs("main"));
-    const environment = await refsEnvironment(readRefs);
-    const screen = await renderRefs({
-      value: {
-        ...environment.value,
-        capabilities: currentEnvironmentCapabilities.filter(
-          ({ name }) => name !== "repository-refs",
-        ),
-      },
-    });
-
-    await expect
-      .element(screen.getByRole("alert"))
-      .toHaveTextContent("The Environment did not answer.");
-    expect(readRefs).not.toHaveBeenCalled();
   });
 
   it("ignores a second checkout while one is in flight", async () => {
@@ -221,7 +200,7 @@ describe("repository refs", () => {
 });
 
 function Refs() {
-  const repositoryRefs = useRepositoryRefs(repositoryId, repositoryId);
+  const repositoryRefs = useRepositoryRefs(repositoryId);
   const activation = useRefActivation(repositoryRefs);
   const head = repositoryRefs.refs?.worktrees.find(
     ({ path }) => path === mainPath,
@@ -249,7 +228,10 @@ function Refs() {
 }
 
 function renderRefs(
-  environment: { readonly value: Partial<Environment> },
+  environment: {
+    readonly value: Partial<Environment>;
+    readonly queryClient: QueryClient;
+  },
   switchWorktree: (worktreePath: string) => void = () => undefined,
 ) {
   return render(
@@ -263,7 +245,7 @@ function renderRefs(
     >
       <Refs />
     </RepositoryScopeProvider>,
-    { environment: environment.value },
+    { environment: environment.value, queryClient: environment.queryClient },
   );
 }
 
@@ -274,23 +256,17 @@ async function refsEnvironment(
   ) => Promise<RepositoryCheckedOut> = async () =>
     Promise.reject(new Error("Unexpected checkout")),
 ) {
-  const listeners = new Set<EnvironmentChangeListener>();
+  const changes = testChanges();
   return {
-    publish: (repositoryIds: readonly string[]) => {
-      for (const listener of listeners) listener(repositoryIds, "Refs");
-    },
+    publish: (repositoryIds: readonly string[]) =>
+      changes.publish(repositoryIds, "Refs"),
+    queryClient: changes.queryClient,
     value: {
-      rpc: await fakeRpc(readRefs),
       requests: fakeRequests(
         idleOperation,
-        respond(RepositoryRefsHttpApi.checkout, checkout),
+        respond(RepositoryRefsApi.read, readRefs),
+        respond(RepositoryRefsApi.checkout, checkout),
       ),
-      changes: {
-        subscribe: (listener: EnvironmentChangeListener) => {
-          listeners.add(listener);
-          return () => listeners.delete(listener);
-        },
-      },
     },
   };
 }
@@ -309,7 +285,7 @@ function queuedReads() {
     },
     pending: () => waiting.length,
     resolve: async (refs: RepositoryRefs) => (await settle())?.resolve(refs),
-    fail: async (error: Error) => (await settle())?.reject(error),
+    fail: async (error: unknown) => (await settle())?.reject(error),
   };
 }
 

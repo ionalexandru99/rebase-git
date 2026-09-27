@@ -7,6 +7,7 @@ import {
   completeStoredRepositoryHistory,
   storeRepositoryHistoryBatch,
 } from "#web/features/repository-history/replica/repository-history-store";
+import { createEnvironmentRequestId } from "#web/features/repository-history/repository-history-reader";
 import type {
   ConnectedReader,
   RepositoryReplica,
@@ -23,7 +24,6 @@ import {
   beginSynchronization,
   settleSynchronization,
 } from "#web/features/repository-history/worker/synchronization-state";
-import { createEnvironmentRequestId } from "#web/platform/environment/websocket/environment-request-id";
 
 export async function acceptHistoryBatch(
   reader: ConnectedReader,

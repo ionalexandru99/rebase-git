@@ -1,4 +1,4 @@
-import { RepositoryCatalogHttpApi } from "@rebase/contracts";
+import { RepositoryCatalogApi } from "@rebase/contracts";
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef } from "react";
 import { SettingsSection } from "#web/components/ui/settings-layout";
@@ -40,7 +40,7 @@ export function RepositorySettingsPage({
 }) {
   const repository = useCatalogRepository(repositoryId);
   const { environmentId, connected, writable } = useEnvironment();
-  const removal = useCommand(RepositoryCatalogHttpApi.remove, {
+  const removal = useCommand(RepositoryCatalogApi.remove, {
     answers: catalogWithout,
   });
   const logicalRepositoryId = repository?.logicalRepositoryId ?? repositoryId;

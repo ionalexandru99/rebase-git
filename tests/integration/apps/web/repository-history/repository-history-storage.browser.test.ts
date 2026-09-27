@@ -1,12 +1,14 @@
-import {
-  encodeRepositoryHistoryBatch,
-  encodeRepositoryHistoryPage,
-  type RepositoryCommit,
-  type RepositoryHistoryPage,
+import type {
+  RepositoryCommit,
+  RepositoryHistoryPage,
 } from "@rebase/contracts";
 import { Effect } from "effect";
 import { describe, expect, it, vi } from "vite-plus/test";
 import { waitForObservation } from "#tests-support/observation";
+import {
+  encodeRepositoryHistoryBatch,
+  encodeRepositoryHistoryPage,
+} from "#tests-support/repository-history-bytes";
 import {
   acquireSharedWorker,
   createBrowserRepositoryHistoryReader,

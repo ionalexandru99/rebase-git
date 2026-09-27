@@ -1,8 +1,8 @@
 import type {
   EnvironmentDirectoryEntry,
   EnvironmentDirectoryRejected,
-  EnvironmentFilesystemHttpApi,
-  RepositoryCatalogHttpApi,
+  EnvironmentFilesystemApi,
+  RepositoryCatalogApi,
   RepositoryPathRejected,
 } from "@rebase/contracts";
 import type { QueryFailure } from "#web/platform/query/environment-query";
@@ -56,7 +56,7 @@ const directoryProblems: Record<
 };
 
 export function repositorySelectionError(
-  failure: CommandFailure<typeof RepositoryCatalogHttpApi.remember>,
+  failure: CommandFailure<typeof RepositoryCatalogApi.remember>,
 ) {
   return describeFailure(failure, {
     RepositoryPathRejected: ({ reason }) => pathProblems[reason],
@@ -64,7 +64,7 @@ export function repositorySelectionError(
 }
 
 export function directoryListingError(
-  failure: QueryFailure<typeof EnvironmentFilesystemHttpApi.listDirectory>,
+  failure: QueryFailure<typeof EnvironmentFilesystemApi.listDirectory>,
 ) {
   return describeFailure(failure, {
     EnvironmentDirectoryRejected: ({ reason }) => directoryProblems[reason],

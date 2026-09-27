@@ -1,7 +1,7 @@
 import {
   type ChangesScope,
   type RepositoryChanges,
-  RepositoryChangesHttpApi,
+  RepositoryChangesApi,
 } from "@rebase/contracts";
 import { skipToken } from "@tanstack/react-query";
 import type { SelectedChange } from "#web/features/working-changes/hooks/use-change-selection";
@@ -20,7 +20,7 @@ export function useChangeDiff(
     viewed !== null &&
     changes?.[viewed.section].some((file) => file.path === viewed.path);
   return useEnvironmentQuery(
-    RepositoryChangesHttpApi.diff,
+    RepositoryChangesApi.diff,
     listed ? changeDiffInput(scope, viewed) : skipToken,
     {
       enabled,

@@ -1,7 +1,8 @@
 import {
-  type EnvironmentHttpRoute,
   repositoryCommand,
-} from "@rebase/contracts/environment-connection/http/environment-http-route.contract";
+  route,
+} from "@rebase/contracts/environment-connection/environment-route.contract";
+import { RepositoryRejected } from "@rebase/contracts/git/git-failures.contract";
 import {
   ObjectId,
   RefName,
@@ -150,12 +151,20 @@ export const RepositoryCheckoutFailure = Schema.Union([
 ]);
 export type RepositoryCheckoutFailure = typeof RepositoryCheckoutFailure.Type;
 
-export const checkoutRepositoryRefPath = "/api/repositories/refs/checkout";
+export const ReadRepositoryRefs = Schema.Struct({
+  repositoryId: RepositoryId,
+});
+export type ReadRepositoryRefs = typeof ReadRepositoryRefs.Type;
 
-export const RepositoryRefsHttpApi = {
-  checkout: repositoryCommand(checkoutRepositoryRefPath, {
+export const RepositoryRefsApi = {
+  read: route("repositories/refs/read", {
+    request: ReadRepositoryRefs,
+    success: RepositoryRefs,
+    failure: RepositoryRejected,
+  }),
+  checkout: repositoryCommand("repositories/refs/checkout", {
     request: CheckoutRepositoryRef,
     success: RepositoryCheckedOut,
     failure: RepositoryCheckoutFailure,
   }),
-} satisfies Record<string, EnvironmentHttpRoute>;
+};

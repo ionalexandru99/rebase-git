@@ -1,29 +1,28 @@
 import {
-  currentEnvironmentCapabilities,
   type EnvironmentDirectory,
-  EnvironmentFilesystemHttpApi,
-  encodeRepositoryHistoryBatch,
-  encodeRepositoryHistoryPage,
+  EnvironmentFilesystemApi,
+  RepositoryCatalogApi,
   type RepositoryCatalogEntry,
-  RepositoryCatalogHttpApi,
   type RepositoryCommit,
   type RepositoryRefs,
+  RepositoryRefsApi,
 } from "@rebase/contracts";
-import {
-  EnvironmentHttpRejected,
-  EnvironmentResponseError,
-} from "@rebase/environment-client";
 import { describe, expect, it, vi } from "vite-plus/test";
 import { page, userEvent } from "vite-plus/test/browser";
+import {
+  encodeRepositoryHistoryBatch,
+  encodeRepositoryHistoryPage,
+} from "#tests-support/repository-history-bytes";
 import { repositoryScope } from "#tests-ui/apps/web/repository-scope/repository-scope-fixture";
 import {
   fakeRequests,
   idleOperation,
+  rejected,
   respond,
+  unanswered,
 } from "#tests-ui/runtime/fake-requests";
-import { fakeRpc } from "#tests-ui/runtime/fake-rpc";
 import { render } from "#tests-ui/runtime/render";
-import type { LocalEnvironmentSession } from "#web/app/environment/local-environment-session.contract";
+import type { LocalEnvironmentSession } from "#web/app/environment/local-environment-session";
 import { ApplicationShell } from "#web/app/shell/application-shell";
 import { RepositoryWorkspace } from "#web/app/workspace/repository-workspace";
 import { repositoryCatalogKey } from "#web/features/repository-catalog/use-repository-catalog";
@@ -144,9 +143,7 @@ describe("application shell", () => {
     connected.catalogReads
       .mockReturnValueOnce({ repositories: [] })
       .mockImplementation(() => {
-        throw new EnvironmentResponseError({
-          responseTag: RepositoryCatalogHttpApi.list.path,
-        });
+        throw unanswered;
       });
     connected.finishSynchronization();
     await render(
@@ -177,8 +174,9 @@ describe("application shell", () => {
 
   it("explains why a chosen folder cannot be opened", async () => {
     const connected = await connectedSession(() => {
-      throw new EnvironmentHttpRejected({
-        failure: { _tag: "RepositoryPathRejected", reason: "NotRepository" },
+      throw rejected({
+        _tag: "RepositoryPathRejected",
+        reason: "NotRepository",
       });
     });
     await render(
@@ -385,9 +383,7 @@ function pairingRequiredSession(): LocalEnvironmentSession {
   const sessionState = { _tag: "PairingRequired" } as const;
   const unsubscribe = () => undefined;
   return {
-    changes: { subscribe: () => unsubscribe },
     getSnapshot: () => sessionState,
-    requests: fakeRequests(idleOperation),
     start: () => undefined,
     stop: () => undefined,
     subscribe: () => unsubscribe,
@@ -444,13 +440,20 @@ async function connectedSession(
       },
     ],
   };
-  const rpc = await fakeRpc(async () => refs);
+  const catalogReads = vi.fn(() => ({ repositories: [repository] }));
+  const requests = fakeRequests(
+    idleOperation,
+    respond(RepositoryCatalogApi.list, catalogReads),
+    respond(RepositoryCatalogApi.recordOpened, recordOpened),
+    respond(EnvironmentFilesystemApi.listDirectory, () => home),
+    respond(RepositoryCatalogApi.remember, () => remember(repository)),
+    respond(RepositoryRefsApi.read, async () => refs),
+  );
   const listeners = new Set<() => void>();
   let state: ReturnType<LocalEnvironmentSession["getSnapshot"]> = {
     _tag: "Connected",
-    capabilities: currentEnvironmentCapabilities,
     environmentId,
-    rpc,
+    requests,
   };
   let finishSynchronization: () => void = () => undefined;
   const synchronizationFinished = new Promise<void>((resolve) => {
@@ -480,17 +483,8 @@ async function connectedSession(
       return 1;
     }),
   } satisfies RepositoryHistoryGateway;
-  const catalogReads = vi.fn(() => ({ repositories: [repository] }));
   const session: LocalEnvironmentSession = {
-    changes: { subscribe: () => () => undefined },
     getSnapshot: () => state,
-    requests: fakeRequests(
-      idleOperation,
-      respond(RepositoryCatalogHttpApi.list, catalogReads),
-      respond(RepositoryCatalogHttpApi.recordOpened, recordOpened),
-      respond(EnvironmentFilesystemHttpApi.listDirectory, () => home),
-      respond(RepositoryCatalogHttpApi.remember, () => remember(repository)),
-    ),
     start: () => undefined,
     stop: () => undefined,
     subscribe: (listener) => {
@@ -506,13 +500,7 @@ async function connectedSession(
     catalogReads,
     disconnect: () =>
       publish({ _tag: "Reconnecting", attempt: 1, environmentId }),
-    reconnect: () =>
-      publish({
-        _tag: "Connected",
-        capabilities: currentEnvironmentCapabilities,
-        environmentId,
-        rpc,
-      }),
+    reconnect: () => publish({ _tag: "Connected", environmentId, requests }),
     finishSynchronization,
     recordOpened,
     repositoryHistory,

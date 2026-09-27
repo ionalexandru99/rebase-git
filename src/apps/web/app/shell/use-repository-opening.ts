@@ -1,4 +1,4 @@
-import { RepositoryCatalogHttpApi } from "@rebase/contracts";
+import { RepositoryCatalogApi } from "@rebase/contracts";
 import { useCallback, useEffect, useMemo } from "react";
 import {
   createOpenedRepositoryStore,
@@ -27,10 +27,9 @@ export function useRepositoryOpening(
   useEffect(() => () => opened.open(undefined), [opened]);
   const { environmentId, status } = useEnvironment();
   const { findRepository } = useRepositoryCatalog();
-  const { run: recordOpened } = useCommand(
-    RepositoryCatalogHttpApi.recordOpened,
-    { answers: catalogWith },
-  );
+  const { run: recordOpened } = useCommand(RepositoryCatalogApi.recordOpened, {
+    answers: catalogWith,
+  });
   const available = status.availability === "available";
   const showRepository = useCallback(
     (repository: ProjectNavigationRepository) => {

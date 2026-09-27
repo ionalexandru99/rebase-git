@@ -1,16 +1,12 @@
 import { type ReactNode, useMemo, useRef } from "react";
+import { unavailableRequests } from "#web/app/environment/environment-connection";
 import type {
   LocalEnvironmentSession,
   LocalEnvironmentSessionState,
-} from "#web/app/environment/local-environment-session.contract";
+} from "#web/app/environment/local-environment-session";
 import { environmentSessionPresentation } from "#web/app/shell/environment-session-presentation";
-import {
-  type Environment,
-  EnvironmentProvider,
-} from "#web/platform/query/environment-context";
+import { EnvironmentProvider } from "#web/platform/query/environment-context";
 import { useStore } from "#web/platform/store/use-store";
-
-const noCapabilities: Environment["capabilities"] = [];
 
 export function SessionEnvironmentProvider({
   session,
@@ -22,35 +18,20 @@ export function SessionEnvironmentProvider({
   const state = useStore(session);
   const environmentId = useRetainedEnvironmentId(state);
   const connected = state._tag === "Connected";
-  const rpc = connected ? state.rpc : undefined;
-  const capabilities = connected ? state.capabilities : noCapabilities;
+  const requests = connected ? state.requests : unavailableRequests;
   const readable = connected;
   const writable = connected;
   const status = useMemo(() => environmentSessionPresentation(state), [state]);
-  const { requests, changes } = session;
   const environment = useMemo(
     () => ({
       environmentId,
       requests,
-      rpc,
-      capabilities,
-      changes,
       connected,
       readable,
       writable,
       status,
     }),
-    [
-      environmentId,
-      requests,
-      rpc,
-      capabilities,
-      changes,
-      connected,
-      readable,
-      writable,
-      status,
-    ],
+    [environmentId, requests, connected, readable, writable, status],
   );
   return (
     <EnvironmentProvider environment={environment}>

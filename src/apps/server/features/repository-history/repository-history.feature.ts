@@ -1,5 +1,5 @@
 import { Effect } from "effect";
-import type { EnvironmentFeature } from "#server/adapters/environment-transport/combine-environment-features";
+import type { EnvironmentFeature } from "#server/adapters/environment-transport/environment-routes";
 import type { GitCommandRunner } from "#server/adapters/local-git/git-commands";
 import type { RepositoryWatcher } from "#server/adapters/local-git/local-repository-watcher";
 import { acquireRepositoryFreshness } from "#server/features/repository-history/freshness/repository-freshness";
@@ -15,9 +15,8 @@ export function repositoryHistoryFeature(dependencies: {
 }) {
   const history = createRepositoryHistoryService(dependencies);
   return {
-    capabilities: ["repository-history"],
-    httpRoutes: [],
-    rpc: (session) => repositoryHistoryRpc(session, history),
+    routes: [],
+    rpc: () => repositoryHistoryRpc(history),
   } satisfies EnvironmentFeature;
 }
 
@@ -31,9 +30,8 @@ export function repositoryFreshnessFeature(dependencies: {
     acquireRepositoryFreshness(dependencies),
     (freshness) =>
       ({
-        capabilities: ["repository-history-freshness"],
-        httpRoutes: [],
-        rpc: (session) => repositoryFreshnessRpc(session, freshness),
+        routes: [],
+        rpc: () => repositoryFreshnessRpc(freshness),
       }) satisfies EnvironmentFeature,
   );
 }

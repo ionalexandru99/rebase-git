@@ -1,8 +1,7 @@
 import {
-  type EnvironmentHttpRoute,
   repositoryCommand,
   repositoryQuery,
-} from "@rebase/contracts/environment-connection/http/environment-http-route.contract";
+} from "@rebase/contracts/environment-connection/environment-route.contract";
 import {
   RepositoryId,
   RepositoryPath,
@@ -31,7 +30,6 @@ export const RepositoryChanges = Schema.Struct({
   message: Schema.String,
   unstaged: Schema.Array(ChangedFile),
   staged: Schema.Array(ChangedFile),
-  truncated: Schema.Boolean,
   renamesLimited: Schema.Boolean,
 });
 export type RepositoryChanges = typeof RepositoryChanges.Type;
@@ -99,25 +97,25 @@ export function changesFailed(
   return { _tag: "ChangesFailed", reason, detail: detail.slice(0, 2048) };
 }
 
-export const RepositoryChangesHttpApi = {
-  read: repositoryQuery("/api/repositories/changes/read", {
+export const RepositoryChangesApi = {
+  read: repositoryQuery("repositories/changes/read", {
     request: ChangesScope,
     success: RepositoryChanges,
     failure: ChangesFailure,
   }),
-  diff: repositoryQuery("/api/repositories/changes/diff", {
+  diff: repositoryQuery("repositories/changes/diff", {
     request: ReadChangeDiff,
     success: ChangeDiff,
     failure: ChangesFailure,
   }),
-  mutate: repositoryCommand("/api/repositories/changes/mutate", {
+  mutate: repositoryCommand("repositories/changes/mutate", {
     request: MutateChanges,
     success: ChangesWritten,
     failure: ChangesFailure,
   }),
-  commit: repositoryCommand("/api/repositories/changes/commit", {
+  commit: repositoryCommand("repositories/changes/commit", {
     request: CommitChanges,
     success: ChangesWritten,
     failure: ChangesFailure,
   }),
-} satisfies Record<string, EnvironmentHttpRoute>;
+};

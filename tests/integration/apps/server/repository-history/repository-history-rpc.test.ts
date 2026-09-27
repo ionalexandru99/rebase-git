@@ -2,12 +2,10 @@ import { mkdtemp, realpath } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
-  createCurrentEnvironmentHello,
   decodeRepositoryHistoryBatch,
   decodeRepositoryHistoryPage,
-  RepositoryCatalogHttpApi,
+  RepositoryCatalogApi,
 } from "@rebase/contracts";
-import { fetchEnvironmentDiscoveryEffect } from "@rebase/environment-client";
 import { Deferred, Effect, Fiber, type Scope } from "effect";
 import { describe, expect, it, onTestFinished } from "vite-plus/test";
 import {
@@ -17,14 +15,13 @@ import {
 import { fastImport, git } from "#tests-support/git";
 import { openTestServer } from "#tests-support/server";
 import { removeTemporaryDirectory } from "#tests-support/temporary-directory";
-import { connectEnvironmentEffect } from "#web/app/environment/connection/environment-protocol-client";
 import type { RepositoryHistoryTransport } from "#web/features/repository-history/repository-history-reader";
 import { createRepositoryHistoryRpc } from "#web/features/repository-history/transport/repository-history-rpc";
 
 const longSubject = 'long "message" 😀'.repeat(4_000);
 
 describe("Effect RPC over WebSockets", () => {
-  it("streams a large history page within the negotiated frame limit", async () => {
+  it("reads a history page with large commit messages", async () => {
     const repository = await createHistoryRepository(longSubject);
     await withHistory(repository, (history, query) =>
       Effect.gen(function* () {
@@ -192,26 +189,13 @@ async function withHistory(
 ) {
   const server = await openTestServer({ git: gitOverride });
   const { id: repositoryId } = await server.requests(server.owner)(
-    RepositoryCatalogHttpApi.remember,
+    RepositoryCatalogApi.remember,
     { path: repository.path },
   );
+  const connection = await server.connect(server.owner);
   await Effect.runPromise(
     Effect.gen(function* () {
-      const discovery = yield* fetchEnvironmentDiscoveryEffect(server.origin);
-      const hello = createCurrentEnvironmentHello("0.0.0");
-      const connection = yield* connectEnvironmentEffect(
-        server.origin,
-        discovery,
-        {
-          ...hello,
-          receiveLimits: {
-            ...hello.receiveLimits,
-            maxWebSocketResponseBytes: 4_096,
-          },
-        },
-        server.owner,
-      );
-      yield* use(createRepositoryHistoryRpc(connection), {
+      yield* use(createRepositoryHistoryRpc(connection.rpc), {
         repositoryId,
         order: "topological",
         limit: 100,

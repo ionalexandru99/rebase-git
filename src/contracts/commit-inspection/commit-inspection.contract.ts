@@ -1,7 +1,4 @@
-import {
-  type EnvironmentHttpRoute,
-  repositoryQuery,
-} from "@rebase/contracts/environment-connection/http/environment-http-route.contract";
+import { repositoryQuery } from "@rebase/contracts/environment-connection/environment-route.contract";
 import {
   ObjectId,
   RepositoryId,
@@ -46,15 +43,15 @@ export const CommitInspection = Schema.Struct({
   truncated: Schema.Boolean,
 });
 export type CommitInspection = typeof CommitInspection.Type;
-export const CommitInspectionHttpApi = {
-  inspect: repositoryQuery("/api/repositories/commits/inspect", {
+export const CommitInspectionApi = {
+  inspect: repositoryQuery("repositories/commits/inspect", {
     request: InspectCommit,
     success: CommitInspection,
     failure: ChangesFailure,
   }),
-  inspectDiff: repositoryQuery("/api/repositories/commits/diff", {
+  inspectDiff: repositoryQuery("repositories/commits/diff", {
     request: InspectCommitDiff,
     success: ChangeDiff,
     failure: ChangesFailure,
   }),
-} satisfies Record<string, EnvironmentHttpRoute>;
+};

@@ -1,0 +1,8 @@
+{
+  "hello": { "protocol": 4 },
+  "greeting": {
+    "environmentId": "00000000-0000-4000-8000-000000000001",
+    "sequence": 3
+  },
+  "mismatch": { "_tag": "ProtocolMismatch", "serverProtocol": 5 }
+}

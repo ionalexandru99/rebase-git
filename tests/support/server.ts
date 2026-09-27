@@ -2,22 +2,23 @@ import { mkdtemp, realpath } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
-  EnvironmentAuthorizationHttpApi,
-  isRouteOk,
+  EnvironmentAuthorizationApi,
+  type EnvironmentRoute,
+  EnvironmentRpc,
+  environmentLivePath,
+  environmentProtocol,
+  environmentSubprotocol,
   type RouteFailure,
   type RouteInput,
   type RouteSuccess,
 } from "@rebase/contracts";
-import {
-  createEnvironmentRequestClient,
-  type EnvironmentCredential,
-  exchangeEnvironmentPairingEffect,
-  type RequestableEnvironmentHttpRoute,
-} from "@rebase/environment-client";
 import { Effect, Exit, Schema, Scope } from "effect";
+import { RpcClientError, RpcTest } from "effect/unstable/rpc";
 import { onTestFinished } from "vite-plus/test";
+import WebSocket from "ws";
+import { exchangeEnvironmentPairing } from "#desktop/app/desktop-application";
 import type { EnvironmentEventPublisher } from "#server/adapters/environment-transport/environment-event-publisher";
-import type { EnvironmentHttpRequestContext } from "#server/adapters/environment-transport/http/environment-http-route-handler";
+import { environmentRpcHandlers } from "#server/adapters/environment-transport/environment-socket";
 import {
   createLocalGitCommandRunner,
   type GitCommandRunner,
@@ -29,25 +30,33 @@ import {
 } from "#server/app/server/start-environment-server";
 import type { RepositoryCoordination } from "#server/repository/repository-coordination";
 import { removeTemporaryDirectory } from "#tests-support/temporary-directory";
+import {
+  connectEnvironment,
+  type EnvironmentCredential,
+  environmentRequests,
+} from "#web/app/environment/environment-connection";
+import type { EnvironmentRequests } from "#web/platform/query/environment-context";
+import type { EnvironmentInvalidation } from "#web/platform/query/environment-invalidation";
 
-type Routes = Record<string, RequestableEnvironmentHttpRoute>;
+type Routes = Record<string, EnvironmentRoute>;
 
 export type RoutesClient<Api extends Routes> = {
-  readonly [Name in keyof Api]: Api[Name] extends {
-    readonly request: Schema.ConstraintEncoder<unknown>;
-  }
-    ? (
-        input: RouteInput<Api[Name]>,
-      ) => Effect.Effect<RouteSuccess<Api[Name]>, RouteFailure<Api[Name]>>
-    : () => Effect.Effect<RouteSuccess<Api[Name]>, RouteFailure<Api[Name]>>;
+  readonly [Name in keyof Api]: (
+    input: RouteInput<Api[Name]>,
+  ) => Effect.Effect<RouteSuccess<Api[Name]>, RouteFailure<Api[Name]>>;
 };
 
-const requestContext: EnvironmentHttpRequestContext = {
-  credential: undefined,
+type Procedures = Record<
+  string,
+  (input: unknown) => Effect.Effect<unknown, unknown>
+>;
+
+const testContext = {
   device: { id: "00000000-0000-4000-8000-000000000009", label: "Test device" },
-  establishBrowserSession: () => {},
   origin: "http://127.0.0.1",
 };
+
+const unchanged: EnvironmentInvalidation = { changed: () => {} };
 
 interface EnvironmentOverrides {
   readonly events?:
@@ -63,18 +72,27 @@ export function openTestEnvironment(overrides: EnvironmentOverrides = {}) {
   return openInTestScope(
     Effect.gen(function* () {
       const dependencies = yield* acquireTestDependencies(overrides);
-      const features = yield* environmentFeatures(dependencies);
+      const handlers = yield* environmentRpcHandlers(
+        {
+          authorization: dependencies.authorization,
+          environmentId: "00000000-0000-4000-8000-000000000001",
+          events: dependencies.events,
+          features: yield* environmentFeatures(dependencies),
+        },
+        testContext,
+      );
+      const procedures = (yield* RpcTest.makeClient(EnvironmentRpc).pipe(
+        Effect.provide(handlers),
+      )) as unknown as Procedures;
       return {
         ...dependencies,
         remember: (path: string) =>
           Effect.runPromise(dependencies.catalog.remember(path)),
         routes: <Api extends Routes>(api: Api) => {
           const client: Partial<Record<keyof Api, unknown>> = {};
-          for (const name of Object.keys(api) as (keyof Api)[]) {
-            const route = api[name];
-            client[name] = (input: RouteInput<typeof route>) =>
-              serveRoute(route, input, features.httpRoutes);
-          }
+          for (const name of Object.keys(api) as (keyof Api)[])
+            client[name] = (input: unknown) =>
+              callRoute(procedures, api[name] as EnvironmentRoute, input);
           return client as RoutesClient<Api>;
         },
       };
@@ -85,36 +103,134 @@ export function openTestEnvironment(overrides: EnvironmentOverrides = {}) {
 export function openTestServer(overrides: EnvironmentOverrides = {}) {
   return openInTestScope(
     Effect.gen(function* () {
+      const scope = yield* Effect.scope;
       const dependencies = yield* acquireTestDependencies(overrides);
       const server = yield* serveEnvironment(dependencies, {});
-      const owner = yield* exchangePairing(
-        server.origin,
-        new URL(server.pairingUrl).hash.slice(1),
-        "Owner",
+      const owner = yield* Effect.promise(() =>
+        exchangePairing(server.origin, server.pairingUrl, "Owner"),
       );
-      const requests = (credential: EnvironmentCredential) =>
-        createEnvironmentRequestClient(server.origin, () => credential);
+      const connect = (
+        credential: EnvironmentCredential,
+        invalidation = unchanged,
+      ) =>
+        Effect.runPromise(
+          connectEnvironment(server.origin, credential, invalidation).pipe(
+            Scope.provide(scope),
+          ),
+        );
+      const requests = (credential: EnvironmentCredential) => {
+        const connection = connect(credential);
+        return (async (route, input, options) =>
+          environmentRequests((await connection).rpc)(
+            route,
+            input,
+            options,
+          )) satisfies EnvironmentRequests as EnvironmentRequests;
+      };
       return {
         ...server,
         events: dependencies.events,
         home: dependencies.home,
         owner,
+        connect,
         requests,
         pair: async (label: string) => {
           const pairing = await requests(owner)(
-            EnvironmentAuthorizationHttpApi.createPairing,
+            EnvironmentAuthorizationApi.createPairing,
             undefined,
           );
-          return Effect.runPromise(
-            exchangePairing(
-              server.origin,
-              new URL(pairing.pairingUrl).hash.slice(1),
-              label,
-            ),
-          );
+          return exchangePairing(server.origin, pairing.pairingUrl, label);
         },
       };
     }),
+  );
+}
+
+export async function exchangePairing(
+  origin: string,
+  pairingUrl: string,
+  label: string,
+) {
+  const exchanged = await exchangeEnvironmentPairing(origin, {
+    label,
+    pairingMaterial: new URL(pairingUrl).hash.slice(1),
+  });
+  return {
+    type: "bearer" as const,
+    value: exchanged.credential,
+    authorizationId: exchanged.authorization.id,
+  };
+}
+
+export type SocketHello =
+  | { readonly _tag: "Answered"; readonly message: unknown }
+  | { readonly _tag: "Closed"; readonly code: number; readonly reason: string };
+
+export function helloOverSocket(
+  origin: string,
+  {
+    credential,
+    headers = {},
+    protocol = environmentProtocol,
+  }: {
+    readonly credential?: string;
+    readonly headers?: Record<string, string>;
+    readonly protocol?: number;
+  } = {},
+) {
+  return new Promise<SocketHello>((resolveHello, rejectHello) => {
+    const socket = new WebSocket(
+      `${origin.replace("http://", "ws://")}${environmentLivePath}`,
+      credential === undefined
+        ? [environmentSubprotocol]
+        : [environmentSubprotocol, credential],
+      { headers },
+    );
+    socket.once("error", rejectHello);
+    socket.once("close", (code, reason) =>
+      resolveHello({ _tag: "Closed", code, reason: reason.toString() }),
+    );
+    socket.once("open", () =>
+      socket.send(
+        JSON.stringify({
+          _tag: "Request",
+          id: "1",
+          tag: "Hello",
+          payload: { protocol },
+          headers: [],
+        }),
+      ),
+    );
+    socket.once("message", (data) => {
+      resolveHello({ _tag: "Answered", message: JSON.parse(data.toString()) });
+      socket.close();
+    });
+  });
+}
+
+function callRoute(
+  procedures: Procedures,
+  route: EnvironmentRoute,
+  input: unknown,
+) {
+  const call = procedures[route._tag];
+  if (call === undefined)
+    return Effect.die(new Error(`No handler serves ${route._tag}.`));
+  return call(input).pipe(
+    Effect.catchIf(
+      (error) => error instanceof RpcClientError.RpcClientError,
+      Effect.die,
+    ),
+    Effect.map((value) => overTheWire(route.successSchema, value)),
+    Effect.mapError((failure) => overTheWire(route.errorSchema, failure)),
+  );
+}
+
+function overTheWire(schema: Schema.Top, value: unknown) {
+  const codec = schema as Schema.Codec<unknown, unknown>;
+  const encoded = JSON.stringify(Schema.encodeUnknownSync(codec)(value));
+  return Schema.decodeUnknownSync(codec)(
+    encoded === undefined ? undefined : JSON.parse(encoded),
   );
 }
 
@@ -155,50 +271,3 @@ const acquireTemporaryHome = Effect.acquireRelease(
   ),
   (home) => Effect.promise(() => removeTemporaryDirectory(home)),
 );
-
-function exchangePairing(
-  origin: string,
-  pairingMaterial: string,
-  label: string,
-) {
-  return exchangeEnvironmentPairingEffect(origin, {
-    label,
-    pairingMaterial,
-  }).pipe(
-    Effect.map((exchanged) => ({
-      type: "bearer" as const,
-      value: exchanged.credential,
-    })),
-  );
-}
-
-function serveRoute<Route extends RequestableEnvironmentHttpRoute>(
-  route: Route,
-  input: RouteInput<Route>,
-  handlers: Effect.Success<
-    ReturnType<typeof environmentFeatures>
-  >["httpRoutes"],
-): Effect.Effect<RouteSuccess<Route>, RouteFailure<Route>> {
-  const handler = handlers.find(
-    (candidate) =>
-      candidate.route.path === route.path &&
-      candidate.route.method === route.method,
-  );
-  if (handler === undefined)
-    return Effect.die(new Error(`No handler serves ${route.path}.`));
-  return handler.respond(input, requestContext).pipe(
-    Effect.orDie,
-    Effect.map((result) =>
-      Schema.decodeUnknownSync(route.response)(
-        JSON.parse(
-          JSON.stringify(Schema.encodeSync(handler.route.response)(result)),
-        ),
-      ),
-    ),
-    Effect.flatMap((result) =>
-      isRouteOk(result)
-        ? Effect.succeed(result.value)
-        : Effect.fail(result.failure),
-    ),
-  );
-}

@@ -2,10 +2,7 @@ import { execFile } from "node:child_process";
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { promisify } from "node:util";
-import {
-  RepositoryChangesHttpApi,
-  RepositoryRefsHttpApi,
-} from "@rebase/contracts";
+import { RepositoryChangesApi, RepositoryRefsApi } from "@rebase/contracts";
 import { Deferred, Effect, Fiber, Option } from "effect";
 import { expect, it } from "vite-plus/test";
 import { acquireWatchedRepository } from "#server/features/repository-history/freshness/watched-repository";
@@ -77,8 +74,8 @@ it.each([
     await git("add", ".");
     const repository = await environment.remember(directory);
     const repositoryId = repository.id;
-    const changes = environment.routes(RepositoryChangesHttpApi);
-    const refs = environment.routes(RepositoryRefsHttpApi);
+    const changes = environment.routes(RepositoryChangesApi);
+    const refs = environment.routes(RepositoryRefsApi);
 
     await Effect.runPromise(
       Effect.scoped(
@@ -161,7 +158,7 @@ it("reads changes while a commit holds the worktree", async () => {
   await writeFile(join(directory, "file.txt"), "committed\n");
   await git("add", ".");
   const repositoryId = (await environment.remember(directory)).id;
-  const changes = environment.routes(RepositoryChangesHttpApi);
+  const changes = environment.routes(RepositoryChangesApi);
 
   await Effect.runPromise(
     Effect.scoped(

@@ -1,52 +1,57 @@
 import {
+  type EnvironmentRoute,
   type RepositoryOperation,
-  RepositoryOperationsHttpApi,
+  RepositoryOperationsApi,
   type RouteInput,
   type RouteSuccess,
 } from "@rebase/contracts";
-import type {
-  EnvironmentRequestClient,
-  EnvironmentRequestOptions,
-  RequestableEnvironmentHttpRoute,
-} from "@rebase/environment-client";
+import type { EnvironmentRequests } from "#web/platform/query/environment-context";
+import type { RequestFailure } from "#web/platform/query/request-failure";
 
-export interface FakeRoute<
-  Route extends
-    RequestableEnvironmentHttpRoute = RequestableEnvironmentHttpRoute,
-> {
+interface RequestOptions {
+  readonly signal?: AbortSignal;
+}
+
+export interface FakeRoute<Route extends EnvironmentRoute = EnvironmentRoute> {
   readonly route: Route;
   respond(
     input: RouteInput<Route>,
-    options: EnvironmentRequestOptions,
+    options: RequestOptions,
   ): RouteSuccess<Route> | Promise<RouteSuccess<Route>>;
 }
 
-export function respond<Route extends RequestableEnvironmentHttpRoute>(
+export function respond<Route extends EnvironmentRoute>(
   route: Route,
   handler: (
     input: RouteInput<Route>,
-    options: EnvironmentRequestOptions,
+    options: RequestOptions,
   ) => RouteSuccess<Route> | Promise<RouteSuccess<Route>>,
 ): FakeRoute<Route> {
   return { route, respond: handler };
 }
 
+export function rejected<Failure>(failure: Failure): RequestFailure<Failure> {
+  return { _tag: "Rejected", failure };
+}
+
+export const unanswered: RequestFailure<never> = { _tag: "Unanswered" };
+
 export function fakeRequests(
   ...routes: readonly FakeRoute[]
-): EnvironmentRequestClient {
-  return async <Route extends RequestableEnvironmentHttpRoute>(
+): EnvironmentRequests {
+  return async <Route extends EnvironmentRoute>(
     route: Route,
     input: RouteInput<Route>,
-    options: EnvironmentRequestOptions = {},
+    options: RequestOptions = {},
   ) => {
     const fake = routes.find((candidate) => handles(candidate, route));
     if (fake === undefined)
-      throw new Error(`Unexpected request to ${route.path}`);
+      throw new Error(`Unexpected request to ${route._tag}`);
     return fake.respond(input, options);
   };
 }
 
-function handles<Route extends RequestableEnvironmentHttpRoute>(
+function handles<Route extends EnvironmentRoute>(
   fake: FakeRoute,
   route: Route,
 ): fake is FakeRoute<Route> {
@@ -54,7 +59,7 @@ function handles<Route extends RequestableEnvironmentHttpRoute>(
 }
 
 export const idleOperation = respond(
-  RepositoryOperationsHttpApi.read,
+  RepositoryOperationsApi.read,
   async (): Promise<RepositoryOperation> => ({
     kind: "idle",
     phase: "idle",

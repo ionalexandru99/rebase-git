@@ -1,7 +1,7 @@
 import { mkdir, mkdtemp, realpath } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { RepositoryBranchesHttpApi } from "@rebase/contracts";
+import { RepositoryBranchesApi } from "@rebase/contracts";
 import { Effect } from "effect";
 import { describe, expect, it, onTestFinished } from "vite-plus/test";
 import {
@@ -117,7 +117,7 @@ describe("repository branches", () => {
   it("rejects renaming a branch held by another worktree or moved since it was read", async () => {
     const fixture = await createFixture();
     const topic = await git(fixture.repositoryPath, "rev-parse", "topic");
-    const spike = await git(fixture.repositoryPath, "rev-parse", "spike");
+    const _spike = await git(fixture.repositoryPath, "rev-parse", "spike");
     const rename = (name: string, expectedTarget: string) =>
       withBranches(fixture, ({ branches, repositoryId }) =>
         branches.rename({
@@ -314,7 +314,7 @@ describe("repository branches", () => {
 async function withBranches<Value, Failure>(
   fixture: Pick<Fixture, "repositoryPath">,
   use: (dependencies: {
-    readonly branches: RoutesClient<typeof RepositoryBranchesHttpApi>;
+    readonly branches: RoutesClient<typeof RepositoryBranchesApi>;
     readonly repositoryId: string;
   }) => Effect.Effect<Value, Failure>,
 ) {
@@ -322,7 +322,7 @@ async function withBranches<Value, Failure>(
   const repository = await environment.remember(fixture.repositoryPath);
   return Effect.runPromise(
     use({
-      branches: environment.routes(RepositoryBranchesHttpApi),
+      branches: environment.routes(RepositoryBranchesApi),
       repositoryId: repository.id,
     }),
   );

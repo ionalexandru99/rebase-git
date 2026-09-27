@@ -12,6 +12,7 @@ import {
 } from "#desktop/app/desktop-application";
 import type { ManagedEnvironmentServer } from "#desktop/platform/environment/environment-supervisor";
 import { removeTemporaryDirectory } from "#tests-support/temporary-directory";
+import { connectEnvironment } from "#web/app/environment/environment-connection";
 
 const directories = new Set<string>();
 
@@ -47,9 +48,6 @@ describe("Electron application", () => {
       expect(firstWindow).toMatchObject({ renderer });
       expect(firstWindow?.credential).toMatch(/^rebase\.v1\./);
       expect(serverStarts).toBe(1);
-      await expect(
-        fetch(`${firstWindow?.environmentOrigin}/health`),
-      ).resolves.toMatchObject({ status: 200 });
 
       await application.activate();
       expect(host.windows).toHaveLength(1);
@@ -61,21 +59,24 @@ describe("Electron application", () => {
         firstWindow?.environmentOrigin,
       );
       expect(host.windows[1]?.credential).toBe(firstWindow?.credential);
-      const snapshot = await fetch(
-        `${firstWindow?.environmentOrigin}/api/environment/snapshot`,
-        {
-          headers: { authorization: `Bearer ${host.windows[1]?.credential}` },
-        },
-      );
-      expect(snapshot.status).toBe(200);
-      await snapshot.body?.cancel();
+      await expect(
+        Effect.runPromise(
+          Effect.scoped(
+            connectEnvironment(
+              firstWindow?.environmentOrigin ?? "",
+              { type: "bearer", value: host.windows[1]?.credential ?? "" },
+              { changed: () => {} },
+            ),
+          ),
+        ),
+      ).resolves.toHaveProperty("environmentId");
       expect(serverStarts).toBe(1);
 
       await application.windowAllClosed();
 
       expect(host.quitCalls).toBe(1);
       await expect(
-        fetch(`${firstWindow?.environmentOrigin}/health`),
+        fetch(firstWindow?.environmentOrigin ?? ""),
       ).rejects.toThrow();
       await expect(
         access(join(homeDirectory, ".rebase", "runtime", "runtime.json")),

@@ -1,9 +1,9 @@
 import {
   type ChangeDiff,
   type CommitInspection,
-  CommitInspectionHttpApi,
+  CommitInspectionApi,
   type RepositoryChanges,
-  RepositoryChangesHttpApi,
+  RepositoryChangesApi,
 } from "@rebase/contracts";
 import { afterEach, expect, it, vi } from "vite-plus/test";
 import { page } from "vite-plus/test/browser";
@@ -24,7 +24,6 @@ const changes: RepositoryChanges = {
     { path: "second.bin", previousPath: null, status: "M" },
   ],
   staged: [],
-  truncated: false,
   renamesLimited: false,
 };
 
@@ -79,24 +78,24 @@ async function fixture(linkedWorktree = false) {
     patch: "",
   });
   const requests = fakeRequests(
-    respond(RepositoryChangesHttpApi.read, (scope, { signal }) => {
+    respond(RepositoryChangesApi.read, (scope, { signal }) => {
       requestCount++;
       reads.push(scope.repositoryId);
       return holdReads ? held(scope.repositoryId, signal) : changes;
     }),
-    respond(RepositoryChangesHttpApi.diff, (scope) => {
+    respond(RepositoryChangesApi.diff, (scope) => {
       requestCount++;
-      diffs.push(`${RepositoryChangesHttpApi.diff.path}:${scope.path}`);
+      diffs.push(`${RepositoryChangesApi.diff._tag}:${scope.path}`);
       return binaryDiff(scope.path);
     }),
-    respond(CommitInspectionHttpApi.inspect, (scope, { signal }) => {
+    respond(CommitInspectionApi.inspect, (scope, { signal }) => {
       requestCount++;
       inspections.push(scope.oid);
       return holdInspections ? held(scope.oid, signal) : inspection(scope.oid);
     }),
-    respond(CommitInspectionHttpApi.inspectDiff, (scope) => {
+    respond(CommitInspectionApi.inspectDiff, (scope) => {
       requestCount++;
-      diffs.push(`${CommitInspectionHttpApi.inspectDiff.path}:${scope.path}`);
+      diffs.push(`${CommitInspectionApi.inspectDiff._tag}:${scope.path}`);
       return binaryDiff(scope.path);
     }),
   );
@@ -262,7 +261,7 @@ it("retains an inspected commit and file while another tab and another project a
     .click();
   await expect
     .poll(() => f.diffs.at(-1))
-    .toBe(`${CommitInspectionHttpApi.inspectDiff.path}:second.bin`);
+    .toBe(`${CommitInspectionApi.inspectDiff._tag}:second.bin`);
   const count = f.inspections.length;
   await page.getByRole("tab", { name: "Diffs", exact: true }).click();
   await page.getByRole("tab", { name: "Commit", exact: true }).click();
@@ -334,7 +333,7 @@ it("pauses retained sessions while a different environment is current", async ()
     .click();
   await expect
     .poll(() => f.diffs.at(-1))
-    .toBe(`${CommitInspectionHttpApi.inspectDiff.path}:second.bin`);
+    .toBe(`${CommitInspectionApi.inspectDiff._tag}:second.bin`);
   const requests = f.requestCount();
   await f.showEnvironment("other-environment");
   await expect

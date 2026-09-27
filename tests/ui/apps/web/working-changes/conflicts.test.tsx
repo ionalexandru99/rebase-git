@@ -5,14 +5,17 @@ import {
   type ConflictList,
   type MutateChanges,
   type RepositoryChanges,
-  RepositoryChangesHttpApi,
-  RepositoryConflictsHttpApi,
+  RepositoryChangesApi,
+  RepositoryConflictsApi,
   type StageConflict,
 } from "@rebase/contracts";
-import { EnvironmentHttpRejected } from "@rebase/environment-client";
 import { describe, expect, it } from "vite-plus/test";
 import { page } from "vite-plus/test/browser";
-import { fakeRequests, respond } from "#tests-ui/runtime/fake-requests";
+import {
+  fakeRequests,
+  rejected,
+  respond,
+} from "#tests-ui/runtime/fake-requests";
 import { render } from "#tests-ui/runtime/render";
 import { WorkingChanges } from "#web/features/working-changes/working-changes";
 
@@ -101,7 +104,6 @@ async function fixture() {
           status: "M" as const,
         })),
     ],
-    truncated: false,
     renamesLimited: false,
   });
   const list = (): ConflictList => ({
@@ -129,27 +131,25 @@ async function fixture() {
     };
   };
   const requests = fakeRequests(
-    respond(RepositoryChangesHttpApi.read, () => changes()),
-    respond(RepositoryChangesHttpApi.mutate, (command) => {
+    respond(RepositoryChangesApi.read, () => changes()),
+    respond(RepositoryChangesApi.mutate, (command) => {
       mutations.push(command);
       return { changes: changes(), diff: null };
     }),
-    respond(RepositoryConflictsHttpApi.list, () => list()),
-    respond(RepositoryConflictsHttpApi.document, ({ path }) => document(path)),
-    respond(RepositoryConflictsHttpApi.stage, (command) => {
+    respond(RepositoryConflictsApi.list, () => list()),
+    respond(RepositoryConflictsApi.document, ({ path }) => document(path)),
+    respond(RepositoryConflictsApi.stage, (command) => {
       stages.push(command);
       if (command.path === conflicted && !command.allowMarkers)
-        throw new EnvironmentHttpRejected({
-          failure: {
-            _tag: "ConflictFailed",
-            reason: "Markers",
-            detail: "Conflict markers remain.",
-          },
+        throw rejected({
+          _tag: "ConflictFailed",
+          reason: "Markers",
+          detail: "Conflict markers remain.",
         });
       unresolved.delete(command.path);
       return list();
     }),
-    respond(RepositoryConflictsHttpApi.choose, (command) => {
+    respond(RepositoryConflictsApi.choose, (command) => {
       choices.push(command);
       unresolved.delete(command.path);
       return list();

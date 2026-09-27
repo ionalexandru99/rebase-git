@@ -1,6 +1,6 @@
 import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { RepositoryPullHttpApi } from "@rebase/contracts";
+import { RepositoryPullApi } from "@rebase/contracts";
 import { Effect } from "effect";
 import { describe, expect, it } from "vite-plus/test";
 import { cloneRepository, fastImport, git } from "#tests-support/git";
@@ -188,7 +188,7 @@ async function fixture() {
   await cloneRepository(originPath, repositoryPath);
 
   const repositoryId = (await environment.remember(repositoryPath)).id;
-  const service = environment.routes(RepositoryPullHttpApi);
+  const service = environment.routes(RepositoryPullApi);
   return {
     repositoryPath,
     pull: (branch: string) =>

@@ -1,5 +1,5 @@
 import { Menu } from "@base-ui/react/menu";
-import { RepositoryPushHttpApi } from "@rebase/contracts";
+import { RepositoryPushApi } from "@rebase/contracts";
 import {
   IconArrowDown,
   IconArrowUp,
@@ -33,7 +33,7 @@ import { useCommand } from "#web/platform/query/use-command";
 export type Push = ReturnType<typeof usePush>;
 
 export function usePush() {
-  const command = useCommand(RepositoryPushHttpApi.push);
+  const command = useCommand(RepositoryPushApi.push);
   const [review, setReview] = useState<ForcePushReview | null>(null);
   const worktreePath = useRepositoryScope()?.worktreePath;
   const { cancel, reset } = command;

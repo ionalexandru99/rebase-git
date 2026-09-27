@@ -1,4 +1,3 @@
-import { currentTransportLimits } from "@rebase/contracts";
 import { describe, expect, it } from "vite-plus/test";
 import { gitFailed } from "#server/adapters/local-git/git-commands";
 import {
@@ -155,7 +154,7 @@ describe("git ref parsing", () => {
     ).toMatchObject({ _tag: "CheckoutRejected", reason: "LocalChanges" });
   });
 
-  it("keeps refs beyond one frame while enforcing the collection limits", () => {
+  it("enforces the ref collection limits", () => {
     const fitted = fitRepositoryRefs({
       branches: Array.from({ length: 5 }, (_, index) => ({
         name: `branch-${index}`,
@@ -179,9 +178,6 @@ describe("git ref parsing", () => {
       branches: false,
       remoteBranches: true,
     });
-    expect(Buffer.byteLength(JSON.stringify(fitted))).toBeGreaterThan(
-      currentTransportLimits.maxHttpResponseBytes,
-    );
   });
 });
 

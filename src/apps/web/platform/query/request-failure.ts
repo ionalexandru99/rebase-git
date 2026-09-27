@@ -1,23 +1,12 @@
 import type {
-  AuthorizationDenied,
   BranchCheckedOutElsewhere,
-  EnvironmentAccessFailure,
   RefMissing,
   RepositoryRejected,
 } from "@rebase/contracts";
-import {
-  EnvironmentAccessDenied,
-  EnvironmentHttpRejected,
-  EnvironmentResponseError,
-} from "@rebase/environment-client";
 
 export type RequestFailure<Failure> =
   | { readonly _tag: "Rejected"; readonly failure: Failure }
   | { readonly _tag: "Unanswered" }
-  | {
-      readonly _tag: "AccessDenied";
-      readonly failure: EnvironmentAccessFailure;
-    }
   | { readonly _tag: "Cancelled" };
 
 type TaggedFailure = { readonly _tag: string };
@@ -29,23 +18,26 @@ export type FailureMessages<Failure extends TaggedFailure> = {
 };
 
 type SharedFailure =
-  | AuthorizationDenied
   | { readonly _tag: "RepositoryMissing" }
   | RepositoryRejected
   | RefMissing
   | typeof BranchCheckedOutElsewhere.Type;
 
-const accessDenied = "This device has no access to this repository.";
 const repositoryMissing = "The repository is no longer available.";
+
+const failureTags = new Set(["Rejected", "Unanswered", "Cancelled"]);
 
 export function requestFailure<Failure>(
   error: unknown,
 ): RequestFailure<Failure> {
-  if (error instanceof EnvironmentHttpRejected)
-    return { _tag: "Rejected", failure: error.failure as Failure };
-  if (error instanceof EnvironmentAccessDenied)
-    return { _tag: "AccessDenied", failure: error.failure };
-  if (error instanceof EnvironmentResponseError) return { _tag: "Unanswered" };
+  if (
+    typeof error === "object" &&
+    error !== null &&
+    "_tag" in error &&
+    typeof error._tag === "string" &&
+    failureTags.has(error._tag)
+  )
+    return error as RequestFailure<Failure>;
   throw error;
 }
 
@@ -62,8 +54,6 @@ export function describeFailure<Failure extends TaggedFailure>(
   switch (failure._tag) {
     case "Unanswered":
       return "The Environment did not answer. Check the connection and try again.";
-    case "AccessDenied":
-      return accessDenied;
     case "Cancelled":
       return "The request was cancelled.";
     case "Rejected":
@@ -84,8 +74,6 @@ function describeRejection<Failure extends TaggedFailure>(
 function sharedWording(failure: TaggedFailure): string {
   const shared = failure as SharedFailure;
   switch (shared._tag) {
-    case "AuthorizationDenied":
-      return accessDenied;
     case "RepositoryMissing":
       return repositoryMissing;
     case "RepositoryRejected":

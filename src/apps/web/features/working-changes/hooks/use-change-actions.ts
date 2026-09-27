@@ -1,7 +1,7 @@
 import {
   type ChangesScope,
   type ChangesWritten,
-  RepositoryChangesHttpApi,
+  RepositoryChangesApi,
   type ViewedChange,
 } from "@rebase/contracts";
 import {
@@ -17,11 +17,11 @@ import {
 type WrittenScope = ChangesScope & { readonly viewed?: ViewedChange };
 
 export function useChangeActions(target: CommandTarget) {
-  const mutate = useCommand(RepositoryChangesHttpApi.mutate, {
+  const mutate = useCommand(RepositoryChangesApi.mutate, {
     target,
     answers: (written, input) => changesAnswers(input, written),
   });
-  const commit = useCommand(RepositoryChangesHttpApi.commit, {
+  const commit = useCommand(RepositoryChangesApi.commit, {
     target,
     answers: (written, input) =>
       changesAnswers({ ...input, amend: false }, written),
@@ -31,7 +31,7 @@ export function useChangeActions(target: CommandTarget) {
 
 function changesAnswers(scope: WrittenScope, written: ChangesWritten) {
   const changes = answer(
-    RepositoryChangesHttpApi.read,
+    RepositoryChangesApi.read,
     changesScope(scope),
     written.changes,
   );
@@ -39,7 +39,7 @@ function changesAnswers(scope: WrittenScope, written: ChangesWritten) {
   return [
     changes,
     answer(
-      RepositoryChangesHttpApi.diff,
+      RepositoryChangesApi.diff,
       changeDiffInput(scope, scope.viewed),
       written.diff,
       written.changes.revision,

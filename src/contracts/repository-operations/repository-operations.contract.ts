@@ -1,8 +1,7 @@
 import {
-  type EnvironmentHttpRoute,
   repositoryCommand,
   repositoryQuery,
-} from "@rebase/contracts/environment-connection/http/environment-http-route.contract";
+} from "@rebase/contracts/environment-connection/environment-route.contract";
 import {
   RepositoryId,
   RepositoryPath,
@@ -64,14 +63,14 @@ export const OperationFailure = Schema.TaggedStruct("OperationFailed", {
   detail: Schema.String.check(Schema.isMaxLength(2048)),
 });
 export type OperationFailure = typeof OperationFailure.Type;
-export const RepositoryOperationsHttpApi = {
-  read: repositoryQuery("/api/repositories/operations/read", {
+export const RepositoryOperationsApi = {
+  read: repositoryQuery("repositories/operations/read", {
     request: OperationScope,
     success: RepositoryOperation,
   }),
-  execute: repositoryCommand("/api/repositories/operations/execute", {
+  execute: repositoryCommand("repositories/operations/execute", {
     request: ExecuteOperation,
     success: RepositoryOperation,
     failure: OperationFailure,
   }),
-} satisfies Record<string, EnvironmentHttpRoute>;
+};

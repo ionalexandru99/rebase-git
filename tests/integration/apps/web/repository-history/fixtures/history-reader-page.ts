@@ -1,8 +1,8 @@
+import type { RepositoryCommit } from "@rebase/contracts";
 import {
   encodeRepositoryHistoryBatch,
   encodeRepositoryHistoryPage,
-  type RepositoryCommit,
-} from "@rebase/contracts";
+} from "#tests-support/repository-history-bytes";
 import { createBrowserRepositoryHistoryReader } from "#web/features/repository-history/browser-repository-history-reader";
 
 const parameters = new URLSearchParams(location.search);

@@ -1,10 +1,10 @@
-import { type PullBranch, RepositoryPullHttpApi } from "@rebase/contracts";
+import { type PullBranch, RepositoryPullApi } from "@rebase/contracts";
 import { Effect } from "effect";
-import type { EnvironmentFeature } from "#server/adapters/environment-transport/combine-environment-features";
+import type { EnvironmentFeature } from "#server/adapters/environment-transport/environment-routes";
 import {
   type RepositoryDependencies,
   repositoryRoutes,
-} from "#server/adapters/environment-transport/http/repository-http-routes";
+} from "#server/adapters/environment-transport/environment-routes";
 import type { GitCommandRunner } from "#server/adapters/local-git/git-commands";
 import {
   fastForwardBranch,
@@ -21,10 +21,9 @@ export function repositoryPullFeature(
 ): EnvironmentFeature {
   const { command } = repositoryRoutes(dependencies);
   return {
-    capabilities: [],
-    httpRoutes: [
+    routes: [
       command(
-        RepositoryPullHttpApi.pull,
+        RepositoryPullApi.pull,
         {
           name: "pull",
           locks: { refs: "wait" },

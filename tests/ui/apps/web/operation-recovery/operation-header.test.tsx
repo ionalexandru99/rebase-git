@@ -1,21 +1,23 @@
 import {
   type RepositoryChangeKind,
   type RepositoryChanges,
-  RepositoryChangesHttpApi,
+  RepositoryChangesApi,
   type RepositoryOperation,
-  RepositoryOperationsHttpApi,
+  RepositoryOperationsApi,
 } from "@rebase/contracts";
-import { EnvironmentHttpRejected } from "@rebase/environment-client";
 import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
 import { page } from "vite-plus/test/browser";
 import { repositoryScope } from "#tests-ui/apps/web/repository-scope/repository-scope-fixture";
-import { fakeRequests, respond } from "#tests-ui/runtime/fake-requests";
-import { render } from "#tests-ui/runtime/render";
+import {
+  fakeRequests,
+  rejected,
+  respond,
+} from "#tests-ui/runtime/fake-requests";
+import { render, testChanges } from "#tests-ui/runtime/render";
 import { NotificationsProvider } from "#web/features/notifications/notifications";
 import { OperationRecoveryNotice } from "#web/features/operation-recovery/components/operation-recovery-notice";
 import { WorkingChanges } from "#web/features/working-changes/working-changes";
 import { WorkspacePanel } from "#web/features/workspace-panel/workspace-panel";
-import type { EnvironmentChangeListener } from "#web/platform/environment/environment-protocol.contract";
 import { RepositoryScopeProvider } from "#web/platform/query/repository-scope";
 
 const path = "src/app.ts";
@@ -63,7 +65,7 @@ function showPanel(open: boolean) {
 
 async function fixture() {
   let operation = conflicted();
-  const listeners = new Set<EnvironmentChangeListener>();
+  const environmentChanges = testChanges();
   const execute = vi.fn(
     (_command: { readonly revision: string }): RepositoryOperation => operation,
   );
@@ -73,13 +75,12 @@ async function fixture() {
     message: "",
     unstaged: [],
     staged: [],
-    truncated: false,
     renamesLimited: false,
   });
   const requests = fakeRequests(
-    respond(RepositoryOperationsHttpApi.read, () => operation),
-    respond(RepositoryOperationsHttpApi.execute, (command) => execute(command)),
-    respond(RepositoryChangesHttpApi.read, () => changes()),
+    respond(RepositoryOperationsApi.read, () => operation),
+    respond(RepositoryOperationsApi.execute, (command) => execute(command)),
+    respond(RepositoryChangesApi.read, () => changes()),
   );
   await render(
     <NotificationsProvider>
@@ -104,17 +105,7 @@ async function fixture() {
         </WorkspacePanel.Provider>
       </RepositoryScopeProvider>
     </NotificationsProvider>,
-    {
-      environment: {
-        requests,
-        changes: {
-          subscribe: (listener) => {
-            listeners.add(listener);
-            return () => listeners.delete(listener);
-          },
-        },
-      },
-    },
+    { environment: { requests }, queryClient: environmentChanges.queryClient },
   );
   return {
     execute,
@@ -122,7 +113,7 @@ async function fixture() {
       operation = next;
     },
     change: (kind: RepositoryChangeKind) => {
-      for (const listener of listeners) listener([scope.repositoryId], kind);
+      environmentChanges.publish([scope.repositoryId], kind);
     },
   };
 }
@@ -177,12 +168,10 @@ describe("operation header in the Diffs tab", () => {
     f.execute
       .mockImplementationOnce(() => {
         f.set({ ...ready(), revision: "three" });
-        throw new EnvironmentHttpRejected({
-          failure: {
-            _tag: "OperationFailed",
-            reason: "Stale",
-            detail: "Git state changed.",
-          },
+        throw rejected({
+          _tag: "OperationFailed",
+          reason: "Stale",
+          detail: "Git state changed.",
         });
       })
       .mockImplementationOnce(() => {

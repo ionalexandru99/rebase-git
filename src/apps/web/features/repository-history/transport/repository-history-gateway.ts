@@ -1,3 +1,4 @@
+import type { EnvironmentRpcClient } from "@rebase/contracts";
 import { Effect } from "effect";
 import {
   type RepositoryHistoryGateway,
@@ -10,7 +11,6 @@ import type {
   RepositoryFreshnessTransport,
 } from "#web/features/repository-history/transport/repository-freshness-transport";
 import { createRepositoryHistoryRpc } from "#web/features/repository-history/transport/repository-history-rpc";
-import type { NegotiatedEnvironmentRpc } from "#web/platform/environment/environment-protocol.contract";
 
 export function createRepositoryHistoryGateway() {
   let transport: RepositoryHistoryTransport | undefined;
@@ -58,10 +58,10 @@ export function createRepositoryHistoryGateway() {
     }
   };
   return {
-    connect: (connection: NegotiatedEnvironmentRpc) =>
+    connect: (rpc: EnvironmentRpcClient) =>
       Effect.acquireRelease(
         Effect.sync(() => {
-          const next = createRepositoryHistoryRpc(connection);
+          const next = createRepositoryHistoryRpc(rpc);
           connect(next);
           return next;
         }),

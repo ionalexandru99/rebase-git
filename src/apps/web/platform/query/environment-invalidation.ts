@@ -1,39 +1,20 @@
 import type { RepositoryChangeKind } from "@rebase/contracts";
-import {
-  type Query,
-  type QueryClient,
-  useQueryClient,
-} from "@tanstack/react-query";
-import { useEffect, useRef } from "react";
-import type { EnvironmentChanges } from "#web/platform/environment/environment-protocol.contract";
+import type { Query, QueryClient } from "@tanstack/react-query";
 import type { EnvironmentQueryMeta } from "#web/platform/query/environment-query-meta";
 
-export function useEnvironmentInvalidation(
-  changes: EnvironmentChanges,
-  connected: boolean,
-) {
-  const queryClient = useQueryClient();
-  useEffect(
-    () => subscribeChangeInvalidation(queryClient, changes),
-    [changes, queryClient],
-  );
-  const wasConnected = useRef(connected);
-  useEffect(() => {
-    if (connected && !wasConnected.current)
-      void queryClient.invalidateQueries({
-        predicate: (query) => invalidatedByChange(query.meta),
-      });
-    wasConnected.current = connected;
-  }, [connected, queryClient]);
+export interface EnvironmentInvalidation {
+  readonly changed: (
+    repositoryIds?: readonly string[],
+    kind?: RepositoryChangeKind,
+  ) => void;
 }
 
-export function subscribeChangeInvalidation(
+export function createEnvironmentInvalidation(
   queryClient: QueryClient,
-  changes: EnvironmentChanges,
-) {
+): EnvironmentInvalidation {
   const cache = queryClient.getQueryCache();
   const changedWhileFetching = new WeakSet<Query>();
-  const refetchAfterSettle = cache.subscribe(({ query }) => {
+  cache.subscribe(({ query }) => {
     if (
       query.state.fetchStatus === "fetching" ||
       !changedWhileFetching.delete(query)
@@ -44,16 +25,17 @@ export function subscribeChangeInvalidation(
       { cancelRefetch: false },
     );
   });
-  const invalidateChanged = changes.subscribe((repositoryIds, kind) => {
-    const predicate = (query: Query) =>
-      invalidatedByChange(query.meta, repositoryIds, kind);
-    for (const query of cache.findAll({ predicate, fetchStatus: "fetching" }))
-      changedWhileFetching.add(query);
-    void queryClient.invalidateQueries({ predicate }, { cancelRefetch: false });
-  });
-  return () => {
-    invalidateChanged();
-    refetchAfterSettle();
+  return {
+    changed: (repositoryIds, kind) => {
+      const predicate = (query: Query) =>
+        invalidatedByChange(query.meta, repositoryIds, kind);
+      for (const query of cache.findAll({ predicate, fetchStatus: "fetching" }))
+        changedWhileFetching.add(query);
+      void queryClient.invalidateQueries(
+        { predicate },
+        { cancelRefetch: false },
+      );
+    },
   };
 }
 

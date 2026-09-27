@@ -112,33 +112,13 @@ describe("Environment authorization", () => {
     await run(authorization.authorize(custom.credential));
   });
 
-  it("rejects ticket replay and blocks revoked grants", async () => {
+  it("blocks revoked grants", async () => {
     const { authorization } = await openTestEnvironment();
-    const owner = await pairDevice(authorization, "Owner");
     const viewer = await pairDevice(authorization, "Viewer");
-    const ticket = await run(authorization.mintTicket(viewer.credential));
-    await run(authorization.consumeTicket(ticket.ticket));
-    await expectFailure(
-      authorization.consumeTicket(ticket.ticket),
-      "TicketAlreadyUsed",
-    );
 
-    const expiredTicket = await run(
-      authorization.mintTicket(viewer.credential),
-    );
-    advanceClock(30_000);
-    await expectFailure(
-      authorization.consumeTicket(expiredTicket.ticket),
-      "ExpiredTicket",
-    );
-
-    await run(authorization.revoke(owner.credential, viewer.authorization.id));
+    await run(authorization.revoke(viewer.authorization.id));
     await expectFailure(
       authorization.authorize(viewer.credential),
-      "RevokedGrant",
-    );
-    await expectFailure(
-      authorization.mintTicket(viewer.credential),
       "RevokedGrant",
     );
   });
@@ -187,14 +167,9 @@ describe("Environment authorization", () => {
 
     failing.failNextWrite("Could not save device authorization");
     await expectStorageFailure(authorization.exchangePairing(exchange));
-    const owner = await run(authorization.exchangePairing(exchange));
-
-    const ticket = await run(authorization.mintTicket(owner.credential));
-    failing.failNextWrite("Could not authenticate device authorization");
-    await expectStorageFailure(authorization.consumeTicket(ticket.ticket));
     await expect(
-      run(authorization.consumeTicket(ticket.ticket)),
-    ).resolves.toMatchObject({ id: owner.authorization.id });
+      run(authorization.exchangePairing(exchange)),
+    ).resolves.toHaveProperty("credential");
   });
 });
 

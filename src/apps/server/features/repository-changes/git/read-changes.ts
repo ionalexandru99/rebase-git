@@ -86,7 +86,6 @@ export function readChanges(git: GitCommandRunner, scope: ChangesScope) {
         revision: fingerprint(head ?? "", index, status, base, ...identities),
         unstaged,
         staged,
-        truncated: false,
         renamesLimited: stagedDiff.stderr.includes(
           "rename detection was skipped",
         ),

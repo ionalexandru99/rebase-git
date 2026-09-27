@@ -1,8 +1,8 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import {
-  EnvironmentFilesystemHttpApi,
-  RepositoryCatalogHttpApi,
+  EnvironmentFilesystemApi,
+  RepositoryCatalogApi,
 } from "@rebase/contracts";
 import { describe, expect, it } from "vite-plus/test";
 import { createRepository } from "#tests-support/git";
@@ -16,23 +16,23 @@ describe("repository catalog transport", () => {
     const owner = server.requests(server.owner);
     const device = server.requests(await server.pair("Second browser"));
 
-    const remembered = await owner(RepositoryCatalogHttpApi.remember, {
+    const remembered = await owner(RepositoryCatalogApi.remember, {
       path: repositoryPath,
     });
-    await expect(
-      device(RepositoryCatalogHttpApi.list, undefined),
-    ).resolves.toEqual({ repositories: [remembered] });
-    const opened = await device(RepositoryCatalogHttpApi.recordOpened, {
+    await expect(device(RepositoryCatalogApi.list, undefined)).resolves.toEqual(
+      { repositories: [remembered] },
+    );
+    const opened = await device(RepositoryCatalogApi.recordOpened, {
       repositoryId: remembered.id,
     });
     expect(opened.lastOpenedAt >= remembered.lastOpenedAt).toBe(true);
 
     await expect(
-      device(RepositoryCatalogHttpApi.remove, { repositoryId: remembered.id }),
+      device(RepositoryCatalogApi.remove, { repositoryId: remembered.id }),
     ).resolves.toEqual({ repositoryId: remembered.id });
-    await expect(
-      owner(RepositoryCatalogHttpApi.list, undefined),
-    ).resolves.toEqual({ repositories: [] });
+    await expect(owner(RepositoryCatalogApi.list, undefined)).resolves.toEqual({
+      repositories: [],
+    });
   });
 
   it("returns typed path and missing-entry failures", async () => {
@@ -40,19 +40,19 @@ describe("repository catalog transport", () => {
     const owner = server.requests(server.owner);
 
     await expect(
-      owner(RepositoryCatalogHttpApi.remember, {
+      owner(RepositoryCatalogApi.remember, {
         path: join(server.home, "missing"),
       }),
     ).rejects.toMatchObject({
-      _tag: "EnvironmentHttpRejected",
+      _tag: "Rejected",
       failure: { _tag: "RepositoryPathRejected", reason: "NotFound" },
     });
     await expect(
-      owner(RepositoryCatalogHttpApi.recordOpened, {
+      owner(RepositoryCatalogApi.recordOpened, {
         repositoryId: "00000000-0000-4000-8000-000000000099",
       }),
     ).rejects.toMatchObject({
-      _tag: "EnvironmentHttpRejected",
+      _tag: "Rejected",
       failure: {
         _tag: "RepositoryRejected",
         reason: "Missing",
@@ -67,7 +67,7 @@ describe("repository catalog transport", () => {
     await writeFile(join(server.home, "notes.md"), "notes");
 
     const listing = await server.requests(server.owner)(
-      EnvironmentFilesystemHttpApi.listDirectory,
+      EnvironmentFilesystemApi.listDirectory,
       { path: server.home },
     );
 

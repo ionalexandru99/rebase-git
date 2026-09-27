@@ -1,9 +1,10 @@
 import { createBrowserRepositoryHistoryReader } from "#web/features/repository-history/browser-repository-history-reader";
 import "@rebase/web/styles.css";
 import {
-  RepositoryBranchesHttpApi,
+  RepositoryBranchesApi,
   type RepositoryCommit,
   type RepositoryRefs,
+  RepositoryRefsApi,
 } from "@rebase/contracts";
 import {
   persistQueryClientRestore,
@@ -11,8 +12,11 @@ import {
 } from "@tanstack/react-query-persist-client";
 import { expect, it, vi } from "vite-plus/test";
 import { repositoryScope } from "#tests-ui/apps/web/repository-scope/repository-scope-fixture";
-import { fakeRequests, respond } from "#tests-ui/runtime/fake-requests";
-import { fakeRpc } from "#tests-ui/runtime/fake-rpc";
+import {
+  fakeRequests,
+  respond,
+  unanswered,
+} from "#tests-ui/runtime/fake-requests";
 import { render } from "#tests-ui/runtime/render";
 import { OpenedHistoryContext } from "#web/app/shell/opened-history-context";
 import { RepositoryWorkspace } from "#web/app/workspace/repository-workspace";
@@ -22,6 +26,7 @@ import { resolveHistoryScope } from "#web/features/commit-graph/scope/history-sc
 import { useRepositoryRefs } from "#web/features/refs/repository-refs";
 import { storeRepositoryHistoryPage } from "#web/features/repository-history/replica/repository-history-store";
 import { RepositoryHistoryOffline } from "#web/features/repository-history/repository-history-reader";
+import { environmentQueryKey } from "#web/platform/query/environment-query";
 import { createEnvironmentQueryClient } from "#web/platform/query/environment-query-client";
 import { createEnvironmentQueryPersistence } from "#web/platform/query/environment-query-persistence";
 import { RepositoryScopeProvider } from "#web/platform/query/repository-scope";
@@ -78,20 +83,18 @@ it("restores only persisted refs, unconfirmed, for the same protocol", async () 
 it("keeps restored refs unconfirmed until a live read answers", async () => {
   const environmentId = crypto.randomUUID();
   const refs = repositoryRefs();
-  const logicalId = refs.logicalRepositoryId ?? "";
-  const queryClient = await restoredRefs(environmentId, logicalId, refs);
+  const queryClient = await restoredRefs(environmentId, refs);
   let online = false;
-  const rpc = await fakeRpc(async () => {
-    if (!online) throw new Error("offline");
-    return refs;
-  });
-  const screen = await render(
-    <RefsProbe
-      logicalRepositoryId={logicalId}
-      repositoryId={refs.repositoryId}
-    />,
-    { environment: { environmentId, rpc }, queryClient },
+  const requests = fakeRequests(
+    respond(RepositoryRefsApi.read, async () => {
+      if (!online) throw unanswered;
+      return refs;
+    }),
   );
+  const screen = await render(<RefsProbe repositoryId={refs.repositoryId} />, {
+    environment: { environmentId, requests },
+    queryClient,
+  });
 
   await expect
     .element(screen.getByRole("alert"))
@@ -111,15 +114,15 @@ it("keeps restored refs restored through a branch write until a live read answer
   const environmentId = crypto.randomUUID();
   const refs = repositoryRefs();
   const logicalId = refs.logicalRepositoryId ?? "";
-  const queryClient = await restoredRefs(environmentId, logicalId, refs);
+  const queryClient = await restoredRefs(environmentId, refs);
   const reads: PromiseWithResolvers<RepositoryRefs>[] = [];
-  const rpc = await fakeRpc(() => {
-    const read = Promise.withResolvers<RepositoryRefs>();
-    reads.push(read);
-    return read.promise;
-  });
   const requests = fakeRequests(
-    respond(RepositoryBranchesHttpApi.rename, async ({ newName }) => ({
+    respond(RepositoryRefsApi.read, () => {
+      const read = Promise.withResolvers<RepositoryRefs>();
+      reads.push(read);
+      return read.promise;
+    }),
+    respond(RepositoryBranchesApi.rename, async ({ newName }) => ({
       branch: { name: newName, target: oid },
       previousName: "main",
     })),
@@ -132,16 +135,13 @@ it("keeps restored refs restored through a branch write until a live read answer
         worktreePath: "/feature",
       })}
     >
-      <RefsProbe
-        logicalRepositoryId={logicalId}
-        repositoryId={refs.repositoryId}
-      />
+      <RefsProbe repositoryId={refs.repositoryId} />
       <RenameMain />
     </RepositoryScopeProvider>,
-    { environment: { environmentId, rpc, requests }, queryClient },
+    { environment: { environmentId, requests }, queryClient },
   );
   await expect.poll(() => reads).toHaveLength(1);
-  reads[0]?.reject(new Error("offline"));
+  reads[0]?.reject(unanswered);
   await expect
     .element(screen.getByRole("alert"))
     .toHaveTextContent("The Environment did not answer.");
@@ -164,7 +164,7 @@ it.each(["Automatic", "Custom"] as const)(
     const environmentId = crypto.randomUUID();
     const refs = repositoryRefs();
     const logicalId = refs.logicalRepositoryId ?? "";
-    const queryClient = await restoredRefs(environmentId, logicalId, refs);
+    const queryClient = await restoredRefs(environmentId, refs);
     const custom = {
       _tag: "Custom",
       selections: [
@@ -250,17 +250,8 @@ it.each(["Automatic", "Custom"] as const)(
   },
 );
 
-function RefsProbe({
-  logicalRepositoryId,
-  repositoryId,
-}: {
-  readonly logicalRepositoryId: string;
-  readonly repositoryId: string;
-}) {
-  const { error, refs, restored, retry } = useRepositoryRefs(
-    repositoryId,
-    logicalRepositoryId,
-  );
+function RefsProbe({ repositoryId }: { readonly repositoryId: string }) {
+  const { error, refs, restored, retry } = useRepositoryRefs(repositoryId);
   return (
     <div>
       <p role="status">
@@ -276,7 +267,7 @@ function RefsProbe({
 }
 
 function RenameMain() {
-  const rename = useCommand(RepositoryBranchesHttpApi.rename);
+  const rename = useCommand(RepositoryBranchesApi.rename);
   return (
     <button
       type="button"
@@ -296,15 +287,17 @@ function renameMain(refs: RepositoryRefs): RepositoryRefs {
   };
 }
 
-async function restoredRefs(
-  environmentId: string,
-  logicalId: string,
-  refs: RepositoryRefs,
-) {
+async function restoredRefs(environmentId: string, refs: RepositoryRefs) {
   const persistence = createEnvironmentQueryPersistence();
   const saved = createEnvironmentQueryClient();
+  const input = { repositoryId: refs.repositoryId };
   await saved.fetchQuery({
-    queryKey: ["repository-refs", environmentId, logicalId],
+    queryKey: environmentQueryKey(
+      environmentId,
+      refs.repositoryId,
+      RepositoryRefsApi.read,
+      input,
+    ),
     queryFn: async () => refs,
     meta: { changes: "refs", repositoryId: refs.repositoryId, persist: true },
   });

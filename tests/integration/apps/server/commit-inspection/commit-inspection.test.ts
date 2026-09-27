@@ -3,7 +3,7 @@ import { readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
-import { CommitInspectionHttpApi } from "@rebase/contracts";
+import { CommitInspectionApi } from "@rebase/contracts";
 import { Effect } from "effect";
 import { describe, expect, it } from "vite-plus/test";
 import { createRepository } from "#tests-support/git";
@@ -25,7 +25,7 @@ async function fixture() {
   await git("commit", "-m", "Initial\n\nFull commit body.");
   const oid = await git("rev-parse", "HEAD");
   const repository = await environment.remember(directory);
-  const service = environment.routes(CommitInspectionHttpApi);
+  const service = environment.routes(CommitInspectionApi);
   const scope = { repositoryId: repository.id, worktreePath: directory, oid };
   return { directory, git, service, scope };
 }
@@ -217,7 +217,7 @@ describe("historical commit inspection", () => {
     ).rejects.toMatchObject({ reason: "Missing" });
   });
 
-  it("supports empty commits and rejects revision expressions", async () => {
+  it("supports empty commits and refuses revision expressions", async () => {
     const f = await fixture();
     await f.git("commit", "--allow-empty", "-m", "Empty");
     const scope = { ...f.scope, oid: await f.git("rev-parse", "HEAD") };
@@ -226,6 +226,6 @@ describe("historical commit inspection", () => {
     );
     await expect(
       Effect.runPromise(f.service.inspect({ ...scope, oid: "HEAD^{tree}" })),
-    ).rejects.toMatchObject({ reason: "Unsupported" });
+    ).rejects.toThrow("Schema validation failed");
   });
 });

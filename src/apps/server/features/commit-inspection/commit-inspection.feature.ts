@@ -1,9 +1,9 @@
-import { CommitInspectionHttpApi } from "@rebase/contracts";
-import type { EnvironmentFeature } from "#server/adapters/environment-transport/combine-environment-features";
+import { CommitInspectionApi } from "@rebase/contracts";
+import type { EnvironmentFeature } from "#server/adapters/environment-transport/environment-routes";
 import {
   type RepositoryDependencies,
   repositoryRoutes,
-} from "#server/adapters/environment-transport/http/repository-http-routes";
+} from "#server/adapters/environment-transport/environment-routes";
 import {
   inspectCommit,
   inspectCommitDiff,
@@ -13,10 +13,9 @@ export function commitInspectionFeature(
   dependencies: RepositoryDependencies,
 ): EnvironmentFeature {
   const { query } = repositoryRoutes(dependencies);
-  const api = CommitInspectionHttpApi;
+  const api = CommitInspectionApi;
   return {
-    capabilities: [],
-    httpRoutes: [
+    routes: [
       query(api.inspect, (input, git) => inspectCommit(git, input)),
       query(api.inspectDiff, (input, git) => inspectCommitDiff(git, input)),
     ],

@@ -8,6 +8,7 @@ import { ApplicationShell } from "#web/app/shell/application-shell";
 import { NotificationsProvider } from "#web/features/notifications/notifications";
 import { createRepositoryHistoryGateway } from "#web/features/repository-history/transport/repository-history-gateway";
 import { ApplicationRuntime } from "#web/platform/effect/application-runtime-context";
+import { createEnvironmentInvalidation } from "#web/platform/query/environment-invalidation";
 import { createEnvironmentQueryClient } from "#web/platform/query/environment-query-client";
 import { createEnvironmentQueryPersistence } from "#web/platform/query/environment-query-persistence";
 import "@rebase/web/styles.css";
@@ -22,13 +23,13 @@ const productVersion = import.meta.env.REBASE_PRODUCT_VERSION;
 const desktopHost = readDesktopHostBridge();
 const runtime = ManagedRuntime.make(Layer.empty);
 const repositoryHistory = createRepositoryHistoryGateway();
-const session = createBrowserLocalEnvironmentSession(
-  productVersion,
-  desktopHost,
-  { runtime, onConnect: repositoryHistory.connect },
-);
-session.start();
 const queryClient = createEnvironmentQueryClient();
+const session = createBrowserLocalEnvironmentSession(desktopHost, {
+  runtime,
+  onConnect: repositoryHistory.connect,
+  invalidation: createEnvironmentInvalidation(queryClient),
+});
+session.start();
 const queryPersistence = createEnvironmentQueryPersistence();
 
 createRoot(rootElement).render(

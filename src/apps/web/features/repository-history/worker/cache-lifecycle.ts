@@ -7,6 +7,7 @@ import {
   describeHistoryCaches,
 } from "#web/features/repository-history/cache/repository-history-storage";
 import { queueHistoryStorageWrite as queueStorageWrite } from "#web/features/repository-history/cache/repository-history-storage-maintenance";
+import { createEnvironmentRequestId } from "#web/features/repository-history/repository-history-reader";
 import { readHistory } from "#web/features/repository-history/worker/history-pages";
 import type {
   ConnectedReader,
@@ -25,7 +26,6 @@ import {
   startSynchronization,
 } from "#web/features/repository-history/worker/synchronization";
 import { readHistoryCacheRecords } from "#web/persistence/repository-history/repository-history-cache-records";
-import { createEnvironmentRequestId } from "#web/platform/environment/websocket/environment-request-id";
 
 type CacheManagementRequest =
   | { readonly action: "clear-all" }

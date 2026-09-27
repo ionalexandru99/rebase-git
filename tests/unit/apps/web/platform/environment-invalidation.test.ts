@@ -1,12 +1,8 @@
 import { QueryObserver } from "@tanstack/react-query";
 import { describe, expect, it, vi } from "vite-plus/test";
-import type {
-  EnvironmentChangeListener,
-  EnvironmentChanges,
-} from "#web/platform/environment/environment-protocol.contract";
 import {
+  createEnvironmentInvalidation,
   invalidatedByChange,
-  subscribeChangeInvalidation,
 } from "#web/platform/query/environment-invalidation";
 import { createEnvironmentQueryClient } from "#web/platform/query/environment-query-client";
 
@@ -38,13 +34,6 @@ describe("environment change invalidation", () => {
 
   it("reads once more after the read in flight when changes arrive during it", async () => {
     const queryClient = createEnvironmentQueryClient();
-    const listeners = new Set<EnvironmentChangeListener>();
-    const changes: EnvironmentChanges = {
-      subscribe: (listener) => {
-        listeners.add(listener);
-        return () => listeners.delete(listener);
-      },
-    };
     const responses: Array<(branches: readonly string[]) => void> = [];
     const read = vi.fn(
       () =>
@@ -52,15 +41,13 @@ describe("environment change invalidation", () => {
           responses.push(resolve);
         }),
     );
-    const stopInvalidation = subscribeChangeInvalidation(queryClient, changes);
+    const invalidation = createEnvironmentInvalidation(queryClient);
     const observer = new QueryObserver(queryClient, {
       queryKey: ["repository-refs", "one"],
       queryFn: read,
       meta: refs,
     });
-    const change = () => {
-      for (const listener of listeners) listener(["one"], "Refs");
-    };
+    const change = () => invalidation.changed(["one"], "Refs");
     const stopObserving = observer.subscribe(() => {});
     await expect.poll(() => read).toHaveBeenCalledOnce();
     responses[0]?.(["main"]);
@@ -79,6 +66,5 @@ describe("environment change invalidation", () => {
 
     expect(read).toHaveBeenCalledTimes(3);
     stopObserving();
-    stopInvalidation();
   });
 });

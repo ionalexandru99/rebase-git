@@ -50,7 +50,7 @@ export function verifyDeviceCredential(
     : undefined;
 }
 
-export function createSecretMaterial() {
+function createSecretMaterial() {
   return randomBytes(32).toString("base64url");
 }
 

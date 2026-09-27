@@ -3,7 +3,7 @@ import type {
   RepositoryFilesystemHost,
 } from "@rebase/contracts";
 import type { JSX } from "react";
-import type { LocalEnvironmentSession } from "#web/app/environment/local-environment-session.contract";
+import type { LocalEnvironmentSession } from "#web/app/environment/local-environment-session";
 import { ApplicationLayout } from "#web/app/shell/application-layout";
 import { PanelSessions } from "#web/app/shell/panel-sessions";
 import { RepositorySelectionProvider } from "#web/app/shell/repository-selection-provider";

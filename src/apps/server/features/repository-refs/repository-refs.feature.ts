@@ -1,20 +1,21 @@
 import {
   type CreateRepositoryBranch,
-  RepositoryBranchesHttpApi,
+  RepositoryBranchesApi,
   type RepositoryBranchesOperationFailure,
-  RepositoryRefsHttpApi,
+  RepositoryRefsApi,
   type RepositoryRejected,
-  RepositoryTagsHttpApi,
+  RepositoryTagsApi,
   repositoryRejected,
   type SetRepositoryBranchUpstream,
 } from "@rebase/contracts";
 import { Effect } from "effect";
-import type { EnvironmentFeature } from "#server/adapters/environment-transport/combine-environment-features";
 import type { EnvironmentEventPublisher } from "#server/adapters/environment-transport/environment-event-publisher";
 import {
+  type EnvironmentFeature,
   type RepositoryDependencies,
   repositoryRoutes,
-} from "#server/adapters/environment-transport/http/repository-http-routes";
+  route,
+} from "#server/adapters/environment-transport/environment-routes";
 import {
   type GitCommandRunner,
   runRepositoryGit,
@@ -38,7 +39,6 @@ import {
   deleteTag,
 } from "#server/features/repository-refs/git/repository-tags";
 import { acquireRepositoryChangePublisher } from "#server/features/repository-refs/repository-change-publisher";
-import { repositoryRefsRpc } from "#server/features/repository-refs/repository-refs-rpc";
 import type { RepositoryAccess } from "#server/repository/repository-access";
 import type { RepositoryWritePolicy } from "#server/repository/repository-coordination";
 
@@ -85,12 +85,12 @@ export function repositoryRefsFeature(
               ),
         ),
       );
-    const branches = RepositoryBranchesHttpApi;
+    const branches = RepositoryBranchesApi;
     return {
-      capabilities: ["repository-refs"],
-      httpRoutes: [
+      routes: [
+        route(RepositoryRefsApi.read, (input) => readRefs(input.repositoryId)),
         command(
-          RepositoryRefsHttpApi.checkout,
+          RepositoryRefsApi.checkout,
           {
             name: "checkout",
             locks: { refs: "wait", worktree: "wait" },
@@ -110,14 +110,13 @@ export function repositoryRefsFeature(
         command(branches.delete, branchPolicy, (input, git) =>
           deleteBranch(git, access, input),
         ),
-        command(RepositoryTagsHttpApi.create, tagPolicy, (input, git) =>
+        command(RepositoryTagsApi.create, tagPolicy, (input, git) =>
           createTag(git, input),
         ),
-        command(RepositoryTagsHttpApi.delete, tagPolicy, (input, git) =>
+        command(RepositoryTagsApi.delete, tagPolicy, (input, git) =>
           deleteTag(git, input),
         ),
       ],
-      rpc: (session) => repositoryRefsRpc(session, readRefs),
     } satisfies EnvironmentFeature;
   });
 }
