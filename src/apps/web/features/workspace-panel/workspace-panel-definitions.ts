@@ -3,9 +3,11 @@ import {
   IconFileDiff,
   IconGitCommit,
   IconGitPullRequest,
+  IconHistory,
 } from "@tabler/icons-react";
 import { lazy } from "react";
 import { isObjectId } from "#contracts/git/git-values.contract.ts";
+import { isReflogRef } from "#contracts/repository-reflog/repository-reflog.contract.ts";
 import type { WorkspacePanelDefinition } from "#web/features/workspace-panel/workspace-panel-model.ts";
 
 export const workingChangesPanel = {
@@ -19,6 +21,20 @@ export const workingChangesPanel = {
   available: true,
   launchable: true,
   description: "Review and commit working changes",
+} satisfies WorkspacePanelDefinition;
+
+export const reflogPanel = {
+  acceptsInput: isReflogRef,
+  Content: lazy(() =>
+    import("#web/features/reflog/reflog-panel.tsx").then((module) => ({
+      default: module.ReflogPanel,
+    })),
+  ),
+  label: "Reflog",
+  icon: IconHistory,
+  available: true,
+  launchable: true,
+  description: "Find where branches pointed before",
 } satisfies WorkspacePanelDefinition;
 
 const commitInspectionPanel = {
@@ -38,6 +54,7 @@ const commitInspectionPanel = {
 const definitions = {
   commit: commitInspectionPanel,
   changes: workingChangesPanel,
+  reflog: reflogPanel,
   code: {
     label: "Code",
     icon: IconCode,

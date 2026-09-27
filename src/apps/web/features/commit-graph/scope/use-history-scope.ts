@@ -1,8 +1,8 @@
 import { useCallback, useMemo, useRef, useState } from "react";
-import type { RepositoryRefTarget } from "#contracts/repository-refs/repository-refs.contract.ts";
 import {
   automaticHistoryScope,
   type HistoryScope,
+  type HistorySelection,
   historyScopesEqual,
   renameHistoryBranch,
   resolveHistoryScope,
@@ -63,7 +63,7 @@ export function useHistoryScope(
     [change],
   );
   const toggleRef = useCallback(
-    (target: RepositoryRefTarget) => {
+    (target: HistorySelection) => {
       if (refs === undefined) return;
       change(
         resolveHistoryScope(
@@ -127,15 +127,18 @@ function decodeScope(value: string): HistoryScope {
     record.scope._tag !== "Custom" ||
     !Array.isArray(record.scope.selections) ||
     record.scope.selections.length === 0 ||
-    !record.scope.selections.every(isRefTarget)
+    !record.scope.selections.every(isHistorySelection)
   ) {
     return automaticHistoryScope;
   }
   return { _tag: "Custom", selections: record.scope.selections };
 }
 
-function isRefTarget(value: unknown): value is RepositoryRefTarget {
-  if (!isRecord(value) || !isNonEmptyString(value.name)) return false;
+function isHistorySelection(value: unknown): value is HistorySelection {
+  if (!isRecord(value)) return false;
+  if (value._tag === "Commit")
+    return typeof value.oid === "string" && /^[0-9a-f]{40,64}$/.test(value.oid);
+  if (!isNonEmptyString(value.name)) return false;
   if (value._tag === "LocalBranch" || value._tag === "Tag") return true;
   return value._tag === "RemoteBranch" && isNonEmptyString(value.remote);
 }

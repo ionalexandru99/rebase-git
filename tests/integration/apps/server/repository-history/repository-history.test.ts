@@ -101,7 +101,7 @@ describe("repository history synchronization", () => {
         expect(positions.get(parent)).toBeGreaterThan(index);
   });
 
-  it("sends only unknown commits, including after a force push", async () => {
+  it("sends only unknown commits and keeps what the reflog still reaches after a force push", async () => {
     const history = await openHistory();
     const path = join(history.home, "incremental");
     await importLinearHistory(path, "sha1", 3);
@@ -130,11 +130,9 @@ describe("repository history synchronization", () => {
       ...rewritten.tips,
       rootOids: ["f".repeat(40)],
     });
-    expect(collected.commits.map(({ subject }) => subject)).toEqual([
-      "rewritten",
-      "commit 1",
-      "commit 0",
-    ]);
+    expect(new Set(collected.commits.map(({ subject }) => subject))).toEqual(
+      new Set(["rewritten", "appended", "commit 2", "commit 1", "commit 0"]),
+    );
   });
 
   it("restores shallow parents and resends history when the boundary moves", async () => {
