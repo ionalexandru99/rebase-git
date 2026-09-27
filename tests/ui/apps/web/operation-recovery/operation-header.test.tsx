@@ -28,6 +28,7 @@ function conflicted(): RepositoryOperation {
     revision: "one",
     branch: "topic",
     commit: "a".repeat(40),
+    mergedBranch: null,
     progress: { current: 3, total: 8 },
     unresolvedPaths: [path],
     lock: null,

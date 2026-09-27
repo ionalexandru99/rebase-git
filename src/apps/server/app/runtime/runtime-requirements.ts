@@ -3,7 +3,7 @@ import { Effect } from "effect";
 import { RuntimeRequirementsError } from "#server/app/runtime/runtime-errors.contract";
 
 const minimumNode22Version = [22, 18, 0] as const;
-const minimumGitVersion = [2, 34, 0] as const;
+const minimumGitVersion = [2, 35, 0] as const;
 
 export const verifyRuntimeRequirements = Effect.gen(function* () {
   yield* captureRequirement(() =>
@@ -27,7 +27,7 @@ export function assertSupportedNodeVersion(version: string) {
 export function assertSupportedGitVersion(version: string) {
   const parsed = parseVersion(version, "Git");
   if (compareVersions(parsed, minimumGitVersion) < 0) {
-    throw new Error(`Git 2.34 or newer is required. Found Git ${version}.`);
+    throw new Error(`Git 2.35 or newer is required. Found Git ${version}.`);
   }
 }
 
@@ -56,7 +56,7 @@ function readGitVersion() {
 
         const message =
           error.code === "ENOENT"
-            ? "Git 2.34 or newer is required, but Git was not found."
+            ? "Git 2.35 or newer is required, but Git was not found."
             : `Could not run Git: ${error.message}`;
         resume(
           Effect.fail(new RuntimeRequirementsError({ cause: error, message })),

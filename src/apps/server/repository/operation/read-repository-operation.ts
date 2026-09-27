@@ -100,12 +100,15 @@ export function readRepositoryOperation(
           metadata.HEAD,
       ),
       commit:
-        (
-          metadata["rebase-merge/stopped-sha"] ??
-          metadata["rebase-apply/original-commit"] ??
-          metadata.CHERRY_PICK_HEAD ??
-          metadata.REVERT_HEAD
+        (kind === "merge"
+          ? metadata.MERGE_HEAD?.split("\n")[0]
+          : (metadata["rebase-merge/stopped-sha"] ??
+            metadata["rebase-apply/original-commit"] ??
+            metadata.CHERRY_PICK_HEAD ??
+            metadata.REVERT_HEAD)
         )?.trim() ?? null,
+      mergedBranch:
+        kind === "merge" ? mergedBranchName(metadata.MERGE_MSG) : null,
       progress: operationProgress(metadata),
     } satisfies RepositoryOperation;
   });
@@ -273,6 +276,13 @@ function branchName(headName: string | null) {
         .replace(/^ref: /, "")
         .replace(/^refs\/heads\//, "")
     : null;
+}
+
+function mergedBranchName(message: string | null) {
+  return (
+    /^Merge (?:remote-tracking )?branch '([^']+)'/.exec(message ?? "")?.[1] ??
+    null
+  );
 }
 
 function operationProgress(metadata: Metadata) {
