@@ -27,6 +27,11 @@ export interface ConflictSnapshot {
   readonly markerSize: number;
 }
 
+interface SnapshotSources {
+  readonly markerSizes: ReadonlyMap<string, number>;
+  readonly blobs: ReadonlyMap<string, GitBlob>;
+}
+
 const defaultMarkerSize = 7;
 const gitlink = "160000";
 const symlink = "120000";
@@ -37,30 +42,12 @@ export function readConflictSnapshots(
   entries: ReadonlyMap<string, readonly StageEntry[]>,
 ) {
   return Effect.gen(function* () {
-    const paths = [...entries.keys()];
-    if (paths.length === 0) return [];
-    const markerSizes = yield* readMarkerSizes(git, directory, paths);
-    const blobs = yield* readBlobs(
-      git,
-      directory,
-      [...entries.values()].flatMap((stages) =>
-        stages.filter((stage) => stage.mode !== gitlink).map(({ oid }) => oid),
-      ),
-    );
+    if (entries.size === 0) return [];
+    const sources = yield* readSnapshotSources(git, directory, entries);
     return yield* Effect.forEach(
-      paths,
-      (path) =>
-        worktreeFile(directory, path).pipe(
-          Effect.map((worktree) =>
-            conflictSnapshot(
-              path,
-              entries.get(path) ?? [],
-              blobs,
-              worktree,
-              markerSizes.get(path) ?? defaultMarkerSize,
-            ),
-          ),
-        ),
+      entries,
+      ([path, stages]) =>
+        readConflictSnapshot(directory, path, stages, sources),
       { concurrency: 16 },
     );
   });
@@ -73,22 +60,23 @@ export function requireConflict(
   revision?: string,
 ) {
   return Effect.gen(function* () {
-    const stages = (yield* readUnmergedEntries(git, directory, [path])).get(
-      path,
-    );
+    const entries = yield* readUnmergedEntries(git, directory, [path]);
+    const stages = entries.get(path);
     if (stages === undefined)
       return yield* Effect.fail(
         conflictFailed("Missing", "This file is no longer in conflict."),
       );
-    const [snapshot] = yield* readConflictSnapshots(
+    const sources = yield* readSnapshotSources(
       git,
       directory,
       new Map([[path, stages]]),
     );
-    if (snapshot === undefined)
-      return yield* Effect.fail(
-        conflictFailed("Missing", "This file is no longer in conflict."),
-      );
+    const snapshot = yield* readConflictSnapshot(
+      directory,
+      path,
+      stages,
+      sources,
+    );
     if (revision !== undefined && snapshot.file.revision !== revision)
       return yield* Effect.fail(
         conflictFailed(
@@ -108,13 +96,46 @@ export function worktreeText(worktree: RepositoryFileContent) {
     : null;
 }
 
+function readSnapshotSources(
+  git: GitCommandRunner,
+  directory: string,
+  entries: ReadonlyMap<string, readonly StageEntry[]>,
+) {
+  return Effect.all(
+    {
+      markerSizes: readMarkerSizes(git, directory, [...entries.keys()]),
+      blobs: readBlobs(
+        git,
+        directory,
+        [...entries.values()].flatMap((stages) =>
+          stages
+            .filter((stage) => stage.mode !== gitlink)
+            .map(({ oid }) => oid),
+        ),
+      ),
+    },
+    { concurrency: "unbounded" },
+  );
+}
+
+function readConflictSnapshot(
+  directory: string,
+  path: string,
+  stages: readonly StageEntry[],
+  sources: SnapshotSources,
+) {
+  return worktreeFile(directory, path).pipe(
+    Effect.map((worktree) => conflictSnapshot(path, stages, worktree, sources)),
+  );
+}
+
 function conflictSnapshot(
   path: string,
   stages: readonly StageEntry[],
-  blobs: ReadonlyMap<string, GitBlob>,
   worktree: RepositoryFileContent,
-  markerSize: number,
+  { blobs, markerSizes }: SnapshotSources,
 ): ConflictSnapshot {
+  const markerSize = markerSizes.get(path) ?? defaultMarkerSize;
   const kind = conflictKind(stages);
   const text = worktreeText(worktree);
   return {
@@ -136,13 +157,12 @@ function conflictSnapshot(
         const blob = blobs.get(stage.oid);
         return {
           side: stage.side,
-          oid: stage.oid,
           bytes: blob?.bytes ?? 0,
           binary: binary(blob?.content ?? null),
         };
       }),
       openRegions: text === null ? 0 : markerBlocks(text, markerSize).length,
-      choices: wholeFileChoices(stages, kind, worktree),
+      choices: wholeFileChoices(stages, kind),
     },
   };
 }
@@ -150,14 +170,12 @@ function conflictSnapshot(
 function wholeFileChoices(
   stages: readonly StageEntry[],
   kind: ConflictFile["kind"],
-  worktree: RepositoryFileContent,
 ) {
   const choices: WholeFileChoice[] = [];
   if (hasSide(stages, "current")) choices.push("current");
   if (hasSide(stages, "incoming")) choices.push("incoming");
   if (kind.startsWith("deleted-in-") || kind === "both-deleted")
     choices.push("delete");
-  if (worktree.identity !== "missing") choices.push("worktree");
   return choices;
 }
 

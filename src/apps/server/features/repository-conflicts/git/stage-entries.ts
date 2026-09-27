@@ -30,15 +30,12 @@ export function readUnmergedEntries(
   directory: string,
   paths: readonly string[] = [],
 ) {
-  return readStageEntries(git, directory, "--unmerged", paths);
-}
-
-export function readResolveUndoEntries(
-  git: GitCommandRunner,
-  directory: string,
-  paths: readonly string[] = [],
-) {
-  return readStageEntries(git, directory, "--resolve-undo", paths);
+  return runRepositoryGit(git, directory, [
+    "ls-files",
+    "--unmerged",
+    "-z",
+    ...(paths.length === 0 ? [] : ["--", ...paths]),
+  ]).pipe(Effect.map(parseStageEntries));
 }
 
 export function conflictKind(stages: readonly StageEntry[]) {
@@ -47,20 +44,6 @@ export function conflictKind(stages: readonly StageEntry[]) {
 
 export function hasSide(stages: readonly StageEntry[], side: ConflictSide) {
   return stages.some((stage) => stage.side === side);
-}
-
-function readStageEntries(
-  git: GitCommandRunner,
-  directory: string,
-  listing: "--unmerged" | "--resolve-undo",
-  paths: readonly string[],
-) {
-  return runRepositoryGit(git, directory, [
-    "ls-files",
-    listing,
-    "-z",
-    ...(paths.length === 0 ? [] : ["--", ...paths]),
-  ]).pipe(Effect.map(parseStageEntries));
 }
 
 function parseStageEntries(output: string) {

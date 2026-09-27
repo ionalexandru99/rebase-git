@@ -1,5 +1,3 @@
-import { readFile } from "node:fs/promises";
-import { resolve } from "node:path";
 import type {
   ConflictSides,
   RepositoryOperation,
@@ -7,94 +5,44 @@ import type {
 } from "@rebase/contracts";
 import { Effect } from "effect";
 import type { GitCommandRunner } from "#server/domain/git-command.contract";
-import { changeIo } from "#server/features/repository-changes/git/change-failures";
 import { runRepositoryGit } from "#server/repository/access/index";
-
-export interface ConflictCommits {
-  readonly current: string | null;
-  readonly incoming: string | null;
-  readonly base: string | null;
-}
 
 export function readConflictSides(
   git: GitCommandRunner,
   directory: string,
   operation: RepositoryOperation,
 ) {
-  return readConflictCommits(git, directory, operation).pipe(
-    Effect.flatMap((commits) =>
-      labelSides(git, directory, operation, commits).pipe(
-        Effect.map((labels) => ({ commits, labels })),
-      ),
-    ),
-  );
-}
-
-function readConflictCommits(
-  git: GitCommandRunner,
-  directory: string,
-  operation: RepositoryOperation,
-) {
   return Effect.gen(function* () {
-    const current = yield* resolveCommit(git, directory, "HEAD");
-    const incoming =
-      operation.kind === "merge"
-        ? yield* resolveCommit(git, directory, "MERGE_HEAD")
-        : operation.commit;
-    return {
-      current,
-      incoming,
-      base: yield* baseCommit(git, directory, operation.kind, incoming),
-    } satisfies ConflictCommits;
-  });
-}
-
-function labelSides(
-  git: GitCommandRunner,
-  directory: string,
-  operation: RepositoryOperation,
-  commits: ConflictCommits,
-) {
-  return Effect.gen(function* () {
-    const [subjects, branches, merged] = yield* Effect.all(
+    const [current, incoming] = yield* Effect.all(
       [
-        readSubjects(git, directory, Object.values(commits)),
-        readBranchHeads(git, directory),
-        operation.kind === "merge"
-          ? readMergedBranch(git, directory)
-          : Effect.succeed(null),
+        resolveCommit(git, directory, "HEAD"),
+        operation.commit === null
+          ? Effect.succeed(null)
+          : resolveCommit(git, directory, operation.commit),
       ],
       { concurrency: "unbounded" },
     );
-    const label = (commit: string | null, recorded: string | null) =>
+    const base = yield* baseCommit(git, directory, operation.kind, incoming);
+    const subjects = yield* readSubjects(git, directory, [
+      current,
+      incoming,
+      base,
+    ]);
+    const label = (commit: string | null, ref: string | null) =>
       ({
-        ref:
-          commit === null
-            ? null
-            : (recorded ?? uniqueBranch(branches.get(commit))),
+        ref: commit === null ? null : ref,
         commit,
         subject: commit === null ? null : (subjects.get(commit) ?? null),
       }) satisfies SideLabel;
-    const rebase = operation.kind === "rebase";
     return {
-      current: label(commits.current, rebase ? null : operation.branch),
-      incoming: label(commits.incoming, rebase ? operation.branch : merged),
-      base: label(commits.base, null),
+      current: label(current, null),
+      incoming: label(
+        incoming,
+        operation.kind === "rebase" ? operation.branch : operation.mergedBranch,
+      ),
+      base: label(base, null),
     } satisfies ConflictSides;
   });
-}
-
-export function sideTreeCommits(
-  operation: RepositoryOperation,
-  commits: ConflictCommits,
-) {
-  return {
-    current: commits.current,
-    incoming:
-      operation.kind === "revert" && commits.incoming !== null
-        ? `${commits.incoming}^`
-        : commits.incoming,
-  };
 }
 
 function baseCommit(
@@ -122,9 +70,7 @@ function resolveCommit(git: GitCommandRunner, directory: string, rev: string) {
       git,
       directory,
       ["rev-parse", "--verify", "--quiet", rev],
-      {
-        exitCodes: [0, 1],
-      },
+      { exitCodes: [0, 1] },
     ),
   );
 }
@@ -159,44 +105,4 @@ function readSubjects(
         ),
     ),
   );
-}
-
-function readBranchHeads(git: GitCommandRunner, directory: string) {
-  return runRepositoryGit(git, directory, [
-    "for-each-ref",
-    "--format=%(objectname)%00%(refname:short)",
-    "refs/heads",
-  ]).pipe(
-    Effect.map((output) => {
-      const heads = new Map<string, string[]>();
-      for (const line of output.split("\n").filter(Boolean)) {
-        const [commit = "", name = ""] = line.split("\0");
-        heads.set(commit, [...(heads.get(commit) ?? []), name]);
-      }
-      return heads;
-    }),
-  );
-}
-
-function readMergedBranch(git: GitCommandRunner, directory: string) {
-  return runRepositoryGit(git, directory, [
-    "rev-parse",
-    "--git-path",
-    "MERGE_MSG",
-  ]).pipe(
-    Effect.flatMap((path) =>
-      changeIo(() =>
-        readFile(resolve(directory, path.trim()), "utf8").catch(() => ""),
-      ),
-    ),
-    Effect.map(
-      (message) =>
-        /^Merge (?:remote-tracking )?branch '([^']+)'/.exec(message)?.[1] ??
-        null,
-    ),
-  );
-}
-
-function uniqueBranch(names: readonly string[] | undefined) {
-  return names?.length === 1 ? (names[0] ?? null) : null;
 }

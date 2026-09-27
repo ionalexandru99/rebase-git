@@ -1,5 +1,4 @@
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type {
   ConflictDocument,
@@ -9,30 +8,22 @@ import type {
 import { Effect } from "effect";
 import type { GitCommandRunner } from "#server/domain/git-command.contract";
 import { previewByteLimit } from "#server/domain/repository-comparison.contract";
-import type { RepositoryCoordinationService } from "#server/domain/repository-coordination.contract";
 import { changeIo } from "#server/features/repository-changes/git/change-failures";
+import { scratchDirectory } from "#server/features/repository-changes/git/read-change-diff";
 import { conflictFailed } from "#server/features/repository-conflicts/git/conflict-failures";
 import {
   type ConflictSnapshot,
   requireConflict,
   worktreeText,
 } from "#server/features/repository-conflicts/git/read-conflict-files";
-import {
-  readConflictSides,
-  sideTreeCommits,
-} from "#server/features/repository-conflicts/git/read-conflict-sides";
-import { readRegionBlame } from "#server/features/repository-conflicts/git/read-region-blame";
 import type { StageEntry } from "#server/features/repository-conflicts/git/stage-entries";
 import {
-  type MarkerBlock,
   markerBlocks,
   openRegionLines,
-  sideLineNumbers,
-  splitLines,
 } from "#server/features/repository-conflicts/regions/conflict-regions";
 import { tokenMarks } from "#server/features/repository-conflicts/regions/token-marks";
 import { runRepositoryGit } from "#server/repository/access/index";
-import { binary, fingerprint } from "#server/repository/comparison/index";
+import { binary } from "#server/repository/comparison/index";
 
 interface StageTexts {
   readonly current: string;
@@ -40,12 +31,10 @@ interface StageTexts {
   readonly incoming: string;
 }
 
-const maximumLineLength = 100_000;
 const textModes = new Set(["100644", "100755"]);
 
 export function readConflictDocument(
   git: GitCommandRunner,
-  coordination: RepositoryCoordinationService,
   input: ConflictPath,
 ) {
   return Effect.gen(function* () {
@@ -53,46 +42,27 @@ export function readConflictDocument(
     const snapshot = yield* requireConflict(git, directory, input.path);
     const texts = yield* stageTexts(snapshot);
     const content = yield* documentContent(snapshot);
-    const operation = yield* coordination.operation(directory);
-    const [sides, merged] = yield* Effect.all(
-      [
-        readConflictSides(git, directory, operation),
-        mergeStages(git, directory, texts, snapshot.markerSize),
-      ],
-      { concurrency: "unbounded" },
-    );
-    const regions = markerBlocks(merged, snapshot.markerSize);
-    if (regions.some(hasOversizedLine))
-      return yield* Effect.fail(
-        conflictFailed("TooLarge", "A conflicting line is too long to show."),
-      );
-    const blame = yield* readDocumentBlame(
+    const merged = yield* mergeStages(
       git,
       directory,
-      input.path,
-      sideTreeCommits(operation, sides.commits),
       texts,
-      regions,
+      snapshot.markerSize,
     );
+    const regions = markerBlocks(merged, snapshot.markerSize);
     const openLines = openRegionLines(
       regions,
       markerBlocks(content, snapshot.markerSize),
     );
     return {
       file: snapshot.file,
-      sides: sides.labels,
       content,
       regions: regions.map(
         (region, index): ConflictRegion => ({
-          id: regionId(regions, index),
+          id: String(index),
           line: openLines[index] ?? null,
           current: region.current,
           base: region.base,
           incoming: region.incoming,
-          blame: {
-            current: blame.current[index] ?? null,
-            incoming: blame.incoming[index] ?? null,
-          },
           marks: {
             current: tokenMarks(region.base, region.current),
             incoming: tokenMarks(region.base, region.incoming),
@@ -102,31 +72,6 @@ export function readConflictDocument(
       ),
     } satisfies ConflictDocument;
   });
-}
-
-function readDocumentBlame(
-  git: GitCommandRunner,
-  directory: string,
-  path: string,
-  commits: Record<"current" | "incoming", string | null>,
-  texts: StageTexts,
-  regions: readonly MarkerBlock[],
-) {
-  const blame = (side: "current" | "incoming") =>
-    readRegionBlame(
-      git,
-      directory,
-      path,
-      commits[side],
-      sideLineNumbers(
-        splitLines(texts[side]),
-        regions.map((region) => region[side]),
-      ),
-    );
-  return Effect.all(
-    { current: blame("current"), incoming: blame("incoming") },
-    { concurrency: "unbounded" },
-  );
 }
 
 function stageTexts(snapshot: ConflictSnapshot) {
@@ -220,29 +165,5 @@ function mergeStages(
         { exitCodes: Array.from({ length: 128 }, (_, count) => count) },
       );
     }),
-  );
-}
-
-const scratchDirectory = Effect.acquireRelease(
-  changeIo(() => mkdtemp(join(tmpdir(), "rebase-conflict-"))),
-  (path) =>
-    changeIo(() => rm(path, { recursive: true, force: true })).pipe(
-      Effect.ignore,
-    ),
-);
-
-function regionId(regions: readonly MarkerBlock[], index: number) {
-  const texts = (region: MarkerBlock | undefined) =>
-    JSON.stringify([region?.current, region?.base, region?.incoming]);
-  const key = texts(regions[index]);
-  const occurrence = regions
-    .slice(0, index)
-    .filter((region) => texts(region) === key).length;
-  return fingerprint(key, String(occurrence));
-}
-
-function hasOversizedLine(region: MarkerBlock) {
-  return [region.current, region.base, region.incoming].some((lines) =>
-    lines.some((line) => line.length > maximumLineLength),
   );
 }

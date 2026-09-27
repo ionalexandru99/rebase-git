@@ -73,7 +73,7 @@ function cleanFileContent(
 ) {
   return Effect.scoped(
     Effect.gen(function* () {
-      const objectDirectory = yield* scratchObjectDirectory;
+      const objectDirectory = yield* scratchDirectory;
       const oid = (yield* runRepositoryGit(
         git,
         directory,
@@ -93,8 +93,8 @@ function cleanFileContent(
   );
 }
 
-const scratchObjectDirectory = Effect.acquireRelease(
-  changeIo(() => mkdtemp(join(tmpdir(), "rebase-objects-"))),
+export const scratchDirectory = Effect.acquireRelease(
+  changeIo(() => mkdtemp(join(tmpdir(), "rebase-scratch-"))),
   (path) =>
     changeIo(() => rm(path, { recursive: true, force: true })).pipe(
       Effect.ignore,

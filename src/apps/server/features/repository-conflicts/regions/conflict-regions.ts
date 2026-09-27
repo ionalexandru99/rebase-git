@@ -58,22 +58,6 @@ export function openRegionLines(
   });
 }
 
-export function sideLineNumbers(
-  sideLines: readonly string[],
-  regions: readonly (readonly string[])[],
-) {
-  let cursor = 0;
-  return regions.map((lines) => {
-    if (lines.length === 0) return null;
-    for (let start = cursor; start + lines.length <= sideLines.length; start++)
-      if (lines.every((line, offset) => sideLines[start + offset] === line)) {
-        cursor = start + lines.length;
-        return start + 1;
-      }
-    return null;
-  });
-}
-
 function emptyBlock(line: number) {
   return {
     line,

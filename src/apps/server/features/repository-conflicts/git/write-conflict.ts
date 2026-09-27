@@ -1,11 +1,8 @@
-import { randomUUID } from "node:crypto";
-import { chmod, rename, rm, stat, writeFile } from "node:fs/promises";
-import { basename, dirname, join } from "node:path";
+import { writeFile } from "node:fs/promises";
 import type { WriteConflict } from "@rebase/contracts";
 import { Effect } from "effect";
 import type { GitCommandRunner } from "#server/domain/git-command.contract";
 import { previewByteLimit } from "#server/domain/repository-comparison.contract";
-import type { RepositoryCoordinationService } from "#server/domain/repository-coordination.contract";
 import { changeIo } from "#server/features/repository-changes/git/change-failures";
 import { safeChangePath } from "#server/features/repository-changes/git/change-files";
 import { conflictFailed } from "#server/features/repository-conflicts/git/conflict-failures";
@@ -14,11 +11,7 @@ import { requireConflict } from "#server/features/repository-conflicts/git/read-
 
 const specialModes = new Set(["120000", "160000"]);
 
-export function writeConflict(
-  git: GitCommandRunner,
-  coordination: RepositoryCoordinationService,
-  input: WriteConflict,
-) {
+export function writeConflict(git: GitCommandRunner, input: WriteConflict) {
   return Effect.gen(function* () {
     const snapshot = yield* requireConflict(
       git,
@@ -38,26 +31,7 @@ export function writeConflict(
         ),
       );
     const target = yield* safeChangePath(input.worktreePath, input.path);
-    yield* changeIo(() => replaceFile(target, input.content));
-    return yield* readConflictDocument(git, coordination, input);
+    yield* changeIo(() => writeFile(target, input.content));
+    return yield* readConflictDocument(git, input);
   });
-}
-
-async function replaceFile(target: string, content: string) {
-  const mode = await stat(target).then(
-    (info) => info.mode & 0o7777,
-    () => null,
-  );
-  const temporary = join(
-    dirname(target),
-    `.${basename(target)}.${randomUUID()}.tmp`,
-  );
-  try {
-    await writeFile(temporary, content, { flag: "wx" });
-    if (mode !== null) await chmod(temporary, mode);
-    await rename(temporary, target);
-  } catch (error) {
-    await rm(temporary, { force: true });
-    throw error;
-  }
 }

@@ -2,13 +2,10 @@ import type { ChooseConflict, WholeFileChoice } from "@rebase/contracts";
 import { Effect } from "effect";
 import type { GitCommandRunner } from "#server/domain/git-command.contract";
 import type { RepositoryCoordinationService } from "#server/domain/repository-coordination.contract";
-import {
-  confirmChange,
-  conflictFailed,
-  runConflictGit,
-} from "#server/features/repository-conflicts/git/conflict-failures";
+import { conflictFailed } from "#server/features/repository-conflicts/git/conflict-failures";
 import { requireConflict } from "#server/features/repository-conflicts/git/read-conflict-files";
 import { readConflictList } from "#server/features/repository-conflicts/git/read-conflicts";
+import { runRepositoryGit } from "#server/repository/access/index";
 
 export function chooseWholeFile(
   git: GitCommandRunner,
@@ -30,10 +27,8 @@ export function chooseWholeFile(
         ),
       );
     for (const args of choiceCommands(input.choice, input.path))
-      yield* runConflictGit(git, input.worktreePath, args);
-    return yield* confirmChange(
-      readConflictList(git, coordination, input.worktreePath),
-    );
+      yield* runRepositoryGit(git, input.worktreePath, args);
+    return yield* readConflictList(git, coordination, input.worktreePath);
   });
 }
 
@@ -51,7 +46,5 @@ function choiceCommands(choice: WholeFileChoice, path: string) {
       ];
     case "delete":
       return [["rm", "--quiet", "--", path]];
-    case "worktree":
-      return [["add", "--", path]];
   }
 }
