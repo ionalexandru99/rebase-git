@@ -10,18 +10,18 @@ import type { GitCommandRunner } from "#server/domain/git-command.contract";
 import { previewByteLimit } from "#server/domain/repository-comparison.contract";
 import { changeIo } from "#server/features/repository-changes/git/change-failures";
 import { scratchDirectory } from "#server/features/repository-changes/git/read-change-diff";
-import { conflictFailed } from "#server/features/repository-conflicts/git/conflict-failures";
-import {
-  type ConflictSnapshot,
-  requireConflict,
-  worktreeText,
-} from "#server/features/repository-conflicts/git/read-conflict-files";
-import type { StageEntry } from "#server/features/repository-conflicts/git/stage-entries";
 import {
   markerBlocks,
   openRegionLines,
-} from "#server/features/repository-conflicts/regions/conflict-regions";
-import { tokenMarks } from "#server/features/repository-conflicts/regions/token-marks";
+  tokenMarks,
+} from "#server/features/repository-conflicts/conflict-regions";
+import {
+  type ConflictSnapshot,
+  conflictFailed,
+  requireConflict,
+  type StageEntry,
+  worktreeText,
+} from "#server/features/repository-conflicts/git/conflict-files";
 import { runRepositoryGit } from "#server/repository/access/index";
 import { binary } from "#server/repository/comparison/index";
 

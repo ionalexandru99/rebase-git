@@ -9,11 +9,13 @@ import {
   RepositoryCoordination,
   type RepositoryWritePolicy,
 } from "#server/domain/repository-coordination.contract";
-import { chooseWholeFile } from "#server/features/repository-conflicts/git/choose-whole-file";
 import { readConflictDocument } from "#server/features/repository-conflicts/git/read-conflict-document";
-import { readConflictList } from "#server/features/repository-conflicts/git/read-conflicts";
-import { stageConflict } from "#server/features/repository-conflicts/git/stage-conflict";
-import { writeConflict } from "#server/features/repository-conflicts/git/write-conflict";
+import { readConflictList } from "#server/features/repository-conflicts/git/read-conflict-list";
+import {
+  chooseWholeFile,
+  stageConflict,
+  writeConflict,
+} from "#server/features/repository-conflicts/git/resolve-conflict";
 
 const resolve: RepositoryWritePolicy = {
   name: "resolve",

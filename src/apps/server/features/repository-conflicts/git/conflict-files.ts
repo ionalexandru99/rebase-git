@@ -1,16 +1,15 @@
-import type { ConflictFile, WholeFileChoice } from "@rebase/contracts";
+import type {
+  ConflictFailure,
+  ConflictFile,
+  ConflictKind,
+  ConflictSide,
+  WholeFileChoice,
+} from "@rebase/contracts";
 import { Effect } from "effect";
 import type { GitCommandRunner } from "#server/domain/git-command.contract";
 import type { RepositoryFileContent } from "#server/domain/repository-comparison.contract";
 import { worktreeFile } from "#server/features/repository-changes/git/change-files";
-import { conflictFailed } from "#server/features/repository-conflicts/git/conflict-failures";
-import {
-  conflictKind,
-  hasSide,
-  readUnmergedEntries,
-  type StageEntry,
-} from "#server/features/repository-conflicts/git/stage-entries";
-import { markerBlocks } from "#server/features/repository-conflicts/regions/conflict-regions";
+import { markerBlocks } from "#server/features/repository-conflicts/conflict-regions";
 import { runRepositoryGit } from "#server/repository/access/index";
 import {
   binary,
@@ -18,6 +17,12 @@ import {
   type GitBlob,
   readBlobs,
 } from "#server/repository/comparison/index";
+
+export interface StageEntry {
+  readonly side: ConflictSide;
+  readonly mode: string;
+  readonly oid: string;
+}
 
 export interface ConflictSnapshot {
   readonly file: ConflictFile;
@@ -32,9 +37,45 @@ interface SnapshotSources {
   readonly blobs: ReadonlyMap<string, GitBlob>;
 }
 
+const sides: Record<string, ConflictSide> = {
+  "1": "base",
+  "2": "current",
+  "3": "incoming",
+};
+
+const kinds: Record<string, ConflictKind> = {
+  "base,current,incoming": "both-modified",
+  "current,incoming": "both-added",
+  base: "both-deleted",
+  "base,incoming": "deleted-in-current",
+  "base,current": "deleted-in-incoming",
+  current: "added-in-current",
+  incoming: "added-in-incoming",
+};
+
 const defaultMarkerSize = 7;
 const gitlink = "160000";
 const symlink = "120000";
+
+export function conflictFailed(
+  reason: ConflictFailure["reason"],
+  detail: string,
+): ConflictFailure {
+  return { _tag: "ConflictFailed", reason, detail: detail.slice(0, 2048) };
+}
+
+export function readUnmergedEntries(
+  git: GitCommandRunner,
+  directory: string,
+  paths: readonly string[] = [],
+) {
+  return runRepositoryGit(git, directory, [
+    "ls-files",
+    "--unmerged",
+    "-z",
+    ...(paths.length === 0 ? [] : ["--", ...paths]),
+  ]).pipe(Effect.map(parseStageEntries));
+}
 
 export function readConflictSnapshots(
   git: GitCommandRunner,
@@ -96,6 +137,19 @@ export function worktreeText(worktree: RepositoryFileContent) {
     : null;
 }
 
+function parseStageEntries(output: string) {
+  const entries = new Map<string, StageEntry[]>();
+  for (const record of output.split("\0").filter(Boolean)) {
+    const tab = record.indexOf("\t");
+    const [mode, oid, stage] = record.slice(0, tab).split(" ");
+    const side = sides[stage ?? ""];
+    if (tab < 0 || mode === undefined || oid === undefined || !side) continue;
+    const path = record.slice(tab + 1);
+    entries.set(path, [...(entries.get(path) ?? []), { side, mode, oid }]);
+  }
+  return entries;
+}
+
 function readSnapshotSources(
   git: GitCommandRunner,
   directory: string,
@@ -118,6 +172,30 @@ function readSnapshotSources(
   );
 }
 
+function readMarkerSizes(
+  git: GitCommandRunner,
+  directory: string,
+  paths: readonly string[],
+) {
+  return runRepositoryGit(
+    git,
+    directory,
+    ["check-attr", "-z", "--stdin", "conflict-marker-size"],
+    { input: paths.map((path) => `${path}\0`).join("") },
+  ).pipe(
+    Effect.map((output) => {
+      const fields = output.split("\0");
+      const sizes = new Map<string, number>();
+      for (let index = 0; index + 2 < fields.length; index += 3) {
+        const size = Number(fields[index + 2]);
+        if (Number.isSafeInteger(size) && size > 0)
+          sizes.set(fields[index] ?? "", size);
+      }
+      return sizes;
+    }),
+  );
+}
+
 function readConflictSnapshot(
   directory: string,
   path: string,
@@ -136,7 +214,8 @@ function conflictSnapshot(
   { blobs, markerSizes }: SnapshotSources,
 ): ConflictSnapshot {
   const markerSize = markerSizes.get(path) ?? defaultMarkerSize;
-  const kind = conflictKind(stages);
+  const kind =
+    kinds[stages.map((stage) => stage.side).join(",")] ?? "both-modified";
   const text = worktreeText(worktree);
   return {
     stages,
@@ -167,38 +246,13 @@ function conflictSnapshot(
   };
 }
 
-function wholeFileChoices(
-  stages: readonly StageEntry[],
-  kind: ConflictFile["kind"],
-) {
+function wholeFileChoices(stages: readonly StageEntry[], kind: ConflictKind) {
+  const has = (side: ConflictSide) =>
+    stages.some((stage) => stage.side === side);
   const choices: WholeFileChoice[] = [];
-  if (hasSide(stages, "current")) choices.push("current");
-  if (hasSide(stages, "incoming")) choices.push("incoming");
+  if (has("current")) choices.push("current");
+  if (has("incoming")) choices.push("incoming");
   if (kind.startsWith("deleted-in-") || kind === "both-deleted")
     choices.push("delete");
   return choices;
-}
-
-function readMarkerSizes(
-  git: GitCommandRunner,
-  directory: string,
-  paths: readonly string[],
-) {
-  return runRepositoryGit(
-    git,
-    directory,
-    ["check-attr", "-z", "--stdin", "conflict-marker-size"],
-    { input: paths.map((path) => `${path}\0`).join("") },
-  ).pipe(
-    Effect.map((output) => {
-      const fields = output.split("\0");
-      const sizes = new Map<string, number>();
-      for (let index = 0; index + 2 < fields.length; index += 3) {
-        const size = Number(fields[index + 2]);
-        if (Number.isSafeInteger(size) && size > 0)
-          sizes.set(fields[index] ?? "", size);
-      }
-      return sizes;
-    }),
-  );
 }
