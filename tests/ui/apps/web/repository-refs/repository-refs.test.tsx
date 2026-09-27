@@ -122,7 +122,8 @@ describe("repository refs", () => {
   it("ignores a second checkout while one is in flight", async () => {
     const reads = queuedReads();
     const checkout = vi.fn(
-      (): Promise<RepositoryCheckedOut> => new Promise(() => undefined),
+      (_command: CheckoutRepositoryRef): Promise<RepositoryCheckedOut> =>
+        new Promise(() => undefined),
     );
     const screen = await renderRefs(
       await refsEnvironment(reads.next, checkout),
