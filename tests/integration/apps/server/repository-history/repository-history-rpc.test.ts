@@ -9,8 +9,11 @@ import {
 } from "@rebase/contracts";
 import { fetchEnvironmentDiscoveryEffect } from "@rebase/environment-client";
 import { Deferred, Effect, Fiber, type Scope } from "effect";
-import { afterEach, describe, expect, it } from "vite-plus/test";
-import type { GitCommandRunner } from "#server/adapters/local-git/git-commands";
+import { describe, expect, it, onTestFinished } from "vite-plus/test";
+import {
+  type GitCommandRunner,
+  gitFailed,
+} from "#server/adapters/local-git/git-commands";
 import { fastImport, git } from "#tests-support/git";
 import { openTestServer } from "#tests-support/server";
 import { removeTemporaryDirectory } from "#tests-support/temporary-directory";
@@ -19,13 +22,6 @@ import type { RepositoryHistoryTransport } from "#web/features/repository-histor
 import { createRepositoryHistoryRpc } from "#web/features/repository-history/transport/repository-history-rpc";
 
 const longSubject = 'long "message" 😀'.repeat(4_000);
-const directories: string[] = [];
-
-afterEach(async () => {
-  await Promise.all(
-    directories.splice(0).map((path) => removeTemporaryDirectory(path)),
-  );
-});
 
 describe("Effect RPC over WebSockets", () => {
   it("streams a large history page within the negotiated frame limit", async () => {
@@ -108,6 +104,29 @@ describe("Effect RPC over WebSockets", () => {
     );
   });
 
+  it("reports a Git timeout by its reason alone", async () => {
+    const repository = await createHistoryRepository("commit");
+    await withHistory(
+      repository,
+      (history, query) =>
+        Effect.gen(function* () {
+          const failure = yield* history.read(query).pipe(Effect.flip);
+          expect(failure).toMatchObject({
+            _tag: "RepositoryHistoryRejected",
+            failure: { _tag: "GitFailed", reason: "Timeout" },
+          });
+          expect(failure).not.toHaveProperty("failure.detail");
+        }),
+      (local) => ({
+        ...local,
+        run: (command) =>
+          command.arguments[0] === "log"
+            ? Effect.fail(gitFailed("Timeout"))
+            : local.run(command),
+      }),
+    );
+  });
+
   it("bounds concurrent history reads on one connection", async () => {
     const repository = await createHistoryRepository("commit");
     const occupied = Deferred.makeUnsafe<void>();
@@ -145,7 +164,7 @@ describe("Effect RPC over WebSockets", () => {
 
 async function createHistoryRepository(subject: string) {
   const path = await realpath(await mkdtemp(join(tmpdir(), "rebase rpc ")));
-  directories.push(path);
+  onTestFinished(() => removeTemporaryDirectory(path));
   await git(path, "init", "-b", "main");
   await fastImport(
     path,

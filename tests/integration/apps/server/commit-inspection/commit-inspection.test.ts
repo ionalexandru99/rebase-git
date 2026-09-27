@@ -1,27 +1,17 @@
 import { execFile } from "node:child_process";
-import { mkdtemp, readFile, realpath, writeFile } from "node:fs/promises";
+import { readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { CommitInspectionHttpApi } from "@rebase/contracts";
 import { Effect } from "effect";
-import { afterEach, describe, expect, it } from "vite-plus/test";
+import { describe, expect, it } from "vite-plus/test";
 import { createRepository } from "#tests-support/git";
 import { openTestEnvironment } from "#tests-support/server";
-import { removeTemporaryDirectory } from "#tests-support/temporary-directory";
-
-const directories: string[] = [];
-afterEach(async () => {
-  await Promise.all(
-    directories.splice(0).map((path) => removeTemporaryDirectory(path)),
-  );
-});
 
 async function fixture() {
-  const directory = await realpath(
-    await mkdtemp(join(tmpdir(), "rebase-inspection-")),
-  );
-  directories.push(directory);
+  const environment = await openTestEnvironment();
+  const directory = join(environment.home, "repository");
   const git = async (...args: string[]) =>
     (
       await promisify(execFile)("git", ["-C", directory, ...args])
@@ -34,7 +24,6 @@ async function fixture() {
   await git("add", ".");
   await git("commit", "-m", "Initial\n\nFull commit body.");
   const oid = await git("rev-parse", "HEAD");
-  const environment = await openTestEnvironment();
   const repository = await environment.remember(directory);
   const service = environment.routes(CommitInspectionHttpApi);
   const scope = { repositoryId: repository.id, worktreePath: directory, oid };

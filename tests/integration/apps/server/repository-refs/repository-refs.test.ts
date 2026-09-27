@@ -14,7 +14,7 @@ import {
   type RouteFailure,
 } from "@rebase/contracts";
 import { Effect } from "effect";
-import { afterEach, describe, expect, it, vi } from "vite-plus/test";
+import { describe, expect, it, onTestFinished, vi } from "vite-plus/test";
 import type { EnvironmentEventPublisher } from "#server/adapters/environment-transport/environment-event-publisher";
 import type { GitCommandRunner } from "#server/adapters/local-git/git-commands";
 import { readRepositoryRefs } from "#server/features/repository-refs/git/read-repository-refs";
@@ -23,15 +23,6 @@ import { createRepository, git } from "#tests-support/git";
 import { waitForObservation } from "#tests-support/observation";
 import { openTestEnvironment } from "#tests-support/server";
 import { removeTemporaryDirectory } from "#tests-support/temporary-directory";
-
-const directories = new Set<string>();
-
-afterEach(async () => {
-  await Promise.all(
-    [...directories].map((directory) => removeTemporaryDirectory(directory)),
-  );
-  directories.clear();
-});
 
 describe("repository refs", () => {
   it("reads each remote provider alongside the GitHub avatar repository", async () => {
@@ -513,7 +504,7 @@ async function createFixture(): Promise<Fixture> {
 
 async function createTemporaryDirectory() {
   const directory = await mkdtemp(join(tmpdir(), "rebase refs "));
-  directories.add(directory);
+  onTestFinished(() => removeTemporaryDirectory(directory));
   return realpath(directory);
 }
 

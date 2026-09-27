@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { RepositoryBranchesHttpApi } from "@rebase/contracts";
 import { Effect } from "effect";
-import { afterEach, describe, expect, it } from "vite-plus/test";
+import { describe, expect, it, onTestFinished } from "vite-plus/test";
 import {
   cloneRepository,
   createRepository,
@@ -12,15 +12,6 @@ import {
 } from "#tests-support/git";
 import { openTestEnvironment, type RoutesClient } from "#tests-support/server";
 import { removeTemporaryDirectory } from "#tests-support/temporary-directory";
-
-const directories = new Set<string>();
-
-afterEach(async () => {
-  await Promise.all(
-    [...directories].map((directory) => removeTemporaryDirectory(directory)),
-  );
-  directories.clear();
-});
 
 describe("repository branches", () => {
   it("creates a branch at a commit and tracks a remote branch", async () => {
@@ -365,7 +356,7 @@ async function createFixture(): Promise<Fixture> {
 
 async function createTemporaryDirectory() {
   const directory = await mkdtemp(join(tmpdir(), "rebase branches "));
-  directories.add(directory);
+  onTestFinished(() => removeTemporaryDirectory(directory));
   return realpath(directory);
 }
 

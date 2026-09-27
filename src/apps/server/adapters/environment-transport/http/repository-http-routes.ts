@@ -53,10 +53,8 @@ export function repositoryRoutes({
     input: Input,
   ) =>
     handle(input, git).pipe(
-      Effect.mapError((error) =>
-        isGitFailed(error)
-          ? repositoryRejected("GitFailed", error.detail)
-          : (error as Failure | RepositoryRejected),
+      Effect.catchIf(isGitFailed, (error) =>
+        Effect.fail(repositoryRejected("GitFailed", error.detail)),
       ),
     );
   return {

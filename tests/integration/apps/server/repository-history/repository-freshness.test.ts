@@ -6,7 +6,7 @@ import {
   type RepositoryFreshness,
 } from "@rebase/contracts";
 import { Deferred, Effect } from "effect";
-import { afterEach, describe, expect, it } from "vite-plus/test";
+import { describe, expect, it, onTestFinished } from "vite-plus/test";
 import { createLocalRepositoryWatcher } from "#server/adapters/local-git/local-repository-watcher";
 import {
   acquireRepositoryFreshness,
@@ -19,14 +19,7 @@ import { removeTemporaryDirectory } from "#tests-support/temporary-directory";
 import { connectCurrentEnvironmentEffect } from "#web/app/environment/connection/environment-protocol-client";
 import { createRepositoryHistoryRpc } from "#web/features/repository-history/transport/repository-history-rpc";
 
-const directories: string[] = [];
 const committer = "committer Rebase test <rebase@example.test> 0 +0000\n";
-
-afterEach(async () => {
-  await Promise.all(
-    directories.splice(0).map((path) => removeTemporaryDirectory(path)),
-  );
-});
 
 describe("repository freshness with real Git", () => {
   for (const entry of ["logs/refs", "logs"])
@@ -265,7 +258,7 @@ describe("repository freshness with real Git", () => {
 
 async function createFixture() {
   const root = await mkdtemp(join(tmpdir(), "rebase freshness "));
-  directories.push(root);
+  onTestFinished(() => removeTemporaryDirectory(root));
   const remote = join(root, "remote.git");
   const local = join(root, "local");
   await git(root, "init", "--bare", "-b", "main", remote);

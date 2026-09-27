@@ -1,5 +1,6 @@
 import type { RepositoryHistoryOperationFailure } from "@rebase/contracts";
 import { Effect } from "effect";
+import type { RepositoryAccess } from "#server/repository/repository-access";
 
 const maximumDetailLength = 2_048;
 
@@ -19,6 +20,31 @@ export function historyOutputTooLarge(): RepositoryHistoryOperationFailure {
 
 export function snapshotInvalidated(): RepositoryHistoryOperationFailure {
   return { _tag: "SnapshotInvalidated" };
+}
+
+export function historyWireFailure(
+  failure: RepositoryHistoryOperationFailure,
+): RepositoryHistoryOperationFailure {
+  if (failure._tag !== "GitFailed") return failure;
+  return failure.reason === "Failed" && failure.detail !== undefined
+    ? { _tag: "GitFailed", detail: failure.detail, reason: "Failed" }
+    : { _tag: "GitFailed", reason: failure.reason };
+}
+
+export function findHistoryRepository(
+  access: RepositoryAccess,
+  repositoryId: string,
+) {
+  return access
+    .repository(repositoryId)
+    .pipe(
+      Effect.mapError(
+        (error): RepositoryHistoryOperationFailure =>
+          error._tag === "RepositoryRejected"
+            ? { _tag: "RepositoryMissing", repositoryId }
+            : { _tag: "GitFailed", reason: "Failed" },
+      ),
+    );
 }
 
 export function parseHistoryOutput<T>(parse: () => T) {

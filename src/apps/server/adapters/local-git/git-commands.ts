@@ -41,6 +41,8 @@ export interface GitFailed {
   readonly exitCode?: number;
 }
 
+export type GitObjectFormat = "sha1" | "sha256";
+
 export interface GitCommandRunner {
   readonly run: (
     command: GitCommand,
@@ -54,6 +56,11 @@ interface RepositoryGitOptions extends GitCommandOptions {
   readonly exitCodes?: readonly number[];
 }
 
+const objectIdLengths: Readonly<Record<GitObjectFormat, number>> = {
+  sha1: 40,
+  sha256: 64,
+};
+const hexadecimal = /^[0-9a-f]+$/;
 const defaultTimeoutMilliseconds = 30_000;
 const defaultMaximumOutputBytes = 16 * 1_048_576;
 const maximumDetailLength = 2_048;
@@ -100,6 +107,14 @@ export function streamRepositoryGit(
   options: GitStreamOptions = {},
 ) {
   return git.stream({ ...options, directory, arguments: args });
+}
+
+export function isGitObjectId(value: string, objectFormat?: GitObjectFormat) {
+  const lengths =
+    objectFormat === undefined
+      ? Object.values(objectIdLengths)
+      : [objectIdLengths[objectFormat]];
+  return lengths.includes(value.length) && hexadecimal.test(value);
 }
 
 export function readGitCommonDirectory(

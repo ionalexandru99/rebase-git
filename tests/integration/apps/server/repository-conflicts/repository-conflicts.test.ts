@@ -2,7 +2,7 @@ import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { RepositoryConflictsHttpApi } from "@rebase/contracts";
 import { Effect } from "effect";
-import { afterEach, describe, expect, it } from "vite-plus/test";
+import { describe, expect, it } from "vite-plus/test";
 import { createConflictedRebase } from "#tests-support/conflicted-repository";
 import {
   createDivergedRepository,
@@ -10,19 +10,12 @@ import {
 } from "#tests-support/diverged-repository";
 import { git } from "#tests-support/git";
 import { openTestEnvironment } from "#tests-support/server";
-import { removeTemporaryDirectory } from "#tests-support/temporary-directory";
 
-const directories: string[] = [];
-afterEach(async () => {
-  await Promise.all(
-    directories.splice(0).map((path) => removeTemporaryDirectory(path)),
-  );
-});
-
-async function fixture(create = createConflictedRebase) {
-  const directory = await create();
-  directories.push(directory);
+async function fixture(
+  create: (parent: string) => Promise<string> = createConflictedRebase,
+) {
   const environment = await openTestEnvironment();
+  const directory = await create(environment.home);
   const repositoryId = (await environment.remember(directory)).id;
   const service = environment.routes(RepositoryConflictsHttpApi);
   const scope = { repositoryId, worktreePath: directory };
@@ -121,8 +114,8 @@ describe("repository conflicts", () => {
   });
 
   it("labels a merge with the branch Git recorded and the merge base", async () => {
-    const f = await fixture(async () => {
-      const { directory, git } = await createDivergedRepository();
+    const f = await fixture(async (parent) => {
+      const { directory, git } = await createDivergedRepository(parent);
       await startConflict(git, "merge");
       return directory;
     });

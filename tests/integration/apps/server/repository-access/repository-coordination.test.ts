@@ -1,6 +1,5 @@
 import { execFile } from "node:child_process";
-import { mkdtemp, realpath, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import {
@@ -8,22 +7,12 @@ import {
   RepositoryRefsHttpApi,
 } from "@rebase/contracts";
 import { Deferred, Effect, Fiber, Option } from "effect";
-import { afterEach, expect, it } from "vite-plus/test";
+import { expect, it } from "vite-plus/test";
 import { acquireWatchedRepository } from "#server/features/repository-history/freshness/watched-repository";
 import { createRepository } from "#tests-support/git";
 import { openTestEnvironment } from "#tests-support/server";
-import { removeTemporaryDirectory } from "#tests-support/temporary-directory";
 
-const directories: string[] = [];
 const execute = promisify(execFile);
-
-afterEach(async () => {
-  await Promise.all(
-    directories
-      .splice(0)
-      .map((directory) => removeTemporaryDirectory(directory)),
-  );
-});
 
 it.each([
   { mutation: "commit", linked: false },
@@ -33,28 +22,6 @@ it.each([
 ] as const)(
   "serializes $mutation and checkout across features, linked worktree: $linked",
   async ({ mutation, linked }) => {
-    const root = await realpath(
-      await mkdtemp(join(tmpdir(), "rebase-coordination-")),
-    );
-    directories.push(root);
-    const directory = join(root, "repository");
-    const git = (...args: string[]) =>
-      execute("git", ["-C", directory, ...args]);
-    await createRepository(directory, { commits: [] });
-    await git("config", "user.name", "Test");
-    await git("config", "user.email", "test@example.test");
-    await git("config", "commit.gpgsign", "false");
-    await writeFile(join(directory, "file.txt"), "initial\n");
-    await git("add", ".");
-    await git("commit", "-m", "Initial");
-    await git("branch", "next");
-    const checkoutDirectory = linked ? join(root, "linked") : directory;
-    if (linked) {
-      await git("worktree", "add", "-b", "topic", checkoutDirectory);
-    }
-    await writeFile(join(directory, "file.txt"), "committed\n");
-    await git("add", ".");
-
     const commitEntered = Deferred.makeUnsafe<void>();
     const releaseCommit = Deferred.makeUnsafe<void>();
     const checkoutEntered = Deferred.makeUnsafe<void>();
@@ -90,6 +57,24 @@ it.each([
             : coordination.run(path, policy, operation),
       }),
     });
+    const root = environment.home;
+    const directory = join(root, "repository");
+    const git = (...args: string[]) =>
+      execute("git", ["-C", directory, ...args]);
+    await createRepository(directory, { commits: [] });
+    await git("config", "user.name", "Test");
+    await git("config", "user.email", "test@example.test");
+    await git("config", "commit.gpgsign", "false");
+    await writeFile(join(directory, "file.txt"), "initial\n");
+    await git("add", ".");
+    await git("commit", "-m", "Initial");
+    await git("branch", "next");
+    const checkoutDirectory = linked ? join(root, "linked") : directory;
+    if (linked) {
+      await git("worktree", "add", "-b", "topic", checkoutDirectory);
+    }
+    await writeFile(join(directory, "file.txt"), "committed\n");
+    await git("add", ".");
     const repository = await environment.remember(directory);
     const repositoryId = repository.id;
     const changes = environment.routes(RepositoryChangesHttpApi);
@@ -150,21 +135,6 @@ it.each([
 );
 
 it("reads changes while a commit holds the worktree", async () => {
-  const directory = await realpath(
-    await mkdtemp(join(tmpdir(), "rebase-coordination-")),
-  );
-  directories.push(directory);
-  const git = (...args: string[]) => execute("git", ["-C", directory, ...args]);
-  await createRepository(directory, { commits: [] });
-  await git("config", "user.name", "Test");
-  await git("config", "user.email", "test@example.test");
-  await git("config", "commit.gpgsign", "false");
-  await writeFile(join(directory, "file.txt"), "initial\n");
-  await git("add", ".");
-  await git("commit", "-m", "Initial");
-  await writeFile(join(directory, "file.txt"), "committed\n");
-  await git("add", ".");
-
   const commitEntered = Deferred.makeUnsafe<void>();
   const releaseCommit = Deferred.makeUnsafe<void>();
   const environment = await openTestEnvironment({
@@ -179,6 +149,17 @@ it("reads changes while a commit holds the worktree", async () => {
           : local.run(command),
     }),
   });
+  const directory = join(environment.home, "repository");
+  const git = (...args: string[]) => execute("git", ["-C", directory, ...args]);
+  await createRepository(directory, { commits: [] });
+  await git("config", "user.name", "Test");
+  await git("config", "user.email", "test@example.test");
+  await git("config", "commit.gpgsign", "false");
+  await writeFile(join(directory, "file.txt"), "initial\n");
+  await git("add", ".");
+  await git("commit", "-m", "Initial");
+  await writeFile(join(directory, "file.txt"), "committed\n");
+  await git("add", ".");
   const repositoryId = (await environment.remember(directory)).id;
   const changes = environment.routes(RepositoryChangesHttpApi);
 

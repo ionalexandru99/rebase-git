@@ -3,7 +3,10 @@ import { and, eq, isNull } from "drizzle-orm";
 import { Effect, type Scope } from "effect";
 import { combineEnvironmentFeatures } from "#server/adapters/environment-transport/combine-environment-features";
 import { createEnvironmentEventPublisher } from "#server/adapters/environment-transport/environment-event-publisher";
-import { createLocalGitCommandRunner } from "#server/adapters/local-git/git-commands";
+import {
+  createLocalGitCommandRunner,
+  type GitCommandRunner,
+} from "#server/adapters/local-git/git-commands";
 import { createLocalRepositoryWatcher } from "#server/adapters/local-git/local-repository-watcher";
 import {
   acquireRuntimeMarker,
@@ -21,7 +24,7 @@ import {
 import { commitInspectionFeature } from "#server/features/commit-inspection/commit-inspection.feature";
 import { createEnvironmentAuthorization } from "#server/features/environment-authorization/environment-authorization";
 import { environmentAuthorizationFeature } from "#server/features/environment-authorization/environment-authorization.feature";
-import { environmentFilesystemFeature } from "#server/features/environment-filesystem/environment-filesystem.feature";
+import { environmentFilesystemFeature } from "#server/features/environment-filesystem/environment-filesystem";
 import { createRepositoryCatalog } from "#server/features/repository-catalog/repository-catalog";
 import { repositoryCatalogFeature } from "#server/features/repository-catalog/repository-catalog.feature";
 import { repositoryChangesFeature } from "#server/features/repository-changes/repository-changes.feature";
@@ -30,7 +33,7 @@ import {
   repositoryFreshnessFeature,
   repositoryHistoryFeature,
 } from "#server/features/repository-history/repository-history.feature";
-import { repositoryOperationsFeature } from "#server/features/repository-operations/repository-operations.feature";
+import { repositoryOperationsFeature } from "#server/features/repository-operations/repository-operations";
 import { repositoryPullFeature } from "#server/features/repository-pull/repository-pull.feature";
 import { repositoryPushFeature } from "#server/features/repository-push/repository-push.feature";
 import { repositoryRefsFeature } from "#server/features/repository-refs/repository-refs.feature";
@@ -77,7 +80,7 @@ export function startEnvironmentServer(
   return Effect.gen(function* () {
     yield* verifyRuntimeRequirements;
     return yield* serveEnvironment(
-      yield* acquireEnvironment(options.home),
+      yield* acquireEnvironment(options.home, createLocalGitCommandRunner()),
       options,
     );
   });
@@ -88,8 +91,7 @@ export function serveEnvironment(
   options: Omit<EnvironmentServerOptions, "home">,
 ) {
   return Effect.gen(function* () {
-    const identity = createEnvironmentIdentity(dependencies.context);
-    const environment = yield* identity.current();
+    const environment = yield* readCurrentEnvironment(dependencies.context);
     const useAutomaticPort = options.port === undefined || options.port === 0;
     const listener = yield* acquireEnvironmentListener({
       authorization: dependencies.authorization,
@@ -105,7 +107,7 @@ export function serveEnvironment(
     });
 
     if (useAutomaticPort && environment.automaticPort === null) {
-      yield* identity.claimAutomaticPort(listener.port);
+      yield* claimAutomaticPort(dependencies.context, listener.port);
     }
 
     yield* acquireRuntimeMarker(
@@ -127,11 +129,10 @@ export function serveEnvironment(
   });
 }
 
-export function acquireEnvironment(home: string) {
+export function acquireEnvironment(home: string, git: GitCommandRunner) {
   return Effect.gen(function* () {
     const paths = environmentPaths(join(home, ".rebase"));
     const context = yield* acquireEnvironmentContext(paths);
-    const git = createLocalGitCommandRunner();
     const watcher = createLocalRepositoryWatcher();
     const catalog = createRepositoryCatalog(context, git);
     return {
@@ -188,13 +189,6 @@ function markListenerReady(listener: EnvironmentListener) {
       listener.readiness.value = true;
     });
   });
-}
-
-function createEnvironmentIdentity(context: EnvironmentContext) {
-  return {
-    current: () => readCurrentEnvironment(context),
-    claimAutomaticPort: (port: number) => claimAutomaticPort(context, port),
-  };
 }
 
 function readCurrentEnvironment(context: EnvironmentContext) {

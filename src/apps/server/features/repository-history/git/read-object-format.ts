@@ -2,31 +2,16 @@ import type { RepositoryHistoryOperationFailure } from "@rebase/contracts";
 import { Effect } from "effect";
 import {
   type GitCommandRunner,
+  type GitObjectFormat,
   readGitEntryIdentity,
   runRepositoryGit,
 } from "#server/adapters/local-git/git-commands";
 import { historyFailed } from "#server/features/repository-history/git/history-failures";
 
-export type GitObjectFormat = "sha1" | "sha256";
-
 export type ObjectFormatRead = Effect.Effect<
   GitObjectFormat,
   RepositoryHistoryOperationFailure
 >;
-
-const objectIdLengths: Readonly<Record<GitObjectFormat, number>> = {
-  sha1: 40,
-  sha256: 64,
-};
-const hexadecimal = /^[0-9a-f]+$/;
-
-export function isGitObjectId(value: string, objectFormat?: GitObjectFormat) {
-  const lengths =
-    objectFormat === undefined
-      ? Object.values(objectIdLengths)
-      : [objectIdLengths[objectFormat]];
-  return lengths.includes(value.length) && hexadecimal.test(value);
-}
 
 export function createObjectFormatCache(git: GitCommandRunner) {
   const formats = new Map<

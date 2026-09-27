@@ -5,14 +5,12 @@ import type {
 import { Effect } from "effect";
 import {
   type GitCommandRunner,
+  type GitObjectFormat,
+  isGitObjectId,
   runRepositoryGit,
 } from "#server/adapters/local-git/git-commands";
 import { historySnapshotIdentity } from "#server/features/repository-history/git/history-snapshot-identity";
-import {
-  type GitObjectFormat,
-  isGitObjectId,
-  type ObjectFormatRead,
-} from "#server/features/repository-history/git/read-object-format";
+import type { ObjectFormatRead } from "#server/features/repository-history/git/read-object-format";
 import { readShallowHistoryOids } from "#server/features/repository-history/git/shallow-repository-history";
 
 const maximumRefsOutputBytes = 16 * 1_048_576;

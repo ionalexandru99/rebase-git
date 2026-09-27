@@ -10,6 +10,7 @@ import {
   acquireWatchedRepository,
   type FreshnessSubscription,
 } from "#server/features/repository-history/freshness/watched-repository";
+import { findHistoryRepository } from "#server/features/repository-history/git/history-failures";
 import type { RepositoryAccess } from "#server/repository/repository-access";
 import type { RepositoryCoordination } from "#server/repository/repository-coordination";
 
@@ -70,16 +71,7 @@ export function acquireRepositoryFreshness({
     ) =>
       Effect.gen(function* () {
         if (closed) return yield* Effect.fail(missingRepository(repositoryId));
-        const entry = yield* access
-          .repository(repositoryId)
-          .pipe(
-            Effect.mapError(
-              (error): RepositoryHistoryOperationFailure =>
-                error._tag === "RepositoryRejected"
-                  ? missingRepository(repositoryId)
-                  : { _tag: "GitFailed", reason: "Failed" },
-            ),
-          );
+        const entry = yield* findHistoryRepository(access, repositoryId);
         if (closed) return yield* Effect.fail(missingRepository(repositoryId));
         const key = entry.logicalRepositoryId ?? repositoryId;
         const subscription: FreshnessSubscription = {

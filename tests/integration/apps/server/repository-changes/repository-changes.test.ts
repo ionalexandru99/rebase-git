@@ -5,7 +5,6 @@ import {
   mkdtemp,
   readdir,
   readFile,
-  realpath,
   utimes,
   writeFile,
 } from "node:fs/promises";
@@ -19,38 +18,18 @@ import {
   RepositoryChangesHttpApi,
 } from "@rebase/contracts";
 import { Effect } from "effect";
-import { afterEach, describe, expect, it } from "vite-plus/test";
+import { describe, expect, it } from "vite-plus/test";
 import type { GitCommand } from "#server/adapters/local-git/git-commands";
 import { createRepository, fastImport } from "#tests-support/git";
 import { openTestEnvironment } from "#tests-support/server";
 import { removeTemporaryDirectory } from "#tests-support/temporary-directory";
 
 const exec = promisify(execFile);
-const directories: string[] = [];
-afterEach(async () => {
-  await Promise.all(
-    directories.splice(0).map((path) => removeTemporaryDirectory(path)),
-  );
-});
 async function fixture(
   initial = true,
   afterCommand?: (command: GitCommand) => Promise<void>,
   beforeCommand?: (command: GitCommand) => Promise<void>,
 ) {
-  const directory = await realpath(
-    await mkdtemp(join(tmpdir(), "rebase-changes-")),
-  );
-  directories.push(directory);
-  const git = (...args: string[]) => exec("git", ["-C", directory, ...args]);
-  await createRepository(directory, { commits: [] });
-  await git("config", "user.name", "Test");
-  await git("config", "user.email", "test@example.com");
-  await git("config", "commit.gpgsign", "false");
-  await writeFile(join(directory, "file.txt"), "one\ntwo\nthree\n");
-  if (initial) {
-    await git("add", ".");
-    await git("commit", "-m", "Initial");
-  }
   const environment = await openTestEnvironment({
     git: (runner) => ({
       ...runner,
@@ -67,6 +46,17 @@ async function fixture(
         ),
     }),
   });
+  const directory = join(environment.home, "repository");
+  const git = (...args: string[]) => exec("git", ["-C", directory, ...args]);
+  await createRepository(directory, { commits: [] });
+  await git("config", "user.name", "Test");
+  await git("config", "user.email", "test@example.com");
+  await git("config", "commit.gpgsign", "false");
+  await writeFile(join(directory, "file.txt"), "one\ntwo\nthree\n");
+  if (initial) {
+    await git("add", ".");
+    await git("commit", "-m", "Initial");
+  }
   const repositoryId = (await environment.remember(directory)).id;
   const scope: ChangesScope = {
     repositoryId,
@@ -387,10 +377,7 @@ describe("working changes through Git", () => {
   });
   it("tracks index-only edits in the linked worktree's own index", async () => {
     const f = await fixture();
-    const parent = await realpath(
-      await mkdtemp(join(tmpdir(), "rebase-changes-linked-")),
-    );
-    directories.push(parent);
+    const parent = `${f.directory}-linked`;
     const linked = join(parent, "linked");
     await f.git("worktree", "add", "-b", "linked", linked);
     const git = (...args: string[]) => exec("git", ["-C", linked, ...args]);

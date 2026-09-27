@@ -110,63 +110,57 @@ describe("repository history", () => {
   });
 
   it("synchronizes refs, stashes, and detached linked worktree heads", async () => {
-    await withHistoryListener(async ({ catalog, root, server }) => {
-      const repositoryPath = join(root, "complete");
-      const linkedPath = join(root, "linked");
-      await importLinearHistory(repositoryPath, "sha1", 2);
-      await git(repositoryPath, "checkout", "-b", "side");
-      await git(repositoryPath, "commit", "--allow-empty", "-m", "side");
-      const side = await git(repositoryPath, "rev-parse", "HEAD");
-      await git(repositoryPath, "checkout", "main");
-      await git(repositoryPath, "update-ref", "refs/remotes/origin/side", side);
-      await git(repositoryPath, "tag", "snapshot");
-      await writeFile(join(repositoryPath, "stashed-one.txt"), "one");
-      await git(repositoryPath, "add", "stashed-one.txt");
-      await git(repositoryPath, "stash", "push", "-m", "saved work one");
-      await writeFile(join(repositoryPath, "stashed-two.txt"), "two");
-      await git(repositoryPath, "add", "stashed-two.txt");
-      await git(repositoryPath, "stash", "push", "-m", "saved work two");
-      await git(
-        repositoryPath,
-        "worktree",
-        "add",
-        "--detach",
-        linkedPath,
-        "main",
-      );
-      await git(linkedPath, "commit", "--allow-empty", "-m", "detached linked");
-      const detached = await git(linkedPath, "rev-parse", "HEAD");
-      const repository = await Effect.runPromise(
-        catalog.remember(repositoryPath),
-      );
-      const stashRoots = (
-        await git(repositoryPath, "stash", "list", "--format=%H")
-      ).split("\n");
-      const expected = new Set(
-        (
-          await git(
-            repositoryPath,
-            "rev-list",
-            "--all",
-            detached,
-            ...stashRoots,
-          )
-        ).split("\n"),
-      );
+    const server = await openTestServer();
+    const repositoryPath = join(server.home, "complete");
+    const linkedPath = join(server.home, "linked");
+    await importLinearHistory(repositoryPath, "sha1", 2);
+    await git(repositoryPath, "checkout", "-b", "side");
+    await git(repositoryPath, "commit", "--allow-empty", "-m", "side");
+    const side = await git(repositoryPath, "rev-parse", "HEAD");
+    await git(repositoryPath, "checkout", "main");
+    await git(repositoryPath, "update-ref", "refs/remotes/origin/side", side);
+    await git(repositoryPath, "tag", "snapshot");
+    await writeFile(join(repositoryPath, "stashed-one.txt"), "one");
+    await git(repositoryPath, "add", "stashed-one.txt");
+    await git(repositoryPath, "stash", "push", "-m", "saved work one");
+    await writeFile(join(repositoryPath, "stashed-two.txt"), "two");
+    await git(repositoryPath, "add", "stashed-two.txt");
+    await git(repositoryPath, "stash", "push", "-m", "saved work two");
+    await git(
+      repositoryPath,
+      "worktree",
+      "add",
+      "--detach",
+      linkedPath,
+      "main",
+    );
+    await git(linkedPath, "commit", "--allow-empty", "-m", "detached linked");
+    const detached = await git(linkedPath, "rev-parse", "HEAD");
+    const repository = await server.requests(server.owner)(
+      RepositoryCatalogHttpApi.remember,
+      { path: repositoryPath },
+    );
+    const stashRoots = (
+      await git(repositoryPath, "stash", "list", "--format=%H")
+    ).split("\n");
+    const expected = new Set(
+      (
+        await git(repositoryPath, "rev-list", "--all", detached, ...stashRoots)
+      ).split("\n"),
+    );
 
-      const commits = await synchronizeHistory(server, repository.id);
+    const commits = await synchronizeHistory(server, repository.id);
 
-      expect(new Set(commits.map((commit) => commit.oid))).toEqual(expected);
-      expect(
-        commits.some((commit) => commit.subject === "detached linked"),
-      ).toBe(true);
-      expect(
-        commits.some((commit) => commit.subject.includes("saved work one")),
-      ).toBe(true);
-      expect(
-        commits.some((commit) => commit.subject.includes("saved work two")),
-      ).toBe(true);
-    });
+    expect(new Set(commits.map((commit) => commit.oid))).toEqual(expected);
+    expect(commits.some((commit) => commit.subject === "detached linked")).toBe(
+      true,
+    );
+    expect(
+      commits.some((commit) => commit.subject.includes("saved work one")),
+    ).toBe(true);
+    expect(
+      commits.some((commit) => commit.subject.includes("saved work two")),
+    ).toBe(true);
   });
 
   it.each([
@@ -177,103 +171,101 @@ describe("repository history", () => {
   ] as const)(
     "delivers the first 100 $objectFormat commits with small frames: $smallFrames",
     async ({ objectFormat, smallFrames }) => {
-      await withHistoryListener(async ({ catalog, root, server }) => {
-        const repositoryPath = join(root, objectFormat);
-        await importLinearHistory(repositoryPath, objectFormat, 110);
-        const repository = await Effect.runPromise(
-          catalog.remember(repositoryPath),
-        );
-        const head = await git(repositoryPath, "rev-parse", "main");
-        const hello = smallFrames
-          ? smallFrameHello()
-          : createCurrentEnvironmentHello("0.0.0");
-        const page = await readHistoryPage(server, repository.id, head, hello);
-        expect(page.objectFormat).toBe(objectFormat);
-        expect(page.commits).toHaveLength(100);
-        expect(page.commits[0]?.subject).toBe("commit 109");
-        expect(page.commits.at(-1)?.subject).toBe("commit 10");
-        expect(
-          page.commits.every(
-            (commit) =>
-              commit.oid.length === (objectFormat === "sha1" ? 40 : 64),
-          ),
-        ).toBe(true);
-      });
+      const server = await openTestServer();
+      const repositoryPath = join(server.home, objectFormat);
+      await importLinearHistory(repositoryPath, objectFormat, 110);
+      const repository = await server.requests(server.owner)(
+        RepositoryCatalogHttpApi.remember,
+        { path: repositoryPath },
+      );
+      const head = await git(repositoryPath, "rev-parse", "main");
+      const hello = smallFrames
+        ? smallFrameHello()
+        : createCurrentEnvironmentHello("0.0.0");
+      const page = await readHistoryPage(server, repository.id, head, hello);
+      expect(page.objectFormat).toBe(objectFormat);
+      expect(page.commits).toHaveLength(100);
+      expect(page.commits[0]?.subject).toBe("commit 109");
+      expect(page.commits.at(-1)?.subject).toBe("commit 10");
+      expect(
+        page.commits.every(
+          (commit) => commit.oid.length === (objectFormat === "sha1" ? 40 : 64),
+        ),
+      ).toBe(true);
     },
   );
 
   it("preserves nested and octopus merge topology", async () => {
-    await withHistoryListener(async ({ catalog, root, server }) => {
-      const repositoryPath = join(root, "merges");
-      await createMergeRepository(repositoryPath);
-      const repository = await Effect.runPromise(
-        catalog.remember(repositoryPath),
-      );
-      const head = await git(repositoryPath, "rev-parse", "main");
+    const server = await openTestServer();
+    const repositoryPath = join(server.home, "merges");
+    await createMergeRepository(repositoryPath);
+    const repository = await server.requests(server.owner)(
+      RepositoryCatalogHttpApi.remember,
+      { path: repositoryPath },
+    );
+    const head = await git(repositoryPath, "rev-parse", "main");
 
-      const page = await readHistoryPage(server, repository.id, head);
+    const page = await readHistoryPage(server, repository.id, head);
 
-      expect(page.commits[0]?.subject).toBe("octopus");
-      expect(page.commits[0]?.parents).toHaveLength(3);
-      expect(
-        page.commits.find((commit) => commit.subject === "nested merge")
-          ?.parents,
-      ).toHaveLength(2);
-      const positions = new Map(
-        page.commits.map((commit, index) => [commit.oid, index]),
-      );
-      expect(
-        page.commits.every((commit, index) =>
-          commit.parents.every(
-            (parent) => (positions.get(parent) ?? index + 1) > index,
-          ),
+    expect(page.commits[0]?.subject).toBe("octopus");
+    expect(page.commits[0]?.parents).toHaveLength(3);
+    expect(
+      page.commits.find((commit) => commit.subject === "nested merge")?.parents,
+    ).toHaveLength(2);
+    const positions = new Map(
+      page.commits.map((commit, index) => [commit.oid, index]),
+    );
+    expect(
+      page.commits.every((commit, index) =>
+        commit.parents.every(
+          (parent) => (positions.get(parent) ?? index + 1) > index,
         ),
-      ).toBe(true);
-    });
+      ),
+    ).toBe(true);
   });
 
   it("stops at a shallow repository boundary", async () => {
-    await withHistoryListener(async ({ catalog, root, server }) => {
-      const source = join(root, "shallow-source");
-      const repositoryPath = join(root, "shallow-clone");
-      await importLinearHistory(source, "sha1", 5);
-      await cloneRepository(
-        pathToFileURL(source).href,
+    const server = await openTestServer();
+    const source = join(server.home, "shallow-source");
+    const repositoryPath = join(server.home, "shallow-clone");
+    await importLinearHistory(source, "sha1", 5);
+    await cloneRepository(
+      pathToFileURL(source).href,
+      repositoryPath,
+      "--branch=main",
+      "--depth=2",
+    );
+    const repository = await server.requests(server.owner)(
+      RepositoryCatalogHttpApi.remember,
+      { path: repositoryPath },
+    );
+    const head = await git(repositoryPath, "rev-parse", "main");
+
+    const page = await readHistoryPage(server, repository.id, head);
+
+    expect(page.commits).toHaveLength(2);
+    const missingParent = await git(source, "rev-parse", "main~2");
+    expect(page.commits.at(-1)?.parents).toEqual([missingParent]);
+    const synchronized: RepositoryCommit[] = [];
+    await Effect.runPromise(
+      synchronizeRepositoryHistory(
+        createLocalGitCommandRunner(),
         repositoryPath,
-        "--branch=main",
-        "--depth=2",
-      );
-      const repository = await Effect.runPromise(
-        catalog.remember(repositoryPath),
-      );
-      const head = await git(repositoryPath, "rev-parse", "main");
-
-      const page = await readHistoryPage(server, repository.id, head);
-
-      expect(page.commits).toHaveLength(2);
-      const missingParent = await git(source, "rev-parse", "main~2");
-      expect(page.commits.at(-1)?.parents).toEqual([missingParent]);
-      const synchronized: RepositoryCommit[] = [];
-      await Effect.runPromise(
-        synchronizeRepositoryHistory(
-          createLocalGitCommandRunner(),
-          repositoryPath,
-          {
-            _tag: "SynchronizeRepositoryHistory",
-            priority: "visible",
-            repositoryId: repository.id,
-            requestId,
-          },
-          (batch) =>
-            Effect.sync(() => {
-              synchronized.push(...batch.commits);
-            }),
-          readObjectFormat(createLocalGitCommandRunner(), repositoryPath),
-        ),
-      );
-      expect(synchronized).toHaveLength(2);
-      expect(synchronized.at(-1)?.parents).toEqual([missingParent]);
-    });
+        {
+          _tag: "SynchronizeRepositoryHistory",
+          priority: "visible",
+          repositoryId: repository.id,
+          requestId,
+        },
+        (batch) =>
+          Effect.sync(() => {
+            synchronized.push(...batch.commits);
+          }),
+        readObjectFormat(createLocalGitCommandRunner(), repositoryPath),
+      ),
+    );
+    expect(synchronized).toHaveLength(2);
+    expect(synchronized.at(-1)?.parents).toEqual([missingParent]);
   });
 
   it("coalesces ref movement during traversal before publishing the latest refs", async () => {
@@ -661,23 +653,6 @@ function lastSnapshot(batches: readonly RepositoryHistoryBatch[]) {
   return snapshot;
 }
 
-async function withHistoryListener(
-  use: (fixture: ListenerFixture) => Promise<void>,
-) {
-  const server = await openTestServer();
-  const requests = server.requests(server.owner);
-  await use({
-    catalog: {
-      remember: (path) =>
-        Effect.promise(() =>
-          requests(RepositoryCatalogHttpApi.remember, { path }),
-        ),
-    },
-    root: server.home,
-    server: { credential: server.owner, origin: server.origin },
-  });
-}
-
 async function importLinearHistory(
   path: string,
   objectFormat: "sha1" | "sha256",
@@ -778,7 +753,7 @@ function withHistoryConnection<A, E>(
           server.origin,
           discovery,
           hello,
-          server.credential,
+          server.owner,
         );
         return yield* use(connection);
       }),
@@ -806,14 +781,6 @@ async function createTemporaryDirectory() {
 }
 
 interface HistoryServer {
-  readonly credential: { readonly type: "bearer"; readonly value: string };
   readonly origin: string;
-}
-
-interface ListenerFixture {
-  readonly catalog: {
-    readonly remember: (path: string) => Effect.Effect<{ readonly id: string }>;
-  };
-  readonly root: string;
-  readonly server: HistoryServer;
+  readonly owner: { readonly type: "bearer"; readonly value: string };
 }

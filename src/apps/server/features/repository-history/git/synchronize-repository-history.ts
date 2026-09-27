@@ -6,16 +6,16 @@ import {
   type SynchronizeRepositoryHistory,
 } from "@rebase/contracts";
 import { Effect } from "effect";
-import type { GitCommandRunner } from "#server/adapters/local-git/git-commands";
+import type {
+  GitCommandRunner,
+  GitObjectFormat,
+} from "#server/adapters/local-git/git-commands";
 import {
   historyFailed,
   snapshotInvalidated,
 } from "#server/features/repository-history/git/history-failures";
 import { historyTraversalIdentity } from "#server/features/repository-history/git/history-snapshot-identity";
-import type {
-  GitObjectFormat,
-  ObjectFormatRead,
-} from "#server/features/repository-history/git/read-object-format";
+import type { ObjectFormatRead } from "#server/features/repository-history/git/read-object-format";
 import { readRepositoryHistorySnapshot } from "#server/features/repository-history/git/read-repository-history-snapshot";
 import { streamRepositoryHistory } from "#server/features/repository-history/git/stream-repository-history";
 

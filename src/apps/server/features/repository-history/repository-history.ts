@@ -6,6 +6,10 @@ import type {
 } from "@rebase/contracts";
 import { Effect } from "effect";
 import type { GitCommandRunner } from "#server/adapters/local-git/git-commands";
+import {
+  findHistoryRepository,
+  historyWireFailure,
+} from "#server/features/repository-history/git/history-failures";
 import { createObjectFormatCache } from "#server/features/repository-history/git/read-object-format";
 import { readRepositoryHistory } from "#server/features/repository-history/git/read-repository-history";
 import { synchronizeRepositoryHistory } from "#server/features/repository-history/git/synchronize-repository-history";
@@ -20,20 +24,9 @@ export function createRepositoryHistoryService(dependencies: {
   readonly git: GitCommandRunner;
 }) {
   const objectFormat = createObjectFormatCache(dependencies.git);
-  const findRepository = (repositoryId: string) =>
-    dependencies.access
-      .repository(repositoryId)
-      .pipe(
-        Effect.mapError(
-          (error): RepositoryHistoryOperationFailure =>
-            error._tag === "RepositoryRejected"
-              ? { _tag: "RepositoryMissing", repositoryId }
-              : { _tag: "GitFailed", reason: "Failed" },
-        ),
-      );
   return {
     read: (request: ReadRepositoryHistory) =>
-      findRepository(request.repositoryId).pipe(
+      findHistoryRepository(dependencies.access, request.repositoryId).pipe(
         Effect.flatMap((repository) =>
           readRepositoryHistory(
             dependencies.git,
@@ -42,6 +35,7 @@ export function createRepositoryHistoryService(dependencies: {
             objectFormat(repository.path),
           ),
         ),
+        Effect.mapError(historyWireFailure),
       ),
     synchronize: (
       request: SynchronizeRepositoryHistory,
@@ -49,7 +43,7 @@ export function createRepositoryHistoryService(dependencies: {
         batch: RepositoryHistoryBatch,
       ) => Effect.Effect<void, RepositoryHistoryOperationFailure>,
     ) =>
-      findRepository(request.repositoryId).pipe(
+      findHistoryRepository(dependencies.access, request.repositoryId).pipe(
         Effect.flatMap((repository) =>
           synchronizeRepositoryHistory(
             dependencies.git,
@@ -59,6 +53,7 @@ export function createRepositoryHistoryService(dependencies: {
             objectFormat(repository.path),
           ),
         ),
+        Effect.mapError(historyWireFailure),
       ),
   };
 }

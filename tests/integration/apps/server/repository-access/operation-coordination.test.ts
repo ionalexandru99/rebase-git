@@ -9,14 +9,13 @@ import {
   RepositoryRefsHttpApi,
 } from "@rebase/contracts";
 import { Deferred, Effect, Fiber } from "effect";
-import { afterEach, expect, it } from "vite-plus/test";
+import { expect, it } from "vite-plus/test";
 import type { RepositoryWritePolicy } from "#server/repository/repository-coordination";
 import {
   createDivergedRepository,
   startConflict,
 } from "#tests-support/diverged-repository";
 import { openTestEnvironment } from "#tests-support/server";
-import { removeTemporaryDirectory } from "#tests-support/temporary-directory";
 
 const exec = promisify(execFile);
 const refsAndWorktreeWrite: RepositoryWritePolicy = {
@@ -34,17 +33,9 @@ const refsWriteIfAvailable: RepositoryWritePolicy = {
   locks: { refs: "ifAvailable" },
   duringOperation: "proceed",
 };
-const directories: string[] = [];
-afterEach(async () => {
-  await Promise.all(
-    directories.splice(0).map((path) => removeTemporaryDirectory(path)),
-  );
-});
-
 async function fixture() {
-  const { directory, git } = await createDivergedRepository();
-  directories.push(directory);
   const environment = await openTestEnvironment();
+  const { directory, git } = await createDivergedRepository(environment.home);
   const repositoryId = (await environment.remember(directory)).id;
   const { coordination } = environment;
   const changes = environment.routes(RepositoryChangesHttpApi);
@@ -149,7 +140,6 @@ it("amends the commit at a rebase edit stop before continuing", async () => {
 it("skips a contended fetch while ref writers queue across worktrees", async () => {
   const f = await fixture();
   const linked = `${f.directory}-linked`;
-  directories.push(linked);
   await f.git("worktree", "add", linked, "topic");
   await Effect.runPromise(
     Effect.scoped(

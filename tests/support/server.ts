@@ -18,7 +18,10 @@ import { Effect, Exit, Schema, Scope } from "effect";
 import { onTestFinished } from "vite-plus/test";
 import type { EnvironmentEventPublisher } from "#server/adapters/environment-transport/environment-event-publisher";
 import type { EnvironmentHttpRequestContext } from "#server/adapters/environment-transport/http/environment-http-route-handler";
-import type { GitCommandRunner } from "#server/adapters/local-git/git-commands";
+import {
+  createLocalGitCommandRunner,
+  type GitCommandRunner,
+} from "#server/adapters/local-git/git-commands";
 import {
   acquireEnvironment,
   environmentFeatures,
@@ -118,14 +121,17 @@ export function openTestServer(overrides: EnvironmentOverrides = {}) {
 function acquireTestDependencies(overrides: EnvironmentOverrides) {
   return Effect.gen(function* () {
     const home = yield* acquireTemporaryHome;
-    const environment = yield* acquireEnvironment(home);
+    const git = createLocalGitCommandRunner();
+    const environment = yield* acquireEnvironment(
+      home,
+      overrides.git?.(git) ?? git,
+    );
     return {
       ...environment,
       coordination:
         overrides.coordination?.(environment.coordination) ??
         environment.coordination,
       events: overrides.events?.(environment.events) ?? environment.events,
-      git: overrides.git?.(environment.git) ?? environment.git,
       home,
     };
   });

@@ -6,10 +6,10 @@ import type {
 import { Effect } from "effect";
 import {
   type GitCommandRunner,
+  isGitObjectId,
   runRepositoryGit,
 } from "#server/adapters/local-git/git-commands";
 import { historyFailed } from "#server/features/repository-history/git/history-failures";
-import { isGitObjectId } from "#server/features/repository-history/git/read-object-format";
 
 const maximumShallowBytes = 4 * 1_048_576;
 const maximumShallowOutputBytes = 8 * 1_048_576;

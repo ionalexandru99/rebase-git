@@ -1,20 +1,10 @@
-import { mkdtemp, readFile, realpath, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { RepositoryPullHttpApi } from "@rebase/contracts";
 import { Effect } from "effect";
-import { afterEach, describe, expect, it } from "vite-plus/test";
+import { describe, expect, it } from "vite-plus/test";
 import { cloneRepository, fastImport, git } from "#tests-support/git";
 import { openTestEnvironment } from "#tests-support/server";
-import { removeTemporaryDirectory } from "#tests-support/temporary-directory";
-
-const directories: string[] = [];
-
-afterEach(async () => {
-  await Promise.all(
-    directories.splice(0).map((path) => removeTemporaryDirectory(path)),
-  );
-});
 
 describe("fast-forward pull", () => {
   it("fast-forwards the checked-out branch and keeps unrelated local edits", async () => {
@@ -185,8 +175,8 @@ describe("fast-forward pull", () => {
 });
 
 async function fixture() {
-  const root = await realpath(await mkdtemp(join(tmpdir(), "rebase pull ")));
-  directories.push(root);
+  const environment = await openTestEnvironment();
+  const root = environment.home;
   const originPath = join(root, "origin.git");
   const repositoryPath = join(root, "repository");
   await git(root, "init", "--bare", "-b", "main", originPath);
@@ -197,7 +187,6 @@ async function fixture() {
   });
   await cloneRepository(originPath, repositoryPath);
 
-  const environment = await openTestEnvironment();
   const repositoryId = (await environment.remember(repositoryPath)).id;
   const service = environment.routes(RepositoryPullHttpApi);
   return {

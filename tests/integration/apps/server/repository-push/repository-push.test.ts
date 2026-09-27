@@ -1,5 +1,4 @@
-import { chmod, mkdtemp, realpath, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { chmod, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import {
   type PushBranch,
@@ -7,25 +6,17 @@ import {
   RepositoryPushHttpApi,
 } from "@rebase/contracts";
 import { Effect, Fiber } from "effect";
-import { afterEach, describe, expect, it } from "vite-plus/test";
+import { describe, expect, it } from "vite-plus/test";
 import {
   type GitCommandRunner,
   gitFailed,
 } from "#server/adapters/local-git/git-commands";
 import { cloneRepository, createRepository, git } from "#tests-support/git";
 import { openTestEnvironment } from "#tests-support/server";
-import { removeTemporaryDirectory } from "#tests-support/temporary-directory";
-
-const directories: string[] = [];
-afterEach(async () => {
-  await Promise.all(
-    directories.splice(0).map((path) => removeTemporaryDirectory(path)),
-  );
-});
 
 async function fixture(wrap?: (runner: GitCommandRunner) => GitCommandRunner) {
-  const root = await realpath(await mkdtemp(join(tmpdir(), "rebase-push-")));
-  directories.push(root);
+  const environment = await openTestEnvironment({ git: wrap });
+  const root = environment.home;
   const remote = join(root, "remote.git");
   const local = join(root, "local");
   const other = join(root, "other");
@@ -34,7 +25,6 @@ async function fixture(wrap?: (runner: GitCommandRunner) => GitCommandRunner) {
   await git(local, "remote", "add", "origin", remote);
   await git(local, "push", "-u", "origin", "main");
   await cloneRepository(remote, other);
-  const environment = await openTestEnvironment({ git: wrap });
   const repositoryId = (await environment.remember(local)).id;
   const service = environment.routes(RepositoryPushHttpApi);
   const scope = { repositoryId, worktreePath: local };

@@ -2,7 +2,7 @@ import { access, mkdir, mkdtemp, realpath, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Effect, Stream } from "effect";
-import { afterEach, describe, expect, it } from "vite-plus/test";
+import { describe, expect, it, onTestFinished } from "vite-plus/test";
 import {
   type GitCommandRunner,
   gitFailed,
@@ -13,15 +13,6 @@ import { repositoryCatalogTable } from "#server/persistence/environment-state.sc
 import { createRepository, git } from "#tests-support/git";
 import { openTestEnvironment } from "#tests-support/server";
 import { removeTemporaryDirectory } from "#tests-support/temporary-directory";
-
-const directories = new Set<string>();
-
-afterEach(async () => {
-  await Promise.all(
-    [...directories].map((directory) => removeTemporaryDirectory(directory)),
-  );
-  directories.clear();
-});
 
 describe("repository catalog", () => {
   it("reports unavailable Git without remembering the path", async () => {
@@ -236,6 +227,6 @@ function expectMissing<A, E>(effect: Effect.Effect<A, E>) {
 
 async function createTemporaryDirectory() {
   const directory = await mkdtemp(join(tmpdir(), "rebase catalog "));
-  directories.add(directory);
+  onTestFinished(() => removeTemporaryDirectory(directory));
   return realpath(directory);
 }

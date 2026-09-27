@@ -10,13 +10,13 @@ import { Effect } from "effect";
 import {
   type GitCommandRunner,
   type GitFailed,
+  isGitObjectId,
   runRepositoryGit,
 } from "#server/adapters/local-git/git-commands";
 import {
   type CommitSide,
   readCommitChange,
 } from "#server/features/commit-inspection/git/read-commit-change";
-import { isGitObjectId } from "#server/features/repository-history/git/read-object-format";
 import { buildChangeDiff } from "#server/repository/comparison/build-change-diff";
 import {
   type GitBlob,

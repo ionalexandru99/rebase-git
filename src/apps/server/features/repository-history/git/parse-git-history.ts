@@ -5,7 +5,7 @@ import type {
 import {
   type GitObjectFormat,
   isGitObjectId,
-} from "#server/features/repository-history/git/read-object-format";
+} from "#server/adapters/local-git/git-commands";
 
 export const gitHistoryFormat = [
   "%H",

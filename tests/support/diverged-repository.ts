@@ -7,9 +7,9 @@ import { createRepository } from "#tests-support/git";
 
 const exec = promisify(execFile);
 
-export async function createDivergedRepository() {
+export async function createDivergedRepository(parent = tmpdir()) {
   const directory = await realpath(
-    await mkdtemp(join(tmpdir(), "rebase-operation-")),
+    await mkdtemp(join(parent, "rebase-operation-")),
   );
   const git = (...args: string[]) =>
     exec("git", ["-C", directory, ...args], {

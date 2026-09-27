@@ -5,6 +5,7 @@ import type {
 import { Effect, Stream } from "effect";
 import {
   type GitCommandRunner,
+  type GitObjectFormat,
   isGitRejection,
   streamRepositoryGit,
 } from "#server/adapters/local-git/git-commands";
@@ -17,7 +18,6 @@ import {
   createGitHistoryBatchParser,
   gitHistoryFormat,
 } from "#server/features/repository-history/git/parse-git-history";
-import type { GitObjectFormat } from "#server/features/repository-history/git/read-object-format";
 import { packedGitArguments } from "#server/features/repository-history/git/read-selected-history";
 import { restoreShallowCommitParents } from "#server/features/repository-history/git/shallow-repository-history";
 

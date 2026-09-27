@@ -18,15 +18,10 @@ import {
   startConflict,
 } from "#tests-support/diverged-repository";
 import { openTestEnvironment } from "#tests-support/server";
-import { removeTemporaryDirectory } from "#tests-support/temporary-directory";
 
 const exec = promisify(execFile);
-const directories: string[] = [];
-afterEach(async () => {
+afterEach(() => {
   vi.unstubAllEnvs();
-  await Promise.all(
-    directories.splice(0).map((path) => removeTemporaryDirectory(path)),
-  );
 });
 
 type GitIntercept = (
@@ -35,8 +30,6 @@ type GitIntercept = (
 ) => ReturnType<GitCommandRunner["run"]> | undefined;
 
 async function fixture() {
-  const { directory, git } = await createDivergedRepository();
-  directories.push(directory);
   let intercept: GitIntercept | undefined;
   const environment = await openTestEnvironment({
     git: (runner) => ({
@@ -44,6 +37,7 @@ async function fixture() {
       run: (command) => intercept?.(runner, command) ?? runner.run(command),
     }),
   });
+  const { directory, git } = await createDivergedRepository(environment.home);
   const repositoryId = (await environment.remember(directory)).id;
   const service = environment.routes(RepositoryOperationsHttpApi);
   const scope = { repositoryId, worktreePath: directory };
@@ -206,7 +200,6 @@ describe("Git operation recovery", () => {
   it("rediscovers an operation in a linked worktree while the main worktree stays idle", async () => {
     const f = await fixture();
     const linked = `${f.directory}-linked`;
-    directories.push(linked);
     await f.git("worktree", "add", linked, "topic");
     await expect(
       exec("git", ["-C", linked, "merge", "main"]),

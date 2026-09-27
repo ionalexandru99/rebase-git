@@ -8,15 +8,30 @@ import {
   type EnvironmentDirectory,
   type EnvironmentDirectoryEntry,
   type EnvironmentDirectoryRejected,
+  EnvironmentFilesystemHttpApi,
   type EnvironmentPathBreadcrumb,
 } from "@rebase/contracts";
 import { Effect } from "effect";
+import type { EnvironmentFeature } from "#server/adapters/environment-transport/combine-environment-features";
+import { route } from "#server/adapters/environment-transport/http/environment-http-route-handler";
 
 const maximumEntries = 500;
 const maximumPathLength = 4_096;
 const maximumBreadcrumbBytes = 16_384;
 const responseSizeMargin = 512;
 const realpathNative = promisify(realpath.native);
+
+export function environmentFilesystemFeature(): EnvironmentFeature {
+  const filesystem = createEnvironmentFilesystem();
+  return {
+    capabilities: [],
+    httpRoutes: [
+      route(EnvironmentFilesystemHttpApi.listDirectory, (directory) =>
+        filesystem.listDirectory(directory.path, directory.includeHidden),
+      ),
+    ],
+  };
+}
 
 export function createEnvironmentFilesystem(homeDirectory = homedir()) {
   return {
