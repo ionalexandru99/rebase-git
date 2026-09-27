@@ -1,9 +1,9 @@
-import { RepositoryConflictsHttpApi } from "@rebase/contracts";
-import type { EnvironmentFeature } from "#server/adapters/environment-transport/combine-environment-features";
+import { RepositoryConflictsApi } from "@rebase/contracts";
+import type { EnvironmentFeature } from "#server/adapters/environment-transport/environment-routes";
 import {
   type RepositoryDependencies,
   repositoryRoutes,
-} from "#server/adapters/environment-transport/http/repository-http-routes";
+} from "#server/adapters/environment-transport/environment-routes";
 import { readConflictDocument } from "#server/features/repository-conflicts/git/read-conflict-document";
 import { readConflictList } from "#server/features/repository-conflicts/git/read-conflict-list";
 import {
@@ -27,10 +27,9 @@ export function repositoryConflictsFeature(
 ): EnvironmentFeature {
   const { command, query } = repositoryRoutes(dependencies);
   const { coordination } = dependencies;
-  const api = RepositoryConflictsHttpApi;
+  const api = RepositoryConflictsApi;
   return {
-    capabilities: [],
-    httpRoutes: [
+    routes: [
       query(api.list, (input, git) =>
         readConflictList(git, coordination, input.worktreePath),
       ),

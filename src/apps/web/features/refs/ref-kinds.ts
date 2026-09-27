@@ -1,7 +1,7 @@
 import type {
   BranchUpstreamTarget,
-  RepositoryBranchesHttpApi,
-  RepositoryTagsHttpApi,
+  RepositoryBranchesApi,
+  RepositoryTagsApi,
 } from "@rebase/contracts";
 import { describeFailure } from "#web/platform/query/request-failure";
 import type { CommandFailure } from "#web/platform/query/use-command";
@@ -29,8 +29,8 @@ export interface StartPoint {
 }
 
 export type RefRoute =
-  | (typeof RepositoryBranchesHttpApi)[keyof typeof RepositoryBranchesHttpApi]
-  | (typeof RepositoryTagsHttpApi)[keyof typeof RepositoryTagsHttpApi];
+  | (typeof RepositoryBranchesApi)[keyof typeof RepositoryBranchesApi]
+  | (typeof RepositoryTagsApi)[keyof typeof RepositoryTagsApi];
 
 export function commitStartPoint(oid: string): StartPoint {
   return { label: oid.slice(0, 7), name: "", oid };

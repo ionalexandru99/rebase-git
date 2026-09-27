@@ -1,103 +1,75 @@
-import { readRepositoryHistoryBatchSequence } from "@rebase/contracts";
-import { environmentResponseError } from "@rebase/environment-client";
-import { Effect, Option, Stream } from "effect";
+import type {
+  EnvironmentRpcClient,
+  RepositoryHistoryOperationFailure,
+} from "@rebase/contracts";
+import { Effect, Stream } from "effect";
+import type { RpcClientError } from "effect/unstable/rpc";
 import {
+  createEnvironmentRequestId,
+  RepositoryHistoryOffline,
+  RepositoryHistoryRejected,
   type RepositoryHistoryTransport,
   RepositoryHistoryUnavailable,
 } from "#web/features/repository-history/repository-history-reader";
 import { createHistorySyncScheduler } from "#web/features/repository-history/transport/history-sync-scheduler";
-import { createRepositoryFreshnessRpc } from "#web/features/repository-history/transport/repository-freshness-rpc";
-import { historyRpcFailure } from "#web/features/repository-history/transport/repository-history-rpc-error";
-import { hasEnvironmentCapability } from "#web/platform/environment/environment-capabilities";
-import type { NegotiatedEnvironmentRpc } from "#web/platform/environment/environment-protocol.contract";
-import { rpcJsonReassembler } from "#web/platform/environment/rpc/environment-rpc-json";
-import { createEnvironmentRequestId } from "#web/platform/environment/websocket/environment-request-id";
+
+const encoder = new TextEncoder();
 
 export function createRepositoryHistoryRpc(
-  connection: NegotiatedEnvironmentRpc,
+  client: EnvironmentRpcClient,
 ): RepositoryHistoryTransport {
-  const client = connection.rpc;
-  const enabled =
-    hasEnvironmentCapability(connection.negotiated, "repository-history", 6) &&
-    hasEnvironmentCapability(connection.negotiated, "json-fragmentation");
   const schedule = createHistorySyncScheduler();
   return {
-    freshness: createRepositoryFreshnessRpc(
-      client,
-      hasEnvironmentCapability(
-        connection.negotiated,
-        "repository-history-freshness",
-      ),
-    ),
+    freshness: {
+      observe: (repositoryId, publish) =>
+        client.WatchFreshness({ repositoryId }, { streamBufferSize: 1 }).pipe(
+          Stream.mapError(historyRpcFailure),
+          Stream.runForEach((state) => Effect.sync(() => publish(state))),
+          Effect.andThen(Effect.fail(new RepositoryHistoryUnavailable())),
+        ),
+      fetch: (repositoryId) =>
+        client
+          .FetchHistory({ repositoryId })
+          .pipe(Effect.mapError(historyRpcFailure)),
+      configure: (repositoryId, setting) =>
+        client
+          .ConfigureFetch({ repositoryId, setting })
+          .pipe(Effect.mapError(historyRpcFailure)),
+    },
     read: (request) =>
-      Effect.gen(function* () {
-        if (!enabled) return yield* new RepositoryHistoryUnavailable();
-        const requestId = createEnvironmentRequestId();
-        const accept = rpcJsonReassembler(requestId);
-        const result = yield* client
-          .ReadHistory(
-            { ...request, _tag: "ReadRepositoryHistory", requestId },
-            { streamBufferSize: 1 },
-          )
-          .pipe(
-            Stream.mapError(historyRpcFailure),
-            Stream.mapEffect(accept),
-            Stream.filter((bytes): bytes is Uint8Array => bytes !== undefined),
-            Stream.runHead,
-          );
-        if (Option.isNone(result))
-          return yield* new RepositoryHistoryUnavailable();
-        return result.value;
-      }),
+      client
+        .ReadHistory({
+          ...request,
+          _tag: "ReadRepositoryHistory",
+          requestId: createEnvironmentRequestId(),
+        })
+        .pipe(
+          Effect.map((json) => encoder.encode(json)),
+          Effect.mapError(historyRpcFailure),
+        ),
     synchronize: (request, acceptBatch) =>
       schedule(
         request.priority,
         Effect.gen(function* () {
-          if (!enabled) return yield* new RepositoryHistoryUnavailable();
-          const requestId = createEnvironmentRequestId();
-          const accept = rpcJsonReassembler(requestId);
-          let expectedSequence =
-            request.basis?._tag === "Incomplete"
-              ? request.basis.nextBatchSequence
-              : 0;
           let commitCount: number | undefined;
           yield* client
             .SynchronizeHistory(
-              { ...request, _tag: "SynchronizeRepositoryHistory", requestId },
+              {
+                ...request,
+                _tag: "SynchronizeRepositoryHistory",
+                requestId: createEnvironmentRequestId(),
+              },
               { streamBufferSize: 1 },
             )
             .pipe(
               Stream.mapError(historyRpcFailure),
-              Stream.takeUntil(
-                (message) => message._tag === "RepositoryHistorySynchronized",
-              ),
-              Stream.runForEach((message) =>
-                Effect.gen(function* () {
-                  if (commitCount !== undefined)
-                    return yield* environmentResponseError("WebSocket");
-                  if (message._tag === "RepositoryHistorySynchronized") {
+              Stream.runForEach((message) => {
+                if (typeof message !== "string")
+                  return Effect.sync(() => {
                     commitCount = message.commitCount;
-                    return;
-                  }
-                  const bytes = yield* accept(message);
-                  if (bytes === undefined) return;
-                  const sequence = yield* Effect.try({
-                    try: () => readRepositoryHistoryBatchSequence(bytes),
-                    catch: () => environmentResponseError("WebSocket"),
                   });
-                  if (sequence !== expectedSequence)
-                    return yield* environmentResponseError("WebSocket");
-                  yield* acceptBatch(bytes);
-                  yield* client
-                    .CommitHistoryBatch({
-                      _tag: "AcknowledgeRepositoryHistoryBatch",
-                      requestId,
-                      sequence,
-                    })
-                    .pipe(Effect.mapError(historyRpcFailure));
-                  expectedSequence += 1;
-                }),
-              ),
+                return acceptBatch(encoder.encode(message));
+              }),
             );
           if (commitCount === undefined)
             return yield* new RepositoryHistoryUnavailable();
@@ -105,4 +77,12 @@ export function createRepositoryHistoryRpc(
         }),
       ),
   };
+}
+
+function historyRpcFailure(
+  error: RepositoryHistoryOperationFailure | RpcClientError.RpcClientError,
+) {
+  return error._tag === "RpcClientError"
+    ? new RepositoryHistoryOffline()
+    : new RepositoryHistoryRejected({ failure: error });
 }

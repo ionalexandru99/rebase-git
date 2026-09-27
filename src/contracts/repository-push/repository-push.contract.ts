@@ -1,7 +1,4 @@
-import {
-  type EnvironmentHttpRoute,
-  repositoryCommand,
-} from "@rebase/contracts/environment-connection/http/environment-http-route.contract";
+import { repositoryCommand } from "@rebase/contracts/environment-connection/environment-route.contract";
 import {
   ObjectId,
   RefName,
@@ -57,10 +54,10 @@ export const PushRejected = Schema.TaggedStruct("PushRejected", {
 });
 export type PushRejected = typeof PushRejected.Type;
 
-export const RepositoryPushHttpApi = {
-  push: repositoryCommand("/api/repositories/push", {
+export const RepositoryPushApi = {
+  push: repositoryCommand("repositories/push", {
     request: PushBranch,
     success: RemoteBranchUpdated,
     failure: PushRejected,
   }),
-} satisfies Record<string, EnvironmentHttpRoute>;
+};

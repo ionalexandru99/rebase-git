@@ -1,4 +1,4 @@
-import { CommitInspectionHttpApi, type InspectCommit } from "@rebase/contracts";
+import { CommitInspectionApi, type InspectCommit } from "@rebase/contracts";
 import { skipToken } from "@tanstack/react-query";
 import { useEnvironmentQuery } from "#web/platform/query/environment-query";
 
@@ -13,7 +13,7 @@ export function useCommitInspection(
   enabled: boolean,
 ) {
   return useEnvironmentQuery(
-    CommitInspectionHttpApi.inspect,
+    CommitInspectionApi.inspect,
     oid === undefined ? skipToken : { repositoryId, worktreePath, oid },
     { enabled, changes: "none" },
   );

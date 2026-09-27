@@ -12,6 +12,7 @@ import {
 } from "#desktop/app/desktop-application";
 import type { ManagedEnvironmentServer } from "#desktop/platform/environment/environment-supervisor";
 import { removeTemporaryDirectory } from "#tests-support/temporary-directory";
+import { connectEnvironment } from "#web/app/environment/environment-connection";
 
 const directories = new Set<string>();
 
@@ -61,14 +62,17 @@ describe("Electron application", () => {
         firstWindow?.environmentOrigin,
       );
       expect(host.windows[1]?.credential).toBe(firstWindow?.credential);
-      const snapshot = await fetch(
-        `${firstWindow?.environmentOrigin}/api/environment/snapshot`,
-        {
-          headers: { authorization: `Bearer ${host.windows[1]?.credential}` },
-        },
-      );
-      expect(snapshot.status).toBe(200);
-      await snapshot.body?.cancel();
+      await expect(
+        Effect.runPromise(
+          Effect.scoped(
+            connectEnvironment(
+              firstWindow?.environmentOrigin ?? "",
+              { type: "bearer", value: host.windows[1]?.credential ?? "" },
+              { changed: () => {} },
+            ),
+          ),
+        ),
+      ).resolves.toHaveProperty("environmentId");
       expect(serverStarts).toBe(1);
 
       await application.windowAllClosed();

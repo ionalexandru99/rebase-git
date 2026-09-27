@@ -4,8 +4,6 @@ import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
-import { fetchEnvironmentDiscoveryEffect } from "@rebase/environment-client";
-import { Effect } from "effect";
 import { afterEach, describe, expect, it } from "vite-plus/test";
 import { startEnvironmentServer } from "#tests-support/environment-server";
 import { removeTemporaryDirectory } from "#tests-support/temporary-directory";
@@ -44,15 +42,6 @@ describe("rebase serve", () => {
       expect(response.status).toBe(200);
       await expect(response.json()).resolves.toEqual({ status: "ready" });
       await verifyBrowserAssets(origin);
-
-      const discovery = await Effect.runPromise(
-        fetchEnvironmentDiscoveryEffect(origin),
-      );
-      expect(discovery.environmentId).toBe(
-        readEnvironmentState(
-          join(directory, ".rebase", "state", "state.sqlite"),
-        )?.id,
-      );
 
       const runtime = JSON.parse(await readFile(runtimePath, "utf8"));
       expect(runtime).toMatchObject({

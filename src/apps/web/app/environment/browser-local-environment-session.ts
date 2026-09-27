@@ -1,65 +1,68 @@
 import {
   type DesktopHostBridge,
-  EnvironmentAuthorizationHttpApi,
+  EnvironmentAccessFailure,
+  type ExchangeEnvironmentPairing,
+  environmentBrowserSessionPath,
 } from "@rebase/contracts";
-import type { EnvironmentCredential } from "@rebase/environment-client";
+import { Effect, Schema } from "effect";
 import {
-  createEnvironmentBrowserSessionEffect,
-  createEnvironmentRequestClient,
-  environmentResponseError,
-  readEnvironmentBrowserSessionEffect,
-} from "@rebase/environment-client";
-import { Effect } from "effect";
-import { connectCurrentEnvironmentEffect } from "#web/app/environment/connection/environment-protocol-client";
-import { createLocalEnvironmentSession } from "#web/app/environment/local-environment-session";
-import type {
-  LocalEnvironmentGateway,
-  LocalEnvironmentSession,
-  LocalEnvironmentSessionOptions,
-} from "#web/app/environment/local-environment-session.contract";
+  connectEnvironment,
+  EnvironmentAccessDenied,
+  type EnvironmentCredential,
+  EnvironmentUnavailable,
+} from "#web/app/environment/environment-connection";
+import {
+  createLocalEnvironmentSession,
+  type LocalEnvironmentSession,
+  type LocalEnvironmentSessionOptions,
+} from "#web/app/environment/local-environment-session";
 
 type DesktopEnvironmentHost = Pick<
   DesktopHostBridge,
   "environmentOrigin" | "getEnvironmentCredential"
 >;
 
+const decodeAccessFailure = Schema.decodeUnknownSync(EnvironmentAccessFailure);
+
 export function createBrowserLocalEnvironmentSession(
-  productVersion: string,
   host: DesktopEnvironmentHost | undefined,
-  lifetime: Pick<LocalEnvironmentSessionOptions, "runtime" | "onConnect">,
+  lifetime: Pick<
+    LocalEnvironmentSessionOptions,
+    "runtime" | "onConnect" | "invalidation"
+  >,
 ): LocalEnvironmentSession {
   const bootstrap = resolveLocalEnvironmentBootstrap(window.location, host);
-  let credential: EnvironmentCredential | undefined;
-  const requests = createEnvironmentRequestClient(
-    bootstrap.environmentOrigin,
-    () => credential,
-  );
-  const gateway: LocalEnvironmentGateway = {
-    authorize: () =>
-      createLocalEnvironmentAuthorization(
-        bootstrap.environmentOrigin,
-        bootstrap.pairingMaterial,
-        host,
-      )().pipe(
-        Effect.tap((authorized) =>
-          Effect.sync(() => {
-            credential = authorized;
-          }),
-        ),
-      ),
-    connect: (credential, lastObservedSequence) =>
-      connectCurrentEnvironmentEffect(
-        bootstrap.environmentOrigin,
-        productVersion,
-        {
+  let pairingMaterial = bootstrap.pairingMaterial;
+  return createLocalEnvironmentSession({
+    ...lifetime,
+    gateway: {
+      authorize: () =>
+        Effect.gen(function* () {
+          if (host !== undefined) {
+            const value = yield* Effect.tryPromise({
+              try: () => host.getEnvironmentCredential(),
+              catch: () => new EnvironmentUnavailable(),
+            });
+            return { type: "bearer", value } satisfies EnvironmentCredential;
+          }
+          if (pairingMaterial !== undefined) {
+            yield* createBrowserSession(bootstrap.environmentOrigin, {
+              label: "Rebase browser",
+              pairingMaterial,
+            });
+            pairingMaterial = undefined;
+            window.history.replaceState(null, "", "/");
+          }
+          return { type: "browser-session" } satisfies EnvironmentCredential;
+        }),
+      connect: (credential) =>
+        connectEnvironment(
+          bootstrap.environmentOrigin,
           credential,
-          ...(lastObservedSequence === undefined
-            ? {}
-            : { lastObservedSequence }),
-        },
-      ),
-  };
-  return createLocalEnvironmentSession({ ...lifetime, gateway, requests });
+          lifetime.invalidation,
+        ),
+    },
+  });
 }
 
 export function resolveLocalEnvironmentBootstrap(
@@ -73,34 +76,36 @@ export function resolveLocalEnvironmentBootstrap(
   };
 }
 
-function createLocalEnvironmentAuthorization(
+function createBrowserSession(
   origin: string,
-  pairingMaterial: string | undefined,
-  host: DesktopEnvironmentHost | undefined,
-): LocalEnvironmentGateway["authorize"] {
-  return () =>
-    Effect.gen(function* () {
-      if (host !== undefined) {
-        const value = yield* Effect.tryPromise({
-          try: () => host.getEnvironmentCredential(),
-          catch: () =>
-            environmentResponseError(
-              EnvironmentAuthorizationHttpApi.exchangePairing.path,
-            ),
-        });
-        return { type: "bearer" as const, value };
+  exchange: ExchangeEnvironmentPairing,
+) {
+  return Effect.tryPromise({
+    try: async (signal) => {
+      const response = await fetch(
+        new URL(environmentBrowserSessionPath, origin),
+        {
+          body: JSON.stringify(exchange),
+          credentials: "same-origin",
+          headers: { "content-type": "application/json" },
+          method: "POST",
+          signal,
+        },
+      );
+      if (response.ok) {
+        await response.body?.cancel();
+        return undefined;
       }
-      if (pairingMaterial !== undefined) {
-        yield* createEnvironmentBrowserSessionEffect(origin, {
-          label: "Rebase browser",
-          pairingMaterial,
-        });
-        pairingMaterial = undefined;
-        clearPairingMaterial();
-      }
-      yield* readEnvironmentBrowserSessionEffect(origin);
-      return { type: "browser-session" as const };
-    });
+      return decodeAccessFailure(await response.json());
+    },
+    catch: () => new EnvironmentUnavailable(),
+  }).pipe(
+    Effect.flatMap((failure) =>
+      failure === undefined
+        ? Effect.void
+        : Effect.fail(new EnvironmentAccessDenied({ failure })),
+    ),
+  );
 }
 
 function readPairingMaterial(location: Pick<Location, "hash" | "pathname">) {
@@ -108,8 +113,4 @@ function readPairingMaterial(location: Pick<Location, "hash" | "pathname">) {
     return undefined;
   }
   return location.hash.slice(1);
-}
-
-function clearPairingMaterial() {
-  window.history.replaceState(null, "", "/");
 }

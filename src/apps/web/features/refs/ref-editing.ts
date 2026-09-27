@@ -3,9 +3,9 @@ import {
   type BranchUpstreamTarget,
   type LocalBranch,
   type RemoteBranch,
-  RepositoryBranchesHttpApi,
+  RepositoryBranchesApi,
   type RepositoryRefs,
-  RepositoryTagsHttpApi,
+  RepositoryTagsApi,
 } from "@rebase/contracts";
 import { useCallback, useRef, useState } from "react";
 import {
@@ -73,15 +73,15 @@ export function useRefEditing({
   }) => void;
 }) {
   const creates = {
-    branch: useCommand(RepositoryBranchesHttpApi.create),
-    tag: useCommand(RepositoryTagsHttpApi.create),
+    branch: useCommand(RepositoryBranchesApi.create),
+    tag: useCommand(RepositoryTagsApi.create),
   };
   const deletes = {
-    branch: useCommand(RepositoryBranchesHttpApi.delete),
-    tag: useCommand(RepositoryTagsHttpApi.delete),
+    branch: useCommand(RepositoryBranchesApi.delete),
+    tag: useCommand(RepositoryTagsApi.delete),
   };
-  const renameBranch = useCommand(RepositoryBranchesHttpApi.rename);
-  const setBranchUpstream = useCommand(RepositoryBranchesHttpApi.setUpstream);
+  const renameBranch = useCommand(RepositoryBranchesApi.rename);
+  const setBranchUpstream = useCommand(RepositoryBranchesApi.setUpstream);
   const [edit, setEdit] = useState<RefEdit>();
   const [error, setError] = useState<string>();
   const [pending, setPending] = useState<PendingDeletion>();

@@ -14,8 +14,5 @@
   },
   "include": ["./**/*.ts", "./**/*.tsx", "./package.json"],
   "exclude": ["./dist"],
-  "references": [
-    { "path": "../../contracts" },
-    { "path": "../../environment-client" }
-  ]
+  "references": [{ "path": "../../contracts" }]
 }

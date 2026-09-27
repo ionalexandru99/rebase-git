@@ -1,7 +1,7 @@
 import {
   type RepositoryCatalog,
+  RepositoryCatalogApi,
   type RepositoryCatalogEntry,
-  RepositoryCatalogHttpApi,
 } from "@rebase/contracts";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback } from "react";
@@ -18,7 +18,7 @@ export function repositoryCatalogKey(environmentId: string | undefined) {
   return environmentQueryKey(
     environmentId,
     null,
-    RepositoryCatalogHttpApi.list,
+    RepositoryCatalogApi.list,
     undefined,
   );
 }
@@ -38,17 +38,13 @@ function sortCatalog(catalog: RepositoryCatalog): RepositoryCatalog {
 export function useRepositoryCatalog() {
   const queryClient = useQueryClient();
   const { environmentId } = useEnvironment();
-  const catalog = useEnvironmentQuery(
-    RepositoryCatalogHttpApi.list,
-    undefined,
-    {
-      changes: "none",
-      staleTime: 0,
-      refetchOnWindowFocus: false,
-      refetchOnMount: false,
-      select: sortCatalog,
-    },
-  );
+  const catalog = useEnvironmentQuery(RepositoryCatalogApi.list, undefined, {
+    changes: "none",
+    staleTime: 0,
+    refetchOnWindowFocus: false,
+    refetchOnMount: false,
+    select: sortCatalog,
+  });
   const findRepository = useCallback(
     (repositoryId: string) =>
       queryClient
@@ -65,7 +61,7 @@ export function useRepositoryCatalog() {
 export function catalogWith(entry: RepositoryCatalogEntry) {
   return [
     answer(
-      RepositoryCatalogHttpApi.list,
+      RepositoryCatalogApi.list,
       undefined,
       (catalog): RepositoryCatalog => ({
         repositories: [...without(catalog, entry.id), entry],
@@ -81,7 +77,7 @@ export function catalogWithout({
 }) {
   return [
     answer(
-      RepositoryCatalogHttpApi.list,
+      RepositoryCatalogApi.list,
       undefined,
       (catalog): RepositoryCatalog => ({
         repositories: without(catalog, repositoryId),

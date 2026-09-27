@@ -1,17 +1,11 @@
 import {
-  createJsonMessageReassembler,
-  currentTransportLimits,
   decodeRepositoryHistoryBatch,
   decodeRepositoryHistoryPage,
   encodeRepositoryHistoryBatch,
   encodeRepositoryHistoryPage,
-  fragmentJsonMessage,
-  JsonMessageFragment,
   maximumRepositoryHistorySequence,
   type RepositoryHistoryPage,
-  readRepositoryHistoryBatchSequence,
 } from "@rebase/contracts";
-import { Schema } from "effect";
 import { describe, expect, it } from "vite-plus/test";
 
 const requestId = "00000000-0000-4000-8000-000000000011";
@@ -62,28 +56,6 @@ describe("repository history JSON codec", () => {
     },
   );
 
-  it("delivers a full synchronization batch in one JSON frame by default", () => {
-    const page = historyPage("sha1");
-    const batch = {
-      commits: page.commits.flatMap((commit) =>
-        Array.from({ length: 512 }, () => commit),
-      ),
-      objectFormat: page.objectFormat,
-      repositoryId,
-      requestId,
-      sequence: 7,
-    } as const;
-    const encoded = encodeRepositoryHistoryBatch(batch);
-
-    expect(readRepositoryHistoryBatchSequence(encoded)).toBe(7);
-    expect(decodeRepositoryHistoryBatch(encoded)).toEqual(batch);
-    const frames = fragmentJsonMessage(
-      { logicalMessageId: 7, payload: encoded, requestId },
-      currentTransportLimits.maxWebSocketResponseBytes,
-    );
-    expect(frames).toHaveLength(1);
-  });
-
   it("rejects batch sequences outside the unsigned wire range", () => {
     const page = historyPage("sha1");
     const batch = {
@@ -105,7 +77,7 @@ describe("repository history JSON codec", () => {
       }),
     ).toThrow();
     expect(() =>
-      readRepositoryHistoryBatchSequence(
+      decodeRepositoryHistoryBatch(
         new TextEncoder().encode(
           JSON.stringify({
             ...batch,
@@ -139,77 +111,6 @@ describe("repository history JSON codec", () => {
     ).toEqual(batch);
   });
 
-  it("fragments and reassembles a logical history message out of order", () => {
-    const page = historyPage("sha1");
-    const payload = encodeRepositoryHistoryPage({
-      ...page,
-      commits: page.commits.map((commit) => ({
-        ...commit,
-        subject: 'Graph 🦀 漢字\u0000 "quoted" \\'.repeat(100),
-      })),
-    });
-    const frames = fragmentJsonMessage(
-      { logicalMessageId: 7, payload, requestId },
-      256,
-    );
-    const reassembler = createJsonMessageReassembler();
-
-    expect(frames.length).toBeGreaterThan(2);
-    for (const frame of frames) {
-      const json = JSON.stringify(frame);
-      expect(new TextEncoder().encode(json).byteLength).toBeLessThanOrEqual(
-        256,
-      );
-      expect(
-        Schema.decodeUnknownSync(JsonMessageFragment)(JSON.parse(json)),
-      ).toEqual(frame);
-    }
-    const completed = frames
-      .toReversed()
-      .map((frame) => reassembler.accept(frame))
-      .find((result) => result !== undefined);
-
-    expect(completed).toEqual({ logicalMessageId: 7, payload, requestId });
-  });
-
-  it("rejects duplicate fragments and malformed payloads", () => {
-    const [first] = fragmentJsonMessage(
-      {
-        logicalMessageId: 4,
-        payload: new Uint8Array(160),
-        requestId,
-      },
-      256,
-    );
-    const reassembler = createJsonMessageReassembler();
-
-    expect(first).toBeDefined();
-    reassembler.accept(requireFragment(first));
-    expect(() => reassembler.accept(requireFragment(first))).toThrow();
-    expect(() =>
-      decodeRepositoryHistoryPage(new Uint8Array([1, 2, 3])),
-    ).toThrow();
-  });
-
-  it("discards partial messages and rejects invalid request IDs", () => {
-    const [first] = fragmentJsonMessage(
-      { logicalMessageId: 4, payload: new Uint8Array(160), requestId },
-      256,
-    );
-    const reassembler = createJsonMessageReassembler();
-    expect(first).toBeDefined();
-    reassembler.accept(requireFragment(first));
-    reassembler.discard(requestId);
-    expect(() => reassembler.accept(requireFragment(first))).not.toThrow();
-
-    expect(() =>
-      Schema.decodeUnknownSync(JsonMessageFragment)({
-        ...first,
-        requestId: "x".repeat(36),
-      }),
-    ).toThrow();
-  });
-
   it("rejects pages beyond the encoded collection limits", () => {
     const page = historyPage("sha1");
     const commit = page.commits[0];
@@ -241,25 +142,7 @@ describe("repository history JSON codec", () => {
       }),
     ).toThrow();
   });
-
-  it("rejects logical messages beyond the reassembly limit", () => {
-    expect(() =>
-      fragmentJsonMessage(
-        {
-          logicalMessageId: 1,
-          payload: new Uint8Array(64 * 1_048_576 + 1),
-          requestId,
-        },
-        1_048_576,
-      ),
-    ).toThrow("Logical message is too large");
-  });
 });
-
-function requireFragment(fragment: JsonMessageFragment | undefined) {
-  if (fragment === undefined) throw new Error("Missing fragment");
-  return fragment;
-}
 
 function historyPage(objectFormat: "sha1" | "sha256"): RepositoryHistoryPage {
   const oidLength = objectFormat === "sha1" ? 40 : 64;

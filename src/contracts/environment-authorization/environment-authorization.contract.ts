@@ -1,8 +1,4 @@
-import { EnvironmentHttpFailure } from "@rebase/contracts/environment-connection/environment-request-failure.contract";
-import {
-  type EnvironmentHttpRoute,
-  route,
-} from "@rebase/contracts/environment-connection/http/environment-http-route.contract";
+import { route } from "@rebase/contracts/environment-connection/environment-route.contract";
 import { IsoDate } from "@rebase/contracts/environment-connection/iso-date.contract";
 import { Schema } from "effect";
 
@@ -48,12 +44,6 @@ export const EnvironmentBrowserSession = Schema.Struct({
 });
 export type EnvironmentBrowserSession = typeof EnvironmentBrowserSession.Type;
 
-export const EnvironmentWebSocketTicket = Schema.Struct({
-  expiresAt: IsoDate,
-  ticket: SecretMaterial,
-});
-export type EnvironmentWebSocketTicket = typeof EnvironmentWebSocketTicket.Type;
-
 export const RevokeEnvironmentAuthorization = Schema.Struct({
   authorizationId: AuthorizationId,
 });
@@ -70,14 +60,12 @@ export type EnvironmentAuthorizationRevoked =
 export const InvalidHost = Schema.TaggedStruct("InvalidHost", {});
 export const InvalidOrigin = Schema.TaggedStruct("InvalidOrigin", {});
 export const InvalidGrant = Schema.TaggedStruct("InvalidGrant", {});
+export type InvalidGrant = typeof InvalidGrant.Type;
 export const ExpiredGrant = Schema.TaggedStruct("ExpiredGrant", {});
 export const RevokedGrant = Schema.TaggedStruct("RevokedGrant", {});
 export const InvalidPairing = Schema.TaggedStruct("InvalidPairing", {});
 export const ExpiredPairing = Schema.TaggedStruct("ExpiredPairing", {});
 export const PairingAlreadyUsed = Schema.TaggedStruct("PairingAlreadyUsed", {});
-export const InvalidTicket = Schema.TaggedStruct("InvalidTicket", {});
-export const ExpiredTicket = Schema.TaggedStruct("ExpiredTicket", {});
-export const TicketAlreadyUsed = Schema.TaggedStruct("TicketAlreadyUsed", {});
 
 export const EnvironmentAuthorizationFailure = Schema.Union([
   InvalidHost,
@@ -88,61 +76,34 @@ export const EnvironmentAuthorizationFailure = Schema.Union([
   InvalidPairing,
   ExpiredPairing,
   PairingAlreadyUsed,
-  InvalidTicket,
-  ExpiredTicket,
-  TicketAlreadyUsed,
 ]);
 export type EnvironmentAuthorizationFailure =
   typeof EnvironmentAuthorizationFailure.Type;
 
+export const InvalidMessage = Schema.TaggedStruct("InvalidMessage", {});
+export const PayloadTooLarge = Schema.TaggedStruct("PayloadTooLarge", {
+  limitBytes: Schema.Natural,
+});
+
 export const EnvironmentAccessFailure = Schema.Union([
   EnvironmentAuthorizationFailure,
-  EnvironmentHttpFailure,
+  InvalidMessage,
+  PayloadTooLarge,
 ]);
 export type EnvironmentAccessFailure = typeof EnvironmentAccessFailure.Type;
 
+export const environmentBrowserSessionPath =
+  "/api/authorization/browser-session";
 export const environmentPairingExchangePath =
   "/api/authorization/pairings/exchange";
-export const environmentPairingsPath = "/api/authorization/pairings";
-export const environmentWebSocketTicketsPath =
-  "/api/authorization/websocket-tickets";
-export const environmentAuthorizationRevocationPath =
-  "/api/authorization/revocations";
 
-export const EnvironmentAuthorizationHttpApi = {
-  createBrowserSession: route({
-    public: true,
-    method: "POST",
-    path: "/api/authorization/browser-session",
-    request: ExchangeEnvironmentPairing,
-    success: EnvironmentBrowserSession,
-  }),
-  readBrowserSession: route({
-    method: "GET",
-    path: "/api/authorization/browser-session",
-    success: EnvironmentBrowserSession,
-  }),
-  createPairing: route({
-    method: "POST",
-    path: environmentPairingsPath,
+export const EnvironmentAuthorizationApi = {
+  createPairing: route("authorization/pairings/create", {
     success: EnvironmentPairingCreated,
   }),
-  exchangePairing: route({
-    public: true,
-    method: "POST",
-    path: environmentPairingExchangePath,
-    request: ExchangeEnvironmentPairing,
-    success: EnvironmentPairingExchanged,
-  }),
-  mintWebSocketTicket: route({
-    method: "POST",
-    path: environmentWebSocketTicketsPath,
-    success: EnvironmentWebSocketTicket,
-  }),
-  revokeAuthorization: route({
-    method: "POST",
-    path: environmentAuthorizationRevocationPath,
+  revokeAuthorization: route("authorization/revoke", {
     request: RevokeEnvironmentAuthorization,
     success: EnvironmentAuthorizationRevoked,
+    failure: InvalidGrant,
   }),
-} satisfies Record<string, EnvironmentHttpRoute>;
+};

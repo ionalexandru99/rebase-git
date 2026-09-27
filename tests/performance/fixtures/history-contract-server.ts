@@ -2,15 +2,15 @@ import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
-  EnvironmentAuthorizationHttpApi,
-  RepositoryCatalogHttpApi,
+  EnvironmentPairingExchanged,
+  environmentPairingExchangePath,
 } from "@rebase/contracts";
+import { Effect, Schema } from "effect";
+import { createLocalGitCommandRunner } from "#server/adapters/local-git/git-commands";
 import {
-  createEnvironmentRequestClient,
-  exchangeEnvironmentPairingEffect,
-} from "@rebase/environment-client";
-import { Effect } from "effect";
-import { startEnvironmentServer } from "#server/app/server/start-environment-server";
+  acquireEnvironment,
+  serveEnvironment,
+} from "#server/app/server/start-environment-server";
 import { removeTemporaryDirectory } from "#tests-support/temporary-directory";
 
 const repositoryPath = process.argv[2];
@@ -23,31 +23,32 @@ try {
   await Effect.runPromise(
     Effect.scoped(
       Effect.gen(function* () {
-        const server = yield* startEnvironmentServer({ home: temporary });
-        const { credential } = yield* exchangeEnvironmentPairingEffect(
-          server.origin,
-          {
-            label: "History contract fixture",
-            pairingMaterial: new URL(server.pairingUrl).hash.slice(1),
-          },
+        const dependencies = yield* acquireEnvironment(
+          temporary,
+          createLocalGitCommandRunner(),
         );
-        const requests = createEnvironmentRequestClient(server.origin, () => ({
-          type: "bearer",
-          value: credential,
-        }));
-        const repository = yield* Effect.promise(() =>
-          requests(RepositoryCatalogHttpApi.remember, { path: repositoryPath }),
-        );
-        const { ticket } = yield* Effect.promise(() =>
-          requests(
-            EnvironmentAuthorizationHttpApi.mintWebSocketTicket,
-            undefined,
-          ),
-        );
+        const server = yield* serveEnvironment(dependencies, {});
+        const repository = yield* dependencies.catalog.remember(repositoryPath);
+        const { credential } = yield* Effect.promise(async () => {
+          const response = await fetch(
+            new URL(environmentPairingExchangePath, server.origin),
+            {
+              body: JSON.stringify({
+                label: "History contract fixture",
+                pairingMaterial: new URL(server.pairingUrl).hash.slice(1),
+              }),
+              headers: { "content-type": "application/json" },
+              method: "POST",
+            },
+          );
+          return Schema.decodeUnknownSync(EnvironmentPairingExchanged)(
+            await response.json(),
+          );
+        });
         yield* Effect.sync(() => {
           globalThis.gc?.();
           process.stdout.write(
-            `${JSON.stringify({ origin: server.origin, repositoryId: repository.id, ticket, idleRssBytes: process.memoryUsage().rss })}\n`,
+            `${JSON.stringify({ origin: server.origin, repositoryId: repository.id, credential, idleRssBytes: process.memoryUsage().rss })}\n`,
           );
         });
         yield* Effect.never;

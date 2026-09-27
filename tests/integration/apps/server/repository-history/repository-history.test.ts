@@ -3,18 +3,15 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import {
-  createCurrentEnvironmentHello,
   decodeRepositoryHistoryBatch,
   decodeRepositoryHistoryPage,
-  type EnvironmentHello,
   maximumRepositoryHistorySequence,
-  RepositoryCatalogHttpApi,
+  RepositoryCatalogApi,
   type RepositoryCommit,
   type RepositoryHistoryBatch,
   type RepositoryHistoryOperationFailure,
   type RepositoryHistorySnapshot,
 } from "@rebase/contracts";
-import { fetchEnvironmentDiscoveryEffect } from "@rebase/environment-client";
 import { Effect } from "effect";
 import { afterEach, describe, expect, it } from "vite-plus/test";
 import { createLocalGitCommandRunner } from "#server/adapters/local-git/git-commands";
@@ -29,10 +26,6 @@ import {
 } from "#tests-support/git";
 import { openTestServer } from "#tests-support/server";
 import { removeTemporaryDirectory } from "#tests-support/temporary-directory";
-import {
-  connectEnvironmentEffect,
-  type EnvironmentProtocolConnection,
-} from "#web/app/environment/connection/environment-protocol-client";
 import { createRepositoryHistoryRpc } from "#web/features/repository-history/transport/repository-history-rpc";
 
 const directories = new Set<string>();
@@ -137,7 +130,7 @@ describe("repository history", () => {
     await git(linkedPath, "commit", "--allow-empty", "-m", "detached linked");
     const detached = await git(linkedPath, "rev-parse", "HEAD");
     const repository = await server.requests(server.owner)(
-      RepositoryCatalogHttpApi.remember,
+      RepositoryCatalogApi.remember,
       { path: repositoryPath },
     );
     const stashRoots = (
@@ -163,26 +156,18 @@ describe("repository history", () => {
     ).toBe(true);
   });
 
-  it.each([
-    { objectFormat: "sha1", smallFrames: false },
-    { objectFormat: "sha256", smallFrames: false },
-    { objectFormat: "sha1", smallFrames: true },
-    { objectFormat: "sha256", smallFrames: true },
-  ] as const)(
-    "delivers the first 100 $objectFormat commits with small frames: $smallFrames",
-    async ({ objectFormat, smallFrames }) => {
+  it.each(["sha1", "sha256"] as const)(
+    "delivers the first 100 %s commits",
+    async (objectFormat) => {
       const server = await openTestServer();
       const repositoryPath = join(server.home, objectFormat);
       await importLinearHistory(repositoryPath, objectFormat, 110);
       const repository = await server.requests(server.owner)(
-        RepositoryCatalogHttpApi.remember,
+        RepositoryCatalogApi.remember,
         { path: repositoryPath },
       );
       const head = await git(repositoryPath, "rev-parse", "main");
-      const hello = smallFrames
-        ? smallFrameHello()
-        : createCurrentEnvironmentHello("0.0.0");
-      const page = await readHistoryPage(server, repository.id, head, hello);
+      const page = await readHistoryPage(server, repository.id, head);
       expect(page.objectFormat).toBe(objectFormat);
       expect(page.commits).toHaveLength(100);
       expect(page.commits[0]?.subject).toBe("commit 109");
@@ -200,7 +185,7 @@ describe("repository history", () => {
     const repositoryPath = join(server.home, "merges");
     await createMergeRepository(repositoryPath);
     const repository = await server.requests(server.owner)(
-      RepositoryCatalogHttpApi.remember,
+      RepositoryCatalogApi.remember,
       { path: repositoryPath },
     );
     const head = await git(repositoryPath, "rev-parse", "main");
@@ -236,7 +221,7 @@ describe("repository history", () => {
       "--depth=2",
     );
     const repository = await server.requests(server.owner)(
-      RepositoryCatalogHttpApi.remember,
+      RepositoryCatalogApi.remember,
       { path: repositoryPath },
     );
     const head = await git(repositoryPath, "rev-parse", "main");
@@ -708,14 +693,14 @@ async function commitFile(
   await git(path, "commit", "-m", subject);
 }
 
-function readHistoryPage(
+async function readHistoryPage(
   server: HistoryServer,
   repositoryId: string,
   oid: string,
-  hello = smallFrameHello(),
 ) {
-  return withHistoryConnection(server, hello, (connection) =>
-    createRepositoryHistoryRpc(connection)
+  const { rpc } = await server.connect(server.owner);
+  return Effect.runPromise(
+    createRepositoryHistoryRpc(rpc)
       .read({
         repositoryId,
         order: "topological",
@@ -728,8 +713,9 @@ function readHistoryPage(
 
 async function synchronizeHistory(server: HistoryServer, repositoryId: string) {
   const commits: RepositoryCommit[] = [];
-  await withHistoryConnection(server, smallFrameHello(), (connection) =>
-    createRepositoryHistoryRpc(connection).synchronize(
+  const { rpc } = await server.connect(server.owner);
+  await Effect.runPromise(
+    createRepositoryHistoryRpc(rpc).synchronize(
       { repositoryId, priority: "visible" },
       (bytes) =>
         Effect.sync(() => {
@@ -740,38 +726,6 @@ async function synchronizeHistory(server: HistoryServer, repositoryId: string) {
   return commits;
 }
 
-function withHistoryConnection<A, E>(
-  server: HistoryServer,
-  hello: EnvironmentHello,
-  use: (connection: EnvironmentProtocolConnection) => Effect.Effect<A, E>,
-) {
-  return Effect.runPromise(
-    Effect.scoped(
-      Effect.gen(function* () {
-        const discovery = yield* fetchEnvironmentDiscoveryEffect(server.origin);
-        const connection = yield* connectEnvironmentEffect(
-          server.origin,
-          discovery,
-          hello,
-          server.owner,
-        );
-        return yield* use(connection);
-      }),
-    ),
-  );
-}
-
-function smallFrameHello(): EnvironmentHello {
-  return {
-    ...createCurrentEnvironmentHello("0.0.0"),
-    receiveLimits: {
-      maxCapturedOutputBytes: 1_048_576,
-      maxHttpResponseBytes: 1_048_576,
-      maxWebSocketResponseBytes: 1_024,
-    },
-  };
-}
-
 async function createTemporaryDirectory() {
   const directory = await realpath(
     await mkdtemp(join(tmpdir(), "rebase history ")),
@@ -780,7 +734,4 @@ async function createTemporaryDirectory() {
   return directory;
 }
 
-interface HistoryServer {
-  readonly origin: string;
-  readonly owner: { readonly type: "bearer"; readonly value: string };
-}
+type HistoryServer = Awaited<ReturnType<typeof openTestServer>>;

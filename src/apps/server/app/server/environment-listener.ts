@@ -1,22 +1,13 @@
 import { createServer, type Server } from "node:http";
-import { EnvironmentHttpApi } from "@rebase/contracts";
 import { Data, Effect, FiberSet } from "effect";
-import type { EnvironmentFeatures } from "#server/adapters/environment-transport/combine-environment-features";
 import type { EnvironmentEventPublisher } from "#server/adapters/environment-transport/environment-event-publisher";
-import { formatHostAddress } from "#server/adapters/environment-transport/environment-request-authorization";
-import {
-  createEnvironmentTransportDiscovery,
-  type EnvironmentTransportState,
-} from "#server/adapters/environment-transport/environment-transport-discovery";
 import {
   createEnvironmentHttpHandler,
   type RunEnvironmentEffect,
-} from "#server/adapters/environment-transport/http/environment-http-handler";
-import {
-  type EnvironmentHttpRouteHandler,
-  route,
-} from "#server/adapters/environment-transport/http/environment-http-route-handler";
-import { attachEnvironmentWebSocketServer } from "#server/adapters/environment-transport/websocket/environment-websocket-server";
+} from "#server/adapters/environment-transport/environment-http-handler";
+import { formatHostAddress } from "#server/adapters/environment-transport/environment-request-authorization";
+import type { EnvironmentFeatures } from "#server/adapters/environment-transport/environment-routes";
+import { attachEnvironmentSocket } from "#server/adapters/environment-transport/environment-socket";
 import { errorMessage, isFileSystemError } from "#server/error-inspection";
 import type { EnvironmentAuthorization } from "#server/features/environment-authorization/environment-authorization";
 
@@ -43,7 +34,6 @@ interface EnvironmentListenerOptions {
   readonly features: EnvironmentFeatures;
   readonly host?: string;
   readonly port?: number;
-  readonly productVersion: string;
 }
 
 const loopbackHost = "127.0.0.1";
@@ -54,22 +44,6 @@ export function acquireEnvironmentListener(
   return Effect.gen(function* () {
     const host = options.host ?? loopbackHost;
     const port = options.port ?? 0;
-    const state: EnvironmentTransportState = {
-      discovery: createEnvironmentTransportDiscovery(
-        options.environmentId,
-        options.productVersion,
-        options.features.capabilities,
-      ),
-      events: options.events,
-    };
-    const routes = [
-      ...environmentTransportHttpRoutes(state),
-      ...options.features.httpRoutes,
-    ];
-    yield* Effect.try({
-      try: () => validateEnvironmentHttpRoutes(routes),
-      catch: (cause) => environmentServerError(cause, host, port),
-    });
     const readiness = { value: false };
     const runFork = yield* FiberSet.makeRuntime<never, void, never>();
     const runEnvironmentEffect: RunEnvironmentEffect = (effect, signal) => {
@@ -79,7 +53,6 @@ export function acquireEnvironmentListener(
       createHttpServer(
         readiness,
         options.authorization,
-        routes,
         host,
         port,
         runEnvironmentEffect,
@@ -91,13 +64,7 @@ export function acquireEnvironmentListener(
     yield* Effect.acquireRelease(
       Effect.try({
         try: () =>
-          attachEnvironmentWebSocketServer(
-            server,
-            state,
-            options.authorization,
-            options.features,
-            runEnvironmentEffect,
-          ),
+          attachEnvironmentSocket(server, options, runEnvironmentEffect),
         catch: (cause) => environmentServerError(cause, host, port),
       }),
       (webSockets) => Effect.promise(webSockets.close).pipe(Effect.orDie),
@@ -115,35 +82,9 @@ export function acquireEnvironmentListener(
   });
 }
 
-function environmentTransportHttpRoutes(state: EnvironmentTransportState) {
-  return [
-    route(EnvironmentHttpApi.discovery, () => Effect.succeed(state.discovery)),
-    route(EnvironmentHttpApi.snapshot, () =>
-      Effect.sync(() => ({
-        environmentId: state.discovery.environmentId,
-        sequence: state.events.currentSequence(),
-      })),
-    ),
-  ];
-}
-
-function validateEnvironmentHttpRoutes(
-  routes: readonly EnvironmentHttpRouteHandler[],
-) {
-  const registered = new Set<string>();
-  for (const { route } of routes) {
-    const name = `${route.method} ${route.path}`;
-    if (registered.has(name)) {
-      throw new Error(`Duplicate HTTP route: ${name}`);
-    }
-    registered.add(name);
-  }
-}
-
 function createHttpServer(
   readiness: { value: boolean },
   authorization: EnvironmentListenerOptions["authorization"],
-  routes: readonly EnvironmentHttpRouteHandler[],
   host: string,
   port: number,
   runEnvironmentEffect: RunEnvironmentEffect,
@@ -155,7 +96,6 @@ function createHttpServer(
         { maxHeaderSize: 16_384 },
         createEnvironmentHttpHandler(
           authorization,
-          routes,
           () => readiness.value,
           runEnvironmentEffect,
           browserAssetsRoot,

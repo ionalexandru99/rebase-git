@@ -1,6 +1,6 @@
 import {
+  environmentMaxMessageBytes,
   type LocalBranch,
-  maximumJsonMessageBytes,
   type RepositoryRefs,
   type RepositoryWorktree,
 } from "@rebase/contracts";
@@ -238,7 +238,7 @@ function providerForAddress(address: string): Provider {
 const responseSizeMargin = 512;
 
 export function fitRepositoryRefs(refs: RepositoryRefs): RepositoryRefs {
-  const budget = maximumJsonMessageBytes - responseSizeMargin;
+  const budget = environmentMaxMessageBytes - responseSizeMargin;
   const emptied: RepositoryRefs = {
     ...refs,
     branches: [],

@@ -1,11 +1,11 @@
-import { EnvironmentRequestId } from "@rebase/contracts/environment-connection/negotiation/environment-protocol.contract";
-import { AuthorizationDenied } from "@rebase/contracts/environment-connection/rpc/environment-rpc-failure.contract";
 import {
   ObjectId,
   RepositoryId,
 } from "@rebase/contracts/git/git-values.contract";
 import { maximumRepositoryHistorySequence } from "@rebase/contracts/repository-history/repository-history-limits.contract";
 import { Schema } from "effect";
+
+export const EnvironmentRequestId = Schema.String.check(Schema.isUUID(4));
 
 const RepositoryMissing = Schema.TaggedStruct("RepositoryMissing", {
   repositoryId: RepositoryId,
@@ -96,16 +96,7 @@ export const SynchronizeRepositoryHistory = Schema.TaggedStruct(
 export type SynchronizeRepositoryHistory =
   typeof SynchronizeRepositoryHistory.Type;
 
-export const AcknowledgeRepositoryHistoryBatch = Schema.TaggedStruct(
-  "AcknowledgeRepositoryHistoryBatch",
-  {
-    requestId: EnvironmentRequestId,
-    sequence: RepositoryHistorySequence,
-  },
-);
-
 export const RepositoryHistoryOperationFailure = Schema.Union([
-  AuthorizationDenied,
   RepositoryMissing,
   Schema.TaggedStruct("SnapshotInvalidated", {}),
   GitFailed,

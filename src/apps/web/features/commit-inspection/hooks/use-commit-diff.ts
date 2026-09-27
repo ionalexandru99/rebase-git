@@ -1,6 +1,6 @@
 import {
   type CommitInspection,
-  CommitInspectionHttpApi,
+  CommitInspectionApi,
   type InspectCommitDiff,
 } from "@rebase/contracts";
 import { skipToken } from "@tanstack/react-query";
@@ -14,7 +14,7 @@ export function useCommitDiff(
   enabled: boolean,
 ) {
   return useEnvironmentQuery(
-    CommitInspectionHttpApi.inspectDiff,
+    CommitInspectionApi.inspectDiff,
     details === undefined || path === null
       ? skipToken
       : commitDiffInput(scope, details, path),

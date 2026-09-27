@@ -1,5 +1,9 @@
-import type { RouteFailure, RouteInput, RouteSuccess } from "@rebase/contracts";
-import type { RequestableEnvironmentHttpRoute } from "@rebase/environment-client";
+import type {
+  EnvironmentRoute,
+  RouteFailure,
+  RouteInput,
+  RouteSuccess,
+} from "@rebase/contracts";
 import {
   hashKey,
   keepPreviousData,
@@ -17,12 +21,14 @@ import {
   requestFailure,
 } from "#web/platform/query/request-failure";
 
-export type QueryFailure<Route extends RequestableEnvironmentHttpRoute> =
-  RequestFailure<RouteFailure<Route>>;
+export type QueryFailure<Route extends EnvironmentRoute> = RequestFailure<
+  RouteFailure<Route>
+>;
 
 export interface EnvironmentQueryOptions<Data> {
   readonly enabled?: boolean;
   readonly changes: EnvironmentChangeScope;
+  readonly persist?: boolean;
   readonly version?: string;
   readonly staleTime?: number;
   readonly gcTime?: number;
@@ -33,9 +39,7 @@ export interface EnvironmentQueryOptions<Data> {
   readonly keepPrevious?: boolean;
 }
 
-export function environmentQueryKey<
-  Route extends RequestableEnvironmentHttpRoute,
->(
+export function environmentQueryKey<Route extends EnvironmentRoute>(
   environmentId: string | undefined,
   repositoryId: string | null,
   route: Route,
@@ -46,20 +50,19 @@ export function environmentQueryKey<
     "environment",
     environmentId ?? null,
     repositoryId,
-    route.path,
+    route._tag,
     input,
     ...(version === undefined ? [] : [version]),
   ] as const;
 }
 
-export function useEnvironmentQuery<
-  Route extends RequestableEnvironmentHttpRoute,
->(
+export function useEnvironmentQuery<Route extends EnvironmentRoute>(
   route: Route,
   input: RouteInput<Route> | SkipToken,
   {
     enabled = true,
     changes,
+    persist = false,
     version,
     keepPrevious = false,
     ...queryOptions
@@ -89,7 +92,7 @@ export function useEnvironmentQuery<
             }
           },
     enabled: active,
-    meta: { changes, repositoryId },
+    meta: { changes, repositoryId, persist },
     ...(keepPrevious ? { placeholderData: keepPreviousData } : {}),
   });
   useCancelWhileInactive(useQueryClient(), hashKey(queryKey), active);

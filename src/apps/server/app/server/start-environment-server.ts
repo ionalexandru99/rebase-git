@@ -1,8 +1,8 @@
 import { join } from "node:path";
 import { and, eq, isNull } from "drizzle-orm";
 import { Effect, type Scope } from "effect";
-import { combineEnvironmentFeatures } from "#server/adapters/environment-transport/combine-environment-features";
 import { createEnvironmentEventPublisher } from "#server/adapters/environment-transport/environment-event-publisher";
+import { combineEnvironmentFeatures } from "#server/adapters/environment-transport/environment-routes";
 import {
   createLocalGitCommandRunner,
   type GitCommandRunner,
@@ -44,7 +44,6 @@ import {
 import { environmentTable } from "#server/persistence/environment-state.schema";
 import type { EnvironmentStorageError } from "#server/persistence/sqlite/storage-operation";
 import { environmentPaths } from "#server/persistence/storage/environment-paths";
-import { productVersion } from "#server/product-version";
 import { createRepositoryAccess } from "#server/repository/repository-access";
 import { createRepositoryCoordination } from "#server/repository/repository-coordination";
 
@@ -103,7 +102,6 @@ export function serveEnvironment(
       features: yield* environmentFeatures(dependencies),
       ...(options.host === undefined ? {} : { host: options.host }),
       port: useAutomaticPort ? (environment.automaticPort ?? 0) : options.port,
-      productVersion,
     });
 
     if (useAutomaticPort && environment.automaticPort === null) {

@@ -2,7 +2,7 @@ import type {
   PushBranch,
   PushDestination,
   PushRejected,
-  RepositoryPushHttpApi,
+  RepositoryPushApi,
   RepositoryRefs,
 } from "@rebase/contracts";
 import { describeFailure } from "#web/platform/query/request-failure";
@@ -11,7 +11,7 @@ import type {
   CommandInput,
 } from "#web/platform/query/use-command";
 
-export type PushRequest = CommandInput<typeof RepositoryPushHttpApi.push>;
+export type PushRequest = CommandInput<typeof RepositoryPushApi.push>;
 
 export interface ForcePushReview {
   readonly branch: string;
@@ -128,7 +128,7 @@ export function describeProgress({ destination, mode }: PushBranch) {
 }
 
 export function describePushFailure(
-  failure: CommandFailure<typeof RepositoryPushHttpApi.push>,
+  failure: CommandFailure<typeof RepositoryPushApi.push>,
   destination: PushDestination,
 ) {
   return describeFailure(failure, {

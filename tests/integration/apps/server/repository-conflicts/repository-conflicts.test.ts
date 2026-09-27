@@ -1,6 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
-import { RepositoryConflictsHttpApi } from "@rebase/contracts";
+import { RepositoryConflictsApi } from "@rebase/contracts";
 import { Effect } from "effect";
 import { describe, expect, it } from "vite-plus/test";
 import { createConflictedRebase } from "#tests-support/conflicted-repository";
@@ -17,7 +17,7 @@ async function fixture(
   const environment = await openTestEnvironment();
   const directory = await create(environment.home);
   const repositoryId = (await environment.remember(directory)).id;
-  const service = environment.routes(RepositoryConflictsHttpApi);
+  const service = environment.routes(RepositoryConflictsApi);
   const scope = { repositoryId, worktreePath: directory };
   const list = () => Effect.runPromise(service.list(scope));
   const file = async (path: string) => {

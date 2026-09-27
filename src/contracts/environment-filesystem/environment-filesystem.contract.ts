@@ -1,7 +1,4 @@
-import {
-  type EnvironmentHttpRoute,
-  route,
-} from "@rebase/contracts/environment-connection/http/environment-http-route.contract";
+import { route } from "@rebase/contracts/environment-connection/environment-route.contract";
 import { IsoDate } from "@rebase/contracts/environment-connection/iso-date.contract";
 import { Schema } from "effect";
 
@@ -67,14 +64,10 @@ export const EnvironmentDirectoryRejected = Schema.TaggedStruct(
 export type EnvironmentDirectoryRejected =
   typeof EnvironmentDirectoryRejected.Type;
 
-export const environmentDirectoryPath = "/api/filesystem/directory";
-
-export const EnvironmentFilesystemHttpApi = {
-  listDirectory: route({
-    method: "POST",
-    path: environmentDirectoryPath,
+export const EnvironmentFilesystemApi = {
+  listDirectory: route("filesystem/directory", {
     request: ListEnvironmentDirectory,
     success: EnvironmentDirectory,
     failure: EnvironmentDirectoryRejected,
   }),
-} satisfies Record<string, EnvironmentHttpRoute>;
+};

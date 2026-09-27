@@ -2,7 +2,7 @@ import { mkdir, mkdtemp, rename, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
-  RepositoryCatalogHttpApi,
+  RepositoryCatalogApi,
   type RepositoryFreshness,
 } from "@rebase/contracts";
 import { Deferred, Effect } from "effect";
@@ -16,7 +16,6 @@ import { cloneRepository, fastImport, git } from "#tests-support/git";
 import { waitForObservation } from "#tests-support/observation";
 import { openTestEnvironment, openTestServer } from "#tests-support/server";
 import { removeTemporaryDirectory } from "#tests-support/temporary-directory";
-import { connectCurrentEnvironmentEffect } from "#web/app/environment/connection/environment-protocol-client";
 import { createRepositoryHistoryRpc } from "#web/features/repository-history/transport/repository-history-rpc";
 
 const committer = "committer Rebase test <rebase@example.test> 0 +0000\n";
@@ -212,17 +211,13 @@ describe("repository freshness with real Git", () => {
     const fixture = await createFixture();
     const server = await openTestServer();
     const { id: repositoryId } = await server.requests(server.owner)(
-      RepositoryCatalogHttpApi.remember,
+      RepositoryCatalogApi.remember,
       { path: fixture.local },
     );
+    const connection = await server.connect(server.owner);
     await Effect.runPromise(
       Effect.gen(function* () {
-        const connection = yield* connectCurrentEnvironmentEffect(
-          server.origin,
-          "0.0.0",
-          { credential: server.owner },
-        );
-        const transport = createRepositoryHistoryRpc(connection).freshness;
+        const transport = createRepositoryHistoryRpc(connection.rpc).freshness;
         if (transport === undefined)
           throw new Error("Missing freshness transport");
         const observing = yield* Deferred.make<void>();

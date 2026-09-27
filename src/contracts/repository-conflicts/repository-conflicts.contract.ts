@@ -1,8 +1,7 @@
 import {
-  type EnvironmentHttpRoute,
   repositoryCommand,
   repositoryQuery,
-} from "@rebase/contracts/environment-connection/http/environment-http-route.contract";
+} from "@rebase/contracts/environment-connection/environment-route.contract";
 import {
   RepositoryId,
   RepositoryPath,
@@ -143,30 +142,30 @@ export const ConflictFailure = Schema.TaggedStruct("ConflictFailed", {
 });
 export type ConflictFailure = typeof ConflictFailure.Type;
 
-export const RepositoryConflictsHttpApi = {
-  list: repositoryQuery("/api/repositories/conflicts/list", {
+export const RepositoryConflictsApi = {
+  list: repositoryQuery("repositories/conflicts/list", {
     request: ConflictScope,
     success: ConflictList,
     failure: ConflictFailure,
   }),
-  document: repositoryQuery("/api/repositories/conflicts/document", {
+  document: repositoryQuery("repositories/conflicts/document", {
     request: ConflictPath,
     success: ConflictDocument,
     failure: ConflictFailure,
   }),
-  write: repositoryCommand("/api/repositories/conflicts/write", {
+  write: repositoryCommand("repositories/conflicts/write", {
     request: WriteConflict,
     success: ConflictDocument,
     failure: ConflictFailure,
   }),
-  choose: repositoryCommand("/api/repositories/conflicts/choose", {
+  choose: repositoryCommand("repositories/conflicts/choose", {
     request: ChooseConflict,
     success: ConflictList,
     failure: ConflictFailure,
   }),
-  stage: repositoryCommand("/api/repositories/conflicts/stage", {
+  stage: repositoryCommand("repositories/conflicts/stage", {
     request: StageConflict,
     success: ConflictList,
     failure: ConflictFailure,
   }),
-} satisfies Record<string, EnvironmentHttpRoute>;
+};

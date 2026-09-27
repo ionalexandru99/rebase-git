@@ -23,7 +23,6 @@
   "dependencies": {
     "@rebase/contracts": "workspace:*",
     "@rebase/server": "workspace:*",
-    "@rebase/environment-client": "workspace:*",
     "effect": "catalog:",
     "electron-updater": "6.8.9"
   },

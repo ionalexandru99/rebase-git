@@ -5,7 +5,7 @@ import { existsSync, readFileSync, realpathSync } from "node:fs";
 import { homedir, release } from "node:os";
 
 import { fileURLToPath } from "node:url";
-import { currentEnvironmentProtocol } from "@rebase/contracts";
+import { environmentProtocol } from "@rebase/contracts";
 import { Deferred, Effect } from "effect";
 import { resolveHostAddress } from "#server/app/server/host-address";
 import {
@@ -150,10 +150,9 @@ function resolveBrowserAssetsRoot() {
 }
 
 function versionOutput() {
-  const protocol = currentEnvironmentProtocol;
   return [
     `Rebase ${productVersion}`,
-    `Environment protocol ${protocol.major}.${protocol.minor} (minimum ${protocol.major}.${protocol.minimumSupportedMinor})`,
+    `Environment protocol ${environmentProtocol}`,
   ].join("\n");
 }
 

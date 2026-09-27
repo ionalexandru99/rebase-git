@@ -1,8 +1,9 @@
-import type { RouteFailure, RouteInput, RouteSuccess } from "@rebase/contracts";
 import type {
-  EnvironmentRequestClient,
-  RequestableEnvironmentHttpRoute,
-} from "@rebase/environment-client";
+  EnvironmentRoute,
+  RouteFailure,
+  RouteInput,
+  RouteSuccess,
+} from "@rebase/contracts";
 import {
   hashKey,
   type Query,
@@ -12,7 +13,10 @@ import {
   useQueryClient,
 } from "@tanstack/react-query";
 import { type RefObject, useCallback, useRef } from "react";
-import { useEnvironment } from "#web/platform/query/environment-context";
+import {
+  type EnvironmentRequests,
+  useEnvironment,
+} from "#web/platform/query/environment-context";
 import { invalidatedByChange } from "#web/platform/query/environment-invalidation";
 import {
   environmentQueryKey,
@@ -29,30 +33,31 @@ export interface CommandTarget {
   readonly worktreePath: string;
 }
 
-export type CommandFailure<Route extends RequestableEnvironmentHttpRoute> =
-  RequestFailure<RouteFailure<Route>>;
+export type CommandFailure<Route extends EnvironmentRoute> = RequestFailure<
+  RouteFailure<Route>
+>;
 
-export type CommandResult<Route extends RequestableEnvironmentHttpRoute> =
+export type CommandResult<Route extends EnvironmentRoute> =
   | { readonly _tag: "Ok"; readonly value: RouteSuccess<Route> }
   | CommandFailure<Route>;
 
-export type CommandInput<Route extends RequestableEnvironmentHttpRoute> =
+export type CommandInput<Route extends EnvironmentRoute> =
   RouteInput<Route> extends CommandTarget
     ? Omit<RouteInput<Route>, keyof CommandTarget>
     : RouteInput<Route>;
 
 export interface CommandAnswer {
-  readonly route: RequestableEnvironmentHttpRoute;
+  readonly route: EnvironmentRoute;
   readonly input: unknown;
   readonly value: unknown;
   readonly version?: string;
 }
 
-type AnswerValue<Read extends RequestableEnvironmentHttpRoute> =
+type AnswerValue<Read extends EnvironmentRoute> =
   | RouteSuccess<Read>
   | ((current: RouteSuccess<Read> | undefined) => RouteSuccess<Read>);
 
-export interface CommandOptions<Route extends RequestableEnvironmentHttpRoute> {
+export interface CommandOptions<Route extends EnvironmentRoute> {
   readonly target?: CommandTarget | undefined;
   readonly before?: () => Promise<boolean>;
   readonly answers?: (
@@ -61,20 +66,20 @@ export interface CommandOptions<Route extends RequestableEnvironmentHttpRoute> {
   ) => readonly CommandAnswer[];
 }
 
-export interface CommandRun<Route extends RequestableEnvironmentHttpRoute> {
+export interface CommandRun<Route extends EnvironmentRoute> {
   readonly input: RouteInput<Route>;
   readonly value: RouteSuccess<Route>;
   readonly submittedAt: number;
 }
 
-export interface CommandState<Route extends RequestableEnvironmentHttpRoute> {
+export interface CommandState<Route extends EnvironmentRoute> {
   readonly pending: boolean;
   readonly result: CommandResult<Route> | undefined;
   readonly input: RouteInput<Route> | undefined;
   readonly submittedAt: number;
 }
 
-export function answer<Read extends RequestableEnvironmentHttpRoute>(
+export function answer<Read extends EnvironmentRoute>(
   route: Read,
   input: RouteInput<Read>,
   value: AnswerValue<Read>,
@@ -83,7 +88,7 @@ export function answer<Read extends RequestableEnvironmentHttpRoute>(
   return { route, input, value, ...(version === undefined ? {} : { version }) };
 }
 
-export function useCommand<Route extends RequestableEnvironmentHttpRoute>(
+export function useCommand<Route extends EnvironmentRoute>(
   route: Route,
   { target: explicitTarget, before, answers }: CommandOptions<Route> = {},
 ) {
@@ -120,7 +125,7 @@ export function useCommand<Route extends RequestableEnvironmentHttpRoute>(
   const run = useCallback(
     (input: CommandInput<Route>) => {
       if (scoped && target === undefined)
-        throw new Error(`${route.path} needs a repository target.`);
+        throw new Error(`${route._tag} needs a repository target.`);
       return mutateAsync(
         (target === undefined
           ? input
@@ -131,7 +136,7 @@ export function useCommand<Route extends RequestableEnvironmentHttpRoute>(
             }) as RouteInput<Route>,
       );
     },
-    [mutateAsync, route.path, scoped, target],
+    [mutateAsync, route._tag, scoped, target],
   );
   const cancel = useCallback(() => running.current?.abort(), []);
   const result = mutation.data;
@@ -152,25 +157,25 @@ export function useCommand<Route extends RequestableEnvironmentHttpRoute>(
   };
 }
 
-export type Command<Route extends RequestableEnvironmentHttpRoute> = ReturnType<
+export type Command<Route extends EnvironmentRoute> = ReturnType<
   typeof useCommand<Route>
 >;
 
 function commandKey(
-  route: RequestableEnvironmentHttpRoute,
+  route: EnvironmentRoute,
   target: CommandTarget | undefined,
 ) {
   return [
     "command",
-    route.path,
+    route._tag,
     ...(target === undefined ? [] : [target.repositoryId, target.worktreePath]),
   ];
 }
 
-function targetsRepository(route: RequestableEnvironmentHttpRoute) {
-  const request = route.request as { readonly fields?: object } | undefined;
+function targetsRepository(route: EnvironmentRoute) {
+  const request = route.payloadSchema as { readonly fields?: object };
   return (
-    request?.fields !== undefined &&
+    request.fields !== undefined &&
     "repositoryId" in request.fields &&
     "worktreePath" in request.fields
   );
@@ -185,8 +190,8 @@ async function prepare(
   return ready ? undefined : { _tag: "Cancelled" };
 }
 
-async function request<Route extends RequestableEnvironmentHttpRoute>(
-  requests: EnvironmentRequestClient,
+async function request<Route extends EnvironmentRoute>(
+  requests: EnvironmentRequests,
   route: Route,
   input: RouteInput<Route>,
   running: RefObject<AbortController | undefined>,
@@ -207,7 +212,7 @@ async function request<Route extends RequestableEnvironmentHttpRoute>(
   }
 }
 
-async function settle<Route extends RequestableEnvironmentHttpRoute>(
+async function settle<Route extends EnvironmentRoute>(
   queryClient: QueryClient,
   environmentId: string | undefined,
   input: RouteInput<Route>,
@@ -220,7 +225,7 @@ async function settle<Route extends RequestableEnvironmentHttpRoute>(
     readonly answers: CommandOptions<Route>["answers"];
   },
 ) {
-  if (result._tag === "Cancelled" || result._tag === "AccessDenied") return;
+  if (result._tag === "Cancelled") return;
   const answered =
     result._tag === "Ok" && answers !== undefined
       ? await writeAnswers(
@@ -275,7 +280,7 @@ function readsFrom(query: Query, repositoryId: string | null) {
     : invalidatedByChange(query.meta, [repositoryId]);
 }
 
-function lastOk<Route extends RequestableEnvironmentHttpRoute>(
+function lastOk<Route extends EnvironmentRoute>(
   runs: readonly CommandState<Route>[],
 ): CommandRun<Route> | undefined {
   const last = runs.findLast(({ result }) => result?._tag === "Ok");

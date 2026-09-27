@@ -1,30 +1,14 @@
 import {
-  type EnvironmentRpcClient,
   type RepositoryRefs,
-  type RepositoryRefsFailed,
-  RepositoryRefsHttpApi,
+  RepositoryRefsApi,
   type RepositoryRefTarget,
 } from "@rebase/contracts";
-import {
-  type QueryClient,
-  useQuery,
-  useQueryClient,
-} from "@tanstack/react-query";
+import { type Query, type QueryClient, skipToken } from "@tanstack/react-query";
 import { useCallback, useEffect, useRef } from "react";
 import type { RepositoryHistoryObservation } from "#web/features/repository-history/repository-history-reader";
-import { hasEnvironmentCapability } from "#web/platform/environment/environment-capabilities";
-import { readRepositoryRefs } from "#web/platform/environment/rpc/read-repository-refs";
-import {
-  type Environment,
-  useEnvironment,
-} from "#web/platform/query/environment-context";
-import { hasLiveData } from "#web/platform/query/live-query-data";
+import { useEnvironmentQuery } from "#web/platform/query/environment-query";
 import { useRepositoryScope } from "#web/platform/query/repository-scope";
-import {
-  describeFailure,
-  type RequestFailure,
-  requestFailure,
-} from "#web/platform/query/request-failure";
+import { describeFailure } from "#web/platform/query/request-failure";
 import { useCommand } from "#web/platform/query/use-command";
 
 export interface RepositoryRefsRead {
@@ -46,49 +30,19 @@ export interface RefActivation {
   readonly error: string | null;
 }
 
-const repositoryRefsRoot = "repository-refs";
-
 export function useRepositoryRefs(
   repositoryId: string | undefined,
-  logicalRepositoryId: string | undefined,
 ): RepositoryRefsRead {
-  const environment = useEnvironment();
-  const { environmentId, rpc } = environment;
-  const refsRpc = servesRefs(environment) ? rpc : undefined;
-  const queryClient = useQueryClient();
-  const queryKey = repositoryRefsKey(environmentId, logicalRepositoryId);
-  const query = useQuery<
-    RepositoryRefs,
-    RequestFailure<RepositoryRefsFailed["failure"]>,
-    RepositoryRefs,
-    ReturnType<typeof repositoryRefsKey>
-  >({
-    queryKey,
-    queryFn: ({ signal }) => readRefs(refsRpc, repositoryId, signal),
-    enabled:
-      rpc !== undefined &&
-      environmentId !== undefined &&
-      repositoryId !== undefined &&
-      logicalRepositoryId !== undefined,
-    meta: {
-      changes: "refs",
-      repositoryId: repositoryId ?? null,
-      persist: true,
-    },
-    gcTime: Number.POSITIVE_INFINITY,
-    select: useCallback(
-      (refs: RepositoryRefs) =>
-        repositoryId === undefined || refs.repositoryId === repositoryId
-          ? refs
-          : { ...refs, repositoryId },
-      [repositoryId],
-    ),
-  });
+  const query = useEnvironmentQuery(
+    RepositoryRefsApi.read,
+    repositoryId === undefined ? skipToken : { repositoryId },
+    { changes: "refs", persist: true, gcTime: Number.POSITIVE_INFINITY },
+  );
   const { refetch } = query;
   const retry = useCallback(() => void refetch(), [refetch]);
   return {
     refs: query.data,
-    restored: query.dataUpdatedAt > 0 && !hasLiveData(queryClient, queryKey),
+    restored: query.data !== undefined && query.dataUpdatedAt === 0,
     loading:
       query.data === undefined && !query.isError && repositoryId !== undefined,
     error: query.isError ? describeFailure(query.error) : null,
@@ -98,7 +52,7 @@ export function useRepositoryRefs(
 
 export function useScopedRepositoryRefs() {
   const scope = useRepositoryScope();
-  return useRepositoryRefs(scope?.repositoryId, scope?.logicalRepositoryId);
+  return useRepositoryRefs(scope?.repositoryId);
 }
 
 export function useHistoryRefRefresh(
@@ -127,11 +81,25 @@ export function forgetRepositoryRefs(
   environmentId: string,
   logicalRepositoryId: string,
 ) {
-  forget(queryClient, repositoryRefsKey(environmentId, logicalRepositoryId));
+  forget(
+    queryClient,
+    (query) =>
+      query.queryKey[1] === environmentId &&
+      (query.queryKey[2] === logicalRepositoryId ||
+        (query.state.data as RepositoryRefs | undefined)
+          ?.logicalRepositoryId === logicalRepositoryId),
+  );
 }
 
 export function forgetAllRepositoryRefs(queryClient: QueryClient) {
-  forget(queryClient, [repositoryRefsRoot]);
+  forget(queryClient, () => true);
+}
+
+function forget(queryClient: QueryClient, matches: (query: Query) => boolean) {
+  const predicate = (query: Query) =>
+    query.queryKey[3] === RepositoryRefsApi.read._tag && matches(query);
+  queryClient.removeQueries({ predicate, type: "inactive" });
+  void queryClient.resetQueries({ predicate });
 }
 
 export function useRefActivation({
@@ -139,7 +107,7 @@ export function useRefActivation({
   restored,
 }: RepositoryRefsRead): RefActivation {
   const scope = useRepositoryScope();
-  const checkout = useCommand(RepositoryRefsHttpApi.checkout);
+  const checkout = useCommand(RepositoryRefsApi.checkout);
   const { run } = checkout;
   const checkingOut = useRef(false);
   const select = useCallback(
@@ -228,40 +196,5 @@ export function resolveActiveWorktreePath(
     refs.worktrees.find((worktree) => worktree.main)?.path ??
     refs.worktrees[0]?.path ??
     preferredPath
-  );
-}
-
-function repositoryRefsKey(
-  environmentId: string | undefined,
-  logicalRepositoryId: string | undefined,
-) {
-  return [
-    repositoryRefsRoot,
-    environmentId ?? null,
-    logicalRepositoryId ?? null,
-  ] as const;
-}
-
-function forget(queryClient: QueryClient, queryKey: readonly unknown[]) {
-  queryClient.removeQueries({ queryKey, type: "inactive" });
-  void queryClient.resetQueries({ queryKey });
-}
-
-function readRefs(
-  rpc: EnvironmentRpcClient | undefined,
-  repositoryId: string | undefined,
-  signal: AbortSignal,
-) {
-  if (rpc === undefined || repositoryId === undefined)
-    return Promise.reject({ _tag: "Unanswered" });
-  return readRepositoryRefs(rpc, repositoryId, signal).catch((error) => {
-    throw requestFailure(error);
-  });
-}
-
-function servesRefs(environment: Environment) {
-  return (
-    hasEnvironmentCapability(environment, "json-fragmentation") &&
-    hasEnvironmentCapability(environment, "repository-refs")
   );
 }

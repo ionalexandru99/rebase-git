@@ -15,7 +15,7 @@ import {
   type ChangeSelection,
   type ChangesScope,
   type MutateChanges,
-  RepositoryChangesHttpApi,
+  RepositoryChangesApi,
 } from "@rebase/contracts";
 import { Effect } from "effect";
 import { describe, expect, it } from "vite-plus/test";
@@ -63,7 +63,7 @@ async function fixture(
     worktreePath: directory,
     amend: false,
   };
-  const service = environment.routes(RepositoryChangesHttpApi);
+  const service = environment.routes(RepositoryChangesApi);
   const read = (amend = false) =>
     Effect.runPromise(service.read({ ...scope, amend }));
   const diff = (

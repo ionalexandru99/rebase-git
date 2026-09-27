@@ -3,7 +3,7 @@ import type {
   OperationKind,
   OperationScope,
   RepositoryOperation,
-  RepositoryOperationsHttpApi,
+  RepositoryOperationsApi,
 } from "@rebase/contracts";
 import { useState } from "react";
 import { useOperationAction } from "#web/features/operation-recovery/hooks/use-operation";
@@ -26,7 +26,7 @@ interface CompletedOperation {
   readonly aborted: boolean;
 }
 
-type ExecuteRoute = typeof RepositoryOperationsHttpApi.execute;
+type ExecuteRoute = typeof RepositoryOperationsApi.execute;
 
 const headerPhases: ReadonlySet<RepositoryOperation["phase"]> = new Set([
   "conflicts",

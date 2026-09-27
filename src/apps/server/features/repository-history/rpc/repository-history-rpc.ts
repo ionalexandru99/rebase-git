@@ -1,73 +1,51 @@
 import {
-  encodeRepositoryHistoryBatch,
-  encodeRepositoryHistoryPage,
-  fragmentJsonMessage,
-  type JsonMessageFragment,
   type ReadRepositoryHistory,
   type RepositoryHistoryOperationFailure,
-  type RepositoryHistoryReadRpc,
+  type RepositoryHistoryRpc,
   type RepositoryHistorySynchronized,
+  repositoryHistoryBatchJson,
+  repositoryHistoryPageJson,
   type SynchronizeRepositoryHistory,
 } from "@rebase/contracts";
-import { type Cause, Deferred, Effect, Queue, Stream } from "effect";
-import type { EnvironmentRpcHandlersFor } from "#server/adapters/environment-transport/combine-environment-features";
-import type { EnvironmentRpcSession } from "#server/adapters/environment-transport/rpc/environment-rpc-negotiation";
+import { type Cause, Effect, Queue, Stream } from "effect";
+import type { EnvironmentRpcHandlersFor } from "#server/adapters/environment-transport/environment-routes";
 import type { RepositoryHistoryService } from "#server/features/repository-history/repository-history";
 
-type HistoryOutput = JsonMessageFragment | RepositoryHistorySynchronized;
-interface PendingBatch {
-  readonly sequence: number;
-  readonly committed: Deferred.Deferred<void>;
-}
+type HistoryOutput = string | RepositoryHistorySynchronized;
+type HistoryReadHandlers = Pick<
+  EnvironmentRpcHandlersFor<typeof RepositoryHistoryRpc>,
+  "ReadHistory" | "SynchronizeHistory"
+>;
 
 export function repositoryHistoryRpc(
-  session: EnvironmentRpcSession,
   history: RepositoryHistoryService,
-): EnvironmentRpcHandlersFor<typeof RepositoryHistoryReadRpc> {
+): HistoryReadHandlers {
   const requests = new Set<string>();
-  const pending = new Map<string, PendingBatch>();
   const acquire = (requestId: string) =>
     Effect.acquireRelease(
-      Effect.gen(function* () {
-        const negotiated =
-          yield* session.requireCapability("repository-history");
-        if (requests.size >= 2 || requests.has(requestId))
-          return yield* failed();
+      Effect.suspend(() => {
+        if (requests.size >= 2 || requests.has(requestId)) return failed();
         requests.add(requestId);
-        return negotiated.limits.maxWebSocketResponseBytes - 512;
+        return Effect.void;
       }),
       () =>
         Effect.sync(() => {
           requests.delete(requestId);
-          pending.delete(requestId);
         }),
     );
 
   return {
     ReadHistory: (request: ReadRepositoryHistory) =>
-      Stream.unwrap(
-        Effect.gen(function* () {
-          const limit = yield* acquire(request.requestId);
-          const page = yield* history.read(request);
-          const fragments = yield* Effect.try({
-            try: () =>
-              fragmentJsonMessage(
-                {
-                  payload: encodeRepositoryHistoryPage(page),
-                  requestId: request.requestId,
-                  logicalMessageId: 0,
-                },
-                limit,
-              ),
-            catch: () => failure(),
-          });
-          return Stream.fromIterable(fragments).pipe(Stream.rechunk(1));
-        }),
+      Effect.scoped(
+        acquire(request.requestId).pipe(
+          Effect.andThen(history.read(request)),
+          Effect.map(repositoryHistoryPageJson),
+        ),
       ),
     SynchronizeHistory: (request: SynchronizeRepositoryHistory) =>
       Stream.unwrap(
         Effect.gen(function* () {
-          const limit = yield* acquire(request.requestId);
+          yield* acquire(request.requestId);
           const queue = yield* Queue.bounded<
             HistoryOutput,
             RepositoryHistoryOperationFailure | Cause.Done
@@ -75,33 +53,9 @@ export function repositoryHistoryRpc(
           yield* Effect.addFinalizer(() => Queue.shutdown(queue));
           const produce = history
             .synchronize(request, (batch) =>
-              Effect.gen(function* () {
-                const committed = yield* Deferred.make<void>();
-                pending.set(request.requestId, {
-                  sequence: batch.sequence,
-                  committed,
-                });
-                const fragments = yield* Effect.try({
-                  try: () =>
-                    fragmentJsonMessage(
-                      {
-                        payload: encodeRepositoryHistoryBatch(batch),
-                        requestId: request.requestId,
-                        logicalMessageId: batch.sequence,
-                      },
-                      limit,
-                    ),
-                  catch: () => failure(),
-                });
-                yield* Queue.offerAll(queue, fragments);
-                yield* Deferred.await(committed).pipe(
-                  Effect.timeoutOrElse({
-                    duration: "30 seconds",
-                    orElse: () => Effect.fail(failure()),
-                  }),
-                );
-                pending.delete(request.requestId);
-              }),
+              Queue.offer(queue, repositoryHistoryBatchJson(batch)).pipe(
+                Effect.asVoid,
+              ),
             )
             .pipe(
               Effect.flatMap((commitCount) =>
@@ -115,30 +69,15 @@ export function repositoryHistoryRpc(
               Effect.catchCause((cause) => Queue.failCause(queue, cause)),
             );
           yield* Effect.forkScoped(produce);
-          return Stream.fromQueue(queue).pipe(Stream.rechunk(1));
+          return Stream.fromQueue(queue);
         }),
       ),
-    CommitHistoryBatch: ({
-      requestId,
-      sequence,
-    }: {
-      requestId: string;
-      sequence: number;
-    }) =>
-      Effect.gen(function* () {
-        yield* session.requireCapability("repository-history");
-        const batch = pending.get(requestId);
-        if (batch === undefined || batch.sequence !== sequence)
-          return yield* failed();
-        yield* Deferred.succeed(batch.committed, undefined);
-      }),
   };
 }
 
-function failure(): RepositoryHistoryOperationFailure {
-  return { _tag: "GitFailed", reason: "Failed" };
-}
-
 function failed() {
-  return Effect.fail(failure());
+  return Effect.fail<RepositoryHistoryOperationFailure>({
+    _tag: "GitFailed",
+    reason: "Failed",
+  });
 }

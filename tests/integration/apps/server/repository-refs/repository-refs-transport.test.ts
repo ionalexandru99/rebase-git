@@ -1,21 +1,15 @@
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import {
-  RepositoryBranchesHttpApi,
-  RepositoryCatalogHttpApi,
-  RepositoryRefsHttpApi,
+  RepositoryBranchesApi,
+  RepositoryCatalogApi,
+  RepositoryRefsApi,
 } from "@rebase/contracts";
-import {
-  type EnvironmentCredential,
-  EnvironmentHttpRejected,
-} from "@rebase/environment-client";
-import { Effect, Layer, ManagedRuntime } from "effect";
+import { Layer, ManagedRuntime } from "effect";
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import { createRepository, git } from "#tests-support/git";
 import { openTestServer } from "#tests-support/server";
 import { createBrowserLocalEnvironmentSession } from "#web/app/environment/browser-local-environment-session";
-import { connectCurrentEnvironmentEffect } from "#web/app/environment/connection/environment-protocol-client";
-import { readRepositoryRefs } from "#web/platform/environment/rpc/read-repository-refs";
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -27,7 +21,7 @@ describe("repository refs transport", () => {
     const requests = server.requests(server.owner);
     const repositoryPath = join(server.home, "repository");
     await createRepository(repositoryPath, { commits: ["initial", "next"] });
-    const remembered = await requests(RepositoryCatalogHttpApi.remember, {
+    const remembered = await requests(RepositoryCatalogApi.remember, {
       path: repositoryPath,
     });
     const head = await git(repositoryPath, "rev-parse", "HEAD");
@@ -39,14 +33,14 @@ describe("repository refs transport", () => {
     };
 
     await expect(
-      requests(RepositoryBranchesHttpApi.create, create),
+      requests(RepositoryBranchesApi.create, create),
     ).resolves.toEqual({ name: "spike", target: head });
     await git(repositoryPath, "checkout", "spike");
     await git(repositoryPath, "commit", "--allow-empty", "-m", "only here");
     await git(repositoryPath, "checkout", "main");
     const spike = await git(repositoryPath, "rev-parse", "spike");
     await expect(
-      requests(RepositoryBranchesHttpApi.delete, {
+      requests(RepositoryBranchesApi.delete, {
         force: false,
         local: { name: "spike", target: spike },
         repositoryId: remembered.id,
@@ -57,7 +51,7 @@ describe("repository refs transport", () => {
     });
   });
 
-  it("reassembles a ref snapshot larger than a WebSocket frame", async () => {
+  it("reads a ref snapshot larger than a megabyte", async () => {
     const server = await openTestServer();
     const repositoryPath = join(server.home, "repository");
     await createRepository(repositoryPath, { branches: ["feature"] });
@@ -73,12 +67,12 @@ describe("repository refs transport", () => {
     );
     await git(repositoryPath, "tag", "v1");
     const repository = await server.requests(server.owner)(
-      RepositoryCatalogHttpApi.remember,
+      RepositoryCatalogApi.remember,
       { path: repositoryPath },
     );
-    const refs = await Effect.runPromise(
-      readRefsOverWebSocket(server.origin, server.owner, repository.id),
-    );
+    const refs = await server.requests(server.owner)(RepositoryRefsApi.read, {
+      repositoryId: repository.id,
+    });
     expect(refs.remoteBranches.map((branch) => branch.name)).toEqual(names);
     expect(refs.tags.map((tag) => tag.name)).toEqual(["v1"]);
     expect(refs.truncated).toEqual({
@@ -94,20 +88,28 @@ describe("repository refs transport", () => {
     const repositoryPath = join(server.home, "repository");
     await createRepository(repositoryPath, { branches: ["feature"] });
     const remembered = await server.requests(owner)(
-      RepositoryCatalogHttpApi.remember,
+      RepositoryCatalogApi.remember,
       { path: repositoryPath },
     );
     vi.stubGlobal("window", { location: new URL(origin) });
     const runtime = ManagedRuntime.make(Layer.empty);
+    let changes = 0;
     const session = createBrowserLocalEnvironmentSession(
-      "0.0.0",
       {
         environmentOrigin: origin,
         getEnvironmentCredential: async () => owner.value,
       },
-      { runtime },
+      {
+        runtime,
+        invalidation: {
+          changed: (repositoryIds, kind) => {
+            if (kind === "Refs" && repositoryIds?.includes(remembered.id))
+              changes++;
+          },
+        },
+      },
     );
-    const refChanges = countRefChanges(session, remembered.id);
+    const refChanges = () => changes;
     const refs = () => readConnectedRefs(session, remembered.id);
     session.start();
     try {
@@ -183,7 +185,7 @@ describe("repository refs transport", () => {
 
   it("serves refs to every paired device and checks out branches", async () => {
     const server = await openTestServer();
-    const { origin, owner } = server;
+    const { owner } = server;
     const requests = server.requests(owner);
     const repositoryPath = join(server.home, "repository");
     await createRepository(repositoryPath, { branches: ["feature"] });
@@ -195,13 +197,13 @@ describe("repository refs transport", () => {
       "git@github.com:alex/rebase.git",
     );
     const viewer = await server.pair("Second browser");
-    const remembered = await requests(RepositoryCatalogHttpApi.remember, {
+    const remembered = await requests(RepositoryCatalogApi.remember, {
       path: repositoryPath,
     });
 
-    const refs = await Effect.runPromise(
-      readRefsOverWebSocket(origin, viewer, remembered.id),
-    );
+    const refs = await server.requests(viewer)(RepositoryRefsApi.read, {
+      repositoryId: remembered.id,
+    });
     expect(refs.repositoryId).toBe(remembered.id);
     expect(refs.githubRepository).toEqual({ owner: "alex", name: "rebase" });
     expect(refs.branches.map((branch) => branch.name)).toEqual(
@@ -214,59 +216,22 @@ describe("repository refs transport", () => {
       worktreePath: repositoryPath,
     } as const;
     await expect(
-      requests(RepositoryRefsHttpApi.checkout, checkout),
+      requests(RepositoryRefsApi.checkout, checkout),
     ).resolves.toMatchObject({ head: { branch: "feature" }, stash: "none" });
     await expect(
-      Effect.runPromise(
-        readRefsOverWebSocket(
-          origin,
-          viewer,
-          "00000000-0000-4000-8000-000000000099",
-        ),
-      ),
-    ).rejects.toEqual(
-      new EnvironmentHttpRejected({
-        failure: {
-          _tag: "RepositoryRejected",
-          reason: "Missing",
-          detail: "This repository is no longer available.",
-        },
+      server.requests(viewer)(RepositoryRefsApi.read, {
+        repositoryId: "00000000-0000-4000-8000-000000000099",
       }),
-    );
+    ).rejects.toEqual({
+      _tag: "Rejected",
+      failure: {
+        _tag: "RepositoryRejected",
+        reason: "Missing",
+        detail: "This repository is no longer available.",
+      },
+    });
   });
 });
-
-function readRefsOverWebSocket(
-  origin: string,
-  credential: EnvironmentCredential,
-  repositoryId: string,
-) {
-  return Effect.scoped(
-    Effect.gen(function* () {
-      const connection = yield* connectCurrentEnvironmentEffect(
-        origin,
-        "0.0.0",
-        { credential },
-      );
-      return yield* Effect.tryPromise({
-        try: (signal) =>
-          readRepositoryRefs(connection.rpc, repositoryId, signal),
-        catch: (error) => error,
-      });
-    }),
-  );
-}
-
-function countRefChanges(
-  session: ReturnType<typeof createBrowserLocalEnvironmentSession>,
-  repositoryId: string,
-) {
-  let changes = 0;
-  session.changes.subscribe((repositoryIds, kind) => {
-    if (kind === "Refs" && repositoryIds?.includes(repositoryId)) changes++;
-  });
-  return () => changes;
-}
 
 function readConnectedRefs(
   session: ReturnType<typeof createBrowserLocalEnvironmentSession>,
@@ -275,9 +240,5 @@ function readConnectedRefs(
   const state = session.getSnapshot();
   if (state._tag !== "Connected")
     return Promise.reject(new Error("The session is not connected."));
-  return readRepositoryRefs(
-    state.rpc,
-    repositoryId,
-    new AbortController().signal,
-  );
+  return state.requests(RepositoryRefsApi.read, { repositoryId });
 }

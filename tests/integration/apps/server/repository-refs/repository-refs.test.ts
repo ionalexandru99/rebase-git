@@ -10,7 +10,7 @@ import { join } from "node:path";
 import {
   type CheckoutRepositoryRef,
   type RepositoryCheckedOut,
-  RepositoryRefsHttpApi,
+  RepositoryRefsApi,
   type RouteFailure,
 } from "@rebase/contracts";
 import { Effect } from "effect";
@@ -437,7 +437,7 @@ async function withRefsService<Value, Failure>(
         command: CheckoutRepositoryRef,
       ) => Effect.Effect<
         RepositoryCheckedOut,
-        RouteFailure<typeof RepositoryRefsHttpApi.checkout>
+        RouteFailure<typeof RepositoryRefsApi.checkout>
       >;
       readonly read: () => ReturnType<typeof readRepositoryRefs>;
     };
@@ -447,7 +447,7 @@ async function withRefsService<Value, Failure>(
 ) {
   const environment = await openTestEnvironment({ git });
   const repository = await environment.remember(fixture.repositoryPath);
-  const { checkout } = environment.routes(RepositoryRefsHttpApi);
+  const { checkout } = environment.routes(RepositoryRefsApi);
   return Effect.runPromise(
     Effect.scoped(
       Effect.gen(function* () {

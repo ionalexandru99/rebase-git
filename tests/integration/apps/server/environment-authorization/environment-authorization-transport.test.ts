@@ -1,150 +1,71 @@
-import { randomBytes } from "node:crypto";
 import { request } from "node:http";
 import {
-  createCurrentEnvironmentHello,
-  EnvironmentAuthorizationHttpApi,
+  EnvironmentAuthorizationApi,
+  environmentBrowserSessionPath,
   environmentLivePath,
-  environmentSnapshotPath,
+  environmentPairingExchangePath,
+  environmentProtocol,
+  environmentSubprotocol,
+  unauthorizedCloseCode,
 } from "@rebase/contracts";
-import {
-  EnvironmentAccessDenied,
-  exchangeEnvironmentPairingEffect,
-  fetchEnvironmentDiscoveryEffect,
-  fetchEnvironmentSnapshotEffect,
-} from "@rebase/environment-client";
-import { Effect } from "effect";
 import { describe, expect, it } from "vite-plus/test";
-import { openTestServer } from "#tests-support/server";
-import { connectCurrentEnvironmentEffect } from "#web/app/environment/connection/environment-protocol-client";
+import WebSocket from "ws";
+import { exchangePairing, openTestServer } from "#tests-support/server";
+import { EnvironmentAccessDenied } from "#web/app/environment/environment-connection";
 
 describe("Environment authorization transport", () => {
-  it("resumes a browser session without exposing its credential and enforces revocation", async () => {
-    const { origin, owner } = await openTestServer();
-    const pairingMaterial = await createPairing(origin, owner.value);
-    const response = await postJson(
-      origin,
-      "/api/authorization/browser-session",
-      {
-        label: "Browser client",
-        pairingMaterial,
-      },
+  it("opens the socket with a browser session cookie only from the server origin", async () => {
+    const { origin, owner, requests } = await openTestServer();
+    const pairing = await requests(owner)(
+      EnvironmentAuthorizationApi.createPairing,
+      undefined,
     );
+    const response = await postJson(origin, environmentBrowserSessionPath, {
+      label: "Browser client",
+      pairingMaterial: new URL(pairing.pairingUrl).hash.slice(1),
+    });
     expect(response.status).toBe(200);
-    const session = (await readOk(response)) as {
-      readonly authorization: unknown;
+    const session = (await response.json()) as {
+      readonly authorization: { readonly id: string };
     };
     expect(session).not.toHaveProperty("credential");
-    const cookieHeader = response.headers.get("set-cookie");
+    const cookieHeader = response.headers.get("set-cookie") ?? "";
     expect(cookieHeader).toContain("HttpOnly");
     expect(cookieHeader).toContain("SameSite=Strict");
     expect(cookieHeader).toContain("Path=/api");
-    const cookie = cookieHeader?.split(";")[0] ?? "";
-    const resumed = await fetch(`${origin}/api/authorization/browser-session`, {
-      headers: { cookie },
+    const cookie = cookieHeader.split(";")[0] ?? "";
+
+    await expect(helloWithCookie(origin, cookie, origin)).resolves.toContain(
+      '"sequence":0',
+    );
+    await expect(
+      helloWithCookie(origin, cookie, "https://attacker.example"),
+    ).rejects.toThrow("403");
+
+    await requests(owner)(EnvironmentAuthorizationApi.revokeAuthorization, {
+      authorizationId: session.authorization.id,
     });
-    expect(await responseResult(resumed)).toEqual({
-      status: 200,
-      body: { _tag: "Ok", value: session },
-    });
-    const snapshot = await fetch(`${origin}${environmentSnapshotPath}`, {
-      headers: { cookie },
-    });
-    expect(snapshot.status).toBe(200);
-    await snapshot.body?.cancel();
-    const ticket = await fetch(
-      `${origin}${EnvironmentAuthorizationHttpApi.mintWebSocketTicket.path}`,
-      {
+    await expect(helloWithCookie(origin, cookie, origin)).rejects.toThrow(
+      `${unauthorizedCloseCode} RevokedGrant`,
+    );
+  });
+
+  it("requires the server origin for browser pairing", async () => {
+    const { origin } = await openTestServer();
+    for (const requestOrigin of [
+      undefined,
+      "null",
+      "http://127.0.0.1:1",
+      "https://attacker.example",
+    ]) {
+      const denied = await fetch(`${origin}${environmentBrowserSessionPath}`, {
         method: "POST",
-        headers: { cookie, origin },
-      },
-    );
-    expect(ticket.status).toBe(200);
-    await ticket.body?.cancel();
-    const second = await openTestServer();
-    const other = await fetch(`${second.origin}${environmentSnapshotPath}`, {
-      headers: { cookie },
-    });
-    expect(await responseResult(other)).toEqual({
-      status: 401,
-      body: { _tag: "InvalidGrant" },
-    });
-    const bearer = await fetch(`${second.origin}${environmentSnapshotPath}`, {
-      headers: {
-        cookie,
-        authorization: `Bearer ${second.owner.value}`,
-      },
-    });
-    expect(bearer.status).toBe(200);
-    await bearer.body?.cancel();
-    const authorizationId = readString(session.authorization, "id");
-    const revocation = await postJson(
-      origin,
-      EnvironmentAuthorizationHttpApi.revokeAuthorization.path,
-      { authorizationId },
-      owner.value,
-    );
-    expect(revocation.status).toBe(200);
-    const revoked = await fetch(`${origin}/api/authorization/browser-session`, {
-      headers: { cookie },
-    });
-    expect(await responseResult(revoked)).toEqual({
-      status: 401,
-      body: { _tag: "RevokedGrant" },
-    });
-  });
-
-  it("requires the server origin for browser pairing and cookie-authenticated writes", async () => {
-    const { origin, owner } = await openTestServer();
-    const body = JSON.stringify({
-      label: "Browser client",
-      pairingMaterial: await createPairing(origin, owner.value),
-    });
-    for (const requestOrigin of [
-      undefined,
-      "null",
-      "http://127.0.0.1:1",
-      "https://attacker.example",
-    ]) {
-      const denied = await fetch(
-        `${origin}/api/authorization/browser-session`,
-        {
-          method: "POST",
-          headers: {
-            "content-type": "application/json",
-            ...(requestOrigin === undefined ? {} : { origin: requestOrigin }),
-          },
-          body,
+        headers: {
+          "content-type": "application/json",
+          ...(requestOrigin === undefined ? {} : { origin: requestOrigin }),
         },
-      );
-      expect(await responseResult(denied)).toEqual({
-        status: 403,
-        body: { _tag: "InvalidOrigin" },
+        body: JSON.stringify({ label: "Browser", pairingMaterial: "123-456" }),
       });
-    }
-    const paired = await fetch(`${origin}/api/authorization/browser-session`, {
-      method: "POST",
-      headers: { "content-type": "application/json", origin },
-      body,
-    });
-    expect(paired.status).toBe(200);
-    const cookie = paired.headers.get("set-cookie")?.split(";")[0] ?? "";
-    await paired.body?.cancel();
-    for (const requestOrigin of [
-      undefined,
-      "null",
-      "http://127.0.0.1:1",
-      "https://attacker.example",
-    ]) {
-      const denied = await fetch(
-        `${origin}${EnvironmentAuthorizationHttpApi.mintWebSocketTicket.path}`,
-        {
-          method: "POST",
-          headers: {
-            cookie,
-            ...(requestOrigin === undefined ? {} : { origin: requestOrigin }),
-          },
-        },
-      );
       expect(await responseResult(denied)).toEqual({
         status: 403,
         body: { _tag: "InvalidOrigin" },
@@ -152,11 +73,15 @@ describe("Environment authorization transport", () => {
     }
   });
 
-  it("rejects malformed, invalid, and excess JSON fields before exchanging a pairing", async () => {
-    const { origin, owner } = await openTestServer();
+  it("rejects malformed, oversized and excess JSON before exchanging a pairing", async () => {
+    const { origin, owner, requests } = await openTestServer();
+    const pairing = await requests(owner)(
+      EnvironmentAuthorizationApi.createPairing,
+      undefined,
+    );
     const exchange = {
       label: "Browser client",
-      pairingMaterial: await createPairing(origin, owner.value),
+      pairingMaterial: new URL(pairing.pairingUrl).hash.slice(1),
     };
     for (const body of [
       "{",
@@ -164,10 +89,10 @@ describe("Environment authorization transport", () => {
       JSON.stringify({ ...exchange, unexpected: true }),
     ]) {
       const response = await fetch(
-        `${origin}${EnvironmentAuthorizationHttpApi.exchangePairing.path}`,
+        `${origin}${environmentPairingExchangePath}`,
         {
           method: "POST",
-          headers: { "content-type": "application/json", origin },
+          headers: { "content-type": "application/json" },
           body,
         },
       );
@@ -176,389 +101,94 @@ describe("Environment authorization transport", () => {
         status: 400,
       });
     }
+    const oversized = await postJson(origin, environmentPairingExchangePath, {
+      ...exchange,
+      label: "x".repeat(70_000),
+    });
+    expect(await responseResult(oversized)).toEqual({
+      body: { _tag: "PayloadTooLarge", limitBytes: 65_536 },
+      status: 413,
+    });
     await expect(
-      run(exchangeEnvironmentPairingEffect(origin, exchange)),
-    ).resolves.toHaveProperty("credential");
+      exchangePairing(origin, pairing.pairingUrl, "Browser client"),
+    ).resolves.toHaveProperty("type", "bearer");
   });
 
-  it("returns the allowed method and rejects bodies on empty-body routes", async () => {
-    const { origin, owner } = await openTestServer();
-    const url = `${origin}${EnvironmentAuthorizationHttpApi.mintWebSocketTicket.path}`;
-    const wrongMethod = await fetch(url);
-    expect(wrongMethod.status).toBe(405);
-    expect(wrongMethod.headers.get("allow")).toBe("POST");
-    expect(await wrongMethod.text()).toBe("");
-
-    const nonEmpty = await fetch(url, {
-      method: "POST",
-      headers: { authorization: `Bearer ${owner.value}`, origin },
-      body: " ",
-    });
-    expect(await responseResult(nonEmpty)).toEqual({
-      body: { _tag: "InvalidMessage" },
-      status: 400,
-    });
-  });
-
-  it("connects the browser client with the exchanged device credential", async () => {
-    const { environmentId, origin, owner } = await openTestServer();
-    await expect(
-      run(
-        exchangeEnvironmentPairingEffect(origin, {
-          label: "Browser client",
-          pairingMaterial: "123-456",
-        }),
-      ),
-    ).rejects.toEqual(
-      new EnvironmentAccessDenied({
-        failure: { _tag: "InvalidPairing" },
-        status: 401,
-      }),
-    );
-
-    const paired = await run(
-      exchangeEnvironmentPairingEffect(origin, {
-        label: "Browser client",
-        pairingMaterial: await createPairing(origin, owner.value),
-      }),
-    );
-    const credential = { type: "bearer", value: paired.credential } as const;
-    await expect(
-      run(
-        Effect.scoped(
-          connectCurrentEnvironmentEffect(origin, "0.0.0", {
-            credential,
-          }).pipe(
-            Effect.flatMap((connection) =>
-              fetchEnvironmentSnapshotEffect(
-                origin,
-                connection.discovery,
-                credential,
-              ),
-            ),
-          ),
-        ),
-      ),
-    ).resolves.toEqual({ environmentId, sequence: 0 });
-  });
-
-  it("pairs and revokes devices through HTTP", async () => {
-    const { origin, owner } = await openTestServer();
-    const unauthenticated = await fetch(`${origin}${environmentSnapshotPath}`);
-    expect(await responseResult(unauthenticated)).toEqual({
-      body: { _tag: "InvalidGrant" },
-      status: 401,
-    });
-
-    const viewerPairing = await postEmpty(
-      origin,
-      EnvironmentAuthorizationHttpApi.createPairing.path,
-      owner.value,
-    );
-    expect(viewerPairing.status).toBe(200);
-    const viewerPairingBody = await readOk(viewerPairing);
-    const pairingUrl = new URL(readString(viewerPairingBody, "pairingUrl"));
-    const viewer = await exchangePairing(
-      origin,
-      pairingUrl.hash.slice(1),
-      "Review browser",
-    );
-
-    const snapshot = await fetch(`${origin}${environmentSnapshotPath}`, {
-      headers: { authorization: `Bearer ${viewer.credential}` },
-    });
-    expect(snapshot.status).toBe(200);
-
-    const revocation = await postJson(
-      origin,
-      EnvironmentAuthorizationHttpApi.revokeAuthorization.path,
-      { authorizationId: viewer.authorization.id },
-      owner.value,
-    );
-    expect(revocation.status).toBe(200);
-    const revokedSnapshot = await fetch(`${origin}${environmentSnapshotPath}`, {
-      headers: { authorization: `Bearer ${viewer.credential}` },
-    });
-    expect(await responseResult(revokedSnapshot)).toEqual({
-      body: { _tag: "RevokedGrant" },
-      status: 401,
-    });
-    const discovery = await run(fetchEnvironmentDiscoveryEffect(origin));
-    await expect(
-      run(
-        fetchEnvironmentSnapshotEffect(origin, discovery, {
-          type: "bearer",
-          value: viewer.credential,
-        }),
-      ),
-    ).rejects.toEqual(
-      new EnvironmentAccessDenied({
-        failure: { _tag: "RevokedGrant" },
-        status: 401,
-      }),
-    );
-    const revokedTicket = await postEmpty(
-      origin,
-      EnvironmentAuthorizationHttpApi.mintWebSocketTicket.path,
-      viewer.credential,
-    );
-    expect(await responseResult(revokedTicket)).toEqual({
-      body: { _tag: "RevokedGrant" },
-      status: 401,
-    });
-  });
-
-  it("validates host and origin before consuming one-time WebSocket tickets", async () => {
-    const { origin, owner } = await openTestServer();
-    const invalidHost = await requestJson(
-      `${origin}${environmentSnapshotPath}`,
-      {
-        authorization: "Bearer invalid",
-        host: "attacker.example",
+  it("rejects requests addressed to another host", async () => {
+    const { origin } = await openTestServer();
+    const response = await new Promise<number>(
+      (resolveStatus, rejectStatus) => {
+        const outgoing = request(
+          `${origin}${environmentPairingExchangePath}`,
+          { headers: { host: "attacker.example" }, method: "POST" },
+          (incoming) => {
+            incoming.resume();
+            resolveStatus(incoming.statusCode ?? 0);
+          },
+        );
+        outgoing.on("error", rejectStatus);
+        outgoing.end("{}");
       },
     );
-    expect(invalidHost).toEqual({
-      body: { _tag: "InvalidHost" },
-      status: 403,
-    });
+    expect(response).toBe(403);
+  });
 
-    const invalidOrigin = await fetch(
-      `${origin}${EnvironmentAuthorizationHttpApi.mintWebSocketTicket.path}`,
-      {
-        headers: {
-          authorization: `Bearer ${owner.value}`,
-          origin: "https://attacker.example",
-        },
-        method: "POST",
-      },
+  it("pairs another device over the socket and refuses it once revoked", async () => {
+    const server = await openTestServer();
+    const viewer = await server.pair("Review browser");
+    await expect(server.connect(viewer)).resolves.toHaveProperty(
+      "environmentId",
+      server.environmentId,
     );
-    expect(await responseResult(invalidOrigin)).toEqual({
-      body: { _tag: "InvalidOrigin" },
-      status: 403,
-    });
-
-    const ticket = await mintTicket(origin, owner.value);
-    const invalidSocket = await rejectedWebSocket(
-      origin,
-      ticket,
-      "https://attacker.example",
+    await server.requests(server.owner)(
+      EnvironmentAuthorizationApi.revokeAuthorization,
+      { authorizationId: viewer.authorizationId },
     );
-    expect(invalidSocket).toEqual({
-      body: { _tag: "InvalidOrigin" },
-      status: 403,
-    });
-
-    const socket = await openWebSocket(origin, ticket);
-    socket.send(
-      JSON.stringify({
-        _tag: "Request",
-        id: "1",
-        tag: "Hello",
-        payload: createCurrentEnvironmentHello("0.0.0"),
-        headers: [],
-      }),
+    await expect(server.connect(viewer)).rejects.toEqual(
+      new EnvironmentAccessDenied({ failure: { _tag: "RevokedGrant" } }),
     );
-    await expect(nextTextMessage(socket)).resolves.toContain(
-      '"_tag":"HelloAccepted"',
-    );
-    socket.close();
-
-    await expect(rejectedWebSocket(origin, ticket, origin)).resolves.toEqual({
-      body: { _tag: "TicketAlreadyUsed" },
-      status: 409,
-    });
   });
 });
 
-async function createPairing(origin: string, credential: string) {
-  const response = await postEmpty(
-    origin,
-    EnvironmentAuthorizationHttpApi.createPairing.path,
-    credential,
-  );
-  return new URL(readString(await readOk(response), "pairingUrl")).hash.slice(
-    1,
-  );
+function helloWithCookie(origin: string, cookie: string, socketOrigin: string) {
+  return new Promise<string>((resolveHello, rejectHello) => {
+    const socket = new WebSocket(
+      `${origin.replace("http://", "ws://")}${environmentLivePath}`,
+      [environmentSubprotocol],
+      { headers: { cookie, origin: socketOrigin } },
+    );
+    socket.once("unexpected-response", (_, response) =>
+      rejectHello(new Error(String(response.statusCode))),
+    );
+    socket.once("close", (code, reason) =>
+      rejectHello(new Error(`${code} ${reason.toString()}`)),
+    );
+    socket.once("open", () =>
+      socket.send(
+        JSON.stringify({
+          _tag: "Request",
+          id: "1",
+          tag: "Hello",
+          payload: { protocol: environmentProtocol },
+          headers: [],
+        }),
+      ),
+    );
+    socket.once("message", (data) => {
+      resolveHello(data.toString());
+      socket.close();
+    });
+  });
 }
 
-async function exchangePairing(
-  origin: string,
-  pairingMaterial: string,
-  label: string,
-) {
-  const response = await postJson(
-    origin,
-    EnvironmentAuthorizationHttpApi.exchangePairing.path,
-    { label, pairingMaterial },
-  );
-  expect(response.status).toBe(200);
-  return (await readOk(response)) as {
-    readonly authorization: { readonly id: string };
-    readonly credential: string;
-  };
-}
-
-async function mintTicket(origin: string, credential: string) {
-  const response = await postEmpty(
-    origin,
-    EnvironmentAuthorizationHttpApi.mintWebSocketTicket.path,
-    credential,
-  );
-  expect(response.status).toBe(200);
-  return readString(await readOk(response), "ticket");
-}
-
-function postJson(
-  origin: string,
-  path: string,
-  body: unknown,
-  credential?: string,
-) {
+function postJson(origin: string, path: string, body: unknown) {
   return fetch(`${origin}${path}`, {
     body: JSON.stringify(body),
-    headers: {
-      "content-type": "application/json",
-      origin,
-      ...(credential === undefined
-        ? {}
-        : { authorization: `Bearer ${credential}` }),
-    },
+    headers: { "content-type": "application/json", origin },
     method: "POST",
   });
-}
-
-function postEmpty(origin: string, path: string, credential: string) {
-  return fetch(`${origin}${path}`, {
-    headers: {
-      authorization: `Bearer ${credential}`,
-      origin,
-    },
-    method: "POST",
-  });
-}
-
-function requestJson(url: string, headers: Record<string, string>) {
-  return new Promise<{ readonly body: unknown; readonly status: number }>(
-    (resolveResponse, rejectResponse) => {
-      const outgoing = request(url, { headers }, (response) => {
-        let body = "";
-        response.setEncoding("utf8");
-        response.on("data", (chunk) => {
-          body += chunk;
-        });
-        response.on("end", () => {
-          resolveResponse({
-            body: JSON.parse(body),
-            status: response.statusCode ?? 0,
-          });
-        });
-      });
-      outgoing.on("error", rejectResponse);
-      outgoing.end();
-    },
-  );
-}
-
-function openWebSocket(origin: string, ticket: string) {
-  return new Promise<WebSocket>((resolveOpen, rejectOpen) => {
-    const socket = new WebSocket(webSocketUrl(origin, ticket));
-    socket.addEventListener("open", () => resolveOpen(socket), { once: true });
-    socket.addEventListener(
-      "error",
-      () => rejectOpen(new Error("WebSocket failed")),
-      {
-        once: true,
-      },
-    );
-  });
-}
-
-function rejectedWebSocket(
-  origin: string,
-  ticket: string,
-  requestOrigin: string,
-) {
-  return new Promise<{ readonly body: unknown; readonly status: number }>(
-    (resolveResponse, rejectResponse) => {
-      const outgoing = request(
-        `${origin}${environmentLivePath}?ticket=${ticket}`,
-        {
-          headers: {
-            connection: "Upgrade",
-            origin: requestOrigin,
-            "sec-websocket-key": randomBytes(16).toString("base64"),
-            "sec-websocket-version": "13",
-            upgrade: "websocket",
-          },
-        },
-        (response) => {
-          let body = "";
-          response.setEncoding("utf8");
-          response.on("data", (chunk) => {
-            body += chunk;
-          });
-          response.on("end", () => {
-            resolveResponse({
-              body: JSON.parse(body),
-              status: response.statusCode ?? 0,
-            });
-          });
-        },
-      );
-      outgoing.on("upgrade", (_, socket) => {
-        socket.destroy();
-        rejectResponse(new Error("Expected the WebSocket upgrade to fail."));
-      });
-      outgoing.on("error", rejectResponse);
-      outgoing.end();
-    },
-  );
-}
-
-function webSocketUrl(origin: string, ticket: string) {
-  return `${origin.replace("http://", "ws://")}${environmentLivePath}?ticket=${ticket}`;
-}
-
-function nextTextMessage(socket: WebSocket) {
-  return new Promise<string>((resolveMessage, rejectMessage) => {
-    socket.addEventListener(
-      "message",
-      (event) => {
-        if (typeof event.data !== "string") {
-          rejectMessage(new Error("Expected a text WebSocket message."));
-        } else {
-          resolveMessage(event.data);
-        }
-      },
-      { once: true },
-    );
-  });
-}
-
-async function readOk(response: Response) {
-  const body: unknown = await response.json();
-  expect(body).toMatchObject({ _tag: "Ok" });
-  return typeof body === "object" && body !== null && "value" in body
-    ? body.value
-    : undefined;
 }
 
 async function responseResult(response: Response) {
   return { body: await response.json(), status: response.status };
-}
-
-function readString(value: unknown, property: string) {
-  if (
-    typeof value !== "object" ||
-    value === null ||
-    !(property in value) ||
-    typeof value[property as keyof typeof value] !== "string"
-  ) {
-    throw new Error(`Expected response property "${property}".`);
-  }
-  return value[property as keyof typeof value] as string;
-}
-
-function run<Value, Error>(effect: Effect.Effect<Value, Error>) {
-  return Effect.runPromise(effect);
 }

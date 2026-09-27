@@ -1,7 +1,6 @@
 import { mkdir, mkdtemp, realpath, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
-import { currentTransportLimits } from "@rebase/contracts";
 import { Effect } from "effect";
 import { afterEach, describe, expect, it } from "vite-plus/test";
 import { createEnvironmentFilesystem } from "#server/features/environment-filesystem/environment-filesystem";
@@ -62,7 +61,7 @@ describe("Environment filesystem", () => {
     });
   });
 
-  it("keeps large listings within the HTTP response limit", async () => {
+  it("caps large listings at 500 entries", async () => {
     const root = await createTemporaryDirectory();
     await Promise.all(
       Array.from({ length: 520 }, (_, index) =>
@@ -78,9 +77,6 @@ describe("Environment filesystem", () => {
 
     expect(listing.truncated).toBe(true);
     expect(listing.entries).toHaveLength(500);
-    expect(Buffer.byteLength(JSON.stringify(listing))).toBeLessThanOrEqual(
-      currentTransportLimits.maxHttpResponseBytes,
-    );
   });
 
   it("returns typed failures for malformed and missing paths", async () => {

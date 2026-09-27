@@ -1,4 +1,4 @@
-import { EnvironmentFilesystemHttpApi } from "@rebase/contracts";
+import { EnvironmentFilesystemApi } from "@rebase/contracts";
 import { useEnvironmentQuery } from "#web/platform/query/environment-query";
 
 export function useDirectoryListing(
@@ -6,7 +6,7 @@ export function useDirectoryListing(
   enabled: boolean,
 ) {
   return useEnvironmentQuery(
-    EnvironmentFilesystemHttpApi.listDirectory,
+    EnvironmentFilesystemApi.listDirectory,
     path === undefined ? {} : { path },
     { enabled, changes: "none", staleTime: 0, refetchOnWindowFocus: false },
   );

@@ -5,13 +5,13 @@ import type {
   EnvironmentDeviceAuthorization,
   EnvironmentPairingExchanged,
   ExchangeEnvironmentPairing,
+  InvalidGrant,
 } from "@rebase/contracts";
 import { eq } from "drizzle-orm";
 import { Data, Effect } from "effect";
 import {
   createDeviceCredential,
   createPairingCode,
-  createSecretMaterial,
   digestSecretMaterial,
   verifyDeviceCredential,
 } from "#server/features/environment-authorization/environment-authorization-secret";
@@ -20,7 +20,6 @@ import { authorizationMetadataTable } from "#server/persistence/environment-stat
 import type { EnvironmentStorageError } from "#server/persistence/sqlite/storage-operation";
 
 const pairingLifetimeMilliseconds = 10 * 60 * 1_000;
-const ticketLifetimeMilliseconds = 30 * 1_000;
 const authorizationInactivityMilliseconds = 90 * 24 * 60 * 60 * 1_000;
 const retainedMaterialMilliseconds = 24 * 60 * 60 * 1_000;
 
@@ -39,9 +38,6 @@ export interface EnvironmentAuthorization {
   readonly authorize: (
     credential: string | undefined,
   ) => AuthorizationResult<EnvironmentDeviceAuthorization>;
-  readonly consumeTicket: (
-    ticket: string | undefined,
-  ) => AuthorizationResult<EnvironmentDeviceAuthorization>;
   readonly createPairing: (pairing?: {
     readonly replacesGrantsWithSameLabel?: boolean;
   }) => Effect.Effect<{
@@ -51,33 +47,27 @@ export interface EnvironmentAuthorization {
   readonly exchangePairing: (
     exchange: ExchangeEnvironmentPairing,
   ) => AuthorizationResult<EnvironmentPairingExchanged>;
-  readonly mintTicket: (credential: string | undefined) => AuthorizationResult<{
-    readonly expiresAt: string;
-    readonly ticket: string;
-  }>;
   readonly revoke: (
-    credential: string | undefined,
     authorizationId: string,
-  ) => AuthorizationResult<EnvironmentAuthorizationRevoked>;
+  ) => Effect.Effect<
+    EnvironmentAuthorizationRevoked,
+    InvalidGrant | EnvironmentStorageError
+  >;
 }
 
 export function createEnvironmentAuthorization(
   context: EnvironmentContext,
 ): EnvironmentAuthorization {
   const pairings = new Map<string, PairingEntry>();
-  const tickets = new Map<string, TicketEntry>();
 
   return {
     authorize: (credential) => authorizeCredential(context, credential),
-    consumeTicket: (ticket) => consumeTicket(context, tickets, ticket),
     createPairing: (pairing) =>
       Effect.sync(() =>
         createPairing(pairings, pairing?.replacesGrantsWithSameLabel ?? false),
       ),
     exchangePairing: (exchange) => exchangePairing(context, pairings, exchange),
-    mintTicket: (credential) => mintTicket(context, tickets, credential),
-    revoke: (credential, authorizationId) =>
-      revokeAuthorization(context, credential, authorizationId),
+    revoke: (authorizationId) => revokeAuthorization(context, authorizationId),
   };
 }
 
@@ -241,64 +231,11 @@ function authorizeStoredGrant(
     );
 }
 
-function mintTicket(
-  context: EnvironmentContext,
-  tickets: Map<string, TicketEntry>,
-  credential: string | undefined,
-) {
-  return Effect.gen(function* () {
-    const authorization = yield* authorizeCredential(context, credential);
-    const now = Date.now();
-    removeOldMaterial(tickets, now);
-    const ticket = createSecretMaterial();
-    const expiresAt = now + ticketLifetimeMilliseconds;
-    tickets.set(digestSecretMaterial(ticket), {
-      authorizationId: authorization.id,
-      expiresAt,
-      used: false,
-    });
-    return { expiresAt: new Date(expiresAt).toISOString(), ticket };
-  });
-}
-
-function consumeTicket(
-  context: EnvironmentContext,
-  tickets: Map<string, TicketEntry>,
-  ticket: string | undefined,
-) {
-  if (ticket === undefined) {
-    return failAuthorization({ _tag: "InvalidTicket" });
-  }
-  const stored = tickets.get(digestSecretMaterial(ticket));
-  if (stored === undefined) {
-    return failAuthorization({ _tag: "InvalidTicket" });
-  }
-  if (stored.used) {
-    return failAuthorization({ _tag: "TicketAlreadyUsed" });
-  }
-  if (Date.now() >= stored.expiresAt) {
-    return failAuthorization({ _tag: "ExpiredTicket" });
-  }
-
-  stored.used = true;
-  return authorizeStoredGrant(context, stored.authorizationId).pipe(
-    Effect.tapError((error) =>
-      error._tag === "EnvironmentStorageError"
-        ? Effect.sync(() => {
-            stored.used = false;
-          })
-        : Effect.void,
-    ),
-  );
-}
-
 function revokeAuthorization(
   context: EnvironmentContext,
-  credential: string | undefined,
   authorizationId: string,
 ) {
   return Effect.gen(function* () {
-    yield* authorizeCredential(context, credential);
     const revokedAt = new Date().toISOString();
     const revoked = yield* context.write(
       "Could not revoke device authorization",
@@ -310,16 +247,13 @@ function revokeAuthorization(
           .run().changes > 0,
     );
     if (!revoked) {
-      return yield* failAuthorization({ _tag: "InvalidGrant" });
+      return yield* Effect.fail<InvalidGrant>({ _tag: "InvalidGrant" });
     }
     return { authorizationId, revokedAt };
   });
 }
 
-function removeOldMaterial<Entry extends MaterialEntry>(
-  entries: Map<string, Entry>,
-  now: number,
-) {
+function removeOldMaterial(entries: Map<string, PairingEntry>, now: number) {
   for (const [digest, entry] of entries) {
     if (entry.expiresAt + retainedMaterialMilliseconds <= now) {
       entries.delete(digest);
@@ -339,15 +273,8 @@ function failAuthorization(failure: EnvironmentAuthorizationFailure) {
   return Effect.fail(new EnvironmentAuthorizationError({ failure }));
 }
 
-interface MaterialEntry {
+interface PairingEntry {
   readonly expiresAt: number;
-  used: boolean;
-}
-
-interface PairingEntry extends MaterialEntry {
   readonly replacesGrantsWithSameLabel: boolean;
-}
-
-interface TicketEntry extends MaterialEntry {
-  readonly authorizationId: string;
+  used: boolean;
 }

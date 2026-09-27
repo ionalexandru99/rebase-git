@@ -96,10 +96,7 @@ export function RepositorySelectionProvider({
 }
 
 function useLiveRefs(repository: RepositoryCatalogEntry | undefined) {
-  const { refs, restored } = useRepositoryRefs(
-    repository?.id,
-    repository?.logicalRepositoryId ?? repository?.id,
-  );
+  const { refs, restored } = useRepositoryRefs(repository?.id);
   return restored ? undefined : refs;
 }
 

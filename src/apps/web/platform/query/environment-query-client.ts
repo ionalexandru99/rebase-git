@@ -1,10 +1,8 @@
 import { focusManager, QueryClient } from "@tanstack/react-query";
-import { createLiveQueryCache } from "#web/platform/query/live-query-data";
 
 export function createEnvironmentQueryClient() {
   focusManager.setEventListener(listenForWindowFocus);
   return new QueryClient({
-    queryCache: createLiveQueryCache(),
     defaultOptions: {
       queries: {
         networkMode: "always",

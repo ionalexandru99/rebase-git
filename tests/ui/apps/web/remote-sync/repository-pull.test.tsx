@@ -1,10 +1,10 @@
 import {
   type PullFailure,
   type RepositoryFreshness,
-  RepositoryPullHttpApi,
+  RepositoryPullApi,
   type RepositoryRefs,
+  RepositoryRefsApi,
 } from "@rebase/contracts";
-import { EnvironmentHttpRejected } from "@rebase/environment-client";
 import { describe, expect, it, vi } from "vite-plus/test";
 import { page } from "vite-plus/test/browser";
 import {
@@ -16,9 +16,9 @@ import { repositoryScope } from "#tests-ui/apps/web/repository-scope/repository-
 import {
   fakeRequests,
   idleOperation,
+  rejected,
   respond,
 } from "#tests-ui/runtime/fake-requests";
-import { fakeRpc } from "#tests-ui/runtime/fake-rpc";
 import { render } from "#tests-ui/runtime/render";
 import { NotificationsProvider } from "#web/features/notifications/notifications";
 import { RemoteSync } from "#web/features/remote-sync/remote-sync";
@@ -84,7 +84,8 @@ describe("repository pull", () => {
     const finished = Promise.withResolvers<void>();
     const requests = fakeRequests(
       idleOperation,
-      respond(RepositoryPullHttpApi.pull, async (command) => {
+      respond(RepositoryRefsApi.read, async () => refs(3)),
+      respond(RepositoryPullApi.pull, async (command) => {
         pulled(command);
         await finished.promise;
         return { outcome: "FastForwarded" as const };
@@ -105,7 +106,7 @@ describe("repository pull", () => {
           </RemoteSync>
         </RepositoryScopeProvider>
       </div>,
-      { environment: { requests, rpc: await fakeRpc(async () => refs(3)) } },
+      { environment: { requests } },
     );
     await page.getByRole("button", { name: "Pull 3 incoming commits" }).click();
     await expect
@@ -168,9 +169,10 @@ async function fixture({
   const requested = vi.fn();
   const requests = fakeRequests(
     idleOperation,
-    respond(RepositoryPullHttpApi.pull, async (command) => {
+    respond(RepositoryRefsApi.read, async () => refs(0)),
+    respond(RepositoryPullApi.pull, async (command) => {
       requested(command);
-      if (failure !== undefined) throw new EnvironmentHttpRejected({ failure });
+      if (failure !== undefined) throw rejected(failure);
       return { outcome: "FastForwarded" as const };
     }),
   );
@@ -185,7 +187,7 @@ async function fixture({
         <RemoteSync reader={reader}>{(actions) => actions}</RemoteSync>
       </RepositoryScopeProvider>
     </NotificationsProvider>,
-    { environment: { requests, rpc: await fakeRpc(async () => refs(0)) } },
+    { environment: { requests } },
   );
   return {
     fetch,

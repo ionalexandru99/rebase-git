@@ -1,4 +1,4 @@
-import { currentEnvironmentProtocol } from "@rebase/contracts";
+import { environmentProtocol } from "@rebase/contracts";
 import { createAsyncStoragePersister } from "@tanstack/query-async-storage-persister";
 import type { Query } from "@tanstack/react-query";
 import type {
@@ -27,7 +27,7 @@ export function createEnvironmentQueryPersistence(): EnvironmentQueryPersistence
         deserialize: (value) => unconfirmedClient(JSON.parse(value)),
       }),
     ),
-    buster: `protocol-${currentEnvironmentProtocol.major}`,
+    buster: `protocol-${environmentProtocol}`,
     maxAge: Number.POSITIVE_INFINITY,
     dehydrateOptions: { shouldDehydrateQuery: persistedQuery },
     hydrateOptions: {
@@ -50,6 +50,7 @@ function unconfirmedClient(client: PersistedClient): PersistedClient {
         state: {
           ...query.state,
           status: "success",
+          dataUpdatedAt: 0,
           error: null,
           fetchFailureCount: 0,
           fetchFailureReason: null,

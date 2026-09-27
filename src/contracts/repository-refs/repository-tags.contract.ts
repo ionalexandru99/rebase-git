@@ -1,7 +1,4 @@
-import {
-  type EnvironmentHttpRoute,
-  repositoryCommand,
-} from "@rebase/contracts/environment-connection/http/environment-http-route.contract";
+import { repositoryCommand } from "@rebase/contracts/environment-connection/environment-route.contract";
 import {
   ObjectId,
   RefName,
@@ -43,15 +40,15 @@ export const TagRejected = Schema.TaggedStruct("TagRejected", {
 });
 export type TagRejected = typeof TagRejected.Type;
 
-export const RepositoryTagsHttpApi = {
-  create: repositoryCommand("/api/repositories/tags/create", {
+export const RepositoryTagsApi = {
+  create: repositoryCommand("repositories/tags/create", {
     request: CreateRepositoryTag,
     success: RepositoryTag,
     failure: TagRejected,
   }),
-  delete: repositoryCommand("/api/repositories/tags/delete", {
+  delete: repositoryCommand("repositories/tags/delete", {
     request: DeleteRepositoryTag,
     success: RepositoryTagDeleted,
     failure: RefMissing,
   }),
-} satisfies Record<string, EnvironmentHttpRoute>;
+};

@@ -1,9 +1,9 @@
-import { RepositoryChangesHttpApi } from "@rebase/contracts";
-import type { EnvironmentFeature } from "#server/adapters/environment-transport/combine-environment-features";
+import { RepositoryChangesApi } from "@rebase/contracts";
+import type { EnvironmentFeature } from "#server/adapters/environment-transport/environment-routes";
 import {
   type RepositoryDependencies,
   repositoryRoutes,
-} from "#server/adapters/environment-transport/http/repository-http-routes";
+} from "#server/adapters/environment-transport/environment-routes";
 import {
   commitRepositoryChanges,
   mutateRepositoryChanges,
@@ -15,10 +15,9 @@ export function repositoryChangesFeature(
   dependencies: RepositoryDependencies,
 ): EnvironmentFeature {
   const { command, query } = repositoryRoutes(dependencies);
-  const api = RepositoryChangesHttpApi;
+  const api = RepositoryChangesApi;
   return {
-    capabilities: [],
-    httpRoutes: [
+    routes: [
       query(api.read, readRepositoryChanges),
       query(api.diff, readRepositoryChangeDiff),
       command(

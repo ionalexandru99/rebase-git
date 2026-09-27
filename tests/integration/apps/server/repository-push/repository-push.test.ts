@@ -3,7 +3,7 @@ import { join } from "node:path";
 import {
   type PushBranch,
   type PushDestination,
-  RepositoryPushHttpApi,
+  RepositoryPushApi,
 } from "@rebase/contracts";
 import { Effect, Fiber } from "effect";
 import { describe, expect, it } from "vite-plus/test";
@@ -26,7 +26,7 @@ async function fixture(wrap?: (runner: GitCommandRunner) => GitCommandRunner) {
   await git(local, "push", "-u", "origin", "main");
   await cloneRepository(remote, other);
   const repositoryId = (await environment.remember(local)).id;
-  const service = environment.routes(RepositoryPushHttpApi);
+  const service = environment.routes(RepositoryPushApi);
   const scope = { repositoryId, worktreePath: local };
   const push = (
     branch: string,
@@ -238,6 +238,8 @@ describe("pushing branches", () => {
     await pushStarted;
     await Effect.runPromise(Fiber.interrupt(fiber));
 
-    expect(await f.tip(f.local, "refs/remotes/origin/main")).toBe(pushed);
+    await expect
+      .poll(() => f.tip(f.local, "refs/remotes/origin/main"))
+      .toBe(pushed);
   });
 });

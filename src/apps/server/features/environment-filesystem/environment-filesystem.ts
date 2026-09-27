@@ -4,29 +4,26 @@ import { homedir } from "node:os";
 import { basename, dirname, extname, isAbsolute, join, parse } from "node:path";
 import { promisify } from "node:util";
 import {
-  currentTransportLimits,
   type EnvironmentDirectory,
   type EnvironmentDirectoryEntry,
   type EnvironmentDirectoryRejected,
-  EnvironmentFilesystemHttpApi,
+  EnvironmentFilesystemApi,
   type EnvironmentPathBreadcrumb,
 } from "@rebase/contracts";
 import { Effect } from "effect";
-import type { EnvironmentFeature } from "#server/adapters/environment-transport/combine-environment-features";
-import { route } from "#server/adapters/environment-transport/http/environment-http-route-handler";
+import type { EnvironmentFeature } from "#server/adapters/environment-transport/environment-routes";
+import { route } from "#server/adapters/environment-transport/environment-routes";
 
 const maximumEntries = 500;
 const maximumPathLength = 4_096;
 const maximumBreadcrumbBytes = 16_384;
-const responseSizeMargin = 512;
 const realpathNative = promisify(realpath.native);
 
 export function environmentFilesystemFeature(): EnvironmentFeature {
   const filesystem = createEnvironmentFilesystem();
   return {
-    capabilities: [],
-    httpRoutes: [
-      route(EnvironmentFilesystemHttpApi.listDirectory, (directory) =>
+    routes: [
+      route(EnvironmentFilesystemApi.listDirectory, (directory) =>
         filesystem.listDirectory(directory.path, directory.includeHidden),
       ),
     ],
@@ -55,18 +52,12 @@ function listEnvironmentDirectory(
       inspectEntries(path, directoryEntries.slice(0, maximumEntries)),
     );
     const parent = dirname(path);
-    const listing = {
+    return {
       breadcrumbs: createBreadcrumbs(path),
-      entries: [],
+      entries: inspectedEntries,
       ...(parent === path ? {} : { parentPath: parent }),
       path,
-      truncated: false,
-    } satisfies EnvironmentDirectory;
-    const entries = fitDirectoryEntries(listing, inspectedEntries);
-    return {
-      ...listing,
-      entries,
-      truncated: directoryEntries.length > entries.length,
+      truncated: directoryEntries.length > inspectedEntries.length,
     } satisfies EnvironmentDirectory;
   });
 }
@@ -152,27 +143,6 @@ function createBreadcrumbs(path: string): readonly EnvironmentPathBreadcrumb[] {
     bounded.shift();
   }
   return bounded;
-}
-
-function fitDirectoryEntries(
-  listing: EnvironmentDirectory,
-  entries: readonly EnvironmentDirectoryEntry[],
-) {
-  const maximumResponseBytes =
-    currentTransportLimits.maxHttpResponseBytes - responseSizeMargin;
-  let encodedBytes = Buffer.byteLength(JSON.stringify(listing));
-  const fitted: EnvironmentDirectoryEntry[] = [];
-
-  for (const entry of entries) {
-    const entryBytes = Buffer.byteLength(JSON.stringify(entry));
-    const separatorBytes = fitted.length === 0 ? 0 : 1;
-    if (encodedBytes + entryBytes + separatorBytes > maximumResponseBytes) {
-      break;
-    }
-    fitted.push(entry);
-    encodedBytes += entryBytes + separatorBytes;
-  }
-  return fitted;
 }
 
 function fileKind(name: string) {

@@ -1,5 +1,9 @@
-import { exchangeEnvironmentPairingEffect } from "@rebase/environment-client";
-import { Effect } from "effect";
+import {
+  EnvironmentPairingExchanged,
+  type ExchangeEnvironmentPairing,
+  environmentPairingExchangePath,
+} from "@rebase/contracts";
+import { Schema } from "effect";
 import type { ManagedEnvironmentServer } from "#desktop/platform/environment/environment-supervisor";
 
 export type DesktopRenderer =
@@ -34,11 +38,12 @@ export async function startDesktopApplication(
 ) {
   const environment = await options.startEnvironment();
   try {
-    const { credential } = await Effect.runPromise(
-      exchangeEnvironmentPairingEffect(environment.origin, {
+    const { credential } = await exchangeEnvironmentPairing(
+      environment.origin,
+      {
         label: "Rebase desktop",
         pairingMaterial: new URL(environment.pairingUrl).hash.slice(1),
-      }),
+      },
     );
     const application = new DesktopApplication(
       options.host,
@@ -52,6 +57,24 @@ export async function startDesktopApplication(
     await environment.stop();
     throw error;
   }
+}
+
+async function exchangeEnvironmentPairing(
+  origin: string,
+  exchange: ExchangeEnvironmentPairing,
+) {
+  const response = await fetch(
+    new URL(environmentPairingExchangePath, origin),
+    {
+      body: JSON.stringify(exchange),
+      headers: { "content-type": "application/json" },
+      method: "POST",
+    },
+  );
+  const body: unknown = await response.json();
+  if (!response.ok)
+    throw new Error(`The Environment refused pairing: ${JSON.stringify(body)}`);
+  return Schema.decodeUnknownSync(EnvironmentPairingExchanged)(body);
 }
 
 export class DesktopApplication {

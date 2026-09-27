@@ -1,11 +1,9 @@
-import type { EnvironmentRpcClient } from "@rebase/contracts";
-import type { EnvironmentRequestClient } from "@rebase/environment-client";
-import { createContext, type ReactNode, useContext } from "react";
 import type {
-  EnvironmentChanges,
-  NegotiatedEnvironment,
-} from "#web/platform/environment/environment-protocol.contract";
-import { useEnvironmentInvalidation } from "#web/platform/query/environment-invalidation";
+  EnvironmentRoute,
+  RouteInput,
+  RouteSuccess,
+} from "@rebase/contracts";
+import { createContext, type ReactNode, useContext } from "react";
 
 export type EnvironmentAvailability =
   | "available"
@@ -28,12 +26,15 @@ export interface EnvironmentStatus {
   readonly status: string;
 }
 
+export type EnvironmentRequests = <Route extends EnvironmentRoute>(
+  route: Route,
+  input: RouteInput<Route>,
+  options?: { readonly signal?: AbortSignal },
+) => Promise<RouteSuccess<Route>>;
+
 export interface Environment {
   readonly environmentId: string | undefined;
-  readonly requests: EnvironmentRequestClient;
-  readonly rpc: EnvironmentRpcClient | undefined;
-  readonly capabilities: NegotiatedEnvironment["capabilities"];
-  readonly changes: EnvironmentChanges;
+  readonly requests: EnvironmentRequests;
   readonly connected: boolean;
   readonly readable: boolean;
   readonly writable: boolean;
@@ -49,7 +50,6 @@ export function EnvironmentProvider({
   readonly environment: Environment;
   readonly children?: ReactNode;
 }) {
-  useEnvironmentInvalidation(environment.changes, environment.connected);
   return (
     <EnvironmentContext.Provider value={environment}>
       {children}

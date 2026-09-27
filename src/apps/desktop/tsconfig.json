@@ -8,9 +8,5 @@
   },
   "include": ["./**/*.ts"],
   "exclude": ["./dist"],
-  "references": [
-    { "path": "../../contracts" },
-    { "path": "../server" },
-    { "path": "../../environment-client" }
-  ]
+  "references": [{ "path": "../../contracts" }, { "path": "../server" }]
 }

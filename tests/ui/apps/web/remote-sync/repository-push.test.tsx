@@ -1,19 +1,19 @@
 import {
   type PushBranch,
   type PushRejected,
-  RepositoryPushHttpApi,
+  RepositoryPushApi,
   type RepositoryRefs,
+  RepositoryRefsApi,
 } from "@rebase/contracts";
-import { EnvironmentHttpRejected } from "@rebase/environment-client";
 import { describe, expect, it, vi } from "vite-plus/test";
 import { page } from "vite-plus/test/browser";
 import { repositoryScope } from "#tests-ui/apps/web/repository-scope/repository-scope-fixture";
 import {
   fakeRequests,
   idleOperation,
+  rejected,
   respond,
 } from "#tests-ui/runtime/fake-requests";
-import { fakeRpc } from "#tests-ui/runtime/fake-rpc";
 import { render } from "#tests-ui/runtime/render";
 import { NotificationsProvider } from "#web/features/notifications/notifications";
 import {
@@ -72,10 +72,10 @@ async function fixture(
   const pushed = vi.fn<(command: PushBranch) => void>();
   const requests = fakeRequests(
     idleOperation,
-    respond(RepositoryPushHttpApi.push, async (command, { signal }) => {
+    respond(RepositoryPushApi.push, async (command, { signal }) => {
       pushed(command);
       const failure = await respondTo(command, signal);
-      if (failure !== null) throw new EnvironmentHttpRejected({ failure });
+      if (failure !== null) throw rejected(failure);
       return { destination: command.destination, target: reviewed };
     }),
   );
@@ -213,7 +213,8 @@ describe("repository push", () => {
     const repositoryId = "00000000-0000-4000-8000-000000000001";
     const requests = fakeRequests(
       idleOperation,
-      respond(RepositoryPushHttpApi.push, (command, { signal }) =>
+      respond(RepositoryRefsApi.read, async () => spikeRefs(repositoryId)),
+      respond(RepositoryPushApi.push, (command, { signal }) =>
         pendingPush(aborted)(command, signal),
       ),
     );
@@ -241,10 +242,7 @@ describe("repository push", () => {
       </NotificationsProvider>
     );
     const view = await render(tree(true), {
-      environment: {
-        requests,
-        rpc: await fakeRpc(async () => spikeRefs(repositoryId)),
-      },
+      environment: { requests },
     });
     const pushButton = page.getByRole("button", { name: "Push spike" });
     const progress = page.getByRole("region", { name: "Push progress" });

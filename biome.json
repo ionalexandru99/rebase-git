@@ -62,7 +62,7 @@
       }
     },
     {
-      "includes": ["src/contracts/**", "src/environment-client/**"],
+      "includes": ["src/contracts/**"],
       "linter": {
         "rules": {
           "style": {

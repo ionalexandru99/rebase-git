@@ -2,15 +2,15 @@ import {
   type ExecuteOperation,
   type OperationFailure,
   type RepositoryOperation,
-  RepositoryOperationsHttpApi,
+  RepositoryOperationsApi,
   repositoryRejected,
 } from "@rebase/contracts";
 import { Effect } from "effect";
-import type { EnvironmentFeature } from "#server/adapters/environment-transport/combine-environment-features";
+import type { EnvironmentFeature } from "#server/adapters/environment-transport/environment-routes";
 import {
   type RepositoryDependencies,
   repositoryRoutes,
-} from "#server/adapters/environment-transport/http/repository-http-routes";
+} from "#server/adapters/environment-transport/environment-routes";
 import type {
   GitCommandOutput,
   GitCommandRunner,
@@ -22,10 +22,9 @@ export function repositoryOperationsFeature(
 ): EnvironmentFeature {
   const { command, query } = repositoryRoutes(dependencies);
   const { coordination } = dependencies;
-  const api = RepositoryOperationsHttpApi;
+  const api = RepositoryOperationsApi;
   return {
-    capabilities: [],
-    httpRoutes: [
+    routes: [
       query(api.read, (input) => coordination.operation(input.worktreePath)),
       command(
         api.execute,

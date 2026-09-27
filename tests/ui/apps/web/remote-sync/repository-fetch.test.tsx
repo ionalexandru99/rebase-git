@@ -103,7 +103,7 @@ describe("repository fetch controls", () => {
           ...ready,
           freshness: { ...fresh, stale: true },
           freshnessError: new RepositoryHistoryRejected({
-            failure: { _tag: "AuthorizationDenied" },
+            failure: { _tag: "SnapshotInvalidated" },
           }),
         }}
       />,
@@ -255,7 +255,7 @@ describe("repository fetch controls", () => {
     const reader = createReader();
     reader.configureFetch.mockRejectedValueOnce(
       new RepositoryHistoryRejected({
-        failure: { _tag: "AuthorizationDenied" },
+        failure: { _tag: "SnapshotInvalidated" },
       }),
     );
     await render(<Controls reader={reader} snapshot={ready} />);
@@ -268,7 +268,7 @@ describe("repository fetch controls", () => {
     await page.getByRole("button", { name: "Save", exact: true }).click();
     await expect
       .element(page.getByRole("alert"))
-      .toHaveTextContent("This device has no access to this repository.");
+      .toHaveTextContent("Git could not complete the operation.");
     await expect
       .element(page.getByRole("spinbutton", { name: "Interval in seconds" }))
       .toHaveValue(90);

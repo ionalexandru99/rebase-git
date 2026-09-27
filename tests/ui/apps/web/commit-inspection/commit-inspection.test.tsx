@@ -1,6 +1,6 @@
 import {
   type ChangeDiff,
-  CommitInspectionHttpApi,
+  CommitInspectionApi,
   type CommitInspection as Details,
   type InspectCommit,
   type InspectCommitDiff,
@@ -80,12 +80,8 @@ async function fixture(
     ),
   };
   const requests = fakeRequests(
-    respond(CommitInspectionHttpApi.inspect, (command) =>
-      client.inspect(command),
-    ),
-    respond(CommitInspectionHttpApi.inspectDiff, (command) =>
-      client.diff(command),
-    ),
+    respond(CommitInspectionApi.inspect, (command) => client.inspect(command)),
+    respond(CommitInspectionApi.inspectDiff, (command) => client.diff(command)),
   );
   const reader = historyReader({ commits: history(40), status: "ready" });
   const scopeKey = crypto.randomUUID();

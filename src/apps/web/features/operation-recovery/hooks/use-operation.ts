@@ -1,6 +1,6 @@
 import {
   type OperationScope,
-  RepositoryOperationsHttpApi,
+  RepositoryOperationsApi,
 } from "@rebase/contracts";
 import { skipToken } from "@tanstack/react-query";
 import { useEnvironmentQuery } from "#web/platform/query/environment-query";
@@ -13,7 +13,7 @@ export function useOperation(
   polling: boolean,
 ) {
   return useEnvironmentQuery(
-    RepositoryOperationsHttpApi.read,
+    RepositoryOperationsApi.read,
     scope === undefined ? skipToken : operationScope(scope),
     {
       changes: "index",
@@ -24,14 +24,10 @@ export function useOperation(
 }
 
 export function useOperationAction(scope: OperationScope | undefined) {
-  return useCommand(RepositoryOperationsHttpApi.execute, {
+  return useCommand(RepositoryOperationsApi.execute, {
     target: scope,
     answers: (operation, input) => [
-      answer(
-        RepositoryOperationsHttpApi.read,
-        operationScope(input),
-        operation,
-      ),
+      answer(RepositoryOperationsApi.read, operationScope(input), operation),
     ],
   });
 }

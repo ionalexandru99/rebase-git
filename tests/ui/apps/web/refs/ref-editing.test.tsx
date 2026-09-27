@@ -1,25 +1,22 @@
 import {
-  RepositoryBranchesHttpApi,
+  type EnvironmentRoute,
+  RepositoryBranchesApi,
   type RepositoryRefs,
-  RepositoryRefsHttpApi,
-  RepositoryTagsHttpApi,
+  RepositoryRefsApi,
+  RepositoryTagsApi,
   type RouteFailure,
   type RouteInput,
   type RouteSuccess,
 } from "@rebase/contracts";
-import {
-  EnvironmentHttpRejected,
-  type RequestableEnvironmentHttpRoute,
-} from "@rebase/environment-client";
 import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
 import { userEvent } from "vite-plus/test/browser";
 import { repositoryScope } from "#tests-ui/apps/web/repository-scope/repository-scope-fixture";
 import {
   fakeRequests,
   idleOperation,
+  rejected,
   respond,
 } from "#tests-ui/runtime/fake-requests";
-import { fakeRpc } from "#tests-ui/runtime/fake-rpc";
 import { render } from "#tests-ui/runtime/render";
 import { BranchesSidebar } from "#web/features/branches-sidebar/branches-sidebar";
 import { CommitActionMenu } from "#web/features/commit-graph/commit-actions";
@@ -35,8 +32,8 @@ const spike = "b".repeat(40);
 const scope = { repositoryId, worktreePath: mainPath };
 
 type RefRoute =
-  | keyof typeof RepositoryBranchesHttpApi
-  | keyof typeof RepositoryRefsHttpApi
+  | keyof typeof RepositoryBranchesApi
+  | keyof typeof RepositoryRefsApi
   | "createTag"
   | "deleteTag";
 
@@ -345,15 +342,15 @@ describe("ref editing", () => {
 });
 
 type RefFailure = RouteFailure<
-  | (typeof RepositoryBranchesHttpApi)[keyof typeof RepositoryBranchesHttpApi]
-  | typeof RepositoryTagsHttpApi.delete
+  | (typeof RepositoryBranchesApi)[keyof typeof RepositoryBranchesApi]
+  | typeof RepositoryTagsApi.delete
 >;
 
 async function refsEnvironment() {
   const requested = vi.fn<(route: RefRoute, command: unknown) => void>();
   const rejections = new Map<RefRoute, RefFailure>();
   let current = refs();
-  const reply = <Route extends RequestableEnvironmentHttpRoute>(
+  const reply = <Route extends EnvironmentRoute>(
     name: RefRoute,
     route: Route,
     answer: (command: RouteInput<Route>) => RouteSuccess<Route>,
@@ -362,7 +359,7 @@ async function refsEnvironment() {
       requested(name, command);
       const failure = rejections.get(name);
       rejections.delete(name);
-      if (failure !== undefined) throw new EnvironmentHttpRejected({ failure });
+      if (failure !== undefined) throw rejected(failure);
       return answer(command);
     });
   const branches = (
@@ -374,12 +371,13 @@ async function refsEnvironment() {
   };
   const requests = fakeRequests(
     idleOperation,
-    reply("create", RepositoryBranchesHttpApi.create, ({ name }) => {
+    respond(RepositoryRefsApi.read, async () => current),
+    reply("create", RepositoryBranchesApi.create, ({ name }) => {
       const branch = { name, target: main };
       branches((all) => [...all, branch]);
       return branch;
     }),
-    reply("rename", RepositoryBranchesHttpApi.rename, (command) => {
+    reply("rename", RepositoryBranchesApi.rename, (command) => {
       const branch = { name: command.newName, target: spike };
       branches((all) =>
         all.map((existing) =>
@@ -388,7 +386,7 @@ async function refsEnvironment() {
       );
       return { branch, previousName: command.name };
     }),
-    reply("delete", RepositoryBranchesHttpApi.delete, ({ local, remote }) => {
+    reply("delete", RepositoryBranchesApi.delete, ({ local, remote }) => {
       branches((all) => all.filter(({ name }) => name !== local?.name));
       current = {
         ...current,
@@ -402,23 +400,23 @@ async function refsEnvironment() {
         ...(remote === undefined ? {} : { remote }),
       };
     }),
-    reply("setUpstream", RepositoryBranchesHttpApi.setUpstream, ({ name }) => ({
+    reply("setUpstream", RepositoryBranchesApi.setUpstream, ({ name }) => ({
       name,
       target: main,
     })),
-    reply("createTag", RepositoryTagsHttpApi.create, (command) => {
+    reply("createTag", RepositoryTagsApi.create, (command) => {
       const tag = { name: command.name, target: command.target };
       current = { ...current, tags: [...current.tags, tag] };
       return tag;
     }),
-    reply("deleteTag", RepositoryTagsHttpApi.delete, (command) => {
+    reply("deleteTag", RepositoryTagsApi.delete, (command) => {
       current = {
         ...current,
         tags: current.tags.filter(({ name }) => name !== command.name),
       };
       return { name: command.name, target: spike };
     }),
-    reply("checkout", RepositoryRefsHttpApi.checkout, (command) => {
+    reply("checkout", RepositoryRefsApi.checkout, (command) => {
       const head = { branch: command.target.name, commit: spike };
       current = {
         ...current,
@@ -439,7 +437,7 @@ async function refsEnvironment() {
     requested,
     rejectNext: (route: RefRoute, failure: RefFailure) =>
       rejections.set(route, failure),
-    environment: { requests, rpc: await fakeRpc(async () => current) },
+    environment: { requests },
   };
 }
 

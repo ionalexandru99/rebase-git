@@ -3,7 +3,7 @@ import {
   type ChangesWritten,
   type CommitChanges,
   changesFailed,
-  currentTransportLimits,
+  environmentMaxMessageBytes,
   type MutateChanges,
   type ReadChangeDiff,
   type RepositoryChanges,
@@ -124,8 +124,7 @@ function requireCommittable(
   return Effect.void;
 }
 
-const writtenResponseBytes =
-  currentTransportLimits.maxHttpResponseBytes - 32_768;
+const writtenResponseBytes = environmentMaxMessageBytes - 32_768;
 
 function readWritten(
   git: GitCommandRunner,

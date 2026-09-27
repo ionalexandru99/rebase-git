@@ -87,7 +87,6 @@
     "@playwright/test": "1.62.1",
     "@rebase/contracts": "workspace:*",
     "@rebase/desktop": "workspace:*",
-    "@rebase/environment-client": "workspace:*",
     "@rebase/server": "workspace:*",
     "@rebase/web": "workspace:*",
     "@tanstack/react-query": "5.103.2",

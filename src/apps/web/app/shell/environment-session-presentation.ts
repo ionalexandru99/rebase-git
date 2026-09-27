@@ -1,4 +1,4 @@
-import type { LocalEnvironmentSessionState } from "#web/app/environment/local-environment-session.contract";
+import type { LocalEnvironmentSessionState } from "#web/app/environment/local-environment-session";
 import type { EnvironmentStatus } from "#web/platform/query/environment-context";
 
 export function environmentSessionPresentation(

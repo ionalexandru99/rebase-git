@@ -6,7 +6,7 @@ import {
   type ConflictPath,
   type ConflictScope,
   type RepositoryChanges,
-  RepositoryConflictsHttpApi,
+  RepositoryConflictsApi,
   type RepositoryRejected,
   type WholeFileChoice,
 } from "@rebase/contracts";
@@ -46,7 +46,7 @@ const fresh = {
 
 export function useConflictList(scope: ConflictScope | null, enabled = true) {
   return useEnvironmentQuery(
-    RepositoryConflictsHttpApi.list,
+    RepositoryConflictsApi.list,
     scope === null ? skipToken : conflictScope(scope),
     { ...fresh, enabled },
   );
@@ -57,7 +57,7 @@ export function useConflictDocument(
   enabled = true,
 ) {
   return useEnvironmentQuery(
-    RepositoryConflictsHttpApi.document,
+    RepositoryConflictsApi.document,
     input === null ? skipToken : { ...conflictScope(input), path: input.path },
     { ...fresh, enabled },
   );
@@ -102,17 +102,16 @@ export function useConflictActions(
   const options = {
     target: scope,
     answers: (list: ConflictList, input: ConflictScope) => [
-      answer(RepositoryConflictsHttpApi.list, conflictScope(input), list),
+      answer(RepositoryConflictsApi.list, conflictScope(input), list),
     ],
   };
-  const stage = useCommand(RepositoryConflictsHttpApi.stage, options);
-  const choose = useCommand(RepositoryConflictsHttpApi.choose, options);
+  const stage = useCommand(RepositoryConflictsApi.stage, options);
+  const choose = useCommand(RepositoryConflictsApi.choose, options);
   const [markers, setMarkers] = useState<string | null>(null);
   const failure = stage.failure ?? choose.failure;
   const settled = (
     result: CommandResult<
-      | typeof RepositoryConflictsHttpApi.stage
-      | typeof RepositoryConflictsHttpApi.choose
+      typeof RepositoryConflictsApi.stage | typeof RepositoryConflictsApi.choose
     >,
   ) => {
     if (result._tag === "Ok") onResolved?.(result.value);

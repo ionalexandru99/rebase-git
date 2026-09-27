@@ -13,8 +13,6 @@ export function describeRepositoryHistoryError(
     return "This browser cannot store repository history.";
   }
   switch (error.failure._tag) {
-    case "AuthorizationDenied":
-      return "This device cannot read repository history.";
     case "RepositoryMissing":
       return "The repository is no longer known by this Environment.";
     case "SnapshotInvalidated":

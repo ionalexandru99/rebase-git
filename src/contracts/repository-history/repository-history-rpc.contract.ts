@@ -1,10 +1,8 @@
-import { JsonMessageFragment } from "@rebase/contracts/environment-connection/websocket/json-message-fragment.contract";
 import {
   RepositoryFetchSetting,
   RepositoryFreshness,
 } from "@rebase/contracts/repository-history/repository-freshness.contract";
 import {
-  AcknowledgeRepositoryHistoryBatch,
   ReadRepositoryHistory,
   RepositoryHistoryOperationFailure,
   RepositoryHistorySynchronized,
@@ -14,26 +12,19 @@ import { Schema } from "effect";
 import { Rpc, RpcGroup } from "effect/unstable/rpc";
 
 const RepositoryId = ReadRepositoryHistory.fields.repositoryId;
-export const RepositoryHistoryReadRpc = RpcGroup.make(
+
+export const RepositoryHistoryRpc = RpcGroup.make(
   Rpc.make("ReadHistory", {
     payload: ReadRepositoryHistory,
-    success: JsonMessageFragment,
+    success: Schema.String,
     error: RepositoryHistoryOperationFailure,
-    stream: true,
   }),
   Rpc.make("SynchronizeHistory", {
     payload: SynchronizeRepositoryHistory,
-    success: Schema.Union([JsonMessageFragment, RepositoryHistorySynchronized]),
+    success: Schema.Union([Schema.String, RepositoryHistorySynchronized]),
     error: RepositoryHistoryOperationFailure,
     stream: true,
   }),
-  Rpc.make("CommitHistoryBatch", {
-    payload: AcknowledgeRepositoryHistoryBatch,
-    error: RepositoryHistoryOperationFailure,
-  }),
-);
-
-export const RepositoryFreshnessRpc = RpcGroup.make(
   Rpc.make("WatchFreshness", {
     payload: { repositoryId: RepositoryId },
     success: RepositoryFreshness,
@@ -50,8 +41,4 @@ export const RepositoryFreshnessRpc = RpcGroup.make(
     success: RepositoryFreshness,
     error: RepositoryHistoryOperationFailure,
   }),
-);
-
-export const RepositoryHistoryRpc = RepositoryHistoryReadRpc.merge(
-  RepositoryFreshnessRpc,
 );

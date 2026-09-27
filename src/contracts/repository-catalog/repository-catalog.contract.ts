@@ -1,7 +1,4 @@
-import {
-  type EnvironmentHttpRoute,
-  route,
-} from "@rebase/contracts/environment-connection/http/environment-http-route.contract";
+import { route } from "@rebase/contracts/environment-connection/environment-route.contract";
 import { IsoDate } from "@rebase/contracts/environment-connection/iso-date.contract";
 import { RepositoryRejected } from "@rebase/contracts/git/git-failures.contract";
 import {
@@ -66,36 +63,23 @@ export const RepositoryPathRejected = Schema.TaggedStruct(
 );
 export type RepositoryPathRejected = typeof RepositoryPathRejected.Type;
 
-export const repositoryCatalogPath = "/api/repositories";
-export const rememberRepositoryPath = "/api/repositories/remember";
-export const recordRepositoryOpenedPath = "/api/repositories/opened";
-export const removeRepositoryPath = "/api/repositories/removals";
-
-export const RepositoryCatalogHttpApi = {
-  list: route({
-    method: "GET",
-    path: repositoryCatalogPath,
+export const RepositoryCatalogApi = {
+  list: route("repositories/list", {
     success: RepositoryCatalog,
   }),
-  recordOpened: route({
-    method: "POST",
-    path: recordRepositoryOpenedPath,
+  recordOpened: route("repositories/opened", {
     request: RecordRepositoryOpened,
     success: RepositoryCatalogEntry,
     failure: RepositoryRejected,
   }),
-  remember: route({
-    method: "POST",
-    path: rememberRepositoryPath,
+  remember: route("repositories/remember", {
     request: RememberRepository,
     success: RepositoryCatalogEntry,
     failure: RepositoryPathRejected,
   }),
-  remove: route({
-    method: "POST",
-    path: removeRepositoryPath,
+  remove: route("repositories/remove", {
     request: RemoveRepository,
     success: RepositoryRemoved,
     failure: RepositoryRejected,
   }),
-} satisfies Record<string, EnvironmentHttpRoute>;
+};

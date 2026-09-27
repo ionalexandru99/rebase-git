@@ -4,21 +4,20 @@ import {
   changesFailed,
   type MutateChanges,
   type RepositoryChanges,
-  RepositoryChangesHttpApi,
+  RepositoryChangesApi,
 } from "@rebase/contracts";
-import {
-  EnvironmentHttpRejected,
-  EnvironmentResponseError,
-} from "@rebase/environment-client";
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import { page } from "vite-plus/test/browser";
-import { fakeRequests, respond } from "#tests-ui/runtime/fake-requests";
-import { render } from "#tests-ui/runtime/render";
+import {
+  fakeRequests,
+  rejected,
+  respond,
+  unanswered,
+} from "#tests-ui/runtime/fake-requests";
+import { render, testChanges } from "#tests-ui/runtime/render";
 import { defaultDiffPreferences } from "#web/domain/file-diff/diff-preferences.contract";
 import { WorkingChanges } from "#web/features/working-changes/working-changes";
 import { saveDiffPreferences } from "#web/persistence/working-changes/working-changes-store";
-import type { EnvironmentChangeListener } from "#web/platform/environment/environment-protocol.contract";
-import { createEnvironmentQueryClient } from "#web/platform/query/environment-query-client";
 
 const path = "src/read-status.ts";
 const before = 'export const status = "old";\n';
@@ -80,37 +79,25 @@ async function fixture(
   let writesHeld: Promise<void> | undefined;
   let reads = 0;
   let diffReads = 0;
-  const listeners = new Set<EnvironmentChangeListener>();
-  const changes = {
-    subscribe: (listener: EnvironmentChangeListener) => {
-      listeners.add(listener);
-      return () => listeners.delete(listener);
-    },
-  };
   const requests = fakeRequests(
-    respond(RepositoryChangesHttpApi.read, (command) => {
+    respond(RepositoryChangesApi.read, (command) => {
       reads += 1;
       if (command.amend && rejectAmendReads)
-        throw new EnvironmentHttpRejected({
-          failure: changesFailed("Conflict", "There is no commit to amend."),
-        });
+        throw rejected(
+          changesFailed("Conflict", "There is no commit to amend."),
+        );
       return snapshot;
     }),
-    respond(RepositoryChangesHttpApi.diff, (command) => {
+    respond(RepositoryChangesApi.diff, (command) => {
       diffReads += 1;
-      if (diffsRejected)
-        throw new EnvironmentResponseError({
-          responseTag: RepositoryChangesHttpApi.diff.path,
-        });
+      if (diffsRejected) throw unanswered;
       return diffs[command.path] ?? diff;
     }),
-    respond(RepositoryChangesHttpApi.mutate, async (command) => {
+    respond(RepositoryChangesApi.mutate, async (command) => {
       mutations.push(command);
       await writesHeld;
       if (staleMutations)
-        throw new EnvironmentHttpRejected({
-          failure: changesFailed("Stale", "The changes moved on."),
-        });
+        throw rejected(changesFailed("Stale", "The changes moved on."));
       snapshot = {
         ...snapshot,
         revision: `revision-${mutations.length}`,
@@ -132,23 +119,20 @@ async function fixture(
             : null,
       };
     }),
-    respond(RepositoryChangesHttpApi.commit, async (command) => {
+    respond(RepositoryChangesApi.commit, async (command) => {
       commits.push(command);
       if (command.amend)
         snapshot = { ...snapshot, head: crypto.randomUUID(), staged: [] };
       await writesHeld;
       if (rejectCommit)
-        throw new EnvironmentHttpRejected({
-          failure: changesFailed(
-            "Conflict",
-            "Commit hook rejected this message.",
-          ),
-        });
+        throw rejected(
+          changesFailed("Conflict", "Commit hook rejected this message."),
+        );
       snapshot = { ...snapshot, revision: "committed", staged: [] };
       return { changes: snapshot, diff: null };
     }),
   );
-  const queryClient = createEnvironmentQueryClient();
+  const { queryClient, publish } = testChanges();
   const view = await render(
     <div className="dark text-foreground" style={{ width: 1100, height: 700 }}>
       <WorkingChanges
@@ -162,7 +146,7 @@ async function fixture(
         openMergeView={() => {}}
       />
     </div>,
-    { environment: { requests, changes }, queryClient },
+    { environment: { requests }, queryClient },
   );
   if (!rejectDiffs)
     await expect
@@ -176,7 +160,7 @@ async function fixture(
     reads: () => reads,
     diffReads: () => diffReads,
     emitChange: () => {
-      for (const listener of listeners) listener([repositoryId], "Index");
+      publish([repositoryId], "Index");
     },
     advanceHead: (message: string) => {
       snapshot = {
