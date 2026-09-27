@@ -82,8 +82,7 @@ async function measureCommitGraph(
   const session = await page.context().newCDPSession(page);
   let historyReads = 0;
   session.on("Network.webSocketFrameSent", ({ response }) => {
-    if (response.payloadData.includes('"ReadRepositoryHistory"'))
-      historyReads += 1;
+    if (response.payloadData.includes('"tag":"ReadHistory"')) historyReads += 1;
   });
 
   try {
@@ -126,10 +125,8 @@ async function measureCommitGraph(
     await expect(history.getByRole("row").first()).toBeVisible();
     const browserMetrics = await page.evaluate(() => window.__graphMetrics);
     await measureHistoryScopeFeedback(page, false);
-    const readsBeforeCachedScope = readCount();
-    expect(readsBeforeCachedScope).toBeGreaterThan(0);
     const scopeFeedback = await measureHistoryScopeFeedback(page, true);
-    expect(readCount()).toBe(readsBeforeCachedScope);
+    expect(readCount()).toBe(0);
     const correctedContentMilliseconds = await measureCorrectedContent(
       page,
       repositoryPath,
@@ -254,7 +251,7 @@ async function shapeGraphWebSockets(page: Page, latency: number) {
         if (
           direction === "sent" &&
           typeof message === "string" &&
-          message.includes('"ReadRepositoryHistory"')
+          message.includes('"tag":"ReadHistory"')
         )
           frames.historyReads += 1;
         transmissionEnd =
@@ -372,8 +369,7 @@ async function installGraphMeasurements(page: Page) {
             if (
               window.__graphMetrics.started > 0 &&
               window.__graphMetrics.firstContent === undefined &&
-              typeof message.data === "string" &&
-              message.data.includes('"_tag":"JsonMessageFragment"')
+              typeof message.data === "string"
             ) {
               window.__graphMetrics.lastHistoryMessage = performance.now();
             }

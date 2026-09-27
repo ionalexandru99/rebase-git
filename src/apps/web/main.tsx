@@ -1,13 +1,11 @@
 import { PersistQueryClientProvider } from "@tanstack/react-query-persist-client";
-import { Layer, ManagedRuntime } from "effect";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { createBrowserLocalEnvironmentSession } from "#web/app/environment/browser-local-environment-session";
 import { readDesktopHostBridge } from "#web/app/environment/desktop-host-bridge";
 import { ApplicationShell } from "#web/app/shell/application-shell";
 import { NotificationsProvider } from "#web/features/notifications/notifications";
-import { createRepositoryHistoryGateway } from "#web/features/repository-history/transport/repository-history-gateway";
-import { ApplicationRuntime } from "#web/platform/effect/application-runtime-context";
+import { connectRepositoryHistory } from "#web/features/repository-history/repository-history";
 import { createEnvironmentInvalidation } from "#web/platform/query/environment-invalidation";
 import { createEnvironmentQueryClient } from "#web/platform/query/environment-query-client";
 import { createEnvironmentQueryPersistence } from "#web/platform/query/environment-query-persistence";
@@ -21,12 +19,9 @@ if (!(rootElement instanceof HTMLElement)) {
 
 const productVersion = import.meta.env.REBASE_PRODUCT_VERSION;
 const desktopHost = readDesktopHostBridge();
-const runtime = ManagedRuntime.make(Layer.empty);
-const repositoryHistory = createRepositoryHistoryGateway();
 const queryClient = createEnvironmentQueryClient();
 const session = createBrowserLocalEnvironmentSession(desktopHost, {
-  runtime,
-  onConnect: repositoryHistory.connect,
+  onConnect: connectRepositoryHistory,
   invalidation: createEnvironmentInvalidation(queryClient),
 });
 session.start();
@@ -38,17 +33,14 @@ createRoot(rootElement).render(
       client={queryClient}
       persistOptions={queryPersistence}
     >
-      <ApplicationRuntime value={runtime}>
-        <NotificationsProvider>
-          <ApplicationShell
-            desktopUpdates={desktopHost?.updates}
-            productVersion={productVersion}
-            repositoryFilesystem={desktopHost}
-            repositoryHistory={repositoryHistory.gateway}
-            session={session}
-          />
-        </NotificationsProvider>
-      </ApplicationRuntime>
+      <NotificationsProvider>
+        <ApplicationShell
+          desktopUpdates={desktopHost?.updates}
+          productVersion={productVersion}
+          repositoryFilesystem={desktopHost}
+          session={session}
+        />
+      </NotificationsProvider>
     </PersistQueryClientProvider>
   </StrictMode>,
 );

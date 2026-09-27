@@ -1,37 +1,37 @@
 import type {
   RepositoryCommit,
-  RepositoryHistoryOperationFailure,
+  RepositoryHistoryFailure,
 } from "@rebase/contracts";
 import { Effect, Stream } from "effect";
 import {
   type GitCommandRunner,
   type GitObjectFormat,
-  isGitRejection,
+  runRepositoryGit,
   streamRepositoryGit,
 } from "#server/adapters/local-git/git-commands";
-import {
-  parseHistoryOutput,
-  snapshotInvalidated,
-} from "#server/features/repository-history/git/history-failures";
-import { historyTraversalPageSize } from "#server/features/repository-history/git/history-snapshot-identity";
+import { parseHistoryOutput } from "#server/features/repository-history/git/history-failures";
 import {
   createGitHistoryBatchParser,
   gitHistoryFormat,
 } from "#server/features/repository-history/git/parse-git-history";
-import { packedGitArguments } from "#server/features/repository-history/git/read-selected-history";
 import { restoreShallowCommitParents } from "#server/features/repository-history/git/shallow-repository-history";
 
 const batchSize = 256;
+const pageSize = 5_000;
 const maximumBatchCharacters = 4 * 1_048_576;
 const traversalTimeoutMilliseconds = 30 * 60_000;
+const packedGitArguments = [
+  "-c",
+  "core.packedGitLimit=32m",
+  "-c",
+  "core.packedGitWindowSize=16m",
+];
 
 interface HistoryTraversal {
   readonly roots: readonly string[];
-  readonly excludedRoots: readonly string[];
-  readonly skip: number;
+  readonly knownTips: readonly string[];
   readonly objectFormat: GitObjectFormat;
   readonly shallowOids: readonly string[];
-  readonly invalidBasisOnFailure: boolean;
 }
 
 export function streamRepositoryHistory(
@@ -40,40 +40,39 @@ export function streamRepositoryHistory(
   traversal: HistoryTraversal,
   emit: (
     commits: readonly RepositoryCommit[],
-  ) => Effect.Effect<void, RepositoryHistoryOperationFailure>,
+  ) => Effect.Effect<void, RepositoryHistoryFailure>,
 ) {
   return Effect.gen(function* () {
+    const excluded = yield* existingCommits(
+      git,
+      repositoryPath,
+      traversal.knownTips,
+    );
     const frontier = new Set(traversal.roots);
     const shallow = new Set(traversal.shallowOids);
-    let remainingSkip = traversal.skip;
-    let emitted = 0;
     const deadline = Date.now() + traversalTimeoutMilliseconds;
-    const acceptBatch = (parsed: readonly RepositoryCommit[]) =>
+    const acceptBatch = (commits: readonly RepositoryCommit[]) =>
       Effect.gen(function* () {
-        for (const commit of parsed) {
+        for (const commit of commits) {
           frontier.delete(commit.oid);
           for (const parent of commit.parents) frontier.add(parent);
         }
-        const skipped = Math.min(remainingSkip, parsed.length);
-        remainingSkip -= skipped;
-        const pending = skipped === 0 ? parsed : parsed.slice(skipped);
-        if (pending.length === 0) return;
         yield* emit(
           yield* restoreShallowCommitParents(
             git,
             repositoryPath,
-            pending,
+            commits,
             shallow,
           ),
         );
-        emitted += pending.length;
       });
     while (frontier.size > 0) {
       const parsed = yield* historyPage(
         git,
         repositoryPath,
-        traversal,
+        traversal.objectFormat,
         frontier,
+        excluded,
         deadline,
       ).pipe(
         Stream.runFoldEffect(
@@ -82,26 +81,44 @@ export function streamRepositoryHistory(
             acceptBatch(batch).pipe(Effect.as(count + batch.length)),
         ),
       );
-      if (parsed < historyTraversalPageSize) break;
+      if (parsed < pageSize) break;
     }
-    if (remainingSkip > 0) return yield* Effect.fail(snapshotInvalidated());
-    return emitted;
   });
+}
+
+function existingCommits(
+  git: GitCommandRunner,
+  repositoryPath: string,
+  oids: readonly string[],
+) {
+  if (oids.length === 0) return Effect.succeed([]);
+  return runRepositoryGit(
+    git,
+    repositoryPath,
+    ["cat-file", "--batch-check=%(objectname) %(objecttype)"],
+    { input: `${oids.join("\n")}\n`, maxOutputBytes: 8 * 1_048_576 },
+  ).pipe(
+    Effect.map((output) =>
+      output
+        .split("\n")
+        .flatMap((line) =>
+          line.endsWith(" commit") ? [line.slice(0, line.indexOf(" "))] : [],
+        ),
+    ),
+  );
 }
 
 function historyPage(
   git: GitCommandRunner,
   repositoryPath: string,
-  traversal: HistoryTraversal,
+  objectFormat: GitObjectFormat,
   frontier: ReadonlySet<string>,
+  excluded: readonly string[],
   deadline: number,
-): Stream.Stream<
-  readonly RepositoryCommit[],
-  RepositoryHistoryOperationFailure
-> {
+): Stream.Stream<readonly RepositoryCommit[], RepositoryHistoryFailure> {
   return Stream.suspend(() => {
     const parser = createGitHistoryBatchParser(
-      traversal.objectFormat,
+      objectFormat,
       batchSize,
       maximumBatchCharacters,
     );
@@ -113,22 +130,17 @@ function historyPage(
         "--stdin",
         "--topo-order",
         "--no-show-signature",
-        `--max-count=${historyTraversalPageSize}`,
+        `--max-count=${pageSize}`,
         `--format=${gitHistoryFormat}`,
         "-z",
         "--",
       ],
       {
         globalArguments: packedGitArguments,
-        input: `${[...frontier].sort().join("\n")}\n${traversal.excludedRoots.map((oid) => `^${oid}`).join("\n")}\n`,
+        input: `${[...frontier].sort().join("\n")}\n${excluded.map((oid) => `^${oid}`).join("\n")}\n`,
         timeoutMilliseconds: Math.max(1, deadline - Date.now()),
       },
     ).pipe(
-      Stream.mapError((error) =>
-        traversal.invalidBasisOnFailure && isGitRejection(error)
-          ? snapshotInvalidated()
-          : error,
-      ),
       Stream.mapEffect((chunk) =>
         parseHistoryOutput(() => parser.accept(chunk)),
       ),

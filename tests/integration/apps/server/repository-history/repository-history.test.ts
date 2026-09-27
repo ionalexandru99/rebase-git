@@ -1,23 +1,19 @@
-import { mkdir, mkdtemp, realpath, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import {
-  decodeRepositoryHistoryBatch,
-  decodeRepositoryHistoryPage,
-  maximumRepositoryHistorySequence,
   RepositoryCatalogApi,
   type RepositoryCommit,
-  type RepositoryHistoryBatch,
-  type RepositoryHistoryOperationFailure,
-  type RepositoryHistorySnapshot,
+  type RepositoryHistoryTips,
+  type RepositoryHistoryUpdate,
+  type SynchronizeRepositoryHistory,
 } from "@rebase/contracts";
-import { Effect } from "effect";
-import { afterEach, describe, expect, it } from "vite-plus/test";
-import { createLocalGitCommandRunner } from "#server/adapters/local-git/git-commands";
-import { readObjectFormat } from "#server/features/repository-history/git/read-object-format";
-import { readRepositoryHistorySnapshot } from "#server/features/repository-history/git/read-repository-history-snapshot";
-import { synchronizeRepositoryHistory } from "#server/features/repository-history/git/synchronize-repository-history";
+import { Effect, Stream } from "effect";
+import { describe, expect, it } from "vite-plus/test";
+import {
+  type GitCommandRunner,
+  gitFailed,
+} from "#server/adapters/local-git/git-commands";
 import {
   cloneRepository,
   createRepository,
@@ -25,617 +21,262 @@ import {
   git,
 } from "#tests-support/git";
 import { openTestServer } from "#tests-support/server";
-import { removeTemporaryDirectory } from "#tests-support/temporary-directory";
-import { createRepositoryHistoryRpc } from "#web/features/repository-history/transport/repository-history-rpc";
+import { openEnvironmentSocket } from "#web/platform/environment/environment-connection";
 
-const directories = new Set<string>();
-const environmentId = "00000000-0000-4000-8000-000000000001";
-const requestId = "00000000-0000-4000-8000-000000000011";
+const unchanged = { changed: () => {} };
 
-afterEach(async () => {
-  await Promise.all(
-    [...directories].map((directory) => removeTemporaryDirectory(directory)),
-  );
-  directories.clear();
-});
-
-describe("repository history", () => {
-  it("synchronizes a bare repository without a worktree HEAD", async () => {
-    const root = await createTemporaryDirectory();
-    const source = join(root, "bare-source");
-    const bare = join(root, "repository.git");
-    await importLinearHistory(source, "sha1", 3);
-    await git(root, "clone", "--bare", source, bare);
-    const commits: RepositoryCommit[] = [];
-
-    const count = await Effect.runPromise(
-      synchronizeRepositoryHistory(
-        createLocalGitCommandRunner(),
-        bare,
-        {
-          _tag: "SynchronizeRepositoryHistory",
-          priority: "visible",
-          repositoryId: environmentId,
-          requestId,
-        },
-        (batch) =>
-          Effect.sync(() => {
-            commits.push(...batch.commits);
-          }),
-        readObjectFormat(createLocalGitCommandRunner(), bare),
-      ),
-    );
-
-    expect(count).toBe(3);
-    expect(commits.map((commit) => commit.subject)).toEqual([
-      "commit 2",
-      "commit 1",
-      "commit 0",
-    ]);
-  });
-
-  it("preserves failures raised while emitting streamed batches", async () => {
-    const root = await createTemporaryDirectory();
-    const repositoryPath = join(root, "emit-failure");
-    await importLinearHistory(repositoryPath, "sha1", 1);
-    const failure: RepositoryHistoryOperationFailure = {
-      _tag: "GitFailed",
-      detail: "Batch delivery failed",
-      reason: "Failed",
-    };
-
-    await expect(
-      Effect.runPromise(
-        synchronizeRepositoryHistory(
-          createLocalGitCommandRunner(),
-          repositoryPath,
-          {
-            _tag: "SynchronizeRepositoryHistory",
-            priority: "visible",
-            repositoryId: environmentId,
-            requestId,
-          },
-          () => Effect.fail(failure),
-          readObjectFormat(createLocalGitCommandRunner(), repositoryPath),
-        ),
-      ),
-    ).rejects.toBe(failure);
-  });
-
-  it("synchronizes refs, stashes, and detached linked worktree heads", async () => {
-    const server = await openTestServer();
-    const repositoryPath = join(server.home, "complete");
-    const linkedPath = join(server.home, "linked");
-    await importLinearHistory(repositoryPath, "sha1", 2);
-    await git(repositoryPath, "checkout", "-b", "side");
-    await git(repositoryPath, "commit", "--allow-empty", "-m", "side");
-    const side = await git(repositoryPath, "rev-parse", "HEAD");
-    await git(repositoryPath, "checkout", "main");
-    await git(repositoryPath, "update-ref", "refs/remotes/origin/side", side);
-    await git(repositoryPath, "tag", "snapshot");
-    await writeFile(join(repositoryPath, "stashed-one.txt"), "one");
-    await git(repositoryPath, "add", "stashed-one.txt");
-    await git(repositoryPath, "stash", "push", "-m", "saved work one");
-    await writeFile(join(repositoryPath, "stashed-two.txt"), "two");
-    await git(repositoryPath, "add", "stashed-two.txt");
-    await git(repositoryPath, "stash", "push", "-m", "saved work two");
-    await git(
-      repositoryPath,
-      "worktree",
-      "add",
-      "--detach",
-      linkedPath,
-      "main",
-    );
-    await git(linkedPath, "commit", "--allow-empty", "-m", "detached linked");
-    const detached = await git(linkedPath, "rev-parse", "HEAD");
-    const repository = await server.requests(server.owner)(
-      RepositoryCatalogApi.remember,
-      { path: repositoryPath },
-    );
-    const stashRoots = (
-      await git(repositoryPath, "stash", "list", "--format=%H")
-    ).split("\n");
-    const expected = new Set(
-      (
-        await git(repositoryPath, "rev-list", "--all", detached, ...stashRoots)
-      ).split("\n"),
-    );
-
-    const commits = await synchronizeHistory(server, repository.id);
-
-    expect(new Set(commits.map((commit) => commit.oid))).toEqual(expected);
-    expect(commits.some((commit) => commit.subject === "detached linked")).toBe(
-      true,
-    );
-    expect(
-      commits.some((commit) => commit.subject.includes("saved work one")),
-    ).toBe(true);
-    expect(
-      commits.some((commit) => commit.subject.includes("saved work two")),
-    ).toBe(true);
-  });
-
+describe("repository history synchronization", () => {
   it.each(["sha1", "sha256"] as const)(
-    "delivers the first 100 %s commits",
+    "streams every %s commit newest first after the tips",
     async (objectFormat) => {
-      const server = await openTestServer();
-      const repositoryPath = join(server.home, objectFormat);
-      await importLinearHistory(repositoryPath, objectFormat, 110);
-      const repository = await server.requests(server.owner)(
-        RepositoryCatalogApi.remember,
-        { path: repositoryPath },
-      );
-      const head = await git(repositoryPath, "rev-parse", "main");
-      const page = await readHistoryPage(server, repository.id, head);
-      expect(page.objectFormat).toBe(objectFormat);
-      expect(page.commits).toHaveLength(100);
-      expect(page.commits[0]?.subject).toBe("commit 109");
-      expect(page.commits.at(-1)?.subject).toBe("commit 10");
+      const history = await openHistory();
+      const path = join(history.home, objectFormat);
+      await importLinearHistory(path, objectFormat, 300);
+
+      const synchronized = await history.synchronize(path);
+
+      expect(synchronized.tips.objectFormat).toBe(objectFormat);
+      expect(synchronized.commits).toHaveLength(300);
+      expect(synchronized.commits[0]?.subject).toBe("commit 299");
+      expect(synchronized.commits.at(-1)?.subject).toBe("commit 0");
       expect(
-        page.commits.every(
-          (commit) => commit.oid.length === (objectFormat === "sha1" ? 40 : 64),
+        synchronized.commits.every(
+          ({ oid }) => oid.length === (objectFormat === "sha1" ? 40 : 64),
         ),
       ).toBe(true);
     },
   );
 
-  it("preserves nested and octopus merge topology", async () => {
-    const server = await openTestServer();
-    const repositoryPath = join(server.home, "merges");
-    await createMergeRepository(repositoryPath);
-    const repository = await server.requests(server.owner)(
-      RepositoryCatalogApi.remember,
-      { path: repositoryPath },
-    );
-    const head = await git(repositoryPath, "rev-parse", "main");
-
-    const page = await readHistoryPage(server, repository.id, head);
-
-    expect(page.commits[0]?.subject).toBe("octopus");
-    expect(page.commits[0]?.parents).toHaveLength(3);
-    expect(
-      page.commits.find((commit) => commit.subject === "nested merge")?.parents,
-    ).toHaveLength(2);
-    const positions = new Map(
-      page.commits.map((commit, index) => [commit.oid, index]),
-    );
-    expect(
-      page.commits.every((commit, index) =>
-        commit.parents.every(
-          (parent) => (positions.get(parent) ?? index + 1) > index,
-        ),
-      ),
-    ).toBe(true);
-  });
-
-  it("stops at a shallow repository boundary", async () => {
-    const server = await openTestServer();
-    const source = join(server.home, "shallow-source");
-    const repositoryPath = join(server.home, "shallow-clone");
-    await importLinearHistory(source, "sha1", 5);
-    await cloneRepository(
-      pathToFileURL(source).href,
-      repositoryPath,
-      "--branch=main",
-      "--depth=2",
-    );
-    const repository = await server.requests(server.owner)(
-      RepositoryCatalogApi.remember,
-      { path: repositoryPath },
-    );
-    const head = await git(repositoryPath, "rev-parse", "main");
-
-    const page = await readHistoryPage(server, repository.id, head);
-
-    expect(page.commits).toHaveLength(2);
-    const missingParent = await git(source, "rev-parse", "main~2");
-    expect(page.commits.at(-1)?.parents).toEqual([missingParent]);
-    const synchronized: RepositoryCommit[] = [];
-    await Effect.runPromise(
-      synchronizeRepositoryHistory(
-        createLocalGitCommandRunner(),
-        repositoryPath,
-        {
-          _tag: "SynchronizeRepositoryHistory",
-          priority: "visible",
-          repositoryId: repository.id,
-          requestId,
-        },
-        (batch) =>
-          Effect.sync(() => {
-            synchronized.push(...batch.commits);
-          }),
-        readObjectFormat(createLocalGitCommandRunner(), repositoryPath),
-      ),
-    );
-    expect(synchronized).toHaveLength(2);
-    expect(synchronized.at(-1)?.parents).toEqual([missingParent]);
-  });
-
-  it("coalesces ref movement during traversal before publishing the latest refs", async () => {
-    const root = await createTemporaryDirectory();
-    const repositoryPath = join(root, "moving-refs");
-    await importLinearHistory(repositoryPath, "sha1", 2);
-    const batches: RepositoryHistoryBatch[] = [];
-    let moved = false;
-
-    const count = await Effect.runPromise(
-      synchronizeRepositoryHistory(
-        createLocalGitCommandRunner(),
-        repositoryPath,
-        {
-          _tag: "SynchronizeRepositoryHistory",
-          priority: "visible",
-          repositoryId: environmentId,
-          requestId,
-        },
-        (batch) =>
-          Effect.promise(async () => {
-            batches.push(batch);
-            if (batch.snapshot !== undefined && !moved) {
-              moved = true;
-              await git(
-                repositoryPath,
-                "commit",
-                "--allow-empty",
-                "-m",
-                "arrived during traversal",
-              );
-            }
-          }),
-        readObjectFormat(createLocalGitCommandRunner(), repositoryPath),
-      ),
-    );
-
-    const latestHead = await git(repositoryPath, "rev-parse", "main");
-    expect(count).toBe(3);
-    expect(batches.flatMap((batch) => batch.commits)).toHaveLength(3);
-    expect(batches.at(-2)?.snapshot?.refTargets).toContainEqual({
-      name: "main",
-      oid: latestHead,
-      type: "branch",
-    });
-    expect(batches.map((batch) => batch.sequence)).toEqual(
-      batches.map((_, index) => index),
-    );
-  });
-
-  it("resumes an unchanged incomplete snapshot from its committed batch", async () => {
-    const root = await createTemporaryDirectory();
-    const repositoryPath = join(root, "resumable");
-    await importLinearHistory(repositoryPath, "sha1", 300);
-    let snapshot: RepositoryHistorySnapshot | undefined;
-    const committed: RepositoryHistoryBatch[] = [];
-    const interrupted: RepositoryHistoryOperationFailure = {
-      _tag: "GitFailed",
-      reason: "Failed",
-    };
-
-    await expect(
-      Effect.runPromise(
-        synchronizeRepositoryHistory(
-          createLocalGitCommandRunner(),
-          repositoryPath,
-          {
-            _tag: "SynchronizeRepositoryHistory",
-            priority: "visible",
-            repositoryId: environmentId,
-            requestId,
-          },
-          (batch) => {
-            if (batch.snapshot !== undefined) {
-              snapshot = batch.snapshot;
-            }
-            if (batch.commits.length > 0) {
-              committed.push(batch);
-            }
-            return batch.commits.length === 256
-              ? Effect.fail(interrupted)
-              : Effect.void;
-          },
-          readObjectFormat(createLocalGitCommandRunner(), repositoryPath),
-        ),
-      ),
-    ).rejects.toBe(interrupted);
-    const captured = snapshot;
-    if (captured === undefined) {
-      throw new Error("Snapshot metadata was not sent");
-    }
-    const resumed: RepositoryHistoryBatch[] = [];
-
-    const count = await Effect.runPromise(
-      synchronizeRepositoryHistory(
-        createLocalGitCommandRunner(),
-        repositoryPath,
-        {
-          _tag: "SynchronizeRepositoryHistory",
-          basis: {
-            _tag: "Incomplete",
-            committedCommitCount: 256,
-            nextBatchSequence: 2,
-            objectFormat: captured.objectFormat,
-            rootOids: captured.rootOids,
-            snapshotId: captured.id,
-            shallowOids: captured.shallowOids ?? [],
-          },
-          priority: "visible",
-          repositoryId: environmentId,
-          requestId,
-        },
-        (batch) =>
-          Effect.sync(() => {
-            resumed.push(batch);
-          }),
-        readObjectFormat(createLocalGitCommandRunner(), repositoryPath),
-      ),
-    );
-
-    expect(committed).toHaveLength(1);
-    expect(resumed[0]?.sequence).toBe(2);
-    expect(resumed.flatMap((batch) => batch.commits)).toHaveLength(44);
-    expect(count).toBe(300);
-  });
-
-  it("resumes across bounded merge pages while captured refs move", async () => {
-    const root = await createTemporaryDirectory();
-    const path = join(root, "bounded-resume");
-    await importLinearHistory(path, "sha1", 10_001);
-    await git(path, "checkout", "-b", "side", "main~7500");
-    await git(path, "commit", "--allow-empty", "-m", "side commit");
+  it("synchronizes refs, stashes, detached linked worktree heads and large messages", async () => {
+    const history = await openHistory();
+    const path = join(history.home, "complete");
+    const linked = join(history.home, "linked");
+    await importLinearHistory(path, "sha1", 2);
+    await git(path, "checkout", "-b", "side");
+    const subject = 'long "message" 😀'.repeat(4_000);
+    await git(path, "commit", "--allow-empty", "-m", subject);
+    const side = await git(path, "rev-parse", "HEAD");
     await git(path, "checkout", "main");
-    await git(path, "merge", "--no-ff", "side", "-m", "merge side");
-    const initial: RepositoryHistoryBatch[] = [];
-    await runSynchronization(path, undefined, initial);
-    const commits = initial.flatMap((batch) => batch.commits);
-    expect(commits).toHaveLength(10_003);
-    expect(new Set(commits.map((commit) => commit.oid)).size).toBe(10_003);
-    const expectedParents = new Map(
-      (await git(path, "rev-list", "--parents", "main"))
-        .split("\n")
-        .map((line) => {
-          const [oid, ...parents] = line.split(" ");
-          return [oid, parents] as const;
-        }),
+    await git(path, "update-ref", "refs/remotes/origin/side", side);
+    await git(path, "tag", "snapshot");
+    await writeFile(join(path, "stashed.txt"), "stashed");
+    await git(path, "add", "stashed.txt");
+    await git(path, "stash", "push", "-m", "saved work");
+    await git(path, "worktree", "add", "--detach", linked, "main");
+    await git(linked, "commit", "--allow-empty", "-m", "detached linked");
+    const detached = await git(linked, "rev-parse", "HEAD");
+    const stash = await git(path, "stash", "list", "--format=%H");
+    const expected = (
+      await git(path, "rev-list", "--all", detached, stash)
+    ).split("\n");
+
+    const synchronized = await history.synchronize(path);
+
+    expect(new Set(synchronized.commits.map(({ oid }) => oid))).toEqual(
+      new Set(expected),
     );
-    const seen = new Set<string>();
-    for (const commit of commits) {
-      expect(commit.parents).toEqual(expectedParents.get(commit.oid));
-      expect(commit.parents.some((parent) => seen.has(parent))).toBe(false);
-      seen.add(commit.oid);
-    }
-    const prefix: RepositoryCommit[] = [];
-    let nextSequence = 0;
-    for (const batch of initial) {
-      if (batch.commits.length === 0) continue;
-      prefix.push(...batch.commits);
-      nextSequence = batch.sequence + 1;
-      if (prefix.length > 5_000) break;
-    }
-    await git(path, "commit", "--allow-empty", "-m", "new tip");
-    const snapshot = lastSnapshot(initial);
-    const resumed: RepositoryHistoryBatch[] = [];
-    const count = await runSynchronization(
-      path,
-      {
-        _tag: "Incomplete",
-        committedCommitCount: prefix.length,
-        nextBatchSequence: nextSequence,
-        objectFormat: snapshot.objectFormat,
-        rootOids: snapshot.rootOids,
-        snapshotId: snapshot.id,
-        shallowOids: snapshot.shallowOids ?? [],
-      },
-      resumed,
+    expect(synchronized.commits.find(({ oid }) => oid === side)?.subject).toBe(
+      subject,
     );
-    const combined = [...prefix, ...resumed.flatMap((batch) => batch.commits)];
-    expect(count).toBe(10_004);
-    expect(combined).toHaveLength(10_004);
-    expect(new Set(combined.map((commit) => commit.oid)).size).toBe(10_004);
-    expect(resumed[0]?.sequence).toBe(nextSequence);
+    expect(synchronized.tips.refTargets).toContainEqual({
+      name: "origin/side",
+      oid: side,
+      type: "remote-branch",
+    });
   });
 
-  it("rejects a legacy traversal basis before skipping any commits", async () => {
-    const root = await createTemporaryDirectory();
-    const path = join(root, "legacy-traversal");
+  it("keeps nested and octopus merges in topological order", async () => {
+    const history = await openHistory();
+    const path = join(history.home, "merges");
+    await createMergeRepository(path);
+
+    const { commits } = await history.synchronize(path);
+
+    expect(commits[0]?.parents).toHaveLength(3);
+    const positions = new Map(commits.map(({ oid }, index) => [oid, index]));
+    for (const [index, commit] of commits.entries())
+      for (const parent of commit.parents)
+        expect(positions.get(parent)).toBeGreaterThan(index);
+  });
+
+  it("sends only unknown commits, including after a force push", async () => {
+    const history = await openHistory();
+    const path = join(history.home, "incremental");
     await importLinearHistory(path, "sha1", 3);
-    const snapshot = await Effect.runPromise(
-      readRepositoryHistorySnapshot(
-        createLocalGitCommandRunner(),
-        path,
-        readObjectFormat(createLocalGitCommandRunner(), path),
-      ),
-    );
-    const emitted: RepositoryHistoryBatch[] = [];
-    await expect(
-      runSynchronization(
-        path,
-        {
-          _tag: "Incomplete",
-          committedCommitCount: 1,
-          nextBatchSequence: 2,
-          objectFormat: snapshot.objectFormat,
-          rootOids: snapshot.rootOids,
-          snapshotId: "e".repeat(64),
-          shallowOids: [],
-        },
-        emitted,
-      ),
-    ).rejects.toMatchObject({ _tag: "SnapshotInvalidated" });
-    expect(emitted).toEqual([]);
-  });
+    const initial = await history.synchronize(path);
+    await git(path, "commit", "--allow-empty", "-m", "appended");
 
-  it("sends only the delta for a completed basis and reconciles force resets", async () => {
-    const root = await createTemporaryDirectory();
-    const repositoryPath = join(root, "completed-basis");
-    await importLinearHistory(repositoryPath, "sha1", 3);
-    await git(repositoryPath, "branch", "side", "main~1");
-    const initial: RepositoryHistoryBatch[] = [];
-    await runSynchronization(repositoryPath, undefined, initial);
-    const initialSnapshot = lastSnapshot(initial);
-    const resetTarget = await git(repositoryPath, "rev-parse", "main~1");
-    await git(repositoryPath, "commit", "--allow-empty", "-m", "delta commit");
-    const delta: RepositoryHistoryBatch[] = [];
+    const appended = await history.synchronize(path, initial.tips);
 
-    await runSynchronization(
-      repositoryPath,
-      {
-        _tag: "Complete",
-        commitCount: 3,
-        objectFormat: initialSnapshot.objectFormat,
-        rootOids: initialSnapshot.rootOids,
-        snapshotId: initialSnapshot.id,
-        shallowOids: initialSnapshot.shallowOids ?? [],
-      },
-      delta,
-    );
+    expect(appended.commits.map(({ subject }) => subject)).toEqual([
+      "appended",
+    ]);
+    await git(path, "reset", "--hard", "HEAD~2");
+    await git(path, "commit", "--allow-empty", "-m", "rewritten");
 
-    expect(delta.flatMap((batch) => batch.commits)).toHaveLength(1);
-    expect(delta[0]?.snapshot?.resumable).toBe(false);
-    const deltaSnapshot = lastSnapshot(delta);
-    await git(repositoryPath, "branch", "-D", "side");
-    await git(repositoryPath, "reset", "--hard", resetTarget);
-    const reset: RepositoryHistoryBatch[] = [];
+    const rewritten = await history.synchronize(path, appended.tips);
 
-    await runSynchronization(
-      repositoryPath,
-      {
-        _tag: "Complete",
-        commitCount: 4,
-        objectFormat: deltaSnapshot.objectFormat,
-        rootOids: deltaSnapshot.rootOids,
-        snapshotId: deltaSnapshot.id,
-        shallowOids: deltaSnapshot.shallowOids ?? [],
-      },
-      reset,
-    );
-
-    expect(reset.flatMap((batch) => batch.commits)).toEqual([]);
-    expect(lastSnapshot(reset).refTargets).toContainEqual({
+    expect(rewritten.commits.map(({ subject }) => subject)).toEqual([
+      "rewritten",
+    ]);
+    expect(rewritten.tips.refTargets).toContainEqual({
       name: "main",
-      oid: resetTarget,
+      oid: await git(path, "rev-parse", "main"),
       type: "branch",
     });
-    expect(
-      lastSnapshot(reset).refTargets.some((target) => target.name === "side"),
-    ).toBe(false);
-  });
-
-  it("rejects a resume basis whose captured roots no longer exist", async () => {
-    const root = await createTemporaryDirectory();
-    const repositoryPath = join(root, "invalid-basis");
-    await importLinearHistory(repositoryPath, "sha1", 1);
-
-    const failure = await Effect.runPromise(
-      Effect.flip(
-        synchronizeRepositoryHistory(
-          createLocalGitCommandRunner(),
-          repositoryPath,
-          {
-            _tag: "SynchronizeRepositoryHistory",
-            basis: {
-              _tag: "Incomplete",
-              committedCommitCount: 1,
-              nextBatchSequence: 2,
-              objectFormat: "sha1",
-              rootOids: ["f".repeat(40)],
-              snapshotId: "e".repeat(64),
-            },
-            priority: "visible",
-            repositoryId: environmentId,
-            requestId,
-          },
-          () => Effect.void,
-          readObjectFormat(createLocalGitCommandRunner(), repositoryPath),
-        ),
-      ),
-    );
-
-    expect(failure).toMatchObject({ _tag: "SnapshotInvalidated" });
-  });
-
-  it("rejects a resume that has exhausted the batch sequence", async () => {
-    const root = await createTemporaryDirectory();
-    const repositoryPath = join(root, "exhausted-sequence");
-    await importLinearHistory(repositoryPath, "sha1", 1);
-    const oid = await git(repositoryPath, "rev-parse", "HEAD");
-    const snapshot = await Effect.runPromise(
-      readRepositoryHistorySnapshot(
-        createLocalGitCommandRunner(),
-        repositoryPath,
-        readObjectFormat(createLocalGitCommandRunner(), repositoryPath),
-      ),
-    );
-    const emitted: RepositoryHistoryBatch[] = [];
-
-    const failure = await Effect.runPromise(
-      Effect.flip(
-        synchronizeRepositoryHistory(
-          createLocalGitCommandRunner(),
-          repositoryPath,
-          {
-            _tag: "SynchronizeRepositoryHistory",
-            basis: {
-              _tag: "Incomplete",
-              committedCommitCount: 0,
-              nextBatchSequence: maximumRepositoryHistorySequence,
-              shallowOids: [],
-              objectFormat: "sha1",
-              rootOids: [oid],
-              snapshotId: snapshot.id,
-            },
-            priority: "visible",
-            repositoryId: environmentId,
-            requestId,
-          },
-          (batch) =>
-            Effect.sync(() => {
-              emitted.push(batch);
-            }),
-          readObjectFormat(createLocalGitCommandRunner(), repositoryPath),
-        ),
-      ),
-    );
-
-    expect(failure).toMatchObject({
-      _tag: "GitFailed",
-      detail: "Repository history batch sequence is exhausted",
+    const collected = await history.synchronize(path, {
+      ...rewritten.tips,
+      rootOids: ["f".repeat(40)],
     });
-    expect(emitted).toEqual([]);
+    expect(collected.commits.map(({ subject }) => subject)).toEqual([
+      "rewritten",
+      "commit 1",
+      "commit 0",
+    ]);
+  });
+
+  it("restores shallow parents and resends history when the boundary moves", async () => {
+    const history = await openHistory();
+    const source = join(history.home, "shallow-source");
+    const clone = join(history.home, "shallow-clone");
+    await createRepository(source, { commits: [] });
+    for (let index = 0; index < 4; index += 1)
+      await git(source, "commit", "--allow-empty", "-m", `commit ${index}`);
+    await cloneRepository(pathToFileURL(source).href, clone, "--depth=2");
+    const oids = (await git(source, "rev-list", "HEAD")).split("\n");
+
+    const shallow = await history.synchronize(clone);
+
+    expect(shallow.tips.shallowOids).toEqual([oids[1]]);
+    expect(shallow.commits.map(({ oid }) => oid)).toEqual(oids.slice(0, 2));
+    expect(shallow.commits.at(-1)?.parents).toEqual([oids[2]]);
+    await git(clone, "fetch", "--deepen=1");
+
+    const deepened = await history.synchronize(clone, shallow.tips);
+
+    expect(deepened.tips.shallowOids).toEqual([oids[2]]);
+    expect(deepened.commits.map(({ oid }) => oid)).toEqual(oids.slice(0, 3));
+  });
+
+  it("waits for the browser to store each batch before finishing", async () => {
+    const history = await openHistory();
+    const path = join(history.home, "backpressure");
+    await importLinearHistory(path, "sha1", 1);
+    const stored = Promise.withResolvers<void>();
+    let finished = false;
+
+    const synchronized = history
+      .synchronize(path, undefined, async (update) => {
+        if (update._tag === "RepositoryHistoryCommits") await stored.promise;
+      })
+      .then(() => {
+        finished = true;
+      });
+    await expect.poll(() => history.received()).toBeGreaterThan(1);
+    expect(finished).toBe(false);
+    stored.resolve();
+    await synchronized;
+    expect(finished).toBe(true);
+  });
+
+  it("interrupts Git when the browser cancels and keeps the socket usable", async () => {
+    const started = Promise.withResolvers<void>();
+    const interrupted = Promise.withResolvers<void>();
+    let hang = true;
+    const history = await openHistory((local) => ({
+      ...local,
+      stream: (command) =>
+        hang && command.arguments[0] === "log"
+          ? Stream.fromEffect(
+              Effect.sync(() => started.resolve()).pipe(
+                Effect.andThen(Effect.never),
+                Effect.ensuring(Effect.sync(() => interrupted.resolve())),
+              ),
+            )
+          : local.stream(command),
+    }));
+    const path = join(history.home, "cancel");
+    await importLinearHistory(path, "sha1", 1);
+    const controller = new AbortController();
+
+    const cancelled = history.synchronize(
+      path,
+      undefined,
+      undefined,
+      controller.signal,
+    );
+    await started.promise;
+    controller.abort();
+    await expect(cancelled).rejects.toMatchObject({ _tag: "Cancelled" });
+    await interrupted.promise;
+    hang = false;
+
+    expect((await history.synchronize(path)).commits).toHaveLength(1);
+  });
+
+  it("reports a Git timeout by its reason alone", async () => {
+    const history = await openHistory((local) => ({
+      ...local,
+      stream: (command) =>
+        command.arguments[0] === "log"
+          ? Stream.fail(gitFailed("Timeout"))
+          : local.stream(command),
+    }));
+    const path = join(history.home, "timeout");
+    await importLinearHistory(path, "sha1", 1);
+
+    const failure = await history.synchronize(path).catch((error) => error);
+
+    expect(failure).toEqual({
+      _tag: "Rejected",
+      failure: { _tag: "GitFailed", reason: "Timeout" },
+    });
   });
 });
 
-async function runSynchronization(
-  repositoryPath: string,
-  basis: Parameters<typeof synchronizeRepositoryHistory>[2]["basis"],
-  batches: RepositoryHistoryBatch[],
+async function openHistory(
+  override?: (git: GitCommandRunner) => GitCommandRunner,
 ) {
-  return Effect.runPromise(
-    synchronizeRepositoryHistory(
-      createLocalGitCommandRunner(),
-      repositoryPath,
-      {
-        _tag: "SynchronizeRepositoryHistory",
-        ...(basis === undefined ? {} : { basis }),
-        priority: "visible",
-        repositoryId: environmentId,
-        requestId,
-      },
-      (batch) =>
-        Effect.sync(() => {
-          batches.push(batch);
-        }),
-      readObjectFormat(createLocalGitCommandRunner(), repositoryPath),
-    ),
+  const server = await openTestServer({ git: override });
+  const socket = await openEnvironmentSocket(
+    server.origin,
+    server.owner,
+    unchanged,
   );
-}
-
-function lastSnapshot(batches: readonly RepositoryHistoryBatch[]) {
-  const snapshot = batches.findLast((batch) => batch.snapshot)?.snapshot;
-  if (snapshot === undefined) {
-    throw new Error("Snapshot metadata was not sent");
-  }
-  return snapshot;
+  let received = 0;
+  return {
+    home: server.home,
+    received: () => received,
+    synchronize: async (
+      path: string,
+      known?: RepositoryHistoryTips,
+      accept?: (update: RepositoryHistoryUpdate) => Promise<void>,
+      signal = new AbortController().signal,
+    ) => {
+      const repository = await socket.requests(RepositoryCatalogApi.remember, {
+        path,
+      });
+      const request: SynchronizeRepositoryHistory = {
+        repositoryId: repository.id,
+        knownTips: known?.rootOids ?? [],
+        shallowOids: known?.shallowOids ?? [],
+      };
+      const commits: RepositoryCommit[] = [];
+      let tips: RepositoryHistoryTips | undefined;
+      await socket.synchronizeHistory(
+        request,
+        async (update) => {
+          received += 1;
+          if (update._tag === "RepositoryHistoryTips") tips = update;
+          else commits.push(...update.commits);
+          await accept?.(update);
+        },
+        signal,
+      );
+      if (tips === undefined) throw new Error("No tips were sent");
+      return { tips, commits };
+    },
+  };
 }
 
 async function importLinearHistory(
@@ -662,76 +303,28 @@ async function importLinearHistory(
 
 async function createMergeRepository(path: string) {
   await createRepository(path, { commits: [] });
-  await commitFile(path, "base.txt", "base", "base");
+  await commitFile(path, "base.txt", "base");
   await git(path, "checkout", "-b", "feature");
-  await commitFile(path, "feature.txt", "one", "feature one");
+  await commitFile(path, "feature.txt", "feature one");
   await git(path, "checkout", "-b", "nested");
-  await commitFile(path, "nested.txt", "nested", "nested");
+  await commitFile(path, "nested.txt", "nested");
   await git(path, "checkout", "feature");
-  await commitFile(path, "feature.txt", "two", "feature two");
+  await commitFile(path, "feature.txt", "feature two");
   await git(path, "merge", "--no-ff", "nested", "-m", "nested merge");
   await git(path, "checkout", "main");
-  await commitFile(path, "main.txt", "main", "main");
+  await commitFile(path, "main.txt", "main");
   await git(path, "merge", "--no-ff", "feature", "-m", "feature merge");
   await git(path, "checkout", "-b", "octo-a");
-  await commitFile(path, "octo-a.txt", "a", "octo a");
+  await commitFile(path, "octo-a.txt", "octo a");
   await git(path, "checkout", "main");
   await git(path, "checkout", "-b", "octo-b");
-  await commitFile(path, "octo-b.txt", "b", "octo b");
+  await commitFile(path, "octo-b.txt", "octo b");
   await git(path, "checkout", "main");
   await git(path, "merge", "--no-ff", "octo-a", "octo-b", "-m", "octopus");
 }
 
-async function commitFile(
-  path: string,
-  name: string,
-  value: string,
-  subject: string,
-) {
-  await writeFile(join(path, name), value);
+async function commitFile(path: string, name: string, subject: string) {
+  await writeFile(join(path, name), subject);
   await git(path, "add", name);
   await git(path, "commit", "-m", subject);
 }
-
-async function readHistoryPage(
-  server: HistoryServer,
-  repositoryId: string,
-  oid: string,
-) {
-  const { rpc } = await server.connect(server.owner);
-  return Effect.runPromise(
-    createRepositoryHistoryRpc(rpc)
-      .read({
-        repositoryId,
-        order: "topological",
-        limit: 100,
-        roots: [{ name: "main", oid, type: "branch" }],
-      })
-      .pipe(Effect.map(decodeRepositoryHistoryPage)),
-  );
-}
-
-async function synchronizeHistory(server: HistoryServer, repositoryId: string) {
-  const commits: RepositoryCommit[] = [];
-  const { rpc } = await server.connect(server.owner);
-  await Effect.runPromise(
-    createRepositoryHistoryRpc(rpc).synchronize(
-      { repositoryId, priority: "visible" },
-      (bytes) =>
-        Effect.sync(() => {
-          commits.push(...decodeRepositoryHistoryBatch(bytes).commits);
-        }),
-    ),
-  );
-  return commits;
-}
-
-async function createTemporaryDirectory() {
-  const directory = await realpath(
-    await mkdtemp(join(tmpdir(), "rebase history ")),
-  );
-  directories.add(directory);
-  return directory;
-}
-
-type HistoryServer = Awaited<ReturnType<typeof openTestServer>>;

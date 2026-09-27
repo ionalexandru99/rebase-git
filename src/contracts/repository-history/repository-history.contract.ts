@@ -2,117 +2,11 @@ import {
   ObjectId,
   RepositoryId,
 } from "@rebase/contracts/git/git-values.contract";
-import { maximumRepositoryHistorySequence } from "@rebase/contracts/repository-history/repository-history-limits.contract";
 import { Schema } from "effect";
+import { Rpc, RpcGroup } from "effect/unstable/rpc";
 
-export const EnvironmentRequestId = Schema.String.check(Schema.isUUID(4));
-
-const RepositoryMissing = Schema.TaggedStruct("RepositoryMissing", {
-  repositoryId: RepositoryId,
-});
-
-const GitFailed = Schema.TaggedStruct("GitFailed", {
-  detail: Schema.optional(Schema.String.check(Schema.isMaxLength(2_048))),
-  reason: Schema.Literals([
-    "GitUnavailable",
-    "NotRepository",
-    "Timeout",
-    "OutputTooLarge",
-    "Failed",
-  ]),
-});
-
-const SnapshotId = Schema.String.check(Schema.isPattern(/^[0-9a-f]{64}$/));
-const SnapshotRootOids = Schema.Array(ObjectId).check(
-  Schema.isMaxLength(40_512),
-);
-const RepositoryHistorySequence = Schema.Int.check(
-  Schema.isBetween({
-    minimum: 0,
-    maximum: maximumRepositoryHistorySequence,
-  }),
-);
-
-export const RepositoryHistoryRefTarget = Schema.Struct({
-  name: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(1_024)),
-  oid: ObjectId,
-  type: Schema.Literals(["branch", "head", "remote-branch", "tag"]),
-});
-export type RepositoryHistoryRefTarget = typeof RepositoryHistoryRefTarget.Type;
-
-export const ReadRepositoryHistory = Schema.TaggedStruct(
-  "ReadRepositoryHistory",
-  {
-    ancestry: Schema.optionalKey(Schema.Literals(["all", "first-parent"])),
-    offset: Schema.optionalKey(
-      Schema.Int.check(
-        Schema.isBetween({ minimum: 0, maximum: 2_147_482_647 }),
-      ),
-    ),
-    additionalParentEdges: Schema.optionalKey(
-      Schema.Array(
-        Schema.Struct({ childOid: ObjectId, parentOid: ObjectId }),
-      ).check(Schema.isMaxLength(1_000)),
-    ),
-    limit: Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 1_000 })),
-    order: Schema.Literals(["topological", "chronological"]),
-    repositoryId: RepositoryId,
-    requestId: EnvironmentRequestId,
-    roots: Schema.Array(RepositoryHistoryRefTarget).check(
-      Schema.isMinLength(1),
-      Schema.isMaxLength(256),
-    ),
-  },
-);
-export type ReadRepositoryHistory = typeof ReadRepositoryHistory.Type;
-
-export const SynchronizeRepositoryHistory = Schema.TaggedStruct(
-  "SynchronizeRepositoryHistory",
-  {
-    basis: Schema.optionalKey(
-      Schema.Union([
-        Schema.TaggedStruct("Complete", {
-          shallowOids: Schema.optionalKey(SnapshotRootOids),
-          commitCount: Schema.Natural,
-          objectFormat: Schema.Literals(["sha1", "sha256"]),
-          rootOids: SnapshotRootOids,
-          snapshotId: SnapshotId,
-        }),
-        Schema.TaggedStruct("Incomplete", {
-          shallowOids: Schema.optionalKey(SnapshotRootOids),
-          committedCommitCount: Schema.Natural,
-          nextBatchSequence: RepositoryHistorySequence,
-          objectFormat: Schema.Literals(["sha1", "sha256"]),
-          rootOids: SnapshotRootOids,
-          snapshotId: SnapshotId,
-        }),
-      ]),
-    ),
-    priority: Schema.Literals(["background", "visible"]),
-    repositoryId: RepositoryId,
-    requestId: EnvironmentRequestId,
-  },
-);
-export type SynchronizeRepositoryHistory =
-  typeof SynchronizeRepositoryHistory.Type;
-
-export const RepositoryHistoryOperationFailure = Schema.Union([
-  RepositoryMissing,
-  Schema.TaggedStruct("SnapshotInvalidated", {}),
-  GitFailed,
-]);
-export type RepositoryHistoryOperationFailure =
-  typeof RepositoryHistoryOperationFailure.Type;
-
-export const RepositoryHistorySynchronized = Schema.TaggedStruct(
-  "RepositoryHistorySynchronized",
-  {
-    commitCount: Schema.Natural,
-    requestId: EnvironmentRequestId,
-  },
-);
-export type RepositoryHistorySynchronized =
-  typeof RepositoryHistorySynchronized.Type;
+const HistoryTips = Schema.Array(ObjectId).check(Schema.isMaxLength(40_512));
+const ObjectFormat = Schema.Literals(["sha1", "sha256"]);
 
 const HistoryString = Schema.String.check(
   Schema.makeFilter(
@@ -121,6 +15,13 @@ const HistoryString = Schema.String.check(
       "String is too large",
   ),
 );
+
+export const RepositoryHistoryRefTarget = Schema.Struct({
+  name: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(1_024)),
+  oid: ObjectId,
+  type: Schema.Literals(["branch", "head", "remote-branch", "tag"]),
+});
+export type RepositoryHistoryRefTarget = typeof RepositoryHistoryRefTarget.Type;
 
 export const RepositoryCommitIdentity = Schema.Struct({
   email: HistoryString,
@@ -141,65 +42,59 @@ export const RepositoryCommit = Schema.Struct({
 });
 export type RepositoryCommit = typeof RepositoryCommit.Type;
 
-const ObjectFormat = Schema.Literals(["sha1", "sha256"]);
-
-export const RepositoryHistorySnapshot = Schema.Struct({
-  shallowOids: Schema.optionalKey(SnapshotRootOids),
-  id: SnapshotId,
-  objectFormat: ObjectFormat,
-  refTargets: Schema.Array(RepositoryHistoryRefTarget).check(
-    Schema.isMaxLength(40_512),
-  ),
-  resumable: Schema.Boolean,
-  rootOids: SnapshotRootOids,
+export const SynchronizeRepositoryHistory = Schema.Struct({
+  repositoryId: RepositoryId,
+  knownTips: HistoryTips,
+  shallowOids: HistoryTips,
 });
-export type RepositoryHistorySnapshot = typeof RepositoryHistorySnapshot.Type;
+export type SynchronizeRepositoryHistory =
+  typeof SynchronizeRepositoryHistory.Type;
 
-export const RepositoryHistoryPage = Schema.Struct({
-  commits: Schema.Array(RepositoryCommit).check(Schema.isMaxLength(1_000)),
-  objectFormat: ObjectFormat,
-  refTargets: Schema.Array(RepositoryHistoryRefTarget).check(
-    Schema.isMaxLength(256),
-  ),
-  repositoryId: RepositoryId,
-  requestId: EnvironmentRequestId,
-}).check(Schema.makeFilter(hasMatchingObjectIds));
-export type RepositoryHistoryPage = typeof RepositoryHistoryPage.Type;
+export const RepositoryHistoryTips = Schema.TaggedStruct(
+  "RepositoryHistoryTips",
+  {
+    objectFormat: ObjectFormat,
+    rootOids: HistoryTips,
+    shallowOids: HistoryTips,
+    refTargets: Schema.Array(RepositoryHistoryRefTarget).check(
+      Schema.isMaxLength(40_512),
+    ),
+  },
+);
+export type RepositoryHistoryTips = typeof RepositoryHistoryTips.Type;
 
-export const RepositoryHistoryBatch = Schema.Struct({
-  commits: Schema.Array(RepositoryCommit).check(Schema.isMaxLength(512)),
-  objectFormat: ObjectFormat,
-  repositoryId: RepositoryId,
-  requestId: EnvironmentRequestId,
-  sequence: RepositoryHistorySequence,
-  snapshot: Schema.optionalKey(RepositoryHistorySnapshot),
-}).check(
-  Schema.makeFilter((batch) => {
-    if (!hasMatchingObjectIds(batch)) return false;
-    const snapshot = batch.snapshot;
-    if (snapshot === undefined) return true;
-    const oidLength = batch.objectFormat === "sha1" ? 40 : 64;
-    return (
-      snapshot.objectFormat === batch.objectFormat &&
-      snapshot.refTargets.every((ref) => ref.oid.length === oidLength) &&
-      snapshot.rootOids.every((oid) => oid.length === oidLength) &&
-      (snapshot.shallowOids ?? []).every((oid) => oid.length === oidLength)
-    );
+export const RepositoryHistoryCommits = Schema.TaggedStruct(
+  "RepositoryHistoryCommits",
+  { commits: Schema.Array(RepositoryCommit).check(Schema.isMaxLength(512)) },
+);
+export type RepositoryHistoryCommits = typeof RepositoryHistoryCommits.Type;
+
+export const RepositoryHistoryUpdate = Schema.Union([
+  RepositoryHistoryTips,
+  RepositoryHistoryCommits,
+]);
+export type RepositoryHistoryUpdate = typeof RepositoryHistoryUpdate.Type;
+
+export const RepositoryHistoryFailure = Schema.Union([
+  Schema.TaggedStruct("RepositoryMissing", { repositoryId: RepositoryId }),
+  Schema.TaggedStruct("GitFailed", {
+    detail: Schema.optional(Schema.String.check(Schema.isMaxLength(2_048))),
+    reason: Schema.Literals([
+      "GitUnavailable",
+      "NotRepository",
+      "Timeout",
+      "OutputTooLarge",
+      "Failed",
+    ]),
+  }),
+]);
+export type RepositoryHistoryFailure = typeof RepositoryHistoryFailure.Type;
+
+export const RepositoryHistoryRpc = RpcGroup.make(
+  Rpc.make("SynchronizeHistory", {
+    payload: SynchronizeRepositoryHistory,
+    success: RepositoryHistoryUpdate,
+    error: RepositoryHistoryFailure,
+    stream: true,
   }),
 );
-export type RepositoryHistoryBatch = typeof RepositoryHistoryBatch.Type;
-
-function hasMatchingObjectIds(history: {
-  readonly objectFormat: "sha1" | "sha256";
-  readonly commits: readonly RepositoryCommit[];
-  readonly refTargets?: readonly RepositoryHistoryRefTarget[];
-}) {
-  const oidLength = history.objectFormat === "sha1" ? 40 : 64;
-  return (
-    history.commits.every(
-      (commit) =>
-        commit.oid.length === oidLength &&
-        commit.parents.every((oid) => oid.length === oidLength),
-    ) && (history.refTargets ?? []).every((ref) => ref.oid.length === oidLength)
-  );
-}

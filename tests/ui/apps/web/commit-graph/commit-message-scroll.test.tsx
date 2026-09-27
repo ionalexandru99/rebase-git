@@ -17,12 +17,14 @@ describe("commit message scrolling", () => {
         : commit,
     );
     const reader = historyReader({ commits, status: "ready" });
-    reader.getRefTargets.mockResolvedValue([
-      { name: "main", oid: historyOid(0), type: "branch" },
-      { name: "v1", oid: historyOid(0), type: "tag" },
-      { name: "stable", oid: historyOid(0), type: "tag" },
-      { name: "last-ref", oid: historyOid(0), type: "tag" },
-    ]);
+    reader.publish({
+      refTargets: [
+        { name: "main", oid: historyOid(0), type: "branch" },
+        { name: "v1", oid: historyOid(0), type: "tag" },
+        { name: "stable", oid: historyOid(0), type: "tag" },
+        { name: "last-ref", oid: historyOid(0), type: "tag" },
+      ],
+    });
     const screen = await renderGraph(reader);
     const row = screen.getByRole("row", { name: /^A long commit message/ });
     const message = row.getByRole("region", {

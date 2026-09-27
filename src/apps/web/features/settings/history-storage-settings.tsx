@@ -10,14 +10,13 @@ import {
   AlertDialogTitle,
 } from "#web/components/ui/alert-dialog";
 import { Button } from "#web/components/ui/button";
-import type { RepositoryHistoryStorageDiagnostics } from "#web/domain/repository-history/history-storage.contract";
 import { RepositoryHistoryCacheList } from "#web/features/history-storage/components/repository-history-cache-list";
 import { forgetAllRepositoryRefs } from "#web/features/refs/repository-refs";
-import { requestBrowserHistoryStorage } from "#web/features/repository-history/storage/browser-history-storage";
+import type { HistoryStorage } from "#web/features/repository-history/history-worker-protocol";
+import { openRepositoryHistory } from "#web/features/repository-history/repository-history";
 
 export function HistoryStorageSettings() {
-  const [diagnostics, setDiagnostics] =
-    useState<RepositoryHistoryStorageDiagnostics>();
+  const [diagnostics, setDiagnostics] = useState<HistoryStorage>();
   const [error, setError] = useState<string>();
   const [pending, setPending] = useState(false);
   const [confirming, setConfirming] = useState(false);
@@ -33,9 +32,7 @@ export function HistoryStorageSettings() {
       setError(undefined);
       setMessage(undefined);
       try {
-        setDiagnostics(
-          await requestBrowserHistoryStorage(action, current.signal),
-        );
+        setDiagnostics(await readHistoryStorage(action, current.signal));
         if (action === "clear") {
           forgetAllRepositoryRefs(queryClient);
           setMessage(
@@ -117,4 +114,22 @@ export function HistoryStorageSettings() {
       </AlertDialog>
     </div>
   );
+}
+
+async function readHistoryStorage(
+  action: "inspect" | "clear",
+  signal: AbortSignal,
+) {
+  const storage = openRepositoryHistory();
+  try {
+    return await storage.ask(
+      {
+        _tag: "Storage",
+        action: action === "clear" ? "clear-all" : "inspect",
+      },
+      signal,
+    );
+  } finally {
+    storage.close();
+  }
 }

@@ -1,20 +1,17 @@
 import { type JSX, Suspense, useCallback, useMemo, useState } from "react";
-import { useOpenedHistory } from "#web/app/shell/opened-history-context";
 import { CommitInspectionBridge } from "#web/app/workspace/commit-inspection-bridge";
-import { useWorkspaceHistoryScope } from "#web/app/workspace/use-workspace-history-scope";
 import { ResizableHandle, ResizablePanel } from "#web/components/ui/resizable";
 import { BranchesSidebar } from "#web/features/branches-sidebar/branches-sidebar";
 import { CommitGraph } from "#web/features/commit-graph/commit-graph";
-import { automaticHistoryScope } from "#web/features/commit-graph/scope/history-scope-model";
+import { automaticHistoryScope } from "#web/features/commit-graph/scope/history-scope";
+import { useHistoryScope } from "#web/features/commit-graph/scope/use-history-scope";
 import { MergeView } from "#web/features/merge-view/merge-view";
 import { OperationRecoveryNotice } from "#web/features/operation-recovery/components/operation-recovery-notice";
 import { requestRefIntent } from "#web/features/refs/ref-actions";
-import {
-  useHistoryRefRefresh,
-  useScopedRepositoryRefs,
-} from "#web/features/refs/repository-refs";
+import { useScopedRepositoryRefs } from "#web/features/refs/repository-refs";
 import { RemoteSync } from "#web/features/remote-sync/remote-sync";
 import { useCatalogRepository } from "#web/features/repository-catalog/use-repository-catalog";
+import { useRepositoryHistory } from "#web/features/repository-history/repository-history";
 import { workingChangesPanel } from "#web/features/working-changes/working-changes-panel-definition";
 import { WorkspacePanel } from "#web/features/workspace-panel/workspace-panel";
 import { useEnvironment } from "#web/platform/query/environment-context";
@@ -96,22 +93,20 @@ function Workspace({
     }),
     [openMergeView],
   );
-  const history = useOpenedHistory();
-  const reader = history?.reader;
+  const history = useRepositoryHistory({
+    environmentId,
+    repositoryId: scope.repositoryId,
+    logicalRepositoryId: scope.logicalRepositoryId,
+  });
   const name = useCatalogRepository(scope.repositoryId)?.name ?? "Repository";
   const repositoryRefs = useScopedRepositoryRefs();
   const { refs } = repositoryRefs;
-  const historyScope = useWorkspaceHistoryScope(
-    environmentId,
-    scope,
-    repositoryRefs,
-  );
+  const historyScope = useHistoryScope(environmentId, scope, repositoryRefs);
   const resolved = historyScope.resolvedScope;
-  useHistoryRefRefresh(reader, scope.connected, repositoryRefs.retry);
   return (
     <>
       <OperationRecoveryNotice key={worktreePath} repositoryName={name} />
-      <RemoteSync reader={reader}>
+      <RemoteSync>
         {(syncActions) => (
           <CommitInspectionBridge connected={scope.connected}>
             {(inspection) => (
@@ -126,7 +121,6 @@ function Workspace({
                   <BranchesSidebar
                     onBranchRenamed={historyScope.renameBranch}
                     onToggleHistoryRef={historyScope.toggleRef}
-                    reader={reader}
                     selectedHistoryRefKeys={
                       resolved?.selectedRefKeys ?? noRefKeys
                     }

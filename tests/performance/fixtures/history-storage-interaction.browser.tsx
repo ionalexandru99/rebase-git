@@ -1,33 +1,16 @@
-import {
-  type RepositoryCommit,
-  repositoryHistoryBatchJson,
-  repositoryHistoryPageJson,
-} from "@rebase/contracts";
+import type { RepositoryCommit } from "@rebase/contracts";
 import { QueryClientProvider } from "@tanstack/react-query";
-import { Layer, ManagedRuntime } from "effect";
 import type { ComponentProps } from "react";
 import { createRoot } from "react-dom/client";
 import { CommitGraph } from "#web/features/commit-graph/commit-graph";
-import { openCommitGraphHistory } from "#web/features/commit-graph/paging/commit-graph-history";
-import { createBrowserRepositoryHistoryReader } from "#web/features/repository-history/browser-repository-history-reader";
-import {
-  beginRepositoryHistorySynchronization,
-  completeStoredRepositoryHistory,
-  storeRepositoryHistoryBatch,
-  storeRepositoryHistoryPage,
-} from "#web/features/repository-history/replica/repository-history-store";
-import type {
-  RepositoryHistoryGateway,
-  RepositoryHistoryReader,
-} from "#web/features/repository-history/repository-history-reader";
-import { ApplicationRuntime } from "#web/platform/effect/application-runtime-context";
+import { HistoryGraph } from "#web/features/repository-history/history-graph";
+import { HistoryView } from "#web/features/repository-history/history-view";
+import type { RepositoryHistory } from "#web/features/repository-history/repository-history";
 import {
   type Environment,
   EnvironmentProvider,
 } from "#web/platform/query/environment-context";
 import { createEnvironmentQueryClient } from "#web/platform/query/environment-query-client";
-
-const encoder = new TextEncoder();
 
 const offlineEnvironment: Environment = {
   environmentId: undefined,
@@ -45,22 +28,54 @@ const offlineEnvironment: Environment = {
   },
 };
 
-const environmentId = crypto.randomUUID();
-const name = crypto.randomUUID();
-const workerUrl = new URL("./history-storage-quota-worker.ts", import.meta.url);
-workerUrl.searchParams.set("channel", name);
-const worker = new SharedWorker(workerUrl, { type: "module", name });
-const channel = new BroadcastChannel(`history-storage-budget:${name}`);
-let arm: (() => void) | undefined;
-let quotaTriggered = false;
-channel.onmessage = ({ data }) => {
-  if (data === "armed") arm?.();
-  if (data === "quota-triggered") quotaTriggered = true;
-};
+export async function prepareStorageInteraction() {
+  const worker = new Worker(
+    new URL("./history-storage-worker.ts", import.meta.url),
+    { type: "module" },
+  );
+  const reply = <T,>() =>
+    new Promise<T>((resolve) => {
+      worker.onmessage = ({ data }: MessageEvent<T>) => resolve(data);
+    });
+  const seeded = reply<{ readonly _tag: "Seeded" }>();
+  worker.postMessage("seed");
+  await seeded;
+  const container = document.createElement("div");
+  container.style.cssText = "height:720px;width:1280px";
+  document.body.append(container);
+  const root = createRoot(container);
+  const history = visibleHistory(500);
+  root.render(
+    <StorageGraph
+      history={history}
+      roots={[{ name: "main", oid: oid(0), type: "branch" }]}
+      repositoryName="Storage interaction"
+    />,
+  );
+  return {
+    run: async () => {
+      const maintained = reply<{
+        readonly quotaTriggered: boolean;
+        readonly visible: unknown;
+        readonly rebuilt: unknown;
+        readonly pruned: unknown;
+      }>();
+      worker.postMessage("run");
+      const { quotaTriggered, visible, rebuilt, pruned } = await maintained;
+      return { quotaTriggered, visible, rebuilt, pruned };
+    },
+    close: () => {
+      root.unmount();
+      worker.terminate();
+    },
+  };
+}
 
-function fixture(count: number, disconnected = false) {
-  const repositoryId = crypto.randomUUID();
-  const oid = (index: number) => index.toString(16).padStart(40, "0");
+function oid(index: number) {
+  return index.toString(16).padStart(40, "0");
+}
+
+function visibleHistory(count: number): RepositoryHistory {
   const commits: RepositoryCommit[] = Array.from(
     { length: count },
     (_, index) => {
@@ -72,160 +87,47 @@ function fixture(count: number, disconnected = false) {
       };
       return {
         oid: oid(index),
-        parents: disconnected || index === count - 1 ? [] : [oid(index + 1)],
+        parents: index === count - 1 ? [] : [oid(index + 1)],
         subject: `Storage commit ${index}`,
         author: identity,
         committer: identity,
       };
     },
   );
-  const roots = [{ name: "main", oid: oid(0), type: "branch" as const }];
-  const query = { roots, limit: 100, order: "topological" as const };
+  const graph = new HistoryGraph();
+  for (const [index, commit] of commits.entries()) graph.add(commit, index);
   const snapshot = {
-    id: "e".repeat(64),
-    objectFormat: "sha1" as const,
-    refTargets: roots,
-    resumable: true,
-    rootOids: [oid(0)],
-  };
-  const page = {
-    commits: commits.slice(0, disconnected ? 1 : 100),
-    objectFormat: "sha1" as const,
-    refTargets: roots,
-    repositoryId,
-    requestId: crypto.randomUUID(),
-  };
-  const batches = Array.from(
-    { length: Math.ceil(count / 500) },
-    (_, sequence) => ({
-      commits: commits.slice(sequence * 500, (sequence + 1) * 500),
-      objectFormat: "sha1" as const,
-      repositoryId,
-      requestId: crypto.randomUUID(),
-      sequence,
-      snapshot,
-    }),
-  );
-  const encodedPage = encoder.encode(repositoryHistoryPageJson(page));
-  const encodedBatches = batches.map((batch) =>
-    encoder.encode(repositoryHistoryBatchJson(batch)),
-  );
-  const first = batches[0];
-  if (first === undefined) throw new Error("Storage fixture is empty");
-  const empty = encoder.encode(
-    repositoryHistoryBatchJson({ ...first, commits: [] }),
-  );
-  const gateway: RepositoryHistoryGateway = {
-    read: async () => encodedPage,
-    synchronize: async (request, accept, signal) => {
-      for (const bytes of request.basis?._tag === "Complete"
-        ? [empty]
-        : encodedBatches) {
-        signal?.throwIfAborted();
-        await accept(bytes);
-      }
-      return count;
-    },
-  };
-  return { repositoryId, commits, roots, query, page, batches, gateway };
-}
-
-async function seed(data: ReturnType<typeof fixture>) {
-  await storeRepositoryHistoryPage(
-    environmentId,
-    data.repositoryId,
-    data.page,
-    data.query,
-  );
-  await beginRepositoryHistorySynchronization(environmentId, data.repositoryId);
-  for (const batch of data.batches)
-    await storeRepositoryHistoryBatch(environmentId, data.repositoryId, batch);
-  await completeStoredRepositoryHistory(
-    environmentId,
-    data.repositoryId,
-    data.commits.length,
-  );
-}
-
-function waitForCompletion(reader: RepositoryHistoryReader) {
-  return new Promise<void>((resolve, reject) => {
-    const check = () => {
-      const snapshot = reader.getSnapshot();
-      if (snapshot.synchronization === "complete") {
-        unsubscribe();
-        resolve();
-      } else if (snapshot.status === "error") {
-        unsubscribe();
-        reject(snapshot.error);
-      }
-    };
-    const unsubscribe = reader.subscribe(check);
-    check();
-  });
-}
-
-export async function prepareStorageInteraction() {
-  const visible = fixture(500);
-  const maintenance = fixture(20_000);
-  const closed = fixture(20_000, true);
-  await seed(visible);
-  await seed(maintenance);
-  await seed(closed);
-  const connect = (data: ReturnType<typeof fixture>) =>
-    createBrowserRepositoryHistoryReader({
-      environmentId,
-      repositoryId: data.repositoryId,
-      gateway: data.gateway,
-      worker,
-    });
-  const visibleReader = connect(visible);
-  const maintenanceReader = connect(maintenance);
-  await visibleReader.read(visible.query);
-  await maintenanceReader.read(maintenance.query);
-  await Promise.all([
-    waitForCompletion(visibleReader),
-    waitForCompletion(maintenanceReader),
-  ]);
-  const container = document.createElement("div");
-  container.style.cssText = "height:720px;width:1280px";
-  document.body.append(container);
-  const root = createRoot(container);
-  root.render(
-    <StorageGraph
-      history={openCommitGraphHistory(visibleReader)}
-      roots={visible.roots}
-      repositoryName="Storage interaction"
-    />,
-  );
+    revision: 1,
+    status: "ready",
+    synchronization: "complete",
+    commitCount: count,
+    refTargets: [],
+  } as const;
   return {
-    run: async () => {
-      await maintenanceReader.manageCache("clear");
-      const cleared = await maintenanceReader.read(maintenance.query);
-      if (cleared.length !== 0)
-        throw new Error("Clear did not empty its cache");
-      await new Promise<void>((resolve) => {
-        arm = resolve;
-        channel.postMessage("arm");
-      });
-      await maintenanceReader.manageCache("rebuild");
-      await waitForCompletion(maintenanceReader);
-      const diagnostics = await maintenanceReader.getCacheDiagnostics();
-      const cache = (repositoryId: string) =>
-        diagnostics.caches.find((item) => item.repositoryId === repositoryId);
+    getSnapshot: () => snapshot,
+    subscribe: () => () => {},
+    ask: async (query) => {
+      if (query._tag === "Search")
+        return { commits: [], complete: true, commitCount: count } as never;
+      if (!("scope" in query)) return [] as never;
+      const view = new HistoryView(graph, query.scope, []);
+      if (query._tag === "Locate")
+        return query.oids.map((value) => view.row(value)) as never;
+      if (query._tag === "Oids")
+        return view.oids(query.start, query.end) as never;
+      if (query._tag !== "Rows") return undefined as never;
       return {
-        quotaTriggered,
-        visible: cache(visible.repositoryId),
-        rebuilt: cache(maintenance.repositoryId),
-        pruned: cache(closed.repositoryId),
-      };
+        total: view.total,
+        start: query.start,
+        shift: 0,
+        rows: view.rows(query.start, query.end).map((row) => ({
+          ...row,
+          commit: commits[Number.parseInt(row.oid, 16)] as RepositoryCommit,
+        })),
+      } as never;
     },
-    close: () => {
-      root.unmount();
-      visibleReader.close();
-      maintenanceReader.close();
-      worker.port.close();
-      channel.close();
-    },
+    synchronize: () => {},
+    close: () => {},
   };
 }
 
@@ -238,14 +140,11 @@ declare global {
 function StorageGraph(props: ComponentProps<typeof CommitGraph>) {
   return (
     <QueryClientProvider client={queryClient}>
-      <ApplicationRuntime value={runtime}>
-        <EnvironmentProvider environment={offlineEnvironment}>
-          <CommitGraph {...props} />
-        </EnvironmentProvider>
-      </ApplicationRuntime>
+      <EnvironmentProvider environment={offlineEnvironment}>
+        <CommitGraph {...props} />
+      </EnvironmentProvider>
     </QueryClientProvider>
   );
 }
 
-const runtime = ManagedRuntime.make(Layer.empty);
 const queryClient = createEnvironmentQueryClient();

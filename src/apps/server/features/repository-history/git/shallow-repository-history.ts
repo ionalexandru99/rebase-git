@@ -1,7 +1,7 @@
 import { open } from "node:fs/promises";
 import type {
   RepositoryCommit,
-  RepositoryHistoryOperationFailure,
+  RepositoryHistoryFailure,
 } from "@rebase/contracts";
 import { Effect } from "effect";
 import {
@@ -77,10 +77,7 @@ export function restoreShallowCommitParents(
   directory: string,
   commits: readonly RepositoryCommit[],
   shallowOids: ReadonlySet<string>,
-): Effect.Effect<
-  readonly RepositoryCommit[],
-  RepositoryHistoryOperationFailure
-> {
+): Effect.Effect<readonly RepositoryCommit[], RepositoryHistoryFailure> {
   const boundaries = commits.filter((commit) => shallowOids.has(commit.oid));
   if (boundaries.length === 0) return Effect.succeed(commits);
   return runRepositoryGit(

@@ -111,7 +111,6 @@ async function openWindow(
     width: 1200,
   });
 
-  configureEnvironmentWebSocketOrigin(window, options.environmentOrigin);
   registerEnvironmentCredentialIpc(window, options, trusted);
   preventUntrustedNavigation(window, options.renderer);
   window.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
@@ -149,33 +148,6 @@ function preventUntrustedNavigation(
   };
   window.webContents.on("will-navigate", guardNavigation);
   window.webContents.on("will-redirect", guardNavigation);
-}
-
-function configureEnvironmentWebSocketOrigin(
-  window: BrowserWindow,
-  environmentOrigin: string,
-) {
-  const webSocketOrigin = new URL(environmentOrigin);
-  webSocketOrigin.protocol =
-    webSocketOrigin.protocol === "https:" ? "wss:" : "ws:";
-
-  window.webContents.session.webRequest.onBeforeSendHeaders(
-    { types: ["webSocket"], urls: ["<all_urls>"] },
-    (details, callback) => {
-      if (new URL(details.url).origin !== webSocketOrigin.origin) {
-        callback({ requestHeaders: details.requestHeaders });
-        return;
-      }
-
-      const requestHeaders = { ...details.requestHeaders };
-      const existingOrigin = Object.keys(requestHeaders).find(
-        (header) => header.toLowerCase() === "origin",
-      );
-      if (existingOrigin !== undefined) delete requestHeaders[existingOrigin];
-      requestHeaders.Origin = environmentOrigin;
-      callback({ requestHeaders });
-    },
-  );
 }
 
 function resolveRenderer(

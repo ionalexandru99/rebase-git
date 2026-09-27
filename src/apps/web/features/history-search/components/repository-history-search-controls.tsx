@@ -3,51 +3,26 @@ import { IconSearch, IconX } from "@tabler/icons-react";
 import { type KeyboardEvent, useId, useRef, useState } from "react";
 import { Button } from "#web/components/ui/button";
 import { Input } from "#web/components/ui/input";
-import type { RepositoryHistorySearch } from "#web/domain/repository-history/history-search.contract";
 import { HistorySearchResults } from "#web/features/history-search/components/history-search-results";
-import { useRepositoryHistorySearch } from "#web/features/history-search/hooks/use-repository-history-search";
-import { useRepositoryHistorySearchModel } from "#web/features/history-search/hooks/use-repository-history-search-model";
-import type { RepositoryHistorySearchModel } from "#web/features/history-search/repository-history-search";
-import type { RepositoryHistorySnapshot } from "#web/features/repository-history/repository-history-reader";
+import { useHistorySearch } from "#web/features/history-search/use-history-search";
+import type { HistorySnapshot } from "#web/features/repository-history/history-worker-protocol";
+import type { RepositoryHistory } from "#web/features/repository-history/repository-history";
 
 export function RepositoryHistorySearchControls({
-  reader,
+  history,
   snapshot,
   onNavigate,
   offline = false,
 }: {
-  readonly reader: RepositoryHistorySearch;
-  readonly snapshot: RepositoryHistorySnapshot;
+  readonly history: RepositoryHistory;
+  readonly snapshot: HistorySnapshot;
   readonly onNavigate: (oid: string, signal: AbortSignal) => Promise<void>;
-  readonly offline?: boolean;
-}) {
-  const model = useRepositoryHistorySearchModel(
-    reader,
-    snapshot.historyRevision,
-    onNavigate,
-  );
-  return (
-    <RepositoryHistorySearchView
-      model={model}
-      snapshot={snapshot}
-      offline={offline}
-    />
-  );
-}
-
-export function RepositoryHistorySearchView({
-  model,
-  snapshot,
-  offline = false,
-}: {
-  readonly model: RepositoryHistorySearchModel | undefined;
-  readonly snapshot: RepositoryHistorySnapshot;
   readonly offline?: boolean;
 }) {
   const input = useRef<HTMLInputElement>(null);
   const resultsId = useId();
   const [opened, setOpened] = useState(false);
-  const search = useRepositoryHistorySearch(model);
+  const search = useHistorySearch(history, snapshot.revision, onNavigate);
   const open = () => {
     setOpened(true);
     input.current?.focus();

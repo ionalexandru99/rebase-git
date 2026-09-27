@@ -1,8 +1,12 @@
+import { environmentProtocol } from "@rebase/contracts";
 import {
-  type EnvironmentRpcClient,
-  environmentProtocol,
-} from "@rebase/contracts";
-import { Effect, Fiber, type ManagedRuntime, Result, type Scope } from "effect";
+  Effect,
+  Fiber,
+  Layer,
+  ManagedRuntime,
+  Result,
+  type Scope,
+} from "effect";
 import {
   EnvironmentAccessDenied,
   type EnvironmentConnection,
@@ -10,7 +14,7 @@ import {
   type EnvironmentCredential,
   EnvironmentProtocolMismatch,
   environmentRequests,
-} from "#web/app/environment/environment-connection";
+} from "#web/platform/environment/environment-connection";
 import type { EnvironmentRequests } from "#web/platform/query/environment-context";
 import type { EnvironmentInvalidation } from "#web/platform/query/environment-invalidation";
 import { createStore, type ReadableStore } from "#web/platform/store/store";
@@ -44,10 +48,6 @@ export interface LocalEnvironmentSession
   readonly stop: () => void;
 }
 
-export type EnvironmentConnected = (
-  rpc: EnvironmentRpcClient,
-) => Effect.Effect<void, never, Scope.Scope>;
-
 export interface LocalEnvironmentGateway {
   readonly authorize: () => Effect.Effect<
     EnvironmentCredential,
@@ -65,8 +65,8 @@ export interface LocalEnvironmentGateway {
 export interface LocalEnvironmentSessionOptions {
   readonly gateway: LocalEnvironmentGateway;
   readonly invalidation: EnvironmentInvalidation;
-  readonly onConnect?: EnvironmentConnected;
-  readonly runtime: ManagedRuntime.ManagedRuntime<never, never>;
+  readonly onConnect?: (credential: EnvironmentCredential) => void;
+  readonly runtime?: ManagedRuntime.ManagedRuntime<never, never>;
   readonly waitBeforeReconnect?: (attempt: number) => Effect.Effect<void>;
 }
 
@@ -82,6 +82,7 @@ export function createLocalEnvironmentSession(
   });
   let credential: EnvironmentCredential | undefined;
   let fiber: Fiber.Fiber<void, never> | undefined;
+  const runtime = options.runtime ?? ManagedRuntime.make(Layer.empty);
   const publish: PublishState = (next) => Effect.sync(() => state.set(next));
 
   const runSession = Effect.gen(function* () {
@@ -94,7 +95,7 @@ export function createLocalEnvironmentSession(
     subscribe: state.subscribe,
     start: () => {
       if (fiber !== undefined) return;
-      fiber = options.runtime.runFork(
+      fiber = runtime.runFork(
         runSession.pipe(
           Effect.ensuring(
             Effect.sync(() => {
@@ -105,7 +106,7 @@ export function createLocalEnvironmentSession(
       );
     },
     stop: () => {
-      if (fiber !== undefined) options.runtime.runFork(Fiber.interrupt(fiber));
+      if (fiber !== undefined) runtime.runFork(Fiber.interrupt(fiber));
     },
   };
 }
@@ -154,8 +155,8 @@ function maintainConnection(
                 environmentId = active.environmentId;
               }),
             ),
-            Effect.tap(
-              (active) => options.onConnect?.(active.rpc) ?? Effect.void,
+            Effect.tap(() =>
+              Effect.sync(() => options.onConnect?.(credential)),
             ),
             Effect.tap((active) =>
               Effect.sync(() => options.invalidation.changed()).pipe(

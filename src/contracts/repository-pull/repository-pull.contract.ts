@@ -1,4 +1,7 @@
-import { repositoryCommand } from "@rebase/contracts/environment-connection/environment-route.contract";
+import {
+  repositoryCommand,
+  repositoryQuery,
+} from "@rebase/contracts/environment-connection/environment-route.contract";
 import {
   RepositoryId,
   RepositoryPath,
@@ -38,7 +41,54 @@ export const PullFailure = Schema.Union([
 ]);
 export type PullFailure = typeof PullFailure.Type;
 
+export const RepositoryFetchSetting = Schema.Union([
+  Schema.TaggedStruct("Inherit", {}),
+  Schema.TaggedStruct("Disabled", {}),
+  Schema.TaggedStruct("Interval", {
+    seconds: Schema.Int.check(
+      Schema.isBetween({ minimum: 1, maximum: 86_400 }),
+    ),
+  }),
+]);
+export type RepositoryFetchSetting = typeof RepositoryFetchSetting.Type;
+
+export const FetchFailed = Schema.TaggedStruct("FetchFailed", {
+  reason: Schema.Literals([
+    "GitUnavailable",
+    "Timeout",
+    "OutputTooLarge",
+    "Failed",
+  ]),
+});
+export type FetchFailed = typeof FetchFailed.Type;
+
+export const RepositoryFetchStatus = Schema.Struct({
+  fetching: Schema.Boolean,
+  defaultIntervalSeconds: Schema.Int.check(Schema.isGreaterThan(0)),
+  setting: RepositoryFetchSetting,
+  failure: Schema.optionalKey(FetchFailed),
+});
+export type RepositoryFetchStatus = typeof RepositoryFetchStatus.Type;
+
+const RepositoryTarget = Schema.Struct({ repositoryId: RepositoryId });
+
 export const RepositoryPullApi = {
+  fetchStatus: repositoryQuery("repositories/fetch-status", {
+    request: RepositoryTarget,
+    success: RepositoryFetchStatus,
+  }),
+  fetch: repositoryCommand("repositories/fetch", {
+    request: RepositoryTarget,
+    success: RepositoryFetchStatus,
+    failure: FetchFailed,
+  }),
+  configureFetch: repositoryCommand("repositories/configure-fetch", {
+    request: Schema.Struct({
+      repositoryId: RepositoryId,
+      setting: RepositoryFetchSetting,
+    }),
+    success: RepositoryFetchStatus,
+  }),
   pull: repositoryCommand("repositories/pull", {
     request: PullBranch,
     success: BranchPulled,

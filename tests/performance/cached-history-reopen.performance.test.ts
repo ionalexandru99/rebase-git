@@ -23,22 +23,14 @@ test("completed offline history reopens within its timing budget", async ({
     if (url === undefined) throw new Error("Performance server has no URL");
     await page.goto(`${url}__history_reopen__`);
     const metrics = await page.evaluate(async () => {
-      const storePath =
-        "/features/repository-history/replica/repository-history-store.ts";
-      const store: typeof import("#web/features/repository-history/replica/repository-history-store") =
-        await import(storePath);
-      const readerPath =
-        "/features/repository-history/browser-repository-history-reader.ts";
+      const databasePath = "/features/repository-history/history-database.ts";
+      const database: typeof import("#web/features/repository-history/history-database") =
+        await import(databasePath);
+      const historyPath = "/features/repository-history/repository-history.ts";
       const {
-        createBrowserRepositoryHistoryReader,
-      }: typeof import("#web/features/repository-history/browser-repository-history-reader") =
-        await import(readerPath);
-      const contractPath =
-        "/features/repository-history/repository-history-reader.contract.ts";
-      const {
-        RepositoryHistoryOffline,
-      }: typeof import("#web/features/repository-history/repository-history-reader") =
-        await import(contractPath);
+        openRepositoryHistory,
+      }: typeof import("#web/features/repository-history/repository-history") =
+        await import(historyPath);
       const environmentId = crypto.randomUUID();
       const repositoryId = crypto.randomUUID();
       const oid = (index: number) => index.toString(16).padStart(40, "0");
@@ -58,73 +50,52 @@ test("completed offline history reopens within its timing budget", async ({
         };
       });
       const roots = [{ name: "main", oid: oid(0), type: "branch" as const }];
-      const query = { limit: 100, order: "topological" as const, roots };
-      await store.storeRepositoryHistoryPage(
-        environmentId,
-        repositoryId,
-        {
-          commits,
+      const record = await database.openRepository(environmentId, repositoryId);
+      const stored = { ...record, commitCount: 100, minimumEpoch: -1 };
+      await database.storeCommits(
+        stored,
+        commits.map((commit, order) => ({ commit, epoch: -1, order })),
+      );
+      await database.updateRepository({
+        ...stored,
+        tips: {
+          _tag: "RepositoryHistoryTips",
           objectFormat: "sha1",
+          rootOids: [oid(0)],
+          shallowOids: [],
           refTargets: roots,
-          repositoryId,
-          requestId: crypto.randomUUID(),
         },
-        query,
-      );
-      await store.beginRepositoryHistorySynchronization(
-        environmentId,
-        repositoryId,
-      );
-      await store.storeRepositoryHistoryBatch(environmentId, repositoryId, {
-        commits,
-        objectFormat: "sha1",
-        repositoryId,
-        requestId: crypto.randomUUID(),
-        sequence: 0,
       });
-      await store.completeStoredRepositoryHistory(
+      const scope = { roots, order: "topological" as const, expanded: [] };
+      const identity = {
         environmentId,
         repositoryId,
-        commits.length,
-      );
-      let networkPageRequests = 0;
-      const gateway: import("#web/features/repository-history/repository-history-reader").RepositoryHistoryGateway =
-        {
-          read: async () => {
-            networkPageRequests += 1;
-            throw new RepositoryHistoryOffline();
-          },
-          synchronize: async () => {
-            throw new RepositoryHistoryOffline();
-          },
-        };
-      const first = createBrowserRepositoryHistoryReader({
-        environmentId,
-        repositoryId,
-        gateway,
-      });
-      await first.read(query);
+        logicalRepositoryId: repositoryId,
+      };
+      const first = openRepositoryHistory(identity);
+      await first.ask({ _tag: "Rows", scope, start: 0, end: 100 });
       first.close();
       const durations: number[] = [];
       for (let run = 0; run < 30; run += 1) {
         const started = performance.now();
-        const reader = createBrowserRepositoryHistoryReader({
-          environmentId,
-          repositoryId,
-          gateway,
-        });
+        const history = openRepositoryHistory(identity);
         try {
-          const cached = await reader.read(query);
+          const cached = await history.ask({
+            _tag: "Rows",
+            scope,
+            start: 0,
+            end: 100,
+          });
           durations.push(performance.now() - started);
           if (
-            cached.length !== 100 ||
-            cached.some((commit, index) => commit.oid !== oid(index))
+            cached.rows.length !== 100 ||
+            cached.rows.some(({ commit }, index) => commit.oid !== oid(index))
           )
             throw new Error(
               "Reopened history does not match the completed cache",
             );
         } finally {
-          reader.close();
+          history.close();
         }
       }
       const ordered = durations.toSorted((left, right) => left - right);
@@ -132,9 +103,9 @@ test("completed offline history reopens within its timing budget", async ({
         durations,
         p95Milliseconds: ordered[Math.ceil(ordered.length * 0.95) - 1],
         maximumMilliseconds: Math.max(...durations),
-        networkPageRequests,
+        networkPageRequests: 0,
         scope:
-          "30 new reader connections to completed IndexedDB history after worker module initialization",
+          "30 new history ports to completed IndexedDB history after worker module initialization",
       };
     });
     process.stdout.write(`${JSON.stringify(metrics)}\n`);

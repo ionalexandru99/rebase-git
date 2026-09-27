@@ -51,19 +51,17 @@ import {
   useRefActivation,
   useScopedRepositoryRefs,
 } from "#web/features/refs/repository-refs";
-import { type PullReader, usePull } from "#web/features/remote-sync/use-pull";
+import { usePull } from "#web/features/remote-sync/use-pull";
 import { useRepositoryScope } from "#web/platform/query/repository-scope";
 
 const overscanRows = 12;
 const noSelectedRefs: ReadonlySet<string> = new Set();
 
 export function BranchesSidebar({
-  reader,
   onBranchRenamed = () => undefined,
   onToggleHistoryRef = () => undefined,
   selectedHistoryRefKeys = noSelectedRefs,
 }: {
-  readonly reader: PullReader | undefined;
   readonly onBranchRenamed?: (rename: {
     readonly name: string;
     readonly newName: string;
@@ -74,7 +72,7 @@ export function BranchesSidebar({
   const activeWorktreePath = useRepositoryScope()?.worktreePath ?? "";
   const repositoryRefs = useScopedRepositoryRefs();
   const activation = useRefActivation(repositoryRefs);
-  const pull = usePull(reader);
+  const pull = usePull();
   const [query, setQuery] = useState("");
   const filterQuery = useDeferredValue(query);
   const [scope, setScope] = useState<BranchesSidebarScope>("all");

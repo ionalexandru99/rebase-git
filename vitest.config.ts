@@ -28,6 +28,9 @@ const browserProject = (
   test: { setupFiles?: string[]; testTimeout?: number } = {},
 ) => ({
   extends: "./src/apps/web/vite.config.ts",
+  optimizeDeps: {
+    include: ["effect/unstable/rpc", "effect/unstable/socket"],
+  },
   resolve: {
     alias: {
       "#tests-support": fileURLToPath(

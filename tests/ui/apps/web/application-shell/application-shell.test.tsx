@@ -9,10 +9,7 @@ import {
 import { describe, expect, it, vi } from "vite-plus/test";
 import { page, userEvent } from "vite-plus/test/browser";
 import { catalogEntry, repositoryRefs } from "#tests-support/fixtures";
-import {
-  encodeRepositoryHistoryBatch,
-  encodeRepositoryHistoryPage,
-} from "#tests-support/repository-history-bytes";
+import { storeHistory } from "#tests-support/history";
 import { repositoryScope } from "#tests-ui/apps/web/repository-scope/repository-scope-fixture";
 import {
   fakeRequests,
@@ -25,21 +22,20 @@ import { render } from "#tests-ui/runtime/render";
 import type { LocalEnvironmentSession } from "#web/app/environment/local-environment-session";
 import { ApplicationShell } from "#web/app/shell/application-shell";
 import { RepositoryWorkspace } from "#web/app/workspace/repository-workspace";
-import type { RepositoryHistoryGateway } from "#web/features/repository-history/repository-history-reader";
+import { NotificationsProvider } from "#web/features/notifications/notifications";
 import { RepositoryScopeProvider } from "#web/platform/query/repository-scope";
 
 describe("application shell", () => {
   it("opens repository settings from the list without opening its graph", async () => {
     const connected = await connectedSession();
-    connected.finishSynchronization();
     await render(
       <ApplicationShell
         desktopUpdates={undefined}
         productVersion="test"
         repositoryFilesystem={undefined}
-        repositoryHistory={connected.repositoryHistory}
         session={connected.session}
       />,
+      { wrapper: NotificationsProvider },
     );
     await page
       .getByRole("button", { name: "Repository settings for rebase-test" })
@@ -49,7 +45,6 @@ describe("application shell", () => {
       .element(page.getByRole("main", { name: "Repository settings" }))
       .toBeVisible();
     expect(connected.recordOpened).not.toHaveBeenCalled();
-    expect(connected.repositoryHistory.read).not.toHaveBeenCalled();
     await expect
       .element(page.getByRole("combobox", { name: "History ordering" }))
       .toBeVisible();
@@ -63,15 +58,14 @@ describe("application shell", () => {
 
   it("returns to the same graph selection from repository settings and applies saved ordering", async () => {
     const connected = await connectedSession();
-    connected.finishSynchronization();
     await render(
       <ApplicationShell
         desktopUpdates={undefined}
         productVersion="test"
         repositoryFilesystem={undefined}
-        repositoryHistory={connected.repositoryHistory}
         session={connected.session}
       />,
+      { wrapper: NotificationsProvider },
     );
     await page
       .getByRole("main", { name: "Open project" })
@@ -115,15 +109,14 @@ describe("application shell", () => {
 
   it("opens the repository chosen in the folder picker", async () => {
     const connected = await connectedSession();
-    connected.finishSynchronization();
     await render(
       <ApplicationShell
         desktopUpdates={undefined}
         productVersion="test"
         repositoryFilesystem={undefined}
-        repositoryHistory={connected.repositoryHistory}
         session={connected.session}
       />,
+      { wrapper: NotificationsProvider },
     );
     const picker = await chooseFolder("repo");
     await expect.element(picker).not.toBeInTheDocument();
@@ -143,15 +136,14 @@ describe("application shell", () => {
       .mockImplementation(() => {
         throw unanswered;
       });
-    connected.finishSynchronization();
     await render(
       <ApplicationShell
         desktopUpdates={undefined}
         productVersion="test"
         repositoryFilesystem={undefined}
-        repositoryHistory={connected.repositoryHistory}
         session={connected.session}
       />,
+      { wrapper: NotificationsProvider },
     );
     await chooseFolder("repo");
     await expect
@@ -182,9 +174,9 @@ describe("application shell", () => {
         desktopUpdates={undefined}
         productVersion="test"
         repositoryFilesystem={undefined}
-        repositoryHistory={connected.repositoryHistory}
         session={connected.session}
       />,
+      { wrapper: NotificationsProvider },
     );
     const picker = await chooseFolder("repo");
     await expect
@@ -220,15 +212,14 @@ describe("application shell", () => {
 
   it("hides remembered repositories when the device must pair again", async () => {
     const connected = await connectedSession();
-    connected.finishSynchronization();
     await render(
       <ApplicationShell
         desktopUpdates={undefined}
         productVersion="test"
         repositoryFilesystem={undefined}
-        repositoryHistory={connected.repositoryHistory}
         session={connected.session}
       />,
+      { wrapper: NotificationsProvider },
     );
     const repositories = page
       .getByRole("main", { name: "Open project" })
@@ -302,9 +293,9 @@ describe("application shell", () => {
         desktopUpdates={undefined}
         productVersion="0.0.2-test"
         repositoryFilesystem={undefined}
-        repositoryHistory={connected.repositoryHistory}
         session={connected.session}
       />,
+      { wrapper: NotificationsProvider },
     );
     await page
       .getByRole("main", { name: "Open project" })
@@ -316,7 +307,6 @@ describe("application shell", () => {
       .getByRole("grid", { name: "Commit history" })
       .getByRole("row", { name: /^cached commit,/ });
     await expect.element(commit).toBeVisible();
-    connected.finishSynchronization();
 
     connected.disconnect();
 
@@ -344,9 +334,9 @@ async function renderShell() {
       desktopUpdates={undefined}
       productVersion="0.0.2-test"
       repositoryFilesystem={undefined}
-      repositoryHistory={unavailableHistory}
       session={pairingRequiredSession()}
     />,
+    { wrapper: NotificationsProvider },
   );
 }
 
@@ -359,11 +349,6 @@ async function renderRepositoryWorkspace() {
     </div>,
   );
 }
-
-const unavailableHistory: RepositoryHistoryGateway = {
-  read: async () => Promise.reject(new Error("Unavailable")),
-  synchronize: async () => Promise.reject(new Error("Unavailable")),
-};
 
 function pairingRequiredSession(): LocalEnvironmentSession {
   const sessionState = { _tag: "PairingRequired" } as const;
@@ -424,34 +409,7 @@ async function connectedSession(
     environmentId,
     requests,
   };
-  let finishSynchronization: () => void = () => undefined;
-  const synchronizationFinished = new Promise<void>((resolve) => {
-    finishSynchronization = resolve;
-  });
-  const repositoryHistory = {
-    read: vi.fn(async () =>
-      encodeRepositoryHistoryPage({
-        commits: [commit],
-        objectFormat: "sha1",
-        refTargets: [root],
-        repositoryId,
-        requestId: crypto.randomUUID(),
-      }),
-    ),
-    synchronize: vi.fn(async (_request, acceptBatch) => {
-      await acceptBatch(
-        encodeRepositoryHistoryBatch({
-          commits: [commit],
-          objectFormat: "sha1",
-          repositoryId,
-          requestId: crypto.randomUUID(),
-          sequence: 0,
-        }),
-      );
-      await synchronizationFinished;
-      return 1;
-    }),
-  } satisfies RepositoryHistoryGateway;
+  await storeHistory(environmentId, repositoryId, [commit], [root]);
   const session: LocalEnvironmentSession = {
     getSnapshot: () => state,
     start: () => undefined,
@@ -469,9 +427,7 @@ async function connectedSession(
     catalogReads,
     disconnect: () =>
       publish({ _tag: "Reconnecting", attempt: 1, environmentId }),
-    finishSynchronization,
     recordOpened,
-    repositoryHistory,
     requirePairing: () => publish({ _tag: "PairingRequired" }),
     session,
   };

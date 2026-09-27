@@ -1,6 +1,6 @@
 import {
   type PullFailure,
-  type RepositoryFreshness,
+  type RepositoryFetchStatus,
   RepositoryPullApi,
   RepositoryRefsApi,
 } from "@rebase/contracts";
@@ -8,7 +8,7 @@ import { describe, expect, it, vi } from "vite-plus/test";
 import { page } from "vite-plus/test/browser";
 import {
   commitId,
-  repositoryFreshness,
+  fetchStatus,
   repositoryId,
   repositoryRefs,
   upstream,
@@ -29,16 +29,9 @@ import {
 import { render } from "#tests-ui/runtime/render";
 import { NotificationsProvider } from "#web/features/notifications/notifications";
 import { RemoteSync } from "#web/features/remote-sync/remote-sync";
-import type { RepositoryHistorySnapshot } from "#web/features/repository-history/repository-history-reader";
 import { RepositoryScopeProvider } from "#web/platform/query/repository-scope";
 
-const freshness = repositoryFreshness({ revision: 1 });
-const history: RepositoryHistorySnapshot = {
-  revision: 0,
-  historyRevision: 0,
-  status: "ready",
-  freshness,
-};
+const status = fetchStatus();
 
 describe("repository pull", () => {
   it("fetches before fast-forwarding the branch", async () => {
@@ -61,12 +54,7 @@ describe("repository pull", () => {
   });
 
   it("does not pull when the fetch fails", async () => {
-    const f = await fixture({
-      fetched: {
-        ...freshness,
-        failure: { _tag: "FetchFailed", reason: "Failed" },
-      },
-    });
+    const f = await fixture({ fetchFails: true });
     await f.pull();
     await expect.poll(() => f.fetch.mock.calls.length).toBe(1);
     await expect
@@ -77,14 +65,14 @@ describe("repository pull", () => {
 
   it("pulls the active branch from the graph toolbar and holds fetch until it finishes", async () => {
     const reader = historyReader({ commits: graphHistory(2), status: "ready" });
-    reader.snapshot = { ...reader.snapshot, freshness };
-    const fetched = Promise.withResolvers<RepositoryFreshness>();
-    reader.fetch.mockReturnValue(fetched.promise);
+    const fetched = Promise.withResolvers<RepositoryFetchStatus>();
     const pulled = vi.fn<(command: unknown) => void>();
     const finished = Promise.withResolvers<void>();
     const requests = fakeRequests(
       idleOperation,
       respond(RepositoryRefsApi.read, async () => refs(3)),
+      respond(RepositoryPullApi.fetchStatus, async () => status),
+      respond(RepositoryPullApi.fetch, () => fetched.promise),
       respond(RepositoryPullApi.pull, async (command) => {
         pulled(command);
         await finished.promise;
@@ -94,7 +82,7 @@ describe("repository pull", () => {
     await render(
       <div style={{ height: 520, width: 900 }}>
         <RepositoryScopeProvider scope={repositoryScope({ repositoryId })}>
-          <RemoteSync reader={reader}>
+          <RemoteSync>
             {(actions) => (
               <CommitGraphFixture
                 reader={reader}
@@ -110,9 +98,9 @@ describe("repository pull", () => {
     );
     await page.getByRole("button", { name: "Pull 3 incoming commits" }).click();
     await expect
-      .element(page.getByRole("button", { name: "Fetch", exact: true }))
+      .element(page.getByRole("button", { name: "Fetching", exact: true }))
       .toBeDisabled();
-    fetched.resolve(freshness);
+    fetched.resolve(status);
     await expect
       .poll(() => pulled)
       .toHaveBeenCalledWith({
@@ -159,32 +147,36 @@ describe("repository pull", () => {
 });
 
 async function fixture({
-  fetched = freshness,
+  fetchFails = false,
   failure,
 }: {
-  readonly fetched?: RepositoryFreshness;
+  readonly fetchFails?: boolean;
   readonly failure?: PullFailure;
 } = {}) {
-  const fetch = vi.fn(async () => fetched);
+  const fetch = vi.fn(async () => {
+    if (fetchFails)
+      throw rejected({
+        _tag: "FetchFailed" as const,
+        reason: "Failed" as const,
+      });
+    return status;
+  });
   const requested = vi.fn();
   const requests = fakeRequests(
     idleOperation,
     respond(RepositoryRefsApi.read, async () => refs(0)),
+    respond(RepositoryPullApi.fetchStatus, async () => status),
+    respond(RepositoryPullApi.fetch, fetch),
     respond(RepositoryPullApi.pull, async (command) => {
       requested(command);
       if (failure !== undefined) throw rejected(failure);
       return { outcome: "FastForwarded" as const };
     }),
   );
-  const reader = {
-    fetch,
-    getSnapshot: () => history,
-    subscribe: () => () => {},
-  };
   await render(
     <NotificationsProvider>
       <RepositoryScopeProvider scope={repositoryScope({ repositoryId })}>
-        <RemoteSync reader={reader}>{(actions) => actions}</RemoteSync>
+        <RemoteSync>{(actions) => actions}</RemoteSync>
       </RepositoryScopeProvider>
     </NotificationsProvider>,
     { environment: { requests } },

@@ -4,7 +4,7 @@ import type {
   ChangedFile,
   RepositoryCatalogEntry,
   RepositoryChanges,
-  RepositoryFreshness,
+  RepositoryFetchStatus,
   RepositoryOperation,
   RepositoryRefs,
   RepositoryWorktree,
@@ -164,15 +164,13 @@ export function catalogEntry(
   };
 }
 
-export function repositoryFreshness(
-  freshness: Partial<RepositoryFreshness> = {},
-): RepositoryFreshness {
+export function fetchStatus(
+  status: Partial<RepositoryFetchStatus> = {},
+): RepositoryFetchStatus {
   return {
-    revision: 0,
     fetching: false,
-    stale: false,
     defaultIntervalSeconds: 300,
     setting: { _tag: "Inherit" },
-    ...freshness,
+    ...status,
   };
 }

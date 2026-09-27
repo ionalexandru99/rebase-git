@@ -8,7 +8,7 @@ import {
 } from "#web/components/ui/context-menu";
 import { writeClipboardText } from "#web/features/clipboard/write-clipboard-text";
 import { createRefActions } from "#web/features/refs/ref-actions";
-import type { RepositoryHistoryReadModel } from "#web/features/repository-history/repository-history-reader";
+import type { RepositoryHistory } from "#web/features/repository-history/repository-history";
 import { useRepositoryScope } from "#web/platform/query/repository-scope";
 
 interface CommitAccess {
@@ -24,12 +24,10 @@ interface CommitActionHandlers {
 }
 
 export function useCommitActions({
-  reader,
+  history,
   onOpenDetails,
 }: {
-  readonly reader:
-    | Pick<RepositoryHistoryReadModel, "getCommitSummaries">
-    | undefined;
+  readonly history: Pick<RepositoryHistory, "ask"> | undefined;
   readonly onOpenDetails?: ((oid: string) => void) | undefined;
 }) {
   const scope = useRepositoryScope();
@@ -49,7 +47,7 @@ export function useCommitActions({
     ...commitActions(oid, access, {
       openDetails: onOpenDetails,
       readCommit: async (commit) =>
-        (await reader?.getCommitSummaries([commit]))?.[0],
+        (await history?.ask({ _tag: "Commits", oids: [commit] }))?.[0],
       writeClipboard: writeClipboardText,
       attempt,
     }),

@@ -3,13 +3,16 @@ import type {
   RepositoryHistoryRefTarget,
 } from "@rebase/contracts";
 import { QueryClientProvider } from "@tanstack/react-query";
-import { Layer, ManagedRuntime } from "effect";
 import { createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { CommitGraph } from "#web/features/commit-graph/commit-graph";
-import { openCommitGraphHistory } from "#web/features/commit-graph/paging/commit-graph-history";
-import type { RepositoryHistoryReader } from "#web/features/repository-history/repository-history-reader";
-import { ApplicationRuntime } from "#web/platform/effect/application-runtime-context";
+import { HistoryGraph } from "#web/features/repository-history/history-graph";
+import {
+  type HistoryScopeQuery,
+  HistoryView,
+} from "#web/features/repository-history/history-view";
+import type { HistoryQuery } from "#web/features/repository-history/history-worker-protocol";
+import type { RepositoryHistory } from "#web/features/repository-history/repository-history";
 import {
   type Environment,
   EnvironmentProvider,
@@ -33,7 +36,6 @@ const offlineEnvironment: Environment = {
 };
 
 let root: Root | undefined;
-const runtime = ManagedRuntime.make(Layer.empty);
 
 export function mountGraph(laneCount: number) {
   root?.unmount();
@@ -74,51 +76,60 @@ export function mountGraph(laneCount: number) {
       name: index === 0 ? "main" : `feature/branch-${index}`,
     }),
   );
+  const refTargets: RepositoryHistoryRefTarget[] = [
+    ...roots,
+    { oid: oid(laneCount), name: "origin/main", type: "remote-branch" },
+    { oid: oid(2), name: "v0.0.2", type: "tag" },
+  ];
+  const graph = new HistoryGraph();
+  for (let index = 0; index < count; index += 1)
+    graph.add(commit(index), index);
+  const views = new Map<string, HistoryView>();
+  const view = (scope: HistoryScopeQuery) => {
+    const key = JSON.stringify(scope);
+    const known = views.get(key) ?? new HistoryView(graph, scope, refTargets);
+    views.set(key, known);
+    return known;
+  };
+  const answer = (query: HistoryQuery) => {
+    switch (query._tag) {
+      case "Rows": {
+        const scoped = view(query.scope);
+        return {
+          total: scoped.total,
+          start: query.start,
+          shift: 0,
+          rows: scoped.rows(query.start, query.end).map((row) => ({
+            ...row,
+            commit: commit(Number.parseInt(row.oid, 16)),
+          })),
+        };
+      }
+      case "Oids":
+        return view(query.scope).oids(query.start, query.end);
+      case "Locate":
+        return query.oids.map((value) => view(query.scope).row(value));
+      case "Commits":
+        return query.oids.map((value) => commit(Number.parseInt(value, 16)));
+      case "Search":
+        return { commits: [], complete: true, commitCount: count };
+      default:
+        throw new Error(`No ${query._tag} in the scroll fixture`);
+    }
+  };
   const snapshot = {
     revision: 0,
-    historyRevision: 0,
     status: "ready",
     synchronization: "complete",
-    synchronizedCommitCount: count,
+    commitCount: count,
+    refTargets,
   } as const;
-  const reader: RepositoryHistoryReader = {
-    read: async (query) =>
-      Array.from(
-        {
-          length: Math.min(
-            query.limit,
-            Math.max(0, count - (query.offset ?? 0)),
-          ),
-        },
-        (_, index) => commit(index + (query.offset ?? 0)),
-      ),
+  const history: RepositoryHistory = {
     getSnapshot: () => snapshot,
-    getRefTargets: async () => [
-      ...roots,
-      { oid: oid(laneCount), name: "origin/main", type: "remote-branch" },
-      { oid: oid(2), name: "v0.0.2", type: "tag" },
-    ],
-    getCommitSummaries: async (oids) =>
-      oids.map((value) => commit(Number.parseInt(value, 16))),
-    locate: async (_query, value) => Number.parseInt(value, 16),
-    locateMany: async (_query, oids) =>
-      oids.map((value) => ({ oid: value, index: Number.parseInt(value, 16) })),
-    ancestryRoute: async () => undefined,
     subscribe: () => () => {},
+    ask: async (query) => answer(query) as never,
+    synchronize: () => {},
     close: () => {},
-    fetch: async () => {
-      throw new Error("No fetch in scroll fixture");
-    },
-    configureFetch: async () => {
-      throw new Error("No fetch in scroll fixture");
-    },
-    getCacheDiagnostics: async () => ({ caches: [], persistent: false }),
-    manageCache: async () => undefined,
-    search: async () => ({
-      commits: [],
-      replicaComplete: true,
-      synchronizedCommitCount: count,
-    }),
   };
   root = createRoot(container);
   root.render(
@@ -126,18 +137,14 @@ export function mountGraph(laneCount: number) {
       QueryClientProvider,
       { client: createEnvironmentQueryClient() },
       createElement(
-        ApplicationRuntime,
-        { value: runtime },
-        createElement(
-          EnvironmentProvider,
-          { environment: offlineEnvironment },
-          createElement(CommitGraph, {
-            history: openCommitGraphHistory(reader),
-            roots,
-            repositoryName: "100,000 commits",
-            scope: { _tag: "Automatic" },
-          }),
-        ),
+        EnvironmentProvider,
+        { environment: offlineEnvironment },
+        createElement(CommitGraph, {
+          history,
+          roots,
+          repositoryName: "100,000 commits",
+          scope: { _tag: "Automatic" },
+        }),
       ),
     ),
   );

@@ -1,7 +1,6 @@
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { RepositoryCatalogApi, RepositoryRefsApi } from "@rebase/contracts";
-import { Layer, ManagedRuntime } from "effect";
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import { createRepository, git } from "#tests-support/git";
 import { openTestServer } from "#tests-support/server";
@@ -53,7 +52,6 @@ describe("repository refs transport", () => {
       { path: repositoryPath },
     );
     vi.stubGlobal("window", { location: new URL(origin) });
-    const runtime = ManagedRuntime.make(Layer.empty);
     let changes = 0;
     const session = createBrowserLocalEnvironmentSession(
       {
@@ -61,7 +59,6 @@ describe("repository refs transport", () => {
         getEnvironmentCredential: async () => owner.value,
       },
       {
-        runtime,
         invalidation: {
           changed: (repositoryIds, kind) => {
             if (kind === "Refs" && repositoryIds?.includes(remembered.id))
@@ -140,7 +137,6 @@ describe("repository refs transport", () => {
         });
     } finally {
       session.stop();
-      await runtime.dispose();
     }
   });
 });

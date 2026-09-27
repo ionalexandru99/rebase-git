@@ -21,7 +21,7 @@ export function appendCommitLanes(
   checkpoint: CommitLaneCheckpoint,
   commits: readonly CommitTopology[],
   seeds: ReadonlyMap<string, CommitLaneSeed> = new Map(),
-  localHistory?: ReadonlySet<string>,
+  localHistory?: { readonly has: (oid: string) => boolean },
 ) {
   const lanes = checkpoint.lanes.map((lane) => ({ ...lane }));
   let nextLaneId = checkpoint.nextLaneId;

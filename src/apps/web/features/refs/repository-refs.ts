@@ -4,8 +4,7 @@ import {
   type RepositoryRefTarget,
 } from "@rebase/contracts";
 import { type Query, type QueryClient, skipToken } from "@tanstack/react-query";
-import { useCallback, useEffect, useRef } from "react";
-import type { RepositoryHistoryObservation } from "#web/features/repository-history/repository-history-reader";
+import { useCallback, useRef } from "react";
 import {
   isRouteQuery,
   useEnvironmentQuery,
@@ -56,27 +55,6 @@ export function useRepositoryRefs(
 export function useScopedRepositoryRefs() {
   const scope = useRepositoryScope();
   return useRepositoryRefs(scope?.repositoryId);
-}
-
-export function useHistoryRefRefresh(
-  reader: RepositoryHistoryObservation | undefined,
-  connected: boolean,
-  refresh: () => void,
-) {
-  useEffect(() => {
-    if (reader === undefined || !connected) return;
-    let completedRevision = reader.getSnapshot().historyRevision;
-    return reader.subscribe(() => {
-      const snapshot = reader.getSnapshot();
-      if (
-        snapshot.synchronization !== "complete" ||
-        snapshot.historyRevision === completedRevision
-      )
-        return;
-      completedRevision = snapshot.historyRevision;
-      refresh();
-    });
-  }, [connected, reader, refresh]);
 }
 
 export function forgetRepositoryRefs(

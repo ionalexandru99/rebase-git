@@ -4,7 +4,7 @@ import { Effect } from "effect";
 import { describe, expect, it, vi } from "vite-plus/test";
 import { createRepository } from "#tests-support/git";
 import { openTestServer } from "#tests-support/server";
-import { environmentRequests } from "#web/app/environment/environment-connection";
+import { environmentRequests } from "#web/platform/environment/environment-connection";
 
 const repositoryId = "00000000-0000-4000-8000-000000000001";
 

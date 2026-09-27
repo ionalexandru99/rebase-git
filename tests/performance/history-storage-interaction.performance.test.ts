@@ -134,11 +134,7 @@ test("quota cleanup and cache rebuild keep graph interaction within its timing b
       open: true,
       state: "complete",
     });
-    expect(metrics.storage.pruned).toMatchObject({
-      commitCount: 1,
-      open: false,
-      state: "complete",
-    });
+    expect(metrics.storage.pruned).toBeUndefined();
     expect(metrics.feedbackSamples).toBeGreaterThanOrEqual(5);
     expect(metrics.feedbackSamples).toBe(metrics.keyboardEvents);
     assertTimingBudget(

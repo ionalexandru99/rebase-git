@@ -3,7 +3,6 @@ import { userEvent } from "vite-plus/test/browser";
 import {
   CommitGraphFixture,
   history,
-  historyOid,
   historyReader,
   mergeHistory,
   renderGraph,
@@ -19,15 +18,6 @@ describe("commit graph commands", () => {
   it("reveals a hidden result from cached search", async () => {
     const commits = mergeHistory();
     const reader = historyReader({ commits, status: "ready" });
-    reader.search.mockResolvedValue({
-      commits: commits.slice(3, 4),
-      replicaComplete: true,
-      synchronizedCommitCount: 6,
-    });
-    reader.ancestryRoute.mockResolvedValue({
-      rootOid: historyOid(0),
-      edges: [{ childOid: historyOid(0), parentOid: historyOid(2) }],
-    });
     const screen = await renderGraph(reader);
     const grid = screen.getByRole("grid");
     await expect
@@ -39,10 +29,9 @@ describe("commit graph commands", () => {
     await expect
       .element(grid.getByRole("row", { name: /^Commit 3,/ }))
       .toHaveAttribute("aria-selected", "true");
-    expect(reader.ancestryRoute).toHaveBeenCalledWith(
-      [historyOid(0)],
-      historyOid(3),
-    );
+    await expect
+      .element(grid.getByRole("row", { name: /^Commit 0,/ }))
+      .toHaveAttribute("aria-expanded", "true");
   });
 
   it("offers creating refs at the commit on a writable connection", async () => {
@@ -81,7 +70,12 @@ describe("commit graph commands", () => {
 
   it("explains missing commit metadata and needs read access for details", async () => {
     const reader = historyReader({ commits: history(2), status: "ready" });
-    reader.getCommitSummaries.mockResolvedValue([]);
+    const ask = reader.ask;
+    vi.spyOn(reader, "ask").mockImplementation((query, signal) =>
+      query._tag === "Commits"
+        ? Promise.resolve([] as never)
+        : ask(query, signal),
+    );
     const openDetails = vi.fn();
     const screen = await render(
       <ScopedGraph
@@ -107,9 +101,6 @@ describe("commit graph commands", () => {
   it("selects the invoking commit and opens its menu from the keyboard", async () => {
     const commits = history(4);
     const reader = historyReader({ commits, status: "ready" });
-    reader.getCommitSummaries.mockImplementation(async (oids) =>
-      commits.filter(({ oid }) => oids.includes(oid)),
-    );
     const copy = vi.spyOn(navigator.clipboard, "writeText").mockResolvedValue();
     const screen = await renderGraph(reader);
     const grid = screen.getByRole("grid");

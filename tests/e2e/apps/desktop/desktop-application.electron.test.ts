@@ -178,8 +178,8 @@ async function hasCompletedHistory(page: Page) {
             database.close();
             resolve(
               repositories.result.some(
-                (repository: { completion?: unknown }) =>
-                  repository.completion !== undefined,
+                (repository: { tips?: unknown }) =>
+                  repository.tips !== undefined,
               ),
             );
           };
