@@ -1,6 +1,10 @@
-import { ObjectId, RepositoryId, RepositoryPath } from "@rebase/contracts";
 import { Schema } from "effect";
 import { describe, expect, it } from "vite-plus/test";
+import {
+  ObjectId,
+  RepositoryId,
+  RepositoryPath,
+} from "#contracts/git/git-values.contract.ts";
 
 describe("git values contract", () => {
   it("accepts sha1 and sha256 object ids only", () => {

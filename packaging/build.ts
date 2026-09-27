@@ -12,8 +12,8 @@ const packageManagerCommand =
   process.platform === "win32" ? (process.env.ComSpec ?? "cmd.exe") : "pnpm";
 const packageManagerArguments =
   process.platform === "win32"
-    ? ["/d", "/c", "pnpm.cmd", "--filter", "@rebase/web", "build:web"]
-    : ["--filter", "@rebase/web", "build:web"];
+    ? ["/d", "/c", "pnpm.cmd", "build:web"]
+    : ["build:web"];
 
 await rm(outputDirectory, { force: true, recursive: true });
 await execute(packageManagerCommand, packageManagerArguments, {
@@ -38,7 +38,7 @@ await Promise.all([
 await Promise.all([
   build({
     bundle: true,
-    conditions: ["rebase-source", "node", "import"],
+    conditions: ["node", "import"],
     define: {
       REBASE_PRODUCT_VERSION: JSON.stringify(packageMetadata.version),
     },

@@ -2,9 +2,9 @@ import { mkdtemp, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import { expect, test } from "@playwright/test";
-import { startEnvironmentServer } from "#tests-support/environment-server";
-import { createConflictedRebase, git } from "#tests-support/git";
-import { removeTemporaryDirectory } from "#tests-support/temporary-directory";
+import { startEnvironmentServer } from "#tests-support/environment-server.ts";
+import { createConflictedRebase, git } from "#tests-support/git.ts";
+import { removeTemporaryDirectory } from "#tests-support/temporary-directory.ts";
 
 test("resolves a paused rebase line by line and continues it", async ({
   page,

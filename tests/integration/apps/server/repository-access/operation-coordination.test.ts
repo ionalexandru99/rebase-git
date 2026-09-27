@@ -2,17 +2,17 @@ import { execFile } from "node:child_process";
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { promisify } from "node:util";
-import {
-  type CheckoutRepositoryRef,
-  RepositoryChangesApi,
-  RepositoryOperationsApi,
-  RepositoryRefsApi,
-} from "@rebase/contracts";
 import { Deferred, Effect, Fiber } from "effect";
 import { expect, it } from "vite-plus/test";
-import type { RepositoryWritePolicy } from "#server/repository/repository-coordination";
-import { createDivergedRepository, startConflict } from "#tests-support/git";
-import { openTestEnvironment } from "#tests-support/server";
+import { RepositoryChangesApi } from "#contracts/repository-changes/repository-changes.contract.ts";
+import { RepositoryOperationsApi } from "#contracts/repository-operations/repository-operations.contract.ts";
+import {
+  type CheckoutRepositoryRef,
+  RepositoryRefsApi,
+} from "#contracts/repository-refs/repository-refs.contract.ts";
+import type { RepositoryWritePolicy } from "#server/repository/repository-coordination.ts";
+import { createDivergedRepository, startConflict } from "#tests-support/git.ts";
+import { openTestEnvironment } from "#tests-support/server.ts";
 
 const exec = promisify(execFile);
 const refsAndWorktreeWrite: RepositoryWritePolicy = {

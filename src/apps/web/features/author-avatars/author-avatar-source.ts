@@ -1,4 +1,4 @@
-import type { RepositoryRefs } from "@rebase/contracts";
+import type { RepositoryRefs } from "#contracts/repository-refs/repository-refs.contract.ts";
 
 export type GitHubRepository = NonNullable<RepositoryRefs["githubRepository"]>;
 export interface AvatarAuthor {

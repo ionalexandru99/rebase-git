@@ -2,19 +2,19 @@ import { execFile } from "node:child_process";
 import { chmod, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { promisify } from "node:util";
+import { Effect } from "effect";
+import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import {
   type OperationAction,
   RepositoryOperationsApi,
-} from "@rebase/contracts";
-import { Effect } from "effect";
-import { afterEach, describe, expect, it, vi } from "vite-plus/test";
+} from "#contracts/repository-operations/repository-operations.contract.ts";
 import {
   type GitCommand,
   type GitCommandRunner,
   gitFailed,
-} from "#server/adapters/local-git/git-commands";
-import { createDivergedRepository, startConflict } from "#tests-support/git";
-import { openTestEnvironment } from "#tests-support/server";
+} from "#server/adapters/local-git/git-commands.ts";
+import { createDivergedRepository, startConflict } from "#tests-support/git.ts";
+import { openTestEnvironment } from "#tests-support/server.ts";
 
 const exec = promisify(execFile);
 afterEach(() => {

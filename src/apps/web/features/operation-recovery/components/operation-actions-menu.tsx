@@ -1,7 +1,10 @@
 import { Menu } from "@base-ui/react/menu";
-import type { OperationAction, RepositoryOperation } from "@rebase/contracts";
 import { useRef } from "react";
-import { Button } from "#web/components/ui/button";
+import type {
+  OperationAction,
+  RepositoryOperation,
+} from "#contracts/repository-operations/repository-operations.contract.ts";
+import { Button } from "#web/components/ui/button.tsx";
 
 export function OperationActionsMenu({
   operation,

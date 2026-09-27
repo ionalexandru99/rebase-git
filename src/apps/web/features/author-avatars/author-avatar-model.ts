@@ -3,8 +3,8 @@ import {
   type AvatarAuthor,
   AvatarUnavailable,
   type GitHubRepository,
-} from "#web/features/author-avatars/author-avatar-source";
-import { githubAvatarSource } from "#web/features/author-avatars/github-avatar-source";
+} from "#web/features/author-avatars/author-avatar-source.ts";
+import { githubAvatarSource } from "#web/features/author-avatars/github-avatar-source.ts";
 
 export interface AuthorAvatarModel {
   readonly get: (email: string) => string | undefined;

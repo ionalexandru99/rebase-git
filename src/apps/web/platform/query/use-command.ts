@@ -1,9 +1,3 @@
-import type {
-  EnvironmentRoute,
-  RouteFailure,
-  RouteInput,
-  RouteSuccess,
-} from "@rebase/contracts";
 import {
   hashKey,
   type Query,
@@ -13,20 +7,26 @@ import {
   useQueryClient,
 } from "@tanstack/react-query";
 import { type RefObject, useCallback, useRef } from "react";
+import type {
+  EnvironmentRoute,
+  RouteFailure,
+  RouteInput,
+  RouteSuccess,
+} from "#contracts/environment-connection/environment-route.contract.ts";
 import {
   type EnvironmentRequests,
   useEnvironment,
-} from "#web/platform/query/environment-context";
-import { invalidatedByChange } from "#web/platform/query/environment-invalidation";
+} from "#web/platform/query/environment-context.tsx";
+import { invalidatedByChange } from "#web/platform/query/environment-invalidation.ts";
 import {
   environmentQueryKey,
   inputRepositoryId,
-} from "#web/platform/query/environment-query";
-import { useRepositoryScope } from "#web/platform/query/repository-scope";
+} from "#web/platform/query/environment-query.ts";
+import { useRepositoryScope } from "#web/platform/query/repository-scope.tsx";
 import {
   type RequestFailure,
   requestFailure,
-} from "#web/platform/query/request-failure";
+} from "#web/platform/query/request-failure.ts";
 
 export interface CommandTarget {
   readonly repositoryId: string;

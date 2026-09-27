@@ -1,8 +1,8 @@
-import { Button } from "#web/components/ui/button";
-import { Input } from "#web/components/ui/input";
-import { useWorktreeOperation } from "#web/features/operation-recovery/hooks/use-operation-status";
-import type { WorkingChangesView } from "#web/features/working-changes/hooks/use-working-changes-view";
-import { usePanelFeature } from "#web/features/workspace-panel/api";
+import { Button } from "#web/components/ui/button.tsx";
+import { Input } from "#web/components/ui/input.tsx";
+import { useWorktreeOperation } from "#web/features/operation-recovery/hooks/use-operation-status.ts";
+import type { WorkingChangesView } from "#web/features/working-changes/hooks/use-working-changes-view.ts";
+import { usePanelFeature } from "#web/features/workspace-panel/api.ts";
 
 type CommitEditorView = Pick<
   WorkingChangesView,

@@ -1,8 +1,8 @@
 import type {
   RepositoryCommit,
   RepositoryHistoryRefTarget,
-} from "@rebase/contracts";
-import { readCommitChunk } from "#web/features/repository-history/history-database";
+} from "#contracts/repository-history/repository-history.contract.ts";
+import { readCommitChunk } from "#web/features/repository-history/history-database.ts";
 
 const maximumScannedCommits = 4_096;
 const chunkSize = 256;

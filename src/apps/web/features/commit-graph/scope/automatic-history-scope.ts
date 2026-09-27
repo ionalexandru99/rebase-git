@@ -1,10 +1,10 @@
+import type { RepositoryHistoryRefTarget } from "#contracts/repository-history/repository-history.contract.ts";
 import type {
   LocalBranch,
   RemoteDefaultBranch,
-  RepositoryHistoryRefTarget,
   RepositoryRefs,
   RepositoryRefTarget,
-} from "@rebase/contracts";
+} from "#contracts/repository-refs/repository-refs.contract.ts";
 
 export function resolveAutomaticHistoryRoots(
   refs: RepositoryRefs,

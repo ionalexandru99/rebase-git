@@ -5,8 +5,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { afterEach, describe, expect, it } from "vite-plus/test";
-import { startEnvironmentServer } from "#tests-support/environment-server";
-import { removeTemporaryDirectory } from "#tests-support/temporary-directory";
+import { startEnvironmentServer } from "#tests-support/environment-server.ts";
+import { removeTemporaryDirectory } from "#tests-support/temporary-directory.ts";
 
 const children = new Set<ChildProcessWithoutNullStreams>();
 const directories = new Set<string>();

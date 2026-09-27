@@ -1,5 +1,5 @@
 import { type CSSProperties, type ReactNode, useEffect, useState } from "react";
-import { writeClipboardText } from "#web/features/clipboard/write-clipboard-text";
+import { writeClipboardText } from "#web/features/clipboard/write-clipboard-text.ts";
 
 export function CopyPill({
   value,

@@ -1,9 +1,9 @@
-import {
-  type PushRejected,
-  type PushRejectedReason,
-  repositoryRejected,
-} from "@rebase/contracts";
-import type { GitCommandOutput } from "#server/adapters/local-git/git-commands";
+import { repositoryRejected } from "#contracts/git/git-failures.contract.ts";
+import type {
+  PushRejected,
+  PushRejectedReason,
+} from "#contracts/repository-push/repository-push.contract.ts";
+import type { GitCommandOutput } from "#server/adapters/local-git/git-commands.ts";
 
 export function pushError(
   reason: PushRejectedReason,

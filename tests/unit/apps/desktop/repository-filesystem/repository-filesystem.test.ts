@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vite-plus/test";
-import { requireAbsoluteRepositoryPath } from "#desktop/features/repository-filesystem/repository-filesystem-ipc";
+import { requireAbsoluteRepositoryPath } from "#desktop/features/repository-filesystem/repository-filesystem-ipc.ts";
 
 vi.mock("electron", () => ({ ipcMain: {}, shell: {} }));
 

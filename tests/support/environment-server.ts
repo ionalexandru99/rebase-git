@@ -14,20 +14,16 @@ export function startEnvironmentServer(
       if (name.toLowerCase() === "path") delete inheritedEnvironment[name];
     }
   }
-  const child = spawn(
-    process.execPath,
-    ["--conditions=rebase-source", cliPath, "serve", ...arguments_],
-    {
-      env: {
-        ...inheritedEnvironment,
-        BROWSER: "none",
-        HOME: homeDirectory,
-        USERPROFILE: homeDirectory,
-        ...environment,
-      },
-      stdio: ["pipe", "pipe", "pipe"],
+  const child = spawn(process.execPath, [cliPath, "serve", ...arguments_], {
+    env: {
+      ...inheritedEnvironment,
+      BROWSER: "none",
+      HOME: homeDirectory,
+      USERPROFILE: homeDirectory,
+      ...environment,
     },
-  );
+    stdio: ["pipe", "pipe", "pipe"],
+  });
   let stdout = "";
   let stderr = "";
   child.stdout.on("data", (chunk) => {

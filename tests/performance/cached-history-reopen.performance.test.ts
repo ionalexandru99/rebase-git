@@ -1,7 +1,7 @@
 import { resolve } from "node:path";
 import { expect, test } from "@playwright/test";
 import { createServer } from "vite";
-import { assertTimingBudget } from "#tests-performance/timing-budget";
+import { assertTimingBudget } from "#tests-performance/timing-budget.ts";
 
 test("completed offline history reopens within its timing budget", async ({
   page,
@@ -24,12 +24,12 @@ test("completed offline history reopens within its timing budget", async ({
     await page.goto(`${url}__history_reopen__`);
     const metrics = await page.evaluate(async () => {
       const databasePath = "/features/repository-history/history-database.ts";
-      const database: typeof import("#web/features/repository-history/history-database") =
+      const database: typeof import("#web/features/repository-history/history-database.ts") =
         await import(databasePath);
       const historyPath = "/features/repository-history/repository-history.ts";
       const {
         openRepositoryHistory,
-      }: typeof import("#web/features/repository-history/repository-history") =
+      }: typeof import("#web/features/repository-history/repository-history.ts") =
         await import(historyPath);
       const environmentId = crypto.randomUUID();
       const repositoryId = crypto.randomUUID();

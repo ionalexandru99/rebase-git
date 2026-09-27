@@ -1,7 +1,7 @@
 import type {
   RepositoryCommit,
   RepositoryHistoryTips,
-} from "@rebase/contracts";
+} from "#contracts/repository-history/repository-history.contract.ts";
 
 export const workingChangesStoreName = "workingChanges";
 const commitStoreName = "commits";

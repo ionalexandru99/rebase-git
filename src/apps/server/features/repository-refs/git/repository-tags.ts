@@ -1,25 +1,29 @@
-import {
-  type CreateRepositoryTag,
-  type DeleteRepositoryTag,
-  type RefMissing,
-  type RepositoryRejected,
-  type RepositoryTag,
-  type RepositoryTagDeleted,
-  repositoryRejected,
-  type TagRejected,
-} from "@rebase/contracts";
 import { Effect } from "effect";
+import {
+  type RepositoryRejected,
+  repositoryRejected,
+} from "#contracts/git/git-failures.contract.ts";
+import type {
+  RefMissing,
+  RepositoryTag,
+} from "#contracts/repository-refs/repository-refs.contract.ts";
+import type {
+  CreateRepositoryTag,
+  DeleteRepositoryTag,
+  RepositoryTagDeleted,
+  TagRejected,
+} from "#contracts/repository-refs/repository-tags.contract.ts";
 import {
   type GitCommandRunner,
   type GitFailed,
   isGitRejection,
   runRepositoryGit,
-} from "#server/adapters/local-git/git-commands";
+} from "#server/adapters/local-git/git-commands.ts";
 import {
   readRefTarget,
   refCommand,
   requireValidRefName,
-} from "#server/features/repository-refs/git/ref-git";
+} from "#server/features/repository-refs/git/ref-git.ts";
 
 export function createTag(
   git: GitCommandRunner,

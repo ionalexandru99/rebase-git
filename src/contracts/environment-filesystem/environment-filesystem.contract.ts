@@ -1,6 +1,6 @@
-import { route } from "@rebase/contracts/environment-connection/environment-route.contract";
-import { IsoDate } from "@rebase/contracts/environment-connection/iso-date.contract";
 import { Schema } from "effect";
+import { route } from "#contracts/environment-connection/environment-route.contract.ts";
+import { IsoDate } from "#contracts/environment-connection/iso-date.contract.ts";
 
 const EnvironmentPath = Schema.String.check(
   Schema.isMinLength(1),

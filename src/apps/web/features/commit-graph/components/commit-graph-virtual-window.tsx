@@ -15,7 +15,7 @@ import {
 import {
   graphHeaderHeight,
   graphRowHeight as rowHeight,
-} from "#web/features/commit-graph/layout/graph-metrics";
+} from "#web/features/commit-graph/layout/graph-geometry.ts";
 
 const overscanRows = 6;
 const emptyViewport = { width: 0, height: 0 };

@@ -7,13 +7,13 @@ import {
   useRef,
   useState,
 } from "react";
-import { graphRowHeight } from "#web/features/commit-graph/layout/graph-metrics";
-import type { HistoryScopeQuery } from "#web/features/repository-history/history-view";
+import { graphRowHeight } from "#web/features/commit-graph/layout/graph-geometry.ts";
+import type { HistoryScopeQuery } from "#web/features/repository-history/history-view.ts";
 import type {
   HistoryFailure,
   HistoryRow,
-} from "#web/features/repository-history/history-worker-protocol";
-import type { RepositoryHistory } from "#web/features/repository-history/repository-history";
+} from "#web/features/repository-history/history-worker-protocol.ts";
+import type { RepositoryHistory } from "#web/features/repository-history/repository-history.ts";
 
 const margin = 200;
 const prefetch = 100;

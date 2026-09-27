@@ -2,13 +2,13 @@ import { execFile } from "node:child_process";
 import { resolve } from "node:path";
 import { promisify } from "node:util";
 import { expect, test } from "@playwright/test";
-import type { RepositoryCommit } from "@rebase/contracts";
 import { createServer } from "vite";
+import type { RepositoryCommit } from "#contracts/repository-history/repository-history.contract.ts";
 import {
   createGitHistoryBatchParser,
   gitHistoryFormat,
-} from "#server/features/repository-history/git/parse-git-history";
-import { assertTimingBudget } from "#tests-performance/timing-budget";
+} from "#server/features/repository-history/git/parse-git-history.ts";
+import { assertTimingBudget } from "#tests-performance/timing-budget.ts";
 
 test("cached metadata search on repository history and 250,000 merge-heavy commits", async ({
   page,
@@ -79,12 +79,12 @@ test("cached metadata search on repository history and 250,000 merge-heavy commi
     const measurements = await page.evaluate(async (fixture) => {
       const { repositoryCommitCount, onlyRepository } = fixture;
       const databasePath = "/features/repository-history/history-database.ts";
-      const database: typeof import("#web/features/repository-history/history-database") =
+      const database: typeof import("#web/features/repository-history/history-database.ts") =
         await import(databasePath);
       const searchPath = "/features/repository-history/history-search.ts";
       const {
         searchHistory,
-      }: typeof import("#web/features/repository-history/history-search") =
+      }: typeof import("#web/features/repository-history/history-search.ts") =
         await import(searchPath);
       const environmentId = crypto.randomUUID();
       const count = 250_000;

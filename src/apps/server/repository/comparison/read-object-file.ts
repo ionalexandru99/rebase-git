@@ -3,11 +3,11 @@ import {
   type GitCommandOptions,
   type GitCommandRunner,
   runRepositoryGit,
-} from "#server/adapters/local-git/git-commands";
+} from "#server/adapters/local-git/git-commands.ts";
 import {
   readBlobs,
   unreadableBlob,
-} from "#server/repository/comparison/read-blobs";
+} from "#server/repository/comparison/read-blobs.ts";
 
 export interface RepositoryFileContent {
   readonly content: Buffer | null;

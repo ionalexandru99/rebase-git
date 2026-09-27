@@ -3,7 +3,7 @@ import {
   type MergeSegment,
   type Picks,
   segmentLines,
-} from "#web/features/merge-view/conflict-document";
+} from "#web/features/merge-view/conflict-document.ts";
 
 interface SegmentRange {
   readonly segment: MergeSegment;

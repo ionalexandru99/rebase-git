@@ -2,7 +2,7 @@ import { describe, expect, it } from "vite-plus/test";
 import {
   createGitHistoryBatchParser,
   gitHistoryFormat,
-} from "#server/features/repository-history/git/parse-git-history";
+} from "#server/features/repository-history/git/parse-git-history.ts";
 
 function parseGitHistory(output: string, objectFormat: "sha1" | "sha256") {
   const parser = createGitHistoryBatchParser(objectFormat, 1_000);

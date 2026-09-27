@@ -1,14 +1,12 @@
-import type {
-  RepositoryCatalogEntry,
-  RepositoryChangeKind,
-} from "@rebase/contracts";
 import { Effect, Exit, Queue, Scope, Semaphore } from "effect";
-import type { EnvironmentEventPublisher } from "#server/adapters/environment-transport/environment-event-publisher";
+import type { RepositoryChangeKind } from "#contracts/environment-connection/environment-rpc.contract.ts";
+import type { RepositoryCatalogEntry } from "#contracts/repository-catalog/repository-catalog.contract.ts";
+import type { EnvironmentEventPublisher } from "#server/adapters/environment-transport/environment-event-publisher.ts";
 import {
   type GitCommandRunner,
   readGitCommonDirectory,
-} from "#server/adapters/local-git/git-commands";
-import type { RepositoryWatcher } from "#server/adapters/local-git/local-repository-watcher";
+} from "#server/adapters/local-git/git-commands.ts";
+import type { RepositoryWatcher } from "#server/adapters/local-git/local-repository-watcher.ts";
 
 export interface RepositoryChangePublisher {
   readonly watch: (repository: RepositoryCatalogEntry) => Effect.Effect<void>;

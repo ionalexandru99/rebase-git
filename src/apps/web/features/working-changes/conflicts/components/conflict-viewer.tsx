@@ -1,15 +1,15 @@
+import { IconFileDiff } from "@tabler/icons-react";
+import { Fragment, useMemo } from "react";
 import type {
   ConflictDocument,
   ConflictSide,
   ConflictSides,
-} from "@rebase/contracts";
-import { IconFileDiff } from "@tabler/icons-react";
-import { Fragment, useMemo } from "react";
-import { Button } from "#web/components/ui/button";
-import { sideNames } from "#web/features/merge-view/components/pane-lines";
-import { mergeModel } from "#web/features/merge-view/conflict-document";
-import { WholeFileMenu } from "#web/features/working-changes/conflicts/components/whole-file-menu";
-import type { WorkingChangesView } from "#web/features/working-changes/hooks/use-working-changes-view";
+} from "#contracts/repository-conflicts/repository-conflicts.contract.ts";
+import { Button } from "#web/components/ui/button.tsx";
+import { sideNames } from "#web/features/merge-view/components/pane-lines.tsx";
+import { mergeModel } from "#web/features/merge-view/conflict-document.ts";
+import { WholeFileMenu } from "#web/features/working-changes/conflicts/components/whole-file-menu.tsx";
+import type { WorkingChangesView } from "#web/features/working-changes/hooks/use-working-changes-view.ts";
 
 type ConflictView = Pick<
   WorkingChangesView,

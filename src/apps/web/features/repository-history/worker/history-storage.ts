@@ -3,11 +3,11 @@ import {
   HistoryStorageUnavailable,
   readRepositories,
   type StoredRepository,
-} from "#web/features/repository-history/history-database";
+} from "#web/features/repository-history/history-database.ts";
 import type {
   HistoryCache,
   HistoryStorage,
-} from "#web/features/repository-history/history-worker-protocol";
+} from "#web/features/repository-history/history-worker-protocol.ts";
 
 type IsOpen = (environmentId: string, repositoryId: string) => boolean;
 

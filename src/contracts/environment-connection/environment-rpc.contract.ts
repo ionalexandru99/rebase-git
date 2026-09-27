@@ -1,16 +1,3 @@
-import { CommitInspectionApi } from "@rebase/contracts/commit-inspection/commit-inspection.contract";
-import { EnvironmentAuthorizationApi } from "@rebase/contracts/environment-authorization/environment-authorization.contract";
-import { EnvironmentFilesystemApi } from "@rebase/contracts/environment-filesystem/environment-filesystem.contract";
-import { RepositoryCatalogApi } from "@rebase/contracts/repository-catalog/repository-catalog.contract";
-import { RepositoryChangesApi } from "@rebase/contracts/repository-changes/repository-changes.contract";
-import { RepositoryConflictsApi } from "@rebase/contracts/repository-conflicts/repository-conflicts.contract";
-import { RepositoryHistoryRpc } from "@rebase/contracts/repository-history/repository-history.contract";
-import { RepositoryOperationsApi } from "@rebase/contracts/repository-operations/repository-operations.contract";
-import { RepositoryPullApi } from "@rebase/contracts/repository-pull/repository-pull.contract";
-import { RepositoryPushApi } from "@rebase/contracts/repository-push/repository-push.contract";
-import { RepositoryBranchesApi } from "@rebase/contracts/repository-refs/repository-branches.contract";
-import { RepositoryRefsApi } from "@rebase/contracts/repository-refs/repository-refs.contract";
-import { RepositoryTagsApi } from "@rebase/contracts/repository-refs/repository-tags.contract";
 import { Schema } from "effect";
 import {
   Rpc,
@@ -18,6 +5,19 @@ import {
   type RpcClientError,
   RpcGroup,
 } from "effect/unstable/rpc";
+import { CommitInspectionApi } from "#contracts/commit-inspection/commit-inspection.contract.ts";
+import { EnvironmentAuthorizationApi } from "#contracts/environment-authorization/environment-authorization.contract.ts";
+import { EnvironmentFilesystemApi } from "#contracts/environment-filesystem/environment-filesystem.contract.ts";
+import { RepositoryCatalogApi } from "#contracts/repository-catalog/repository-catalog.contract.ts";
+import { RepositoryChangesApi } from "#contracts/repository-changes/repository-changes.contract.ts";
+import { RepositoryConflictsApi } from "#contracts/repository-conflicts/repository-conflicts.contract.ts";
+import { RepositoryHistoryRpc } from "#contracts/repository-history/repository-history.contract.ts";
+import { RepositoryOperationsApi } from "#contracts/repository-operations/repository-operations.contract.ts";
+import { RepositoryPullApi } from "#contracts/repository-pull/repository-pull.contract.ts";
+import { RepositoryPushApi } from "#contracts/repository-push/repository-push.contract.ts";
+import { RepositoryBranchesApi } from "#contracts/repository-refs/repository-branches.contract.ts";
+import { RepositoryRefsApi } from "#contracts/repository-refs/repository-refs.contract.ts";
+import { RepositoryTagsApi } from "#contracts/repository-refs/repository-tags.contract.ts";
 
 export const environmentProtocol = 5;
 export const environmentMaxMessageBytes = 64 * 1_048_576;

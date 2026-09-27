@@ -12,10 +12,10 @@ import {
   type WebSocketRoute,
 } from "@playwright/test";
 import { WebSocketServer } from "ws";
-import { assertTimingBudget } from "#tests-performance/timing-budget";
-import { startEnvironmentServer } from "#tests-support/environment-server";
-import { createRepository, git } from "#tests-support/git";
-import { removeTemporaryDirectory } from "#tests-support/temporary-directory";
+import { assertTimingBudget } from "#tests-performance/timing-budget.ts";
+import { startEnvironmentServer } from "#tests-support/environment-server.ts";
+import { createRepository, git } from "#tests-support/git.ts";
+import { removeTemporaryDirectory } from "#tests-support/temporary-directory.ts";
 
 const megabitsPerSecond = 20;
 const networkBytesPerSecond = (megabitsPerSecond * 1_000_000) / 8;

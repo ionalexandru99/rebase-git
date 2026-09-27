@@ -1,14 +1,14 @@
+import { type FormEvent, useId, useState } from "react";
 import {
   type RepositoryFetchSetting,
   RepositoryPullApi,
-} from "@rebase/contracts";
-import { type FormEvent, useId, useState } from "react";
-import { Button } from "#web/components/ui/button";
-import { Input } from "#web/components/ui/input";
-import { SettingsRow } from "#web/components/ui/settings-layout";
-import { useEnvironmentQuery } from "#web/platform/query/environment-query";
-import { describeFailure } from "#web/platform/query/request-failure";
-import { useCommand } from "#web/platform/query/use-command";
+} from "#contracts/repository-pull/repository-pull.contract.ts";
+import { Button } from "#web/components/ui/button.tsx";
+import { Input } from "#web/components/ui/input.tsx";
+import { SettingsRow } from "#web/components/ui/settings-layout.tsx";
+import { useEnvironmentQuery } from "#web/platform/query/environment-query.ts";
+import { describeFailure } from "#web/platform/query/request-failure.ts";
+import { useCommand } from "#web/platform/query/use-command.ts";
 
 const inheritedSetting: RepositoryFetchSetting = { _tag: "Inherit" };
 

@@ -1,6 +1,6 @@
 import { Switch as SwitchPrimitive } from "@base-ui/react/switch";
 import type { ComponentProps } from "react";
-import { cn } from "#web/lib/utils";
+import { cn } from "#web/lib/utils.ts";
 
 function Switch({
   className,

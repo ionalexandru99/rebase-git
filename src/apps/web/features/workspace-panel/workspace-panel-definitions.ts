@@ -1,7 +1,39 @@
-import { IconCode, IconGitPullRequest } from "@tabler/icons-react";
-import { commitInspectionPanel } from "#web/features/commit-inspection/commit-inspection-panel-definition";
-import { workingChangesPanel } from "#web/features/working-changes/working-changes-panel-definition";
-import type { WorkspacePanelDefinition } from "#web/features/workspace-panel/workspace-panel-model";
+import {
+  IconCode,
+  IconFileDiff,
+  IconGitCommit,
+  IconGitPullRequest,
+} from "@tabler/icons-react";
+import { lazy } from "react";
+import { isObjectId } from "#contracts/git/git-values.contract.ts";
+import type { WorkspacePanelDefinition } from "#web/features/workspace-panel/workspace-panel-model.ts";
+
+export const workingChangesPanel = {
+  Content: lazy(() =>
+    import("#web/features/working-changes/working-changes.tsx").then(
+      (module) => ({ default: module.WorkingChangesPanel }),
+    ),
+  ),
+  label: "Diffs",
+  icon: IconFileDiff,
+  available: true,
+  launchable: true,
+  description: "Review and commit working changes",
+} satisfies WorkspacePanelDefinition;
+
+const commitInspectionPanel = {
+  acceptsInput: isObjectId,
+  Content: lazy(() =>
+    import("#web/features/commit-inspection/commit-inspection.tsx").then(
+      (module) => ({ default: module.CommitInspectionPanel }),
+    ),
+  ),
+  label: "Commit",
+  icon: IconGitCommit,
+  available: true,
+  launchable: false,
+  description: "Inspect a selected commit",
+} satisfies WorkspacePanelDefinition;
 
 const definitions = {
   commit: commitInspectionPanel,

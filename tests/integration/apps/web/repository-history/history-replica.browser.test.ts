@@ -1,14 +1,14 @@
+import { describe, expect, it, onTestFinished } from "vite-plus/test";
 import type {
   RepositoryCommit,
   RepositoryHistoryRefTarget,
   RepositoryHistoryUpdate,
   SynchronizeRepositoryHistory,
-} from "@rebase/contracts";
-import { describe, expect, it, onTestFinished } from "vite-plus/test";
-import { historyCommit, historyScope } from "#tests-support/history";
-import type { HistorySnapshot } from "#web/features/repository-history/history-worker-protocol";
-import { HistoryReplica } from "#web/features/repository-history/worker/history-replica";
-import type { EnvironmentSocket } from "#web/platform/environment/environment-connection";
+} from "#contracts/repository-history/repository-history.contract.ts";
+import { historyCommit, historyScope } from "#tests-support/history.ts";
+import type { HistorySnapshot } from "#web/features/repository-history/history-worker-protocol.ts";
+import { HistoryReplica } from "#web/features/repository-history/worker/history-replica.ts";
+import type { EnvironmentSocket } from "#web/platform/environment/environment-connection.ts";
 
 const repositoryId = "00000000-0000-4000-8000-000000000001";
 

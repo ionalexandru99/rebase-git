@@ -4,19 +4,19 @@ import {
 } from "@tabler/icons-react";
 import { type ReactNode, useEffect, useRef } from "react";
 import { useGroupRef } from "react-resizable-panels";
-import { Button } from "#web/components/ui/button";
+import { Button } from "#web/components/ui/button.tsx";
 import {
   ResizableHandle,
   ResizablePanel,
   ResizablePanelGroup,
-} from "#web/components/ui/resizable";
-import { WorkspacePanelTabs } from "#web/features/workspace-panel/components/workspace-panel-tabs";
-import type { WorkspacePanelKind } from "#web/features/workspace-panel/workspace-panel-model";
+} from "#web/components/ui/resizable.tsx";
+import { WorkspacePanelTabs } from "#web/features/workspace-panel/components/workspace-panel-tabs.tsx";
+import type { WorkspacePanelKind } from "#web/features/workspace-panel/workspace-panel-definitions.ts";
 import {
   useWorkspacePanel,
   WorkspacePanelProvider,
-} from "#web/features/workspace-panel/workspace-panel-provider";
-import { WorkspacePanelSessions } from "#web/features/workspace-panel/workspace-panel-sessions";
+} from "#web/features/workspace-panel/workspace-panel-provider.tsx";
+import { WorkspacePanelSessions } from "#web/features/workspace-panel/workspace-panel-sessions.tsx";
 
 function Group({ children }: { readonly children: ReactNode }) {
   const { store, panelId, state } = useWorkspacePanel();

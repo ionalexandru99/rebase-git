@@ -3,7 +3,7 @@ import { describe, expect, it } from "vite-plus/test";
 import {
   browserAssetPath,
   resolveBrowserAsset,
-} from "#server/adapters/browser-assets";
+} from "#server/adapters/browser-assets.ts";
 
 const assetsRoot = resolve("browser-assets");
 

@@ -1,14 +1,21 @@
-import type { OperationAction } from "@rebase/contracts";
 import {
   IconChevronDown,
   IconChevronUp,
   IconCircleFilled,
 } from "@tabler/icons-react";
 import { useState } from "react";
-import { Button } from "#web/components/ui/button";
-import { OperationControls } from "#web/features/operation-recovery/components/operation-controls";
-import type { OperationRecoveryState } from "#web/features/operation-recovery/hooks/use-operation-recovery";
-import { operationHeading } from "#web/features/operation-recovery/operation-messages";
+import type { OperationAction } from "#contracts/repository-operations/repository-operations.contract.ts";
+import { Button } from "#web/components/ui/button.tsx";
+import { PersistentNotification } from "#web/features/notifications/components/persistent-notification.tsx";
+import { OperationControls } from "#web/features/operation-recovery/components/operation-controls.tsx";
+import {
+  type OperationRecoveryState,
+  showsOperationHeader,
+  useOperationRecovery,
+} from "#web/features/operation-recovery/hooks/use-operation-recovery.ts";
+import { operationHeading } from "#web/features/operation-recovery/operation-messages.ts";
+import { useWorkspacePanel } from "#web/features/workspace-panel/workspace-panel-provider.tsx";
+import { useRepositoryScope } from "#web/platform/query/repository-scope.tsx";
 
 export function OperationRecoveryToast({
   state,
@@ -141,5 +148,27 @@ export function OperationRecoveryToast({
         </>
       )}
     </section>
+  );
+}
+
+export function OperationRecoveryNotice({
+  repositoryName,
+}: {
+  readonly repositoryName: string;
+}) {
+  const scope = useRepositoryScope();
+  const recovery = useOperationRecovery(scope, { polling: true });
+  const panel = useWorkspacePanel();
+  if (scope === undefined) return null;
+  const diffsVisible = panel.state.open && panel.state.active === "changes";
+  if (diffsVisible && showsOperationHeader(recovery.state)) return null;
+  return (
+    <PersistentNotification>
+      <OperationRecoveryToast
+        {...recovery}
+        repositoryName={repositoryName}
+        review={() => panel.execute({ type: "open", kind: "changes" })}
+      />
+    </PersistentNotification>
   );
 }

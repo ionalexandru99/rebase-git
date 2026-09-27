@@ -1,36 +1,36 @@
+import { describe, expect, it, vi } from "vite-plus/test";
+import { page } from "vite-plus/test/browser";
+import { RepositoryPullApi } from "#contracts/repository-pull/repository-pull.contract.ts";
 import {
   type PushBranch,
   type PushRejected,
-  RepositoryPullApi,
   RepositoryPushApi,
-  RepositoryRefsApi,
-} from "@rebase/contracts";
-import { describe, expect, it, vi } from "vite-plus/test";
-import { page } from "vite-plus/test/browser";
-import {
-  commitId,
-  fetchStatus,
-  repositoryId,
-  repositoryRefs,
-  worktree,
-} from "#tests-support/fixtures";
-import { repositoryScope } from "#tests-ui/apps/web/repository-scope/repository-scope-fixture";
+} from "#contracts/repository-push/repository-push.contract.ts";
+import { RepositoryRefsApi } from "#contracts/repository-refs/repository-refs.contract.ts";
 import {
   fakeRequests,
   idleOperation,
   rejected,
   respond,
-} from "#tests-ui/runtime/fake-requests";
-import { render } from "#tests-ui/runtime/render";
-import { NotificationsProvider } from "#web/features/notifications/notifications";
+} from "#tests-support/fake-requests.ts";
+import {
+  commitId,
+  fetchStatus,
+  repositoryId,
+  repositoryRefs,
+  repositoryScope,
+  worktree,
+} from "#tests-support/fixtures.ts";
+import { render } from "#tests-support/render.tsx";
+import { NotificationsProvider } from "#web/features/notifications/notifications.tsx";
 import {
   PushButton,
   PushNotice,
   usePush,
-} from "#web/features/remote-sync/push";
-import type { PushTarget } from "#web/features/remote-sync/push-target";
-import { RemoteSync } from "#web/features/remote-sync/remote-sync";
-import { RepositoryScopeProvider } from "#web/platform/query/repository-scope";
+} from "#web/features/remote-sync/push.tsx";
+import type { PushTarget } from "#web/features/remote-sync/push-target.ts";
+import { RemoteSync } from "#web/features/remote-sync/remote-sync.tsx";
+import { RepositoryScopeProvider } from "#web/platform/query/repository-scope.tsx";
 
 const reviewed = "9c1e2f71".padEnd(40, "0");
 const scope = { repositoryId: "repo", worktreePath: "/repo" };

@@ -1,7 +1,7 @@
 import type {
   RepositoryHistoryRefTarget,
   RepositoryHistoryTips,
-} from "@rebase/contracts";
+} from "#contracts/repository-history/repository-history.contract.ts";
 import {
   clearRepository,
   HistoryStorageUnavailable,
@@ -14,22 +14,22 @@ import {
   storeCommits,
   updateRepository,
   writeTopology,
-} from "#web/features/repository-history/history-database";
-import { HistoryGraph } from "#web/features/repository-history/history-graph";
-import { searchHistory } from "#web/features/repository-history/history-search";
+} from "#web/features/repository-history/history-database.ts";
+import { HistoryGraph } from "#web/features/repository-history/history-graph.ts";
+import { searchHistory } from "#web/features/repository-history/history-search.ts";
 import {
   findInHistory,
   type HistoryScopeQuery,
   HistoryView,
-} from "#web/features/repository-history/history-view";
+} from "#web/features/repository-history/history-view.ts";
 import type {
   HistoryFailure,
   HistoryRows,
   HistorySearchPage,
   HistorySnapshot,
-} from "#web/features/repository-history/history-worker-protocol";
-import { writeWithEviction } from "#web/features/repository-history/worker/history-storage";
-import type { EnvironmentSocket } from "#web/platform/environment/environment-connection";
+} from "#web/features/repository-history/history-worker-protocol.ts";
+import { writeWithEviction } from "#web/features/repository-history/worker/history-storage.ts";
+import type { EnvironmentSocket } from "#web/platform/environment/environment-connection.ts";
 
 const cachedViews = 4;
 const recentTopologyShare = 16;

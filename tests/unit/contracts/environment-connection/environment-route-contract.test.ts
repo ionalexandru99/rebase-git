@@ -1,10 +1,8 @@
-import {
-  RepositoryCatalogApi,
-  RepositoryPushApi,
-  repositoryRejected,
-} from "@rebase/contracts";
 import { Schema } from "effect";
 import { describe, expect, it } from "vite-plus/test";
+import { repositoryRejected } from "#contracts/git/git-failures.contract.ts";
+import { RepositoryCatalogApi } from "#contracts/repository-catalog/repository-catalog.contract.ts";
+import { RepositoryPushApi } from "#contracts/repository-push/repository-push.contract.ts";
 
 describe("Environment route contract", () => {
   it("fails a repository command with its own failures or the standard rejection", () => {

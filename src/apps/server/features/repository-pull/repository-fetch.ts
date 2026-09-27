@@ -1,18 +1,18 @@
+import { Cause, Effect, Fiber, Option, Semaphore } from "effect";
+import type { RepositoryRejected } from "#contracts/git/git-failures.contract.ts";
+import { repositoryRejected } from "#contracts/git/git-failures.contract.ts";
 import type {
   FetchFailed,
   RepositoryFetchSetting,
   RepositoryFetchStatus,
-  RepositoryRejected,
-} from "@rebase/contracts";
-import { repositoryRejected } from "@rebase/contracts";
-import { Cause, Effect, Fiber, Option, Semaphore } from "effect";
-import type { EnvironmentEventPublisher } from "#server/adapters/environment-transport/environment-event-publisher";
+} from "#contracts/repository-pull/repository-pull.contract.ts";
+import type { EnvironmentEventPublisher } from "#server/adapters/environment-transport/environment-event-publisher.ts";
 import {
   type GitCommandRunner,
   runRepositoryGit,
-} from "#server/adapters/local-git/git-commands";
-import type { RepositoryAccess } from "#server/repository/repository-access";
-import type { RepositoryCoordination } from "#server/repository/repository-coordination";
+} from "#server/adapters/local-git/git-commands.ts";
+import type { RepositoryAccess } from "#server/repository/repository-access.ts";
+import type { RepositoryCoordination } from "#server/repository/repository-coordination.ts";
 
 const defaultIntervalSeconds = 300;
 const maximumFetchedRepositories = 32;

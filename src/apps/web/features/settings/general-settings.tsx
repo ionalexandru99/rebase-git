@@ -1,15 +1,15 @@
 import { Select } from "@base-ui/react/select";
+import { IconChevronDown } from "@tabler/icons-react";
+import { type JSX, useState } from "react";
 import {
   type DesktopUpdateSnapshot,
   type DesktopUpdates,
   type ReleaseChannel,
   releaseChannels as releaseChannelValues,
-} from "@rebase/contracts";
-import { IconChevronDown } from "@tabler/icons-react";
-import { type JSX, useState } from "react";
-import { Button } from "#web/components/ui/button";
-import { SettingsRow as SettingRow } from "#web/components/ui/settings-layout";
-import { Switch } from "#web/components/ui/switch";
+} from "#contracts/desktop-updates/desktop-updates.contract.ts";
+import { Button } from "#web/components/ui/button.tsx";
+import { SettingsRow as SettingRow } from "#web/components/ui/settings-layout.tsx";
+import { Switch } from "#web/components/ui/switch.tsx";
 
 const releaseChannelLabels: Record<ReleaseChannel, string> = {
   nightly: "Nightly",

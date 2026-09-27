@@ -10,9 +10,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Effect } from "effect";
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
-import { environmentPaths } from "#server/persistence/storage/environment-paths";
-import { ensureServerSecret } from "#server/persistence/storage/server-secret";
-import { removeTemporaryDirectory } from "#tests-support/temporary-directory";
+import { environmentPaths } from "#server/persistence/storage/environment-paths.ts";
+import { ensureServerSecret } from "#server/persistence/storage/server-secret.ts";
+import { removeTemporaryDirectory } from "#tests-support/temporary-directory.ts";
 
 const pendingWrite = vi.hoisted(() => ({
   pause: undefined as (() => Promise<void>) | undefined,

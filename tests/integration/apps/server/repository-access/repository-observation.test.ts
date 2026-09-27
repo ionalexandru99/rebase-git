@@ -6,15 +6,15 @@ import { join } from "node:path";
 import { promisify } from "node:util";
 import { Effect, Exit, Scope } from "effect";
 import { expect, it, vi } from "vite-plus/test";
-import { createEnvironmentEventPublisher } from "#server/adapters/environment-transport/environment-event-publisher";
-import type { GitCommandRunner } from "#server/adapters/local-git/git-commands";
-import { createLocalRepositoryWatcher } from "#server/adapters/local-git/local-repository-watcher";
-import { readRepositoryRefs } from "#server/features/repository-refs/git/read-repository-refs";
-import { acquireRepositoryChangePublisher } from "#server/features/repository-refs/repository-change-publisher";
-import { createRepository } from "#tests-support/git";
-import { waitForObservation } from "#tests-support/observation";
-import { openTestEnvironment } from "#tests-support/server";
-import { removeTemporaryDirectory } from "#tests-support/temporary-directory";
+import { createEnvironmentEventPublisher } from "#server/adapters/environment-transport/environment-event-publisher.ts";
+import type { GitCommandRunner } from "#server/adapters/local-git/git-commands.ts";
+import { createLocalRepositoryWatcher } from "#server/adapters/local-git/local-repository-watcher.ts";
+import { readRepositoryRefs } from "#server/features/repository-refs/git/read-repository-refs.ts";
+import { acquireRepositoryChangePublisher } from "#server/features/repository-refs/repository-change-publisher.ts";
+import { createRepository } from "#tests-support/git.ts";
+import { waitForObservation } from "#tests-support/observation.ts";
+import { openTestEnvironment } from "#tests-support/server.ts";
+import { removeTemporaryDirectory } from "#tests-support/temporary-directory.ts";
 
 vi.mock("node:fs", async (original) => {
   const fs = await original<typeof import("node:fs")>();

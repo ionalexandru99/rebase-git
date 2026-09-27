@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vite-plus/test";
-import { githubRepositoryFromRemotes } from "#server/features/repository-refs/git/read-repository-refs";
+import { githubRepositoryFromRemotes } from "#server/features/repository-refs/git/read-repository-refs.ts";
 
 describe("GitHub repository identity", () => {
   it.each([

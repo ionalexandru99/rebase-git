@@ -1,11 +1,14 @@
-import type { RepositoryRefs, RepositoryRefTarget } from "@rebase/contracts";
 import { describe, expect, it } from "vite-plus/test";
+import type {
+  RepositoryRefs,
+  RepositoryRefTarget,
+} from "#contracts/repository-refs/repository-refs.contract.ts";
 import {
   automaticHistoryScope,
   historyRefKey,
   resolveHistoryScope,
   toggleHistoryRef,
-} from "#web/features/commit-graph/scope/history-scope";
+} from "#web/features/commit-graph/scope/history-scope.ts";
 
 const repositoryId = "00000000-0000-4000-8000-000000000001";
 const commits = Array.from({ length: 9 }, (_, index) =>

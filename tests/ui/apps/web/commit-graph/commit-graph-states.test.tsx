@@ -7,9 +7,9 @@ import {
   historyOid,
   historyReader,
   renderGraph,
-} from "#tests-ui/apps/web/commit-graph/commit-graph-fixture";
-import { render } from "#tests-ui/runtime/render";
-import { graphRowHeight } from "#web/features/commit-graph/layout/graph-metrics";
+} from "#tests-support/commit-graph-fixture.tsx";
+import { render } from "#tests-support/render.tsx";
+import { graphRowHeight } from "#web/features/commit-graph/layout/graph-geometry.ts";
 
 describe("commit graph states", () => {
   beforeEach(async () => {

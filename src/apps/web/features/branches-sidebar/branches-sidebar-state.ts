@@ -3,14 +3,14 @@ import type {
   RemoteBranch,
   RepositoryRefs,
   RepositoryRefTarget,
-} from "@rebase/contracts";
+} from "#contracts/repository-refs/repository-refs.contract.ts";
 import {
   type BranchesSidebarFolderRow,
   buildBranchTree,
   type RowHierarchy,
-} from "#web/features/branches-sidebar/branch-tree";
-import type { RefKind } from "#web/features/refs/ref-kinds";
-import { activeHead } from "#web/features/refs/repository-refs";
+} from "#web/features/branches-sidebar/branch-tree.ts";
+import type { RefKind } from "#web/features/refs/ref-kinds.ts";
+import { activeHead } from "#web/features/refs/repository-refs.ts";
 
 export const localBranchesSectionId = "branches";
 export const tagsSectionId = "tags";

@@ -1,12 +1,15 @@
-import type { OperationScope, RepositoryOperation } from "@rebase/contracts";
 import { useEffect, useState } from "react";
+import type {
+  OperationScope,
+  RepositoryOperation,
+} from "#contracts/repository-operations/repository-operations.contract.ts";
 import {
   useOperation,
   useOperationAction,
-} from "#web/features/operation-recovery/hooks/use-operation";
-import { useEnvironment } from "#web/platform/query/environment-context";
-import { useRepositoryScope } from "#web/platform/query/repository-scope";
-import { describeFailure } from "#web/platform/query/request-failure";
+} from "#web/features/operation-recovery/hooks/use-operation.ts";
+import { useEnvironment } from "#web/platform/query/environment-context.tsx";
+import { useRepositoryScope } from "#web/platform/query/repository-scope.tsx";
+import { describeFailure } from "#web/platform/query/request-failure.ts";
 
 export interface OperationStatus {
   readonly operation: RepositoryOperation | null;

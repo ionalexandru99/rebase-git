@@ -1,14 +1,17 @@
+import type { RepositoryCatalogEntry } from "#contracts/repository-catalog/repository-catalog.contract.ts";
+import type {
+  ChangedFile,
+  RepositoryChanges,
+} from "#contracts/repository-changes/repository-changes.contract.ts";
+import type { ChangeDiff } from "#contracts/repository-comparison/repository-comparison.contract.ts";
+import type { RepositoryOperation } from "#contracts/repository-operations/repository-operations.contract.ts";
+import type { RepositoryFetchStatus } from "#contracts/repository-pull/repository-pull.contract.ts";
 import type {
   BranchUpstream,
-  ChangeDiff,
-  ChangedFile,
-  RepositoryCatalogEntry,
-  RepositoryChanges,
-  RepositoryFetchStatus,
-  RepositoryOperation,
   RepositoryRefs,
   RepositoryWorktree,
-} from "@rebase/contracts";
+} from "#contracts/repository-refs/repository-refs.contract.ts";
+import type { RepositoryScope } from "#web/platform/query/repository-scope.tsx";
 
 export const repositoryId = "00000000-0000-4000-8000-000000000001";
 export const commitId = "a".repeat(40);
@@ -172,5 +175,20 @@ export function fetchStatus(
     defaultIntervalSeconds: 300,
     setting: { _tag: "Inherit" },
     ...status,
+  };
+}
+
+export function repositoryScope(
+  scope: Partial<RepositoryScope> = {},
+): RepositoryScope {
+  return {
+    repositoryId,
+    worktreePath: mainPath,
+    logicalRepositoryId: repositoryId,
+    connected: true,
+    readable: true,
+    writable: true,
+    switchWorktree: () => undefined,
+    ...scope,
   };
 }

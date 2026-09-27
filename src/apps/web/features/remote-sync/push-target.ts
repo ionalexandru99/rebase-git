@@ -3,13 +3,13 @@ import type {
   PushDestination,
   PushRejected,
   RepositoryPushApi,
-  RepositoryRefs,
-} from "@rebase/contracts";
-import { describeFailure } from "#web/platform/query/request-failure";
+} from "#contracts/repository-push/repository-push.contract.ts";
+import type { RepositoryRefs } from "#contracts/repository-refs/repository-refs.contract.ts";
+import { describeFailure } from "#web/platform/query/request-failure.ts";
 import type {
   CommandFailure,
   CommandInput,
-} from "#web/platform/query/use-command";
+} from "#web/platform/query/use-command.ts";
 
 export type PushRequest = CommandInput<typeof RepositoryPushApi.push>;
 

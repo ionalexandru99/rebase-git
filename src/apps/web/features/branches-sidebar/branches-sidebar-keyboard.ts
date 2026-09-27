@@ -1,7 +1,7 @@
 import {
   type BranchesSidebarRow,
   stepRow,
-} from "#web/features/branches-sidebar/branches-sidebar-state";
+} from "#web/features/branches-sidebar/branches-sidebar-state.ts";
 
 type ExpandableRow = Exclude<BranchesSidebarRow, { kind: "ref" }>;
 

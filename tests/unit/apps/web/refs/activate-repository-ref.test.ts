@@ -3,11 +3,11 @@ import {
   branchScenarioRefs,
   mainPath,
   topicPath,
-} from "#tests-support/fixtures";
+} from "#tests-support/fixtures.ts";
 import {
   resolveActiveWorktreePath,
   resolveRefActivation,
-} from "#web/features/refs/repository-refs";
+} from "#web/features/refs/repository-refs.ts";
 
 describe("repository ref activation", () => {
   it("switches worktrees for branches held elsewhere and checks out the rest", () => {

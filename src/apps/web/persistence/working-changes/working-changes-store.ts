@@ -1,17 +1,20 @@
 import {
   type DiffPreferences,
   defaultDiffPreferences,
-} from "#web/domain/file-diff/diff-preferences.contract";
+} from "#web/domain/file-diff/diff-preferences.contract.ts";
 import {
   requestResult,
   transactionCompleted,
   withHistoryDatabase,
   workingChangesStoreName,
-} from "#web/features/repository-history/history-database";
-import {
-  type CommitDraft,
-  emptyCommitDraft,
-} from "#web/persistence/working-changes/working-changes-store.contract";
+} from "#web/features/repository-history/history-database.ts";
+
+export interface CommitDraft {
+  readonly subject: string;
+  readonly description: string;
+}
+
+export const emptyCommitDraft: CommitDraft = { subject: "", description: "" };
 
 let writes: Promise<unknown> = Promise.resolve();
 

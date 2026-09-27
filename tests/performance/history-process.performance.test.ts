@@ -5,15 +5,15 @@ import { arch, cpus, platform, release, totalmem } from "node:os";
 import { resolve } from "node:path";
 import { promisify } from "node:util";
 import { expect, test } from "@playwright/test";
+import { Effect, Exit, Scope, Stream } from "effect";
+import { RpcClient, RpcSerialization } from "effect/unstable/rpc";
+import { Socket } from "effect/unstable/socket";
 import {
   EnvironmentRpc,
   environmentLivePath,
   environmentProtocol,
   environmentSubprotocol,
-} from "@rebase/contracts";
-import { Effect, Exit, Scope, Stream } from "effect";
-import { RpcClient, RpcSerialization } from "effect/unstable/rpc";
-import { Socket } from "effect/unstable/socket";
+} from "#contracts/environment-connection/environment-rpc.contract.ts";
 
 const execute = promisify(execFile);
 const corpusPath = process.env.HISTORY_PROCESS_CORPUS_PATH;
@@ -36,7 +36,6 @@ test("prepared corpus stays within server and Git process budgets", async () => 
     process.execPath,
     [
       "--expose-gc",
-      "--conditions=rebase-source",
       resolve("tests/performance/fixtures/history-contract-server.ts"),
       corpusPath,
     ],

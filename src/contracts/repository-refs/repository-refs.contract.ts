@@ -1,16 +1,16 @@
+import { Schema } from "effect";
 import {
   repositoryCommand,
   route,
-} from "@rebase/contracts/environment-connection/environment-route.contract";
-import { RepositoryRejected } from "@rebase/contracts/git/git-failures.contract";
+} from "#contracts/environment-connection/environment-route.contract.ts";
+import { RepositoryRejected } from "#contracts/git/git-failures.contract.ts";
 import {
   ObjectId,
   RefName,
   RemoteName,
   RepositoryId,
   RepositoryPath,
-} from "@rebase/contracts/git/git-values.contract";
-import { Schema } from "effect";
+} from "#contracts/git/git-values.contract.ts";
 
 const FailureDetail = Schema.String.check(Schema.isMaxLength(2_048));
 

@@ -3,20 +3,23 @@ import { realpath } from "node:fs";
 import { stat } from "node:fs/promises";
 import { basename, isAbsolute } from "node:path";
 import { promisify } from "node:util";
-import {
-  type RepositoryCatalogEntry,
-  type RepositoryPathRejected,
-  repositoryRejected,
-} from "@rebase/contracts";
 import { asc, eq } from "drizzle-orm";
 import { Effect } from "effect";
+import { repositoryRejected } from "#contracts/git/git-failures.contract.ts";
+import type {
+  RepositoryCatalogEntry,
+  RepositoryPathRejected,
+} from "#contracts/repository-catalog/repository-catalog.contract.ts";
+import { RepositoryCatalogApi } from "#contracts/repository-catalog/repository-catalog.contract.ts";
+import type { EnvironmentFeature } from "#server/adapters/environment-transport/environment-routes.ts";
+import { route } from "#server/adapters/environment-transport/environment-routes.ts";
 import {
   type GitCommandRunner,
   isGitRejection,
   runRepositoryGit,
-} from "#server/adapters/local-git/git-commands";
-import type { EnvironmentContext } from "#server/persistence/environment-context";
-import { repositoryCatalogTable } from "#server/persistence/environment-state.schema";
+} from "#server/adapters/local-git/git-commands.ts";
+import type { EnvironmentContext } from "#server/persistence/environment-context.ts";
+import { repositoryCatalogTable } from "#server/persistence/environment-state.schema.ts";
 
 const realpathNative = promisify(realpath.native);
 
@@ -336,5 +339,23 @@ function catalogEntry(
       : { logicalRepositoryId: repository.logicalRepositoryId }),
     name: repository.name,
     path: repository.path,
+  };
+}
+
+export function repositoryCatalogFeature(
+  catalog: RepositoryCatalog,
+): EnvironmentFeature {
+  const api = RepositoryCatalogApi;
+  return {
+    routes: [
+      route(api.list, () =>
+        Effect.map(catalog.list(), (repositories) => ({ repositories })),
+      ),
+      route(api.remember, (input) => catalog.remember(input.path)),
+      route(api.recordOpened, (input) =>
+        catalog.recordOpened(input.repositoryId),
+      ),
+      route(api.remove, (input) => catalog.remove(input.repositoryId)),
+    ],
   };
 }

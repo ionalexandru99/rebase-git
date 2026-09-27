@@ -1,25 +1,25 @@
 import { IconArrowBarToDown, IconArrowDown } from "@tabler/icons-react";
 import type { ReactNode } from "react";
-import { ToolbarButton } from "#web/components/ui/toolbar-button";
-import { ErrorNotification } from "#web/features/notifications/components/error-notification";
-import { useOperationCommandState } from "#web/features/operation-recovery/hooks/use-operation-status";
+import { ToolbarButton } from "#web/components/ui/toolbar-button.tsx";
+import { ErrorNotification } from "#web/features/notifications/components/error-notification.tsx";
+import { useOperationCommandState } from "#web/features/operation-recovery/hooks/use-operation-status.ts";
 import {
   activeHead,
   useScopedRepositoryRefs,
-} from "#web/features/refs/repository-refs";
+} from "#web/features/refs/repository-refs.ts";
 import {
   type Push,
   PushButton,
   PushNotice,
   usePush,
-} from "#web/features/remote-sync/push";
-import { resolvePushTarget } from "#web/features/remote-sync/push-target";
+} from "#web/features/remote-sync/push.tsx";
+import { resolvePushTarget } from "#web/features/remote-sync/push-target.ts";
 import {
   type Pull,
   useFetch,
   usePull,
-} from "#web/features/remote-sync/use-pull";
-import { useRepositoryScope } from "#web/platform/query/repository-scope";
+} from "#web/features/remote-sync/use-pull.ts";
+import { useRepositoryScope } from "#web/platform/query/repository-scope.tsx";
 
 export function RemoteSync({
   children,

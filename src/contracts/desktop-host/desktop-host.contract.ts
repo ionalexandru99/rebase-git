@@ -1,4 +1,4 @@
-import type { DesktopUpdates } from "@rebase/contracts/desktop-updates/desktop-updates.contract";
+import type { DesktopUpdates } from "#contracts/desktop-updates/desktop-updates.contract.ts";
 
 export interface RepositoryFilesystemHost {
   revealRepository(path: string): Promise<void>;

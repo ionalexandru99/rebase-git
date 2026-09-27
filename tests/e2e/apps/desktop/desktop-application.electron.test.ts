@@ -8,9 +8,9 @@ import {
   type Page,
   test,
 } from "@playwright/test";
-import type { DesktopHostBridge } from "@rebase/contracts";
-import { createRepository } from "#tests-support/git";
-import { removeTemporaryDirectory } from "#tests-support/temporary-directory";
+import type { DesktopHostBridge } from "#contracts/desktop-host/desktop-host.contract.ts";
+import { createRepository } from "#tests-support/git.ts";
+import { removeTemporaryDirectory } from "#tests-support/temporary-directory.ts";
 
 test("opens, closes, and reopens a recent repository after restart", async () => {
   const testHome = await mkdtemp(join(tmpdir(), "rebase-electron-e2e-"));

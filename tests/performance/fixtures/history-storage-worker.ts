@@ -1,11 +1,11 @@
 import type {
   RepositoryCommit,
   RepositoryHistoryUpdate,
-} from "@rebase/contracts";
-import type { HistorySnapshot } from "#web/features/repository-history/history-worker-protocol";
-import { HistoryReplica } from "#web/features/repository-history/worker/history-replica";
-import { describeHistoryStorage } from "#web/features/repository-history/worker/history-storage";
-import type { EnvironmentSocket } from "#web/platform/environment/environment-connection";
+} from "#contracts/repository-history/repository-history.contract.ts";
+import type { HistorySnapshot } from "#web/features/repository-history/history-worker-protocol.ts";
+import { HistoryReplica } from "#web/features/repository-history/worker/history-replica.ts";
+import { describeHistoryStorage } from "#web/features/repository-history/worker/history-storage.ts";
+import type { EnvironmentSocket } from "#web/platform/environment/environment-connection.ts";
 
 const environmentId = crypto.randomUUID();
 const put = IDBObjectStore.prototype.put;

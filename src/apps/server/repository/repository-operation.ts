@@ -1,16 +1,16 @@
 import { createHash } from "node:crypto";
 import { lstat, readFile, stat } from "node:fs/promises";
 import { join } from "node:path";
-import {
-  type OperationKind,
-  type RepositoryOperation,
-  repositoryRejected,
-} from "@rebase/contracts";
 import { Effect } from "effect";
+import { repositoryRejected } from "#contracts/git/git-failures.contract.ts";
+import type {
+  OperationKind,
+  RepositoryOperation,
+} from "#contracts/repository-operations/repository-operations.contract.ts";
 import {
   type GitCommandRunner,
   runRepositoryGit,
-} from "#server/adapters/local-git/git-commands";
+} from "#server/adapters/local-git/git-commands.ts";
 
 const maximumMetadataBytes = 2 * 1024 * 1024;
 

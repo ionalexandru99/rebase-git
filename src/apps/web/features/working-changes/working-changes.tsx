@@ -1,21 +1,26 @@
-import type { ChangeSection, ChangeSelection } from "@rebase/contracts";
 import { lazy, Suspense, useState } from "react";
-import { Button } from "#web/components/ui/button";
-import { Confirmation } from "#web/components/ui/confirmation";
+import type {
+  ChangeSection,
+  ChangeSelection,
+} from "#contracts/repository-changes/repository-changes.contract.ts";
+import { Button } from "#web/components/ui/button.tsx";
+import { Confirmation } from "#web/components/ui/confirmation.tsx";
 import {
   ResizableHandle,
   ResizablePanel,
   ResizablePanelGroup,
-} from "#web/components/ui/resizable";
-import { OperationHeader } from "#web/features/operation-recovery/components/operation-header";
-import { ChangeFileTree } from "#web/features/working-changes/components/change-file-tree";
-import { CommitEditor } from "#web/features/working-changes/components/commit-editor";
-import { ConflictViewer } from "#web/features/working-changes/conflicts/components/conflict-viewer";
+} from "#web/components/ui/resizable.tsx";
+import { DiffWorkerPool } from "#web/features/file-diff/components/diff-worker-pool.tsx";
+import { OperationHeader } from "#web/features/operation-recovery/components/operation-controls.tsx";
+import { ChangeFileTree } from "#web/features/working-changes/components/change-file-tree.tsx";
+import { CommitEditor } from "#web/features/working-changes/components/commit-editor.tsx";
+import { ConflictViewer } from "#web/features/working-changes/conflicts/components/conflict-viewer.tsx";
 import {
   type ChangeAction,
   useWorkingChangesView,
   type WorkingChangesTarget,
-} from "#web/features/working-changes/hooks/use-working-changes-view";
+} from "#web/features/working-changes/hooks/use-working-changes-view.ts";
+import { usePanelFeature } from "#web/features/workspace-panel/api.ts";
 
 interface DiscardRequest {
   readonly section: ChangeSection;
@@ -24,7 +29,8 @@ interface DiscardRequest {
 }
 
 const ChangeDiffViewer = lazy(
-  () => import("#web/features/working-changes/components/change-diff-viewer"),
+  () =>
+    import("#web/features/working-changes/components/change-diff-viewer.tsx"),
 );
 
 export function WorkingChanges({
@@ -157,4 +163,48 @@ function describeDiscard(selection: ChangeSelection) {
   if (selection._tag === "Files")
     return `Discard changes in ${selection.paths.length} selected ${selection.paths.length === 1 ? "file" : "files"}.`;
   return "Discard every change in this section, including files hidden by the filter.";
+}
+
+export function WorkingChangesPanel({
+  openMergeView,
+}: {
+  readonly openMergeView?: (path: string) => void;
+}) {
+  const feature = usePanelFeature();
+  if (feature?.scope === undefined || feature.environment === undefined)
+    return <Disconnected />;
+  const { active, environment, scope } = feature;
+  const { connected, writable } = environment;
+  const { environmentId, repositoryId, worktreePath } = scope;
+  return (
+    <DiffWorkerPool>
+      {connected ? null : <Disconnected />}
+      <div className="h-full min-h-0" hidden={!connected}>
+        <WorkingChanges
+          target={{
+            repositoryId,
+            worktreePath,
+            draftKey: JSON.stringify([
+              environmentId,
+              repositoryId,
+              worktreePath,
+            ]),
+            active: connected && active,
+          }}
+          writable={connected && writable}
+          openMergeView={openMergeView ?? ignoreMergeView}
+        />
+      </div>
+    </DiffWorkerPool>
+  );
+}
+
+function ignoreMergeView() {}
+
+function Disconnected() {
+  return (
+    <div className="flex h-full items-center justify-center p-6 text-sm text-muted-foreground">
+      Connect to the repository to review changes.
+    </div>
+  );
 }

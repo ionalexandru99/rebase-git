@@ -1,11 +1,11 @@
+import { Schema } from "effect";
+import { expect, it } from "vite-plus/test";
 import {
   EnvironmentGreeting,
   EnvironmentHello,
   EnvironmentRpc,
   ProtocolMismatch,
-} from "@rebase/contracts";
-import { Schema } from "effect";
-import { expect, it } from "vite-plus/test";
+} from "#contracts/environment-connection/environment-rpc.contract.ts";
 
 const hello = { protocol: 4 };
 const greeting = {

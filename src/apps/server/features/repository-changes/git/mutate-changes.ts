@@ -1,19 +1,18 @@
+import { createTwoFilesPatch, diffLines } from "diff";
+import { Effect } from "effect";
 import {
-  type ChangeDiff,
   changesFailed,
   type MutateChanges,
   type RepositoryChanges,
-} from "@rebase/contracts";
-import { createTwoFilesPatch } from "diff";
-import { Effect } from "effect";
+} from "#contracts/repository-changes/repository-changes.contract.ts";
+import type { ChangeDiff } from "#contracts/repository-comparison/repository-comparison.contract.ts";
 import {
   type GitCommandOptions,
   type GitCommandRunner,
   runRepositoryGit,
-} from "#server/adapters/local-git/git-commands";
-import { safeChangePath } from "#server/features/repository-changes/git/change-files";
-import { readChangeDiff } from "#server/features/repository-changes/git/read-change-diff";
-import { selectedChangeText } from "#server/features/repository-changes/git/selected-change-text";
+} from "#server/adapters/local-git/git-commands.ts";
+import { safeChangePath } from "#server/features/repository-changes/git/change-files.ts";
+import { readChangeDiff } from "#server/features/repository-changes/git/read-change-diff.ts";
 
 export function mutateChanges<E>(
   git: GitCommandRunner,
@@ -308,4 +307,43 @@ function applyChangePatch(
         input: patch,
       }).pipe(Effect.mapError(rejected));
   });
+}
+
+export function selectedChangeText(
+  before: string,
+  after: string,
+  lines: readonly string[],
+  reverse: boolean,
+) {
+  const selected = new Set(lines);
+  const found = new Set<string>();
+  const output: string[] = [];
+  let oldLine = 1;
+  let newLine = 1;
+  for (const change of diffLines(before, after)) {
+    for (const line of change.value.match(/[^\n]*\n|[^\n]+$/g) ?? []) {
+      const id = change.removed ? `-${oldLine}` : `+${newLine}`;
+      const changed = change.added || change.removed;
+      const chosen = changed && selected.has(id);
+      if (chosen) found.add(id);
+      if (
+        !changed ||
+        (reverse
+          ? change.removed
+            ? chosen
+            : !chosen
+          : change.added
+            ? chosen
+            : !chosen)
+      )
+        output.push(line);
+      if (!change.added) oldLine++;
+      if (!change.removed) newLine++;
+    }
+  }
+  if (found.size !== selected.size || found.size === 0)
+    throw new Error(
+      "The selected lines have changed. Refresh the diff and select them again.",
+    );
+  return output.join("");
 }

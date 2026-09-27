@@ -1,17 +1,19 @@
+import { type CSSProperties, memo, useMemo } from "react";
 import type {
   RepositoryCommit,
   RepositoryHistoryRefTarget,
-} from "@rebase/contracts";
-import { type CSSProperties, memo, useMemo } from "react";
-import { CommitGraphCommitCells } from "#web/features/commit-graph/components/commit-graph-commit-cells";
-import { CommitGraphMergeControl } from "#web/features/commit-graph/components/commit-graph-merge-controls";
-import { graphNodeColor } from "#web/features/commit-graph/layout/graph-colors";
+} from "#contracts/repository-history/repository-history.contract.ts";
+import { CommitGraphCommitCells } from "#web/features/commit-graph/components/commit-graph-commit-cells.tsx";
+import {
+  graphNodeColor,
+  graphRemoteOpacity,
+} from "#web/features/commit-graph/layout/graph-colors.ts";
 import {
   commitGraphGutterWidth,
   commitGraphNodePosition,
-} from "#web/features/commit-graph/layout/graph-geometry";
-import { graphMetadataColumns } from "#web/features/commit-graph/layout/graph-metrics";
-import type { CommitLaneRow } from "#web/features/repository-history/commit-lanes";
+  graphMetadataColumns,
+} from "#web/features/commit-graph/layout/graph-geometry.ts";
+import type { CommitLaneRow } from "#web/features/repository-history/commit-lanes.ts";
 
 const selectedRowStyle = {
   "--graph-row-background":
@@ -96,4 +98,53 @@ function commitAriaLabel(
       ? ""
       : `, refs ${labels.map((label) => label.name).join(", ")}`;
   return `${commit.subject}, ${commit.author.name}, ${commit.oid.slice(0, 8)}, ${parents} ${parents === 1 ? "parent" : "parents"}${refs}`;
+}
+
+function CommitGraphMergeControl({
+  subject,
+  state,
+  position,
+  color,
+  remote,
+}: {
+  readonly subject: string;
+  readonly state: "collapsed" | "expanded";
+  readonly position: number;
+  readonly color: string;
+  readonly remote: boolean;
+}) {
+  return (
+    <button
+      aria-label={`${state === "expanded" ? "Collapse" : "Expand"} merge ${subject}`}
+      aria-expanded={state === "expanded"}
+      className="absolute top-px z-[3] grid size-6 place-items-center"
+      data-merge-toggle
+      onPointerDown={(event) => event.preventDefault()}
+      style={{ left: position - 12 }}
+      tabIndex={-1}
+      type="button"
+    >
+      <svg
+        aria-hidden="true"
+        className="size-3 text-repository"
+        viewBox="-6 -6 12 12"
+      >
+        <circle
+          r="5.5"
+          fill={
+            remote
+              ? `color-mix(in srgb, ${color} ${graphRemoteOpacity * 100}%, var(--graph-row-background, var(--repository)))`
+              : color
+          }
+        />
+        <path
+          d={state === "expanded" ? "M-2.5 0h5" : "M-2.5 0h5M0-2.5v5"}
+          fill="none"
+          stroke="currentColor"
+          strokeLinecap="round"
+          strokeWidth="1"
+        />
+      </svg>
+    </button>
+  );
 }

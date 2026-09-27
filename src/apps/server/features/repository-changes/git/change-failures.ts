@@ -1,5 +1,5 @@
-import { repositoryRejected } from "@rebase/contracts";
 import { Effect } from "effect";
+import { repositoryRejected } from "#contracts/git/git-failures.contract.ts";
 
 export function changeIo<T>(operation: () => Promise<T>) {
   return Effect.tryPromise({

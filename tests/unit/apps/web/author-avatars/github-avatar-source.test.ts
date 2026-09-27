@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
-import { githubAvatarSource } from "#web/features/author-avatars/github-avatar-source";
+import { githubAvatarSource } from "#web/features/author-avatars/github-avatar-source.ts";
 
 const repository = { owner: "alex", name: "rebase" };
 const author = {

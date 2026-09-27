@@ -1,10 +1,11 @@
-import type { ChangeDiff, CommitFile } from "@rebase/contracts";
 import { useMemo, useState } from "react";
-import { Button } from "#web/components/ui/button";
-import type { DiffPreferences } from "#web/domain/file-diff/diff-preferences.contract";
-import { DiffContent } from "#web/features/file-diff/components/diff-content";
-import { DiffDisplayControls } from "#web/features/file-diff/components/diff-display-controls";
-import { createChangeDiffModel } from "#web/features/file-diff/diff-model";
+import type { CommitFile } from "#contracts/commit-inspection/commit-inspection.contract.ts";
+import type { ChangeDiff } from "#contracts/repository-comparison/repository-comparison.contract.ts";
+import { Button } from "#web/components/ui/button.tsx";
+import type { DiffPreferences } from "#web/domain/file-diff/diff-preferences.contract.ts";
+import { DiffContent } from "#web/features/file-diff/components/diff-content.tsx";
+import { DiffDisplayControls } from "#web/features/file-diff/components/diff-display-controls.tsx";
+import { createChangeDiffModel } from "#web/features/file-diff/diff-model.ts";
 
 export interface CommitDiffRead {
   readonly value: ChangeDiff | undefined;

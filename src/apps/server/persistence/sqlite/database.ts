@@ -2,12 +2,12 @@ import { chmodSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 import { drizzle } from "drizzle-orm/node-sqlite";
 import { Effect, Schedule } from "effect";
-import { migrateEnvironmentState } from "#server/persistence/sqlite/migrations";
+import { migrateEnvironmentState } from "#server/persistence/sqlite/migrations.ts";
 import {
   type EnvironmentStorageError,
   storageSync,
-} from "#server/persistence/sqlite/storage-operation";
-import type { EnvironmentPaths } from "#server/persistence/storage/environment-paths";
+} from "#server/persistence/sqlite/storage-operation.ts";
+import type { EnvironmentPaths } from "#server/persistence/storage/environment-paths.ts";
 
 const busyTimeoutMilliseconds = 1_000;
 const databaseLockRetryDelay = "10 millis";

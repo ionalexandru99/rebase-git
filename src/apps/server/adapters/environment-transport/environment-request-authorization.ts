@@ -1,11 +1,9 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { isIPv4 } from "node:net";
-import {
-  type EnvironmentAccessFailure,
-  environmentSubprotocol,
-} from "@rebase/contracts";
 import { Effect } from "effect";
-import { EnvironmentAuthorizationError } from "#server/features/environment-authorization/environment-authorization";
+import type { EnvironmentAccessFailure } from "#contracts/environment-authorization/environment-authorization.contract.ts";
+import { environmentSubprotocol } from "#contracts/environment-connection/environment-rpc.contract.ts";
+import { EnvironmentAuthorizationError } from "#server/features/environment-authorization/environment-authorization.ts";
 
 export function validateRequestHost(request: IncomingMessage) {
   const expectedHost = listeningHost(request);

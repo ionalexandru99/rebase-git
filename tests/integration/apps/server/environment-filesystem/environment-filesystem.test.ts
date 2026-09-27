@@ -3,8 +3,8 @@ import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import { Effect } from "effect";
 import { afterEach, describe, expect, it } from "vite-plus/test";
-import { createEnvironmentFilesystem } from "#server/features/environment-filesystem/environment-filesystem";
-import { removeTemporaryDirectory } from "#tests-support/temporary-directory";
+import { createEnvironmentFilesystem } from "#server/features/environment-filesystem/environment-filesystem.ts";
+import { removeTemporaryDirectory } from "#tests-support/temporary-directory.ts";
 
 const directories = new Set<string>();
 

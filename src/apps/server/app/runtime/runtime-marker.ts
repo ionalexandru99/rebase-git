@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import { Data, Effect, type Scope } from "effect";
-import { errorMessage, isFileSystemError } from "#server/error-inspection";
+import { errorMessage, isFileSystemError } from "#server/error-inspection.ts";
 
 interface RuntimeMarker {
   readonly host: string;

@@ -1,12 +1,12 @@
 import { describe, expect, it } from "vite-plus/test";
 import { userEvent } from "vite-plus/test/browser";
-import { waitForObservation } from "#tests-support/observation";
 import {
   history,
   historyReader,
   mergeHistory,
   renderGraph,
-} from "#tests-ui/apps/web/commit-graph/commit-graph-fixture";
+} from "#tests-support/commit-graph-fixture.tsx";
+import { waitForObservation } from "#tests-support/observation.ts";
 
 describe("commit graph layout", () => {
   it("centers merge symbols on their circles in both states", async () => {

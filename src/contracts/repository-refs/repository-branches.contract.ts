@@ -1,17 +1,17 @@
-import { repositoryCommand } from "@rebase/contracts/environment-connection/environment-route.contract";
+import { Schema } from "effect";
+import { repositoryCommand } from "#contracts/environment-connection/environment-route.contract.ts";
 import {
   ObjectId,
   RefName,
   RemoteName,
   RepositoryId,
   RepositoryPath,
-} from "@rebase/contracts/git/git-values.contract";
+} from "#contracts/git/git-values.contract.ts";
 import {
   BranchCheckedOutElsewhere,
   LocalBranch,
   RefMissing,
-} from "@rebase/contracts/repository-refs/repository-refs.contract";
-import { Schema } from "effect";
+} from "#contracts/repository-refs/repository-refs.contract.ts";
 
 export const BranchUpstreamTarget = Schema.Struct({
   name: RefName,

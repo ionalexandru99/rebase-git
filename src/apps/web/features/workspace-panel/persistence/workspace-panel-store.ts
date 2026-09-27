@@ -1,14 +1,14 @@
-import { workspacePanelDefinitions } from "#web/features/workspace-panel/workspace-panel-definitions";
+import { workspacePanelDefinitions } from "#web/features/workspace-panel/workspace-panel-definitions.ts";
 import type {
   WorkspacePanelState,
   WorkspacePanelStore,
-} from "#web/features/workspace-panel/workspace-panel-model";
+} from "#web/features/workspace-panel/workspace-panel-model.ts";
 import {
   initialWorkspacePanelState,
   isWorkspacePanelKind,
   reduceWorkspacePanel,
-} from "#web/features/workspace-panel/workspace-panel-state";
-import { createStore } from "#web/platform/store/store";
+} from "#web/features/workspace-panel/workspace-panel-state.ts";
+import { createStore } from "#web/platform/store/store.ts";
 
 const panelStoragePrefix = "rebase:workspace-panel:v1:";
 

@@ -1,4 +1,5 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
+import { Data, Effect, Schema } from "effect";
 import {
   type EnvironmentAccessFailure,
   EnvironmentBrowserSession,
@@ -6,20 +7,19 @@ import {
   ExchangeEnvironmentPairing,
   environmentBrowserSessionPath,
   environmentPairingExchangePath,
-} from "@rebase/contracts";
-import { Data, Effect, Schema } from "effect";
-import { respondWithBrowserAsset } from "#server/adapters/browser-assets";
+} from "#contracts/environment-authorization/environment-authorization.contract.ts";
+import { respondWithBrowserAsset } from "#server/adapters/browser-assets.ts";
 import {
   accessFailureStatus,
   validateRequestHost,
   validateRequestOrigin,
   writeBrowserSessionCookie,
-} from "#server/adapters/environment-transport/environment-request-authorization";
+} from "#server/adapters/environment-transport/environment-request-authorization.ts";
 import type {
   EnvironmentAuthorization,
   EnvironmentAuthorizationError,
-} from "#server/features/environment-authorization/environment-authorization";
-import type { EnvironmentStorageError } from "#server/persistence/sqlite/storage-operation";
+} from "#server/features/environment-authorization/environment-authorization.ts";
+import type { EnvironmentStorageError } from "#server/persistence/sqlite/storage-operation.ts";
 
 export type RunEnvironmentEffect = (
   effect: Effect.Effect<void, never, never>,

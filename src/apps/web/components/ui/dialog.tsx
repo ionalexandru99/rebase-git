@@ -2,7 +2,7 @@
 
 import { Dialog as DialogPrimitive } from "@base-ui/react/dialog";
 import type { ComponentProps } from "react";
-import { cn } from "#web/lib/utils";
+import { cn } from "#web/lib/utils.ts";
 
 function Dialog(props: DialogPrimitive.Root.Props) {
   return <DialogPrimitive.Root data-slot="dialog" {...props} />;

@@ -1,23 +1,28 @@
 import { randomUUID } from "node:crypto";
-import type {
-  EnvironmentAuthorizationFailure,
-  EnvironmentAuthorizationRevoked,
-  EnvironmentDeviceAuthorization,
-  EnvironmentPairingExchanged,
-  ExchangeEnvironmentPairing,
-  InvalidGrant,
-} from "@rebase/contracts";
 import { eq } from "drizzle-orm";
 import { Data, Effect } from "effect";
+import {
+  EnvironmentAuthorizationApi,
+  type EnvironmentAuthorizationFailure,
+  type EnvironmentAuthorizationRevoked,
+  type EnvironmentDeviceAuthorization,
+  type EnvironmentPairingExchanged,
+  type ExchangeEnvironmentPairing,
+  type InvalidGrant,
+} from "#contracts/environment-authorization/environment-authorization.contract.ts";
+import {
+  type EnvironmentFeature,
+  route,
+} from "#server/adapters/environment-transport/environment-routes.ts";
 import {
   createDeviceCredential,
   createPairingCode,
   digestSecretMaterial,
   verifyDeviceCredential,
-} from "#server/features/environment-authorization/environment-authorization-secret";
-import type { EnvironmentContext } from "#server/persistence/environment-context";
-import { authorizationMetadataTable } from "#server/persistence/environment-state.schema";
-import type { EnvironmentStorageError } from "#server/persistence/sqlite/storage-operation";
+} from "#server/features/environment-authorization/environment-authorization-secret.ts";
+import type { EnvironmentContext } from "#server/persistence/environment-context.ts";
+import { authorizationMetadataTable } from "#server/persistence/environment-state.schema.ts";
+import type { EnvironmentStorageError } from "#server/persistence/sqlite/storage-operation.ts";
 
 const pairingLifetimeMilliseconds = 10 * 60 * 1_000;
 const authorizationInactivityMilliseconds = 90 * 24 * 60 * 60 * 1_000;
@@ -57,6 +62,25 @@ export interface EnvironmentAuthorization {
     authorizationId: string,
     revoked: () => void,
   ) => () => void;
+}
+
+export function environmentAuthorizationFeature(
+  authorization: EnvironmentAuthorization,
+): EnvironmentFeature {
+  const api = EnvironmentAuthorizationApi;
+  return {
+    routes: [
+      route(api.createPairing, (_, context) =>
+        Effect.map(authorization.createPairing(), (created) => ({
+          expiresAt: created.expiresAt,
+          pairingUrl: `${context.origin}/pair#${created.material}`,
+        })),
+      ),
+      route(api.revokeAuthorization, (revocation) =>
+        authorization.revoke(revocation.authorizationId),
+      ),
+    ],
+  };
 }
 
 export function createEnvironmentAuthorization(

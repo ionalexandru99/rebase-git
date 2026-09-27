@@ -3,10 +3,8 @@ import type { ComponentType } from "react";
 import type {
   WorkspacePanelInputAction,
   WorkspacePanelKind,
-} from "#web/features/workspace-panel/workspace-panel-definitions";
-import type { ReadableStore } from "#web/platform/store/store";
-
-export type { WorkspacePanelKind } from "#web/features/workspace-panel/workspace-panel-definitions";
+} from "#web/features/workspace-panel/workspace-panel-definitions.ts";
+import type { ReadableStore } from "#web/platform/store/store.ts";
 
 export interface WorkspacePanelDefinition {
   readonly acceptsInput?: (input: unknown) => boolean;

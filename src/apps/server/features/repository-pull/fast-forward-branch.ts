@@ -1,16 +1,18 @@
+import { Effect } from "effect";
 import {
-  type BranchPulled,
-  type PullFailure,
   type RepositoryRejected,
   repositoryRejected,
-} from "@rebase/contracts";
-import { Effect } from "effect";
+} from "#contracts/git/git-failures.contract.ts";
+import type {
+  BranchPulled,
+  PullFailure,
+} from "#contracts/repository-pull/repository-pull.contract.ts";
 import {
   type GitCommandRunner,
   type GitFailed,
   isGitRejection,
   runRepositoryGit,
-} from "#server/adapters/local-git/git-commands";
+} from "#server/adapters/local-git/git-commands.ts";
 
 const pullCommand = { timeoutMilliseconds: 60_000 };
 

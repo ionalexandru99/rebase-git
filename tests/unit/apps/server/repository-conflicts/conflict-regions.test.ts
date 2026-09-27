@@ -3,7 +3,7 @@ import {
   markerBlocks,
   openRegionLines,
   tokenMarks,
-} from "#server/features/repository-conflicts/conflict-regions";
+} from "#server/features/repository-conflicts/conflict-regions.ts";
 
 it("reads only markers of the configured size", () => {
   const text = [

@@ -1,38 +1,38 @@
+import { useCallback, useMemo, useState } from "react";
 import type {
   ChangeSection,
   ChangeSelection,
   ChangesScope,
   MutateChanges,
   RepositoryChanges,
-} from "@rebase/contracts";
-import { useCallback, useMemo, useState } from "react";
-import { useDiffPreferences } from "#web/features/file-diff/hooks/use-diff-preferences";
+} from "#contracts/repository-changes/repository-changes.contract.ts";
+import { useDiffPreferences } from "#web/features/file-diff/hooks/use-diff-preferences.ts";
 import {
   splitConflicts,
   useConflicts,
-} from "#web/features/working-changes/conflicts/hooks/use-conflicts";
+} from "#web/features/working-changes/conflicts/hooks/use-conflicts.ts";
+import {
+  type SelectedChange,
+  useChangeSelection,
+} from "#web/features/working-changes/hooks/use-change-selection.ts";
 import {
   amendDraftKey,
   commitMessage,
-} from "#web/features/working-changes/draft/commit-draft";
+  useCommitDraft,
+} from "#web/features/working-changes/hooks/use-commit-draft.ts";
 import {
   type Amend,
   amendOff,
   useAmendHead,
-} from "#web/features/working-changes/hooks/use-amend";
-import { useChangeActions } from "#web/features/working-changes/hooks/use-change-actions";
-import { useChangeDiff } from "#web/features/working-changes/hooks/use-change-diff";
-import {
-  type SelectedChange,
-  useChangeSelection,
-} from "#web/features/working-changes/hooks/use-change-selection";
-import { useCommitDraft } from "#web/features/working-changes/hooks/use-commit-draft";
-import { useWorkingChanges } from "#web/features/working-changes/hooks/use-working-changes";
-import type { CommitDraft } from "#web/persistence/working-changes/working-changes-store.contract";
+  useChangeActions,
+  useChangeDiff,
+  useWorkingChanges,
+} from "#web/features/working-changes/hooks/use-working-changes.ts";
+import type { CommitDraft } from "#web/persistence/working-changes/working-changes-store.ts";
 import {
   describeFailure,
   type RequestFailure,
-} from "#web/platform/query/request-failure";
+} from "#web/platform/query/request-failure.ts";
 
 const headMovedMessage =
   "HEAD changed while you were amending. Review the latest commit before enabling Amend again.";

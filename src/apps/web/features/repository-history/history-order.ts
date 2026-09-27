@@ -1,5 +1,5 @@
 import { useCallback, useSyncExternalStore } from "react";
-import type { HistoryOrder } from "#web/features/repository-history/history-graph";
+import type { HistoryOrder } from "#web/features/repository-history/history-graph.ts";
 
 export interface RepositoryHistoryIdentity {
   readonly environmentId: string;

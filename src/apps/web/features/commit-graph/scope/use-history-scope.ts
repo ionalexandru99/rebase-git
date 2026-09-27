@@ -1,5 +1,5 @@
-import type { RepositoryRefTarget } from "@rebase/contracts";
 import { useCallback, useMemo, useRef, useState } from "react";
+import type { RepositoryRefTarget } from "#contracts/repository-refs/repository-refs.contract.ts";
 import {
   automaticHistoryScope,
   type HistoryScope,
@@ -7,9 +7,9 @@ import {
   renameHistoryBranch,
   resolveHistoryScope,
   toggleHistoryRef,
-} from "#web/features/commit-graph/scope/history-scope";
-import type { RepositoryRefsRead } from "#web/features/refs/repository-refs";
-import type { RepositoryScope } from "#web/platform/query/repository-scope";
+} from "#web/features/commit-graph/scope/history-scope.ts";
+import type { RepositoryRefsRead } from "#web/features/refs/repository-refs.ts";
+import type { RepositoryScope } from "#web/platform/query/repository-scope.tsx";
 
 const storagePrefix = "rebase:history-filter:v1";
 

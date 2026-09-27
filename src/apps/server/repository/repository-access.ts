@@ -1,22 +1,22 @@
 import { realpath } from "node:fs";
 import { promisify } from "node:util";
-import {
-  type RepositoryCatalogEntry,
-  type RepositoryRejected,
-  type RepositoryWorktree,
-  repositoryRejected,
-} from "@rebase/contracts";
 import { Effect } from "effect";
+import {
+  type RepositoryRejected,
+  repositoryRejected,
+} from "#contracts/git/git-failures.contract.ts";
+import type { RepositoryCatalogEntry } from "#contracts/repository-catalog/repository-catalog.contract.ts";
+import type { RepositoryWorktree } from "#contracts/repository-refs/repository-refs.contract.ts";
 import {
   type GitCommandRunner,
   readGitCommonDirectory,
   runRepositoryGit,
-} from "#server/adapters/local-git/git-commands";
+} from "#server/adapters/local-git/git-commands.ts";
 import type {
   RepositoryWatcher,
   RepositoryWatchHandle,
-} from "#server/adapters/local-git/local-repository-watcher";
-import type { EnvironmentStorageError } from "#server/persistence/sqlite/storage-operation";
+} from "#server/adapters/local-git/local-repository-watcher.ts";
+import type { EnvironmentStorageError } from "#server/persistence/sqlite/storage-operation.ts";
 
 const realpathNative = promisify(realpath.native);
 const branchPrefix = "refs/heads/";

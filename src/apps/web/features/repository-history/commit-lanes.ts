@@ -1,4 +1,4 @@
-import type { RepositoryHistoryRefTarget } from "@rebase/contracts";
+import type { RepositoryHistoryRefTarget } from "#contracts/repository-history/repository-history.contract.ts";
 
 export const laneColorCount = 8;
 

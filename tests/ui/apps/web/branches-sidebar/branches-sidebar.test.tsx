@@ -1,24 +1,13 @@
+import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
+import { userEvent } from "vite-plus/test/browser";
+import { RepositoryPullApi } from "#contracts/repository-pull/repository-pull.contract.ts";
 import {
   type CheckoutRepositoryRef,
   type RepositoryCheckedOut,
-  RepositoryPullApi,
   type RepositoryRefs,
   RepositoryRefsApi,
   type RepositoryRefTarget,
-} from "@rebase/contracts";
-import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
-import { userEvent } from "vite-plus/test/browser";
-import {
-  commitId,
-  fetchStatus,
-  mainAndTopicWorktrees,
-  mainPath,
-  repositoryId,
-  repositoryRefs,
-  topicPath,
-  upstream,
-} from "#tests-support/fixtures";
-import { repositoryScope } from "#tests-ui/apps/web/repository-scope/repository-scope-fixture";
+} from "#contracts/repository-refs/repository-refs.contract.ts";
 import {
   type FakeRoute,
   fakeRequests,
@@ -26,15 +15,26 @@ import {
   rejected,
   respond,
   unanswered,
-} from "#tests-ui/runtime/fake-requests";
-import { render, testChanges } from "#tests-ui/runtime/render";
-import { BranchesSidebar } from "#web/features/branches-sidebar/branches-sidebar";
-import { historyRefKey } from "#web/features/commit-graph/scope/history-scope";
-import { requestRefIntent } from "#web/features/refs/ref-actions";
+} from "#tests-support/fake-requests.ts";
+import {
+  commitId,
+  fetchStatus,
+  mainAndTopicWorktrees,
+  mainPath,
+  repositoryId,
+  repositoryRefs,
+  repositoryScope,
+  topicPath,
+  upstream,
+} from "#tests-support/fixtures.ts";
+import { render, testChanges } from "#tests-support/render.tsx";
+import { BranchesSidebar } from "#web/features/branches-sidebar/branches-sidebar.tsx";
+import { historyRefKey } from "#web/features/commit-graph/scope/history-scope.ts";
+import { requestRefIntent } from "#web/features/refs/ref-actions.ts";
 import {
   type RepositoryScope,
   RepositoryScopeProvider,
-} from "#web/platform/query/repository-scope";
+} from "#web/platform/query/repository-scope.tsx";
 
 describe("branches sidebar", () => {
   beforeEach(() => localStorage.removeItem("rebase:branches-view:v1"));

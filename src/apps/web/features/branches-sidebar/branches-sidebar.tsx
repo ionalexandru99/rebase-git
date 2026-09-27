@@ -1,4 +1,3 @@
-import type { RepositoryRefTarget } from "@rebase/contracts";
 import { IconSearch } from "@tabler/icons-react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import {
@@ -12,14 +11,15 @@ import {
   useRef,
   useState,
 } from "react";
-import { keyAction, runAction } from "#web/components/ui/action-menu";
-import { Input } from "#web/components/ui/input";
-import { treeKeyAction } from "#web/features/branches-sidebar/branches-sidebar-keyboard";
+import type { RepositoryRefTarget } from "#contracts/repository-refs/repository-refs.contract.ts";
+import { keyAction, runAction } from "#web/components/ui/action-menu.tsx";
+import { Input } from "#web/components/ui/input.tsx";
+import { treeKeyAction } from "#web/features/branches-sidebar/branches-sidebar-keyboard.ts";
 import {
   RefRow,
   rowElementId,
   SectionRow,
-} from "#web/features/branches-sidebar/branches-sidebar-rows";
+} from "#web/features/branches-sidebar/branches-sidebar-rows.tsx";
 import {
   type BranchesSidebarRefRow,
   type BranchesSidebarRow,
@@ -34,25 +34,28 @@ import {
   refSectionId,
   scopeShowing,
   toggleSection,
-} from "#web/features/branches-sidebar/branches-sidebar-state";
-import { SidebarStatus } from "#web/features/branches-sidebar/sidebar-status";
+} from "#web/features/branches-sidebar/branches-sidebar-state.ts";
+import { SidebarStatus } from "#web/features/branches-sidebar/sidebar-status.tsx";
 import {
   BranchesSidebarScopeFilter,
   BranchesSidebarViewSelector,
   useBranchesSidebarView,
-} from "#web/features/branches-sidebar/sidebar-view-controls";
-import { historyRefKey } from "#web/features/commit-graph/scope/history-scope";
-import { refActions, useRefIntent } from "#web/features/refs/ref-actions";
-import { useRefEditing } from "#web/features/refs/ref-editing";
-import { RefEditingStatus } from "#web/features/refs/ref-editing-status";
-import { commitStartPoint, type RefKind } from "#web/features/refs/ref-kinds";
-import { RefEditField } from "#web/features/refs/ref-name-field";
+} from "#web/features/branches-sidebar/sidebar-view-controls.tsx";
+import { historyRefKey } from "#web/features/commit-graph/scope/history-scope.ts";
+import { refActions, useRefIntent } from "#web/features/refs/ref-actions.ts";
+import { useRefEditing } from "#web/features/refs/ref-editing.ts";
+import { RefEditingStatus } from "#web/features/refs/ref-editing-status.tsx";
+import {
+  commitStartPoint,
+  type RefKind,
+} from "#web/features/refs/ref-kinds.ts";
+import { RefEditField } from "#web/features/refs/ref-name-field.tsx";
 import {
   useRefActivation,
   useScopedRepositoryRefs,
-} from "#web/features/refs/repository-refs";
-import { usePull } from "#web/features/remote-sync/use-pull";
-import { useRepositoryScope } from "#web/platform/query/repository-scope";
+} from "#web/features/refs/repository-refs.ts";
+import { usePull } from "#web/features/remote-sync/use-pull.ts";
+import { useRepositoryScope } from "#web/platform/query/repository-scope.tsx";
 
 const overscanRows = 12;
 const noSelectedRefs: ReadonlySet<string> = new Set();

@@ -1,17 +1,17 @@
-import type { EnvironmentRpcClient } from "@rebase/contracts";
 import { Effect } from "effect";
 import { describe, expect, it, vi } from "vite-plus/test";
+import type { EnvironmentRpcClient } from "#contracts/environment-connection/environment-rpc.contract.ts";
 import {
   createLocalEnvironmentSession,
   type LocalEnvironmentGateway,
   type LocalEnvironmentSessionOptions,
   type LocalEnvironmentSessionState,
-} from "#web/app/environment/local-environment-session";
+} from "#web/app/environment/local-environment-session.ts";
 import {
   EnvironmentAccessDenied,
   EnvironmentProtocolMismatch,
   EnvironmentUnavailable,
-} from "#web/platform/environment/environment-connection";
+} from "#web/platform/environment/environment-connection.ts";
 
 const environmentId = "00000000-0000-4000-8000-000000000001";
 

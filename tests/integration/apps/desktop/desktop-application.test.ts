@@ -1,7 +1,6 @@
 import { access, mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { startEnvironmentServer } from "@rebase/server";
 import { Effect, Exit, Scope } from "effect";
 import { afterEach, describe, expect, it } from "vite-plus/test";
 import {
@@ -9,10 +8,11 @@ import {
   type DesktopApplicationHost,
   type DesktopWindowOptions,
   startDesktopApplication,
-} from "#desktop/app/desktop-application";
-import type { ManagedEnvironmentServer } from "#desktop/platform/environment/environment-supervisor";
-import { removeTemporaryDirectory } from "#tests-support/temporary-directory";
-import { connectEnvironment } from "#web/platform/environment/environment-connection";
+} from "#desktop/app/desktop-application.ts";
+import type { ManagedEnvironmentServer } from "#desktop/platform/environment/environment-supervisor.ts";
+import { startEnvironmentServer } from "#server/app/server/start-environment-server.ts";
+import { removeTemporaryDirectory } from "#tests-support/temporary-directory.ts";
+import { connectEnvironment } from "#web/platform/environment/environment-connection.ts";
 
 const directories = new Set<string>();
 

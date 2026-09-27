@@ -9,7 +9,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { promisify } from "node:util";
 import { type Browser, chromium, expect, test } from "@playwright/test";
-import { removeTemporaryDirectory } from "#tests-support/temporary-directory";
+import { removeTemporaryDirectory } from "#tests-support/temporary-directory.ts";
 
 const execFileAsync = promisify(execFile);
 

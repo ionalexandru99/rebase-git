@@ -1,5 +1,5 @@
-import type { TokenMark } from "@rebase/contracts";
 import { diffArrays } from "diff";
+import type { TokenMark } from "#contracts/repository-conflicts/repository-conflicts.contract.ts";
 
 interface MarkerBlock {
   readonly line: number;

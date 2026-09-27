@@ -1,42 +1,44 @@
 import { mkdtemp, realpath } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import {
-  EnvironmentAuthorizationApi,
-  type EnvironmentRoute,
-  EnvironmentRpc,
-  environmentLivePath,
-  environmentProtocol,
-  environmentSubprotocol,
-  type RouteFailure,
-  type RouteInput,
-  type RouteSuccess,
-} from "@rebase/contracts";
 import { Effect, Exit, Schema, Scope } from "effect";
 import { RpcClientError, RpcTest } from "effect/unstable/rpc";
 import { onTestFinished } from "vite-plus/test";
 import WebSocket from "ws";
-import { exchangeEnvironmentPairing } from "#desktop/app/desktop-application";
-import type { EnvironmentEventPublisher } from "#server/adapters/environment-transport/environment-event-publisher";
-import { environmentRpcHandlers } from "#server/adapters/environment-transport/environment-socket";
+import { EnvironmentAuthorizationApi } from "#contracts/environment-authorization/environment-authorization.contract.ts";
+import type {
+  EnvironmentRoute,
+  RouteFailure,
+  RouteInput,
+  RouteSuccess,
+} from "#contracts/environment-connection/environment-route.contract.ts";
+import {
+  EnvironmentRpc,
+  environmentLivePath,
+  environmentProtocol,
+  environmentSubprotocol,
+} from "#contracts/environment-connection/environment-rpc.contract.ts";
+import { exchangeEnvironmentPairing } from "#desktop/app/desktop-application.ts";
+import type { EnvironmentEventPublisher } from "#server/adapters/environment-transport/environment-event-publisher.ts";
+import { environmentRpcHandlers } from "#server/adapters/environment-transport/environment-socket.ts";
 import {
   createLocalGitCommandRunner,
   type GitCommandRunner,
-} from "#server/adapters/local-git/git-commands";
+} from "#server/adapters/local-git/git-commands.ts";
 import {
   acquireEnvironment,
   environmentFeatures,
   serveEnvironment,
-} from "#server/app/server/serve-environment";
-import type { RepositoryCoordination } from "#server/repository/repository-coordination";
-import { removeTemporaryDirectory } from "#tests-support/temporary-directory";
+} from "#server/app/server/serve-environment.ts";
+import type { RepositoryCoordination } from "#server/repository/repository-coordination.ts";
+import { removeTemporaryDirectory } from "#tests-support/temporary-directory.ts";
 import {
   connectEnvironment,
   type EnvironmentCredential,
   environmentRequests,
-} from "#web/platform/environment/environment-connection";
-import type { EnvironmentRequests } from "#web/platform/query/environment-context";
-import type { EnvironmentInvalidation } from "#web/platform/query/environment-invalidation";
+} from "#web/platform/environment/environment-connection.ts";
+import type { EnvironmentRequests } from "#web/platform/query/environment-context.tsx";
+import type { EnvironmentInvalidation } from "#web/platform/query/environment-invalidation.ts";
 
 type Routes = Record<string, EnvironmentRoute>;
 

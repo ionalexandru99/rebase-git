@@ -2,9 +2,9 @@ import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, type Page, test } from "@playwright/test";
-import { startEnvironmentServer } from "#tests-support/environment-server";
-import { createRepository, git } from "#tests-support/git";
-import { removeTemporaryDirectory } from "#tests-support/temporary-directory";
+import { startEnvironmentServer } from "#tests-support/environment-server.ts";
+import { createRepository, git } from "#tests-support/git.ts";
+import { removeTemporaryDirectory } from "#tests-support/temporary-directory.ts";
 
 test("opens a repository and checks out a local branch", async ({ page }) => {
   const testHome = await mkdtemp(join(tmpdir(), "rebase-branches-e2e-"));

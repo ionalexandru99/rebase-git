@@ -1,6 +1,6 @@
-import type { RepositoryChangeKind } from "@rebase/contracts";
 import type { Query, QueryClient } from "@tanstack/react-query";
-import type { EnvironmentQueryMeta } from "#web/platform/query/environment-query-meta";
+import type { RepositoryChangeKind } from "#contracts/environment-connection/environment-rpc.contract.ts";
+import type { EnvironmentQueryMeta } from "#web/platform/query/environment-query-meta.ts";
 
 export interface EnvironmentInvalidation {
   readonly changed: (

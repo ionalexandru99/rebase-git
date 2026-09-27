@@ -4,7 +4,7 @@ import {
   ResizableHandle,
   ResizablePanel,
   ResizablePanelGroup,
-} from "#web/components/ui/resizable";
+} from "#web/components/ui/resizable.tsx";
 
 const projectSidebarSize = {
   collapsed: "3rem",

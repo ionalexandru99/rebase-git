@@ -1,8 +1,8 @@
 import { realpathSync, type WatchEventType, watch } from "node:fs";
 import { join, relative, sep } from "node:path";
-import type { RepositoryChangeKind } from "@rebase/contracts";
 import { Effect } from "effect";
-import { watchGitDirectoryTree } from "#server/adapters/local-git/watch-git-directory-tree";
+import type { RepositoryChangeKind } from "#contracts/environment-connection/environment-rpc.contract.ts";
+import { watchGitDirectoryTree } from "#server/adapters/local-git/watch-git-directory-tree.ts";
 
 export interface RepositoryWatchHandle {
   readonly close: () => void;

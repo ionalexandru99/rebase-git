@@ -1,9 +1,9 @@
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   type ConflictDocument,
   type ConflictPath,
   RepositoryConflictsApi,
-} from "@rebase/contracts";
-import { useCallback, useEffect, useRef, useState } from "react";
+} from "#contracts/repository-conflicts/repository-conflicts.contract.ts";
 import {
   fileContent,
   type LinePick,
@@ -12,15 +12,15 @@ import {
   type Picks,
   picksOf,
   withTyped,
-} from "#web/features/merge-view/conflict-document";
-import { editText } from "#web/features/merge-view/result-text";
+} from "#web/features/merge-view/conflict-document.ts";
+import { editText } from "#web/features/merge-view/result-text.ts";
 import {
   conflictReason,
   useConflictDocument,
   useConflictList,
-} from "#web/features/working-changes/conflicts/hooks/use-conflicts";
-import { describeFailure } from "#web/platform/query/request-failure";
-import { answer, useCommand } from "#web/platform/query/use-command";
+} from "#web/features/working-changes/conflicts/hooks/use-conflicts.ts";
+import { describeFailure } from "#web/platform/query/request-failure.ts";
+import { answer, useCommand } from "#web/platform/query/use-command.ts";
 
 interface WriteQueue {
   revision: string | null;

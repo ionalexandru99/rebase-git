@@ -1,29 +1,9 @@
 {
-  "extends": "../tsconfig.base.json",
+  "extends": "../tsconfig.json",
   "compilerOptions": {
-    "composite": false,
-    "declaration": false,
-    "declarationMap": false,
     "jsx": "react-jsx",
     "lib": ["ES2024", "DOM", "DOM.Iterable"],
-    "noEmit": true,
-    "paths": {
-      "#desktop/*": ["./../src/apps/desktop/*.ts"],
-      "#server/*": ["./../src/apps/server/*.ts"],
-      "#tests-integration/*": ["./integration/*.ts"],
-      "#tests-performance/*": ["./performance/*.ts"],
-      "#tests-support/*": ["./support/*.ts"],
-      "#tests-ui/*": ["./ui/*.tsx"],
-      "#web/*": ["./../src/apps/web/*.ts", "./../src/apps/web/*.tsx"]
-    },
-    "skipLibCheck": true,
     "types": ["node", "vite/client", "vitest/globals"]
   },
-  "include": [
-    "../playwright*.config.ts",
-    "../vitest.config.ts",
-    "../vite.config.ts",
-    "./**/*.ts",
-    "./**/*.tsx"
-  ]
+  "include": [".", "../*.config.ts"]
 }

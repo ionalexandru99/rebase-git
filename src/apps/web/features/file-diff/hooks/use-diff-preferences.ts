@@ -2,11 +2,11 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import {
   type DiffPreferences,
   defaultDiffPreferences,
-} from "#web/domain/file-diff/diff-preferences.contract";
+} from "#web/domain/file-diff/diff-preferences.contract.ts";
 import {
   readDiffPreferences,
   saveDiffPreferences,
-} from "#web/persistence/working-changes/working-changes-store";
+} from "#web/persistence/working-changes/working-changes-store.ts";
 
 export function useDiffPreferences() {
   const [preferences, setPreferences] = useState(defaultDiffPreferences);

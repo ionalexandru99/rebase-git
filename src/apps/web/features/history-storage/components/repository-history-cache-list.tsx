@@ -1,5 +1,5 @@
-import { formatCacheSize } from "#web/features/history-storage/format-cache-size";
-import type { HistoryStorage } from "#web/features/repository-history/history-worker-protocol";
+import { formatCacheSize } from "#web/features/history-storage/format-cache-size.ts";
+import type { HistoryStorage } from "#web/features/repository-history/history-worker-protocol.ts";
 
 export function RepositoryHistoryCacheList({
   diagnostics,

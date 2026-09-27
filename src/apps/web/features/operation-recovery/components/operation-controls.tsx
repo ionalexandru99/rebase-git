@@ -1,11 +1,23 @@
-import type { OperationAction, RepositoryOperation } from "@rebase/contracts";
+import { IconCircleFilled } from "@tabler/icons-react";
 import { type ReactNode, useRef, useState } from "react";
-import { Button } from "#web/components/ui/button";
-import { Confirmation } from "#web/components/ui/confirmation";
-import { OperationActionsMenu } from "#web/features/operation-recovery/components/operation-actions-menu";
-import type { OperationRecoveryState } from "#web/features/operation-recovery/hooks/use-operation-recovery";
-import { operationLabel } from "#web/features/operation-recovery/operation-messages";
-import { cn } from "#web/lib/utils";
+import type {
+  OperationAction,
+  OperationScope,
+  RepositoryOperation,
+} from "#contracts/repository-operations/repository-operations.contract.ts";
+import { Button } from "#web/components/ui/button.tsx";
+import { Confirmation } from "#web/components/ui/confirmation.tsx";
+import { OperationActionsMenu } from "#web/features/operation-recovery/components/operation-actions-menu.tsx";
+import {
+  type OperationRecoveryState,
+  showsOperationHeader,
+  useOperationRecovery,
+} from "#web/features/operation-recovery/hooks/use-operation-recovery.ts";
+import {
+  operationHeading,
+  operationLabel,
+} from "#web/features/operation-recovery/operation-messages.ts";
+import { cn } from "#web/lib/utils.ts";
 
 export function OperationControls({
   state,
@@ -123,4 +135,37 @@ function confirmationTitle(
     operation.commit?.slice(0, 8) ??
     (operation.kind === "am" ? "this patch" : "this commit");
   return `Skip ${subject}? Its changes will not be included.`;
+}
+
+export function OperationHeader({ scope }: { readonly scope: OperationScope }) {
+  const recovery = useOperationRecovery(scope);
+  const { state } = recovery;
+  const operation = state.operation;
+  if (operation === null || !showsOperationHeader(state)) return null;
+  const meta = [operation.branch, operation.commit?.slice(0, 8)]
+    .filter((part) => part)
+    .join(" · ");
+  return (
+    <section
+      aria-label="Operation"
+      className="shrink-0 border-border border-b bg-muted"
+    >
+      <OperationControls {...recovery} className="min-h-11 px-3 py-1.5">
+        <IconCircleFilled
+          aria-hidden="true"
+          className="size-2 shrink-0 text-status-connecting"
+        />
+        <h2
+          className="text-xs font-semibold"
+          aria-live="polite"
+          aria-atomic="true"
+        >
+          {operationHeading(state)}
+        </h2>
+        <span className="min-w-0 flex-1 truncate font-mono text-[10px] text-muted-foreground">
+          {meta}
+        </span>
+      </OperationControls>
+    </section>
+  );
 }

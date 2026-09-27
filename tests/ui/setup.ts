@@ -1,2 +1,2 @@
 import "vitest-browser-react";
-import "@rebase/web/styles.css";
+import "#web/styles.css";

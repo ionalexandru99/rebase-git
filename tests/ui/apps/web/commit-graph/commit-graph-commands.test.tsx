@@ -6,13 +6,13 @@ import {
   historyReader,
   mergeHistory,
   renderGraph,
-} from "#tests-ui/apps/web/commit-graph/commit-graph-fixture";
-import { repositoryScope } from "#tests-ui/apps/web/repository-scope/repository-scope-fixture";
-import { render } from "#tests-ui/runtime/render";
+} from "#tests-support/commit-graph-fixture.tsx";
+import { repositoryScope } from "#tests-support/fixtures.ts";
+import { render } from "#tests-support/render.tsx";
 import {
   type RepositoryScope,
   RepositoryScopeProvider,
-} from "#web/platform/query/repository-scope";
+} from "#web/platform/query/repository-scope.tsx";
 
 describe("commit graph commands", () => {
   it("reveals a hidden result from cached search", async () => {

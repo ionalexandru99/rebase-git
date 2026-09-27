@@ -1,10 +1,10 @@
 import type { SelectedLineRange } from "@pierre/diffs";
 import { FileDiff } from "@pierre/diffs/react";
-import type { ChangeDiff } from "@rebase/contracts";
 import { IconFileDiff } from "@tabler/icons-react";
 import type { CSSProperties } from "react";
-import type { DiffPreferences } from "#web/domain/file-diff/diff-preferences.contract";
-import type { createChangeDiffModel } from "#web/features/file-diff/diff-model";
+import type { ChangeDiff } from "#contracts/repository-comparison/repository-comparison.contract.ts";
+import type { DiffPreferences } from "#web/domain/file-diff/diff-preferences.contract.ts";
+import type { createChangeDiffModel } from "#web/features/file-diff/diff-model.ts";
 
 export function DiffContent({
   diff,

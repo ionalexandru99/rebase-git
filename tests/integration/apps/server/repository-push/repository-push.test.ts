@@ -1,18 +1,18 @@
 import { chmod, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { Effect, Fiber } from "effect";
+import { describe, expect, it } from "vite-plus/test";
 import {
   type PushBranch,
   type PushDestination,
   RepositoryPushApi,
-} from "@rebase/contracts";
-import { Effect, Fiber } from "effect";
-import { describe, expect, it } from "vite-plus/test";
+} from "#contracts/repository-push/repository-push.contract.ts";
 import {
   type GitCommandRunner,
   gitFailed,
-} from "#server/adapters/local-git/git-commands";
-import { cloneRepository, createRepository, git } from "#tests-support/git";
-import { openTestEnvironment } from "#tests-support/server";
+} from "#server/adapters/local-git/git-commands.ts";
+import { cloneRepository, createRepository, git } from "#tests-support/git.ts";
+import { openTestEnvironment } from "#tests-support/server.ts";
 
 async function fixture(wrap?: (runner: GitCommandRunner) => GitCommandRunner) {
   const environment = await openTestEnvironment({ git: wrap });

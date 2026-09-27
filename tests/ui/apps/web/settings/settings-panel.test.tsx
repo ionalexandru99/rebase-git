@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vite-plus/test";
 import { page } from "vite-plus/test/browser";
-import { render } from "#tests-ui/runtime/render";
-import { SettingsPanel } from "#web/features/settings/settings-panel";
+import { render } from "#tests-support/render.tsx";
+import { SettingsPanel } from "#web/features/settings/settings-panel.tsx";
 
 describe("settings panel", () => {
   it("shows browser update availability and navigates settings", async () => {

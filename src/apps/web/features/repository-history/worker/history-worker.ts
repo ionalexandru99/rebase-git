@@ -1,12 +1,12 @@
-import type { RepositoryChangeKind } from "@rebase/contracts";
+import type { RepositoryChangeKind } from "#contracts/environment-connection/environment-rpc.contract.ts";
 import {
   clearRepository,
   readRepositories,
-} from "#web/features/repository-history/history-database";
+} from "#web/features/repository-history/history-database.ts";
 import {
   holdLease,
   watchLease,
-} from "#web/features/repository-history/history-lease";
+} from "#web/features/repository-history/history-lease.ts";
 import type {
   HistoryClientMessage,
   HistoryIdentity,
@@ -14,18 +14,18 @@ import type {
   HistoryQuery,
   HistoryWorkerLease,
   HistoryWorkerMessage,
-} from "#web/features/repository-history/history-worker-protocol";
+} from "#web/features/repository-history/history-worker-protocol.ts";
 import {
   HistoryReplica,
   historyFailure,
-} from "#web/features/repository-history/worker/history-replica";
-import { describeHistoryStorage } from "#web/features/repository-history/worker/history-storage";
+} from "#web/features/repository-history/worker/history-replica.ts";
+import { describeHistoryStorage } from "#web/features/repository-history/worker/history-storage.ts";
 import {
   type EnvironmentAccess,
   type EnvironmentSocket,
   openEnvironmentSocket,
   reconnectDelay,
-} from "#web/platform/environment/environment-connection";
+} from "#web/platform/environment/environment-connection.ts";
 
 interface HistoryClient {
   readonly port: MessagePort;

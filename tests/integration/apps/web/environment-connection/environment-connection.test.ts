@@ -1,10 +1,11 @@
 import { join } from "node:path";
-import { RepositoryCatalogApi, RepositoryRefsApi } from "@rebase/contracts";
 import { Effect } from "effect";
 import { describe, expect, it, vi } from "vite-plus/test";
-import { createRepository } from "#tests-support/git";
-import { openTestServer } from "#tests-support/server";
-import { environmentRequests } from "#web/platform/environment/environment-connection";
+import { RepositoryCatalogApi } from "#contracts/repository-catalog/repository-catalog.contract.ts";
+import { RepositoryRefsApi } from "#contracts/repository-refs/repository-refs.contract.ts";
+import { createRepository } from "#tests-support/git.ts";
+import { openTestServer } from "#tests-support/server.ts";
+import { environmentRequests } from "#web/platform/environment/environment-connection.ts";
 
 const repositoryId = "00000000-0000-4000-8000-000000000001";
 

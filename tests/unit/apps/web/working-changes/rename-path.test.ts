@@ -2,7 +2,7 @@ import { describe, expect, it } from "vite-plus/test";
 import {
   compactRename,
   renameHint,
-} from "#web/features/working-changes/rename/rename-path";
+} from "#web/features/working-changes/components/change-file-section.tsx";
 
 describe("rename paths", () => {
   it.each([

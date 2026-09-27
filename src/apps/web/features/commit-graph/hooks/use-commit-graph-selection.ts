@@ -7,8 +7,8 @@ import {
   useRef,
   useState,
 } from "react";
-import type { HistoryScopeQuery } from "#web/features/repository-history/history-view";
-import type { RepositoryHistory } from "#web/features/repository-history/repository-history";
+import type { HistoryScopeQuery } from "#web/features/repository-history/history-view.ts";
+import type { RepositoryHistory } from "#web/features/repository-history/repository-history.ts";
 
 export type CommitGraphSelectionMode =
   | "replace"

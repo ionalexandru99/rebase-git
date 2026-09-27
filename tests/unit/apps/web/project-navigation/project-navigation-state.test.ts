@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vite-plus/test";
-import type { ProjectNavigationState } from "#web/features/project-navigation/project-navigation";
+import type { ProjectNavigationState } from "#web/features/project-navigation/project-navigation.ts";
 import {
   environmentRepositories,
   filterEnvironmentRepositories,
@@ -9,7 +9,7 @@ import {
   setProjectSidebarCollapsed,
   showOpenProject,
   toggleEnvironment,
-} from "#web/features/project-navigation/project-navigation-state";
+} from "#web/features/project-navigation/project-navigation-state.ts";
 
 describe("project navigation state", () => {
   it("keeps known repositories visible and disables them when their Environment is unavailable", () => {

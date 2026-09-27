@@ -1,5 +1,5 @@
 import { Data, Effect, type Semaphore } from "effect";
-import { errorMessage } from "#server/error-inspection";
+import { errorMessage } from "#server/error-inspection.ts";
 
 export class EnvironmentStorageError extends Data.TaggedError(
   "EnvironmentStorageError",

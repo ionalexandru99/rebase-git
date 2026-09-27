@@ -1,11 +1,11 @@
 import type {
   RepositoryCommit,
   RepositoryCommitIdentity,
-} from "@rebase/contracts";
+} from "#contracts/repository-history/repository-history.contract.ts";
 import {
   type GitObjectFormat,
   isGitObjectId,
-} from "#server/adapters/local-git/git-commands";
+} from "#server/adapters/local-git/git-commands.ts";
 
 export const gitHistoryFormat = [
   "%H",

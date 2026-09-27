@@ -5,14 +5,15 @@ import { existsSync, readFileSync, realpathSync } from "node:fs";
 import { homedir, release } from "node:os";
 
 import { fileURLToPath } from "node:url";
-import { environmentProtocol } from "@rebase/contracts";
 import { Deferred, Effect } from "effect";
-import { resolveHostAddress } from "#server/app/server/host-address";
+import { environmentProtocol } from "#contracts/environment-connection/environment-rpc.contract.ts";
+import { resolveHostAddress } from "#server/app/server/host-address.ts";
 import {
   type EnvironmentServerOptions,
   startEnvironmentServer,
-} from "#server/app/server/start-environment-server";
-import { productVersion } from "#server/product-version";
+} from "#server/app/server/start-environment-server.ts";
+
+declare const REBASE_PRODUCT_VERSION: string;
 
 const usage =
   "Usage: rebase [serve] [--host <ip-address|lan|tailscale>] [--port <1-65535>]";
@@ -138,7 +139,6 @@ function resolveBrowserAssetsRoot() {
   const candidates = [
     new URL("./web", import.meta.url),
     new URL("../web/dist/web", import.meta.url),
-    new URL("../../web/dist/web", import.meta.url),
   ];
   const root = candidates.find((candidate) => existsSync(candidate));
   if (root === undefined) {
@@ -149,9 +149,17 @@ function resolveBrowserAssetsRoot() {
   return fileURLToPath(root);
 }
 
+function productVersion() {
+  if (typeof REBASE_PRODUCT_VERSION === "string") return REBASE_PRODUCT_VERSION;
+  const packageMetadata = JSON.parse(
+    readFileSync(new URL("../../../package.json", import.meta.url), "utf8"),
+  ) as { readonly version: string };
+  return packageMetadata.version;
+}
+
 function versionOutput() {
   return [
-    `Rebase ${productVersion}`,
+    `Rebase ${productVersion()}`,
     `Environment protocol ${environmentProtocol}`,
   ].join("\n");
 }

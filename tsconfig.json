@@ -1,9 +1,29 @@
 {
-  "files": [],
-  "references": [
-    { "path": "./src/contracts" },
-    { "path": "./src/apps/server" },
-    { "path": "./src/apps/web" },
-    { "path": "./src/apps/desktop" }
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "compilerOptions": {
+    "allowImportingTsExtensions": true,
+    "exactOptionalPropertyTypes": true,
+    "forceConsistentCasingInFileNames": true,
+    "isolatedModules": true,
+    "module": "NodeNext",
+    "moduleDetection": "force",
+    "moduleResolution": "NodeNext",
+    "noEmit": true,
+    "noFallthroughCasesInSwitch": true,
+    "noImplicitOverride": true,
+    "noUncheckedIndexedAccess": true,
+    "noUncheckedSideEffectImports": true,
+    "resolveJsonModule": true,
+    "skipLibCheck": true,
+    "strict": true,
+    "target": "ES2024",
+    "types": ["node"],
+    "verbatimModuleSyntax": true
+  },
+  "include": [
+    "src/contracts",
+    "src/apps/server",
+    "src/apps/desktop",
+    "packaging"
   ]
 }

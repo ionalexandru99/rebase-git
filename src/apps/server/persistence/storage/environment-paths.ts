@@ -1,8 +1,8 @@
 import { chmod, mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import { Effect } from "effect";
-import { errorMessage } from "#server/error-inspection";
-import { EnvironmentStorageError } from "#server/persistence/sqlite/storage-operation";
+import { errorMessage } from "#server/error-inspection.ts";
+import { EnvironmentStorageError } from "#server/persistence/sqlite/storage-operation.ts";
 
 export interface EnvironmentPaths {
   readonly cacheDirectory: string;

@@ -1,9 +1,7 @@
-import type {
-  RepositoryHistoryRefTarget,
-  RepositoryRefTarget,
-} from "@rebase/contracts";
-import { CommitRefPill } from "#web/features/commit-graph/components/commit-ref-labels";
-import type { HistoryScope } from "#web/features/commit-graph/scope/history-scope";
+import type { RepositoryHistoryRefTarget } from "#contracts/repository-history/repository-history.contract.ts";
+import type { RepositoryRefTarget } from "#contracts/repository-refs/repository-refs.contract.ts";
+import { CommitRefPill } from "#web/features/commit-graph/components/commit-ref-labels.tsx";
+import type { HistoryScope } from "#web/features/commit-graph/scope/history-scope.ts";
 
 export function HistoryScopeStrip({
   onRemove,

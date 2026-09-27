@@ -1,5 +1,6 @@
 import {
   IconChevronRight,
+  IconDeviceLaptop,
   IconFolderPlus,
   IconSearch,
 } from "@tabler/icons-react";
@@ -12,22 +13,25 @@ import {
   useRef,
   useState,
 } from "react";
-import { useOpenProjectEnvironments } from "#web/features/open-project/hooks/use-open-project-environments";
-import type { OpenProjectRepository } from "#web/features/open-project/open-project-model";
+import type {
+  OpenProjectEnvironment,
+  OpenProjectRepository,
+} from "#web/features/open-project/open-project-model.ts";
 import {
   catalogRepositoryItems,
   filterOpenProjectEnvironments,
   keyboardRepositoryItems,
   recentRepositoryItems,
-} from "#web/features/open-project/open-project-state";
-import { OpenProjectToolbar } from "#web/features/open-project/open-project-toolbar";
-import { RecentRepositories } from "#web/features/open-project/recent-repositories";
-import { RepositoryEnvironmentGroup } from "#web/features/open-project/repository-environment-group";
-import { openProjectItemId } from "#web/features/open-project/repository-row";
-import { localEnvironment } from "#web/features/project-navigation/local-environment";
-import type { ProjectNavigationRepository } from "#web/features/project-navigation/project-navigation";
-import { RepositoryFolderPicker } from "#web/features/repository-folder-picker/repository-folder-picker";
-import { useEnvironment } from "#web/platform/query/environment-context";
+} from "#web/features/open-project/open-project-state.ts";
+import { OpenProjectToolbar } from "#web/features/open-project/open-project-toolbar.tsx";
+import { RecentRepositories } from "#web/features/open-project/recent-repositories.tsx";
+import { RepositoryEnvironmentGroup } from "#web/features/open-project/repository-environment-group.tsx";
+import { openProjectItemId } from "#web/features/open-project/repository-row.tsx";
+import { localEnvironment } from "#web/features/project-navigation/local-environment.ts";
+import type { ProjectNavigationRepository } from "#web/features/project-navigation/project-navigation.ts";
+import { useRepositoryCatalog } from "#web/features/repository-catalog/use-repository-catalog.ts";
+import { RepositoryFolderPicker } from "#web/features/repository-folder-picker/repository-folder-browser.tsx";
+import { useEnvironment } from "#web/platform/query/environment-context.tsx";
 
 export function OpenProjectScreen({
   onOpenRepository,
@@ -275,4 +279,32 @@ function keyboardDirection(key: string): -1 | 0 | 1 {
   if (key === "ArrowDown" || key === "ArrowRight") return 1;
   if (key === "ArrowUp" || key === "ArrowLeft") return -1;
   return 0;
+}
+
+function useOpenProjectEnvironments(): readonly OpenProjectEnvironment[] {
+  const { repositories } = useRepositoryCatalog();
+  const { availability, connectionState, status } = useEnvironment().status;
+  return useMemo(
+    () =>
+      connectionState === "PairingRequired"
+        ? []
+        : [
+            {
+              availability,
+              icon: IconDeviceLaptop,
+              iconColor: "var(--primary)",
+              id: localEnvironment.id,
+              name: localEnvironment.name,
+              repositories: repositories.map((repository) => ({
+                environmentId: localEnvironment.id,
+                id: repository.id,
+                lastOpenedAt: repository.lastOpenedAt,
+                name: repository.name,
+                path: repository.path,
+              })),
+              status,
+            },
+          ],
+    [availability, connectionState, repositories, status],
+  );
 }

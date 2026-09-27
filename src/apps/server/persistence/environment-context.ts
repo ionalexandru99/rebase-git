@@ -3,22 +3,22 @@ import type { DatabaseSync } from "node:sqlite";
 import { eq } from "drizzle-orm";
 import { drizzle, type NodeSQLiteDatabase } from "drizzle-orm/node-sqlite";
 import { Effect, type Scope, Semaphore } from "effect";
-import { environmentTable } from "#server/persistence/environment-state.schema";
+import { environmentTable } from "#server/persistence/environment-state.schema.ts";
 import {
   closeEnvironmentDatabase,
   openEnvironmentDatabase,
-} from "#server/persistence/sqlite/database";
+} from "#server/persistence/sqlite/database.ts";
 import {
   type EnvironmentStorageError,
   serializedPromise,
   storagePromise,
   storageSync,
-} from "#server/persistence/sqlite/storage-operation";
+} from "#server/persistence/sqlite/storage-operation.ts";
 import {
   type EnvironmentPaths,
   prepareEnvironmentDirectories,
-} from "#server/persistence/storage/environment-paths";
-import { ensureServerSecret } from "#server/persistence/storage/server-secret";
+} from "#server/persistence/storage/environment-paths.ts";
+import { ensureServerSecret } from "#server/persistence/storage/server-secret.ts";
 
 export interface EnvironmentContext {
   readonly database: NodeSQLiteDatabase;

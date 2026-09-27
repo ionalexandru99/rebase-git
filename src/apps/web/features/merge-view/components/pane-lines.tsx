@@ -1,20 +1,20 @@
+import type { KeyboardEvent } from "react";
 import type {
   ConflictRegion,
   ConflictSide,
   TokenMark,
-} from "@rebase/contracts";
-import type { KeyboardEvent } from "react";
+} from "#contracts/repository-conflicts/repository-conflicts.contract.ts";
 import {
   type LinePick,
   type Picks,
   pickPosition,
   picksOf,
-} from "#web/features/merge-view/conflict-document";
+} from "#web/features/merge-view/conflict-document.ts";
 import type {
   LineSelection,
   LineTarget,
-} from "#web/features/merge-view/hooks/use-selection";
-import { cn } from "#web/lib/utils";
+} from "#web/features/merge-view/hooks/use-selection.ts";
+import { cn } from "#web/lib/utils.ts";
 
 export const sideNames: Record<ConflictSide, string> = {
   base: "Base",

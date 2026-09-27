@@ -1,6 +1,6 @@
-import type { RepositoryCommit } from "@rebase/contracts";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { useEffect, useRef } from "react";
+import type { RepositoryCommit } from "#contracts/repository-history/repository-history.contract.ts";
 
 export function HistorySearchResults({
   commits,

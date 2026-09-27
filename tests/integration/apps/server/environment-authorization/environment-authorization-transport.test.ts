@@ -1,21 +1,21 @@
 import { request } from "node:http";
+import { Effect } from "effect";
+import { describe, expect, it } from "vite-plus/test";
 import {
   EnvironmentAuthorizationApi,
   environmentBrowserSessionPath,
   environmentPairingExchangePath,
-  unauthorizedCloseCode,
-} from "@rebase/contracts";
-import { Effect } from "effect";
-import { describe, expect, it } from "vite-plus/test";
+} from "#contracts/environment-authorization/environment-authorization.contract.ts";
+import { unauthorizedCloseCode } from "#contracts/environment-connection/environment-rpc.contract.ts";
 import {
   exchangePairing,
   helloOverSocket,
   openTestServer,
-} from "#tests-support/server";
+} from "#tests-support/server.ts";
 import {
   EnvironmentAccessDenied,
   EnvironmentUnavailable,
-} from "#web/platform/environment/environment-connection";
+} from "#web/platform/environment/environment-connection.ts";
 
 describe("Environment authorization transport", () => {
   it("opens the socket with a browser session cookie only from the server origin", async () => {

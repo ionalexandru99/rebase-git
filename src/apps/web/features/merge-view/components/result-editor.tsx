@@ -1,15 +1,15 @@
-import type { ConflictSide } from "@rebase/contracts";
 import { type RefObject, useMemo } from "react";
-import { Button } from "#web/components/ui/button";
-import { sideColours } from "#web/features/merge-view/components/pane-lines";
+import type { ConflictSide } from "#contracts/repository-conflicts/repository-conflicts.contract.ts";
+import { Button } from "#web/components/ui/button.tsx";
+import { sideColours } from "#web/features/merge-view/components/pane-lines.tsx";
 import {
   isOpen,
   type MergeModel,
   type Picks,
   picksOf,
   segmentLines,
-} from "#web/features/merge-view/conflict-document";
-import { cn } from "#web/lib/utils";
+} from "#web/features/merge-view/conflict-document.ts";
+import { cn } from "#web/lib/utils.ts";
 
 const lineHeight = 20;
 const typedEdge = "bg-foreground/55";

@@ -1,17 +1,17 @@
+import { Effect } from "effect";
 import type {
   RepositoryHistoryFailure,
   RepositoryHistoryRefTarget,
   RepositoryHistoryTips,
-} from "@rebase/contracts";
-import { Effect } from "effect";
+} from "#contracts/repository-history/repository-history.contract.ts";
 import {
   type GitCommandRunner,
   type GitObjectFormat,
   isGitObjectId,
   runRepositoryGit,
-} from "#server/adapters/local-git/git-commands";
-import type { ObjectFormatRead } from "#server/features/repository-history/git/read-object-format";
-import { readShallowHistoryOids } from "#server/features/repository-history/git/shallow-repository-history";
+} from "#server/adapters/local-git/git-commands.ts";
+import type { ObjectFormatRead } from "#server/features/repository-history/git/read-object-format.ts";
+import { readShallowHistoryOids } from "#server/features/repository-history/git/shallow-repository-history.ts";
 
 const maximumRefsOutputBytes = 16 * 1_048_576;
 const maximumStashRootsBytes = 16 * 1_024;

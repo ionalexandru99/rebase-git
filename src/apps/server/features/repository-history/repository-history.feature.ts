@@ -1,26 +1,26 @@
+import { type Cause, Effect, Queue, Stream } from "effect";
 import type {
   RepositoryHistoryFailure,
   RepositoryHistoryRpc,
   RepositoryHistoryUpdate,
   SynchronizeRepositoryHistory,
-} from "@rebase/contracts";
-import { type Cause, Effect, Queue, Stream } from "effect";
+} from "#contracts/repository-history/repository-history.contract.ts";
 import type {
   EnvironmentFeature,
   EnvironmentRpcHandlersFor,
-} from "#server/adapters/environment-transport/environment-routes";
-import type { GitCommandRunner } from "#server/adapters/local-git/git-commands";
+} from "#server/adapters/environment-transport/environment-routes.ts";
+import type { GitCommandRunner } from "#server/adapters/local-git/git-commands.ts";
 import {
   findHistoryRepository,
   historyWireFailure,
-} from "#server/features/repository-history/git/history-failures";
-import { readHistoryTips } from "#server/features/repository-history/git/read-history-tips";
+} from "#server/features/repository-history/git/history-failures.ts";
+import { readHistoryTips } from "#server/features/repository-history/git/read-history-tips.ts";
 import {
   createObjectFormatCache,
   type ObjectFormatRead,
-} from "#server/features/repository-history/git/read-object-format";
-import { streamRepositoryHistory } from "#server/features/repository-history/git/stream-repository-history";
-import type { RepositoryAccess } from "#server/repository/repository-access";
+} from "#server/features/repository-history/git/read-object-format.ts";
+import { streamRepositoryHistory } from "#server/features/repository-history/git/stream-repository-history.ts";
+import type { RepositoryAccess } from "#server/repository/repository-access.ts";
 
 export function repositoryHistoryFeature(dependencies: {
   readonly access: RepositoryAccess;

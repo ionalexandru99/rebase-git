@@ -3,7 +3,7 @@ import { useMemo, useRef, useState } from "react";
 import {
   type ChangeTreeRow,
   changeTreeRows,
-} from "#web/features/file-diff/file-tree";
+} from "#web/features/file-diff/file-tree.ts";
 
 export function useFileRows<File extends { readonly path: string }>(
   files: readonly File[],

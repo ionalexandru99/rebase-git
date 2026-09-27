@@ -1,12 +1,12 @@
-import { repositoryCommand } from "@rebase/contracts/environment-connection/environment-route.contract";
+import { Schema } from "effect";
+import { repositoryCommand } from "#contracts/environment-connection/environment-route.contract.ts";
 import {
   ObjectId,
   RefName,
   RemoteName,
   RepositoryId,
   RepositoryPath,
-} from "@rebase/contracts/git/git-values.contract";
-import { Schema } from "effect";
+} from "#contracts/git/git-values.contract.ts";
 
 export const PushDestination = Schema.Struct({
   remote: RemoteName,

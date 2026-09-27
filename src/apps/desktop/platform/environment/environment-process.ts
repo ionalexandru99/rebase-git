@@ -1,10 +1,10 @@
 import { homedir } from "node:os";
-import { startEnvironmentServer } from "@rebase/server";
 import { Deferred, Effect } from "effect";
 import type {
   EnvironmentProcessCommand,
   EnvironmentProcessMessage,
-} from "#desktop/platform/environment/environment-supervisor";
+} from "#desktop/platform/environment/environment-supervisor.ts";
+import { startEnvironmentServer } from "#server/app/server/start-environment-server.ts";
 
 const acquireStopRequest = Effect.gen(function* () {
   const stop = yield* Deferred.make<void>();

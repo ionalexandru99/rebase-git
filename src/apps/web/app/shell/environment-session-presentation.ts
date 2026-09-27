@@ -1,5 +1,5 @@
-import type { LocalEnvironmentSessionState } from "#web/app/environment/local-environment-session";
-import type { EnvironmentStatus } from "#web/platform/query/environment-context";
+import type { LocalEnvironmentSessionState } from "#web/app/environment/local-environment-session.ts";
+import type { EnvironmentStatus } from "#web/platform/query/environment-context.tsx";
 
 export function environmentSessionPresentation(
   state: LocalEnvironmentSessionState,

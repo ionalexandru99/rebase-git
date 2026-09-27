@@ -1,17 +1,17 @@
 import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { Effect, Schema } from "effect";
 import {
   EnvironmentPairingExchanged,
   environmentPairingExchangePath,
-} from "@rebase/contracts";
-import { Effect, Schema } from "effect";
-import { createLocalGitCommandRunner } from "#server/adapters/local-git/git-commands";
+} from "#contracts/environment-authorization/environment-authorization.contract.ts";
+import { createLocalGitCommandRunner } from "#server/adapters/local-git/git-commands.ts";
 import {
   acquireEnvironment,
   serveEnvironment,
-} from "#server/app/server/serve-environment";
-import { removeTemporaryDirectory } from "#tests-support/temporary-directory";
+} from "#server/app/server/serve-environment.ts";
+import { removeTemporaryDirectory } from "#tests-support/temporary-directory.ts";
 
 const repositoryPath = process.argv[2];
 if (repositoryPath === undefined)

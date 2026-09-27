@@ -1,15 +1,15 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
-import { RepositoryConflictsApi } from "@rebase/contracts";
 import { Effect } from "effect";
 import { describe, expect, it } from "vite-plus/test";
+import { RepositoryConflictsApi } from "#contracts/repository-conflicts/repository-conflicts.contract.ts";
 import {
   createConflictedRebase,
   createDivergedRepository,
   git,
   startConflict,
-} from "#tests-support/git";
-import { openTestEnvironment } from "#tests-support/server";
+} from "#tests-support/git.ts";
+import { openTestEnvironment } from "#tests-support/server.ts";
 
 async function fixture(
   create: (parent: string) => Promise<string> = createConflictedRebase,

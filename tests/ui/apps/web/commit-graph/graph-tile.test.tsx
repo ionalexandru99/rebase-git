@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vite-plus/test";
-import { drawGraphTile } from "#web/features/commit-graph/layout/draw-graph-tile";
+import { drawGraphTile } from "#web/features/commit-graph/layout/graph-tile.ts";
 import {
   appendCommitLanes,
   createCommitLaneCheckpoint,
   graphLaneSeeds,
-} from "#web/features/repository-history/commit-lanes";
+} from "#web/features/repository-history/commit-lanes.ts";
 
 describe("graph tile endpoints", () => {
   it("joins incoming branches at the shared commit circle across tile boundaries", () => {

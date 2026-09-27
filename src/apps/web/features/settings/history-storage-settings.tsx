@@ -8,12 +8,12 @@ import {
   AlertDialogDescription,
   AlertDialogFooter,
   AlertDialogTitle,
-} from "#web/components/ui/alert-dialog";
-import { Button } from "#web/components/ui/button";
-import { RepositoryHistoryCacheList } from "#web/features/history-storage/components/repository-history-cache-list";
-import { forgetAllRepositoryRefs } from "#web/features/refs/repository-refs";
-import type { HistoryStorage } from "#web/features/repository-history/history-worker-protocol";
-import { openRepositoryHistory } from "#web/features/repository-history/repository-history";
+} from "#web/components/ui/alert-dialog.tsx";
+import { Button } from "#web/components/ui/button.tsx";
+import { RepositoryHistoryCacheList } from "#web/features/history-storage/components/repository-history-cache-list.tsx";
+import { forgetAllRepositoryRefs } from "#web/features/refs/repository-refs.ts";
+import type { HistoryStorage } from "#web/features/repository-history/history-worker-protocol.ts";
+import { openRepositoryHistory } from "#web/features/repository-history/repository-history.ts";
 
 export function HistoryStorageSettings() {
   const [diagnostics, setDiagnostics] = useState<HistoryStorage>();

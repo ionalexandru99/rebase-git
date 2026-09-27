@@ -1,27 +1,36 @@
-import {
-  type RepositoryChangeKind,
-  type RepositoryOperation,
-  RepositoryOperationsApi,
-} from "@rebase/contracts";
 import { describe, expect, it, vi } from "vite-plus/test";
 import { page, userEvent } from "vite-plus/test/browser";
-import { conflictedRebase, repositoryOperation } from "#tests-support/fixtures";
-import { repositoryScope } from "#tests-ui/apps/web/repository-scope/repository-scope-fixture";
+import type { RepositoryChangeKind } from "#contracts/environment-connection/environment-rpc.contract.ts";
+import {
+  type RepositoryOperation,
+  RepositoryOperationsApi,
+} from "#contracts/repository-operations/repository-operations.contract.ts";
 import {
   fakeRequests,
   rejected,
   respond,
-} from "#tests-ui/runtime/fake-requests";
-import { render, testChanges, testEnvironment } from "#tests-ui/runtime/render";
-import { ErrorNotification } from "#web/features/notifications/components/error-notification";
-import { PersistentNotification } from "#web/features/notifications/components/persistent-notification";
-import { NotificationsProvider } from "#web/features/notifications/notifications";
-import { OperationRecoveryNotice } from "#web/features/operation-recovery/components/operation-recovery-notice";
-import { OperationRecoveryToast } from "#web/features/operation-recovery/components/operation-recovery-toast";
-import type { OperationRecoveryState } from "#web/features/operation-recovery/hooks/use-operation-recovery";
-import { WorkspacePanel } from "#web/features/workspace-panel/workspace-panel";
-import { EnvironmentProvider } from "#web/platform/query/environment-context";
-import { RepositoryScopeProvider } from "#web/platform/query/repository-scope";
+} from "#tests-support/fake-requests.ts";
+import {
+  conflictedRebase,
+  repositoryOperation,
+  repositoryScope,
+} from "#tests-support/fixtures.ts";
+import {
+  render,
+  testChanges,
+  testEnvironment,
+} from "#tests-support/render.tsx";
+import { ErrorNotification } from "#web/features/notifications/components/error-notification.tsx";
+import { PersistentNotification } from "#web/features/notifications/components/persistent-notification.tsx";
+import { NotificationsProvider } from "#web/features/notifications/notifications.tsx";
+import {
+  OperationRecoveryNotice,
+  OperationRecoveryToast,
+} from "#web/features/operation-recovery/components/operation-recovery-toast.tsx";
+import type { OperationRecoveryState } from "#web/features/operation-recovery/hooks/use-operation-recovery.ts";
+import { WorkspacePanel } from "#web/features/workspace-panel/workspace-panel.tsx";
+import { EnvironmentProvider } from "#web/platform/query/environment-context.tsx";
+import { RepositoryScopeProvider } from "#web/platform/query/repository-scope.tsx";
 
 function snapshot(value = conflictedRebase()): OperationRecoveryState {
   return {

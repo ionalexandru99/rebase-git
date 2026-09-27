@@ -1,17 +1,20 @@
 import { mkdir, mkdtemp, realpath } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { RepositoryBranchesApi } from "@rebase/contracts";
 import { Effect } from "effect";
 import { describe, expect, it, onTestFinished } from "vite-plus/test";
+import { RepositoryBranchesApi } from "#contracts/repository-refs/repository-branches.contract.ts";
 import {
   cloneRepository,
   createRepository,
   fastImport,
   git,
-} from "#tests-support/git";
-import { openTestEnvironment, type RoutesClient } from "#tests-support/server";
-import { removeTemporaryDirectory } from "#tests-support/temporary-directory";
+} from "#tests-support/git.ts";
+import {
+  openTestEnvironment,
+  type RoutesClient,
+} from "#tests-support/server.ts";
+import { removeTemporaryDirectory } from "#tests-support/temporary-directory.ts";
 
 describe("repository branches", () => {
   it("creates a branch at a commit and tracks a remote branch", async () => {

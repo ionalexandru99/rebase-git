@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vite-plus/test";
-import { resolveHostAddress } from "#server/app/server/host-address";
+import { resolveHostAddress } from "#server/app/server/host-address.ts";
 
 const interfaces = {
   eth0: [

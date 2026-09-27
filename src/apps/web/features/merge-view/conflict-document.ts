@@ -2,7 +2,7 @@ import type {
   ConflictDocument,
   ConflictRegion,
   ConflictSide,
-} from "@rebase/contracts";
+} from "#contracts/repository-conflicts/repository-conflicts.contract.ts";
 
 export interface LinePick {
   readonly side: ConflictSide;

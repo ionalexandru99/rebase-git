@@ -3,7 +3,7 @@ import type {
   RemoteBranch,
   RemoteDefaultBranch,
   RepositoryTag,
-} from "@rebase/contracts";
+} from "#contracts/repository-refs/repository-refs.contract.ts";
 
 export const forEachRefFormat = [
   "%(refname)",

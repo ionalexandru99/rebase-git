@@ -1,24 +1,24 @@
 import type {
   RepositoryCommit,
   RepositoryHistoryRefTarget,
-} from "@rebase/contracts";
+} from "#contracts/repository-history/repository-history.contract.ts";
 import {
   openRepository,
   storeCommits,
   updateRepository,
-} from "#web/features/repository-history/history-database";
-import { HistoryGraph } from "#web/features/repository-history/history-graph";
+} from "#web/features/repository-history/history-database.ts";
+import { HistoryGraph } from "#web/features/repository-history/history-graph.ts";
 import {
   findInHistory,
   type HistoryScopeQuery,
   HistoryView,
-} from "#web/features/repository-history/history-view";
+} from "#web/features/repository-history/history-view.ts";
 import type {
   HistoryAnswers,
   HistoryQuery,
   HistorySnapshot,
-} from "#web/features/repository-history/history-worker-protocol";
-import type { RepositoryHistory } from "#web/features/repository-history/repository-history";
+} from "#web/features/repository-history/history-worker-protocol.ts";
+import type { RepositoryHistory } from "#web/features/repository-history/repository-history.ts";
 
 export function historyOid(index: number) {
   return index.toString(16).padStart(40, "0");

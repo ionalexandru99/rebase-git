@@ -1,4 +1,4 @@
-import type { RepositoryChangeKind } from "@rebase/contracts";
+import type { RepositoryChangeKind } from "#contracts/environment-connection/environment-rpc.contract.ts";
 
 type EnvironmentChangeSubscriber = (
   sequence: number,

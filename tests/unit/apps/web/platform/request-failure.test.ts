@@ -1,13 +1,11 @@
-import type {
-  RefMissing,
-  RepositoryRejected,
-  TagRejected,
-} from "@rebase/contracts";
 import { describe, expect, it } from "vite-plus/test";
+import type { RepositoryRejected } from "#contracts/git/git-failures.contract.ts";
+import type { RefMissing } from "#contracts/repository-refs/repository-refs.contract.ts";
+import type { TagRejected } from "#contracts/repository-refs/repository-tags.contract.ts";
 import {
   describeFailure,
   type RequestFailure,
-} from "#web/platform/query/request-failure";
+} from "#web/platform/query/request-failure.ts";
 
 type TagFailure = RequestFailure<TagRejected | RefMissing | RepositoryRejected>;
 

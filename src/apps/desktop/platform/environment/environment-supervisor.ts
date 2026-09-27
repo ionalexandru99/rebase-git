@@ -1,6 +1,6 @@
 import { fileURLToPath } from "node:url";
-import type { EnvironmentServer } from "@rebase/server";
 import { type UtilityProcess, utilityProcess } from "electron";
+import type { EnvironmentServer } from "#server/app/server/start-environment-server.ts";
 
 export type EnvironmentProcessMessage =
   | { readonly type: "ready"; readonly server: EnvironmentServer }

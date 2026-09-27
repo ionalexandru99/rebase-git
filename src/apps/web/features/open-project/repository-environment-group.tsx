@@ -4,12 +4,12 @@ import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
-} from "#web/components/ui/collapsible";
+} from "#web/components/ui/collapsible.tsx";
 import type {
   OpenProjectEnvironment,
   OpenProjectRepository,
-} from "#web/features/open-project/open-project-model";
-import { RepositoryRow } from "#web/features/open-project/repository-row";
+} from "#web/features/open-project/open-project-model.ts";
+import { RepositoryRow } from "#web/features/open-project/repository-row.tsx";
 
 export function RepositoryEnvironmentGroup({
   activeKey,

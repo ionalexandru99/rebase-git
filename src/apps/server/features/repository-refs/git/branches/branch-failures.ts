@@ -1,12 +1,12 @@
 import {
-  type RepositoryBranchesOperationFailure,
   type RepositoryRejected,
   repositoryRejected,
-} from "@rebase/contracts";
+} from "#contracts/git/git-failures.contract.ts";
+import type { RepositoryBranchesOperationFailure } from "#contracts/repository-refs/repository-branches.contract.ts";
 import {
   type GitFailed,
   isGitRejection,
-} from "#server/adapters/local-git/git-commands";
+} from "#server/adapters/local-git/git-commands.ts";
 
 export function branchWriteFailed(
   error: GitFailed,

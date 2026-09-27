@@ -2,7 +2,7 @@ import { expect, it } from "vite-plus/test";
 import {
   commitMessage,
   draftFromMessage,
-} from "#web/features/working-changes/draft/commit-draft";
+} from "#web/features/working-changes/hooks/use-commit-draft.ts";
 
 it("joins the subject and description with one blank line and drops an empty body", () => {
   expect(

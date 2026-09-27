@@ -3,7 +3,7 @@ import type {
   DesktopUpdateSnapshot,
   DesktopUpdateStatus,
   ReleaseChannel,
-} from "@rebase/contracts";
+} from "#contracts/desktop-updates/desktop-updates.contract.ts";
 
 export type DesktopUpdaterEvent =
   | "checking-for-update"

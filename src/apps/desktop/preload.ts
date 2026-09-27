@@ -1,13 +1,15 @@
+import { contextBridge, ipcRenderer } from "electron";
+import type { DesktopHostBridge } from "#contracts/desktop-host/desktop-host.contract.ts";
 import type {
-  DesktopHostBridge,
   DesktopUpdateSnapshot,
   DesktopUpdates,
   ReleaseChannel,
-} from "@rebase/contracts";
-import { contextBridge, ipcRenderer } from "electron";
-import { desktopApplicationIpc } from "#desktop/app/desktop-application-ipc.contract";
-import { applicationUpdaterIpc } from "#desktop/features/application-updates/application-updater-ipc.contract";
-import { repositoryFilesystemIpc } from "#desktop/features/repository-filesystem/repository-filesystem-ipc.contract";
+} from "#contracts/desktop-updates/desktop-updates.contract.ts";
+import {
+  applicationUpdaterIpc,
+  desktopApplicationIpc,
+  repositoryFilesystemIpc,
+} from "#desktop/ipc-channels.ts";
 
 const host = Object.freeze({
   environmentOrigin: readRequiredArgument("--rebase-environment-origin="),

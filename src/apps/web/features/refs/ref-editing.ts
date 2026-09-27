@@ -1,24 +1,26 @@
+import { useCallback, useRef, useState } from "react";
 import {
   type BranchNotMerged,
   type BranchUpstreamTarget,
-  type LocalBranch,
-  type RemoteBranch,
   RepositoryBranchesApi,
-  type RepositoryRefs,
-  RepositoryTagsApi,
-} from "@rebase/contracts";
-import { useCallback, useRef, useState } from "react";
+} from "#contracts/repository-refs/repository-branches.contract.ts";
+import type {
+  LocalBranch,
+  RemoteBranch,
+  RepositoryRefs,
+} from "#contracts/repository-refs/repository-refs.contract.ts";
+import { RepositoryTagsApi } from "#contracts/repository-refs/repository-tags.contract.ts";
 import {
   describeRefFailure,
   type RefKind,
   type RefRoute,
   type StartPoint,
-} from "#web/features/refs/ref-kinds";
-import { rejection } from "#web/platform/query/request-failure";
+} from "#web/features/refs/ref-kinds.ts";
+import { rejection } from "#web/platform/query/request-failure.ts";
 import {
   type CommandFailure,
   useCommand,
-} from "#web/platform/query/use-command";
+} from "#web/platform/query/use-command.ts";
 
 type RefEdit =
   | {

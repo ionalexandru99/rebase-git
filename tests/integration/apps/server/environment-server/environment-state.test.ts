@@ -10,14 +10,14 @@ import { afterEach, describe, expect, it } from "vite-plus/test";
 import {
   acquireEnvironmentContext,
   type EnvironmentContext,
-} from "#server/persistence/environment-context";
+} from "#server/persistence/environment-context.ts";
 import {
   authorizationMetadataTable,
   environmentTable,
   repositoryCatalogTable,
-} from "#server/persistence/environment-state.schema";
-import { environmentPaths } from "#server/persistence/storage/environment-paths";
-import { removeTemporaryDirectory } from "#tests-support/temporary-directory";
+} from "#server/persistence/environment-state.schema.ts";
+import { environmentPaths } from "#server/persistence/storage/environment-paths.ts";
+import { removeTemporaryDirectory } from "#tests-support/temporary-directory.ts";
 
 const directories = new Set<string>();
 const generatedMigrations = readMigrationFiles({

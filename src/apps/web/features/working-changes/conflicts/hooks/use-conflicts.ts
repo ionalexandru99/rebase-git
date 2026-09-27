@@ -1,28 +1,30 @@
+import { skipToken } from "@tanstack/react-query";
+import { useMemo, useState } from "react";
+import type { RepositoryRejected } from "#contracts/git/git-failures.contract.ts";
+import type {
+  ChangedFile,
+  RepositoryChanges,
+} from "#contracts/repository-changes/repository-changes.contract.ts";
 import {
-  type ChangedFile,
   type ConflictFailure,
   type ConflictFile,
   type ConflictList,
   type ConflictPath,
   type ConflictScope,
-  type RepositoryChanges,
   RepositoryConflictsApi,
-  type RepositoryRejected,
   type WholeFileChoice,
-} from "@rebase/contracts";
-import { skipToken } from "@tanstack/react-query";
-import { useMemo, useState } from "react";
-import { useEnvironmentQuery } from "#web/platform/query/environment-query";
+} from "#contracts/repository-conflicts/repository-conflicts.contract.ts";
+import { useEnvironmentQuery } from "#web/platform/query/environment-query.ts";
 import {
   describeFailure,
   type RequestFailure,
   rejection,
-} from "#web/platform/query/request-failure";
+} from "#web/platform/query/request-failure.ts";
 import {
   answer,
   type CommandResult,
   useCommand,
-} from "#web/platform/query/use-command";
+} from "#web/platform/query/use-command.ts";
 
 type ConflictRequestFailure = RequestFailure<
   ConflictFailure | RepositoryRejected

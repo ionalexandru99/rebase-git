@@ -1,7 +1,7 @@
 import { resolve } from "node:path";
 import { expect, test } from "@playwright/test";
 import { createServer } from "vite";
-import { assertTimingBudget } from "#tests-performance/timing-budget";
+import { assertTimingBudget } from "#tests-performance/timing-budget.ts";
 
 test("quota cleanup and cache rebuild keep graph interaction within its timing budget", async ({
   page,

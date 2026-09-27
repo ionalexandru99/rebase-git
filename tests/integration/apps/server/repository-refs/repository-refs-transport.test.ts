@@ -1,10 +1,11 @@
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { RepositoryCatalogApi, RepositoryRefsApi } from "@rebase/contracts";
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
-import { createRepository, git } from "#tests-support/git";
-import { openTestServer } from "#tests-support/server";
-import { createBrowserLocalEnvironmentSession } from "#web/app/environment/browser-local-environment-session";
+import { RepositoryCatalogApi } from "#contracts/repository-catalog/repository-catalog.contract.ts";
+import { RepositoryRefsApi } from "#contracts/repository-refs/repository-refs.contract.ts";
+import { createRepository, git } from "#tests-support/git.ts";
+import { openTestServer } from "#tests-support/server.ts";
+import { createBrowserLocalEnvironmentSession } from "#web/app/environment/browser-local-environment-session.ts";
 
 afterEach(() => {
   vi.unstubAllGlobals();

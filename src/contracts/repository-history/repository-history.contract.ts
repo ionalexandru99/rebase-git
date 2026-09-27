@@ -1,9 +1,6 @@
-import {
-  ObjectId,
-  RepositoryId,
-} from "@rebase/contracts/git/git-values.contract";
 import { Schema } from "effect";
 import { Rpc, RpcGroup } from "effect/unstable/rpc";
+import { ObjectId, RepositoryId } from "#contracts/git/git-values.contract.ts";
 
 const HistoryTips = Schema.Array(ObjectId).check(Schema.isMaxLength(40_512));
 const ObjectFormat = Schema.Literals(["sha1", "sha256"]);

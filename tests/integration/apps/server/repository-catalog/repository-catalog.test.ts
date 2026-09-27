@@ -6,13 +6,13 @@ import { describe, expect, it, onTestFinished } from "vite-plus/test";
 import {
   type GitCommandRunner,
   gitFailed,
-} from "#server/adapters/local-git/git-commands";
-import { createRepositoryCatalog } from "#server/features/repository-catalog/repository-catalog";
-import type { EnvironmentContext } from "#server/persistence/environment-context";
-import { repositoryCatalogTable } from "#server/persistence/environment-state.schema";
-import { createRepository, git } from "#tests-support/git";
-import { openTestEnvironment } from "#tests-support/server";
-import { removeTemporaryDirectory } from "#tests-support/temporary-directory";
+} from "#server/adapters/local-git/git-commands.ts";
+import { createRepositoryCatalog } from "#server/features/repository-catalog/repository-catalog.ts";
+import type { EnvironmentContext } from "#server/persistence/environment-context.ts";
+import { repositoryCatalogTable } from "#server/persistence/environment-state.schema.ts";
+import { createRepository, git } from "#tests-support/git.ts";
+import { openTestEnvironment } from "#tests-support/server.ts";
+import { removeTemporaryDirectory } from "#tests-support/temporary-directory.ts";
 
 describe("repository catalog", () => {
   it("reports unavailable Git without remembering the path", async () => {

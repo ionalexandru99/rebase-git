@@ -1,26 +1,27 @@
-import type {
-  EnvironmentRoute,
-  RouteFailure,
-  RouteInput,
-  RouteSuccess,
-} from "@rebase/contracts";
 import {
+  focusManager,
   hashKey,
   keepPreviousData,
   type Query,
-  type QueryClient,
+  QueryClient,
   type SkipToken,
   skipToken,
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
 import { useEffect } from "react";
-import { useEnvironment } from "#web/platform/query/environment-context";
-import type { EnvironmentChangeScope } from "#web/platform/query/environment-query-meta";
+import type {
+  EnvironmentRoute,
+  RouteFailure,
+  RouteInput,
+  RouteSuccess,
+} from "#contracts/environment-connection/environment-route.contract.ts";
+import { useEnvironment } from "#web/platform/query/environment-context.tsx";
+import type { EnvironmentChangeScope } from "#web/platform/query/environment-query-meta.ts";
 import {
   type RequestFailure,
   requestFailure,
-} from "#web/platform/query/request-failure";
+} from "#web/platform/query/request-failure.ts";
 
 export type QueryFailure<Route extends EnvironmentRoute> = RequestFailure<
   RouteFailure<Route>
@@ -132,4 +133,32 @@ export function inputRepositoryId(input: unknown) {
     typeof input.repositoryId === "string"
     ? input.repositoryId
     : null;
+}
+
+export function createEnvironmentQueryClient() {
+  focusManager.setEventListener(listenForWindowFocus);
+  return new QueryClient({
+    defaultOptions: {
+      queries: {
+        networkMode: "always",
+        staleTime: Number.POSITIVE_INFINITY,
+        retry: false,
+        refetchOnReconnect: false,
+      },
+      mutations: {
+        networkMode: "always",
+      },
+    },
+  });
+}
+
+function listenForWindowFocus(onFocus: () => void) {
+  if (typeof window === "undefined") return undefined;
+  const listener = () => onFocus();
+  window.addEventListener("visibilitychange", listener);
+  window.addEventListener("focus", listener);
+  return () => {
+    window.removeEventListener("visibilitychange", listener);
+    window.removeEventListener("focus", listener);
+  };
 }

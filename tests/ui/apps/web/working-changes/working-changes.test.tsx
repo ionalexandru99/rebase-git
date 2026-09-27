@@ -1,28 +1,28 @@
+import { afterEach, describe, expect, it, vi } from "vite-plus/test";
+import { page } from "vite-plus/test/browser";
 import {
-  type ChangeDiff,
   type CommitChanges,
   changesFailed,
   type MutateChanges,
   type RepositoryChanges,
   RepositoryChangesApi,
-} from "@rebase/contracts";
-import { afterEach, describe, expect, it, vi } from "vite-plus/test";
-import { page } from "vite-plus/test/browser";
-import {
-  changeDiff,
-  changedFile,
-  repositoryChanges,
-} from "#tests-support/fixtures";
+} from "#contracts/repository-changes/repository-changes.contract.ts";
+import type { ChangeDiff } from "#contracts/repository-comparison/repository-comparison.contract.ts";
 import {
   fakeRequests,
   rejected,
   respond,
   unanswered,
-} from "#tests-ui/runtime/fake-requests";
-import { render, testChanges } from "#tests-ui/runtime/render";
-import { defaultDiffPreferences } from "#web/domain/file-diff/diff-preferences.contract";
-import { WorkingChanges } from "#web/features/working-changes/working-changes";
-import { saveDiffPreferences } from "#web/persistence/working-changes/working-changes-store";
+} from "#tests-support/fake-requests.ts";
+import {
+  changeDiff,
+  changedFile,
+  repositoryChanges,
+} from "#tests-support/fixtures.ts";
+import { render, testChanges } from "#tests-support/render.tsx";
+import { defaultDiffPreferences } from "#web/domain/file-diff/diff-preferences.contract.ts";
+import { WorkingChanges } from "#web/features/working-changes/working-changes.tsx";
+import { saveDiffPreferences } from "#web/persistence/working-changes/working-changes-store.ts";
 
 const path = "src/read-status.ts";
 const before = 'export const status = "old";\n';

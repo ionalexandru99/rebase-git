@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vite-plus/test";
-import { repositoryRefs, upstream } from "#tests-support/fixtures";
-import { resolvePushTarget } from "#web/features/remote-sync/push-target";
+import { repositoryRefs, upstream } from "#tests-support/fixtures.ts";
+import { resolvePushTarget } from "#web/features/remote-sync/push-target.ts";
 
 const remoteTip = "b".repeat(40);
 

@@ -1,24 +1,24 @@
+import { Effect } from "effect";
 import type {
   ConflictFailure,
   ConflictFile,
   ConflictKind,
   ConflictSide,
   WholeFileChoice,
-} from "@rebase/contracts";
-import { Effect } from "effect";
+} from "#contracts/repository-conflicts/repository-conflicts.contract.ts";
 import {
   type GitCommandRunner,
   runRepositoryGit,
-} from "#server/adapters/local-git/git-commands";
-import { worktreeFile } from "#server/features/repository-changes/git/change-files";
-import { markerBlocks } from "#server/features/repository-conflicts/conflict-regions";
-import { binary } from "#server/repository/comparison/build-change-diff";
-import { fingerprint } from "#server/repository/comparison/fingerprint";
+} from "#server/adapters/local-git/git-commands.ts";
+import { worktreeFile } from "#server/features/repository-changes/git/change-files.ts";
+import { markerBlocks } from "#server/features/repository-conflicts/conflict-regions.ts";
+import { binary } from "#server/repository/comparison/build-change-diff.ts";
+import { fingerprint } from "#server/repository/comparison/fingerprint.ts";
 import {
   type GitBlob,
   readBlobs,
-} from "#server/repository/comparison/read-blobs";
-import type { RepositoryFileContent } from "#server/repository/comparison/read-object-file";
+} from "#server/repository/comparison/read-blobs.ts";
+import type { RepositoryFileContent } from "#server/repository/comparison/read-object-file.ts";
 
 export interface StageEntry {
   readonly side: ConflictSide;

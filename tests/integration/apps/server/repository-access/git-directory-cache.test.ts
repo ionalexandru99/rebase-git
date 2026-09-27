@@ -3,12 +3,12 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Effect, Stream } from "effect";
 import { afterEach, beforeEach, expect, it } from "vite-plus/test";
-import type { GitCommandRunner } from "#server/adapters/local-git/git-commands";
+import type { GitCommandRunner } from "#server/adapters/local-git/git-commands.ts";
 import {
   createRepositoryCoordination,
   type RepositoryWritePolicy,
-} from "#server/repository/repository-coordination";
-import { removeTemporaryDirectory } from "#tests-support/temporary-directory";
+} from "#server/repository/repository-coordination.ts";
+import { removeTemporaryDirectory } from "#tests-support/temporary-directory.ts";
 
 const recoverPolicy: RepositoryWritePolicy = {
   name: "recover",

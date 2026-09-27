@@ -24,12 +24,12 @@ test("the history view for the first 1,600 rows of 256 active lanes stays below 
       const graphPath = "/features/repository-history/history-graph.ts";
       const {
         HistoryGraph,
-      }: typeof import("#web/features/repository-history/history-graph") =
+      }: typeof import("#web/features/repository-history/history-graph.ts") =
         await import(graphPath);
       const viewPath = "/features/repository-history/history-view.ts";
       const {
         HistoryView,
-      }: typeof import("#web/features/repository-history/history-view") =
+      }: typeof import("#web/features/repository-history/history-view.ts") =
         await import(viewPath);
       const branches = 256;
       const totalCommits = branches * 16 + 2;

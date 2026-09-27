@@ -1,5 +1,5 @@
 import { expect, it, onTestFinished } from "vite-plus/test";
-import { openRepositoryHistory } from "#web/features/repository-history/repository-history";
+import { openRepositoryHistory } from "#web/features/repository-history/repository-history.ts";
 
 it("releases the history of a tab that closes without closing its history", async () => {
   const observer = openRepositoryHistory();

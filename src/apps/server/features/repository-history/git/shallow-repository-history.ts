@@ -1,15 +1,15 @@
 import { open } from "node:fs/promises";
+import { Effect } from "effect";
 import type {
   RepositoryCommit,
   RepositoryHistoryFailure,
-} from "@rebase/contracts";
-import { Effect } from "effect";
+} from "#contracts/repository-history/repository-history.contract.ts";
 import {
   type GitCommandRunner,
   isGitObjectId,
   runRepositoryGit,
-} from "#server/adapters/local-git/git-commands";
-import { historyFailed } from "#server/features/repository-history/git/history-failures";
+} from "#server/adapters/local-git/git-commands.ts";
+import { historyFailed } from "#server/features/repository-history/git/history-failures.ts";
 
 const maximumShallowBytes = 4 * 1_048_576;
 const maximumShallowOutputBytes = 8 * 1_048_576;

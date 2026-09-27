@@ -1,5 +1,9 @@
 import type { IncomingMessage, Server } from "node:http";
 import type { Duplex } from "node:stream";
+import { Deferred, Effect, Fiber, Layer, Queue, Stream } from "effect";
+import { RpcSerialization, RpcServer } from "effect/unstable/rpc";
+import { Socket, SocketServer } from "effect/unstable/socket";
+import { type WebSocket, WebSocketServer } from "ws";
 import {
   type EnvironmentChanged,
   EnvironmentRpc,
@@ -9,24 +13,20 @@ import {
   environmentSubprotocol,
   type ProtocolMismatch,
   unauthorizedCloseCode,
-} from "@rebase/contracts";
-import { Deferred, Effect, Fiber, Layer, Queue, Stream } from "effect";
-import { RpcSerialization, RpcServer } from "effect/unstable/rpc";
-import { Socket, SocketServer } from "effect/unstable/socket";
-import { type WebSocket, WebSocketServer } from "ws";
-import type { EnvironmentEventPublisher } from "#server/adapters/environment-transport/environment-event-publisher";
-import type { RunEnvironmentEffect } from "#server/adapters/environment-transport/environment-http-handler";
+} from "#contracts/environment-connection/environment-rpc.contract.ts";
+import type { EnvironmentEventPublisher } from "#server/adapters/environment-transport/environment-event-publisher.ts";
+import type { RunEnvironmentEffect } from "#server/adapters/environment-transport/environment-http-handler.ts";
 import {
   expectedRequestOrigin,
   readSocketCredential,
   validateRequestHost,
   validateRequestOrigin,
-} from "#server/adapters/environment-transport/environment-request-authorization";
+} from "#server/adapters/environment-transport/environment-request-authorization.ts";
 import type {
   EnvironmentFeatures,
   RouteContext,
-} from "#server/adapters/environment-transport/environment-routes";
-import type { EnvironmentAuthorization } from "#server/features/environment-authorization/environment-authorization";
+} from "#server/adapters/environment-transport/environment-routes.ts";
+import type { EnvironmentAuthorization } from "#server/features/environment-authorization/environment-authorization.ts";
 
 export interface EnvironmentSocketOptions {
   readonly authorization: EnvironmentAuthorization;

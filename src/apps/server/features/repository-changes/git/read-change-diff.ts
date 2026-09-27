@@ -1,24 +1,24 @@
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { ReadChangeDiff } from "@rebase/contracts";
 import { Effect } from "effect";
+import type { ReadChangeDiff } from "#contracts/repository-changes/repository-changes.contract.ts";
 import {
   type GitCommandOptions,
   type GitCommandRunner,
   runRepositoryGit,
-} from "#server/adapters/local-git/git-commands";
-import { changeIo } from "#server/features/repository-changes/git/change-failures";
+} from "#server/adapters/local-git/git-commands.ts";
+import { changeIo } from "#server/features/repository-changes/git/change-failures.ts";
 import {
   safeChangePath,
   worktreeFile,
-} from "#server/features/repository-changes/git/change-files";
+} from "#server/features/repository-changes/git/change-files.ts";
 import {
   binary,
   buildChangeDiff,
-} from "#server/repository/comparison/build-change-diff";
-import { previewByteLimit } from "#server/repository/comparison/read-blobs";
-import { objectFile } from "#server/repository/comparison/read-object-file";
+} from "#server/repository/comparison/build-change-diff.ts";
+import { previewByteLimit } from "#server/repository/comparison/read-blobs.ts";
+import { objectFile } from "#server/repository/comparison/read-object-file.ts";
 
 export function readChangeDiff(
   git: GitCommandRunner,

@@ -1,6 +1,9 @@
-import { environmentProtocol, unauthorizedCloseCode } from "@rebase/contracts";
 import { describe, expect, it } from "vite-plus/test";
-import { helloOverSocket, openTestServer } from "#tests-support/server";
+import {
+  environmentProtocol,
+  unauthorizedCloseCode,
+} from "#contracts/environment-connection/environment-rpc.contract.ts";
+import { helloOverSocket, openTestServer } from "#tests-support/server.ts";
 
 describe("Environment socket", () => {
   it("closes a socket that arrives with an unpaired credential before serving it", async () => {

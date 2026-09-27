@@ -3,8 +3,8 @@ import type {
   ProjectNavigationRepository,
   ProjectNavigationRepositoryItem,
   ProjectNavigationState,
-} from "#web/features/project-navigation/project-navigation";
-import type { EnvironmentAvailability } from "#web/platform/query/environment-context";
+} from "#web/features/project-navigation/project-navigation.ts";
+import type { EnvironmentAvailability } from "#web/platform/query/environment-context.tsx";
 
 export function environmentRepositories(
   environment: ProjectNavigationEnvironment,

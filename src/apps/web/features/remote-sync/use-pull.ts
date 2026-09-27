@@ -1,13 +1,13 @@
-import { RepositoryPullApi } from "@rebase/contracts";
 import { skipToken } from "@tanstack/react-query";
 import { useCallback, useState } from "react";
-import { useEnvironmentQuery } from "#web/platform/query/environment-query";
-import { useRepositoryScope } from "#web/platform/query/repository-scope";
-import { describeFailure } from "#web/platform/query/request-failure";
+import { RepositoryPullApi } from "#contracts/repository-pull/repository-pull.contract.ts";
+import { useEnvironmentQuery } from "#web/platform/query/environment-query.ts";
+import { useRepositoryScope } from "#web/platform/query/repository-scope.tsx";
+import { describeFailure } from "#web/platform/query/request-failure.ts";
 import {
   type CommandFailure,
   useCommand,
-} from "#web/platform/query/use-command";
+} from "#web/platform/query/use-command.ts";
 
 export function useFetch() {
   const scope = useRepositoryScope();

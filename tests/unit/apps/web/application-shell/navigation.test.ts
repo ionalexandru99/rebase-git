@@ -2,7 +2,7 @@ import { describe, expect, it } from "vite-plus/test";
 import {
   initialNavigation,
   reduceNavigation,
-} from "#web/app/shell/use-navigation";
+} from "#web/app/shell/use-navigation.ts";
 
 const repository = { id: "payments", name: "payments" };
 

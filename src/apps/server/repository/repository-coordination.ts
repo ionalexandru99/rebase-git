@@ -1,20 +1,20 @@
 import { realpath } from "node:fs/promises";
+import { Effect, Option, Semaphore } from "effect";
 import {
-  type RepositoryOperation,
   type RepositoryRejected,
   repositoryRejected,
-} from "@rebase/contracts";
-import { Effect, Option, Semaphore } from "effect";
+} from "#contracts/git/git-failures.contract.ts";
+import type { RepositoryOperation } from "#contracts/repository-operations/repository-operations.contract.ts";
 import {
   type GitCommandRunner,
   readGitCommonDirectory,
   readGitEntryIdentity,
   runRepositoryGit,
-} from "#server/adapters/local-git/git-commands";
+} from "#server/adapters/local-git/git-commands.ts";
 import {
   type GitDirectories,
   readRepositoryOperation,
-} from "#server/repository/repository-operation";
+} from "#server/repository/repository-operation.ts";
 
 type RepositoryLockAcquisition = "wait" | "ifAvailable";
 
