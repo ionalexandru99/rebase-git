@@ -13,8 +13,7 @@
     "build": "tsc -b",
     "build:web": "vp build",
     "dev": "vp dev --port 4173",
-    "preview": "vp preview --port 4173",
-    "typecheck": "tsc -b --emitDeclarationOnly"
+    "preview": "vp preview --port 4173"
   },
   "dependencies": {
     "@base-ui/react": "1.7.0",

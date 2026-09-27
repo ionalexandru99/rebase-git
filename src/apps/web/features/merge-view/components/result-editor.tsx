@@ -74,7 +74,6 @@ export function ResultEditor({
               block.edges === null && (
                 <div
                   key={block.regionId}
-                  data-open-block
                   aria-hidden="true"
                   className="absolute inset-x-0 bg-[repeating-linear-gradient(135deg,rgb(255_255_255/4%)_0_5px,transparent_5px_12px)] shadow-[inset_0_0_0_1px_rgb(255_255_255/5%)]"
                   style={blockPosition(block)}

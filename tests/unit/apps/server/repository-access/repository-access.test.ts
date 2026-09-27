@@ -2,6 +2,7 @@ import { Effect, Stream } from "effect";
 import { describe, expect, it } from "vite-plus/test";
 import type { GitCommandRunner } from "#server/adapters/local-git/git-commands";
 import { createRepositoryAccess } from "#server/repository/repository-access";
+import { catalogEntry } from "#tests-support/fixtures";
 
 const repositoryId = "00000000-0000-4000-8000-000000000001";
 const repositoryPath = "/missing/rebase/repository";
@@ -83,14 +84,7 @@ function fakeRepository(initialWorktrees: readonly string[]) {
   };
   const access = createRepositoryAccess(
     {
-      find: (id) =>
-        Effect.succeed({
-          id,
-          name: "repository",
-          path: repositoryPath,
-          addedAt: "",
-          lastOpenedAt: "",
-        }),
+      find: (id) => Effect.succeed(catalogEntry({ id, path: repositoryPath })),
     },
     git,
     {

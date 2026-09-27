@@ -2,11 +2,16 @@ import {
   type PushBranch,
   type PushRejected,
   RepositoryPushApi,
-  type RepositoryRefs,
   RepositoryRefsApi,
 } from "@rebase/contracts";
 import { describe, expect, it, vi } from "vite-plus/test";
 import { page } from "vite-plus/test/browser";
+import {
+  commitId,
+  repositoryId,
+  repositoryRefs,
+  worktree,
+} from "#tests-support/fixtures";
 import { repositoryScope } from "#tests-ui/apps/web/repository-scope/repository-scope-fixture";
 import {
   fakeRequests,
@@ -210,10 +215,17 @@ describe("repository push", () => {
 
   it("keeps a running push when the graph toolbar closes", async () => {
     const aborted = vi.fn();
-    const repositoryId = "00000000-0000-4000-8000-000000000001";
     const requests = fakeRequests(
       idleOperation,
-      respond(RepositoryRefsApi.read, async () => spikeRefs(repositoryId)),
+      respond(RepositoryRefsApi.read, async () =>
+        repositoryRefs({
+          branches: [
+            { name: "spike", target: commitId, worktreePath: "/repo" },
+          ],
+          remoteProviders: [{ remote: "origin", provider: "git" }],
+          worktrees: [worktree("/repo", "spike")],
+        }),
+      ),
       respond(RepositoryPushApi.push, (command, { signal }) =>
         pendingPush(aborted)(command, signal),
       ),
@@ -256,18 +268,3 @@ describe("repository push", () => {
     expect(aborted).not.toHaveBeenCalled();
   });
 });
-
-function spikeRefs(repositoryId: string): RepositoryRefs {
-  const commit = "a".repeat(40);
-  return {
-    branches: [{ name: "spike", target: commit, worktreePath: "/repo" }],
-    remoteBranches: [],
-    remoteProviders: [{ remote: "origin", provider: "git" }],
-    repositoryId,
-    tags: [],
-    truncated: { branches: false, remoteBranches: false, tags: false },
-    worktrees: [
-      { head: { branch: "spike", commit }, main: true, path: "/repo" },
-    ],
-  };
-}

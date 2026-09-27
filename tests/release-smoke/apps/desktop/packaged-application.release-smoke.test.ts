@@ -35,10 +35,7 @@ test("launches the packaged application with its product identity", async () => 
         throw new Error("The packaged application did not create a context.");
       }
       const window = context.pages()[0] ?? (await context.waitForEvent("page"));
-      await expect(window.getByRole("status")).toHaveAttribute(
-        "data-connection-state",
-        "Connected",
-      );
+      await expect(window.getByRole("status")).toHaveText("Available");
       await window.bringToFront();
       await expect
         .poll(() =>

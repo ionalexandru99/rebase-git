@@ -339,7 +339,6 @@ export function BranchesSidebar({
         aria-busy={activation.checkingOut}
         aria-label="Branches"
         className={`group/tree min-h-0 flex-1 overflow-x-hidden overflow-y-auto [scrollbar-width:none] px-2 pb-2 outline-none [&::-webkit-scrollbar]:hidden focus-visible:ring-2 focus-visible:ring-sidebar-ring/40 ${activation.checkingOut ? "cursor-progress opacity-70" : ""}`}
-        data-slot="branches-scroll"
         onKeyDown={handleTreeKeyDown}
         ref={treeRef}
         role="tree"

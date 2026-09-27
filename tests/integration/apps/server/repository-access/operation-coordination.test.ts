@@ -11,10 +11,7 @@ import {
 import { Deferred, Effect, Fiber } from "effect";
 import { expect, it } from "vite-plus/test";
 import type { RepositoryWritePolicy } from "#server/repository/repository-coordination";
-import {
-  createDivergedRepository,
-  startConflict,
-} from "#tests-support/diverged-repository";
+import { createDivergedRepository, startConflict } from "#tests-support/git";
 import { openTestEnvironment } from "#tests-support/server";
 
 const exec = promisify(execFile);

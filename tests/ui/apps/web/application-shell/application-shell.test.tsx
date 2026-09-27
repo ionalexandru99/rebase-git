@@ -4,11 +4,11 @@ import {
   RepositoryCatalogApi,
   type RepositoryCatalogEntry,
   type RepositoryCommit,
-  type RepositoryRefs,
   RepositoryRefsApi,
 } from "@rebase/contracts";
 import { describe, expect, it, vi } from "vite-plus/test";
 import { page, userEvent } from "vite-plus/test/browser";
+import { catalogEntry, repositoryRefs } from "#tests-support/fixtures";
 import {
   encodeRepositoryHistoryBatch,
   encodeRepositoryHistoryPage,
@@ -25,9 +25,7 @@ import { render } from "#tests-ui/runtime/render";
 import type { LocalEnvironmentSession } from "#web/app/environment/local-environment-session";
 import { ApplicationShell } from "#web/app/shell/application-shell";
 import { RepositoryWorkspace } from "#web/app/workspace/repository-workspace";
-import { repositoryCatalogKey } from "#web/features/repository-catalog/use-repository-catalog";
 import type { RepositoryHistoryGateway } from "#web/features/repository-history/repository-history-reader";
-import { createEnvironmentQueryClient } from "#web/platform/query/environment-query-client";
 import { RepositoryScopeProvider } from "#web/platform/query/repository-scope";
 
 describe("application shell", () => {
@@ -195,19 +193,7 @@ describe("application shell", () => {
   });
 
   it("renders the empty project shell and focuses repository search", async () => {
-    const queryClient = createEnvironmentQueryClient();
-    queryClient.setQueryData(repositoryCatalogKey(undefined), {
-      repositories: [
-        {
-          addedAt: "2026-09-04T12:00:00.000Z",
-          id: "00000000-0000-4000-8000-000000000031",
-          lastOpenedAt: "2026-09-04T12:00:00.000Z",
-          name: "cached-repository",
-          path: "/cached",
-        },
-      ],
-    });
-    await renderShell(queryClient);
+    await renderShell();
 
     await expect
       .element(page.getByRole("region", { name: "Rebase application" }))
@@ -220,19 +206,41 @@ describe("application shell", () => {
       .toBeVisible();
     await expect
       .element(page.getByRole("status"))
-      .toHaveAttribute("data-connection-state", "PairingRequired");
+      .toHaveTextContent("Pairing required");
     await expect
       .element(page.getByRole("main", { name: "Open project" }))
       .toBeVisible();
-    await expect
-      .element(page.getByText("cached-repository"))
-      .not.toBeInTheDocument();
     await expect
       .element(page.getByRole("searchbox", { name: "Search repositories" }))
       .toHaveFocus();
     await expect
       .element(page.getByRole("button", { name: "Browse files" }))
       .toBeDisabled();
+  });
+
+  it("hides remembered repositories when the device must pair again", async () => {
+    const connected = await connectedSession();
+    connected.finishSynchronization();
+    await render(
+      <ApplicationShell
+        desktopUpdates={undefined}
+        productVersion="test"
+        repositoryFilesystem={undefined}
+        repositoryHistory={connected.repositoryHistory}
+        session={connected.session}
+      />,
+    );
+    const repositories = page
+      .getByRole("main", { name: "Open project" })
+      .getByRole("option");
+    await expect.element(repositories.first()).toBeVisible();
+
+    connected.requirePairing();
+
+    await expect
+      .element(page.getByRole("status"))
+      .toHaveTextContent("Pairing required");
+    expect(repositories.elements()).toHaveLength(0);
   });
 
   it("opens the project launcher from expanded and collapsed sidebars", async () => {
@@ -316,27 +324,6 @@ describe("application shell", () => {
     await commit.click();
     await expect.element(commit).toHaveAttribute("aria-selected", "true");
   });
-
-  it("lists the repository catalog again after reconnecting", async () => {
-    const connected = await connectedSession();
-    connected.finishSynchronization();
-    await render(
-      <ApplicationShell
-        desktopUpdates={undefined}
-        productVersion="test"
-        repositoryFilesystem={undefined}
-        repositoryHistory={connected.repositoryHistory}
-        session={connected.session}
-      />,
-    );
-    await expect.poll(() => connected.catalogReads.mock.calls.length).toBe(1);
-    connected.disconnect();
-    await expect
-      .element(page.getByRole("status"))
-      .toHaveAttribute("data-connection-state", "Reconnecting");
-    connected.reconnect();
-    await expect.poll(() => connected.catalogReads.mock.calls.length).toBe(2);
-  });
 });
 
 async function chooseFolder(name: string) {
@@ -351,7 +338,7 @@ async function chooseFolder(name: string) {
   return picker;
 }
 
-async function renderShell(queryClient = createEnvironmentQueryClient()) {
+async function renderShell() {
   return render(
     <ApplicationShell
       desktopUpdates={undefined}
@@ -360,7 +347,6 @@ async function renderShell(queryClient = createEnvironmentQueryClient()) {
       repositoryHistory={unavailableHistory}
       session={pairingRequiredSession()}
     />,
-    { queryClient },
   );
 }
 
@@ -406,13 +392,7 @@ async function connectedSession(
     subject: "cached commit",
   };
   const root = { name: "main", oid, type: "branch" as const };
-  const repository: RepositoryCatalogEntry = {
-    addedAt: "2026-09-04T12:00:00.000Z",
-    id: repositoryId,
-    lastOpenedAt: "2026-09-04T12:00:00.000Z",
-    name: "rebase-test",
-    path: "/repo",
-  };
+  const repository = catalogEntry({ id: repositoryId, name: "rebase-test" });
   const recordOpened = vi.fn(() => repository);
   const home: EnvironmentDirectory = {
     path: "/",
@@ -422,24 +402,13 @@ async function connectedSession(
     ],
     truncated: false,
   };
-  const refs: RepositoryRefs = {
+  const refs = repositoryRefs({
     branches: [{ name: "main", target: oid, worktreePath: "/repo" }],
-    remoteBranches: [],
     repositoryId,
-    tags: [],
-    truncated: {
-      branches: false,
-      remoteBranches: false,
-      tags: false,
-    },
     worktrees: [
-      {
-        head: { branch: "main", commit: oid },
-        main: true,
-        path: "/repo",
-      },
+      { head: { branch: "main", commit: oid }, main: true, path: "/repo" },
     ],
-  };
+  });
   const catalogReads = vi.fn(() => ({ repositories: [repository] }));
   const requests = fakeRequests(
     idleOperation,
@@ -500,10 +469,10 @@ async function connectedSession(
     catalogReads,
     disconnect: () =>
       publish({ _tag: "Reconnecting", attempt: 1, environmentId }),
-    reconnect: () => publish({ _tag: "Connected", environmentId, requests }),
     finishSynchronization,
     recordOpened,
     repositoryHistory,
+    requirePairing: () => publish({ _tag: "PairingRequired" }),
     session,
   };
 }

@@ -1,10 +1,7 @@
 import { mkdtemp, realpath } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type {
-  RepositoryCatalogEntry,
-  RepositoryChangeKind,
-} from "@rebase/contracts";
+import type { RepositoryChangeKind } from "@rebase/contracts";
 import { Effect, Queue } from "effect";
 import { TestClock } from "effect/testing";
 import { afterEach, expect, it } from "vite-plus/test";
@@ -12,6 +9,7 @@ import { createEnvironmentEventPublisher } from "#server/adapters/environment-tr
 import { createLocalGitCommandRunner } from "#server/adapters/local-git/git-commands";
 import type { RepositoryWatcher } from "#server/adapters/local-git/local-repository-watcher";
 import { acquireRepositoryChangePublisher } from "#server/features/repository-refs/repository-change-publisher";
+import { catalogEntry } from "#tests-support/fixtures";
 import { createRepository } from "#tests-support/git";
 import { removeTemporaryDirectory } from "#tests-support/temporary-directory";
 
@@ -93,12 +91,6 @@ interface Published {
   readonly kind: RepositoryChangeKind | undefined;
 }
 
-function repository(id: string, root: string): RepositoryCatalogEntry {
-  return {
-    id,
-    path: join(root, id),
-    name: id,
-    addedAt: "2026-09-26T00:00:00.000Z",
-    lastOpenedAt: "2026-09-26T00:00:00.000Z",
-  };
+function repository(id: string, root: string) {
+  return catalogEntry({ id, name: id, path: join(root, id) });
 }

@@ -4,13 +4,13 @@ import {
   type ConflictFile,
   type ConflictList,
   type MutateChanges,
-  type RepositoryChanges,
   RepositoryChangesApi,
   RepositoryConflictsApi,
   type StageConflict,
 } from "@rebase/contracts";
 import { describe, expect, it } from "vite-plus/test";
 import { page } from "vite-plus/test/browser";
+import { changedFile, repositoryChanges } from "#tests-support/fixtures";
 import {
   fakeRequests,
   rejected,
@@ -81,31 +81,21 @@ async function fixture() {
   const choices: ChooseConflict[] = [];
   const mutations: MutateChanges[] = [];
   const mergeViews: string[] = [];
-  const conflictRow = (path: string) => ({
-    path,
-    previousPath: null,
-    status: "U" as const,
-  });
-  const changes = (): RepositoryChanges => ({
-    revision: `changes-${unresolved.size}`,
-    head: "a".repeat(40),
-    message: "",
-    unstaged: [
-      ...[...unresolved].map(conflictRow),
-      { path: "src/other.ts", previousPath: null, status: "M" },
-    ],
-    staged: [
-      ...[...unresolved].map(conflictRow),
-      ...files
-        .filter((file) => !unresolved.has(file.path))
-        .map((file) => ({
-          path: file.path,
-          previousPath: null,
-          status: "M" as const,
-        })),
-    ],
-    renamesLimited: false,
-  });
+  const conflictRow = (path: string) => changedFile(path, "U");
+  const changes = () =>
+    repositoryChanges({
+      revision: `changes-${unresolved.size}`,
+      unstaged: [
+        ...[...unresolved].map(conflictRow),
+        changedFile("src/other.ts"),
+      ],
+      staged: [
+        ...[...unresolved].map(conflictRow),
+        ...files
+          .filter((file) => !unresolved.has(file.path))
+          .map((file) => changedFile(file.path)),
+      ],
+    });
   const list = (): ConflictList => ({
     sides,
     files: files.filter((file) => unresolved.has(file.path)),

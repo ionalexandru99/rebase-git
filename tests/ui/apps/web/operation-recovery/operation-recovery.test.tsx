@@ -5,6 +5,7 @@ import {
 } from "@rebase/contracts";
 import { describe, expect, it, vi } from "vite-plus/test";
 import { page, userEvent } from "vite-plus/test/browser";
+import { conflictedRebase, repositoryOperation } from "#tests-support/fixtures";
 import { repositoryScope } from "#tests-ui/apps/web/repository-scope/repository-scope-fixture";
 import {
   fakeRequests,
@@ -22,32 +23,7 @@ import { WorkspacePanel } from "#web/features/workspace-panel/workspace-panel";
 import { EnvironmentProvider } from "#web/platform/query/environment-context";
 import { RepositoryScopeProvider } from "#web/platform/query/repository-scope";
 
-function operation(
-  patch: Partial<RepositoryOperation> = {},
-): RepositoryOperation {
-  return {
-    kind: "rebase",
-    phase: "conflicts",
-    revision: "one",
-    branch: "topic",
-    commit: "a".repeat(40),
-    mergedBranch: null,
-    progress: { current: 3, total: 8 },
-    unresolvedPaths: ["file.txt"],
-    lock: null,
-    actions: [
-      {
-        action: "continue",
-        enabled: false,
-        reason: "Resolve and stage one file.",
-      },
-      { action: "skip", enabled: true, reason: null },
-      { action: "abort", enabled: true, reason: null },
-    ],
-    ...patch,
-  };
-}
-function snapshot(value = operation()): OperationRecoveryState {
+function snapshot(value = conflictedRebase()): OperationRecoveryState {
   return {
     operation: value,
     connected: true,
@@ -101,7 +77,7 @@ describe("operation recovery toast", () => {
   });
 
   it("offers only merge actions and executes a confirmed abort with the observed revision", async () => {
-    const merge = operation({
+    const merge = conflictedRebase({
       kind: "merge",
       progress: null,
       actions: [
@@ -131,7 +107,9 @@ describe("operation recovery toast", () => {
     const f = await fixture();
     await page.getByRole("button", { name: "Actions" }).click();
     await page.getByRole("menuitem", { name: "Skip commit…" }).click();
-    await f.view.rerender(f.tree(snapshot(operation({ revision: "two" }))));
+    await f.view.rerender(
+      f.tree(snapshot(conflictedRebase({ revision: "two" }))),
+    );
     await expect
       .element(page.getByRole("button", { name: "Confirm skip" }))
       .not.toBeInTheDocument();
@@ -145,7 +123,7 @@ describe("operation recovery toast", () => {
 
   it("makes Continue keyboard accessible and prevents execution while disconnected", async () => {
     const state = snapshot(
-      operation({
+      conflictedRebase({
         phase: "edit",
         unresolvedPaths: [],
         actions: [
@@ -217,12 +195,17 @@ describe("operation recovery toast", () => {
     await expect
       .element(page.getByRole("region", { name: "Git operation" }))
       .not.toBeInTheDocument();
-    f.set(operation());
+    f.set(conflictedRebase());
     f.change("Refs");
     await expect
       .element(page.getByRole("button", { name: "Review conflicts" }))
       .toBeVisible();
-    f.set(operation({ revision: "two", unresolvedPaths: ["a.txt", "b.txt"] }));
+    f.set(
+      conflictedRebase({
+        revision: "two",
+        unresolvedPaths: ["a.txt", "b.txt"],
+      }),
+    );
     f.change("Index");
     await expect
       .element(
@@ -283,7 +266,7 @@ describe("operation recovery toast", () => {
       .element(page.getByRole("heading", { name: "Rebase completed" }))
       .toBeVisible();
 
-    f.set(operation({ kind: "merge", progress: null }));
+    f.set(conflictedRebase({ kind: "merge", progress: null }));
     f.change("Index");
     await expect
       .element(page.getByRole("button", { name: "Review conflicts" }))
@@ -298,7 +281,7 @@ describe("operation recovery toast", () => {
 });
 
 function readyToContinue() {
-  return operation({
+  return conflictedRebase({
     phase: "ready",
     unresolvedPaths: [],
     actions: [{ action: "continue", enabled: true, reason: null }],
@@ -306,13 +289,7 @@ function readyToContinue() {
 }
 
 function idle() {
-  return operation({
-    kind: "idle",
-    phase: "idle",
-    actions: [],
-    unresolvedPaths: [],
-    revision: "finished",
-  });
+  return repositoryOperation({ revision: "finished" });
 }
 
 async function liveFixture(initial: RepositoryOperation) {

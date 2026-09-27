@@ -10,6 +10,15 @@ import {
 } from "@rebase/contracts";
 import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
 import { userEvent } from "vite-plus/test/browser";
+import {
+  commitId,
+  mainAndTopicWorktrees,
+  mainPath,
+  repositoryId,
+  repositoryRefs,
+  topicPath,
+  upstream,
+} from "#tests-support/fixtures";
 import { repositoryScope } from "#tests-ui/apps/web/repository-scope/repository-scope-fixture";
 import {
   fakeRequests,
@@ -24,10 +33,7 @@ import { NotificationsProvider } from "#web/features/notifications/notifications
 import { createRefActions } from "#web/features/refs/ref-actions";
 import { RepositoryScopeProvider } from "#web/platform/query/repository-scope";
 
-const repositoryId = "00000000-0000-4000-8000-000000000001";
-const mainPath = "/repo";
-const topicPath = "/repo/.worktrees/topic";
-const main = "a".repeat(40);
+const main = commitId;
 const spike = "b".repeat(40);
 const scope = { repositoryId, worktreePath: mainPath };
 
@@ -489,18 +495,13 @@ function BranchWorkspace({
 }
 
 function refs(): RepositoryRefs {
-  return {
+  return repositoryRefs({
     branches: [
       { name: "main", target: main, worktreePath: mainPath },
       {
         name: "feature/merged",
         target: main,
-        upstream: {
-          ahead: 0,
-          behind: 0,
-          gone: false,
-          name: "origin/feature/merged",
-        },
+        upstream: upstream("origin/feature/merged"),
       },
       { name: "feature/spike", target: spike },
       { name: "topic", target: main, worktreePath: topicPath },
@@ -510,12 +511,7 @@ function refs(): RepositoryRefs {
       { name: "main", remote: "origin", target: main },
       { name: "release", remote: "origin", target: main },
     ],
-    repositoryId,
     tags: [{ name: "v0.9", target: main }],
-    truncated: { branches: false, remoteBranches: false, tags: false },
-    worktrees: [
-      { head: { branch: "main", commit: main }, main: true, path: mainPath },
-      { head: { branch: "topic", commit: main }, main: false, path: topicPath },
-    ],
-  };
+    worktrees: mainAndTopicWorktrees(),
+  });
 }

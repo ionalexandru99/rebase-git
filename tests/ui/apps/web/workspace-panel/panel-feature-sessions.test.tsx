@@ -1,12 +1,15 @@
 import {
-  type ChangeDiff,
   type CommitInspection,
   CommitInspectionApi,
-  type RepositoryChanges,
   RepositoryChangesApi,
 } from "@rebase/contracts";
 import { afterEach, expect, it, vi } from "vite-plus/test";
 import { page } from "vite-plus/test/browser";
+import {
+  changeDiff,
+  changedFile,
+  repositoryChanges,
+} from "#tests-support/fixtures";
 import { fakeRequests, respond } from "#tests-ui/runtime/fake-requests";
 import { render } from "#tests-ui/runtime/render";
 import { ResizablePanel } from "#web/components/ui/resizable";
@@ -15,17 +18,11 @@ import { useWorkspacePanel } from "#web/features/workspace-panel/workspace-panel
 
 const oid = "a".repeat(40);
 const parentOid = "b".repeat(40);
-const changes: RepositoryChanges = {
-  revision: "one",
+const changes = repositoryChanges({
   head: oid,
   message: "Previous message",
-  unstaged: [
-    { path: "first.bin", previousPath: null, status: "M" },
-    { path: "second.bin", previousPath: null, status: "M" },
-  ],
-  staged: [],
-  renamesLimited: false,
-};
+  unstaged: [changedFile("first.bin"), changedFile("second.bin")],
+});
 
 function inspection(inspected: string): CommitInspection {
   const author = {
@@ -40,10 +37,7 @@ function inspection(inspected: string): CommitInspection {
     message: "Inspected commit\n\nRetained body",
     author,
     committer: author,
-    files: [
-      { path: "first.bin", status: "M", previousPath: null },
-      { path: "second.bin", status: "M", previousPath: null },
-    ],
+    files: [changedFile("first.bin"), changedFile("second.bin")],
     truncated: false,
   };
 }
@@ -66,17 +60,7 @@ async function fixture(linkedWorktree = false) {
         reject(signal.reason);
       });
     });
-  const binaryDiff = (path: string): ChangeDiff => ({
-    path,
-    revision: path,
-    kind: "binary",
-    before: null,
-    after: null,
-    beforeBytes: 10,
-    afterBytes: 20,
-    mime: null,
-    patch: "",
-  });
+  const binaryDiff = (path: string) => changeDiff(path, { afterBytes: 20 });
   const requests = fakeRequests(
     respond(RepositoryChangesApi.read, (scope, { signal }) => {
       requestCount++;

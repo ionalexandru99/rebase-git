@@ -1,17 +1,17 @@
-import type { RepositoryRefs } from "@rebase/contracts";
 import { describe, expect, it } from "vite-plus/test";
+import {
+  branchScenarioRefs,
+  mainPath,
+  topicPath,
+} from "#tests-support/fixtures";
 import {
   resolveActiveWorktreePath,
   resolveRefActivation,
 } from "#web/features/refs/repository-refs";
 
-const commit = "a".repeat(40);
-const mainPath = "/repo";
-const topicPath = "/repo/.worktrees/topic";
-
 describe("repository ref activation", () => {
   it("switches worktrees for branches held elsewhere and checks out the rest", () => {
-    const current = refs();
+    const current = branchScenarioRefs();
 
     expect(
       resolveRefActivation(current, mainPath, {
@@ -58,33 +58,11 @@ describe("repository ref activation", () => {
   });
 
   it("falls back to the main worktree when the preferred path disappeared", () => {
-    expect(resolveActiveWorktreePath(refs(), topicPath)).toBe(topicPath);
-    expect(resolveActiveWorktreePath(refs(), "/gone")).toBe(mainPath);
+    expect(resolveActiveWorktreePath(branchScenarioRefs(), topicPath)).toBe(
+      topicPath,
+    );
+    expect(resolveActiveWorktreePath(branchScenarioRefs(), "/gone")).toBe(
+      mainPath,
+    );
   });
 });
-
-function refs(): RepositoryRefs {
-  return {
-    branches: [
-      {
-        name: "main",
-        upstream: { ahead: 0, behind: 2, gone: false, name: "origin/main" },
-        worktreePath: mainPath,
-      },
-      { name: "feature" },
-      { name: "topic", worktreePath: topicPath },
-    ],
-    remoteBranches: [
-      { name: "feature", remote: "origin" },
-      { name: "topic", remote: "origin" },
-      { name: "release", remote: "upstream" },
-    ],
-    repositoryId: "00000000-0000-4000-8000-000000000001",
-    tags: [{ name: "v1.0.0" }],
-    truncated: { branches: false, remoteBranches: false, tags: false },
-    worktrees: [
-      { head: { branch: "main", commit }, main: true, path: mainPath },
-      { head: { branch: "topic", commit }, main: false, path: topicPath },
-    ],
-  };
-}

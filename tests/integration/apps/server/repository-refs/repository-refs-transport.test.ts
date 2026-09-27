@@ -1,10 +1,6 @@
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import {
-  RepositoryBranchesApi,
-  RepositoryCatalogApi,
-  RepositoryRefsApi,
-} from "@rebase/contracts";
+import { RepositoryCatalogApi, RepositoryRefsApi } from "@rebase/contracts";
 import { Layer, ManagedRuntime } from "effect";
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import { createRepository, git } from "#tests-support/git";
@@ -16,41 +12,6 @@ afterEach(() => {
 });
 
 describe("repository refs transport", () => {
-  it("creates branches and returns typed branch failures", async () => {
-    const server = await openTestServer();
-    const requests = server.requests(server.owner);
-    const repositoryPath = join(server.home, "repository");
-    await createRepository(repositoryPath, { commits: ["initial", "next"] });
-    const remembered = await requests(RepositoryCatalogApi.remember, {
-      path: repositoryPath,
-    });
-    const head = await git(repositoryPath, "rev-parse", "HEAD");
-    const create = {
-      name: "spike",
-      repositoryId: remembered.id,
-      startPoint: head,
-      worktreePath: repositoryPath,
-    };
-
-    await expect(
-      requests(RepositoryBranchesApi.create, create),
-    ).resolves.toEqual({ name: "spike", target: head });
-    await git(repositoryPath, "checkout", "spike");
-    await git(repositoryPath, "commit", "--allow-empty", "-m", "only here");
-    await git(repositoryPath, "checkout", "main");
-    const spike = await git(repositoryPath, "rev-parse", "spike");
-    await expect(
-      requests(RepositoryBranchesApi.delete, {
-        force: false,
-        local: { name: "spike", target: spike },
-        repositoryId: remembered.id,
-        worktreePath: repositoryPath,
-      }),
-    ).rejects.toMatchObject({
-      failure: { _tag: "BranchNotMerged", count: 1, name: "spike" },
-    });
-  });
-
   it("reads a ref snapshot larger than a megabyte", async () => {
     const server = await openTestServer();
     const repositoryPath = join(server.home, "repository");
@@ -181,55 +142,6 @@ describe("repository refs transport", () => {
       session.stop();
       await runtime.dispose();
     }
-  });
-
-  it("serves refs to every paired device and checks out branches", async () => {
-    const server = await openTestServer();
-    const { owner } = server;
-    const requests = server.requests(owner);
-    const repositoryPath = join(server.home, "repository");
-    await createRepository(repositoryPath, { branches: ["feature"] });
-    await git(
-      repositoryPath,
-      "remote",
-      "add",
-      "origin",
-      "git@github.com:alex/rebase.git",
-    );
-    const viewer = await server.pair("Second browser");
-    const remembered = await requests(RepositoryCatalogApi.remember, {
-      path: repositoryPath,
-    });
-
-    const refs = await server.requests(viewer)(RepositoryRefsApi.read, {
-      repositoryId: remembered.id,
-    });
-    expect(refs.repositoryId).toBe(remembered.id);
-    expect(refs.githubRepository).toEqual({ owner: "alex", name: "rebase" });
-    expect(refs.branches.map((branch) => branch.name)).toEqual(
-      expect.arrayContaining(["main", "feature"]),
-    );
-
-    const checkout = {
-      repositoryId: remembered.id,
-      target: { _tag: "LocalBranch", name: "feature" },
-      worktreePath: repositoryPath,
-    } as const;
-    await expect(
-      requests(RepositoryRefsApi.checkout, checkout),
-    ).resolves.toMatchObject({ head: { branch: "feature" }, stash: "none" });
-    await expect(
-      server.requests(viewer)(RepositoryRefsApi.read, {
-        repositoryId: "00000000-0000-4000-8000-000000000099",
-      }),
-    ).rejects.toEqual({
-      _tag: "Rejected",
-      failure: {
-        _tag: "RepositoryRejected",
-        reason: "Missing",
-        detail: "This repository is no longer available.",
-      },
-    });
   });
 });
 

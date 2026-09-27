@@ -2,6 +2,7 @@ import type { RepositoryFreshness } from "@rebase/contracts";
 import { StrictMode, useLayoutEffect } from "react";
 import { describe, expect, it, vi } from "vite-plus/test";
 import { page, userEvent } from "vite-plus/test/browser";
+import { repositoryFreshness } from "#tests-support/fixtures";
 import { repositoryScope } from "#tests-ui/apps/web/repository-scope/repository-scope-fixture";
 import { render } from "#tests-ui/runtime/render";
 import { NotificationsProvider } from "#web/features/notifications/notifications";
@@ -20,13 +21,7 @@ import { RepositoryScopeProvider } from "#web/platform/query/repository-scope";
 import { createStore } from "#web/platform/store/store";
 import { useStore } from "#web/platform/store/use-store";
 
-const fresh: RepositoryFreshness = {
-  defaultIntervalSeconds: 300,
-  fetching: false,
-  stale: false,
-  revision: 0,
-  setting: { _tag: "Inherit" },
-};
+const fresh = repositoryFreshness();
 const scope = repositoryScope();
 const ready: RepositoryHistorySnapshot = {
   historyRevision: 0,

@@ -1,5 +1,5 @@
-import type { RepositoryRefs } from "@rebase/contracts";
 import { describe, expect, it } from "vite-plus/test";
+import { repositoryRefs, upstream } from "#tests-support/fixtures";
 import { resolvePushTarget } from "#web/features/remote-sync/push-target";
 
 const remoteTip = "b".repeat(40);
@@ -30,9 +30,8 @@ describe("push target", () => {
   });
 });
 
-function refs(): RepositoryRefs {
-  return {
-    repositoryId: "00000000-0000-4000-8000-000000000001",
+function refs() {
+  return repositoryRefs({
     remoteProviders: [
       { remote: "team", provider: "git" },
       { remote: "team/fork", provider: "github" },
@@ -41,20 +40,12 @@ function refs(): RepositoryRefs {
       { name: "main" },
       {
         name: "topic",
-        upstream: {
-          name: "team/fork/feature/topic",
-          ahead: 2,
-          behind: 1,
-          gone: false,
-        },
+        upstream: upstream("team/fork/feature/topic", { ahead: 2, behind: 1 }),
       },
     ],
     remoteBranches: [
       { remote: "team", name: "fork/feature/topic", target: remoteTip },
       { remote: "team", name: "feature/topic", target: "c".repeat(40) },
     ],
-    tags: [],
-    truncated: { branches: false, remoteBranches: false, tags: false },
-    worktrees: [],
-  };
+  });
 }

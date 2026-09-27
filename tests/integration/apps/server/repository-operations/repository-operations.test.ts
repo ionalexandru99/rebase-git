@@ -13,10 +13,7 @@ import {
   type GitCommandRunner,
   gitFailed,
 } from "#server/adapters/local-git/git-commands";
-import {
-  createDivergedRepository,
-  startConflict,
-} from "#tests-support/diverged-repository";
+import { createDivergedRepository, startConflict } from "#tests-support/git";
 import { openTestEnvironment } from "#tests-support/server";
 
 const exec = promisify(execFile);

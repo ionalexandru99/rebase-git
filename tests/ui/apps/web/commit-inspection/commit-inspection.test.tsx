@@ -6,6 +6,7 @@ import {
   type InspectCommitDiff,
 } from "@rebase/contracts";
 import { describe, expect, it, vi } from "vite-plus/test";
+import { changeDiff, changedFile } from "#tests-support/fixtures";
 import {
   CommitGraphFixture,
   history,
@@ -47,24 +48,14 @@ function details(oid = historyOid(0), parentOid = historyOid(1)): Details {
       date: "2026-09-15T11:00:00+03:00",
     },
     files: [
-      { path: "src/first.bin", previousPath: null, status: "M" },
-      { path: "src/second.bin", previousPath: "old.bin", status: "R" },
+      changedFile("src/first.bin"),
+      changedFile("src/second.bin", "R", "old.bin"),
     ],
     truncated: false,
   };
 }
-function diff(path: string, bytes = 100): ChangeDiff {
-  return {
-    path,
-    revision: path,
-    kind: "binary",
-    before: null,
-    after: null,
-    beforeBytes: 10,
-    afterBytes: bytes,
-    mime: null,
-    patch: "",
-  };
+function diff(path: string, bytes = 100) {
+  return changeDiff(path, { afterBytes: bytes });
 }
 async function fixture(
   overrides: Partial<InspectionClient> = {},
@@ -158,7 +149,7 @@ describe("commit inspection", () => {
         ...details(command.oid),
         parentOid: null,
         parents: [],
-        files: [{ path: "src/initial.ts", previousPath: null, status: "A" }],
+        files: [changedFile("src/initial.ts", "A")],
       }),
       diff: (command) => ({
         ...diff(command.path),

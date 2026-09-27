@@ -1,7 +1,6 @@
 import {
   type CheckoutRepositoryRef,
   type RepositoryCheckedOut,
-  type RepositoryFreshness,
   RepositoryPullApi,
   type RepositoryRefs,
   RepositoryRefsApi,
@@ -9,6 +8,16 @@ import {
 } from "@rebase/contracts";
 import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
 import { userEvent } from "vite-plus/test/browser";
+import {
+  commitId,
+  mainAndTopicWorktrees,
+  mainPath,
+  repositoryFreshness,
+  repositoryId,
+  repositoryRefs,
+  topicPath,
+  upstream,
+} from "#tests-support/fixtures";
 import { repositoryScope } from "#tests-ui/apps/web/repository-scope/repository-scope-fixture";
 import {
   type FakeRoute,
@@ -28,10 +37,6 @@ import {
   RepositoryScopeProvider,
 } from "#web/platform/query/repository-scope";
 
-const repositoryId = "00000000-0000-4000-8000-000000000001";
-const mainPath = "/repo";
-const topicPath = "/repo/.worktrees/topic";
-const commit = "a".repeat(40);
 const readyHistory = {
   revision: 0,
   historyRevision: 0,
@@ -131,7 +136,7 @@ describe("branches sidebar", () => {
         branch.name === "topic"
           ? {
               ...branch,
-              upstream: { ahead, behind, gone: false, name: "origin/topic" },
+              upstream: upstream("origin/topic", { ahead, behind }),
             }
           : branch,
       ),
@@ -200,12 +205,7 @@ describe("branches sidebar", () => {
         branch.name === "feature"
           ? {
               ...branch,
-              upstream: {
-                ahead: 0,
-                behind: 2,
-                gone: false,
-                name: "origin/feature",
-              },
+              upstream: upstream("origin/feature", { behind: 2 }),
             }
           : branch,
       ),
@@ -302,6 +302,11 @@ describe("branches sidebar", () => {
     await expect
       .element(screen.getByRole("treeitem", { name: /main/ }))
       .not.toBeInTheDocument();
+
+    await filter.fill("missing");
+    await expect
+      .element(screen.getByRole("status"))
+      .toHaveTextContent("No tags match.");
   });
 
   it("connects tree focus, navigation, expansion, and activation", async () => {
@@ -366,15 +371,16 @@ describe("branches sidebar", () => {
     await expect.poll(() => reads.length).toBe(2);
   });
 
-  it("announces checkout progress and failures", async () => {
+  it("announces checkout progress and failures and ignores another checkout while one runs", async () => {
     const refusal = rejected({
       _tag: "CheckoutRejected",
       detail: "",
       reason: "LocalChanges",
     });
     let answer = (): Promise<RepositoryCheckedOut> => Promise.reject(refusal);
+    const checkouts = vi.fn(() => answer());
     const { screen } = await renderSidebar({
-      routes: [respond(RepositoryRefsApi.checkout, () => answer())],
+      routes: [respond(RepositoryRefsApi.checkout, checkouts)],
     });
     const tree = screen.getByRole("tree", { name: "Branches" });
     const feature = tree.getByRole("treeitem", { name: "feature" });
@@ -387,6 +393,8 @@ describe("branches sidebar", () => {
     answer = () => new Promise(() => undefined);
     await feature.dblClick();
     await expect.element(tree).toHaveAttribute("aria-busy", "true");
+    await feature.dblClick();
+    expect(checkouts).toHaveBeenCalledTimes(2);
   });
 });
 
@@ -394,13 +402,7 @@ function pullRequests() {
   const pulled = vi.fn<(branch: string) => void>();
   let finish = () => {};
   const reader: PullReader = {
-    fetch: async (): Promise<RepositoryFreshness> => ({
-      revision: 1,
-      fetching: false,
-      stale: false,
-      defaultIntervalSeconds: 300,
-      setting: { _tag: "Inherit" },
-    }),
+    fetch: async () => repositoryFreshness({ revision: 1 }),
     getSnapshot: () => readyHistory,
     subscribe: () => () => {},
   };
@@ -440,7 +442,7 @@ async function renderSidebar({
     async (command: CheckoutRepositoryRef): Promise<RepositoryCheckedOut> => {
       checkouts(command.target);
       return {
-        head: { branch: command.target.name, commit },
+        head: { branch: command.target.name, commit: commitId },
         stash: "none",
         worktreePath: command.worktreePath,
       };
@@ -488,21 +490,16 @@ async function renderSidebar({
 }
 
 function refs(): RepositoryRefs {
-  return {
+  return repositoryRefs({
     branches: [
       { name: "main", worktreePath: mainPath },
       { name: "feature" },
       { name: "topic", worktreePath: topicPath },
     ],
     remoteBranches: [{ name: "release", remote: "origin" }],
-    repositoryId,
     tags: [{ name: "v1.0.0" }],
-    truncated: { branches: false, remoteBranches: false, tags: false },
-    worktrees: [
-      { head: { branch: "main", commit }, main: true, path: mainPath },
-      { head: { branch: "topic", commit }, main: false, path: topicPath },
-    ],
-  };
+    worktrees: mainAndTopicWorktrees(),
+  });
 }
 
 function nestedRefs(): RepositoryRefs {

@@ -10,7 +10,7 @@ import { createLocalGitCommandRunner } from "#server/adapters/local-git/git-comm
 import {
   acquireEnvironment,
   serveEnvironment,
-} from "#server/app/server/start-environment-server";
+} from "#server/app/server/serve-environment";
 import { removeTemporaryDirectory } from "#tests-support/temporary-directory";
 
 const repositoryPath = process.argv[2];

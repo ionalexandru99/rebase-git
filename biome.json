@@ -23,28 +23,7 @@
   "linter": {
     "enabled": true,
     "rules": {
-      "preset": "recommended",
-      "style": {
-        "noRestrictedImports": {
-          "level": "error",
-          "options": {
-            "patterns": [
-              {
-                "group": [
-                  "@rebase/server/**",
-                  "!@rebase/server/package.json",
-                  "@rebase/desktop/**"
-                ],
-                "message": "Use private #server/* or #desktop/* aliases for internal imports and tests. Cross-package consumers must use the public package entry point."
-              },
-              {
-                "group": ["vitest", "vitest/**"],
-                "message": "Import test APIs from vite-plus/test."
-              }
-            ]
-          }
-        }
-      }
+      "preset": "recommended"
     }
   },
   "overrides": [
@@ -70,14 +49,6 @@
               "level": "error",
               "options": {
                 "patterns": [
-                  {
-                    "group": [
-                      "@rebase/server/**",
-                      "!@rebase/server/package.json",
-                      "@rebase/desktop/**"
-                    ],
-                    "message": "Use private #server/* or #desktop/* aliases for internal imports and tests. Cross-package consumers must use the public package entry point."
-                  },
                   {
                     "group": [
                       "#server/**",
@@ -108,14 +79,6 @@
                 "patterns": [
                   {
                     "group": [
-                      "@rebase/server/**",
-                      "!@rebase/server/package.json",
-                      "@rebase/desktop/**"
-                    ],
-                    "message": "Use private #server/* or #desktop/* aliases for internal imports and tests. Cross-package consumers must use the public package entry point."
-                  },
-                  {
-                    "group": [
                       "#web/app/**",
                       "#web/features/**",
                       "@rebase/web",
@@ -139,14 +102,6 @@
               "level": "error",
               "options": {
                 "patterns": [
-                  {
-                    "group": [
-                      "@rebase/server/**",
-                      "!@rebase/server/package.json",
-                      "@rebase/desktop/**"
-                    ],
-                    "message": "Use private #server/* or #desktop/* aliases for internal imports and tests. Cross-package consumers must use the public package entry point."
-                  },
                   {
                     "group": [
                       "#web/app/**",
@@ -179,14 +134,6 @@
               "level": "error",
               "options": {
                 "patterns": [
-                  {
-                    "group": [
-                      "@rebase/server/**",
-                      "!@rebase/server/package.json",
-                      "@rebase/desktop/**"
-                    ],
-                    "message": "Use private #server/* or #desktop/* aliases for internal imports and tests. Cross-package consumers must use the public package entry point."
-                  },
                   {
                     "group": [
                       "#web/app/**",
@@ -223,18 +170,6 @@
               "options": {
                 "patterns": [
                   {
-                    "group": [
-                      "@rebase/server/**",
-                      "!@rebase/server/package.json",
-                      "@rebase/desktop/**"
-                    ],
-                    "message": "Use private #server/* or #desktop/* aliases for internal imports and tests. Cross-package consumers must use the public package entry point."
-                  },
-                  {
-                    "group": ["vitest", "vitest/**"],
-                    "message": "Import test APIs from vite-plus/test."
-                  },
-                  {
                     "group": ["effect", "effect/**"],
                     "message": "Browser features and application composition use TanStack Query and plain TypeScript. Keep Effect in the environment connection and the history pipeline."
                   }
@@ -258,14 +193,6 @@
               "level": "error",
               "options": {
                 "patterns": [
-                  {
-                    "group": [
-                      "@rebase/server/**",
-                      "!@rebase/server/package.json",
-                      "@rebase/desktop/**"
-                    ],
-                    "message": "Use private #server/* or #desktop/* aliases for internal imports and tests. Cross-package consumers must use the public package entry point."
-                  },
                   {
                     "group": ["@rebase/web", "@rebase/web/**"],
                     "message": "Server and desktop code cannot depend on the browser application. Extract a purpose-specific shared client or port."

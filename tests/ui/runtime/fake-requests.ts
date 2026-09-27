@@ -1,10 +1,10 @@
 import {
   type EnvironmentRoute,
-  type RepositoryOperation,
   RepositoryOperationsApi,
   type RouteInput,
   type RouteSuccess,
 } from "@rebase/contracts";
+import { repositoryOperation } from "#tests-support/fixtures";
 import type { EnvironmentRequests } from "#web/platform/query/environment-context";
 import type { RequestFailure } from "#web/platform/query/request-failure";
 
@@ -58,18 +58,6 @@ function handles<Route extends EnvironmentRoute>(
   return fake.route === route;
 }
 
-export const idleOperation = respond(
-  RepositoryOperationsApi.read,
-  async (): Promise<RepositoryOperation> => ({
-    kind: "idle",
-    phase: "idle",
-    revision: "idle",
-    branch: null,
-    commit: null,
-    mergedBranch: null,
-    progress: null,
-    unresolvedPaths: [],
-    actions: [],
-    lock: null,
-  }),
+export const idleOperation = respond(RepositoryOperationsApi.read, async () =>
+  repositoryOperation(),
 );
