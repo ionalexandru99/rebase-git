@@ -4,9 +4,9 @@ import {
 } from "@rebase/contracts";
 import { Schema } from "effect";
 import { BrowserWindow, ipcMain } from "electron";
-import type { ApplicationUpdater } from "#desktop/features/application-updates/application-updater.contract";
+import type { ApplicationUpdater } from "#desktop/features/application-updates/application-updater";
 import { applicationUpdaterIpc } from "#desktop/features/application-updates/application-updater-ipc.contract";
-import type { TrustedIpcHandler } from "#desktop/platform/renderer-trust/renderer-trust.contract";
+import type { TrustedIpcHandler } from "#desktop/platform/renderer-trust";
 
 export function registerApplicationUpdaterIpc(
   updater: ApplicationUpdater,

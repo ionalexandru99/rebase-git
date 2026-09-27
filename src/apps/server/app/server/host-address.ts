@@ -1,10 +1,16 @@
 import { BlockList, isIP, isIPv4 } from "node:net";
 import { networkInterfaces } from "node:os";
-import {
-  type HostAlias,
-  hostAliases,
-  type NetworkAddresses,
-} from "#server/app/server/host-address.contract";
+
+const hostAliases = ["lan", "tailscale"] as const;
+type HostAlias = (typeof hostAliases)[number];
+
+type NetworkAddresses = Readonly<
+  Record<
+    string,
+    | readonly { readonly address: string; readonly internal: boolean }[]
+    | undefined
+  >
+>;
 
 const unspecifiedAddresses = new BlockList();
 unspecifiedAddresses.addAddress("0.0.0.0");
@@ -32,7 +38,7 @@ export function resolveHostAddress(
   return requested;
 }
 
-export function isHostAlias(value: string): value is HostAlias {
+function isHostAlias(value: string): value is HostAlias {
   return (hostAliases as readonly string[]).includes(value);
 }
 

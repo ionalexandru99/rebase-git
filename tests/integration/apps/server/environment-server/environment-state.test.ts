@@ -7,8 +7,10 @@ import { and, eq, isNull, sql } from "drizzle-orm";
 import { type MigrationMeta, readMigrationFiles } from "drizzle-orm/migrator";
 import { Effect } from "effect";
 import { afterEach, describe, expect, it } from "vite-plus/test";
-import { acquireEnvironmentContext } from "#server/persistence/environment-context";
-import type { EnvironmentContext } from "#server/persistence/environment-context.contract";
+import {
+  acquireEnvironmentContext,
+  type EnvironmentContext,
+} from "#server/persistence/environment-context";
 import {
   authorizationMetadataTable,
   environmentTable,
@@ -27,6 +29,7 @@ const createAuthorizationCapabilitiesMigration = generatedMigrations[2];
 const createRepositoryCatalogMigration = generatedMigrations[3];
 const addLogicalRepositoryIdentityMigration = generatedMigrations[4];
 const removeDormantActivityMigration = generatedMigrations[5];
+const ownerOnlyAuthorizationMigration = generatedMigrations[6];
 
 if (
   createEnvironmentMigration === undefined ||
@@ -34,9 +37,10 @@ if (
   createAuthorizationCapabilitiesMigration === undefined ||
   createRepositoryCatalogMigration === undefined ||
   addLogicalRepositoryIdentityMigration === undefined ||
-  removeDormantActivityMigration === undefined
+  removeDormantActivityMigration === undefined ||
+  ownerOnlyAuthorizationMigration === undefined
 ) {
-  throw new Error("Expected six generated Environment state migrations.");
+  throw new Error("Expected seven generated Environment state migrations.");
 }
 
 afterEach(async () => {
@@ -139,6 +143,11 @@ describe("Environment state", () => {
         name: removeDormantActivityMigration.name,
         version: 6,
       },
+      {
+        checksum_length: 64,
+        name: ownerOnlyAuthorizationMigration.name,
+        version: 7,
+      },
     ]);
     database.close();
 
@@ -207,7 +216,6 @@ describe("Environment state", () => {
           label: "Legacy device",
           lastSeenAt: null,
           revokedAt: null,
-          role: "viewer",
         },
       ],
       environmentId,
@@ -247,16 +255,17 @@ describe("Environment state", () => {
       generatedMigrationEntry(createRepositoryCatalogMigration, 4),
       generatedMigrationEntry(addLogicalRepositoryIdentityMigration, 5),
       generatedMigrationEntry(removeDormantActivityMigration, 6),
+      generatedMigrationEntry(ownerOnlyAuthorizationMigration, 7),
       {
         checksum: "future",
-        createdAt: removeDormantActivityMigration.folderMillis + 1,
+        createdAt: ownerOnlyAuthorizationMigration.folderMillis + 1,
         name: "future",
-        version: 7,
+        version: 8,
       },
     ]);
 
     await expect(openState(newerPaths)).rejects.toThrow(
-      "The state database is at version 7, but this Rebase build supports version 6.",
+      "The state database is at version 8, but this Rebase build supports version 7.",
     );
   });
 
@@ -283,7 +292,7 @@ describe("Environment state", () => {
       database
         .prepare("SELECT max(id) AS version FROM __drizzle_migrations")
         .get(),
-    ).toEqual({ version: 6 });
+    ).toEqual({ version: 7 });
     database.close();
   });
 

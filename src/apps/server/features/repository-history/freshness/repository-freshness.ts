@@ -1,166 +1,149 @@
 import type {
   RepositoryFetchSetting,
   RepositoryFreshness,
+  RepositoryHistoryOperationFailure,
 } from "@rebase/contracts";
 import { Effect, Exit, Fiber, Scope } from "effect";
-import { GitCommands } from "#server/domain/git-command.contract";
-import { RepositoryAccess } from "#server/domain/repository-access.contract";
-import { RepositoryCoordination } from "#server/domain/repository-coordination.contract";
-import { RepositoryWatching } from "#server/domain/repository-watcher.contract";
-import { acquireWatchedRepository } from "#server/features/repository-history/freshness/watched-repository";
-import type { FreshnessSubscription } from "#server/features/repository-history/freshness/watched-repository.contract";
-import { RepositoryHistoryError } from "#server/features/repository-history/git/history-failures";
+import type { GitCommandRunner } from "#server/adapters/local-git/git-commands";
+import type { RepositoryWatcher } from "#server/adapters/local-git/local-repository-watcher";
+import {
+  acquireWatchedRepository,
+  type FreshnessSubscription,
+} from "#server/features/repository-history/freshness/watched-repository";
+import { findHistoryRepository } from "#server/features/repository-history/git/history-failures";
+import type { RepositoryAccess } from "#server/repository/repository-access";
+import type { RepositoryCoordination } from "#server/repository/repository-coordination";
 
 interface RepositoryLifetime {
-  readonly releaseOwnership: Effect.Effect<void>;
   readonly scope: Scope.Closeable;
   readonly subscribers: Set<FreshnessSubscription>;
   readonly repository: Fiber.Fiber<
     Effect.Success<ReturnType<typeof acquireWatchedRepository>>,
-    RepositoryHistoryError
+    RepositoryHistoryOperationFailure
   >;
 }
 
 export type RepositoryFreshnessService = Effect.Success<
-  typeof acquireRepositoryFreshness
+  ReturnType<typeof acquireRepositoryFreshness>
 >;
 
-export const acquireRepositoryFreshness = Effect.gen(function* () {
-  const access = yield* RepositoryAccess;
-  const git = yield* GitCommands;
-  const watcher = yield* RepositoryWatching;
-  const coordination = yield* RepositoryCoordination;
-  const scope = yield* Effect.scope;
-  const repositories = new Map<string, RepositoryLifetime>();
-  const aliases = new Map<string, string>();
-  let closed = false;
-  yield* Effect.addFinalizer(() =>
-    Effect.sync(() => {
-      closed = true;
-      repositories.clear();
-      aliases.clear();
-    }),
-  );
+export function acquireRepositoryFreshness({
+  access,
+  coordination,
+  git,
+  watcher,
+}: {
+  readonly access: RepositoryAccess;
+  readonly coordination: RepositoryCoordination;
+  readonly git: GitCommandRunner;
+  readonly watcher: RepositoryWatcher;
+}) {
+  return Effect.gen(function* () {
+    const scope = yield* Effect.scope;
+    const repositories = new Map<string, RepositoryLifetime>();
+    const aliases = new Map<string, string>();
+    let closed = false;
+    yield* Effect.addFinalizer(() =>
+      Effect.sync(() => {
+        closed = true;
+        repositories.clear();
+        aliases.clear();
+      }),
+    );
 
-  const release = (
-    key: string,
-    lifetime: RepositoryLifetime,
-    subscription: FreshnessSubscription,
-  ) =>
-    Effect.gen(function* () {
-      if (!lifetime.subscribers.delete(subscription)) return;
-      if (lifetime.subscribers.size > 0) {
-        yield* lifetime.releaseOwnership;
-        return;
-      }
-      if (repositories.get(key) === lifetime) repositories.delete(key);
-      for (const [alias, logicalId] of aliases)
-        if (logicalId === key) aliases.delete(alias);
-      yield* Scope.close(lifetime.scope, Exit.void);
-    }).pipe(Effect.uninterruptible);
+    const release = (
+      key: string,
+      lifetime: RepositoryLifetime,
+      subscription: FreshnessSubscription,
+    ) =>
+      Effect.gen(function* () {
+        if (!lifetime.subscribers.delete(subscription)) return;
+        if (lifetime.subscribers.size > 0) return;
+        if (repositories.get(key) === lifetime) repositories.delete(key);
+        for (const [alias, logicalId] of aliases)
+          if (logicalId === key) aliases.delete(alias);
+        yield* Scope.close(lifetime.scope, Exit.void);
+      }).pipe(Effect.uninterruptible);
 
-  const subscribe = (
-    repositoryId: string,
-    publish: (freshness: RepositoryFreshness) => void,
-    authorization?: { readonly automaticFetch: boolean },
-  ) =>
-    Effect.gen(function* () {
-      if (closed) return yield* Effect.fail(missingRepository(repositoryId));
-      const entry = yield* access
-        .repository(repositoryId)
-        .pipe(
-          Effect.mapError((error) =>
-            error._tag === "RepositoryAccessError"
-              ? missingRepository(repositoryId)
-              : historyError(error),
-          ),
-        );
-      if (closed) return yield* Effect.fail(missingRepository(repositoryId));
-      const key = entry.logicalRepositoryId ?? repositoryId;
-      const subscription: FreshnessSubscription = {
-        path: entry.path,
-        publish,
-        automaticFetch: authorization?.automaticFetch ?? false,
-      };
-      return yield* Effect.uninterruptibleMask((restore) =>
-        Effect.gen(function* () {
-          let lifetime = repositories.get(key);
-          if (lifetime === undefined) {
-            let releaseOwnership = Effect.void;
-            const repositoryScope = yield* Scope.fork(scope);
-            const subscribers = new Set<FreshnessSubscription>();
-            const repository = yield* acquireWatchedRepository(
-              entry,
-              subscribers,
-              git,
-              watcher,
-              coordination,
+    const subscribe = (
+      repositoryId: string,
+      publish: (freshness: RepositoryFreshness) => void,
+    ) =>
+      Effect.gen(function* () {
+        if (closed) return yield* Effect.fail(missingRepository(repositoryId));
+        const entry = yield* findHistoryRepository(access, repositoryId);
+        if (closed) return yield* Effect.fail(missingRepository(repositoryId));
+        const key = entry.logicalRepositoryId ?? repositoryId;
+        const subscription: FreshnessSubscription = {
+          path: entry.path,
+          publish,
+        };
+        return yield* Effect.uninterruptibleMask((restore) =>
+          Effect.gen(function* () {
+            let lifetime = repositories.get(key);
+            if (lifetime === undefined) {
+              const repositoryScope = yield* Scope.fork(scope);
+              const subscribers = new Set<FreshnessSubscription>();
+              const repository = yield* acquireWatchedRepository(
+                entry,
+                subscribers,
+                git,
+                watcher,
+                coordination,
+              ).pipe(
+                Effect.provideService(Scope.Scope, repositoryScope),
+                Effect.forkIn(repositoryScope),
+              );
+              lifetime = {
+                scope: repositoryScope,
+                subscribers,
+                repository,
+              };
+              repositories.set(key, lifetime);
+            }
+            aliases.set(repositoryId, key);
+            lifetime.subscribers.add(subscription);
+            const unsubscribe = release(key, lifetime, subscription);
+            return yield* restore(
+              Effect.gen(function* () {
+                const repository = yield* Fiber.join(lifetime.repository);
+                yield* repository.observe(subscription);
+                return unsubscribe;
+              }),
             ).pipe(
-              Effect.tap((repository) =>
-                Effect.sync(() => {
-                  releaseOwnership = repository.releaseOwnership;
-                }),
+              Effect.onExit((exit) =>
+                Exit.isFailure(exit) ? unsubscribe : Effect.void,
               ),
-              Effect.provideService(Scope.Scope, repositoryScope),
-              Effect.forkIn(repositoryScope),
             );
-            lifetime = {
-              scope: repositoryScope,
-              subscribers,
-              repository,
-              releaseOwnership: Effect.suspend(() => releaseOwnership),
-            };
-            repositories.set(key, lifetime);
-          }
-          aliases.set(repositoryId, key);
-          lifetime.subscribers.add(subscription);
-          const unsubscribe = release(key, lifetime, subscription);
-          return yield* restore(
-            Effect.gen(function* () {
-              const repository = yield* Fiber.join(lifetime.repository);
-              yield* repository.observe(subscription);
-              return unsubscribe;
-            }),
-          ).pipe(
-            Effect.onExit((exit) =>
-              Exit.isFailure(exit) ? unsubscribe : Effect.void,
-            ),
-          );
-        }),
-      );
-    });
+          }),
+        );
+      });
 
-  const active = (repositoryId: string) =>
-    Effect.gen(function* () {
-      const lifetime = repositories.get(
-        aliases.get(repositoryId) ?? repositoryId,
-      );
-      if (closed || lifetime === undefined)
-        return yield* Effect.fail(missingRepository(repositoryId));
-      return yield* Fiber.join(lifetime.repository);
-    });
-  return {
-    subscribe,
-    fetch: (repositoryId: string) =>
-      active(repositoryId).pipe(
-        Effect.flatMap((repository) => repository.fetch),
-      ),
-    configure: (repositoryId: string, setting: RepositoryFetchSetting) =>
-      active(repositoryId).pipe(
-        Effect.flatMap((repository) => repository.configure(setting)),
-      ),
-  };
-});
-
-function missingRepository(repositoryId: string) {
-  return new RepositoryHistoryError({
-    failure: { _tag: "RepositoryMissing", repositoryId },
+    const active = (repositoryId: string) =>
+      Effect.gen(function* () {
+        const lifetime = repositories.get(
+          aliases.get(repositoryId) ?? repositoryId,
+        );
+        if (closed || lifetime === undefined)
+          return yield* Effect.fail(missingRepository(repositoryId));
+        return yield* Fiber.join(lifetime.repository);
+      });
+    return {
+      subscribe,
+      fetch: (repositoryId: string) =>
+        active(repositoryId).pipe(
+          Effect.flatMap((repository) => repository.fetch),
+        ),
+      configure: (repositoryId: string, setting: RepositoryFetchSetting) =>
+        active(repositoryId).pipe(
+          Effect.flatMap((repository) => repository.configure(setting)),
+        ),
+    };
   });
 }
 
-function historyError(cause: unknown) {
-  return new RepositoryHistoryError({
-    cause,
-    failure: { _tag: "GitFailed", reason: "Failed" },
-  });
+function missingRepository(
+  repositoryId: string,
+): RepositoryHistoryOperationFailure {
+  return { _tag: "RepositoryMissing", repositoryId };
 }

@@ -1,293 +1,222 @@
-import { randomUUID } from "node:crypto";
+import { mkdtemp, realpath } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import {
   createCurrentEnvironmentHello,
   decodeRepositoryHistoryBatch,
   decodeRepositoryHistoryPage,
-  type EnvironmentAccessCapability,
-  type RepositoryHistoryBatch,
+  RepositoryCatalogHttpApi,
 } from "@rebase/contracts";
 import { fetchEnvironmentDiscoveryEffect } from "@rebase/environment-client";
-import { Deferred, Effect, Fiber } from "effect";
-import { describe, expect, it } from "vite-plus/test";
-import { createEnvironmentEventPublisher } from "#server/adapters/environment-transport/events/environment-event-publisher";
-import { acquireEnvironmentListener } from "#server/app/server/environment-listener";
+import { Deferred, Effect, Fiber, type Scope } from "effect";
+import { describe, expect, it, onTestFinished } from "vite-plus/test";
 import {
-  type EnvironmentAuthorization,
-  EnvironmentAuthorizationAccess,
-} from "#server/domain/environment-authorization.contract";
-import { environmentAuthorizationFeature } from "#server/features/environment-authorization/environment-authorization.feature";
-import type { RepositoryHistoryService } from "#server/features/repository-history/repository-history";
-import { repositoryHistoryRpc } from "#server/features/repository-history/rpc/repository-history-rpc";
-import { testEnvironmentFeatures } from "#tests-integration/apps/server/environment-connection/test-environment-features";
+  type GitCommandRunner,
+  gitFailed,
+} from "#server/adapters/local-git/git-commands";
+import { fastImport, git } from "#tests-support/git";
+import { openTestServer } from "#tests-support/server";
+import { removeTemporaryDirectory } from "#tests-support/temporary-directory";
 import { connectEnvironmentEffect } from "#web/app/environment/connection/environment-protocol-client";
 import type { RepositoryHistoryTransport } from "#web/features/repository-history/repository-history-reader";
 import { createRepositoryHistoryRpc } from "#web/features/repository-history/transport/repository-history-rpc";
 
-const repositoryId = "00000000-0000-4000-8000-000000000001";
-const oid = "a".repeat(40);
-const query = {
-  repositoryId,
-  order: "topological" as const,
-  limit: 100,
-  roots: [{ name: "main", oid, type: "branch" as const }],
-};
-const identity = {
-  name: "Alex",
-  email: "alex@example.test",
-  timestampSeconds: 0,
-  timezoneOffsetMinutes: 0,
-};
+const longSubject = 'long "message" 😀'.repeat(4_000);
 
 describe("Effect RPC over WebSockets", () => {
-  it("streams a large history page within the negotiated frame limit", () =>
-    withHistory(
-      {
-        read: (request) =>
-          Effect.succeed({
-            objectFormat: "sha1",
-            repositoryId,
-            requestId: request.requestId,
-            refTargets: [],
-            commits: [
-              {
-                oid,
-                parents: [],
-                author: identity,
-                committer: identity,
-                subject: 'long "message" 😀'.repeat(4_000),
-              },
-            ],
-          }),
-        synchronize: () => Effect.die("unused"),
-      },
-      (history) =>
-        Effect.gen(function* () {
-          const page = decodeRepositoryHistoryPage(yield* history.read(query));
-          expect(page.commits[0]?.subject).toBe(
-            'long "message" 😀'.repeat(4_000),
-          );
-        }),
-    ));
+  it("streams a large history page within the negotiated frame limit", async () => {
+    const repository = await createHistoryRepository(longSubject);
+    await withHistory(repository, (history, query) =>
+      Effect.gen(function* () {
+        const page = decodeRepositoryHistoryPage(yield* history.read(query));
+        expect(page.commits[0]?.subject).toBe(longSubject);
+      }),
+    );
+  });
 
-  it("waits for browser storage before finishing synchronization", () =>
-    Effect.runPromise(
+  it("waits for browser storage before finishing synchronization", async () => {
+    const repository = await createHistoryRepository("commit");
+    await withHistory(repository, (history, query) =>
       Effect.gen(function* () {
         const received = yield* Deferred.make<void>();
         const stored = yield* Deferred.make<void>();
         let finished = false;
-        yield* historyConnection(
-          {
-            read: () => Effect.die("unused"),
-            synchronize: (request, emit) =>
-              emit(batch(request.requestId)).pipe(
-                Effect.andThen(
-                  Effect.sync(() => {
-                    finished = true;
-                    return 1;
-                  }),
-                ),
-              ),
-          },
-          (history) =>
-            Effect.gen(function* () {
-              const sync = yield* history
-                .synchronize({ repositoryId, priority: "visible" }, (bytes) =>
-                  Effect.gen(function* () {
-                    expect(decodeRepositoryHistoryBatch(bytes).sequence).toBe(
-                      0,
-                    );
-                    yield* Deferred.succeed(received, undefined);
-                    yield* Deferred.await(stored);
-                  }),
-                )
-                .pipe(Effect.forkScoped);
-              yield* Deferred.await(received);
-              expect(finished).toBe(false);
-              yield* Deferred.succeed(stored, undefined);
-              expect(yield* Fiber.join(sync)).toBe(1);
-              expect(finished).toBe(true);
-            }),
-        );
-      }).pipe(Effect.scoped),
-    ));
+        const sequences: number[] = [];
+        const sync = yield* history
+          .synchronize(
+            { repositoryId: query.repositoryId, priority: "visible" },
+            (bytes) =>
+              Effect.gen(function* () {
+                sequences.push(decodeRepositoryHistoryBatch(bytes).sequence);
+                yield* Deferred.succeed(received, undefined);
+                yield* Deferred.await(stored);
+              }),
+          )
+          .pipe(
+            Effect.tap(() =>
+              Effect.sync(() => {
+                finished = true;
+              }),
+            ),
+            Effect.forkScoped,
+          );
+        yield* Deferred.await(received);
+        expect(finished).toBe(false);
+        yield* Deferred.succeed(stored, undefined);
+        expect(yield* Fiber.join(sync)).toBe(1);
+        expect(finished).toBe(true);
+        expect(sequences[0]).toBe(0);
+      }),
+    );
+  });
 
-  it("interrupts server work when a caller cancels, and keeps the connection usable", () =>
-    Effect.runPromise(
-      Effect.gen(function* () {
-        const started = yield* Deferred.make<void>();
-        const interrupted = yield* Deferred.make<void>();
-        yield* historyConnection(
-          {
-            read: () =>
-              Deferred.succeed(started, undefined).pipe(
+  it("interrupts server work when a caller cancels, and keeps the connection usable", async () => {
+    const repository = await createHistoryRepository("commit");
+    const started = Deferred.makeUnsafe<void>();
+    const interrupted = Deferred.makeUnsafe<void>();
+    let hang = true;
+    await withHistory(
+      repository,
+      (history, query) =>
+        Effect.gen(function* () {
+          const reading = yield* history.read(query).pipe(Effect.forkScoped);
+          yield* Deferred.await(started);
+          yield* Fiber.interrupt(reading);
+          yield* Deferred.await(interrupted);
+          hang = false;
+          expect(
+            yield* history.synchronize(
+              { repositoryId: query.repositoryId, priority: "visible" },
+              () => Effect.void,
+            ),
+          ).toBe(1);
+        }),
+      (local) => ({
+        ...local,
+        run: (command) =>
+          hang && command.arguments[0] === "log"
+            ? Deferred.succeed(started, undefined).pipe(
                 Effect.andThen(Effect.never),
                 Effect.ensuring(Deferred.succeed(interrupted, undefined)),
-              ),
-            synchronize: () => Effect.succeed(0),
-          },
-          (history) =>
-            Effect.gen(function* () {
-              const reading = yield* history
-                .read(query)
-                .pipe(Effect.forkScoped);
-              yield* Deferred.await(started);
-              yield* Fiber.interrupt(reading);
-              yield* Deferred.await(interrupted);
-              expect(
-                yield* history.synchronize(
-                  { repositoryId, priority: "visible" },
-                  () => Effect.void,
-                ),
-              ).toBe(0);
-            }),
-        );
-      }).pipe(Effect.scoped),
-    ));
+              )
+            : local.run(command),
+      }),
+    );
+  });
 
-  it("bounds concurrent history reads on one connection", () =>
-    Effect.runPromise(
-      Effect.gen(function* () {
-        const occupied = yield* Deferred.make<void>();
-        let active = 0;
-        yield* historyConnection(
-          {
-            read: () =>
-              Effect.gen(function* () {
+  it("reports a Git timeout by its reason alone", async () => {
+    const repository = await createHistoryRepository("commit");
+    await withHistory(
+      repository,
+      (history, query) =>
+        Effect.gen(function* () {
+          const failure = yield* history.read(query).pipe(Effect.flip);
+          expect(failure).toMatchObject({
+            _tag: "RepositoryHistoryRejected",
+            failure: { _tag: "GitFailed", reason: "Timeout" },
+          });
+          expect(failure).not.toHaveProperty("failure.detail");
+        }),
+      (local) => ({
+        ...local,
+        run: (command) =>
+          command.arguments[0] === "log"
+            ? Effect.fail(gitFailed("Timeout"))
+            : local.run(command),
+      }),
+    );
+  });
+
+  it("bounds concurrent history reads on one connection", async () => {
+    const repository = await createHistoryRepository("commit");
+    const occupied = Deferred.makeUnsafe<void>();
+    let active = 0;
+    await withHistory(
+      repository,
+      (history, query) =>
+        Effect.gen(function* () {
+          const first = yield* history.read(query).pipe(Effect.forkScoped);
+          const second = yield* history.read(query).pipe(Effect.forkScoped);
+          yield* Deferred.await(occupied);
+          const failure = yield* history.read(query).pipe(Effect.flip);
+          expect(failure).toMatchObject({
+            _tag: "RepositoryHistoryRejected",
+            failure: { _tag: "GitFailed" },
+          });
+          expect(active).toBe(2);
+          yield* Fiber.interrupt(first);
+          yield* Fiber.interrupt(second);
+        }),
+      (local) => ({
+        ...local,
+        run: (command) =>
+          command.arguments[0] === "log"
+            ? Effect.gen(function* () {
                 active += 1;
                 if (active === 2) yield* Deferred.succeed(occupied, undefined);
                 return yield* Effect.never;
-              }),
-            synchronize: () => Effect.die("unused"),
-          },
-          (history) =>
-            Effect.gen(function* () {
-              const first = yield* history.read(query).pipe(Effect.forkScoped);
-              const second = yield* history.read(query).pipe(Effect.forkScoped);
-              yield* Deferred.await(occupied);
-              const failure = yield* history.read(query).pipe(Effect.flip);
-              expect(failure).toMatchObject({
-                _tag: "RepositoryHistoryRejected",
-                failure: { _tag: "GitFailed" },
-              });
-              expect(active).toBe(2);
-              yield* Fiber.interrupt(first);
-              yield* Fiber.interrupt(second);
-            }),
-        );
-      }).pipe(Effect.scoped),
-    ));
-
-  it("rejects history calls without repository access", () =>
-    withHistory(
-      {
-        read: () => Effect.die("must not read"),
-        synchronize: () => Effect.die("must not synchronize"),
-      },
-      (history) =>
-        history.read(query).pipe(
-          Effect.flip,
-          Effect.tap((error) =>
-            Effect.sync(() =>
-              expect(error).toMatchObject({
-                _tag: "RepositoryHistoryRejected",
-                failure: { _tag: "AuthorizationDenied" },
-              }),
-            ),
-          ),
-        ),
-      ["environment.read"],
-    ));
+              })
+            : local.run(command),
+      }),
+    );
+  });
 });
 
-function batch(requestId: string): RepositoryHistoryBatch {
-  return {
-    repositoryId,
-    requestId,
-    objectFormat: "sha1",
-    sequence: 0,
-    commits: [
-      {
-        oid,
-        parents: [],
-        author: identity,
-        committer: identity,
-        subject: "commit",
-      },
-    ],
-  };
-}
-
-function withHistory<A, E>(
-  history: RepositoryHistoryService,
-  use: (history: RepositoryHistoryTransport) => Effect.Effect<A, E>,
-  capabilities?: readonly EnvironmentAccessCapability[],
-) {
-  return Effect.runPromise(
-    historyConnection(history, use, capabilities).pipe(Effect.scoped),
+async function createHistoryRepository(subject: string) {
+  const path = await realpath(await mkdtemp(join(tmpdir(), "rebase rpc ")));
+  onTestFinished(() => removeTemporaryDirectory(path));
+  await git(path, "init", "-b", "main");
+  await fastImport(
+    path,
+    `commit refs/heads/main\ncommitter Alex <alex@example.test> 0 +0000\ndata ${Buffer.byteLength(subject)}\n${subject}\n\n`,
   );
+  return { head: await git(path, "rev-parse", "main"), path };
 }
 
-function historyConnection<A, E, R>(
-  history: RepositoryHistoryService,
-  use: (history: RepositoryHistoryTransport) => Effect.Effect<A, E, R>,
-  capabilities: readonly EnvironmentAccessCapability[] = [
-    "environment.read",
-    "repository.read",
-  ],
+async function withHistory(
+  repository: { readonly head: string; readonly path: string },
+  use: (
+    history: RepositoryHistoryTransport,
+    query: {
+      readonly repositoryId: string;
+      readonly order: "topological";
+      readonly limit: number;
+      readonly roots: readonly {
+        readonly name: string;
+        readonly oid: string;
+        readonly type: "branch";
+      }[];
+    },
+  ) => Effect.Effect<void, unknown, Scope.Scope>,
+  gitOverride?: (git: GitCommandRunner) => GitCommandRunner,
 ) {
-  return Effect.gen(function* () {
-    const authorization = {
-      capabilities,
-      id: randomUUID(),
-      label: "Test",
-      role: "custom" as const,
-    };
-    const auth: EnvironmentAuthorization = {
-      authorize: () => Effect.succeed(authorization),
-      consumeTicket: () => Effect.succeed(authorization),
-      mintTicket: () =>
-        Effect.succeed({
-          ticket: "test-ticket-material-00000000000000000000",
-          expiresAt: "2026-09-06T00:00:00.000Z",
-        }),
-      createPairing: () => Effect.die("unused"),
-      exchangePairing: () => Effect.die("unused"),
-      revoke: () => Effect.die("unused"),
-    };
-    const listener = yield* acquireEnvironmentListener({
-      authorization: auth,
-      environmentId: repositoryId,
-      events: createEnvironmentEventPublisher(),
-      features: testEnvironmentFeatures([
-        yield* Effect.provideService(
-          environmentAuthorizationFeature,
-          EnvironmentAuthorizationAccess,
-          auth,
-        ),
+  const server = await openTestServer({ git: gitOverride });
+  const { id: repositoryId } = await server.requests(server.owner)(
+    RepositoryCatalogHttpApi.remember,
+    { path: repository.path },
+  );
+  await Effect.runPromise(
+    Effect.gen(function* () {
+      const discovery = yield* fetchEnvironmentDiscoveryEffect(server.origin);
+      const hello = createCurrentEnvironmentHello("0.0.0");
+      const connection = yield* connectEnvironmentEffect(
+        server.origin,
+        discovery,
         {
-          capabilities: ["repository-history"],
-          httpRoutes: [],
-          rpc: (session) => repositoryHistoryRpc(session, history),
+          ...hello,
+          receiveLimits: {
+            ...hello.receiveLimits,
+            maxWebSocketResponseBytes: 4_096,
+          },
         },
-      ]),
-      productVersion: "0.0.0",
-    });
-    listener.readiness.value = true;
-    const discovery = yield* fetchEnvironmentDiscoveryEffect(listener.origin);
-    const hello = createCurrentEnvironmentHello("0.0.0");
-    const connection = yield* connectEnvironmentEffect(
-      listener.origin,
-      discovery,
-      {
-        ...hello,
-        receiveLimits: {
-          ...hello.receiveLimits,
-          maxWebSocketResponseBytes: 4_096,
-        },
-      },
-      { type: "bearer", value: "test" },
-    );
-    const result = yield* use(createRepositoryHistoryRpc(connection));
-    return result;
-  });
+        server.owner,
+      );
+      yield* use(createRepositoryHistoryRpc(connection), {
+        repositoryId,
+        order: "topological",
+        limit: 100,
+        roots: [{ name: "main", oid: repository.head, type: "branch" }],
+      });
+    }).pipe(Effect.scoped),
+  );
 }

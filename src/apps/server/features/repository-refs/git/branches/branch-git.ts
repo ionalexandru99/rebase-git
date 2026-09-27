@@ -6,7 +6,11 @@ import type {
   RepositoryWorktree,
 } from "@rebase/contracts";
 import { Effect } from "effect";
-import type { GitCommandRunner } from "#server/domain/git-command.contract";
+import {
+  type GitCommandRunner,
+  isGitRejection,
+  runRepositoryGit,
+} from "#server/adapters/local-git/git-commands";
 import { branchWriteFailed } from "#server/features/repository-refs/git/branches/branch-failures";
 import {
   forEachRefFormat,
@@ -18,10 +22,6 @@ import {
   refCommand,
   requireValidRefName,
 } from "#server/features/repository-refs/git/ref-git";
-import {
-  isGitRejection,
-  runRepositoryGit,
-} from "#server/repository/access/index";
 
 export function branchRef(name: string) {
   return `refs/heads/${name}`;

@@ -6,12 +6,12 @@ import type {
   RepositoryRejected,
 } from "@rebase/contracts";
 import { Effect } from "effect";
-import type { GitCommandRunner } from "#server/domain/git-command.contract";
-import type {
-  RepositoryAccessError,
-  RepositoryAccessService,
-} from "#server/domain/repository-access.contract";
-import type { RepositoryGitError } from "#server/domain/repository-git.contract";
+import {
+  type GitCommandRunner,
+  type GitFailed,
+  isGitRejection,
+  runRepositoryGit,
+} from "#server/adapters/local-git/git-commands";
 import { branchWriteFailed } from "#server/features/repository-refs/git/branches/branch-failures";
 import {
   branchRef,
@@ -19,10 +19,7 @@ import {
   worktreeHolding,
 } from "#server/features/repository-refs/git/branches/branch-git";
 import { refCommand } from "#server/features/repository-refs/git/ref-git";
-import {
-  isGitRejection,
-  runRepositoryGit,
-} from "#server/repository/access/index";
+import type { RepositoryAccess } from "#server/repository/repository-access";
 
 const listedCommits = 20;
 const pushCommand = { literalPathspecs: false, timeoutMilliseconds: 120_000 };
@@ -32,14 +29,11 @@ type RemoteTarget = NonNullable<DeleteRepositoryBranch["remote"]>;
 
 export function deleteBranch(
   git: GitCommandRunner,
-  access: RepositoryAccessService,
+  access: RepositoryAccess,
   command: DeleteRepositoryBranch,
 ): Effect.Effect<
   RepositoryBranchDeleted,
-  | RepositoryBranchesOperationFailure
-  | RepositoryRejected
-  | RepositoryAccessError
-  | RepositoryGitError
+  RepositoryBranchesOperationFailure | RepositoryRejected | GitFailed
 > {
   const { force, local, remote, worktreePath } = command;
   return Effect.gen(function* () {
@@ -59,7 +53,7 @@ export function deleteBranch(
 
 function requireDeletableLocal(
   git: GitCommandRunner,
-  access: RepositoryAccessService,
+  access: RepositoryAccess,
   worktreePath: string,
   { name, target }: LocalTarget,
 ) {

@@ -1,7 +1,3 @@
-export {
-  EnvironmentAccessCapability,
-  environmentAccessCapabilities,
-} from "@rebase/contracts/environment-connection/environment-access-capability.contract";
 export { EnvironmentHttpFailure } from "@rebase/contracts/environment-connection/environment-request-failure.contract";
 export {
   ClientReceiveLimits,

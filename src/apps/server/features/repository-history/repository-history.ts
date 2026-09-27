@@ -1,41 +1,32 @@
 import type {
   ReadRepositoryHistory,
   RepositoryHistoryBatch,
+  RepositoryHistoryOperationFailure,
   SynchronizeRepositoryHistory,
 } from "@rebase/contracts";
 import { Effect } from "effect";
-import type { GitCommandRunner } from "#server/domain/git-command.contract";
-import type { RepositoryAccessService } from "#server/domain/repository-access.contract";
+import type { GitCommandRunner } from "#server/adapters/local-git/git-commands";
 import {
-  historyGitFailed,
-  RepositoryHistoryError,
+  findHistoryRepository,
+  historyWireFailure,
 } from "#server/features/repository-history/git/history-failures";
 import { createObjectFormatCache } from "#server/features/repository-history/git/read-object-format";
 import { readRepositoryHistory } from "#server/features/repository-history/git/read-repository-history";
 import { synchronizeRepositoryHistory } from "#server/features/repository-history/git/synchronize-repository-history";
+import type { RepositoryAccess } from "#server/repository/repository-access";
 
 export type RepositoryHistoryService = ReturnType<
   typeof createRepositoryHistoryService
 >;
 
 export function createRepositoryHistoryService(dependencies: {
-  readonly access: RepositoryAccessService;
+  readonly access: RepositoryAccess;
   readonly git: GitCommandRunner;
 }) {
   const objectFormat = createObjectFormatCache(dependencies.git);
-  const findRepository = (repositoryId: string) =>
-    dependencies.access.repository(repositoryId).pipe(
-      Effect.mapError((error) =>
-        error._tag === "RepositoryAccessError"
-          ? new RepositoryHistoryError({
-              failure: { _tag: "RepositoryMissing", repositoryId },
-            })
-          : error,
-      ),
-    );
   return {
     read: (request: ReadRepositoryHistory) =>
-      findRepository(request.repositoryId).pipe(
+      findHistoryRepository(dependencies.access, request.repositoryId).pipe(
         Effect.flatMap((repository) =>
           readRepositoryHistory(
             dependencies.git,
@@ -44,17 +35,15 @@ export function createRepositoryHistoryService(dependencies: {
             objectFormat(repository.path),
           ),
         ),
-        Effect.catchTag("RepositoryGitError", (error) =>
-          Effect.fail(historyGitFailed(error)),
-        ),
+        Effect.mapError(historyWireFailure),
       ),
     synchronize: (
       request: SynchronizeRepositoryHistory,
       emit: (
         batch: RepositoryHistoryBatch,
-      ) => Effect.Effect<void, RepositoryHistoryError>,
+      ) => Effect.Effect<void, RepositoryHistoryOperationFailure>,
     ) =>
-      findRepository(request.repositoryId).pipe(
+      findHistoryRepository(dependencies.access, request.repositoryId).pipe(
         Effect.flatMap((repository) =>
           synchronizeRepositoryHistory(
             dependencies.git,
@@ -64,9 +53,7 @@ export function createRepositoryHistoryService(dependencies: {
             objectFormat(repository.path),
           ),
         ),
-        Effect.catchTag("RepositoryGitError", (error) =>
-          Effect.fail(historyGitFailed(error)),
-        ),
+        Effect.mapError(historyWireFailure),
       ),
   };
 }

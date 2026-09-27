@@ -42,13 +42,12 @@ export type EnvironmentSnapshot = typeof EnvironmentSnapshot.Type;
 
 export const EnvironmentHttpApi = {
   discovery: route({
-    capability: null,
+    public: true,
     method: "GET",
     path: environmentDiscoveryPath,
     success: EnvironmentDiscovery,
   }),
   snapshot: route({
-    capability: "environment.read",
     method: "GET",
     path: environmentSnapshotPath,
     success: EnvironmentSnapshot,

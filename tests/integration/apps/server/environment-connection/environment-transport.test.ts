@@ -2,193 +2,165 @@ import { request } from "node:http";
 import {
   createCurrentEnvironmentHello,
   currentTransportLimits,
+  EnvironmentAuthorizationHttpApi,
   EnvironmentHttpApi,
   environmentDiscoveryPath,
   environmentLivePath,
   environmentSnapshotPath,
   type RouteResultValue,
 } from "@rebase/contracts";
-import { Effect, Schema } from "effect";
+import { Schema } from "effect";
 import { describe, expect, it } from "vite-plus/test";
-import type { EnvironmentFeature } from "#server/adapters/environment-transport/environment-feature.contract";
-import { createEnvironmentEventPublisher } from "#server/adapters/environment-transport/events/environment-event-publisher";
-import { acquireEnvironmentListener } from "#server/app/server/environment-listener";
-import {
-  type EnvironmentAuthorization,
-  EnvironmentAuthorizationAccess,
-} from "#server/domain/environment-authorization.contract";
-import type { EnvironmentEventPublisher } from "#server/domain/environment-event-publisher.contract";
-import { environmentAuthorizationFeature } from "#server/features/environment-authorization/environment-authorization.feature";
-import { testEnvironmentFeatures } from "#tests-integration/apps/server/environment-connection/test-environment-features";
-
-const environmentId = "00000000-0000-4000-8000-000000000001";
-const testAuthorization = createTestAuthorization();
+import { openTestServer } from "#tests-support/server";
 
 describe("Environment transport", () => {
   it("serves typed discovery and a bounded base snapshot", async () => {
-    await withListener(async (origin) => {
-      const discoveryResponse = await fetch(
-        `${origin}${environmentDiscoveryPath}`,
-      );
-      expect(discoveryResponse.status).toBe(200);
-      expect(discoveryResponse.headers.get("cache-control")).toBe("no-store");
-      const discovery = okValue(
-        Schema.decodeUnknownSync(EnvironmentHttpApi.discovery.response)(
-          await discoveryResponse.json(),
-        ),
-      );
-      expect(discovery).toMatchObject({
-        environmentId,
-        productVersion: "0.0.0",
-        protocol: { major: 3, minor: 0, minimumSupportedMinor: 0 },
-        limits: currentTransportLimits,
-      });
-      expect(
-        discovery.capabilities.some(
-          (capability) => capability.name === "repository-history",
-        ),
-      ).toBe(false);
-
-      const snapshotResponse = await fetch(
-        `${origin}${environmentSnapshotPath}`,
-      );
-      expect(snapshotResponse.status).toBe(200);
-      expect(
-        okValue(
-          Schema.decodeUnknownSync(EnvironmentHttpApi.snapshot.response)(
-            await snapshotResponse.json(),
-          ),
-        ),
-      ).toEqual({ environmentId, sequence: 0 });
+    const { environmentId, origin, owner } = await openTestServer();
+    const discoveryResponse = await fetch(
+      `${origin}${environmentDiscoveryPath}`,
+    );
+    expect(discoveryResponse.status).toBe(200);
+    expect(discoveryResponse.headers.get("cache-control")).toBe("no-store");
+    const discovery = okValue(
+      Schema.decodeUnknownSync(EnvironmentHttpApi.discovery.response)(
+        await discoveryResponse.json(),
+      ),
+    );
+    expect(discovery).toMatchObject({
+      environmentId,
+      productVersion: "0.0.0",
+      protocol: { major: 3, minor: 0, minimumSupportedMinor: 0 },
+      limits: currentTransportLimits,
     });
+
+    const snapshotResponse = await fetch(
+      `${origin}${environmentSnapshotPath}`,
+      { headers: { authorization: `Bearer ${owner.value}` } },
+    );
+    expect(snapshotResponse.status).toBe(200);
+    expect(
+      okValue(
+        Schema.decodeUnknownSync(EnvironmentHttpApi.snapshot.response)(
+          await snapshotResponse.json(),
+        ),
+      ),
+    ).toEqual({ environmentId, sequence: 0 });
   });
 
-  it("advertises the capabilities of registered features only", async () => {
-    const history: EnvironmentFeature = {
-      capabilities: ["repository-history"],
-      httpRoutes: [],
-    };
-    await withListener(
-      async (origin) => {
-        const response = await fetch(`${origin}${environmentDiscoveryPath}`);
-        const discovery = okValue(
-          Schema.decodeUnknownSync(EnvironmentHttpApi.discovery.response)(
-            await response.json(),
-          ),
-        );
-        const names = discovery.capabilities.map(({ name }) => name);
-        expect(names).toContain("repository-history");
-        expect(names).toContain("environment-events");
-        expect(names).not.toContain("repository-refs");
-      },
-      [history],
+  it("advertises the capabilities of the registered features", async () => {
+    const { origin } = await openTestServer();
+    const response = await fetch(`${origin}${environmentDiscoveryPath}`);
+    const discovery = okValue(
+      Schema.decodeUnknownSync(EnvironmentHttpApi.discovery.response)(
+        await response.json(),
+      ),
+    );
+    const names = discovery.capabilities.map(({ name }) => name);
+    expect(names).toEqual(
+      expect.arrayContaining([
+        "environment-events",
+        "repository-history",
+        "repository-refs",
+      ]),
     );
   });
 
   it("counts and rejects HTTP bodies beyond the advertised limit", async () => {
-    await withListener(async (origin) => {
-      const response = await sendChunkedBody(
-        `${origin}${environmentDiscoveryPath}`,
-        currentTransportLimits.maxHttpRequestBytes + 1,
-      );
-      expect(response.status).toBe(413);
-      expect(response.body).toEqual({
-        _tag: "PayloadTooLarge",
-        limitBytes: currentTransportLimits.maxHttpRequestBytes,
-      });
+    const { origin } = await openTestServer();
+    const response = await sendChunkedBody(
+      `${origin}${environmentDiscoveryPath}`,
+      currentTransportLimits.maxHttpRequestBytes + 1,
+    );
+    expect(response.status).toBe(413);
+    expect(response.body).toEqual({
+      _tag: "PayloadTooLarge",
+      limitBytes: currentTransportLimits.maxHttpRequestBytes,
     });
   });
 
   it("rejects a non-empty HTTP body as an invalid message", async () => {
-    await withListener(async (origin) => {
-      const response = await sendChunkedBody(
-        `${origin}${environmentDiscoveryPath}`,
-        1,
-      );
-      expect(response).toEqual({
-        body: { _tag: "InvalidMessage" },
-        status: 400,
-      });
+    const { origin } = await openTestServer();
+    const response = await sendChunkedBody(
+      `${origin}${environmentDiscoveryPath}`,
+      1,
+    );
+    expect(response).toEqual({
+      body: { _tag: "InvalidMessage" },
+      status: 400,
     });
   });
 
   it("rejects a streaming HTTP body before the sender finishes it", async () => {
-    await withListener(async (origin) => {
-      const response = await sendUnfinishedChunkedBody(
-        `${origin}${environmentDiscoveryPath}`,
-        currentTransportLimits.maxHttpRequestBytes + 1,
-      );
-      expect(response.status).toBe(413);
-    });
+    const { origin } = await openTestServer();
+    const response = await sendUnfinishedChunkedBody(
+      `${origin}${environmentDiscoveryPath}`,
+      currentTransportLimits.maxHttpRequestBytes + 1,
+    );
+    expect(response.status).toBe(413);
   });
 
   it("closes upgraded sockets with the listener scope", async () => {
-    let closed: ReturnType<typeof nextClose> | undefined;
-    await withListener(async (origin) => {
-      const socket = await openWebSocket(origin);
-      closed = nextClose(socket);
-    });
+    const server = await openTestServer();
+    const socket = await openWebSocket(server.origin, server.owner.value);
+    const closed = nextClose(socket);
+    await server.close();
 
     await expect(closed).resolves.toMatchObject({ code: 1006 });
   });
 
   it("requires a hello before application calls and rejects a second hello", async () => {
-    await withListener(async (origin) => {
-      const socket = await openWebSocket(origin);
-      expect(
-        await rpcRequest(socket, "1", "WatchEnvironment", null),
-      ).toMatchObject({
-        _tag: "Exit",
-        exit: {
-          _tag: "Failure",
-          cause: [{ _tag: "Fail", error: { _tag: "AuthorizationDenied" } }],
+    const { origin, owner } = await openTestServer();
+    const socket = await openWebSocket(origin, owner.value);
+    expect(
+      await rpcRequest(socket, "1", "WatchEnvironment", null),
+    ).toMatchObject({
+      _tag: "Exit",
+      exit: {
+        _tag: "Failure",
+        cause: [{ _tag: "Fail", error: { _tag: "AuthorizationDenied" } }],
+      },
+    });
+    const hello = createCurrentEnvironmentHello("0.0.0");
+    expect(await rpcRequest(socket, "2", "Hello", hello)).toMatchObject({
+      _tag: "Exit",
+      exit: { _tag: "Success", value: { _tag: "HelloAccepted" } },
+    });
+    expect(await rpcRequest(socket, "3", "Hello", hello)).toMatchObject({
+      _tag: "Exit",
+      exit: {
+        _tag: "Success",
+        value: {
+          _tag: "HelloRejected",
+          failure: { _tag: "HandshakeAlreadyCompleted" },
         },
-      });
-      const hello = createCurrentEnvironmentHello("0.0.0");
-      expect(await rpcRequest(socket, "2", "Hello", hello)).toMatchObject({
-        _tag: "Exit",
-        exit: { _tag: "Success", value: { _tag: "HelloAccepted" } },
-      });
-      expect(await rpcRequest(socket, "3", "Hello", hello)).toMatchObject({
-        _tag: "Exit",
-        exit: {
-          _tag: "Success",
-          value: {
-            _tag: "HelloRejected",
-            failure: { _tag: "HandshakeAlreadyCompleted" },
-          },
-        },
-      });
+      },
     });
   });
 
   it("rejects malformed JSON frames", async () => {
-    await withListener(async (origin) => {
-      const socket = await openWebSocket(origin);
-      const response = nextMessage(socket);
-      socket.send("{");
-      expect(await response).toMatchObject({ _tag: "Defect" });
-    });
+    const { origin, owner } = await openTestServer();
+    const socket = await openWebSocket(origin, owner.value);
+    const response = nextMessage(socket);
+    socket.send("{");
+    expect(await response).toMatchObject({ _tag: "Defect" });
   });
 
   it("closes sockets that exceed the advertised frame limit", async () => {
-    await withListener(async (origin) => {
-      const socket = await openWebSocket(origin);
-      const closed = nextClose(socket);
-      socket.send(
-        "x".repeat(currentTransportLimits.maxWebSocketRequestBytes + 1),
-      );
-      expect(await closed).toMatchObject({ code: 1009 });
-    });
+    const { origin, owner } = await openTestServer();
+    const socket = await openWebSocket(origin, owner.value);
+    const closed = nextClose(socket);
+    socket.send(
+      "x".repeat(currentTransportLimits.maxWebSocketRequestBytes + 1),
+    );
+    expect(await closed).toMatchObject({ code: 1009 });
   });
 
   it("closes sockets that never complete the handshake", async () => {
-    await withListener(async (origin) => {
-      const socket = await openWebSocket(origin);
-      expect(await nextClose(socket)).toEqual({
-        code: 1008,
-        reason: "HandshakeRequired",
-      });
+    const { origin, owner } = await openTestServer();
+    const socket = await openWebSocket(origin, owner.value);
+    expect(await nextClose(socket)).toEqual({
+      code: 1008,
+      reason: "HandshakeRequired",
     });
   });
 });
@@ -216,39 +188,24 @@ function nextMessage(socket: WebSocket) {
   });
 }
 
-function withListener(
-  run: (origin: string, events: EnvironmentEventPublisher) => Promise<void>,
-  features: readonly EnvironmentFeature[] = [],
-) {
-  return Effect.runPromise(
-    Effect.scoped(
-      Effect.gen(function* () {
-        const events = createEnvironmentEventPublisher();
-        const listener = yield* acquireEnvironmentListener({
-          authorization: testAuthorization,
-          environmentId,
-          events,
-          features: testEnvironmentFeatures([
-            yield* Effect.provideService(
-              environmentAuthorizationFeature,
-              EnvironmentAuthorizationAccess,
-              testAuthorization,
-            ),
-            ...features,
-          ]),
-          productVersion: "0.0.0",
-        });
-        listener.readiness.value = true;
-        yield* Effect.promise(() => run(listener.origin, events));
-      }),
-    ),
+async function openWebSocket(origin: string, credential: string) {
+  const minted = await fetch(
+    `${origin}${EnvironmentAuthorizationHttpApi.mintWebSocketTicket.path}`,
+    {
+      headers: { authorization: `Bearer ${credential}`, origin },
+      method: "POST",
+    },
   );
+  const { value } = (await minted.json()) as {
+    readonly value: { readonly ticket: string };
+  };
+  return connectWebSocket(origin, value.ticket);
 }
 
-function openWebSocket(origin: string) {
+function connectWebSocket(origin: string, ticket: string) {
   return new Promise<WebSocket>((resolveOpen, rejectOpen) => {
     const socket = new WebSocket(
-      `${origin.replace("http://", "ws://")}${environmentLivePath}?ticket=test-ticket`,
+      `${origin.replace("http://", "ws://")}${environmentLivePath}?ticket=${ticket}`,
     );
     socket.addEventListener("open", () => resolveOpen(socket), { once: true });
     socket.addEventListener(
@@ -259,36 +216,6 @@ function openWebSocket(origin: string) {
       },
     );
   });
-}
-
-function createTestAuthorization(): EnvironmentAuthorization {
-  const authorization = {
-    capabilities: ["environment.read" as const],
-    id: "00000000-0000-4000-8000-000000000002",
-    label: "Test device",
-    role: "custom" as const,
-  };
-  return {
-    authorize: () => Effect.succeed(authorization),
-    consumeTicket: () => Effect.succeed(authorization),
-    createPairing: () =>
-      Effect.succeed({
-        expiresAt: "2026-08-21T12:10:00.000Z",
-        material: "test-pairing-material-000000000000000000000",
-      }),
-    exchangePairing: () =>
-      Effect.succeed({ authorization, credential: "test-credential-material" }),
-    mintTicket: () =>
-      Effect.succeed({
-        expiresAt: "2026-08-21T12:00:30.000Z",
-        ticket: "test-ticket",
-      }),
-    revoke: (_, authorizationId) =>
-      Effect.succeed({
-        authorizationId,
-        revokedAt: "2026-08-21T12:00:00.000Z",
-      }),
-  };
 }
 
 function nextClose(socket: WebSocket) {

@@ -5,7 +5,7 @@ import { pathToFileURL } from "node:url";
 import type { RepositoryHistoryBatch } from "@rebase/contracts";
 import { Effect } from "effect";
 import { expect, it, vi } from "vite-plus/test";
-import { createLocalGitCommandRunner } from "#server/adapters/local-git/local-git-command-runner";
+import { createLocalGitCommandRunner } from "#server/adapters/local-git/git-commands";
 import { createLocalRepositoryWatcher } from "#server/adapters/local-git/local-repository-watcher";
 import { readObjectFormat } from "#server/features/repository-history/git/read-object-format";
 import { readRepositoryHistory } from "#server/features/repository-history/git/read-repository-history";
@@ -115,7 +115,7 @@ it("preserves true shallow parents and invalidates the old basis when external d
           readObjectFormat(git, clone),
         ),
       ),
-    ).rejects.toMatchObject({ failure: { _tag: "SnapshotInvalidated" } });
+    ).rejects.toMatchObject({ _tag: "SnapshotInvalidated" });
     const rebuilt: RepositoryHistoryBatch[] = [];
     expect(
       await Effect.runPromise(

@@ -1,10 +1,8 @@
 import type { ChangeDiff } from "@rebase/contracts";
 import { createTwoFilesPatch } from "diff";
-import {
-  previewByteLimit,
-  type RepositoryFileContent,
-} from "#server/domain/repository-comparison.contract";
 import { fingerprint } from "#server/repository/comparison/fingerprint";
+import { previewByteLimit } from "#server/repository/comparison/read-blobs";
+import type { RepositoryFileContent } from "#server/repository/comparison/read-object-file";
 
 const patchTimeoutMilliseconds = 250;
 

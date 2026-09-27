@@ -9,25 +9,22 @@ import {
   type TagRejected,
 } from "@rebase/contracts";
 import { Effect } from "effect";
-import type { GitCommandRunner } from "#server/domain/git-command.contract";
-import type { RepositoryGitError } from "#server/domain/repository-git.contract";
+import {
+  type GitCommandRunner,
+  type GitFailed,
+  isGitRejection,
+  runRepositoryGit,
+} from "#server/adapters/local-git/git-commands";
 import {
   readRefTarget,
   refCommand,
   requireValidRefName,
 } from "#server/features/repository-refs/git/ref-git";
-import {
-  isGitRejection,
-  runRepositoryGit,
-} from "#server/repository/access/index";
 
 export function createTag(
   git: GitCommandRunner,
   { name, target, worktreePath }: CreateRepositoryTag,
-): Effect.Effect<
-  RepositoryTag,
-  TagRejected | RepositoryRejected | RepositoryGitError
-> {
+): Effect.Effect<RepositoryTag, TagRejected | RepositoryRejected | GitFailed> {
   return Effect.gen(function* () {
     yield* requireValidTagName(git, worktreePath, name);
     yield* runRepositoryGit(
@@ -43,7 +40,7 @@ export function createTag(
 export function deleteTag(
   git: GitCommandRunner,
   { name, worktreePath }: DeleteRepositoryTag,
-): Effect.Effect<RepositoryTagDeleted, RefMissing | RepositoryGitError> {
+): Effect.Effect<RepositoryTagDeleted, RefMissing | GitFailed> {
   return Effect.gen(function* () {
     const target = yield* requireTagTarget(git, worktreePath, name);
     yield* runRepositoryGit(
@@ -84,9 +81,7 @@ function tagRef(name: string) {
   return `refs/tags/${name}`;
 }
 
-function tagWriteFailed(
-  error: RepositoryGitError,
-): TagRejected | RepositoryRejected {
+function tagWriteFailed(error: GitFailed): TagRejected | RepositoryRejected {
   return isGitRejection(error) && /already exists/.test(error.detail)
     ? { _tag: "TagRejected", reason: "Exists" }
     : repositoryRejected("GitFailed", error.detail);

@@ -1,13 +1,17 @@
 #!/usr/bin/env node
 
-import { existsSync, realpathSync } from "node:fs";
+import { spawn } from "node:child_process";
+import { existsSync, readFileSync, realpathSync } from "node:fs";
+import { homedir, release } from "node:os";
+
 import { fileURLToPath } from "node:url";
 import { currentEnvironmentProtocol } from "@rebase/contracts";
 import { Deferred, Effect } from "effect";
-import { openDefaultBrowser } from "#server/adapters/browser-client/default-browser";
-import type { EnvironmentServerOptions } from "#server/app/server/environment-server.contract";
 import { resolveHostAddress } from "#server/app/server/host-address";
-import { startEnvironmentServer } from "#server/app/server/start-environment-server";
+import {
+  type EnvironmentServerOptions,
+  startEnvironmentServer,
+} from "#server/app/server/start-environment-server";
 import { productVersion } from "#server/product-version";
 
 const usage =
@@ -55,7 +59,11 @@ function parseServeArguments(arguments_: string[]): EnvironmentServerOptions {
     else throw new Error(usage);
   }
 
-  return { browserAssetsRoot: resolveBrowserAssetsRoot(), ...serveOptions };
+  return {
+    browserAssetsRoot: resolveBrowserAssetsRoot(),
+    home: homedir(),
+    ...serveOptions,
+  };
 }
 
 function parsePort(value: string) {
@@ -155,4 +163,50 @@ if (
   realpathSync(fileURLToPath(import.meta.url)) === realpathSync(entryPoint)
 ) {
   await main();
+}
+
+function openDefaultBrowser(url: string) {
+  if (process.env.BROWSER === "none") {
+    return;
+  }
+
+  try {
+    const invocation = browserInvocation(url);
+    const child = spawn(invocation.command, invocation.arguments, {
+      detached: true,
+      stdio: "ignore",
+      windowsHide: true,
+    });
+    child.once("error", () => undefined);
+    child.unref();
+  } catch {}
+}
+
+function browserInvocation(url: string): BrowserInvocation {
+  if (process.platform === "darwin") {
+    return { arguments: [url], command: "open" };
+  }
+  if (process.platform === "win32" || isWindowsSubsystemForLinux()) {
+    return {
+      arguments: ["/d", "/s", "/c", "start", "", url],
+      command: "cmd.exe",
+    };
+  }
+  return { arguments: [url], command: "xdg-open" };
+}
+
+function isWindowsSubsystemForLinux() {
+  if (process.env.WSL_DISTRO_NAME !== undefined) return true;
+  try {
+    return readFileSync("/proc/sys/kernel/osrelease", "utf8")
+      .toLowerCase()
+      .includes("microsoft");
+  } catch {
+    return release().toLowerCase().includes("microsoft");
+  }
+}
+
+interface BrowserInvocation {
+  readonly arguments: readonly string[];
+  readonly command: string;
 }

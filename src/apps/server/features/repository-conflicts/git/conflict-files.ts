@@ -6,17 +6,19 @@ import type {
   WholeFileChoice,
 } from "@rebase/contracts";
 import { Effect } from "effect";
-import type { GitCommandRunner } from "#server/domain/git-command.contract";
-import type { RepositoryFileContent } from "#server/domain/repository-comparison.contract";
+import {
+  type GitCommandRunner,
+  runRepositoryGit,
+} from "#server/adapters/local-git/git-commands";
 import { worktreeFile } from "#server/features/repository-changes/git/change-files";
 import { markerBlocks } from "#server/features/repository-conflicts/conflict-regions";
-import { runRepositoryGit } from "#server/repository/access/index";
+import { binary } from "#server/repository/comparison/build-change-diff";
+import { fingerprint } from "#server/repository/comparison/fingerprint";
 import {
-  binary,
-  fingerprint,
   type GitBlob,
   readBlobs,
-} from "#server/repository/comparison/index";
+} from "#server/repository/comparison/read-blobs";
+import type { RepositoryFileContent } from "#server/repository/comparison/read-object-file";
 
 export interface StageEntry {
   readonly side: ConflictSide;

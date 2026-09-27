@@ -4,25 +4,22 @@ import { app, BrowserWindow, dialog } from "electron";
 import electronUpdater, { type AppUpdater } from "electron-updater";
 import {
   type DesktopApplication,
+  type DesktopApplicationHost,
+  type DesktopRenderer,
+  type DesktopWindowOptions,
   startDesktopApplication,
 } from "#desktop/app/desktop-application";
-import type {
-  DesktopApplicationHost,
-  DesktopRenderer,
-  DesktopWindowOptions,
-} from "#desktop/app/desktop-application.contract";
 import { desktopApplicationIpc } from "#desktop/app/desktop-application-ipc.contract";
 import { createApplicationUpdateSettingsStore } from "#desktop/features/application-updates/application-update-settings-store";
 import { createApplicationUpdater } from "#desktop/features/application-updates/application-updater";
 import { registerApplicationUpdaterIpc } from "#desktop/features/application-updates/application-updater-ipc";
-import { createElectronRepositoryFilesystem } from "#desktop/features/repository-filesystem/electron-repository-filesystem";
 import { registerRepositoryFilesystemIpc } from "#desktop/features/repository-filesystem/repository-filesystem-ipc";
 import { startManagedEnvironmentServer } from "#desktop/platform/environment/environment-supervisor";
 import {
   createTrustedIpcHandler,
   isTrustedRendererLocation,
-} from "#desktop/platform/renderer-trust/renderer-trust";
-import type { TrustedIpcHandler } from "#desktop/platform/renderer-trust/renderer-trust.contract";
+  type TrustedIpcHandler,
+} from "#desktop/platform/renderer-trust";
 
 let desktopApplication: DesktopApplication | undefined;
 const desktopIconPath = fileURLToPath(
@@ -68,10 +65,7 @@ async function start() {
   );
   const trusted = createTrustedIpcHandler(renderer);
   registerApplicationUpdaterIpc(applicationUpdater, trusted);
-  registerRepositoryFilesystemIpc(
-    createElectronRepositoryFilesystem(),
-    trusted,
-  );
+  registerRepositoryFilesystemIpc(trusted);
   desktopApplication = await startDesktopApplication({
     host: createHost(trusted),
     renderer,

@@ -1,16 +1,17 @@
 import {
   maximumRepositoryHistorySequence,
   type RepositoryHistoryBatch,
+  type RepositoryHistoryOperationFailure,
   type RepositoryHistorySnapshot,
   type SynchronizeRepositoryHistory,
 } from "@rebase/contracts";
 import { Effect } from "effect";
-import type { GitCommandRunner } from "#server/domain/git-command.contract";
-import type { GitObjectFormat } from "#server/domain/git-object-id";
-import type { RepositoryGitError } from "#server/domain/repository-git.contract";
+import type {
+  GitCommandRunner,
+  GitObjectFormat,
+} from "#server/adapters/local-git/git-commands";
 import {
   historyFailed,
-  type RepositoryHistoryError,
   snapshotInvalidated,
 } from "#server/features/repository-history/git/history-failures";
 import { historyTraversalIdentity } from "#server/features/repository-history/git/history-snapshot-identity";
@@ -28,9 +29,9 @@ export function synchronizeRepositoryHistory(
   request: SynchronizeRepositoryHistory,
   emit: (
     batch: RepositoryHistoryBatch,
-  ) => Effect.Effect<void, RepositoryHistoryError>,
+  ) => Effect.Effect<void, RepositoryHistoryOperationFailure>,
   readObjectFormat: ObjectFormatRead,
-): Effect.Effect<number, RepositoryHistoryError | RepositoryGitError> {
+): Effect.Effect<number, RepositoryHistoryOperationFailure> {
   return Effect.gen(function* () {
     let sequence =
       request.basis?._tag === "Incomplete"
@@ -188,7 +189,7 @@ function emitSnapshot(
   sequence: number,
   emit: (
     batch: RepositoryHistoryBatch,
-  ) => Effect.Effect<void, RepositoryHistoryError>,
+  ) => Effect.Effect<void, RepositoryHistoryOperationFailure>,
 ) {
   return emit({
     commits: [],
@@ -208,10 +209,10 @@ function streamHistory(
   excludedRoots: readonly string[],
   skip: number,
   objectFormat: GitObjectFormat,
-  nextSequence: Effect.Effect<number, RepositoryHistoryError>,
+  nextSequence: Effect.Effect<number, RepositoryHistoryOperationFailure>,
   emit: (
     batch: RepositoryHistoryBatch,
-  ) => Effect.Effect<void, RepositoryHistoryError>,
+  ) => Effect.Effect<void, RepositoryHistoryOperationFailure>,
   invalidBasisOnFailure: boolean,
   shallowOids: readonly string[],
 ) {

@@ -1,12 +1,15 @@
-import type {
-  LocalBranch,
-  RepositoryRefs,
-  RepositoryWorktree,
+import {
+  type LocalBranch,
+  maximumJsonMessageBytes,
+  type RepositoryRefs,
+  type RepositoryWorktree,
 } from "@rebase/contracts";
 import { Effect } from "effect";
-import type { GitCommandRunner } from "#server/domain/git-command.contract";
-import type { RepositoryGitError } from "#server/domain/repository-git.contract";
-import { fitRepositoryRefs } from "#server/features/repository-refs/git/fit-repository-refs";
+import {
+  type GitCommandRunner,
+  type GitFailed,
+  runRepositoryGit,
+} from "#server/adapters/local-git/git-commands";
 import {
   forEachRefFormat,
   localBranchFromRecord,
@@ -15,12 +18,10 @@ import {
   remoteDefaultBranchFromRecord,
   tagFromRecord,
 } from "#server/features/repository-refs/git/parse-for-each-ref";
-import { readRemoteMetadata } from "#server/features/repository-refs/git/read-remote-metadata";
 import {
   canonicalizeWorktrees,
   readWorktrees,
-  runRepositoryGit,
-} from "#server/repository/access/index";
+} from "#server/repository/repository-access";
 
 const readTimeoutMilliseconds = 15_000;
 const maximumRefsOutputBytes = 16 * 1_048_576;
@@ -32,7 +33,7 @@ export function readRepositoryRefs(
     readonly logicalRepositoryId?: string;
     readonly path: string;
   },
-): Effect.Effect<RepositoryRefs, RepositoryGitError> {
+): Effect.Effect<RepositoryRefs, GitFailed> {
   return Effect.gen(function* () {
     const output = yield* Effect.all(
       {
@@ -125,5 +126,152 @@ function withDefined<Input, Output>(
   return (input: Input) => {
     const output = convert(input);
     return output === undefined ? [] : [output];
+  };
+}
+
+function readRemoteMetadata(git: GitCommandRunner, directory: string) {
+  return runRepositoryGit(
+    git,
+    directory,
+    ["config", "--get-regexp", "^remote\\..*\\.url$"],
+    { timeoutMilliseconds: 5_000, maxOutputBytes: 65_536 },
+  ).pipe(
+    Effect.map((remotes) => ({
+      githubRepository: githubRepositoryFromRemotes(remotes),
+      remoteProviders: remoteProvidersFromConfig(remotes),
+    })),
+    Effect.catch(() =>
+      Effect.succeed({ githubRepository: undefined, remoteProviders: [] }),
+    ),
+  );
+}
+
+export function githubRepositoryFromRemotes(
+  output: string,
+): RepositoryRefs["githubRepository"] {
+  const remotes = output
+    .trim()
+    .split("\n")
+    .flatMap((line) => {
+      const match = /^remote\.(.+)\.url\s+(.+)$/.exec(line.trim());
+      return match?.[1] === undefined || match[2] === undefined
+        ? []
+        : [{ remote: match[1], url: match[2] }];
+    });
+  const origin = remotes.find((remote) => remote.remote === "origin");
+  const url =
+    origin?.url ?? (remotes.length === 1 ? remotes[0]?.url : undefined);
+  if (url === undefined) return undefined;
+  const match =
+    /^(?:https:\/\/github\.com\/|git@github\.com:|ssh:\/\/git@github\.com\/)([a-zA-Z0-9-]{1,39})\/([a-zA-Z0-9_.-]{1,100}?)\/?$/.exec(
+      url,
+    );
+  const owner = match?.[1];
+  const name = match?.[2]?.replace(/\.git$/, "");
+  return owner === undefined ||
+    name === undefined ||
+    name === "" ||
+    name === "." ||
+    name === ".."
+    ? undefined
+    : { owner, name };
+}
+
+type Provider = NonNullable<
+  RepositoryRefs["remoteProviders"]
+>[number]["provider"];
+
+export function remoteProvidersFromConfig(
+  output: string,
+): NonNullable<RepositoryRefs["remoteProviders"]> {
+  const remotes = new Map<string, Provider>();
+  for (const line of output.split("\n")) {
+    const match = /^remote\.(.+)\.url\s+(.+)$/.exec(line.trim());
+    const remote = match?.[1];
+    const address = match?.[2];
+    if (
+      remote === undefined ||
+      remote.length > 255 ||
+      address === undefined ||
+      remotes.has(remote)
+    )
+      continue;
+    remotes.set(remote, providerForAddress(address));
+    if (remotes.size === 256) break;
+  }
+  return [...remotes].map(([remote, provider]) => ({ remote, provider }));
+}
+
+function providerForAddress(address: string): Provider {
+  let host: string;
+  try {
+    host = address.includes("://")
+      ? new URL(address).hostname.toLowerCase()
+      : (/^(?:[^@/]+@)?([^/:]+):/.exec(address)?.[1]?.toLowerCase() ?? "");
+  } catch {
+    return "git";
+  }
+  if (host === "github.com" || host === "ssh.github.com") return "github";
+  if (host === "gitlab.com" || host === "altssh.gitlab.com") return "gitlab";
+  if (host === "bitbucket.org" || host === "altssh.bitbucket.org")
+    return "bitbucket";
+  if (
+    host === "dev.azure.com" ||
+    host === "ssh.dev.azure.com" ||
+    host.endsWith(".visualstudio.com")
+  )
+    return "azure";
+  if (host === "codeberg.org") return "codeberg";
+  if (/^git-codecommit\.[a-z0-9-]+\.amazonaws\.com(?:\.cn)?$/.test(host))
+    return "aws";
+  const label = host.split(".")[0];
+  if (
+    label === "gitlab" ||
+    label === "gitea" ||
+    label === "forgejo" ||
+    label === "bitbucket"
+  )
+    return label;
+  return "git";
+}
+
+const responseSizeMargin = 512;
+
+export function fitRepositoryRefs(refs: RepositoryRefs): RepositoryRefs {
+  const budget = maximumJsonMessageBytes - responseSizeMargin;
+  const emptied: RepositoryRefs = {
+    ...refs,
+    branches: [],
+    remoteBranches: [],
+    tags: [],
+    truncated: { branches: true, remoteBranches: true, tags: true },
+  };
+  let encodedBytes = Buffer.byteLength(JSON.stringify(emptied));
+  const fit = <Entry>(entries: readonly Entry[]) => {
+    const fitted: Entry[] = [];
+    for (const entry of entries) {
+      const entryBytes =
+        Buffer.byteLength(JSON.stringify(entry)) +
+        (fitted.length === 0 ? 0 : 1);
+      if (encodedBytes + entryBytes > budget) break;
+      fitted.push(entry);
+      encodedBytes += entryBytes;
+    }
+    return fitted;
+  };
+
+  const branches = fit(refs.branches.slice(0, 10_000));
+  const remoteBranches = fit(refs.remoteBranches.slice(0, 20_000));
+  const tags = fit(refs.tags.slice(0, 10_000));
+  return {
+    ...refs,
+    branches,
+    remoteBranches,
+    tags,
+    truncated: {
+      branches: branches.length < refs.branches.length,
+      remoteBranches: remoteBranches.length < refs.remoteBranches.length,
+      tags: tags.length < refs.tags.length,
+    },
   };
 }

@@ -1,53 +1,25 @@
-import { randomUUID } from "node:crypto";
 import { mkdir, mkdtemp, rename, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { RepositoryFreshness } from "@rebase/contracts";
-import { Deferred, Effect, Layer } from "effect";
-import { afterEach, describe, expect, it } from "vite-plus/test";
-import { createEnvironmentEventPublisher } from "#server/adapters/environment-transport/events/environment-event-publisher";
-import { createLocalGitCommandRunner } from "#server/adapters/local-git/local-git-command-runner";
+import {
+  RepositoryCatalogHttpApi,
+  type RepositoryFreshness,
+} from "@rebase/contracts";
+import { Deferred, Effect } from "effect";
+import { describe, expect, it, onTestFinished } from "vite-plus/test";
 import { createLocalRepositoryWatcher } from "#server/adapters/local-git/local-repository-watcher";
-import { acquireEnvironmentListener } from "#server/app/server/environment-listener";
-import {
-  type EnvironmentAuthorization,
-  EnvironmentAuthorizationAccess,
-} from "#server/domain/environment-authorization.contract";
-import { GitCommands } from "#server/domain/git-command.contract";
-import {
-  type RepositoryCatalog,
-  RepositoryCatalogAccess,
-} from "#server/domain/repository-catalog.contract";
-import { RepositoryWatching } from "#server/domain/repository-watcher.contract";
-import { environmentAuthorizationFeature } from "#server/features/environment-authorization/environment-authorization.feature";
 import {
   acquireRepositoryFreshness,
   type RepositoryFreshnessService,
 } from "#server/features/repository-history/freshness/repository-freshness";
-import {
-  repositoryFreshnessFeature,
-  repositoryHistoryFeature,
-} from "#server/features/repository-history/repository-history.feature";
-import {
-  repositoryAccessLayer,
-  repositoryCoordinationLayer,
-} from "#server/repository/access/index";
-import { testEnvironmentFeatures } from "#tests-integration/apps/server/environment-connection/test-environment-features";
 import { cloneRepository, fastImport, git } from "#tests-support/git";
 import { waitForObservation } from "#tests-support/observation";
+import { openTestEnvironment, openTestServer } from "#tests-support/server";
 import { removeTemporaryDirectory } from "#tests-support/temporary-directory";
 import { connectCurrentEnvironmentEffect } from "#web/app/environment/connection/environment-protocol-client";
 import { createRepositoryHistoryRpc } from "#web/features/repository-history/transport/repository-history-rpc";
 
-const directories: string[] = [];
-const repositoryId = "00000000-0000-4000-8000-000000000001";
 const committer = "committer Rebase test <rebase@example.test> 0 +0000\n";
-
-afterEach(async () => {
-  await Promise.all(
-    directories.splice(0).map((path) => removeTemporaryDirectory(path)),
-  );
-});
 
 describe("repository freshness with real Git", () => {
   for (const entry of ["logs/refs", "logs"])
@@ -113,7 +85,7 @@ describe("repository freshness with real Git", () => {
 
   it("fetches the configured default remote, respects prune settings and keeps cached history after failure", async () => {
     const fixture = await createFixture();
-    await withService(fixture, async (service) => {
+    await withService(fixture, async (service, repositoryId) => {
       await Effect.runPromise(service.subscribe(repositoryId, () => {}));
       await git(fixture.remote, "branch", "temporary", "main");
       expect((await Effect.runPromise(service.fetch(repositoryId))).stale).toBe(
@@ -161,7 +133,7 @@ describe("repository freshness with real Git", () => {
     const linked = join(fixture.root, "linked");
     await git(fixture.local, "worktree", "add", "--detach", linked);
     const states: RepositoryFreshness[] = [];
-    await withService(fixture, async (service) => {
+    await withService(fixture, async (service, repositoryId) => {
       await Effect.runPromise(
         service.subscribe(repositoryId, (state) => states.push(state)),
       );
@@ -203,7 +175,7 @@ describe("repository freshness with real Git", () => {
 
   it("persists repository settings and fetches on the scheduled interval", async () => {
     const fixture = await createFixture();
-    await withService(fixture, async (service) => {
+    await withService(fixture, async (service, repositoryId) => {
       await Effect.runPromise(service.subscribe(repositoryId, () => {}));
       await Effect.runPromise(
         service.configure(repositoryId, { _tag: "Interval", seconds: 1 }),
@@ -211,11 +183,9 @@ describe("repository freshness with real Git", () => {
     });
     const remoteHead = await commitToRemote(fixture, "new remote commit");
     const states: RepositoryFreshness[] = [];
-    await withService(fixture, async (service) => {
+    await withService(fixture, async (service, repositoryId) => {
       await Effect.runPromise(
-        service.subscribe(repositoryId, (state) => states.push(state), {
-          automaticFetch: true,
-        }),
+        service.subscribe(repositoryId, (state) => states.push(state)),
       );
       expect(states[0]?.setting).toEqual({ _tag: "Interval", seconds: 1 });
       await waitForObservation(async () =>
@@ -240,31 +210,17 @@ describe("repository freshness with real Git", () => {
 
   it("reports fetch failure and recovery over the same repository WebSocket", async () => {
     const fixture = await createFixture();
+    const server = await openTestServer();
+    const { id: repositoryId } = await server.requests(server.owner)(
+      RepositoryCatalogHttpApi.remember,
+      { path: fixture.local },
+    );
     await Effect.runPromise(
       Effect.gen(function* () {
-        const features = yield* Effect.all([
-          environmentAuthorizationFeature,
-          repositoryHistoryFeature,
-          repositoryFreshnessFeature,
-        ]).pipe(
-          Effect.provide(freshnessServices(fixture.catalog)),
-          Effect.provideService(
-            EnvironmentAuthorizationAccess,
-            testAuthorization(),
-          ),
-        );
-        const listener = yield* acquireEnvironmentListener({
-          authorization: testAuthorization(),
-          environmentId: repositoryId,
-          events: createEnvironmentEventPublisher(),
-          features: testEnvironmentFeatures(features),
-          productVersion: "0.0.0",
-        });
-        listener.readiness.value = true;
         const connection = yield* connectCurrentEnvironmentEffect(
-          listener.origin,
+          server.origin,
           "0.0.0",
-          { credential: { type: "bearer", value: "test" } },
+          { credential: server.owner },
         );
         const transport = createRepositoryHistoryRpc(connection).freshness;
         if (transport === undefined)
@@ -302,7 +258,7 @@ describe("repository freshness with real Git", () => {
 
 async function createFixture() {
   const root = await mkdtemp(join(tmpdir(), "rebase freshness "));
-  directories.push(root);
+  onTestFinished(() => removeTemporaryDirectory(root));
   const remote = join(root, "remote.git");
   const local = join(root, "local");
   await git(root, "init", "--bare", "-b", "main", remote);
@@ -316,22 +272,7 @@ async function createFixture() {
     "--config",
     "rebase.autoFetchIntervalSeconds=0",
   );
-  const entry = {
-    id: repositoryId,
-    logicalRepositoryId: repositoryId,
-    path: local,
-    name: "local",
-    addedAt: new Date().toISOString(),
-    lastOpenedAt: new Date().toISOString(),
-  };
-  const catalog: RepositoryCatalog = {
-    find: () => Effect.succeed(entry),
-    list: () => Effect.succeed([entry]),
-    recordOpened: () => Effect.succeed(entry),
-    remember: () => Effect.succeed(entry),
-    remove: () => Effect.succeed({ repositoryId }),
-  };
-  return { root, remote, local, catalog };
+  return { root, remote, local };
 }
 
 async function commitToRemote(
@@ -345,56 +286,19 @@ async function commitToRemote(
   return git(fixture.remote, "rev-parse", "main");
 }
 
-function withService(
+async function withService(
   fixture: Awaited<ReturnType<typeof createFixture>>,
-  use: (service: RepositoryFreshnessService) => Promise<void>,
+  use: (
+    service: RepositoryFreshnessService,
+    repositoryId: string,
+  ) => Promise<void>,
 ) {
-  return Effect.runPromise(
+  const environment = await openTestEnvironment();
+  const { id } = await environment.remember(fixture.local);
+  await Effect.runPromise(
     Effect.gen(function* () {
-      const service = yield* acquireRepositoryFreshness.pipe(
-        Effect.provide(freshnessServices(fixture.catalog)),
-      );
-      yield* Effect.promise(() => use(service));
+      const service = yield* acquireRepositoryFreshness(environment);
+      yield* Effect.promise(() => use(service, id));
     }).pipe(Effect.scoped),
   );
-}
-
-function freshnessServices(catalog: RepositoryCatalog) {
-  return Layer.mergeAll(
-    repositoryAccessLayer,
-    repositoryCoordinationLayer,
-  ).pipe(
-    Layer.provideMerge(
-      Layer.mergeAll(
-        Layer.succeed(RepositoryCatalogAccess, catalog),
-        Layer.succeed(GitCommands, createLocalGitCommandRunner()),
-        Layer.succeed(RepositoryWatching, createLocalRepositoryWatcher()),
-      ),
-    ),
-  );
-}
-
-function testAuthorization(): EnvironmentAuthorization {
-  const authorization = {
-    capabilities: [
-      "environment.read",
-      "repository.read",
-      "repository.write",
-    ] as const,
-    id: randomUUID(),
-    label: "Test",
-    role: "contributor" as const,
-  };
-  return {
-    authorize: () => Effect.succeed(authorization),
-    consumeTicket: () => Effect.succeed(authorization),
-    createPairing: () => Effect.die("unused"),
-    exchangePairing: () => Effect.die("unused"),
-    mintTicket: () =>
-      Effect.succeed({
-        ticket: "test-ticket-material-00000000000000000000",
-        expiresAt: "2026-09-06T00:00:00.000Z",
-      }),
-    revoke: () => Effect.die("unused"),
-  };
 }

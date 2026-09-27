@@ -1,7 +1,7 @@
-import type { EnvironmentCredential } from "@rebase/environment-client";
 import {
   EnvironmentAccessDenied,
   type EnvironmentConnectionFailure,
+  type EnvironmentCredential,
   EnvironmentHelloRejected,
 } from "@rebase/environment-client";
 import { Effect, Fiber, Result } from "effect";
@@ -143,7 +143,6 @@ function maintainConnection(
               publish({
                 _tag: "Connected",
                 environmentId: active.negotiated.environmentId,
-                accessCapabilities: active.negotiated.accessCapabilities ?? [],
                 capabilities: active.negotiated.capabilities,
                 rpc: active.rpc,
               }),

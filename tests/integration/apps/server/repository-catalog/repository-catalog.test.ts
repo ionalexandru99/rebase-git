@@ -2,39 +2,26 @@ import { access, mkdir, mkdtemp, realpath, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Effect, Stream } from "effect";
-import { afterEach, describe, expect, it } from "vite-plus/test";
-import { createLocalGitCommandRunner } from "#server/adapters/local-git/local-git-command-runner";
+import { describe, expect, it, onTestFinished } from "vite-plus/test";
 import {
-  GitCommandError,
   type GitCommandRunner,
-} from "#server/domain/git-command.contract";
+  gitFailed,
+} from "#server/adapters/local-git/git-commands";
 import { createRepositoryCatalog } from "#server/features/repository-catalog/repository-catalog";
-import { acquireEnvironmentContext } from "#server/persistence/environment-context";
-import type { EnvironmentContext } from "#server/persistence/environment-context.contract";
+import type { EnvironmentContext } from "#server/persistence/environment-context";
 import { repositoryCatalogTable } from "#server/persistence/environment-state.schema";
-import { environmentPaths } from "#server/persistence/storage/environment-paths";
 import { createRepository, git } from "#tests-support/git";
+import { openTestEnvironment } from "#tests-support/server";
 import { removeTemporaryDirectory } from "#tests-support/temporary-directory";
-
-const directories = new Set<string>();
-
-afterEach(async () => {
-  await Promise.all(
-    [...directories].map((directory) => removeTemporaryDirectory(directory)),
-  );
-  directories.clear();
-});
 
 describe("repository catalog", () => {
   it("reports unavailable Git without remembering the path", async () => {
     const root = await createTemporaryDirectory();
     const unavailable: GitCommandRunner = {
-      run: () => Effect.fail(new GitCommandError({ reason: "GitUnavailable" })),
-      stream: () =>
-        Stream.fail(new GitCommandError({ reason: "GitUnavailable" })),
+      run: () => Effect.fail(gitFailed("GitUnavailable")),
+      stream: () => Stream.fail(gitFailed("GitUnavailable")),
     };
     const result = await withCatalog(
-      root,
       (catalog) =>
         Effect.gen(function* () {
           const error = yield* Effect.flip(catalog.remember(root));
@@ -53,7 +40,7 @@ describe("repository catalog", () => {
     await createRepository(repositoryPath);
     await mkdir(nestedPath, { recursive: true });
 
-    const result = await withCatalog(root, (catalog) =>
+    const result = await withCatalog((catalog) =>
       Effect.gen(function* () {
         const first = yield* catalog.remember(nestedPath);
         const second = yield* catalog.remember(repositoryPath);
@@ -77,7 +64,7 @@ describe("repository catalog", () => {
     await createRepository(repositoryPath);
     await git(repositoryPath, "worktree", "add", worktreePath, "-b", "feature");
 
-    const repositories = await withCatalog(root, (catalog) =>
+    const repositories = await withCatalog((catalog) =>
       Effect.gen(function* () {
         yield* catalog.remember(repositoryPath);
         yield* catalog.remember(worktreePath);
@@ -99,7 +86,7 @@ describe("repository catalog", () => {
     const repositoryPath = join(root, "repository");
     await createRepository(repositoryPath);
 
-    const result = await withCatalog(root, (catalog) =>
+    const result = await withCatalog((catalog) =>
       Effect.gen(function* () {
         const first = yield* catalog.remember(repositoryPath);
         yield* catalog.remove(first.id);
@@ -120,7 +107,7 @@ describe("repository catalog", () => {
     await createRepository(repositoryPath);
     await git(repositoryPath, "worktree", "add", worktreePath, "-b", "feature");
 
-    const result = await withCatalog(root, (catalog, context) =>
+    const result = await withCatalog((catalog, context) =>
       Effect.gen(function* () {
         const main = yield* catalog.remember(repositoryPath);
         const feature = yield* catalog.remember(worktreePath);
@@ -147,7 +134,7 @@ describe("repository catalog", () => {
     const repositoryPath = join(root, "repository");
     await createRepository(repositoryPath);
 
-    const result = await withCatalog(root, (catalog) =>
+    const result = await withCatalog((catalog) =>
       Effect.gen(function* () {
         const remembered = yield* catalog.remember(repositoryPath);
         const opened = yield* catalog.recordOpened(remembered.id);
@@ -169,7 +156,7 @@ describe("repository catalog", () => {
     await mkdir(plainDirectory);
     await writeFile(plainFile, "plain", "utf8");
 
-    await withCatalog(root, (catalog) =>
+    await withCatalog((catalog) =>
       Effect.gen(function* () {
         yield* expectFailure(catalog.remember("relative"), "MalformedPath");
         yield* expectFailure(
@@ -183,10 +170,9 @@ describe("repository catalog", () => {
   });
 
   it("reports missing repository ids for open and remove", async () => {
-    const root = await createTemporaryDirectory();
     const missingId = "00000000-0000-4000-8000-000000000099";
 
-    await withCatalog(root, (catalog) =>
+    await withCatalog((catalog) =>
       Effect.gen(function* () {
         yield* expectMissing(catalog.recordOpened(missingId));
         yield* expectMissing(catalog.remove(missingId));
@@ -195,22 +181,20 @@ describe("repository catalog", () => {
   });
 });
 
-function withCatalog<A, E>(
-  root: string,
+async function withCatalog<A, E>(
   use: (
     catalog: ReturnType<typeof createRepositoryCatalog>,
     context: EnvironmentContext,
   ) => Effect.Effect<A, E>,
-  git: GitCommandRunner = createLocalGitCommandRunner(),
+  git?: GitCommandRunner,
 ) {
+  const environment = await openTestEnvironment();
   return Effect.runPromise(
-    Effect.scoped(
-      Effect.gen(function* () {
-        const context = yield* acquireEnvironmentContext(
-          environmentPaths(join(root, ".rebase")),
-        );
-        return yield* use(createRepositoryCatalog(context, git), context);
-      }),
+    use(
+      git === undefined
+        ? environment.catalog
+        : createRepositoryCatalog(environment.context, git),
+      environment.context,
     ),
   );
 }
@@ -243,6 +227,6 @@ function expectMissing<A, E>(effect: Effect.Effect<A, E>) {
 
 async function createTemporaryDirectory() {
   const directory = await mkdtemp(join(tmpdir(), "rebase catalog "));
-  directories.add(directory);
+  onTestFinished(() => removeTemporaryDirectory(directory));
   return realpath(directory);
 }

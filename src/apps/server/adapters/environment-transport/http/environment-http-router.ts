@@ -16,9 +16,9 @@ import {
 import type {
   EnvironmentHttpRequestContext,
   EnvironmentHttpRouteHandler,
-} from "#server/adapters/environment-transport/http/environment-http-route-handler.contract";
+} from "#server/adapters/environment-transport/http/environment-http-route-handler";
 import { writeBrowserSessionCookie } from "#server/adapters/environment-transport/http/environment-session-cookie";
-import type { EnvironmentAuthorization } from "#server/domain/environment-authorization.contract";
+import type { EnvironmentAuthorization } from "#server/features/environment-authorization/environment-authorization";
 
 export function routeEnvironmentHttpRequest(
   handlers: readonly EnvironmentHttpRouteHandler[],
@@ -53,10 +53,9 @@ function serveRoute(
       yield* requireEmptyBody(body);
     }
     const credential = readRequestCredential(request);
-    const device =
-      route.capability === null
-        ? undefined
-        : yield* authorization.authorize(credential, route.capability);
+    const device = route.public
+      ? undefined
+      : yield* authorization.authorize(credential);
     const input =
       route.request === undefined
         ? undefined

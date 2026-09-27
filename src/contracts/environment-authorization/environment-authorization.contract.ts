@@ -1,7 +1,3 @@
-import {
-  EnvironmentAccessCapability,
-  environmentAccessCapabilities,
-} from "@rebase/contracts/environment-connection/environment-access-capability.contract";
 import { EnvironmentHttpFailure } from "@rebase/contracts/environment-connection/environment-request-failure.contract";
 import {
   type EnvironmentHttpRoute,
@@ -9,20 +5,6 @@ import {
 } from "@rebase/contracts/environment-connection/http/environment-http-route.contract";
 import { IsoDate } from "@rebase/contracts/environment-connection/iso-date.contract";
 import { Schema } from "effect";
-
-export const environmentAuthorizationRoles = [
-  "viewer",
-  "contributor",
-  "maintainer",
-  "owner",
-  "custom",
-] as const;
-
-export const EnvironmentAuthorizationRole = Schema.Literals(
-  environmentAuthorizationRoles,
-);
-export type EnvironmentAuthorizationRole =
-  typeof EnvironmentAuthorizationRole.Type;
 
 const AuthorizationId = Schema.String.check(Schema.isUUID(4));
 const SecretMaterial = Schema.String.check(
@@ -34,14 +16,6 @@ const DeviceLabel = Schema.String.check(
   Schema.isMinLength(1),
   Schema.isMaxLength(128),
 );
-
-export const CreateEnvironmentPairing = Schema.Struct({
-  role: EnvironmentAuthorizationRole,
-  capabilities: Schema.Array(EnvironmentAccessCapability).check(
-    Schema.isMaxLength(environmentAccessCapabilities.length),
-  ),
-});
-export type CreateEnvironmentPairing = typeof CreateEnvironmentPairing.Type;
 
 export const EnvironmentPairingCreated = Schema.Struct({
   pairingUrl: Schema.String,
@@ -58,8 +32,6 @@ export type ExchangeEnvironmentPairing = typeof ExchangeEnvironmentPairing.Type;
 export const EnvironmentDeviceAuthorization = Schema.Struct({
   id: AuthorizationId,
   label: DeviceLabel,
-  role: EnvironmentAuthorizationRole,
-  capabilities: Schema.Array(EnvironmentAccessCapability),
 });
 export type EnvironmentDeviceAuthorization =
   typeof EnvironmentDeviceAuthorization.Type;
@@ -100,9 +72,6 @@ export const InvalidOrigin = Schema.TaggedStruct("InvalidOrigin", {});
 export const InvalidGrant = Schema.TaggedStruct("InvalidGrant", {});
 export const ExpiredGrant = Schema.TaggedStruct("ExpiredGrant", {});
 export const RevokedGrant = Schema.TaggedStruct("RevokedGrant", {});
-export const CapabilityDenied = Schema.TaggedStruct("CapabilityDenied", {
-  capability: EnvironmentAccessCapability,
-});
 export const InvalidPairing = Schema.TaggedStruct("InvalidPairing", {});
 export const ExpiredPairing = Schema.TaggedStruct("ExpiredPairing", {});
 export const PairingAlreadyUsed = Schema.TaggedStruct("PairingAlreadyUsed", {});
@@ -116,7 +85,6 @@ export const EnvironmentAuthorizationFailure = Schema.Union([
   InvalidGrant,
   ExpiredGrant,
   RevokedGrant,
-  CapabilityDenied,
   InvalidPairing,
   ExpiredPairing,
   PairingAlreadyUsed,
@@ -143,40 +111,35 @@ export const environmentAuthorizationRevocationPath =
 
 export const EnvironmentAuthorizationHttpApi = {
   createBrowserSession: route({
-    capability: null,
+    public: true,
     method: "POST",
     path: "/api/authorization/browser-session",
     request: ExchangeEnvironmentPairing,
     success: EnvironmentBrowserSession,
   }),
   readBrowserSession: route({
-    capability: "environment.read",
     method: "GET",
     path: "/api/authorization/browser-session",
     success: EnvironmentBrowserSession,
   }),
   createPairing: route({
-    capability: "authorization.manage",
     method: "POST",
     path: environmentPairingsPath,
-    request: CreateEnvironmentPairing,
     success: EnvironmentPairingCreated,
   }),
   exchangePairing: route({
-    capability: null,
+    public: true,
     method: "POST",
     path: environmentPairingExchangePath,
     request: ExchangeEnvironmentPairing,
     success: EnvironmentPairingExchanged,
   }),
   mintWebSocketTicket: route({
-    capability: "environment.read",
     method: "POST",
     path: environmentWebSocketTicketsPath,
     success: EnvironmentWebSocketTicket,
   }),
   revokeAuthorization: route({
-    capability: "authorization.manage",
     method: "POST",
     path: environmentAuthorizationRevocationPath,
     request: RevokeEnvironmentAuthorization,

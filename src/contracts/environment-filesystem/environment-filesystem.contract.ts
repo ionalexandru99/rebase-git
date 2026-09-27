@@ -71,7 +71,6 @@ export const environmentDirectoryPath = "/api/filesystem/directory";
 
 export const EnvironmentFilesystemHttpApi = {
   listDirectory: route({
-    capability: "repository.write",
     method: "POST",
     path: environmentDirectoryPath,
     request: ListEnvironmentDirectory,

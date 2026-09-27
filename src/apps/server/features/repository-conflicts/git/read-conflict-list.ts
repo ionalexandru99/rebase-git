@@ -5,17 +5,19 @@ import type {
   SideLabel,
 } from "@rebase/contracts";
 import { Effect } from "effect";
-import type { GitCommandRunner } from "#server/domain/git-command.contract";
-import type { RepositoryCoordinationService } from "#server/domain/repository-coordination.contract";
+import {
+  type GitCommandRunner,
+  runRepositoryGit,
+} from "#server/adapters/local-git/git-commands";
 import {
   readConflictSnapshots,
   readUnmergedEntries,
 } from "#server/features/repository-conflicts/git/conflict-files";
-import { runRepositoryGit } from "#server/repository/access/index";
+import type { RepositoryCoordination } from "#server/repository/repository-coordination";
 
 export function readConflictList(
   git: GitCommandRunner,
-  coordination: RepositoryCoordinationService,
+  coordination: RepositoryCoordination,
   directory: string,
 ) {
   return Effect.gen(function* () {

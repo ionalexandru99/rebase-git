@@ -5,7 +5,7 @@ import { pathToFileURL } from "node:url";
 import type { ReadRepositoryHistory } from "@rebase/contracts";
 import { Effect } from "effect";
 import { afterEach, describe, expect, it } from "vite-plus/test";
-import { createLocalGitCommandRunner } from "#server/adapters/local-git/local-git-command-runner";
+import { createLocalGitCommandRunner } from "#server/adapters/local-git/git-commands";
 import { readObjectFormat } from "#server/features/repository-history/git/read-object-format";
 import { readRepositoryHistory } from "#server/features/repository-history/git/read-repository-history";
 import { cloneRepository, fastImport, git } from "#tests-support/git";

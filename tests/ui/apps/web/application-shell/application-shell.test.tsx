@@ -448,7 +448,6 @@ async function connectedSession(
   const listeners = new Set<() => void>();
   let state: ReturnType<LocalEnvironmentSession["getSnapshot"]> = {
     _tag: "Connected",
-    accessCapabilities: [],
     capabilities: currentEnvironmentCapabilities,
     environmentId,
     rpc,
@@ -510,7 +509,6 @@ async function connectedSession(
     reconnect: () =>
       publish({
         _tag: "Connected",
-        accessCapabilities: [],
         capabilities: currentEnvironmentCapabilities,
         environmentId,
         rpc,

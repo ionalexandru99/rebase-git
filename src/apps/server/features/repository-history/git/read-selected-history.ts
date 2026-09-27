@@ -1,13 +1,14 @@
-import type { ReadRepositoryHistory } from "@rebase/contracts";
+import type {
+  ReadRepositoryHistory,
+  RepositoryHistoryOperationFailure,
+} from "@rebase/contracts";
 import { Effect, Stream } from "effect";
-import type { GitCommandRunner } from "#server/domain/git-command.contract";
-import type { RepositoryGitError } from "#server/domain/repository-git.contract";
 import {
-  historyOutputTooLarge,
-  RepositoryHistoryError,
-} from "#server/features/repository-history/git/history-failures";
+  type GitCommandRunner,
+  streamRepositoryGit,
+} from "#server/adapters/local-git/git-commands";
+import { historyOutputTooLarge } from "#server/features/repository-history/git/history-failures";
 import { gitHistoryFormat } from "#server/features/repository-history/git/parse-git-history";
-import { streamRepositoryGit } from "#server/repository/access/index";
 
 export const maximumHistoryOutputBytes = 8 * 1_048_576;
 export const packedGitArguments = [
@@ -130,13 +131,9 @@ function streamQuery(
   args: readonly string[],
   roots: readonly string[],
   deadline: number,
-): Stream.Stream<string, RepositoryHistoryError | RepositoryGitError> {
+): Stream.Stream<string, RepositoryHistoryOperationFailure> {
   return Date.now() >= deadline
-    ? Stream.fail(
-        new RepositoryHistoryError({
-          failure: { _tag: "GitFailed", reason: "Timeout" },
-        }),
-      )
+    ? Stream.fail({ _tag: "GitFailed", reason: "Timeout" })
     : streamRepositoryGit(git, repositoryPath, args, {
         globalArguments: packedGitArguments,
         input: `${roots.join("\n")}\n`,

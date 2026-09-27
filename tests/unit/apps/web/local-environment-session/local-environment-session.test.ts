@@ -1,7 +1,6 @@
 import {
   createCurrentEnvironmentDiscovery,
   createCurrentEnvironmentHello,
-  type EnvironmentAccessCapability,
   type EnvironmentRpcClient,
   negotiateEnvironmentHello,
 } from "@rebase/contracts";
@@ -61,8 +60,6 @@ describe("local Environment session", () => {
     session.start();
     await expectState(session.getSnapshot, "Connected");
 
-    expect(session.getSnapshot()).toMatchObject({ accessCapabilities: [] });
-
     expect(gateway.authorize).toHaveBeenCalledOnce();
     expect(gateway.connect).toHaveBeenCalledWith(
       { type: "bearer", value: "device-credential" },
@@ -103,11 +100,8 @@ describe("local Environment session", () => {
   );
 
   it("owns one reconnect after the active connection closes", async () => {
-    const initial = createConnection(7, [
-      "repository.read",
-      "repository.write",
-    ]);
-    const reconnected = createConnection(8, ["repository.read"]);
+    const initial = createConnection(7);
+    const reconnected = createConnection(8);
     const gateway = createGateway(initial, reconnected);
     const feature = createFeature();
     const reconnect = deferred<void>();
@@ -122,9 +116,6 @@ describe("local Environment session", () => {
 
     session.start();
     await expectState(session.getSnapshot, "Connected");
-    expect(session.getSnapshot()).toMatchObject({
-      accessCapabilities: ["repository.read", "repository.write"],
-    });
     initial.disconnect.resolve(
       new EnvironmentResponseError({ responseTag: "WebSocket" }),
     );
@@ -138,9 +129,6 @@ describe("local Environment session", () => {
 
     reconnect.resolve();
     await expectState(session.getSnapshot, "Connected");
-    expect(session.getSnapshot()).toMatchObject({
-      accessCapabilities: ["repository.read"],
-    });
     expect(gateway.connect).toHaveBeenNthCalledWith(
       2,
       { type: "bearer", value: "device-credential" },
@@ -225,10 +213,7 @@ function createGateway(...connections: ReturnType<typeof createConnection>[]) {
   };
 }
 
-function createConnection(
-  currentSequence = 0,
-  accessCapabilities?: readonly EnvironmentAccessCapability[],
-) {
+function createConnection(currentSequence = 0) {
   const disconnect = deferred<EnvironmentResponseError>();
   const discovery = createCurrentEnvironmentDiscovery(
     "00000000-0000-4000-8000-000000000001",
@@ -248,10 +233,7 @@ function createConnection(
     currentSequence: () => currentSequence,
     disconnect,
     discovery,
-    negotiated: {
-      ...negotiated,
-      ...(accessCapabilities === undefined ? {} : { accessCapabilities }),
-    },
+    negotiated,
     rpc: {} as EnvironmentRpcClient,
     waitForSequence: vi.fn(() => Effect.never),
     subscribeChanges: vi.fn<EnvironmentProtocolConnection["subscribeChanges"]>(

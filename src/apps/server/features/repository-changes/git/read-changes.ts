@@ -7,14 +7,14 @@ import {
   repositoryRejected,
 } from "@rebase/contracts";
 import { Effect } from "effect";
-import type { GitCommandRunner } from "#server/domain/git-command.contract";
-import { changeIo } from "#server/features/repository-changes/git/change-failures";
-import { worktreeIdentities } from "#server/features/repository-changes/git/change-files";
 import {
+  type GitCommandRunner,
   runRepositoryGit,
   runRepositoryGitOutput,
-} from "#server/repository/access/index";
-import { fingerprint } from "#server/repository/comparison/index";
+} from "#server/adapters/local-git/git-commands";
+import { changeIo } from "#server/features/repository-changes/git/change-failures";
+import { worktreeIdentities } from "#server/features/repository-changes/git/change-files";
+import { fingerprint } from "#server/repository/comparison/fingerprint";
 
 export function readChanges(git: GitCommandRunner, scope: ChangesScope) {
   return Effect.gen(function* () {

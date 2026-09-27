@@ -2,9 +2,11 @@ import { randomUUID } from "node:crypto";
 import { copyFile, open, rename, rm, stat, utimes } from "node:fs/promises";
 import { repositoryRejected } from "@rebase/contracts";
 import { Effect } from "effect";
-import type { GitCommandRunner } from "#server/domain/git-command.contract";
+import {
+  type GitCommandRunner,
+  runRepositoryGit,
+} from "#server/adapters/local-git/git-commands";
 import { changeIo } from "#server/features/repository-changes/git/change-failures";
-import { runRepositoryGit } from "#server/repository/access/index";
 
 export function withChangeIndex<A, E>(
   git: GitCommandRunner,

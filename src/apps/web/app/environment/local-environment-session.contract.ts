@@ -1,7 +1,4 @@
-import type {
-  EnvironmentAccessCapability,
-  EnvironmentRpcClient,
-} from "@rebase/contracts";
+import type { EnvironmentRpcClient } from "@rebase/contracts";
 import type {
   EnvironmentAccessDenied,
   EnvironmentConnectionFailure,
@@ -23,7 +20,6 @@ export type LocalEnvironmentSessionState =
   | {
       readonly _tag: "Connected";
       readonly environmentId: string;
-      readonly accessCapabilities: readonly EnvironmentAccessCapability[];
       readonly capabilities: NegotiatedEnvironment["capabilities"];
       readonly rpc: EnvironmentRpcClient;
     }

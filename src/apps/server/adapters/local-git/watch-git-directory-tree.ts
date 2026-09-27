@@ -1,6 +1,6 @@
 import { type FSWatcher, lstatSync, readdirSync, watch } from "node:fs";
 import { join, sep } from "node:path";
-import type { RepositoryWatchHandle } from "#server/domain/repository-watcher.contract";
+import type { RepositoryWatchHandle } from "#server/adapters/local-git/local-repository-watcher";
 
 export function watchGitDirectoryTree(
   root: string,

@@ -52,6 +52,7 @@ test("prepared corpus stays within server and Git process budgets", async () => 
   const started = await new Promise<{
     origin: string;
     repositoryId: string;
+    ticket: string;
     idleRssBytes: number;
   }>((resolveStart, reject) => {
     let output = "";
@@ -95,7 +96,7 @@ test("prepared corpus stays within server and Git process budgets", async () => 
     void sample();
   }, 5);
   const socket = new WebSocket(
-    `${started.origin.replace("http://", "ws://")}${environmentLivePath}?ticket=benchmark`,
+    `${started.origin.replace("http://", "ws://")}${environmentLivePath}?ticket=${started.ticket}`,
   );
   const rpcScope = Effect.runSync(Scope.make());
   try {

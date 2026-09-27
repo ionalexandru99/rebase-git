@@ -1,35 +1,17 @@
 import { execFile } from "node:child_process";
-import { randomUUID } from "node:crypto";
-import { mkdtemp, readFile, realpath, writeFile } from "node:fs/promises";
+import { readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { CommitInspectionHttpApi } from "@rebase/contracts";
 import { Effect } from "effect";
-import { afterEach, describe, expect, it } from "vite-plus/test";
-import { createLocalGitCommandRunner } from "#server/adapters/local-git/local-git-command-runner";
-import { createLocalRepositoryWatcher } from "#server/adapters/local-git/local-repository-watcher";
-import { commitInspectionFeature } from "#server/features/commit-inspection/commit-inspection.feature";
-import {
-  createRepositoryAccess,
-  createRepositoryCoordination,
-} from "#server/repository/access/index";
-import { repositoryFeatureClient } from "#tests-integration/apps/server/environment-connection/feature-routes-client";
+import { describe, expect, it } from "vite-plus/test";
 import { createRepository } from "#tests-support/git";
-import { removeTemporaryDirectory } from "#tests-support/temporary-directory";
-
-const directories: string[] = [];
-afterEach(async () => {
-  await Promise.all(
-    directories.splice(0).map((path) => removeTemporaryDirectory(path)),
-  );
-});
+import { openTestEnvironment } from "#tests-support/server";
 
 async function fixture() {
-  const directory = await realpath(
-    await mkdtemp(join(tmpdir(), "rebase-inspection-")),
-  );
-  directories.push(directory);
+  const environment = await openTestEnvironment();
+  const directory = join(environment.home, "repository");
   const git = async (...args: string[]) =>
     (
       await promisify(execFile)("git", ["-C", directory, ...args])
@@ -42,31 +24,9 @@ async function fixture() {
   await git("add", ".");
   await git("commit", "-m", "Initial\n\nFull commit body.");
   const oid = await git("rev-parse", "HEAD");
-  const repositoryId = randomUUID();
-  const runner = createLocalGitCommandRunner();
-  const service = repositoryFeatureClient(
-    CommitInspectionHttpApi,
-    commitInspectionFeature,
-    {
-      access: createRepositoryAccess(
-        {
-          find: () =>
-            Effect.succeed({
-              id: repositoryId,
-              name: "test",
-              path: directory,
-              addedAt: "",
-              lastOpenedAt: "",
-            }),
-        },
-        runner,
-        createLocalRepositoryWatcher(),
-      ),
-      git: runner,
-      coordination: createRepositoryCoordination(runner),
-    },
-  );
-  const scope = { repositoryId, worktreePath: directory, oid };
+  const repository = await environment.remember(directory);
+  const service = environment.routes(CommitInspectionHttpApi);
+  const scope = { repositoryId: repository.id, worktreePath: directory, oid };
   return { directory, git, service, scope };
 }
 

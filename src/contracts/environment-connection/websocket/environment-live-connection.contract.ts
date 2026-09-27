@@ -1,4 +1,3 @@
-import { EnvironmentAccessCapability } from "@rebase/contracts/environment-connection/environment-access-capability.contract";
 import {
   InvalidMessage,
   PayloadTooLarge,
@@ -65,9 +64,6 @@ export type EnvironmentTransportFailure =
   typeof EnvironmentTransportFailure.Type;
 
 export const HelloAccepted = Schema.TaggedStruct("HelloAccepted", {
-  accessCapabilities: Schema.optionalKey(
-    Schema.Array(EnvironmentAccessCapability),
-  ),
   environmentId: Schema.String.check(Schema.isUUID(4)),
   protocol: Schema.Struct({
     major: Schema.Natural,

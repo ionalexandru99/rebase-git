@@ -1,19 +1,25 @@
 import { randomUUID } from "node:crypto";
 import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
-import { Effect, type Scope } from "effect";
-import { RuntimeMarkerError } from "#server/app/runtime/runtime-errors.contract";
-import type { RuntimeMarker } from "#server/app/runtime/runtime-marker.contract";
+import { Data, Effect, type Scope } from "effect";
 import { errorMessage, isFileSystemError } from "#server/error-inspection";
-import { defaultEnvironmentPaths } from "#server/persistence/storage/environment-paths";
 
-export function defaultRuntimePath(): string {
-  return defaultEnvironmentPaths().runtimeMarker;
+interface RuntimeMarker {
+  readonly host: string;
+  readonly origin: string;
+  readonly pid: number;
+  readonly port: number;
+  readonly startedAt: string;
 }
+
+export class RuntimeMarkerError extends Data.TaggedError("RuntimeMarkerError")<{
+  readonly cause: unknown;
+  readonly message: string;
+}> {}
 
 export function acquireRuntimeMarker(
   marker: RuntimeMarker,
-  runtimePath = defaultRuntimePath(),
+  runtimePath: string,
 ): Effect.Effect<void, RuntimeMarkerError, Scope.Scope> {
   return Effect.acquireRelease(writeRuntimeMarker(runtimePath, marker), () =>
     removeRuntimeMarker(runtimePath, marker.pid).pipe(

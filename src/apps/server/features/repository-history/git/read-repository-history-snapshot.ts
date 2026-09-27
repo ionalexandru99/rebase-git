@@ -1,16 +1,17 @@
-import type { RepositoryHistorySnapshot } from "@rebase/contracts";
+import type {
+  RepositoryHistoryOperationFailure,
+  RepositoryHistorySnapshot,
+} from "@rebase/contracts";
 import { Effect } from "effect";
-import type { GitCommandRunner } from "#server/domain/git-command.contract";
 import {
+  type GitCommandRunner,
   type GitObjectFormat,
   isGitObjectId,
-} from "#server/domain/git-object-id";
-import type { RepositoryGitError } from "#server/domain/repository-git.contract";
-import type { RepositoryHistoryError } from "#server/features/repository-history/git/history-failures";
+  runRepositoryGit,
+} from "#server/adapters/local-git/git-commands";
 import { historySnapshotIdentity } from "#server/features/repository-history/git/history-snapshot-identity";
 import type { ObjectFormatRead } from "#server/features/repository-history/git/read-object-format";
 import { readShallowHistoryOids } from "#server/features/repository-history/git/shallow-repository-history";
-import { runRepositoryGit } from "#server/repository/access/index";
 
 const maximumRefsOutputBytes = 16 * 1_048_576;
 const maximumStashRootsBytes = 16 * 1_024;
@@ -27,10 +28,7 @@ export function readRepositoryHistorySnapshot(
   git: GitCommandRunner,
   repositoryPath: string,
   readObjectFormat: ObjectFormatRead,
-): Effect.Effect<
-  RepositoryHistorySnapshot,
-  RepositoryHistoryError | RepositoryGitError
-> {
+): Effect.Effect<RepositoryHistorySnapshot, RepositoryHistoryOperationFailure> {
   return Effect.gen(function* () {
     const [objectFormat, refsOutput, stashTipOutput, worktreesOutput] =
       yield* Effect.all(

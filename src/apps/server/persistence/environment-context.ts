@@ -1,32 +1,40 @@
 import { randomUUID } from "node:crypto";
 import type { DatabaseSync } from "node:sqlite";
 import { eq } from "drizzle-orm";
-import { drizzle } from "drizzle-orm/node-sqlite";
-import { Effect, Layer, type Scope, Semaphore } from "effect";
-import type { EnvironmentStorageError } from "#server/domain/environment-storage-error.contract";
-import {
-  type EnvironmentContext,
-  EnvironmentStorage,
-} from "#server/persistence/environment-context.contract";
+import { drizzle, type NodeSQLiteDatabase } from "drizzle-orm/node-sqlite";
+import { Effect, type Scope, Semaphore } from "effect";
 import { environmentTable } from "#server/persistence/environment-state.schema";
 import {
   closeEnvironmentDatabase,
   openEnvironmentDatabase,
 } from "#server/persistence/sqlite/database";
 import {
+  type EnvironmentStorageError,
   serializedPromise,
   storagePromise,
   storageSync,
 } from "#server/persistence/sqlite/storage-operation";
 import {
-  defaultEnvironmentPaths,
+  type EnvironmentPaths,
   prepareEnvironmentDirectories,
 } from "#server/persistence/storage/environment-paths";
-import type { EnvironmentPaths } from "#server/persistence/storage/environment-paths.contract";
 import { ensureServerSecret } from "#server/persistence/storage/server-secret";
 
+export interface EnvironmentContext {
+  readonly database: NodeSQLiteDatabase;
+  readonly serverSecret: string;
+  readonly read: <Value>(
+    message: string,
+    operation: (database: NodeSQLiteDatabase) => PromiseLike<Value> | Value,
+  ) => Effect.Effect<Value, EnvironmentStorageError>;
+  readonly write: <Value>(
+    message: string,
+    operation: (database: NodeSQLiteDatabase) => PromiseLike<Value> | Value,
+  ) => Effect.Effect<Value, EnvironmentStorageError>;
+}
+
 export function acquireEnvironmentContext(
-  paths: EnvironmentPaths = defaultEnvironmentPaths(),
+  paths: EnvironmentPaths,
 ): Effect.Effect<EnvironmentContext, EnvironmentStorageError, Scope.Scope> {
   return Effect.gen(function* () {
     yield* prepareEnvironmentDirectories(paths);
@@ -42,10 +50,6 @@ export function acquireEnvironmentContext(
     yield* initializeEnvironment(context);
     return context;
   });
-}
-
-export function environmentContextLayer(paths: EnvironmentPaths) {
-  return Layer.effect(EnvironmentStorage, acquireEnvironmentContext(paths));
 }
 
 function createEnvironmentContext(

@@ -1,19 +1,16 @@
+import type { RepositoryHistoryOperationFailure } from "@rebase/contracts";
 import { Effect } from "effect";
-import type { GitCommandRunner } from "#server/domain/git-command.contract";
-import type { GitObjectFormat } from "#server/domain/git-object-id";
-import type { RepositoryGitError } from "#server/domain/repository-git.contract";
 import {
-  historyFailed,
-  type RepositoryHistoryError,
-} from "#server/features/repository-history/git/history-failures";
-import {
+  type GitCommandRunner,
+  type GitObjectFormat,
   readGitEntryIdentity,
   runRepositoryGit,
-} from "#server/repository/access/index";
+} from "#server/adapters/local-git/git-commands";
+import { historyFailed } from "#server/features/repository-history/git/history-failures";
 
 export type ObjectFormatRead = Effect.Effect<
   GitObjectFormat,
-  RepositoryHistoryError | RepositoryGitError
+  RepositoryHistoryOperationFailure
 >;
 
 export function createObjectFormatCache(git: GitCommandRunner) {

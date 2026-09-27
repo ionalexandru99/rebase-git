@@ -1,6 +1,12 @@
 import { execFile } from "node:child_process";
-import { Effect } from "effect";
-import { RuntimeRequirementsError } from "#server/app/runtime/runtime-errors.contract";
+import { Data, Effect } from "effect";
+
+export class RuntimeRequirementsError extends Data.TaggedError(
+  "RuntimeRequirementsError",
+)<{
+  readonly cause: unknown;
+  readonly message: string;
+}> {}
 
 const minimumNode22Version = [22, 18, 0] as const;
 const minimumGitVersion = [2, 35, 0] as const;

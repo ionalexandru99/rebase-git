@@ -78,8 +78,7 @@ export function negotiateEnvironmentRpc(
       hello,
       result.currentSequence,
     );
-    const { accessCapabilities: _access, ...negotiated } = result;
-    if (!equivalentHello(expected, negotiated))
+    if (!equivalentHello(expected, result))
       return yield* environmentResponseError("WebSocket");
     return result;
   });

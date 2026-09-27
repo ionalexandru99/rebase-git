@@ -10,9 +10,8 @@ import {
   type SynchronizeRepositoryHistory,
 } from "@rebase/contracts";
 import { type Cause, Deferred, Effect, Queue, Stream } from "effect";
-import type { EnvironmentRpcHandlersFor } from "#server/adapters/environment-transport/environment-feature.contract";
-import type { EnvironmentRpcSession } from "#server/adapters/environment-transport/rpc/environment-rpc-session.contract";
-import { RepositoryHistoryError } from "#server/features/repository-history/git/history-failures";
+import type { EnvironmentRpcHandlersFor } from "#server/adapters/environment-transport/combine-environment-features";
+import type { EnvironmentRpcSession } from "#server/adapters/environment-transport/rpc/environment-rpc-negotiation";
 import type { RepositoryHistoryService } from "#server/features/repository-history/repository-history";
 
 type HistoryOutput = JsonMessageFragment | RepositoryHistorySynchronized;
@@ -30,10 +29,8 @@ export function repositoryHistoryRpc(
   const acquire = (requestId: string) =>
     Effect.acquireRelease(
       Effect.gen(function* () {
-        const negotiated = yield* session.requireCapability(
-          "repository-history",
-          "repository.read",
-        );
+        const negotiated =
+          yield* session.requireCapability("repository-history");
         if (requests.size >= 2 || requests.has(requestId))
           return yield* failed();
         requests.add(requestId);
@@ -51,9 +48,7 @@ export function repositoryHistoryRpc(
       Stream.unwrap(
         Effect.gen(function* () {
           const limit = yield* acquire(request.requestId);
-          const page = yield* history
-            .read(request)
-            .pipe(Effect.mapError(historyFailure));
+          const page = yield* history.read(request);
           const fragments = yield* Effect.try({
             try: () =>
               fragmentJsonMessage(
@@ -96,24 +91,19 @@ export function repositoryHistoryRpc(
                       },
                       limit,
                     ),
-                  catch: () =>
-                    new RepositoryHistoryError({ failure: failure() }),
+                  catch: () => failure(),
                 });
                 yield* Queue.offerAll(queue, fragments);
                 yield* Deferred.await(committed).pipe(
                   Effect.timeoutOrElse({
                     duration: "30 seconds",
-                    orElse: () =>
-                      Effect.fail(
-                        new RepositoryHistoryError({ failure: failure() }),
-                      ),
+                    orElse: () => Effect.fail(failure()),
                   }),
                 );
                 pending.delete(request.requestId);
               }),
             )
             .pipe(
-              Effect.mapError(historyFailure),
               Effect.flatMap((commitCount) =>
                 Queue.offer(queue, {
                   _tag: "RepositoryHistorySynchronized",
@@ -136,10 +126,7 @@ export function repositoryHistoryRpc(
       sequence: number;
     }) =>
       Effect.gen(function* () {
-        yield* session.requireCapability(
-          "repository-history",
-          "repository.read",
-        );
+        yield* session.requireCapability("repository-history");
         const batch = pending.get(requestId);
         if (batch === undefined || batch.sequence !== sequence)
           return yield* failed();
@@ -154,11 +141,4 @@ function failure(): RepositoryHistoryOperationFailure {
 
 function failed() {
   return Effect.fail(failure());
-}
-
-function historyFailure(error: {
-  readonly _tag: string;
-  readonly failure?: RepositoryHistoryOperationFailure;
-}): RepositoryHistoryOperationFailure {
-  return error.failure ?? failure();
 }

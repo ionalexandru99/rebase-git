@@ -1,9 +1,8 @@
 import { RepositoryChangesHttpApi } from "@rebase/contracts";
-import { Effect } from "effect";
-import type { EnvironmentFeature } from "#server/adapters/environment-transport/environment-feature.contract";
+import type { EnvironmentFeature } from "#server/adapters/environment-transport/combine-environment-features";
 import {
-  command,
-  query,
+  type RepositoryDependencies,
+  repositoryRoutes,
 } from "#server/adapters/environment-transport/http/repository-http-routes";
 import {
   commitRepositoryChanges,
@@ -12,14 +11,17 @@ import {
   readRepositoryChanges,
 } from "#server/features/repository-changes/repository-changes";
 
-export const repositoryChangesFeature = Effect.gen(function* () {
+export function repositoryChangesFeature(
+  dependencies: RepositoryDependencies,
+): EnvironmentFeature {
+  const { command, query } = repositoryRoutes(dependencies);
   const api = RepositoryChangesHttpApi;
   return {
     capabilities: [],
     httpRoutes: [
-      yield* query(api.read, readRepositoryChanges),
-      yield* query(api.diff, readRepositoryChangeDiff),
-      yield* command(
+      query(api.read, readRepositoryChanges),
+      query(api.diff, readRepositoryChangeDiff),
+      command(
         api.mutate,
         (input) => ({
           name: input.action,
@@ -31,7 +33,7 @@ export const repositoryChangesFeature = Effect.gen(function* () {
         }),
         mutateRepositoryChanges,
       ),
-      yield* command(
+      command(
         api.commit,
         (input) =>
           input.amend
@@ -51,5 +53,5 @@ export const repositoryChangesFeature = Effect.gen(function* () {
         commitRepositoryChanges,
       ),
     ],
-  } satisfies EnvironmentFeature;
-});
+  };
+}

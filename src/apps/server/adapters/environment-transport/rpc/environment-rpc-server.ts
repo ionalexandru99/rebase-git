@@ -1,14 +1,10 @@
-import {
-  type EnvironmentAccessCapability,
-  EnvironmentRpc,
-  environmentRpcSerialization,
-} from "@rebase/contracts";
+import { EnvironmentRpc, environmentRpcSerialization } from "@rebase/contracts";
 import { Deferred, Effect, Fiber, Layer, Option } from "effect";
 import { RpcSerialization, RpcServer } from "effect/unstable/rpc";
 import { Socket, SocketServer } from "effect/unstable/socket";
 import type { WebSocket } from "ws";
-import type { EnvironmentTransportState } from "#server/adapters/environment-transport/environment-connection.contract";
-import type { EnvironmentFeatures } from "#server/adapters/environment-transport/environment-feature.contract";
+import type { EnvironmentFeatures } from "#server/adapters/environment-transport/combine-environment-features";
+import type { EnvironmentTransportState } from "#server/adapters/environment-transport/environment-transport-discovery";
 import { acquireEnvironmentEvents } from "#server/adapters/environment-transport/rpc/environment-rpc-events";
 import { createEnvironmentRpcSession } from "#server/adapters/environment-transport/rpc/environment-rpc-negotiation";
 
@@ -17,11 +13,10 @@ export function runEnvironmentRpcSession(
   state: EnvironmentTransportState,
   features: EnvironmentFeatures,
   address: SocketServer.Address,
-  access: ReadonlySet<EnvironmentAccessCapability>,
 ) {
   return Effect.gen(function* () {
     const disconnected = yield* Deferred.make<void>();
-    const session = yield* createEnvironmentRpcSession(state, access);
+    const session = yield* createEnvironmentRpcSession(state);
     const watchEnvironment = yield* acquireEnvironmentEvents(session);
     const handlers = EnvironmentRpc.toLayer({
       ...features.rpc(session),

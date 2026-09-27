@@ -6,13 +6,11 @@ import { Effect, Exit, Scope } from "effect";
 import { afterEach, describe, expect, it } from "vite-plus/test";
 import {
   type DesktopApplication,
+  type DesktopApplicationHost,
+  type DesktopWindowOptions,
   startDesktopApplication,
 } from "#desktop/app/desktop-application";
-import type {
-  DesktopApplicationHost,
-  DesktopWindowOptions,
-} from "#desktop/app/desktop-application.contract";
-import type { ManagedEnvironmentServer } from "#desktop/platform/environment/environment-supervisor.contract";
+import type { ManagedEnvironmentServer } from "#desktop/platform/environment/environment-supervisor";
 import { removeTemporaryDirectory } from "#tests-support/temporary-directory";
 
 const directories = new Set<string>();
@@ -27,10 +25,6 @@ afterEach(async () => {
 describe("Electron application", () => {
   it("starts one ready Environment server, loads the renderer, and stops cleanly", async () => {
     const homeDirectory = await createTemporaryDirectory();
-    const previousHome = process.env.HOME;
-    const previousUserProfile = process.env.USERPROFILE;
-    process.env.HOME = homeDirectory;
-    process.env.USERPROFILE = homeDirectory;
     let application: DesktopApplication | undefined;
 
     try {
@@ -45,7 +39,7 @@ describe("Electron application", () => {
         renderer,
         startEnvironment: async () => {
           serverStarts += 1;
-          return startEnvironmentInProcess();
+          return startEnvironmentInProcess(homeDirectory);
         },
       });
       const firstWindow = host.windows[0];
@@ -87,12 +81,7 @@ describe("Electron application", () => {
         access(join(homeDirectory, ".rebase", "runtime", "runtime.json")),
       ).rejects.toMatchObject({ code: "ENOENT" });
     } finally {
-      try {
-        await application?.stop();
-      } finally {
-        restoreEnvironmentVariable("HOME", previousHome);
-        restoreEnvironmentVariable("USERPROFILE", previousUserProfile);
-      }
+      await application?.stop();
     }
   });
 });
@@ -117,10 +106,12 @@ class TestDesktopHost implements DesktopApplicationHost {
   }
 }
 
-async function startEnvironmentInProcess(): Promise<ManagedEnvironmentServer> {
+async function startEnvironmentInProcess(
+  home: string,
+): Promise<ManagedEnvironmentServer> {
   const scope = Scope.makeUnsafe();
   const server = await Effect.runPromise(
-    Scope.provide(startEnvironmentServer(), scope),
+    Scope.provide(startEnvironmentServer({ home }), scope),
   );
   return {
     ...server,
@@ -132,12 +123,4 @@ async function createTemporaryDirectory() {
   const directory = await mkdtemp(join(tmpdir(), "rebase-desktop-test-"));
   directories.add(directory);
   return directory;
-}
-
-function restoreEnvironmentVariable(name: string, value: string | undefined) {
-  if (value === undefined) {
-    delete process.env[name];
-  } else {
-    process.env[name] = value;
-  }
 }

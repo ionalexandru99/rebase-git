@@ -1,7 +1,6 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { Effect } from "effect";
-import { respondWithBrowserAsset } from "#server/adapters/browser-client/browser-assets";
-import type { RunEnvironmentEffect } from "#server/adapters/environment-transport/environment-connection.contract";
+import { respondWithBrowserAsset } from "#server/adapters/browser-assets";
 import { validateRequestHost } from "#server/adapters/environment-transport/environment-request-authorization";
 import { readEnvironmentHttpRequestBody } from "#server/adapters/environment-transport/http/environment-http-request-body";
 import {
@@ -12,9 +11,14 @@ import {
   writeEnvironmentHttpError,
   writeJsonValue,
 } from "#server/adapters/environment-transport/http/environment-http-response";
-import type { EnvironmentHttpRouteHandler } from "#server/adapters/environment-transport/http/environment-http-route-handler.contract";
+import type { EnvironmentHttpRouteHandler } from "#server/adapters/environment-transport/http/environment-http-route-handler";
 import { routeEnvironmentHttpRequest } from "#server/adapters/environment-transport/http/environment-http-router";
-import type { EnvironmentAuthorization } from "#server/domain/environment-authorization.contract";
+import type { EnvironmentAuthorization } from "#server/features/environment-authorization/environment-authorization";
+
+export type RunEnvironmentEffect = (
+  effect: Effect.Effect<void, never, never>,
+  signal?: AbortSignal,
+) => void;
 
 export function createEnvironmentHttpHandler(
   authorization: EnvironmentAuthorization,

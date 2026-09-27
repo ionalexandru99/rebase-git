@@ -1,11 +1,16 @@
-import type { RepositoryCommit } from "@rebase/contracts";
+import type {
+  RepositoryCommit,
+  RepositoryHistoryOperationFailure,
+} from "@rebase/contracts";
 import { Effect, Stream } from "effect";
-import type { GitCommandRunner } from "#server/domain/git-command.contract";
-import type { GitObjectFormat } from "#server/domain/git-object-id";
-import type { RepositoryGitError } from "#server/domain/repository-git.contract";
+import {
+  type GitCommandRunner,
+  type GitObjectFormat,
+  isGitRejection,
+  streamRepositoryGit,
+} from "#server/adapters/local-git/git-commands";
 import {
   parseHistoryOutput,
-  type RepositoryHistoryError,
   snapshotInvalidated,
 } from "#server/features/repository-history/git/history-failures";
 import { historyTraversalPageSize } from "#server/features/repository-history/git/history-snapshot-identity";
@@ -15,10 +20,6 @@ import {
 } from "#server/features/repository-history/git/parse-git-history";
 import { packedGitArguments } from "#server/features/repository-history/git/read-selected-history";
 import { restoreShallowCommitParents } from "#server/features/repository-history/git/shallow-repository-history";
-import {
-  isGitRejection,
-  streamRepositoryGit,
-} from "#server/repository/access/index";
 
 const batchSize = 256;
 const maximumBatchCharacters = 4 * 1_048_576;
@@ -39,7 +40,7 @@ export function streamRepositoryHistory(
   traversal: HistoryTraversal,
   emit: (
     commits: readonly RepositoryCommit[],
-  ) => Effect.Effect<void, RepositoryHistoryError>,
+  ) => Effect.Effect<void, RepositoryHistoryOperationFailure>,
 ) {
   return Effect.gen(function* () {
     const frontier = new Set(traversal.roots);
@@ -83,7 +84,7 @@ export function streamRepositoryHistory(
       );
       if (parsed < historyTraversalPageSize) break;
     }
-    if (remainingSkip > 0) return yield* snapshotInvalidated();
+    if (remainingSkip > 0) return yield* Effect.fail(snapshotInvalidated());
     return emitted;
   });
 }
@@ -96,7 +97,7 @@ function historyPage(
   deadline: number,
 ): Stream.Stream<
   readonly RepositoryCommit[],
-  RepositoryHistoryError | RepositoryGitError
+  RepositoryHistoryOperationFailure
 > {
   return Stream.suspend(() => {
     const parser = createGitHistoryBatchParser(

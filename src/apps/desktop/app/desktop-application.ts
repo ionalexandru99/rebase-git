@@ -1,12 +1,33 @@
 import { exchangeEnvironmentPairingEffect } from "@rebase/environment-client";
 import { Effect } from "effect";
-import type {
-  DesktopApplicationHost,
-  DesktopApplicationOptions,
-  DesktopQuitEvent,
-  DesktopRenderer,
-} from "#desktop/app/desktop-application.contract";
-import type { ManagedEnvironmentServer } from "#desktop/platform/environment/environment-supervisor.contract";
+import type { ManagedEnvironmentServer } from "#desktop/platform/environment/environment-supervisor";
+
+export type DesktopRenderer =
+  | { readonly type: "file"; readonly path: string }
+  | { readonly type: "url"; readonly url: string };
+
+export interface DesktopWindowOptions {
+  readonly environmentOrigin: string;
+  readonly credential: string;
+  readonly renderer: DesktopRenderer;
+}
+
+export interface DesktopApplicationHost {
+  readonly platform: NodeJS.Platform;
+  hasOpenWindows(): boolean;
+  openWindow(options: DesktopWindowOptions): Promise<void> | void;
+  quit(): void;
+}
+
+export interface DesktopQuitEvent {
+  preventDefault(): void;
+}
+
+export interface DesktopApplicationOptions {
+  readonly host: DesktopApplicationHost;
+  readonly renderer: DesktopRenderer;
+  readonly startEnvironment: () => Promise<ManagedEnvironmentServer>;
+}
 
 export async function startDesktopApplication(
   options: DesktopApplicationOptions,

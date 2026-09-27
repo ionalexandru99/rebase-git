@@ -3,7 +3,7 @@ import { isIPv4 } from "node:net";
 import type { EnvironmentAuthorizationFailure } from "@rebase/contracts";
 import { Effect } from "effect";
 import { readBrowserSessionCredential } from "#server/adapters/environment-transport/http/environment-session-cookie";
-import { EnvironmentAuthorizationError } from "#server/domain/environment-authorization.contract";
+import { EnvironmentAuthorizationError } from "#server/features/environment-authorization/environment-authorization";
 
 export function validateRequestHost(request: IncomingMessage) {
   const expectedHost = listeningHost(request);
@@ -68,7 +68,6 @@ export function authorizationFailureStatus(
   switch (failure._tag) {
     case "InvalidHost":
     case "InvalidOrigin":
-    case "CapabilityDenied":
       return 403;
     case "InvalidGrant":
     case "RevokedGrant":

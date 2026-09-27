@@ -21,7 +21,7 @@ describe("describeFailure", () => {
     [
       {
         _tag: "AccessDenied",
-        failure: { _tag: "CapabilityDenied", capability: "repository.write" },
+        failure: { _tag: "RevokedGrant" },
       },
       "This device has no access to this repository.",
     ],

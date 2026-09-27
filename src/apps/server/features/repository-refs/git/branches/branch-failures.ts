@@ -3,11 +3,13 @@ import {
   type RepositoryRejected,
   repositoryRejected,
 } from "@rebase/contracts";
-import type { RepositoryGitError } from "#server/domain/repository-git.contract";
-import { isGitRejection } from "#server/repository/access/index";
+import {
+  type GitFailed,
+  isGitRejection,
+} from "#server/adapters/local-git/git-commands";
 
 export function branchWriteFailed(
-  error: RepositoryGitError,
+  error: GitFailed,
   name: string,
 ): RepositoryBranchesOperationFailure | RepositoryRejected {
   if (!isGitRejection(error))
