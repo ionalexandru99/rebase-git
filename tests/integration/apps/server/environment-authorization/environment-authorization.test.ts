@@ -12,11 +12,11 @@ import {
 import {
   createEnvironmentAuthorization,
   type EnvironmentAuthorization,
-} from "#server/features/environment-authorization/environment-authorization";
-import type { EnvironmentContext } from "#server/persistence/environment-context";
-import { authorizationMetadataTable } from "#server/persistence/environment-state.schema";
-import { EnvironmentStorageError } from "#server/persistence/sqlite/storage-operation";
-import { openTestEnvironment } from "#tests-support/server";
+} from "#server/features/environment-authorization/environment-authorization.ts";
+import type { EnvironmentContext } from "#server/persistence/environment-context.ts";
+import { authorizationMetadataTable } from "#server/persistence/environment-state.schema.ts";
+import { EnvironmentStorageError } from "#server/persistence/sqlite/storage-operation.ts";
+import { openTestEnvironment } from "#tests-support/server.ts";
 
 beforeEach(() => {
   vi.useFakeTimers({

@@ -1,8 +1,8 @@
 import { expect, it } from "vite-plus/test";
 import { page } from "vite-plus/test/browser";
 import { render } from "vitest-browser-react";
-import { createStore } from "#web/platform/store/store";
-import { useStore } from "#web/platform/store/use-store";
+import { createStore } from "#web/platform/store/store.ts";
+import { useStore } from "#web/platform/store/use-store.ts";
 
 interface Counter {
   readonly count: number;

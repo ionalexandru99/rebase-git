@@ -1,7 +1,7 @@
 import type {
   GraphCommit,
   StoredTopology,
-} from "#web/features/repository-history/history-database";
+} from "#web/features/repository-history/history-database.ts";
 
 export type HistoryOrder = "topological" | "chronological";
 

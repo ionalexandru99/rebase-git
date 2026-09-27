@@ -11,18 +11,18 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
+import { Effect } from "effect";
+import { describe, expect, it } from "vite-plus/test";
 import {
   type ChangeSelection,
   type ChangesScope,
   type MutateChanges,
   RepositoryChangesApi,
-} from "@rebase/contracts";
-import { Effect } from "effect";
-import { describe, expect, it } from "vite-plus/test";
-import type { GitCommand } from "#server/adapters/local-git/git-commands";
-import { createRepository, fastImport } from "#tests-support/git";
-import { openTestEnvironment } from "#tests-support/server";
-import { removeTemporaryDirectory } from "#tests-support/temporary-directory";
+} from "#contracts/repository-changes/repository-changes.contract.ts";
+import type { GitCommand } from "#server/adapters/local-git/git-commands.ts";
+import { createRepository, fastImport } from "#tests-support/git.ts";
+import { openTestEnvironment } from "#tests-support/server.ts";
+import { removeTemporaryDirectory } from "#tests-support/temporary-directory.ts";
 
 const exec = promisify(execFile);
 async function fixture(

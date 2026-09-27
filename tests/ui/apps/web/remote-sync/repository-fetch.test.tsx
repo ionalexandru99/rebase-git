@@ -1,27 +1,26 @@
+import { act } from "react";
+import { describe, expect, it, vi } from "vite-plus/test";
+import { page, userEvent } from "vite-plus/test/browser";
 import {
   type FetchFailed,
   type RepositoryFetchSetting,
   type RepositoryFetchStatus,
   RepositoryPullApi,
-  RepositoryRefsApi,
-} from "@rebase/contracts";
-import { act } from "react";
-import { describe, expect, it, vi } from "vite-plus/test";
-import { page, userEvent } from "vite-plus/test/browser";
-import { fetchStatus } from "#tests-support/fixtures";
-import { repositoryScope } from "#tests-ui/apps/web/repository-scope/repository-scope-fixture";
+} from "#contracts/repository-pull/repository-pull.contract.ts";
+import { RepositoryRefsApi } from "#contracts/repository-refs/repository-refs.contract.ts";
 import {
   fakeRequests,
   idleOperation,
   rejected,
   respond,
   unanswered,
-} from "#tests-ui/runtime/fake-requests";
-import { render, testChanges } from "#tests-ui/runtime/render";
-import { NotificationsProvider } from "#web/features/notifications/notifications";
-import { RepositoryFetchSettings } from "#web/features/remote-sync/fetch-settings";
-import { RemoteSync } from "#web/features/remote-sync/remote-sync";
-import { RepositoryScopeProvider } from "#web/platform/query/repository-scope";
+} from "#tests-support/fake-requests.ts";
+import { fetchStatus, repositoryScope } from "#tests-support/fixtures.ts";
+import { render, testChanges } from "#tests-support/render.tsx";
+import { NotificationsProvider } from "#web/features/notifications/notifications.tsx";
+import { RepositoryFetchSettings } from "#web/features/remote-sync/fetch-settings.tsx";
+import { RemoteSync } from "#web/features/remote-sync/remote-sync.tsx";
+import { RepositoryScopeProvider } from "#web/platform/query/repository-scope.tsx";
 
 const scope = repositoryScope();
 const fresh = fetchStatus();

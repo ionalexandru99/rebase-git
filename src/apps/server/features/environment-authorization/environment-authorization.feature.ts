@@ -1,10 +1,10 @@
-import { EnvironmentAuthorizationApi } from "@rebase/contracts";
 import { Effect } from "effect";
+import { EnvironmentAuthorizationApi } from "#contracts/environment-authorization/environment-authorization.contract.ts";
 import {
   type EnvironmentFeature,
   route,
-} from "#server/adapters/environment-transport/environment-routes";
-import type { EnvironmentAuthorization } from "#server/features/environment-authorization/environment-authorization";
+} from "#server/adapters/environment-transport/environment-routes.ts";
+import type { EnvironmentAuthorization } from "#server/features/environment-authorization/environment-authorization.ts";
 
 export function environmentAuthorizationFeature(
   authorization: EnvironmentAuthorization,

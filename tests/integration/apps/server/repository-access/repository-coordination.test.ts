@@ -2,15 +2,13 @@ import { execFile } from "node:child_process";
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { promisify } from "node:util";
-import {
-  RepositoryChangesApi,
-  RepositoryPullApi,
-  RepositoryRefsApi,
-} from "@rebase/contracts";
 import { Deferred, Effect, Fiber, Option } from "effect";
 import { expect, it } from "vite-plus/test";
-import { createRepository } from "#tests-support/git";
-import { openTestEnvironment } from "#tests-support/server";
+import { RepositoryChangesApi } from "#contracts/repository-changes/repository-changes.contract.ts";
+import { RepositoryPullApi } from "#contracts/repository-pull/repository-pull.contract.ts";
+import { RepositoryRefsApi } from "#contracts/repository-refs/repository-refs.contract.ts";
+import { createRepository } from "#tests-support/git.ts";
+import { openTestEnvironment } from "#tests-support/server.ts";
 
 const execute = promisify(execFile);
 

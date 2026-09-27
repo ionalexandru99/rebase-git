@@ -1,26 +1,29 @@
+import { describe, expect, it, vi } from "vite-plus/test";
 import {
-  type ChangeDiff,
   CommitInspectionApi,
   type CommitInspection as Details,
   type InspectCommit,
   type InspectCommitDiff,
-} from "@rebase/contracts";
-import { describe, expect, it, vi } from "vite-plus/test";
-import { changeDiff, changedFile } from "#tests-support/fixtures";
+} from "#contracts/commit-inspection/commit-inspection.contract.ts";
+import type { ChangeDiff } from "#contracts/repository-comparison/repository-comparison.contract.ts";
 import {
   CommitGraphFixture,
   history,
   historyOid,
   historyReader,
-} from "#tests-ui/apps/web/commit-graph/commit-graph-fixture";
-import { repositoryScope } from "#tests-ui/apps/web/repository-scope/repository-scope-fixture";
-import { fakeRequests, respond } from "#tests-ui/runtime/fake-requests";
-import { render } from "#tests-ui/runtime/render";
-import { CommitInspectionBridge } from "#web/app/workspace/commit-inspection-bridge";
-import { ResizablePanel } from "#web/components/ui/resizable";
-import { CommitInspection } from "#web/features/commit-inspection/commit-inspection";
-import { WorkspacePanel } from "#web/features/workspace-panel/workspace-panel";
-import { RepositoryScopeProvider } from "#web/platform/query/repository-scope";
+} from "#tests-support/commit-graph-fixture.tsx";
+import { fakeRequests, respond } from "#tests-support/fake-requests.ts";
+import {
+  changeDiff,
+  changedFile,
+  repositoryScope,
+} from "#tests-support/fixtures.ts";
+import { render } from "#tests-support/render.tsx";
+import { CommitInspectionBridge } from "#web/app/workspace/commit-inspection-bridge.tsx";
+import { ResizablePanel } from "#web/components/ui/resizable.tsx";
+import { CommitInspection } from "#web/features/commit-inspection/commit-inspection.tsx";
+import { WorkspacePanel } from "#web/features/workspace-panel/workspace-panel.tsx";
+import { RepositoryScopeProvider } from "#web/platform/query/repository-scope.tsx";
 
 interface InspectionClient {
   readonly inspect: (command: InspectCommit) => Details | Promise<Details>;

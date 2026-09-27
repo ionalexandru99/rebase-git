@@ -2,8 +2,8 @@ import { mkdtemp, readdir, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vite-plus/test";
-import { createApplicationUpdateSettingsStore } from "#desktop/features/application-updates/application-update-settings-store";
-import { removeTemporaryDirectory } from "#tests-support/temporary-directory";
+import { createApplicationUpdateSettingsStore } from "#desktop/features/application-updates/application-update-settings-store.ts";
+import { removeTemporaryDirectory } from "#tests-support/temporary-directory.ts";
 
 describe("application update settings store", () => {
   let directory: string | undefined;

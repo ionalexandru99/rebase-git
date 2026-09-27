@@ -1,5 +1,5 @@
-import { RepositoryPath } from "@rebase/contracts/git/git-values.contract";
 import { Schema } from "effect";
+import { RepositoryPath } from "#contracts/git/git-values.contract.ts";
 
 const Revision = Schema.String.check(Schema.isMaxLength(128));
 

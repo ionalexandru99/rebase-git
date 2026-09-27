@@ -1,5 +1,8 @@
-import type { RepositoryChanges, ViewedChange } from "@rebase/contracts";
 import { useState } from "react";
+import type {
+  RepositoryChanges,
+  ViewedChange,
+} from "#contracts/repository-changes/repository-changes.contract.ts";
 
 export interface ConflictSelection {
   readonly section: "conflicts";

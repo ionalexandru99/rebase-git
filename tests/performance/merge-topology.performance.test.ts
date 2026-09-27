@@ -1,7 +1,7 @@
 import { resolve } from "node:path";
 import { expect, test } from "@playwright/test";
 import { createServer } from "vite";
-import { assertTimingBudget } from "#tests-performance/timing-budget";
+import { assertTimingBudget } from "#tests-performance/timing-budget.ts";
 
 test("256 active lanes stay within append and canvas budgets", async ({
   page,
@@ -21,12 +21,12 @@ test("256 active lanes stay within append and canvas budgets", async ({
       const {
         appendCommitLanes,
         createCommitLaneCheckpoint,
-      }: typeof import("#web/features/repository-history/commit-lanes") =
+      }: typeof import("#web/features/repository-history/commit-lanes.ts") =
         await import(lanesPath);
-      const canvasPath = "/features/commit-graph/layout/draw-graph-tile.ts";
+      const canvasPath = "/features/commit-graph/layout/graph-tile.ts";
       const {
         drawGraphTile,
-      }: typeof import("#web/features/commit-graph/layout/draw-graph-tile") =
+      }: typeof import("#web/features/commit-graph/layout/graph-tile.ts") =
         await import(canvasPath);
       const branches = 256;
       const depth = 8;
@@ -50,7 +50,7 @@ test("256 active lanes stay within append and canvas budgets", async ({
         { oid: base, parents: [] },
       ];
       let checkpoint = createCommitLaneCheckpoint();
-      const rows: import("#web/features/repository-history/commit-lanes").CommitLaneRow[] =
+      const rows: import("#web/features/repository-history/commit-lanes.ts").CommitLaneRow[] =
         [];
       const appendDurations: number[] = [];
       let firstPlans = "";

@@ -1,6 +1,6 @@
-import { ExchangeEnvironmentPairing } from "@rebase/contracts";
 import { Schema } from "effect";
 import { describe, expect, it } from "vite-plus/test";
+import { ExchangeEnvironmentPairing } from "#contracts/environment-authorization/environment-authorization.contract.ts";
 
 describe("Environment authorization HTTP contract", () => {
   it("accepts only six-digit pairing codes", () => {

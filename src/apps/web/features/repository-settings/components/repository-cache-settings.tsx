@@ -6,14 +6,14 @@ import {
   AlertDialogDescription,
   AlertDialogFooter,
   AlertDialogTitle,
-} from "#web/components/ui/alert-dialog";
-import { Button } from "#web/components/ui/button";
-import { SettingsRow } from "#web/components/ui/settings-layout";
-import { formatCacheSize } from "#web/features/history-storage/format-cache-size";
+} from "#web/components/ui/alert-dialog.tsx";
+import { Button } from "#web/components/ui/button.tsx";
+import { SettingsRow } from "#web/components/ui/settings-layout.tsx";
+import { formatCacheSize } from "#web/features/history-storage/format-cache-size.ts";
 import {
   historyCacheActions,
   useHistoryCacheManagement,
-} from "#web/features/history-storage/use-history-cache-management";
+} from "#web/features/history-storage/use-history-cache-management.ts";
 
 export function RepositoryCacheSettings(
   props: Parameters<typeof useHistoryCacheManagement>[0] & {

@@ -1,22 +1,26 @@
+import { Effect, Schema } from "effect";
+import type { DesktopHostBridge } from "#contracts/desktop-host/desktop-host.contract.ts";
 import {
-  type DesktopHostBridge,
+  DesktopUpdateSnapshot,
+  type DesktopUpdates,
+} from "#contracts/desktop-updates/desktop-updates.contract.ts";
+import {
   EnvironmentAccessFailure,
   type ExchangeEnvironmentPairing,
   environmentBrowserSessionPath,
-} from "@rebase/contracts";
-import { Effect, Schema } from "effect";
+} from "#contracts/environment-authorization/environment-authorization.contract.ts";
 import {
   createLocalEnvironmentSession,
   type LocalEnvironmentSession,
   type LocalEnvironmentSessionOptions,
-} from "#web/app/environment/local-environment-session";
+} from "#web/app/environment/local-environment-session.ts";
 import {
   connectEnvironment,
   type EnvironmentAccess,
   EnvironmentAccessDenied,
   type EnvironmentCredential,
   EnvironmentUnavailable,
-} from "#web/platform/environment/environment-connection";
+} from "#web/platform/environment/environment-connection.ts";
 
 type DesktopEnvironmentHost = Pick<
   DesktopHostBridge,
@@ -115,4 +119,27 @@ function readPairingMaterial(location: Pick<Location, "hash" | "pathname">) {
     return undefined;
   }
   return location.hash.slice(1);
+}
+
+declare global {
+  interface Window {
+    readonly rebaseHost?: DesktopHostBridge;
+  }
+}
+
+const decodeSnapshot = Schema.decodeUnknownSync(DesktopUpdateSnapshot);
+
+export function readDesktopHostBridge(): DesktopHostBridge | undefined {
+  const host = window.rebaseHost;
+  if (host === undefined) return undefined;
+  return { ...host, updates: decodedDesktopUpdates(host.updates) };
+}
+
+function decodedDesktopUpdates(updates: DesktopUpdates): DesktopUpdates {
+  return {
+    ...updates,
+    getSnapshot: () => updates.getSnapshot().then(decodeSnapshot),
+    subscribe: (listener) =>
+      updates.subscribe((snapshot) => listener(decodeSnapshot(snapshot))),
+  };
 }

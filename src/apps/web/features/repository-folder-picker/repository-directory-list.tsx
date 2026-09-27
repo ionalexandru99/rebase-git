@@ -1,8 +1,8 @@
-import type { EnvironmentDirectoryEntry } from "@rebase/contracts";
 import { IconFile, IconFolder } from "@tabler/icons-react";
 import type { JSX } from "react";
-import { modifiedDateLabel } from "#web/features/repository-folder-picker/repository-folder-picker-state";
-import { cn } from "#web/lib/utils";
+import type { EnvironmentDirectoryEntry } from "#contracts/environment-filesystem/environment-filesystem.contract.ts";
+import { modifiedDateLabel } from "#web/features/repository-folder-picker/repository-folder-picker-state.ts";
+import { cn } from "#web/lib/utils.ts";
 
 export function RepositoryDirectoryList({
   entries,

@@ -2,9 +2,9 @@ import { useCallback, useEffect, useState } from "react";
 import type {
   HistoryStorage,
   HistoryStorageAction,
-} from "#web/features/repository-history/history-worker-protocol";
-import type { RepositoryHistory } from "#web/features/repository-history/repository-history";
-import { useStore } from "#web/platform/store/use-store";
+} from "#web/features/repository-history/history-worker-protocol.ts";
+import type { RepositoryHistory } from "#web/features/repository-history/repository-history.ts";
+import { useStore } from "#web/platform/store/use-store.ts";
 
 export type HistoryCacheAction = Exclude<HistoryStorageAction, "inspect">;
 

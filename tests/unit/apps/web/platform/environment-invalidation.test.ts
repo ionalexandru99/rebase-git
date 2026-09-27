@@ -3,8 +3,8 @@ import { describe, expect, it, vi } from "vite-plus/test";
 import {
   createEnvironmentInvalidation,
   invalidatedByChange,
-} from "#web/platform/query/environment-invalidation";
-import { createEnvironmentQueryClient } from "#web/platform/query/environment-query-client";
+} from "#web/platform/query/environment-invalidation.ts";
+import { createEnvironmentQueryClient } from "#web/platform/query/environment-query.ts";
 
 const refs = { changes: "refs", repositoryId: "one" } as const;
 const index = { changes: "index", repositoryId: "one" } as const;

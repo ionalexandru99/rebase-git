@@ -1,19 +1,22 @@
-import type { CommitInspection as CommitDetails } from "@rebase/contracts";
+import { skipToken } from "@tanstack/react-query";
 import { lazy, Suspense, useState } from "react";
-import { Button } from "#web/components/ui/button";
-import { CommitFiles } from "#web/features/commit-inspection/components/commit-files";
-import { CommitMetadata } from "#web/features/commit-inspection/components/commit-metadata";
-import { useCommitDiff } from "#web/features/commit-inspection/hooks/use-commit-diff";
 import {
-  type InspectionScope,
-  useCommitInspection,
-} from "#web/features/commit-inspection/hooks/use-commit-inspection";
-import { useDiffPreferences } from "#web/features/file-diff/hooks/use-diff-preferences";
-import { usePanelFeature } from "#web/features/workspace-panel/api";
-import { describeFailure } from "#web/platform/query/request-failure";
+  type CommitInspection as CommitDetails,
+  CommitInspectionApi,
+  type InspectCommit,
+  type InspectCommitDiff,
+} from "#contracts/commit-inspection/commit-inspection.contract.ts";
+import { Button } from "#web/components/ui/button.tsx";
+import { CommitFiles } from "#web/features/commit-inspection/components/commit-files.tsx";
+import { CommitMetadata } from "#web/features/commit-inspection/components/commit-metadata.tsx";
+import { DiffWorkerPool } from "#web/features/file-diff/components/diff-worker-pool.tsx";
+import { useDiffPreferences } from "#web/features/file-diff/hooks/use-diff-preferences.ts";
+import { usePanelFeature } from "#web/features/workspace-panel/api.ts";
+import { useEnvironmentQuery } from "#web/platform/query/environment-query.ts";
+import { describeFailure } from "#web/platform/query/request-failure.ts";
 
 const CommitDiff = lazy(
-  () => import("#web/features/commit-inspection/components/commit-diff"),
+  () => import("#web/features/commit-inspection/components/commit-diff.tsx"),
 );
 
 interface SelectedFile {
@@ -122,4 +125,75 @@ function selectedPath(
   )
     return selected.path;
   return details.files[0]?.path ?? null;
+}
+
+export function CommitInspectionPanel() {
+  const feature = usePanelFeature();
+  const scope = feature?.scope;
+  const environment = feature?.environment;
+  if (scope === undefined || environment === undefined) {
+    return (
+      <p className="p-4 text-sm text-muted-foreground">
+        Connect to the environment to inspect commits.
+      </p>
+    );
+  }
+  return (
+    <DiffWorkerPool>
+      <CommitInspection
+        scope={{
+          repositoryId: scope.repositoryId,
+          worktreePath: scope.worktreePath,
+        }}
+        connected={environment.connected}
+      />
+    </DiffWorkerPool>
+  );
+}
+
+function useCommitDiff(
+  scope: InspectionScope,
+  details: CommitDetails | undefined,
+  path: string | null,
+  enabled: boolean,
+) {
+  return useEnvironmentQuery(
+    CommitInspectionApi.inspectDiff,
+    details === undefined || path === null
+      ? skipToken
+      : commitDiffInput(scope, details, path),
+    { enabled, changes: "none" },
+  );
+}
+
+function commitDiffInput(
+  { repositoryId, worktreePath }: InspectionScope,
+  details: CommitDetails,
+  path: string,
+): InspectCommitDiff {
+  const previousPath = details.files.find(
+    (file) => file.path === path,
+  )?.previousPath;
+  return {
+    repositoryId,
+    worktreePath,
+    oid: details.oid,
+    ...(details.parentOid === null ? {} : { parentOid: details.parentOid }),
+    path,
+    ...(previousPath == null ? {} : { previousPath }),
+  };
+}
+
+type InspectionScope = Pick<InspectCommit, "repositoryId" | "worktreePath">;
+
+function useCommitInspection(
+  { repositoryId, worktreePath }: InspectionScope,
+  oid: string | undefined,
+  enabled: boolean,
+) {
+  return useEnvironmentQuery(
+    CommitInspectionApi.inspect,
+    oid === undefined ? skipToken : { repositoryId, worktreePath, oid },
+    { enabled, changes: "none" },
+  );
 }

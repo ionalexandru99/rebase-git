@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vite-plus/test";
-import { selectedDiffLines } from "#web/features/working-changes/diff/diff-selection";
+import { selectedDiffLines } from "#web/features/working-changes/components/change-diff-viewer.tsx";
 
 describe("diff selection coordinates", () => {
   const diff = {

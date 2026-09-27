@@ -1,12 +1,12 @@
 import {
   workspacePanelDefinitions,
   workspacePanelKinds,
-} from "#web/features/workspace-panel/workspace-panel-definitions";
+} from "#web/features/workspace-panel/workspace-panel-definitions.ts";
 import type {
   WorkspacePanelAction,
   WorkspacePanelKind,
   WorkspacePanelState,
-} from "#web/features/workspace-panel/workspace-panel-model";
+} from "#web/features/workspace-panel/workspace-panel-model.ts";
 
 export const initialWorkspacePanelState: WorkspacePanelState = {
   tabs: [],

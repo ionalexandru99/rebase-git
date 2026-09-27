@@ -37,7 +37,7 @@ await Promise.all([
       js: 'import { createRequire as createNodeRequire } from "node:module"; const require = createNodeRequire(import.meta.url);',
     },
     bundle: true,
-    conditions: ["rebase-source", "node", "import"],
+    conditions: ["node", "import"],
     define: {
       "process.env.NODE_ENV": JSON.stringify("production"),
       REBASE_PRODUCT_VERSION: JSON.stringify(productVersion),
@@ -56,7 +56,7 @@ await Promise.all([
   }),
   build({
     bundle: true,
-    conditions: ["rebase-source", "node", "import"],
+    conditions: ["node", "import"],
     entryPoints: ["src/apps/desktop/preload.ts"],
     external: ["electron"],
     format: "cjs",

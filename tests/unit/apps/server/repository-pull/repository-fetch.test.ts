@@ -1,17 +1,17 @@
-import type { RepositoryCatalogEntry } from "@rebase/contracts";
 import { Deferred, Effect, Fiber, type Scope, Stream } from "effect";
 import { TestClock } from "effect/testing";
 import { describe, expect, it, vi } from "vite-plus/test";
-import { createEnvironmentEventPublisher } from "#server/adapters/environment-transport/environment-event-publisher";
+import type { RepositoryCatalogEntry } from "#contracts/repository-catalog/repository-catalog.contract.ts";
+import { createEnvironmentEventPublisher } from "#server/adapters/environment-transport/environment-event-publisher.ts";
 import {
   type GitCommandRunner,
   gitFailed,
-} from "#server/adapters/local-git/git-commands";
+} from "#server/adapters/local-git/git-commands.ts";
 import {
   acquireRepositoryFetch,
   type RepositoryFetch,
-} from "#server/features/repository-pull/repository-fetch";
-import type { RepositoryAccess } from "#server/repository/repository-access";
+} from "#server/features/repository-pull/repository-fetch.ts";
+import type { RepositoryAccess } from "#server/repository/repository-access.ts";
 
 const repositoryId = "00000000-0000-4000-8000-000000000001";
 const linkedId = "00000000-0000-4000-8000-000000000002";

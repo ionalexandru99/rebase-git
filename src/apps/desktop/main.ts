@@ -1,25 +1,35 @@
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { app, BrowserWindow, dialog } from "electron";
+import { Schema } from "effect";
+import { app, BrowserWindow, dialog, ipcMain } from "electron";
 import electronUpdater, { type AppUpdater } from "electron-updater";
+import {
+  type DesktopUpdateSnapshot,
+  ReleaseChannel,
+} from "#contracts/desktop-updates/desktop-updates.contract.ts";
 import {
   type DesktopApplication,
   type DesktopApplicationHost,
   type DesktopRenderer,
   type DesktopWindowOptions,
   startDesktopApplication,
-} from "#desktop/app/desktop-application";
-import { desktopApplicationIpc } from "#desktop/app/desktop-application-ipc.contract";
-import { createApplicationUpdateSettingsStore } from "#desktop/features/application-updates/application-update-settings-store";
-import { createApplicationUpdater } from "#desktop/features/application-updates/application-updater";
-import { registerApplicationUpdaterIpc } from "#desktop/features/application-updates/application-updater-ipc";
-import { registerRepositoryFilesystemIpc } from "#desktop/features/repository-filesystem/repository-filesystem-ipc";
-import { startManagedEnvironmentServer } from "#desktop/platform/environment/environment-supervisor";
+} from "#desktop/app/desktop-application.ts";
+import { createApplicationUpdateSettingsStore } from "#desktop/features/application-updates/application-update-settings-store.ts";
+import {
+  type ApplicationUpdater,
+  createApplicationUpdater,
+} from "#desktop/features/application-updates/application-updater.ts";
+import { registerRepositoryFilesystemIpc } from "#desktop/features/repository-filesystem/repository-filesystem-ipc.ts";
+import {
+  applicationUpdaterIpc,
+  desktopApplicationIpc,
+} from "#desktop/ipc-channels.ts";
+import { startManagedEnvironmentServer } from "#desktop/platform/environment/environment-supervisor.ts";
 import {
   createTrustedIpcHandler,
   isTrustedRendererLocation,
   type TrustedIpcHandler,
-} from "#desktop/platform/renderer-trust";
+} from "#desktop/platform/renderer-trust.ts";
 
 let desktopApplication: DesktopApplication | undefined;
 const desktopIconPath = fileURLToPath(
@@ -165,11 +175,7 @@ function resolveRenderer(
 
   return {
     type: "file",
-    path: fileURLToPath(
-      process.env.NODE_ENV === "production"
-        ? new URL("./web/index.html", moduleUrl)
-        : new URL("../../web/dist/web/index.html", moduleUrl),
-    ),
+    path: fileURLToPath(new URL("./web/index.html", moduleUrl)),
   };
 }
 
@@ -182,4 +188,47 @@ function reportFailure(title: string, error: unknown) {
   process.exitCode = 1;
   dialog.showErrorBox(title, message);
   app.quit();
+}
+
+function registerApplicationUpdaterIpc(
+  updater: ApplicationUpdater,
+  trusted: TrustedIpcHandler,
+) {
+  ipcMain.handle(
+    applicationUpdaterIpc.snapshot,
+    trusted(() => updater.getSnapshot()),
+  );
+  ipcMain.handle(
+    applicationUpdaterIpc.check,
+    trusted(() => updater.checkForUpdates()),
+  );
+  ipcMain.handle(
+    applicationUpdaterIpc.install,
+    trusted(() => updater.installUpdate()),
+  );
+  ipcMain.handle(
+    applicationUpdaterIpc.selectReleaseChannel,
+    trusted((_event, value: unknown) =>
+      updater.selectReleaseChannel(
+        Schema.decodeUnknownSync(ReleaseChannel)(value),
+      ),
+    ),
+  );
+  ipcMain.handle(
+    applicationUpdaterIpc.setCheckAutomatically,
+    trusted((_event, value: unknown) => {
+      if (typeof value !== "boolean") {
+        throw new TypeError("checkAutomatically must be a boolean.");
+      }
+      return updater.setCheckAutomatically(value);
+    }),
+  );
+
+  return updater.subscribe(sendSnapshot);
+}
+
+function sendSnapshot(snapshot: DesktopUpdateSnapshot) {
+  for (const window of BrowserWindow.getAllWindows()) {
+    window.webContents.send(applicationUpdaterIpc.snapshotChanged, snapshot);
+  }
 }

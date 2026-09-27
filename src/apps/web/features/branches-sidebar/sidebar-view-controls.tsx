@@ -3,7 +3,7 @@ import { type JSX, useId, useState } from "react";
 import type {
   BranchesSidebarScope,
   BranchesSidebarView,
-} from "#web/features/branches-sidebar/branches-sidebar-state";
+} from "#web/features/branches-sidebar/branches-sidebar-state.ts";
 
 const viewStorageKey = "rebase:branches-view:v1";
 

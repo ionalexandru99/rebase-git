@@ -4,21 +4,6 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
-catalogs:
-  default:
-    drizzle-kit:
-      specifier: 1.0.0-rc.5-ab785fc
-      version: 1.0.0-rc.5-ab785fc
-    drizzle-orm:
-      specifier: 1.0.0-rc.5-169397b
-      version: 1.0.0-rc.5-169397b
-    effect:
-      specifier: 4.0.0-rc.110
-      version: 4.0.0-rc.110
-    vite-plus:
-      specifier: 0.2.9
-      version: 0.2.9
-
 overrides:
   vite: npm:@voidzero-dev/vite-plus-core@0.2.9
   vitest: 4.1.10
@@ -40,140 +25,12 @@ importers:
         specifier: 8.21.3
         version: 8.21.3
     devDependencies:
-      '@biomejs/biome':
-        specifier: 2.5.9
-        version: 2.5.9
-      '@playwright/test':
-        specifier: 1.62.1
-        version: 1.62.1
-      '@rebase/contracts':
-        specifier: workspace:*
-        version: link:src/contracts
-      '@rebase/desktop':
-        specifier: workspace:*
-        version: link:src/apps/desktop
-      '@rebase/server':
-        specifier: workspace:*
-        version: link:src/apps/server
-      '@rebase/web':
-        specifier: workspace:*
-        version: link:src/apps/web
-      '@tanstack/react-query':
-        specifier: 5.103.2
-        version: 5.103.2(react@19.2.8)
-      '@tanstack/react-query-persist-client':
-        specifier: 5.103.2
-        version: 5.103.2(@tanstack/react-query@5.103.2(react@19.2.8))(react@19.2.8)
-      '@types/node':
-        specifier: 24.13.3
-        version: 24.13.3
-      '@types/react':
-        specifier: 19.2.18
-        version: 19.2.18
-      '@types/react-dom':
-        specifier: 19.2.4
-        version: 19.2.4(@types/react@19.2.18)
-      '@types/ws':
-        specifier: 8.18.1
-        version: 8.18.1
-      '@vitest/browser-playwright':
-        specifier: 4.1.10
-        version: 4.1.10(@voidzero-dev/vite-plus-core@0.2.9(@types/node@24.13.3)(esbuild@0.28.2)(jiti@2.7.0)(typescript@7.0.2))(playwright@1.62.1)(vitest@4.1.10)
-      concurrently:
-        specifier: 10.0.5
-        version: 10.0.5
-      drizzle-kit:
-        specifier: 'catalog:'
-        version: 1.0.0-rc.5-ab785fc
-      electron:
-        specifier: 43.4.1
-        version: 43.4.1(supports-color@10.2.2)
-      electron-builder:
-        specifier: 26.15.3
-        version: 26.15.3(electron-builder-squirrel-windows@26.15.3)(supports-color@10.2.2)
-      esbuild:
-        specifier: 0.28.2
-        version: 0.28.2
-      react:
-        specifier: 19.2.8
-        version: 19.2.8
-      react-dom:
-        specifier: 19.2.8
-        version: 19.2.8(react@19.2.8)
-      typescript:
-        specifier: 7.0.2
-        version: 7.0.2
-      vite:
-        specifier: npm:@voidzero-dev/vite-plus-core@0.2.9
-        version: '@voidzero-dev/vite-plus-core@0.2.9(@types/node@24.13.3)(esbuild@0.28.2)(jiti@2.7.0)(typescript@7.0.2)'
-      vite-plus:
-        specifier: 'catalog:'
-        version: 0.2.9(@types/node@24.13.3)(@vitest/browser-playwright@4.1.10)(@voidzero-dev/vite-plus-core@0.2.9(@types/node@24.13.3)(esbuild@0.28.2)(jiti@2.7.0)(typescript@7.0.2))(esbuild@0.28.2)(jiti@2.7.0)(typescript@7.0.2)
-      vitest:
-        specifier: 4.1.10
-        version: 4.1.10(@types/node@24.13.3)(@vitest/browser-playwright@4.1.10)(@vitest/browser-preview@4.1.10)(@voidzero-dev/vite-plus-core@0.2.9(@types/node@24.13.3)(esbuild@0.28.2)(jiti@2.7.0)(typescript@7.0.2))
-      vitest-browser-react:
-        specifier: 2.2.0
-        version: 2.2.0(@types/react-dom@19.2.4(@types/react@19.2.18))(@types/react@19.2.18)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(vitest@4.1.10)
-      wait-on:
-        specifier: 9.1.0
-        version: 9.1.0(debug@4.4.3(supports-color@10.2.2))(supports-color@10.2.2)
-
-  src/apps/desktop:
-    dependencies:
-      '@rebase/contracts':
-        specifier: workspace:*
-        version: link:../../contracts
-      '@rebase/server':
-        specifier: workspace:*
-        version: link:../server
-      effect:
-        specifier: 'catalog:'
-        version: 4.0.0-rc.110
-      electron-updater:
-        specifier: 6.8.9
-        version: 6.8.9(supports-color@10.2.2)
-    devDependencies:
-      '@types/semver':
-        specifier: 7.8.0
-        version: 7.8.0
-      cross-env:
-        specifier: 10.1.0
-        version: 10.1.0
-      electron:
-        specifier: 43.4.1
-        version: 43.4.1(supports-color@10.2.2)
-      esbuild:
-        specifier: 0.28.2
-        version: 0.28.2
-
-  src/apps/server:
-    dependencies:
-      '@rebase/contracts':
-        specifier: workspace:*
-        version: link:../../contracts
-      diff:
-        specifier: 8.0.4
-        version: 8.0.4
-      drizzle-orm:
-        specifier: 'catalog:'
-        version: 1.0.0-rc.5-169397b(effect@4.0.0-rc.110)(zod@3.25.76)
-      effect:
-        specifier: 'catalog:'
-        version: 4.0.0-rc.110
-      ws:
-        specifier: 8.21.3
-        version: 8.21.3
-    devDependencies:
-      '@types/ws':
-        specifier: 8.18.1
-        version: 8.18.1
-
-  src/apps/web:
-    dependencies:
       '@base-ui/react':
         specifier: 1.7.0
         version: 1.7.0(@types/react@19.2.18)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
+      '@biomejs/biome':
+        specifier: 2.5.9
+        version: 2.5.9
       '@fontsource-variable/inter':
         specifier: 5.3.0
         version: 5.3.0
@@ -183,12 +40,15 @@ importers:
       '@pierre/theme':
         specifier: 2.0.0
         version: 2.0.0
-      '@rebase/contracts':
-        specifier: workspace:*
-        version: link:../../contracts
+      '@playwright/test':
+        specifier: 1.62.1
+        version: 1.62.1
       '@tabler/icons-react':
         specifier: 3.46.0
         version: 3.46.0(react@19.2.8)
+      '@tailwindcss/vite':
+        specifier: 4.3.3
+        version: 4.3.3(@voidzero-dev/vite-plus-core@0.2.9(@types/node@24.13.3)(esbuild@0.28.2)(jiti@2.7.0)(typescript@7.0.2))
       '@tanstack/query-async-storage-persister':
         specifier: 5.103.2
         version: 5.103.2
@@ -201,15 +61,57 @@ importers:
       '@tanstack/react-virtual':
         specifier: 3.14.10
         version: 3.14.10(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
+      '@types/node':
+        specifier: 24.13.3
+        version: 24.13.3
+      '@types/react':
+        specifier: 19.2.18
+        version: 19.2.18
+      '@types/react-dom':
+        specifier: 19.2.4
+        version: 19.2.4(@types/react@19.2.18)
+      '@types/semver':
+        specifier: 7.8.0
+        version: 7.8.0
+      '@types/ws':
+        specifier: 8.18.1
+        version: 8.18.1
+      '@vitejs/plugin-react':
+        specifier: 6.0.5
+        version: 6.0.5(@voidzero-dev/vite-plus-core@0.2.9(@types/node@24.13.3)(esbuild@0.28.2)(jiti@2.7.0)(typescript@7.0.2))
+      '@vitest/browser-playwright':
+        specifier: 4.1.10
+        version: 4.1.10(@voidzero-dev/vite-plus-core@0.2.9(@types/node@24.13.3)(esbuild@0.28.2)(jiti@2.7.0)(typescript@7.0.2))(playwright@1.62.1)(vitest@4.1.10)
       class-variance-authority:
         specifier: 0.7.1
         version: 0.7.1
       clsx:
         specifier: 2.1.1
         version: 2.1.1
-      effect:
-        specifier: 'catalog:'
-        version: 4.0.0-rc.110
+      concurrently:
+        specifier: 10.0.5
+        version: 10.0.5
+      cross-env:
+        specifier: 10.1.0
+        version: 10.1.0
+      diff:
+        specifier: 8.0.4
+        version: 8.0.4
+      drizzle-kit:
+        specifier: 1.0.0-rc.5-ab785fc
+        version: 1.0.0-rc.5-ab785fc
+      electron:
+        specifier: 43.4.1
+        version: 43.4.1(supports-color@10.2.2)
+      electron-builder:
+        specifier: 26.15.3
+        version: 26.15.3(electron-builder-squirrel-windows@26.15.3)(supports-color@10.2.2)
+      electron-updater:
+        specifier: 6.8.9
+        version: 6.8.9(supports-color@10.2.2)
+      esbuild:
+        specifier: 0.28.2
+        version: 0.28.2
       idb-keyval:
         specifier: 6.3.0
         version: 6.3.0
@@ -222,46 +124,39 @@ importers:
       react-resizable-panels:
         specifier: 4.12.3
         version: 4.12.3(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
+      shadcn:
+        specifier: 4.19.0
+        version: 4.19.0(supports-color@10.2.2)(typescript@7.0.2)
       shiki:
         specifier: 4.4.3
         version: 4.4.3
       tailwind-merge:
         specifier: 3.6.0
         version: 3.6.0
-    devDependencies:
-      '@tailwindcss/vite':
-        specifier: 4.3.3
-        version: 4.3.3(@voidzero-dev/vite-plus-core@0.2.9(@types/node@24.13.3)(esbuild@0.28.2)(jiti@2.7.0)(typescript@7.0.2))
-      '@types/react':
-        specifier: 19.2.18
-        version: 19.2.18
-      '@types/react-dom':
-        specifier: 19.2.4
-        version: 19.2.4(@types/react@19.2.18)
-      '@vitejs/plugin-react':
-        specifier: 6.0.5
-        version: 6.0.5(@voidzero-dev/vite-plus-core@0.2.9(@types/node@24.13.3)(esbuild@0.28.2)(jiti@2.7.0)(typescript@7.0.2))
-      shadcn:
-        specifier: 4.19.0
-        version: 4.19.0(supports-color@10.2.2)(typescript@7.0.2)
       tailwindcss:
         specifier: 4.3.3
         version: 4.3.3
       tw-animate-css:
         specifier: 1.4.0
         version: 1.4.0
+      typescript:
+        specifier: 7.0.2
+        version: 7.0.2
       vite:
         specifier: npm:@voidzero-dev/vite-plus-core@0.2.9
         version: '@voidzero-dev/vite-plus-core@0.2.9(@types/node@24.13.3)(esbuild@0.28.2)(jiti@2.7.0)(typescript@7.0.2)'
       vite-plus:
-        specifier: 'catalog:'
+        specifier: 0.2.9
         version: 0.2.9(@types/node@24.13.3)(@vitest/browser-playwright@4.1.10)(@voidzero-dev/vite-plus-core@0.2.9(@types/node@24.13.3)(esbuild@0.28.2)(jiti@2.7.0)(typescript@7.0.2))(esbuild@0.28.2)(jiti@2.7.0)(typescript@7.0.2)
-
-  src/contracts:
-    dependencies:
-      effect:
-        specifier: 'catalog:'
-        version: 4.0.0-rc.110
+      vitest:
+        specifier: 4.1.10
+        version: 4.1.10(@types/node@24.13.3)(@vitest/browser-playwright@4.1.10)(@vitest/browser-preview@4.1.10)(@voidzero-dev/vite-plus-core@0.2.9(@types/node@24.13.3)(esbuild@0.28.2)(jiti@2.7.0)(typescript@7.0.2))
+      vitest-browser-react:
+        specifier: 2.2.0
+        version: 2.2.0(@types/react-dom@19.2.4(@types/react@19.2.18))(@types/react@19.2.18)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(vitest@4.1.10)
+      wait-on:
+        specifier: 9.1.0
+        version: 9.1.0(debug@4.4.3(supports-color@10.2.2))(supports-color@10.2.2)
 
 packages:
 

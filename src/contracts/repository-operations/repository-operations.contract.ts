@@ -1,12 +1,12 @@
+import { Schema } from "effect";
 import {
   repositoryCommand,
   repositoryQuery,
-} from "@rebase/contracts/environment-connection/environment-route.contract";
+} from "#contracts/environment-connection/environment-route.contract.ts";
 import {
   RepositoryId,
   RepositoryPath,
-} from "@rebase/contracts/git/git-values.contract";
-import { Schema } from "effect";
+} from "#contracts/git/git-values.contract.ts";
 
 export const OperationScope = Schema.Struct({
   repositoryId: RepositoryId,

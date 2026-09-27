@@ -1,20 +1,20 @@
+import { Effect, Stream } from "effect";
 import type {
   RepositoryCommit,
   RepositoryHistoryFailure,
-} from "@rebase/contracts";
-import { Effect, Stream } from "effect";
+} from "#contracts/repository-history/repository-history.contract.ts";
 import {
   type GitCommandRunner,
   type GitObjectFormat,
   runRepositoryGit,
   streamRepositoryGit,
-} from "#server/adapters/local-git/git-commands";
-import { parseHistoryOutput } from "#server/features/repository-history/git/history-failures";
+} from "#server/adapters/local-git/git-commands.ts";
+import { parseHistoryOutput } from "#server/features/repository-history/git/history-failures.ts";
 import {
   createGitHistoryBatchParser,
   gitHistoryFormat,
-} from "#server/features/repository-history/git/parse-git-history";
-import { restoreShallowCommitParents } from "#server/features/repository-history/git/shallow-repository-history";
+} from "#server/features/repository-history/git/parse-git-history.ts";
+import { restoreShallowCommitParents } from "#server/features/repository-history/git/shallow-repository-history.ts";
 
 const batchSize = 256;
 const pageSize = 5_000;

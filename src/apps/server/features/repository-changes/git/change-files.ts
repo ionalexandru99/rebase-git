@@ -1,9 +1,9 @@
 import { lstat, readFile, readlink, realpath } from "node:fs/promises";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { Effect } from "effect";
-import { changeIo } from "#server/features/repository-changes/git/change-failures";
-import { previewByteLimit } from "#server/repository/comparison/read-blobs";
-import type { RepositoryFileContent } from "#server/repository/comparison/read-object-file";
+import { changeIo } from "#server/features/repository-changes/git/change-failures.ts";
+import { previewByteLimit } from "#server/repository/comparison/read-blobs.ts";
+import type { RepositoryFileContent } from "#server/repository/comparison/read-object-file.ts";
 
 export function safeChangePath(directory: string, path: string) {
   return changeIo(async () => {

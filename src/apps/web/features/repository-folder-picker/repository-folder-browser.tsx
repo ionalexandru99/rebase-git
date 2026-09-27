@@ -1,20 +1,22 @@
-import type { RepositoryCatalogEntry } from "@rebase/contracts";
 import { IconArrowUp, IconSearch, IconX } from "@tabler/icons-react";
 import { type JSX, useEffect, useRef, useState } from "react";
-import { Button } from "#web/components/ui/button";
+import type { RepositoryCatalogEntry } from "#contracts/repository-catalog/repository-catalog.contract.ts";
+import { Button } from "#web/components/ui/button.tsx";
 import {
+  Dialog,
   DialogClose,
+  DialogContent,
   DialogDescription,
   DialogTitle,
-} from "#web/components/ui/dialog";
-import { Input } from "#web/components/ui/input";
-import { useFolderBrowser } from "#web/features/repository-folder-picker/hooks/use-folder-browser";
-import { RepositoryDirectoryList } from "#web/features/repository-folder-picker/repository-directory-list";
+} from "#web/components/ui/dialog.tsx";
+import { Input } from "#web/components/ui/input.tsx";
+import { useFolderBrowser } from "#web/features/repository-folder-picker/hooks/use-folder-browser.ts";
+import { RepositoryDirectoryList } from "#web/features/repository-folder-picker/repository-directory-list.tsx";
 import {
   type RepositoryFolderPickerEnvironment,
   RepositoryFolderPickerEnvironmentSelect,
-} from "#web/features/repository-folder-picker/repository-folder-picker-environment-select";
-import { filterDirectoryEntries } from "#web/features/repository-folder-picker/repository-folder-picker-state";
+} from "#web/features/repository-folder-picker/repository-folder-picker-environment-select.tsx";
+import { filterDirectoryEntries } from "#web/features/repository-folder-picker/repository-folder-picker-state.ts";
 
 export function RepositoryFolderBrowser({
   environment,
@@ -175,5 +177,45 @@ export function RepositoryFolderBrowser({
         </Button>
       </footer>
     </>
+  );
+}
+
+interface RepositoryFolderPickerProps {
+  readonly environments: readonly RepositoryFolderPickerEnvironment[];
+  readonly onOpenChange: (open: boolean) => void;
+  readonly onRepositoryOpened: (
+    environmentId: string,
+    repository: RepositoryCatalogEntry,
+  ) => void;
+  readonly open: boolean;
+}
+
+export function RepositoryFolderPicker({
+  environments,
+  onOpenChange,
+  onRepositoryOpened,
+  open,
+}: RepositoryFolderPickerProps): JSX.Element | null {
+  const [environmentId, setEnvironmentId] = useState<string>();
+  const environment =
+    environments.find(({ id }) => id === environmentId) ??
+    environments.find(({ availability }) => availability === "available") ??
+    environments[0];
+  if (environment === undefined) return null;
+  return (
+    <Dialog onOpenChange={onOpenChange} open={open}>
+      <DialogContent className="flex h-[min(32rem,calc(100svh-2rem))] max-w-[46rem] flex-col overflow-hidden">
+        <RepositoryFolderBrowser
+          key={environment.id}
+          environment={environment}
+          environments={environments}
+          chooseEnvironment={setEnvironmentId}
+          onRepositoryOpened={(repository) => {
+            onRepositoryOpened(environment.id, repository);
+            onOpenChange(false);
+          }}
+        />
+      </DialogContent>
+    </Dialog>
   );
 }

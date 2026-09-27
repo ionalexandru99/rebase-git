@@ -1,5 +1,8 @@
-import type { ConflictRegion, ConflictSide } from "@rebase/contracts";
 import { useCallback, useMemo, useRef, useState } from "react";
+import type {
+  ConflictRegion,
+  ConflictSide,
+} from "#contracts/repository-conflicts/repository-conflicts.contract.ts";
 import {
   applyPick,
   isOpen,
@@ -12,8 +15,8 @@ import {
   regionSegments,
   takeSide,
   togglePick,
-} from "#web/features/merge-view/conflict-document";
-import type { ChooseRegion } from "#web/features/merge-view/hooks/use-merge-document";
+} from "#web/features/merge-view/conflict-document.ts";
+import type { ChooseRegion } from "#web/features/merge-view/hooks/use-merge-document.ts";
 
 export interface LineTarget extends LinePick {
   readonly regionId: string;

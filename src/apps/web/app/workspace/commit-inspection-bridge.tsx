@@ -5,8 +5,8 @@ import {
   useEffect,
   useRef,
 } from "react";
-import type { CommitGraphHandle } from "#web/features/commit-graph/commit-graph";
-import { useWorkspacePanel } from "#web/features/workspace-panel/workspace-panel-provider";
+import type { CommitGraphHandle } from "#web/features/commit-graph/commit-graph.tsx";
+import { useWorkspacePanel } from "#web/features/workspace-panel/workspace-panel-provider.tsx";
 
 export interface InspectionGraphActions {
   readonly graphRef: RefObject<CommitGraphHandle | null>;

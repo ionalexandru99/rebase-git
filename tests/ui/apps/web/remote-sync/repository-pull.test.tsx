@@ -1,35 +1,35 @@
+import { describe, expect, it, vi } from "vite-plus/test";
+import { page } from "vite-plus/test/browser";
 import {
   type PullFailure,
   type RepositoryFetchStatus,
   RepositoryPullApi,
-  RepositoryRefsApi,
-} from "@rebase/contracts";
-import { describe, expect, it, vi } from "vite-plus/test";
-import { page } from "vite-plus/test/browser";
-import {
-  commitId,
-  fetchStatus,
-  repositoryId,
-  repositoryRefs,
-  upstream,
-  worktree,
-} from "#tests-support/fixtures";
+} from "#contracts/repository-pull/repository-pull.contract.ts";
+import { RepositoryRefsApi } from "#contracts/repository-refs/repository-refs.contract.ts";
 import {
   CommitGraphFixture,
   history as graphHistory,
   historyReader,
-} from "#tests-ui/apps/web/commit-graph/commit-graph-fixture";
-import { repositoryScope } from "#tests-ui/apps/web/repository-scope/repository-scope-fixture";
+} from "#tests-support/commit-graph-fixture.tsx";
 import {
   fakeRequests,
   idleOperation,
   rejected,
   respond,
-} from "#tests-ui/runtime/fake-requests";
-import { render } from "#tests-ui/runtime/render";
-import { NotificationsProvider } from "#web/features/notifications/notifications";
-import { RemoteSync } from "#web/features/remote-sync/remote-sync";
-import { RepositoryScopeProvider } from "#web/platform/query/repository-scope";
+} from "#tests-support/fake-requests.ts";
+import {
+  commitId,
+  fetchStatus,
+  repositoryId,
+  repositoryRefs,
+  repositoryScope,
+  upstream,
+  worktree,
+} from "#tests-support/fixtures.ts";
+import { render } from "#tests-support/render.tsx";
+import { NotificationsProvider } from "#web/features/notifications/notifications.tsx";
+import { RemoteSync } from "#web/features/remote-sync/remote-sync.tsx";
+import { RepositoryScopeProvider } from "#web/platform/query/repository-scope.tsx";
 
 const status = fetchStatus();
 

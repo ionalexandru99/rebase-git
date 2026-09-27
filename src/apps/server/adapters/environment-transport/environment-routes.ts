@@ -1,26 +1,28 @@
-import {
-  type EnvironmentDeviceAuthorization,
-  type EnvironmentRoute,
-  type EnvironmentRpc,
-  type RepositoryRejected,
-  type RouteFailure,
-  type RouteInput,
-  type RouteSuccess,
-  repositoryRejected,
-} from "@rebase/contracts";
 import { Effect, type Scope } from "effect";
 import type { Rpc, RpcGroup } from "effect/unstable/rpc";
+import type { EnvironmentDeviceAuthorization } from "#contracts/environment-authorization/environment-authorization.contract.ts";
+import type {
+  EnvironmentRoute,
+  RouteFailure,
+  RouteInput,
+  RouteSuccess,
+} from "#contracts/environment-connection/environment-route.contract.ts";
+import type { EnvironmentRpc } from "#contracts/environment-connection/environment-rpc.contract.ts";
+import {
+  type RepositoryRejected,
+  repositoryRejected,
+} from "#contracts/git/git-failures.contract.ts";
 import type {
   GitCommandRunner,
   GitFailed,
-} from "#server/adapters/local-git/git-commands";
-import { EnvironmentAuthorizationError } from "#server/features/environment-authorization/environment-authorization";
-import { EnvironmentStorageError } from "#server/persistence/sqlite/storage-operation";
-import type { RepositoryAccess } from "#server/repository/repository-access";
+} from "#server/adapters/local-git/git-commands.ts";
+import { EnvironmentAuthorizationError } from "#server/features/environment-authorization/environment-authorization.ts";
+import { EnvironmentStorageError } from "#server/persistence/sqlite/storage-operation.ts";
+import type { RepositoryAccess } from "#server/repository/repository-access.ts";
 import type {
   RepositoryCoordination,
   RepositoryWritePolicy,
-} from "#server/repository/repository-coordination";
+} from "#server/repository/repository-coordination.ts";
 
 export interface RouteContext {
   readonly device: EnvironmentDeviceAuthorization;

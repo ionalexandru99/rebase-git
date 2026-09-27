@@ -1,19 +1,19 @@
+import { Effect } from "effect";
 import type {
   ConflictList,
   ConflictSides,
-  RepositoryOperation,
   SideLabel,
-} from "@rebase/contracts";
-import { Effect } from "effect";
+} from "#contracts/repository-conflicts/repository-conflicts.contract.ts";
+import type { RepositoryOperation } from "#contracts/repository-operations/repository-operations.contract.ts";
 import {
   type GitCommandRunner,
   runRepositoryGit,
-} from "#server/adapters/local-git/git-commands";
+} from "#server/adapters/local-git/git-commands.ts";
 import {
   readConflictSnapshots,
   readUnmergedEntries,
-} from "#server/features/repository-conflicts/git/conflict-files";
-import type { RepositoryCoordination } from "#server/repository/repository-coordination";
+} from "#server/features/repository-conflicts/git/conflict-files.ts";
+import type { RepositoryCoordination } from "#server/repository/repository-coordination.ts";
 
 export function readConflictList(
   git: GitCommandRunner,

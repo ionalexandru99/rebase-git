@@ -1,46 +1,48 @@
+import { Effect } from "effect";
+import {
+  type RepositoryRejected,
+  repositoryRejected,
+} from "#contracts/git/git-failures.contract.ts";
 import {
   type CreateRepositoryBranch,
   RepositoryBranchesApi,
   type RepositoryBranchesOperationFailure,
-  RepositoryRefsApi,
-  type RepositoryRejected,
-  RepositoryTagsApi,
-  repositoryRejected,
   type SetRepositoryBranchUpstream,
-} from "@rebase/contracts";
-import { Effect } from "effect";
-import type { EnvironmentEventPublisher } from "#server/adapters/environment-transport/environment-event-publisher";
+} from "#contracts/repository-refs/repository-branches.contract.ts";
+import { RepositoryRefsApi } from "#contracts/repository-refs/repository-refs.contract.ts";
+import { RepositoryTagsApi } from "#contracts/repository-refs/repository-tags.contract.ts";
+import type { EnvironmentEventPublisher } from "#server/adapters/environment-transport/environment-event-publisher.ts";
 import {
   type EnvironmentFeature,
   type RepositoryDependencies,
   repositoryRoutes,
   route,
-} from "#server/adapters/environment-transport/environment-routes";
+} from "#server/adapters/environment-transport/environment-routes.ts";
 import {
   type GitCommandRunner,
   runRepositoryGit,
-} from "#server/adapters/local-git/git-commands";
-import type { RepositoryWatcher } from "#server/adapters/local-git/local-repository-watcher";
-import { branchWriteFailed } from "#server/features/repository-refs/git/branches/branch-failures";
+} from "#server/adapters/local-git/git-commands.ts";
+import type { RepositoryWatcher } from "#server/adapters/local-git/local-repository-watcher.ts";
+import { branchWriteFailed } from "#server/features/repository-refs/git/branches/branch-failures.ts";
 import {
   readLocalBranch,
   requireBranchTarget,
   requireRemoteBranch,
   requireValidBranchName,
   setUpstreamArguments,
-} from "#server/features/repository-refs/git/branches/branch-git";
-import { deleteBranch } from "#server/features/repository-refs/git/branches/delete-branch";
-import { renameBranch } from "#server/features/repository-refs/git/branches/rename-branch";
-import { checkoutRepositoryRef } from "#server/features/repository-refs/git/checkout-repository-ref";
-import { readRepositoryRefs } from "#server/features/repository-refs/git/read-repository-refs";
-import { refCommand } from "#server/features/repository-refs/git/ref-git";
+} from "#server/features/repository-refs/git/branches/branch-git.ts";
+import { deleteBranch } from "#server/features/repository-refs/git/branches/delete-branch.ts";
+import { renameBranch } from "#server/features/repository-refs/git/branches/rename-branch.ts";
+import { checkoutRepositoryRef } from "#server/features/repository-refs/git/checkout-repository-ref.ts";
+import { readRepositoryRefs } from "#server/features/repository-refs/git/read-repository-refs.ts";
+import { refCommand } from "#server/features/repository-refs/git/ref-git.ts";
 import {
   createTag,
   deleteTag,
-} from "#server/features/repository-refs/git/repository-tags";
-import { acquireRepositoryChangePublisher } from "#server/features/repository-refs/repository-change-publisher";
-import type { RepositoryAccess } from "#server/repository/repository-access";
-import type { RepositoryWritePolicy } from "#server/repository/repository-coordination";
+} from "#server/features/repository-refs/git/repository-tags.ts";
+import { acquireRepositoryChangePublisher } from "#server/features/repository-refs/repository-change-publisher.ts";
+import type { RepositoryAccess } from "#server/repository/repository-access.ts";
+import type { RepositoryWritePolicy } from "#server/repository/repository-coordination.ts";
 
 const branchPolicy: RepositoryWritePolicy = {
   name: "branch",

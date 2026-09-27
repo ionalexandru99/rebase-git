@@ -1,17 +1,17 @@
-import type { RepositoryCatalogEntry } from "@rebase/contracts";
 import { type ReactNode, useCallback, useMemo } from "react";
+import type { RepositoryCatalogEntry } from "#contracts/repository-catalog/repository-catalog.contract.ts";
 import {
   type Navigate,
   type Navigation,
   worktreePathFor,
-} from "#web/app/shell/use-navigation";
+} from "#web/app/shell/use-navigation.ts";
 import {
   resolveActiveWorktreePath,
   useRepositoryRefs,
-} from "#web/features/refs/repository-refs";
-import { useCatalogRepository } from "#web/features/repository-catalog/use-repository-catalog";
-import { useEnvironment } from "#web/platform/query/environment-context";
-import { RepositoryScopeProvider } from "#web/platform/query/repository-scope";
+} from "#web/features/refs/repository-refs.ts";
+import { useCatalogRepository } from "#web/features/repository-catalog/use-repository-catalog.ts";
+import { useEnvironment } from "#web/platform/query/environment-context.tsx";
+import { RepositoryScopeProvider } from "#web/platform/query/repository-scope.tsx";
 
 export function RepositorySelectionProvider({
   navigation,

@@ -1,6 +1,6 @@
-import { IsoDate } from "@rebase/contracts";
 import { Schema } from "effect";
 import { describe, expect, it } from "vite-plus/test";
+import { IsoDate } from "#contracts/environment-connection/iso-date.contract.ts";
 
 describe("IsoDate contract", () => {
   it("accepts only millisecond precision UTC timestamps", () => {

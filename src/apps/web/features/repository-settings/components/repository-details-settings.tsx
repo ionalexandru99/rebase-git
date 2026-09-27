@@ -7,9 +7,9 @@ import {
   AlertDialogDescription,
   AlertDialogFooter,
   AlertDialogTitle,
-} from "#web/components/ui/alert-dialog";
-import { Button } from "#web/components/ui/button";
-import { SettingsRow } from "#web/components/ui/settings-layout";
+} from "#web/components/ui/alert-dialog.tsx";
+import { Button } from "#web/components/ui/button.tsx";
+import { SettingsRow } from "#web/components/ui/settings-layout.tsx";
 
 export function RepositoryDetailsSettings({
   name,

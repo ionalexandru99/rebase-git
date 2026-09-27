@@ -1,12 +1,15 @@
-import type { ConflictFile, ConflictSides } from "@rebase/contracts";
 import { IconArrowDown } from "@tabler/icons-react";
-import { Button } from "#web/components/ui/button";
-import { Confirmation } from "#web/components/ui/confirmation";
+import type {
+  ConflictFile,
+  ConflictSides,
+} from "#contracts/repository-conflicts/repository-conflicts.contract.ts";
+import { Button } from "#web/components/ui/button.tsx";
+import { Confirmation } from "#web/components/ui/confirmation.tsx";
 import {
   FileListSection,
   RowLead,
-} from "#web/features/working-changes/components/file-list-section";
-import type { WorkingChangesView } from "#web/features/working-changes/hooks/use-working-changes-view";
+} from "#web/features/working-changes/components/file-list-section.tsx";
+import type { WorkingChangesView } from "#web/features/working-changes/hooks/use-working-changes-view.ts";
 
 export type ConflictFileSectionView = Pick<
   WorkingChangesView,

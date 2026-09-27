@@ -1,12 +1,15 @@
-import type { DesktopUpdateSnapshot, DesktopUpdates } from "@rebase/contracts";
 import {
   IconDatabase,
   IconSettings,
   type TablerIcon,
 } from "@tabler/icons-react";
 import type { ComponentType } from "react";
-import { GeneralSettings } from "#web/features/settings/general-settings";
-import { HistoryStorageSettings } from "#web/features/settings/history-storage-settings";
+import type {
+  DesktopUpdateSnapshot,
+  DesktopUpdates,
+} from "#contracts/desktop-updates/desktop-updates.contract.ts";
+import { GeneralSettings } from "#web/features/settings/general-settings.tsx";
+import { HistoryStorageSettings } from "#web/features/settings/history-storage-settings.tsx";
 
 export interface SettingsSectionContext {
   readonly desktopUpdates: DesktopUpdates | undefined;

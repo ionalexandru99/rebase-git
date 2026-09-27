@@ -1,9 +1,9 @@
+import { createContext, type ReactNode, useContext } from "react";
 import type {
   EnvironmentRoute,
   RouteInput,
   RouteSuccess,
-} from "@rebase/contracts";
-import { createContext, type ReactNode, useContext } from "react";
+} from "#contracts/environment-connection/environment-route.contract.ts";
 
 export type EnvironmentAvailability =
   | "available"

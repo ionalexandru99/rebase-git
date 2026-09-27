@@ -1,27 +1,27 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
-import {
-  RepositoryCatalogApi,
-  type RepositoryCommit,
-  type RepositoryHistoryTips,
-  type RepositoryHistoryUpdate,
-  type SynchronizeRepositoryHistory,
-} from "@rebase/contracts";
 import { Effect, Stream } from "effect";
 import { describe, expect, it } from "vite-plus/test";
+import { RepositoryCatalogApi } from "#contracts/repository-catalog/repository-catalog.contract.ts";
+import type {
+  RepositoryCommit,
+  RepositoryHistoryTips,
+  RepositoryHistoryUpdate,
+  SynchronizeRepositoryHistory,
+} from "#contracts/repository-history/repository-history.contract.ts";
 import {
   type GitCommandRunner,
   gitFailed,
-} from "#server/adapters/local-git/git-commands";
+} from "#server/adapters/local-git/git-commands.ts";
 import {
   cloneRepository,
   createRepository,
   fastImport,
   git,
-} from "#tests-support/git";
-import { openTestServer } from "#tests-support/server";
-import { openEnvironmentSocket } from "#web/platform/environment/environment-connection";
+} from "#tests-support/git.ts";
+import { openTestServer } from "#tests-support/server.ts";
+import { openEnvironmentSocket } from "#web/platform/environment/environment-connection.ts";
 
 const unchanged = { changed: () => {} };
 

@@ -3,16 +3,16 @@ import { readdir, stat } from "node:fs/promises";
 import { homedir } from "node:os";
 import { basename, dirname, extname, isAbsolute, join, parse } from "node:path";
 import { promisify } from "node:util";
+import { Effect } from "effect";
 import {
   type EnvironmentDirectory,
   type EnvironmentDirectoryEntry,
   type EnvironmentDirectoryRejected,
   EnvironmentFilesystemApi,
   type EnvironmentPathBreadcrumb,
-} from "@rebase/contracts";
-import { Effect } from "effect";
-import type { EnvironmentFeature } from "#server/adapters/environment-transport/environment-routes";
-import { route } from "#server/adapters/environment-transport/environment-routes";
+} from "#contracts/environment-filesystem/environment-filesystem.contract.ts";
+import type { EnvironmentFeature } from "#server/adapters/environment-transport/environment-routes.ts";
+import { route } from "#server/adapters/environment-transport/environment-routes.ts";
 
 const maximumEntries = 500;
 const maximumPathLength = 4_096;

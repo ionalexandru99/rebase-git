@@ -1,20 +1,20 @@
 import { stat } from "node:fs/promises";
+import { Effect } from "effect";
+import { repositoryRejected } from "#contracts/git/git-failures.contract.ts";
 import {
   type ChangedFile,
   type ChangesScope,
   changesFailed,
   type RepositoryChanges,
-  repositoryRejected,
-} from "@rebase/contracts";
-import { Effect } from "effect";
+} from "#contracts/repository-changes/repository-changes.contract.ts";
 import {
   type GitCommandRunner,
   runRepositoryGit,
   runRepositoryGitOutput,
-} from "#server/adapters/local-git/git-commands";
-import { changeIo } from "#server/features/repository-changes/git/change-failures";
-import { worktreeIdentities } from "#server/features/repository-changes/git/change-files";
-import { fingerprint } from "#server/repository/comparison/fingerprint";
+} from "#server/adapters/local-git/git-commands.ts";
+import { changeIo } from "#server/features/repository-changes/git/change-failures.ts";
+import { worktreeIdentities } from "#server/features/repository-changes/git/change-files.ts";
+import { fingerprint } from "#server/repository/comparison/fingerprint.ts";
 
 export function readChanges(git: GitCommandRunner, scope: ChangesScope) {
   return Effect.gen(function* () {

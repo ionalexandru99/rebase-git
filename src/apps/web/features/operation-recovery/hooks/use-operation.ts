@@ -1,10 +1,10 @@
+import { skipToken } from "@tanstack/react-query";
 import {
   type OperationScope,
   RepositoryOperationsApi,
-} from "@rebase/contracts";
-import { skipToken } from "@tanstack/react-query";
-import { useEnvironmentQuery } from "#web/platform/query/environment-query";
-import { answer, useCommand } from "#web/platform/query/use-command";
+} from "#contracts/repository-operations/repository-operations.contract.ts";
+import { useEnvironmentQuery } from "#web/platform/query/environment-query.ts";
+import { answer, useCommand } from "#web/platform/query/use-command.ts";
 
 const operationRefreshMilliseconds = 10_000;
 

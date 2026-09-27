@@ -2,13 +2,13 @@ import type {
   RepositoryCommit,
   RepositoryHistoryFailure,
   RepositoryHistoryRefTarget,
-} from "@rebase/contracts";
-import type { CommitLaneRow } from "#web/features/repository-history/commit-lanes";
+} from "#contracts/repository-history/repository-history.contract.ts";
+import type { CommitLaneRow } from "#web/features/repository-history/commit-lanes.ts";
 import type {
   HistoryScopeQuery,
   HistoryTarget,
-} from "#web/features/repository-history/history-view";
-import type { EnvironmentAccess } from "#web/platform/environment/environment-connection";
+} from "#web/features/repository-history/history-view.ts";
+import type { EnvironmentAccess } from "#web/platform/environment/environment-connection.ts";
 
 export interface HistoryIdentity {
   readonly environmentId: string;

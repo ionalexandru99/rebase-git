@@ -1,14 +1,17 @@
+import { useEffect, useRef } from "react";
 import type {
   BranchUpstream,
   LocalBranch,
   RemoteBranch,
   RepositoryRefs,
   RepositoryRefTarget,
-} from "@rebase/contracts";
-import { useEffect, useRef } from "react";
-import type { Action } from "#web/components/ui/action-menu";
-import type { RefDeletion, RefEditing } from "#web/features/refs/ref-editing";
-import type { RefKind, StartPoint } from "#web/features/refs/ref-kinds";
+} from "#contracts/repository-refs/repository-refs.contract.ts";
+import type { Action } from "#web/components/ui/action-menu.tsx";
+import type {
+  RefDeletion,
+  RefEditing,
+} from "#web/features/refs/ref-editing.ts";
+import type { RefKind, StartPoint } from "#web/features/refs/ref-kinds.ts";
 
 export type RefIntent =
   | { readonly _tag: "DraftRef"; readonly kind: RefKind; readonly oid: string }

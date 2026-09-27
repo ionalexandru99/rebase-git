@@ -1,8 +1,8 @@
+import type { RepositoryRejected } from "#contracts/git/git-failures.contract.ts";
 import type {
   BranchCheckedOutElsewhere,
   RefMissing,
-  RepositoryRejected,
-} from "@rebase/contracts";
+} from "#contracts/repository-refs/repository-refs.contract.ts";
 
 export type RequestFailure<Failure> =
   | { readonly _tag: "Rejected"; readonly failure: Failure }

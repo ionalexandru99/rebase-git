@@ -1,11 +1,8 @@
 import { randomUUID } from "node:crypto";
 import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
-import {
-  type DesktopUpdateSettings,
-  DesktopUpdateSettingsSchema,
-} from "@rebase/contracts";
 import { Schema } from "effect";
+import { DesktopUpdateSettings } from "#contracts/desktop-updates/desktop-updates.contract.ts";
 
 export interface ApplicationUpdateSettingsStore {
   read(): Promise<DesktopUpdateSettings>;
@@ -26,7 +23,7 @@ export function createApplicationUpdateSettingsStore(
       try {
         const source = await readFile(path, "utf8");
         try {
-          return Schema.decodeUnknownSync(DesktopUpdateSettingsSchema)(
+          return Schema.decodeUnknownSync(DesktopUpdateSettings)(
             JSON.parse(source),
           );
         } catch {

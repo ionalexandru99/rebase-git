@@ -2,11 +2,11 @@ import { describe, expect, it } from "vite-plus/test";
 import {
   workspacePanelDefinitions,
   workspacePanelKinds,
-} from "#web/features/workspace-panel/workspace-panel-definitions";
+} from "#web/features/workspace-panel/workspace-panel-definitions.ts";
 import {
   initialWorkspacePanelState,
   reduceWorkspacePanel,
-} from "#web/features/workspace-panel/workspace-panel-state";
+} from "#web/features/workspace-panel/workspace-panel-state.ts";
 
 describe("workspace panel state", () => {
   it("does not open unavailable features", () => {

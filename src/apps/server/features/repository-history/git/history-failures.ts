@@ -1,6 +1,6 @@
-import type { RepositoryHistoryFailure } from "@rebase/contracts";
 import { Effect } from "effect";
-import type { RepositoryAccess } from "#server/repository/repository-access";
+import type { RepositoryHistoryFailure } from "#contracts/repository-history/repository-history.contract.ts";
+import type { RepositoryAccess } from "#server/repository/repository-access.ts";
 
 const maximumDetailLength = 2_048;
 

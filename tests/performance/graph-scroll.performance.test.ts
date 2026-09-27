@@ -1,7 +1,7 @@
 import { resolve } from "node:path";
 import { expect, type Page, test } from "@playwright/test";
 import { createServer } from "vite";
-import { assertTimingBudget } from "#tests-performance/timing-budget";
+import { assertTimingBudget } from "#tests-performance/timing-budget.ts";
 
 for (const deviceScaleFactor of [1, 2]) {
   test.describe(`DPR ${deviceScaleFactor}`, () => {
@@ -19,7 +19,7 @@ for (const deviceScaleFactor of [1, 2]) {
           });
           const result = await page.evaluate(async (laneCount) => {
             const path = "/tests/performance/fixtures/graph-scroll.browser.ts";
-            const fixture: typeof import("#tests-performance/fixtures/graph-scroll.browser") =
+            const fixture: typeof import("#tests-performance/fixtures/graph-scroll.browser.ts") =
               await import(path);
             return fixture.measureGraphScroll(laneCount);
           }, laneCount);
@@ -49,7 +49,7 @@ test("moves the keyboard selection through loaded rows", async ({ page }) => {
     await mountGraph(page, 32);
     const result = await page.evaluate(async () => {
       const path = "/tests/performance/fixtures/graph-scroll.browser.ts";
-      const fixture: typeof import("#tests-performance/fixtures/graph-scroll.browser") =
+      const fixture: typeof import("#tests-performance/fixtures/graph-scroll.browser.ts") =
         await import(path);
       return fixture.measureKeyboardNavigation(150);
     });
@@ -101,7 +101,7 @@ async function withGraphFixture(page: Page, measure: () => Promise<void>) {
 async function mountGraph(page: Page, laneCount: number) {
   await page.evaluate(async (laneCount) => {
     const path = "/tests/performance/fixtures/graph-scroll.browser.ts";
-    const fixture: typeof import("#tests-performance/fixtures/graph-scroll.browser") =
+    const fixture: typeof import("#tests-performance/fixtures/graph-scroll.browser.ts") =
       await import(path);
     fixture.mountGraph(laneCount);
   }, laneCount);

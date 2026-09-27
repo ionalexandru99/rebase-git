@@ -1,5 +1,5 @@
 import { expect, it } from "vite-plus/test";
-import { buildChangeDiff } from "#server/repository/comparison/build-change-diff";
+import { buildChangeDiff } from "#server/repository/comparison/build-change-diff.ts";
 
 it("keeps identical content at different paths out of the same diff cache entry", () => {
   const before = {

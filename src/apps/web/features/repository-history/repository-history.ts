@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import {
   holdLease,
   watchLease,
-} from "#web/features/repository-history/history-lease";
+} from "#web/features/repository-history/history-lease.ts";
 import type {
   HistoryAnswers,
   HistoryClientMessage,
@@ -13,10 +13,10 @@ import type {
   HistorySnapshot,
   HistoryWorkerLease,
   HistoryWorkerMessage,
-} from "#web/features/repository-history/history-worker-protocol";
-import type { EnvironmentAccess } from "#web/platform/environment/environment-connection";
-import { describeFailure } from "#web/platform/query/request-failure";
-import { createStore, type ReadableStore } from "#web/platform/store/store";
+} from "#web/features/repository-history/history-worker-protocol.ts";
+import type { EnvironmentAccess } from "#web/platform/environment/environment-connection.ts";
+import { describeFailure } from "#web/platform/query/request-failure.ts";
+import { createStore, type ReadableStore } from "#web/platform/store/store.ts";
 
 export interface RepositoryHistory extends ReadableStore<HistorySnapshot> {
   readonly ask: <Query extends HistoryQuery>(

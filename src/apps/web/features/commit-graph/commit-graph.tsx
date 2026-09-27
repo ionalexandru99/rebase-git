@@ -1,8 +1,3 @@
-import type {
-  RepositoryHistoryRefTarget,
-  RepositoryRefs,
-  RepositoryRefTarget,
-} from "@rebase/contracts";
 import {
   type CSSProperties,
   type JSX,
@@ -16,43 +11,51 @@ import {
   useRef,
   useState,
 } from "react";
-import { runAction } from "#web/components/ui/action-menu";
-import { Button } from "#web/components/ui/button";
-import { AuthorAvatars } from "#web/features/author-avatars/author-avatar";
-import type { GitHubRepository } from "#web/features/author-avatars/author-avatar-source";
+import type { RepositoryHistoryRefTarget } from "#contracts/repository-history/repository-history.contract.ts";
+import type {
+  RepositoryRefs,
+  RepositoryRefTarget,
+} from "#contracts/repository-refs/repository-refs.contract.ts";
+import { runAction } from "#web/components/ui/action-menu.tsx";
+import { Button } from "#web/components/ui/button.tsx";
+import { AuthorAvatars } from "#web/features/author-avatars/author-avatar.tsx";
+import type { GitHubRepository } from "#web/features/author-avatars/author-avatar-source.ts";
 import {
   CommitActionMenu,
   useCommitActions,
-} from "#web/features/commit-graph/commit-actions";
-import { CommitGraphCanvas } from "#web/features/commit-graph/components/commit-graph-canvas";
+} from "#web/features/commit-graph/commit-actions.tsx";
+import { CommitGraphCanvas } from "#web/features/commit-graph/components/commit-graph-canvas.tsx";
 import {
   CommitGraphRow,
   commitRowId,
-} from "#web/features/commit-graph/components/commit-graph-row";
+} from "#web/features/commit-graph/components/commit-graph-row.tsx";
 import {
   CommitGraphFailure,
   CommitGraphLoading,
   CommitGraphPageRetry,
-} from "#web/features/commit-graph/components/commit-graph-status";
-import { CommitGraphToolbar } from "#web/features/commit-graph/components/commit-graph-toolbar";
+} from "#web/features/commit-graph/components/commit-graph-status.tsx";
 import {
   type CommitGraphViewportHandle,
   CommitGraphVirtualWindow,
-} from "#web/features/commit-graph/components/commit-graph-virtual-window";
-import { GraphRefAppearance } from "#web/features/commit-graph/components/graph-ref-appearance";
-import { HistoryScopeStrip } from "#web/features/commit-graph/components/history-scope-strip";
-import { useCommitGraphView } from "#web/features/commit-graph/hooks/use-commit-graph-view";
-import { useGraphColors } from "#web/features/commit-graph/hooks/use-graph-colors";
-import { commitGraphGutterWidth } from "#web/features/commit-graph/layout/graph-geometry";
-import { graphMetadataColumns } from "#web/features/commit-graph/layout/graph-metrics";
-import { graphRefLabels } from "#web/features/commit-graph/layout/graph-ref-labels";
-import type { HistoryScope } from "#web/features/commit-graph/scope/history-scope";
-import { RepositoryHistorySearchControls } from "#web/features/history-search/components/repository-history-search-controls";
+} from "#web/features/commit-graph/components/commit-graph-virtual-window.tsx";
+import {
+  GraphRefAppearance,
+  graphRefLabels,
+} from "#web/features/commit-graph/components/commit-ref-labels.tsx";
+import { HistoryScopeStrip } from "#web/features/commit-graph/components/history-scope-strip.tsx";
+import { useCommitGraphView } from "#web/features/commit-graph/hooks/use-commit-graph-view.ts";
+import { useGraphColors } from "#web/features/commit-graph/layout/graph-colors.ts";
+import {
+  commitGraphGutterWidth,
+  graphMetadataColumns,
+} from "#web/features/commit-graph/layout/graph-geometry.ts";
+import type { HistoryScope } from "#web/features/commit-graph/scope/history-scope.ts";
+import { RepositoryHistorySearchControls } from "#web/features/history-search/components/repository-history-search-controls.tsx";
 import {
   describeHistoryFailure,
   type RepositoryHistory,
-} from "#web/features/repository-history/repository-history";
-import { useRepositoryScope } from "#web/platform/query/repository-scope";
+} from "#web/features/repository-history/repository-history.ts";
+import { useRepositoryScope } from "#web/platform/query/repository-scope.tsx";
 
 export interface CommitGraphHandle {
   readonly focusSelection: () => void;
@@ -440,3 +443,19 @@ function eventTargetMatches(event: SyntheticEvent, selector: string) {
     event.target instanceof Element && event.target.closest(selector) !== null
   );
 }
+
+function Frame({ children }: { readonly children: ReactNode }) {
+  return (
+    <header className="flex min-h-12 shrink-0 flex-wrap items-center gap-2 border-border/60 border-b px-3 py-2">
+      {children}
+    </header>
+  );
+}
+function Title({ repositoryName }: { readonly repositoryName: string }) {
+  return (
+    <h1 className="mr-auto min-w-0 max-w-48 truncate text-[.85rem] font-semibold text-foreground">
+      {repositoryName}
+    </h1>
+  );
+}
+const CommitGraphToolbar = { Frame, Title };

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vite-plus/test";
-import { refNameProblem } from "#web/features/refs/ref-kinds";
+import { refNameProblem } from "#web/features/refs/ref-kinds.ts";
 
 const branches = [{ name: "main" }, { name: "fix/refs-watcher" }];
 

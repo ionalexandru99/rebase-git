@@ -1,37 +1,39 @@
-import {
-  type EnvironmentRoute,
-  RepositoryBranchesApi,
-  type RepositoryRefs,
-  RepositoryRefsApi,
-  RepositoryTagsApi,
-  type RouteFailure,
-  type RouteInput,
-  type RouteSuccess,
-} from "@rebase/contracts";
 import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
 import { userEvent } from "vite-plus/test/browser";
+import type {
+  EnvironmentRoute,
+  RouteFailure,
+  RouteInput,
+  RouteSuccess,
+} from "#contracts/environment-connection/environment-route.contract.ts";
+import { RepositoryBranchesApi } from "#contracts/repository-refs/repository-branches.contract.ts";
+import {
+  type RepositoryRefs,
+  RepositoryRefsApi,
+} from "#contracts/repository-refs/repository-refs.contract.ts";
+import { RepositoryTagsApi } from "#contracts/repository-refs/repository-tags.contract.ts";
+import {
+  fakeRequests,
+  idleOperation,
+  rejected,
+  respond,
+} from "#tests-support/fake-requests.ts";
 import {
   commitId,
   mainAndTopicWorktrees,
   mainPath,
   repositoryId,
   repositoryRefs,
+  repositoryScope,
   topicPath,
   upstream,
-} from "#tests-support/fixtures";
-import { repositoryScope } from "#tests-ui/apps/web/repository-scope/repository-scope-fixture";
-import {
-  fakeRequests,
-  idleOperation,
-  rejected,
-  respond,
-} from "#tests-ui/runtime/fake-requests";
-import { render } from "#tests-ui/runtime/render";
-import { BranchesSidebar } from "#web/features/branches-sidebar/branches-sidebar";
-import { CommitActionMenu } from "#web/features/commit-graph/commit-actions";
-import { NotificationsProvider } from "#web/features/notifications/notifications";
-import { createRefActions } from "#web/features/refs/ref-actions";
-import { RepositoryScopeProvider } from "#web/platform/query/repository-scope";
+} from "#tests-support/fixtures.ts";
+import { render } from "#tests-support/render.tsx";
+import { BranchesSidebar } from "#web/features/branches-sidebar/branches-sidebar.tsx";
+import { CommitActionMenu } from "#web/features/commit-graph/commit-actions.tsx";
+import { NotificationsProvider } from "#web/features/notifications/notifications.tsx";
+import { createRefActions } from "#web/features/refs/ref-actions.ts";
+import { RepositoryScopeProvider } from "#web/platform/query/repository-scope.tsx";
 
 const main = commitId;
 const spike = "b".repeat(40);

@@ -1,10 +1,10 @@
 import type { JSX } from "react";
-import { Button } from "#web/components/ui/button";
+import { Button } from "#web/components/ui/button.tsx";
 import type {
   BranchesSidebarRow,
   BranchesSidebarScope,
-} from "#web/features/branches-sidebar/branches-sidebar-state";
-import type { RepositoryRefsRead } from "#web/features/refs/repository-refs";
+} from "#web/features/branches-sidebar/branches-sidebar-state.ts";
+import type { RepositoryRefsRead } from "#web/features/refs/repository-refs.ts";
 
 export function SidebarStatus({
   query,

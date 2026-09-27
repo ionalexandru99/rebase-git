@@ -3,7 +3,7 @@ import {
   assertSupportedGitVersion,
   assertSupportedNodeVersion,
   parseGitVersion,
-} from "#server/app/runtime/runtime-requirements";
+} from "#server/app/runtime/runtime-requirements.ts";
 
 describe("runtime requirements", () => {
   it.each(["22.18.0", "22.23.2", "24.0.0", "24.19.0", "24.99.99"])(

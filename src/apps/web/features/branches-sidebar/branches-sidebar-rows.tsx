@@ -1,4 +1,3 @@
-import type { BranchUpstream } from "@rebase/contracts";
 import {
   IconArrowDown,
   IconArrowUp,
@@ -12,23 +11,24 @@ import {
   IconTag,
 } from "@tabler/icons-react";
 import { type CSSProperties, useRef } from "react";
+import type { BranchUpstream } from "#contracts/repository-refs/repository-refs.contract.ts";
 import {
   type Action,
   ActionMenuItems,
   runAction,
-} from "#web/components/ui/action-menu";
+} from "#web/components/ui/action-menu.tsx";
 import {
   ContextMenu,
   ContextMenuContent,
   ContextMenuTrigger,
-} from "#web/components/ui/context-menu";
-import type { BranchesSidebarFolderRow } from "#web/features/branches-sidebar/branch-tree";
+} from "#web/components/ui/context-menu.tsx";
+import type { BranchesSidebarFolderRow } from "#web/features/branches-sidebar/branch-tree.ts";
 import {
   type BranchesSidebarRefRow,
   type BranchesSidebarSectionRow,
   localBranchesSectionId,
   tagsSectionId,
-} from "#web/features/branches-sidebar/branches-sidebar-state";
+} from "#web/features/branches-sidebar/branches-sidebar-state.ts";
 
 export function rowElementId(rowId: string): string {
   return `branches-row-${rowId}`;

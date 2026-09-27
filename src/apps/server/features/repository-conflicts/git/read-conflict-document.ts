@@ -1,31 +1,31 @@
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { Effect } from "effect";
 import type {
   ConflictDocument,
   ConflictPath,
   ConflictRegion,
-} from "@rebase/contracts";
-import { Effect } from "effect";
+} from "#contracts/repository-conflicts/repository-conflicts.contract.ts";
 import {
   type GitCommandRunner,
   runRepositoryGit,
-} from "#server/adapters/local-git/git-commands";
-import { changeIo } from "#server/features/repository-changes/git/change-failures";
-import { scratchDirectory } from "#server/features/repository-changes/git/read-change-diff";
+} from "#server/adapters/local-git/git-commands.ts";
+import { changeIo } from "#server/features/repository-changes/git/change-failures.ts";
+import { scratchDirectory } from "#server/features/repository-changes/git/read-change-diff.ts";
 import {
   markerBlocks,
   openRegionLines,
   tokenMarks,
-} from "#server/features/repository-conflicts/conflict-regions";
+} from "#server/features/repository-conflicts/conflict-regions.ts";
 import {
   type ConflictSnapshot,
   conflictFailed,
   requireConflict,
   type StageEntry,
   worktreeText,
-} from "#server/features/repository-conflicts/git/conflict-files";
-import { binary } from "#server/repository/comparison/build-change-diff";
-import { previewByteLimit } from "#server/repository/comparison/read-blobs";
+} from "#server/features/repository-conflicts/git/conflict-files.ts";
+import { binary } from "#server/repository/comparison/build-change-diff.ts";
+import { previewByteLimit } from "#server/repository/comparison/read-blobs.ts";
 
 interface StageTexts {
   readonly current: string;

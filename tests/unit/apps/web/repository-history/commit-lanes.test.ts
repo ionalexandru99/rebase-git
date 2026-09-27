@@ -2,7 +2,7 @@ import { describe, expect, it } from "vite-plus/test";
 import {
   appendCommitLanes,
   createCommitLaneCheckpoint,
-} from "#web/features/repository-history/commit-lanes";
+} from "#web/features/repository-history/commit-lanes.ts";
 
 const a = "a".repeat(40);
 const b = "b".repeat(40);

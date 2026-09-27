@@ -1,23 +1,25 @@
+import { describe, expect, it } from "vite-plus/test";
+import { page } from "vite-plus/test/browser";
+import {
+  type MutateChanges,
+  RepositoryChangesApi,
+} from "#contracts/repository-changes/repository-changes.contract.ts";
 import {
   type ChooseConflict,
   type ConflictDocument,
   type ConflictFile,
   type ConflictList,
-  type MutateChanges,
-  RepositoryChangesApi,
   RepositoryConflictsApi,
   type StageConflict,
-} from "@rebase/contracts";
-import { describe, expect, it } from "vite-plus/test";
-import { page } from "vite-plus/test/browser";
-import { changedFile, repositoryChanges } from "#tests-support/fixtures";
+} from "#contracts/repository-conflicts/repository-conflicts.contract.ts";
 import {
   fakeRequests,
   rejected,
   respond,
-} from "#tests-ui/runtime/fake-requests";
-import { render } from "#tests-ui/runtime/render";
-import { WorkingChanges } from "#web/features/working-changes/working-changes";
+} from "#tests-support/fake-requests.ts";
+import { changedFile, repositoryChanges } from "#tests-support/fixtures.ts";
+import { render } from "#tests-support/render.tsx";
+import { WorkingChanges } from "#web/features/working-changes/working-changes.tsx";
 
 const current = "c".repeat(40);
 const incoming = "d".repeat(40);

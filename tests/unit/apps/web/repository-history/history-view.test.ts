@@ -5,13 +5,13 @@ import {
   historyOid,
   historyScope,
   linearHistory,
-} from "#tests-support/history";
-import { HistoryGraph } from "#web/features/repository-history/history-graph";
+} from "#tests-support/history.ts";
+import { HistoryGraph } from "#web/features/repository-history/history-graph.ts";
 import {
   findInHistory,
   type HistoryScopeQuery,
   HistoryView,
-} from "#web/features/repository-history/history-view";
+} from "#web/features/repository-history/history-view.ts";
 
 const mergeHistory = [
   commit("merge", ["main", "side"], 1),

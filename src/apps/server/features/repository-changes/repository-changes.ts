@@ -1,3 +1,4 @@
+import { Effect } from "effect";
 import {
   type ChangesScope,
   type ChangesWritten,
@@ -6,21 +7,26 @@ import {
   type MutateChanges,
   type ReadChangeDiff,
   type RepositoryChanges,
+  RepositoryChangesApi,
   type ViewedChange,
-} from "@rebase/contracts";
-import { Effect } from "effect";
+} from "#contracts/repository-changes/repository-changes.contract.ts";
+import type { EnvironmentFeature } from "#server/adapters/environment-transport/environment-routes.ts";
+import {
+  type RepositoryDependencies,
+  repositoryRoutes,
+} from "#server/adapters/environment-transport/environment-routes.ts";
 import {
   type GitCommandRunner,
   runRepositoryGit,
-} from "#server/adapters/local-git/git-commands";
+} from "#server/adapters/local-git/git-commands.ts";
 import {
   safeChangePath,
   worktreeIdentities,
-} from "#server/features/repository-changes/git/change-files";
-import { withChangeIndex } from "#server/features/repository-changes/git/change-index";
-import { mutateChanges } from "#server/features/repository-changes/git/mutate-changes";
-import { readChangeDiff } from "#server/features/repository-changes/git/read-change-diff";
-import { readChanges } from "#server/features/repository-changes/git/read-changes";
+} from "#server/features/repository-changes/git/change-files.ts";
+import { withChangeIndex } from "#server/features/repository-changes/git/change-index.ts";
+import { mutateChanges } from "#server/features/repository-changes/git/mutate-changes.ts";
+import { readChangeDiff } from "#server/features/repository-changes/git/read-change-diff.ts";
+import { readChanges } from "#server/features/repository-changes/git/read-changes.ts";
 
 export function readRepositoryChanges(
   scope: ChangesScope,
@@ -191,4 +197,48 @@ function staleChanges() {
     "Stale",
     "The repository changed. Review the refreshed changes and try again.",
   );
+}
+
+export function repositoryChangesFeature(
+  dependencies: RepositoryDependencies,
+): EnvironmentFeature {
+  const { command, query } = repositoryRoutes(dependencies);
+  const api = RepositoryChangesApi;
+  return {
+    routes: [
+      query(api.read, readRepositoryChanges),
+      query(api.diff, readRepositoryChangeDiff),
+      command(
+        api.mutate,
+        (input) => ({
+          name: input.action,
+          locks: { worktree: "wait" },
+          duringOperation:
+            input.action === "discard"
+              ? "block"
+              : { allowWhen: (operation) => operation.kind !== "unknown" },
+        }),
+        mutateRepositoryChanges,
+      ),
+      command(
+        api.commit,
+        (input) =>
+          input.amend
+            ? {
+                name: "amend",
+                locks: { refs: "wait", worktree: "wait" },
+                duringOperation: {
+                  allowWhen: (operation) =>
+                    operation.kind === "rebase" && operation.phase === "edit",
+                },
+              }
+            : {
+                name: "commit",
+                locks: { refs: "wait", worktree: "wait" },
+                duringOperation: "block",
+              },
+        commitRepositoryChanges,
+      ),
+    ],
+  };
 }

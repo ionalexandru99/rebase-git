@@ -1,20 +1,20 @@
+import { afterEach, expect, it, vi } from "vite-plus/test";
+import { page } from "vite-plus/test/browser";
 import {
   type CommitInspection,
   CommitInspectionApi,
-  RepositoryChangesApi,
-} from "@rebase/contracts";
-import { afterEach, expect, it, vi } from "vite-plus/test";
-import { page } from "vite-plus/test/browser";
+} from "#contracts/commit-inspection/commit-inspection.contract.ts";
+import { RepositoryChangesApi } from "#contracts/repository-changes/repository-changes.contract.ts";
+import { fakeRequests, respond } from "#tests-support/fake-requests.ts";
 import {
   changeDiff,
   changedFile,
   repositoryChanges,
-} from "#tests-support/fixtures";
-import { fakeRequests, respond } from "#tests-ui/runtime/fake-requests";
-import { render } from "#tests-ui/runtime/render";
-import { ResizablePanel } from "#web/components/ui/resizable";
-import { WorkspacePanel } from "#web/features/workspace-panel/workspace-panel";
-import { useWorkspacePanel } from "#web/features/workspace-panel/workspace-panel-provider";
+} from "#tests-support/fixtures.ts";
+import { render } from "#tests-support/render.tsx";
+import { ResizablePanel } from "#web/components/ui/resizable.tsx";
+import { WorkspacePanel } from "#web/features/workspace-panel/workspace-panel.tsx";
+import { useWorkspacePanel } from "#web/features/workspace-panel/workspace-panel-provider.tsx";
 
 const oid = "a".repeat(40);
 const parentOid = "b".repeat(40);

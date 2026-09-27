@@ -1,6 +1,6 @@
 import { type ReactNode, useLayoutEffect, useRef } from "react";
-import { Button } from "#web/components/ui/button";
-import { cn } from "#web/lib/utils";
+import { Button } from "#web/components/ui/button.tsx";
+import { cn } from "#web/lib/utils.ts";
 
 export function Confirmation({
   title,

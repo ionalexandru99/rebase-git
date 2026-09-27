@@ -3,11 +3,11 @@ import { readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
-import { CommitInspectionApi } from "@rebase/contracts";
 import { Effect } from "effect";
 import { describe, expect, it } from "vite-plus/test";
-import { createRepository } from "#tests-support/git";
-import { openTestEnvironment } from "#tests-support/server";
+import { CommitInspectionApi } from "#contracts/commit-inspection/commit-inspection.contract.ts";
+import { createRepository } from "#tests-support/git.ts";
+import { openTestEnvironment } from "#tests-support/server.ts";
 
 async function fixture() {
   const environment = await openTestEnvironment();

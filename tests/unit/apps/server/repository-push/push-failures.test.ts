@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vite-plus/test";
-import { classifyPushFailure } from "#server/features/repository-push/git/push-failures";
+import { classifyPushFailure } from "#server/features/repository-push/git/push-failures.ts";
 
 describe("push failure classification", () => {
   it.each([

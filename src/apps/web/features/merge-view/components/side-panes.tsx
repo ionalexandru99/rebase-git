@@ -1,7 +1,10 @@
-import type { ConflictSide, ConflictSides } from "@rebase/contracts";
 import { IconArrowBarToDown } from "@tabler/icons-react";
 import { memo, type RefObject, useMemo } from "react";
-import { Button } from "#web/components/ui/button";
+import type {
+  ConflictSide,
+  ConflictSides,
+} from "#contracts/repository-conflicts/repository-conflicts.contract.ts";
+import { Button } from "#web/components/ui/button.tsx";
 import {
   bandEdges,
   PaneLines,
@@ -10,14 +13,14 @@ import {
   type RegionBand,
   sideColours,
   sideNames,
-} from "#web/features/merge-view/components/pane-lines";
+} from "#web/features/merge-view/components/pane-lines.tsx";
 import {
   type MergeModel,
   picksOf,
   sideTaken,
-} from "#web/features/merge-view/conflict-document";
-import type { LineSelection } from "#web/features/merge-view/hooks/use-selection";
-import { cn } from "#web/lib/utils";
+} from "#web/features/merge-view/conflict-document.ts";
+import type { LineSelection } from "#web/features/merge-view/hooks/use-selection.ts";
+import { cn } from "#web/lib/utils.ts";
 
 const sideShortcuts: Partial<Record<ConflictSide, string>> = {
   current: "Alt+1",

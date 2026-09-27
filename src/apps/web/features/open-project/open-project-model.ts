@@ -1,5 +1,5 @@
 import type { TablerIcon } from "@tabler/icons-react";
-import type { EnvironmentAvailability } from "#web/platform/query/environment-context";
+import type { EnvironmentAvailability } from "#web/platform/query/environment-context.tsx";
 
 export interface OpenProjectRepository {
   readonly environmentId: string;

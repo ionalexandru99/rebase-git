@@ -1,23 +1,26 @@
-import { type PullBranch, RepositoryPullApi } from "@rebase/contracts";
 import { Effect } from "effect";
-import type { EnvironmentEventPublisher } from "#server/adapters/environment-transport/environment-event-publisher";
+import {
+  type PullBranch,
+  RepositoryPullApi,
+} from "#contracts/repository-pull/repository-pull.contract.ts";
+import type { EnvironmentEventPublisher } from "#server/adapters/environment-transport/environment-event-publisher.ts";
 import {
   type EnvironmentFeature,
   type RepositoryDependencies,
   repositoryRoutes,
   route,
-} from "#server/adapters/environment-transport/environment-routes";
-import type { GitCommandRunner } from "#server/adapters/local-git/git-commands";
+} from "#server/adapters/environment-transport/environment-routes.ts";
+import type { GitCommandRunner } from "#server/adapters/local-git/git-commands.ts";
 import {
   fastForwardBranch,
   pullBlocked,
-} from "#server/features/repository-pull/fast-forward-branch";
-import { acquireRepositoryFetch } from "#server/features/repository-pull/repository-fetch";
+} from "#server/features/repository-pull/fast-forward-branch.ts";
+import { acquireRepositoryFetch } from "#server/features/repository-pull/repository-fetch.ts";
 import {
   canonicalizeWorktrees,
   readWorktrees,
-} from "#server/repository/repository-access";
-import type { RepositoryCoordination } from "#server/repository/repository-coordination";
+} from "#server/repository/repository-access.ts";
+import type { RepositoryCoordination } from "#server/repository/repository-coordination.ts";
 
 export function repositoryPullFeature(
   dependencies: RepositoryDependencies & {

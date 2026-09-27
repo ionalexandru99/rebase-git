@@ -1,4 +1,4 @@
-import type { RepositoryHistoryRefTarget } from "@rebase/contracts";
+import type { RepositoryHistoryRefTarget } from "#contracts/repository-history/repository-history.contract.ts";
 import {
   appendCommitLanes,
   type CommitLaneCheckpoint,
@@ -6,12 +6,12 @@ import {
   type CommitLaneSeed,
   createCommitLaneCheckpoint,
   graphLaneSeeds,
-} from "#web/features/repository-history/commit-lanes";
+} from "#web/features/repository-history/commit-lanes.ts";
 import type {
   HistoryGraph,
   HistoryOrder,
   HistoryParentEdge,
-} from "#web/features/repository-history/history-graph";
+} from "#web/features/repository-history/history-graph.ts";
 
 export interface HistoryScopeQuery {
   readonly roots: readonly RepositoryHistoryRefTarget[];

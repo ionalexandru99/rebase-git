@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vite-plus/test";
-import type { OpenProjectEnvironment } from "#web/features/open-project/open-project-model";
+import type { OpenProjectEnvironment } from "#web/features/open-project/open-project-model.ts";
 import {
   catalogRepositoryItems,
   filterOpenProjectEnvironments,
@@ -7,7 +7,7 @@ import {
   keyboardRepositoryItems,
   recentRepositoryItems,
   repositoryInitials,
-} from "#web/features/open-project/open-project-state";
+} from "#web/features/open-project/open-project-state.ts";
 
 const TestEnvironmentIcon = (() =>
   null) as unknown as OpenProjectEnvironment["icon"];

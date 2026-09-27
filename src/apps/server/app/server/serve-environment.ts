@@ -1,36 +1,38 @@
 import { join } from "node:path";
 import { and, eq, isNull } from "drizzle-orm";
 import { Effect } from "effect";
-import { createEnvironmentEventPublisher } from "#server/adapters/environment-transport/environment-event-publisher";
-import { combineEnvironmentFeatures } from "#server/adapters/environment-transport/environment-routes";
-import type { GitCommandRunner } from "#server/adapters/local-git/git-commands";
-import { createLocalRepositoryWatcher } from "#server/adapters/local-git/local-repository-watcher";
-import { acquireRuntimeMarker } from "#server/app/runtime/runtime-marker";
+import { createEnvironmentEventPublisher } from "#server/adapters/environment-transport/environment-event-publisher.ts";
+import { combineEnvironmentFeatures } from "#server/adapters/environment-transport/environment-routes.ts";
+import type { GitCommandRunner } from "#server/adapters/local-git/git-commands.ts";
+import { createLocalRepositoryWatcher } from "#server/adapters/local-git/local-repository-watcher.ts";
+import { acquireRuntimeMarker } from "#server/app/runtime/runtime-marker.ts";
 import {
   acquireEnvironmentListener,
   type EnvironmentListener,
-} from "#server/app/server/environment-listener";
-import { commitInspectionFeature } from "#server/features/commit-inspection/commit-inspection.feature";
-import { createEnvironmentAuthorization } from "#server/features/environment-authorization/environment-authorization";
-import { environmentAuthorizationFeature } from "#server/features/environment-authorization/environment-authorization.feature";
-import { environmentFilesystemFeature } from "#server/features/environment-filesystem/environment-filesystem";
-import { createRepositoryCatalog } from "#server/features/repository-catalog/repository-catalog";
-import { repositoryCatalogFeature } from "#server/features/repository-catalog/repository-catalog.feature";
-import { repositoryChangesFeature } from "#server/features/repository-changes/repository-changes.feature";
-import { repositoryConflictsFeature } from "#server/features/repository-conflicts/repository-conflicts.feature";
-import { repositoryHistoryFeature } from "#server/features/repository-history/repository-history.feature";
-import { repositoryOperationsFeature } from "#server/features/repository-operations/repository-operations";
-import { repositoryPullFeature } from "#server/features/repository-pull/repository-pull.feature";
-import { repositoryPushFeature } from "#server/features/repository-push/repository-push.feature";
-import { repositoryRefsFeature } from "#server/features/repository-refs/repository-refs.feature";
+} from "#server/app/server/environment-listener.ts";
+import { commitInspectionFeature } from "#server/features/commit-inspection/commit-inspection.ts";
+import { environmentAuthorizationFeature } from "#server/features/environment-authorization/environment-authorization.feature.ts";
+import { createEnvironmentAuthorization } from "#server/features/environment-authorization/environment-authorization.ts";
+import { environmentFilesystemFeature } from "#server/features/environment-filesystem/environment-filesystem.ts";
+import {
+  createRepositoryCatalog,
+  repositoryCatalogFeature,
+} from "#server/features/repository-catalog/repository-catalog.ts";
+import { repositoryChangesFeature } from "#server/features/repository-changes/repository-changes.ts";
+import { repositoryConflictsFeature } from "#server/features/repository-conflicts/repository-conflicts.ts";
+import { repositoryHistoryFeature } from "#server/features/repository-history/repository-history.feature.ts";
+import { repositoryOperationsFeature } from "#server/features/repository-operations/repository-operations.ts";
+import { repositoryPullFeature } from "#server/features/repository-pull/repository-pull.feature.ts";
+import { repositoryPushFeature } from "#server/features/repository-push/repository-push.ts";
+import { repositoryRefsFeature } from "#server/features/repository-refs/repository-refs.feature.ts";
 import {
   acquireEnvironmentContext,
   type EnvironmentContext,
-} from "#server/persistence/environment-context";
-import { environmentTable } from "#server/persistence/environment-state.schema";
-import { environmentPaths } from "#server/persistence/storage/environment-paths";
-import { createRepositoryAccess } from "#server/repository/repository-access";
-import { createRepositoryCoordination } from "#server/repository/repository-coordination";
+} from "#server/persistence/environment-context.ts";
+import { environmentTable } from "#server/persistence/environment-state.schema.ts";
+import { environmentPaths } from "#server/persistence/storage/environment-paths.ts";
+import { createRepositoryAccess } from "#server/repository/repository-access.ts";
+import { createRepositoryCoordination } from "#server/repository/repository-coordination.ts";
 
 export interface EnvironmentServerOptions {
   readonly browserAssetsRoot?: string;

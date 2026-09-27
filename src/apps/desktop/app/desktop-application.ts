@@ -1,10 +1,10 @@
+import { Schema } from "effect";
 import {
   EnvironmentPairingExchanged,
   type ExchangeEnvironmentPairing,
   environmentPairingExchangePath,
-} from "@rebase/contracts";
-import { Schema } from "effect";
-import type { ManagedEnvironmentServer } from "#desktop/platform/environment/environment-supervisor";
+} from "#contracts/environment-authorization/environment-authorization.contract.ts";
+import type { ManagedEnvironmentServer } from "#desktop/platform/environment/environment-supervisor.ts";
 
 export type DesktopRenderer =
   | { readonly type: "file"; readonly path: string }

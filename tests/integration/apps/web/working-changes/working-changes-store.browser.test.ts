@@ -4,7 +4,7 @@ import {
   readDiffPreferences,
   saveCommitDraft,
   saveDiffPreferences,
-} from "#web/persistence/working-changes/working-changes-store";
+} from "#web/persistence/working-changes/working-changes-store.ts";
 
 it("restores drafts per environment, repository, and worktree with client-wide display preferences", async () => {
   const key = JSON.stringify([crypto.randomUUID(), "repository", "/worktree"]);

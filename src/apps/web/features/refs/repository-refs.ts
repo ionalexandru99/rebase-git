@@ -1,17 +1,17 @@
+import { type Query, type QueryClient, skipToken } from "@tanstack/react-query";
+import { useCallback, useRef } from "react";
 import {
   type RepositoryRefs,
   RepositoryRefsApi,
   type RepositoryRefTarget,
-} from "@rebase/contracts";
-import { type Query, type QueryClient, skipToken } from "@tanstack/react-query";
-import { useCallback, useRef } from "react";
+} from "#contracts/repository-refs/repository-refs.contract.ts";
 import {
   isRouteQuery,
   useEnvironmentQuery,
-} from "#web/platform/query/environment-query";
-import { useRepositoryScope } from "#web/platform/query/repository-scope";
-import { describeFailure } from "#web/platform/query/request-failure";
-import { useCommand } from "#web/platform/query/use-command";
+} from "#web/platform/query/environment-query.ts";
+import { useRepositoryScope } from "#web/platform/query/repository-scope.tsx";
+import { describeFailure } from "#web/platform/query/request-failure.ts";
+import { useCommand } from "#web/platform/query/use-command.ts";
 
 export interface RepositoryRefsRead {
   readonly refs: RepositoryRefs | undefined;

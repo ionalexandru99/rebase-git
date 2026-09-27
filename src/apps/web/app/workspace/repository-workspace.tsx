@@ -1,24 +1,27 @@
 import { type JSX, Suspense, useCallback, useMemo, useState } from "react";
-import { CommitInspectionBridge } from "#web/app/workspace/commit-inspection-bridge";
-import { ResizableHandle, ResizablePanel } from "#web/components/ui/resizable";
-import { BranchesSidebar } from "#web/features/branches-sidebar/branches-sidebar";
-import { CommitGraph } from "#web/features/commit-graph/commit-graph";
-import { automaticHistoryScope } from "#web/features/commit-graph/scope/history-scope";
-import { useHistoryScope } from "#web/features/commit-graph/scope/use-history-scope";
-import { MergeView } from "#web/features/merge-view/merge-view";
-import { OperationRecoveryNotice } from "#web/features/operation-recovery/components/operation-recovery-notice";
-import { requestRefIntent } from "#web/features/refs/ref-actions";
-import { useScopedRepositoryRefs } from "#web/features/refs/repository-refs";
-import { RemoteSync } from "#web/features/remote-sync/remote-sync";
-import { useCatalogRepository } from "#web/features/repository-catalog/use-repository-catalog";
-import { useRepositoryHistory } from "#web/features/repository-history/repository-history";
-import { workingChangesPanel } from "#web/features/working-changes/working-changes-panel-definition";
-import { WorkspacePanel } from "#web/features/workspace-panel/workspace-panel";
-import { useEnvironment } from "#web/platform/query/environment-context";
+import { CommitInspectionBridge } from "#web/app/workspace/commit-inspection-bridge.tsx";
+import {
+  ResizableHandle,
+  ResizablePanel,
+} from "#web/components/ui/resizable.tsx";
+import { BranchesSidebar } from "#web/features/branches-sidebar/branches-sidebar.tsx";
+import { CommitGraph } from "#web/features/commit-graph/commit-graph.tsx";
+import { automaticHistoryScope } from "#web/features/commit-graph/scope/history-scope.ts";
+import { useHistoryScope } from "#web/features/commit-graph/scope/use-history-scope.ts";
+import { MergeView } from "#web/features/merge-view/merge-view.tsx";
+import { OperationRecoveryNotice } from "#web/features/operation-recovery/components/operation-recovery-toast.tsx";
+import { requestRefIntent } from "#web/features/refs/ref-actions.ts";
+import { useScopedRepositoryRefs } from "#web/features/refs/repository-refs.ts";
+import { RemoteSync } from "#web/features/remote-sync/remote-sync.tsx";
+import { useCatalogRepository } from "#web/features/repository-catalog/use-repository-catalog.ts";
+import { useRepositoryHistory } from "#web/features/repository-history/repository-history.ts";
+import { WorkspacePanel } from "#web/features/workspace-panel/workspace-panel.tsx";
+import { workingChangesPanel } from "#web/features/workspace-panel/workspace-panel-definitions.ts";
+import { useEnvironment } from "#web/platform/query/environment-context.tsx";
 import {
   type RepositoryScope,
   useRepositoryScope,
-} from "#web/platform/query/repository-scope";
+} from "#web/platform/query/repository-scope.tsx";
 
 const noRefKeys: ReadonlySet<string> = new Set();
 

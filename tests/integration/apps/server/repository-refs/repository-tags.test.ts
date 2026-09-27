@@ -3,13 +3,13 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Effect } from "effect";
 import { afterEach, describe, expect, it } from "vite-plus/test";
-import { createLocalGitCommandRunner } from "#server/adapters/local-git/git-commands";
+import { createLocalGitCommandRunner } from "#server/adapters/local-git/git-commands.ts";
 import {
   createTag,
   deleteTag,
-} from "#server/features/repository-refs/git/repository-tags";
-import { createRepository, git } from "#tests-support/git";
-import { removeTemporaryDirectory } from "#tests-support/temporary-directory";
+} from "#server/features/repository-refs/git/repository-tags.ts";
+import { createRepository, git } from "#tests-support/git.ts";
+import { removeTemporaryDirectory } from "#tests-support/temporary-directory.ts";
 
 const repositoryId = "00000000-0000-4000-8000-000000000001";
 const runner = createLocalGitCommandRunner();

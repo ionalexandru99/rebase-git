@@ -1,10 +1,10 @@
-import type { EnvironmentDirectoryEntry } from "@rebase/contracts";
 import { describe, expect, it } from "vite-plus/test";
+import type { EnvironmentDirectoryEntry } from "#contracts/environment-filesystem/environment-filesystem.contract.ts";
 import {
   filterDirectoryEntries,
   modifiedDateLabel,
   repositorySelectionError,
-} from "#web/features/repository-folder-picker/repository-folder-picker-state";
+} from "#web/features/repository-folder-picker/repository-folder-picker-state.ts";
 
 const entries = [
   {

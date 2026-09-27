@@ -1,10 +1,4 @@
 import { Combobox } from "@base-ui/react/combobox";
-import type {
-  BranchNotMerged,
-  BranchUpstreamTarget,
-  LocalBranch,
-  RemoteBranch,
-} from "@rebase/contracts";
 import {
   IconCheck,
   IconCircleCheck,
@@ -12,10 +6,21 @@ import {
   IconX,
 } from "@tabler/icons-react";
 import { useEffect, useMemo } from "react";
-import { Button } from "#web/components/ui/button";
-import { Confirmation } from "#web/components/ui/confirmation";
-import { PersistentNotification } from "#web/features/notifications/components/persistent-notification";
-import { deletionTitle, type RefEditing } from "#web/features/refs/ref-editing";
+import type {
+  BranchNotMerged,
+  BranchUpstreamTarget,
+} from "#contracts/repository-refs/repository-branches.contract.ts";
+import type {
+  LocalBranch,
+  RemoteBranch,
+} from "#contracts/repository-refs/repository-refs.contract.ts";
+import { Button } from "#web/components/ui/button.tsx";
+import { Confirmation } from "#web/components/ui/confirmation.tsx";
+import { PersistentNotification } from "#web/features/notifications/components/persistent-notification.tsx";
+import {
+  deletionTitle,
+  type RefEditing,
+} from "#web/features/refs/ref-editing.ts";
 
 interface UpstreamChoice {
   readonly label: string;

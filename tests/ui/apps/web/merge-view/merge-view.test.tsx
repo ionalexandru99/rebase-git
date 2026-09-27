@@ -6,7 +6,7 @@ import {
   initialContent,
   mergeViewFixture,
   path,
-} from "#tests-ui/apps/web/merge-view/merge-view-fixture";
+} from "#tests-support/merge-view-fixture.tsx";
 
 type Side = "Current" | "Incoming" | "Base";
 

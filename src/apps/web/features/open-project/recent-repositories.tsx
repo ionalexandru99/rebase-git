@@ -1,12 +1,12 @@
 import type { JSX } from "react";
-import type { OpenProjectRepository } from "#web/features/open-project/open-project-model";
+import type { OpenProjectRepository } from "#web/features/open-project/open-project-model.ts";
 import {
   formatLastOpened,
   type OpenProjectRepositoryItem,
   repositoryInitials,
-} from "#web/features/open-project/open-project-state";
-import { openProjectItemId } from "#web/features/open-project/repository-row";
-import { RepositorySettingsButton } from "#web/features/repository-settings/components/repository-settings-button";
+} from "#web/features/open-project/open-project-state.ts";
+import { openProjectItemId } from "#web/features/open-project/repository-row.tsx";
+import { RepositorySettingsButton } from "#web/features/repository-settings/components/repository-settings-button.tsx";
 
 export function RecentRepositories({
   activeKey,

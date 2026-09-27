@@ -12,7 +12,7 @@ Rebase is a fast Git client for developers working on large repositories. It run
 - Prefer deep modules: few files with real behavior behind small interfaces. No `index.ts` barrels, no file that only re-exports, no hook or component that only wraps one call for one caller, no type-only `*.contract.ts` next to its implementation.
 - Extract a function when it is reused or worth testing on its own, and keep it in the same file. The caller should read as a sequence of steps.
 - Name files for what they hold (`conflict-document.ts`, `use-merge-document.ts`), never `model`, `utils`, `helpers` or `types`.
-- Use package names across packages and the private aliases `#server/*`, `#web/*`, `#desktop/*` inside one. No relative imports.
+- The repository is one package. Import through the `package.json` `imports` aliases `#contracts/*`, `#server/*`, `#web/*`, `#desktop/*` and `#tests-support/*`, with the file extension (`#web/features/merge-view/merge-view.tsx`). Declare aliases only there. No relative imports.
 - No code comments.
 
 ## Architecture

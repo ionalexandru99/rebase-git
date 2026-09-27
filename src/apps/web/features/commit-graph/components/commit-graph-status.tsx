@@ -1,4 +1,4 @@
-import { Button } from "#web/components/ui/button";
+import { Button } from "#web/components/ui/button.tsx";
 
 const loadingRowIds = Array.from(
   { length: 12 },

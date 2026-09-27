@@ -1,28 +1,28 @@
-import {
-  type RepositoryChangeKind,
-  RepositoryChangesApi,
-  type RepositoryOperation,
-  RepositoryOperationsApi,
-} from "@rebase/contracts";
 import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
 import { page } from "vite-plus/test/browser";
+import type { RepositoryChangeKind } from "#contracts/environment-connection/environment-rpc.contract.ts";
+import { RepositoryChangesApi } from "#contracts/repository-changes/repository-changes.contract.ts";
 import {
-  conflictedRebase,
-  repositoryChanges,
-  repositoryOperation,
-} from "#tests-support/fixtures";
-import { repositoryScope } from "#tests-ui/apps/web/repository-scope/repository-scope-fixture";
+  type RepositoryOperation,
+  RepositoryOperationsApi,
+} from "#contracts/repository-operations/repository-operations.contract.ts";
 import {
   fakeRequests,
   rejected,
   respond,
-} from "#tests-ui/runtime/fake-requests";
-import { render, testChanges } from "#tests-ui/runtime/render";
-import { NotificationsProvider } from "#web/features/notifications/notifications";
-import { OperationRecoveryNotice } from "#web/features/operation-recovery/components/operation-recovery-notice";
-import { WorkingChanges } from "#web/features/working-changes/working-changes";
-import { WorkspacePanel } from "#web/features/workspace-panel/workspace-panel";
-import { RepositoryScopeProvider } from "#web/platform/query/repository-scope";
+} from "#tests-support/fake-requests.ts";
+import {
+  conflictedRebase,
+  repositoryChanges,
+  repositoryOperation,
+  repositoryScope,
+} from "#tests-support/fixtures.ts";
+import { render, testChanges } from "#tests-support/render.tsx";
+import { NotificationsProvider } from "#web/features/notifications/notifications.tsx";
+import { OperationRecoveryNotice } from "#web/features/operation-recovery/components/operation-recovery-toast.tsx";
+import { WorkingChanges } from "#web/features/working-changes/working-changes.tsx";
+import { WorkspacePanel } from "#web/features/workspace-panel/workspace-panel.tsx";
+import { RepositoryScopeProvider } from "#web/platform/query/repository-scope.tsx";
 
 const path = "src/app.ts";
 const scope = repositoryScope({ repositoryId: crypto.randomUUID() });

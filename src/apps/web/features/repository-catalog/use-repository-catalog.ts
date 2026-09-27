@@ -1,16 +1,16 @@
+import { useQueryClient } from "@tanstack/react-query";
+import { useCallback } from "react";
 import {
   type RepositoryCatalog,
   RepositoryCatalogApi,
   type RepositoryCatalogEntry,
-} from "@rebase/contracts";
-import { useQueryClient } from "@tanstack/react-query";
-import { useCallback } from "react";
-import { useEnvironment } from "#web/platform/query/environment-context";
+} from "#contracts/repository-catalog/repository-catalog.contract.ts";
+import { useEnvironment } from "#web/platform/query/environment-context.tsx";
 import {
   environmentQueryKey,
   useEnvironmentQuery,
-} from "#web/platform/query/environment-query";
-import { answer } from "#web/platform/query/use-command";
+} from "#web/platform/query/environment-query.ts";
+import { answer } from "#web/platform/query/use-command.ts";
 
 const noRepositories: readonly RepositoryCatalogEntry[] = [];
 

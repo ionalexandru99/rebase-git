@@ -1,23 +1,23 @@
-import type {
-  RepositoryCommit,
-  RepositoryHistoryRefTarget,
-} from "@rebase/contracts";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { CommitGraph } from "#web/features/commit-graph/commit-graph";
-import { HistoryGraph } from "#web/features/repository-history/history-graph";
+import type {
+  RepositoryCommit,
+  RepositoryHistoryRefTarget,
+} from "#contracts/repository-history/repository-history.contract.ts";
+import { CommitGraph } from "#web/features/commit-graph/commit-graph.tsx";
+import { HistoryGraph } from "#web/features/repository-history/history-graph.ts";
 import {
   type HistoryScopeQuery,
   HistoryView,
-} from "#web/features/repository-history/history-view";
-import type { HistoryQuery } from "#web/features/repository-history/history-worker-protocol";
-import type { RepositoryHistory } from "#web/features/repository-history/repository-history";
+} from "#web/features/repository-history/history-view.ts";
+import type { HistoryQuery } from "#web/features/repository-history/history-worker-protocol.ts";
+import type { RepositoryHistory } from "#web/features/repository-history/repository-history.ts";
 import {
   type Environment,
   EnvironmentProvider,
-} from "#web/platform/query/environment-context";
-import { createEnvironmentQueryClient } from "#web/platform/query/environment-query-client";
+} from "#web/platform/query/environment-context.tsx";
+import { createEnvironmentQueryClient } from "#web/platform/query/environment-query.ts";
 
 const offlineEnvironment: Environment = {
   environmentId: undefined,

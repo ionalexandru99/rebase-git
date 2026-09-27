@@ -3,9 +3,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Effect, Stream } from "effect";
 import { afterAll, beforeAll, expect, it } from "vite-plus/test";
-import { createLocalGitCommandRunner } from "#server/adapters/local-git/git-commands";
-import { createRepository, fastImport } from "#tests-support/git";
-import { removeTemporaryDirectory } from "#tests-support/temporary-directory";
+import { createLocalGitCommandRunner } from "#server/adapters/local-git/git-commands.ts";
+import { createRepository, fastImport } from "#tests-support/git.ts";
+import { removeTemporaryDirectory } from "#tests-support/temporary-directory.ts";
 
 const git = createLocalGitCommandRunner();
 let directory = "";

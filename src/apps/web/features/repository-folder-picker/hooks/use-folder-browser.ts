@@ -1,15 +1,16 @@
+import { useState } from "react";
+import { EnvironmentFilesystemApi } from "#contracts/environment-filesystem/environment-filesystem.contract.ts";
 import {
   RepositoryCatalogApi,
   type RepositoryCatalogEntry,
-} from "@rebase/contracts";
-import { useState } from "react";
-import { useDirectoryListing } from "#web/features/environment-filesystem/hooks/use-directory-listing";
-import { catalogWith } from "#web/features/repository-catalog/use-repository-catalog";
+} from "#contracts/repository-catalog/repository-catalog.contract.ts";
+import { catalogWith } from "#web/features/repository-catalog/use-repository-catalog.ts";
 import {
   directoryListingError,
   repositorySelectionError,
-} from "#web/features/repository-folder-picker/repository-folder-picker-state";
-import { useCommand } from "#web/platform/query/use-command";
+} from "#web/features/repository-folder-picker/repository-folder-picker-state.ts";
+import { useEnvironmentQuery } from "#web/platform/query/environment-query.ts";
+import { useCommand } from "#web/platform/query/use-command.ts";
 
 type FolderSelection =
   | { readonly _tag: "None" }
@@ -69,4 +70,12 @@ export function useFolderBrowser(
       if (result._tag === "Ok") onRepositoryOpened(result.value);
     },
   };
+}
+
+function useDirectoryListing(path: string | undefined, enabled: boolean) {
+  return useEnvironmentQuery(
+    EnvironmentFilesystemApi.listDirectory,
+    path === undefined ? {} : { path },
+    { enabled, changes: "none", staleTime: 0, refetchOnWindowFocus: false },
+  );
 }

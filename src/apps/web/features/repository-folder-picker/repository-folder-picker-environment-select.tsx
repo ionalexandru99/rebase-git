@@ -9,8 +9,8 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-} from "#web/components/ui/dropdown-menu";
-import type { EnvironmentAvailability } from "#web/platform/query/environment-context";
+} from "#web/components/ui/dropdown-menu.tsx";
+import type { EnvironmentAvailability } from "#web/platform/query/environment-context.tsx";
 
 export interface RepositoryFolderPickerEnvironment {
   readonly availability: EnvironmentAvailability;

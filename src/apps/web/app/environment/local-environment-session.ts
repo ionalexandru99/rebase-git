@@ -1,4 +1,3 @@
-import { environmentProtocol } from "@rebase/contracts";
 import {
   Effect,
   Fiber,
@@ -7,6 +6,7 @@ import {
   Result,
   type Scope,
 } from "effect";
+import { environmentProtocol } from "#contracts/environment-connection/environment-rpc.contract.ts";
 import {
   EnvironmentAccessDenied,
   type EnvironmentConnection,
@@ -15,10 +15,10 @@ import {
   EnvironmentProtocolMismatch,
   environmentRequests,
   reconnectDelay,
-} from "#web/platform/environment/environment-connection";
-import type { EnvironmentRequests } from "#web/platform/query/environment-context";
-import type { EnvironmentInvalidation } from "#web/platform/query/environment-invalidation";
-import { createStore, type ReadableStore } from "#web/platform/store/store";
+} from "#web/platform/environment/environment-connection.ts";
+import type { EnvironmentRequests } from "#web/platform/query/environment-context.tsx";
+import type { EnvironmentInvalidation } from "#web/platform/query/environment-invalidation.ts";
+import { createStore, type ReadableStore } from "#web/platform/store/store.ts";
 
 export type LocalEnvironmentSessionState =
   | { readonly _tag: "PairingRequired" }

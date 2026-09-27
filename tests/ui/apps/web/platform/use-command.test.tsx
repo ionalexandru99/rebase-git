@@ -1,19 +1,20 @@
-import { RepositoryOperationsApi, RepositoryTagsApi } from "@rebase/contracts";
 import { useState } from "react";
 import { expect, it, vi } from "vite-plus/test";
 import { page } from "vite-plus/test/browser";
-import { repositoryScope } from "#tests-ui/apps/web/repository-scope/repository-scope-fixture";
+import { RepositoryOperationsApi } from "#contracts/repository-operations/repository-operations.contract.ts";
+import { RepositoryTagsApi } from "#contracts/repository-refs/repository-tags.contract.ts";
 import {
   fakeRequests,
   idleOperation,
   rejected,
   respond,
-} from "#tests-ui/runtime/fake-requests";
-import { render } from "#tests-ui/runtime/render";
-import { useEnvironmentQuery } from "#web/platform/query/environment-query";
-import { RepositoryScopeProvider } from "#web/platform/query/repository-scope";
-import { describeFailure } from "#web/platform/query/request-failure";
-import { useCommand } from "#web/platform/query/use-command";
+} from "#tests-support/fake-requests.ts";
+import { repositoryScope } from "#tests-support/fixtures.ts";
+import { render } from "#tests-support/render.tsx";
+import { useEnvironmentQuery } from "#web/platform/query/environment-query.ts";
+import { RepositoryScopeProvider } from "#web/platform/query/repository-scope.tsx";
+import { describeFailure } from "#web/platform/query/request-failure.ts";
+import { useCommand } from "#web/platform/query/use-command.ts";
 
 const scope = repositoryScope();
 

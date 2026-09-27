@@ -1,27 +1,27 @@
+import { IconArrowDown, IconArrowLeft, IconArrowUp } from "@tabler/icons-react";
+import { type KeyboardEvent, type ReactNode, useState } from "react";
 import type {
   ConflictList,
   ConflictPath,
   ConflictSide,
-} from "@rebase/contracts";
-import { IconArrowDown, IconArrowLeft, IconArrowUp } from "@tabler/icons-react";
-import { type KeyboardEvent, type ReactNode, useState } from "react";
-import { Button } from "#web/components/ui/button";
-import { Confirmation } from "#web/components/ui/confirmation";
-import { ResultEditor } from "#web/features/merge-view/components/result-editor";
-import { SidePanes } from "#web/features/merge-view/components/side-panes";
+} from "#contracts/repository-conflicts/repository-conflicts.contract.ts";
+import { Button } from "#web/components/ui/button.tsx";
+import { Confirmation } from "#web/components/ui/confirmation.tsx";
+import { ResultEditor } from "#web/features/merge-view/components/result-editor.tsx";
+import { SidePanes } from "#web/features/merge-view/components/side-panes.tsx";
 import {
   openCount,
   regionSegments,
-} from "#web/features/merge-view/conflict-document";
-import { useMergeDocument } from "#web/features/merge-view/hooks/use-merge-document";
-import { useSelection } from "#web/features/merge-view/hooks/use-selection";
-import { WholeFileMenu } from "#web/features/working-changes/conflicts/components/whole-file-menu";
+} from "#web/features/merge-view/conflict-document.ts";
+import { useMergeDocument } from "#web/features/merge-view/hooks/use-merge-document.ts";
+import { useSelection } from "#web/features/merge-view/hooks/use-selection.ts";
+import { WholeFileMenu } from "#web/features/working-changes/conflicts/components/whole-file-menu.tsx";
 import {
   useConflictActions,
   wholeFileOnly,
-} from "#web/features/working-changes/conflicts/hooks/use-conflicts";
-import { useRepositoryScope } from "#web/platform/query/repository-scope";
-import { describeFailure } from "#web/platform/query/request-failure";
+} from "#web/features/working-changes/conflicts/hooks/use-conflicts.ts";
+import { useRepositoryScope } from "#web/platform/query/repository-scope.tsx";
+import { describeFailure } from "#web/platform/query/request-failure.ts";
 
 interface MergeViewHandlers {
   readonly onOpen: (path: string) => void;

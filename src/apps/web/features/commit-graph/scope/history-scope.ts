@@ -1,13 +1,13 @@
+import type { RepositoryHistoryRefTarget } from "#contracts/repository-history/repository-history.contract.ts";
 import type {
   LocalBranch,
-  RepositoryHistoryRefTarget,
   RepositoryRefs,
   RepositoryRefTarget,
-} from "@rebase/contracts";
+} from "#contracts/repository-refs/repository-refs.contract.ts";
 import {
   resolveAutomaticHistoryRoots,
   resolveAutomaticHistorySelections,
-} from "#web/features/commit-graph/scope/automatic-history-scope";
+} from "#web/features/commit-graph/scope/automatic-history-scope.ts";
 
 export const automaticHistoryScope = { _tag: "Automatic" } as const;
 

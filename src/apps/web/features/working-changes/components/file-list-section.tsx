@@ -4,11 +4,11 @@ import {
   IconFolder,
 } from "@tabler/icons-react";
 import { type ReactNode, useState } from "react";
-import { Button } from "#web/components/ui/button";
-import type { ChangeTreeRow } from "#web/features/file-diff/file-tree";
-import { useFileRows } from "#web/features/file-diff/hooks/use-file-rows";
-import { ChangeFileIcon } from "#web/features/working-changes/components/change-file-icon";
-import { cn } from "#web/lib/utils";
+import { Button } from "#web/components/ui/button.tsx";
+import type { ChangeTreeRow } from "#web/features/file-diff/file-tree.ts";
+import { useFileRows } from "#web/features/file-diff/hooks/use-file-rows.ts";
+import { ChangeFileIcon } from "#web/features/working-changes/components/change-file-icon.tsx";
+import { cn } from "#web/lib/utils.ts";
 
 interface FileRowContext<File extends { readonly path: string }> {
   readonly rows: readonly ChangeTreeRow<File>[];

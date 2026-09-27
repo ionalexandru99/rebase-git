@@ -1,9 +1,9 @@
 import { useReducer } from "react";
-import { localEnvironment } from "#web/features/project-navigation/local-environment";
+import { localEnvironment } from "#web/features/project-navigation/local-environment.ts";
 import type {
   ProjectNavigationRepository,
   ProjectNavigationState,
-} from "#web/features/project-navigation/project-navigation";
+} from "#web/features/project-navigation/project-navigation.ts";
 import {
   openProjectRepository,
   removeProjectRepository,
@@ -11,8 +11,8 @@ import {
   setProjectSidebarCollapsed,
   showOpenProject,
   toggleEnvironment,
-} from "#web/features/project-navigation/project-navigation-state";
-import type { EnvironmentStatus } from "#web/platform/query/environment-context";
+} from "#web/features/project-navigation/project-navigation-state.ts";
+import type { EnvironmentStatus } from "#web/platform/query/environment-context.tsx";
 
 export interface Navigation {
   readonly projects: ProjectNavigationState;

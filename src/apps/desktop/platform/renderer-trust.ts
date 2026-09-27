@@ -1,7 +1,7 @@
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { BrowserWindow, type IpcMainInvokeEvent } from "electron";
-import type { DesktopRenderer } from "#desktop/app/desktop-application";
+import type { DesktopRenderer } from "#desktop/app/desktop-application.ts";
 
 export type TrustedIpcHandler = <Arguments extends readonly unknown[], Result>(
   handler: (event: IpcMainInvokeEvent, ...arguments_: Arguments) => Result,

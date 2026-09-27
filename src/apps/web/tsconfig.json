@@ -1,18 +1,9 @@
 {
-  "extends": "../../../tsconfig.base.json",
+  "extends": "../../../tsconfig.json",
   "compilerOptions": {
     "jsx": "react-jsx",
     "lib": ["ES2024", "DOM", "DOM.Iterable"],
-    "outDir": "./dist/types",
-    "paths": {
-      "#web/*": ["./*.ts", "./*.tsx"]
-    },
-    "rootDir": ".",
-    "skipLibCheck": true,
-    "tsBuildInfoFile": "./dist/types/tsconfig.tsbuildinfo",
     "types": ["vite/client"]
   },
-  "include": ["./**/*.ts", "./**/*.tsx", "./package.json"],
-  "exclude": ["./dist"],
-  "references": [{ "path": "../../contracts" }]
+  "include": ["."]
 }

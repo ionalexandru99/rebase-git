@@ -9,9 +9,9 @@ import {
 } from "node:fs/promises";
 import { join } from "node:path";
 import { Effect } from "effect";
-import { errorMessage, isFileSystemError } from "#server/error-inspection";
-import { EnvironmentStorageError } from "#server/persistence/sqlite/storage-operation";
-import type { EnvironmentPaths } from "#server/persistence/storage/environment-paths";
+import { errorMessage, isFileSystemError } from "#server/error-inspection.ts";
+import { EnvironmentStorageError } from "#server/persistence/sqlite/storage-operation.ts";
+import type { EnvironmentPaths } from "#server/persistence/storage/environment-paths.ts";
 
 export function ensureServerSecret(paths: EnvironmentPaths) {
   return Effect.tryPromise({

@@ -1,11 +1,10 @@
-import type {
-  RepositoryCommit,
-  RepositoryHistoryRefTarget,
-} from "@rebase/contracts";
 import { act, createRef, useState } from "react";
 import { describe, expect, it, vi } from "vite-plus/test";
 import { userEvent } from "vite-plus/test/browser";
-import { waitForObservation } from "#tests-support/observation";
+import type {
+  RepositoryCommit,
+  RepositoryHistoryRefTarget,
+} from "#contracts/repository-history/repository-history.contract.ts";
 import {
   CommitGraphFixture,
   history,
@@ -13,11 +12,12 @@ import {
   historyReader,
   mergeHistory,
   renderGraph,
-} from "#tests-ui/apps/web/commit-graph/commit-graph-fixture";
-import { render } from "#tests-ui/runtime/render";
-import type { CommitGraphHandle } from "#web/features/commit-graph/commit-graph";
-import { saveRepositoryHistoryOrder } from "#web/features/repository-history/history-order";
-import type { HistoryQuery } from "#web/features/repository-history/history-worker-protocol";
+} from "#tests-support/commit-graph-fixture.tsx";
+import { waitForObservation } from "#tests-support/observation.ts";
+import { render } from "#tests-support/render.tsx";
+import type { CommitGraphHandle } from "#web/features/commit-graph/commit-graph.tsx";
+import { saveRepositoryHistoryOrder } from "#web/features/repository-history/history-order.ts";
+import type { HistoryQuery } from "#web/features/repository-history/history-worker-protocol.ts";
 
 describe("commit graph navigation", () => {
   it("selects a loaded row in the same task as the arrow key", async () => {

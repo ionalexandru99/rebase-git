@@ -9,23 +9,23 @@ import {
   IconX,
 } from "@tabler/icons-react";
 import { type JSX, useState } from "react";
-import { Button } from "#web/components/ui/button";
+import { Button } from "#web/components/ui/button.tsx";
 import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
-} from "#web/components/ui/collapsible";
-import { Input } from "#web/components/ui/input";
+} from "#web/components/ui/collapsible.tsx";
+import { Input } from "#web/components/ui/input.tsx";
 import type {
   ProjectNavigationRepository,
   ProjectNavigationState,
-} from "#web/features/project-navigation/project-navigation";
-import { filterEnvironmentRepositories } from "#web/features/project-navigation/project-navigation-state";
-import { RepositorySettingsButton } from "#web/features/repository-settings/components/repository-settings-button";
+} from "#web/features/project-navigation/project-navigation.ts";
+import { filterEnvironmentRepositories } from "#web/features/project-navigation/project-navigation-state.ts";
+import { RepositorySettingsButton } from "#web/features/repository-settings/components/repository-settings-button.tsx";
 import {
   type EnvironmentStatus,
   useEnvironment,
-} from "#web/platform/query/environment-context";
+} from "#web/platform/query/environment-context.tsx";
 
 export function ProjectsSidebar({
   closeRepository,

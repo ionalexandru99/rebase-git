@@ -3,7 +3,7 @@ import {
   type GitCommandRunner,
   isGitRejection,
   runRepositoryGit,
-} from "#server/adapters/local-git/git-commands";
+} from "#server/adapters/local-git/git-commands.ts";
 
 export const refCommand = {
   literalPathspecs: false,

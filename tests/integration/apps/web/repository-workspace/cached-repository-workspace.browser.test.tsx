@@ -1,35 +1,37 @@
-import "@rebase/web/styles.css";
-import {
-  RepositoryBranchesApi,
-  type RepositoryCommit,
-  type RepositoryRefs,
-  RepositoryRefsApi,
-} from "@rebase/contracts";
+import "#web/styles.css";
 import {
   persistQueryClientRestore,
   persistQueryClientSave,
 } from "@tanstack/react-query-persist-client";
 import { expect, it } from "vite-plus/test";
-import { repositoryScope } from "#tests-ui/apps/web/repository-scope/repository-scope-fixture";
+import type { RepositoryCommit } from "#contracts/repository-history/repository-history.contract.ts";
+import { RepositoryBranchesApi } from "#contracts/repository-refs/repository-branches.contract.ts";
+import {
+  type RepositoryRefs,
+  RepositoryRefsApi,
+} from "#contracts/repository-refs/repository-refs.contract.ts";
 import {
   fakeRequests,
   respond,
   unanswered,
-} from "#tests-ui/runtime/fake-requests";
-import { render } from "#tests-ui/runtime/render";
-import { RepositoryWorkspace } from "#web/app/workspace/repository-workspace";
-import { NotificationsProvider } from "#web/features/notifications/notifications";
-import { useRepositoryRefs } from "#web/features/refs/repository-refs";
+} from "#tests-support/fake-requests.ts";
+import { repositoryScope } from "#tests-support/fixtures.ts";
+import { render } from "#tests-support/render.tsx";
+import { RepositoryWorkspace } from "#web/app/workspace/repository-workspace.tsx";
+import { NotificationsProvider } from "#web/features/notifications/notifications.tsx";
+import { useRepositoryRefs } from "#web/features/refs/repository-refs.ts";
 import {
   openRepository,
   storeCommits,
   updateRepository,
-} from "#web/features/repository-history/history-database";
-import { environmentQueryKey } from "#web/platform/query/environment-query";
-import { createEnvironmentQueryClient } from "#web/platform/query/environment-query-client";
-import { createEnvironmentQueryPersistence } from "#web/platform/query/environment-query-persistence";
-import { RepositoryScopeProvider } from "#web/platform/query/repository-scope";
-import { useCommand } from "#web/platform/query/use-command";
+} from "#web/features/repository-history/history-database.ts";
+import {
+  createEnvironmentQueryClient,
+  environmentQueryKey,
+} from "#web/platform/query/environment-query.ts";
+import { createEnvironmentQueryPersistence } from "#web/platform/query/environment-query-persistence.ts";
+import { RepositoryScopeProvider } from "#web/platform/query/repository-scope.tsx";
+import { useCommand } from "#web/platform/query/use-command.ts";
 
 it("restores only persisted refs, unconfirmed, for the same protocol", async () => {
   const persistence = createEnvironmentQueryPersistence();

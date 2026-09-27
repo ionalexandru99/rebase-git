@@ -1,5 +1,4 @@
 import { Menu } from "@base-ui/react/menu";
-import { RepositoryPushApi } from "@rebase/contracts";
 import {
   IconArrowDown,
   IconArrowUp,
@@ -7,15 +6,16 @@ import {
   IconCircleFilled,
 } from "@tabler/icons-react";
 import { useEffect, useState } from "react";
-import { Button } from "#web/components/ui/button";
-import { Confirmation } from "#web/components/ui/confirmation";
+import { RepositoryPushApi } from "#contracts/repository-push/repository-push.contract.ts";
+import { Button } from "#web/components/ui/button.tsx";
+import { Confirmation } from "#web/components/ui/confirmation.tsx";
 import {
   DropdownMenuContent,
   DropdownMenuItem,
-} from "#web/components/ui/dropdown-menu";
-import { ToolbarButton } from "#web/components/ui/toolbar-button";
-import { ErrorNotification } from "#web/features/notifications/components/error-notification";
-import { PersistentNotification } from "#web/features/notifications/components/persistent-notification";
+} from "#web/components/ui/dropdown-menu.tsx";
+import { ToolbarButton } from "#web/components/ui/toolbar-button.tsx";
+import { ErrorNotification } from "#web/features/notifications/components/error-notification.tsx";
+import { PersistentNotification } from "#web/features/notifications/components/persistent-notification.tsx";
 import {
   describeProgress,
   describePushFailure,
@@ -26,9 +26,9 @@ import {
   forcePushReview,
   type PushRequest,
   type PushTarget,
-} from "#web/features/remote-sync/push-target";
-import { useRepositoryScope } from "#web/platform/query/repository-scope";
-import { useCommand } from "#web/platform/query/use-command";
+} from "#web/features/remote-sync/push-target.ts";
+import { useRepositoryScope } from "#web/platform/query/repository-scope.tsx";
+import { useCommand } from "#web/platform/query/use-command.ts";
 
 export type Push = ReturnType<typeof usePush>;
 

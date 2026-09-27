@@ -1,22 +1,23 @@
 import { randomUUID } from "node:crypto";
-import {
-  type CheckoutRepositoryRef,
-  type RepositoryCheckedOut,
-  type RepositoryCheckoutFailure,
-  type RepositoryRefTarget,
-  type RepositoryRejected,
-  type RepositoryWorktree,
-  repositoryRejected,
-} from "@rebase/contracts";
 import { Effect } from "effect";
+import {
+  type RepositoryRejected,
+  repositoryRejected,
+} from "#contracts/git/git-failures.contract.ts";
+import type {
+  CheckoutRepositoryRef,
+  RepositoryCheckedOut,
+  RepositoryCheckoutFailure,
+  RepositoryRefTarget,
+  RepositoryWorktree,
+} from "#contracts/repository-refs/repository-refs.contract.ts";
 import {
   type GitCommandRunner,
   type GitFailed,
   isGitRejection,
   runRepositoryGit,
-} from "#server/adapters/local-git/git-commands";
-import { checkoutFailure } from "#server/features/repository-refs/git/repository-refs-failures";
-import type { RepositoryAccess } from "#server/repository/repository-access";
+} from "#server/adapters/local-git/git-commands.ts";
+import type { RepositoryAccess } from "#server/repository/repository-access.ts";
 
 const checkoutCommand = {
   literalPathspecs: false,
@@ -287,4 +288,36 @@ function gitAccepts(
     Effect.as(true),
     Effect.catchIf(isGitRejection, () => Effect.succeed(false)),
   );
+}
+
+export function checkoutFailure(
+  error: GitFailed,
+  targetName: string,
+): RepositoryCheckoutFailure | RepositoryRejected {
+  if (!isGitRejection(error))
+    return repositoryRejected("GitFailed", error.detail);
+  const elsewhere =
+    /already (?:checked out|used by worktree) at '([^']+)'/.exec(error.detail);
+  if (elsewhere?.[1] !== undefined) {
+    return {
+      _tag: "BranchCheckedOutElsewhere",
+      name: targetName,
+      worktreePath: elsewhere[1],
+    };
+  }
+  if (
+    /did not match any file\(s\) known to git|invalid reference|is not a commit and a branch/i.test(
+      error.detail,
+    )
+  ) {
+    return { _tag: "RefMissing", name: targetName };
+  }
+  if (/would be overwritten by checkout/i.test(error.detail)) {
+    return {
+      _tag: "CheckoutRejected",
+      detail: error.detail,
+      reason: "LocalChanges",
+    };
+  }
+  return repositoryRejected("GitFailed", error.detail);
 }

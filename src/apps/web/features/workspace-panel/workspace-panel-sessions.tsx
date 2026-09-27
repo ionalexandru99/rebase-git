@@ -1,3 +1,8 @@
+export type {
+  WorkspacePanelEnvironment,
+  WorkspacePanelScope,
+} from "#web/features/workspace-panel/workspace-panel-session.ts";
+
 import {
   createContext,
   type ReactNode,
@@ -9,25 +14,20 @@ import {
   useRef,
   useState,
 } from "react";
-import { PanelFeatureContext } from "#web/features/workspace-panel/api";
-import { RetainedPanelView } from "#web/features/workspace-panel/components/retained-panel-view";
+import { PanelFeatureContext } from "#web/features/workspace-panel/api.ts";
+import { RetainedPanelView } from "#web/features/workspace-panel/components/retained-panel-view.tsx";
 import {
   createSessionCollection,
   type PanelSession,
-} from "#web/features/workspace-panel/sessions/panel-view-sessions";
-import { createPanelViewTarget } from "#web/features/workspace-panel/sessions/panel-view-target";
-import { workspacePanelDefinitions } from "#web/features/workspace-panel/workspace-panel-definitions";
-import type { WorkspacePanelKind } from "#web/features/workspace-panel/workspace-panel-model";
+} from "#web/features/workspace-panel/panel-view-sessions.ts";
+import { workspacePanelDefinitions } from "#web/features/workspace-panel/workspace-panel-definitions.ts";
+import type { WorkspacePanelKind } from "#web/features/workspace-panel/workspace-panel-model.ts";
 import type {
+  PanelViewTarget,
   WorkspacePanelEnvironment,
   WorkspacePanelScope,
-} from "#web/features/workspace-panel/workspace-panel-session";
-import { useStore } from "#web/platform/store/use-store";
-
-export type {
-  WorkspacePanelEnvironment,
-  WorkspacePanelScope,
-} from "#web/features/workspace-panel/workspace-panel-session";
+} from "#web/features/workspace-panel/workspace-panel-session.ts";
+import { useStore } from "#web/platform/store/use-store.ts";
 
 const SessionsContext = createContext<
   ReturnType<typeof createSessionCollection> | undefined
@@ -229,4 +229,22 @@ export function PanelSessionTarget({
     };
   }, [session, kind, target, children]);
   return <div ref={setTarget} className="h-full min-h-0" />;
+}
+
+function createPanelViewTarget(element: HTMLElement): PanelViewTarget {
+  const listeners = new Set<() => void>();
+  return {
+    element,
+    beforeDetach: (listener: () => void) => {
+      listeners.add(listener);
+      return () => {
+        listeners.delete(listener);
+      };
+    },
+    detach: () => {
+      for (const listener of listeners) {
+        listener();
+      }
+    },
+  };
 }

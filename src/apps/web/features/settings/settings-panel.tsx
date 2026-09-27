@@ -1,11 +1,14 @@
-import type { DesktopUpdateSnapshot, DesktopUpdates } from "@rebase/contracts";
 import { type ComponentType, type JSX, useEffect, useState } from "react";
+import type {
+  DesktopUpdateSnapshot,
+  DesktopUpdates,
+} from "#contracts/desktop-updates/desktop-updates.contract.ts";
 import {
   type SettingsSectionContext,
   type SettingsSectionId,
   settingsSections,
-} from "#web/features/settings/settings-sections";
-import { SettingsSidebar } from "#web/features/settings/settings-sidebar";
+} from "#web/features/settings/settings-sections.ts";
+import { SettingsSidebar } from "#web/features/settings/settings-sidebar.tsx";
 
 export function SettingsPanel({
   closeSettings,

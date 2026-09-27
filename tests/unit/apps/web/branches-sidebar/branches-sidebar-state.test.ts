@@ -3,13 +3,13 @@ import {
   branchScenarioRefs,
   mainPath,
   topicPath,
-} from "#tests-support/fixtures";
+} from "#tests-support/fixtures.ts";
 import {
   buildBranchesSidebarRows,
   defaultExpandedSections,
   stepRow,
   toggleSection,
-} from "#web/features/branches-sidebar/branches-sidebar-state";
+} from "#web/features/branches-sidebar/branches-sidebar-state.ts";
 
 describe("branches sidebar state", () => {
   it("expands local branches by default and keeps remotes and tags collapsed", () => {

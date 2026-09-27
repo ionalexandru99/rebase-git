@@ -1,10 +1,10 @@
-import type { CommitFile } from "@rebase/contracts";
 import {
   IconChevronDown,
   IconChevronRight,
   IconFolder,
 } from "@tabler/icons-react";
-import { useFileRows } from "#web/features/file-diff/hooks/use-file-rows";
+import type { CommitFile } from "#contracts/commit-inspection/commit-inspection.contract.ts";
+import { useFileRows } from "#web/features/file-diff/hooks/use-file-rows.ts";
 
 const statusLabels: Record<CommitFile["status"], string> = {
   A: "Added",

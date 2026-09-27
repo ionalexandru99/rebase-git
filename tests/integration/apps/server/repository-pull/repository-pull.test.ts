@@ -1,10 +1,10 @@
 import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { RepositoryPullApi } from "@rebase/contracts";
 import { Effect } from "effect";
 import { describe, expect, it } from "vite-plus/test";
-import { cloneRepository, fastImport, git } from "#tests-support/git";
-import { openTestEnvironment } from "#tests-support/server";
+import { RepositoryPullApi } from "#contracts/repository-pull/repository-pull.contract.ts";
+import { cloneRepository, fastImport, git } from "#tests-support/git.ts";
+import { openTestEnvironment } from "#tests-support/server.ts";
 
 describe("fast-forward pull", () => {
   it("fast-forwards the checked-out branch and keeps unrelated local edits", async () => {

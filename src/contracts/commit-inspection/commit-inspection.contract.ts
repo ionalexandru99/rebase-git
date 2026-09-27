@@ -1,12 +1,12 @@
-import { repositoryQuery } from "@rebase/contracts/environment-connection/environment-route.contract";
+import { Schema } from "effect";
+import { repositoryQuery } from "#contracts/environment-connection/environment-route.contract.ts";
 import {
   ObjectId,
   RepositoryId,
   RepositoryPath,
-} from "@rebase/contracts/git/git-values.contract";
-import { ChangesFailure } from "@rebase/contracts/repository-changes/repository-changes.contract";
-import { ChangeDiff } from "@rebase/contracts/repository-comparison/repository-comparison.contract";
-import { Schema } from "effect";
+} from "#contracts/git/git-values.contract.ts";
+import { ChangesFailure } from "#contracts/repository-changes/repository-changes.contract.ts";
+import { ChangeDiff } from "#contracts/repository-comparison/repository-comparison.contract.ts";
 
 export const InspectCommit = Schema.Struct({
   repositoryId: RepositoryId,

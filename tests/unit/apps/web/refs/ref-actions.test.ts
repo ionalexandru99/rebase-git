@@ -6,12 +6,12 @@ import {
   repositoryRefs,
   topicPath,
   upstream,
-} from "#tests-support/fixtures";
+} from "#tests-support/fixtures.ts";
 import {
   type BranchesSidebarRefRow,
   buildBranchesSidebarRows,
-} from "#web/features/branches-sidebar/branches-sidebar-state";
-import { refActions } from "#web/features/refs/ref-actions";
+} from "#web/features/branches-sidebar/branches-sidebar-state.ts";
+import { refActions } from "#web/features/refs/ref-actions.ts";
 
 describe("ref actions", () => {
   it("explains why a checked-out branch cannot be renamed or deleted", () => {

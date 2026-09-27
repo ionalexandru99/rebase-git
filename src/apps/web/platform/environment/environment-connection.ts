@@ -1,18 +1,4 @@
 import {
-  type EnvironmentAccessFailure,
-  EnvironmentAuthorizationFailure,
-  EnvironmentRpc,
-  type EnvironmentRpcClient,
-  environmentLivePath,
-  environmentProtocol,
-  environmentSubprotocol,
-  type ProtocolMismatch,
-  type RepositoryHistoryUpdate,
-  type RouteSuccess,
-  type SynchronizeRepositoryHistory,
-  unauthorizedCloseCode,
-} from "@rebase/contracts";
-import {
   Cause,
   Data,
   Deferred,
@@ -32,9 +18,27 @@ import {
   RpcSerialization,
 } from "effect/unstable/rpc";
 import { Socket } from "effect/unstable/socket";
-import type { EnvironmentRequests } from "#web/platform/query/environment-context";
-import type { EnvironmentInvalidation } from "#web/platform/query/environment-invalidation";
-import type { RequestFailure } from "#web/platform/query/request-failure";
+import {
+  type EnvironmentAccessFailure,
+  EnvironmentAuthorizationFailure,
+} from "#contracts/environment-authorization/environment-authorization.contract.ts";
+import type { RouteSuccess } from "#contracts/environment-connection/environment-route.contract.ts";
+import {
+  EnvironmentRpc,
+  type EnvironmentRpcClient,
+  environmentLivePath,
+  environmentProtocol,
+  environmentSubprotocol,
+  type ProtocolMismatch,
+  unauthorizedCloseCode,
+} from "#contracts/environment-connection/environment-rpc.contract.ts";
+import type {
+  RepositoryHistoryUpdate,
+  SynchronizeRepositoryHistory,
+} from "#contracts/repository-history/repository-history.contract.ts";
+import type { EnvironmentRequests } from "#web/platform/query/environment-context.tsx";
+import type { EnvironmentInvalidation } from "#web/platform/query/environment-invalidation.ts";
+import type { RequestFailure } from "#web/platform/query/request-failure.ts";
 
 export type EnvironmentCredential =
   | { readonly type: "browser-session" }

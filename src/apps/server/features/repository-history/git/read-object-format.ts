@@ -1,12 +1,12 @@
-import type { RepositoryHistoryFailure } from "@rebase/contracts";
 import { Effect } from "effect";
+import type { RepositoryHistoryFailure } from "#contracts/repository-history/repository-history.contract.ts";
 import {
   type GitCommandRunner,
   type GitObjectFormat,
   readGitEntryIdentity,
   runRepositoryGit,
-} from "#server/adapters/local-git/git-commands";
-import { historyFailed } from "#server/features/repository-history/git/history-failures";
+} from "#server/adapters/local-git/git-commands.ts";
+import { historyFailed } from "#server/features/repository-history/git/history-failures.ts";
 
 export type ObjectFormatRead = Effect.Effect<
   GitObjectFormat,

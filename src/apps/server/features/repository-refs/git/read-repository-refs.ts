@@ -1,14 +1,14 @@
+import { Effect } from "effect";
 import type {
   LocalBranch,
   RepositoryRefs,
   RepositoryWorktree,
-} from "@rebase/contracts";
-import { Effect } from "effect";
+} from "#contracts/repository-refs/repository-refs.contract.ts";
 import {
   type GitCommandRunner,
   type GitFailed,
   runRepositoryGit,
-} from "#server/adapters/local-git/git-commands";
+} from "#server/adapters/local-git/git-commands.ts";
 import {
   forEachRefFormat,
   localBranchFromRecord,
@@ -16,11 +16,11 @@ import {
   remoteBranchFromRecord,
   remoteDefaultBranchFromRecord,
   tagFromRecord,
-} from "#server/features/repository-refs/git/parse-for-each-ref";
+} from "#server/features/repository-refs/git/parse-for-each-ref.ts";
 import {
   canonicalizeWorktrees,
   readWorktrees,
-} from "#server/repository/repository-access";
+} from "#server/repository/repository-access.ts";
 
 const readTimeoutMilliseconds = 15_000;
 const maximumRefsOutputBytes = 16 * 1_048_576;

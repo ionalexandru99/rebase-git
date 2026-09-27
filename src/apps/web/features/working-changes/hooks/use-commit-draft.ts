@@ -6,15 +6,12 @@ import {
   useQueryClient,
 } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { draftFromMessage } from "#web/features/working-changes/draft/commit-draft";
-import {
-  readCommitDraft,
-  saveCommitDraft,
-} from "#web/persistence/working-changes/working-changes-store";
 import {
   type CommitDraft,
   emptyCommitDraft,
-} from "#web/persistence/working-changes/working-changes-store.contract";
+  readCommitDraft,
+  saveCommitDraft,
+} from "#web/persistence/working-changes/working-changes-store.ts";
 
 const saveDelayMilliseconds = 300;
 
@@ -139,4 +136,18 @@ function useDebouncedSave(
   }, []);
   useEffect(() => flush, [flush]);
   return useMemo(() => ({ schedule, cancel }), [schedule, cancel]);
+}
+
+export function commitMessage({ subject, description }: CommitDraft) {
+  const body = description.trim();
+  return subject.trim() + (body ? `\n\n${body}` : "");
+}
+
+export function draftFromMessage(message: string): CommitDraft {
+  const [subject = "", ...body] = message.split(/\r?\n/);
+  return { subject, description: body.join("\n").trimStart() };
+}
+
+export function amendDraftKey(draftKey: string, head: string | null) {
+  return `${draftKey}:amend:${head}`;
 }

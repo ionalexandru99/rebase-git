@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vite-plus/test";
-import { repositoryRefs, worktree } from "#tests-support/fixtures";
+import { repositoryRefs, worktree } from "#tests-support/fixtures.ts";
 import {
   buildBranchesSidebarRows,
   defaultExpandedSections,
-} from "#web/features/branches-sidebar/branches-sidebar-state";
+} from "#web/features/branches-sidebar/branches-sidebar-state.ts";
 
 const refs = repositoryRefs({
   branches: [

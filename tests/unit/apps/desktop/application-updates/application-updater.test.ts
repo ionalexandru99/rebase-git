@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vite-plus/test";
 import {
   createApplicationUpdater,
   type DesktopAutoUpdater,
-} from "#desktop/features/application-updates/application-updater";
+} from "#desktop/features/application-updates/application-updater.ts";
 
 describe("desktop application updater", () => {
   it("keeps automatic checks disabled until the user enables them", async () => {

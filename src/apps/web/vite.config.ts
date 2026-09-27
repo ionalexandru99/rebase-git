@@ -1,9 +1,11 @@
-import { dirname } from "node:path";
-import { fileURLToPath } from "node:url";
+import { readFileSync } from "node:fs";
 import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
 import { defineConfig } from "vite-plus";
-import packageMetadata from "./package.json" with { type: "json" };
+
+const packageMetadata = JSON.parse(
+  readFileSync(new URL("../../../package.json", import.meta.url), "utf8"),
+) as { readonly version: string };
 
 export default defineConfig({
   base: "./",
@@ -15,10 +17,6 @@ export default defineConfig({
     ),
   },
   plugins: [react(), tailwindcss()],
-  resolve: {
-    alias: { "#web": dirname(fileURLToPath(import.meta.url)) },
-    conditions: ["rebase-source"],
-  },
   build: {
     outDir: "dist/web",
   },

@@ -1,6 +1,6 @@
 import type { ComponentProps } from "react";
-import { Button } from "#web/components/ui/button";
-import { cn } from "#web/lib/utils";
+import { Button } from "#web/components/ui/button.tsx";
+import { cn } from "#web/lib/utils.ts";
 
 export function ToolbarButton({
   className,

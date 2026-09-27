@@ -1,12 +1,12 @@
-import type { WholeFileChoice } from "@rebase/contracts";
 import { IconChevronDown } from "@tabler/icons-react";
-import { Button } from "#web/components/ui/button";
+import type { WholeFileChoice } from "#contracts/repository-conflicts/repository-conflicts.contract.ts";
+import { Button } from "#web/components/ui/button.tsx";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-} from "#web/components/ui/dropdown-menu";
+} from "#web/components/ui/dropdown-menu.tsx";
 
 const choiceLabels: Record<WholeFileChoice, string> = {
   current: "Use current",

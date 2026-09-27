@@ -1,25 +1,25 @@
+import { Effect } from "effect";
+import type { RepositoryRejected } from "#contracts/git/git-failures.contract.ts";
 import type {
   BranchCommitSummary,
   DeleteRepositoryBranch,
   RepositoryBranchDeleted,
   RepositoryBranchesOperationFailure,
-  RepositoryRejected,
-} from "@rebase/contracts";
-import { Effect } from "effect";
+} from "#contracts/repository-refs/repository-branches.contract.ts";
 import {
   type GitCommandRunner,
   type GitFailed,
   isGitRejection,
   runRepositoryGit,
-} from "#server/adapters/local-git/git-commands";
-import { branchWriteFailed } from "#server/features/repository-refs/git/branches/branch-failures";
+} from "#server/adapters/local-git/git-commands.ts";
+import { branchWriteFailed } from "#server/features/repository-refs/git/branches/branch-failures.ts";
 import {
   branchRef,
   requireBranchTarget,
   worktreeHolding,
-} from "#server/features/repository-refs/git/branches/branch-git";
-import { refCommand } from "#server/features/repository-refs/git/ref-git";
-import type { RepositoryAccess } from "#server/repository/repository-access";
+} from "#server/features/repository-refs/git/branches/branch-git.ts";
+import { refCommand } from "#server/features/repository-refs/git/ref-git.ts";
+import type { RepositoryAccess } from "#server/repository/repository-access.ts";
 
 const listedCommits = 20;
 const pushCommand = { literalPathspecs: false, timeoutMilliseconds: 120_000 };

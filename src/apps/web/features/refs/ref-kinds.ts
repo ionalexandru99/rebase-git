@@ -1,10 +1,10 @@
 import type {
   BranchUpstreamTarget,
   RepositoryBranchesApi,
-  RepositoryTagsApi,
-} from "@rebase/contracts";
-import { describeFailure } from "#web/platform/query/request-failure";
-import type { CommandFailure } from "#web/platform/query/use-command";
+} from "#contracts/repository-refs/repository-branches.contract.ts";
+import type { RepositoryTagsApi } from "#contracts/repository-refs/repository-tags.contract.ts";
+import { describeFailure } from "#web/platform/query/request-failure.ts";
+import type { CommandFailure } from "#web/platform/query/use-command.ts";
 
 export type RefKind = "branch" | "tag";
 

@@ -1,18 +1,18 @@
 import { useState } from "react";
-import { Button } from "#web/components/ui/button";
-import { Input } from "#web/components/ui/input";
+import { Button } from "#web/components/ui/button.tsx";
+import { Input } from "#web/components/ui/input.tsx";
 import {
   ChangeFileSection,
   type ChangeFileSectionView,
-} from "#web/features/working-changes/components/change-file-section";
+} from "#web/features/working-changes/components/change-file-section.tsx";
 import {
   ConflictFileSection,
   type ConflictFileSectionView,
-} from "#web/features/working-changes/conflicts/components/conflict-file-section";
+} from "#web/features/working-changes/conflicts/components/conflict-file-section.tsx";
 import type {
   ChangeAction,
   WorkingChangesView,
-} from "#web/features/working-changes/hooks/use-working-changes-view";
+} from "#web/features/working-changes/hooks/use-working-changes-view.ts";
 
 type FileTreeView = ChangeFileSectionView &
   ConflictFileSectionView &

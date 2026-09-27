@@ -1,11 +1,11 @@
-import { route } from "@rebase/contracts/environment-connection/environment-route.contract";
-import { IsoDate } from "@rebase/contracts/environment-connection/iso-date.contract";
-import { RepositoryRejected } from "@rebase/contracts/git/git-failures.contract";
+import { Schema } from "effect";
+import { route } from "#contracts/environment-connection/environment-route.contract.ts";
+import { IsoDate } from "#contracts/environment-connection/iso-date.contract.ts";
+import { RepositoryRejected } from "#contracts/git/git-failures.contract.ts";
 import {
   RepositoryId,
   RepositoryPath,
-} from "@rebase/contracts/git/git-values.contract";
-import { Schema } from "effect";
+} from "#contracts/git/git-values.contract.ts";
 
 const RepositoryName = Schema.String.check(
   Schema.isMinLength(1),

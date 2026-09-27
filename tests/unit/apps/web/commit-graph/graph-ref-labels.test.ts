@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vite-plus/test";
-import { graphRefLabels } from "#web/features/commit-graph/layout/graph-ref-labels";
+import { graphRefLabels } from "#web/features/commit-graph/components/commit-ref-labels.tsx";
 import {
   appendCommitLanes,
   createCommitLaneCheckpoint,
-} from "#web/features/repository-history/commit-lanes";
+} from "#web/features/repository-history/commit-lanes.ts";
 
 describe("graph ref visibility", () => {
   it("shows only scoped branches ahead of local history and all refs within it", () => {

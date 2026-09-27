@@ -1,16 +1,19 @@
+import { useState } from "react";
 import type {
   OperationAction,
   OperationKind,
   OperationScope,
   RepositoryOperation,
   RepositoryOperationsApi,
-} from "@rebase/contracts";
-import { useState } from "react";
-import { useOperationAction } from "#web/features/operation-recovery/hooks/use-operation";
-import { useWorktreeOperation } from "#web/features/operation-recovery/hooks/use-operation-status";
-import { useRepositoryScope } from "#web/platform/query/repository-scope";
-import { describeFailure } from "#web/platform/query/request-failure";
-import type { Command, CommandResult } from "#web/platform/query/use-command";
+} from "#contracts/repository-operations/repository-operations.contract.ts";
+import { useOperationAction } from "#web/features/operation-recovery/hooks/use-operation.ts";
+import { useWorktreeOperation } from "#web/features/operation-recovery/hooks/use-operation-status.ts";
+import { useRepositoryScope } from "#web/platform/query/repository-scope.tsx";
+import { describeFailure } from "#web/platform/query/request-failure.ts";
+import type {
+  Command,
+  CommandResult,
+} from "#web/platform/query/use-command.ts";
 
 export interface OperationRecoveryState {
   readonly operation: RepositoryOperation | null;

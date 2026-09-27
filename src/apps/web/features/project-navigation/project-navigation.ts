@@ -1,4 +1,4 @@
-import type { EnvironmentAvailability } from "#web/platform/query/environment-context";
+import type { EnvironmentAvailability } from "#web/platform/query/environment-context.tsx";
 
 export interface ProjectNavigationRepository {
   readonly id: string;

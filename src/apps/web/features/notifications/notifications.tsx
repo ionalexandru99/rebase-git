@@ -1,8 +1,8 @@
 import { Toast } from "@base-ui/react/toast";
 import { IconAlertCircle, IconX } from "@tabler/icons-react";
 import { type ReactNode, useState } from "react";
-import { Button } from "#web/components/ui/button";
-import { PersistentNotificationOutlet } from "#web/features/notifications/components/persistent-notification";
+import { Button } from "#web/components/ui/button.tsx";
+import { PersistentNotificationOutlet } from "#web/features/notifications/components/persistent-notification.tsx";
 
 export function NotificationsProvider({
   children,

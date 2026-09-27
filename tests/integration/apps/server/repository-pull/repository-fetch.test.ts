@@ -1,9 +1,9 @@
 import { join } from "node:path";
-import { RepositoryPullApi } from "@rebase/contracts";
 import { Effect } from "effect";
 import { describe, expect, it } from "vite-plus/test";
-import { cloneRepository, fastImport, git } from "#tests-support/git";
-import { openTestEnvironment } from "#tests-support/server";
+import { RepositoryPullApi } from "#contracts/repository-pull/repository-pull.contract.ts";
+import { cloneRepository, fastImport, git } from "#tests-support/git.ts";
+import { openTestEnvironment } from "#tests-support/server.ts";
 
 const committer = "committer Rebase test <rebase@example.test> 0 +0000\n";
 

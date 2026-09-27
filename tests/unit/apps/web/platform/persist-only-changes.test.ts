@@ -1,8 +1,8 @@
 import { dehydrate } from "@tanstack/react-query";
 import type { Persister } from "@tanstack/react-query-persist-client";
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
-import { createEnvironmentQueryClient } from "#web/platform/query/environment-query-client";
-import { persistOnlyChanges } from "#web/platform/query/persist-only-changes";
+import { createEnvironmentQueryClient } from "#web/platform/query/environment-query.ts";
+import { persistOnlyChanges } from "#web/platform/query/environment-query-persistence.ts";
 
 afterEach(() => {
   vi.useRealTimers();

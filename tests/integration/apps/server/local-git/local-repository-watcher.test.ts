@@ -1,13 +1,13 @@
 import { mkdir, mkdtemp, rename, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { RepositoryChangeKind } from "@rebase/contracts";
 import { Effect } from "effect";
 import { describe, expect, it, onTestFinished } from "vite-plus/test";
-import { createLocalRepositoryWatcher } from "#server/adapters/local-git/local-repository-watcher";
-import { cloneRepository, fastImport, git } from "#tests-support/git";
-import { waitForObservation } from "#tests-support/observation";
-import { removeTemporaryDirectory } from "#tests-support/temporary-directory";
+import type { RepositoryChangeKind } from "#contracts/environment-connection/environment-rpc.contract.ts";
+import { createLocalRepositoryWatcher } from "#server/adapters/local-git/local-repository-watcher.ts";
+import { cloneRepository, fastImport, git } from "#tests-support/git.ts";
+import { waitForObservation } from "#tests-support/observation.ts";
+import { removeTemporaryDirectory } from "#tests-support/temporary-directory.ts";
 
 const committer = "committer Rebase test <rebase@example.test> 0 +0000\n";
 

@@ -2,7 +2,7 @@ import { Fragment } from "react";
 import {
   ContextMenuItem,
   ContextMenuSeparator,
-} from "#web/components/ui/context-menu";
+} from "#web/components/ui/context-menu.tsx";
 
 export interface Action {
   readonly id: string;

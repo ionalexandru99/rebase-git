@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vite-plus/test";
-import { createChangeDiffModel } from "#web/features/file-diff/diff-model";
+import { createChangeDiffModel } from "#web/features/file-diff/diff-model.ts";
 
 function model(before: string | null, after: string | null, patch: string) {
   return createChangeDiffModel({

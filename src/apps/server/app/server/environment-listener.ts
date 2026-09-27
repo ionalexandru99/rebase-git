@@ -1,15 +1,15 @@
 import { createServer, type Server } from "node:http";
 import { Data, Effect, FiberSet } from "effect";
-import type { EnvironmentEventPublisher } from "#server/adapters/environment-transport/environment-event-publisher";
+import type { EnvironmentEventPublisher } from "#server/adapters/environment-transport/environment-event-publisher.ts";
 import {
   createEnvironmentHttpHandler,
   type RunEnvironmentEffect,
-} from "#server/adapters/environment-transport/environment-http-handler";
-import { formatHostAddress } from "#server/adapters/environment-transport/environment-request-authorization";
-import type { EnvironmentFeatures } from "#server/adapters/environment-transport/environment-routes";
-import { attachEnvironmentSocket } from "#server/adapters/environment-transport/environment-socket";
-import { errorMessage, isFileSystemError } from "#server/error-inspection";
-import type { EnvironmentAuthorization } from "#server/features/environment-authorization/environment-authorization";
+} from "#server/adapters/environment-transport/environment-http-handler.ts";
+import { formatHostAddress } from "#server/adapters/environment-transport/environment-request-authorization.ts";
+import type { EnvironmentFeatures } from "#server/adapters/environment-transport/environment-routes.ts";
+import { attachEnvironmentSocket } from "#server/adapters/environment-transport/environment-socket.ts";
+import { errorMessage, isFileSystemError } from "#server/error-inspection.ts";
+import type { EnvironmentAuthorization } from "#server/features/environment-authorization/environment-authorization.ts";
 
 export class EnvironmentServerStartError extends Data.TaggedError(
   "EnvironmentServerStartError",

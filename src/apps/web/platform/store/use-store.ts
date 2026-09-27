@@ -1,5 +1,5 @@
 import { useMemo, useSyncExternalStore } from "react";
-import type { ReadableStore } from "#web/platform/store/store";
+import type { ReadableStore } from "#web/platform/store/store.ts";
 
 export function useStore<T>(store: ReadableStore<T>): T;
 export function useStore<T, Selected>(

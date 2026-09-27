@@ -1,4 +1,3 @@
-import type { RepositoryCommit } from "@rebase/contracts";
 import {
   createContext,
   type ReactNode,
@@ -8,11 +7,12 @@ import {
   useState,
   useSyncExternalStore,
 } from "react";
+import type { RepositoryCommit } from "#contracts/repository-history/repository-history.contract.ts";
 import {
   type AuthorAvatarModel,
   createAuthorAvatarModel,
-} from "#web/features/author-avatars/author-avatar-model";
-import type { GitHubRepository } from "#web/features/author-avatars/author-avatar-source";
+} from "#web/features/author-avatars/author-avatar-model.ts";
+import type { GitHubRepository } from "#web/features/author-avatars/author-avatar-source.ts";
 
 const AvatarContext = createContext<AuthorAvatarModel | undefined>(undefined);
 

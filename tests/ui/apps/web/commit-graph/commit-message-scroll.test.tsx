@@ -5,7 +5,7 @@ import {
   historyReader,
   mergeHistory,
   renderGraph,
-} from "#tests-ui/apps/web/commit-graph/commit-graph-fixture";
+} from "#tests-support/commit-graph-fixture.tsx";
 
 describe("commit message scrolling", () => {
   it("reveals every ref without moving the graph, other messages, or metadata", async () => {

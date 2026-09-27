@@ -1,7 +1,7 @@
 import { isAbsolute } from "node:path";
 import { ipcMain, shell } from "electron";
-import { repositoryFilesystemIpc } from "#desktop/features/repository-filesystem/repository-filesystem-ipc.contract";
-import type { TrustedIpcHandler } from "#desktop/platform/renderer-trust";
+import { repositoryFilesystemIpc } from "#desktop/ipc-channels.ts";
+import type { TrustedIpcHandler } from "#desktop/platform/renderer-trust.ts";
 
 export function registerRepositoryFilesystemIpc(trusted: TrustedIpcHandler) {
   ipcMain.handle(

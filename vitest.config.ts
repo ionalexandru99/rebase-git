@@ -1,4 +1,3 @@
-import { fileURLToPath } from "node:url";
 import { playwright } from "@vitest/browser-playwright";
 import { defineConfig } from "vite-plus";
 
@@ -31,15 +30,6 @@ const browserProject = (
   optimizeDeps: {
     include: ["effect/unstable/rpc", "effect/unstable/socket"],
   },
-  resolve: {
-    alias: {
-      "#tests-support": fileURLToPath(
-        new URL("./tests/support", import.meta.url),
-      ),
-      "#tests-ui": fileURLToPath(new URL("./tests/ui", import.meta.url)),
-      "#web": fileURLToPath(new URL("./src/apps/web", import.meta.url)),
-    },
-  },
   test: {
     browser: {
       enabled: true,
@@ -66,25 +56,6 @@ const browserProject = (
 });
 
 export default defineConfig({
-  resolve: {
-    alias: {
-      "#desktop": fileURLToPath(new URL("./src/apps/desktop", import.meta.url)),
-      "#server": fileURLToPath(new URL("./src/apps/server", import.meta.url)),
-      "#tests-integration": fileURLToPath(
-        new URL("./tests/integration", import.meta.url),
-      ),
-      "#tests-support": fileURLToPath(
-        new URL("./tests/support", import.meta.url),
-      ),
-      "#tests-ui": fileURLToPath(new URL("./tests/ui", import.meta.url)),
-      "#web": fileURLToPath(new URL("./src/apps/web", import.meta.url)),
-    },
-  },
-  ssr: {
-    resolve: {
-      conditions: ["rebase-source", "import", "default"],
-    },
-  },
   test: {
     attachmentsDir: "tests/.artifacts/vitest",
     projects: [

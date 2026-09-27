@@ -1,14 +1,14 @@
 import { describe, expect, it, vi } from "vite-plus/test";
 import { page, userEvent } from "vite-plus/test/browser";
 import { render } from "vitest-browser-react";
-import type { HistoryCacheAction } from "#web/features/history-storage/use-history-cache-management";
+import type { HistoryCacheAction } from "#web/features/history-storage/use-history-cache-management.ts";
 import type {
   HistorySnapshot,
   HistoryStorage,
-} from "#web/features/repository-history/history-worker-protocol";
-import type { RepositoryHistory } from "#web/features/repository-history/repository-history";
-import { RepositoryCacheSettings } from "#web/features/repository-settings/components/repository-cache-settings";
-import { createStore } from "#web/platform/store/store";
+} from "#web/features/repository-history/history-worker-protocol.ts";
+import type { RepositoryHistory } from "#web/features/repository-history/repository-history.ts";
+import { RepositoryCacheSettings } from "#web/features/repository-settings/components/repository-cache-settings.tsx";
+import { createStore } from "#web/platform/store/store.ts";
 
 const identity = {
   environmentId: "environment-1",

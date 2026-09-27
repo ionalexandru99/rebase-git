@@ -1,15 +1,15 @@
 import { describe, expect, it } from "vite-plus/test";
-import { gitFailed } from "#server/adapters/local-git/git-commands";
+import { gitFailed } from "#server/adapters/local-git/git-commands.ts";
+import { checkoutFailure } from "#server/features/repository-refs/git/checkout-repository-ref.ts";
 import {
   localBranchFromRecord,
   parseForEachRef,
   remoteBranchFromRecord,
   remoteDefaultBranchFromRecord,
   tagFromRecord,
-} from "#server/features/repository-refs/git/parse-for-each-ref";
-import { fitRepositoryRefs } from "#server/features/repository-refs/git/read-repository-refs";
-import { checkoutFailure } from "#server/features/repository-refs/git/repository-refs-failures";
-import { parseWorktreeList } from "#server/repository/repository-access";
+} from "#server/features/repository-refs/git/parse-for-each-ref.ts";
+import { fitRepositoryRefs } from "#server/features/repository-refs/git/read-repository-refs.ts";
+import { parseWorktreeList } from "#server/repository/repository-access.ts";
 
 const commit = "a".repeat(40);
 

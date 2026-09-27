@@ -1,15 +1,18 @@
-import type { RepositoryCommit } from "@rebase/contracts";
 import { type ReactElement, useCallback, useState } from "react";
-import { type Action, ActionMenuItems } from "#web/components/ui/action-menu";
+import type { RepositoryCommit } from "#contracts/repository-history/repository-history.contract.ts";
+import {
+  type Action,
+  ActionMenuItems,
+} from "#web/components/ui/action-menu.tsx";
 import {
   ContextMenu,
   ContextMenuContent,
   ContextMenuTrigger,
-} from "#web/components/ui/context-menu";
-import { writeClipboardText } from "#web/features/clipboard/write-clipboard-text";
-import { createRefActions } from "#web/features/refs/ref-actions";
-import type { RepositoryHistory } from "#web/features/repository-history/repository-history";
-import { useRepositoryScope } from "#web/platform/query/repository-scope";
+} from "#web/components/ui/context-menu.tsx";
+import { writeClipboardText } from "#web/features/clipboard/write-clipboard-text.ts";
+import { createRefActions } from "#web/features/refs/ref-actions.ts";
+import type { RepositoryHistory } from "#web/features/repository-history/repository-history.ts";
+import { useRepositoryScope } from "#web/platform/query/repository-scope.tsx";
 
 interface CommitAccess {
   readonly connected: boolean;

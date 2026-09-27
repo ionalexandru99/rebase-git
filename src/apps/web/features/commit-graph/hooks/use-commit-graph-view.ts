@@ -1,7 +1,3 @@
-import type {
-  RepositoryHistoryRefTarget,
-  RepositoryRefTarget,
-} from "@rebase/contracts";
 import {
   type RefObject,
   useCallback,
@@ -10,21 +6,23 @@ import {
   useRef,
   useState,
 } from "react";
-import type { CommitGraphViewportHandle } from "#web/features/commit-graph/components/commit-graph-virtual-window";
-import { historyLabelTarget } from "#web/features/commit-graph/components/commit-ref-labels";
+import type { RepositoryHistoryRefTarget } from "#contracts/repository-history/repository-history.contract.ts";
+import type { RepositoryRefTarget } from "#contracts/repository-refs/repository-refs.contract.ts";
+import type { CommitGraphViewportHandle } from "#web/features/commit-graph/components/commit-graph-virtual-window.tsx";
+import { historyLabelTarget } from "#web/features/commit-graph/components/commit-ref-labels.tsx";
 import {
   type CommitGraphSelectionMode,
   useCommitGraphSelection,
-} from "#web/features/commit-graph/hooks/use-commit-graph-selection";
-import { useGraphRows } from "#web/features/commit-graph/hooks/use-graph-rows";
-import { useRepositoryHistoryOrder } from "#web/features/repository-history/history-order";
-import type { HistoryScopeQuery } from "#web/features/repository-history/history-view";
+} from "#web/features/commit-graph/hooks/use-commit-graph-selection.ts";
+import { useGraphRows } from "#web/features/commit-graph/hooks/use-graph-rows.ts";
+import { useRepositoryHistoryOrder } from "#web/features/repository-history/history-order.ts";
+import type { HistoryScopeQuery } from "#web/features/repository-history/history-view.ts";
 import {
   emptyHistorySnapshot,
   type RepositoryHistory,
-} from "#web/features/repository-history/repository-history";
-import { createStore } from "#web/platform/store/store";
-import { useStore } from "#web/platform/store/use-store";
+} from "#web/features/repository-history/repository-history.ts";
+import { createStore } from "#web/platform/store/store.ts";
+import { useStore } from "#web/platform/store/use-store.ts";
 
 const emptyHistory = createStore(emptyHistorySnapshot);
 

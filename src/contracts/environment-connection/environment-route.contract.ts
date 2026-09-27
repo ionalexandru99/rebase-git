@@ -1,6 +1,6 @@
-import { RepositoryRejected } from "@rebase/contracts/git/git-failures.contract";
 import { Schema } from "effect";
 import { Rpc } from "effect/unstable/rpc";
+import { RepositoryRejected } from "#contracts/git/git-failures.contract.ts";
 
 export interface EnvironmentRoute extends Rpc.Any {
   readonly payloadSchema: Schema.Top;

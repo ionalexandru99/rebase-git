@@ -1,21 +1,21 @@
+import { Effect } from "effect";
+import { repositoryRejected } from "#contracts/git/git-failures.contract.ts";
 import {
   type ExecuteOperation,
   type OperationFailure,
   type RepositoryOperation,
   RepositoryOperationsApi,
-  repositoryRejected,
-} from "@rebase/contracts";
-import { Effect } from "effect";
-import type { EnvironmentFeature } from "#server/adapters/environment-transport/environment-routes";
+} from "#contracts/repository-operations/repository-operations.contract.ts";
+import type { EnvironmentFeature } from "#server/adapters/environment-transport/environment-routes.ts";
 import {
   type RepositoryDependencies,
   repositoryRoutes,
-} from "#server/adapters/environment-transport/environment-routes";
+} from "#server/adapters/environment-transport/environment-routes.ts";
 import type {
   GitCommandOutput,
   GitCommandRunner,
-} from "#server/adapters/local-git/git-commands";
-import type { RepositoryCoordination } from "#server/repository/repository-coordination";
+} from "#server/adapters/local-git/git-commands.ts";
+import type { RepositoryCoordination } from "#server/repository/repository-coordination.ts";
 
 export function repositoryOperationsFeature(
   dependencies: RepositoryDependencies,

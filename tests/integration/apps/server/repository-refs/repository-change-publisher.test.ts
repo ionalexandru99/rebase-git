@@ -1,17 +1,17 @@
 import { mkdtemp, realpath } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { RepositoryChangeKind } from "@rebase/contracts";
 import { Effect, Queue } from "effect";
 import { TestClock } from "effect/testing";
 import { afterEach, expect, it } from "vite-plus/test";
-import { createEnvironmentEventPublisher } from "#server/adapters/environment-transport/environment-event-publisher";
-import { createLocalGitCommandRunner } from "#server/adapters/local-git/git-commands";
-import type { RepositoryWatcher } from "#server/adapters/local-git/local-repository-watcher";
-import { acquireRepositoryChangePublisher } from "#server/features/repository-refs/repository-change-publisher";
-import { catalogEntry } from "#tests-support/fixtures";
-import { createRepository } from "#tests-support/git";
-import { removeTemporaryDirectory } from "#tests-support/temporary-directory";
+import type { RepositoryChangeKind } from "#contracts/environment-connection/environment-rpc.contract.ts";
+import { createEnvironmentEventPublisher } from "#server/adapters/environment-transport/environment-event-publisher.ts";
+import { createLocalGitCommandRunner } from "#server/adapters/local-git/git-commands.ts";
+import type { RepositoryWatcher } from "#server/adapters/local-git/local-repository-watcher.ts";
+import { acquireRepositoryChangePublisher } from "#server/features/repository-refs/repository-change-publisher.ts";
+import { catalogEntry } from "#tests-support/fixtures.ts";
+import { createRepository } from "#tests-support/git.ts";
+import { removeTemporaryDirectory } from "#tests-support/temporary-directory.ts";
 
 const directories: string[] = [];
 

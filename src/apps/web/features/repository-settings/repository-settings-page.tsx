@@ -1,23 +1,29 @@
-import { RepositoryCatalogApi } from "@rebase/contracts";
 import { useQueryClient } from "@tanstack/react-query";
-import { useEffect, useMemo, useRef } from "react";
-import { SettingsSection } from "#web/components/ui/settings-layout";
-import { writeClipboardText } from "#web/features/clipboard/write-clipboard-text";
-import { localEnvironment } from "#web/features/project-navigation/local-environment";
-import { forgetRepositoryRefs } from "#web/features/refs/repository-refs";
-import { RepositoryFetchSettings } from "#web/features/remote-sync/fetch-settings";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { RepositoryCatalogApi } from "#contracts/repository-catalog/repository-catalog.contract.ts";
+import {
+  SettingsRow,
+  SettingsSection,
+} from "#web/components/ui/settings-layout.tsx";
+import { writeClipboardText } from "#web/features/clipboard/write-clipboard-text.ts";
+import { localEnvironment } from "#web/features/project-navigation/local-environment.ts";
+import { forgetRepositoryRefs } from "#web/features/refs/repository-refs.ts";
+import { RepositoryFetchSettings } from "#web/features/remote-sync/fetch-settings.tsx";
 import {
   catalogWithout,
   useCatalogRepository,
-} from "#web/features/repository-catalog/use-repository-catalog";
-import type { RepositoryHistoryIdentity } from "#web/features/repository-history/history-order";
-import type { RepositoryHistory } from "#web/features/repository-history/repository-history";
-import { RepositoryCacheSettings } from "#web/features/repository-settings/components/repository-cache-settings";
-import { RepositoryDetailsSettings } from "#web/features/repository-settings/components/repository-details-settings";
-import { RepositoryOrderSettings } from "#web/features/repository-settings/components/repository-order-settings";
-import { useEnvironment } from "#web/platform/query/environment-context";
-import { describeFailure } from "#web/platform/query/request-failure";
-import { useCommand } from "#web/platform/query/use-command";
+} from "#web/features/repository-catalog/use-repository-catalog.ts";
+import {
+  type RepositoryHistoryIdentity,
+  saveRepositoryHistoryOrder,
+  useRepositoryHistoryOrder,
+} from "#web/features/repository-history/history-order.ts";
+import type { RepositoryHistory } from "#web/features/repository-history/repository-history.ts";
+import { RepositoryCacheSettings } from "#web/features/repository-settings/components/repository-cache-settings.tsx";
+import { RepositoryDetailsSettings } from "#web/features/repository-settings/components/repository-details-settings.tsx";
+import { useEnvironment } from "#web/platform/query/environment-context.tsx";
+import { describeFailure } from "#web/platform/query/request-failure.ts";
+import { useCommand } from "#web/platform/query/use-command.ts";
 
 export function RepositorySettingsPage({
   repositoryId,
@@ -152,6 +158,57 @@ function RepositoryHistorySettings({
           }
         />
       </SettingsSection>
+    </>
+  );
+}
+
+function RepositoryOrderSettings({
+  identity,
+}: {
+  readonly identity: RepositoryHistoryIdentity;
+}) {
+  const descriptionId = useId();
+  const order = useRepositoryHistoryOrder(
+    identity.environmentId,
+    identity.repositoryId,
+  );
+  const [error, setError] = useState(false);
+  return (
+    <>
+      <SettingsRow
+        title="History ordering"
+        description="Saved for this repository in this client."
+        descriptionId={descriptionId}
+      >
+        <select
+          aria-label="History ordering"
+          aria-describedby={descriptionId}
+          className="h-8 rounded-md border border-input bg-background px-3 text-sm"
+          value={order}
+          onChange={(event) => {
+            try {
+              saveRepositoryHistoryOrder(
+                identity,
+                event.currentTarget.value === "chronological"
+                  ? "chronological"
+                  : "topological",
+              );
+              setError(false);
+            } catch {
+              setError(true);
+            }
+          }}
+        >
+          <option value="topological">Topological</option>
+          <option value="chronological">Chronological</option>
+        </select>
+      </SettingsRow>
+      {error ? (
+        <p role="alert" className="text-sm text-destructive">
+          Could not save history ordering. Check this client's storage and try
+          again.
+        </p>
+      ) : null}
     </>
   );
 }

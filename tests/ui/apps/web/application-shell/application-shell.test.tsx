@@ -1,29 +1,34 @@
+import { describe, expect, it, vi } from "vite-plus/test";
+import { page, userEvent } from "vite-plus/test/browser";
 import {
   type EnvironmentDirectory,
   EnvironmentFilesystemApi,
+} from "#contracts/environment-filesystem/environment-filesystem.contract.ts";
+import {
   RepositoryCatalogApi,
   type RepositoryCatalogEntry,
-  type RepositoryCommit,
-  RepositoryRefsApi,
-} from "@rebase/contracts";
-import { describe, expect, it, vi } from "vite-plus/test";
-import { page, userEvent } from "vite-plus/test/browser";
-import { catalogEntry, repositoryRefs } from "#tests-support/fixtures";
-import { storeHistory } from "#tests-support/history";
-import { repositoryScope } from "#tests-ui/apps/web/repository-scope/repository-scope-fixture";
+} from "#contracts/repository-catalog/repository-catalog.contract.ts";
+import type { RepositoryCommit } from "#contracts/repository-history/repository-history.contract.ts";
+import { RepositoryRefsApi } from "#contracts/repository-refs/repository-refs.contract.ts";
 import {
   fakeRequests,
   idleOperation,
   rejected,
   respond,
   unanswered,
-} from "#tests-ui/runtime/fake-requests";
-import { render } from "#tests-ui/runtime/render";
-import type { LocalEnvironmentSession } from "#web/app/environment/local-environment-session";
-import { ApplicationShell } from "#web/app/shell/application-shell";
-import { RepositoryWorkspace } from "#web/app/workspace/repository-workspace";
-import { NotificationsProvider } from "#web/features/notifications/notifications";
-import { RepositoryScopeProvider } from "#web/platform/query/repository-scope";
+} from "#tests-support/fake-requests.ts";
+import {
+  catalogEntry,
+  repositoryRefs,
+  repositoryScope,
+} from "#tests-support/fixtures.ts";
+import { storeHistory } from "#tests-support/history.ts";
+import { render } from "#tests-support/render.tsx";
+import type { LocalEnvironmentSession } from "#web/app/environment/local-environment-session.ts";
+import { ApplicationShell } from "#web/app/shell/application-shell.tsx";
+import { RepositoryWorkspace } from "#web/app/workspace/repository-workspace.tsx";
+import { NotificationsProvider } from "#web/features/notifications/notifications.tsx";
+import { RepositoryScopeProvider } from "#web/platform/query/repository-scope.tsx";
 
 describe("application shell", () => {
   it("opens repository settings from the list without opening its graph", async () => {

@@ -1,7 +1,7 @@
 import type {
   OpenProjectEnvironment,
   OpenProjectRepository,
-} from "#web/features/open-project/open-project-model";
+} from "#web/features/open-project/open-project-model.ts";
 
 const repositoryNameCollator = new Intl.Collator(undefined, {
   numeric: true,

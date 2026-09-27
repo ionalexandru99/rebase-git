@@ -2,12 +2,14 @@ import type {
   EnvironmentDirectoryEntry,
   EnvironmentDirectoryRejected,
   EnvironmentFilesystemApi,
+} from "#contracts/environment-filesystem/environment-filesystem.contract.ts";
+import type {
   RepositoryCatalogApi,
   RepositoryPathRejected,
-} from "@rebase/contracts";
-import type { QueryFailure } from "#web/platform/query/environment-query";
-import { describeFailure } from "#web/platform/query/request-failure";
-import type { CommandFailure } from "#web/platform/query/use-command";
+} from "#contracts/repository-catalog/repository-catalog.contract.ts";
+import type { QueryFailure } from "#web/platform/query/environment-query.ts";
+import { describeFailure } from "#web/platform/query/request-failure.ts";
+import type { CommandFailure } from "#web/platform/query/use-command.ts";
 
 export function filterDirectoryEntries(
   entries: readonly EnvironmentDirectoryEntry[],

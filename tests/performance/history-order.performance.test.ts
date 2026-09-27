@@ -1,7 +1,7 @@
 import { resolve } from "node:path";
 import { test } from "@playwright/test";
 import { createServer } from "vite";
-import { assertTimingBudget } from "#tests-performance/timing-budget";
+import { assertTimingBudget } from "#tests-performance/timing-budget.ts";
 
 test("cached order changes on 250,000 merge-heavy commits", async ({
   page,
@@ -26,12 +26,12 @@ test("cached order changes on 250,000 merge-heavy commits", async ({
         "/features/repository-history/worker/history-replica.ts";
       const {
         HistoryReplica,
-      }: typeof import("#web/features/repository-history/worker/history-replica") =
+      }: typeof import("#web/features/repository-history/worker/history-replica.ts") =
         await import(replicaPath);
       const historyPath = "/features/repository-history/repository-history.ts";
       const {
         openRepositoryHistory,
-      }: typeof import("#web/features/repository-history/repository-history") =
+      }: typeof import("#web/features/repository-history/repository-history.ts") =
         await import(historyPath);
       const environmentId = crypto.randomUUID();
       const repositoryId = crypto.randomUUID();
@@ -73,7 +73,7 @@ test("cached order changes on 250,000 merge-heavy commits", async ({
         },
         () => true,
       );
-      const socket: import("#web/platform/environment/environment-connection").EnvironmentSocket =
+      const socket: import("#web/platform/environment/environment-connection.ts").EnvironmentSocket =
         {
           environmentId,
           synchronizeHistory: async (_request, accept) => {

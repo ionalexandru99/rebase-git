@@ -1,15 +1,17 @@
 import { PersistQueryClientProvider } from "@tanstack/react-query-persist-client";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
-import { createBrowserLocalEnvironmentSession } from "#web/app/environment/browser-local-environment-session";
-import { readDesktopHostBridge } from "#web/app/environment/desktop-host-bridge";
-import { ApplicationShell } from "#web/app/shell/application-shell";
-import { NotificationsProvider } from "#web/features/notifications/notifications";
-import { connectRepositoryHistory } from "#web/features/repository-history/repository-history";
-import { createEnvironmentInvalidation } from "#web/platform/query/environment-invalidation";
-import { createEnvironmentQueryClient } from "#web/platform/query/environment-query-client";
-import { createEnvironmentQueryPersistence } from "#web/platform/query/environment-query-persistence";
-import "@rebase/web/styles.css";
+import {
+  createBrowserLocalEnvironmentSession,
+  readDesktopHostBridge,
+} from "#web/app/environment/browser-local-environment-session.ts";
+import { ApplicationShell } from "#web/app/shell/application-shell.tsx";
+import { NotificationsProvider } from "#web/features/notifications/notifications.tsx";
+import { connectRepositoryHistory } from "#web/features/repository-history/repository-history.ts";
+import { createEnvironmentInvalidation } from "#web/platform/query/environment-invalidation.ts";
+import { createEnvironmentQueryClient } from "#web/platform/query/environment-query.ts";
+import { createEnvironmentQueryPersistence } from "#web/platform/query/environment-query-persistence.ts";
+import "#web/styles.css";
 
 const rootElement = document.getElementById("root");
 

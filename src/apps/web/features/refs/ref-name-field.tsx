@@ -1,8 +1,8 @@
-import type { RepositoryRefs } from "@rebase/contracts";
 import { useId, useLayoutEffect, useRef, useState } from "react";
-import { Input } from "#web/components/ui/input";
-import type { RefEditing } from "#web/features/refs/ref-editing";
-import { refKinds, refNameProblem } from "#web/features/refs/ref-kinds";
+import type { RepositoryRefs } from "#contracts/repository-refs/repository-refs.contract.ts";
+import { Input } from "#web/components/ui/input.tsx";
+import type { RefEditing } from "#web/features/refs/ref-editing.ts";
+import { refKinds, refNameProblem } from "#web/features/refs/ref-kinds.ts";
 
 function RefNameField({
   initialName,

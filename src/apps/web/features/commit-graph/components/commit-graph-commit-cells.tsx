@@ -1,10 +1,10 @@
+import { memo, type ReactNode } from "react";
 import type {
   RepositoryCommit,
   RepositoryHistoryRefTarget,
-} from "@rebase/contracts";
-import { memo, type ReactNode } from "react";
-import { AuthorAvatar } from "#web/features/author-avatars/author-avatar";
-import { CommitMessage } from "#web/features/commit-graph/components/commit-message";
+} from "#contracts/repository-history/repository-history.contract.ts";
+import { AuthorAvatar } from "#web/features/author-avatars/author-avatar.tsx";
+import { CommitMessage } from "#web/features/commit-graph/components/commit-message.tsx";
 
 export const CommitGraphCommitCells = memo(
   function CommitGraphCommitCells({
