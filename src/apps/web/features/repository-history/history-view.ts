@@ -1,12 +1,12 @@
 import type { RepositoryHistoryRefTarget } from "@rebase/contracts";
-import type { CommitLaneSeed } from "#web/features/commit-graph/layout/commit-lane-model";
 import {
   appendCommitLanes,
   type CommitLaneCheckpoint,
   type CommitLaneRow,
+  type CommitLaneSeed,
   createCommitLaneCheckpoint,
-} from "#web/features/commit-graph/layout/commit-lanes";
-import { graphLaneSeeds } from "#web/features/commit-graph/layout/graph-colors";
+  graphLaneSeeds,
+} from "#web/features/repository-history/commit-lanes";
 import type {
   HistoryGraph,
   HistoryOrder,

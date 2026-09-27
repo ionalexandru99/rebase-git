@@ -67,6 +67,45 @@ describe("history search controls", () => {
       .toHaveBeenCalledWith(commit(21).oid, expect.any(AbortSignal));
   });
 
+  it("keeps opening a result while history changes and refreshes afterwards", async () => {
+    const reader = searchable(
+      vi.fn<Search>().mockResolvedValue(result([commit(1)])),
+    );
+    const signals: AbortSignal[] = [];
+    let finish = () => {};
+    const onNavigate = vi.fn((_oid: string, signal: AbortSignal) => {
+      signals.push(signal);
+      return new Promise<void>((resolve) => {
+        finish = resolve;
+      });
+    });
+    const screen = await render(
+      <RepositoryHistorySearchControls
+        history={reader}
+        snapshot={snapshot}
+        onNavigate={onNavigate}
+      />,
+    );
+    await page.getByRole("searchbox").fill("history");
+    await page
+      .getByRole("button", { name: /Repair shallow history 1/ })
+      .click();
+    await expect.poll(() => onNavigate).toHaveBeenCalledOnce();
+
+    await screen.rerender(
+      <RepositoryHistorySearchControls
+        history={reader}
+        snapshot={{ ...snapshot, revision: 2 }}
+        onNavigate={onNavigate}
+      />,
+    );
+
+    expect(signals.map((signal) => signal.aborted)).toEqual([false]);
+    expect(reader.search).toHaveBeenCalledOnce();
+    await act(async () => finish());
+    await expect.poll(() => reader.search).toHaveBeenCalledTimes(2);
+  });
+
   it("keeps one request in Strict Mode and transfers the query on repository switching", async () => {
     const signals: AbortSignal[] = [];
     const search = vi.fn<Search>((_query, signal) => {

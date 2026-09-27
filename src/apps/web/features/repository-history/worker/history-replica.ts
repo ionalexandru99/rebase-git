@@ -47,6 +47,7 @@ export class HistoryReplica {
   private revision = 0;
   private views = new Map<string, HistoryView>();
   private paused = false;
+  private closed = false;
   private loading: Promise<void>;
   private running: AbortController | undefined;
   private task: Promise<void> = Promise.resolve();
@@ -87,6 +88,7 @@ export class HistoryReplica {
   }
 
   synchronize(sync: HistorySync) {
+    if (this.paused || this.closed) return;
     this.requested = sync;
     if (this.running !== undefined) return;
     const controller = new AbortController();
@@ -106,15 +108,14 @@ export class HistoryReplica {
   }
 
   offline() {
-    if (this.running !== undefined) return;
-    this.fail({ _tag: "Offline" });
+    if (this.paused || this.closed || this.running !== undefined) return;
+    this.failure = { _tag: "Offline" };
+    this.announce();
   }
 
   close() {
-    this.running?.abort();
-    this.running = undefined;
-    this.requested = undefined;
-    return this.task;
+    this.closed = true;
+    return this.stop();
   }
 
   async rows(
@@ -195,13 +196,13 @@ export class HistoryReplica {
   }
 
   async clear(remove: boolean) {
-    await this.close();
+    this.paused = true;
+    await this.stop();
     await this.loading;
     await clearRepository(this.environmentId, this.repositoryId, remove);
     this.reset();
-    this.paused = true;
     this.record = undefined;
-    this.bump();
+    this.changed();
   }
 
   async rebuild() {
@@ -232,7 +233,7 @@ export class HistoryReplica {
     } catch (error) {
       this.failure = historyFailure(error);
     }
-    this.bump();
+    this.changed();
   }
 
   private async readGraph(repository: number) {
@@ -249,9 +250,9 @@ export class HistoryReplica {
 
   private async synchronizeOnce(sync: HistorySync, signal: AbortSignal) {
     const current = this.record;
-    if (this.paused || current === undefined) return;
+    if (this.paused || this.closed || current === undefined) return;
     this.synchronization = "syncing";
-    this.bump();
+    this.announce();
     let record: StoredRepository = {
       ...current,
       minimumEpoch: current.minimumEpoch - 1,
@@ -271,8 +272,8 @@ export class HistoryReplica {
           if (signal.aborted) throw signal.reason;
           if (update._tag === "RepositoryHistoryTips") {
             tips = update;
-            this.refTargets = update.refTargets;
-            this.bump();
+            if (current.tips === undefined)
+              this.applyRefTargets(update.refTargets);
             return;
           }
           const stored = update.commits.map((commit) => ({
@@ -295,7 +296,7 @@ export class HistoryReplica {
           this.record = record;
           for (const { commit, order } of stored)
             this.graph.add(commit, epoch * epochSize + order);
-          this.bump();
+          if (stored.length > 0) this.changed();
         },
         signal,
       );
@@ -305,19 +306,34 @@ export class HistoryReplica {
       await updateRepository(record);
       if (signal.aborted) return;
       this.record = record;
-      this.refTargets = tips.refTargets;
       this.synchronization = "complete";
       this.failure = undefined;
       if (order > 0)
         void writeTopology(record.id, this.graph.topology()).catch(
           () => undefined,
         );
+      this.applyRefTargets(tips.refTargets);
     } catch (error) {
       if (signal.aborted) return;
       this.failure = historyFailure(error);
-      this.synchronization = this.record?.tips === undefined ? "idle" : "stale";
+      this.synchronization = this.graph.size > 0 ? "stale" : "idle";
+      this.announce();
     }
-    this.bump();
+  }
+
+  private stop() {
+    this.running?.abort();
+    this.requested = undefined;
+    return this.task;
+  }
+
+  private applyRefTargets(refTargets: readonly RepositoryHistoryRefTarget[]) {
+    if (sameRefTargets(this.refTargets, refTargets)) {
+      this.announce();
+      return;
+    }
+    this.refTargets = refTargets;
+    this.changed();
   }
 
   private async view(scope: HistoryScopeQuery) {
@@ -342,11 +358,6 @@ export class HistoryReplica {
     return view;
   }
 
-  private fail(failure: HistoryFailure) {
-    this.failure = failure;
-    this.bump();
-  }
-
   private reset() {
     this.graph = new HistoryGraph();
     this.refTargets = [];
@@ -354,11 +365,33 @@ export class HistoryReplica {
     this.failure = undefined;
   }
 
-  private bump() {
+  private changed() {
     this.revision += 1;
     this.views.clear();
+    this.announce();
+  }
+
+  private announce() {
     this.publish(this.snapshot());
   }
+}
+
+function sameRefTargets(
+  left: readonly RepositoryHistoryRefTarget[],
+  right: readonly RepositoryHistoryRefTarget[],
+) {
+  return (
+    left.length === right.length &&
+    left.every((ref, index) => {
+      const other = right[index];
+      return (
+        other !== undefined &&
+        other.type === ref.type &&
+        other.name === ref.name &&
+        other.oid === ref.oid
+      );
+    })
+  );
 }
 
 export function historyFailure(error: unknown): HistoryFailure {

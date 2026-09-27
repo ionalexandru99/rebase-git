@@ -122,14 +122,12 @@ export function environmentRequests(
 
 export interface EnvironmentSocket {
   readonly environmentId: string;
-  readonly requests: EnvironmentRequests;
   readonly synchronizeHistory: (
     request: SynchronizeRepositoryHistory,
     accept: (update: RepositoryHistoryUpdate) => Promise<void>,
     signal: AbortSignal,
   ) => Promise<void>;
   readonly closed: Promise<void>;
-  readonly close: () => void;
 }
 
 export async function openEnvironmentSocket(
@@ -151,7 +149,6 @@ export async function openEnvironmentSocket(
   const { environmentId, rpc, closed } = exit.value;
   return {
     environmentId,
-    requests: environmentRequests(rpc),
     synchronizeHistory: async (request, accept, signal) => {
       let rejected: { readonly error: unknown } | undefined;
       const result = await Effect.runPromiseExit(
@@ -172,7 +169,6 @@ export async function openEnvironmentSocket(
       if (Exit.isFailure(result)) throw requestFailure(result.cause);
     },
     closed: Effect.runPromise(closed).then(() => undefined),
-    close,
   };
 }
 

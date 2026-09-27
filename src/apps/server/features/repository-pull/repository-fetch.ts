@@ -56,7 +56,7 @@ export function acquireRepositoryFetch({
         : { failure: repository.failure }),
     });
     const publish = (repository: FetchedRepository) =>
-      events.publishChanged([...repository.repositoryIds], "Refs");
+      events.publishChanged([...repository.repositoryIds], "Fetch");
 
     const schedule = (repository: FetchedRepository): Effect.Effect<void> =>
       Effect.gen(function* () {

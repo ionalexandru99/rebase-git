@@ -9,6 +9,7 @@ import type {
   HistoryWorkerMessage,
 } from "#web/features/repository-history/history-worker-protocol";
 import type { EnvironmentAccess } from "#web/platform/environment/environment-connection";
+import { describeFailure } from "#web/platform/query/request-failure";
 import { createStore, type ReadableStore } from "#web/platform/store/store";
 
 export interface RepositoryHistory extends ReadableStore<HistorySnapshot> {
@@ -177,10 +178,7 @@ export function describeHistoryFailure(failure: HistoryFailure) {
     case "StorageUnavailable":
       return "This browser cannot store repository history.";
     case "Rejected":
-      return failure.failure._tag === "RepositoryMissing"
-        ? "The repository is no longer known by this Environment."
-        : failure.failure.detail?.trim() ||
-            "Git could not read commit history.";
+      return describeFailure(failure);
   }
 }
 

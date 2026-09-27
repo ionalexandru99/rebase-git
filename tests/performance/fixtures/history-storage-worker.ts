@@ -98,14 +98,10 @@ function fixture(count: number, disconnected = false) {
   );
   const socket: EnvironmentSocket = {
     environmentId,
-    requests: async () => {
-      throw new Error("Offline benchmark");
-    },
     synchronizeHistory: async (_request, accept) => {
       for (const update of updates) await accept(update);
     },
     closed: new Promise(() => {}),
-    close: () => {},
   };
   return {
     repositoryId,

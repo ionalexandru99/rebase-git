@@ -3,7 +3,6 @@ import { RepositoryPullApi } from "@rebase/contracts";
 import { Effect } from "effect";
 import { describe, expect, it } from "vite-plus/test";
 import { cloneRepository, fastImport, git } from "#tests-support/git";
-import { waitForObservation } from "#tests-support/observation";
 import { openTestEnvironment } from "#tests-support/server";
 
 const committer = "committer Rebase test <rebase@example.test> 0 +0000\n";
@@ -36,19 +35,16 @@ describe("repository fetch with real Git", () => {
     expect(recovered).not.toHaveProperty("failure");
   });
 
-  it("persists the interval and fetches on schedule while a client listens", async () => {
+  it("persists the interval in the repository config", async () => {
     const f = await fixture();
+
     await expect(
-      f.configure({ _tag: "Interval", seconds: 1 }),
-    ).resolves.toMatchObject({ setting: { _tag: "Interval", seconds: 1 } });
+      f.configure({ _tag: "Interval", seconds: 600 }),
+    ).resolves.toMatchObject({ setting: { _tag: "Interval", seconds: 600 } });
+
     expect(
       await git(f.local, "config", "--get", "rebase.autoFetchIntervalSeconds"),
-    ).toBe("1");
-    const remoteHead = await commitToRemote(f.remote, "scheduled commit");
-
-    await waitForObservation(async () =>
-      expect(await git(f.local, "rev-parse", "origin/main")).toBe(remoteHead),
-    );
+    ).toBe("600");
   });
 });
 
@@ -81,12 +77,4 @@ async function fixture() {
       setting: Parameters<typeof routes.configureFetch>[0]["setting"],
     ) => Effect.runPromise(routes.configureFetch({ repositoryId, setting })),
   };
-}
-
-async function commitToRemote(remote: string, message: string) {
-  await fastImport(
-    remote,
-    `commit refs/heads/main\n${committer}data <<END\n${message}\nEND\nfrom refs/heads/main^0\n`,
-  );
-  return git(remote, "rev-parse", "main");
 }

@@ -21,7 +21,6 @@ const overscanRows = 6;
 const emptyViewport = { width: 0, height: 0 };
 
 export interface CommitGraphViewportHandle {
-  readonly getScrollOffset: () => number;
   readonly scrollToIndex: (index: number) => void;
 }
 
@@ -116,7 +115,6 @@ export function CommitGraphVirtualWindow({
     [onPageSize, viewport.height],
   );
   useImperativeHandle(ref, () => ({
-    getScrollOffset: () => virtualizer.scrollOffset ?? 0,
     scrollToIndex: (index) =>
       virtualizer.scrollToIndex(index, { align: "auto" }),
   }));

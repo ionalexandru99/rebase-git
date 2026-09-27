@@ -34,6 +34,7 @@ export function useHistorySearch(
   onNavigate: (oid: string, signal: AbortSignal) => Promise<void>,
 ) {
   const [state, setState] = useState(emptySearch);
+  const navigating = state.navigating;
   const latest = useRef(state);
   const running = useRef<AbortController | undefined>(undefined);
   const selectedOid = useRef<string | undefined>(undefined);
@@ -51,9 +52,10 @@ export function useHistorySearch(
   }, []);
 
   const search = useCallback(
-    (text: string) => {
+    (text: string, keepResults = false) => {
       const signal = begin();
-      publish({ ...emptySearch, text, loading: text.trim() !== "" });
+      if (!keepResults)
+        publish({ ...emptySearch, text, loading: text.trim() !== "" });
       if (text.trim() === "") return;
       void restoreResults(history, text, selectedOid.current, signal).then(
         (page) => {
@@ -80,9 +82,16 @@ export function useHistorySearch(
     [begin, history, publish],
   );
 
+  const searched = useRef({ history, revision });
   useEffect(() => {
-    if (revision >= 0) search(latest.current.text);
-  }, [revision, search]);
+    const previous = searched.current;
+    const switched = previous.history !== history;
+    if (!switched && (navigating || previous.revision === revision)) return;
+    searched.current = { history, revision };
+    const { text } = latest.current;
+    if (switched) search(text);
+    else if (text.trim() !== "") search(text, true);
+  }, [history, revision, navigating, search]);
   useEffect(() => () => running.current?.abort(), []);
 
   const loadPage = async (signal: AbortSignal) => {

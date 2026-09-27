@@ -72,7 +72,7 @@ describe("repository fetch", () => {
         expect(changed).toHaveBeenCalledWith(
           expect.any(Number),
           [repositoryId],
-          "Refs",
+          "Fetch",
         );
       }),
     ));

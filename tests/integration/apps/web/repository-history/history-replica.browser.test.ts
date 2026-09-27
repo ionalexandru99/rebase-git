@@ -89,23 +89,51 @@ describe("history replica in browser storage", () => {
     expect(f.requests.at(-1)?.knownTips).toEqual([]);
     expect(await f.oids(["c1"])).toEqual(["c1"]);
   });
+
+  it("ignores a synchronization requested while the cache is being cleared", async () => {
+    const f = fixture();
+    await f.synchronize(tips(["c1"]), [historyCommit("c1", [], 1)]);
+
+    const cleared = f.replica.clear(false);
+    f.replica.synchronize({ socket: f.socket, repositoryId });
+    await cleared;
+
+    expect(f.requests).toHaveLength(1);
+    expect(await f.oids(["c1"])).toEqual([]);
+    expect(f.snapshot().status).toBe("empty");
+  });
+
+  it("keeps a moved branch on its stored tip when the synchronization fails", async () => {
+    const f = fixture();
+    const main = (oid: string) =>
+      ({ name: "main", oid, type: "branch" }) as const;
+    await f.synchronize(tips(["c1"], [main("c1")]), [
+      historyCommit("c1", [], 1),
+    ]);
+
+    await f.fail(tips(["c2"], [main("c2")]));
+
+    expect(await f.oids([main("c2")])).toEqual(["c1"]);
+    expect(f.snapshot()).toMatchObject({
+      synchronization: "stale",
+      refTargets: [main("c1")],
+    });
+  });
 });
 
 function fixture(environmentId: string = crypto.randomUUID()) {
   const snapshots: HistorySnapshot[] = [];
   const requests: SynchronizeRepositoryHistory[] = [];
   let updates: readonly RepositoryHistoryUpdate[] = [];
+  let rejection: unknown;
   const socket: EnvironmentSocket = {
     environmentId,
-    requests: async () => {
-      throw new Error("Unexpected request");
-    },
     synchronizeHistory: async (request, accept) => {
       requests.push(request);
       for (const update of updates) await accept(update);
+      if (rejection !== undefined) throw rejection;
     },
     closed: new Promise(() => {}),
-    close: () => {},
   };
   const replica = new HistoryReplica(
     environmentId,
@@ -120,29 +148,39 @@ function fixture(environmentId: string = crypto.randomUUID()) {
     replica,
     requests,
     snapshot,
+    socket,
+    fail: async (next: RepositoryHistoryUpdate) => {
+      updates = [next];
+      rejection = { _tag: "Unanswered" };
+      replica.synchronize({ socket, repositoryId });
+      await expect.poll(() => snapshot().synchronization).toBe("stale");
+    },
     synchronize: async (
       next: RepositoryHistoryUpdate,
       commits: readonly RepositoryCommit[],
     ) => {
       const count = requests.length;
+      rejection = undefined;
       updates = [next, { _tag: "RepositoryHistoryCommits", commits }];
       replica.synchronize({ socket, repositoryId });
       await expect.poll(() => requests.length).toBe(count + 1);
       await expect.poll(() => snapshot().synchronization).toBe("complete");
     },
-    oids: async (roots: readonly string[]) => {
+    oids: async (roots: readonly (RepositoryHistoryRefTarget | string)[]) => {
       const rows = await replica.rows(historyScope(roots), 0, 100);
       return rows.rows.map(({ commit }) => commit.oid);
     },
   };
 }
 
-function tips(roots: readonly string[]): RepositoryHistoryUpdate {
-  const refTargets: RepositoryHistoryRefTarget[] = roots.map((oid) => ({
+function tips(
+  roots: readonly string[],
+  refTargets: readonly RepositoryHistoryRefTarget[] = roots.map((oid) => ({
     name: oid,
     oid,
     type: "branch",
-  }));
+  })),
+): RepositoryHistoryUpdate {
   return {
     _tag: "RepositoryHistoryTips",
     objectFormat: "sha1",

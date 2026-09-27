@@ -45,10 +45,12 @@ export class HistoryStorageUnavailable extends Error {
   }
 }
 
+let connection: Promise<IDBDatabase> | undefined;
+
 export async function withHistoryDatabase<T>(
   use: (database: IDBDatabase) => Promise<T>,
 ): Promise<T> {
-  const database = await openDatabase();
+  const database = await sharedDatabase();
   try {
     return await use(database);
   } catch (cause) {
@@ -74,16 +76,6 @@ export function transactionCompleted(transaction: IDBTransaction) {
     transaction.onabort = () =>
       reject(new HistoryStorageUnavailable(transaction.error));
   });
-}
-
-export function readRepository(environmentId: string, repositoryId: string) {
-  return read([repositoryStoreName], (store) =>
-    requestResult<StoredRepository | undefined>(
-      store(repositoryStoreName)
-        .index(identityIndexName)
-        .get([environmentId, repositoryId]),
-    ),
-  );
 }
 
 export function readRepositories() {
@@ -255,7 +247,18 @@ function repositoryRange(repository: number, after?: string) {
   );
 }
 
-function openDatabase() {
+function sharedDatabase() {
+  if (connection !== undefined) return connection;
+  const forget = () => {
+    if (connection === opened) connection = undefined;
+  };
+  const opened = openDatabase(forget);
+  opened.catch(forget);
+  connection = opened;
+  return opened;
+}
+
+function openDatabase(closed: () => void) {
   return new Promise<IDBDatabase>((resolve, reject) => {
     let blocked = false;
     let request: IDBOpenDBRequest;
@@ -271,8 +274,13 @@ function openDatabase() {
         request.result.close();
         return;
       }
-      request.result.onversionchange = () => request.result.close();
-      resolve(request.result);
+      const database = request.result;
+      database.onversionchange = () => {
+        closed();
+        database.close();
+      };
+      database.onclose = closed;
+      resolve(database);
     };
     request.onerror = () =>
       reject(new HistoryStorageUnavailable(request.error));

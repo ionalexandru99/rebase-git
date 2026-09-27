@@ -11,8 +11,6 @@ import {
   type ReactNode,
   type Ref,
   type SyntheticEvent,
-  useCallback,
-  useEffect,
   useImperativeHandle,
   useMemo,
   useRef,
@@ -41,30 +39,20 @@ import {
   type CommitGraphViewportHandle,
   CommitGraphVirtualWindow,
 } from "#web/features/commit-graph/components/commit-graph-virtual-window";
-import { historyLabelTarget } from "#web/features/commit-graph/components/commit-ref-labels";
 import { GraphRefAppearance } from "#web/features/commit-graph/components/graph-ref-appearance";
 import { HistoryScopeStrip } from "#web/features/commit-graph/components/history-scope-strip";
-import {
-  type CommitGraphSelectionMode,
-  useCommitGraphSelection,
-} from "#web/features/commit-graph/hooks/use-commit-graph-selection";
+import { useCommitGraphView } from "#web/features/commit-graph/hooks/use-commit-graph-view";
 import { useGraphColors } from "#web/features/commit-graph/hooks/use-graph-colors";
-import { useGraphRows } from "#web/features/commit-graph/hooks/use-graph-rows";
 import { commitGraphGutterWidth } from "#web/features/commit-graph/layout/graph-geometry";
 import { graphMetadataColumns } from "#web/features/commit-graph/layout/graph-metrics";
 import { graphRefLabels } from "#web/features/commit-graph/layout/graph-ref-labels";
 import type { HistoryScope } from "#web/features/commit-graph/scope/history-scope";
 import { RepositoryHistorySearchControls } from "#web/features/history-search/components/repository-history-search-controls";
-import { useRepositoryHistoryOrder } from "#web/features/repository-history/history-order";
-import type { HistoryScopeQuery } from "#web/features/repository-history/history-view";
 import {
   describeHistoryFailure,
-  emptyHistorySnapshot,
   type RepositoryHistory,
 } from "#web/features/repository-history/repository-history";
 import { useRepositoryScope } from "#web/platform/query/repository-scope";
-import { createStore } from "#web/platform/store/store";
-import { useStore } from "#web/platform/store/use-store";
 
 export interface CommitGraphHandle {
   readonly focusSelection: () => void;
@@ -72,7 +60,6 @@ export interface CommitGraphHandle {
 }
 
 const emptyRefLabels: readonly RepositoryHistoryRefTarget[] = [];
-const emptyHistory = createStore(emptyHistorySnapshot);
 
 export function CommitGraph({
   ref,
@@ -114,101 +101,38 @@ export function CommitGraph({
   readonly githubRepository?: GitHubRepository | undefined;
 }): JSX.Element {
   const [menuOid, setMenuOid] = useState<string>();
-  const [expanded, setExpanded] = useState<
-    ReadonlyMap<string, readonly string[]>
-  >(new Map());
-  const order = useRepositoryHistoryOrder(
-    historyIdentity?.environmentId,
-    historyIdentity?.repositoryId,
-  );
   const connected = useRepositoryScope()?.connected;
-  const snapshot = useStore(history ?? emptyHistory);
-  const [pageSize, setPageSize] = useState(12);
-  const [range, setRange] = useState({ first: 0, last: 40 });
-  const [pending, setPending] = useState<{
-    readonly oid: string;
-    readonly mode: CommitGraphSelectionMode;
-  }>();
   const scrollRef = useRef<HTMLTableElement>(null);
   const viewportRef = useRef<CommitGraphViewportHandle>(null);
-  const scopeQuery = useMemo<HistoryScopeQuery | undefined>(
-    () =>
-      roots === undefined
-        ? undefined
-        : {
-            roots,
-            order,
-            expanded: [...expanded].flatMap(([childOid, parents]) =>
-              parents.map((parentOid) => ({ childOid, parentOid })),
-            ),
-          },
-    [roots, order, expanded],
-  );
-  const activeOid = useRef<string | undefined>(undefined);
-  const rows = useGraphRows({
+  const {
+    snapshot,
+    rows,
+    scopeQuery,
+    start,
+    total,
+    windowRows,
+    laneRows,
+    oids,
+    merges,
+    shownMerges,
+    resident,
+    navigation,
+    activeCommitOid,
+    beginNavigation,
+    toggleMerge,
+    navigateToOid,
+    focusSelection,
+    onRange,
+    setPageSize,
+  } = useCommitGraphView({
     history,
-    scope: scopeQuery,
-    revision: snapshot.revision,
-    first: range.first,
-    last: range.last,
+    historyIdentity,
+    roots,
     scrollRef,
-    activeOid,
+    viewportRef,
+    onRevealHistoryRef,
+    onActiveCommitChange,
   });
-  const answer = rows.answer;
-  const current = rows.loading ? undefined : answer;
-  const start = answer?.start ?? 0;
-  const windowRows = answer?.rows ?? [];
-  const total = answer?.total ?? 0;
-  const laneRows = useMemo(
-    () => windowRows.map((row) => row.lane),
-    [windowRows],
-  );
-  const oids = useMemo(
-    () => windowRows.map((row) => row.commit.oid),
-    [windowRows],
-  );
-  const merges = useMemo(
-    () =>
-      new Map(
-        windowRows.flatMap((row) =>
-          row.merge === undefined
-            ? []
-            : [
-                [
-                  row.commit.oid,
-                  expanded.has(row.commit.oid)
-                    ? ("expanded" as const)
-                    : ("collapsed" as const),
-                ] as const,
-              ],
-        ),
-      ),
-    [windowRows, expanded],
-  );
-  const shownMerges = useMemo(
-    () =>
-      new Map(
-        windowRows.flatMap((row) =>
-          row.merge === undefined ? [] : [[row.commit.oid, row.merge] as const],
-        ),
-      ),
-    [windowRows],
-  );
-  const resident = useMemo(
-    () => ({
-      oidAt: (index: number) =>
-        current?.rows[index - current.start]?.commit.oid,
-      indexOf: (oid: string) => {
-        const found =
-          current?.rows.findIndex((row) => row.commit.oid === oid) ?? -1;
-        return found < 0 || current === undefined
-          ? undefined
-          : current.start + found;
-      },
-      oids: () => current?.rows.map((row) => row.commit.oid) ?? [],
-    }),
-    [current],
-  );
   const colors = useGraphColors(history, laneRows, snapshot.refTargets);
   const labelsByOid = useMemo(
     () => graphRefLabels(snapshot.refTargets, laneRows, roots ?? []),
@@ -218,118 +142,9 @@ export function CommitGraph({
     () => commitGraphGutterWidth(laneRows),
     [laneRows],
   );
-
-  const navigationIntent = useRef(0);
-  const beginNavigation = () => {
-    navigationIntent.current += 1;
-    navigation.cancel();
-    setPending(undefined);
-    return navigationIntent.current;
-  };
-
-  const toggleMerge = (oid: string, expand: boolean) => {
-    const offset = windowRows.findIndex(
-      (candidate) => candidate.commit.oid === oid,
-    );
-    const row = windowRows[offset];
-    const index = start + offset;
-    if (row === undefined || row.commit.parents.length < 2) return;
-    beginNavigation();
-    navigation.select(oid, index, "activate");
-    setExpanded((previous) => {
-      if (expand === previous.has(oid)) return previous;
-      const next = new Map(previous);
-      if (expand) next.set(oid, row.commit.parents.slice(1));
-      else next.delete(oid);
-      return next;
-    });
-    scrollRef.current?.focus();
-  };
-
-  const navigation = useCommitGraphSelection({
-    history,
-    scope: current?.scope,
-    version:
-      current === undefined ? undefined : `${current.key}\0${current.revision}`,
-    total: current?.total ?? 0,
-    resident,
-    pageSize,
-    merges,
-    toggleMerge,
-    scrollToIndex: (index) => viewportRef.current?.scrollToIndex(index),
-    onSelectionIntent: () => beginNavigation(),
-    onActiveCommitChange,
-  });
-  activeOid.current = navigation.selection.activeOid;
-
-  useEffect(() => {
-    if (pending === undefined || history === undefined || current === undefined)
-      return;
-    const intent = navigationIntent.current;
-    void history
-      .ask({ _tag: "Locate", scope: current.scope, oids: [pending.oid] })
-      .then(
-        ([index]) => {
-          if (index === undefined || intent !== navigationIntent.current)
-            return;
-          setPending(undefined);
-          navigation.select(pending.oid, index, pending.mode);
-          viewportRef.current?.scrollToIndex(index);
-        },
-        () => undefined,
-      );
-  }, [pending, history, current, navigation.select]);
-
-  const navigateToOid = async (oid: string, signal?: AbortSignal) => {
-    signal?.throwIfAborted();
-    const intent = beginNavigation();
-    if (history === undefined || scopeQuery === undefined)
-      throw new Error("This commit is outside the selected history.");
-    const target = await history.ask(
-      { _tag: "Find", scope: scopeQuery, oid },
-      signal,
-    );
-    signal?.throwIfAborted();
-    if (intent !== navigationIntent.current) return;
-    if (target === undefined)
-      throw new Error("This commit is outside the selected history.");
-    const root = target.root;
-    const selection = root === undefined ? undefined : historyLabelTarget(root);
-    if (selection !== undefined) onRevealHistoryRef?.(selection);
-    if (target.expanded.length > 0)
-      setExpanded((previous) => {
-        const next = new Map(previous);
-        for (const edge of target.expanded)
-          next.set(edge.childOid, [
-            ...new Set([...(next.get(edge.childOid) ?? []), edge.parentOid]),
-          ]);
-        return next;
-      });
-    setPending({ oid, mode: "replace" });
-    scrollRef.current?.focus();
-  };
-  const focusSelection = () => {
-    if (navigation.selection.activeOid !== undefined)
-      viewportRef.current?.scrollToIndex(navigation.selection.activeIndex);
-    scrollRef.current?.focus();
-  };
   useImperativeHandle(ref, () => ({ navigateToOid, focusSelection }));
-  const activeCommitOid =
-    navigation.selection.activeOid !== undefined &&
-    oids.includes(navigation.selection.activeOid)
-      ? navigation.selection.activeOid
-      : undefined;
 
   const commands = useCommitActions({ history, onOpenDetails });
-  const onRange = useCallback(
-    (first: number, last: number) =>
-      setRange((previous) =>
-        previous.first === first && previous.last === last
-          ? previous
-          : { first, last },
-      ),
-    [],
-  );
   const handleKeyDown = (event: KeyboardEvent<HTMLElement>) => {
     if (event.defaultPrevented) return;
     if (

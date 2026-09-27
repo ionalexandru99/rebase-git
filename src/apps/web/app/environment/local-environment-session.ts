@@ -66,7 +66,6 @@ export interface LocalEnvironmentSessionOptions {
   readonly gateway: LocalEnvironmentGateway;
   readonly invalidation: EnvironmentInvalidation;
   readonly onConnect?: (credential: EnvironmentCredential) => void;
-  readonly runtime?: ManagedRuntime.ManagedRuntime<never, never>;
   readonly waitBeforeReconnect?: (attempt: number) => Effect.Effect<void>;
 }
 
@@ -82,7 +81,7 @@ export function createLocalEnvironmentSession(
   });
   let credential: EnvironmentCredential | undefined;
   let fiber: Fiber.Fiber<void, never> | undefined;
-  const runtime = options.runtime ?? ManagedRuntime.make(Layer.empty);
+  const runtime = ManagedRuntime.make(Layer.empty);
   const publish: PublishState = (next) => Effect.sync(() => state.set(next));
 
   const runSession = Effect.gen(function* () {

@@ -1,5 +1,5 @@
 import type { EnvironmentRpcClient } from "@rebase/contracts";
-import { Effect, Layer, ManagedRuntime } from "effect";
+import { Effect } from "effect";
 import { describe, expect, it, vi } from "vite-plus/test";
 import {
   createLocalEnvironmentSession,
@@ -13,7 +13,6 @@ import {
   EnvironmentUnavailable,
 } from "#web/platform/environment/environment-connection";
 
-const runtime = ManagedRuntime.make(Layer.empty);
 const environmentId = "00000000-0000-4000-8000-000000000001";
 
 describe("local Environment session", () => {
@@ -131,7 +130,6 @@ function createSession(
 ) {
   return createLocalEnvironmentSession({
     invalidation: { changed: () => {} },
-    runtime,
     ...options,
   });
 }

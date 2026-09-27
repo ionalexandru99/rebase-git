@@ -1,7 +1,7 @@
 import type { RepositoryHistoryRefTarget } from "@rebase/contracts";
 import { useLayoutEffect, useMemo, useRef } from "react";
-import type { CommitLaneRow } from "#web/features/commit-graph/layout/commit-lane-model";
 import { graphColors } from "#web/features/commit-graph/layout/graph-colors";
+import type { CommitLaneRow } from "#web/features/repository-history/commit-lanes";
 import type { RepositoryHistory } from "#web/features/repository-history/repository-history";
 
 export function useGraphColors(

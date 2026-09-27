@@ -67,7 +67,7 @@ function receive(client: HistoryClient, message: HistoryClientMessage) {
     case "Connect":
       client.environment = message.environment;
       void connect(message.environment);
-      synchronizeOrigin(message.environment);
+      synchronize(client);
       return;
     case "Synchronize":
       synchronize(client);
@@ -188,7 +188,7 @@ function refsChanged(
   repositoryIds: readonly string[] | undefined,
   kind: RepositoryChangeKind | undefined,
 ) {
-  if (kind === "Index") return;
+  if (kind !== undefined && kind !== "Refs") return;
   synchronizeOrigin(environment, repositoryIds);
 }
 

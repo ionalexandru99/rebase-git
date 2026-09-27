@@ -42,7 +42,7 @@ export const ProtocolMismatch = Schema.TaggedStruct("ProtocolMismatch", {
 });
 export type ProtocolMismatch = typeof ProtocolMismatch.Type;
 
-export const RepositoryChangeKind = Schema.Literals(["Refs", "Index"]);
+export const RepositoryChangeKind = Schema.Literals(["Refs", "Index", "Fetch"]);
 export type RepositoryChangeKind = typeof RepositoryChangeKind.Type;
 
 export const EnvironmentChanged = Schema.TaggedStruct("EnvironmentChanged", {

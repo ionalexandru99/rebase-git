@@ -563,9 +563,11 @@ describe("working changes", () => {
       .toHaveValue("Unsent message");
   });
   it("says when this browser cannot keep the commit draft", async () => {
-    const open = vi.spyOn(indexedDB, "open").mockImplementation(() => {
-      throw new Error("Storage is blocked.");
-    });
+    const transaction = vi
+      .spyOn(IDBDatabase.prototype, "transaction")
+      .mockImplementation(() => {
+        throw new DOMException("Storage is blocked.", "InvalidStateError");
+      });
     try {
       await fixture();
       await expect
@@ -574,7 +576,7 @@ describe("working changes", () => {
           "Could not access changes preferences or the commit draft in this browser.",
         );
     } finally {
-      open.mockRestore();
+      transaction.mockRestore();
     }
   });
 });

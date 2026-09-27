@@ -263,7 +263,7 @@ async function fixture(
     configure,
     publish: async (next: RepositoryFetchStatus) => {
       status = next;
-      await act(async () => changes.publish([scope.repositoryId], "Refs"));
+      await act(async () => changes.publish([scope.repositoryId], "Fetch"));
     },
   };
 }

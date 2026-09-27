@@ -1,17 +1,96 @@
-import type {
-  CommitLane,
-  CommitLaneCheckpoint,
-  CommitLaneRow,
-  CommitLaneSeed,
-  CommitTopology,
-} from "#web/features/commit-graph/layout/commit-lane-model";
+import type { RepositoryHistoryRefTarget } from "@rebase/contracts";
 
-export type {
-  CommitLane,
-  CommitLaneCheckpoint,
-  CommitLaneRow,
-  CommitTopology,
-} from "#web/features/commit-graph/layout/commit-lane-model";
+export const laneColorCount = 8;
+
+export interface CommitTopology {
+  readonly oid: string;
+  readonly parents: readonly string[];
+}
+
+export interface CommitLanePosition {
+  readonly id: number;
+  readonly slot: number;
+  readonly color: number;
+  readonly incomingColor?: number;
+  readonly remote: boolean;
+}
+
+export interface CommitLaneSeed {
+  readonly color: number;
+  readonly remote: boolean;
+  readonly boundary?: boolean;
+}
+
+export interface CommitLane extends CommitLanePosition {
+  readonly expectedOid: string;
+  readonly branchDepth: number;
+}
+
+export interface CommitLaneCheckpoint {
+  readonly lanes: readonly CommitLane[];
+  readonly nextLaneId: number;
+}
+
+export interface CommitLaneRow {
+  readonly lanesAfter: readonly CommitLanePosition[];
+  readonly lanesBefore: readonly CommitLanePosition[];
+  readonly nodeLaneId: number;
+  readonly nodeHasIncomingLane: boolean;
+  readonly nodeRemote: boolean;
+  readonly oid: string;
+  readonly parentLaneIds: readonly number[];
+}
+
+export function graphRefName(ref: RepositoryHistoryRefTarget) {
+  return ref.type === "remote-branch"
+    ? ref.name.slice(ref.name.indexOf("/") + 1)
+    : ref.name;
+}
+
+export function graphBranchColorIndex(name: string) {
+  if (["main", "master", "dev", "develop"].includes(name)) return 0;
+  let hash = 0;
+  for (const character of name)
+    hash = (hash * 31 + character.charCodeAt(0)) >>> 0;
+  return 1 + (hash % (laneColorCount - 1));
+}
+
+export function graphLaneSeeds(
+  refs: readonly RepositoryHistoryRefTarget[],
+  previousRows: readonly CommitLaneRow[] = [],
+  roots: readonly RepositoryHistoryRefTarget[] = [],
+) {
+  const seeds = new Map<string, CommitLaneSeed>();
+  for (const ref of refs) {
+    if (ref.type !== "branch" && ref.type !== "remote-branch") continue;
+    if (seeds.get(ref.oid)?.remote === false) continue;
+    seeds.set(ref.oid, {
+      color: graphBranchColorIndex(graphRefName(ref)),
+      remote: ref.type === "remote-branch",
+    });
+  }
+  for (const row of previousRows) {
+    const node = row.lanesBefore.find((lane) => lane.id === row.nodeLaneId);
+    if (node !== undefined)
+      seeds.set(row.oid, {
+        color: node.color,
+        remote: seeds.get(row.oid)?.remote === false ? false : row.nodeRemote,
+      });
+  }
+  const selectedRefs = new Set(roots.map((ref) => `${ref.type}\0${ref.name}`));
+  for (const ref of refs) {
+    if (ref.type !== "branch" && ref.type !== "remote-branch") continue;
+    if (!selectedRefs.has(`${ref.type}\0${ref.name}`)) continue;
+    const seed = seeds.get(ref.oid);
+    if (seed?.boundary) continue;
+    seeds.set(ref.oid, {
+      color: graphBranchColorIndex(graphRefName(ref)),
+      remote: seed?.remote ?? ref.type === "remote-branch",
+      boundary: true,
+    });
+  }
+  return seeds;
+}
 
 export function createCommitLaneCheckpoint(): CommitLaneCheckpoint {
   return { lanes: [], nextLaneId: 0 };

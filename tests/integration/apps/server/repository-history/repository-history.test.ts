@@ -54,7 +54,9 @@ describe("repository history synchronization", () => {
     await importLinearHistory(path, "sha1", 2);
     await git(path, "checkout", "-b", "side");
     const subject = 'long "message" 😀'.repeat(4_000);
-    await git(path, "commit", "--allow-empty", "-m", subject);
+    const message = join(history.home, "large-message.txt");
+    await writeFile(message, subject);
+    await git(path, "commit", "--allow-empty", "-F", message);
     const side = await git(path, "rev-parse", "HEAD");
     await git(path, "checkout", "main");
     await git(path, "update-ref", "refs/remotes/origin/side", side);
@@ -243,6 +245,7 @@ async function openHistory(
     server.owner,
     unchanged,
   );
+  const requests = server.requests(server.owner);
   let received = 0;
   return {
     home: server.home,
@@ -253,7 +256,7 @@ async function openHistory(
       accept?: (update: RepositoryHistoryUpdate) => Promise<void>,
       signal = new AbortController().signal,
     ) => {
-      const repository = await socket.requests(RepositoryCatalogApi.remember, {
+      const repository = await requests(RepositoryCatalogApi.remember, {
         path,
       });
       const request: SynchronizeRepositoryHistory = {

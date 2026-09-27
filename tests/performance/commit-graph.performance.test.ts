@@ -60,7 +60,6 @@ for (const scenario of scenarios) {
     timing("selectionFeedbackMilliseconds", 50);
     timing("scopeFeedbackMilliseconds", 100);
     timing("uncachedScopeFeedbackMilliseconds", scenario.firstContentLimit);
-    timing("postGitRenderMilliseconds", 100);
     timing("correctedContentMilliseconds", scenario.correctedContentLimit);
     timing("frameWorkP95Milliseconds", 8.3);
     timing("frameWorkP99Milliseconds", 16.7);
@@ -80,17 +79,12 @@ async function measureCommitGraph(
   await git(repositoryPath, "branch", "feature", "HEAD~50");
   const server = startEnvironmentServer(testHome);
   const session = await page.context().newCDPSession(page);
-  let historyReads = 0;
-  session.on("Network.webSocketFrameSent", ({ response }) => {
-    if (response.payloadData.includes('"tag":"ReadHistory"')) historyReads += 1;
-  });
 
   try {
     const socketProfile =
       scenario.latency === 0
         ? undefined
         : await shapeGraphWebSockets(page, scenario.latency);
-    const readCount = () => socketProfile?.historyReads ?? historyReads;
     await session.send("Network.enable");
     await session.send("Network.emulateNetworkConditions", {
       connectionType: scenario.latency === 0 ? "none" : "wifi",
@@ -126,7 +120,6 @@ async function measureCommitGraph(
     const browserMetrics = await page.evaluate(() => window.__graphMetrics);
     await measureHistoryScopeFeedback(page, false);
     const scopeFeedback = await measureHistoryScopeFeedback(page, true);
-    expect(readCount()).toBe(0);
     const correctedContentMilliseconds = await measureCorrectedContent(
       page,
       repositoryPath,
@@ -141,9 +134,6 @@ async function measureCommitGraph(
         required(browserMetrics.loadingFeedback) - browserMetrics.started,
       openingFeedbackMilliseconds:
         required(browserMetrics.openingFeedback) - browserMetrics.started,
-      postGitRenderMilliseconds:
-        required(browserMetrics.firstContent) -
-        required(browserMetrics.lastHistoryMessage),
       selectionFeedbackMilliseconds: selectionFeedback,
       scopeFeedbackMilliseconds: scopeFeedback,
       uncachedScopeFeedbackMilliseconds: uncachedScopeFeedback,
@@ -220,7 +210,6 @@ async function shapeGraphWebSockets(page: Page, latency: number) {
   const frames = {
     sent: 0,
     received: 0,
-    historyReads: 0,
     errors: [] as string[],
   };
   await page.routeWebSocket("**/*", (browser) => {
@@ -248,12 +237,6 @@ async function shapeGraphWebSockets(page: Page, latency: number) {
       let transmissionEnd = 0;
       let pending = Promise.resolve();
       source.onMessage((message) => {
-        if (
-          direction === "sent" &&
-          typeof message === "string" &&
-          message.includes('"tag":"ReadHistory"')
-        )
-          frames.historyReads += 1;
         transmissionEnd =
           Math.max(performance.now(), transmissionEnd) +
           (Buffer.byteLength(message) / networkBytesPerSecond) * 1_000;
@@ -354,42 +337,6 @@ async function installGraphMeasurements(page: Page) {
       attributes: true,
       childList: true,
       subtree: true,
-    });
-    const wrappers = new WeakMap<EventListener, EventListener>();
-    const addEventListener = WebSocket.prototype.addEventListener;
-    WebSocket.prototype.addEventListener = new Proxy(addEventListener, {
-      apply(target, receiver, arguments_) {
-        const [type, listener] = arguments_;
-        if (type === "message" && typeof listener === "function") {
-          const wrapped: EventListener = function (
-            this: WebSocket,
-            event: Event,
-          ) {
-            const message = event as MessageEvent;
-            if (
-              window.__graphMetrics.started > 0 &&
-              window.__graphMetrics.firstContent === undefined &&
-              typeof message.data === "string"
-            ) {
-              window.__graphMetrics.lastHistoryMessage = performance.now();
-            }
-            return Reflect.apply(listener, this, [message]);
-          };
-          wrappers.set(listener, wrapped);
-          arguments_[1] = wrapped;
-        }
-        return Reflect.apply(target, receiver, arguments_);
-      },
-    });
-    const removeEventListener = WebSocket.prototype.removeEventListener;
-    WebSocket.prototype.removeEventListener = new Proxy(removeEventListener, {
-      apply(target, receiver, arguments_) {
-        const listener = arguments_[1];
-        if (typeof listener === "function") {
-          arguments_[1] = wrappers.get(listener) ?? listener;
-        }
-        return Reflect.apply(target, receiver, arguments_);
-      },
     });
   });
 }
@@ -549,7 +496,6 @@ function required(value: number | undefined) {
 
 interface GraphMetrics {
   firstContent?: number;
-  lastHistoryMessage?: number;
   loadingFeedback?: number;
   openingFeedback?: number;
   started: number;

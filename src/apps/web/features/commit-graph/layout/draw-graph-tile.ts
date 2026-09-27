@@ -1,6 +1,6 @@
-import type { CommitLaneRow } from "#web/features/commit-graph/layout/commit-lane-model";
 import { graphRowHeight } from "#web/features/commit-graph/layout/graph-metrics";
 import { graphTilePaths } from "#web/features/commit-graph/layout/graph-tile-paths";
+import type { CommitLaneRow } from "#web/features/repository-history/commit-lanes";
 
 export function drawGraphTile(
   canvas: HTMLCanvasElement,

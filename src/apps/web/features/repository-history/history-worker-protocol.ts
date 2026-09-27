@@ -3,7 +3,7 @@ import type {
   RepositoryHistoryFailure,
   RepositoryHistoryRefTarget,
 } from "@rebase/contracts";
-import type { CommitLaneRow } from "#web/features/commit-graph/layout/commit-lanes";
+import type { CommitLaneRow } from "#web/features/repository-history/commit-lanes";
 import type {
   HistoryScopeQuery,
   HistoryTarget,

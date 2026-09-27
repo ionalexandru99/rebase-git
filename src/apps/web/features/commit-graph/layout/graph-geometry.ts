@@ -1,8 +1,8 @@
-import type { CommitLaneRow } from "#web/features/commit-graph/layout/commit-lane-model";
 import {
   graphLaneInset,
   graphLanePitch,
 } from "#web/features/commit-graph/layout/graph-metrics";
+import type { CommitLaneRow } from "#web/features/repository-history/commit-lanes";
 
 export function graphLaneX(slot: number) {
   return graphLaneInset + slot * graphLanePitch;

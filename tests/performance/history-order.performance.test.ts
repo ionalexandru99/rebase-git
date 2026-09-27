@@ -76,9 +76,6 @@ test("cached order changes on 250,000 merge-heavy commits", async ({
       const socket: import("#web/platform/environment/environment-connection").EnvironmentSocket =
         {
           environmentId,
-          requests: async () => {
-            throw new Error("Offline benchmark");
-          },
           synchronizeHistory: async (_request, accept) => {
             await accept({
               _tag: "RepositoryHistoryTips",
@@ -100,7 +97,6 @@ test("cached order changes on 250,000 merge-heavy commits", async ({
             }
           },
           closed: new Promise(() => {}),
-          close: () => {},
         };
       const ingestStarted = performance.now();
       replica.synchronize({ socket, repositoryId });
