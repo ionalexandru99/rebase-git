@@ -30,10 +30,11 @@ export function parseReflog(output: string): ReflogLine[] {
 export function groupReflog(
   lines: readonly ReflogLine[],
   orphaned: ReadonlySet<string>,
+  limit = lines.length,
 ): ReflogEntry[] {
   const entries: ReflogEntry[] = [];
   let index = 0;
-  while (index < lines.length) {
+  while (index < Math.min(limit, lines.length)) {
     const rebase = rebaseGroup(lines, index);
     const entry = rebase?.entry ?? plainEntry(lines, index);
     index = rebase?.next ?? index + 1;

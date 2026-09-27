@@ -65,4 +65,16 @@ describe("reflog grouping", () => {
       previousOid: oid("a"),
     });
   });
+
+  it("uses the line past the limit only to find the previous tip", () => {
+    const entries = groupReflog(
+      lines(["b", "commit: Second"], ["a", "commit: First"]),
+      new Set(),
+      1,
+    );
+
+    expect(entries).toEqual([
+      expect.objectContaining({ oid: oid("b"), previousOid: oid("a") }),
+    ]);
+  });
 });

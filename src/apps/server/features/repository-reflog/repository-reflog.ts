@@ -81,7 +81,7 @@ function readReflog(
       tips.split("\n").filter((tip) => tip.length > 0),
     );
     return {
-      entries: groupReflog(kept, orphaned),
+      entries: groupReflog(lines, orphaned, maximumEntries),
       truncated: lines.length > maximumEntries,
     };
   });
