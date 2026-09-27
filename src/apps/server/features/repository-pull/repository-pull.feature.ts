@@ -1,15 +1,18 @@
 import { type PullBranch, RepositoryPullApi } from "@rebase/contracts";
 import { Effect } from "effect";
-import type { EnvironmentFeature } from "#server/adapters/environment-transport/environment-routes";
+import type { EnvironmentEventPublisher } from "#server/adapters/environment-transport/environment-event-publisher";
 import {
+  type EnvironmentFeature,
   type RepositoryDependencies,
   repositoryRoutes,
+  route,
 } from "#server/adapters/environment-transport/environment-routes";
 import type { GitCommandRunner } from "#server/adapters/local-git/git-commands";
 import {
   fastForwardBranch,
   pullBlocked,
 } from "#server/features/repository-pull/fast-forward-branch";
+import { acquireRepositoryFetch } from "#server/features/repository-pull/repository-fetch";
 import {
   canonicalizeWorktrees,
   readWorktrees,
@@ -17,22 +20,36 @@ import {
 import type { RepositoryCoordination } from "#server/repository/repository-coordination";
 
 export function repositoryPullFeature(
-  dependencies: RepositoryDependencies,
-): EnvironmentFeature {
-  const { command } = repositoryRoutes(dependencies);
-  return {
-    routes: [
-      command(
-        RepositoryPullApi.pull,
-        {
-          name: "pull",
-          locks: { refs: "wait" },
-          duringOperation: "proceed",
-        },
-        pullBranch(dependencies.coordination),
-      ),
-    ],
-  };
+  dependencies: RepositoryDependencies & {
+    readonly events: EnvironmentEventPublisher;
+  },
+) {
+  return Effect.gen(function* () {
+    const { command } = repositoryRoutes(dependencies);
+    const fetch = yield* acquireRepositoryFetch(dependencies);
+    return {
+      routes: [
+        route(RepositoryPullApi.fetchStatus, (input) =>
+          fetch.status(input.repositoryId),
+        ),
+        route(RepositoryPullApi.fetch, (input) =>
+          fetch.fetch(input.repositoryId),
+        ),
+        route(RepositoryPullApi.configureFetch, (input) =>
+          fetch.configure(input.repositoryId, input.setting),
+        ),
+        command(
+          RepositoryPullApi.pull,
+          {
+            name: "pull",
+            locks: { refs: "wait" },
+            duringOperation: "proceed",
+          },
+          pullBranch(dependencies.coordination),
+        ),
+      ],
+    } satisfies EnvironmentFeature;
+  });
 }
 
 function pullBranch(coordination: RepositoryCoordination) {

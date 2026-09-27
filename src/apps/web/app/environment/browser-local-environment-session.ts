@@ -6,16 +6,17 @@ import {
 } from "@rebase/contracts";
 import { Effect, Schema } from "effect";
 import {
-  connectEnvironment,
-  EnvironmentAccessDenied,
-  type EnvironmentCredential,
-  EnvironmentUnavailable,
-} from "#web/app/environment/environment-connection";
-import {
   createLocalEnvironmentSession,
   type LocalEnvironmentSession,
   type LocalEnvironmentSessionOptions,
 } from "#web/app/environment/local-environment-session";
+import {
+  connectEnvironment,
+  type EnvironmentAccess,
+  EnvironmentAccessDenied,
+  type EnvironmentCredential,
+  EnvironmentUnavailable,
+} from "#web/platform/environment/environment-connection";
 
 type DesktopEnvironmentHost = Pick<
   DesktopHostBridge,
@@ -26,15 +27,16 @@ const decodeAccessFailure = Schema.decodeUnknownSync(EnvironmentAccessFailure);
 
 export function createBrowserLocalEnvironmentSession(
   host: DesktopEnvironmentHost | undefined,
-  lifetime: Pick<
-    LocalEnvironmentSessionOptions,
-    "runtime" | "onConnect" | "invalidation"
-  >,
+  lifetime: Pick<LocalEnvironmentSessionOptions, "invalidation"> & {
+    readonly onConnect?: (access: EnvironmentAccess) => void;
+  },
 ): LocalEnvironmentSession {
   const bootstrap = resolveLocalEnvironmentBootstrap(window.location, host);
   let pairingMaterial = bootstrap.pairingMaterial;
   return createLocalEnvironmentSession({
-    ...lifetime,
+    invalidation: lifetime.invalidation,
+    onConnect: (credential) =>
+      lifetime.onConnect?.({ origin: bootstrap.environmentOrigin, credential }),
     gateway: {
       authorize: () =>
         Effect.gen(function* () {

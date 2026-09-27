@@ -5,20 +5,25 @@ import type {
   RepositoryRefTarget,
 } from "@rebase/contracts";
 import {
-  automaticHistoryScope,
-  type HistoryScope,
-  type ResolvedHistoryScope,
-} from "#web/features/commit-graph/scope/history-scope-model";
-import {
   resolveAutomaticHistoryRoots,
   resolveAutomaticHistorySelections,
-} from "#web/features/repository-history/replica/automatic-history-roots";
+} from "#web/features/commit-graph/scope/automatic-history-scope";
 
-export type {
-  HistoryScope,
-  ResolvedHistoryScope,
-} from "#web/features/commit-graph/scope/history-scope-model";
-export { automaticHistoryScope } from "#web/features/commit-graph/scope/history-scope-model";
+export const automaticHistoryScope = { _tag: "Automatic" } as const;
+
+export type HistoryScope =
+  | typeof automaticHistoryScope
+  | {
+      readonly _tag: "Custom";
+      readonly selections: readonly RepositoryRefTarget[];
+    };
+
+export interface ResolvedHistoryScope {
+  readonly roots: readonly RepositoryHistoryRefTarget[];
+  readonly scope: HistoryScope;
+  readonly selectedRefKeys: ReadonlySet<string>;
+  readonly selections: readonly RepositoryRefTarget[];
+}
 
 export function resolveHistoryScope(
   scope: HistoryScope,

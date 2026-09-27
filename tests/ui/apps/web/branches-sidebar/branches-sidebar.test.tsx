@@ -10,9 +10,9 @@ import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
 import { userEvent } from "vite-plus/test/browser";
 import {
   commitId,
+  fetchStatus,
   mainAndTopicWorktrees,
   mainPath,
-  repositoryFreshness,
   repositoryId,
   repositoryRefs,
   topicPath,
@@ -31,17 +31,11 @@ import { render, testChanges } from "#tests-ui/runtime/render";
 import { BranchesSidebar } from "#web/features/branches-sidebar/branches-sidebar";
 import { historyRefKey } from "#web/features/commit-graph/scope/history-scope";
 import { requestRefIntent } from "#web/features/refs/ref-actions";
-import type { PullReader } from "#web/features/remote-sync/use-pull";
 import {
   type RepositoryScope,
   RepositoryScopeProvider,
 } from "#web/platform/query/repository-scope";
 
-const readyHistory = {
-  revision: 0,
-  historyRevision: 0,
-  status: "ready",
-} as const;
 describe("branches sidebar", () => {
   beforeEach(() => localStorage.removeItem("rebase:branches-view:v1"));
 
@@ -213,8 +207,7 @@ describe("branches sidebar", () => {
     const pulls = pullRequests();
     const { screen } = await renderSidebar({
       refs: tracked,
-      reader: pulls.reader,
-      routes: [pulls.route],
+      routes: pulls.routes,
     });
     const tree = screen.getByRole("tree", { name: "Branches" });
 
@@ -347,7 +340,7 @@ describe("branches sidebar", () => {
     const view = (scope: RepositoryScope | undefined) => (
       <RepositoryScopeProvider scope={scope}>
         <div style={{ height: 480, width: 320 }}>
-          <BranchesSidebar reader={undefined} />
+          <BranchesSidebar />
         </div>
       </RepositoryScopeProvider>
     );
@@ -401,34 +394,31 @@ describe("branches sidebar", () => {
 function pullRequests() {
   const pulled = vi.fn<(branch: string) => void>();
   let finish = () => {};
-  const reader: PullReader = {
-    fetch: async () => repositoryFreshness({ revision: 1 }),
-    getSnapshot: () => readyHistory,
-    subscribe: () => () => {},
-  };
+  const status = fetchStatus();
   return {
     pulled,
     finish: () => finish(),
-    reader,
-    route: respond(RepositoryPullApi.pull, async (command) => {
-      pulled(command.branch);
-      await new Promise<void>((resolve) => {
-        finish = resolve;
-      });
-      return { outcome: "FastForwarded" as const };
-    }),
+    routes: [
+      respond(RepositoryPullApi.fetchStatus, async () => status),
+      respond(RepositoryPullApi.fetch, async () => status),
+      respond(RepositoryPullApi.pull, async (command) => {
+        pulled(command.branch);
+        await new Promise<void>((resolve) => {
+          finish = resolve;
+        });
+        return { outcome: "FastForwarded" as const };
+      }),
+    ],
   };
 }
 
 async function renderSidebar({
   refs: initial = refs(),
-  reader,
   routes = [],
   selectedHistoryRefKeys,
   switchWorktree,
 }: {
   readonly refs?: RepositoryRefs;
-  readonly reader?: PullReader;
   readonly routes?: readonly FakeRoute[];
   readonly selectedHistoryRefKeys?: ReadonlySet<string>;
   readonly switchWorktree?: (worktreePath: string) => void;
@@ -459,7 +449,6 @@ async function renderSidebar({
       <div style={{ height: 480, width: 320 }}>
         <BranchesSidebar
           onToggleHistoryRef={onToggleHistoryRef}
-          reader={reader}
           {...(selectedHistoryRefKeys === undefined
             ? {}
             : { selectedHistoryRefKeys })}

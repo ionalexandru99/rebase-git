@@ -1,55 +1,68 @@
 import { RepositoryPullApi } from "@rebase/contracts";
+import { skipToken } from "@tanstack/react-query";
 import { useCallback, useState } from "react";
-import type {
-  RepositoryHistoryFetchCommands,
-  RepositoryHistoryObservation,
-  RepositoryHistorySnapshot,
-} from "#web/features/repository-history/repository-history-reader";
+import { useEnvironmentQuery } from "#web/platform/query/environment-query";
 import { useRepositoryScope } from "#web/platform/query/repository-scope";
 import { describeFailure } from "#web/platform/query/request-failure";
 import {
   type CommandFailure,
   useCommand,
 } from "#web/platform/query/use-command";
-import { createStore } from "#web/platform/store/store";
-import { useStore } from "#web/platform/store/use-store";
 
-export type PullReader = Pick<RepositoryHistoryFetchCommands, "fetch"> &
-  RepositoryHistoryObservation;
-
-const idleHistory = createStore<RepositoryHistorySnapshot>({
-  revision: 0,
-  historyRevision: 0,
-  status: "empty",
-});
-
-export function usePull(reader: PullReader | undefined) {
+export function useFetch() {
   const scope = useRepositoryScope();
-  const command = useCommand(RepositoryPullApi.pull, {
-    before: async () =>
-      reader !== undefined && (await reader.fetch()).failure === undefined,
-  });
-  const freshnessReady = useStore(reader ?? idleHistory, isFreshnessReady);
+  const repositoryId = scope?.repositoryId;
+  const status = useEnvironmentQuery(
+    RepositoryPullApi.fetchStatus,
+    repositoryId === undefined ? skipToken : { repositoryId },
+    { changes: "refs" },
+  );
+  const command = useCommand(RepositoryPullApi.fetch);
+  const { run } = command;
+  const execute = useCallback(
+    () =>
+      repositoryId === undefined
+        ? Promise.resolve(false)
+        : run({ repositoryId }).then((result) => result._tag === "Ok"),
+    [repositoryId, run],
+  );
+  return {
+    status: status.data,
+    ready: status.data !== undefined && scope?.connected === true,
+    fetching: status.data?.fetching === true || command.running,
+    failed:
+      command.failure !== undefined ||
+      (status.data?.failure !== undefined && !command.running),
+    execute,
+  };
+}
+
+export type Fetch = ReturnType<typeof useFetch>;
+
+export function usePull() {
+  const scope = useRepositoryScope();
+  const fetch = useFetch();
+  const command = useCommand(RepositoryPullApi.pull, { before: fetch.execute });
   const [mountedAt] = useState(Date.now);
   const pulling = command.running;
   const { run, canRun } = command;
 
   const pull = useCallback(
     async (branch: string) => {
-      if (!canRun || reader === undefined || pulling) return;
+      if (!canRun || pulling) return;
       await run({ branch });
     },
-    [canRun, reader, pulling, run],
+    [canRun, pulling, run],
   );
 
   const latest = command.latest;
   return {
-    available: scope !== undefined && reader !== undefined,
-    allowed: canRun && reader !== undefined,
+    available: scope !== undefined,
+    allowed: canRun,
     canRun,
     pull,
     pulling,
-    freshnessReady,
+    ready: fetch.ready,
     error:
       latest?.result === undefined ||
       latest.submittedAt < mountedAt ||
@@ -62,16 +75,6 @@ export function usePull(reader: PullReader | undefined) {
 }
 
 export type Pull = ReturnType<typeof usePull>;
-
-export function useHistorySnapshot(reader: PullReader | undefined) {
-  return useStore(reader ?? idleHistory);
-}
-
-function isFreshnessReady(snapshot: RepositoryHistorySnapshot) {
-  return (
-    snapshot.freshness !== undefined && snapshot.freshnessError === undefined
-  );
-}
 
 function describePullFailure(
   branch: string,

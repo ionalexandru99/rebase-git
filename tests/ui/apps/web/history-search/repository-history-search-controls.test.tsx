@@ -3,34 +3,45 @@ import { act, StrictMode } from "react";
 import { describe, expect, it, vi } from "vite-plus/test";
 import { page, userEvent } from "vite-plus/test/browser";
 import { render } from "#tests-ui/runtime/render";
-import type {
-  RepositoryHistorySearch,
-  RepositoryHistorySearchResult,
-} from "#web/domain/repository-history/history-search.contract";
 import { RepositoryHistorySearchControls } from "#web/features/history-search/components/repository-history-search-controls";
+import type {
+  HistorySearchPage,
+  HistorySnapshot,
+} from "#web/features/repository-history/history-worker-protocol";
+import type { RepositoryHistory } from "#web/features/repository-history/repository-history";
+import { createStore } from "#web/platform/store/store";
 
-const snapshot = {
-  historyRevision: 1,
+type Search = (
+  query: {
+    readonly text: string;
+    readonly limit: number;
+    readonly cursor?: string;
+  },
+  signal?: AbortSignal,
+) => Promise<HistorySearchPage>;
+
+const snapshot: HistorySnapshot = {
   revision: 1,
-  status: "ready" as const,
-  synchronization: "complete" as const,
-  synchronizedCommitCount: 100,
+  status: "ready",
+  synchronization: "complete",
+  commitCount: 100,
+  refTargets: [],
 };
 describe("history search controls", () => {
   it("loads further matches by scrolling without opening a commit", async () => {
-    const reader = {
-      search: vi
-        .fn<RepositoryHistorySearch["search"]>()
+    const reader = searchable(
+      vi
+        .fn<Search>()
         .mockResolvedValueOnce({
           ...result(Array.from({ length: 20 }, (_, index) => commit(index))),
-          nextCursor: "more",
+          cursor: "more",
         })
         .mockResolvedValueOnce(result([commit(20), commit(21)])),
-    };
+    );
     const onNavigate = vi.fn(async () => {});
     await render(
       <RepositoryHistorySearchControls
-        reader={reader}
+        history={reader}
         snapshot={snapshot}
         onNavigate={onNavigate}
       />,
@@ -56,21 +67,58 @@ describe("history search controls", () => {
       .toHaveBeenCalledWith(commit(21).oid, expect.any(AbortSignal));
   });
 
+  it("keeps opening a result while history changes and refreshes afterwards", async () => {
+    const reader = searchable(
+      vi.fn<Search>().mockResolvedValue(result([commit(1)])),
+    );
+    const signals: AbortSignal[] = [];
+    let finish = () => {};
+    const onNavigate = vi.fn((_oid: string, signal: AbortSignal) => {
+      signals.push(signal);
+      return new Promise<void>((resolve) => {
+        finish = resolve;
+      });
+    });
+    const screen = await render(
+      <RepositoryHistorySearchControls
+        history={reader}
+        snapshot={snapshot}
+        onNavigate={onNavigate}
+      />,
+    );
+    await page.getByRole("searchbox").fill("history");
+    await page
+      .getByRole("button", { name: /Repair shallow history 1/ })
+      .click();
+    await expect.poll(() => onNavigate).toHaveBeenCalledOnce();
+
+    await screen.rerender(
+      <RepositoryHistorySearchControls
+        history={reader}
+        snapshot={{ ...snapshot, revision: 2 }}
+        onNavigate={onNavigate}
+      />,
+    );
+
+    expect(signals.map((signal) => signal.aborted)).toEqual([false]);
+    expect(reader.search).toHaveBeenCalledOnce();
+    await act(async () => finish());
+    await expect.poll(() => reader.search).toHaveBeenCalledTimes(2);
+  });
+
   it("keeps one request in Strict Mode and transfers the query on repository switching", async () => {
     const signals: AbortSignal[] = [];
-    const search = vi.fn<RepositoryHistorySearch["search"]>(
-      (_query, signal) => {
-        if (signal !== undefined) signals.push(signal);
-        return new Promise(() => {});
-      },
-    );
-    const first = { search };
-    const second = { search };
+    const search = vi.fn<Search>((_query, signal) => {
+      if (signal !== undefined) signals.push(signal);
+      return new Promise(() => {});
+    });
+    const first = searchable(search);
+    const second = searchable(search);
     const onNavigate = vi.fn(async () => {});
     const screen = await render(
       <StrictMode>
         <RepositoryHistorySearchControls
-          reader={first}
+          history={first}
           snapshot={snapshot}
           onNavigate={onNavigate}
         />
@@ -81,7 +129,7 @@ describe("history search controls", () => {
     await screen.rerender(
       <StrictMode>
         <RepositoryHistorySearchControls
-          reader={second}
+          history={second}
           snapshot={snapshot}
           onNavigate={onNavigate}
         />
@@ -95,19 +143,19 @@ describe("history search controls", () => {
   });
 
   it("continues sparse pages and shows cached metadata and partial offline coverage", async () => {
-    const reader = {
-      search: vi
-        .fn<RepositoryHistorySearch["search"]>()
-        .mockResolvedValueOnce({ ...result([]), nextCursor: "continue" })
+    const reader = searchable(
+      vi
+        .fn<Search>()
+        .mockResolvedValueOnce({ ...result([]), cursor: "continue" })
         .mockResolvedValueOnce({
           ...result([commit(1)]),
-          replicaComplete: false,
-          synchronizedCommitCount: 42,
+          complete: false,
+          commitCount: 42,
         }),
-    };
+    );
     await render(
       <RepositoryHistorySearchControls
-        reader={reader}
+        history={reader}
         snapshot={snapshot}
         onNavigate={vi.fn()}
         offline
@@ -136,19 +184,19 @@ describe("history search controls", () => {
   });
 
   it("uses the same navigation handlers for result clicks, Enter, Shift Enter", async () => {
-    const reader = {
-      search: vi
-        .fn<RepositoryHistorySearch["search"]>()
+    const reader = searchable(
+      vi
+        .fn<Search>()
         .mockResolvedValueOnce({
           ...result([commit(1), commit(2)]),
-          nextCursor: "next",
+          cursor: "next",
         })
         .mockResolvedValue(result([commit(3)])),
-    };
+    );
     const onNavigate = vi.fn(async () => undefined);
     await render(
       <RepositoryHistorySearchControls
-        reader={reader}
+        history={reader}
         snapshot={snapshot}
         onNavigate={onNavigate}
       />,
@@ -198,10 +246,10 @@ describe("history search controls", () => {
   });
 
   it("cancels pending text and content revisions without showing stale results", async () => {
-    let finish: ((value: RepositoryHistorySearchResult) => void) | undefined;
-    const reader = {
-      search: vi
-        .fn<RepositoryHistorySearch["search"]>()
+    let finish: ((value: HistorySearchPage) => void) | undefined;
+    const reader = searchable(
+      vi
+        .fn<Search>()
         .mockImplementationOnce(
           () =>
             new Promise((resolve) => {
@@ -209,11 +257,11 @@ describe("history search controls", () => {
             }),
         )
         .mockResolvedValue(result([commit(2)])),
-    };
+    );
     const onNavigate = vi.fn(async () => undefined);
     const screen = await render(
       <RepositoryHistorySearchControls
-        reader={reader}
+        history={reader}
         snapshot={snapshot}
         onNavigate={onNavigate}
       />,
@@ -236,18 +284,11 @@ describe("history search controls", () => {
     await expect
       .element(page.getByRole("button", { name: /Repair shallow history 1/ }))
       .not.toBeInTheDocument();
-    await screen.rerender(
-      <RepositoryHistorySearchControls
-        reader={reader}
-        snapshot={{ ...snapshot, revision: 99 }}
-        onNavigate={onNavigate}
-      />,
-    );
     expect(reader.search).toHaveBeenCalledTimes(2);
     await screen.rerender(
       <RepositoryHistorySearchControls
-        reader={reader}
-        snapshot={{ ...snapshot, historyRevision: 2 }}
+        history={reader}
+        snapshot={{ ...snapshot, revision: 2 }}
         onNavigate={onNavigate}
       />,
     );
@@ -255,15 +296,13 @@ describe("history search controls", () => {
   });
 
   it("preserves the selected OID across content updates without navigating again", async () => {
-    const reader = {
-      search: vi
-        .fn<RepositoryHistorySearch["search"]>()
-        .mockResolvedValue(result([commit(1), commit(2)])),
-    };
+    const reader = searchable(
+      vi.fn<Search>().mockResolvedValue(result([commit(1), commit(2)])),
+    );
     const onNavigate = vi.fn(async () => undefined);
     const screen = await render(
       <RepositoryHistorySearchControls
-        reader={reader}
+        history={reader}
         snapshot={snapshot}
         onNavigate={onNavigate}
       />,
@@ -275,8 +314,8 @@ describe("history search controls", () => {
     reader.search.mockResolvedValue(result([commit(3), commit(1), commit(2)]));
     await screen.rerender(
       <RepositoryHistorySearchControls
-        reader={reader}
-        snapshot={{ ...snapshot, historyRevision: 2 }}
+        history={reader}
+        snapshot={{ ...snapshot, revision: 2 }}
         onNavigate={onNavigate}
       />,
     );
@@ -293,15 +332,13 @@ describe("history search controls", () => {
   ])(
     "bounds selection restoration at five requests: %j",
     async ({ selectedPage, emptyPages }) => {
-      const reader = {
-        search: vi
-          .fn<RepositoryHistorySearch["search"]>()
-          .mockResolvedValue(result([commit(99)])),
-      };
+      const reader = searchable(
+        vi.fn<Search>().mockResolvedValue(result([commit(99)])),
+      );
       const onNavigate = vi.fn(async () => undefined);
       const screen = await render(
         <RepositoryHistorySearchControls
-          reader={reader}
+          history={reader}
           snapshot={snapshot}
           onNavigate={onNavigate}
         />,
@@ -321,13 +358,13 @@ describe("history search controls", () => {
                 ? []
                 : [commit(index)],
           ),
-          ...(index < selectedPage ? { nextCursor: String(index + 1) } : {}),
+          ...(index < selectedPage ? { cursor: String(index + 1) } : {}),
         };
       });
       await screen.rerender(
         <RepositoryHistorySearchControls
-          reader={reader}
-          snapshot={{ ...snapshot, historyRevision: 2 }}
+          history={reader}
+          snapshot={{ ...snapshot, revision: 2 }}
           onNavigate={onNavigate}
         />,
       );
@@ -357,12 +394,12 @@ describe("history search controls", () => {
 
   it("keeps pending navigation disabled and reports failures with a retry", async () => {
     let rejectNavigation: ((error: Error) => void) | undefined;
-    const reader = {
-      search: vi
-        .fn<RepositoryHistorySearch["search"]>()
+    const reader = searchable(
+      vi
+        .fn<Search>()
         .mockRejectedValueOnce(new Error("Unavailable"))
         .mockResolvedValue(result([commit(1)])),
-    };
+    );
     const onNavigate = vi.fn(
       () =>
         new Promise<void>((_resolve, reject) => {
@@ -371,7 +408,7 @@ describe("history search controls", () => {
     );
     await render(
       <RepositoryHistorySearchControls
-        reader={reader}
+        history={reader}
         snapshot={snapshot}
         onNavigate={onNavigate}
       />,
@@ -400,10 +437,28 @@ describe("history search controls", () => {
   });
 });
 
-function result(
-  commits: readonly RepositoryCommit[],
-): RepositoryHistorySearchResult {
-  return { commits, replicaComplete: true, synchronizedCommitCount: 100 };
+function result(commits: readonly RepositoryCommit[]): HistorySearchPage {
+  return { commits, complete: true, commitCount: 100 };
+}
+
+function searchable<Searching extends Search>(search: Searching) {
+  return {
+    ...createStore(snapshot),
+    search,
+    ask: (query, signal) =>
+      query._tag === "Search"
+        ? search(
+            {
+              text: query.text,
+              limit: query.limit,
+              ...(query.cursor === undefined ? {} : { cursor: query.cursor }),
+            },
+            signal,
+          )
+        : Promise.reject(new Error("Unexpected history query")),
+    synchronize: () => {},
+    close: () => {},
+  } as RepositoryHistory & { readonly search: Searching };
 }
 
 function commit(index: number): RepositoryCommit {

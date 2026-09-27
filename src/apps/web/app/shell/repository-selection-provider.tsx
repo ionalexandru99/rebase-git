@@ -1,10 +1,5 @@
-import type { RepositoryCatalogEntry, RepositoryRefs } from "@rebase/contracts";
-import { type ReactNode, useCallback, useEffect, useMemo } from "react";
-import { OpenedHistoryContext } from "#web/app/shell/opened-history-context";
-import {
-  type OpenedRepositoryStore,
-  openedRepositoryKey,
-} from "#web/app/shell/opened-repository";
+import type { RepositoryCatalogEntry } from "@rebase/contracts";
+import { type ReactNode, useCallback, useMemo } from "react";
 import {
   type Navigate,
   type Navigation,
@@ -17,17 +12,14 @@ import {
 import { useCatalogRepository } from "#web/features/repository-catalog/use-repository-catalog";
 import { useEnvironment } from "#web/platform/query/environment-context";
 import { RepositoryScopeProvider } from "#web/platform/query/repository-scope";
-import { useStore } from "#web/platform/store/use-store";
 
 export function RepositorySelectionProvider({
   navigation,
   navigate,
-  opened,
   children,
 }: {
   readonly navigation: Navigation;
   readonly navigate: Navigate;
-  readonly opened: OpenedRepositoryStore;
   readonly children: ReactNode;
 }) {
   const { connected, readable, writable } = useEnvironment();
@@ -45,13 +37,6 @@ export function RepositorySelectionProvider({
       : resolveActiveWorktreePath(refs, preferredWorktreePath);
   const repositoryId = repository?.id;
   const logicalRepositoryId = repository?.logicalRepositoryId ?? repositoryId;
-  const history = useOpenedRepositoryHistory(
-    opened,
-    repositoryId,
-    logicalRepositoryId,
-    preferredWorktreePath,
-    refs,
-  );
   const switchWorktree = useCallback(
     (path: string) => {
       if (selectedRepositoryId !== undefined)
@@ -87,42 +72,11 @@ export function RepositorySelectionProvider({
     ],
   );
   return (
-    <RepositoryScopeProvider scope={scope}>
-      <OpenedHistoryContext.Provider value={history}>
-        {children}
-      </OpenedHistoryContext.Provider>
-    </RepositoryScopeProvider>
+    <RepositoryScopeProvider scope={scope}>{children}</RepositoryScopeProvider>
   );
 }
 
 function useLiveRefs(repository: RepositoryCatalogEntry | undefined) {
   const { refs, restored } = useRepositoryRefs(repository?.id);
   return restored ? undefined : refs;
-}
-
-function useOpenedRepositoryHistory(
-  opened: OpenedRepositoryStore,
-  repositoryId: string | undefined,
-  logicalRepositoryId: string | undefined,
-  worktreePath: string,
-  refs: RepositoryRefs | undefined,
-) {
-  const { environmentId } = useEnvironment();
-  const snapshot = useStore(opened);
-  const target = useMemo(
-    () =>
-      repositoryId === undefined ||
-      logicalRepositoryId === undefined ||
-      environmentId === undefined
-        ? undefined
-        : { environmentId, repositoryId, logicalRepositoryId, worktreePath },
-    [environmentId, repositoryId, logicalRepositoryId, worktreePath],
-  );
-  useEffect(() => opened.open(target), [opened, target]);
-  useEffect(() => {
-    if (snapshot !== undefined && refs !== undefined) opened.refsArrived(refs);
-  }, [opened, snapshot, refs]);
-  return target !== undefined && snapshot?.key === openedRepositoryKey(target)
-    ? snapshot.history
-    : undefined;
 }

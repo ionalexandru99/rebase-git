@@ -15,7 +15,6 @@ import { RepositoryWorkspace } from "#web/app/workspace/repository-workspace";
 import { OpenProjectScreen } from "#web/features/open-project/open-project-screen";
 import { ProjectsSidebar } from "#web/features/project-navigation/projects-sidebar";
 import { useCatalogRepository } from "#web/features/repository-catalog/use-repository-catalog";
-import type { RepositoryHistoryGateway } from "#web/features/repository-history/repository-history-reader";
 import { SettingsPanel } from "#web/features/settings/settings-panel";
 import { useEnvironment } from "#web/platform/query/environment-context";
 
@@ -23,7 +22,6 @@ interface ApplicationShellProps {
   readonly desktopUpdates: DesktopUpdates | undefined;
   readonly productVersion: string;
   readonly repositoryFilesystem: RepositoryFilesystemHost | undefined;
-  readonly repositoryHistory: RepositoryHistoryGateway;
 }
 
 export function ApplicationShell({
@@ -43,14 +41,9 @@ function Shell({
   desktopUpdates,
   productVersion,
   repositoryFilesystem,
-  repositoryHistory,
 }: ApplicationShellProps): JSX.Element {
   const { navigation, navigate } = useNavigation();
-  const { opened, openRepository, showRepository } = useRepositoryOpening(
-    repositoryHistory,
-    navigation.worktreePaths,
-    navigate,
-  );
+  const { openRepository, showRepository } = useRepositoryOpening(navigate);
   const projects = visibleProjects(
     navigation.projects,
     useEnvironment().status,
@@ -59,11 +52,7 @@ function Shell({
     navigation.repositorySettingsId,
   )?.id;
   return (
-    <RepositorySelectionProvider
-      navigation={navigation}
-      navigate={navigate}
-      opened={opened}
-    >
+    <RepositorySelectionProvider navigation={navigation} navigate={navigate}>
       <PanelSessions
         navigation={navigation}
         visible={!navigation.settingsOpen && repositorySettingsId === undefined}
@@ -96,7 +85,6 @@ function Shell({
           repositorySettings={
             repositorySettingsId === undefined ? undefined : (
               <RepositorySettingsView
-                gateway={repositoryHistory}
                 repositoryId={repositorySettingsId}
                 reveal={
                   repositoryFilesystem === undefined

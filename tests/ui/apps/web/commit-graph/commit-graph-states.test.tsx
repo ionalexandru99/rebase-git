@@ -1,4 +1,3 @@
-import type { RepositoryCommit } from "@rebase/contracts";
 import { act } from "react";
 import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
 import { page, userEvent } from "vite-plus/test/browser";
@@ -11,8 +10,6 @@ import {
 } from "#tests-ui/apps/web/commit-graph/commit-graph-fixture";
 import { render } from "#tests-ui/runtime/render";
 import { graphRowHeight } from "#web/features/commit-graph/layout/graph-metrics";
-import { saveRepositoryHistoryOrder } from "#web/features/repository-history/preferences/repository-history-order";
-import { RepositoryHistoryUnavailable } from "#web/features/repository-history/repository-history-reader";
 
 describe("commit graph states", () => {
   beforeEach(async () => {
@@ -37,21 +34,7 @@ describe("commit graph states", () => {
       expect(grid.element().scrollHeight > grid.element().clientHeight).toBe(
         before > 3,
       );
-      reader.read.mockImplementation(async (query) =>
-        history(after).slice(
-          query.offset ?? 0,
-          (query.offset ?? 0) + query.limit,
-        ),
-      );
-      await act(() =>
-        saveRepositoryHistoryOrder(
-          {
-            environmentId: "test-environment",
-            repositoryId: "test-logical-repository",
-          },
-          "chronological",
-        ),
-      );
+      await act(() => reader.replace(history(after)));
       await expect
         .poll(() => grid.element().scrollHeight > grid.element().clientHeight)
         .toBe(after > 3);
@@ -146,16 +129,18 @@ describe("commit graph states", () => {
     const first = commits[0];
     if (first === undefined) throw new Error("Commit fixture is missing");
     const reader = historyReader({ commits, status: "ready" });
-    reader.getRefTargets.mockResolvedValue([
-      { name: "main", oid: first.oid, type: "branch" },
-      {
-        name: "origin/main",
-        oid: first.oid,
-        type: "remote-branch",
-      },
-      { name: "hidden", oid: "e".repeat(40), type: "tag" },
-      { name: "HEAD", oid: first.oid, type: "head" },
-    ]);
+    reader.publish({
+      refTargets: [
+        { name: "main", oid: first.oid, type: "branch" },
+        {
+          name: "origin/main",
+          oid: first.oid,
+          type: "remote-branch",
+        },
+        { name: "hidden", oid: "e".repeat(40), type: "tag" },
+        { name: "HEAD", oid: first.oid, type: "head" },
+      ],
+    });
     const remove = vi.fn();
     const add = vi.fn();
     const reset = vi.fn();
@@ -249,43 +234,40 @@ describe("commit graph states", () => {
   });
 
   it("shows loading, empty, and failure states without hiding retry", async () => {
-    let rejectLoad: ((error: unknown) => void) | undefined;
-    const pending = new Promise<readonly RepositoryCommit[]>((_, reject) => {
-      rejectLoad = reject;
+    const answered = Promise.withResolvers<void>();
+    const reader = historyReader({
+      commits: [],
+      pending: answered.promise,
+      status: "loading",
     });
-    const reader = historyReader({ commits: [], pending, status: "loading" });
     const screen = await renderGraph(reader);
 
     await expect
       .element(screen.getByRole("status", { name: "Loading commit history" }))
       .toBeVisible();
-    reader.snapshot = {
-      error: new RepositoryHistoryUnavailable(),
-      revision: 1,
-      historyRevision: 1,
-      status: "error",
-    };
-    rejectLoad?.(new RepositoryHistoryUnavailable());
+    await act(() =>
+      reader.publish({ status: "error", failure: { _tag: "Unavailable" } }),
+    );
     await expect
       .element(screen.getByRole("alert"))
       .toHaveTextContent("Commit history is unavailable");
 
-    reader.read.mockResolvedValue([]);
     await screen.getByRole("button", { name: "Retry" }).click();
+    expect(reader.synchronizations()).toBe(1);
+    await act(() => reader.publish({ status: "empty" }));
+    answered.resolve();
     await expect
       .element(screen.getByRole("status", { name: "Empty commit history" }))
       .toHaveTextContent("No cached commits in this history scope.");
-    expect(reader.read).toHaveBeenCalledTimes(2);
   });
 
-  it("shows an unborn repository without requesting Git history", async () => {
+  it("shows an unborn repository", async () => {
     const reader = historyReader({ commits: [], status: "empty" });
-    const screen = await renderGraph(reader, []);
+    await renderGraph(reader, []);
 
     await expect
-      .element(screen.getByRole("status", { name: "Empty commit history" }))
+      .element(page.getByRole("status", { name: "Empty commit history" }))
       .toHaveTextContent("This repository has no commits yet.");
-    expect(reader.read).not.toHaveBeenCalled();
   });
 
   it("starts loading before the reader is available", async () => {
@@ -307,17 +289,17 @@ describe("commit graph states", () => {
       .not.toBeInTheDocument();
   });
 
-  it("removes the previous repository rows before a replacement read fails", async () => {
+  it("removes the previous repository rows before a replacement fails", async () => {
     const first = historyReader({ commits: history(2), status: "ready" });
     const screen = await renderGraph(first);
     await expect
       .element(screen.getByRole("row", { name: /^Commit 0,/ }))
       .toBeVisible();
-    let rejectRead: ((error: unknown) => void) | undefined;
-    const pending = new Promise<readonly RepositoryCommit[]>((_, reject) => {
-      rejectRead = reject;
+    const second = historyReader({
+      commits: [],
+      pending: new Promise(() => {}),
+      status: "loading",
     });
-    const second = historyReader({ commits: [], pending, status: "loading" });
 
     await screen.rerender(
       <div style={{ height: 520, width: 900 }}>
@@ -330,13 +312,9 @@ describe("commit graph states", () => {
         />
       </div>,
     );
-    second.snapshot = {
-      error: new RepositoryHistoryUnavailable(),
-      revision: 1,
-      historyRevision: 1,
-      status: "error",
-    };
-    rejectRead?.(new RepositoryHistoryUnavailable());
+    await act(() =>
+      second.publish({ status: "error", failure: { _tag: "Unavailable" } }),
+    );
 
     await expect
       .element(screen.getByRole("alert"))

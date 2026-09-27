@@ -5,8 +5,8 @@ import { expect, test } from "@playwright/test";
 import type { RepositoryCommit } from "@rebase/contracts";
 import { createServer } from "vite";
 import {
+  createGitHistoryBatchParser,
   gitHistoryFormat,
-  parseGitHistory,
 } from "#server/features/repository-history/git/parse-git-history";
 import { assertTimingBudget } from "#tests-performance/timing-budget";
 
@@ -25,7 +25,8 @@ test("cached metadata search on repository history and 250,000 merge-heavy commi
         : { cwd: process.env.HISTORY_SEARCH_REPOSITORY_PATH }),
     },
   );
-  const actualCommits = parseGitHistory(stdout, "sha1");
+  const parser = createGitHistoryBatchParser("sha1", 1_000);
+  const actualCommits = [...parser.accept(stdout), ...parser.finish()].flat();
   page.on("console", (message) => {
     if (message.text().startsWith("history-search:"))
       process.stdout.write(`${message.text()}\n`);
@@ -77,15 +78,13 @@ test("cached metadata search on repository history and 250,000 merge-heavy commi
     };
     const measurements = await page.evaluate(async (fixture) => {
       const { repositoryCommitCount, onlyRepository } = fixture;
-      const storePath =
-        "/features/repository-history/replica/repository-history-store.ts";
-      const store: typeof import("#web/features/repository-history/replica/repository-history-store") =
-        await import(storePath);
-      const searchPath =
-        "/features/repository-history/search/repository-history-search.ts";
+      const databasePath = "/features/repository-history/history-database.ts";
+      const database: typeof import("#web/features/repository-history/history-database") =
+        await import(databasePath);
+      const searchPath = "/features/repository-history/history-search.ts";
       const {
-        searchStoredRepositoryHistory,
-      }: typeof import("#web/features/repository-history/search/repository-history-search") =
+        searchHistory,
+      }: typeof import("#web/features/repository-history/history-search") =
         await import(searchPath);
       const environmentId = crypto.randomUUID();
       const count = 250_000;
@@ -156,19 +155,7 @@ test("cached metadata search on repository history and 250,000 merge-heavy commi
           },
         ];
         const seedStarted = performance.now();
-        await store.storeRepositoryHistoryPage(
-          environmentId,
-          repositoryId,
-          {
-            commits: firstPage,
-            objectFormat: "sha1",
-            refTargets: roots,
-            repositoryId,
-            requestId: crypto.randomUUID(),
-          },
-          { limit: 100, order: "topological", roots },
-        );
-        await store.beginRepositoryHistorySynchronization(
+        const record = await database.openRepository(
           environmentId,
           repositoryId,
         );
@@ -177,20 +164,21 @@ test("cached metadata search on repository history and 250,000 merge-heavy commi
             console.log(
               `history-search: storing ${corpus.name} ${offset}/${corpus.count}`,
             );
-          await store.storeRepositoryHistoryBatch(environmentId, repositoryId, {
-            commits: await corpus.read(offset, 1_000),
-            objectFormat: "sha1",
-            repositoryId,
-            requestId: crypto.randomUUID(),
-            sequence: offset / 1_000,
-          });
+          const commits = await corpus.read(offset, 1_000);
+          await database.storeCommits(
+            { ...record, commitCount: offset + commits.length },
+            commits.map((commit, index) => ({
+              commit,
+              epoch: -1,
+              order: offset + index,
+            })),
+          );
         }
-        await store.completeStoredRepositoryHistory(
-          environmentId,
-          repositoryId,
-          corpus.count,
-        );
         const seedMilliseconds = performance.now() - seedStarted;
+        const search = (
+          query: { text: string; limit: number; cursor?: string },
+          signal = new AbortController().signal,
+        ) => searchHistory(record.id, roots, query, signal);
         for (const text of corpus.queries) {
           const measureUntilMatch = async () => {
             let cursor: string | undefined;
@@ -217,20 +205,16 @@ test("cached metadata search on repository history and 250,000 merge-heavy commi
             const fullStarted = performance.now();
             do {
               const started = performance.now();
-              const result = await searchStoredRepositoryHistory(
-                environmentId,
-                repositoryId,
-                {
-                  text,
-                  limit: 20,
-                  ...(cursor === undefined ? {} : { cursor }),
-                },
-              );
+              const result = await search({
+                text,
+                limit: 20,
+                ...(cursor === undefined ? {} : { cursor }),
+              });
               maximumRequestMilliseconds = Math.max(
                 maximumRequestMilliseconds,
                 performance.now() - started,
               );
-              cursor = result.nextCursor;
+              cursor = result.cursor;
               scans += 1;
               matches += result.commits.length;
             } while (cursor !== undefined && matches === 0);
@@ -255,11 +239,7 @@ test("cached metadata search on repository history and 250,000 merge-heavy commi
           let firstMatches = 0;
           for (let run = 0; run < 30; run += 1) {
             const started = performance.now();
-            const result = await searchStoredRepositoryHistory(
-              environmentId,
-              repositoryId,
-              { text, limit: 20 },
-            );
+            const result = await search({ text, limit: 20 });
             durations.push(performance.now() - started);
             firstMatches = result.commits.length;
           }
@@ -291,9 +271,7 @@ test("cached metadata search on repository history and 250,000 merge-heavy commi
         let canceled = false;
         try {
           do {
-            const result = await searchStoredRepositoryHistory(
-              environmentId,
-              repositoryId,
+            const result = await search(
               {
                 text: "unmatched-cancellation-needle",
                 limit: 20,
@@ -301,7 +279,7 @@ test("cached metadata search on repository history and 250,000 merge-heavy commi
               },
               controller.signal,
             );
-            cursor = result.nextCursor;
+            cursor = result.cursor;
           } while (cursor !== undefined);
         } catch (error) {
           if (!(error instanceof DOMException && error.name === "AbortError"))

@@ -1,10 +1,10 @@
 import { type ReactNode, useMemo, useRef } from "react";
-import { unavailableRequests } from "#web/app/environment/environment-connection";
 import type {
   LocalEnvironmentSession,
   LocalEnvironmentSessionState,
 } from "#web/app/environment/local-environment-session";
 import { environmentSessionPresentation } from "#web/app/shell/environment-session-presentation";
+import { unavailableRequests } from "#web/platform/environment/environment-connection";
 import { EnvironmentProvider } from "#web/platform/query/environment-context";
 import { useStore } from "#web/platform/store/use-store";
 

@@ -2,10 +2,13 @@ import { execFile } from "node:child_process";
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { promisify } from "node:util";
-import { RepositoryChangesApi, RepositoryRefsApi } from "@rebase/contracts";
+import {
+  RepositoryChangesApi,
+  RepositoryPullApi,
+  RepositoryRefsApi,
+} from "@rebase/contracts";
 import { Deferred, Effect, Fiber, Option } from "effect";
 import { expect, it } from "vite-plus/test";
-import { acquireWatchedRepository } from "#server/features/repository-history/freshness/watched-repository";
 import { createRepository } from "#tests-support/git";
 import { openTestEnvironment } from "#tests-support/server";
 
@@ -76,22 +79,16 @@ it.each([
     const repositoryId = repository.id;
     const changes = environment.routes(RepositoryChangesApi);
     const refs = environment.routes(RepositoryRefsApi);
+    const pull = environment.routes(RepositoryPullApi);
 
     await Effect.runPromise(
       Effect.scoped(
         Effect.gen(function* () {
           const scope = { repositoryId, worktreePath: directory, amend: false };
           const snapshot = yield* changes.read(scope);
-          const freshness = yield* acquireWatchedRepository(
-            repository,
-            new Set(),
-            environment.git,
-            { watch: () => Effect.succeed({ close: () => {} }) },
-            environment.coordination,
-          );
           const committing = yield* (
             mutation === "fetch"
-              ? freshness.fetch.pipe(Effect.asVoid)
+              ? pull.fetch({ repositoryId }).pipe(Effect.ignore)
               : changes
                   .commit({
                     ...scope,

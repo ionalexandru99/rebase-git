@@ -168,14 +168,16 @@ describe("commit graph layout", () => {
       author: { ...commit.author, name: "Alexandru Ion" },
     }));
     const reader = historyReader({ commits, status: "ready" });
-    reader.getRefTargets.mockResolvedValue([
-      { type: "branch", name: "main", oid: commits[0]?.oid ?? "" },
-      {
-        type: "remote-branch",
-        name: "origin/main",
-        oid: commits[1]?.oid ?? "",
-      },
-    ]);
+    reader.publish({
+      refTargets: [
+        { type: "branch", name: "main", oid: commits[0]?.oid ?? "" },
+        {
+          type: "remote-branch",
+          name: "origin/main",
+          oid: commits[1]?.oid ?? "",
+        },
+      ],
+    });
     const screen = await renderGraph(reader);
     const local = screen
       .getByRole("row", { name: /^Commit 0,/ })

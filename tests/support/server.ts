@@ -34,7 +34,7 @@ import {
   connectEnvironment,
   type EnvironmentCredential,
   environmentRequests,
-} from "#web/app/environment/environment-connection";
+} from "#web/platform/environment/environment-connection";
 import type { EnvironmentRequests } from "#web/platform/query/environment-context";
 import type { EnvironmentInvalidation } from "#web/platform/query/environment-invalidation";
 

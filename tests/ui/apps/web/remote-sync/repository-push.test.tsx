@@ -1,6 +1,7 @@
 import {
   type PushBranch,
   type PushRejected,
+  RepositoryPullApi,
   RepositoryPushApi,
   RepositoryRefsApi,
 } from "@rebase/contracts";
@@ -8,6 +9,7 @@ import { describe, expect, it, vi } from "vite-plus/test";
 import { page } from "vite-plus/test/browser";
 import {
   commitId,
+  fetchStatus,
   repositoryId,
   repositoryRefs,
   worktree,
@@ -226,30 +228,17 @@ describe("repository push", () => {
           worktrees: [worktree("/repo", "spike")],
         }),
       ),
+      respond(RepositoryPullApi.fetchStatus, async () => fetchStatus()),
       respond(RepositoryPushApi.push, (command, { signal }) =>
         pendingPush(aborted)(command, signal),
       ),
     );
-    const snapshot = {
-      revision: 0,
-      historyRevision: 0,
-      status: "ready",
-    } as const;
-    const reader = {
-      fetch: vi.fn(async () => {
-        throw new Error("fetch is not expected");
-      }),
-      getSnapshot: () => snapshot,
-      subscribe: () => () => {},
-    };
     const tree = (toolbar: boolean) => (
       <NotificationsProvider>
         <RepositoryScopeProvider
           scope={repositoryScope({ repositoryId, worktreePath: "/repo" })}
         >
-          <RemoteSync reader={reader}>
-            {(actions) => (toolbar ? actions : null)}
-          </RemoteSync>
+          <RemoteSync>{(actions) => (toolbar ? actions : null)}</RemoteSync>
         </RepositoryScopeProvider>
       </NotificationsProvider>
     );

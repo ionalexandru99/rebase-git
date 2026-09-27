@@ -1,32 +1,42 @@
-import type { RepositoryFetchSetting } from "@rebase/contracts";
+import {
+  type RepositoryFetchSetting,
+  RepositoryPullApi,
+} from "@rebase/contracts";
 import { type FormEvent, useId, useState } from "react";
 import { Button } from "#web/components/ui/button";
 import { Input } from "#web/components/ui/input";
 import { SettingsRow } from "#web/components/ui/settings-layout";
-import {
-  type RepositoryHistoryFetchCommands,
-  RepositoryHistoryOffline,
-  RepositoryHistoryRejected,
-  RepositoryHistoryUnavailable,
-} from "#web/features/repository-history/repository-history-reader";
+import { useEnvironmentQuery } from "#web/platform/query/environment-query";
 import { describeFailure } from "#web/platform/query/request-failure";
+import { useCommand } from "#web/platform/query/use-command";
+
+const inheritedSetting: RepositoryFetchSetting = { _tag: "Inherit" };
 
 export function RepositoryFetchSettings({
-  reader,
-  setting,
-  defaultIntervalSeconds,
-  disabled,
-  disabledReason,
-  onSaved,
+  repositoryId,
+  canConfigure,
 }: {
-  readonly reader: Pick<RepositoryHistoryFetchCommands, "configureFetch">;
-  readonly setting: RepositoryFetchSetting;
-  readonly defaultIntervalSeconds: number;
-  readonly disabled: boolean;
-  readonly disabledReason?: string;
-  readonly onSaved?: () => void;
+  readonly repositoryId: string;
+  readonly canConfigure: boolean;
 }) {
   const id = useId();
+  const status = useEnvironmentQuery(
+    RepositoryPullApi.fetchStatus,
+    { repositoryId },
+    { changes: "refs" },
+  );
+  const configure = useCommand(RepositoryPullApi.configureFetch);
+  const setting = status.data?.setting ?? inheritedSetting;
+  const defaultIntervalSeconds = status.data?.defaultIntervalSeconds ?? 300;
+  const disabled =
+    !configure.canRun || !canConfigure || status.data === undefined;
+  const disabledReason = !configure.canRun
+    ? "Reconnect to the server and try again."
+    : status.error !== null
+      ? describeFailure(status.error)
+      : !canConfigure
+        ? "Connect with repository write access to change fetch settings."
+        : "Loading fetch settings.";
   const [draft, setDraft] = useState<{
     readonly mode: RepositoryFetchSetting["_tag"];
     readonly seconds: string;
@@ -56,15 +66,12 @@ export function RepositoryFetchSettings({
         : { _tag: mode };
     setSaving(true);
     setError(undefined);
-    void reader
-      .configureFetch(next)
-      .then(
-        () => {
-          setDraft(undefined);
-          onSaved?.();
-        },
-        (cause: unknown) => setError(describeRepositoryFetchError(cause)),
-      )
+    void configure
+      .run({ repositoryId, setting: next })
+      .then((result) => {
+        if (result._tag === "Ok") setDraft(undefined);
+        else setError(describeFailure(result));
+      })
       .finally(() => setSaving(false));
   };
   return (
@@ -159,14 +166,4 @@ export function formatFetchInterval(seconds: number) {
     return `${minutes} ${minutes === 1 ? "minute" : "minutes"}`;
   }
   return `${seconds} ${seconds === 1 ? "second" : "seconds"}`;
-}
-
-export function describeRepositoryFetchError(error: unknown) {
-  if (error instanceof RepositoryHistoryOffline)
-    return describeFailure({ _tag: "Unanswered" });
-  if (error instanceof RepositoryHistoryUnavailable)
-    return "Fetching is unavailable for this server.";
-  if (error instanceof RepositoryHistoryRejected)
-    return describeFailure({ _tag: "Rejected", failure: error.failure });
-  return "Git could not complete the operation.";
 }

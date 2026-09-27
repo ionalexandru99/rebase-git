@@ -3,38 +3,30 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef } from "react";
 import { SettingsSection } from "#web/components/ui/settings-layout";
 import { writeClipboardText } from "#web/features/clipboard/write-clipboard-text";
-import type { RepositoryHistoryCacheReader } from "#web/features/history-storage/history-cache";
 import { localEnvironment } from "#web/features/project-navigation/local-environment";
 import { forgetRepositoryRefs } from "#web/features/refs/repository-refs";
-import {
-  describeRepositoryFetchError,
-  RepositoryFetchSettings,
-} from "#web/features/remote-sync/fetch-settings";
+import { RepositoryFetchSettings } from "#web/features/remote-sync/fetch-settings";
 import {
   catalogWithout,
   useCatalogRepository,
 } from "#web/features/repository-catalog/use-repository-catalog";
-import type { RepositoryHistoryIdentity } from "#web/features/repository-history/preferences/repository-history-order";
-import type { RepositoryHistoryFetchCommands } from "#web/features/repository-history/repository-history-reader";
+import type { RepositoryHistoryIdentity } from "#web/features/repository-history/history-order";
+import type { RepositoryHistory } from "#web/features/repository-history/repository-history";
 import { RepositoryCacheSettings } from "#web/features/repository-settings/components/repository-cache-settings";
 import { RepositoryDetailsSettings } from "#web/features/repository-settings/components/repository-details-settings";
 import { RepositoryOrderSettings } from "#web/features/repository-settings/components/repository-order-settings";
 import { useEnvironment } from "#web/platform/query/environment-context";
 import { describeFailure } from "#web/platform/query/request-failure";
 import { useCommand } from "#web/platform/query/use-command";
-import { useStore } from "#web/platform/store/use-store";
-
-type RepositoryHistorySettingsClient = RepositoryHistoryCacheReader &
-  Pick<RepositoryHistoryFetchCommands, "configureFetch">;
 
 export function RepositorySettingsPage({
   repositoryId,
-  reader,
+  history,
   reveal,
   onRemoved,
 }: {
   readonly repositoryId: string;
-  readonly reader: RepositoryHistorySettingsClient | undefined;
+  readonly history: RepositoryHistory | undefined;
   readonly reveal: ((path: string) => Promise<void>) | undefined;
   readonly onRemoved: () => void;
 }) {
@@ -88,7 +80,7 @@ export function RepositorySettingsPage({
             <RepositoryOrderSettings identity={identity} />
           )}
         </SettingsSection>
-        {reader === undefined || identity === undefined ? (
+        {history === undefined || identity === undefined ? (
           <p role="status" className="mt-8 text-sm text-muted-foreground">
             {environmentId === undefined
               ? "Reconnect to load repository settings."
@@ -96,7 +88,8 @@ export function RepositorySettingsPage({
           </p>
         ) : (
           <RepositoryHistorySettings
-            reader={reader}
+            history={history}
+            repositoryId={repositoryId}
             identity={identity}
             connected={connected}
             canConfigure={writable}
@@ -124,46 +117,30 @@ export function RepositorySettingsPage({
 }
 
 function RepositoryHistorySettings({
-  reader,
+  history,
+  repositoryId,
   identity,
   connected,
   canConfigure,
 }: {
-  readonly reader: RepositoryHistorySettingsClient;
+  readonly history: RepositoryHistory;
+  readonly repositoryId: string;
   readonly identity: RepositoryHistoryIdentity;
   readonly connected: boolean;
   readonly canConfigure: boolean;
 }) {
-  const snapshot = useStore(reader);
   const queryClient = useQueryClient();
-  const disabledReason = !connected
-    ? "Reconnect to the server and try again."
-    : snapshot.freshnessError !== undefined
-      ? describeRepositoryFetchError(snapshot.freshnessError)
-      : !canConfigure
-        ? "Connect with repository write access to change fetch settings."
-        : "Loading fetch settings.";
   return (
     <>
       <SettingsSection title="Fetch">
         <RepositoryFetchSettings
-          reader={reader}
-          setting={snapshot.freshness?.setting ?? { _tag: "Inherit" }}
-          defaultIntervalSeconds={
-            snapshot.freshness?.defaultIntervalSeconds ?? 300
-          }
-          disabled={
-            !connected ||
-            !canConfigure ||
-            snapshot.freshness === undefined ||
-            snapshot.freshnessError !== undefined
-          }
-          disabledReason={disabledReason}
+          repositoryId={repositoryId}
+          canConfigure={canConfigure}
         />
       </SettingsSection>
       <SettingsSection title="History storage">
         <RepositoryCacheSettings
-          reader={reader}
+          history={history}
           identity={identity}
           connected={connected}
           onCacheChanged={() =>

@@ -13,6 +13,7 @@ export interface EnvironmentEventPublisher {
     kind?: RepositoryChangeKind,
   ) => number;
   readonly subscribe: (subscriber: EnvironmentChangeSubscriber) => () => void;
+  readonly listening: () => boolean;
 }
 
 export function createEnvironmentEventPublisher(): EnvironmentEventPublisher {
@@ -28,6 +29,7 @@ export function createEnvironmentEventPublisher(): EnvironmentEventPublisher {
       }
       return sequence;
     },
+    listening: () => subscribers.size > 0,
     subscribe: (subscriber) => {
       subscribers.add(subscriber);
       return () => {

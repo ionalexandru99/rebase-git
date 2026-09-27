@@ -5,9 +5,9 @@ import {
 import {
   requestResult,
   transactionCompleted,
-  withRepositoryHistoryDatabase,
+  withHistoryDatabase,
   workingChangesStoreName,
-} from "#web/persistence/repository-history/repository-history-database";
+} from "#web/features/repository-history/history-database";
 import {
   type CommitDraft,
   emptyCommitDraft,
@@ -65,15 +65,12 @@ function access<T>(
   use: (store: IDBObjectStore) => Promise<T>,
   mode: IDBTransactionMode,
 ) {
-  return withRepositoryHistoryDatabase(
-    globalThis.indexedDB,
-    async (database) => {
-      const transaction = database.transaction(workingChangesStoreName, mode);
-      const [result] = await Promise.all([
-        use(transaction.objectStore(workingChangesStoreName)),
-        transactionCompleted(transaction),
-      ]);
-      return result;
-    },
-  );
+  return withHistoryDatabase(async (database) => {
+    const transaction = database.transaction(workingChangesStoreName, mode);
+    const [result] = await Promise.all([
+      use(transaction.objectStore(workingChangesStoreName)),
+      transactionCompleted(transaction),
+    ]);
+    return result;
+  });
 }

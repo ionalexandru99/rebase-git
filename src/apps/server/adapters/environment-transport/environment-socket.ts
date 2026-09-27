@@ -93,7 +93,7 @@ function authorizeUpgrade(
   return Effect.gen(function* () {
     yield* validateRequestHost(request);
     const { credential, cookie } = readSocketCredential(request);
-    yield* validateRequestOrigin(request, cookie && credential !== undefined);
+    if (cookie) yield* validateRequestOrigin(request, credential !== undefined);
     return yield* authorization.authorize(credential);
   }).pipe(
     Effect.map((device) => ({ _tag: "Authorized" as const, device })),

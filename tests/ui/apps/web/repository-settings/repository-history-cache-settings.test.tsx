@@ -1,17 +1,20 @@
 import { describe, expect, it, vi } from "vite-plus/test";
 import { page, userEvent } from "vite-plus/test/browser";
 import { render } from "vitest-browser-react";
-import type { RepositoryHistoryStorageDiagnostics } from "#web/domain/repository-history/history-storage.contract";
-import type { RepositoryHistoryCacheReader } from "#web/features/history-storage/history-cache";
-import type { RepositoryHistorySnapshot } from "#web/features/repository-history/repository-history-reader";
-import { RepositoryHistoryStorageUnavailable } from "#web/features/repository-history/repository-history-reader";
+import type { HistoryCacheAction } from "#web/features/history-storage/use-history-cache-management";
+import type {
+  HistorySnapshot,
+  HistoryStorage,
+} from "#web/features/repository-history/history-worker-protocol";
+import type { RepositoryHistory } from "#web/features/repository-history/repository-history";
 import { RepositoryCacheSettings } from "#web/features/repository-settings/components/repository-cache-settings";
+import { createStore } from "#web/platform/store/store";
 
 const identity = {
   environmentId: "environment-1",
   repositoryId: "repository-1",
 };
-const diagnostics: RepositoryHistoryStorageDiagnostics = {
+const diagnostics: HistoryStorage = {
   persistent: true,
   usageBytes: 2048,
   quotaBytes: 4096,
@@ -37,27 +40,31 @@ const diagnostics: RepositoryHistoryStorageDiagnostics = {
 };
 
 function historyReader() {
-  const listeners = new Set<() => void>();
-  let snapshot: RepositoryHistorySnapshot = {
+  const store = createStore<HistorySnapshot>({
     status: "ready",
     revision: 1,
-    historyRevision: 1,
     synchronization: "complete",
+    commitCount: 12,
+    refTargets: [],
+  });
+  const getCacheDiagnostics = vi.fn(async () => diagnostics);
+  const manageCache = vi.fn(async (_action: HistoryCacheAction) => {});
+  const history: RepositoryHistory = {
+    getSnapshot: store.getSnapshot,
+    subscribe: store.subscribe,
+    ask: async (query) => {
+      if (query._tag !== "Storage") throw new Error("Unexpected query");
+      if (query.action !== "inspect") await manageCache(query.action);
+      return (await getCacheDiagnostics()) as never;
+    },
+    synchronize: () => {},
+    close: () => {},
   };
   return {
-    getSnapshot: () => snapshot,
-    subscribe: (listener: () => void) => {
-      listeners.add(listener);
-      return () => listeners.delete(listener);
-    },
-    getCacheDiagnostics: vi.fn(async () => diagnostics),
-    manageCache: vi.fn(async () => {}),
-    publish(value: RepositoryHistorySnapshot) {
-      snapshot = value;
-      for (const listener of listeners) listener();
-    },
-  } satisfies RepositoryHistoryCacheReader & {
-    publish: (value: RepositoryHistorySnapshot) => void;
+    ...history,
+    getCacheDiagnostics,
+    manageCache,
+    publish: (value: HistorySnapshot) => store.set(value),
   };
 }
 
@@ -66,7 +73,7 @@ async function openDialog(reader = historyReader()) {
   const screen = await render(
     <RepositoryCacheSettings
       connected
-      reader={reader}
+      history={reader}
       identity={identity}
       onCacheChanged={changed}
     />,
@@ -187,9 +194,9 @@ describe("repository history storage", () => {
     reader.publish({
       status: "ready",
       revision: 2,
-      historyRevision: 2,
       synchronization: "syncing",
-      synchronizedCommitCount: 256,
+      commitCount: 256,
+      refTargets: [],
     });
     await expect
       .element(page.getByText("Synchronizing history · 256 commits stored"))
@@ -209,8 +216,10 @@ describe("repository history storage", () => {
     reader.publish({
       status: "error",
       revision: 2,
-      historyRevision: 2,
-      error: new RepositoryHistoryStorageUnavailable(),
+      synchronization: "idle",
+      commitCount: 0,
+      refTargets: [],
+      failure: { _tag: "StorageUnavailable" },
     });
     await openDialog(reader);
     await expect

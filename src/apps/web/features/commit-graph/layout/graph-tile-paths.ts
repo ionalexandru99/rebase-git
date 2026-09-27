@@ -1,4 +1,3 @@
-import type { CommitLaneRow } from "#web/features/commit-graph/layout/commit-lane-model";
 import {
   graphLaneColor,
   graphNodeColor,
@@ -9,6 +8,7 @@ import {
   graphLaneX,
 } from "#web/features/commit-graph/layout/graph-geometry";
 import { graphRowHeight } from "#web/features/commit-graph/layout/graph-metrics";
+import type { CommitLaneRow } from "#web/features/repository-history/commit-lanes";
 
 interface LaneStroke {
   readonly path: Path2D;

@@ -12,7 +12,7 @@ import {
 } from "#desktop/app/desktop-application";
 import type { ManagedEnvironmentServer } from "#desktop/platform/environment/environment-supervisor";
 import { removeTemporaryDirectory } from "#tests-support/temporary-directory";
-import { connectEnvironment } from "#web/app/environment/environment-connection";
+import { connectEnvironment } from "#web/platform/environment/environment-connection";
 
 const directories = new Set<string>();
 

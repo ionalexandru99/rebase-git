@@ -2,8 +2,12 @@ import { describe, expect, it } from "vite-plus/test";
 import {
   createGitHistoryBatchParser,
   gitHistoryFormat,
-  parseGitHistory,
 } from "#server/features/repository-history/git/parse-git-history";
+
+function parseGitHistory(output: string, objectFormat: "sha1" | "sha256") {
+  const parser = createGitHistoryBatchParser(objectFormat, 1_000);
+  return [...parser.accept(output), ...parser.finish()].flat();
+}
 
 describe("Git history metadata", () => {
   it("streams fragmented records into bounded batches", () => {

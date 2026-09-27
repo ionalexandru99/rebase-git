@@ -22,14 +22,17 @@ test("cached order changes on 250,000 merge-heavy commits", async ({
     if (url === undefined) throw new Error("Performance server has no URL");
     await page.goto(url);
     const measurements = await page.evaluate(async () => {
-      const storePath =
-        "/features/repository-history/replica/repository-history-store.ts";
-      const store: typeof import("#web/features/repository-history/replica/repository-history-store") =
-        await import(storePath);
-      const queryPath =
-        "/features/repository-history/query/repository-history-query.ts";
-      const queries: typeof import("#web/features/repository-history/query/repository-history-query") =
-        await import(queryPath);
+      const replicaPath =
+        "/features/repository-history/worker/history-replica.ts";
+      const {
+        HistoryReplica,
+      }: typeof import("#web/features/repository-history/worker/history-replica") =
+        await import(replicaPath);
+      const historyPath = "/features/repository-history/repository-history.ts";
+      const {
+        openRepositoryHistory,
+      }: typeof import("#web/features/repository-history/repository-history") =
+        await import(historyPath);
       const environmentId = crypto.randomUUID();
       const repositoryId = crypto.randomUUID();
       const count = 250_000;
@@ -57,164 +60,113 @@ test("cached order changes on 250,000 merge-heavy commits", async ({
           timezoneOffsetMinutes: 0,
         },
       });
-      await store.storeRepositoryHistoryPage(
+      const scope = (
+        order: "topological" | "chronological",
+        expanded: readonly { childOid: string; parentOid: string }[] = [],
+      ) => ({ roots, order, expanded });
+      let completed = false;
+      const replica = new HistoryReplica(
         environmentId,
         repositoryId,
-        {
-          commits: Array.from({ length: 100 }, (_, index) => commit(index)),
-          objectFormat: "sha1",
-          refTargets: roots,
-          repositoryId,
-          requestId: crypto.randomUUID(),
+        (snapshot) => {
+          completed = snapshot.synchronization === "complete";
         },
-        { limit: 100, order: "topological", roots },
+        () => true,
       );
-      await store.beginRepositoryHistorySynchronization(
-        environmentId,
-        repositoryId,
-      );
-      for (let offset = 0; offset < count; offset += 1_000) {
-        if (offset % 50_000 === 0)
-          console.log(`history-order: storing ${offset}/${count}`);
-        await store.storeRepositoryHistoryBatch(environmentId, repositoryId, {
-          commits: Array.from(
-            { length: Math.min(1_000, count - offset) },
-            (_, index) => commit(index + offset),
-          ),
-          objectFormat: "sha1",
-          repositoryId,
-          requestId: crypto.randomUUID(),
-          sequence: offset / 1_000,
-        });
-      }
-      await store.completeStoredRepositoryHistory(
-        environmentId,
-        repositoryId,
-        count,
-      );
-      console.log("history-order: preparing compact index");
-      const cache: import("#web/features/repository-history/query/history-order-model").HistoryOrderCache =
-        { queries: new Map(), revision: 0 };
+      const socket: import("#web/platform/environment/environment-connection").EnvironmentSocket =
+        {
+          environmentId,
+          synchronizeHistory: async (_request, accept) => {
+            await accept({
+              _tag: "RepositoryHistoryTips",
+              objectFormat: "sha1",
+              rootOids: [oid(0)],
+              shallowOids: [],
+              refTargets: roots,
+            });
+            for (let offset = 0; offset < count; offset += 500) {
+              if (offset % 50_000 === 0)
+                console.log(`history-order: storing ${offset}/${count}`);
+              await accept({
+                _tag: "RepositoryHistoryCommits",
+                commits: Array.from(
+                  { length: Math.min(500, count - offset) },
+                  (_, index) => commit(index + offset),
+                ),
+              });
+            }
+          },
+          closed: new Promise(() => {}),
+        };
+      const ingestStarted = performance.now();
+      replica.synchronize({ socket, repositoryId });
+      while (!completed) await new Promise(requestAnimationFrame);
+      const ingestMilliseconds = performance.now() - ingestStarted;
+      console.log(`history-order: synchronized in ${ingestMilliseconds}ms`);
+      await replica.close();
       const indexStarted = performance.now();
-      await queries.prepareRepositoryHistoryOrder(
+      const reopened = new HistoryReplica(
         environmentId,
         repositoryId,
-        cache,
+        () => {},
+        () => true,
       );
+      await reopened.rows(scope("topological"), 0, 100);
       const indexMilliseconds = performance.now() - indexStarted;
       console.log(`history-order: index prepared in ${indexMilliseconds}ms`);
-      const readerPath =
-        "/features/repository-history/browser-repository-history-reader.ts";
-      const {
-        createBrowserRepositoryHistoryReader,
-      }: typeof import("#web/features/repository-history/browser-repository-history-reader") =
-        await import(readerPath);
-      const graphPath =
-        "/features/commit-graph/paging/commit-graph-page-window.ts";
-      const {
-        createCommitGraphPageWindow,
-      }: typeof import("#web/features/commit-graph/paging/commit-graph-page-window") =
-        await import(graphPath);
       const reopenStarted = performance.now();
-      const worker = new SharedWorker(
-        "/features/repository-history/worker/repository-history-worker.ts",
-        { type: "module", name: crypto.randomUUID() },
-      );
-      const reader = createBrowserRepositoryHistoryReader({
+      const history = openRepositoryHistory({
         environmentId,
         repositoryId,
-        worker,
-        gateway: {
-          read: async () => {
-            throw new Error("Cached history requested the network");
-          },
-          synchronize: async () => {
-            throw new Error("Offline benchmark");
-          },
-        },
+        logicalRepositoryId: repositoryId,
       });
-      const graph = createCommitGraphPageWindow(reader);
       let freshWorkerGraphMilliseconds: number;
       try {
-        await graph.loadInitial({
-          roots,
-          order: "topological",
-          ancestry: "first-parent",
-          limit: 100,
+        const first = await history.ask({
+          _tag: "Rows",
+          scope: scope("topological"),
+          start: 0,
+          end: 100,
         });
         freshWorkerGraphMilliseconds = performance.now() - reopenStarted;
-        if (
-          graph.getSnapshot().error !== undefined ||
-          graph.getSnapshot().endOffset !== 100
-        )
+        if (first.rows.length !== 100)
           throw new Error("Fresh worker could not prepare the first graph");
       } finally {
-        graph.dispose();
-        reader.close();
-        worker.port.close();
+        history.close();
       }
       const durations: number[] = [];
       for (let run = 0; run < 30; run += 1) {
-        cache.queries.clear();
         const started = performance.now();
-        const result = await queries.readRepositoryHistory(
-          environmentId,
-          repositoryId,
-          {
-            limit: 100,
-            offset: 100,
-            order: run % 2 === 0 ? "chronological" : "topological",
-            roots,
-          },
-          indexedDB,
-          cache,
+        const result = await reopened.rows(
+          scope(run % 2 === 0 ? "chronological" : "topological", [
+            { childOid: oid(count - 1), parentOid: oid(run) },
+          ]),
+          100,
+          200,
         );
         const duration = performance.now() - started;
+        const expected = Array.from({ length: 300 }, (_, index) => index)
+          .filter((index) => index % 4 !== 2)
+          .slice(100, 200)
+          .map(oid);
         if (
-          result?.length !== 100 ||
-          result.some((commit, position) => {
-            const chronologicalOffset =
-              run % 2 === 0
-                ? position % 4 === 1
-                  ? 1
-                  : position % 4 === 2
-                    ? -1
-                    : 0
-                : 0;
-            return commit.oid !== oid(100 + position + chronologicalOffset);
-          })
+          result.rows.map(({ commit }) => commit.oid).join() !== expected.join()
         )
           throw new Error("Ordered page is inconsistent");
         durations.push(duration);
       }
-      const expandedQuery = {
-        roots,
-        order: "topological" as const,
-        ancestry: "first-parent" as const,
-        additionalParentEdges: [{ childOid: oid(0), parentOid: oid(2) }],
-        limit: 100,
-      };
       const expansionStarted = performance.now();
-      const position = await queries.locateRepositoryHistoryCommit(
-        environmentId,
-        repositoryId,
-        expandedQuery,
-        oid(0),
-        cache,
-      );
-      if (position !== 0)
-        throw new Error("Expanded merge position is inconsistent");
-      const expandedPage = await queries.readRepositoryHistory(
-        environmentId,
-        repositoryId,
-        { ...expandedQuery, offset: position },
-        indexedDB,
-        cache,
+      const expanded = await reopened.rows(
+        scope("topological", [{ childOid: oid(0), parentOid: oid(2) }]),
+        0,
+        100,
       );
       const firstExpansionMilliseconds = performance.now() - expansionStarted;
-      if (!expandedPage?.some((commit) => commit.oid === oid(2)))
+      if (!expanded.rows.some(({ commit }) => commit.oid === oid(2)))
         throw new Error("Expanded merge page is inconsistent");
+      await reopened.close();
       return {
+        ingestMilliseconds,
         indexMilliseconds,
         durations,
         firstExpansionMilliseconds,

@@ -1,4 +1,3 @@
-import type { RepositoryCommit } from "@rebase/contracts";
 import {
   defaultRangeExtractor,
   useVirtualizer,
@@ -13,35 +12,36 @@ import {
   useMemo,
   useState,
 } from "react";
-import type { CommitGraphViewportHandle } from "#web/features/commit-graph/commit-graph-model";
 import {
   graphHeaderHeight,
   graphRowHeight as rowHeight,
 } from "#web/features/commit-graph/layout/graph-metrics";
-import type {
-  CommitGraphPageWindow,
-  CommitGraphPageWindowSnapshot,
-} from "#web/features/commit-graph/paging/commit-graph-page-window-model";
 
 const overscanRows = 6;
 const emptyViewport = { width: 0, height: 0 };
 
+export interface CommitGraphViewportHandle {
+  readonly scrollToIndex: (index: number) => void;
+}
+
 export function CommitGraphVirtualWindow({
   ref,
   scrollRef,
-  commits,
-  snapshot,
-  engine,
-  activeOid,
+  total,
+  start,
+  oids,
+  activeIndex,
+  onRange,
   onPageSize,
   children,
 }: {
   readonly ref: Ref<CommitGraphViewportHandle>;
   readonly scrollRef: RefObject<HTMLTableElement | null>;
-  readonly commits: readonly RepositoryCommit[];
-  readonly snapshot: CommitGraphPageWindowSnapshot;
-  readonly engine: CommitGraphPageWindow | undefined;
-  readonly activeOid: string | undefined;
+  readonly total: number;
+  readonly start: number;
+  readonly oids: readonly string[];
+  readonly activeIndex: number | undefined;
+  readonly onRange: (first: number, last: number) => void;
   readonly onPageSize: (size: number) => void;
   readonly children: (viewport: {
     readonly viewport: { readonly width: number; readonly height: number };
@@ -49,11 +49,8 @@ export function CommitGraphVirtualWindow({
     readonly virtualRows: readonly VirtualItem[];
   }) => ReactNode;
 }) {
-  const error = snapshot.error;
   const virtualizer = useVirtualizer({
-    count:
-      snapshot.knownEndOffset +
-      (commits.length > 0 && snapshot.hasOlder ? 1 : 0),
+    count: total,
     estimateSize: () => rowHeight,
     paddingStart: graphHeaderHeight,
     scrollPaddingStart: graphHeaderHeight,
@@ -76,77 +73,37 @@ export function CommitGraphVirtualWindow({
     overscan: overscanRows,
     rangeExtractor: (range) => {
       const indexes = defaultRangeExtractor(range);
-      const active = commits.findIndex((commit) => commit.oid === activeOid);
-      const index = active + snapshot.startOffset;
-      if (active >= 0 && !indexes.includes(index)) indexes.push(index);
       if (
-        error !== undefined &&
-        error.offset >= snapshot.endOffset &&
-        !indexes.includes(error.offset)
+        activeIndex !== undefined &&
+        activeIndex < total &&
+        !indexes.includes(activeIndex)
       )
-        indexes.push(error.offset);
+        indexes.push(activeIndex);
       return indexes.sort((left, right) => left - right);
     },
   });
   const viewport = virtualizer.scrollRect ?? emptyViewport;
   const absoluteRows = virtualizer.getVirtualItems();
   const [rowSlots, setRowSlots] = useState<readonly (string | undefined)[]>([]);
-  const rowOids = absoluteRows.map(
-    (row) =>
-      commits[row.index - snapshot.startOffset]?.oid ?? `retry-${row.index}`,
-  );
-  const nextSlots = reconcileRowSlots(rowSlots, rowOids);
+  const rowKey = (index: number) => oids[index - start] ?? `row-${index}`;
+  const rowKeys = absoluteRows.map((row) => rowKey(row.index));
+  const nextSlots = reconcileRowSlots(rowSlots, rowKeys);
   const virtualRows = useMemo(
     () =>
       absoluteRows.map((row) => ({
         ...row,
         start: row.start - graphHeaderHeight,
         end: row.end - graphHeaderHeight,
-        key: nextSlots.indexOf(
-          commits[row.index - snapshot.startOffset]?.oid ??
-            `retry-${row.index}`,
-        ),
-        index: row.index - snapshot.startOffset,
+        key: nextSlots.indexOf(oids[row.index - start] ?? `row-${row.index}`),
+        index: row.index - start,
       })),
-    [absoluteRows, commits, nextSlots, snapshot.startOffset],
+    [absoluteRows, oids, nextSlots, start],
   );
-  const firstVirtual =
-    commits.length === 0
-      ? undefined
-      : Math.floor((virtualizer.scrollOffset ?? 0) / rowHeight);
-  const lastVirtual =
-    firstVirtual === undefined
-      ? undefined
-      : firstVirtual +
-        Math.max(
-          0,
-          Math.ceil((viewport.height - graphHeaderHeight) / rowHeight),
-        );
-  useEffect(() => {
-    if (
-      firstVirtual === undefined ||
-      lastVirtual === undefined ||
-      engine === undefined ||
-      snapshot.loading ||
-      snapshot.error !== undefined
-    )
-      return;
-    if (
-      firstVirtual < snapshot.startOffset ||
-      firstVirtual >= snapshot.endOffset
-    )
-      void engine.prefetchOffset(firstVirtual);
-    else engine.setViewport(firstVirtual, lastVirtual);
-  }, [
-    firstVirtual,
-    lastVirtual,
-    engine,
-    snapshot.startOffset,
-    snapshot.endOffset,
-    snapshot.loading,
-    snapshot.error,
-  ]);
-
+  const first = Math.floor((virtualizer.scrollOffset ?? 0) / rowHeight);
+  const last =
+    first +
+    Math.max(0, Math.ceil((viewport.height - graphHeaderHeight) / rowHeight));
+  useEffect(() => onRange(first, last), [onRange, first, last]);
   useEffect(
     () =>
       onPageSize(
@@ -158,7 +115,6 @@ export function CommitGraphVirtualWindow({
     [onPageSize, viewport.height],
   );
   useImperativeHandle(ref, () => ({
-    getScrollOffset: () => virtualizer.scrollOffset ?? 0,
     scrollToIndex: (index) =>
       virtualizer.scrollToIndex(index, { align: "auto" }),
   }));
@@ -175,22 +131,22 @@ export function CommitGraphVirtualWindow({
 
 function reconcileRowSlots(
   previous: readonly (string | undefined)[],
-  oids: readonly string[],
+  keys: readonly string[],
 ) {
-  const current = new Set(oids);
+  const current = new Set(keys);
   if (
-    oids.every((oid) => previous.includes(oid)) &&
-    previous.every((oid) => oid === undefined || current.has(oid))
+    keys.every((key) => previous.includes(key)) &&
+    previous.every((key) => key === undefined || current.has(key))
   )
     return previous;
-  const slots = previous.map((oid) =>
-    oid !== undefined && current.has(oid) ? oid : undefined,
+  const slots = previous.map((key) =>
+    key !== undefined && current.has(key) ? key : undefined,
   );
-  for (const oid of oids) {
-    if (slots.includes(oid)) continue;
+  for (const key of keys) {
+    if (slots.includes(key)) continue;
     const available = slots.indexOf(undefined);
-    if (available < 0) slots.push(oid);
-    else slots[available] = oid;
+    if (available < 0) slots.push(key);
+    else slots[available] = key;
   }
   return slots;
 }

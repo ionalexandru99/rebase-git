@@ -15,7 +15,7 @@ import {
 import {
   EnvironmentAccessDenied,
   EnvironmentUnavailable,
-} from "#web/app/environment/environment-connection";
+} from "#web/platform/environment/environment-connection";
 
 describe("Environment authorization transport", () => {
   it("opens the socket with a browser session cookie only from the server origin", async () => {
@@ -164,6 +164,19 @@ describe("Environment authorization transport", () => {
       },
     );
     expect(response).toBe(403);
+  });
+
+  it("opens the socket with a device credential from a page or worker on a file origin", async () => {
+    const { origin, owner } = await openTestServer();
+    await expect(
+      helloOverSocket(origin, {
+        credential: owner.value,
+        headers: { origin: "file://" },
+      }),
+    ).resolves.toMatchObject({
+      _tag: "Answered",
+      message: { exit: { _tag: "Success" } },
+    });
   });
 
   it("pairs another device over the socket and cuts it off once revoked", async () => {

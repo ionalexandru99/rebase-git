@@ -18,10 +18,7 @@ import { createRepositoryCatalog } from "#server/features/repository-catalog/rep
 import { repositoryCatalogFeature } from "#server/features/repository-catalog/repository-catalog.feature";
 import { repositoryChangesFeature } from "#server/features/repository-changes/repository-changes.feature";
 import { repositoryConflictsFeature } from "#server/features/repository-conflicts/repository-conflicts.feature";
-import {
-  repositoryFreshnessFeature,
-  repositoryHistoryFeature,
-} from "#server/features/repository-history/repository-history.feature";
+import { repositoryHistoryFeature } from "#server/features/repository-history/repository-history.feature";
 import { repositoryOperationsFeature } from "#server/features/repository-operations/repository-operations";
 import { repositoryPullFeature } from "#server/features/repository-pull/repository-pull.feature";
 import { repositoryPushFeature } from "#server/features/repository-push/repository-push.feature";
@@ -125,9 +122,8 @@ export function environmentFeatures(dependencies: EnvironmentDependencies) {
       repositoryChangesFeature(dependencies),
       repositoryConflictsFeature(dependencies),
       repositoryHistoryFeature(dependencies),
-      yield* repositoryFreshnessFeature(dependencies),
       repositoryOperationsFeature(dependencies),
-      repositoryPullFeature(dependencies),
+      yield* repositoryPullFeature(dependencies),
       repositoryPushFeature(dependencies),
       yield* repositoryRefsFeature(dependencies),
     ]);

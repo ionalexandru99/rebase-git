@@ -488,7 +488,7 @@ function BranchWorkspace({
         </CommitActionMenu>
       )}
       <div style={{ height: 520, width: 320 }}>
-        <BranchesSidebar onBranchRenamed={onBranchRenamed} reader={undefined} />
+        <BranchesSidebar onBranchRenamed={onBranchRenamed} />
       </div>
     </>
   );

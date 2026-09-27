@@ -1,4 +1,3 @@
-import { createBrowserRepositoryHistoryReader } from "#web/features/repository-history/browser-repository-history-reader";
 import "@rebase/web/styles.css";
 import {
   RepositoryBranchesApi,
@@ -10,7 +9,7 @@ import {
   persistQueryClientRestore,
   persistQueryClientSave,
 } from "@tanstack/react-query-persist-client";
-import { expect, it, vi } from "vite-plus/test";
+import { expect, it } from "vite-plus/test";
 import { repositoryScope } from "#tests-ui/apps/web/repository-scope/repository-scope-fixture";
 import {
   fakeRequests,
@@ -18,14 +17,14 @@ import {
   unanswered,
 } from "#tests-ui/runtime/fake-requests";
 import { render } from "#tests-ui/runtime/render";
-import { OpenedHistoryContext } from "#web/app/shell/opened-history-context";
 import { RepositoryWorkspace } from "#web/app/workspace/repository-workspace";
-import { openCommitGraphHistory } from "#web/features/commit-graph/paging/commit-graph-history";
-import { createBrowserHistoryFilterStore } from "#web/features/commit-graph/scope/browser-history-filter-store";
-import { resolveHistoryScope } from "#web/features/commit-graph/scope/history-scope";
+import { NotificationsProvider } from "#web/features/notifications/notifications";
 import { useRepositoryRefs } from "#web/features/refs/repository-refs";
-import { storeRepositoryHistoryPage } from "#web/features/repository-history/replica/repository-history-store";
-import { RepositoryHistoryOffline } from "#web/features/repository-history/repository-history-reader";
+import {
+  openRepository,
+  storeCommits,
+  updateRepository,
+} from "#web/features/repository-history/history-database";
 import { environmentQueryKey } from "#web/platform/query/environment-query";
 import { createEnvironmentQueryClient } from "#web/platform/query/environment-query-client";
 import { createEnvironmentQueryPersistence } from "#web/platform/query/environment-query-persistence";
@@ -159,68 +158,59 @@ it("keeps restored refs restored through a branch write until a live read answer
 });
 
 it.each(["Automatic", "Custom"] as const)(
-  "renders cached %s history before live refs respond",
+  "reopens %s history from browser storage while the server is unreachable",
   async (mode) => {
     const environmentId = crypto.randomUUID();
     const refs = repositoryRefs();
     const logicalId = refs.logicalRepositoryId ?? "";
     const queryClient = await restoredRefs(environmentId, refs);
-    const custom = {
-      _tag: "Custom",
-      selections: [
-        { _tag: "LocalBranch", name: "feature" },
-        { _tag: "Tag", name: "new-tag" },
-      ],
-    } as const;
-    const filterStore = createBrowserHistoryFilterStore();
-    if (mode === "Custom") filterStore.save(environmentId, logicalId, custom);
-    const roots = resolveHistoryScope(
-      { _tag: "Automatic" },
-      refs,
-      "/feature",
-    ).roots;
-    await storeRepositoryHistoryPage(
-      environmentId,
-      logicalId,
-      {
-        commits: [commit],
-        objectFormat: "sha1",
-        refTargets: roots,
-        repositoryId: refs.repositoryId,
-        requestId: crypto.randomUUID(),
+    const filterKey = `rebase:history-filter:v1:${environmentId}:${logicalId}`;
+    const custom = JSON.stringify({
+      scope: {
+        _tag: "Custom",
+        selections: [
+          { _tag: "LocalBranch", name: "feature" },
+          { _tag: "Tag", name: "new-tag" },
+        ],
       },
-      { limit: 100, order: "topological", roots },
-    );
-    const read = vi.fn(() => Promise.reject(new RepositoryHistoryOffline()));
-    const reader = createBrowserRepositoryHistoryReader({
-      environmentId,
-      repositoryId: refs.repositoryId,
-      logicalRepositoryId: logicalId,
-      gateway: {
-        read,
-        synchronize: async () => {
-          throw new RepositoryHistoryOffline();
-        },
+      version: 1,
+    });
+    if (mode === "Custom") localStorage.setItem(filterKey, custom);
+    const record = await openRepository(environmentId, logicalId);
+    await storeCommits({ ...record, commitCount: 1, minimumEpoch: -1 }, [
+      { commit, epoch: -1, order: 0 },
+    ]);
+    await updateRepository({
+      ...record,
+      commitCount: 1,
+      minimumEpoch: -1,
+      tips: {
+        _tag: "RepositoryHistoryTips",
+        objectFormat: "sha1",
+        rootOids: [oid],
+        shallowOids: [],
+        refTargets: [{ name: "feature", oid, type: "branch" }],
       },
     });
     const screen = await render(
-      <div style={{ height: 720, width: 1280 }}>
-        <RepositoryScopeProvider
-          scope={repositoryScope({
-            repositoryId: refs.repositoryId,
-            logicalRepositoryId: logicalId,
-            worktreePath: "/feature",
-            connected: false,
-          })}
-        >
-          <OpenedHistoryContext.Provider
-            value={{ ...openCommitGraphHistory(reader), reader }}
+      <NotificationsProvider>
+        <div style={{ height: 720, width: 1280 }}>
+          <RepositoryScopeProvider
+            scope={repositoryScope({
+              repositoryId: refs.repositoryId,
+              logicalRepositoryId: logicalId,
+              worktreePath: "/feature",
+              connected: false,
+            })}
           >
             <RepositoryWorkspace />
-          </OpenedHistoryContext.Provider>
-        </RepositoryScopeProvider>
-      </div>,
-      { environment: { environmentId }, queryClient },
+          </RepositoryScopeProvider>
+        </div>
+      </NotificationsProvider>,
+      {
+        environment: { environmentId, connected: false },
+        queryClient,
+      },
     );
     await expect
       .element(screen.getByRole("row", { name: /^Cached commit,/ }))
@@ -242,10 +232,8 @@ it.each(["Automatic", "Custom"] as const)(
           }),
       )
       .toBeVisible();
-    reader.close();
-    expect(read).not.toHaveBeenCalled();
-    expect(filterStore.load(environmentId, logicalId)).toEqual(
-      mode === "Automatic" ? { _tag: "Automatic" } : custom,
+    expect(localStorage.getItem(filterKey)).toBe(
+      mode === "Automatic" ? null : custom,
     );
   },
 );

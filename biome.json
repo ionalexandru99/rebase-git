@@ -69,7 +69,48 @@
       }
     },
     {
-      "includes": ["src/apps/web/platform/**", "src/apps/web/components/ui/**"],
+      "includes": [
+        "src/apps/web/platform/**",
+        "!src/apps/web/platform/environment/**",
+        "src/apps/web/components/ui/**"
+      ],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "patterns": [
+                  {
+                    "group": [
+                      "@rebase/server/**",
+                      "!@rebase/server/package.json",
+                      "@rebase/desktop/**"
+                    ],
+                    "message": "Use private #server/* or #desktop/* aliases for internal imports and tests. Cross-package consumers must use the public package entry point."
+                  },
+                  {
+                    "group": [
+                      "#web/app/**",
+                      "#web/features/**",
+                      "@rebase/web",
+                      "@rebase/web/**"
+                    ],
+                    "message": "Platform adapters and UI primitives cannot depend on product features or application composition."
+                  },
+                  {
+                    "group": ["effect", "effect/**"],
+                    "message": "Browser features and application composition use TanStack Query and plain TypeScript. Keep Effect in the environment connection."
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "includes": ["src/apps/web/platform/environment/**"],
       "linter": {
         "rules": {
           "style": {
@@ -122,11 +163,7 @@
       }
     },
     {
-      "includes": [
-        "src/apps/web/features/**",
-        "!src/apps/web/features/repository-history/**",
-        "!src/apps/web/features/history-search/**"
-      ],
+      "includes": ["src/apps/web/features/**"],
       "linter": {
         "rules": {
           "style": {
@@ -148,7 +185,7 @@
                   },
                   {
                     "group": ["effect", "effect/**"],
-                    "message": "Browser features and application composition use TanStack Query and plain TypeScript. Keep Effect in the environment connection and the history pipeline."
+                    "message": "Browser features and application composition use TanStack Query and plain TypeScript. Keep Effect in the environment connection."
                   }
                 ]
               }
@@ -171,7 +208,7 @@
                 "patterns": [
                   {
                     "group": ["effect", "effect/**"],
-                    "message": "Browser features and application composition use TanStack Query and plain TypeScript. Keep Effect in the environment connection and the history pipeline."
+                    "message": "Browser features and application composition use TanStack Query and plain TypeScript. Keep Effect in the environment connection."
                   }
                 ]
               }

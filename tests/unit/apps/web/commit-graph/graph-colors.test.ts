@@ -1,13 +1,13 @@
 import { describe, expect, it } from "vite-plus/test";
 import {
-  appendCommitLanes,
-  createCommitLaneCheckpoint,
-} from "#web/features/commit-graph/layout/commit-lanes";
-import {
   graphColors,
   graphLaneColor,
-  graphLaneSeeds,
 } from "#web/features/commit-graph/layout/graph-colors";
+import {
+  appendCommitLanes,
+  createCommitLaneCheckpoint,
+  graphLaneSeeds,
+} from "#web/features/repository-history/commit-lanes";
 
 describe("graph branch colors", () => {
   it.each([

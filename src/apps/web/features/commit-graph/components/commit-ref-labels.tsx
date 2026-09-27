@@ -6,11 +6,11 @@ import { IconTag, IconX } from "@tabler/icons-react";
 import { CopyPill } from "#web/features/clipboard/components/copy-pill";
 import { GitProviderIcon } from "#web/features/commit-graph/components/git-provider-icon";
 import { useGraphRefAppearance } from "#web/features/commit-graph/components/graph-ref-appearance";
+import { graphLaneColor } from "#web/features/commit-graph/layout/graph-colors";
 import {
   graphBranchColorIndex,
-  graphLaneColor,
   graphRefName,
-} from "#web/features/commit-graph/layout/graph-colors";
+} from "#web/features/repository-history/commit-lanes";
 
 export function CommitRefLabels({
   labels,

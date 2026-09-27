@@ -1,10 +1,10 @@
-import type { RepositoryHistoryStorageDiagnostics } from "#web/domain/repository-history/history-storage.contract";
 import { formatCacheSize } from "#web/features/history-storage/format-cache-size";
+import type { HistoryStorage } from "#web/features/repository-history/history-worker-protocol";
 
 export function RepositoryHistoryCacheList({
   diagnostics,
 }: {
-  readonly diagnostics: RepositoryHistoryStorageDiagnostics;
+  readonly diagnostics: HistoryStorage;
 }) {
   return (
     <>

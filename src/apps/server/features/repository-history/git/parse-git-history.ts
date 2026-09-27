@@ -107,29 +107,6 @@ function commitCharacters(commit: RepositoryCommit) {
   );
 }
 
-export function parseGitHistory(
-  output: string,
-  objectFormat: GitObjectFormat,
-): readonly RepositoryCommit[] {
-  if (output.length === 0) {
-    return [];
-  }
-  const fields = output.split("\0");
-  if (fields.at(-1) === "") {
-    fields.pop();
-  }
-  if (fields.length % fieldsPerCommit !== 0) {
-    throw new Error("Truncated Git history record");
-  }
-  const commits: RepositoryCommit[] = [];
-  for (let offset = 0; offset < fields.length; offset += fieldsPerCommit) {
-    commits.push(
-      parseCommit(fields.slice(offset, offset + fieldsPerCommit), objectFormat),
-    );
-  }
-  return commits;
-}
-
 function parseCommit(
   fields: readonly string[],
   objectFormat: GitObjectFormat,

@@ -1,4 +1,4 @@
-import type { RepositoryHistoryOperationFailure } from "@rebase/contracts";
+import type { RepositoryHistoryFailure } from "@rebase/contracts";
 import { Effect } from "effect";
 import {
   type GitCommandRunner,
@@ -10,7 +10,7 @@ import { historyFailed } from "#server/features/repository-history/git/history-f
 
 export type ObjectFormatRead = Effect.Effect<
   GitObjectFormat,
-  RepositoryHistoryOperationFailure
+  RepositoryHistoryFailure
 >;
 
 export function createObjectFormatCache(git: GitCommandRunner) {

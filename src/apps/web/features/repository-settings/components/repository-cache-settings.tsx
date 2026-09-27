@@ -10,15 +10,15 @@ import {
 import { Button } from "#web/components/ui/button";
 import { SettingsRow } from "#web/components/ui/settings-layout";
 import { formatCacheSize } from "#web/features/history-storage/format-cache-size";
-import type { RepositoryHistoryCacheProps } from "#web/features/history-storage/history-cache";
-import { historyCacheActions } from "#web/features/history-storage/history-cache-actions";
-import { useHistoryCacheManagement } from "#web/features/history-storage/hooks/use-history-cache-management";
+import {
+  historyCacheActions,
+  useHistoryCacheManagement,
+} from "#web/features/history-storage/use-history-cache-management";
 
 export function RepositoryCacheSettings(
-  props: Pick<
-    RepositoryHistoryCacheProps,
-    "reader" | "identity" | "onCacheChanged"
-  > & { readonly connected: boolean },
+  props: Parameters<typeof useHistoryCacheManagement>[0] & {
+    readonly connected: boolean;
+  },
 ) {
   const cache = useHistoryCacheManagement(props);
   const current = cache.diagnostics?.caches.find(
@@ -68,11 +68,11 @@ export function RepositoryCacheSettings(
           Clear unused history, then rebuild this cache.
         </p>
       ) : null}
-      {cache.snapshot.error !== undefined &&
+      {cache.snapshot.failure !== undefined &&
       !cache.storageUnavailable &&
       !cache.removed ? (
         <p role="alert" className="text-sm text-destructive">
-          {cache.snapshot.error._tag === "RepositoryHistoryOffline"
+          {cache.snapshot.failure._tag === "Offline"
             ? "Reconnect to finish history synchronization."
             : "History synchronization failed. Rebuild the cache to retry."}
         </p>
@@ -84,8 +84,7 @@ export function RepositoryCacheSettings(
       ) : null}
       {cache.snapshot.synchronization === "syncing" && !cache.removed ? (
         <p role="status" className="text-sm text-muted-foreground">
-          Synchronizing history ·{" "}
-          {(cache.snapshot.synchronizedCommitCount ?? 0).toLocaleString()}{" "}
+          Synchronizing history · {cache.snapshot.commitCount.toLocaleString()}{" "}
           commits stored
         </p>
       ) : null}

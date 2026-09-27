@@ -7,10 +7,10 @@ import {
   useRef,
   useState,
 } from "react";
-import type { CommitLaneRow } from "#web/features/commit-graph/layout/commit-lanes";
 import { drawGraphTile } from "#web/features/commit-graph/layout/draw-graph-tile";
 import { commitGraphGutterWidth } from "#web/features/commit-graph/layout/graph-geometry";
 import { graphRowHeight } from "#web/features/commit-graph/layout/graph-metrics";
+import type { CommitLaneRow } from "#web/features/repository-history/commit-lanes";
 
 const tileRows = 32;
 

@@ -1,5 +1,4 @@
 import { type QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { Layer, ManagedRuntime } from "effect";
 import type { ReactNode } from "react";
 import { afterEach } from "vite-plus/test";
 import {
@@ -8,7 +7,6 @@ import {
   render as renderComponent,
 } from "vitest-browser-react";
 import { fakeRequests, idleOperation } from "#tests-ui/runtime/fake-requests";
-import { ApplicationRuntime } from "#web/platform/effect/application-runtime-context";
 import {
   type Environment,
   EnvironmentProvider,
@@ -16,43 +14,35 @@ import {
 import { createEnvironmentInvalidation } from "#web/platform/query/environment-invalidation";
 import { createEnvironmentQueryClient } from "#web/platform/query/environment-query-client";
 
-const runtimes = new Set<ManagedRuntime.ManagedRuntime<never, never>>();
 const queryClients = new Set<QueryClient>();
 
 afterEach(async () => {
   await cleanup();
   for (const queryClient of queryClients) queryClient.clear();
   queryClients.clear();
-  await Promise.all([...runtimes].map((runtime) => runtime.dispose()));
-  runtimes.clear();
 });
 
 export function render(
   children: ReactNode,
   {
-    runtime = ManagedRuntime.make(Layer.empty),
     environment = {},
     queryClient = createEnvironmentQueryClient(),
     ...options
   }: RenderOptions & {
-    runtime?: ManagedRuntime.ManagedRuntime<never, never>;
     environment?: Partial<Environment>;
     queryClient?: QueryClient;
   } = {},
 ) {
   const value = testEnvironment(environment);
-  runtimes.add(runtime);
   queryClients.add(queryClient);
   const Wrapper = options.wrapper;
   return renderComponent(children, {
     ...options,
     wrapper: ({ children }) => (
       <QueryClientProvider client={queryClient}>
-        <ApplicationRuntime value={runtime}>
-          <EnvironmentProvider environment={value}>
-            {Wrapper === undefined ? children : <Wrapper>{children}</Wrapper>}
-          </EnvironmentProvider>
-        </ApplicationRuntime>
+        <EnvironmentProvider environment={value}>
+          {Wrapper === undefined ? children : <Wrapper>{children}</Wrapper>}
+        </EnvironmentProvider>
       </QueryClientProvider>
     ),
   });

@@ -6,17 +6,14 @@ import { resolve } from "node:path";
 import { promisify } from "node:util";
 import { expect, test } from "@playwright/test";
 import {
-  decodeRepositoryHistoryBatch,
-  decodeRepositoryHistoryPage,
   EnvironmentRpc,
   environmentLivePath,
   environmentProtocol,
   environmentSubprotocol,
 } from "@rebase/contracts";
-import { Effect, Exit, Scope } from "effect";
+import { Effect, Exit, Scope, Stream } from "effect";
 import { RpcClient, RpcSerialization } from "effect/unstable/rpc";
 import { Socket } from "effect/unstable/socket";
-import { createRepositoryHistoryRpc } from "#web/features/repository-history/transport/repository-history-rpc";
 
 const execute = promisify(execFile);
 const corpusPath = process.env.HISTORY_PROCESS_CORPUS_PATH;
@@ -124,23 +121,6 @@ test("prepared corpus stays within server and Git process budgets", async () => 
       ),
     );
     await Effect.runPromise(client.Hello({ protocol: environmentProtocol }));
-    const history = createRepositoryHistoryRpc(client);
-    const firstPages: number[] = [];
-    for (let iteration = 0; iteration <= 30; iteration += 1) {
-      const start = performance.now();
-      const page = decodeRepositoryHistoryPage(
-        await Effect.runPromise(
-          history.read({
-            repositoryId: started.repositoryId,
-            roots: [{ name: "main", oid: revision, type: "branch" }],
-            order: "topological",
-            limit: 100,
-          }),
-        ),
-      );
-      expect(page.commits).toHaveLength(100);
-      if (iteration > 0) firstPages.push(performance.now() - start);
-    }
     let received = 0;
     let batches = 0;
     let wireBytes = 0;
@@ -152,17 +132,27 @@ test("prepared corpus stays within server and Git process budgets", async () => 
     };
     socket.addEventListener("message", countWireBytes);
     await Effect.runPromise(
-      history.synchronize(
-        { repositoryId: started.repositoryId, priority: "visible" },
-        (bytes) =>
-          Effect.sync(() => {
-            const batch = decodeRepositoryHistoryBatch(bytes);
-            if (batch.snapshot !== undefined)
-              snapshotRoots = batch.snapshot.rootOids;
-            received += batch.commits.length;
-            batches += 1;
-          }),
-      ),
+      client
+        .SynchronizeHistory(
+          {
+            repositoryId: started.repositoryId,
+            knownTips: [],
+            shallowOids: [],
+          },
+          { streamBufferSize: 1 },
+        )
+        .pipe(
+          Stream.runForEach((update) =>
+            Effect.sync(() => {
+              if (update._tag === "RepositoryHistoryTips")
+                snapshotRoots = update.rootOids;
+              else {
+                received += update.commits.length;
+                batches += 1;
+              }
+            }),
+          ),
+        ),
     );
     socket.removeEventListener("message", countWireBytes);
     await sample();
@@ -188,7 +178,6 @@ test("prepared corpus stays within server and Git process budgets", async () => 
       wireBytes,
       synchronizationMilliseconds: elapsed,
       commitsPerSecond: received / (elapsed / 1000),
-      firstPage: statistics(firstPages),
       idleServerRssBytes: started.idleRssBytes,
       maximumServerRssBytes: maximumServerRss,
       incrementalServerRssBytes: maximumServerRss - started.idleRssBytes,
@@ -225,14 +214,4 @@ test("prepared corpus stays within server and Git process budgets", async () => 
 async function rss(pid: number) {
   const status = await readFile(`/proc/${pid}/status`, "utf8").catch(() => "");
   return Number(status.match(/^VmRSS:\s+(\d+)/m)?.[1] ?? 0) * 1024;
-}
-
-function statistics(values: number[]) {
-  const sorted = values.toSorted((a, b) => a - b);
-  return {
-    runs: values.length,
-    p50Milliseconds: sorted[Math.ceil(values.length * 0.5) - 1],
-    p95Milliseconds: sorted[Math.ceil(values.length * 0.95) - 1],
-    maximumMilliseconds: Math.max(...values),
-  };
 }

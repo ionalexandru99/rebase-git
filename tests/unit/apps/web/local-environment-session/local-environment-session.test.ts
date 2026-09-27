@@ -1,28 +1,26 @@
 import type { EnvironmentRpcClient } from "@rebase/contracts";
-import { Effect, Layer, ManagedRuntime } from "effect";
+import { Effect } from "effect";
 import { describe, expect, it, vi } from "vite-plus/test";
 import {
-  EnvironmentAccessDenied,
-  EnvironmentProtocolMismatch,
-  EnvironmentUnavailable,
-} from "#web/app/environment/environment-connection";
-import {
   createLocalEnvironmentSession,
-  type EnvironmentConnected,
   type LocalEnvironmentGateway,
   type LocalEnvironmentSessionOptions,
   type LocalEnvironmentSessionState,
 } from "#web/app/environment/local-environment-session";
+import {
+  EnvironmentAccessDenied,
+  EnvironmentProtocolMismatch,
+  EnvironmentUnavailable,
+} from "#web/platform/environment/environment-connection";
 
-const runtime = ManagedRuntime.make(Layer.empty);
 const environmentId = "00000000-0000-4000-8000-000000000001";
 
 describe("local Environment session", () => {
-  it("authorizes, runs the connect hook and releases it on stop", async () => {
+  it("authorizes, reports the connection credential and closes it on stop", async () => {
     const connection = createConnection();
     const gateway = createGateway(connection);
-    const feature = createFeature();
-    const session = createSession({ onConnect: feature.connect, gateway });
+    const onConnect = vi.fn();
+    const session = createSession({ onConnect, gateway });
 
     session.start();
     await expectState(session.getSnapshot, "Connected");
@@ -31,10 +29,12 @@ describe("local Environment session", () => {
       type: "bearer",
       value: "device-credential",
     });
-    expect(feature.connect).toHaveBeenCalledExactlyOnceWith(connection.rpc);
+    expect(onConnect).toHaveBeenCalledExactlyOnceWith({
+      type: "bearer",
+      value: "device-credential",
+    });
     session.stop();
 
-    await expect.poll(() => feature.released).toHaveBeenCalledOnce();
     await expect.poll(() => connection.close).toHaveBeenCalledOnce();
   });
 
@@ -130,17 +130,8 @@ function createSession(
 ) {
   return createLocalEnvironmentSession({
     invalidation: { changed: () => {} },
-    runtime,
     ...options,
   });
-}
-
-function createFeature() {
-  const released = vi.fn();
-  const connect = vi.fn<EnvironmentConnected>(() =>
-    Effect.acquireRelease(Effect.void, () => Effect.sync(released)),
-  );
-  return { connect, released };
 }
 
 function createGateway(...connections: ReturnType<typeof createConnection>[]) {
