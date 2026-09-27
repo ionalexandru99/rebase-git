@@ -4,8 +4,8 @@ import {
   ContextMenuSeparator,
 } from "#web/components/ui/context-menu.tsx";
 
-export interface Action {
-  readonly id: string;
+export interface Action<Id extends string = string> {
+  readonly id: Id;
   readonly label: string;
   readonly enabled: boolean;
   readonly reason?: string;

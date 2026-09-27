@@ -46,14 +46,14 @@ export function deleteTag(
   { name, worktreePath }: DeleteRepositoryTag,
 ): Effect.Effect<RepositoryTagDeleted, RefMissing | GitFailed> {
   return Effect.gen(function* () {
-    const target = yield* requireTagTarget(git, worktreePath, name);
+    yield* requireTagTarget(git, worktreePath, name);
     yield* runRepositoryGit(
       git,
       worktreePath,
       ["tag", "--delete", "--", name],
       refCommand,
     );
-    return { name, target };
+    return { name };
   });
 }
 

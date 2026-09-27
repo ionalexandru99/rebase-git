@@ -21,49 +21,58 @@ interface PackagedApplication {
 
 runOnVirtualDisplay();
 
-test("launches the packaged application with its product identity", async () => {
-  const packageMetadata = JSON.parse(
-    await readFile("package.json", "utf8"),
-  ) as {
-    readonly version: string;
-  };
-  const testHome = await mkdtemp(join(tmpdir(), "rebase-release-smoke-"));
-
-  try {
-    const environment = await createTestEnvironment(testHome);
-    const application = await launchPackagedApplication(environment);
+const packagedTest = test.extend<{ application: PackagedApplication }>({
+  application: async ({}, use) => {
+    const testHome = await mkdtemp(join(tmpdir(), "rebase-release-smoke-"));
     try {
-      const context = application.browser?.contexts()[0];
-      if (context === undefined) {
-        throw new Error("The packaged application did not create a context.");
+      const application = await launchPackagedApplication(
+        await createTestEnvironment(testHome),
+      );
+      try {
+        await use(application);
+      } finally {
+        await closePackagedApplication(application);
       }
-      const window = context.pages()[0] ?? (await context.waitForEvent("page"));
-      await expect(window.getByRole("status")).toHaveText("Available");
-      await window.bringToFront();
-      await expect
-        .poll(() =>
-          window.evaluate(
-            () => document.visibilityState === "visible" && document.hasFocus(),
-          ),
-        )
-        .toBe(true);
-      await window.getByRole("button", { name: "Settings" }).click();
-      await expect(
-        window.getByRole("navigation", { name: "Settings" }),
-      ).toBeVisible();
-      await expect(
-        window.getByRole("heading", { level: 1, name: "General" }),
-      ).toBeVisible();
-      await expect(
-        window.getByText(packageMetadata.version, { exact: true }),
-      ).toBeVisible();
     } finally {
-      await closePackagedApplication(application);
+      await removeTemporaryDirectory(testHome);
     }
-  } finally {
-    await removeTemporaryDirectory(testHome);
-  }
+  },
 });
+
+packagedTest(
+  "launches the packaged application with its product identity",
+  async ({ application }) => {
+    const packageMetadata = JSON.parse(
+      await readFile("package.json", "utf8"),
+    ) as {
+      readonly version: string;
+    };
+    const context = application.browser?.contexts()[0];
+    if (context === undefined) {
+      throw new Error("The packaged application did not create a context.");
+    }
+    const window = context.pages()[0] ?? (await context.waitForEvent("page"));
+    await expect(window.getByRole("status")).toHaveText("Available");
+    await window.bringToFront();
+    await expect
+      .poll(() =>
+        window.evaluate(
+          () => document.visibilityState === "visible" && document.hasFocus(),
+        ),
+      )
+      .toBe(true);
+    await window.getByRole("button", { name: "Settings" }).click();
+    await expect(
+      window.getByRole("navigation", { name: "Settings" }),
+    ).toBeVisible();
+    await expect(
+      window.getByRole("heading", { level: 1, name: "General" }),
+    ).toBeVisible();
+    await expect(
+      window.getByText(packageMetadata.version, { exact: true }),
+    ).toBeVisible();
+  },
+);
 
 async function createTestEnvironment(testHome: string) {
   const environment = Object.fromEntries(

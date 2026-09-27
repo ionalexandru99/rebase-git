@@ -44,6 +44,19 @@ export interface RefActionRow {
   readonly upstream?: BranchUpstream;
 }
 
+export type RefAction = Action<
+  | "checkout"
+  | "pull"
+  | "showReflog"
+  | "newBranch"
+  | "rename"
+  | "upstream"
+  | "delete"
+  | "deleteRemote"
+  | "deleteBoth"
+  | "deleteTag"
+>;
+
 export interface RefActionAccess {
   readonly activeWorktreePath: string;
   readonly writable: boolean;
@@ -65,7 +78,7 @@ export function refActions(
   refs: RepositoryRefs,
   { activeWorktreePath, writable }: RefActionAccess,
   { checkout, pull, showReflog, editing }: RefActionHandlers,
-): readonly Action[] {
+): readonly RefAction[] {
   const readOnly = writable ? undefined : "Read only";
   const target = row.target;
   const startPoint = refStartPoint(target, refs);
@@ -94,7 +107,7 @@ export function refActions(
       ),
     ];
   };
-  const common: readonly Action[] = [
+  const common: readonly RefAction[] = [
     action({ id: "checkout", label: "Checkout", run: () => checkout(target) }),
     ...(pull === undefined ||
     target._tag !== "LocalBranch" ||
@@ -106,7 +119,7 @@ export function refActions(
             label: "Pull",
             enabled: !pull.pulling,
             run: () => pull.run(target.name),
-          },
+          } satisfies RefAction,
         ]),
     ...(showReflog === undefined || target._tag !== "LocalBranch"
       ? []
@@ -222,7 +235,7 @@ const createHere: readonly {
 ];
 
 interface ActionFields {
-  readonly id: string;
+  readonly id: RefAction["id"];
   readonly label: string;
   readonly group?: Action["group"];
   readonly reason?: string | undefined;
@@ -230,7 +243,7 @@ interface ActionFields {
   readonly run: () => void;
 }
 
-function action({ reason, group, keys, ...fields }: ActionFields): Action {
+function action({ reason, group, keys, ...fields }: ActionFields): RefAction {
   return {
     ...fields,
     enabled: reason === undefined,

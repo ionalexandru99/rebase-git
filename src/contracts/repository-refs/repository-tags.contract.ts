@@ -31,7 +31,6 @@ export type DeleteRepositoryTag = typeof DeleteRepositoryTag.Type;
 
 export const RepositoryTagDeleted = Schema.Struct({
   name: RefName,
-  target: ObjectId,
 });
 export type RepositoryTagDeleted = typeof RepositoryTagDeleted.Type;
 

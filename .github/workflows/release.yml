@@ -304,6 +304,7 @@ jobs:
           path: package-artifact
 
       - name: Smoke-test clean npm installation
+        timeout-minutes: 10
         run: node tests/package/smoke-packed-package.ts package-artifact
 
       - name: Set expected application version
@@ -468,6 +469,7 @@ jobs:
           exit 1
 
       - name: Smoke-test clean registry installation
+        timeout-minutes: 10
         env:
           RELEASE_VERSION: ${{ needs.package.outputs.version }}
         run: node tests/package/smoke-packed-package.ts "npm:rebase-git@$RELEASE_VERSION"

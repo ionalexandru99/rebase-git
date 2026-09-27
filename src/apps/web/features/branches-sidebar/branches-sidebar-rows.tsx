@@ -12,11 +12,7 @@ import {
 } from "@tabler/icons-react";
 import { type CSSProperties, useRef } from "react";
 import type { BranchUpstream } from "#contracts/repository-refs/repository-refs.contract.ts";
-import {
-  type Action,
-  ActionMenuItems,
-  runAction,
-} from "#web/components/ui/action-menu.tsx";
+import { ActionMenuItems, runAction } from "#web/components/ui/action-menu.tsx";
 import {
   ContextMenu,
   ContextMenuContent,
@@ -29,6 +25,7 @@ import {
   localBranchesSectionId,
   tagsSectionId,
 } from "#web/features/branches-sidebar/branches-sidebar-state.ts";
+import type { RefAction } from "#web/features/refs/ref-actions.ts";
 
 export function rowElementId(rowId: string): string {
   return `branches-row-${rowId}`;
@@ -103,7 +100,7 @@ export function RefRow({
   selectedInHistory,
   style,
 }: {
-  readonly actions: readonly Action[];
+  readonly actions: readonly RefAction[];
   readonly active: boolean;
   readonly onActivate: () => void;
   readonly onToggleHistory: () => void;
@@ -112,7 +109,7 @@ export function RefRow({
   readonly style: CSSProperties;
 }) {
   const acted = useRef(false);
-  const run = (id: string) =>
+  const run = (id: RefAction["id"]) =>
     runAction(actions.find((action) => action.id === id));
   return (
     <ContextMenu

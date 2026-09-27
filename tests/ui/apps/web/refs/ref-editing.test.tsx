@@ -422,7 +422,7 @@ async function refsEnvironment() {
         ...current,
         tags: current.tags.filter(({ name }) => name !== command.name),
       };
-      return { name: command.name, target: spike };
+      return { name: command.name };
     }),
     reply("checkout", RepositoryRefsApi.checkout, (command) => {
       const head = { branch: command.target.name, commit: spike };

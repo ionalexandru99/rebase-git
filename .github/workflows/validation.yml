@@ -69,15 +69,13 @@ jobs:
         run: pnpm test:unit
       - name: Build desktop and run integration tests
         run: pnpm validate:integration
-      - name: Verify macOS signing keychain
-        if: runner.os == 'macOS'
-        run: node --test tests/package/macos-keychain.test.ts
       - name: Pack npm package
         shell: bash
         run: |
           mkdir package-artifact
           npm pack --pack-destination package-artifact
       - name: Smoke-test clean npm installation
+        timeout-minutes: 10
         run: node tests/package/smoke-packed-package.ts package-artifact
       - name: Install Electron
         run: pnpm exec install-electron

@@ -12,8 +12,6 @@ import {
   RepositoryPath,
 } from "#contracts/git/git-values.contract.ts";
 
-const FailureDetail = Schema.String.check(Schema.isMaxLength(2_048));
-
 export const RepositoryHead = Schema.Struct({
   branch: Schema.optional(RefName),
   commit: ObjectId,
@@ -140,7 +138,6 @@ export const BranchCheckedOutElsewhere = Schema.TaggedStruct(
   },
 );
 export const CheckoutRejected = Schema.TaggedStruct("CheckoutRejected", {
-  detail: FailureDetail,
   reason: Schema.Literals(["LocalChanges", "StashFailed"]),
 });
 

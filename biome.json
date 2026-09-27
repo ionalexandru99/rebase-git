@@ -28,6 +28,16 @@
   },
   "overrides": [
     {
+      "includes": ["tests/release-smoke/**"],
+      "linter": {
+        "rules": {
+          "correctness": {
+            "noEmptyPattern": "off"
+          }
+        }
+      }
+    },
+    {
       "includes": [
         "src/apps/web/features/commit-graph/commit-graph.tsx",
         "src/apps/web/features/commit-graph/components/commit-graph-commit-cells.tsx"

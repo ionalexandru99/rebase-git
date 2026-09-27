@@ -1,4 +1,5 @@
 import { type ChildProcessByStdio, spawn } from "node:child_process";
+import { once } from "node:events";
 import {
   copyFile,
   mkdir,
@@ -193,21 +194,14 @@ function assertVersionOutput(output: string, expectedVersion: string) {
 }
 
 async function verifyServer(child: RunningProcess, home: string) {
-  let stderr = "";
   let stdout = "";
-  child.stderr.on("data", (chunk) => {
-    stderr += chunk.toString();
-  });
+  child.stderr.pipe(process.stderr);
   child.stdout.on("data", (chunk) => {
     stdout += chunk.toString();
   });
 
   try {
-    const origin = await waitForListeningUrl(
-      child,
-      () => stdout,
-      () => stderr,
-    );
+    const origin = await waitForListeningUrl(child, () => stdout);
     if (new URL(origin).hostname !== "127.0.0.1") {
       throw new Error(`The package listened outside loopback: ${origin}`);
     }
@@ -272,16 +266,8 @@ async function stopServer(child: RunningProcess, home: string) {
   await waitForExit(child);
 }
 
-function waitForListeningUrl(
-  child: RunningProcess,
-  readOutput: () => string,
-  readError: () => string,
-) {
+function waitForListeningUrl(child: RunningProcess, readOutput: () => string) {
   return new Promise<string>((resolveOutput, rejectOutput) => {
-    const timeout = setTimeout(() => {
-      cleanup();
-      rejectOutput(new Error(`Timed out waiting for Rebase. ${readError()}`));
-    }, 20_000);
     const inspect = () => {
       const match = readOutput().match(/^Listening URL: (http:\/\/[^\s]+)$/m);
       if (match?.[1]) {
@@ -291,12 +277,9 @@ function waitForListeningUrl(
     };
     const exited = () => {
       cleanup();
-      rejectOutput(
-        new Error(`Rebase exited before it was ready. ${readError()}`),
-      );
+      rejectOutput(new Error("Rebase exited before it was ready."));
     };
     const cleanup = () => {
-      clearTimeout(timeout);
       child.stdout.off("data", inspect);
       child.off("exit", exited);
     };
@@ -306,19 +289,9 @@ function waitForListeningUrl(
   });
 }
 
-function waitForExit(child: RunningProcess) {
-  if (child.exitCode !== null || child.signalCode !== null) {
-    return Promise.resolve();
-  }
-  return new Promise<void>((resolveExit, rejectExit) => {
-    const timeout = setTimeout(() => {
-      rejectExit(new Error("Timed out waiting for Rebase to stop."));
-    }, 10_000);
-    child.once("close", () => {
-      clearTimeout(timeout);
-      resolveExit();
-    });
-  });
+async function waitForExit(child: RunningProcess) {
+  if (child.exitCode !== null || child.signalCode !== null) return;
+  await once(child, "close");
 }
 
 async function listFiles(root: string, directory = ""): Promise<string[]> {

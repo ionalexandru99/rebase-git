@@ -160,7 +160,7 @@ function stashLocalChanges(
     if (status.length === 0) return undefined;
 
     const token = `rebase-auto-stash:${randomUUID()}`;
-    const stashFailure = yield* runRepositoryGit(
+    const stashed = yield* runRepositoryGit(
       git,
       directory,
       [
@@ -172,14 +172,13 @@ function stashLocalChanges(
       ],
       checkoutCommand,
     ).pipe(
-      Effect.as(""),
-      Effect.catchIf(isGitRejection, (error) => Effect.succeed(error.detail)),
+      Effect.as(true),
+      Effect.catchIf(isGitRejection, () => Effect.succeed(false)),
     );
     const entry = yield* findStash(git, directory, token);
-    if (stashFailure !== "" || entry === undefined) {
+    if (!stashed || entry === undefined) {
       return yield* Effect.fail<RepositoryCheckoutFailure>({
         _tag: "CheckoutRejected",
-        detail: stashFailure,
         reason: "StashFailed",
       });
     }
@@ -315,7 +314,6 @@ export function checkoutFailure(
   if (/would be overwritten by checkout/i.test(error.detail)) {
     return {
       _tag: "CheckoutRejected",
-      detail: error.detail,
       reason: "LocalChanges",
     };
   }

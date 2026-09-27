@@ -551,6 +551,7 @@ describe("renamed files through Git", () => {
         ),
     );
     await f.git("read-tree", "renamed");
+    await f.git("config", "diff.renameLimit", String(count + 1));
     const changes = await f.read();
     expect(changes.renamesLimited).toBe(true);
     expect(changes.staged).toHaveLength(count * 2);

@@ -30,6 +30,7 @@ import {
   environmentFeatures,
   serveEnvironment,
 } from "#server/app/server/serve-environment.ts";
+import type { EnvironmentAuthorization } from "#server/features/environment-authorization/environment-authorization.ts";
 import type { RepositoryCoordination } from "#server/repository/repository-coordination.ts";
 import { removeTemporaryDirectory } from "#tests-support/temporary-directory.ts";
 import {
@@ -61,6 +62,9 @@ const testContext = {
 const unchanged: EnvironmentInvalidation = { changed: () => {} };
 
 interface EnvironmentOverrides {
+  readonly authorization?: (
+    authorization: EnvironmentAuthorization,
+  ) => EnvironmentAuthorization;
   readonly events?:
     | ((events: EnvironmentEventPublisher) => EnvironmentEventPublisher)
     | undefined;
@@ -246,6 +250,9 @@ function acquireTestDependencies(overrides: EnvironmentOverrides) {
     );
     return {
       ...environment,
+      authorization:
+        overrides.authorization?.(environment.authorization) ??
+        environment.authorization,
       coordination:
         overrides.coordination?.(environment.coordination) ??
         environment.coordination,

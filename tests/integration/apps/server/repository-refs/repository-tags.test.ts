@@ -48,7 +48,7 @@ describe("repository tags", () => {
   });
 
   it("deletes a tag and reports one that is already gone", async () => {
-    const { worktreePath, head } = await fixture();
+    const { worktreePath } = await fixture();
     await git(worktreePath, "tag", "--no-sign", "v1.0");
     await git(worktreePath, "tag", "--no-sign", "snapshot", "HEAD^{tree}");
     const remove = (name: string) =>
@@ -56,13 +56,8 @@ describe("repository tags", () => {
         deleteTag(runner, { name, repositoryId, worktreePath }),
       );
 
-    await expect(remove("v1.0")).resolves.toEqual({
-      name: "v1.0",
-      target: head,
-    });
-    await expect(remove("snapshot")).resolves.toMatchObject({
-      name: "snapshot",
-    });
+    await expect(remove("v1.0")).resolves.toEqual({ name: "v1.0" });
+    await expect(remove("snapshot")).resolves.toEqual({ name: "snapshot" });
     await expect(git(worktreePath, "tag", "--list")).resolves.toBe("");
     await expect(remove("v1.0")).rejects.toMatchObject({
       _tag: "RefMissing",
