@@ -19,13 +19,13 @@ import { usePush } from "#web/features/repository-push/hooks/use-push";
 import { resolvePushTarget } from "#web/features/repository-push/resolve-push-target";
 import { activeHead } from "#web/features/repository-refs/activate-repository-ref";
 import { useRepositoryRefs } from "#web/features/repository-refs/hooks/use-repository-refs";
-import {
-  type RepositoryScope,
-  useRepositoryScope,
-} from "#web/features/repository-scope/repository-scope-provider";
 import { workingChangesPanel } from "#web/features/working-changes/working-changes-panel-definition";
 import { WorkspacePanel } from "#web/features/workspace-panel/workspace-panel";
 import { useEnvironment } from "#web/platform/query/environment-context";
+import {
+  type RepositoryScope,
+  useRepositoryScope,
+} from "#web/platform/query/repository-scope";
 
 export function RepositoryWorkspace(): JSX.Element | null {
   const scope = useRepositoryScope();

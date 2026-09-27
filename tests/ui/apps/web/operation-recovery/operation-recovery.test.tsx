@@ -15,10 +15,10 @@ import { NotificationsProvider } from "#web/features/notifications/notifications
 import { OperationRecoveryNotice } from "#web/features/operation-recovery/components/operation-recovery-notice";
 import { OperationRecoveryToast } from "#web/features/operation-recovery/components/operation-recovery-toast";
 import type { OperationRecoveryState } from "#web/features/operation-recovery/hooks/use-operation-recovery";
-import { RepositoryScopeProvider } from "#web/features/repository-scope/repository-scope-provider";
 import { WorkspacePanel } from "#web/features/workspace-panel/workspace-panel";
 import type { EnvironmentChangeListener } from "#web/platform/environment/environment-protocol.contract";
 import { EnvironmentProvider } from "#web/platform/query/environment-context";
+import { RepositoryScopeProvider } from "#web/platform/query/repository-scope";
 
 function operation(
   patch: Partial<RepositoryOperation> = {},

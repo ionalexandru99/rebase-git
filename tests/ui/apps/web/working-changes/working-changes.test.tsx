@@ -516,7 +516,7 @@ describe("working changes", () => {
     const f = await fixture([], { rejectDiffs: true });
     await expect
       .element(page.getByRole("alert"))
-      .toHaveTextContent("Could not complete the request.");
+      .toHaveTextContent("The Environment did not answer.");
     const diffReads = f.diffReads();
     f.acceptDiffs();
     await page.getByRole("button", { name: "Refresh", exact: true }).click();

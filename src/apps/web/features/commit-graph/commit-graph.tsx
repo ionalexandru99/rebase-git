@@ -59,7 +59,7 @@ import { RepositoryHistoryFreshnessStatus } from "#web/features/repository-fetch
 import { useRepositoryHistoryFetch } from "#web/features/repository-fetch/hooks/use-repository-history-fetch";
 import { useRepositoryHistoryOrder } from "#web/features/repository-history/hooks/use-repository-history-order";
 import type { RepositoryHistoryQuery } from "#web/features/repository-history/repository-history-reader";
-import { useRepositoryScope } from "#web/features/repository-scope/repository-scope-provider";
+import { useRepositoryScope } from "#web/platform/query/repository-scope";
 
 const emptyRefLabels: readonly RepositoryHistoryRefTarget[] = [];
 

@@ -1,19 +1,22 @@
 import {
   type PushBranch,
   type PushDestination,
+  type PushRejected,
   RepositoryPushHttpApi,
 } from "@rebase/contracts";
 import { useEffect, useState } from "react";
 import {
-  describePushFailure,
-  describePushProgress,
-} from "#web/features/repository-push/push-messages";
-import {
+  destinationName,
   type PushTarget,
   publishRemote,
 } from "#web/features/repository-push/resolve-push-target";
-import { useRepositoryScope } from "#web/features/repository-scope/repository-scope-provider";
-import { useCommand } from "#web/platform/query/use-command";
+import { useRepositoryScope } from "#web/platform/query/repository-scope";
+import { describeFailure } from "#web/platform/query/request-failure";
+import {
+  type CommandFailure,
+  type CommandInput,
+  useCommand,
+} from "#web/platform/query/use-command";
 
 export interface ForcePushReview {
   readonly branch: string;
@@ -22,13 +25,12 @@ export interface ForcePushReview {
   readonly removed: number;
 }
 
-type PushRequest = Omit<PushBranch, "repositoryId" | "worktreePath">;
+type PushRequest = CommandInput<typeof RepositoryPushHttpApi.push>;
 
 export function usePush() {
-  const scope = useRepositoryScope();
-  const command = useCommand(RepositoryPushHttpApi.push, { repository: scope });
+  const command = useCommand(RepositoryPushHttpApi.push);
   const [review, setReview] = useState<ForcePushReview | null>(null);
-  const worktreePath = scope?.worktreePath;
+  const worktreePath = useRepositoryScope()?.worktreePath;
   const { cancel, reset } = command;
   useEffect(() => {
     if (worktreePath === undefined) return;
@@ -38,35 +40,30 @@ export function usePush() {
       setReview(null);
     };
   }, [worktreePath, cancel, reset]);
-  const connected = scope?.connected ?? false;
   const running =
-    command.isPending && command.variables !== undefined
-      ? describePushProgress(command.variables)
+    command.running && command.input !== undefined
+      ? describeProgress(command.input)
       : null;
   const notice =
-    command.isError && command.variables !== undefined
-      ? describePushFailure(command.error, command.variables.destination)
+    command.failure !== undefined && command.input !== undefined
+      ? describePushFailure(command.failure, command.input.destination)
       : null;
 
   const pushBranch = (request: PushRequest) => {
-    if (scope === undefined || !connected || command.isPending) return;
+    if (!command.canRun || command.running) return;
     setReview(null);
-    command.mutate({
-      repositoryId: scope.repositoryId,
-      worktreePath: scope.worktreePath,
-      ...request,
-    });
+    void command.run(request);
   };
 
   const requestForcePush = (target: PushTarget) => {
     const review = forcePushReview(target);
-    if (review === undefined || command.isPending) return;
+    if (review === undefined || command.running) return;
     command.reset();
     setReview(review);
   };
 
   return {
-    connected,
+    connected: command.canRun,
     running,
     review,
     notice,
@@ -84,7 +81,7 @@ export function usePush() {
       if (review !== null) pushBranch(forcePushRequest(review));
     },
     cancel: () => {
-      if (command.isPending) command.cancel();
+      if (command.running) command.cancel();
       else setReview(null);
     },
   };
@@ -125,4 +122,40 @@ function forcePushRequest(review: ForcePushReview): PushRequest {
     setUpstream: false,
     mode: { _tag: "ForceWithLease", expectedOid: review.expectedOid },
   };
+}
+
+function describeProgress({ destination, mode }: PushBranch) {
+  return `${mode._tag === "ForceWithLease" ? "Force pushing" : "Pushing"} to ${destinationName(destination)}`;
+}
+
+function describePushFailure(
+  failure: CommandFailure<typeof RepositoryPushHttpApi.push>,
+  destination: PushDestination,
+) {
+  return describeFailure(failure, {
+    PushRejected: (rejected) => describePushRejection(rejected, destination),
+  });
+}
+
+function describePushRejection(
+  { reason, detail }: PushRejected,
+  destination: PushDestination,
+) {
+  const name = destinationName(destination);
+  switch (reason) {
+    case "NonFastForward":
+      return `Rejected: ${name} has commits you don't have. Fetch first.`;
+    case "LeaseRejected":
+      return `Rejected: ${name} moved since your last fetch. Fetch and review.`;
+    case "HookDeclined":
+      return `Rejected by hook: ${detail}`;
+    case "Authentication":
+      return `${destination.remote} rejected the credentials.`;
+    case "Network":
+      return `Can't reach ${destination.remote}.`;
+    case "RemoteMissing":
+      return `Remote ${destination.remote} not found.`;
+    default:
+      return detail || "Push failed.";
+  }
 }

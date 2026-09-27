@@ -1,4 +1,4 @@
-import type { RepositoryScope } from "#web/features/repository-scope/repository-scope-provider";
+import type { RepositoryScope } from "#web/platform/query/repository-scope";
 
 export function repositoryScope(
   scope: Partial<RepositoryScope> = {},

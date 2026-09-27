@@ -1,11 +1,11 @@
 import type { ConflictFile, ConflictSides } from "@rebase/contracts";
 import { IconArrowDown } from "@tabler/icons-react";
 import { Button } from "#web/components/ui/button";
+import { Confirmation } from "#web/components/ui/confirmation";
 import {
   FileListSection,
   RowLead,
 } from "#web/features/working-changes/components/file-list-section";
-import { MarkersConfirmation } from "#web/features/working-changes/conflicts/components/markers-confirmation";
 import type { WorkingChangesView } from "#web/features/working-changes/hooks/use-working-changes-view";
 
 export type ConflictFileSectionView = Pick<
@@ -67,11 +67,13 @@ export function ConflictFileSection({
               <span className="truncate">{row.name}</span>
             </button>
             {conflicts.confirming === path ? (
-              <MarkersConfirmation
-                path={path}
-                disabled={disabled}
-                cancel={conflicts.cancel}
-                confirm={() => conflicts.resolve(path, true)}
+              <Confirmation
+                title="Conflict markers remain"
+                action="Mark resolved anyway"
+                busy={disabled}
+                onCancel={conflicts.cancel}
+                onConfirm={() => void conflicts.resolve(path, true)}
+                className="min-w-0 flex-nowrap"
               />
             ) : (
               <>
@@ -85,7 +87,7 @@ export function ConflictFileSection({
                   size="icon-xs"
                   aria-label={`Mark ${path} resolved`}
                   disabled={disabled || file === undefined}
-                  onClick={() => conflicts.resolve(path, false)}
+                  onClick={() => void conflicts.resolve(path, false)}
                 >
                   <IconArrowDown />
                 </Button>

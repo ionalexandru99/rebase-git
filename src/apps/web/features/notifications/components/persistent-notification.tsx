@@ -11,5 +11,12 @@ export function PersistentNotification({
   readonly children: ReactNode;
 }) {
   const outlet = useContext(PersistentNotificationOutlet);
-  return outlet === null ? null : createPortal(children, outlet);
+  return outlet === null
+    ? null
+    : createPortal(
+        <div className="pointer-events-auto rounded-lg border border-border bg-popover text-popover-foreground shadow-lg">
+          {children}
+        </div>,
+        outlet,
+      );
 }

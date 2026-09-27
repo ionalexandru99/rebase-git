@@ -6,6 +6,7 @@ import type {
 import { IconArrowDown, IconArrowLeft, IconArrowUp } from "@tabler/icons-react";
 import { type KeyboardEvent, type ReactNode, useState } from "react";
 import { Button } from "#web/components/ui/button";
+import { Confirmation } from "#web/components/ui/confirmation";
 import { ResultEditor } from "#web/features/merge-view/components/result-editor";
 import { SidePanes } from "#web/features/merge-view/components/side-panes";
 import {
@@ -14,14 +15,13 @@ import {
 } from "#web/features/merge-view/conflict-document";
 import { useMergeDocument } from "#web/features/merge-view/hooks/use-merge-document";
 import { useSelection } from "#web/features/merge-view/hooks/use-selection";
-import { useRepositoryScope } from "#web/features/repository-scope/repository-scope-provider";
-import {
-  describeChangesFailure,
-  wholeFileOnly,
-} from "#web/features/working-changes/changes-messages";
-import { MarkersConfirmation } from "#web/features/working-changes/conflicts/components/markers-confirmation";
 import { WholeFileMenu } from "#web/features/working-changes/conflicts/components/whole-file-menu";
-import { useConflictActions } from "#web/features/working-changes/conflicts/hooks/use-conflicts";
+import {
+  useConflictActions,
+  wholeFileOnly,
+} from "#web/features/working-changes/conflicts/hooks/use-conflicts";
+import { useRepositoryScope } from "#web/platform/query/repository-scope";
+import { describeFailure } from "#web/platform/query/request-failure";
 
 interface MergeViewHandlers {
   readonly onOpen: (path: string) => void;
@@ -79,10 +79,10 @@ function MergeViewContent({
   const notice =
     merge.notice ??
     actions.problem ??
-    (failure !== null && !wholeFile ? describeChangesFailure(failure) : null);
+    (failure !== null && !wholeFile ? describeFailure(failure) : null);
   const resolve = async (allowMarkers: boolean) => {
     await merge.settled();
-    actions.resolve(input.path, allowMarkers);
+    await actions.resolve(input.path, allowMarkers);
   };
 
   const onKeyDown = (event: KeyboardEvent<HTMLElement>) => {
@@ -154,16 +154,18 @@ function MergeViewContent({
           disabled={actions.busy}
           onChoose={async (choice) => {
             await merge.settled();
-            actions.choose(input.path, choice);
+            await actions.choose(input.path, choice);
           }}
         />
         {panes &&
           (confirming ? (
-            <MarkersConfirmation
-              path={input.path}
-              disabled={actions.busy}
-              cancel={actions.cancel}
-              confirm={() => void resolve(true)}
+            <Confirmation
+              title="Conflict markers remain"
+              action="Mark resolved anyway"
+              busy={actions.busy}
+              onCancel={actions.cancel}
+              onConfirm={() => void resolve(true)}
+              className="flex-nowrap"
             />
           ) : (
             <Button

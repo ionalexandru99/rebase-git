@@ -13,10 +13,10 @@ import { fakeRequests, respond } from "#tests-ui/runtime/fake-requests";
 import { render } from "#tests-ui/runtime/render";
 import { NotificationsProvider } from "#web/features/notifications/notifications";
 import { OperationRecoveryNotice } from "#web/features/operation-recovery/components/operation-recovery-notice";
-import { RepositoryScopeProvider } from "#web/features/repository-scope/repository-scope-provider";
 import { WorkingChanges } from "#web/features/working-changes/working-changes";
 import { WorkspacePanel } from "#web/features/workspace-panel/workspace-panel";
 import type { EnvironmentChangeListener } from "#web/platform/environment/environment-protocol.contract";
+import { RepositoryScopeProvider } from "#web/platform/query/repository-scope";
 
 const path = "src/app.ts";
 const scope = repositoryScope({ repositoryId: crypto.randomUUID() });

@@ -16,7 +16,7 @@ import {
   RepositoryHistoryRejected,
   type RepositoryHistorySnapshot,
 } from "#web/features/repository-history/repository-history-reader";
-import { RepositoryScopeProvider } from "#web/features/repository-scope/repository-scope-provider";
+import { RepositoryScopeProvider } from "#web/platform/query/repository-scope";
 
 const fresh: RepositoryFreshness = {
   defaultIntervalSeconds: 300,

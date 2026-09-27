@@ -1,27 +1,32 @@
 import {
   type ChangedFile,
+  type ConflictFailure,
   type ConflictFile,
   type ConflictList,
   type ConflictPath,
   type ConflictScope,
   type RepositoryChanges,
   RepositoryConflictsHttpApi,
+  type RepositoryRejected,
   type WholeFileChoice,
 } from "@rebase/contracts";
-import { skipToken, useQueryClient } from "@tanstack/react-query";
-import { useMemo } from "react";
+import { skipToken } from "@tanstack/react-query";
+import { useMemo, useState } from "react";
+import { useEnvironmentQuery } from "#web/platform/query/environment-query";
 import {
-  conflictReason,
-  describeChangesFailure,
-  wholeFileOnly,
-} from "#web/features/working-changes/changes-messages";
-import { changesWriteScope } from "#web/features/working-changes/hooks/use-change-actions";
-import { useEnvironment } from "#web/platform/query/environment-context";
+  describeFailure,
+  type RequestFailure,
+  rejection,
+} from "#web/platform/query/request-failure";
 import {
-  environmentQueryKey,
-  useEnvironmentQuery,
-} from "#web/platform/query/environment-query";
-import { useCommand } from "#web/platform/query/use-command";
+  answer,
+  type CommandResult,
+  useCommand,
+} from "#web/platform/query/use-command";
+
+type ConflictRequestFailure = RequestFailure<
+  ConflictFailure | RepositoryRejected
+>;
 
 export interface ConflictRow {
   readonly path: string;
@@ -78,50 +83,74 @@ export function splitConflicts(changes: RepositoryChanges | undefined) {
   };
 }
 
+export function conflictReason(
+  failure: ConflictRequestFailure | null | undefined,
+): ConflictFailure["reason"] | null {
+  const rejected = rejection(failure);
+  return rejected?._tag === "ConflictFailed" ? rejected.reason : null;
+}
+
+export function wholeFileOnly(failure: ConflictRequestFailure | null) {
+  const reason = conflictReason(failure);
+  return reason === "Unsupported" || reason === "TooLarge";
+}
+
 export function useConflictActions(
   scope: ConflictScope,
   { revision, onResolved }: ConflictActionOptions,
 ) {
-  const store = useStoreConflictList(scope);
   const options = {
-    repository: scope,
-    scope: changesWriteScope(scope),
-    onSuccess: store,
+    target: scope,
+    answers: (list: ConflictList, input: ConflictScope) => [
+      answer(RepositoryConflictsHttpApi.list, conflictScope(input), list),
+    ],
   };
   const stage = useCommand(RepositoryConflictsHttpApi.stage, options);
   const choose = useCommand(RepositoryConflictsHttpApi.choose, options);
-  const resolved = { onSuccess: (list: ConflictList) => onResolved?.(list) };
-  const markersFound =
-    conflictReason(stage.error) === "Markers" &&
-    stage.variables?.allowMarkers === false;
-  const failure = (markersFound ? null : stage.error) ?? choose.error;
-  const command = (path: string) => {
+  const [markers, setMarkers] = useState<string | null>(null);
+  const failure = stage.failure ?? choose.failure;
+  const settled = (
+    result: CommandResult<
+      | typeof RepositoryConflictsHttpApi.stage
+      | typeof RepositoryConflictsHttpApi.choose
+    >,
+  ) => {
+    if (result._tag === "Ok") onResolved?.(result.value);
+  };
+  const input = (path: string) => {
     const current = revision(path);
-    return current === undefined
-      ? undefined
-      : { ...conflictScope(scope), path, revision: current };
+    return current === undefined ? undefined : { path, revision: current };
+  };
+  const reset = () => {
+    setMarkers(null);
+    stage.reset();
+    choose.reset();
   };
   return {
-    busy: stage.isPending || choose.isPending,
-    confirming: markersFound ? (stage.variables?.path ?? null) : null,
-    problem: failure === null ? null : describeChangesFailure(failure),
-    resolve: (path: string, allowMarkers: boolean) => {
-      const input = command(path);
-      if (input === undefined) return;
-      choose.reset();
-      stage.mutate({ ...input, allowMarkers }, resolved);
+    busy: stage.running || choose.running,
+    confirming: markers,
+    problem:
+      failure === undefined || markers !== null
+        ? null
+        : describeFailure(failure),
+    resolve: async (path: string, allowMarkers: boolean) => {
+      const request = input(path);
+      if (request === undefined) return;
+      reset();
+      const result = await stage.run({ ...request, allowMarkers });
+      const markersRemain =
+        result._tag !== "Ok" && conflictReason(result) === "Markers";
+      if (!allowMarkers && markersRemain) setMarkers(path);
+      settled(result);
     },
-    choose: (path: string, choice: WholeFileChoice) => {
-      const input = command(path);
-      if (input === undefined) return;
-      stage.reset();
-      choose.mutate({ ...input, choice }, resolved);
+    choose: async (path: string, choice: WholeFileChoice) => {
+      const request = input(path);
+      if (request === undefined) return;
+      reset();
+      settled(await choose.run({ ...request, choice }));
     },
-    cancel: () => stage.reset(),
-    reset: () => {
-      stage.reset();
-      choose.reset();
-    },
+    cancel: reset,
+    reset,
   };
 }
 
@@ -155,30 +184,15 @@ export function useConflicts(
     documentProblem:
       document.error === null || documentOnlyWhole
         ? null
-        : describeChangesFailure(document.error),
+        : describeFailure(document.error),
     problem:
       actions.problem ??
-      (list.error === null ? null : describeChangesFailure(list.error)),
+      (list.error === null ? null : describeFailure(list.error)),
     refresh: () => {
       actions.reset();
       if (list.isError) void list.refetch();
       if (document.isError) void document.refetch();
     },
-  };
-}
-
-function useStoreConflictList(scope: ConflictScope) {
-  const queryClient = useQueryClient();
-  const { environmentId } = useEnvironment();
-  return async (list: ConflictList) => {
-    const queryKey = environmentQueryKey(
-      environmentId,
-      scope.repositoryId,
-      RepositoryConflictsHttpApi.list,
-      conflictScope(scope),
-    );
-    await queryClient.cancelQueries({ queryKey });
-    queryClient.setQueryData(queryKey, list);
   };
 }
 

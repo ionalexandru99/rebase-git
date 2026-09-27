@@ -1,5 +1,4 @@
 import type { EnvironmentDirectoryEntry } from "@rebase/contracts";
-import { EnvironmentHttpRejected } from "@rebase/environment-client";
 import { describe, expect, it } from "vite-plus/test";
 import {
   filterDirectoryEntries,
@@ -33,14 +32,10 @@ describe("repository folder picker state", () => {
 
   it("explains Git validation only after selection", () => {
     expect(
-      repositorySelectionError(
-        new EnvironmentHttpRejected({
-          failure: {
-            _tag: "RepositoryPathRejected",
-            reason: "NotRepository",
-          },
-        }),
-      ),
+      repositorySelectionError({
+        _tag: "Rejected",
+        failure: { _tag: "RepositoryPathRejected", reason: "NotRepository" },
+      }),
     ).toBe("This folder is not a Git repository.");
   });
 });

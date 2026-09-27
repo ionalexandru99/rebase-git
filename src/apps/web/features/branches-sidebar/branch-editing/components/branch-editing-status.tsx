@@ -1,11 +1,12 @@
 import type { RemoteBranch } from "@rebase/contracts";
+import { Confirmation } from "#web/components/ui/confirmation";
 import type { BranchDeletion } from "#web/features/branches-sidebar/branch-editing/branch-row-actions";
 import { DeletedBranchNotification } from "#web/features/branches-sidebar/branch-editing/components/deleted-branch-notification";
 import { UnmergedCommits } from "#web/features/branches-sidebar/branch-editing/components/unmerged-commits";
 import { UpstreamPicker } from "#web/features/branches-sidebar/branch-editing/components/upstream-picker";
 import type { BranchEditing } from "#web/features/branches-sidebar/branch-editing/hooks/use-branch-editing";
 import { rowElementId } from "#web/features/branches-sidebar/components/branches-sidebar-rows";
-import { DeleteRefConfirmation } from "#web/features/branches-sidebar/components/delete-ref-confirmation";
+import { PersistentNotification } from "#web/features/notifications/components/persistent-notification";
 
 export function BranchEditingStatus({
   editing,
@@ -35,17 +36,23 @@ export function BranchEditingStatus({
         />
       )}
       {deletion.pending === undefined ? null : (
-        <DeleteRefConfirmation
-          busy={deletion.pending.busy === true}
-          key={deletion.pending.failure === undefined ? "confirm" : "unmerged"}
-          onCancel={deletion.cancel}
-          onConfirm={deletion.confirm}
-          title={branchDeletionTitle(deletion.pending.deletion)}
-        >
-          {deletion.pending.failure === undefined ? null : (
-            <UnmergedCommits failure={deletion.pending.failure} />
-          )}
-        </DeleteRefConfirmation>
+        <PersistentNotification>
+          <Confirmation
+            action="Delete"
+            busy={deletion.pending.busy === true}
+            className="px-3 py-2"
+            key={
+              deletion.pending.failure === undefined ? "confirm" : "unmerged"
+            }
+            onCancel={deletion.cancel}
+            onConfirm={deletion.confirm}
+            title={branchDeletionTitle(deletion.pending.deletion)}
+          >
+            {deletion.pending.failure === undefined ? undefined : (
+              <UnmergedCommits failure={deletion.pending.failure} />
+            )}
+          </Confirmation>
+        </PersistentNotification>
       )}
       {deletion.deleted === undefined ? null : (
         <DeletedBranchNotification
@@ -59,7 +66,7 @@ export function BranchEditingStatus({
 }
 
 function branchDeletionTitle({ local, remote }: BranchDeletion) {
-  if (remote === undefined) return `Delete ${local?.name ?? ""}`;
-  if (local === undefined) return `Delete ${remote.name} on ${remote.remote}`;
-  return `Delete ${local.name} locally and on ${remote.remote}`;
+  if (remote === undefined) return `Delete ${local?.name ?? ""}?`;
+  if (local === undefined) return `Delete ${remote.name} on ${remote.remote}?`;
+  return `Delete ${local.name} locally and on ${remote.remote}?`;
 }

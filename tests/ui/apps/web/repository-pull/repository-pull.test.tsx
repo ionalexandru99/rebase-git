@@ -23,7 +23,7 @@ import type { RepositoryHistorySnapshot } from "#web/features/repository-history
 import { PullButton } from "#web/features/repository-pull/components/pull-button";
 import { PullNotice } from "#web/features/repository-pull/components/pull-notice";
 import { usePull } from "#web/features/repository-pull/hooks/use-pull";
-import { RepositoryScopeProvider } from "#web/features/repository-scope/repository-scope-provider";
+import { RepositoryScopeProvider } from "#web/platform/query/repository-scope";
 
 const repositoryId = "00000000-0000-4000-8000-000000000001";
 const freshness: RepositoryFreshness = {

@@ -5,7 +5,7 @@ import type { RefCreateRequest } from "#web/features/branches-sidebar/hooks/use-
 import type { RefCommandDefinition } from "#web/features/ref-commands/ref-command";
 import { useRefActivation } from "#web/features/repository-refs/hooks/use-ref-activation";
 import type { RepositoryRefsRead } from "#web/features/repository-refs/hooks/use-repository-refs";
-import { useRepositoryScope } from "#web/features/repository-scope/repository-scope-provider";
+import { useRepositoryScope } from "#web/platform/query/repository-scope";
 
 const noRefKeys: ReadonlySet<string> = new Set();
 

@@ -7,8 +7,8 @@ import { CommitGraph } from "#web/features/commit-graph/commit-graph";
 import { automaticHistoryScope } from "#web/features/commit-graph/scope/history-scope-model";
 import { useCatalogRepository } from "#web/features/repository-catalog/hooks/use-repository-catalog";
 import { useRepositoryRefs } from "#web/features/repository-refs/hooks/use-repository-refs";
-import type { RepositoryScope } from "#web/features/repository-scope/repository-scope-provider";
 import { useEnvironment } from "#web/platform/query/environment-context";
+import type { RepositoryScope } from "#web/platform/query/repository-scope";
 
 export function WorkspaceGraph({
   scope,

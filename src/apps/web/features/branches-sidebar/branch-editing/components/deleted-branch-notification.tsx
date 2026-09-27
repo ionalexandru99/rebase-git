@@ -20,10 +20,7 @@ export function DeletedBranchNotification({
   }, [onDismiss]);
   return (
     <PersistentNotification>
-      <div
-        className="pointer-events-auto flex items-center gap-3 rounded-lg border border-border bg-popover px-3 py-2 text-popover-foreground shadow-lg"
-        role="status"
-      >
+      <div className="flex items-center gap-3 px-3 py-2" role="status">
         <IconCircleCheck
           aria-hidden="true"
           className="size-4 shrink-0 text-status-available"

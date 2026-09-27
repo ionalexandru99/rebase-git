@@ -20,7 +20,7 @@ import { CommitCommandMenu } from "#web/features/commit-commands/commit-command-
 import { NotificationsProvider } from "#web/features/notifications/notifications";
 import { useRefActivation } from "#web/features/repository-refs/hooks/use-ref-activation";
 import { useRepositoryRefs } from "#web/features/repository-refs/hooks/use-repository-refs";
-import { RepositoryScopeProvider } from "#web/features/repository-scope/repository-scope-provider";
+import { RepositoryScopeProvider } from "#web/platform/query/repository-scope";
 
 const repositoryId = "00000000-0000-4000-8000-000000000001";
 const mainPath = "/repo";
@@ -96,17 +96,24 @@ async function tagEnvironment() {
   const requested =
     vi.fn<(route: "create" | "delete", command: unknown) => void>();
   let rejection: DeleteFailure | undefined;
+  let current = refs();
   const requests = fakeRequests(
     idleOperation,
     respond(RepositoryTagsHttpApi.create, async (command) => {
       requested("create", command);
-      return { name: command.name, target: command.target };
+      const tag = { name: command.name, target: command.target };
+      current = { ...current, tags: [...current.tags, tag] };
+      return tag;
     }),
     respond(RepositoryTagsHttpApi.delete, async (command) => {
       requested("delete", command);
       const failure = rejection;
       rejection = undefined;
       if (failure !== undefined) throw new EnvironmentHttpRejected({ failure });
+      current = {
+        ...current,
+        tags: current.tags.filter(({ name }) => name !== command.name),
+      };
       return { name: command.name, target: release };
     }),
   );
@@ -115,7 +122,7 @@ async function tagEnvironment() {
     rejectNext: (failure: DeleteFailure) => {
       rejection = failure;
     },
-    environment: { requests, rpc: await fakeRpc(async () => refs()) },
+    environment: { requests, rpc: await fakeRpc(async () => current) },
   };
 }
 

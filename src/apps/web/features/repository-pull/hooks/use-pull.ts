@@ -1,21 +1,27 @@
 import { RepositoryPullHttpApi } from "@rebase/contracts";
-import { useMutation } from "@tanstack/react-query";
-import { useCallback, useMemo } from "react";
+import { useCallback, useMemo, useState } from "react";
 import type {
   RepositoryHistoryFetchCommands,
   RepositoryHistoryObservation,
   RepositoryHistorySnapshot,
 } from "#web/features/repository-history/repository-history-reader";
-import { usePulling } from "#web/features/repository-pull/hooks/use-pulling";
 import { createPullBranchCommand } from "#web/features/repository-pull/pull-branch-command";
-import { describePullFailure } from "#web/features/repository-pull/repository-pull-messages";
-import { useRepositoryScope } from "#web/features/repository-scope/repository-scope-provider";
-import { commandKey, useCommand } from "#web/platform/query/use-command";
+import { useRepositoryScope } from "#web/platform/query/repository-scope";
+import { describeFailure } from "#web/platform/query/request-failure";
+import {
+  type CommandFailure,
+  useCommand,
+} from "#web/platform/query/use-command";
 import { createStore } from "#web/platform/store/store";
 import { useStore } from "#web/platform/store/use-store";
 
 type PullReader = Pick<RepositoryHistoryFetchCommands, "fetch"> &
   RepositoryHistoryObservation;
+
+interface PullNotice {
+  readonly id: number;
+  readonly message?: string | undefined;
+}
 
 const idleHistory = createStore<RepositoryHistorySnapshot>({
   revision: 0,
@@ -25,50 +31,34 @@ const idleHistory = createStore<RepositoryHistorySnapshot>({
 
 export function usePull(reader: PullReader | undefined) {
   const scope = useRepositoryScope();
-  const fetchFirst = useMutation({
-    mutationKey: commandKey(RepositoryPullHttpApi.pull, scope),
-    mutationFn: (fetcher: PullReader) => fetcher.fetch(),
+  const command = useCommand(RepositoryPullHttpApi.pull, {
+    before: async () =>
+      reader !== undefined && (await reader.fetch()).failure === undefined,
   });
-  const command = useCommand(RepositoryPullHttpApi.pull, { repository: scope });
+  const [notice, setNotice] = useState<PullNotice>({ id: 0 });
   const freshnessReady = useStore(reader ?? idleHistory, isFreshnessReady);
-  const pulling = usePulling();
-  const repositoryId = scope?.repositoryId;
-  const worktreePath = scope?.worktreePath;
-  const { mutate: fetchBeforePull } = fetchFirst;
-  const { mutate: pullBranch, reset } = command;
+  const pulling = command.running;
+  const { run, canRun } = command;
 
   const pull = useCallback(
-    (branch: string) => {
-      if (
-        repositoryId === undefined ||
-        worktreePath === undefined ||
-        reader === undefined ||
-        pulling
-      )
-        return;
-      reset();
-      fetchBeforePull(reader, {
-        onSuccess: (freshness) => {
-          if (freshness.failure === undefined)
-            pullBranch({ repositoryId, worktreePath, branch });
-        },
-      });
+    async (branch: string) => {
+      if (!canRun || reader === undefined || pulling) return;
+      const show = (message?: string) =>
+        setNotice(({ id }) => ({ id: id + 1, message }));
+      show();
+      const result = await run({ branch });
+      if (result._tag !== "Ok" && result._tag !== "Cancelled")
+        show(describePullFailure(branch, result));
     },
-    [
-      repositoryId,
-      worktreePath,
-      reader,
-      pulling,
-      reset,
-      fetchBeforePull,
-      pullBranch,
-    ],
+    [canRun, reader, pulling, run],
   );
 
-  const allowed =
-    scope?.connected === true && scope.writable && reader !== undefined;
+  const allowed = canRun && reader !== undefined;
   const commands = useMemo(
-    () => (allowed ? [createPullBranchCommand(pull, pulling)] : []),
+    () =>
+      allowed
+        ? [createPullBranchCommand((branch) => void pull(branch), pulling)]
+        : [],
     [allowed, pull, pulling],
   );
 
@@ -77,17 +67,10 @@ export function usePull(reader: PullReader | undefined) {
     pull,
     pulling,
     freshnessReady,
-    error: fetchFirst.isError
-      ? { id: fetchFirst.submittedAt, message: "Pull failed" }
-      : command.error !== null && command.variables !== undefined
-        ? {
-            id: command.submittedAt,
-            message: describePullFailure(
-              command.variables.branch,
-              command.error,
-            ),
-          }
-        : undefined,
+    error:
+      notice.message === undefined
+        ? undefined
+        : { id: notice.id, message: notice.message },
     commands,
   };
 }
@@ -98,4 +81,23 @@ function isFreshnessReady(snapshot: RepositoryHistorySnapshot) {
   return (
     snapshot.freshness !== undefined && snapshot.freshnessError === undefined
   );
+}
+
+function describePullFailure(
+  branch: string,
+  failure: CommandFailure<typeof RepositoryPullHttpApi.pull>,
+) {
+  return describeFailure(failure, {
+    PullDiverged: ({ upstream }) => `${branch} has diverged from ${upstream}.`,
+    PullWouldOverwrite: ({ paths }) =>
+      paths.length === 1
+        ? `Local changes to ${paths[0]} block the pull.`
+        : "Local changes block the pull.",
+    UpstreamMissing: ({ upstream }) =>
+      upstream === undefined
+        ? `${branch} has no upstream.`
+        : `${upstream} was deleted.`,
+    PullUncertain: () => "Pull may not have finished.",
+    BranchMissing: () => `${branch} no longer exists.`,
+  });
 }

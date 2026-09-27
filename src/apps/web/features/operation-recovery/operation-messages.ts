@@ -1,7 +1,5 @@
 import type { OperationKind } from "@rebase/contracts";
-import type { EnvironmentRequestFailure } from "@rebase/environment-client";
 import type { OperationRecoveryState } from "#web/features/operation-recovery/hooks/use-operation-recovery";
-import type { CommandCancelled } from "#web/platform/query/use-command";
 
 const labels: Record<OperationKind, string> = {
   idle: "Git operation",
@@ -12,21 +10,6 @@ const labels: Record<OperationKind, string> = {
   am: "Patch application",
   unknown: "Unknown Git operation",
 };
-
-export function describeOperationFailure(
-  error:
-    | EnvironmentRequestFailure<{ readonly detail: string }>
-    | CommandCancelled,
-) {
-  switch (error._tag) {
-    case "EnvironmentHttpRejected":
-      return error.failure.detail;
-    case "EnvironmentAccessDenied":
-      return "The environment rejected the request. Check your access and reconnect.";
-    default:
-      return "Could not confirm Git state. Check the environment connection.";
-  }
-}
 
 export function operationLabel(state: OperationRecoveryState) {
   return labels[state.completed?.kind ?? state.operation?.kind ?? "unknown"];

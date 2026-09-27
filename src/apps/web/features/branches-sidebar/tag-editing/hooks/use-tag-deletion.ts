@@ -1,6 +1,10 @@
+import type { RepositoryTagsHttpApi } from "@rebase/contracts";
 import { useCallback, useRef, useState } from "react";
-import { describeTagFailure } from "#web/features/branches-sidebar/tag-editing/tag-edit-messages";
-import type { TagCommands } from "#web/features/tag-management/hooks/use-tag-commands";
+import { describeFailure } from "#web/platform/query/request-failure";
+import type { Command, CommandFailure } from "#web/platform/query/use-command";
+
+type TagRoute =
+  (typeof RepositoryTagsHttpApi)[keyof typeof RepositoryTagsHttpApi];
 
 export interface PendingTagDeletion {
   readonly busy: boolean;
@@ -13,10 +17,10 @@ export interface TagDeletionFailure {
 }
 
 export function useTagDeletion({
-  commands,
+  deleteTag,
   focusTree,
 }: {
-  readonly commands: TagCommands | null;
+  readonly deleteTag: Command<typeof RepositoryTagsHttpApi.delete>;
   readonly focusTree: () => void;
 }) {
   const [pending, setPending] = useState<PendingTagDeletion>();
@@ -24,12 +28,12 @@ export function useTagDeletion({
   const latest = useRef(pending);
   latest.current = pending;
 
-  const remove = async (write: TagCommands, name: string) => {
-    const result = await write.delete(name);
-    if (result._tag === "Failed")
+  const remove = async (name: string) => {
+    const result = await deleteTag.run({ name });
+    if (result._tag !== "Ok")
       setFailure((current) => ({
         id: (current?.id ?? 0) + 1,
-        message: describeTagFailure(name, result.failure),
+        message: describeTagFailure(name, result),
       }));
     if (latest.current?.name !== name) return;
     setPending(undefined);
@@ -45,15 +49,27 @@ export function useTagDeletion({
     cancel,
     confirm: () => {
       if (pending === undefined || pending.busy) return;
-      if (commands === null) {
+      if (!deleteTag.canRun) {
         cancel();
         return;
       }
       setPending({ ...pending, busy: true });
-      void remove(commands, pending.name);
+      void remove(pending.name);
     },
     failure,
     pending,
     request: (name: string) => setPending({ busy: false, name }),
   };
+}
+
+export function describeTagFailure(
+  name: string,
+  failure: CommandFailure<TagRoute>,
+) {
+  return describeFailure(failure, {
+    TagRejected: ({ reason }) =>
+      reason === "Exists"
+        ? `${name} already exists.`
+        : `${name} is not a valid tag name.`,
+  });
 }

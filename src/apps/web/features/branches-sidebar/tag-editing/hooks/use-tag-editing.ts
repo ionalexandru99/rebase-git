@@ -1,4 +1,4 @@
-import type { RepositoryTag } from "@rebase/contracts";
+import { type RepositoryTag, RepositoryTagsHttpApi } from "@rebase/contracts";
 import { useCallback, useEffect, useState } from "react";
 import {
   type BranchesSidebarRefRow,
@@ -7,10 +7,12 @@ import {
   tagsSectionId,
 } from "#web/features/branches-sidebar/branches-sidebar-model";
 import type { RefCreateRequest } from "#web/features/branches-sidebar/hooks/use-create-ref-here";
-import { useTagDeletion } from "#web/features/branches-sidebar/tag-editing/hooks/use-tag-deletion";
-import { describeTagFailure } from "#web/features/branches-sidebar/tag-editing/tag-edit-messages";
-import { useTagCommands } from "#web/features/tag-management/hooks/use-tag-commands";
+import {
+  describeTagFailure,
+  useTagDeletion,
+} from "#web/features/branches-sidebar/tag-editing/hooks/use-tag-deletion";
 import { tagNameProblem } from "#web/features/tag-management/tag-name";
+import { useCommand } from "#web/platform/query/use-command";
 
 export type TagEditing = ReturnType<typeof useTagEditing>;
 
@@ -25,9 +27,10 @@ export function useTagEditing({
   readonly reveal: (name: string, sectionId: string) => void;
   readonly tags: readonly RepositoryTag[];
 }) {
-  const commands = useTagCommands();
+  const createTag = useCommand(RepositoryTagsHttpApi.create);
+  const deleteTag = useCommand(RepositoryTagsHttpApi.delete);
   const [draftOid, setDraftOid] = useState<string>();
-  const deletion = useTagDeletion({ commands, focusTree });
+  const deletion = useTagDeletion({ deleteTag, focusTree });
 
   useEffect(() => {
     if (createRequest === undefined) return;
@@ -40,7 +43,7 @@ export function useTagEditing({
   }, [focusTree]);
 
   const rowActions = (row: BranchesSidebarRefRow) =>
-    tagRowActions(row, commands !== null);
+    tagRowActions(row, deleteTag.canRun);
 
   const start = (id: string, row: BranchesSidebarRefRow) => {
     const action = rowActions(row).find((candidate) => candidate.id === id);
@@ -53,13 +56,12 @@ export function useTagEditing({
   return {
     cancel,
     create: async (name: string) => {
-      if (commands === null || draftOid === undefined) {
+      if (!createTag.canRun || draftOid === undefined) {
         cancel();
         return undefined;
       }
-      const created = await commands.create(name, draftOid);
-      if (created._tag === "Failed")
-        return describeTagFailure(name, created.failure);
+      const created = await createTag.run({ name, target: draftOid });
+      if (created._tag !== "Ok") return describeTagFailure(name, created);
       setDraftOid(undefined);
       reveal(name, tagsSectionId);
       return undefined;

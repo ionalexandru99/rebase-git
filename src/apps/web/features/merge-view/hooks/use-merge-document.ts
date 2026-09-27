@@ -3,7 +3,6 @@ import {
   type ConflictPath,
   RepositoryConflictsHttpApi,
 } from "@rebase/contracts";
-import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   fileContent,
@@ -17,14 +16,11 @@ import {
 import { editText } from "#web/features/merge-view/result-text";
 import {
   conflictReason,
-  describeChangesFailure,
-} from "#web/features/working-changes/changes-messages";
-import {
   useConflictDocument,
   useConflictList,
 } from "#web/features/working-changes/conflicts/hooks/use-conflicts";
-import { invalidatedByChange } from "#web/platform/query/environment-invalidation";
-import { settleCommand, useCommand } from "#web/platform/query/use-command";
+import { describeFailure } from "#web/platform/query/request-failure";
+import { answer, useCommand } from "#web/platform/query/use-command";
 
 interface WriteQueue {
   revision: string | null;
@@ -38,11 +34,19 @@ const writeRoute = RepositoryConflictsHttpApi.write;
 const noPicks: Picks = new Map();
 
 export function useMergeDocument(input: ConflictPath) {
-  const { repositoryId, worktreePath, path } = input;
+  const { path } = input;
   const document = useConflictDocument(input);
   const list = useConflictList(input);
-  const { mutateAsync } = useCommand(writeRoute, { repository: input });
-  const refreshIndex = useIndexRefresh(repositoryId);
+  const { run } = useCommand(writeRoute, {
+    target: input,
+    answers: (written, { repositoryId, worktreePath, path }) => [
+      answer(
+        RepositoryConflictsHttpApi.document,
+        { repositoryId, worktreePath, path },
+        written,
+      ),
+    ],
+  });
   const queue = useRef<WriteQueue>({
     revision: null,
     sent: null,
@@ -74,22 +78,18 @@ export function useMergeDocument(input: ConflictPath) {
       const state = queue.current;
       state.running = true;
       state.sent = content;
-      const result = await settleCommand(writeRoute, mutateAsync, {
-        repositoryId,
-        worktreePath,
+      const result = await run({
         path,
         revision: state.revision ?? "",
         content,
       });
       state.running = false;
-      if (result._tag === "Ok") {
-        state.revision = result.value.file.revision;
-        refreshIndex();
-      } else {
+      if (result._tag === "Ok") state.revision = result.value.file.revision;
+      else {
         state.sent = null;
         state.pending = null;
-        if (conflictReason(result.failure) !== "Stale")
-          setNotice(describeChangesFailure(result.failure));
+        if (conflictReason(result) !== "Stale")
+          setNotice(describeFailure(result));
         else {
           setNotice(
             `${path.split("/").at(-1) ?? path} changed on disk. Reloaded.`,
@@ -102,7 +102,7 @@ export function useMergeDocument(input: ConflictPath) {
       if (next !== null) return void send(next);
       for (const waiter of state.waiters.splice(0)) waiter();
     },
-    [mutateAsync, path, refreshIndex, reload, repositoryId, worktreePath],
+    [run, path, reload],
   );
 
   const data = document.data;
@@ -174,15 +174,3 @@ export function useMergeDocument(input: ConflictPath) {
 type MergeDocument = ReturnType<typeof useMergeDocument>;
 
 export type ChooseRegion = MergeDocument["choose"];
-
-function useIndexRefresh(repositoryId: string) {
-  const queryClient = useQueryClient();
-  return useCallback(
-    () =>
-      void queryClient.invalidateQueries({
-        predicate: (query) =>
-          invalidatedByChange(query.meta, [repositoryId], "Index"),
-      }),
-    [queryClient, repositoryId],
-  );
-}

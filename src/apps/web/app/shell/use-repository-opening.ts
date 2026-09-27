@@ -1,3 +1,4 @@
+import { RepositoryCatalogHttpApi } from "@rebase/contracts";
 import { useCallback, useEffect, useMemo } from "react";
 import {
   createOpenedRepositoryStore,
@@ -9,10 +10,10 @@ import {
   worktreePathFor,
 } from "#web/app/shell/use-navigation";
 import type { ProjectNavigationRepository } from "#web/features/project-navigation/project-navigation";
-import { useRecordRepositoryOpened } from "#web/features/repository-catalog/hooks/use-catalog-commands";
 import { useRepositoryCatalog } from "#web/features/repository-catalog/hooks/use-repository-catalog";
 import type { RepositoryHistoryGateway } from "#web/features/repository-history/repository-history-reader";
 import { useEnvironment } from "#web/platform/query/environment-context";
+import { useCommand } from "#web/platform/query/use-command";
 
 export function useRepositoryOpening(
   gateway: RepositoryHistoryGateway,
@@ -23,7 +24,9 @@ export function useRepositoryOpening(
   useEffect(() => () => opened.open(undefined), [opened]);
   const { environmentId, status } = useEnvironment();
   const { findRepository } = useRepositoryCatalog();
-  const { mutate: recordOpened } = useRecordRepositoryOpened();
+  const { run: recordOpened } = useCommand(
+    RepositoryCatalogHttpApi.recordOpened,
+  );
   const available = status.availability === "available";
   const showRepository = useCallback(
     (repository: ProjectNavigationRepository) => {
@@ -44,7 +47,7 @@ export function useRepositoryOpening(
     (repository: ProjectNavigationRepository) => {
       if (!available) return;
       showRepository(repository);
-      recordOpened({ repositoryId: repository.id });
+      void recordOpened({ repositoryId: repository.id });
     },
     [available, recordOpened, showRepository],
   );

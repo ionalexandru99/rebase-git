@@ -1,9 +1,12 @@
 import type {
   EnvironmentDirectoryEntry,
+  EnvironmentDirectoryRejected,
   EnvironmentFilesystemHttpApi,
   RepositoryCatalogHttpApi,
+  RepositoryPathRejected,
 } from "@rebase/contracts";
-import type { EnvironmentRouteFailure } from "@rebase/environment-client";
+import type { QueryFailure } from "#web/platform/query/environment-query";
+import { describeFailure } from "#web/platform/query/request-failure";
 import type { CommandFailure } from "#web/platform/query/use-command";
 
 export function filterDirectoryEntries(
@@ -33,50 +36,37 @@ export function modifiedDateLabel(
   }).format(modified);
 }
 
+const pathProblems: Record<RepositoryPathRejected["reason"], string> = {
+  NotRepository: "This folder is not a Git repository.",
+  NotFound: "This folder no longer exists.",
+  NotDirectory: "The selected path is not a folder.",
+  InspectionFailed: "Rebase could not inspect this folder.",
+  MalformedPath: "The selected folder path is invalid.",
+};
+
+const directoryProblems: Record<
+  EnvironmentDirectoryRejected["reason"],
+  string
+> = {
+  NotFound: "This folder no longer exists.",
+  NotDirectory: "This path is not a folder.",
+  PermissionDenied: "Rebase does not have permission to open this folder.",
+  MalformedPath: "This folder path is invalid.",
+  InspectionFailed: "Rebase could not read this folder.",
+};
+
 export function repositorySelectionError(
-  error: CommandFailure<typeof RepositoryCatalogHttpApi.remember>,
+  failure: CommandFailure<typeof RepositoryCatalogHttpApi.remember>,
 ) {
-  if (
-    error._tag === "EnvironmentHttpRejected" &&
-    error.failure._tag === "RepositoryPathRejected"
-  ) {
-    switch (error.failure.reason) {
-      case "NotRepository":
-        return "This folder is not a Git repository.";
-      case "NotFound":
-        return "This folder no longer exists.";
-      case "NotDirectory":
-        return "The selected path is not a folder.";
-      case "InspectionFailed":
-        return "Rebase could not inspect this folder.";
-      case "MalformedPath":
-        return "The selected folder path is invalid.";
-    }
-  }
-  return "Rebase could not open this repository.";
+  return describeFailure(failure, {
+    RepositoryPathRejected: ({ reason }) => pathProblems[reason],
+  });
 }
 
 export function directoryListingError(
-  error: EnvironmentRouteFailure<
-    typeof EnvironmentFilesystemHttpApi.listDirectory
-  >,
+  failure: QueryFailure<typeof EnvironmentFilesystemHttpApi.listDirectory>,
 ) {
-  if (
-    error._tag === "EnvironmentHttpRejected" &&
-    error.failure._tag === "EnvironmentDirectoryRejected"
-  ) {
-    switch (error.failure.reason) {
-      case "NotFound":
-        return "This folder no longer exists.";
-      case "NotDirectory":
-        return "This path is not a folder.";
-      case "PermissionDenied":
-        return "Rebase does not have permission to open this folder.";
-      case "MalformedPath":
-        return "This folder path is invalid.";
-      case "InspectionFailed":
-        return "Rebase could not read this folder.";
-    }
-  }
-  return "The Environment filesystem is unavailable.";
+  return describeFailure(failure, {
+    EnvironmentDirectoryRejected: ({ reason }) => directoryProblems[reason],
+  });
 }

@@ -4,8 +4,8 @@ import {
   showsOperationHeader,
   useOperationRecovery,
 } from "#web/features/operation-recovery/hooks/use-operation-recovery";
-import { useRepositoryScope } from "#web/features/repository-scope/repository-scope-provider";
 import { useWorkspacePanel } from "#web/features/workspace-panel/workspace-panel-provider";
+import { useRepositoryScope } from "#web/platform/query/repository-scope";
 
 export function OperationRecoveryNotice({
   repositoryName,

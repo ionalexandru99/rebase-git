@@ -8,9 +8,9 @@ import {
   type InspectionScope,
   useCommitInspection,
 } from "#web/features/commit-inspection/hooks/use-commit-inspection";
-import { describeInspectionFailure } from "#web/features/commit-inspection/inspection-messages";
 import { useDiffPreferences } from "#web/features/file-diff/hooks/use-diff-preferences";
 import { usePanelFeature } from "#web/features/workspace-panel/api";
+import { describeFailure } from "#web/platform/query/request-failure";
 
 const CommitDiff = lazy(
   () => import("#web/features/commit-inspection/components/commit-diff"),
@@ -37,9 +37,7 @@ export function CommitInspection({
   const path = details === undefined ? null : selectedPath(details, selected);
   const diff = useCommitDiff(scope, details, path, active);
   const [preferences, choosePreferences] = useDiffPreferences();
-  const error = inspection.isError
-    ? describeInspectionFailure(inspection.error)
-    : null;
+  const error = inspection.isError ? describeFailure(inspection.error) : null;
   const retry = () => void inspection.refetch();
   const select = (next: string) => {
     if (details !== undefined) setSelected({ oid: details.oid, path: next });
@@ -92,9 +90,7 @@ export function CommitInspection({
                   diff={{
                     value: diff.data,
                     loading: diff.isLoading,
-                    error: diff.isError
-                      ? describeInspectionFailure(diff.error)
-                      : null,
+                    error: diff.isError ? describeFailure(diff.error) : null,
                     retry: () => void diff.refetch(),
                   }}
                   preferences={preferences}

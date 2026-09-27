@@ -22,9 +22,7 @@ export function repositoryCatalogKey(environmentId: string | undefined) {
   );
 }
 
-export function sortRepositories(
-  repositories: readonly RepositoryCatalogEntry[],
-) {
+function sortRepositories(repositories: readonly RepositoryCatalogEntry[]) {
   return [...repositories].sort(
     (left, right) =>
       left.name.localeCompare(right.name) ||

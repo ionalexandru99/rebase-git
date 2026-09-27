@@ -1,5 +1,7 @@
+import type { ChangeSection, ChangeSelection } from "@rebase/contracts";
 import { lazy, Suspense, useState } from "react";
 import { Button } from "#web/components/ui/button";
+import { Confirmation } from "#web/components/ui/confirmation";
 import {
   ResizableHandle,
   ResizablePanel,
@@ -8,16 +10,18 @@ import {
 import { OperationHeader } from "#web/features/operation-recovery/components/operation-header";
 import { ChangeFileTree } from "#web/features/working-changes/components/change-file-tree";
 import { CommitEditor } from "#web/features/working-changes/components/commit-editor";
-import {
-  DiscardConfirmation,
-  type DiscardRequest,
-} from "#web/features/working-changes/components/discard-confirmation";
 import { ConflictViewer } from "#web/features/working-changes/conflicts/components/conflict-viewer";
 import {
   type ChangeAction,
   useWorkingChangesView,
   type WorkingChangesTarget,
 } from "#web/features/working-changes/hooks/use-working-changes-view";
+
+interface DiscardRequest {
+  readonly section: ChangeSection;
+  readonly selection: ChangeSelection;
+  readonly revision: string;
+}
 
 const ChangeDiffViewer = lazy(
   () => import("#web/features/working-changes/components/change-diff-viewer"),
@@ -46,6 +50,26 @@ export function WorkingChanges({
       aria-busy={view.busy}
     >
       <OperationHeader scope={target} />
+      {discard === null ? null : (
+        <Confirmation
+          title={`Discard ${discard.section} changes?`}
+          action="Discard changes"
+          onCancel={() => setDiscard(null)}
+          onConfirm={() => {
+            setDiscard(null);
+            view.act(
+              "discard",
+              discard.section,
+              discard.selection,
+              discard.revision,
+            );
+          }}
+          className="shrink-0 border-border border-b p-3"
+        >
+          {describeDiscard(discard.selection)} This cannot be undone. Unrelated
+          edits will be preserved; overlapping edits will stop the operation.
+        </Confirmation>
+      )}
       {view.error ? (
         <div
           role="alert"
@@ -122,18 +146,14 @@ export function WorkingChanges({
           </ResizablePanelGroup>
         </ResizablePanel>
       </ResizablePanelGroup>
-      <DiscardConfirmation
-        request={discard}
-        confirm={(request) =>
-          view.act(
-            "discard",
-            request.section,
-            request.selection,
-            request.revision,
-          )
-        }
-        close={() => setDiscard(null)}
-      />
     </section>
   );
+}
+
+function describeDiscard(selection: ChangeSelection) {
+  if (selection._tag === "Lines")
+    return `Discard ${selection.lines.length} selected changed lines in ${selection.path}.`;
+  if (selection._tag === "Files")
+    return `Discard changes in ${selection.paths.length} selected ${selection.paths.length === 1 ? "file" : "files"}.`;
+  return "Discard every change in this section, including files hidden by the filter.";
 }

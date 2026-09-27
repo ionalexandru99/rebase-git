@@ -1,21 +1,16 @@
-import {
-  type ExecuteOperation,
-  type OperationAction,
-  type OperationKind,
-  type OperationScope,
-  type RepositoryOperation,
+import type {
+  OperationAction,
+  OperationKind,
+  OperationScope,
+  RepositoryOperation,
   RepositoryOperationsHttpApi,
 } from "@rebase/contracts";
-import { type MutationState, useMutationState } from "@tanstack/react-query";
 import { useState } from "react";
 import { useOperationAction } from "#web/features/operation-recovery/hooks/use-operation";
 import { useWorktreeOperation } from "#web/features/operation-recovery/hooks/use-operation-status";
-import { describeOperationFailure } from "#web/features/operation-recovery/operation-messages";
-import { useRepositoryScope } from "#web/features/repository-scope/repository-scope-provider";
-import {
-  type CommandFailure,
-  commandKey,
-} from "#web/platform/query/use-command";
+import { useRepositoryScope } from "#web/platform/query/repository-scope";
+import { describeFailure } from "#web/platform/query/request-failure";
+import type { Command, CommandResult } from "#web/platform/query/use-command";
 
 export interface OperationRecoveryState {
   readonly operation: RepositoryOperation | null;
@@ -31,9 +26,7 @@ interface CompletedOperation {
   readonly aborted: boolean;
 }
 
-type Execution = MutationState<RepositoryOperation, unknown, ExecuteOperation>;
-
-const executeRoute = RepositoryOperationsHttpApi.execute;
+type ExecuteRoute = typeof RepositoryOperationsHttpApi.execute;
 
 const headerPhases: ReadonlySet<RepositoryOperation["phase"]> = new Set([
   "conflicts",
@@ -57,7 +50,7 @@ export function useOperationRecovery(
   const status = useWorktreeOperation(scope, options);
   const matched = status === null ? undefined : scope;
   const action = useOperationAction(matched);
-  const finished = useLastExecution(matched);
+  const finished = lastExecution(action, matched);
   const [retrying, setRetrying] = useState(false);
   const [observedKind, setObservedKind] = useState<OperationKind | null>(null);
   const [forgotten, setForgotten] = useState(0);
@@ -81,29 +74,16 @@ export function useOperationRecovery(
       !allows(operation, choice)
     )
       return;
-    const command = {
-      repositoryId: matched.repositoryId,
-      worktreePath: matched.worktreePath,
-      action: choice,
-    };
     const continueFresh = async () => {
+      setRetrying(true);
       const fresh = await status.read();
-      if (!stillReady(fresh, operation.kind)) return setRetrying(false);
-      action.mutate(
-        { ...command, revision: fresh.revision },
-        { onSettled: () => setRetrying(false) },
-      );
+      if (stillReady(fresh, operation.kind))
+        await action.run({ action: choice, revision: fresh.revision });
+      setRetrying(false);
     };
-    action.mutate(
-      { ...command, revision },
-      {
-        onError: (failure) => {
-          if (choice !== "continue" || !staleRejection(failure)) return;
-          setRetrying(true);
-          void continueFresh();
-        },
-      },
-    );
+    void action.run({ action: choice, revision }).then((result) => {
+      if (choice === "continue" && staleRejection(result)) void continueFresh();
+    });
   };
 
   const state: OperationRecoveryState = {
@@ -112,9 +92,9 @@ export function useOperationRecovery(
     checking: status?.checking ?? true,
     busy,
     error:
-      action.error === null || retrying
+      action.failure === undefined || retrying
         ? (status?.error ?? null)
-        : describeOperationFailure(action.error),
+        : describeFailure(action.failure),
     completed:
       operation?.kind === "idle" &&
       observedKind !== null &&
@@ -137,30 +117,18 @@ export function useOperationRecovery(
   };
 }
 
-function useLastExecution(scope: OperationScope | undefined) {
-  const executions = useMutationState({
-    filters: {
-      mutationKey: commandKey(executeRoute, scope),
-      status: "success",
-    },
-    select: (mutation) => {
-      const { data, variables, submittedAt } = mutation.state as Execution;
-      return {
-        submittedAt,
-        idle: data?.kind === "idle",
-        aborted: variables?.action === "abort",
-      };
-    },
-  });
-  const last = executions.at(-1);
-  return scope !== undefined && last?.idle ? last : null;
+function lastExecution(
+  action: Command<ExecuteRoute>,
+  scope: OperationScope | undefined,
+) {
+  const last = action.lastOk;
+  return scope !== undefined && last?.value.kind === "idle"
+    ? { submittedAt: last.submittedAt, aborted: last.input.action === "abort" }
+    : null;
 }
 
-function staleRejection(failure: CommandFailure<typeof executeRoute>) {
-  return (
-    failure._tag === "EnvironmentHttpRejected" &&
-    failure.failure.reason === "Stale"
-  );
+function staleRejection(result: CommandResult<ExecuteRoute>) {
+  return result._tag === "Rejected" && result.failure.reason === "Stale";
 }
 
 function stillReady(

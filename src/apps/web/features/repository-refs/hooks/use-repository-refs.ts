@@ -1,19 +1,23 @@
-import type { EnvironmentRpcClient, RepositoryRefs } from "@rebase/contracts";
-import { environmentResponseError } from "@rebase/environment-client";
+import type {
+  EnvironmentRpcClient,
+  RepositoryRefs,
+  RepositoryRefsFailed,
+} from "@rebase/contracts";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback } from "react";
-import { describeRefsReadFailure } from "#web/features/repository-refs/refs-messages";
 import { repositoryRefsKey } from "#web/features/repository-refs/repository-refs-query";
 import { hasEnvironmentCapability } from "#web/platform/environment/environment-capabilities";
-import {
-  type RepositoryRefsReadFailure,
-  readRepositoryRefs,
-} from "#web/platform/environment/rpc/read-repository-refs";
+import { readRepositoryRefs } from "#web/platform/environment/rpc/read-repository-refs";
 import {
   type Environment,
   useEnvironment,
 } from "#web/platform/query/environment-context";
 import { hasLiveData } from "#web/platform/query/live-query-data";
+import {
+  describeFailure,
+  type RequestFailure,
+  requestFailure,
+} from "#web/platform/query/request-failure";
 
 export interface RepositoryRefsRead {
   readonly refs: RepositoryRefs | undefined;
@@ -34,7 +38,7 @@ export function useRepositoryRefs(
   const queryKey = repositoryRefsKey(environmentId, logicalRepositoryId);
   const query = useQuery<
     RepositoryRefs,
-    RepositoryRefsReadFailure,
+    RequestFailure<RepositoryRefsFailed["failure"]>,
     RepositoryRefs,
     ReturnType<typeof repositoryRefsKey>
   >({
@@ -66,7 +70,7 @@ export function useRepositoryRefs(
     restored: query.dataUpdatedAt > 0 && !hasLiveData(queryClient, queryKey),
     loading:
       query.data === undefined && !query.isError && repositoryId !== undefined,
-    error: query.isError ? describeRefsReadFailure(query.error) : null,
+    error: query.isError ? describeFailure(query.error) : null,
     retry,
   };
 }
@@ -77,8 +81,10 @@ function readRefs(
   signal: AbortSignal,
 ) {
   if (rpc === undefined || repositoryId === undefined)
-    return Promise.reject(environmentResponseError("WebSocket"));
-  return readRepositoryRefs(rpc, repositoryId, signal);
+    return Promise.reject({ _tag: "Unanswered" });
+  return readRepositoryRefs(rpc, repositoryId, signal).catch((error) => {
+    throw requestFailure(error);
+  });
 }
 
 function servesRefs(environment: Environment) {

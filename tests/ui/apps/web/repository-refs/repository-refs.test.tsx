@@ -17,9 +17,9 @@ import { fakeRpc } from "#tests-ui/runtime/fake-rpc";
 import { render } from "#tests-ui/runtime/render";
 import { useRefActivation } from "#web/features/repository-refs/hooks/use-ref-activation";
 import { useRepositoryRefs } from "#web/features/repository-refs/hooks/use-repository-refs";
-import { RepositoryScopeProvider } from "#web/features/repository-scope/repository-scope-provider";
 import type { EnvironmentChangeListener } from "#web/platform/environment/environment-protocol.contract";
 import type { Environment } from "#web/platform/query/environment-context";
+import { RepositoryScopeProvider } from "#web/platform/query/repository-scope";
 
 const repositoryId = "00000000-0000-4000-8000-000000000001";
 const mainPath = "/repo";
@@ -47,7 +47,7 @@ describe("repository refs", () => {
       .toHaveTextContent("On feature");
   });
 
-  it("applies a checkout to the shown refs and explains a rejected one", async () => {
+  it("re-reads the refs after a checkout and explains a rejected one", async () => {
     const reads = queuedReads();
     const checkout = vi.fn(
       async (
@@ -65,14 +65,8 @@ describe("repository refs", () => {
       .element(screen.getByRole("status"))
       .toHaveTextContent("On main");
 
-    environment.publish([repositoryId]);
-    await expect.poll(() => reads.pending()).toBe(1);
     await screen.getByRole("button", { name: "Checkout feature" }).click();
-    await expect
-      .element(screen.getByRole("status"))
-      .toHaveTextContent("On feature");
-    await expect.poll(() => reads.pending()).toBe(2);
-    await reads.resolve(refs("main"));
+    await expect.poll(() => reads.pending()).toBe(1);
     await reads.resolve(refs("feature"));
     await expect
       .element(screen.getByRole("status"))

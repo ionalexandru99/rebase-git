@@ -9,10 +9,7 @@ import {
   type RepositoryCommit,
   type RepositoryRefs,
 } from "@rebase/contracts";
-import {
-  EnvironmentHttpRejected,
-  EnvironmentResponseError,
-} from "@rebase/environment-client";
+import { EnvironmentHttpRejected } from "@rebase/environment-client";
 import { describe, expect, it, vi } from "vite-plus/test";
 import { page, userEvent } from "vite-plus/test/browser";
 import { repositoryScope } from "#tests-ui/apps/web/repository-scope/repository-scope-fixture";
@@ -28,8 +25,8 @@ import { ApplicationShell } from "#web/app/shell/application-shell";
 import { RepositoryWorkspace } from "#web/app/workspace/repository-workspace";
 import { repositoryCatalogKey } from "#web/features/repository-catalog/hooks/use-repository-catalog";
 import type { RepositoryHistoryGateway } from "#web/features/repository-history/repository-history-reader";
-import { RepositoryScopeProvider } from "#web/features/repository-scope/repository-scope-provider";
 import { createEnvironmentQueryClient } from "#web/platform/query/environment-query-client";
+import { RepositoryScopeProvider } from "#web/platform/query/repository-scope";
 
 describe("application shell", () => {
   it("opens repository settings from the list without opening its graph", async () => {
@@ -135,43 +132,6 @@ describe("application shell", () => {
         page
           .getByRole("grid", { name: "Commit history" })
           .getByRole("row", { name: /^cached commit,/ }),
-      )
-      .toBeVisible();
-  });
-
-  it("opens a newly remembered repository even when the catalog read after it fails", async () => {
-    const connected = await connectedSession();
-    connected.catalogReads
-      .mockReturnValueOnce({ repositories: [] })
-      .mockImplementation(() => {
-        throw new EnvironmentResponseError({
-          responseTag: RepositoryCatalogHttpApi.list.path,
-        });
-      });
-    connected.finishSynchronization();
-    await render(
-      <ApplicationShell
-        desktopUpdates={undefined}
-        productVersion="test"
-        repositoryFilesystem={undefined}
-        repositoryHistory={connected.repositoryHistory}
-        session={connected.session}
-      />,
-    );
-    await chooseFolder("repo");
-    await expect
-      .element(
-        page
-          .getByRole("grid", { name: "Commit history" })
-          .getByRole("row", { name: /^cached commit,/ }),
-      )
-      .toBeVisible();
-    await expect.poll(() => connected.catalogReads.mock.calls.length).toBe(2);
-    await expect
-      .element(
-        page
-          .getByRole("navigation", { name: "Projects" })
-          .getByRole("button", { name: "Repository settings for rebase-test" }),
       )
       .toBeVisible();
   });

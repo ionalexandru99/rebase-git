@@ -1,10 +1,10 @@
+import { RepositoryCatalogHttpApi } from "@rebase/contracts";
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef } from "react";
 import { SettingsSection } from "#web/components/ui/settings-layout";
 import { writeClipboardText } from "#web/features/clipboard/write-clipboard-text";
 import type { RepositoryHistoryCacheReader } from "#web/features/history-storage/history-cache";
 import { localEnvironment } from "#web/features/project-navigation/local-environment";
-import { useRemoveRepository } from "#web/features/repository-catalog/hooks/use-catalog-commands";
 import { useCatalogRepository } from "#web/features/repository-catalog/hooks/use-repository-catalog";
 import { RepositoryFetchSettings } from "#web/features/repository-fetch/components/repository-fetch-settings";
 import { describeRepositoryFetchError } from "#web/features/repository-fetch/repository-fetch-error";
@@ -15,6 +15,8 @@ import { RepositoryCacheSettings } from "#web/features/repository-settings/compo
 import { RepositoryDetailsSettings } from "#web/features/repository-settings/components/repository-details-settings";
 import { RepositoryOrderSettings } from "#web/features/repository-settings/components/repository-order-settings";
 import { useEnvironment } from "#web/platform/query/environment-context";
+import { describeFailure } from "#web/platform/query/request-failure";
+import { useCommand } from "#web/platform/query/use-command";
 import { useStore } from "#web/platform/store/use-store";
 
 type RepositoryHistorySettingsClient = RepositoryHistoryCacheReader &
@@ -33,7 +35,9 @@ export function RepositorySettingsPage({
 }) {
   const repository = useCatalogRepository(repositoryId);
   const { environmentId, connected, writable } = useEnvironment();
-  const { mutateAsync: removeFromCatalog } = useRemoveRepository();
+  const { run: removeFromCatalog } = useCommand(
+    RepositoryCatalogHttpApi.remove,
+  );
   const logicalRepositoryId = repository?.logicalRepositoryId ?? repositoryId;
   const heading = useRef<HTMLHeadingElement>(null);
   const identity = useMemo(
@@ -101,9 +105,12 @@ export function RepositorySettingsPage({
             canRemove={writable}
             copyPath={() => writeClipboardText(path)}
             reveal={reveal === undefined ? undefined : () => reveal(path)}
-            remove={() =>
-              removeFromCatalog({ repositoryId }).then(() => onRemoved())
-            }
+            remove={async () => {
+              const result = await removeFromCatalog({ repositoryId });
+              if (result._tag !== "Ok")
+                throw new Error(describeFailure(result));
+              onRemoved();
+            }}
           />
         </SettingsSection>
       </div>

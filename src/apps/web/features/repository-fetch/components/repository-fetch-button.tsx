@@ -1,10 +1,11 @@
+import { RepositoryPullHttpApi } from "@rebase/contracts";
 import { IconArrowDown } from "@tabler/icons-react";
-import { Button } from "#web/components/ui/button";
+import { ToolbarButton } from "#web/components/ui/toolbar-button";
 import { useOperationCommandState } from "#web/features/operation-recovery/hooks/use-operation-status";
 import { canFetch } from "#web/features/repository-fetch/can-fetch";
 import type { RepositoryHistorySnapshot } from "#web/features/repository-history/repository-history-reader";
-import { usePulling } from "#web/features/repository-pull/hooks/use-pulling";
-import { useRepositoryScope } from "#web/features/repository-scope/repository-scope-provider";
+import { useRepositoryScope } from "#web/platform/query/repository-scope";
+import { useCommand } from "#web/platform/query/use-command";
 
 export function RepositoryFetchButton({
   fetch,
@@ -18,7 +19,7 @@ export function RepositoryFetchButton({
 }) {
   const scope = useRepositoryScope();
   const recoveryBusy = useOperationCommandState() === "busy";
-  const pulling = usePulling();
+  const pulling = useCommand(RepositoryPullHttpApi.pull).running;
   const enabled = canFetch({
     connected: scope?.connected === true,
     writable: scope?.writable === true,
@@ -29,15 +30,9 @@ export function RepositoryFetchButton({
       snapshot.freshness !== undefined && snapshot.freshnessError === undefined,
   });
   return (
-    <Button
-      className="h-7 gap-1.5 text-[.85rem] sm:text-[.85rem]"
-      disabled={!enabled}
-      onClick={fetch.execute}
-      size="sm"
-      variant="ghost"
-    >
+    <ToolbarButton disabled={!enabled} onClick={fetch.execute}>
       <IconArrowDown aria-hidden="true" className="size-3.5" />
       {fetch.fetching ? "Fetching" : "Fetch"}
-    </Button>
+    </ToolbarButton>
   );
 }

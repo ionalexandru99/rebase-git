@@ -7,7 +7,7 @@ import type {
 } from "#web/features/commit-commands/graph-command";
 import { useGraphCommands } from "#web/features/commit-commands/use-graph-commands";
 import type { RepositoryHistoryReadModel } from "#web/features/repository-history/repository-history-reader";
-import { useRepositoryScope } from "#web/features/repository-scope/repository-scope-provider";
+import { useRepositoryScope } from "#web/platform/query/repository-scope";
 
 export function useCommitGraphCommands({
   extraCommands,
