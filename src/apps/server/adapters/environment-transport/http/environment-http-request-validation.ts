@@ -1,6 +1,6 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { Effect, Schema } from "effect";
-import { EnvironmentHttpBodyError } from "#server/adapters/environment-transport/http/environment-http-request-body.contract";
+import { EnvironmentHttpBodyError } from "#server/adapters/environment-transport/http/environment-http-request-body";
 
 export function requireMethod(
   request: IncomingMessage,

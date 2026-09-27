@@ -3,11 +3,13 @@ import {
   type RepositoryRejected,
   repositoryRejected,
 } from "@rebase/contracts";
-import type { RepositoryGitError } from "#server/domain/repository-git.contract";
-import { isGitRejection } from "#server/repository/access/index";
+import {
+  type GitFailed,
+  isGitRejection,
+} from "#server/adapters/local-git/git-commands";
 
 export function checkoutFailure(
-  error: RepositoryGitError,
+  error: GitFailed,
   targetName: string,
 ): RepositoryCheckoutFailure | RepositoryRejected {
   if (!isGitRejection(error))

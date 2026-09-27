@@ -4,29 +4,13 @@ import { join } from "node:path";
 import { RepositoryBranchesHttpApi } from "@rebase/contracts";
 import { Effect } from "effect";
 import { afterEach, describe, expect, it } from "vite-plus/test";
-import { createEnvironmentEventPublisher } from "#server/adapters/environment-transport/events/environment-event-publisher";
-import { createLocalGitCommandRunner } from "#server/adapters/local-git/local-git-command-runner";
-import { createLocalRepositoryWatcher } from "#server/adapters/local-git/local-repository-watcher";
-import { EnvironmentEvents } from "#server/domain/environment-event-publisher.contract";
-import { RepositoryWatching } from "#server/domain/repository-watcher.contract";
-import { createRepositoryCatalog } from "#server/features/repository-catalog/repository-catalog";
-import { repositoryRefsFeature } from "#server/features/repository-refs/repository-refs.feature";
-import { acquireEnvironmentContext } from "#server/persistence/environment-context";
-import { environmentPaths } from "#server/persistence/storage/environment-paths";
-import {
-  createRepositoryAccess,
-  createRepositoryCoordination,
-} from "#server/repository/access/index";
-import {
-  featureRoutesClient,
-  provideRepositoryServices,
-} from "#tests-integration/apps/server/environment-connection/feature-routes-client";
 import {
   cloneRepository,
   createRepository,
   fastImport,
   git,
 } from "#tests-support/git";
+import { openTestEnvironment, type RoutesClient } from "#tests-support/server";
 import { removeTemporaryDirectory } from "#tests-support/temporary-directory";
 
 const directories = new Set<string>();
@@ -120,7 +104,7 @@ describe("repository branches", () => {
     await git(repositoryPath, "init", "-b", "master");
 
     const renamed = await withBranches(
-      { repositoryPath, root },
+      { repositoryPath },
       ({ branches, repositoryId }) =>
         branches.rename({
           name: "master",
@@ -336,50 +320,20 @@ describe("repository branches", () => {
   });
 });
 
-function withBranches<Value, Failure>(
-  fixture: Pick<Fixture, "repositoryPath" | "root">,
+async function withBranches<Value, Failure>(
+  fixture: Pick<Fixture, "repositoryPath">,
   use: (dependencies: {
-    readonly branches: ReturnType<
-      typeof featureRoutesClient<typeof RepositoryBranchesHttpApi>
-    >;
+    readonly branches: RoutesClient<typeof RepositoryBranchesHttpApi>;
     readonly repositoryId: string;
   }) => Effect.Effect<Value, Failure>,
 ) {
-  const runner = createLocalGitCommandRunner();
+  const environment = await openTestEnvironment();
+  const repository = await environment.remember(fixture.repositoryPath);
   return Effect.runPromise(
-    Effect.scoped(
-      Effect.gen(function* () {
-        const context = yield* acquireEnvironmentContext(
-          environmentPaths(join(fixture.root, ".rebase")),
-        );
-        const catalog = createRepositoryCatalog(context, runner);
-        const remembered = yield* catalog.remember(fixture.repositoryPath);
-        const feature = yield* repositoryRefsFeature.pipe(
-          provideRepositoryServices({
-            access: createRepositoryAccess(
-              catalog,
-              runner,
-              createLocalRepositoryWatcher(),
-            ),
-            coordination: createRepositoryCoordination(runner),
-            git: runner,
-          }),
-          Effect.provideService(
-            RepositoryWatching,
-            createLocalRepositoryWatcher(),
-          ),
-          Effect.provideService(
-            EnvironmentEvents,
-            createEnvironmentEventPublisher(),
-          ),
-        );
-        const branches = featureRoutesClient(
-          RepositoryBranchesHttpApi,
-          feature.httpRoutes,
-        );
-        return yield* use({ branches, repositoryId: remembered.id });
-      }),
-    ),
+    use({
+      branches: environment.routes(RepositoryBranchesHttpApi),
+      repositoryId: repository.id,
+    }),
   );
 }
 

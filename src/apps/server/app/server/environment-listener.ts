@@ -1,19 +1,50 @@
 import { createServer, type Server } from "node:http";
-import { Effect, FiberSet } from "effect";
-import type {
-  EnvironmentTransportState,
-  RunEnvironmentEffect,
-} from "#server/adapters/environment-transport/environment-connection.contract";
+import { EnvironmentHttpApi } from "@rebase/contracts";
+import { Data, Effect, FiberSet } from "effect";
+import type { EnvironmentFeatures } from "#server/adapters/environment-transport/combine-environment-features";
+import type { EnvironmentEventPublisher } from "#server/adapters/environment-transport/environment-event-publisher";
 import { formatHostAddress } from "#server/adapters/environment-transport/environment-request-authorization";
-import { createEnvironmentTransportDiscovery } from "#server/adapters/environment-transport/environment-transport-discovery";
-import { createEnvironmentHttpHandler } from "#server/adapters/environment-transport/http/environment-http-handler";
-import type { EnvironmentHttpRouteHandler } from "#server/adapters/environment-transport/http/environment-http-route-handler.contract";
-import { environmentTransportHttpRoutes } from "#server/adapters/environment-transport/http/environment-transport-http-routes";
-import { validateEnvironmentHttpRoutes } from "#server/adapters/environment-transport/http/validate-environment-http-routes";
+import {
+  createEnvironmentTransportDiscovery,
+  type EnvironmentTransportState,
+} from "#server/adapters/environment-transport/environment-transport-discovery";
+import {
+  createEnvironmentHttpHandler,
+  type RunEnvironmentEffect,
+} from "#server/adapters/environment-transport/http/environment-http-handler";
+import {
+  type EnvironmentHttpRouteHandler,
+  route,
+} from "#server/adapters/environment-transport/http/environment-http-route-handler";
 import { attachEnvironmentWebSocketServer } from "#server/adapters/environment-transport/websocket/environment-websocket-server";
-import type { EnvironmentListenerOptions } from "#server/app/server/environment-server.contract";
-import { EnvironmentServerStartError } from "#server/app/server/environment-server-error.contract";
 import { errorMessage, isFileSystemError } from "#server/error-inspection";
+import type { EnvironmentAuthorization } from "#server/features/environment-authorization/environment-authorization";
+
+export class EnvironmentServerStartError extends Data.TaggedError(
+  "EnvironmentServerStartError",
+)<{
+  readonly cause: unknown;
+  readonly message: string;
+}> {}
+
+export interface EnvironmentListener {
+  readonly host: string;
+  readonly origin: string;
+  readonly port: number;
+  readonly readiness: { value: boolean };
+  readonly server: Server;
+}
+
+interface EnvironmentListenerOptions {
+  readonly authorization: EnvironmentAuthorization;
+  readonly browserAssetsRoot?: string;
+  readonly environmentId: string;
+  readonly events: EnvironmentEventPublisher;
+  readonly features: EnvironmentFeatures;
+  readonly host?: string;
+  readonly port?: number;
+  readonly productVersion: string;
+}
 
 const loopbackHost = "127.0.0.1";
 
@@ -82,6 +113,31 @@ export function acquireEnvironmentListener(
       server,
     };
   });
+}
+
+function environmentTransportHttpRoutes(state: EnvironmentTransportState) {
+  return [
+    route(EnvironmentHttpApi.discovery, () => Effect.succeed(state.discovery)),
+    route(EnvironmentHttpApi.snapshot, () =>
+      Effect.sync(() => ({
+        environmentId: state.discovery.environmentId,
+        sequence: state.events.currentSequence(),
+      })),
+    ),
+  ];
+}
+
+function validateEnvironmentHttpRoutes(
+  routes: readonly EnvironmentHttpRouteHandler[],
+) {
+  const registered = new Set<string>();
+  for (const { route } of routes) {
+    const name = `${route.method} ${route.path}`;
+    if (registered.has(name)) {
+      throw new Error(`Duplicate HTTP route: ${name}`);
+    }
+    registered.add(name);
+  }
 }
 
 function createHttpServer(

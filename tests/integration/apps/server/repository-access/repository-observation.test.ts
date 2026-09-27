@@ -4,27 +4,16 @@ import { mkdtemp, realpath, symlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
-import { Effect, Exit, Layer, Scope } from "effect";
+import { Effect, Exit, Scope } from "effect";
 import { expect, it, vi } from "vite-plus/test";
-import { createEnvironmentEventPublisher } from "#server/adapters/environment-transport/events/environment-event-publisher";
-import { createLocalGitCommandRunner } from "#server/adapters/local-git/local-git-command-runner";
+import { createEnvironmentEventPublisher } from "#server/adapters/environment-transport/environment-event-publisher";
+import type { GitCommandRunner } from "#server/adapters/local-git/git-commands";
 import { createLocalRepositoryWatcher } from "#server/adapters/local-git/local-repository-watcher";
-import { GitCommands } from "#server/domain/git-command.contract";
-import { RepositoryCatalogAccess } from "#server/domain/repository-catalog.contract";
-import { RepositoryWatching } from "#server/domain/repository-watcher.contract";
-import { createRepositoryCatalog } from "#server/features/repository-catalog/repository-catalog";
 import { acquireRepositoryFreshness } from "#server/features/repository-history/freshness/repository-freshness";
 import { acquireRepositoryChangePublisher } from "#server/features/repository-refs/repository-change-publisher";
-import { createRepositoryRefsReader } from "#server/features/repository-refs/repository-refs";
-import { acquireEnvironmentContext } from "#server/persistence/environment-context";
-import { environmentPaths } from "#server/persistence/storage/environment-paths";
-import {
-  createRepositoryAccess,
-  repositoryAccessLayer,
-  repositoryCoordinationLayer,
-} from "#server/repository/access/index";
 import { createRepository } from "#tests-support/git";
 import { waitForObservation } from "#tests-support/observation";
+import { openTestEnvironment } from "#tests-support/server";
 import { removeTemporaryDirectory } from "#tests-support/temporary-directory";
 
 vi.mock("node:fs", async (original) => {
@@ -46,21 +35,19 @@ for (const firstRelease of ["refs", "freshness"] as const)
     try {
       await createRepository(main);
       await git("-C", main, "worktree", "add", "-b", "linked", linked);
+      const run = vi.fn<GitCommandRunner["run"]>();
+      const environment = await openTestEnvironment({
+        git: (local) => {
+          run.mockImplementation(local.run);
+          return { ...local, run };
+        },
+      });
+      const mainEntry = await environment.remember(main);
+      const linkedEntry = await environment.remember(linked);
+      const { git: runner, watcher } = environment;
+      run.mockClear();
       await Effect.runPromise(
         Effect.gen(function* () {
-          const context = yield* acquireEnvironmentContext(
-            environmentPaths(join(root, "state")),
-          );
-          const catalog = createRepositoryCatalog(
-            context,
-            createLocalGitCommandRunner(),
-          );
-          const mainEntry = yield* catalog.remember(main);
-          const linkedEntry = yield* catalog.remember(linked);
-          const local = createLocalGitCommandRunner();
-          const run = vi.fn(local.run);
-          const runner = { ...local, run };
-          const watcher = createLocalRepositoryWatcher();
           const events = createEnvironmentEventPublisher();
           const changed = vi.fn();
           events.subscribe(changed);
@@ -70,39 +57,16 @@ for (const firstRelease of ["refs", "freshness"] as const)
             watcher,
             events,
           ).pipe(Effect.provideService(Scope.Scope, refsScope));
-          const refs = createRepositoryRefsReader({
-            access: createRepositoryAccess(
-              catalog,
-              runner,
-              createLocalRepositoryWatcher(),
-            ),
-            changes,
+          vi.mocked(watch).mockClear();
+          yield* changes.watch(mainEntry);
+          yield* changes.watch(linkedEntry);
+          const freshness = yield* acquireRepositoryFreshness({
+            ...environment,
             git: runner,
           });
-          vi.mocked(watch).mockClear();
-          yield* refs.read(mainEntry.id);
-          yield* refs.read(linkedEntry.id);
-          const freshness = yield* acquireRepositoryFreshness.pipe(
-            Effect.provide(
-              Layer.mergeAll(
-                repositoryAccessLayer,
-                repositoryCoordinationLayer,
-              ).pipe(
-                Layer.provide(
-                  Layer.mergeAll(
-                    Layer.succeed(GitCommands, runner),
-                    Layer.succeed(RepositoryCatalogAccess, catalog),
-                    Layer.succeed(RepositoryWatching, watcher),
-                  ),
-                ),
-              ),
-            ),
-            Effect.provideService(GitCommands, runner),
-            Effect.provideService(RepositoryWatching, watcher),
-          );
           const fresh = vi.fn();
           const unsubscribe = yield* freshness.subscribe(linkedEntry.id, fresh);
-          expect(run).toHaveBeenCalledTimes(14);
+          expect(run).toHaveBeenCalledTimes(4);
           const roots = vi.mocked(watch).mock.calls.flatMap((args, index) => {
             if (args[0] !== join(main, ".git")) return [];
             const result = vi.mocked(watch).mock.results[index];
@@ -154,7 +118,7 @@ for (const firstRelease of ["refs", "freshness"] as const)
           const controlChanged = vi.fn();
           control.subscribe(controlChanged);
           const controlChanges = yield* acquireRepositoryChangePublisher(
-            local,
+            runner,
             createLocalRepositoryWatcher(),
             control,
           );

@@ -6,9 +6,10 @@ import type {
   WriteConflict,
 } from "@rebase/contracts";
 import { Effect } from "effect";
-import type { GitCommandRunner } from "#server/domain/git-command.contract";
-import { previewByteLimit } from "#server/domain/repository-comparison.contract";
-import type { RepositoryCoordinationService } from "#server/domain/repository-coordination.contract";
+import {
+  type GitCommandRunner,
+  runRepositoryGit,
+} from "#server/adapters/local-git/git-commands";
 import { changeIo } from "#server/features/repository-changes/git/change-failures";
 import { safeChangePath } from "#server/features/repository-changes/git/change-files";
 import {
@@ -17,7 +18,8 @@ import {
 } from "#server/features/repository-conflicts/git/conflict-files";
 import { readConflictDocument } from "#server/features/repository-conflicts/git/read-conflict-document";
 import { readConflictList } from "#server/features/repository-conflicts/git/read-conflict-list";
-import { runRepositoryGit } from "#server/repository/access/index";
+import { previewByteLimit } from "#server/repository/comparison/read-blobs";
+import type { RepositoryCoordination } from "#server/repository/repository-coordination";
 
 const specialModes = new Set(["120000", "160000"]);
 
@@ -48,7 +50,7 @@ export function writeConflict(git: GitCommandRunner, input: WriteConflict) {
 
 export function chooseWholeFile(
   git: GitCommandRunner,
-  coordination: RepositoryCoordinationService,
+  coordination: RepositoryCoordination,
   input: ChooseConflict,
 ) {
   return Effect.gen(function* () {
@@ -73,7 +75,7 @@ export function chooseWholeFile(
 
 export function stageConflict(
   git: GitCommandRunner,
-  coordination: RepositoryCoordinationService,
+  coordination: RepositoryCoordination,
   input: StageConflict,
 ) {
   return Effect.gen(function* () {

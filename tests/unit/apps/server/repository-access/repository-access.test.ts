@@ -1,7 +1,7 @@
 import { Effect, Stream } from "effect";
 import { describe, expect, it } from "vite-plus/test";
-import type { GitCommandRunner } from "#server/domain/git-command.contract";
-import { createRepositoryAccess } from "#server/repository/access/index";
+import type { GitCommandRunner } from "#server/adapters/local-git/git-commands";
+import { createRepositoryAccess } from "#server/repository/repository-access";
 
 const repositoryId = "00000000-0000-4000-8000-000000000001";
 const repositoryPath = "/missing/rebase/repository";
@@ -49,7 +49,10 @@ describe("repository access", () => {
     );
 
     expect(repository.worktreeLists()).toBe(3);
-    expect(failure.failure._tag).toBe("WorktreeMissing");
+    expect(failure).toMatchObject({
+      _tag: "RepositoryRejected",
+      reason: "Missing",
+    });
   });
 });
 

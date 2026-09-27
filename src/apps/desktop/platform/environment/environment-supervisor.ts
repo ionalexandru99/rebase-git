@@ -1,10 +1,18 @@
 import { fileURLToPath } from "node:url";
+import type { EnvironmentServer } from "@rebase/server";
 import { type UtilityProcess, utilityProcess } from "electron";
-import type {
-  EnvironmentProcessCommand,
-  EnvironmentProcessMessage,
-} from "#desktop/platform/environment/environment-process.contract";
-import type { ManagedEnvironmentServer } from "#desktop/platform/environment/environment-supervisor.contract";
+
+export type EnvironmentProcessMessage =
+  | { readonly type: "ready"; readonly server: EnvironmentServer }
+  | { readonly type: "failed"; readonly message: string };
+
+export interface EnvironmentProcessCommand {
+  readonly type: "stop";
+}
+
+export interface ManagedEnvironmentServer extends EnvironmentServer {
+  stop(): Promise<void>;
+}
 
 const environmentProcessPath = fileURLToPath(
   new URL("./environment-process.js", import.meta.url),

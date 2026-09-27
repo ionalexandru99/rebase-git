@@ -1,11 +1,12 @@
 import { EnvironmentAuthorizationHttpApi } from "@rebase/contracts";
 import { Effect } from "effect";
-import type { EnvironmentFeature } from "#server/adapters/environment-transport/environment-feature.contract";
+import type { EnvironmentFeature } from "#server/adapters/environment-transport/combine-environment-features";
 import { route } from "#server/adapters/environment-transport/http/environment-http-route-handler";
-import { EnvironmentAuthorizationAccess } from "#server/domain/environment-authorization.contract";
+import type { EnvironmentAuthorization } from "#server/features/environment-authorization/environment-authorization";
 
-export const environmentAuthorizationFeature = Effect.gen(function* () {
-  const authorization = yield* EnvironmentAuthorizationAccess;
+export function environmentAuthorizationFeature(
+  authorization: EnvironmentAuthorization,
+): EnvironmentFeature {
   const api = EnvironmentAuthorizationHttpApi;
   return {
     capabilities: [],
@@ -22,8 +23,8 @@ export const environmentAuthorizationFeature = Effect.gen(function* () {
       route(api.readBrowserSession, (_, context) =>
         Effect.succeed({ authorization: context.device }),
       ),
-      route(api.createPairing, (pairing, context) =>
-        Effect.map(authorization.createPairing(pairing), (created) => ({
+      route(api.createPairing, (_, context) =>
+        Effect.map(authorization.createPairing(), (created) => ({
           expiresAt: created.expiresAt,
           pairingUrl: `${context.origin}/pair#${created.material}`,
         })),
@@ -38,5 +39,5 @@ export const environmentAuthorizationFeature = Effect.gen(function* () {
         authorization.revoke(context.credential, revocation.authorizationId),
       ),
     ],
-  } satisfies EnvironmentFeature;
-});
+  };
+}

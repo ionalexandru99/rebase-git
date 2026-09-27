@@ -1,4 +1,3 @@
-import type { EnvironmentAccessCapability } from "@rebase/contracts/environment-connection/environment-access-capability.contract";
 import { RepositoryRejected } from "@rebase/contracts/git/git-failures.contract";
 import { Schema } from "effect";
 
@@ -6,7 +5,7 @@ type RoutePath = `/api/${string}`;
 type RouteMethod = "GET" | "POST";
 
 export interface EnvironmentHttpRoute {
-  readonly capability: EnvironmentAccessCapability | null;
+  readonly public: boolean;
   readonly method: RouteMethod;
   readonly path: RoutePath;
   readonly request?: Schema.Top;
@@ -61,11 +60,11 @@ export type RouteInput<Route> = Route extends {
   : undefined;
 
 interface RouteDefinition<
-  Capability extends EnvironmentAccessCapability | null,
+  Public extends boolean,
   Success extends Schema.Top,
   Failure extends Schema.Top,
 > {
-  readonly capability: Capability;
+  readonly public?: Public;
   readonly method: RouteMethod;
   readonly path: RoutePath;
   readonly success: Success;
@@ -73,42 +72,42 @@ interface RouteDefinition<
 }
 
 export interface DeclaredRoute<
-  Capability extends EnvironmentAccessCapability | null,
+  Public extends boolean,
   Success extends Schema.Top,
   Failure extends Schema.Top,
 > {
-  readonly capability: Capability;
+  readonly public: Public;
   readonly method: RouteMethod;
   readonly path: RoutePath;
   readonly response: RouteResult<Success, Failure>;
 }
 
 export function route<
-  Capability extends EnvironmentAccessCapability | null,
   Request extends Schema.Top,
   Success extends Schema.Top,
   Failure extends Schema.Top = Schema.Never,
+  Public extends boolean = false,
 >(
-  definition: RouteDefinition<Capability, Success, Failure> & {
+  definition: RouteDefinition<Public, Success, Failure> & {
     readonly request: Request;
   },
-): DeclaredRoute<Capability, Success, Failure> & { readonly request: Request };
+): DeclaredRoute<NoInfer<Public>, Success, Failure> & {
+  readonly request: Request;
+};
 export function route<
-  Capability extends EnvironmentAccessCapability | null,
   Success extends Schema.Top,
   Failure extends Schema.Top = Schema.Never,
+  Public extends boolean = false,
 >(
-  definition: RouteDefinition<Capability, Success, Failure>,
-): DeclaredRoute<Capability, Success, Failure>;
+  definition: RouteDefinition<Public, Success, Failure>,
+): DeclaredRoute<NoInfer<Public>, Success, Failure>;
 export function route(
-  definition: RouteDefinition<
-    EnvironmentAccessCapability | null,
-    Schema.Top,
-    Schema.Top
-  > & { readonly request?: Schema.Top },
+  definition: RouteDefinition<boolean, Schema.Top, Schema.Top> & {
+    readonly request?: Schema.Top;
+  },
 ): EnvironmentHttpRoute {
   return {
-    capability: definition.capability,
+    public: definition.public ?? false,
     method: definition.method,
     path: definition.path,
     ...(definition.request === undefined
@@ -139,7 +138,7 @@ export function repositoryQuery<
   path: RoutePath,
   definition: RepositoryRouteDefinition<Request, Success, Failure>,
 ) {
-  return repositoryRoute("repository.read", path, definition);
+  return repositoryRoute(path, definition);
 }
 
 export function repositoryCommand<
@@ -150,16 +149,14 @@ export function repositoryCommand<
   path: RoutePath,
   definition: RepositoryRouteDefinition<Request, Success, Failure>,
 ) {
-  return repositoryRoute("repository.write", path, definition);
+  return repositoryRoute(path, definition);
 }
 
 function repositoryRoute<
-  Capability extends "repository.read" | "repository.write",
   Request extends Schema.Top,
   Success extends Schema.Top,
   Failure extends Schema.Top,
 >(
-  capability: Capability,
   path: RoutePath,
   {
     request,
@@ -168,7 +165,6 @@ function repositoryRoute<
   }: RepositoryRouteDefinition<Request, Success, Failure>,
 ) {
   return route({
-    capability,
     method: "POST",
     path,
     request,

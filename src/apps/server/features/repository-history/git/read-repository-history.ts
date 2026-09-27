@@ -1,14 +1,14 @@
 import type {
   ReadRepositoryHistory,
+  RepositoryHistoryOperationFailure,
   RepositoryHistoryPage,
 } from "@rebase/contracts";
 import { Effect } from "effect";
-import type { GitCommandRunner } from "#server/domain/git-command.contract";
-import type { RepositoryGitError } from "#server/domain/repository-git.contract";
 import {
-  parseHistoryOutput,
-  type RepositoryHistoryError,
-} from "#server/features/repository-history/git/history-failures";
+  type GitCommandRunner,
+  runRepositoryGit,
+} from "#server/adapters/local-git/git-commands";
+import { parseHistoryOutput } from "#server/features/repository-history/git/history-failures";
 import {
   gitHistoryFormat,
   parseGitHistory,
@@ -22,17 +22,13 @@ import {
   readShallowHistoryOids,
   restoreShallowCommitParents,
 } from "#server/features/repository-history/git/shallow-repository-history";
-import { runRepositoryGit } from "#server/repository/access/index";
 
 export function readRepositoryHistory(
   git: GitCommandRunner,
   repositoryPath: string,
   request: ReadRepositoryHistory,
   readObjectFormat: ObjectFormatRead,
-): Effect.Effect<
-  RepositoryHistoryPage,
-  RepositoryHistoryError | RepositoryGitError
-> {
+): Effect.Effect<RepositoryHistoryPage, RepositoryHistoryOperationFailure> {
   return Effect.gen(function* () {
     const objectFormat = yield* readObjectFormat;
     const historyOutput = yield* request.ancestry === "first-parent"

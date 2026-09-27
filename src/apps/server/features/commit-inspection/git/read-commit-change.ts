@@ -1,8 +1,10 @@
 import type { InspectCommitDiff } from "@rebase/contracts";
 import { Effect } from "effect";
-import type { GitCommandRunner } from "#server/domain/git-command.contract";
-import { previewByteLimit } from "#server/domain/repository-comparison.contract";
-import { runRepositoryGit } from "#server/repository/access/index";
+import {
+  type GitCommandRunner,
+  runRepositoryGit,
+} from "#server/adapters/local-git/git-commands";
+import { previewByteLimit } from "#server/repository/comparison/read-blobs";
 
 export interface CommitSide {
   readonly mode: string;

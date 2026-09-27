@@ -3,24 +3,16 @@ import { join } from "node:path";
 import { RepositoryConflictsHttpApi } from "@rebase/contracts";
 import { Effect } from "effect";
 import { afterEach, describe, expect, it } from "vite-plus/test";
-import { createLocalGitCommandRunner } from "#server/adapters/local-git/local-git-command-runner";
-import { createLocalRepositoryWatcher } from "#server/adapters/local-git/local-repository-watcher";
-import { repositoryConflictsFeature } from "#server/features/repository-conflicts/repository-conflicts.feature";
-import {
-  createRepositoryAccess,
-  createRepositoryCoordination,
-} from "#server/repository/access/index";
-import { repositoryFeatureClient } from "#tests-integration/apps/server/environment-connection/feature-routes-client";
 import { createConflictedRebase } from "#tests-support/conflicted-repository";
 import {
   createDivergedRepository,
   startConflict,
 } from "#tests-support/diverged-repository";
 import { git } from "#tests-support/git";
+import { openTestEnvironment } from "#tests-support/server";
 import { removeTemporaryDirectory } from "#tests-support/temporary-directory";
 
 const directories: string[] = [];
-const repositoryId = "00000000-0000-4000-8000-000000000001";
 afterEach(async () => {
   await Promise.all(
     directories.splice(0).map((path) => removeTemporaryDirectory(path)),
@@ -30,29 +22,9 @@ afterEach(async () => {
 async function fixture(create = createConflictedRebase) {
   const directory = await create();
   directories.push(directory);
-  const runner = createLocalGitCommandRunner();
-  const service = repositoryFeatureClient(
-    RepositoryConflictsHttpApi,
-    repositoryConflictsFeature,
-    {
-      access: createRepositoryAccess(
-        {
-          find: () =>
-            Effect.succeed({
-              id: repositoryId,
-              path: directory,
-              name: "test",
-              addedAt: "",
-              lastOpenedAt: "",
-            }),
-        },
-        runner,
-        createLocalRepositoryWatcher(),
-      ),
-      git: runner,
-      coordination: createRepositoryCoordination(runner),
-    },
-  );
+  const environment = await openTestEnvironment();
+  const repositoryId = (await environment.remember(directory)).id;
+  const service = environment.routes(RepositoryConflictsHttpApi);
   const scope = { repositoryId, worktreePath: directory };
   const list = () => Effect.runPromise(service.list(scope));
   const file = async (path: string) => {

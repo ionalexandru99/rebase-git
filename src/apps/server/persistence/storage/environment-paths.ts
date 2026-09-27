@@ -1,13 +1,19 @@
 import { chmod, mkdir } from "node:fs/promises";
-import { homedir } from "node:os";
 import { join } from "node:path";
 import { Effect } from "effect";
-import { EnvironmentStorageError } from "#server/domain/environment-storage-error.contract";
 import { errorMessage } from "#server/error-inspection";
-import type { EnvironmentPaths } from "#server/persistence/storage/environment-paths.contract";
+import { EnvironmentStorageError } from "#server/persistence/sqlite/storage-operation";
 
-export function defaultEnvironmentPaths() {
-  return environmentPaths(join(homedir(), ".rebase"));
+export interface EnvironmentPaths {
+  readonly cacheDirectory: string;
+  readonly root: string;
+  readonly runtimeDirectory: string;
+  readonly runtimeMarker: string;
+  readonly secretsDirectory: string;
+  readonly serverSecret: string;
+  readonly settingsDirectory: string;
+  readonly stateDatabase: string;
+  readonly stateDirectory: string;
 }
 
 export function environmentPaths(root: string): EnvironmentPaths {

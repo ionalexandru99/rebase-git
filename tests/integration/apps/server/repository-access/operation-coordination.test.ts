@@ -10,28 +10,12 @@ import {
 } from "@rebase/contracts";
 import { Deferred, Effect, Fiber } from "effect";
 import { afterEach, expect, it } from "vite-plus/test";
-import { createEnvironmentEventPublisher } from "#server/adapters/environment-transport/events/environment-event-publisher";
-import { createLocalGitCommandRunner } from "#server/adapters/local-git/local-git-command-runner";
-import { createLocalRepositoryWatcher } from "#server/adapters/local-git/local-repository-watcher";
-import { EnvironmentEvents } from "#server/domain/environment-event-publisher.contract";
-import type { RepositoryWritePolicy } from "#server/domain/repository-coordination.contract";
-import { RepositoryWatching } from "#server/domain/repository-watcher.contract";
-import { repositoryChangesFeature } from "#server/features/repository-changes/repository-changes.feature";
-import { repositoryOperationsFeature } from "#server/features/repository-operations/repository-operations.feature";
-import { repositoryRefsFeature } from "#server/features/repository-refs/repository-refs.feature";
-import {
-  createRepositoryAccess,
-  createRepositoryCoordination,
-} from "#server/repository/access/index";
-import {
-  featureRoutesClient,
-  provideRepositoryServices,
-  repositoryFeatureClient,
-} from "#tests-integration/apps/server/environment-connection/feature-routes-client";
+import type { RepositoryWritePolicy } from "#server/repository/repository-coordination";
 import {
   createDivergedRepository,
   startConflict,
 } from "#tests-support/diverged-repository";
+import { openTestEnvironment } from "#tests-support/server";
 import { removeTemporaryDirectory } from "#tests-support/temporary-directory";
 
 const exec = promisify(execFile);
@@ -51,7 +35,6 @@ const refsWriteIfAvailable: RepositoryWritePolicy = {
   duringOperation: "proceed",
 };
 const directories: string[] = [];
-const repositoryId = "00000000-0000-4000-8000-000000000001";
 afterEach(async () => {
   await Promise.all(
     directories.splice(0).map((path) => removeTemporaryDirectory(path)),
@@ -61,33 +44,12 @@ afterEach(async () => {
 async function fixture() {
   const { directory, git } = await createDivergedRepository();
   directories.push(directory);
-  const runner = createLocalGitCommandRunner();
-  const access = createRepositoryAccess(
-    {
-      find: () =>
-        Effect.succeed({
-          id: repositoryId,
-          path: directory,
-          name: "test",
-          addedAt: "",
-          lastOpenedAt: "",
-        }),
-    },
-    runner,
-    createLocalRepositoryWatcher(),
-  );
-  const coordination = createRepositoryCoordination(runner);
-  const services = { access, git: runner, coordination };
-  const changes = repositoryFeatureClient(
-    RepositoryChangesHttpApi,
-    repositoryChangesFeature,
-    services,
-  );
-  const operations = repositoryFeatureClient(
-    RepositoryOperationsHttpApi,
-    repositoryOperationsFeature,
-    services,
-  );
+  const environment = await openTestEnvironment();
+  const repositoryId = (await environment.remember(directory)).id;
+  const { coordination } = environment;
+  const changes = environment.routes(RepositoryChangesHttpApi);
+  const operations = environment.routes(RepositoryOperationsHttpApi);
+  const refs = environment.routes(RepositoryRefsHttpApi);
   const scope = { repositoryId, worktreePath: directory };
   const continueOperation = async () =>
     Effect.runPromise(
@@ -98,27 +60,7 @@ async function fixture() {
       }),
     );
   const checkout = (target: CheckoutRepositoryRef["target"]) =>
-    Effect.runPromise(
-      Effect.scoped(
-        repositoryRefsFeature.pipe(
-          provideRepositoryServices(services),
-          Effect.provideService(
-            RepositoryWatching,
-            createLocalRepositoryWatcher(),
-          ),
-          Effect.provideService(
-            EnvironmentEvents,
-            createEnvironmentEventPublisher(),
-          ),
-          Effect.flatMap((feature) =>
-            featureRoutesClient(
-              RepositoryRefsHttpApi,
-              feature.httpRoutes,
-            ).checkout({ ...scope, target }),
-          ),
-        ),
-      ),
-    );
+    Effect.runPromise(refs.checkout({ ...scope, target }));
   return {
     directory,
     git,

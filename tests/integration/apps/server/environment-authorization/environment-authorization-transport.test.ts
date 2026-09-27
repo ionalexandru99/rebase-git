@@ -1,8 +1,5 @@
 import { randomBytes } from "node:crypto";
-import { mkdtemp } from "node:fs/promises";
 import { request } from "node:http";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 import {
   createCurrentEnvironmentHello,
   EnvironmentAuthorizationHttpApi,
@@ -16,43 +13,20 @@ import {
   fetchEnvironmentSnapshotEffect,
 } from "@rebase/environment-client";
 import { Effect } from "effect";
-import { afterEach, describe, expect, it } from "vite-plus/test";
-import { createEnvironmentEventPublisher } from "#server/adapters/environment-transport/events/environment-event-publisher";
-import { acquireEnvironmentListener } from "#server/app/server/environment-listener";
-import {
-  type EnvironmentAuthorization,
-  EnvironmentAuthorizationAccess,
-} from "#server/domain/environment-authorization.contract";
-import { createEnvironmentAuthorization } from "#server/features/environment-authorization/environment-authorization";
-import { environmentAuthorizationFeature } from "#server/features/environment-authorization/environment-authorization.feature";
-import { acquireEnvironmentContext } from "#server/persistence/environment-context";
-import { environmentPaths } from "#server/persistence/storage/environment-paths";
-import { testEnvironmentFeatures } from "#tests-integration/apps/server/environment-connection/test-environment-features";
-import { removeTemporaryDirectory } from "#tests-support/temporary-directory";
+import { describe, expect, it } from "vite-plus/test";
+import { openTestServer } from "#tests-support/server";
 import { connectCurrentEnvironmentEffect } from "#web/app/environment/connection/environment-protocol-client";
-
-const environmentId = "00000000-0000-4000-8000-000000000001";
-const directories = new Set<string>();
-
-afterEach(async () => {
-  await Promise.all(
-    [...directories].map((directory) => removeTemporaryDirectory(directory)),
-  );
-  directories.clear();
-});
 
 describe("Environment authorization transport", () => {
   it("resumes a browser session without exposing its credential and enforces revocation", async () => {
-    await withAuthorizedListener(async ({ authorization, origin, owner }) => {
-      const pairing = await run(
-        authorization.createPairing({ capabilities: [], role: "viewer" }),
-      );
+    await withAuthorizedListener(async ({ origin, owner }) => {
+      const pairingMaterial = await createPairing(origin, owner.credential);
       const response = await postJson(
         origin,
         "/api/authorization/browser-session",
         {
           label: "Browser client",
-          pairingMaterial: pairing.material,
+          pairingMaterial,
         },
       );
       expect(response.status).toBe(200);
@@ -115,7 +89,13 @@ describe("Environment authorization transport", () => {
         },
       );
       const authorizationId = readString(session.authorization, "id");
-      await run(authorization.revoke(owner.credential, authorizationId));
+      const revocation = await postJson(
+        origin,
+        EnvironmentAuthorizationHttpApi.revokeAuthorization.path,
+        { authorizationId },
+        owner.credential,
+      );
+      expect(revocation.status).toBe(200);
       const revoked = await fetch(
         `${origin}/api/authorization/browser-session`,
         {
@@ -130,13 +110,10 @@ describe("Environment authorization transport", () => {
   });
 
   it("requires the server origin for browser pairing and cookie-authenticated writes", async () => {
-    await withAuthorizedListener(async ({ authorization, origin }) => {
-      const pairing = await run(
-        authorization.createPairing({ capabilities: [], role: "owner" }),
-      );
+    await withAuthorizedListener(async ({ origin, owner }) => {
       const body = JSON.stringify({
         label: "Browser client",
-        pairingMaterial: pairing.material,
+        pairingMaterial: await createPairing(origin, owner.credential),
       });
       for (const requestOrigin of [
         undefined,
@@ -196,13 +173,10 @@ describe("Environment authorization transport", () => {
   });
 
   it("rejects malformed, invalid, and excess JSON fields before exchanging a pairing", async () => {
-    await withAuthorizedListener(async ({ authorization, origin }) => {
-      const pairing = await run(
-        authorization.createPairing({ capabilities: [], role: "viewer" }),
-      );
+    await withAuthorizedListener(async ({ origin, owner }) => {
       const exchange = {
         label: "Browser client",
-        pairingMaterial: pairing.material,
+        pairingMaterial: await createPairing(origin, owner.credential),
       };
       for (const body of [
         "{",
@@ -249,7 +223,7 @@ describe("Environment authorization transport", () => {
   });
 
   it("connects the browser client with the exchanged device credential", async () => {
-    await withAuthorizedListener(async ({ authorization, origin }) => {
+    await withAuthorizedListener(async ({ environmentId, origin, owner }) => {
       await expect(
         run(
           exchangeEnvironmentPairingEffect(origin, {
@@ -264,13 +238,10 @@ describe("Environment authorization transport", () => {
         }),
       );
 
-      const pairing = await run(
-        authorization.createPairing({ capabilities: [], role: "viewer" }),
-      );
       const paired = await run(
         exchangeEnvironmentPairingEffect(origin, {
           label: "Browser client",
-          pairingMaterial: pairing.material,
+          pairingMaterial: await createPairing(origin, owner.credential),
         }),
       );
       const credential = { type: "bearer", value: paired.credential } as const;
@@ -294,8 +265,8 @@ describe("Environment authorization transport", () => {
     });
   });
 
-  it("pairs, enforces capabilities, and revokes through HTTP", async () => {
-    await withAuthorizedListener(async ({ authorization, origin, owner }) => {
+  it("pairs and revokes devices through HTTP", async () => {
+    await withAuthorizedListener(async ({ origin, owner }) => {
       const unauthenticated = await fetch(
         `${origin}${environmentSnapshotPath}`,
       );
@@ -304,10 +275,9 @@ describe("Environment authorization transport", () => {
         status: 401,
       });
 
-      const viewerPairing = await postJson(
+      const viewerPairing = await postEmpty(
         origin,
         EnvironmentAuthorizationHttpApi.createPairing.path,
-        { capabilities: [], role: "viewer" },
         owner.credential,
       );
       expect(viewerPairing.status).toBe(200);
@@ -323,29 +293,6 @@ describe("Environment authorization transport", () => {
         headers: { authorization: `Bearer ${viewer.credential}` },
       });
       expect(snapshot.status).toBe(200);
-
-      const customPairing = await run(
-        authorization.createPairing({
-          capabilities: ["repository.read"],
-          role: "custom",
-        }),
-      );
-      const custom = await exchangePairing(
-        origin,
-        customPairing.material,
-        "Read-only automation",
-      );
-      const deniedSnapshot = await fetch(
-        `${origin}${environmentSnapshotPath}`,
-        { headers: { authorization: `Bearer ${custom.credential}` } },
-      );
-      expect(await responseResult(deniedSnapshot)).toEqual({
-        body: {
-          _tag: "CapabilityDenied",
-          capability: "environment.read",
-        },
-        status: 403,
-      });
 
       const revocation = await postJson(
         origin,
@@ -451,54 +398,25 @@ describe("Environment authorization transport", () => {
   });
 });
 
-function withAuthorizedListener(
+async function withAuthorizedListener(
   use: (fixture: AuthorizedListenerFixture) => Promise<void>,
 ) {
-  return Effect.runPromise(
-    Effect.scoped(
-      Effect.gen(function* () {
-        const directory = yield* Effect.promise(() =>
-          mkdtemp(join(tmpdir(), "rebase authorization transport ")),
-        );
-        directories.add(directory);
-        const context = yield* acquireEnvironmentContext(
-          environmentPaths(join(directory, ".rebase")),
-        );
-        const authorization = createEnvironmentAuthorization(
-          context,
-          context.serverSecret,
-        );
-        const ownerPairing = yield* authorization.createPairing({
-          capabilities: [],
-          role: "owner",
-        });
-        const events = createEnvironmentEventPublisher();
-        const listener = yield* acquireEnvironmentListener({
-          authorization,
-          environmentId,
-          events,
-          features: testEnvironmentFeatures([
-            yield* Effect.provideService(
-              environmentAuthorizationFeature,
-              EnvironmentAuthorizationAccess,
-              authorization,
-            ),
-          ]),
-          productVersion: "0.0.0",
-        });
-        listener.readiness.value = true;
-        const owner = yield* Effect.promise(() =>
-          exchangePairing(
-            listener.origin,
-            ownerPairing.material,
-            "Owner workstation",
-          ),
-        );
-        yield* Effect.promise(() =>
-          use({ authorization, origin: listener.origin, owner }),
-        );
-      }),
-    ),
+  const server = await openTestServer();
+  await use({
+    environmentId: server.environmentId,
+    origin: server.origin,
+    owner: { credential: server.owner.value },
+  });
+}
+
+async function createPairing(origin: string, credential: string) {
+  const response = await postEmpty(
+    origin,
+    EnvironmentAuthorizationHttpApi.createPairing.path,
+    credential,
+  );
+  return new URL(readString(await readOk(response), "pairingUrl")).hash.slice(
+    1,
   );
 }
 
@@ -685,10 +603,7 @@ function run<Value, Error>(effect: Effect.Effect<Value, Error>) {
 }
 
 interface AuthorizedListenerFixture {
-  readonly authorization: EnvironmentAuthorization;
+  readonly environmentId: string;
   readonly origin: string;
-  readonly owner: {
-    readonly authorization: { readonly id: string };
-    readonly credential: string;
-  };
+  readonly owner: { readonly credential: string };
 }

@@ -1,14 +1,15 @@
 import { open } from "node:fs/promises";
-import type { RepositoryCommit } from "@rebase/contracts";
+import type {
+  RepositoryCommit,
+  RepositoryHistoryOperationFailure,
+} from "@rebase/contracts";
 import { Effect } from "effect";
-import type { GitCommandRunner } from "#server/domain/git-command.contract";
-import { isGitObjectId } from "#server/domain/git-object-id";
-import type { RepositoryGitError } from "#server/domain/repository-git.contract";
 import {
-  historyFailed,
-  type RepositoryHistoryError,
-} from "#server/features/repository-history/git/history-failures";
-import { runRepositoryGit } from "#server/repository/access/index";
+  type GitCommandRunner,
+  runRepositoryGit,
+} from "#server/adapters/local-git/git-commands";
+import { historyFailed } from "#server/features/repository-history/git/history-failures";
+import { isGitObjectId } from "#server/features/repository-history/git/read-object-format";
 
 const maximumShallowBytes = 4 * 1_048_576;
 const maximumShallowOutputBytes = 8 * 1_048_576;
@@ -65,8 +66,7 @@ export function readShallowHistoryOids(
             await file.close();
           }
         },
-        catch: (cause) =>
-          historyFailed("Could not read shallow repository history", cause),
+        catch: () => historyFailed("Could not read shallow repository history"),
       }),
     ),
   );
@@ -79,7 +79,7 @@ export function restoreShallowCommitParents(
   shallowOids: ReadonlySet<string>,
 ): Effect.Effect<
   readonly RepositoryCommit[],
-  RepositoryHistoryError | RepositoryGitError
+  RepositoryHistoryOperationFailure
 > {
   const boundaries = commits.filter((commit) => shallowOids.has(commit.oid));
   if (boundaries.length === 0) return Effect.succeed(commits);

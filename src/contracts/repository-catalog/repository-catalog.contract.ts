@@ -73,13 +73,11 @@ export const removeRepositoryPath = "/api/repositories/removals";
 
 export const RepositoryCatalogHttpApi = {
   list: route({
-    capability: "repository.read",
     method: "GET",
     path: repositoryCatalogPath,
     success: RepositoryCatalog,
   }),
   recordOpened: route({
-    capability: "repository.read",
     method: "POST",
     path: recordRepositoryOpenedPath,
     request: RecordRepositoryOpened,
@@ -87,7 +85,6 @@ export const RepositoryCatalogHttpApi = {
     failure: RepositoryRejected,
   }),
   remember: route({
-    capability: "repository.write",
     method: "POST",
     path: rememberRepositoryPath,
     request: RememberRepository,
@@ -95,7 +92,6 @@ export const RepositoryCatalogHttpApi = {
     failure: RepositoryPathRejected,
   }),
   remove: route({
-    capability: "repository.write",
     method: "POST",
     path: removeRepositoryPath,
     request: RemoveRepository,

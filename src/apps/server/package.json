@@ -14,10 +14,10 @@
   },
   "exports": {
     ".": {
-      "rebase-source": "./index.ts",
-      "types": "./dist/index.d.ts",
-      "import": "./dist/index.js",
-      "default": "./dist/index.js"
+      "rebase-source": "./app/server/start-environment-server.ts",
+      "types": "./dist/app/server/start-environment-server.d.ts",
+      "import": "./dist/app/server/start-environment-server.js",
+      "default": "./dist/app/server/start-environment-server.js"
     },
     "./package.json": "./package.json"
   },

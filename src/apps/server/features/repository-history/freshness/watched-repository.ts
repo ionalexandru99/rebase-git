@@ -2,28 +2,29 @@ import type {
   RepositoryCatalogEntry,
   RepositoryFetchSetting,
   RepositoryFreshness,
+  RepositoryHistoryOperationFailure,
 } from "@rebase/contracts";
 import { Cause, Effect, Fiber, Option, Queue, Semaphore } from "effect";
-import type { GitCommandRunner } from "#server/domain/git-command.contract";
-import type { RepositoryCoordinationService } from "#server/domain/repository-coordination.contract";
-import type { RepositoryWatcher } from "#server/domain/repository-watcher.contract";
 import {
-  readRepositoryFetchSetting,
-  writeRepositoryFetchSetting,
-} from "#server/features/repository-history/freshness/repository-fetch-settings";
-import type { FreshnessSubscription } from "#server/features/repository-history/freshness/watched-repository.contract";
-import { RepositoryHistoryError } from "#server/features/repository-history/git/history-failures";
-import {
+  type GitCommandRunner,
   readGitCommonDirectory,
   runRepositoryGit,
-} from "#server/repository/access/index";
+} from "#server/adapters/local-git/git-commands";
+import type { RepositoryWatcher } from "#server/adapters/local-git/local-repository-watcher";
+import { historyFailed } from "#server/features/repository-history/git/history-failures";
+import type { RepositoryCoordination } from "#server/repository/repository-coordination";
+
+export interface FreshnessSubscription {
+  readonly path: string;
+  readonly publish: (freshness: RepositoryFreshness) => void;
+}
 
 export function acquireWatchedRepository(
   entry: RepositoryCatalogEntry,
   subscribers: Set<FreshnessSubscription>,
   git: GitCommandRunner,
   watcher: RepositoryWatcher,
-  coordination: RepositoryCoordinationService,
+  coordination: RepositoryCoordination,
 ) {
   return Effect.gen(function* () {
     const scope = yield* Effect.scope;
@@ -31,11 +32,10 @@ export function acquireWatchedRepository(
     const setting = yield* readRepositoryFetchSetting(git, entry.path);
     const directory = yield* readGitCommonDirectory(git, entry.path).pipe(
       Effect.mapError(
-        (cause) =>
-          new RepositoryHistoryError({
-            cause,
-            failure: { _tag: "RepositoryMissing", repositoryId: entry.id },
-          }),
+        (): RepositoryHistoryOperationFailure => ({
+          _tag: "RepositoryMissing",
+          repositoryId: entry.id,
+        }),
       ),
     );
     let freshness: RepositoryFreshness = {
@@ -52,14 +52,11 @@ export function acquireWatchedRepository(
         }
       | undefined;
     let scheduled: Fiber.Fiber<void> | undefined;
-    let manualOwners = 0;
     let closed = false;
     const path = () => subscribers.values().next().value?.path ?? entry.path;
     const publish = () => {
       for (const subscriber of subscribers) subscriber.publish(freshness);
     };
-    const authorized = () =>
-      [...subscribers].some((subscriber) => subscriber.automaticFetch);
 
     const stopSchedule = Effect.gen(function* () {
       const previous = scheduled;
@@ -71,7 +68,7 @@ export function acquireWatchedRepository(
       if (
         closed ||
         fetching !== undefined ||
-        !authorized() ||
+        subscribers.size === 0 ||
         freshness.setting._tag === "Disabled"
       )
         return;
@@ -83,7 +80,7 @@ export function acquireWatchedRepository(
         yield* Effect.sleep(seconds * 1_000);
         yield* Effect.gen(function* () {
           scheduled = undefined;
-          if (authorized()) yield* beginFetch;
+          if (subscribers.size > 0) yield* beginFetch;
         }).pipe(Semaphore.withPermit(mutex));
       }).pipe(Effect.asVoid, Effect.forkIn(scope));
     });
@@ -122,7 +119,7 @@ export function acquireWatchedRepository(
           return Effect.succeed({
             _tag: "FetchFailed",
             reason:
-              Option.isSome(error) && error.value._tag === "RepositoryGitError"
+              Option.isSome(error) && error.value._tag === "GitFailed"
                 ? error.value.reason
                 : "Failed",
           } as const);
@@ -153,30 +150,7 @@ export function acquireWatchedRepository(
       return fiber;
     });
     const startFetch = beginFetch.pipe(Semaphore.withPermit(mutex));
-    const releaseOwnership = Effect.gen(function* () {
-      const abandoned = yield* Effect.gen(function* () {
-        if (authorized()) return undefined;
-        yield* stopSchedule;
-        if (manualOwners !== 0 || fetching === undefined) return undefined;
-        const abandoned = fetching.fiber;
-        fetching = undefined;
-        freshness = { ...freshness, fetching: false };
-        if (!closed) publish();
-        return abandoned;
-      }).pipe(Semaphore.withPermit(mutex));
-      if (abandoned !== undefined) yield* Fiber.interrupt(abandoned);
-    });
-    const fetch = Effect.acquireUseRelease(
-      Effect.sync(() => {
-        manualOwners += 1;
-      }),
-      () => startFetch.pipe(Effect.flatMap(Fiber.join)),
-      () =>
-        Effect.gen(function* () {
-          manualOwners -= 1;
-          yield* releaseOwnership;
-        }),
-    );
+    const fetch = startFetch.pipe(Effect.flatMap(Fiber.join));
 
     const changes = yield* Queue.make<void>({
       capacity: 1,
@@ -204,12 +178,10 @@ export function acquireWatchedRepository(
 
     return {
       fetch,
-      releaseOwnership,
       observe: (subscription: FreshnessSubscription) =>
         Effect.gen(function* () {
           subscription.publish(freshness);
           if (
-            subscription.automaticFetch &&
             fetching === undefined &&
             scheduled === undefined &&
             freshness.setting._tag !== "Disabled"
@@ -232,4 +204,49 @@ export function acquireWatchedRepository(
         ),
     };
   });
+}
+
+const settingKey = "rebase.autoFetchIntervalSeconds";
+
+function readRepositoryFetchSetting(git: GitCommandRunner, path: string) {
+  return runRepositoryGit(
+    git,
+    path,
+    ["config", "--local", "--get", settingKey],
+    { exitCodes: [0, 1] },
+  ).pipe(
+    Effect.map((output): RepositoryFetchSetting => {
+      const value = output.trim();
+      const seconds = Number(value);
+      return value === "0"
+        ? { _tag: "Disabled" }
+        : Number.isInteger(seconds) && seconds > 0 && seconds <= 86_400
+          ? { _tag: "Interval", seconds }
+          : { _tag: "Inherit" };
+    }),
+    Effect.mapError(settingsError),
+  );
+}
+
+function writeRepositoryFetchSetting(
+  git: GitCommandRunner,
+  path: string,
+  setting: RepositoryFetchSetting,
+) {
+  const value =
+    setting._tag === "Disabled"
+      ? "0"
+      : setting._tag === "Interval"
+        ? String(setting.seconds)
+        : "inherit";
+  return runRepositoryGit(git, path, [
+    "config",
+    "--local",
+    settingKey,
+    value,
+  ]).pipe(Effect.asVoid, Effect.mapError(settingsError));
+}
+
+function settingsError() {
+  return historyFailed("Could not access repository fetch settings");
 }

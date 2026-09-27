@@ -1,6 +1,6 @@
 import type { IpcMainInvokeEvent } from "electron";
 import { describe, expect, it, vi } from "vite-plus/test";
-import { createTrustedIpcHandler } from "#desktop/platform/renderer-trust/renderer-trust";
+import { createTrustedIpcHandler } from "#desktop/platform/renderer-trust";
 
 const { fromWebContents } = vi.hoisted(() => ({ fromWebContents: vi.fn() }));
 

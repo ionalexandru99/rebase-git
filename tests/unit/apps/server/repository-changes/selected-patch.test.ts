@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vite-plus/test";
-import { selectedChangeText } from "#server/features/repository-changes/patch/selected-change-text";
+import { selectedChangeText } from "#server/features/repository-changes/git/selected-change-text";
 
 describe("selected changes", () => {
   const before = "one\ntwo\nthree\n";

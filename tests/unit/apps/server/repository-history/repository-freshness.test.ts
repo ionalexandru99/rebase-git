@@ -3,59 +3,31 @@ import type {
   RepositoryChangeKind,
   RepositoryFreshness,
 } from "@rebase/contracts";
-import {
-  Deferred,
-  Effect,
-  Exit,
-  Fiber,
-  Layer,
-  type Scope,
-  Stream,
-} from "effect";
+import { Deferred, Effect, Exit, Fiber, type Scope, Stream } from "effect";
 import { TestClock } from "effect/testing";
 import { describe, expect, it, vi } from "vite-plus/test";
 import {
-  GitCommandError,
   type GitCommandRunner,
-  GitCommands,
-} from "#server/domain/git-command.contract";
-import { RepositoryCatalogAccess } from "#server/domain/repository-catalog.contract";
-import { RepositoryCoordination } from "#server/domain/repository-coordination.contract";
-import { RepositoryWatching } from "#server/domain/repository-watcher.contract";
+  gitFailed,
+} from "#server/adapters/local-git/git-commands";
+import type { RepositoryWatcher } from "#server/adapters/local-git/local-repository-watcher";
 import {
   acquireRepositoryFreshness,
   type RepositoryFreshnessService,
 } from "#server/features/repository-history/freshness/repository-freshness";
-import { repositoryAccessLayer } from "#server/repository/access/index";
+import { createRepositoryAccess } from "#server/repository/repository-access";
 
 const repositoryId = "00000000-0000-4000-8000-000000000001";
 const linkedId = "00000000-0000-4000-8000-000000000002";
-const writer = { automaticFetch: true };
-const unusedCatalogOperation = () =>
-  Effect.die(new Error("The freshness service only looks repositories up."));
 
 describe("repository freshness", () => {
-  it("keeps readers observing after the final automatic-fetch subscriber leaves", () => {
-    const fetch = vi.fn(() => Effect.succeed(output()));
+  it("publishes a new revision for ref changes but not for index changes", () => {
     const states: RepositoryFreshness[] = [];
-    return withService({ fetch }, (service, watch) =>
+    return withService({ setting: "0" }, (service, watch) =>
       Effect.gen(function* () {
-        const reader = yield* service.subscribe(
-          repositoryId,
-          (state) => states.push(state),
-          { automaticFetch: false },
+        const subscription = yield* service.subscribe(repositoryId, (state) =>
+          states.push(state),
         );
-        yield* TestClock.adjust(300_000);
-        expect(fetch).not.toHaveBeenCalled();
-        const writer = yield* service.subscribe(repositoryId, () => {}, {
-          automaticFetch: true,
-        });
-        yield* TestClock.adjust(0);
-        expect(fetch).toHaveBeenCalledOnce();
-        yield* writer;
-        yield* TestClock.adjust(600_000);
-        expect(fetch).toHaveBeenCalledOnce();
-        expect(watch.close).not.toHaveBeenCalled();
         const beforeChange = states.at(-1)?.revision ?? 0;
         watch.change("Index");
         yield* TestClock.adjust(0);
@@ -63,39 +35,13 @@ describe("repository freshness", () => {
         watch.change("Refs");
         yield* TestClock.adjust(0);
         expect(states.at(-1)?.revision).toBeGreaterThan(beforeChange);
-        yield* reader;
+        yield* subscription;
         expect(watch.close).toHaveBeenCalledOnce();
       }),
     );
   });
 
-  it("interrupts automatic fetch only after its final writer leaves", () => {
-    const states: RepositoryFreshness[] = [];
-    const interrupted = vi.fn();
-    const fetch = vi.fn(() =>
-      Effect.never.pipe(Effect.ensuring(Effect.sync(interrupted))),
-    );
-    return withService({ fetch }, (service, watch) =>
-      Effect.gen(function* () {
-        yield* service.subscribe(repositoryId, (state) => states.push(state));
-        const first = yield* service.subscribe(repositoryId, () => {}, writer);
-        const second = yield* service.subscribe(linkedId, () => {}, writer);
-        yield* TestClock.adjust(0);
-        expect(fetch).toHaveBeenCalledOnce();
-        yield* first;
-        expect(interrupted).not.toHaveBeenCalled();
-        yield* second;
-        expect(interrupted).toHaveBeenCalledOnce();
-        expect(states.at(-1)).toMatchObject({ fetching: false, stale: false });
-        expect(states.at(-1)?.failure).toBeUndefined();
-        expect(watch.close).not.toHaveBeenCalled();
-        yield* TestClock.adjust(600_000);
-        expect(fetch).toHaveBeenCalledOnce();
-      }),
-    );
-  });
-
-  it("shares fetch callers and preserves work when one caller or automatic owner leaves", () => {
+  it("shares fetch callers and preserves work when one caller or subscriber leaves", () => {
     return withService({}, (service, _watch, git) =>
       Effect.gen(function* () {
         const finish = yield* Deferred.make<void>();
@@ -107,11 +53,7 @@ describe("repository freshness", () => {
           ),
         );
         yield* service.subscribe(repositoryId, () => {});
-        const closeWriter = yield* service.subscribe(
-          linkedId,
-          () => {},
-          writer,
-        );
+        const closeWriter = yield* service.subscribe(linkedId, () => {});
         const first = yield* service.fetch(repositoryId).pipe(Effect.forkChild);
         const second = yield* service.fetch(linkedId).pipe(Effect.forkChild);
         yield* TestClock.adjust(0);
@@ -128,67 +70,6 @@ describe("repository freshness", () => {
     );
   });
 
-  it("starts fresh work while an abandoned fetch finishes cancellation", () =>
-    withService({}, (service, _watch, git) =>
-      Effect.gen(function* () {
-        const cleanupStarted = yield* Deferred.make<void>();
-        const cleanupFinished = yield* Deferred.make<void>();
-        const replacementFinished = yield* Deferred.make<void>();
-        git.fetch.mockImplementationOnce(() =>
-          Effect.never.pipe(
-            Effect.onInterrupt(() =>
-              Deferred.succeed(cleanupStarted, undefined).pipe(
-                Effect.andThen(Deferred.await(cleanupFinished)),
-              ),
-            ),
-          ),
-        );
-        git.fetch.mockImplementation(() =>
-          Deferred.await(replacementFinished).pipe(Effect.as(output())),
-        );
-        yield* service.subscribe(repositoryId, () => {});
-        const first = yield* service.fetch(repositoryId).pipe(Effect.forkChild);
-        yield* TestClock.adjust(0);
-        const closing = yield* Fiber.interrupt(first).pipe(Effect.forkChild);
-        yield* Deferred.await(cleanupStarted);
-        const replacement = yield* service
-          .fetch(repositoryId)
-          .pipe(Effect.forkChild);
-        yield* TestClock.adjust(0);
-        const fetchesDuringCleanup = git.fetch.mock.calls.length;
-        yield* Deferred.succeed(cleanupFinished, undefined);
-        yield* Fiber.join(closing);
-        const shared = yield* service
-          .fetch(repositoryId)
-          .pipe(Effect.forkChild);
-        yield* TestClock.adjust(0);
-        yield* Deferred.succeed(replacementFinished, undefined);
-        const replacementResult = yield* Fiber.await(replacement);
-        const sharedResult = yield* Fiber.await(shared);
-        expect(fetchesDuringCleanup).toBe(2);
-        expect(git.fetch).toHaveBeenCalledTimes(2);
-        expect(Exit.isSuccess(replacementResult)).toBe(true);
-        expect(Exit.isSuccess(sharedResult)).toBe(true);
-      }),
-    ));
-
-  it("interrupts an explicit fetch once every caller leaves", () =>
-    withService({}, (service, _watch, git) =>
-      Effect.gen(function* () {
-        const interrupted = vi.fn();
-        git.fetch.mockImplementation(() =>
-          Effect.never.pipe(Effect.ensuring(Effect.sync(interrupted))),
-        );
-        yield* service.subscribe(repositoryId, () => {});
-        const caller = yield* service
-          .fetch(repositoryId)
-          .pipe(Effect.forkChild);
-        yield* TestClock.adjust(0);
-        yield* Fiber.interrupt(caller);
-        expect(interrupted).toHaveBeenCalledOnce();
-      }),
-    ));
-
   it("recovers after typed failure and runner defects", () =>
     withService({ setting: "0" }, (service, _watch, git) =>
       Effect.gen(function* () {
@@ -197,9 +78,7 @@ describe("repository freshness", () => {
           .mockImplementationOnce(() =>
             Effect.die(new Error("Unexpected runner defect")),
           )
-          .mockImplementationOnce(() =>
-            Effect.fail(new GitCommandError({ reason: "Timeout" })),
-          );
+          .mockImplementationOnce(() => Effect.fail(gitFailed("Timeout")));
         yield* service.subscribe(repositoryId, (state) => states.push(state));
         expect(yield* service.fetch(repositoryId)).toMatchObject({
           stale: true,
@@ -211,12 +90,6 @@ describe("repository freshness", () => {
           fetching: false,
           failure: { _tag: "FetchFailed", reason: "Timeout" },
         });
-        git.fetch.mockImplementationOnce(() => Effect.never);
-        const canceled = yield* service
-          .fetch(repositoryId)
-          .pipe(Effect.forkChild);
-        yield* TestClock.adjust(0);
-        yield* Fiber.interrupt(canceled);
         expect(states.at(-1)).toMatchObject({
           fetching: false,
           stale: true,
@@ -232,7 +105,7 @@ describe("repository freshness", () => {
   it("replaces schedules and starts the next interval after fetch completion", () =>
     withService({ setting: "0" }, (service, _watch, git) =>
       Effect.gen(function* () {
-        yield* service.subscribe(repositoryId, () => {}, writer);
+        yield* service.subscribe(repositoryId, () => {});
         yield* service.configure(repositoryId, {
           _tag: "Interval",
           seconds: 10,
@@ -261,7 +134,7 @@ describe("repository freshness", () => {
   it("discards an expired schedule while replacement configuration is being written", () =>
     withService({ setting: "10" }, (service, _watch, git) =>
       Effect.gen(function* () {
-        yield* service.subscribe(repositoryId, () => {}, writer);
+        yield* service.subscribe(repositoryId, () => {});
         yield* TestClock.adjust(5_000);
         const configured = yield* Deferred.make<void>();
         git.initialize = Deferred.await(configured);
@@ -281,11 +154,7 @@ describe("repository freshness", () => {
       Effect.gen(function* () {
         git.fetch.mockImplementationOnce(() => Effect.succeed(output(1)));
         const states: RepositoryFreshness[] = [];
-        yield* service.subscribe(
-          repositoryId,
-          (state) => states.push(state),
-          writer,
-        );
+        yield* service.subscribe(repositoryId, (state) => states.push(state));
         yield* TestClock.adjust(0);
         expect(states.at(-1)).toMatchObject({ stale: true });
         const finish = yield* Deferred.make<void>();
@@ -375,10 +244,10 @@ describe("repository freshness", () => {
         const initialize = yield* Deferred.make<void>();
         git.initialize = Deferred.await(initialize);
         const first = yield* service
-          .subscribe(repositoryId, () => {}, writer)
+          .subscribe(repositoryId, () => {})
           .pipe(Effect.forkChild);
         const second = yield* service
-          .subscribe(linkedId, () => {}, writer)
+          .subscribe(linkedId, () => {})
           .pipe(Effect.forkChild);
         yield* TestClock.adjust(0);
         yield* Deferred.succeed(initialize, undefined);
@@ -392,7 +261,7 @@ describe("repository freshness", () => {
   it("does not postpone scheduled fetch when a reader leaves", () =>
     withService({ setting: "10" }, (service, _watch, git) =>
       Effect.gen(function* () {
-        yield* service.subscribe(repositoryId, () => {}, writer);
+        yield* service.subscribe(repositoryId, () => {});
         const reader = yield* service.subscribe(linkedId, () => {});
         yield* TestClock.adjust(5_000);
         yield* reader;
@@ -429,7 +298,7 @@ describe("repository freshness", () => {
     await withService({ fetch }, (service, watch) =>
       Effect.gen(function* () {
         watchClosed = watch.close;
-        yield* service.subscribe(repositoryId, () => {}, writer);
+        yield* service.subscribe(repositoryId, () => {});
         yield* TestClock.adjust(0);
       }),
     );
@@ -481,52 +350,45 @@ function withService(
   };
   return Effect.runPromise(
     Effect.gen(function* () {
-      const service = yield* acquireRepositoryFreshness.pipe(
-        Effect.provide(
-          repositoryAccessLayer.pipe(
-            Layer.provideMerge(
-              Layer.mergeAll(
-                Layer.succeed(RepositoryCoordination, {
-                  run: (_directory, _policy, operation) => operation,
-                  operation: () =>
-                    Effect.die("Freshness never reads operations."),
-                }),
-                Layer.succeed(RepositoryCatalogAccess, {
-                  find: (id) =>
-                    Effect.succeed({
-                      ...entry,
-                      id,
-                      path: id === linkedId ? "/linked" : entry.path,
-                    }),
-                  list: unusedCatalogOperation,
-                  recordOpened: unusedCatalogOperation,
-                  remember: unusedCatalogOperation,
-                  remove: unusedCatalogOperation,
-                }),
-                Layer.succeed(GitCommands, {
-                  stream: () => Stream.empty,
-                  run: (command) =>
-                    command.arguments[0] === "fetch"
-                      ? git.fetch(command)
-                      : command.arguments.includes("rev-parse")
-                        ? Effect.succeed(output(0, "/repo/.git"))
-                        : git.initialize.pipe(
-                            Effect.as(output(0, options.setting ?? "inherit")),
-                          ),
-                }),
-                Layer.succeed(RepositoryWatching, {
-                  watch: (_, change) =>
-                    Effect.sync(() => {
-                      watch.open();
-                      watch.change = change;
-                      return { close: watch.close };
-                    }),
-                }),
-              ),
-            ),
-          ),
+      const runner: GitCommandRunner = {
+        stream: () => Stream.empty,
+        run: (command) =>
+          command.arguments[0] === "fetch"
+            ? git.fetch(command)
+            : command.arguments.includes("rev-parse")
+              ? Effect.succeed(output(0, "/repo/.git"))
+              : git.initialize.pipe(
+                  Effect.as(output(0, options.setting ?? "inherit")),
+                ),
+      };
+      const watcher: RepositoryWatcher = {
+        watch: (_, change) =>
+          Effect.sync(() => {
+            watch.open();
+            watch.change = change;
+            return { close: watch.close };
+          }),
+      };
+      const service = yield* acquireRepositoryFreshness({
+        access: createRepositoryAccess(
+          {
+            find: (id) =>
+              Effect.succeed({
+                ...entry,
+                id,
+                path: id === linkedId ? "/linked" : entry.path,
+              }),
+          },
+          runner,
+          watcher,
         ),
-      );
+        coordination: {
+          run: (_directory, _policy, operation) => operation,
+          operation: () => Effect.die("Freshness never reads operations."),
+        },
+        git: runner,
+        watcher,
+      });
       yield* test(service, watch, git);
     }).pipe(Effect.scoped, Effect.provide(TestClock.layer())),
   );

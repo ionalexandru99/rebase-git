@@ -6,8 +6,10 @@ import type {
   ConflictRegion,
 } from "@rebase/contracts";
 import { Effect } from "effect";
-import type { GitCommandRunner } from "#server/domain/git-command.contract";
-import { previewByteLimit } from "#server/domain/repository-comparison.contract";
+import {
+  type GitCommandRunner,
+  runRepositoryGit,
+} from "#server/adapters/local-git/git-commands";
 import { changeIo } from "#server/features/repository-changes/git/change-failures";
 import { scratchDirectory } from "#server/features/repository-changes/git/read-change-diff";
 import {
@@ -22,8 +24,8 @@ import {
   type StageEntry,
   worktreeText,
 } from "#server/features/repository-conflicts/git/conflict-files";
-import { runRepositoryGit } from "#server/repository/access/index";
-import { binary } from "#server/repository/comparison/index";
+import { binary } from "#server/repository/comparison/build-change-diff";
+import { previewByteLimit } from "#server/repository/comparison/read-blobs";
 
 interface StageTexts {
   readonly current: string;

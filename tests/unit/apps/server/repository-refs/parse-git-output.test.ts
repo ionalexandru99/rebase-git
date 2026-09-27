@@ -1,7 +1,6 @@
 import { currentTransportLimits } from "@rebase/contracts";
 import { describe, expect, it } from "vite-plus/test";
-import { RepositoryGitError } from "#server/domain/repository-git.contract";
-import { fitRepositoryRefs } from "#server/features/repository-refs/git/fit-repository-refs";
+import { gitFailed } from "#server/adapters/local-git/git-commands";
 import {
   localBranchFromRecord,
   parseForEachRef,
@@ -9,8 +8,9 @@ import {
   remoteDefaultBranchFromRecord,
   tagFromRecord,
 } from "#server/features/repository-refs/git/parse-for-each-ref";
+import { fitRepositoryRefs } from "#server/features/repository-refs/git/read-repository-refs";
 import { checkoutFailure } from "#server/features/repository-refs/git/repository-refs-failures";
-import { parseWorktreeList } from "#server/repository/access/git/parse-worktree-list";
+import { parseWorktreeList } from "#server/repository/repository-access";
 
 const commit = "a".repeat(40);
 
@@ -209,5 +209,5 @@ function record(
 }
 
 function rejectedByGit(detail: string) {
-  return new RepositoryGitError({ detail, exitCode: 128, reason: "Failed" });
+  return { ...gitFailed("Failed", detail), exitCode: 128 };
 }

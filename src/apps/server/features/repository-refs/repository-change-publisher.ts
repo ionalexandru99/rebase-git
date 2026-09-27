@@ -3,10 +3,12 @@ import type {
   RepositoryChangeKind,
 } from "@rebase/contracts";
 import { Effect, Exit, Queue, Scope, Semaphore } from "effect";
-import type { EnvironmentEventPublisher } from "#server/domain/environment-event-publisher.contract";
-import type { GitCommandRunner } from "#server/domain/git-command.contract";
-import type { RepositoryWatcher } from "#server/domain/repository-watcher.contract";
-import { readGitCommonDirectory } from "#server/repository/access/index";
+import type { EnvironmentEventPublisher } from "#server/adapters/environment-transport/environment-event-publisher";
+import {
+  type GitCommandRunner,
+  readGitCommonDirectory,
+} from "#server/adapters/local-git/git-commands";
+import type { RepositoryWatcher } from "#server/adapters/local-git/local-repository-watcher";
 
 export interface RepositoryChangePublisher {
   readonly watch: (repository: RepositoryCatalogEntry) => Effect.Effect<void>;

@@ -6,14 +6,14 @@ import {
 } from "@rebase/contracts";
 import { createTwoFilesPatch } from "diff";
 import { Effect } from "effect";
-import type {
-  GitCommandOptions,
-  GitCommandRunner,
-} from "#server/domain/git-command.contract";
+import {
+  type GitCommandOptions,
+  type GitCommandRunner,
+  runRepositoryGit,
+} from "#server/adapters/local-git/git-commands";
 import { safeChangePath } from "#server/features/repository-changes/git/change-files";
 import { readChangeDiff } from "#server/features/repository-changes/git/read-change-diff";
-import { selectedChangeText } from "#server/features/repository-changes/patch/selected-change-text";
-import { runRepositoryGit } from "#server/repository/access/index";
+import { selectedChangeText } from "#server/features/repository-changes/git/selected-change-text";
 
 export function mutateChanges<E>(
   git: GitCommandRunner,

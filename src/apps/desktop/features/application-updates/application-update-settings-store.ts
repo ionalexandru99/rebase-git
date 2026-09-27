@@ -6,7 +6,11 @@ import {
   DesktopUpdateSettingsSchema,
 } from "@rebase/contracts";
 import { Schema } from "effect";
-import type { ApplicationUpdateSettingsStore } from "#desktop/features/application-updates/application-update-settings-store.contract";
+
+export interface ApplicationUpdateSettingsStore {
+  read(): Promise<DesktopUpdateSettings>;
+  write(settings: DesktopUpdateSettings): Promise<void>;
+}
 
 const defaultSettings: DesktopUpdateSettings = {
   checkAutomatically: true,

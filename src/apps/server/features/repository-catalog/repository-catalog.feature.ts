@@ -1,11 +1,12 @@
 import { RepositoryCatalogHttpApi } from "@rebase/contracts";
 import { Effect } from "effect";
-import type { EnvironmentFeature } from "#server/adapters/environment-transport/environment-feature.contract";
+import type { EnvironmentFeature } from "#server/adapters/environment-transport/combine-environment-features";
 import { route } from "#server/adapters/environment-transport/http/environment-http-route-handler";
-import { RepositoryCatalogAccess } from "#server/domain/repository-catalog.contract";
+import type { RepositoryCatalog } from "#server/features/repository-catalog/repository-catalog";
 
-export const repositoryCatalogFeature = Effect.gen(function* () {
-  const catalog = yield* RepositoryCatalogAccess;
+export function repositoryCatalogFeature(
+  catalog: RepositoryCatalog,
+): EnvironmentFeature {
   const api = RepositoryCatalogHttpApi;
   return {
     capabilities: [],
@@ -19,5 +20,5 @@ export const repositoryCatalogFeature = Effect.gen(function* () {
       ),
       route(api.remove, (input) => catalog.remove(input.repositoryId)),
     ],
-  } satisfies EnvironmentFeature;
-});
+  };
+}

@@ -3,7 +3,7 @@ import type {
   EnvironmentRpcFailure,
 } from "@rebase/contracts";
 import { Effect, Queue, Stream } from "effect";
-import type { EnvironmentRpcSession } from "#server/adapters/environment-transport/rpc/environment-rpc-session.contract";
+import type { EnvironmentRpcSession } from "#server/adapters/environment-transport/rpc/environment-rpc-negotiation";
 
 export function acquireEnvironmentEvents(session: EnvironmentRpcSession) {
   return Effect.gen(function* () {

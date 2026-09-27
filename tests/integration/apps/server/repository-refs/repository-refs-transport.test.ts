@@ -1,5 +1,4 @@
-import { mkdtemp, realpath, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import {
   RepositoryBranchesHttpApi,
@@ -10,57 +9,24 @@ import {
   createEnvironmentRequestClient,
   type EnvironmentCredential,
   EnvironmentHttpRejected,
-  exchangeEnvironmentPairingEffect,
 } from "@rebase/environment-client";
 import { Effect, Layer, ManagedRuntime } from "effect";
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
-import { createEnvironmentEventPublisher } from "#server/adapters/environment-transport/events/environment-event-publisher";
-import { createLocalGitCommandRunner } from "#server/adapters/local-git/local-git-command-runner";
-import { createLocalRepositoryWatcher } from "#server/adapters/local-git/local-repository-watcher";
-import { acquireEnvironmentListener } from "#server/app/server/environment-listener";
-import { EnvironmentAuthorizationAccess } from "#server/domain/environment-authorization.contract";
-import { EnvironmentEvents } from "#server/domain/environment-event-publisher.contract";
-import { GitCommands } from "#server/domain/git-command.contract";
-import { RepositoryAccess } from "#server/domain/repository-access.contract";
-import { RepositoryCatalogAccess } from "#server/domain/repository-catalog.contract";
-import { RepositoryCoordination } from "#server/domain/repository-coordination.contract";
-import { RepositoryWatching } from "#server/domain/repository-watcher.contract";
-import { createEnvironmentAuthorization } from "#server/features/environment-authorization/environment-authorization";
-import { environmentAuthorizationFeature } from "#server/features/environment-authorization/environment-authorization.feature";
-import { createRepositoryCatalog } from "#server/features/repository-catalog/repository-catalog";
-import { repositoryCatalogFeature } from "#server/features/repository-catalog/repository-catalog.feature";
-import { repositoryRefsFeature } from "#server/features/repository-refs/repository-refs.feature";
-import { acquireEnvironmentContext } from "#server/persistence/environment-context";
-import { environmentPaths } from "#server/persistence/storage/environment-paths";
-import {
-  createRepositoryAccess,
-  createRepositoryCoordination,
-} from "#server/repository/access/index";
-import { testEnvironmentFeatures } from "#tests-integration/apps/server/environment-connection/test-environment-features";
 import { createRepository, git } from "#tests-support/git";
-import { removeTemporaryDirectory } from "#tests-support/temporary-directory";
+import { openTestServer } from "#tests-support/server";
 import { createBrowserLocalEnvironmentSession } from "#web/app/environment/browser-local-environment-session";
 import { connectCurrentEnvironmentEffect } from "#web/app/environment/connection/environment-protocol-client";
 import { readRepositoryRefs } from "#web/platform/environment/rpc/read-repository-refs";
 
-const directories = new Set<string>();
-const environmentId = "00000000-0000-4000-8000-000000000001";
-
-afterEach(async () => {
-  await Promise.all(
-    [...directories].map((directory) => removeTemporaryDirectory(directory)),
-  );
-  directories.clear();
+afterEach(() => {
   vi.unstubAllGlobals();
 });
 
 describe("repository refs transport", () => {
-  it("reserves branch writes for writers and returns typed branch failures", async () => {
-    await withRefsListener(async ({ authorization, origin, root }) => {
+  it("creates branches and returns typed branch failures", async () => {
+    await withRefsServer(async ({ origin, owner, root }) => {
       const repositoryPath = join(root, "repository");
       await createRepository(repositoryPath, { commits: ["initial", "next"] });
-      const owner = await pair(origin, authorization, "owner");
-      const viewer = await pair(origin, authorization, "viewer");
       const remembered = await remember(origin, owner, repositoryPath);
       const head = await git(repositoryPath, "rev-parse", "HEAD");
       const create = {
@@ -70,12 +36,6 @@ describe("repository refs transport", () => {
         worktreePath: repositoryPath,
       };
 
-      await expect(
-        requests(origin, viewer)(RepositoryBranchesHttpApi.create, create),
-      ).rejects.toMatchObject({
-        _tag: "EnvironmentAccessDenied",
-        failure: { _tag: "CapabilityDenied", capability: "repository.write" },
-      });
       await expect(
         requests(origin, owner)(RepositoryBranchesHttpApi.create, create),
       ).resolves.toEqual({ name: "spike", target: head });
@@ -97,10 +57,9 @@ describe("repository refs transport", () => {
   });
 
   it("reassembles a ref snapshot larger than a WebSocket frame", async () => {
-    await withRefsListener(async ({ authorization, origin, root }) => {
+    await withRefsServer(async ({ origin, owner, root }) => {
       const repositoryPath = join(root, "repository");
       await createRepository(repositoryPath, { branches: ["feature"] });
-      const owner = await pair(origin, authorization, "owner");
       const head = await git(repositoryPath, "rev-parse", "HEAD");
       const names = Array.from(
         { length: 8_000 },
@@ -127,10 +86,9 @@ describe("repository refs transport", () => {
   });
 
   it("automatically updates the client refs after filesystem changes and fetches", async () => {
-    await withRefsListener(async ({ authorization, origin, root }) => {
+    await withRefsServer(async ({ origin, owner, root }) => {
       const repositoryPath = join(root, "repository");
       await createRepository(repositoryPath, { branches: ["feature"] });
-      const owner = await pair(origin, authorization, "owner");
       const remembered = await remember(origin, owner, repositoryPath);
       vi.stubGlobal("window", { location: new URL(origin) });
       const runtime = ManagedRuntime.make(Layer.empty);
@@ -217,8 +175,8 @@ describe("repository refs transport", () => {
     });
   });
 
-  it("serves refs to readers and reserves checkout for writers", async () => {
-    await withRefsListener(async ({ authorization, origin, root }) => {
+  it("serves refs to every paired device and checks out branches", async () => {
+    await withRefsServer(async ({ origin, owner, pair, root }) => {
       const repositoryPath = join(root, "repository");
       await createRepository(repositoryPath, { branches: ["feature"] });
       await git(
@@ -228,8 +186,7 @@ describe("repository refs transport", () => {
         "origin",
         "git@github.com:alex/rebase.git",
       );
-      const owner = await pair(origin, authorization, "owner");
-      const viewer = await pair(origin, authorization, "viewer");
+      const viewer = await pair("Second browser");
       const remembered = await remember(origin, owner, repositoryPath);
 
       const refs = await Effect.runPromise(
@@ -246,12 +203,6 @@ describe("repository refs transport", () => {
         target: { _tag: "LocalBranch", name: "feature" },
         worktreePath: repositoryPath,
       } as const;
-      await expect(
-        requests(origin, viewer)(RepositoryRefsHttpApi.checkout, checkout),
-      ).rejects.toMatchObject({
-        _tag: "EnvironmentAccessDenied",
-        failure: { _tag: "CapabilityDenied", capability: "repository.write" },
-      });
       await expect(
         requests(origin, owner)(RepositoryRefsHttpApi.checkout, checkout),
       ).resolves.toMatchObject({ head: { branch: "feature" }, stash: "none" });
@@ -322,81 +273,26 @@ function readConnectedRefs(
   );
 }
 
-function withRefsListener(use: (fixture: ListenerFixture) => Promise<void>) {
-  return Effect.runPromise(
-    Effect.scoped(
-      Effect.gen(function* () {
-        const root = yield* Effect.promise(createTemporaryDirectory);
-        const context = yield* acquireEnvironmentContext(
-          environmentPaths(join(root, ".rebase")),
-        );
-        const authorization = createEnvironmentAuthorization(
-          context,
-          context.serverSecret,
-        );
-        const catalog = createRepositoryCatalog(
-          context,
-          createLocalGitCommandRunner(),
-        );
-        const events = createEnvironmentEventPublisher();
-        const git = createLocalGitCommandRunner();
-        const features = yield* Effect.all([
-          environmentAuthorizationFeature,
-          repositoryCatalogFeature,
-          repositoryRefsFeature,
-        ]).pipe(
-          Effect.provideService(EnvironmentAuthorizationAccess, authorization),
-          Effect.provideService(RepositoryCatalogAccess, catalog),
-          Effect.provideService(
-            RepositoryAccess,
-            createRepositoryAccess(
-              catalog,
-              git,
-              createLocalRepositoryWatcher(),
-            ),
-          ),
-          Effect.provideService(GitCommands, git),
-          Effect.provideService(
-            RepositoryCoordination,
-            createRepositoryCoordination(git),
-          ),
-          Effect.provideService(
-            RepositoryWatching,
-            createLocalRepositoryWatcher(),
-          ),
-          Effect.provideService(EnvironmentEvents, events),
-        );
-        const listener = yield* acquireEnvironmentListener({
-          authorization,
-          environmentId,
-          events,
-          features: testEnvironmentFeatures(features),
-          productVersion: "0.0.0",
-        });
-        listener.readiness.value = true;
-        yield* Effect.promise(() =>
-          use({ authorization, origin: listener.origin, root }),
-        );
-      }),
-    ),
-  );
+interface BearerCredential {
+  readonly type: "bearer";
+  readonly value: string;
 }
 
-async function pair(
-  origin: string,
-  authorization: ReturnType<typeof createEnvironmentAuthorization>,
-  role: "owner" | "viewer",
+async function withRefsServer(
+  use: (server: {
+    readonly origin: string;
+    readonly owner: BearerCredential;
+    readonly pair: (label: string) => Promise<BearerCredential>;
+    readonly root: string;
+  }) => Promise<void>,
 ) {
-  const pairing = await Effect.runPromise(
-    authorization.createPairing({ capabilities: [], role }),
-  );
-  const exchanged = await Effect.runPromise(
-    exchangeEnvironmentPairingEffect(origin, {
-      label: `${role} browser`,
-      pairingMaterial: pairing.material,
-    }),
-  );
-  return { type: "bearer" as const, value: exchanged.credential };
+  const server = await openTestServer();
+  await use({
+    origin: server.origin,
+    owner: server.owner,
+    pair: server.pair,
+    root: server.home,
+  });
 }
 
 function remember(
@@ -412,16 +308,4 @@ function remember(
 
 function requests(origin: string, credential: EnvironmentCredential) {
   return createEnvironmentRequestClient(origin, () => credential);
-}
-
-async function createTemporaryDirectory() {
-  const directory = await mkdtemp(join(tmpdir(), "rebase refs transport "));
-  directories.add(directory);
-  return realpath(directory);
-}
-
-interface ListenerFixture {
-  readonly authorization: ReturnType<typeof createEnvironmentAuthorization>;
-  readonly origin: string;
-  readonly root: string;
 }

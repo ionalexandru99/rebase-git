@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Effect, Stream } from "effect";
 import { afterEach, beforeEach, expect, it } from "vite-plus/test";
-import type { GitCommandRunner } from "#server/domain/git-command.contract";
+import type { GitCommandRunner } from "#server/adapters/local-git/git-commands";
 import { createObjectFormatCache } from "#server/features/repository-history/git/read-object-format";
 import { removeTemporaryDirectory } from "#tests-support/temporary-directory";
 

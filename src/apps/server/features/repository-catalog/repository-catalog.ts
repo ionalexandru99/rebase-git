@@ -9,50 +9,32 @@ import {
   repositoryRejected,
 } from "@rebase/contracts";
 import { asc, eq } from "drizzle-orm";
-import { Effect, Layer } from "effect";
+import { Effect } from "effect";
 import {
   type GitCommandRunner,
-  GitCommands,
-} from "#server/domain/git-command.contract";
-import {
-  type RepositoryCatalog,
-  RepositoryCatalogAccess,
-} from "#server/domain/repository-catalog.contract";
-import {
-  type EnvironmentContext,
-  EnvironmentStorage,
-} from "#server/persistence/environment-context.contract";
-import { repositoryCatalogTable } from "#server/persistence/environment-state.schema";
-import {
   isGitRejection,
   runRepositoryGit,
-} from "#server/repository/access/index";
+} from "#server/adapters/local-git/git-commands";
+import type { EnvironmentContext } from "#server/persistence/environment-context";
+import { repositoryCatalogTable } from "#server/persistence/environment-state.schema";
 
 const realpathNative = promisify(realpath.native);
+
+export type RepositoryCatalog = ReturnType<typeof createRepositoryCatalog>;
 
 export function createRepositoryCatalog(
   context: EnvironmentContext,
   git: GitCommandRunner,
-): RepositoryCatalog {
+) {
   return {
-    find: (repositoryId) => findRepository(context, git, repositoryId),
+    find: (repositoryId: string) => findRepository(context, git, repositoryId),
     list: () => listRepositories(context),
-    recordOpened: (repositoryId) =>
+    recordOpened: (repositoryId: string) =>
       recordRepositoryOpened(context, repositoryId),
-    remember: (path) => rememberRepository(context, git, path),
-    remove: (repositoryId) => removeRepository(context, repositoryId),
+    remember: (path: string) => rememberRepository(context, git, path),
+    remove: (repositoryId: string) => removeRepository(context, repositoryId),
   };
 }
-
-export const repositoryCatalogLayer = Layer.effect(
-  RepositoryCatalogAccess,
-  Effect.gen(function* () {
-    return createRepositoryCatalog(
-      yield* EnvironmentStorage,
-      yield* GitCommands,
-    );
-  }),
-);
 
 function listRepositories(context: EnvironmentContext) {
   return context

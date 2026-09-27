@@ -6,12 +6,11 @@ import type {
   RepositoryWorktree,
 } from "@rebase/contracts";
 import { Effect } from "effect";
-import type { GitCommandRunner } from "#server/domain/git-command.contract";
-import type {
-  RepositoryAccessError,
-  RepositoryAccessService,
-} from "#server/domain/repository-access.contract";
-import type { RepositoryGitError } from "#server/domain/repository-git.contract";
+import {
+  type GitCommandRunner,
+  type GitFailed,
+  runRepositoryGit,
+} from "#server/adapters/local-git/git-commands";
 import { branchWriteFailed } from "#server/features/repository-refs/git/branches/branch-failures";
 import {
   readBranchTarget,
@@ -20,18 +19,15 @@ import {
   worktreeHolding,
 } from "#server/features/repository-refs/git/branches/branch-git";
 import { refCommand } from "#server/features/repository-refs/git/ref-git";
-import { runRepositoryGit } from "#server/repository/access/index";
+import type { RepositoryAccess } from "#server/repository/repository-access";
 
 export function renameBranch(
   git: GitCommandRunner,
-  access: RepositoryAccessService,
+  access: RepositoryAccess,
   command: RenameRepositoryBranch,
 ): Effect.Effect<
   RepositoryBranchRenamed,
-  | RepositoryBranchesOperationFailure
-  | RepositoryRejected
-  | RepositoryAccessError
-  | RepositoryGitError
+  RepositoryBranchesOperationFailure | RepositoryRejected | GitFailed
 > {
   const { name, newName, worktreePath } = command;
   return Effect.gen(function* () {

@@ -3,22 +3,22 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { ReadChangeDiff } from "@rebase/contracts";
 import { Effect } from "effect";
-import type {
-  GitCommandOptions,
-  GitCommandRunner,
-} from "#server/domain/git-command.contract";
-import { previewByteLimit } from "#server/domain/repository-comparison.contract";
+import {
+  type GitCommandOptions,
+  type GitCommandRunner,
+  runRepositoryGit,
+} from "#server/adapters/local-git/git-commands";
 import { changeIo } from "#server/features/repository-changes/git/change-failures";
 import {
   safeChangePath,
   worktreeFile,
 } from "#server/features/repository-changes/git/change-files";
-import { runRepositoryGit } from "#server/repository/access/index";
 import {
   binary,
   buildChangeDiff,
-  objectFile,
-} from "#server/repository/comparison/index";
+} from "#server/repository/comparison/build-change-diff";
+import { previewByteLimit } from "#server/repository/comparison/read-blobs";
+import { objectFile } from "#server/repository/comparison/read-object-file";
 
 export function readChangeDiff(
   git: GitCommandRunner,

@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from "vite-plus/test";
-import { createApplicationUpdater } from "#desktop/features/application-updates/application-updater";
-import type { DesktopAutoUpdater } from "#desktop/features/application-updates/application-updater.contract";
+import {
+  createApplicationUpdater,
+  type DesktopAutoUpdater,
+} from "#desktop/features/application-updates/application-updater";
 
 describe("desktop application updater", () => {
   it("keeps automatic checks disabled until the user enables them", async () => {

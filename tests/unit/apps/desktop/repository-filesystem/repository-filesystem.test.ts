@@ -1,5 +1,7 @@
-import { describe, expect, it } from "vite-plus/test";
-import { requireAbsoluteRepositoryPath } from "#desktop/features/repository-filesystem/repository-filesystem";
+import { describe, expect, it, vi } from "vite-plus/test";
+import { requireAbsoluteRepositoryPath } from "#desktop/features/repository-filesystem/repository-filesystem-ipc";
+
+vi.mock("electron", () => ({ ipcMain: {}, shell: {} }));
 
 describe("repository filesystem", () => {
   it("accepts a non-empty absolute reveal path", () => {

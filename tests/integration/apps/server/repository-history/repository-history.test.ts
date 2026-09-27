@@ -6,45 +6,28 @@ import {
   createCurrentEnvironmentHello,
   decodeRepositoryHistoryBatch,
   decodeRepositoryHistoryPage,
-  type EnvironmentAccessCapability,
   type EnvironmentHello,
   maximumRepositoryHistorySequence,
+  RepositoryCatalogHttpApi,
   type RepositoryCommit,
   type RepositoryHistoryBatch,
+  type RepositoryHistoryOperationFailure,
   type RepositoryHistorySnapshot,
 } from "@rebase/contracts";
 import { fetchEnvironmentDiscoveryEffect } from "@rebase/environment-client";
 import { Effect } from "effect";
 import { afterEach, describe, expect, it } from "vite-plus/test";
-import { createEnvironmentEventPublisher } from "#server/adapters/environment-transport/events/environment-event-publisher";
-import { createLocalGitCommandRunner } from "#server/adapters/local-git/local-git-command-runner";
-import { createLocalRepositoryWatcher } from "#server/adapters/local-git/local-repository-watcher";
-import { acquireEnvironmentListener } from "#server/app/server/environment-listener";
-import {
-  type EnvironmentAuthorization,
-  EnvironmentAuthorizationAccess,
-} from "#server/domain/environment-authorization.contract";
-import { environmentAuthorizationFeature } from "#server/features/environment-authorization/environment-authorization.feature";
-import { createRepositoryCatalog } from "#server/features/repository-catalog/repository-catalog";
-import { RepositoryHistoryError } from "#server/features/repository-history/git/history-failures";
+import { createLocalGitCommandRunner } from "#server/adapters/local-git/git-commands";
 import { readObjectFormat } from "#server/features/repository-history/git/read-object-format";
 import { readRepositoryHistorySnapshot } from "#server/features/repository-history/git/read-repository-history-snapshot";
 import { synchronizeRepositoryHistory } from "#server/features/repository-history/git/synchronize-repository-history";
-import {
-  createRepositoryHistoryService,
-  type RepositoryHistoryService,
-} from "#server/features/repository-history/repository-history";
-import { repositoryHistoryRpc } from "#server/features/repository-history/rpc/repository-history-rpc";
-import { acquireEnvironmentContext } from "#server/persistence/environment-context";
-import { environmentPaths } from "#server/persistence/storage/environment-paths";
-import { createRepositoryAccess } from "#server/repository/access/index";
-import { testEnvironmentFeatures } from "#tests-integration/apps/server/environment-connection/test-environment-features";
 import {
   cloneRepository,
   createRepository,
   fastImport,
   git,
 } from "#tests-support/git";
+import { openTestServer } from "#tests-support/server";
 import { removeTemporaryDirectory } from "#tests-support/temporary-directory";
 import {
   connectEnvironmentEffect,
@@ -102,13 +85,11 @@ describe("repository history", () => {
     const root = await createTemporaryDirectory();
     const repositoryPath = join(root, "emit-failure");
     await importLinearHistory(repositoryPath, "sha1", 1);
-    const failure = new RepositoryHistoryError({
-      failure: {
-        _tag: "GitFailed",
-        detail: "Batch delivery failed",
-        reason: "Failed",
-      },
-    });
+    const failure: RepositoryHistoryOperationFailure = {
+      _tag: "GitFailed",
+      detail: "Batch delivery failed",
+      reason: "Failed",
+    };
 
     await expect(
       Effect.runPromise(
@@ -129,7 +110,7 @@ describe("repository history", () => {
   });
 
   it("synchronizes refs, stashes, and detached linked worktree heads", async () => {
-    await withHistoryListener(async ({ catalog, origin, root }) => {
+    await withHistoryListener(async ({ catalog, root, server }) => {
       const repositoryPath = join(root, "complete");
       const linkedPath = join(root, "linked");
       await importLinearHistory(repositoryPath, "sha1", 2);
@@ -173,7 +154,7 @@ describe("repository history", () => {
         ).split("\n"),
       );
 
-      const commits = await synchronizeHistory(origin, repository.id);
+      const commits = await synchronizeHistory(server, repository.id);
 
       expect(new Set(commits.map((commit) => commit.oid))).toEqual(expected);
       expect(
@@ -196,7 +177,7 @@ describe("repository history", () => {
   ] as const)(
     "delivers the first 100 $objectFormat commits with small frames: $smallFrames",
     async ({ objectFormat, smallFrames }) => {
-      await withHistoryListener(async ({ catalog, origin, root }) => {
+      await withHistoryListener(async ({ catalog, root, server }) => {
         const repositoryPath = join(root, objectFormat);
         await importLinearHistory(repositoryPath, objectFormat, 110);
         const repository = await Effect.runPromise(
@@ -206,7 +187,7 @@ describe("repository history", () => {
         const hello = smallFrames
           ? smallFrameHello()
           : createCurrentEnvironmentHello("0.0.0");
-        const page = await readHistoryPage(origin, repository.id, head, hello);
+        const page = await readHistoryPage(server, repository.id, head, hello);
         expect(page.objectFormat).toBe(objectFormat);
         expect(page.commits).toHaveLength(100);
         expect(page.commits[0]?.subject).toBe("commit 109");
@@ -222,7 +203,7 @@ describe("repository history", () => {
   );
 
   it("preserves nested and octopus merge topology", async () => {
-    await withHistoryListener(async ({ catalog, origin, root }) => {
+    await withHistoryListener(async ({ catalog, root, server }) => {
       const repositoryPath = join(root, "merges");
       await createMergeRepository(repositoryPath);
       const repository = await Effect.runPromise(
@@ -230,7 +211,7 @@ describe("repository history", () => {
       );
       const head = await git(repositoryPath, "rev-parse", "main");
 
-      const page = await readHistoryPage(origin, repository.id, head);
+      const page = await readHistoryPage(server, repository.id, head);
 
       expect(page.commits[0]?.subject).toBe("octopus");
       expect(page.commits[0]?.parents).toHaveLength(3);
@@ -252,7 +233,7 @@ describe("repository history", () => {
   });
 
   it("stops at a shallow repository boundary", async () => {
-    await withHistoryListener(async ({ catalog, origin, root }) => {
+    await withHistoryListener(async ({ catalog, root, server }) => {
       const source = join(root, "shallow-source");
       const repositoryPath = join(root, "shallow-clone");
       await importLinearHistory(source, "sha1", 5);
@@ -267,7 +248,7 @@ describe("repository history", () => {
       );
       const head = await git(repositoryPath, "rev-parse", "main");
 
-      const page = await readHistoryPage(origin, repository.id, head);
+      const page = await readHistoryPage(server, repository.id, head);
 
       expect(page.commits).toHaveLength(2);
       const missingParent = await git(source, "rev-parse", "main~2");
@@ -349,9 +330,10 @@ describe("repository history", () => {
     await importLinearHistory(repositoryPath, "sha1", 300);
     let snapshot: RepositoryHistorySnapshot | undefined;
     const committed: RepositoryHistoryBatch[] = [];
-    const interrupted = new RepositoryHistoryError({
-      failure: { _tag: "GitFailed", reason: "Failed" },
-    });
+    const interrupted: RepositoryHistoryOperationFailure = {
+      _tag: "GitFailed",
+      reason: "Failed",
+    };
 
     await expect(
       Effect.runPromise(
@@ -502,7 +484,7 @@ describe("repository history", () => {
         },
         emitted,
       ),
-    ).rejects.toMatchObject({ failure: { _tag: "SnapshotInvalidated" } });
+    ).rejects.toMatchObject({ _tag: "SnapshotInvalidated" });
     expect(emitted).toEqual([]);
   });
 
@@ -592,9 +574,7 @@ describe("repository history", () => {
       ),
     );
 
-    expect(failure).toMatchObject({
-      failure: { _tag: "SnapshotInvalidated" },
-    });
+    expect(failure).toMatchObject({ _tag: "SnapshotInvalidated" });
   });
 
   it("rejects a resume that has exhausted the batch sequence", async () => {
@@ -641,10 +621,8 @@ describe("repository history", () => {
     );
 
     expect(failure).toMatchObject({
-      failure: {
-        _tag: "GitFailed",
-        detail: "Repository history batch sequence is exhausted",
-      },
+      _tag: "GitFailed",
+      detail: "Repository history batch sequence is exhausted",
     });
     expect(emitted).toEqual([]);
   });
@@ -683,57 +661,21 @@ function lastSnapshot(batches: readonly RepositoryHistoryBatch[]) {
   return snapshot;
 }
 
-function withHistoryListener(
+async function withHistoryListener(
   use: (fixture: ListenerFixture) => Promise<void>,
-  historyOverride?: RepositoryHistoryService,
-  authorization: EnvironmentAuthorization = testAuthorization(),
 ) {
-  return Effect.runPromise(
-    Effect.scoped(
-      Effect.gen(function* () {
-        const root = yield* Effect.promise(createTemporaryDirectory);
-        const context = yield* acquireEnvironmentContext(
-          environmentPaths(join(root, ".rebase")),
-        );
-        const catalog = createRepositoryCatalog(
-          context,
-          createLocalGitCommandRunner(),
-        );
-        const history =
-          historyOverride ??
-          createRepositoryHistoryService({
-            access: createRepositoryAccess(
-              catalog,
-              createLocalGitCommandRunner(),
-              createLocalRepositoryWatcher(),
-            ),
-            git: createLocalGitCommandRunner(),
-          });
-        const listener = yield* acquireEnvironmentListener({
-          authorization,
-          environmentId,
-          events: createEnvironmentEventPublisher(),
-          features: testEnvironmentFeatures([
-            yield* Effect.provideService(
-              environmentAuthorizationFeature,
-              EnvironmentAuthorizationAccess,
-              authorization,
-            ),
-            {
-              capabilities: ["repository-history"],
-              httpRoutes: [],
-              rpc: (session) => repositoryHistoryRpc(session, history),
-            },
-          ]),
-          productVersion: "0.0.0",
-        });
-        listener.readiness.value = true;
-        yield* Effect.promise(() =>
-          use({ catalog, origin: listener.origin, root }),
-        );
-      }),
-    ),
-  );
+  const server = await openTestServer();
+  const requests = server.requests(server.owner);
+  await use({
+    catalog: {
+      remember: (path) =>
+        Effect.promise(() =>
+          requests(RepositoryCatalogHttpApi.remember, { path }),
+        ),
+    },
+    root: server.home,
+    server: { credential: server.owner, origin: server.origin },
+  });
 }
 
 async function importLinearHistory(
@@ -792,12 +734,12 @@ async function commitFile(
 }
 
 function readHistoryPage(
-  origin: string,
+  server: HistoryServer,
   repositoryId: string,
   oid: string,
   hello = smallFrameHello(),
 ) {
-  return withHistoryConnection(origin, hello, (connection) =>
+  return withHistoryConnection(server, hello, (connection) =>
     createRepositoryHistoryRpc(connection)
       .read({
         repositoryId,
@@ -809,9 +751,9 @@ function readHistoryPage(
   );
 }
 
-async function synchronizeHistory(origin: string, repositoryId: string) {
+async function synchronizeHistory(server: HistoryServer, repositoryId: string) {
   const commits: RepositoryCommit[] = [];
-  await withHistoryConnection(origin, smallFrameHello(), (connection) =>
+  await withHistoryConnection(server, smallFrameHello(), (connection) =>
     createRepositoryHistoryRpc(connection).synchronize(
       { repositoryId, priority: "visible" },
       (bytes) =>
@@ -824,19 +766,19 @@ async function synchronizeHistory(origin: string, repositoryId: string) {
 }
 
 function withHistoryConnection<A, E>(
-  origin: string,
+  server: HistoryServer,
   hello: EnvironmentHello,
   use: (connection: EnvironmentProtocolConnection) => Effect.Effect<A, E>,
 ) {
   return Effect.runPromise(
     Effect.scoped(
       Effect.gen(function* () {
-        const discovery = yield* fetchEnvironmentDiscoveryEffect(origin);
+        const discovery = yield* fetchEnvironmentDiscoveryEffect(server.origin);
         const connection = yield* connectEnvironmentEffect(
-          origin,
+          server.origin,
           discovery,
           hello,
-          { type: "bearer", value: "test" },
+          server.credential,
         );
         return yield* use(connection);
       }),
@@ -855,32 +797,6 @@ function smallFrameHello(): EnvironmentHello {
   };
 }
 
-function testAuthorization(
-  capabilities: readonly EnvironmentAccessCapability[] = [
-    "environment.read",
-    "repository.read",
-  ],
-): EnvironmentAuthorization {
-  const authorization = {
-    capabilities,
-    id: "00000000-0000-4000-8000-000000000002",
-    label: "Test device",
-    role: "custom" as const,
-  };
-  return {
-    authorize: () => Effect.succeed(authorization),
-    consumeTicket: () => Effect.succeed(authorization),
-    createPairing: () => Effect.die("unused"),
-    exchangePairing: () => Effect.die("unused"),
-    mintTicket: () =>
-      Effect.succeed({
-        ticket: "test-ticket-material-00000000000000000000",
-        expiresAt: "2026-09-06T00:00:00.000Z",
-      }),
-    revoke: () => Effect.die("unused"),
-  };
-}
-
 async function createTemporaryDirectory() {
   const directory = await realpath(
     await mkdtemp(join(tmpdir(), "rebase history ")),
@@ -889,8 +805,15 @@ async function createTemporaryDirectory() {
   return directory;
 }
 
-interface ListenerFixture {
-  readonly catalog: ReturnType<typeof createRepositoryCatalog>;
+interface HistoryServer {
+  readonly credential: { readonly type: "bearer"; readonly value: string };
   readonly origin: string;
+}
+
+interface ListenerFixture {
+  readonly catalog: {
+    readonly remember: (path: string) => Effect.Effect<{ readonly id: string }>;
+  };
   readonly root: string;
+  readonly server: HistoryServer;
 }

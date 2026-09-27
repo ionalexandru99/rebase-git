@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Effect, Stream } from "effect";
 import { afterAll, beforeAll, expect, it } from "vite-plus/test";
-import { createLocalGitCommandRunner } from "#server/adapters/local-git/local-git-command-runner";
+import { createLocalGitCommandRunner } from "#server/adapters/local-git/git-commands";
 import { createRepository, fastImport } from "#tests-support/git";
 import { removeTemporaryDirectory } from "#tests-support/temporary-directory";
 
@@ -38,7 +38,7 @@ it("streams stdout and reports a rejected command with its exit code and stderr"
 
   expect(output.trim().split("\n")).toHaveLength(2_000);
   expect(error).toMatchObject({ exitCode: 128, reason: "Failed" });
-  expect(error.stderr).toContain("Needed a single revision");
+  expect(error.detail).toContain("Needed a single revision");
 });
 
 it("fails with a timeout when the command outlives its deadline", async () => {

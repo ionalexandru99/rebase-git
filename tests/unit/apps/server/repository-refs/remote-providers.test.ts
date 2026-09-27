@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vite-plus/test";
-import { remoteProvidersFromConfig } from "#server/features/repository-refs/git/remote-providers";
+import { remoteProvidersFromConfig } from "#server/features/repository-refs/git/read-repository-refs";
 
 describe("remote providers", () => {
   it.each([

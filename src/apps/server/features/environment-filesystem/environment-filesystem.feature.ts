@@ -1,10 +1,9 @@
 import { EnvironmentFilesystemHttpApi } from "@rebase/contracts";
-import { Effect } from "effect";
-import type { EnvironmentFeature } from "#server/adapters/environment-transport/environment-feature.contract";
+import type { EnvironmentFeature } from "#server/adapters/environment-transport/combine-environment-features";
 import { route } from "#server/adapters/environment-transport/http/environment-http-route-handler";
 import { createEnvironmentFilesystem } from "#server/features/environment-filesystem/environment-filesystem";
 
-export const environmentFilesystemFeature = Effect.sync(() => {
+export function environmentFilesystemFeature(): EnvironmentFeature {
   const filesystem = createEnvironmentFilesystem();
   return {
     capabilities: [],
@@ -13,5 +12,5 @@ export const environmentFilesystemFeature = Effect.sync(() => {
         filesystem.listDirectory(directory.path, directory.includeHidden),
       ),
     ],
-  } satisfies EnvironmentFeature;
-});
+  };
+}

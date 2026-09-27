@@ -10,17 +10,18 @@ import {
   type ViewedChange,
 } from "@rebase/contracts";
 import { Effect } from "effect";
-import type { GitCommandRunner } from "#server/domain/git-command.contract";
-import { safeChangePath } from "#server/features/repository-changes/git/change-files";
+import {
+  type GitCommandRunner,
+  runRepositoryGit,
+} from "#server/adapters/local-git/git-commands";
+import {
+  safeChangePath,
+  worktreeIdentities,
+} from "#server/features/repository-changes/git/change-files";
 import { withChangeIndex } from "#server/features/repository-changes/git/change-index";
 import { mutateChanges } from "#server/features/repository-changes/git/mutate-changes";
 import { readChangeDiff } from "#server/features/repository-changes/git/read-change-diff";
 import { readChanges } from "#server/features/repository-changes/git/read-changes";
-import {
-  verifyChangedFiles,
-  verifyChanges,
-} from "#server/features/repository-changes/git/verify-changes";
-import { runRepositoryGit } from "#server/repository/access/index";
 
 export function readRepositoryChanges(
   scope: ChangesScope,
@@ -181,4 +182,42 @@ function fitChanges(snapshot: RepositoryChanges): RepositoryChanges {
       unstaged.length !== snapshot.unstaged.length ||
       staged.length !== snapshot.staged.length,
   };
+}
+
+function verifyChanges(
+  git: GitCommandRunner,
+  scope: ChangesScope & { readonly revision: string },
+) {
+  return readChanges(git, scope).pipe(
+    Effect.flatMap((current) =>
+      current.snapshot.revision === scope.revision
+        ? Effect.succeed(current)
+        : Effect.fail(staleChanges()),
+    ),
+  );
+}
+
+function verifyChangedFiles(
+  directory: string,
+  files: {
+    readonly paths: readonly string[];
+    readonly identities: readonly string[];
+  },
+) {
+  return worktreeIdentities(directory, files.paths).pipe(
+    Effect.flatMap((identities) =>
+      identities.every(
+        (identity, index) => identity === files.identities[index],
+      )
+        ? Effect.void
+        : Effect.fail(staleChanges()),
+    ),
+  );
+}
+
+function staleChanges() {
+  return changesFailed(
+    "Stale",
+    "The repository changed. Review the refreshed changes and try again.",
+  );
 }

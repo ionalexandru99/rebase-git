@@ -1,14 +1,9 @@
 import { RepositoryConflictsHttpApi } from "@rebase/contracts";
-import { Effect } from "effect";
-import type { EnvironmentFeature } from "#server/adapters/environment-transport/environment-feature.contract";
+import type { EnvironmentFeature } from "#server/adapters/environment-transport/combine-environment-features";
 import {
-  command,
-  query,
+  type RepositoryDependencies,
+  repositoryRoutes,
 } from "#server/adapters/environment-transport/http/repository-http-routes";
-import {
-  RepositoryCoordination,
-  type RepositoryWritePolicy,
-} from "#server/domain/repository-coordination.contract";
 import { readConflictDocument } from "#server/features/repository-conflicts/git/read-conflict-document";
 import { readConflictList } from "#server/features/repository-conflicts/git/read-conflict-list";
 import {
@@ -16,6 +11,7 @@ import {
   stageConflict,
   writeConflict,
 } from "#server/features/repository-conflicts/git/resolve-conflict";
+import type { RepositoryWritePolicy } from "#server/repository/repository-coordination";
 
 const resolve: RepositoryWritePolicy = {
   name: "resolve",
@@ -26,27 +22,26 @@ const resolve: RepositoryWritePolicy = {
   },
 };
 
-export const repositoryConflictsFeature = Effect.gen(function* () {
-  const coordination = yield* RepositoryCoordination;
+export function repositoryConflictsFeature(
+  dependencies: RepositoryDependencies,
+): EnvironmentFeature {
+  const { command, query } = repositoryRoutes(dependencies);
+  const { coordination } = dependencies;
   const api = RepositoryConflictsHttpApi;
   return {
     capabilities: [],
     httpRoutes: [
-      yield* query(api.list, (input, git) =>
+      query(api.list, (input, git) =>
         readConflictList(git, coordination, input.worktreePath),
       ),
-      yield* query(api.document, (input, git) =>
-        readConflictDocument(git, input),
-      ),
-      yield* command(api.write, resolve, (input, git) =>
-        writeConflict(git, input),
-      ),
-      yield* command(api.choose, resolve, (input, git) =>
+      query(api.document, (input, git) => readConflictDocument(git, input)),
+      command(api.write, resolve, (input, git) => writeConflict(git, input)),
+      command(api.choose, resolve, (input, git) =>
         chooseWholeFile(git, coordination, input),
       ),
-      yield* command(api.stage, resolve, (input, git) =>
+      command(api.stage, resolve, (input, git) =>
         stageConflict(git, coordination, input),
       ),
     ],
-  } satisfies EnvironmentFeature;
-});
+  };
+}

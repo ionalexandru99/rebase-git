@@ -1,17 +1,27 @@
-import { ipcMain } from "electron";
-import { requireAbsoluteRepositoryPath } from "#desktop/features/repository-filesystem/repository-filesystem";
-import type { RepositoryFilesystem } from "#desktop/features/repository-filesystem/repository-filesystem.contract";
+import { isAbsolute } from "node:path";
+import { ipcMain, shell } from "electron";
 import { repositoryFilesystemIpc } from "#desktop/features/repository-filesystem/repository-filesystem-ipc.contract";
-import type { TrustedIpcHandler } from "#desktop/platform/renderer-trust/renderer-trust.contract";
+import type { TrustedIpcHandler } from "#desktop/platform/renderer-trust";
 
-export function registerRepositoryFilesystemIpc(
-  filesystem: RepositoryFilesystem,
-  trusted: TrustedIpcHandler,
-) {
+export function registerRepositoryFilesystemIpc(trusted: TrustedIpcHandler) {
   ipcMain.handle(
     repositoryFilesystemIpc.revealRepository,
-    trusted((_event, path: unknown) =>
-      filesystem.revealRepository(requireAbsoluteRepositoryPath(path)),
-    ),
+    trusted((_event, path: unknown) => {
+      shell.showItemInFolder(requireAbsoluteRepositoryPath(path));
+    }),
   );
+}
+
+export function requireAbsoluteRepositoryPath(value: unknown): string {
+  if (
+    typeof value !== "string" ||
+    value.trim().length === 0 ||
+    !isAbsolute(value)
+  ) {
+    throw new TypeError(
+      "Repository reveal requires a non-empty absolute path.",
+    );
+  }
+
+  return value;
 }

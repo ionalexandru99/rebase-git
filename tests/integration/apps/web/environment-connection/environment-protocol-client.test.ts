@@ -10,57 +10,48 @@ import {
 } from "@rebase/environment-client";
 import { Effect } from "effect";
 import { describe, expect, it, vi } from "vite-plus/test";
-import { createEnvironmentEventPublisher } from "#server/adapters/environment-transport/events/environment-event-publisher";
-import { acquireEnvironmentListener } from "#server/app/server/environment-listener";
-import {
-  type EnvironmentAuthorization,
-  EnvironmentAuthorizationAccess,
-} from "#server/domain/environment-authorization.contract";
-import type { EnvironmentEventPublisher } from "#server/domain/environment-event-publisher.contract";
-import { environmentAuthorizationFeature } from "#server/features/environment-authorization/environment-authorization.feature";
-import { testEnvironmentFeatures } from "#tests-integration/apps/server/environment-connection/test-environment-features";
+import type { EnvironmentEventPublisher } from "#server/adapters/environment-transport/environment-event-publisher";
+import { openTestServer } from "#tests-support/server";
 import {
   connectCurrentEnvironmentEffect,
   connectEnvironmentEffect,
   type EnvironmentProtocolConnection,
 } from "#web/app/environment/connection/environment-protocol-client";
 
-const environmentId = "00000000-0000-4000-8000-000000000001";
-const credential = { type: "bearer", value: "test-device-credential" } as const;
-const testAuthorization = createTestAuthorization();
+const repositoryId = "00000000-0000-4000-8000-000000000001";
+let credential: { readonly type: "bearer"; readonly value: string };
 const closedByClient = new EnvironmentResponseError({
   responseTag: "WebSocket",
 });
 
 describe("browser Environment protocol client", () => {
   it("invalidates all refs after a sequence gap and resumes targeted changes without replaying duplicates", async () => {
-    const events = createEnvironmentEventPublisher();
     await withListener(
-      (origin) =>
+      (origin, events) =>
         withCurrentConnection(origin, {}, async (connection) => {
           const changed = vi.fn();
           const unsubscribe = connection.subscribeChanges(changed);
           try {
-            events.publishChanged([environmentId]);
-            events.publishChanged([environmentId]);
+            events.publishChanged([repositoryId]);
+            events.publishChanged([repositoryId]);
             await Effect.runPromise(connection.waitForSequence(2));
             expect(changed).toHaveBeenCalledExactlyOnceWith(
               undefined,
               undefined,
             );
-            events.publishChanged([environmentId], "Refs");
-            events.publishChanged([environmentId], "Refs");
+            events.publishChanged([repositoryId], "Refs");
+            events.publishChanged([repositoryId], "Refs");
             await Effect.runPromise(connection.waitForSequence(4));
             expect(changed.mock.calls).toEqual([
               [undefined, undefined],
-              [[environmentId], "Refs"],
-              [[environmentId], "Refs"],
+              [[repositoryId], "Refs"],
+              [[repositoryId], "Refs"],
             ]);
           } finally {
             unsubscribe();
           }
         }),
-      {
+      (events) => ({
         ...events,
         subscribe: (listener) =>
           events.subscribe((sequence, repositoryIds, kind) => {
@@ -68,7 +59,7 @@ describe("browser Environment protocol client", () => {
             listener(sequence, repositoryIds, kind);
             listener(sequence, repositoryIds, kind);
           }),
-      },
+      }),
     );
   });
 
@@ -91,15 +82,15 @@ describe("browser Environment protocol client", () => {
             const changed = vi.fn();
             const unsubscribe = connection.subscribeChanges(changed);
             try {
-              events.publishChanged([environmentId], "Index");
+              events.publishChanged([repositoryId], "Index");
               await Effect.runPromise(connection.waitForSequence(1));
               expect(changed).toHaveBeenCalledExactlyOnceWith(
                 ...(identified
-                  ? [[environmentId], "Index"]
+                  ? [[repositoryId], "Index"]
                   : [undefined, undefined]),
               );
               unsubscribe();
-              events.publishChanged([environmentId]);
+              events.publishChanged([repositoryId]);
               await Effect.runPromise(connection.waitForSequence(2));
               expect(changed).toHaveBeenCalledOnce();
             } finally {
@@ -111,11 +102,10 @@ describe("browser Environment protocol client", () => {
     });
 
   it("discovers, negotiates, and snapshots one Environment", async () => {
-    await withListener((origin, events) =>
+    await withListener((origin, events, environmentId) =>
       withCurrentConnection(origin, {}, async (connection) => {
         expect(connection.negotiated).toMatchObject({
           _tag: "HelloAccepted",
-          accessCapabilities: ["environment.read"],
           environmentId,
         });
 
@@ -291,59 +281,15 @@ function withNegotiatedConnection(
   );
 }
 
-function withListener(
-  run: (origin: string, events: EnvironmentEventPublisher) => Promise<void>,
-  events = createEnvironmentEventPublisher(),
+async function withListener(
+  run: (
+    origin: string,
+    events: EnvironmentEventPublisher,
+    environmentId: string,
+  ) => Promise<void>,
+  events?: (events: EnvironmentEventPublisher) => EnvironmentEventPublisher,
 ) {
-  return Effect.runPromise(
-    Effect.scoped(
-      Effect.gen(function* () {
-        const listener = yield* acquireEnvironmentListener({
-          authorization: testAuthorization,
-          environmentId,
-          events,
-          features: testEnvironmentFeatures([
-            yield* Effect.provideService(
-              environmentAuthorizationFeature,
-              EnvironmentAuthorizationAccess,
-              testAuthorization,
-            ),
-          ]),
-          productVersion: "0.0.0",
-        });
-        listener.readiness.value = true;
-        yield* Effect.promise(() => run(listener.origin, events));
-      }),
-    ),
-  );
-}
-
-function createTestAuthorization(): EnvironmentAuthorization {
-  const authorization = {
-    capabilities: ["environment.read" as const],
-    id: "00000000-0000-4000-8000-000000000002",
-    label: "Test device",
-    role: "custom" as const,
-  };
-  return {
-    authorize: () => Effect.succeed(authorization),
-    consumeTicket: () => Effect.succeed(authorization),
-    createPairing: () =>
-      Effect.succeed({
-        expiresAt: "2026-08-21T12:10:00.000Z",
-        material: "test-pairing-material-000000000000000000000",
-      }),
-    exchangePairing: () =>
-      Effect.succeed({ authorization, credential: "test-credential-material" }),
-    mintTicket: () =>
-      Effect.succeed({
-        expiresAt: "2026-08-21T12:00:30.000Z",
-        ticket: "test-ticket-material-0000000000000000000000000",
-      }),
-    revoke: (_, authorizationId) =>
-      Effect.succeed({
-        authorizationId,
-        revokedAt: "2026-08-21T12:00:00.000Z",
-      }),
-  };
+  const server = await openTestServer({ events });
+  credential = server.owner;
+  await run(server.origin, server.events, server.environmentId);
 }

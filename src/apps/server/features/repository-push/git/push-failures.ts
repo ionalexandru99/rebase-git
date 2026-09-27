@@ -3,7 +3,7 @@ import {
   type PushRejectedReason,
   repositoryRejected,
 } from "@rebase/contracts";
-import type { GitCommandOutput } from "#server/domain/git-command.contract";
+import type { GitCommandOutput } from "#server/adapters/local-git/git-commands";
 
 export function pushError(
   reason: PushRejectedReason,

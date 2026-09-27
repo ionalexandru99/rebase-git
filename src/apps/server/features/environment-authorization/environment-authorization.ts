@@ -1,23 +1,13 @@
 import { randomUUID } from "node:crypto";
 import type {
-  EnvironmentAccessCapability,
   EnvironmentAuthorizationFailure,
-  EnvironmentAuthorizationRole,
+  EnvironmentAuthorizationRevoked,
   EnvironmentDeviceAuthorization,
+  EnvironmentPairingExchanged,
   ExchangeEnvironmentPairing,
 } from "@rebase/contracts";
 import { eq } from "drizzle-orm";
-import { Effect, Layer } from "effect";
-import {
-  type EnvironmentAuthorization,
-  EnvironmentAuthorizationAccess,
-  EnvironmentAuthorizationError,
-  type EnvironmentPairingRequest,
-} from "#server/domain/environment-authorization.contract";
-import type {
-  EnvironmentAuthorizationClock,
-  EnvironmentAuthorizationOptions,
-} from "#server/features/environment-authorization/environment-authorization.contract";
+import { Data, Effect } from "effect";
 import {
   createDeviceCredential,
   createPairingCode,
@@ -25,72 +15,83 @@ import {
   digestSecretMaterial,
   verifyDeviceCredential,
 } from "#server/features/environment-authorization/environment-authorization-secret";
-import { capabilitiesForRole } from "#server/features/environment-authorization/environment-capabilities";
-import {
-  type EnvironmentContext,
-  EnvironmentStorage,
-} from "#server/persistence/environment-context.contract";
-import {
-  authorizationCapabilityTable,
-  authorizationMetadataTable,
-} from "#server/persistence/environment-state.schema";
+import type { EnvironmentContext } from "#server/persistence/environment-context";
+import { authorizationMetadataTable } from "#server/persistence/environment-state.schema";
+import type { EnvironmentStorageError } from "#server/persistence/sqlite/storage-operation";
 
 const pairingLifetimeMilliseconds = 10 * 60 * 1_000;
 const ticketLifetimeMilliseconds = 30 * 1_000;
 const authorizationInactivityMilliseconds = 90 * 24 * 60 * 60 * 1_000;
 const retainedMaterialMilliseconds = 24 * 60 * 60 * 1_000;
 
+export class EnvironmentAuthorizationError extends Data.TaggedError(
+  "EnvironmentAuthorizationError",
+)<{
+  readonly failure: EnvironmentAuthorizationFailure;
+}> {}
+
+type AuthorizationResult<Value> = Effect.Effect<
+  Value,
+  EnvironmentAuthorizationError | EnvironmentStorageError
+>;
+
+export interface EnvironmentAuthorization {
+  readonly authorize: (
+    credential: string | undefined,
+  ) => AuthorizationResult<EnvironmentDeviceAuthorization>;
+  readonly consumeTicket: (
+    ticket: string | undefined,
+  ) => AuthorizationResult<EnvironmentDeviceAuthorization>;
+  readonly createPairing: (pairing?: {
+    readonly replacesGrantsWithSameLabel?: boolean;
+  }) => Effect.Effect<{
+    readonly expiresAt: string;
+    readonly material: string;
+  }>;
+  readonly exchangePairing: (
+    exchange: ExchangeEnvironmentPairing,
+  ) => AuthorizationResult<EnvironmentPairingExchanged>;
+  readonly mintTicket: (credential: string | undefined) => AuthorizationResult<{
+    readonly expiresAt: string;
+    readonly ticket: string;
+  }>;
+  readonly revoke: (
+    credential: string | undefined,
+    authorizationId: string,
+  ) => AuthorizationResult<EnvironmentAuthorizationRevoked>;
+}
+
 export function createEnvironmentAuthorization(
   context: EnvironmentContext,
-  serverSecret: string,
-  options: EnvironmentAuthorizationOptions = {},
 ): EnvironmentAuthorization {
-  const clock = options.clock ?? systemClock;
   const pairings = new Map<string, PairingEntry>();
   const tickets = new Map<string, TicketEntry>();
 
   return {
-    authorize: (credential, capability) =>
-      authorizeCredential(context, serverSecret, clock, credential, capability),
-    consumeTicket: (ticket) => consumeTicket(context, clock, tickets, ticket),
+    authorize: (credential) => authorizeCredential(context, credential),
+    consumeTicket: (ticket) => consumeTicket(context, tickets, ticket),
     createPairing: (pairing) =>
-      Effect.sync(() => createPairing(clock, pairings, pairing)),
-    exchangePairing: (exchange) =>
-      exchangePairing(context, serverSecret, clock, pairings, exchange),
-    mintTicket: (credential) =>
-      mintTicket(context, serverSecret, clock, tickets, credential),
-    revoke: (credential, authorizationId) =>
-      revokeAuthorization(
-        context,
-        serverSecret,
-        clock,
-        credential,
-        authorizationId,
+      Effect.sync(() =>
+        createPairing(pairings, pairing?.replacesGrantsWithSameLabel ?? false),
       ),
+    exchangePairing: (exchange) => exchangePairing(context, pairings, exchange),
+    mintTicket: (credential) => mintTicket(context, tickets, credential),
+    revoke: (credential, authorizationId) =>
+      revokeAuthorization(context, credential, authorizationId),
   };
 }
 
-export const environmentAuthorizationLayer = Layer.effect(
-  EnvironmentAuthorizationAccess,
-  Effect.map(EnvironmentStorage, (context) =>
-    createEnvironmentAuthorization(context, context.serverSecret),
-  ),
-);
-
 function createPairing(
-  clock: EnvironmentAuthorizationClock,
   pairings: Map<string, PairingEntry>,
-  pairing: EnvironmentPairingRequest,
+  replacesGrantsWithSameLabel: boolean,
 ) {
-  const now = clock.now().getTime();
+  const now = Date.now();
   removeOldMaterial(pairings, now);
   const material = createAvailablePairingCode(pairings);
   const expiresAt = now + pairingLifetimeMilliseconds;
   pairings.set(digestSecretMaterial(material), {
-    capabilities: capabilitiesForRole(pairing.role, pairing.capabilities),
     expiresAt,
-    replacesGrantsWithSameLabel: pairing.replacesGrantsWithSameLabel ?? false,
-    role: pairing.role,
+    replacesGrantsWithSameLabel,
     used: false,
   });
   return { expiresAt: new Date(expiresAt).toISOString(), material };
@@ -106,23 +107,19 @@ function createAvailablePairingCode(pairings: Map<string, PairingEntry>) {
 
 function exchangePairing(
   context: EnvironmentContext,
-  serverSecret: string,
-  clock: EnvironmentAuthorizationClock,
   pairings: Map<string, PairingEntry>,
   exchange: ExchangeEnvironmentPairing,
 ) {
   return Effect.gen(function* () {
-    const now = clock.now();
+    const now = new Date();
     const pairing = yield* consumePairing(
       pairings,
       exchange.pairingMaterial,
       now,
     );
     const authorization = {
-      capabilities: pairing.capabilities,
       id: randomUUID(),
       label: exchange.label,
-      role: pairing.role,
     } satisfies EnvironmentDeviceAuthorization;
 
     yield* context
@@ -143,23 +140,8 @@ function exchangePairing(
                 createdAt: now.toISOString(),
                 id: authorization.id,
                 label: authorization.label,
-                role: authorization.role,
               })
               .run();
-            if (
-              authorization.role === "custom" &&
-              authorization.capabilities.length > 0
-            ) {
-              transaction
-                .insert(authorizationCapabilityTable)
-                .values(
-                  authorization.capabilities.map((capability) => ({
-                    authorizationId: authorization.id,
-                    capability,
-                  })),
-                )
-                .run();
-            }
           },
           { behavior: "immediate" },
         ),
@@ -174,7 +156,10 @@ function exchangePairing(
 
     return {
       authorization,
-      credential: createDeviceCredential(serverSecret, authorization.id),
+      credential: createDeviceCredential(
+        context.serverSecret,
+        authorization.id,
+      ),
     };
   });
 }
@@ -201,25 +186,23 @@ function consumePairing(
 
 function authorizeCredential(
   context: EnvironmentContext,
-  serverSecret: string,
-  clock: EnvironmentAuthorizationClock,
   credential: string | undefined,
-  capability: EnvironmentAccessCapability,
 ) {
-  const authorizationId = verifyDeviceCredential(serverSecret, credential);
+  const authorizationId = verifyDeviceCredential(
+    context.serverSecret,
+    credential,
+  );
   if (authorizationId === undefined) {
     return failAuthorization({ _tag: "InvalidGrant" });
   }
-  return authorizeStoredGrant(context, clock, authorizationId, capability);
+  return authorizeStoredGrant(context, authorizationId);
 }
 
 function authorizeStoredGrant(
   context: EnvironmentContext,
-  clock: EnvironmentAuthorizationClock,
   authorizationId: string,
-  capability: EnvironmentAccessCapability,
 ) {
-  const now = clock.now();
+  const now = new Date();
   return context
     .write("Could not authenticate device authorization", (database) => {
       const metadata = database
@@ -241,38 +224,13 @@ function authorizeStoredGrant(
         return authorizationFailure({ _tag: "ExpiredGrant" });
       }
 
-      const capabilities = capabilitiesForRole(
-        metadata.role,
-        metadata.role === "custom"
-          ? database
-              .select({ capability: authorizationCapabilityTable.capability })
-              .from(authorizationCapabilityTable)
-              .where(
-                eq(
-                  authorizationCapabilityTable.authorizationId,
-                  authorizationId,
-                ),
-              )
-              .all()
-              .map(({ capability: storedCapability }) => storedCapability)
-          : [],
-      );
       database
         .update(authorizationMetadataTable)
         .set({ lastSeenAt: now.toISOString() })
         .where(eq(authorizationMetadataTable.id, authorizationId))
         .run();
 
-      if (!capabilities.includes(capability)) {
-        return authorizationFailure({ _tag: "CapabilityDenied", capability });
-      }
-
-      return authorizationSuccess({
-        capabilities,
-        id: metadata.id,
-        label: metadata.label,
-        role: metadata.role,
-      });
+      return authorizationSuccess({ id: metadata.id, label: metadata.label });
     })
     .pipe(
       Effect.flatMap((result) =>
@@ -285,20 +243,12 @@ function authorizeStoredGrant(
 
 function mintTicket(
   context: EnvironmentContext,
-  serverSecret: string,
-  clock: EnvironmentAuthorizationClock,
   tickets: Map<string, TicketEntry>,
   credential: string | undefined,
 ) {
   return Effect.gen(function* () {
-    const authorization = yield* authorizeCredential(
-      context,
-      serverSecret,
-      clock,
-      credential,
-      "environment.read",
-    );
-    const now = clock.now().getTime();
+    const authorization = yield* authorizeCredential(context, credential);
+    const now = Date.now();
     removeOldMaterial(tickets, now);
     const ticket = createSecretMaterial();
     const expiresAt = now + ticketLifetimeMilliseconds;
@@ -313,7 +263,6 @@ function mintTicket(
 
 function consumeTicket(
   context: EnvironmentContext,
-  clock: EnvironmentAuthorizationClock,
   tickets: Map<string, TicketEntry>,
   ticket: string | undefined,
 ) {
@@ -327,17 +276,12 @@ function consumeTicket(
   if (stored.used) {
     return failAuthorization({ _tag: "TicketAlreadyUsed" });
   }
-  if (clock.now().getTime() >= stored.expiresAt) {
+  if (Date.now() >= stored.expiresAt) {
     return failAuthorization({ _tag: "ExpiredTicket" });
   }
 
   stored.used = true;
-  return authorizeStoredGrant(
-    context,
-    clock,
-    stored.authorizationId,
-    "environment.read",
-  ).pipe(
+  return authorizeStoredGrant(context, stored.authorizationId).pipe(
     Effect.tapError((error) =>
       error._tag === "EnvironmentStorageError"
         ? Effect.sync(() => {
@@ -350,20 +294,12 @@ function consumeTicket(
 
 function revokeAuthorization(
   context: EnvironmentContext,
-  serverSecret: string,
-  clock: EnvironmentAuthorizationClock,
   credential: string | undefined,
   authorizationId: string,
 ) {
   return Effect.gen(function* () {
-    yield* authorizeCredential(
-      context,
-      serverSecret,
-      clock,
-      credential,
-      "authorization.manage",
-    );
-    const revokedAt = clock.now().toISOString();
+    yield* authorizeCredential(context, credential);
+    const revokedAt = new Date().toISOString();
     const revoked = yield* context.write(
       "Could not revoke device authorization",
       (database) =>
@@ -403,19 +339,13 @@ function failAuthorization(failure: EnvironmentAuthorizationFailure) {
   return Effect.fail(new EnvironmentAuthorizationError({ failure }));
 }
 
-const systemClock: EnvironmentAuthorizationClock = {
-  now: () => new Date(),
-};
-
 interface MaterialEntry {
   readonly expiresAt: number;
   used: boolean;
 }
 
 interface PairingEntry extends MaterialEntry {
-  readonly capabilities: ReadonlyArray<EnvironmentAccessCapability>;
   readonly replacesGrantsWithSameLabel: boolean;
-  readonly role: EnvironmentAuthorizationRole;
 }
 
 interface TicketEntry extends MaterialEntry {

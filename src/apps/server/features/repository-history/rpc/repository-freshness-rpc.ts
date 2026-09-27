@@ -5,8 +5,8 @@ import type {
   RepositoryHistoryOperationFailure,
 } from "@rebase/contracts";
 import { Effect, Option, Queue, Semaphore, Stream } from "effect";
-import type { EnvironmentRpcHandlersFor } from "#server/adapters/environment-transport/environment-feature.contract";
-import type { EnvironmentRpcSession } from "#server/adapters/environment-transport/rpc/environment-rpc-session.contract";
+import type { EnvironmentRpcHandlersFor } from "#server/adapters/environment-transport/combine-environment-features";
+import type { EnvironmentRpcSession } from "#server/adapters/environment-transport/rpc/environment-rpc-negotiation";
 import type { RepositoryFreshnessService } from "#server/features/repository-history/freshness/repository-freshness";
 
 export function repositoryFreshnessRpc(
@@ -31,11 +31,8 @@ export function repositoryFreshnessRpc(
         }),
       ),
     );
-  const authorize = (write = false) =>
-    session.requireCapability(
-      "repository-history-freshness",
-      write ? "repository.write" : "repository.read",
-    );
+  const authorize = () =>
+    session.requireCapability("repository-history-freshness");
   return {
     WatchFreshness: ({ repositoryId }: { repositoryId: string }) =>
       Stream.unwrap(
@@ -54,26 +51,18 @@ export function repositoryFreshnessRpc(
           );
           const queue = yield* Queue.sliding<RepositoryFreshness>(1);
           yield* Effect.addFinalizer(() => Queue.shutdown(queue));
-          const automaticFetch = yield* authorize(true).pipe(
-            Effect.match({ onFailure: () => false, onSuccess: () => true }),
-          );
           yield* Effect.acquireRelease(
-            freshness.subscribe(
-              repositoryId,
-              (state) => {
-                Queue.offerUnsafe(queue, state);
-              },
-              { automaticFetch },
-            ),
+            freshness.subscribe(repositoryId, (state) => {
+              Queue.offerUnsafe(queue, state);
+            }),
             (release) => release,
-          ).pipe(Effect.mapError((error) => error.failure));
+          );
           return Stream.fromQueue(queue);
         }),
       ),
     FetchHistory: ({ repositoryId }: { repositoryId: string }) =>
-      authorize(true).pipe(
+      authorize().pipe(
         Effect.flatMap(() => freshness.fetch(repositoryId)),
-        Effect.mapError(failure),
         runCommand,
       ),
     ConfigureFetch: ({
@@ -83,18 +72,9 @@ export function repositoryFreshnessRpc(
       repositoryId: string;
       setting: RepositoryFetchSetting;
     }) =>
-      authorize(true).pipe(
+      authorize().pipe(
         Effect.flatMap(() => freshness.configure(repositoryId, setting)),
-        Effect.mapError(failure),
         runCommand,
       ),
   };
-}
-
-function failure(
-  error:
-    | RepositoryHistoryOperationFailure
-    | { readonly failure: RepositoryHistoryOperationFailure },
-): RepositoryHistoryOperationFailure {
-  return "failure" in error ? error.failure : error;
 }

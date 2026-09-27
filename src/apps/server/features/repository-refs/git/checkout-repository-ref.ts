@@ -9,17 +9,14 @@ import {
   repositoryRejected,
 } from "@rebase/contracts";
 import { Effect } from "effect";
-import type { GitCommandRunner } from "#server/domain/git-command.contract";
-import type {
-  RepositoryAccessError,
-  RepositoryAccessService,
-} from "#server/domain/repository-access.contract";
-import type { RepositoryGitError } from "#server/domain/repository-git.contract";
-import { checkoutFailure } from "#server/features/repository-refs/git/repository-refs-failures";
 import {
+  type GitCommandRunner,
+  type GitFailed,
   isGitRejection,
   runRepositoryGit,
-} from "#server/repository/access/index";
+} from "#server/adapters/local-git/git-commands";
+import { checkoutFailure } from "#server/features/repository-refs/git/repository-refs-failures";
+import type { RepositoryAccess } from "#server/repository/repository-access";
 
 const checkoutCommand = {
   literalPathspecs: false,
@@ -28,14 +25,11 @@ const checkoutCommand = {
 
 export function checkoutRepositoryRef(
   git: GitCommandRunner,
-  access: RepositoryAccessService,
+  access: RepositoryAccess,
   command: CheckoutRepositoryRef,
 ): Effect.Effect<
   RepositoryCheckedOut,
-  | RepositoryCheckoutFailure
-  | RepositoryRejected
-  | RepositoryAccessError
-  | RepositoryGitError
+  RepositoryCheckoutFailure | RepositoryRejected | GitFailed
 > {
   return Effect.gen(function* () {
     const worktrees = yield* access.worktrees(command.worktreePath);
@@ -64,7 +58,7 @@ function checkoutWithAutoStash(
   target: CheckoutTarget,
 ): Effect.Effect<
   RepositoryCheckedOut["stash"],
-  RepositoryCheckoutFailure | RepositoryRejected | RepositoryGitError
+  RepositoryCheckoutFailure | RepositoryRejected | GitFailed
 > {
   return Effect.gen(function* () {
     const stash = yield* stashLocalChanges(git, directory, target);
@@ -102,7 +96,7 @@ function resolveTarget(
   git: GitCommandRunner,
   directory: string,
   target: RepositoryRefTarget,
-): Effect.Effect<CheckoutTarget, RepositoryGitError> {
+): Effect.Effect<CheckoutTarget, GitFailed> {
   if (target._tag !== "RemoteBranch") return Effect.succeed(target);
   return Effect.gen(function* () {
     const local = yield* gitAccepts(git, directory, [
@@ -277,10 +271,7 @@ function restoreStash(git: GitCommandRunner, directory: string, token: string) {
   });
 }
 
-function readCheckedOutHead(
-  access: RepositoryAccessService,
-  worktreePath: string,
-) {
+function readCheckedOutHead(access: RepositoryAccess, worktreePath: string) {
   return access.worktrees(worktreePath).pipe(
     Effect.flatMap((worktrees) => requireWorktree(worktrees, worktreePath)),
     Effect.map((worktree) => worktree.head),

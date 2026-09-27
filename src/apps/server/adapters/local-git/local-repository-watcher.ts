@@ -1,13 +1,19 @@
 import { realpathSync, type WatchEventType, watch } from "node:fs";
 import { join, relative, sep } from "node:path";
 import type { RepositoryChangeKind } from "@rebase/contracts";
-import { Effect, Layer } from "effect";
+import { Effect } from "effect";
 import { watchGitDirectoryTree } from "#server/adapters/local-git/watch-git-directory-tree";
-import {
-  type RepositoryWatcher,
-  type RepositoryWatchHandle,
-  RepositoryWatching,
-} from "#server/domain/repository-watcher.contract";
+
+export interface RepositoryWatchHandle {
+  readonly close: () => void;
+}
+
+export interface RepositoryWatcher {
+  readonly watch: (
+    gitDirectory: string,
+    onChange: (kind: RepositoryChangeKind) => void,
+  ) => Effect.Effect<RepositoryWatchHandle>;
+}
 
 const watchedRootEntries = new Set([
   "HEAD",
@@ -68,11 +74,6 @@ export function createLocalRepositoryWatcher(): RepositoryWatcher {
       }),
   };
 }
-
-export const localRepositoryWatcherLayer = Layer.sync(
-  RepositoryWatching,
-  createLocalRepositoryWatcher,
-);
 
 function watchGitDirectory(
   gitDirectory: string,

@@ -7,21 +7,23 @@ import {
   repositoryRejected,
 } from "@rebase/contracts";
 import { Effect } from "effect";
-import type { GitCommandRunner } from "#server/domain/git-command.contract";
-import { isGitObjectId } from "#server/domain/git-object-id";
-import type { RepositoryFileContent } from "#server/domain/repository-comparison.contract";
-import type { RepositoryGitError } from "#server/domain/repository-git.contract";
+import {
+  type GitCommandRunner,
+  type GitFailed,
+  runRepositoryGit,
+} from "#server/adapters/local-git/git-commands";
 import {
   type CommitSide,
   readCommitChange,
 } from "#server/features/commit-inspection/git/read-commit-change";
-import { runRepositoryGit } from "#server/repository/access/index";
+import { isGitObjectId } from "#server/features/repository-history/git/read-object-format";
+import { buildChangeDiff } from "#server/repository/comparison/build-change-diff";
 import {
-  buildChangeDiff,
   type GitBlob,
   readBlobs,
   unreadableBlob,
-} from "#server/repository/comparison/index";
+} from "#server/repository/comparison/read-blobs";
+import type { RepositoryFileContent } from "#server/repository/comparison/read-object-file";
 
 const originalObjects = { globalArguments: ["--no-replace-objects"] };
 const missingMode = "000000";
@@ -81,7 +83,7 @@ function hasBlob(side: CommitSide) {
 function commitFile(
   side: CommitSide,
   blobs: ReadonlyMap<string, GitBlob>,
-): Effect.Effect<RepositoryFileContent, RepositoryGitError> {
+): Effect.Effect<RepositoryFileContent, GitFailed> {
   if (side.mode === missingMode)
     return Effect.succeed({
       content: null,

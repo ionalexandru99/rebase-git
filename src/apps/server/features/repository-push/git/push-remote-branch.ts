@@ -7,10 +7,11 @@ import {
   repositoryRejected,
 } from "@rebase/contracts";
 import { Effect } from "effect";
-import type {
-  GitCommandOutput,
-  GitCommandRunner,
-} from "#server/domain/git-command.contract";
+import {
+  type GitCommandOutput,
+  type GitCommandRunner,
+  runRepositoryGit,
+} from "#server/adapters/local-git/git-commands";
 import {
   classifyPushFailure,
   pushError,
@@ -20,7 +21,6 @@ import {
   reconcileRemoteBranch,
   uncertainPush,
 } from "#server/features/repository-push/git/reconcile-remote-branch";
-import { runRepositoryGit } from "#server/repository/access/index";
 
 const pushTimeoutMilliseconds = 120_000;
 

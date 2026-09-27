@@ -8,9 +8,9 @@ import type {
 import { Effect, Queue } from "effect";
 import { TestClock } from "effect/testing";
 import { afterEach, expect, it } from "vite-plus/test";
-import { createEnvironmentEventPublisher } from "#server/adapters/environment-transport/events/environment-event-publisher";
-import { createLocalGitCommandRunner } from "#server/adapters/local-git/local-git-command-runner";
-import type { RepositoryWatcher } from "#server/domain/repository-watcher.contract";
+import { createEnvironmentEventPublisher } from "#server/adapters/environment-transport/environment-event-publisher";
+import { createLocalGitCommandRunner } from "#server/adapters/local-git/git-commands";
+import type { RepositoryWatcher } from "#server/adapters/local-git/local-repository-watcher";
 import { acquireRepositoryChangePublisher } from "#server/features/repository-refs/repository-change-publisher";
 import { createRepository } from "#tests-support/git";
 import { removeTemporaryDirectory } from "#tests-support/temporary-directory";

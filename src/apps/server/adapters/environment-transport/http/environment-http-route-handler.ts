@@ -1,15 +1,67 @@
-import type { RouteResultValue } from "@rebase/contracts";
-import { Effect, type Schema } from "effect";
 import type {
-  EnvironmentHttpRequestContext,
-  EnvironmentHttpRouteHandle,
-  EnvironmentHttpRouteHandler,
-  EnvironmentHttpRouteOptions,
-  EnvironmentTransportError,
-  ServableEnvironmentHttpRoute,
-} from "#server/adapters/environment-transport/http/environment-http-route-handler.contract";
-import { EnvironmentAuthorizationError } from "#server/domain/environment-authorization.contract";
-import { EnvironmentStorageError } from "#server/domain/environment-storage-error.contract";
+  EnvironmentDeviceAuthorization,
+  EnvironmentHttpRoute,
+  RouteFailure,
+  RouteInput,
+  RouteResultValue,
+  RouteSuccess,
+} from "@rebase/contracts";
+import { Effect, type Schema } from "effect";
+import { EnvironmentAuthorizationError } from "#server/features/environment-authorization/environment-authorization";
+import { EnvironmentStorageError } from "#server/persistence/sqlite/storage-operation";
+
+export type ServableEnvironmentHttpRoute = EnvironmentHttpRoute & {
+  readonly request?: Schema.ConstraintDecoder<unknown>;
+  readonly response: Schema.ConstraintCodec<
+    RouteResultValue<unknown, unknown>,
+    unknown,
+    unknown,
+    never
+  >;
+};
+
+export type EnvironmentTransportError =
+  | EnvironmentAuthorizationError
+  | EnvironmentStorageError;
+
+export interface EnvironmentHttpRequestContext<
+  Route extends ServableEnvironmentHttpRoute = ServableEnvironmentHttpRoute,
+> {
+  readonly credential: string | undefined;
+  readonly device: DeviceOf<Route["public"]>;
+  readonly establishBrowserSession: (credential: string) => void;
+  readonly origin: string;
+}
+
+export type EnvironmentHttpRouteHandle<
+  Route extends ServableEnvironmentHttpRoute,
+> = (
+  input: RouteInput<Route>,
+  context: EnvironmentHttpRequestContext<Route>,
+) => Effect.Effect<
+  RouteSuccess<Route>,
+  RouteFailure<Route> | EnvironmentTransportError
+>;
+
+export interface EnvironmentHttpRouteOptions {
+  readonly requiresOrigin?: true;
+}
+
+export interface EnvironmentHttpRouteHandler {
+  readonly route: ServableEnvironmentHttpRoute;
+  readonly requiresOrigin: boolean;
+  respond(
+    input: unknown,
+    context: EnvironmentHttpRequestContext,
+  ): Effect.Effect<
+    RouteResultValue<unknown, unknown>,
+    EnvironmentTransportError
+  >;
+}
+
+type DeviceOf<Public> = Public extends true
+  ? undefined
+  : EnvironmentDeviceAuthorization;
 
 export type ResultHttpRoute<Input, Success, Failure> =
   ServableEnvironmentHttpRoute & {

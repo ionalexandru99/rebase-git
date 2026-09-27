@@ -1,8 +1,10 @@
 import type { PushDestination } from "@rebase/contracts";
 import { Effect } from "effect";
-import type { GitCommandRunner } from "#server/domain/git-command.contract";
+import {
+  type GitCommandRunner,
+  runRepositoryGit,
+} from "#server/adapters/local-git/git-commands";
 import { pushError } from "#server/features/repository-push/git/push-failures";
-import { runRepositoryGit } from "#server/repository/access/index";
 
 const reconcileTimeoutMilliseconds = 30_000;
 

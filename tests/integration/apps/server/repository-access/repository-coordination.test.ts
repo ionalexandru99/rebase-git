@@ -1,5 +1,4 @@
 import { execFile } from "node:child_process";
-import { randomUUID } from "node:crypto";
 import { mkdtemp, realpath, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -10,25 +9,9 @@ import {
 } from "@rebase/contracts";
 import { Deferred, Effect, Fiber, Option } from "effect";
 import { afterEach, expect, it } from "vite-plus/test";
-import { createEnvironmentEventPublisher } from "#server/adapters/environment-transport/events/environment-event-publisher";
-import { createLocalGitCommandRunner } from "#server/adapters/local-git/local-git-command-runner";
-import { createLocalRepositoryWatcher } from "#server/adapters/local-git/local-repository-watcher";
-import { EnvironmentEvents } from "#server/domain/environment-event-publisher.contract";
-import type { GitCommandRunner } from "#server/domain/git-command.contract";
-import { RepositoryWatching } from "#server/domain/repository-watcher.contract";
-import { repositoryChangesFeature } from "#server/features/repository-changes/repository-changes.feature";
 import { acquireWatchedRepository } from "#server/features/repository-history/freshness/watched-repository";
-import { repositoryRefsFeature } from "#server/features/repository-refs/repository-refs.feature";
-import {
-  createRepositoryAccess,
-  createRepositoryCoordination,
-} from "#server/repository/access/index";
-import {
-  featureRoutesClient,
-  provideRepositoryServices,
-  repositoryFeatureClient,
-} from "#tests-integration/apps/server/environment-connection/feature-routes-client";
 import { createRepository } from "#tests-support/git";
+import { openTestEnvironment } from "#tests-support/server";
 import { removeTemporaryDirectory } from "#tests-support/temporary-directory";
 
 const directories: string[] = [];
@@ -72,95 +55,57 @@ it.each([
     await writeFile(join(directory, "file.txt"), "committed\n");
     await git("add", ".");
 
+    const commitEntered = Deferred.makeUnsafe<void>();
+    const releaseCommit = Deferred.makeUnsafe<void>();
+    const checkoutEntered = Deferred.makeUnsafe<void>();
+    const checkoutRequested = Deferred.makeUnsafe<void>();
+    const events: string[] = [];
+    const environment = await openTestEnvironment({
+      git: (local) => ({
+        ...local,
+        run: (command) =>
+          Effect.gen(function* () {
+            if (command.arguments.includes(mutation)) {
+              events.push("mutation-start");
+              yield* Deferred.succeed(commitEntered, undefined);
+              yield* Deferred.await(releaseCommit);
+              const result = yield* local.run(command);
+              events.push("mutation-end");
+              return result;
+            }
+            if (command.arguments[0] === "switch") {
+              events.push("checkout");
+              yield* Deferred.succeed(checkoutEntered, undefined);
+            }
+            return yield* local.run(command);
+          }),
+      }),
+      coordination: (coordination) => ({
+        ...coordination,
+        run: (path, policy, operation) =>
+          policy.name === "checkout"
+            ? Deferred.succeed(checkoutRequested, undefined).pipe(
+                Effect.andThen(coordination.run(path, policy, operation)),
+              )
+            : coordination.run(path, policy, operation),
+      }),
+    });
+    const repository = await environment.remember(directory);
+    const repositoryId = repository.id;
+    const changes = environment.routes(RepositoryChangesHttpApi);
+    const refs = environment.routes(RepositoryRefsHttpApi);
+
     await Effect.runPromise(
       Effect.scoped(
         Effect.gen(function* () {
-          const commitEntered = yield* Deferred.make<void>();
-          const releaseCommit = yield* Deferred.make<void>();
-          const checkoutEntered = yield* Deferred.make<void>();
-          const checkoutRequested = yield* Deferred.make<void>();
-          const events: string[] = [];
-          const local = createLocalGitCommandRunner();
-          const runner: GitCommandRunner = {
-            ...local,
-            run: (command) =>
-              Effect.gen(function* () {
-                if (command.arguments.includes(mutation)) {
-                  events.push("mutation-start");
-                  yield* Deferred.succeed(commitEntered, undefined);
-                  yield* Deferred.await(releaseCommit);
-                  const result = yield* local.run(command);
-                  events.push("mutation-end");
-                  return result;
-                }
-                if (command.arguments[0] === "switch") {
-                  events.push("checkout");
-                  yield* Deferred.succeed(checkoutEntered, undefined);
-                }
-                return yield* local.run(command);
-              }),
-          };
-          const coordination = createRepositoryCoordination(runner);
-          const repositoryId = randomUUID();
-          const catalog = {
-            find: () =>
-              Effect.succeed({
-                id: repositoryId,
-                path: directory,
-                name: "test",
-                addedAt: "",
-                lastOpenedAt: "",
-              }),
-          };
-          const access = createRepositoryAccess(
-            catalog,
-            runner,
-            createLocalRepositoryWatcher(),
-          );
-          const changes = repositoryFeatureClient(
-            RepositoryChangesHttpApi,
-            repositoryChangesFeature,
-            { access, git: runner, coordination },
-          );
-          const refsFeature = yield* repositoryRefsFeature.pipe(
-            provideRepositoryServices({
-              access,
-              git: runner,
-              coordination: {
-                ...coordination,
-                run: (path, policy, operation) =>
-                  Deferred.succeed(checkoutRequested, undefined).pipe(
-                    Effect.andThen(coordination.run(path, policy, operation)),
-                  ),
-              },
-            }),
-            Effect.provideService(
-              RepositoryWatching,
-              createLocalRepositoryWatcher(),
-            ),
-            Effect.provideService(
-              EnvironmentEvents,
-              createEnvironmentEventPublisher(),
-            ),
-          );
-          const refs = featureRoutesClient(
-            RepositoryRefsHttpApi,
-            refsFeature.httpRoutes,
-          );
           const scope = { repositoryId, worktreePath: directory, amend: false };
           const snapshot = yield* changes.read(scope);
           const freshness = yield* acquireWatchedRepository(
-            {
-              id: repositoryId,
-              path: directory,
-              name: "test",
-              addedAt: "",
-              lastOpenedAt: "",
-            },
+            repository,
             new Set(),
-            runner,
+            environment.git,
             { watch: () => Effect.succeed({ close: () => {} }) },
-            coordination,
+            environment.coordination,
           );
           const committing = yield* (
             mutation === "fetch"
@@ -220,45 +165,26 @@ it("reads changes while a commit holds the worktree", async () => {
   await writeFile(join(directory, "file.txt"), "committed\n");
   await git("add", ".");
 
+  const commitEntered = Deferred.makeUnsafe<void>();
+  const releaseCommit = Deferred.makeUnsafe<void>();
+  const environment = await openTestEnvironment({
+    git: (local) => ({
+      ...local,
+      run: (command) =>
+        command.arguments[0] === "commit"
+          ? Deferred.succeed(commitEntered, undefined).pipe(
+              Effect.andThen(Deferred.await(releaseCommit)),
+              Effect.andThen(local.run(command)),
+            )
+          : local.run(command),
+    }),
+  });
+  const repositoryId = (await environment.remember(directory)).id;
+  const changes = environment.routes(RepositoryChangesHttpApi);
+
   await Effect.runPromise(
     Effect.scoped(
       Effect.gen(function* () {
-        const commitEntered = yield* Deferred.make<void>();
-        const releaseCommit = yield* Deferred.make<void>();
-        const local = createLocalGitCommandRunner();
-        const runner: GitCommandRunner = {
-          ...local,
-          run: (command) =>
-            command.arguments[0] === "commit"
-              ? Deferred.succeed(commitEntered, undefined).pipe(
-                  Effect.andThen(Deferred.await(releaseCommit)),
-                  Effect.andThen(local.run(command)),
-                )
-              : local.run(command),
-        };
-        const repositoryId = randomUUID();
-        const changes = repositoryFeatureClient(
-          RepositoryChangesHttpApi,
-          repositoryChangesFeature,
-          {
-            access: createRepositoryAccess(
-              {
-                find: () =>
-                  Effect.succeed({
-                    id: repositoryId,
-                    path: directory,
-                    name: "test",
-                    addedAt: "",
-                    lastOpenedAt: "",
-                  }),
-              },
-              runner,
-              createLocalRepositoryWatcher(),
-            ),
-            git: runner,
-            coordination: createRepositoryCoordination(runner),
-          },
-        );
         const scope = { repositoryId, worktreePath: directory, amend: false };
         const snapshot = yield* changes.read(scope);
         const committing = yield* changes

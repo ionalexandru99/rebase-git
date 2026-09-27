@@ -4,18 +4,10 @@ import { join } from "node:path";
 import { RepositoryPullHttpApi } from "@rebase/contracts";
 import { Effect } from "effect";
 import { afterEach, describe, expect, it } from "vite-plus/test";
-import { createLocalGitCommandRunner } from "#server/adapters/local-git/local-git-command-runner";
-import { createLocalRepositoryWatcher } from "#server/adapters/local-git/local-repository-watcher";
-import { repositoryPullFeature } from "#server/features/repository-pull/repository-pull.feature";
-import {
-  createRepositoryAccess,
-  createRepositoryCoordination,
-} from "#server/repository/access/index";
-import { repositoryFeatureClient } from "#tests-integration/apps/server/environment-connection/feature-routes-client";
 import { cloneRepository, fastImport, git } from "#tests-support/git";
+import { openTestEnvironment } from "#tests-support/server";
 import { removeTemporaryDirectory } from "#tests-support/temporary-directory";
 
-const repositoryId = "00000000-0000-4000-8000-000000000001";
 const directories: string[] = [];
 
 afterEach(async () => {
@@ -205,29 +197,9 @@ async function fixture() {
   });
   await cloneRepository(originPath, repositoryPath);
 
-  const runner = createLocalGitCommandRunner();
-  const service = repositoryFeatureClient(
-    RepositoryPullHttpApi,
-    repositoryPullFeature,
-    {
-      access: createRepositoryAccess(
-        {
-          find: () =>
-            Effect.succeed({
-              id: repositoryId,
-              path: repositoryPath,
-              name: "repository",
-              addedAt: "",
-              lastOpenedAt: "",
-            }),
-        },
-        runner,
-        createLocalRepositoryWatcher(),
-      ),
-      git: runner,
-      coordination: createRepositoryCoordination(runner),
-    },
-  );
+  const environment = await openTestEnvironment();
+  const repositoryId = (await environment.remember(repositoryPath)).id;
+  const service = environment.routes(RepositoryPullHttpApi);
   return {
     repositoryPath,
     pull: (branch: string) =>

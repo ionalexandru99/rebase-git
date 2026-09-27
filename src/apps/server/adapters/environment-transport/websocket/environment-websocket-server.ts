@@ -1,28 +1,22 @@
 import type { IncomingMessage, Server } from "node:http";
 import type { Duplex } from "node:stream";
-import {
-  currentTransportLimits,
-  type EnvironmentAccessCapability,
-  environmentLivePath,
-} from "@rebase/contracts";
+import { currentTransportLimits, environmentLivePath } from "@rebase/contracts";
 import { Cause, Effect } from "effect";
-import { type WebSocket, WebSocketServer } from "ws";
-import type {
-  EnvironmentTransportState,
-  RunEnvironmentEffect,
-} from "#server/adapters/environment-transport/environment-connection.contract";
-import type { EnvironmentFeatures } from "#server/adapters/environment-transport/environment-feature.contract";
+import { WebSocketServer } from "ws";
+import type { EnvironmentFeatures } from "#server/adapters/environment-transport/combine-environment-features";
 import {
   authorizationFailureStatus,
   expectedRequestOrigin,
   validateRequestHost,
   validateRequestOrigin,
 } from "#server/adapters/environment-transport/environment-request-authorization";
+import type { EnvironmentTransportState } from "#server/adapters/environment-transport/environment-transport-discovery";
+import type { RunEnvironmentEffect } from "#server/adapters/environment-transport/http/environment-http-handler";
 import { runEnvironmentRpcSession } from "#server/adapters/environment-transport/rpc/environment-rpc-server";
 import {
   type EnvironmentAuthorization,
-  isEnvironmentAuthorizationError,
-} from "#server/domain/environment-authorization.contract";
+  EnvironmentAuthorizationError,
+} from "#server/features/environment-authorization/environment-authorization";
 
 export function attachEnvironmentWebSocketServer(
   server: Server,
@@ -46,10 +40,6 @@ export function attachEnvironmentWebSocketServer(
       },
     },
   });
-  const accessCapabilities = new WeakMap<
-    WebSocket,
-    ReadonlySet<EnvironmentAccessCapability>
-  >();
   const upgrade = (
     request: Parameters<typeof webSocketServer.handleUpgrade>[0],
     socket: Duplex,
@@ -65,15 +55,11 @@ export function attachEnvironmentWebSocketServer(
         yield* validateRequestHost(request);
         yield* validateRequestOrigin(request, false);
         const tickets = url.searchParams.getAll("ticket");
-        const deviceAuthorization = yield* authorization.consumeTicket(
+        yield* authorization.consumeTicket(
           tickets.length === 1 ? tickets[0] : undefined,
         );
         yield* Effect.sync(() => {
           webSocketServer.handleUpgrade(request, socket, head, (webSocket) => {
-            accessCapabilities.set(
-              webSocket,
-              new Set(deviceAuthorization.capabilities),
-            );
             webSocketServer.emit("connection", webSocket, request);
           });
         });
@@ -104,10 +90,8 @@ export function attachEnvironmentWebSocketServer(
               hostname: address.address,
               port: address.port,
             },
-        accessCapabilities.get(socket) ?? new Set(),
       ),
     );
-    accessCapabilities.delete(socket);
   });
 
   return {
@@ -124,9 +108,8 @@ function readUpgradeUrl(request: IncomingMessage) {
 }
 
 function rejectUpgrade(socket: Duplex, error: unknown) {
-  const authorizationError = isEnvironmentAuthorizationError(error)
-    ? error
-    : undefined;
+  const authorizationError =
+    error instanceof EnvironmentAuthorizationError ? error : undefined;
   const status =
     authorizationError === undefined
       ? 503

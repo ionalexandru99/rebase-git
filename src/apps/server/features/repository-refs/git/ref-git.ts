@@ -1,9 +1,9 @@
 import { Effect } from "effect";
-import type { GitCommandRunner } from "#server/domain/git-command.contract";
 import {
+  type GitCommandRunner,
   isGitRejection,
   runRepositoryGit,
-} from "#server/repository/access/index";
+} from "#server/adapters/local-git/git-commands";
 
 export const refCommand = {
   literalPathspecs: false,

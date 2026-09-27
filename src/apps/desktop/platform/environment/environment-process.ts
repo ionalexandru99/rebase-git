@@ -1,9 +1,10 @@
+import { homedir } from "node:os";
 import { startEnvironmentServer } from "@rebase/server";
 import { Deferred, Effect } from "effect";
 import type {
   EnvironmentProcessCommand,
   EnvironmentProcessMessage,
-} from "#desktop/platform/environment/environment-process.contract";
+} from "#desktop/platform/environment/environment-supervisor";
 
 const acquireStopRequest = Effect.gen(function* () {
   const stop = yield* Deferred.make<void>();
@@ -34,6 +35,7 @@ const serveUntilStopped = Effect.scoped(
   Effect.gen(function* () {
     const stop = yield* acquireStopRequest;
     const server = yield* startEnvironmentServer({
+      home: homedir(),
       pairingReplacesGrantsWithSameLabel: true,
     });
     yield* Effect.sync(() => post({ type: "ready", server }));

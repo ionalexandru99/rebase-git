@@ -3,6 +3,12 @@ import {
   type EnvironmentCapabilityName,
   type EnvironmentDiscovery,
 } from "@rebase/contracts";
+import type { EnvironmentEventPublisher } from "#server/adapters/environment-transport/environment-event-publisher";
+
+export interface EnvironmentTransportState {
+  readonly discovery: EnvironmentDiscovery;
+  readonly events: EnvironmentEventPublisher;
+}
 
 const transportCapabilities: readonly EnvironmentCapabilityName[] = [
   "environment-events",

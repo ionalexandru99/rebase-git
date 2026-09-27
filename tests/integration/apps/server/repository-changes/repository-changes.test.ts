@@ -1,5 +1,4 @@
 import { execFile } from "node:child_process";
-import { randomUUID } from "node:crypto";
 import {
   access,
   mkdir,
@@ -21,16 +20,9 @@ import {
 } from "@rebase/contracts";
 import { Effect } from "effect";
 import { afterEach, describe, expect, it } from "vite-plus/test";
-import { createLocalGitCommandRunner } from "#server/adapters/local-git/local-git-command-runner";
-import { createLocalRepositoryWatcher } from "#server/adapters/local-git/local-repository-watcher";
-import type { GitCommand } from "#server/domain/git-command.contract";
-import { repositoryChangesFeature } from "#server/features/repository-changes/repository-changes.feature";
-import {
-  createRepositoryAccess,
-  createRepositoryCoordination,
-} from "#server/repository/access/index";
-import { repositoryFeatureClient } from "#tests-integration/apps/server/environment-connection/feature-routes-client";
+import type { GitCommand } from "#server/adapters/local-git/git-commands";
 import { createRepository, fastImport } from "#tests-support/git";
+import { openTestEnvironment } from "#tests-support/server";
 import { removeTemporaryDirectory } from "#tests-support/temporary-directory";
 
 const exec = promisify(execFile);
@@ -59,48 +51,29 @@ async function fixture(
     await git("add", ".");
     await git("commit", "-m", "Initial");
   }
-  const repositoryId = randomUUID();
+  const environment = await openTestEnvironment({
+    git: (runner) => ({
+      ...runner,
+      run: (command) =>
+        Effect.promise(async () => {
+          await beforeCommand?.(command);
+        }).pipe(
+          Effect.andThen(runner.run(command)),
+          Effect.tap(() =>
+            Effect.promise(async () => {
+              await afterCommand?.(command);
+            }),
+          ),
+        ),
+    }),
+  });
+  const repositoryId = (await environment.remember(directory)).id;
   const scope: ChangesScope = {
     repositoryId,
     worktreePath: directory,
     amend: false,
   };
-  const runner = createLocalGitCommandRunner();
-  const service = repositoryFeatureClient(
-    RepositoryChangesHttpApi,
-    repositoryChangesFeature,
-    {
-      access: createRepositoryAccess(
-        {
-          find: () =>
-            Effect.succeed({
-              id: repositoryId,
-              name: "test",
-              path: directory,
-              addedAt: new Date().toISOString(),
-              lastOpenedAt: new Date().toISOString(),
-            }),
-        },
-        runner,
-        createLocalRepositoryWatcher(),
-      ),
-      git: {
-        ...runner,
-        run: (command) =>
-          Effect.promise(async () => {
-            await beforeCommand?.(command);
-          }).pipe(
-            Effect.andThen(runner.run(command)),
-            Effect.tap(() =>
-              Effect.promise(async () => {
-                await afterCommand?.(command);
-              }),
-            ),
-          ),
-      },
-      coordination: createRepositoryCoordination(runner),
-    },
-  );
+  const service = environment.routes(RepositoryChangesHttpApi);
   const read = (amend = false) =>
     Effect.runPromise(service.read({ ...scope, amend }));
   const diff = (

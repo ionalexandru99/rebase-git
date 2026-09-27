@@ -8,27 +8,20 @@ import {
 } from "@rebase/contracts";
 import { Effect } from "effect";
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
-import { createLocalGitCommandRunner } from "#server/adapters/local-git/local-git-command-runner";
-import { createLocalRepositoryWatcher } from "#server/adapters/local-git/local-repository-watcher";
 import {
-  GitCommandError,
+  type GitCommand,
   type GitCommandRunner,
-} from "#server/domain/git-command.contract";
-import { repositoryOperationsFeature } from "#server/features/repository-operations/repository-operations.feature";
-import {
-  createRepositoryAccess,
-  createRepositoryCoordination,
-} from "#server/repository/access/index";
-import { repositoryFeatureClient } from "#tests-integration/apps/server/environment-connection/feature-routes-client";
+  gitFailed,
+} from "#server/adapters/local-git/git-commands";
 import {
   createDivergedRepository,
   startConflict,
 } from "#tests-support/diverged-repository";
+import { openTestEnvironment } from "#tests-support/server";
 import { removeTemporaryDirectory } from "#tests-support/temporary-directory";
 
 const exec = promisify(execFile);
 const directories: string[] = [];
-const repositoryId = "00000000-0000-4000-8000-000000000001";
 afterEach(async () => {
   vi.unstubAllEnvs();
   await Promise.all(
@@ -36,41 +29,40 @@ afterEach(async () => {
   );
 });
 
+type GitIntercept = (
+  runner: GitCommandRunner,
+  command: GitCommand,
+) => ReturnType<GitCommandRunner["run"]> | undefined;
+
 async function fixture() {
   const { directory, git } = await createDivergedRepository();
   directories.push(directory);
-  const runner = createLocalGitCommandRunner();
-  const operations = (runGit: GitCommandRunner = runner) =>
-    repositoryFeatureClient(
-      RepositoryOperationsHttpApi,
-      repositoryOperationsFeature,
-      {
-        access: createRepositoryAccess(
-          {
-            find: () =>
-              Effect.succeed({
-                id: repositoryId,
-                path: directory,
-                name: "test",
-                addedAt: "",
-                lastOpenedAt: "",
-              }),
-          },
-          runner,
-          createLocalRepositoryWatcher(),
-        ),
-        git: runGit,
-        coordination: createRepositoryCoordination(runner),
-      },
-    );
-  const service = operations();
+  let intercept: GitIntercept | undefined;
+  const environment = await openTestEnvironment({
+    git: (runner) => ({
+      ...runner,
+      run: (command) => intercept?.(runner, command) ?? runner.run(command),
+    }),
+  });
+  const repositoryId = (await environment.remember(directory)).id;
+  const service = environment.routes(RepositoryOperationsHttpApi);
   const scope = { repositoryId, worktreePath: directory };
   const read = () => Effect.runPromise(service.read(scope));
   const execute = async (action: OperationAction) =>
     Effect.runPromise(
       service.execute({ ...scope, revision: (await read()).revision, action }),
     );
-  return { directory, git, runner, operations, service, scope, read, execute };
+  return {
+    directory,
+    git,
+    service,
+    scope,
+    read,
+    execute,
+    interceptGit: (next: GitIntercept) => {
+      intercept = next;
+    },
+  };
 }
 
 describe("Git operation recovery", () => {
@@ -221,13 +213,12 @@ describe("Git operation recovery", () => {
     ).rejects.toBeDefined();
     const linkedScope = { ...f.scope, worktreePath: await realpath(linked) };
     expect((await f.read()).kind).toBe("idle");
-    const restarted = f.operations();
-    expect(await Effect.runPromise(restarted.read(linkedScope))).toMatchObject({
+    expect(await Effect.runPromise(f.service.read(linkedScope))).toMatchObject({
       kind: "merge",
       unresolvedPaths: ["file.txt"],
     });
     await exec("git", ["-C", linked, "merge", "--abort"]);
-    expect((await Effect.runPromise(restarted.read(linkedScope))).kind).toBe(
+    expect((await Effect.runPromise(f.service.read(linkedScope))).kind).toBe(
       "idle",
     );
   });
@@ -257,28 +248,16 @@ describe("Git operation recovery", () => {
     });
     expect((await f.read()).kind).toBe("merge");
     await rm(hook);
-    const uncertain = f.operations({
-      ...f.runner,
-      run: (command) =>
-        command.arguments.includes("--continue")
-          ? f.runner
-              .run(command)
-              .pipe(
-                Effect.andThen(
-                  Effect.fail(new GitCommandError({ reason: "Timeout" })),
-                ),
-              )
-          : f.runner.run(command),
+    f.interceptGit((runner, command) =>
+      command.arguments.includes("--continue")
+        ? runner
+            .run(command)
+            .pipe(Effect.andThen(Effect.fail(gitFailed("Timeout"))))
+        : undefined,
+    );
+    await expect(f.execute("continue")).rejects.toMatchObject({
+      reason: "Uncertain",
     });
-    await expect(
-      Effect.runPromise(
-        uncertain.execute({
-          ...f.scope,
-          revision: (await f.read()).revision,
-          action: "continue",
-        }),
-      ),
-    ).rejects.toMatchObject({ reason: "Uncertain" });
     expect((await f.read()).kind).toBe("idle");
   });
 });

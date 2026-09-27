@@ -1,6 +1,12 @@
-import { Effect, type Semaphore } from "effect";
-import { EnvironmentStorageError } from "#server/domain/environment-storage-error.contract";
+import { Data, Effect, type Semaphore } from "effect";
 import { errorMessage } from "#server/error-inspection";
+
+export class EnvironmentStorageError extends Data.TaggedError(
+  "EnvironmentStorageError",
+)<{
+  readonly cause: unknown;
+  readonly message: string;
+}> {}
 
 export function serializedPromise<A>(
   writer: Semaphore.Semaphore,

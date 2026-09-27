@@ -8,22 +8,14 @@ import {
 } from "@rebase/contracts";
 import { Effect, Fiber } from "effect";
 import { afterEach, describe, expect, it } from "vite-plus/test";
-import { createLocalGitCommandRunner } from "#server/adapters/local-git/local-git-command-runner";
-import { createLocalRepositoryWatcher } from "#server/adapters/local-git/local-repository-watcher";
 import {
-  GitCommandError,
   type GitCommandRunner,
-} from "#server/domain/git-command.contract";
-import { repositoryPushFeature } from "#server/features/repository-push/repository-push.feature";
-import {
-  createRepositoryAccess,
-  createRepositoryCoordination,
-} from "#server/repository/access/index";
-import { repositoryFeatureClient } from "#tests-integration/apps/server/environment-connection/feature-routes-client";
+  gitFailed,
+} from "#server/adapters/local-git/git-commands";
 import { cloneRepository, createRepository, git } from "#tests-support/git";
+import { openTestEnvironment } from "#tests-support/server";
 import { removeTemporaryDirectory } from "#tests-support/temporary-directory";
 
-const repositoryId = "00000000-0000-4000-8000-000000000001";
 const directories: string[] = [];
 afterEach(async () => {
   await Promise.all(
@@ -42,29 +34,9 @@ async function fixture(wrap?: (runner: GitCommandRunner) => GitCommandRunner) {
   await git(local, "remote", "add", "origin", remote);
   await git(local, "push", "-u", "origin", "main");
   await cloneRepository(remote, other);
-  const runner = createLocalGitCommandRunner();
-  const service = repositoryFeatureClient(
-    RepositoryPushHttpApi,
-    repositoryPushFeature,
-    {
-      access: createRepositoryAccess(
-        {
-          find: () =>
-            Effect.succeed({
-              id: repositoryId,
-              path: local,
-              name: "test",
-              addedAt: "",
-              lastOpenedAt: "",
-            }),
-        },
-        runner,
-        createLocalRepositoryWatcher(),
-      ),
-      git: wrap?.(runner) ?? runner,
-      coordination: createRepositoryCoordination(runner),
-    },
-  );
+  const environment = await openTestEnvironment({ git: wrap });
+  const repositoryId = (await environment.remember(local)).id;
+  const service = environment.routes(RepositoryPushHttpApi);
   const scope = { repositoryId, worktreePath: local };
   const push = (
     branch: string,
@@ -234,11 +206,7 @@ describe("pushing branches", () => {
                   "refs/heads/main:refs/heads/main",
                 ],
               })
-              .pipe(
-                Effect.andThen(
-                  Effect.fail(new GitCommandError({ reason: "Timeout" })),
-                ),
-              )
+              .pipe(Effect.andThen(Effect.fail(gitFailed("Timeout"))))
           : runner.run(command),
     }));
     const pushed = await commit(f.local, "arrived");
