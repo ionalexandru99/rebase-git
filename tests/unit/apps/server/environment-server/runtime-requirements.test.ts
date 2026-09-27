@@ -23,16 +23,16 @@ describe("runtime requirements", () => {
   );
 
   it.each([
-    ["git version 2.34.0", "2.34.0"],
+    ["git version 2.35.0", "2.35.0"],
     ["git version 2.45.2.windows.1", "2.45.2"],
     ["git version 2.39.3 (Apple Git-145)", "2.39.3"],
   ])("reads Git versions from %s", (output, expected) => {
     expect(parseGitVersion(output)).toBe(expected);
   });
 
-  it("rejects Git versions older than 2.34", () => {
-    expect(() => assertSupportedGitVersion("2.33.9")).toThrow(
-      "Git 2.34 or newer is required. Found Git 2.33.9.",
+  it("rejects Git versions older than 2.35", () => {
+    expect(() => assertSupportedGitVersion("2.34.9")).toThrow(
+      "Git 2.35 or newer is required. Found Git 2.34.9.",
     );
   });
 });

@@ -61,6 +61,7 @@ export const idleOperation = respond(
     revision: "idle",
     branch: null,
     commit: null,
+    mergedBranch: null,
     progress: null,
     unresolvedPaths: [],
     actions: [],

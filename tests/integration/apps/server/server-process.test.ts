@@ -140,7 +140,7 @@ describe("rebase serve", () => {
 
     expect(exit.code).toBe(1);
     expect(processOutput.stderr()).toContain(
-      "Git 2.34 or newer is required, but Git was not found.",
+      "Git 2.35 or newer is required, but Git was not found.",
     );
     expect(processOutput.stdout()).not.toContain("Listening URL:");
     await expect(access(runtimePath)).rejects.toMatchObject({ code: "ENOENT" });

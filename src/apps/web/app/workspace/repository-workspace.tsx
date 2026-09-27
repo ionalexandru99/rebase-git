@@ -1,4 +1,4 @@
-import { type JSX, useState } from "react";
+import { type JSX, Suspense, useCallback, useMemo, useState } from "react";
 import { useOpenedHistory } from "#web/app/shell/opened-history-context";
 import { CommitInspectionBridge } from "#web/app/workspace/commit-inspection-bridge";
 import { RepositoryPanelProvider } from "#web/app/workspace/repository-panel-provider";
@@ -7,6 +7,7 @@ import { useWorkspaceHistoryScope } from "#web/app/workspace/use-workspace-histo
 import { WorkspaceBranches } from "#web/app/workspace/workspace-branches";
 import { WorkspaceGraph } from "#web/app/workspace/workspace-graph";
 import { useCreateRefHere } from "#web/features/branches-sidebar/hooks/use-create-ref-here";
+import { MergeView } from "#web/features/merge-view/merge-view";
 import { OperationRecoveryNotice } from "#web/features/operation-recovery/components/operation-recovery-notice";
 import { useCatalogRepository } from "#web/features/repository-catalog/hooks/use-repository-catalog";
 import { PullButton } from "#web/features/repository-pull/components/pull-button";
@@ -22,6 +23,7 @@ import {
   type RepositoryScope,
   useRepositoryScope,
 } from "#web/features/repository-scope/repository-scope-provider";
+import { workingChangesPanel } from "#web/features/working-changes/working-changes-panel-definition";
 import { WorkspacePanel } from "#web/features/workspace-panel/workspace-panel";
 import { useEnvironment } from "#web/platform/query/environment-context";
 
@@ -49,6 +51,27 @@ function Workspace({
   readonly scope: RepositoryScope;
 }) {
   const [branchFocusRequest, setBranchFocusRequest] = useState(0);
+  const { worktreePath } = scope;
+  const [merging, setMerging] = useState<{
+    readonly worktreePath: string;
+    readonly path: string;
+  } | null>(null);
+  const mergePath =
+    merging?.worktreePath === worktreePath ? merging.path : null;
+  const openMergeView = useCallback(
+    (path: string) => setMerging({ worktreePath, path }),
+    [worktreePath],
+  );
+  const panelContents = useMemo(
+    () => ({
+      changes: (
+        <Suspense fallback={null}>
+          <workingChangesPanel.Content openMergeView={openMergeView} />
+        </Suspense>
+      ),
+    }),
+    [openMergeView],
+  );
   const history = useOpenedHistory();
   const name = useCatalogRepository(scope.repositoryId)?.name ?? "Repository";
   const repositoryRefs = useRepositoryRefs(
@@ -84,33 +107,42 @@ function Workspace({
               refCommands={pull.commands}
             />
             <WorkspacePanel.Main>
-              {() => (
-                <WorkspaceGraph
-                  scope={scope}
-                  inspection={inspection}
-                  historyScope={historyScope}
-                  extraCommands={refCreation.commands}
-                  onAddHistoryRef={() =>
-                    setBranchFocusRequest((request) => request + 1)
-                  }
-                  toolbarActions={
-                    <>
-                      <PullButton
-                        pull={pull}
-                        activeBranch={activeBranch}
-                        incoming={incoming ?? 0}
-                      />
-                      <PushButton
-                        push={push}
-                        target={resolvePushTarget(refs, activeBranch)}
-                      />
-                      <WorkspacePanel.Toggle />
-                    </>
-                  }
-                />
-              )}
+              {() =>
+                mergePath !== null ? (
+                  <MergeView
+                    path={mergePath}
+                    onOpen={openMergeView}
+                    onClose={() => setMerging(null)}
+                    toolbarActions={<WorkspacePanel.Toggle />}
+                  />
+                ) : (
+                  <WorkspaceGraph
+                    scope={scope}
+                    inspection={inspection}
+                    historyScope={historyScope}
+                    extraCommands={refCreation.commands}
+                    onAddHistoryRef={() =>
+                      setBranchFocusRequest((request) => request + 1)
+                    }
+                    toolbarActions={
+                      <>
+                        <PullButton
+                          pull={pull}
+                          activeBranch={activeBranch}
+                          incoming={incoming ?? 0}
+                        />
+                        <PushButton
+                          push={push}
+                          target={resolvePushTarget(refs, activeBranch)}
+                        />
+                        <WorkspacePanel.Toggle />
+                      </>
+                    }
+                  />
+                )
+              }
             </WorkspacePanel.Main>
-            <WorkspacePanel.Pane />
+            <WorkspacePanel.Pane contents={panelContents} />
           </WorkspacePanel.Group>
         )}
       </CommitInspectionBridge>

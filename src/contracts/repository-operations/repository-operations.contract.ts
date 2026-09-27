@@ -32,6 +32,7 @@ export const RepositoryOperation = Schema.Struct({
   revision: Schema.String,
   branch: Schema.NullOr(Schema.String),
   commit: Schema.NullOr(Schema.String),
+  mergedBranch: Schema.NullOr(Schema.String),
   progress: Schema.NullOr(
     Schema.Struct({ current: Schema.Natural, total: Schema.Natural }),
   ),

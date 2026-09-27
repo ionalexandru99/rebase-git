@@ -5,6 +5,7 @@ import { environmentAuthorizationFeature } from "#server/features/environment-au
 import { environmentFilesystemFeature } from "#server/features/environment-filesystem/environment-filesystem.feature";
 import { repositoryCatalogFeature } from "#server/features/repository-catalog/repository-catalog.feature";
 import { repositoryChangesFeature } from "#server/features/repository-changes/repository-changes.feature";
+import { repositoryConflictsFeature } from "#server/features/repository-conflicts/repository-conflicts.feature";
 import {
   repositoryFreshnessFeature,
   repositoryHistoryFeature,
@@ -21,6 +22,7 @@ export const environmentFeatures = Effect.map(
     repositoryCatalogFeature,
     commitInspectionFeature,
     repositoryChangesFeature,
+    repositoryConflictsFeature,
     repositoryHistoryFeature,
     repositoryFreshnessFeature,
     repositoryOperationsFeature,

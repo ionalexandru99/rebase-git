@@ -40,15 +40,13 @@ export function CommitEditor({
       className="flex h-full min-h-0 flex-col gap-2 overflow-y-auto border-border border-t bg-background p-3"
       aria-label="Commit editor"
     >
-      {blocked && (
+      {blocked && (operation == null || operation.kind === "idle") ? (
+        <p className="text-xs text-muted-foreground">Checking Git state…</p>
+      ) : blocked && amendAllowed ? (
         <p className="text-xs text-muted-foreground">
-          {operation == null || operation.kind === "idle"
-            ? "Checking Git state…"
-            : amendAllowed
-              ? "Enable Amend to edit this rebase commit, or use the operation toast to continue."
-              : "Use the operation toast to finish or abort the active Git operation."}
+          Enable Amend to edit this rebase commit.
         </p>
-      )}
+      ) : null}
       <Input
         aria-label="Commit subject"
         placeholder="Commit message"

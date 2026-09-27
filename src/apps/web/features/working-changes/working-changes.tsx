@@ -5,12 +5,14 @@ import {
   ResizablePanel,
   ResizablePanelGroup,
 } from "#web/components/ui/resizable";
+import { OperationHeader } from "#web/features/operation-recovery/components/operation-header";
 import { ChangeFileTree } from "#web/features/working-changes/components/change-file-tree";
 import { CommitEditor } from "#web/features/working-changes/components/commit-editor";
 import {
   DiscardConfirmation,
   type DiscardRequest,
 } from "#web/features/working-changes/components/discard-confirmation";
+import { ConflictViewer } from "#web/features/working-changes/conflicts/components/conflict-viewer";
 import {
   type ChangeAction,
   useWorkingChangesView,
@@ -24,9 +26,11 @@ const ChangeDiffViewer = lazy(
 export function WorkingChanges({
   target,
   writable,
+  openMergeView,
 }: {
   readonly target: WorkingChangesTarget;
   readonly writable: boolean;
+  readonly openMergeView: (path: string) => void;
 }) {
   const view = useWorkingChangesView(target);
   const [discard, setDiscard] = useState<DiscardRequest | null>(null);
@@ -41,6 +45,7 @@ export function WorkingChanges({
       aria-label="Working changes"
       aria-busy={view.busy}
     >
+      <OperationHeader scope={target} />
       {view.error ? (
         <div
           role="alert"
@@ -67,20 +72,28 @@ export function WorkingChanges({
       ) : null}
       <ResizablePanelGroup orientation="horizontal" className="min-h-0 flex-1">
         <ResizablePanel id="change-diff" defaultSize="70%" minSize="12rem">
-          <Suspense
-            fallback={
-              <p className="p-4 text-xs text-muted-foreground">
-                Loading diff viewer…
-              </p>
-            }
-          >
-            <ChangeDiffViewer
-              key={`${view.selection?.section}:${view.selection?.path}:${view.diff?.revision}`}
+          {view.selection?.section === "conflicts" ? (
+            <ConflictViewer
               view={view}
               writable={writable}
-              act={act}
+              openMergeView={openMergeView}
             />
-          </Suspense>
+          ) : (
+            <Suspense
+              fallback={
+                <p className="p-4 text-xs text-muted-foreground">
+                  Loading diff viewer…
+                </p>
+              }
+            >
+              <ChangeDiffViewer
+                key={`${view.selection?.section}:${view.selection?.path}:${view.diff?.revision}`}
+                view={view}
+                writable={writable}
+                act={act}
+              />
+            </Suspense>
+          )}
         </ResizablePanel>
         <ResizableHandle aria-label="Resize changed-file tree" />
         <ResizablePanel

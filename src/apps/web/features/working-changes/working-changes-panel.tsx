@@ -2,7 +2,11 @@ import { DiffWorkerPool } from "#web/features/file-diff/components/diff-worker-p
 import { WorkingChanges } from "#web/features/working-changes/working-changes";
 import { usePanelFeature } from "#web/features/workspace-panel/api";
 
-export function WorkingChangesPanel() {
+export function WorkingChangesPanel({
+  openMergeView,
+}: {
+  readonly openMergeView?: (path: string) => void;
+}) {
   const feature = usePanelFeature();
   if (feature?.scope === undefined || feature.environment === undefined)
     return <Disconnected />;
@@ -25,11 +29,14 @@ export function WorkingChangesPanel() {
             active: connected && active,
           }}
           writable={connected && writable}
+          openMergeView={openMergeView ?? ignoreMergeView}
         />
       </div>
     </DiffWorkerPool>
   );
 }
+
+function ignoreMergeView() {}
 
 function Disconnected() {
   return (

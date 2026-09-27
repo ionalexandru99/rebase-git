@@ -4,9 +4,8 @@ import type {
   ChangesScope,
   MutateChanges,
   RepositoryChanges,
-  ViewedChange,
 } from "@rebase/contracts";
-import { useCallback, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { useDiffPreferences } from "#web/features/file-diff/hooks/use-diff-preferences";
 import {
   type ChangesRequestFailure,
@@ -14,6 +13,10 @@ import {
   headMovedMessage,
   storageUnavailableMessage,
 } from "#web/features/working-changes/changes-messages";
+import {
+  splitConflicts,
+  useConflicts,
+} from "#web/features/working-changes/conflicts/hooks/use-conflicts";
 import {
   amendDraftKey,
   commitMessage,
@@ -25,7 +28,10 @@ import {
 } from "#web/features/working-changes/hooks/use-amend";
 import { useChangeActions } from "#web/features/working-changes/hooks/use-change-actions";
 import { useChangeDiff } from "#web/features/working-changes/hooks/use-change-diff";
-import { useChangeSelection } from "#web/features/working-changes/hooks/use-change-selection";
+import {
+  type SelectedChange,
+  useChangeSelection,
+} from "#web/features/working-changes/hooks/use-change-selection";
 import { useCommitDraft } from "#web/features/working-changes/hooks/use-commit-draft";
 import { useWorkingChanges } from "#web/features/working-changes/hooks/use-working-changes";
 import type { CommitDraft } from "#web/persistence/working-changes/working-changes-store.contract";
@@ -55,10 +61,20 @@ export function useWorkingChangesView({
   const [notice, setNotice] = useState<string | null>(null);
   const scope: ChangesScope = { repositoryId, worktreePath, amend: amend.on };
   const read = useWorkingChanges(scope, active);
-  const changes = read.isPlaceholderData ? undefined : read.data;
+  const shown = useMemo(() => splitConflicts(read.data), [read.data]);
+  const changes = read.isPlaceholderData ? undefined : shown.changes;
   const headMoved = useCallback(() => setProblem(headMovedMessage), []);
-  const [selection, select] = useChangeSelection(read.data);
+  const [selection, select] = useChangeSelection(
+    shown.changes,
+    shown.conflicted,
+  );
   const diff = useChangeDiff(scope, selection, changes, active);
+  const conflicts = useConflicts(
+    { repositoryId, worktreePath },
+    shown.conflicted,
+    selection?.section === "conflicts" ? selection.path : null,
+    active,
+  );
   const [preferences, choosePreferences] = useDiffPreferences();
   const actions = useChangeActions({ repositoryId, worktreePath });
   useAmendHead(
@@ -73,7 +89,7 @@ export function useWorkingChangesView({
   );
   const loading =
     changes === undefined || (amend.on && amend.head === undefined);
-  const busy = actions.busy;
+  const busy = actions.busy || conflicts.busy;
   const begin = (): RepositoryChanges | undefined => {
     if (changes === undefined || busy || loading) return undefined;
     setProblem(null);
@@ -93,7 +109,10 @@ export function useWorkingChangesView({
         revision: revision ?? current.revision,
         action,
         section,
-        selection: selected,
+        selection:
+          shown.conflicted.length > 0
+            ? listedOnly(current, section, selected)
+            : selected,
       },
       { onError: fail },
     );
@@ -126,7 +145,8 @@ export function useWorkingChangesView({
   };
 
   return {
-    changes: read.data,
+    changes: shown.changes,
+    conflicts,
     diff: diff.data,
     selection,
     select,
@@ -147,6 +167,7 @@ export function useWorkingChangesView({
     loading,
     error:
       problem ??
+      conflicts.problem ??
       (read.isError ? describeChangesFailure(read.error) : null) ??
       (diff.isError ? describeChangesFailure(diff.error) : null) ??
       (draft.unavailable ? storageUnavailableMessage : null),
@@ -155,6 +176,7 @@ export function useWorkingChangesView({
       setProblem(null);
       void read.refetch();
       if (diff.isError) void diff.refetch();
+      conflicts.refresh();
       draft.retry();
     },
     act,
@@ -171,6 +193,18 @@ function currentDraftKey(draftKey: string, amend: Amend) {
     : amendDraftKey(draftKey, amend.head);
 }
 
-function viewing(selection: ViewedChange | null) {
-  return selection === null ? {} : { viewed: selection };
+function viewing(selection: SelectedChange | null) {
+  return selection === null || selection.section === "conflicts"
+    ? {}
+    : { viewed: selection };
+}
+
+function listedOnly(
+  changes: RepositoryChanges,
+  section: ChangeSection,
+  selection: ChangeSelection,
+): ChangeSelection {
+  return selection._tag === "All"
+    ? { _tag: "Files", paths: changes[section].map((file) => file.path) }
+    : selection;
 }

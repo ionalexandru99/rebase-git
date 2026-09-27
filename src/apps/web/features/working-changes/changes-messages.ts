@@ -1,4 +1,8 @@
-import type { RepositoryChangesHttpApi } from "@rebase/contracts";
+import type {
+  ConflictFailure,
+  RepositoryChangesHttpApi,
+  RepositoryConflictsHttpApi,
+} from "@rebase/contracts";
 import type { EnvironmentRouteFailure } from "@rebase/environment-client";
 import type { CommandFailure } from "#web/platform/query/use-command";
 
@@ -6,7 +10,12 @@ type ChangesRoute =
   | typeof RepositoryChangesHttpApi.read
   | typeof RepositoryChangesHttpApi.diff
   | typeof RepositoryChangesHttpApi.mutate
-  | typeof RepositoryChangesHttpApi.commit;
+  | typeof RepositoryChangesHttpApi.commit
+  | typeof RepositoryConflictsHttpApi.list
+  | typeof RepositoryConflictsHttpApi.document
+  | typeof RepositoryConflictsHttpApi.stage
+  | typeof RepositoryConflictsHttpApi.choose
+  | typeof RepositoryConflictsHttpApi.write;
 
 export const headMovedMessage =
   "HEAD changed while you were amending. Review the latest commit before enabling Amend again.";
@@ -29,4 +38,18 @@ export function describeChangesFailure(error: ChangesRequestFailure) {
     case "EnvironmentResponseError":
       return "Could not complete the request. Check the environment connection and try again.";
   }
+}
+
+export function conflictReason(
+  error: ChangesRequestFailure | null,
+): ConflictFailure["reason"] | null {
+  return error?._tag === "EnvironmentHttpRejected" &&
+    error.failure._tag === "ConflictFailed"
+    ? error.failure.reason
+    : null;
+}
+
+export function wholeFileOnly(error: ChangesRequestFailure | null) {
+  const reason = conflictReason(error);
+  return reason === "Unsupported" || reason === "TooLarge";
 }

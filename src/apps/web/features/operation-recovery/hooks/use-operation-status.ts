@@ -17,6 +17,7 @@ export interface OperationStatus {
   readonly busy: boolean;
   readonly error: string | null;
   readonly refresh: () => void;
+  readonly read: () => Promise<RepositoryOperation | null>;
 }
 
 export function useOperationStatus(
@@ -38,6 +39,7 @@ export function useOperationStatus(
     busy: scope !== undefined && busy,
     error: query.isError ? describeOperationFailure(query.error) : null,
     refresh: () => void query.refetch(),
+    read: async () => (await query.refetch()).data ?? null,
   };
 }
 
@@ -52,14 +54,17 @@ export function useOperationCommandState(): "busy" | "idle" {
     : "idle";
 }
 
-export function useWorktreeOperation(scope: OperationScope | undefined) {
+export function useWorktreeOperation(
+  scope: OperationScope | undefined,
+  options: { readonly polling?: boolean } = {},
+) {
   const active = useRepositoryScope();
   const matches =
     active !== undefined &&
     scope !== undefined &&
     active.repositoryId === scope.repositoryId &&
     active.worktreePath === scope.worktreePath;
-  const status = useOperationStatus(matches ? scope : undefined);
+  const status = useOperationStatus(matches ? scope : undefined, options);
   return matches ? status : null;
 }
 
