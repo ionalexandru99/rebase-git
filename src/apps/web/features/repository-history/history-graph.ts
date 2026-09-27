@@ -1,5 +1,7 @@
-import type { RepositoryCommit } from "@rebase/contracts";
-import type { StoredTopology } from "#web/features/repository-history/history-database";
+import type {
+  GraphCommit,
+  StoredTopology,
+} from "#web/features/repository-history/history-database";
 
 export type HistoryOrder = "topological" | "chronological";
 
@@ -71,7 +73,7 @@ export class HistoryGraph {
     );
   }
 
-  add(commit: RepositoryCommit, rank: number) {
+  add(commit: GraphCommit, rank: number) {
     const known = this.ids.get(commit.oid);
     if (known !== undefined) {
       if (this.ranks[known] !== rank) {

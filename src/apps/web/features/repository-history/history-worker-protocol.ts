@@ -118,6 +118,14 @@ export interface HistoryAnswers {
   readonly Storage: HistoryStorage;
 }
 
+export interface HistoryPortOffer {
+  readonly lease?: string;
+}
+
+export interface HistoryWorkerLease {
+  readonly lease: string;
+}
+
 export type HistoryClientMessage =
   | {
       readonly _tag: "Open";

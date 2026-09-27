@@ -175,6 +175,27 @@ describe("history view", () => {
     );
   });
 
+  it("continues lanes exactly when older commits arrive after a deep read", () => {
+    const main = linearHistory(600).map((current, index) =>
+      index === 5 ? { ...current, parents: [historyOid(6), "side"] } : current,
+    );
+    const graph = historyGraph([commit("topic", ["side"]), ...main]);
+    const scope = historyScope([historyOid(0), "topic"]);
+    const continued = (previous: HistoryView) => {
+      const next = new HistoryView(graph, scope, [], previous);
+      const fresh = new HistoryView(graph, scope, []);
+      expect(next.rows(520, next.total)).toEqual(fresh.rows(520, fresh.total));
+      return next;
+    };
+    const first = new HistoryView(graph, scope, []);
+    first.rows(0, first.total);
+
+    graph.add(commit("root", []), 1_000);
+    const second = continued(first);
+    graph.add(commit("side", ["root"]), 1_001);
+    continued(second);
+  });
+
   it("marks merges whose side line is hidden and follows an expanded one", () => {
     const graph = historyGraph(mergeHistory);
     const collapsed = new HistoryView(graph, historyScope(["merge"]), []);

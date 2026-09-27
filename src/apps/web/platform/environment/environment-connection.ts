@@ -68,6 +68,10 @@ export interface EnvironmentConnection {
   readonly closed: Effect.Effect<EnvironmentConnectionFailure>;
 }
 
+export function reconnectDelay(attempt: number) {
+  return Math.min(250 * 2 ** (attempt - 1), 5_000);
+}
+
 const decodeAuthorizationFailure = Schema.decodeUnknownOption(
   EnvironmentAuthorizationFailure,
 );

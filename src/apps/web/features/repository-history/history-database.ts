@@ -7,9 +7,11 @@ export const workingChangesStoreName = "workingChanges";
 const commitStoreName = "commits";
 const repositoryStoreName = "repositories";
 const topologyStoreName = "topology";
+const recentTopologyStoreName = "recentTopology";
 const identityIndexName = "identity";
 const databaseName = "rebase-repository-history";
-const databaseVersion = 9;
+const databaseVersion = 10;
+const epochSize = 2 ** 32;
 
 export interface StoredRepository {
   readonly id: number;
@@ -23,6 +25,16 @@ export interface StoredRepository {
 
 export interface StoredCommit {
   readonly commit: RepositoryCommit;
+  readonly epoch: number;
+  readonly order: number;
+}
+
+export type GraphCommit = Pick<RepositoryCommit, "oid" | "parents"> & {
+  readonly committer: Pick<RepositoryCommit["committer"], "timestampSeconds">;
+};
+
+export interface StoredGraphCommit {
+  readonly commit: GraphCommit;
   readonly epoch: number;
   readonly order: number;
 }
@@ -109,18 +121,46 @@ export function updateRepository(repository: StoredRepository) {
   });
 }
 
+export function historyRank({ epoch, order }: StoredGraphCommit) {
+  return epoch * epochSize + order;
+}
+
 export function storeCommits(
   repository: StoredRepository,
   commits: readonly StoredCommit[],
 ) {
   return write(
-    [commitStoreName, topologyStoreName, repositoryStoreName],
+    [
+      commitStoreName,
+      topologyStoreName,
+      recentTopologyStoreName,
+      repositoryStoreName,
+    ],
     async (store) => {
-      store(topologyStoreName).delete(repository.id);
       store(repositoryStoreName).put(repository);
       const stored = store(commitStoreName);
       for (const record of commits)
         stored.put(record, [repository.id, record.commit.oid]);
+      const saved = await requestResult(
+        store(topologyStoreName).getKey(repository.id),
+      );
+      if (saved === undefined) return;
+      const recent = store(recentTopologyStoreName);
+      for (const { commit, epoch, order } of commits)
+        recent.put(
+          {
+            commit: {
+              oid: commit.oid,
+              parents: commit.parents,
+              committer: {
+                timestampSeconds: commit.committer.timestampSeconds,
+              },
+            },
+            epoch,
+            order,
+          } satisfies StoredGraphCommit,
+          [repository.id, epoch, order],
+        );
     },
   );
 }
@@ -152,15 +192,30 @@ export function readCommitChunk(
 }
 
 export function readTopology(repository: number) {
-  return read([topologyStoreName], (store) =>
-    requestResult<StoredTopology | undefined>(
-      store(topologyStoreName).get(repository),
-    ),
-  );
+  return read([topologyStoreName, recentTopologyStoreName], async (store) => {
+    const [saved, recent] = await Promise.all([
+      requestResult<StoredTopology | undefined>(
+        store(topologyStoreName).get(repository),
+      ),
+      requestResult<StoredGraphCommit[]>(
+        store(recentTopologyStoreName).getAll(recentRange(repository)),
+      ),
+    ]);
+    return saved === undefined
+      ? undefined
+      : {
+          saved,
+          recent: recent.sort(
+            (left, right) =>
+              right.epoch - left.epoch || left.order - right.order,
+          ),
+        };
+  });
 }
 
 export function writeTopology(repository: number, topology: StoredTopology) {
-  return write([topologyStoreName], async (store) => {
+  return write([topologyStoreName, recentTopologyStoreName], async (store) => {
+    store(recentTopologyStoreName).delete(recentRange(repository));
     await requestResult(store(topologyStoreName).put(topology, repository));
   });
 }
@@ -171,7 +226,12 @@ export function clearRepository(
   remove: boolean,
 ) {
   return write(
-    [repositoryStoreName, commitStoreName, topologyStoreName],
+    [
+      repositoryStoreName,
+      commitStoreName,
+      topologyStoreName,
+      recentTopologyStoreName,
+    ],
     async (store) => {
       const repositories = store(repositoryStoreName);
       const record = await requestResult<StoredRepository | undefined>(
@@ -182,6 +242,7 @@ export function clearRepository(
       if (record === undefined) return;
       store(commitStoreName).delete(repositoryRange(record.id));
       store(topologyStoreName).delete(record.id);
+      store(recentTopologyStoreName).delete(recentRange(record.id));
       if (remove) repositories.delete(record.id);
       else
         repositories.put({
@@ -199,7 +260,8 @@ export function clearRepository(
 type StoreName =
   | typeof commitStoreName
   | typeof repositoryStoreName
-  | typeof topologyStoreName;
+  | typeof topologyStoreName
+  | typeof recentTopologyStoreName;
 type Stores = (name: StoreName) => IDBObjectStore;
 
 function read<T>(
@@ -247,6 +309,10 @@ function repositoryRange(repository: number, after?: string) {
   );
 }
 
+function recentRange(repository: number) {
+  return IDBKeyRange.bound([repository], [repository, []]);
+}
+
 function sharedDatabase() {
   if (connection !== undefined) return connection;
   const forget = () => {
@@ -292,13 +358,19 @@ function openDatabase(closed: () => void) {
 }
 
 function recreateHistoryStores(database: IDBDatabase) {
-  for (const name of [commitStoreName, repositoryStoreName, topologyStoreName])
+  for (const name of [
+    commitStoreName,
+    repositoryStoreName,
+    topologyStoreName,
+    recentTopologyStoreName,
+  ])
     if (database.objectStoreNames.contains(name))
       database.deleteObjectStore(name);
   if (!database.objectStoreNames.contains(workingChangesStoreName))
     database.createObjectStore(workingChangesStoreName);
   database.createObjectStore(commitStoreName);
   database.createObjectStore(topologyStoreName);
+  database.createObjectStore(recentTopologyStoreName);
   database
     .createObjectStore(repositoryStoreName, {
       keyPath: "id",

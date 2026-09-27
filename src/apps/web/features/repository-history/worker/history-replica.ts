@@ -5,6 +5,7 @@ import type {
 import {
   clearRepository,
   HistoryStorageUnavailable,
+  historyRank,
   openRepository,
   readCommitChunk,
   readCommits,
@@ -30,12 +31,17 @@ import type {
 import { writeWithEviction } from "#web/features/repository-history/worker/history-storage";
 import type { EnvironmentSocket } from "#web/platform/environment/environment-connection";
 
-const epochSize = 2 ** 32;
 const cachedViews = 4;
+const recentTopologyShare = 16;
 
 export interface HistorySync {
   readonly socket: EnvironmentSocket;
   readonly repositoryId: string;
+}
+
+interface CachedView {
+  readonly view: HistoryView;
+  readonly revision: number;
 }
 
 export class HistoryReplica {
@@ -45,7 +51,10 @@ export class HistoryReplica {
   private synchronization: HistorySnapshot["synchronization"] = "idle";
   private failure: HistoryFailure | undefined;
   private revision = 0;
-  private views = new Map<string, HistoryView>();
+  private views = new Map<string, CachedView>();
+  private savedTopology = false;
+  private recentTopology = 0;
+  private writing: Promise<void> = Promise.resolve();
   private paused = false;
   private closed = false;
   private loading: Promise<void>;
@@ -95,6 +104,7 @@ export class HistoryReplica {
     this.running = controller;
     this.task = (async () => {
       await this.loading;
+      await this.writing;
       for (
         let next = this.requested;
         next !== undefined && !controller.signal.aborted;
@@ -102,6 +112,7 @@ export class HistoryReplica {
       ) {
         this.requested = undefined;
         await this.synchronizeOnce(next, controller.signal);
+        if (!controller.signal.aborted) await this.saveTopology();
       }
       if (this.running === controller) this.running = undefined;
     })();
@@ -110,6 +121,7 @@ export class HistoryReplica {
   offline() {
     if (this.paused || this.closed || this.running !== undefined) return;
     this.failure = { _tag: "Offline" };
+    if (this.synchronization === "complete") this.synchronization = "stale";
     this.announce();
   }
 
@@ -199,6 +211,7 @@ export class HistoryReplica {
     this.paused = true;
     await this.stop();
     await this.loading;
+    await this.writing;
     await clearRepository(this.environmentId, this.repositoryId, remove);
     this.reset();
     this.record = undefined;
@@ -222,14 +235,16 @@ export class HistoryReplica {
       this.graph =
         topology === undefined
           ? await this.readGraph(record.id)
-          : HistoryGraph.fromTopology(topology);
-      if (topology === undefined && this.graph.size > 0)
-        void writeTopology(record.id, this.graph.topology()).catch(
-          () => undefined,
-        );
+          : HistoryGraph.fromTopology(topology.saved);
+      for (const entry of topology?.recent ?? [])
+        this.graph.add(entry.commit, historyRank(entry));
+      this.savedTopology = topology !== undefined;
+      this.recentTopology = topology?.recent.length ?? 0;
+      this.views.clear();
       this.record = record;
       this.refTargets = record.tips?.refTargets ?? [];
       this.synchronization = record.tips === undefined ? "idle" : "complete";
+      void this.saveTopology();
     } catch (error) {
       this.failure = historyFailure(error);
     }
@@ -240,8 +255,7 @@ export class HistoryReplica {
     const graph = new HistoryGraph();
     for (let after: string | undefined; ; ) {
       const chunk = await readCommitChunk(repository, after, 2_048);
-      for (const record of chunk)
-        graph.add(record.commit, record.epoch * epochSize + record.order);
+      for (const record of chunk) graph.add(record.commit, historyRank(record));
       const last = chunk.at(-1);
       if (chunk.length < 2_048 || last === undefined) return graph;
       after = last.commit.oid;
@@ -258,6 +272,7 @@ export class HistoryReplica {
       minimumEpoch: current.minimumEpoch - 1,
     };
     const epoch = record.minimumEpoch;
+    const incremental = current.tips !== undefined;
     let order = 0;
     let tips: RepositoryHistoryTips | undefined;
     try {
@@ -294,9 +309,10 @@ export class HistoryReplica {
           );
           if (signal.aborted) throw signal.reason;
           this.record = record;
-          for (const { commit, order } of stored)
-            this.graph.add(commit, epoch * epochSize + order);
-          if (stored.length > 0) this.changed();
+          for (const commit of stored)
+            this.graph.add(commit.commit, historyRank(commit));
+          if (this.savedTopology) this.recentTopology += stored.length;
+          if (stored.length > 0 && !incremental) this.changed();
         },
         signal,
       );
@@ -308,17 +324,35 @@ export class HistoryReplica {
       this.record = record;
       this.synchronization = "complete";
       this.failure = undefined;
-      if (order > 0)
-        void writeTopology(record.id, this.graph.topology()).catch(
-          () => undefined,
-        );
+      if (incremental && order > 0) this.revision += 1;
       this.applyRefTargets(tips.refTargets);
     } catch (error) {
       if (signal.aborted) return;
       this.failure = historyFailure(error);
       this.synchronization = this.graph.size > 0 ? "stale" : "idle";
+      if (incremental && order > 0) this.revision += 1;
       this.announce();
     }
+  }
+
+  private saveTopology() {
+    const record = this.record;
+    if (
+      record === undefined ||
+      this.graph.size === 0 ||
+      (this.savedTopology &&
+        this.recentTopology * recentTopologyShare < this.graph.size)
+    )
+      return this.writing;
+    const topology = this.graph.topology();
+    this.writing = writeTopology(record.id, topology).then(
+      () => {
+        this.savedTopology = true;
+        this.recentTopology = 0;
+      },
+      () => undefined,
+    );
+    return this.writing;
   }
 
   private stop() {
@@ -333,6 +367,7 @@ export class HistoryReplica {
       return;
     }
     this.refTargets = refTargets;
+    this.views.clear();
     this.changed();
   }
 
@@ -344,13 +379,12 @@ export class HistoryReplica {
   private cachedView(scope: HistoryScopeQuery) {
     const key = JSON.stringify(scope);
     const cached = this.views.get(key);
-    if (cached !== undefined) {
-      this.views.delete(key);
-      this.views.set(key, cached);
-      return cached;
-    }
-    const view = new HistoryView(this.graph, scope, this.refTargets);
-    this.views.set(key, view);
+    this.views.delete(key);
+    const view =
+      cached?.revision === this.revision
+        ? cached.view
+        : new HistoryView(this.graph, scope, this.refTargets, cached?.view);
+    this.views.set(key, { view, revision: this.revision });
     for (const oldest of this.views.keys()) {
       if (this.views.size <= cachedViews) break;
       this.views.delete(oldest);
@@ -360,6 +394,9 @@ export class HistoryReplica {
 
   private reset() {
     this.graph = new HistoryGraph();
+    this.views.clear();
+    this.savedTopology = false;
+    this.recentTopology = 0;
     this.refTargets = [];
     this.synchronization = "idle";
     this.failure = undefined;
@@ -367,7 +404,6 @@ export class HistoryReplica {
 
   private changed() {
     this.revision += 1;
-    this.views.clear();
     this.announce();
   }
 

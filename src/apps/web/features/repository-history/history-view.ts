@@ -40,14 +40,13 @@ export class HistoryView {
   private readonly allowed: ReadonlySet<string>;
   private readonly local: Uint8Array | undefined;
   private readonly seeds: ReadonlyMap<string, CommitLaneSeed>;
-  private readonly checkpoints: CommitLaneCheckpoint[] = [
-    createCommitLaneCheckpoint(),
-  ];
+  private checkpoints: CommitLaneCheckpoint[] = [createCommitLaneCheckpoint()];
 
   constructor(
     private readonly graph: HistoryGraph,
     query: HistoryScopeQuery,
     refTargets: readonly RepositoryHistoryRefTarget[],
+    previous?: HistoryView,
   ) {
     const resolved = query.roots.map(
       (root) => graph.id(root.oid) ?? fallbackRoot(graph, root, refTargets),
@@ -86,6 +85,8 @@ export class HistoryView {
       [],
       query.roots,
     );
+    if (previous !== undefined && this.extends(previous))
+      this.checkpoints = [...previous.checkpoints];
   }
 
   row(oid: string) {
@@ -140,6 +141,29 @@ export class HistoryView {
       });
     }
     return result;
+  }
+
+  private extends(previous: HistoryView) {
+    const rows = (previous.checkpoints.length - 1) * checkpointRows;
+    if (previous.graph !== this.graph || rows > this.total) return false;
+    for (let row = 0; row < rows; row += 1) {
+      const id = this.order[row] ?? -1;
+      if (
+        id !== previous.order[row] ||
+        this.local?.[id] !== previous.local?.[id]
+      )
+        return false;
+      const parents = this.graph.parentIds(id);
+      for (let slot = 1; slot < parents.length; slot += 1) {
+        const parent = parents[slot] ?? -1;
+        if (
+          (this.rowOf[parent] ?? -1) >= 0 !==
+          (previous.rowOf[parent] ?? -1) >= 0
+        )
+          return false;
+      }
+    }
+    return true;
   }
 
   private topology(start: number, end: number) {

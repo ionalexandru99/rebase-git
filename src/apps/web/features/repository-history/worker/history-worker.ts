@@ -3,10 +3,16 @@ import {
   clearRepository,
   readRepositories,
 } from "#web/features/repository-history/history-database";
+import {
+  holdLease,
+  watchLease,
+} from "#web/features/repository-history/history-lease";
 import type {
   HistoryClientMessage,
   HistoryIdentity,
+  HistoryPortOffer,
   HistoryQuery,
+  HistoryWorkerLease,
   HistoryWorkerMessage,
 } from "#web/features/repository-history/history-worker-protocol";
 import {
@@ -18,10 +24,12 @@ import {
   type EnvironmentAccess,
   type EnvironmentSocket,
   openEnvironmentSocket,
+  reconnectDelay,
 } from "#web/platform/environment/environment-connection";
 
 interface HistoryClient {
   readonly port: MessagePort;
+  readonly lease: string | undefined;
   readonly questions: Map<number, AbortController>;
   identity?: HistoryIdentity;
   environment?: EnvironmentAccess;
@@ -36,6 +44,10 @@ interface SocketEntry {
 const replicas = new Map<string, HistoryReplica>();
 const clients = new Set<HistoryClient>();
 const sockets = new Map<string, SocketEntry>();
+const failedConnections = new Map<string, number>();
+const reconnects = new Set<string>();
+const leases = new Map<string, AbortController>();
+const workerLease = holdLease("rebase-history-worker");
 
 const worker = self as unknown as {
   onconnect: ((event: MessageEvent) => void) | null;
@@ -44,16 +56,25 @@ const worker = self as unknown as {
 worker.onconnect = (event) => {
   const shared = event.ports[0];
   if (shared === undefined) return;
-  shared.onmessage = (message) => {
+  shared.onmessage = (message: MessageEvent<HistoryPortOffer>) => {
     const port = message.ports[0];
-    if (port !== undefined) attach(port);
+    if (port !== undefined) attach(port, message.data.lease);
   };
   shared.start();
+  void workerLease.then((lease) => {
+    if (lease !== undefined)
+      shared.postMessage({ lease } satisfies HistoryWorkerLease);
+  });
 };
 
-function attach(port: MessagePort) {
-  const client: HistoryClient = { port, questions: new Map() };
+function attach(port: MessagePort, lease: string | undefined) {
+  const client: HistoryClient = { port, lease, questions: new Map() };
   clients.add(client);
+  if (lease !== undefined && !leases.has(lease)) {
+    const watch = new AbortController();
+    leases.set(lease, watch);
+    watchLease(lease, () => release(lease), watch.signal);
+  }
   port.onmessage = (message: MessageEvent<HistoryClientMessage>) =>
     receive(client, message.data);
   port.start();
@@ -113,8 +134,21 @@ function open(
   synchronize(client);
 }
 
+function release(lease: string) {
+  leases.delete(lease);
+  for (const client of [...clients]) if (client.lease === lease) close(client);
+}
+
 function close(client: HistoryClient) {
-  clients.delete(client);
+  if (!clients.delete(client)) return;
+  const lease = client.lease;
+  if (
+    lease !== undefined &&
+    ![...clients].some((current) => current.lease === lease)
+  ) {
+    leases.get(lease)?.abort();
+    leases.delete(lease);
+  }
   for (const question of client.questions.values()) question.abort();
   client.port.close();
   const replica = client.replica;
@@ -159,28 +193,50 @@ function synchronizeOrigin(
 }
 
 function connect(environment: EnvironmentAccess) {
-  const current = sockets.get(environment.origin);
+  const origin = environment.origin;
+  const current = sockets.get(origin);
   if (current?.live) return current.socket;
   const entry: SocketEntry = {
     live: true,
-    socket: openEnvironmentSocket(environment.origin, environment.credential, {
+    socket: openEnvironmentSocket(origin, environment.credential, {
       changed: (repositoryIds, kind) =>
         refsChanged(environment, repositoryIds, kind),
     }).then(
       (socket) => {
-        void socket.closed.then(() => {
-          entry.live = false;
-        });
+        failedConnections.delete(origin);
+        void socket.closed.then(() => disconnected(origin, entry));
         return socket;
       },
       () => {
-        entry.live = false;
+        disconnected(origin, entry);
         return undefined;
       },
     ),
   };
-  sockets.set(environment.origin, entry);
+  sockets.set(origin, entry);
   return entry.socket;
+}
+
+function disconnected(origin: string, entry: SocketEntry) {
+  entry.live = false;
+  if (sockets.get(origin) !== entry || reconnects.has(origin)) return;
+  const waiting = [...clients].filter(
+    (client) =>
+      client.replica !== undefined && client.environment?.origin === origin,
+  );
+  if (waiting.length === 0) return;
+  for (const client of waiting) client.replica?.offline();
+  const attempt = (failedConnections.get(origin) ?? 0) + 1;
+  failedConnections.set(origin, attempt);
+  reconnects.add(origin);
+  setTimeout(() => {
+    reconnects.delete(origin);
+    const environment = [...clients].find(
+      (client) =>
+        client.replica !== undefined && client.environment?.origin === origin,
+    )?.environment;
+    if (environment !== undefined) synchronizeOrigin(environment);
+  }, reconnectDelay(attempt));
 }
 
 function refsChanged(

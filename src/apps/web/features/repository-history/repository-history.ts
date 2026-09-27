@@ -1,11 +1,17 @@
 import { useEffect, useState } from "react";
+import {
+  holdLease,
+  watchLease,
+} from "#web/features/repository-history/history-lease";
 import type {
   HistoryAnswers,
   HistoryClientMessage,
   HistoryFailure,
   HistoryIdentity,
+  HistoryPortOffer,
   HistoryQuery,
   HistorySnapshot,
+  HistoryWorkerLease,
   HistoryWorkerMessage,
 } from "#web/features/repository-history/history-worker-protocol";
 import type { EnvironmentAccess } from "#web/platform/environment/environment-connection";
@@ -34,20 +40,28 @@ export const emptyHistorySnapshot: HistorySnapshot = {
   refTargets: [],
 };
 
+interface SharedHistoryWorker {
+  readonly worker: SharedWorker;
+  readonly lost: Set<() => void>;
+  connection?: MessagePort;
+}
+
 const opened = new Set<MessagePort>();
 let environment: EnvironmentAccess | undefined;
-let connection: MessagePort | undefined;
-let sharedWorker: SharedWorker | undefined;
+let shared: SharedHistoryWorker | undefined;
+let pageLease: Promise<string | undefined> | undefined;
 let persistenceRequested = false;
 
 export function connectRepositoryHistory(access: EnvironmentAccess) {
   environment = access;
+  let current: SharedHistoryWorker;
   try {
-    connection ??= connectPort(acquireSharedWorker().port);
+    current = acquireSharedWorker();
   } catch {
     return;
   }
-  for (const port of [connection, ...opened])
+  current.connection ??= connectPort(current);
+  for (const port of [current.connection, ...opened])
     send(port, { _tag: "Connect", environment: access });
 }
 
@@ -57,25 +71,38 @@ export function openRepositoryHistory(
   const store = createStore(emptyHistorySnapshot);
   const pending = new Map<number, Pending>();
   let nextId = 0;
-  let worker: SharedWorker | undefined;
-  const fail = () => {
+  let link:
+    | { readonly worker: SharedHistoryWorker; readonly channel: MessagePort }
+    | undefined;
+  const detach = () => {
+    if (link === undefined) return;
+    link.worker.lost.delete(lose);
+    opened.delete(link.channel);
+    link.channel.close();
+    link = undefined;
     for (const request of pending.values())
       request.reject({ _tag: "Unavailable" });
     pending.clear();
+  };
+  const lose = () => {
+    detach();
     store.set({
       ...store.getSnapshot(),
       status: "error",
       failure: { _tag: "Unavailable" },
     });
   };
-  try {
-    worker = acquireSharedWorker();
-    worker.addEventListener("error", fail);
-  } catch {
-    fail();
-  }
-  const channel = worker === undefined ? undefined : connectPort(worker.port);
-  if (channel !== undefined) {
+  const attach = () => {
+    let worker: SharedHistoryWorker;
+    try {
+      worker = acquireSharedWorker();
+    } catch {
+      lose();
+      return;
+    }
+    const channel = connectPort(worker);
+    link = { worker, channel };
+    worker.lost.add(lose);
     opened.add(channel);
     channel.onmessage = (event: MessageEvent<HistoryWorkerMessage>) => {
       const message = event.data;
@@ -97,11 +124,13 @@ export function openRepositoryHistory(
         ...(environment === undefined ? {} : { environment }),
       });
     }
-  }
+  };
+  attach();
   return {
     getSnapshot: store.getSnapshot,
     subscribe: store.subscribe,
     ask: (query, signal) => {
+      const channel = link?.channel;
       if (channel === undefined)
         return Promise.reject<never>({ _tag: "Unavailable" });
       signal?.throwIfAborted();
@@ -124,17 +153,12 @@ export function openRepositoryHistory(
       });
     },
     synchronize: () => {
-      if (channel !== undefined) send(channel, { _tag: "Synchronize" });
+      if (link === undefined) attach();
+      else send(link.channel, { _tag: "Synchronize" });
     },
     close: () => {
-      worker?.removeEventListener("error", fail);
-      if (channel === undefined) return;
-      opened.delete(channel);
-      send(channel, { _tag: "Close" });
-      channel.close();
-      for (const request of pending.values())
-        request.reject({ _tag: "Unavailable" });
-      pending.clear();
+      if (link !== undefined) send(link.channel, { _tag: "Close" });
+      detach();
     },
   };
 }
@@ -182,10 +206,15 @@ export function describeHistoryFailure(failure: HistoryFailure) {
   }
 }
 
-function connectPort(port: MessagePort) {
+function connectPort(current: SharedHistoryWorker) {
   const channel = new MessageChannel();
-  port.postMessage(channel.port2, [channel.port2]);
-  port.start();
+  pageLease ??= holdLease("rebase-history-page");
+  void pageLease.then((lease) =>
+    current.worker.port.postMessage(
+      (lease === undefined ? {} : { lease }) satisfies HistoryPortOffer,
+      [channel.port2],
+    ),
+  );
   return channel.port1;
 }
 
@@ -194,11 +223,25 @@ function send(port: MessagePort, message: HistoryClientMessage) {
 }
 
 function acquireSharedWorker() {
-  sharedWorker ??= new SharedWorker(
-    new URL("./worker/history-worker.ts", import.meta.url),
-    { name: "rebase-repository-history", type: "module" },
-  );
-  return sharedWorker;
+  if (shared !== undefined) return shared;
+  const current: SharedHistoryWorker = {
+    worker: new SharedWorker(
+      new URL("./worker/history-worker.ts", import.meta.url),
+      { name: "rebase-repository-history", type: "module" },
+    ),
+    lost: new Set(),
+  };
+  const lose = () => {
+    if (shared !== current) return;
+    shared = undefined;
+    for (const lost of [...current.lost]) lost();
+  };
+  current.worker.addEventListener("error", lose);
+  current.worker.port.onmessage = (event: MessageEvent<HistoryWorkerLease>) =>
+    watchLease(event.data.lease, lose);
+  current.worker.port.start();
+  shared = current;
+  return current;
 }
 
 function requestPersistentStorage() {

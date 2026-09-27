@@ -14,6 +14,7 @@ import {
   type EnvironmentCredential,
   EnvironmentProtocolMismatch,
   environmentRequests,
+  reconnectDelay,
 } from "#web/platform/environment/environment-connection";
 import type { EnvironmentRequests } from "#web/platform/query/environment-context";
 import type { EnvironmentInvalidation } from "#web/platform/query/environment-invalidation";
@@ -191,14 +192,14 @@ function reconnectAfter(
   attempt: number,
   environmentId?: string,
 ) {
-  const delay = Math.min(250 * 2 ** (attempt - 1), 5_000);
   return publish({
     _tag: "Reconnecting",
     attempt,
     ...(environmentId === undefined ? {} : { environmentId }),
   }).pipe(
     Effect.andThen(
-      options.waitBeforeReconnect?.(attempt) ?? Effect.sleep(delay),
+      options.waitBeforeReconnect?.(attempt) ??
+        Effect.sleep(reconnectDelay(attempt)),
     ),
   );
 }
