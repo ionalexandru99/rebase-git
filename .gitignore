@@ -7,3 +7,7 @@ tests/.artifacts/
 .benchmark-corpus/
 .vitest-attachments/
 .playwright-mcp/
+coverage/
+out/
+playwright-report/
+test-results/

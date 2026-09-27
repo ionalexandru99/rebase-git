@@ -98,48 +98,6 @@
       }
     },
     {
-      "includes": ["src/apps/*/domain/**"],
-      "linter": {
-        "rules": {
-          "style": {
-            "noRestrictedImports": {
-              "level": "error",
-              "options": {
-                "patterns": [
-                  {
-                    "group": [
-                      "@rebase/server/**",
-                      "!@rebase/server/package.json",
-                      "@rebase/desktop/**"
-                    ],
-                    "message": "Use private #server/* or #desktop/* aliases for internal imports and tests. Cross-package consumers must use the public package entry point."
-                  },
-                  {
-                    "group": [
-                      "react",
-                      "react/**",
-                      "react-dom",
-                      "react-dom/**",
-                      "electron",
-                      "#*/app/**",
-                      "#*/features/**",
-                      "#*/adapters/**",
-                      "#*/platform/**",
-                      "@rebase/server",
-                      "@rebase/web",
-                      "@rebase/web/**",
-                      "@rebase/desktop"
-                    ],
-                    "message": "Domain code depends on contracts, not UI, application composition, or concrete adapters."
-                  }
-                ]
-              }
-            }
-          }
-        }
-      }
-    },
-    {
       "includes": ["src/apps/web/platform/**", "src/apps/web/components/ui/**"],
       "linter": {
         "rules": {
@@ -291,7 +249,6 @@
       "includes": [
         "src/apps/desktop/**",
         "src/apps/server/**",
-        "!src/apps/*/domain/**",
         "!src/apps/*/features/**"
       ],
       "linter": {

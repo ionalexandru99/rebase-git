@@ -11,7 +11,7 @@ The project is under active development and is not ready for day-to-day use yet.
 
 ## Install the desktop app
 
-Install Git 2.34 or newer, then download Rebase from the
+Install Git 2.35 or newer, then download Rebase from the
 [latest release](https://github.com/ionalexandru99/rebase-git/releases/latest).
 
 | System | Download | Install |
@@ -23,7 +23,7 @@ Install Git 2.34 or newer, then download Rebase from the
 
 ## Run in your browser
 
-Install Node.js 24 and Git 2.34 or newer, then run:
+Install Node.js 24 and Git 2.35 or newer, then run:
 
 ```bash
 npx rebase-git@latest
@@ -40,7 +40,7 @@ rebase serve
 
 ## Run from source
 
-You need Node.js 24, pnpm 11.22.0, and Git 2.34 or newer.
+You need Node.js 24, pnpm 11.22.0, and Git 2.35 or newer.
 
 ```bash
 git clone https://github.com/ionalexandru99/rebase-git.git
