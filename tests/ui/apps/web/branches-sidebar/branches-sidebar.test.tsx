@@ -1,25 +1,33 @@
 import {
+  type CheckoutRepositoryRef,
+  type RepositoryCheckedOut,
   type RepositoryFreshness,
   RepositoryPullHttpApi,
   type RepositoryRefs,
+  RepositoryRefsHttpApi,
   type RepositoryRefTarget,
 } from "@rebase/contracts";
-import type { ComponentProps } from "react";
+import { EnvironmentHttpRejected } from "@rebase/environment-client";
 import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
 import { userEvent } from "vite-plus/test/browser";
 import { repositoryScope } from "#tests-ui/apps/web/repository-scope/repository-scope-fixture";
 import {
+  type FakeRoute,
   fakeRequests,
   idleOperation,
   respond,
 } from "#tests-ui/runtime/fake-requests";
+import { fakeRpc } from "#tests-ui/runtime/fake-rpc";
 import { render } from "#tests-ui/runtime/render";
 import { BranchesSidebar } from "#web/features/branches-sidebar/branches-sidebar";
 import { historyRefKey } from "#web/features/commit-graph/scope/history-scope";
-import { usePull } from "#web/features/repository-pull/use-pull";
-import type { RefActivation } from "#web/features/repository-refs/hooks/use-ref-activation";
-import type { RepositoryRefsRead } from "#web/features/repository-refs/hooks/use-repository-refs";
-import { RepositoryScopeProvider } from "#web/platform/query/repository-scope";
+import { requestRefIntent } from "#web/features/refs/ref-actions";
+import type { PullReader } from "#web/features/remote-sync/use-pull";
+import type { EnvironmentChangeListener } from "#web/platform/environment/environment-protocol.contract";
+import {
+  type RepositoryScope,
+  RepositoryScopeProvider,
+} from "#web/platform/query/repository-scope";
 
 const repositoryId = "00000000-0000-4000-8000-000000000001";
 const mainPath = "/repo";
@@ -77,9 +85,7 @@ describe("branches sidebar", () => {
   });
 
   it("navigates nested folders and checks out the full branch name", async () => {
-    const { screen, onSelectRef } = await renderSidebar({
-      repositoryRefs: loaded(nestedRefs()),
-    });
+    const { screen, checkouts } = await renderSidebar({ refs: nestedRefs() });
     const tree = screen.getByRole("tree", { name: "Branches" });
     const feature = tree.getByRole("treeitem", {
       name: "feature",
@@ -100,10 +106,12 @@ describe("branches sidebar", () => {
     await expect.element(alpha).toHaveAttribute("aria-level", "4");
     await expect.element(alpha).toHaveTextContent("alpha");
     await userEvent.keyboard("{Enter}");
-    expect(onSelectRef).toHaveBeenLastCalledWith({
-      _tag: "LocalBranch",
-      name: "feature/api/alpha",
-    });
+    await expect
+      .poll(() => checkouts)
+      .toHaveBeenLastCalledWith({
+        _tag: "LocalBranch",
+        name: "feature/api/alpha",
+      });
     await userEvent.keyboard("{ArrowLeft}{ArrowLeft}");
     await expect.element(api).toHaveAttribute("aria-expanded", "false");
     await userEvent.keyboard("{ArrowLeft}");
@@ -129,8 +137,9 @@ describe("branches sidebar", () => {
           : branch,
       ),
     });
-    const callbacks = sidebarCallbacks();
-    const screen = await render(sidebarView(loaded(withSync(0, 2)), callbacks));
+    const { screen, publish } = await renderSidebar({
+      refs: withSync(0, 2),
+    });
     const topic = screen.getByRole("treeitem", {
       name: "topic, linked worktree",
     });
@@ -145,7 +154,7 @@ describe("branches sidebar", () => {
     expect(
       pull.element().getBoundingClientRect().left - name.right,
     ).toBeLessThan(12);
-    await screen.rerender(sidebarView(loaded(withSync(99, 111)), callbacks));
+    publish(withSync(99, 111));
     await expect
       .element(topic.getByRole("img", { name: "111 commits to pull" }))
       .toBeVisible();
@@ -158,23 +167,27 @@ describe("branches sidebar", () => {
   });
 
   it("keeps a single click as focus and checks out on double click", async () => {
-    const { onSelectRef, screen } = await renderSidebar();
-    const feature = screen.getByRole("treeitem", { name: "feature" });
+    const { checkouts, screen } = await renderSidebar();
+    const tree = screen.getByRole("tree", { name: "Branches" });
+    const feature = tree.getByRole("treeitem", { name: "feature" });
 
     await feature.click();
-    expect(onSelectRef).not.toHaveBeenCalled();
+    await expect.element(feature).toHaveAttribute("aria-selected", "true");
 
     await feature.dblClick();
-    expect(onSelectRef).toHaveBeenCalledOnce();
-    expect(onSelectRef).toHaveBeenCalledWith({
+    await expect.poll(() => checkouts).toHaveBeenCalledOnce();
+    await expect.element(tree).toHaveAttribute("aria-busy", "false");
+    expect(checkouts).toHaveBeenCalledOnce();
+    expect(checkouts).toHaveBeenCalledWith({
       _tag: "LocalBranch",
       name: "feature",
     });
 
     await feature.click({ button: "right" });
     await screen.getByRole("menuitem", { name: "Checkout" }).click();
-    expect(onSelectRef).toHaveBeenCalledTimes(2);
-    expect(onSelectRef).toHaveBeenLastCalledWith({
+    await expect.poll(() => checkouts).toHaveBeenCalledTimes(2);
+    await expect.element(tree).toHaveAttribute("aria-busy", "false");
+    expect(checkouts).toHaveBeenLastCalledWith({
       _tag: "LocalBranch",
       name: "feature",
     });
@@ -199,21 +212,11 @@ describe("branches sidebar", () => {
       ),
     };
     const pulls = pullRequests();
-    const callbacks = sidebarCallbacks();
-    const screen = await render(
-      <RepositoryScopeProvider scope={pulls.scope}>
-        <div style={{ height: 480, width: 320 }}>
-          <PullSidebar
-            reader={pulls.reader}
-            activeWorktreePath={mainPath}
-            focusRequest={0}
-            activation={activation(callbacks)}
-            repositoryRefs={loaded(tracked)}
-          />
-        </div>
-      </RepositoryScopeProvider>,
-      { environment: { requests: pulls.requests } },
-    );
+    const { screen } = await renderSidebar({
+      refs: tracked,
+      reader: pulls.reader,
+      routes: [pulls.route],
+    });
     const tree = screen.getByRole("tree", { name: "Branches" });
 
     await tree
@@ -303,11 +306,14 @@ describe("branches sidebar", () => {
   });
 
   it("connects tree focus, navigation, expansion, and activation", async () => {
-    const { onSelectRef, screen } = await renderSidebar({ focusRequest: 1 });
+    const switchWorktree = vi.fn<(worktreePath: string) => void>();
+    const { screen } = await renderSidebar({ switchWorktree });
     const tree = screen.getByRole("tree", { name: "Branches" });
     const main = tree.getByRole("treeitem", {
       name: "main, current branch",
     });
+    await expect.element(main).toBeVisible();
+    requestRefIntent({ _tag: "FocusRefs" });
 
     await expect.element(tree).toHaveFocus();
     await expect.element(main).toBeVisible();
@@ -316,10 +322,7 @@ describe("branches sidebar", () => {
       .toHaveAttribute("aria-activedescendant", main.element().id);
 
     await userEvent.keyboard("{ArrowDown}{Enter}");
-    expect(onSelectRef).toHaveBeenCalledWith({
-      _tag: "LocalBranch",
-      name: "topic",
-    });
+    expect(switchWorktree).toHaveBeenCalledWith(topicPath);
 
     await userEvent.keyboard("{End}{ArrowRight}");
     await expect
@@ -328,157 +331,156 @@ describe("branches sidebar", () => {
   });
 
   it("renders idle, loading, fetch error, and retry states", async () => {
-    const callbacks = sidebarCallbacks();
-    const screen = await render(sidebarView(refsRead({}), callbacks));
+    const reads: PromiseWithResolvers<RepositoryRefs>[] = [];
+    const rpc = await fakeRpc(() => {
+      const read = Promise.withResolvers<RepositoryRefs>();
+      reads.push(read);
+      return read.promise;
+    });
+    const view = (scope: RepositoryScope | undefined) => (
+      <RepositoryScopeProvider scope={scope}>
+        <div style={{ height: 480, width: 320 }}>
+          <BranchesSidebar reader={undefined} />
+        </div>
+      </RepositoryScopeProvider>
+    );
+    const screen = await render(view(undefined), { environment: { rpc } });
 
     await expect
       .element(screen.getByRole("status"))
       .toHaveTextContent("No repository selected.");
 
-    await screen.rerender(sidebarView(refsRead({ loading: true }), callbacks));
+    await screen.rerender(view(repositoryScope({ repositoryId })));
     await expect
       .element(screen.getByRole("status"))
       .toHaveTextContent("Loading branches…");
 
-    await screen.rerender(
-      sidebarView(
-        refsRead({ error: "The Environment did not answer." }),
-        callbacks,
-      ),
-    );
+    await expect.poll(() => reads.length).toBe(1);
+    reads[0]?.reject(new Error("connection closed"));
     await expect
       .element(screen.getByRole("alert"))
       .toHaveTextContent("The Environment did not answer.");
     await screen.getByRole("button", { name: "Retry" }).click();
-    expect(callbacks.onRetry).toHaveBeenCalledOnce();
+    await expect.poll(() => reads.length).toBe(2);
   });
 
   it("announces checkout progress and failures", async () => {
-    const { screen } = await renderSidebar({
-      checkout: {
-        checkingOut: true,
-        error: "Local changes would be overwritten.",
-      },
+    const rejected = new EnvironmentHttpRejected({
+      failure: { _tag: "CheckoutRejected", detail: "", reason: "LocalChanges" },
     });
+    let answer = (): Promise<RepositoryCheckedOut> => Promise.reject(rejected);
+    const { screen } = await renderSidebar({
+      routes: [respond(RepositoryRefsHttpApi.checkout, () => answer())],
+    });
+    const tree = screen.getByRole("tree", { name: "Branches" });
+    const feature = tree.getByRole("treeitem", { name: "feature" });
 
-    await expect
-      .element(screen.getByRole("tree", { name: "Branches" }))
-      .toHaveAttribute("aria-busy", "true");
+    await feature.dblClick();
     await expect
       .element(screen.getByRole("alert"))
       .toHaveTextContent("Local changes would be overwritten.");
+
+    answer = () => new Promise(() => undefined);
+    await feature.dblClick();
+    await expect.element(tree).toHaveAttribute("aria-busy", "true");
   });
 });
 
 function pullRequests() {
   const pulled = vi.fn<(branch: string) => void>();
   let finish = () => {};
-  const requests = fakeRequests(
-    idleOperation,
-    respond(RepositoryPullHttpApi.pull, async (command) => {
+  const reader: PullReader = {
+    fetch: async (): Promise<RepositoryFreshness> => ({
+      revision: 1,
+      fetching: false,
+      stale: false,
+      defaultIntervalSeconds: 300,
+      setting: { _tag: "Inherit" },
+    }),
+    getSnapshot: () => readyHistory,
+    subscribe: () => () => {},
+  };
+  return {
+    pulled,
+    finish: () => finish(),
+    reader,
+    route: respond(RepositoryPullHttpApi.pull, async (command) => {
       pulled(command.branch);
       await new Promise<void>((resolve) => {
         finish = resolve;
       });
       return { outcome: "FastForwarded" as const };
     }),
-  );
-  return {
-    pulled,
-    finish: () => finish(),
-    reader: {
-      fetch: async (): Promise<RepositoryFreshness> => ({
-        revision: 1,
-        fetching: false,
-        stale: false,
-        defaultIntervalSeconds: 300,
-        setting: { _tag: "Inherit" },
-      }),
-      getSnapshot: () => readyHistory,
-      subscribe: () => () => {},
-    },
-    requests,
-    scope: repositoryScope({ repositoryId, worktreePath: mainPath }),
   };
 }
 
 async function renderSidebar({
-  checkout,
-  focusRequest = 0,
+  refs: initial = refs(),
+  reader,
+  routes = [],
   selectedHistoryRefKeys,
-  repositoryRefs = loaded(refs()),
+  switchWorktree,
 }: {
-  readonly checkout?: Omit<RefActivation, "select">;
-  readonly focusRequest?: number;
+  readonly refs?: RepositoryRefs;
+  readonly reader?: PullReader;
+  readonly routes?: readonly FakeRoute[];
   readonly selectedHistoryRefKeys?: ReadonlySet<string>;
-  readonly repositoryRefs?: RepositoryRefsRead;
+  readonly switchWorktree?: (worktreePath: string) => void;
 } = {}) {
-  const callbacks = sidebarCallbacks();
+  let current = initial;
+  const listeners = new Set<EnvironmentChangeListener>();
+  const checkouts = vi.fn<(target: RepositoryRefTarget) => void>();
+  const onToggleHistoryRef = vi.fn<(target: RepositoryRefTarget) => void>();
+  const checkout = respond(
+    RepositoryRefsHttpApi.checkout,
+    async (command: CheckoutRepositoryRef): Promise<RepositoryCheckedOut> => {
+      checkouts(command.target);
+      return {
+        head: { branch: command.target.name, commit },
+        stash: "none",
+        worktreePath: command.worktreePath,
+      };
+    },
+  );
   const screen = await render(
-    sidebarView(
-      repositoryRefs,
-      callbacks,
-      focusRequest,
-      selectedHistoryRefKeys,
-      checkout,
-    ),
+    <RepositoryScopeProvider
+      scope={repositoryScope({
+        repositoryId,
+        worktreePath: mainPath,
+        ...(switchWorktree === undefined ? {} : { switchWorktree }),
+      })}
+    >
+      <div style={{ height: 480, width: 320 }}>
+        <BranchesSidebar
+          onToggleHistoryRef={onToggleHistoryRef}
+          reader={reader}
+          {...(selectedHistoryRefKeys === undefined
+            ? {}
+            : { selectedHistoryRefKeys })}
+        />
+      </div>
+    </RepositoryScopeProvider>,
+    {
+      environment: {
+        rpc: await fakeRpc(async () => current),
+        requests: fakeRequests(idleOperation, ...routes, checkout),
+        changes: {
+          subscribe: (listener) => {
+            listeners.add(listener);
+            return () => listeners.delete(listener);
+          },
+        },
+      },
+    },
   );
-  return { ...callbacks, screen };
-}
-
-function sidebarCallbacks() {
   return {
-    onRetry: vi.fn<() => void>(),
-    onSelectRef: vi.fn<(target: RepositoryRefTarget) => void>(),
-    onToggleHistoryRef: vi.fn<(target: RepositoryRefTarget) => void>(),
-  };
-}
-
-function sidebarView(
-  repositoryRefs: RepositoryRefsRead,
-  callbacks: ReturnType<typeof sidebarCallbacks>,
-  focusRequest = 0,
-  selectedHistoryRefKeys?: ReadonlySet<string>,
-  checkout?: Omit<RefActivation, "select">,
-) {
-  return (
-    <div style={{ height: 480, width: 320 }}>
-      <BranchesSidebar
-        activation={activation(callbacks, checkout)}
-        activeWorktreePath={mainPath}
-        focusRequest={focusRequest}
-        onToggleHistoryRef={callbacks.onToggleHistoryRef}
-        repositoryRefs={{ ...repositoryRefs, retry: callbacks.onRetry }}
-        {...(selectedHistoryRefKeys === undefined
-          ? {}
-          : { selectedHistoryRefKeys })}
-      />
-    </div>
-  );
-}
-
-function activation(
-  callbacks: ReturnType<typeof sidebarCallbacks>,
-  checkout: Omit<RefActivation, "select"> = {
-    checkingOut: false,
-    error: null,
-  },
-): RefActivation {
-  return { ...checkout, select: callbacks.onSelectRef };
-}
-
-function loaded(current: RepositoryRefs): RepositoryRefsRead {
-  return refsRead({ refs: current });
-}
-
-function refsRead(overrides: Partial<RepositoryRefsRead>): RepositoryRefsRead {
-  return {
-    refs: undefined,
-    restored: false,
-    loading: false,
-    error: null,
-    retry: () => undefined,
-    ...overrides,
+    screen,
+    checkouts,
+    onToggleHistoryRef,
+    publish: (next: RepositoryRefs) => {
+      current = next;
+      for (const listener of listeners) listener([repositoryId], "Refs");
+    },
   };
 }
 
@@ -512,14 +514,4 @@ function nestedRefs(): RepositoryRefs {
       { name: "bugfix/login" },
     ],
   };
-}
-
-function PullSidebar({
-  reader,
-  ...sidebar
-}: ComponentProps<typeof BranchesSidebar> & {
-  readonly reader: Parameters<typeof usePull>[0];
-}) {
-  const pull = usePull(reader);
-  return <BranchesSidebar {...sidebar} refCommands={pull.commands} />;
 }

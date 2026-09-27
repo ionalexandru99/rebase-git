@@ -1,15 +1,71 @@
-import type { RemoteBranch, RepositoryRefs } from "@rebase/contracts";
+import type {
+  BranchUpstream,
+  RemoteBranch,
+  RepositoryRefs,
+  RepositoryRefTarget,
+} from "@rebase/contracts";
 import {
-  type BranchesSidebarRefRow,
-  type BranchesSidebarRow,
-  type BranchesSidebarScope,
-  type BranchesSidebarSectionRow,
-  type BranchesSidebarTreeOptions,
-  localBranchesSectionId,
-  tagsSectionId,
-} from "#web/features/branches-sidebar/branches-sidebar-model";
-import { buildBranchTree } from "#web/features/branches-sidebar/tree/branch-tree";
-import { activeHead } from "#web/features/repository-refs/activate-repository-ref";
+  type BranchesSidebarFolderRow,
+  buildBranchTree,
+  type RowHierarchy,
+} from "#web/features/branches-sidebar/branch-tree";
+import type { RefKind } from "#web/features/refs/ref-kinds";
+import { activeHead } from "#web/features/refs/repository-refs";
+
+export const localBranchesSectionId = "branches";
+export const tagsSectionId = "tags";
+
+export type BranchesSidebarScope = "all" | "local" | "remote" | "tags";
+export type BranchesSidebarView = "linear" | "tree";
+
+export interface BranchesSidebarTreeOptions {
+  readonly view: BranchesSidebarView;
+  readonly folders: ReadonlyMap<string, boolean>;
+}
+
+export interface BranchesSidebarSectionRow extends RowHierarchy {
+  readonly expanded: boolean;
+  readonly id: string;
+  readonly kind: "section";
+  readonly sectionId: string;
+  readonly title: string;
+  readonly truncated: boolean;
+  readonly separator: boolean;
+}
+
+export interface BranchesSidebarRefRow extends RowHierarchy {
+  readonly current: boolean;
+  readonly id: string;
+  readonly kind: "ref";
+  readonly name: string;
+  readonly label: string;
+  readonly parentId: string;
+  readonly sectionId: string;
+  readonly target: RepositoryRefTarget;
+  readonly upstream?: BranchUpstream;
+  readonly checkout?: {
+    readonly kind: "repository" | "worktree";
+    readonly path: string;
+  };
+}
+
+export type BranchesSidebarRow =
+  | BranchesSidebarRefRow
+  | BranchesSidebarFolderRow
+  | BranchesSidebarSectionRow;
+
+export type BranchesSidebarItem =
+  | {
+      readonly id: string;
+      readonly kind: "row";
+      readonly row: BranchesSidebarRow;
+    }
+  | { readonly id: "ref-draft"; readonly kind: "draft" };
+
+const kindSections: Record<RefKind, string> = {
+  branch: localBranchesSectionId,
+  tag: tagsSectionId,
+};
 
 export const defaultExpandedSections: ReadonlySet<string> = new Set([
   localBranchesSectionId,
@@ -121,7 +177,7 @@ export function buildBranchesSidebarRows(
     const refRows = section.refs.map(
       (ref, position): BranchesSidebarRefRow => ({
         ...ref,
-        id: `ref:${section.sectionId}:${ref.name}`,
+        id: refRowId(section.sectionId, ref.name),
         kind: "ref",
         sectionId: section.sectionId,
         label: ref.name,
@@ -138,6 +194,46 @@ export function buildBranchesSidebarRows(
         : refRows),
     ];
   });
+}
+
+export function refSectionId(kind: RefKind) {
+  return kindSections[kind];
+}
+
+export function branchesSidebarItems(
+  rows: readonly BranchesSidebarRow[],
+  draftSectionId: string | undefined,
+): readonly BranchesSidebarItem[] {
+  const items: BranchesSidebarItem[] = rows.map((row) => ({
+    id: row.id,
+    kind: "row",
+    row,
+  }));
+  if (draftSectionId !== undefined)
+    items.splice(draftPosition(rows, draftSectionId), 0, {
+      id: "ref-draft",
+      kind: "draft",
+    });
+  return items;
+}
+
+export function estimateItemHeight(item: BranchesSidebarItem | undefined) {
+  if (item?.kind === "draft") return 40;
+  return item?.row.kind === "section" && item.row.separator ? 44 : 32;
+}
+
+export function refRowId(sectionId: string, name: string) {
+  return `ref:${sectionId}:${name}`;
+}
+
+export function refFolderIds(
+  sectionId: string,
+  name: string,
+): readonly string[] {
+  const parts = name.split("/").slice(0, -1);
+  return parts.map(
+    (_, index) => `folder:${sectionId}:${parts.slice(0, index + 1).join("/")}`,
+  );
 }
 
 export function scopeShowing(
@@ -187,6 +283,14 @@ export function currentRefRowId(
   rows: readonly BranchesSidebarRow[],
 ): string | undefined {
   return rows.find((row) => row.kind === "ref" && row.current)?.id;
+}
+
+function draftPosition(rows: readonly BranchesSidebarRow[], sectionId: string) {
+  const index = rows.findIndex(
+    (row) => row.kind === "section" && row.sectionId === sectionId,
+  );
+  if (index >= 0) return index + 1;
+  return sectionId === localBranchesSectionId ? 0 : rows.length;
 }
 
 function createMatcher(query: string) {

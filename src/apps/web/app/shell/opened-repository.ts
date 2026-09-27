@@ -6,13 +6,13 @@ import {
 } from "#web/features/commit-graph/paging/commit-graph-history";
 import { createBrowserHistoryFilterStore } from "#web/features/commit-graph/scope/browser-history-filter-store";
 import { resolveHistoryScope } from "#web/features/commit-graph/scope/history-scope";
+import { resolveActiveWorktreePath } from "#web/features/refs/repository-refs";
 import { createBrowserRepositoryHistoryReader } from "#web/features/repository-history/browser-repository-history-reader";
 import { readRepositoryHistoryOrder } from "#web/features/repository-history/preferences/repository-history-order";
 import type {
   RepositoryHistoryGateway,
   RepositoryHistoryReader,
 } from "#web/features/repository-history/repository-history-reader";
-import { resolveActiveWorktreePath } from "#web/features/repository-refs/activate-repository-ref";
 import { createStore, type ReadableStore } from "#web/platform/store/store";
 
 export interface OpenedRepositoryTarget {

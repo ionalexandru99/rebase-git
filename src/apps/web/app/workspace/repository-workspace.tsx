@@ -1,24 +1,20 @@
 import { type JSX, Suspense, useCallback, useMemo, useState } from "react";
 import { useOpenedHistory } from "#web/app/shell/opened-history-context";
 import { CommitInspectionBridge } from "#web/app/workspace/commit-inspection-bridge";
-import { RepositoryPanelProvider } from "#web/app/workspace/repository-panel-provider";
-import { useHistoryRefRefresh } from "#web/app/workspace/use-history-ref-refresh";
 import { useWorkspaceHistoryScope } from "#web/app/workspace/use-workspace-history-scope";
-import { WorkspaceBranches } from "#web/app/workspace/workspace-branches";
-import { WorkspaceGraph } from "#web/app/workspace/workspace-graph";
-import { useCreateRefHere } from "#web/features/branches-sidebar/hooks/use-create-ref-here";
+import { ResizableHandle, ResizablePanel } from "#web/components/ui/resizable";
+import { BranchesSidebar } from "#web/features/branches-sidebar/branches-sidebar";
+import { CommitGraph } from "#web/features/commit-graph/commit-graph";
+import { automaticHistoryScope } from "#web/features/commit-graph/scope/history-scope-model";
 import { MergeView } from "#web/features/merge-view/merge-view";
 import { OperationRecoveryNotice } from "#web/features/operation-recovery/components/operation-recovery-notice";
+import { requestRefIntent } from "#web/features/refs/ref-actions";
+import {
+  useHistoryRefRefresh,
+  useScopedRepositoryRefs,
+} from "#web/features/refs/repository-refs";
+import { RemoteSync } from "#web/features/remote-sync/remote-sync";
 import { useCatalogRepository } from "#web/features/repository-catalog/use-repository-catalog";
-import { PullButton } from "#web/features/repository-pull/components/pull-button";
-import { PullNotice } from "#web/features/repository-pull/components/pull-notice";
-import { usePull } from "#web/features/repository-pull/use-pull";
-import { PushButton } from "#web/features/repository-push/components/push-button";
-import { PushNotice } from "#web/features/repository-push/components/push-notice";
-import { usePush } from "#web/features/repository-push/hooks/use-push";
-import { resolvePushTarget } from "#web/features/repository-push/resolve-push-target";
-import { activeHead } from "#web/features/repository-refs/activate-repository-ref";
-import { useRepositoryRefs } from "#web/features/repository-refs/hooks/use-repository-refs";
 import { workingChangesPanel } from "#web/features/working-changes/working-changes-panel-definition";
 import { WorkspacePanel } from "#web/features/workspace-panel/workspace-panel";
 import { useEnvironment } from "#web/platform/query/environment-context";
@@ -27,19 +23,48 @@ import {
   useRepositoryScope,
 } from "#web/platform/query/repository-scope";
 
+const noRefKeys: ReadonlySet<string> = new Set();
+
 export function RepositoryWorkspace(): JSX.Element | null {
   const scope = useRepositoryScope();
   const { environmentId } = useEnvironment();
   if (scope === undefined || environmentId === undefined) return null;
-  const { repositoryId, logicalRepositoryId } = scope;
   return (
-    <RepositoryPanelProvider
-      key={JSON.stringify([environmentId, repositoryId, logicalRepositoryId])}
+    <RepositoryPanel
+      key={JSON.stringify([
+        environmentId,
+        scope.repositoryId,
+        scope.logicalRepositoryId,
+      ])}
       environmentId={environmentId}
       scope={scope}
+    />
+  );
+}
+
+function RepositoryPanel({
+  environmentId,
+  scope,
+}: {
+  readonly environmentId: string;
+  readonly scope: RepositoryScope;
+}) {
+  const { repositoryId, logicalRepositoryId, worktreePath } = scope;
+  const panelScope = useMemo(
+    () => ({ environmentId, repositoryId, logicalRepositoryId, worktreePath }),
+    [environmentId, repositoryId, logicalRepositoryId, worktreePath],
+  );
+  return (
+    <WorkspacePanel.Provider
+      scope={panelScope}
+      scopeKey={JSON.stringify([
+        environmentId,
+        logicalRepositoryId,
+        worktreePath,
+      ])}
     >
       <Workspace environmentId={environmentId} scope={scope} />
-    </RepositoryPanelProvider>
+    </WorkspacePanel.Provider>
   );
 }
 
@@ -50,7 +75,6 @@ function Workspace({
   readonly environmentId: string;
   readonly scope: RepositoryScope;
 }) {
-  const [branchFocusRequest, setBranchFocusRequest] = useState(0);
   const { worktreePath } = scope;
   const [merging, setMerging] = useState<{
     readonly worktreePath: string;
@@ -73,79 +97,97 @@ function Workspace({
     [openMergeView],
   );
   const history = useOpenedHistory();
+  const reader = history?.reader;
   const name = useCatalogRepository(scope.repositoryId)?.name ?? "Repository";
-  const repositoryRefs = useRepositoryRefs(
-    scope.repositoryId,
-    scope.logicalRepositoryId,
-  );
+  const repositoryRefs = useScopedRepositoryRefs();
   const { refs } = repositoryRefs;
-  const refCreation = useCreateRefHere();
   const historyScope = useWorkspaceHistoryScope(
     environmentId,
     scope,
     repositoryRefs,
   );
-  const push = usePush();
-  const pull = usePull(history?.reader);
-  useHistoryRefRefresh(history?.reader, scope.connected, repositoryRefs.retry);
-  const activeBranch = refs && activeHead(refs, scope.worktreePath)?.branch;
-  const incoming = refs?.branches.find(({ name }) => name === activeBranch)
-    ?.upstream?.behind;
+  const resolved = historyScope.resolvedScope;
+  useHistoryRefRefresh(reader, scope.connected, repositoryRefs.retry);
   return (
     <>
-      <OperationRecoveryNotice key={scope.worktreePath} repositoryName={name} />
-      <PullNotice pull={pull} />
-      <PushNotice push={push} />
-      <CommitInspectionBridge connected={scope.connected}>
-        {(inspection) => (
-          <WorkspacePanel.Group>
-            <WorkspaceBranches
-              repositoryRefs={repositoryRefs}
-              historyScope={historyScope}
-              createRequest={refCreation.request}
-              focusRequest={branchFocusRequest}
-              refCommands={pull.commands}
-            />
-            <WorkspacePanel.Main>
-              {() =>
-                mergePath !== null ? (
-                  <MergeView
-                    path={mergePath}
-                    onOpen={openMergeView}
-                    onClose={() => setMerging(null)}
-                    toolbarActions={<WorkspacePanel.Toggle />}
-                  />
-                ) : (
-                  <WorkspaceGraph
-                    scope={scope}
-                    inspection={inspection}
-                    historyScope={historyScope}
-                    extraCommands={refCreation.commands}
-                    onAddHistoryRef={() =>
-                      setBranchFocusRequest((request) => request + 1)
-                    }
-                    toolbarActions={
-                      <>
-                        <PullButton
-                          pull={pull}
-                          activeBranch={activeBranch}
-                          incoming={incoming ?? 0}
-                        />
-                        <PushButton
-                          push={push}
-                          target={resolvePushTarget(refs, activeBranch)}
-                        />
-                        <WorkspacePanel.Toggle />
-                      </>
+      <OperationRecoveryNotice key={worktreePath} repositoryName={name} />
+      <RemoteSync reader={reader}>
+        {(syncActions) => (
+          <CommitInspectionBridge connected={scope.connected}>
+            {(inspection) => (
+              <WorkspacePanel.Group>
+                <ResizablePanel
+                  defaultSize="16.5rem"
+                  groupResizeBehavior="preserve-pixel-size"
+                  id="branches"
+                  maxSize="26rem"
+                  minSize="12rem"
+                >
+                  <BranchesSidebar
+                    onBranchRenamed={historyScope.renameBranch}
+                    onToggleHistoryRef={historyScope.toggleRef}
+                    reader={reader}
+                    selectedHistoryRefKeys={
+                      resolved?.selectedRefKeys ?? noRefKeys
                     }
                   />
-                )
-              }
-            </WorkspacePanel.Main>
-            <WorkspacePanel.Pane contents={panelContents} />
-          </WorkspacePanel.Group>
+                </ResizablePanel>
+                <ResizableHandle
+                  aria-label="Resize branches sidebar"
+                  className="z-10 bg-transparent after:w-2 focus-visible:ring-primary/40"
+                />
+                <WorkspacePanel.Main>
+                  {() =>
+                    mergePath !== null ? (
+                      <MergeView
+                        path={mergePath}
+                        onOpen={openMergeView}
+                        onClose={() => setMerging(null)}
+                        toolbarActions={<WorkspacePanel.Toggle />}
+                      />
+                    ) : (
+                      <main
+                        aria-label="Repository workspace"
+                        className="h-full rounded-none bg-repository"
+                      >
+                        <CommitGraph
+                          ref={inspection.graphRef}
+                          onOpenDetails={inspection.open}
+                          onActiveCommitChange={inspection.select}
+                          toolbarActions={
+                            <>
+                              {syncActions}
+                              <WorkspacePanel.Toggle />
+                            </>
+                          }
+                          githubRepository={refs?.githubRepository}
+                          remoteProviders={refs?.remoteProviders}
+                          historyIdentity={{
+                            environmentId,
+                            repositoryId: scope.logicalRepositoryId,
+                          }}
+                          onRemoveHistoryRef={historyScope.toggleRef}
+                          onRevealHistoryRef={historyScope.toggleRef}
+                          onAddHistoryRef={() =>
+                            requestRefIntent({ _tag: "FocusRefs" })
+                          }
+                          onResetHistoryScope={historyScope.reset}
+                          history={history}
+                          repositoryName={name}
+                          roots={resolved?.roots}
+                          scope={resolved?.scope ?? automaticHistoryScope}
+                          selections={resolved?.selections ?? []}
+                        />
+                      </main>
+                    )
+                  }
+                </WorkspacePanel.Main>
+                <WorkspacePanel.Pane contents={panelContents} />
+              </WorkspacePanel.Group>
+            )}
+          </CommitInspectionBridge>
         )}
-      </CommitInspectionBridge>
+      </RemoteSync>
     </>
   );
 }

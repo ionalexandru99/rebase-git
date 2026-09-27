@@ -10,7 +10,6 @@ import {
 } from "#tests-ui/apps/web/commit-graph/commit-graph-fixture";
 import { repositoryScope } from "#tests-ui/apps/web/repository-scope/repository-scope-fixture";
 import { render } from "#tests-ui/runtime/render";
-import type { GraphCommandDefinition } from "#web/features/commit-commands/graph-command";
 import {
   type RepositoryScope,
   RepositoryScopeProvider,
@@ -46,37 +45,26 @@ describe("commit graph commands", () => {
     );
   });
 
-  it("fetches from the toolbar", async () => {
-    const reader = readyToFetch();
+  it("offers creating refs at the commit on a writable connection", async () => {
+    const reader = historyReader({ commits: history(2), status: "ready" });
     const screen = await render(
       <ScopedGraph reader={reader} scope={repositoryScope()} />,
     );
-    const fetch = screen.getByRole("button", { name: "Fetch", exact: true });
-    await fetch.click();
-    await expect.poll(() => reader.fetch).toHaveBeenCalledOnce();
-    await expect.element(fetch).toBeEnabled();
-  });
+    await screen
+      .getByRole("grid")
+      .getByRole("row", { name: /^Commit 1,/ })
+      .click({ button: "right" });
+    await expect
+      .element(screen.getByRole("menu"))
+      .toHaveTextContent(
+        "Copy commit SHACopy commit subjectCreate branch here…Create tag here…",
+      );
+    await userEvent.keyboard("{Escape}");
 
-  it("runs commands that the workspace adds to the commit menu", async () => {
-    const reader = historyReader({ commits: history(2), status: "ready" });
-    const tagged = vi.fn<(oid: string) => void>();
-    const tagCommand: GraphCommandDefinition = {
-      id: "test.tag",
-      order: 5,
-      resolve: (context) => ({
-        label: "Tag commit",
-        enabled: context.writable,
-        execute: async () => {
-          tagged(context.invokingOid);
-          return { _tag: "Executed" };
-        },
-      }),
-    };
-    const screen = await render(
+    await screen.rerender(
       <ScopedGraph
-        commands={[tagCommand]}
         reader={reader}
-        scope={repositoryScope()}
+        scope={repositoryScope({ writable: false })}
       />,
     );
     await screen
@@ -85,9 +73,35 @@ describe("commit graph commands", () => {
       .click({ button: "right" });
     await expect
       .element(screen.getByRole("menu"))
-      .toHaveTextContent("Copy commit SHACopy commit subjectTag commit");
-    await screen.getByRole("menuitem", { name: "Tag commit" }).click();
-    expect(tagged).toHaveBeenCalledWith(historyOid(1));
+      .toHaveTextContent("Copy commit SHACopy commit subject");
+    await expect
+      .element(screen.getByRole("menuitem", { name: "Create tag here…" }))
+      .not.toBeInTheDocument();
+  });
+
+  it("explains missing commit metadata and needs read access for details", async () => {
+    const reader = historyReader({ commits: history(2), status: "ready" });
+    reader.getCommitSummaries.mockResolvedValue([]);
+    const openDetails = vi.fn();
+    const screen = await render(
+      <ScopedGraph
+        reader={reader}
+        scope={repositoryScope({ readable: false })}
+        onOpenDetails={openDetails}
+      />,
+    );
+    await screen
+      .getByRole("grid")
+      .getByRole("row", { name: /^Commit 1,/ })
+      .click({ button: "right" });
+    await expect
+      .element(screen.getByRole("menuitem", { name: "Open details" }))
+      .toHaveAttribute("aria-disabled", "true");
+    await screen.getByRole("menuitem", { name: "Copy commit subject" }).click();
+    await expect
+      .element(screen.getByRole("alert"))
+      .toHaveTextContent("Commit metadata is not available yet");
+    expect(openDetails).not.toHaveBeenCalled();
   });
 
   it("selects the invoking commit and opens its menu from the keyboard", async () => {
@@ -136,37 +150,23 @@ describe("commit graph commands", () => {
   });
 });
 
-function readyToFetch() {
-  const reader = historyReader({ commits: history(2), status: "ready" });
-  const freshness = {
-    revision: 0,
-    fetching: false,
-    stale: false,
-    defaultIntervalSeconds: 300,
-    setting: { _tag: "Inherit" as const },
-  };
-  reader.snapshot = { ...reader.snapshot, freshness };
-  reader.fetch.mockResolvedValue(freshness);
-  return reader;
-}
-
 function ScopedGraph({
-  commands = [],
   reader,
   scope,
+  onOpenDetails,
 }: {
-  readonly commands?: readonly GraphCommandDefinition[];
   readonly reader: ReturnType<typeof historyReader>;
   readonly scope: RepositoryScope;
+  readonly onOpenDetails?: (oid: string) => void;
 }) {
   return (
     <div style={{ height: 520, width: 900 }}>
       <RepositoryScopeProvider scope={scope}>
         <CommitGraphFixture
-          extraCommands={commands}
           reader={reader}
           repositoryName="rebase-test"
           roots={[{ name: "main", oid: "0".repeat(40), type: "branch" }]}
+          onOpenDetails={onOpenDetails}
         />
       </RepositoryScopeProvider>
     </div>

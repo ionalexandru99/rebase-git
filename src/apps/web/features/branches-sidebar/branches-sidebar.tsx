@@ -1,4 +1,4 @@
-import type { RepositoryRefTarget, RepositoryTag } from "@rebase/contracts";
+import type { RepositoryRefTarget } from "@rebase/contracts";
 import { IconSearch } from "@tabler/icons-react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import {
@@ -12,77 +12,69 @@ import {
   useRef,
   useState,
 } from "react";
+import { keyAction, runAction } from "#web/components/ui/action-menu";
 import { Input } from "#web/components/ui/input";
-import {
-  branchesSidebarItems,
-  estimateItemHeight,
-  isBranchEditItem,
-  refFolderIds,
-  refRowId,
-} from "#web/features/branches-sidebar/branch-editing/branch-edit-state";
-import { BranchEditItem } from "#web/features/branches-sidebar/branch-editing/components/branch-edit-item";
-import { BranchEditingStatus } from "#web/features/branches-sidebar/branch-editing/components/branch-editing-status";
-import {
-  type BranchRename,
-  useBranchEditing,
-} from "#web/features/branches-sidebar/branch-editing/hooks/use-branch-editing";
-import {
-  type BranchesSidebarRow,
-  type BranchesSidebarScope,
-  localBranchesSectionId,
-  tagsSectionId,
-} from "#web/features/branches-sidebar/branches-sidebar-model";
-import {
-  buildBranchesSidebarRows,
-  currentRefRowId,
-  defaultExpandedSections,
-  scopeShowing,
-  toggleSection,
-} from "#web/features/branches-sidebar/branches-sidebar-state";
+import { treeKeyAction } from "#web/features/branches-sidebar/branches-sidebar-keyboard";
 import {
   RefRow,
   rowElementId,
   SectionRow,
-} from "#web/features/branches-sidebar/components/branches-sidebar-rows";
-import { BranchesSidebarScopeFilter } from "#web/features/branches-sidebar/components/branches-sidebar-scope-filter";
-import { BranchesSidebarViewSelector } from "#web/features/branches-sidebar/components/branches-sidebar-view-selector";
-import { SidebarStatus } from "#web/features/branches-sidebar/components/sidebar-status";
-import { useBranchesSidebarView } from "#web/features/branches-sidebar/hooks/use-branches-sidebar-view";
-import type { RefCreateRequest } from "#web/features/branches-sidebar/hooks/use-create-ref-here";
-import { treeKeyAction } from "#web/features/branches-sidebar/navigation/branches-sidebar-keyboard";
-import { TagDraftRow } from "#web/features/branches-sidebar/tag-editing/components/tag-draft-row";
-import { TagEditingStatus } from "#web/features/branches-sidebar/tag-editing/components/tag-editing-status";
-import { useTagEditing } from "#web/features/branches-sidebar/tag-editing/hooks/use-tag-editing";
+} from "#web/features/branches-sidebar/branches-sidebar-rows";
+import {
+  type BranchesSidebarRefRow,
+  type BranchesSidebarRow,
+  type BranchesSidebarScope,
+  branchesSidebarItems,
+  buildBranchesSidebarRows,
+  currentRefRowId,
+  defaultExpandedSections,
+  estimateItemHeight,
+  refFolderIds,
+  refRowId,
+  refSectionId,
+  scopeShowing,
+  toggleSection,
+} from "#web/features/branches-sidebar/branches-sidebar-state";
+import { SidebarStatus } from "#web/features/branches-sidebar/sidebar-status";
+import {
+  BranchesSidebarScopeFilter,
+  BranchesSidebarViewSelector,
+  useBranchesSidebarView,
+} from "#web/features/branches-sidebar/sidebar-view-controls";
 import { historyRefKey } from "#web/features/commit-graph/scope/history-scope";
-import type { RefCommandDefinition } from "#web/features/ref-commands/ref-command";
-import type { RefActivation } from "#web/features/repository-refs/hooks/use-ref-activation";
-import type { RepositoryRefsRead } from "#web/features/repository-refs/hooks/use-repository-refs";
+import { refActions, useRefIntent } from "#web/features/refs/ref-actions";
+import { useRefEditing } from "#web/features/refs/ref-editing";
+import { RefEditingStatus } from "#web/features/refs/ref-editing-status";
+import { commitStartPoint, type RefKind } from "#web/features/refs/ref-kinds";
+import { RefEditField } from "#web/features/refs/ref-name-field";
+import {
+  useRefActivation,
+  useScopedRepositoryRefs,
+} from "#web/features/refs/repository-refs";
+import { type PullReader, usePull } from "#web/features/remote-sync/use-pull";
+import { useRepositoryScope } from "#web/platform/query/repository-scope";
 
 const overscanRows = 12;
-const noRefCommands: readonly RefCommandDefinition[] = [];
-const noTags: readonly RepositoryTag[] = [];
+const noSelectedRefs: ReadonlySet<string> = new Set();
 
 export function BranchesSidebar({
-  activation,
-  activeWorktreePath,
-  createRequest,
-  focusRequest,
+  reader,
   onBranchRenamed = () => undefined,
   onToggleHistoryRef = () => undefined,
-  refCommands = noRefCommands,
-  repositoryRefs,
-  selectedHistoryRefKeys = new Set<string>(),
+  selectedHistoryRefKeys = noSelectedRefs,
 }: {
-  readonly activation: RefActivation;
-  readonly activeWorktreePath: string;
-  readonly createRequest?: RefCreateRequest | undefined;
-  readonly focusRequest: number;
-  readonly onBranchRenamed?: (rename: BranchRename) => void;
+  readonly reader: PullReader | undefined;
+  readonly onBranchRenamed?: (rename: {
+    readonly name: string;
+    readonly newName: string;
+  }) => void;
   readonly onToggleHistoryRef?: (target: RepositoryRefTarget) => void;
-  readonly refCommands?: readonly RefCommandDefinition[];
-  readonly repositoryRefs: RepositoryRefsRead;
   readonly selectedHistoryRefKeys?: ReadonlySet<string>;
 }): JSX.Element {
+  const activeWorktreePath = useRepositoryScope()?.worktreePath ?? "";
+  const repositoryRefs = useScopedRepositoryRefs();
+  const activation = useRefActivation(repositoryRefs);
+  const pull = usePull(reader);
   const [query, setQuery] = useState("");
   const filterQuery = useDeferredValue(query);
   const [scope, setScope] = useState<BranchesSidebarScope>("all");
@@ -126,37 +118,29 @@ export function BranchesSidebar({
     ],
   );
   const focusTree = useCallback(() => treeRef.current?.focus(), []);
-  const reveal = useCallback(
-    (name: string, sectionId = localBranchesSectionId) => {
-      setExpandedSections((current) =>
-        current.has(sectionId) ? current : toggleSection(current, sectionId),
-      );
-      setExpandedFolders((current) => {
-        const next = new Map(current);
-        for (const id of refFolderIds(sectionId, name)) next.set(id, true);
-        return next;
-      });
-      setActiveRowId(refRowId(sectionId, name));
-      treeRef.current?.focus();
-    },
-    [],
-  );
-  const editing = useBranchEditing({
-    activeWorktreePath,
-    createRequest,
+  const reveal = useCallback((kind: RefKind, name: string) => {
+    const sectionId = refSectionId(kind);
+    setExpandedSections((current) =>
+      current.has(sectionId) ? current : toggleSection(current, sectionId),
+    );
+    setExpandedFolders((current) => {
+      const next = new Map(current);
+      for (const id of refFolderIds(sectionId, name)) next.set(id, true);
+      return next;
+    });
+    setActiveRowId(refRowId(sectionId, name));
+    treeRef.current?.focus();
+  }, []);
+  const editing = useRefEditing({
+    refs,
     focusTree,
+    reveal,
     onCreated: (name) => onSelectRef({ _tag: "LocalBranch", name }),
     onRenamed: onBranchRenamed,
-    refs,
-    reveal,
   });
-  const tagEditing = useTagEditing({
-    createRequest,
-    focusTree,
-    reveal,
-    tags: refs?.tags ?? noTags,
-  });
-  const draftSectionId = editing.draftSectionId ?? tagEditing.draftSectionId;
+  const edit = editing.edit;
+  const draftSectionId =
+    edit?.kind === "create" ? refSectionId(edit.ref) : undefined;
   useEffect(() => {
     if (draftSectionId !== undefined)
       setScope((current) => scopeShowing(current, draftSectionId));
@@ -203,14 +187,36 @@ export function BranchesSidebar({
 
   const rowsRef = useRef(rows);
   rowsRef.current = rows;
-  useEffect(() => {
-    if (focusRequest === 0) return;
+  useRefIntent((intent) => {
+    if (intent._tag === "DraftRef") {
+      editing.draft(intent.kind, commitStartPoint(intent.oid));
+      return;
+    }
     treeRef.current?.focus();
     setActiveRowId(
       (current) =>
         current ?? currentRefRowId(rowsRef.current) ?? rowsRef.current[0]?.id,
     );
-  }, [focusRequest]);
+  });
+
+  const actionsFor = (row: BranchesSidebarRefRow) =>
+    refs === undefined
+      ? []
+      : refActions(
+          row,
+          refs,
+          { activeWorktreePath, writable: editing.writable },
+          {
+            checkout: onSelectRef,
+            pull: pull.allowed
+              ? {
+                  pulling: pull.pulling,
+                  run: (branch) => void pull.pull(branch),
+                }
+              : undefined,
+            editing,
+          },
+        );
 
   const setRowExpanded = (
     row: Exclude<BranchesSidebarRow, { kind: "ref" }>,
@@ -256,8 +262,8 @@ export function BranchesSidebar({
       return;
     }
     if (
-      editing.handleTreeKey(event.key, activeRow) ||
-      tagEditing.handleTreeKey(event.key, activeRow)
+      activeRow?.kind === "ref" &&
+      runAction(keyAction(actionsFor(activeRow), event.key))
     ) {
       event.preventDefault();
       return;
@@ -349,7 +355,10 @@ export function BranchesSidebar({
             const position = {
               transform: `translateY(${virtualItem.start}px)`,
             };
-            if (isBranchEditItem(item, editing.edit))
+            const editsRow =
+              item.kind === "draft" ||
+              (edit?.kind === "rename" && edit.rowId === item.id);
+            if (editsRow)
               return (
                 <div
                   className="absolute top-0 left-0 w-full"
@@ -358,15 +367,11 @@ export function BranchesSidebar({
                   ref={virtualizer.measureElement}
                   style={position}
                 >
-                  {item.kind === "draft" && draftSectionId === tagsSectionId ? (
-                    <TagDraftRow editing={tagEditing} />
-                  ) : (
-                    <BranchEditItem
-                      branches={refs?.branches ?? []}
-                      editing={editing}
-                      item={item}
-                    />
-                  )}
+                  <RefEditField
+                    editing={editing}
+                    level={item.kind === "row" ? item.row.level : 2}
+                    refs={refs}
+                  />
                 </div>
               );
             if (item.kind !== "row") return null;
@@ -383,18 +388,10 @@ export function BranchesSidebar({
               />
             ) : (
               <RefRow
-                actions={[
-                  ...editing.rowActions(row),
-                  ...tagEditing.rowActions(row),
-                ]}
+                actions={actionsFor(row)}
                 active={row.id === activeRowId}
-                commands={refCommands}
                 key={row.id}
-                onAction={(id) => {
-                  if (!tagEditing.start(id, row)) editing.start(id, row);
-                }}
                 onActivate={() => setActiveRowId(row.id)}
-                onSelect={() => onSelectRef(row.target)}
                 onToggleHistory={() => onToggleHistoryRef(row.target)}
                 row={row}
                 selectedInHistory={selectedHistoryRefKeys.has(
@@ -412,19 +409,12 @@ export function BranchesSidebar({
           scope={scope}
         />
       </div>
-      <BranchEditingStatus
+      <RefEditingStatus
+        anchor={(rowId) => document.getElementById(rowElementId(rowId))}
+        checkoutError={activation.error}
         editing={editing}
         remoteBranches={refs?.remoteBranches ?? []}
       />
-      <TagEditingStatus editing={tagEditing} />
-      {activation.error === null ? null : (
-        <p
-          className="mx-3 mb-3 rounded-md border border-status-unavailable/40 bg-status-unavailable/10 px-3 py-2 text-xs text-foreground"
-          role="alert"
-        >
-          {activation.error}
-        </p>
-      )}
     </nav>
   );
 }
