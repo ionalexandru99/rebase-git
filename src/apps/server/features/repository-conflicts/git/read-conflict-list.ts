@@ -63,7 +63,10 @@ function readConflictSides(
         subject: commit === null ? null : (subjects.get(commit) ?? null),
       }) satisfies SideLabel;
     return {
-      current: label(current, null),
+      current: label(
+        current,
+        operation.kind === "rebase" ? null : operation.branch,
+      ),
       incoming: label(
         incoming,
         operation.kind === "rebase" ? operation.branch : operation.mergedBranch,

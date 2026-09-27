@@ -158,7 +158,7 @@ describe("repository conflicts", () => {
     const list = await f.list();
 
     expect(list.sides).toMatchObject({
-      current: { ref: null, subject: "main" },
+      current: { ref: "main", subject: "main" },
       incoming: { ref: "topic", subject: "topic" },
       base: { ref: null, subject: "base" },
     });
