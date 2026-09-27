@@ -14,7 +14,7 @@ import type { GraphCommandDefinition } from "#web/features/commit-commands/graph
 import {
   type RepositoryScope,
   RepositoryScopeProvider,
-} from "#web/features/repository-scope/repository-scope-provider";
+} from "#web/platform/query/repository-scope";
 
 describe("commit graph commands", () => {
   it("reveals a hidden result from cached search", async () => {

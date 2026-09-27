@@ -4,72 +4,45 @@ import {
   RepositoryChangesHttpApi,
   type ViewedChange,
 } from "@rebase/contracts";
-import { useQueryClient } from "@tanstack/react-query";
-import { useCallback } from "react";
 import {
-  changeDiffKey,
-  changesKey,
+  changeDiffInput,
+  changesScope,
 } from "#web/features/working-changes/working-changes-query";
-import { useEnvironment } from "#web/platform/query/environment-context";
-import { type CommandScope, useCommand } from "#web/platform/query/use-command";
+import {
+  answer,
+  type CommandTarget,
+  useCommand,
+} from "#web/platform/query/use-command";
 
 type WrittenScope = ChangesScope & { readonly viewed?: ViewedChange };
 
-export function useChangeActions(repository: CommandScope) {
-  const { write, reread } = useChangesCache();
-  const scope = changesWriteScope(repository);
+export function useChangeActions(target: CommandTarget) {
   const mutate = useCommand(RepositoryChangesHttpApi.mutate, {
-    repository,
-    scope,
-    onSuccess: (written, command) => write(command, written),
-    onError: (_error, command) => reread(command),
+    target,
+    answers: (written, input) => changesAnswers(input, written),
   });
   const commit = useCommand(RepositoryChangesHttpApi.commit, {
-    repository,
-    scope,
-    onSuccess: (written, command) =>
-      write({ ...command, amend: false }, written),
-    onError: (_error, command) => reread(command),
+    target,
+    answers: (written, input) =>
+      changesAnswers({ ...input, amend: false }, written),
   });
-  return { mutate, commit, busy: mutate.isPending || commit.isPending };
+  return { mutate, commit, busy: mutate.running || commit.running };
 }
 
-export function changesWriteScope({
-  repositoryId,
-  worktreePath,
-}: CommandScope) {
-  return {
-    id: JSON.stringify(["working-changes", repositoryId, worktreePath ?? null]),
-  };
-}
-
-function useChangesCache() {
-  const queryClient = useQueryClient();
-  const { environmentId } = useEnvironment();
-  const write = useCallback(
-    async (scope: WrittenScope, written: ChangesWritten) => {
-      const queryKey = changesKey(environmentId, scope);
-      await queryClient.cancelQueries({ queryKey });
-      queryClient.setQueryData(queryKey, written.changes);
-      if (scope.viewed !== undefined && written.diff !== null)
-        queryClient.setQueryData(
-          changeDiffKey(
-            environmentId,
-            scope,
-            scope.viewed,
-            written.changes.revision,
-          ),
-          written.diff,
-        );
-    },
-    [environmentId, queryClient],
+function changesAnswers(scope: WrittenScope, written: ChangesWritten) {
+  const changes = answer(
+    RepositoryChangesHttpApi.read,
+    changesScope(scope),
+    written.changes,
   );
-  const reread = useCallback(
-    (scope: ChangesScope) =>
-      queryClient.invalidateQueries({
-        queryKey: changesKey(environmentId, scope),
-      }),
-    [environmentId, queryClient],
-  );
-  return { write, reread };
+  if (scope.viewed === undefined || written.diff === null) return [changes];
+  return [
+    changes,
+    answer(
+      RepositoryChangesHttpApi.diff,
+      changeDiffInput(scope, scope.viewed),
+      written.diff,
+      written.changes.revision,
+    ),
+  ];
 }

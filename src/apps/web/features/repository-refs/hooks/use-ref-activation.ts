@@ -1,10 +1,13 @@
-import type { RepositoryRefTarget } from "@rebase/contracts";
+import {
+  RepositoryRefsHttpApi,
+  type RepositoryRefTarget,
+} from "@rebase/contracts";
 import { useCallback, useRef } from "react";
 import { resolveRefActivation } from "#web/features/repository-refs/activate-repository-ref";
-import { useCheckout } from "#web/features/repository-refs/hooks/use-checkout";
 import type { RepositoryRefsRead } from "#web/features/repository-refs/hooks/use-repository-refs";
-import { describeCheckoutFailure } from "#web/features/repository-refs/refs-messages";
-import { useRepositoryScope } from "#web/features/repository-scope/repository-scope-provider";
+import { useRepositoryScope } from "#web/platform/query/repository-scope";
+import { describeFailure } from "#web/platform/query/request-failure";
+import { useCommand } from "#web/platform/query/use-command";
 
 export interface RefActivation {
   readonly select: (target: RepositoryRefTarget) => void;
@@ -17,8 +20,8 @@ export function useRefActivation({
   restored,
 }: RepositoryRefsRead): RefActivation {
   const scope = useRepositoryScope();
-  const checkout = useCheckout();
-  const { mutate } = checkout;
+  const checkout = useCommand(RepositoryRefsHttpApi.checkout);
+  const { run } = checkout;
   const checkingOut = useRef(false);
   const select = useCallback(
     (target: RepositoryRefTarget) => {
@@ -34,25 +37,24 @@ export function useRefActivation({
         scope.switchWorktree(activation.worktreePath);
       else if (activation._tag === "Checkout") {
         checkingOut.current = true;
-        mutate(
-          {
-            repositoryId: scope.repositoryId,
-            worktreePath: scope.worktreePath,
-            target: activation.target,
-          },
-          {
-            onSettled: () => {
-              checkingOut.current = false;
-            },
-          },
-        );
+        void run({ target: activation.target }).finally(() => {
+          checkingOut.current = false;
+        });
       }
     },
-    [mutate, refs, restored, scope],
+    [run, refs, restored, scope],
   );
   return {
     select,
-    checkingOut: checkout.isPending,
-    error: checkout.isError ? describeCheckoutFailure(checkout.error) : null,
+    checkingOut: checkout.running,
+    error:
+      checkout.failure === undefined
+        ? null
+        : describeFailure(checkout.failure, {
+            CheckoutRejected: ({ reason }) =>
+              reason === "StashFailed"
+                ? "Local changes could not be stashed."
+                : "Local changes would be overwritten.",
+          }),
   };
 }

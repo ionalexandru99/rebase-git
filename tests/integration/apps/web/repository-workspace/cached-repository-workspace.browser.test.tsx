@@ -1,12 +1,17 @@
 import { createBrowserRepositoryHistoryReader } from "#web/features/repository-history/browser-repository-history-reader";
 import "@rebase/web/styles.css";
-import type { RepositoryCommit, RepositoryRefs } from "@rebase/contracts";
+import {
+  RepositoryBranchesHttpApi,
+  type RepositoryCommit,
+  type RepositoryRefs,
+} from "@rebase/contracts";
 import {
   persistQueryClientRestore,
   persistQueryClientSave,
 } from "@tanstack/react-query-persist-client";
 import { expect, it, vi } from "vite-plus/test";
 import { repositoryScope } from "#tests-ui/apps/web/repository-scope/repository-scope-fixture";
+import { fakeRequests, respond } from "#tests-ui/runtime/fake-requests";
 import { fakeRpc } from "#tests-ui/runtime/fake-rpc";
 import { render } from "#tests-ui/runtime/render";
 import { OpenedHistoryContext } from "#web/app/shell/opened-history-context";
@@ -16,11 +21,11 @@ import { createBrowserHistoryFilterStore } from "#web/features/commit-graph/scop
 import { resolveHistoryScope } from "#web/features/commit-graph/scope/history-scope";
 import { storeRepositoryHistoryPage } from "#web/features/repository-history/replica/repository-history-store";
 import { RepositoryHistoryOffline } from "#web/features/repository-history/repository-history-reader";
-import { useApplyToRefs } from "#web/features/repository-refs/hooks/use-apply-to-refs";
 import { useRepositoryRefs } from "#web/features/repository-refs/hooks/use-repository-refs";
-import { RepositoryScopeProvider } from "#web/features/repository-scope/repository-scope-provider";
 import { createEnvironmentQueryClient } from "#web/platform/query/environment-query-client";
 import { createEnvironmentQueryPersistence } from "#web/platform/query/environment-query-persistence";
+import { RepositoryScopeProvider } from "#web/platform/query/repository-scope";
+import { useCommand } from "#web/platform/query/use-command";
 
 it("restores only persisted refs, unconfirmed, for the same protocol", async () => {
   const persistence = createEnvironmentQueryPersistence();
@@ -113,6 +118,12 @@ it("keeps restored refs restored through a branch write until a live read answer
     reads.push(read);
     return read.promise;
   });
+  const requests = fakeRequests(
+    respond(RepositoryBranchesHttpApi.rename, async ({ newName }) => ({
+      branch: { name: newName, target: oid },
+      previousName: "main",
+    })),
+  );
   const screen = await render(
     <RepositoryScopeProvider
       scope={repositoryScope({
@@ -127,7 +138,7 @@ it("keeps restored refs restored through a branch write until a live read answer
       />
       <RenameMain />
     </RepositoryScopeProvider>,
-    { environment: { environmentId, rpc }, queryClient },
+    { environment: { environmentId, rpc, requests }, queryClient },
   );
   await expect.poll(() => reads).toHaveLength(1);
   reads[0]?.reject(new Error("offline"));
@@ -265,9 +276,12 @@ function RefsProbe({
 }
 
 function RenameMain() {
-  const applyToRefs = useApplyToRefs();
+  const rename = useCommand(RepositoryBranchesHttpApi.rename);
   return (
-    <button type="button" onClick={() => void applyToRefs(renameMain)}>
+    <button
+      type="button"
+      onClick={() => void rename.run({ name: "main", newName: "trunk" })}
+    >
       Rename main
     </button>
   );

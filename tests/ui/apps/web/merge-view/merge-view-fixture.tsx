@@ -14,7 +14,7 @@ import { repositoryScope } from "#tests-ui/apps/web/repository-scope/repository-
 import { fakeRequests, respond } from "#tests-ui/runtime/fake-requests";
 import { render } from "#tests-ui/runtime/render";
 import { MergeView } from "#web/features/merge-view/merge-view";
-import { RepositoryScopeProvider } from "#web/features/repository-scope/repository-scope-provider";
+import { RepositoryScopeProvider } from "#web/platform/query/repository-scope";
 
 export const path = "src/checkout/config.ts";
 

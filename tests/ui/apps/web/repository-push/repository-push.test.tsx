@@ -18,7 +18,7 @@ import { PushButton } from "#web/features/repository-push/components/push-button
 import { PushNotice } from "#web/features/repository-push/components/push-notice";
 import { usePush } from "#web/features/repository-push/hooks/use-push";
 import type { PushTarget } from "#web/features/repository-push/resolve-push-target";
-import { RepositoryScopeProvider } from "#web/features/repository-scope/repository-scope-provider";
+import { RepositoryScopeProvider } from "#web/platform/query/repository-scope";
 
 const reviewed = "9c1e2f71".padEnd(40, "0");
 const scope = { repositoryId: "repo", worktreePath: "/repo" };
@@ -108,8 +108,8 @@ describe("repository push", () => {
     await page
       .getByRole("button", { name: /^Force push feature\/444-push/ })
       .click();
-    const confirmation = page.getByRole("region", {
-      name: "Confirm force push",
+    const confirmation = page.getByRole("alertdialog", {
+      name: /^Force push to /,
     });
     await expect
       .element(confirmation)
@@ -161,11 +161,7 @@ describe("repository push", () => {
       .click();
 
     await expect
-      .element(
-        page.getByText(
-          "Cancelled. origin/spike reflects what reached the remote.",
-        ),
-      )
+      .element(page.getByText("The request was cancelled."))
       .toBeVisible();
     await expect
       .element(page.getByRole("button", { name: "Push spike" }))
@@ -187,8 +183,8 @@ describe("repository push", () => {
     const forcePush = page.getByRole("button", {
       name: /^Force push feature\/444-push/,
     });
-    const confirmation = page.getByRole("region", {
-      name: "Confirm force push",
+    const confirmation = page.getByRole("alertdialog", {
+      name: /^Force push to /,
     });
 
     await forcePush.click();
@@ -208,7 +204,7 @@ describe("repository push", () => {
       .element(page.getByRole("region", { name: "Push progress" }))
       .not.toBeInTheDocument();
     await expect
-      .element(page.getByText("Cancelled.", { exact: false }))
+      .element(page.getByText("The request was cancelled."))
       .not.toBeInTheDocument();
   });
 });

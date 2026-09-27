@@ -9,23 +9,23 @@ import { WorkspaceGraph } from "#web/app/workspace/workspace-graph";
 import { useCreateRefHere } from "#web/features/branches-sidebar/hooks/use-create-ref-here";
 import { MergeView } from "#web/features/merge-view/merge-view";
 import { OperationRecoveryNotice } from "#web/features/operation-recovery/components/operation-recovery-notice";
-import { useCatalogRepository } from "#web/features/repository-catalog/hooks/use-repository-catalog";
+import { useCatalogRepository } from "#web/features/repository-catalog/use-repository-catalog";
 import { PullButton } from "#web/features/repository-pull/components/pull-button";
 import { PullNotice } from "#web/features/repository-pull/components/pull-notice";
-import { usePull } from "#web/features/repository-pull/hooks/use-pull";
+import { usePull } from "#web/features/repository-pull/use-pull";
 import { PushButton } from "#web/features/repository-push/components/push-button";
 import { PushNotice } from "#web/features/repository-push/components/push-notice";
 import { usePush } from "#web/features/repository-push/hooks/use-push";
 import { resolvePushTarget } from "#web/features/repository-push/resolve-push-target";
 import { activeHead } from "#web/features/repository-refs/activate-repository-ref";
 import { useRepositoryRefs } from "#web/features/repository-refs/hooks/use-repository-refs";
-import {
-  type RepositoryScope,
-  useRepositoryScope,
-} from "#web/features/repository-scope/repository-scope-provider";
 import { workingChangesPanel } from "#web/features/working-changes/working-changes-panel-definition";
 import { WorkspacePanel } from "#web/features/workspace-panel/workspace-panel";
 import { useEnvironment } from "#web/platform/query/environment-context";
+import {
+  type RepositoryScope,
+  useRepositoryScope,
+} from "#web/platform/query/repository-scope";
 
 export function RepositoryWorkspace(): JSX.Element | null {
   const scope = useRepositoryScope();

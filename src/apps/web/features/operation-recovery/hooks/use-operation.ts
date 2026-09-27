@@ -1,15 +1,10 @@
 import {
   type OperationScope,
-  type RepositoryOperation,
   RepositoryOperationsHttpApi,
 } from "@rebase/contracts";
-import { skipToken, useQueryClient } from "@tanstack/react-query";
-import { useEnvironment } from "#web/platform/query/environment-context";
-import {
-  environmentQueryKey,
-  useEnvironmentQuery,
-} from "#web/platform/query/environment-query";
-import { useCommand } from "#web/platform/query/use-command";
+import { skipToken } from "@tanstack/react-query";
+import { useEnvironmentQuery } from "#web/platform/query/environment-query";
+import { answer, useCommand } from "#web/platform/query/use-command";
 
 const operationRefreshMilliseconds = 10_000;
 
@@ -29,24 +24,15 @@ export function useOperation(
 }
 
 export function useOperationAction(scope: OperationScope | undefined) {
-  const queryClient = useQueryClient();
-  const { environmentId } = useEnvironment();
-  const operationKey = (scope: OperationScope) =>
-    environmentQueryKey(
-      environmentId,
-      scope.repositoryId,
-      RepositoryOperationsHttpApi.read,
-      operationScope(scope),
-    );
   return useCommand(RepositoryOperationsHttpApi.execute, {
-    repository: scope,
-    onSuccess: async (operation: RepositoryOperation, command) => {
-      const queryKey = operationKey(command);
-      await queryClient.cancelQueries({ queryKey });
-      queryClient.setQueryData(queryKey, operation);
-    },
-    onError: (_error, command) =>
-      queryClient.invalidateQueries({ queryKey: operationKey(command) }),
+    target: scope,
+    answers: (operation, input) => [
+      answer(
+        RepositoryOperationsHttpApi.read,
+        operationScope(input),
+        operation,
+      ),
+    ],
   });
 }
 

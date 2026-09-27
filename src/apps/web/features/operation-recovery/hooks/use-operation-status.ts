@@ -1,15 +1,12 @@
-import {
-  type OperationScope,
-  type RepositoryOperation,
-  RepositoryOperationsHttpApi,
-} from "@rebase/contracts";
-import { useIsMutating } from "@tanstack/react-query";
+import type { OperationScope, RepositoryOperation } from "@rebase/contracts";
 import { useEffect, useState } from "react";
-import { useOperation } from "#web/features/operation-recovery/hooks/use-operation";
-import { describeOperationFailure } from "#web/features/operation-recovery/operation-messages";
-import { useRepositoryScope } from "#web/features/repository-scope/repository-scope-provider";
+import {
+  useOperation,
+  useOperationAction,
+} from "#web/features/operation-recovery/hooks/use-operation";
 import { useEnvironment } from "#web/platform/query/environment-context";
-import { commandKey } from "#web/platform/query/use-command";
+import { useRepositoryScope } from "#web/platform/query/repository-scope";
+import { describeFailure } from "#web/platform/query/request-failure";
 
 export interface OperationStatus {
   readonly operation: RepositoryOperation | null;
@@ -26,10 +23,7 @@ export function useOperationStatus(
 ): OperationStatus {
   const query = useOperation(scope, polling);
   const disconnectedAt = useDisconnectedAt();
-  const busy =
-    useIsMutating({
-      mutationKey: commandKey(RepositoryOperationsHttpApi.execute, scope),
-    }) > 0;
+  const busy = useOperationAction(scope).running;
   return {
     operation: query.data ?? null,
     checking:
@@ -37,7 +31,7 @@ export function useOperationStatus(
       query.isError ||
       query.dataUpdatedAt <= disconnectedAt,
     busy: scope !== undefined && busy,
-    error: query.isError ? describeOperationFailure(query.error) : null,
+    error: query.isError ? describeFailure(query.error) : null,
     refresh: () => void query.refetch(),
     read: async () => (await query.refetch()).data ?? null,
   };

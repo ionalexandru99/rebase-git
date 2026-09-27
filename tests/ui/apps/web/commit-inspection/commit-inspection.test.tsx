@@ -18,8 +18,8 @@ import { render } from "#tests-ui/runtime/render";
 import { CommitInspectionBridge } from "#web/app/workspace/commit-inspection-bridge";
 import { ResizablePanel } from "#web/components/ui/resizable";
 import { CommitInspection } from "#web/features/commit-inspection/commit-inspection";
-import { RepositoryScopeProvider } from "#web/features/repository-scope/repository-scope-provider";
 import { WorkspacePanel } from "#web/features/workspace-panel/workspace-panel";
+import { RepositoryScopeProvider } from "#web/platform/query/repository-scope";
 
 interface InspectionClient {
   readonly inspect: (command: InspectCommit) => Details | Promise<Details>;

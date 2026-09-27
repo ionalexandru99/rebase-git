@@ -1,9 +1,5 @@
-import type { RouteInput, RouteSuccess } from "@rebase/contracts";
-import {
-  type EnvironmentRouteFailure,
-  environmentRouteFailure,
-  type RequestableEnvironmentHttpRoute,
-} from "@rebase/environment-client";
+import type { RouteFailure, RouteInput, RouteSuccess } from "@rebase/contracts";
+import type { RequestableEnvironmentHttpRoute } from "@rebase/environment-client";
 import {
   hashKey,
   keepPreviousData,
@@ -16,6 +12,13 @@ import {
 import { useEffect } from "react";
 import { useEnvironment } from "#web/platform/query/environment-context";
 import type { EnvironmentChangeScope } from "#web/platform/query/environment-query-meta";
+import {
+  type RequestFailure,
+  requestFailure,
+} from "#web/platform/query/request-failure";
+
+export type QueryFailure<Route extends RequestableEnvironmentHttpRoute> =
+  RequestFailure<RouteFailure<Route>>;
 
 export interface EnvironmentQueryOptions<Data> {
   readonly enabled?: boolean;
@@ -72,7 +75,7 @@ export function useEnvironmentQuery<
     version,
   );
   const active = connected && environmentId !== undefined && enabled;
-  const query = useQuery<RouteSuccess<Route>, EnvironmentRouteFailure<Route>>({
+  const query = useQuery<RouteSuccess<Route>, QueryFailure<Route>>({
     ...queryOptions,
     queryKey,
     queryFn:
@@ -82,7 +85,7 @@ export function useEnvironmentQuery<
             try {
               return await requests(route, input, { signal });
             } catch (error) {
-              throw environmentRouteFailure(route, error);
+              throw requestFailure(error);
             }
           },
     enabled: active,
@@ -106,7 +109,7 @@ function useCancelWhileInactive(
   }, [active, queryClient, queryHash]);
 }
 
-function inputRepositoryId(input: unknown) {
+export function inputRepositoryId(input: unknown) {
   return typeof input === "object" &&
     input !== null &&
     "repositoryId" in input &&

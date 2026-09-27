@@ -1,6 +1,6 @@
-import { IconAlertCircle, IconCircleFilled } from "@tabler/icons-react";
-import { type ReactNode, useEffect, useRef } from "react";
+import { IconCircleFilled } from "@tabler/icons-react";
 import { Button } from "#web/components/ui/button";
+import { Confirmation } from "#web/components/ui/confirmation";
 import { ErrorNotification } from "#web/features/notifications/components/error-notification";
 import { PersistentNotification } from "#web/features/notifications/components/persistent-notification";
 import type {
@@ -11,32 +11,23 @@ import { destinationName } from "#web/features/repository-push/resolve-push-targ
 
 export function PushNotice({ push }: { readonly push: Push }) {
   if (push.running !== null)
-    return (
-      <PushToast
-        label="Push progress"
-        title={push.running}
-        onEscape={push.cancel}
-        actions={
-          <Button size="xs" variant="ghost" onClick={push.cancel}>
-            Cancel
-          </Button>
-        }
-      />
-    );
+    return <PushProgress title={push.running} cancel={push.cancel} />;
   if (push.review !== null)
     return (
-      <ForcePushToast
-        review={push.review}
-        disabled={!push.connected}
-        cancel={push.cancel}
-        confirm={push.confirm}
-      />
+      <PersistentNotification>
+        <ForcePushConfirmation
+          review={push.review}
+          disabled={!push.canRun}
+          cancel={push.cancel}
+          confirm={push.confirm}
+        />
+      </PersistentNotification>
     );
   if (push.notice !== null) return <ErrorNotification message={push.notice} />;
   return null;
 }
 
-function ForcePushToast({
+function ForcePushConfirmation({
   review,
   disabled,
   cancel,
@@ -47,35 +38,19 @@ function ForcePushToast({
   readonly cancel: () => void;
   readonly confirm: () => void;
 }) {
-  const cancelButton = useRef<HTMLButtonElement>(null);
-  useEffect(() => {
-    cancelButton.current?.focus();
-  }, []);
-  const name = destinationName(review.destination);
-  const tip = <Oid>{review.expectedOid.slice(0, 8)}</Oid>;
   return (
-    <PushToast
-      label="Confirm force push"
-      title={`Force push to ${name}?`}
-      tone="warning"
-      onEscape={cancel}
-      actions={
-        <>
-          <Button ref={cancelButton} size="xs" variant="ghost" onClick={cancel}>
-            Cancel
-          </Button>
-          <Button
-            size="xs"
-            variant="destructive"
-            disabled={disabled}
-            onClick={confirm}
-          >
-            Force push
-          </Button>
-        </>
-      }
+    <Confirmation
+      title={`Force push to ${destinationName(review.destination)}?`}
+      action="Force push"
+      disabled={disabled}
+      onCancel={cancel}
+      onConfirm={confirm}
+      className="px-3 py-2"
     >
-      Overwrites {tip}
+      Overwrites{" "}
+      <span className="font-mono text-foreground">
+        {review.expectedOid.slice(0, 8)}
+      </span>
       {review.removed > 0 ? (
         <span className="text-destructive">
           {" "}
@@ -83,69 +58,42 @@ function ForcePushToast({
           {review.removed === 1 ? "commit" : "commits"}
         </span>
       ) : null}
-    </PushToast>
+    </Confirmation>
   );
 }
 
-function PushToast({
-  label,
+function PushProgress({
   title,
-  tone = "progress",
-  onEscape,
-  actions,
-  children,
+  cancel,
 }: {
-  readonly label: string;
   readonly title: string;
-  readonly tone?: "progress" | "warning";
-  readonly onEscape: () => void;
-  readonly actions?: ReactNode;
-  readonly children?: ReactNode;
+  readonly cancel: () => void;
 }) {
   return (
     <PersistentNotification>
       <section
-        aria-label={label}
-        className="pointer-events-auto rounded-lg border border-border bg-popover text-popover-foreground shadow-lg outline-none"
+        aria-label="Push progress"
+        className="flex items-center gap-2 px-3 py-2 outline-none"
         onKeyDown={(event) => {
           if (event.key !== "Escape") return;
           event.stopPropagation();
-          onEscape();
+          cancel();
         }}
       >
-        <div className="flex items-center gap-2 px-3 py-2">
-          {tone === "warning" ? (
-            <IconAlertCircle
-              aria-hidden="true"
-              className="size-4 shrink-0 text-status-connecting"
-            />
-          ) : (
-            <IconCircleFilled
-              aria-hidden="true"
-              className="size-2 shrink-0 text-status-connecting"
-            />
-          )}
-          <h2
-            aria-live="polite"
-            className="min-w-0 flex-1 wrap-anywhere text-xs font-semibold"
-          >
-            {title}
-          </h2>
-          {children === undefined ? actions : null}
-        </div>
-        {children === undefined ? null : (
-          <div className="flex flex-col gap-2 border-border border-t px-3 py-2 text-xs">
-            <div className="text-muted-foreground">{children}</div>
-            {actions === undefined ? null : (
-              <div className="flex justify-end gap-2">{actions}</div>
-            )}
-          </div>
-        )}
+        <IconCircleFilled
+          aria-hidden="true"
+          className="size-2 shrink-0 text-status-connecting"
+        />
+        <h2
+          aria-live="polite"
+          className="min-w-0 flex-1 wrap-anywhere text-xs font-semibold"
+        >
+          {title}
+        </h2>
+        <Button size="xs" variant="ghost" onClick={cancel}>
+          Cancel
+        </Button>
       </section>
     </PersistentNotification>
   );
-}
-
-function Oid({ children }: { readonly children: ReactNode }) {
-  return <span className="font-mono text-foreground">{children}</span>;
 }

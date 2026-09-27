@@ -9,13 +9,14 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
 } from "#web/components/ui/dropdown-menu";
+import { ToolbarButton } from "#web/components/ui/toolbar-button";
 import { useOperationCommandState } from "#web/features/operation-recovery/hooks/use-operation-status";
 import type { Push } from "#web/features/repository-push/hooks/use-push";
 import {
   destinationName,
   type PushTarget,
 } from "#web/features/repository-push/resolve-push-target";
-import { useRepositoryScope } from "#web/features/repository-scope/repository-scope-provider";
+import { useRepositoryScope } from "#web/platform/query/repository-scope";
 
 export function PushButton({
   push,
@@ -29,22 +30,16 @@ export function PushButton({
   if (scope === undefined || target === undefined) return null;
   const upstream = target.upstream;
   const tracked = upstream !== undefined && !upstream.gone;
-  const busy =
-    !scope.connected ||
-    !scope.writable ||
-    operationBusy ||
-    push.running !== null;
+  const busy = !push.canRun || operationBusy || push.running !== null;
   const canPush = !tracked || upstream.ahead > 0;
   const canForcePush = tracked && upstream.remoteOid !== undefined;
   return (
     <div className="flex h-7 items-center rounded-md border border-border">
-      <Button
+      <ToolbarButton
         aria-label={pushLabel(target)}
-        className="h-full gap-1.5 rounded-r-none border-0 text-[.85rem] sm:text-[.85rem]"
+        className="h-full rounded-r-none border-0"
         disabled={busy || !canPush}
         onClick={() => push.push(target)}
-        size="sm"
-        variant="ghost"
       >
         <IconArrowUp aria-hidden="true" className="size-3.5" />
         {push.running === null ? "Push" : "Pushing"}
@@ -59,7 +54,7 @@ export function PushButton({
             {upstream.behind}
           </span>
         ) : null}
-      </Button>
+      </ToolbarButton>
       <Menu.Root>
         <Menu.Trigger
           aria-label="More push actions"

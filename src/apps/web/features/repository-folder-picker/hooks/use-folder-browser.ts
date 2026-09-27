@@ -1,11 +1,15 @@
-import type { RepositoryCatalogEntry } from "@rebase/contracts";
+import {
+  type RepositoryCatalogEntry,
+  RepositoryCatalogHttpApi,
+} from "@rebase/contracts";
 import { useState } from "react";
 import { useDirectoryListing } from "#web/features/environment-filesystem/hooks/use-directory-listing";
-import { useRememberRepository } from "#web/features/repository-catalog/hooks/use-catalog-commands";
+import { catalogWith } from "#web/features/repository-catalog/use-repository-catalog";
 import {
   directoryListingError,
   repositorySelectionError,
 } from "#web/features/repository-folder-picker/repository-folder-picker-state";
+import { useCommand } from "#web/platform/query/use-command";
 
 type FolderSelection =
   | { readonly _tag: "None" }
@@ -21,7 +25,9 @@ export function useFolderBrowser(
   const [location, setLocation] = useState<string>();
   const [selection, setSelection] = useState<FolderSelection>(nothingSelected);
   const listing = useDirectoryListing(location, environment.available);
-  const remember = useRememberRepository();
+  const remember = useCommand(RepositoryCatalogHttpApi.remember, {
+    answers: catalogWith,
+  });
   const directory = listing.isError ? undefined : listing.data;
   const selectedPath =
     directory === undefined
@@ -42,26 +48,25 @@ export function useFolderBrowser(
     directory,
     selectedPath,
     loading: environment.available && listing.isLoading,
-    opening: remember.isPending,
+    opening: remember.running,
     directoryError: !environment.available
       ? environment.status
       : listing.isError
         ? directoryListingError(listing.error)
         : undefined,
-    selectionError: remember.isError
-      ? repositorySelectionError(remember.error)
-      : undefined,
+    selectionError:
+      remember.failure === undefined
+        ? undefined
+        : repositorySelectionError(remember.failure),
     navigate,
     select: (path: string) => {
       remember.reset();
       setSelection({ _tag: "Folder", path });
     },
-    openRepository: () => {
-      if (selectedPath === undefined || remember.isPending) return;
-      remember.mutate(
-        { path: selectedPath },
-        { onSuccess: onRepositoryOpened },
-      );
+    openRepository: async () => {
+      if (selectedPath === undefined || remember.running) return;
+      const result = await remember.run({ path: selectedPath });
+      if (result._tag === "Ok") onRepositoryOpened(result.value);
     },
   };
 }

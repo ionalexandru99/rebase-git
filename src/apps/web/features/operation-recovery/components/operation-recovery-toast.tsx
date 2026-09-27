@@ -48,7 +48,7 @@ export function OperationRecoveryToast({
   return (
     <section
       aria-label="Git operation"
-      className="pointer-events-auto max-h-[calc(100dvh-5rem)] overflow-y-auto rounded-lg border border-border bg-popover text-popover-foreground shadow-lg"
+      className="max-h-[calc(100dvh-5rem)] overflow-y-auto"
     >
       <div className="flex items-center gap-2 px-3 py-2">
         <IconCircleFilled

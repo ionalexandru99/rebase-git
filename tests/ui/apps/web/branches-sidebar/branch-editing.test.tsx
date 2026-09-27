@@ -28,7 +28,7 @@ import type { GraphCommandDefinition } from "#web/features/commit-commands/graph
 import { NotificationsProvider } from "#web/features/notifications/notifications";
 import { useRefActivation } from "#web/features/repository-refs/hooks/use-ref-activation";
 import { useRepositoryRefs } from "#web/features/repository-refs/hooks/use-repository-refs";
-import { RepositoryScopeProvider } from "#web/features/repository-scope/repository-scope-provider";
+import { RepositoryScopeProvider } from "#web/platform/query/repository-scope";
 
 const repositoryId = "00000000-0000-4000-8000-000000000001";
 const mainPath = "/repo";
@@ -290,6 +290,7 @@ type BranchFailure = RouteFailure<
 async function branchEnvironment() {
   const requested = vi.fn<(route: BranchRoute, command: unknown) => void>();
   const rejections = new Map<BranchRoute, BranchFailure>();
+  let current = refs();
   const reply = <Route extends RequestableEnvironmentHttpRoute>(
     name: BranchRoute,
     route: Route,
@@ -302,35 +303,69 @@ async function branchEnvironment() {
       if (failure !== undefined) throw new EnvironmentHttpRejected({ failure });
       return answer(command);
     });
+  const branches = (
+    change: (
+      branches: RepositoryRefs["branches"],
+    ) => RepositoryRefs["branches"],
+  ) => {
+    current = { ...current, branches: change(current.branches) };
+  };
   const requests = fakeRequests(
     idleOperation,
-    reply("create", RepositoryBranchesHttpApi.create, ({ name }) => ({
-      name,
-      target: main,
-    })),
-    reply("rename", RepositoryBranchesHttpApi.rename, (command) => ({
-      branch: { name: command.newName, target: spike },
-      previousName: command.name,
-    })),
-    reply("delete", RepositoryBranchesHttpApi.delete, ({ local, remote }) => ({
-      ...(local === undefined ? {} : { local }),
-      ...(remote === undefined ? {} : { remote }),
-    })),
+    reply("create", RepositoryBranchesHttpApi.create, ({ name }) => {
+      const branch = { name, target: main };
+      branches((all) => [...all, branch]);
+      return branch;
+    }),
+    reply("rename", RepositoryBranchesHttpApi.rename, (command) => {
+      const branch = { name: command.newName, target: spike };
+      branches((all) =>
+        all.map((existing) =>
+          existing.name === command.name ? branch : existing,
+        ),
+      );
+      return { branch, previousName: command.name };
+    }),
+    reply("delete", RepositoryBranchesHttpApi.delete, ({ local, remote }) => {
+      branches((all) => all.filter(({ name }) => name !== local?.name));
+      current = {
+        ...current,
+        remoteBranches: current.remoteBranches.filter(
+          (branch) =>
+            branch.name !== remote?.name || branch.remote !== remote.remote,
+        ),
+      };
+      return {
+        ...(local === undefined ? {} : { local }),
+        ...(remote === undefined ? {} : { remote }),
+      };
+    }),
     reply("setUpstream", RepositoryBranchesHttpApi.setUpstream, ({ name }) => ({
       name,
       target: main,
     })),
-    reply("checkout", RepositoryRefsHttpApi.checkout, (command) => ({
-      head: { branch: command.target.name, commit: spike },
-      stash: "none" as const,
-      worktreePath: command.worktreePath,
-    })),
+    reply("checkout", RepositoryRefsHttpApi.checkout, (command) => {
+      const head = { branch: command.target.name, commit: spike };
+      current = {
+        ...current,
+        worktrees: current.worktrees.map((worktree) =>
+          worktree.path === command.worktreePath
+            ? { ...worktree, head }
+            : worktree,
+        ),
+      };
+      return {
+        head,
+        stash: "none" as const,
+        worktreePath: command.worktreePath,
+      };
+    }),
   );
   return {
     requested,
     rejectNext: (route: BranchRoute, failure: BranchFailure) =>
       rejections.set(route, failure),
-    environment: { requests, rpc: await fakeRpc(async () => refs()) },
+    environment: { requests, rpc: await fakeRpc(async () => current) },
   };
 }
 

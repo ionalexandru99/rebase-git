@@ -1,112 +1,289 @@
-import type { RouteInput, RouteSuccess } from "@rebase/contracts";
-import {
-  type EnvironmentRequestClient,
-  type EnvironmentRouteFailure,
-  environmentRouteFailure,
-  type RequestableEnvironmentHttpRoute,
+import type { RouteFailure, RouteInput, RouteSuccess } from "@rebase/contracts";
+import type {
+  EnvironmentRequestClient,
+  RequestableEnvironmentHttpRoute,
 } from "@rebase/environment-client";
-import { type UseMutationOptions, useMutation } from "@tanstack/react-query";
+import {
+  hashKey,
+  type Query,
+  type QueryClient,
+  useMutation,
+  useMutationState,
+  useQueryClient,
+} from "@tanstack/react-query";
 import { type RefObject, useCallback, useRef } from "react";
 import { useEnvironment } from "#web/platform/query/environment-context";
+import { invalidatedByChange } from "#web/platform/query/environment-invalidation";
+import {
+  environmentQueryKey,
+  inputRepositoryId,
+} from "#web/platform/query/environment-query";
+import { useRepositoryScope } from "#web/platform/query/repository-scope";
+import {
+  type RequestFailure,
+  requestFailure,
+} from "#web/platform/query/request-failure";
 
-export class CommandCancelled extends Error {
-  readonly _tag = "Cancelled";
+export interface CommandTarget {
+  readonly repositoryId: string;
+  readonly worktreePath: string;
 }
 
 export type CommandFailure<Route extends RequestableEnvironmentHttpRoute> =
-  | EnvironmentRouteFailure<Route>
-  | CommandCancelled;
+  RequestFailure<RouteFailure<Route>>;
 
-export interface CommandScope {
-  readonly repositoryId: string;
-  readonly worktreePath?: string;
-}
-
-export type CommandOptions<Route extends RequestableEnvironmentHttpRoute> =
-  Omit<
-    UseMutationOptions<
-      RouteSuccess<Route>,
-      CommandFailure<Route>,
-      RouteInput<Route>
-    >,
-    "mutationFn" | "mutationKey"
-  > & { readonly repository?: CommandScope | undefined };
-
-export function commandKey(
-  route: RequestableEnvironmentHttpRoute,
-  scope?: CommandScope,
-) {
-  return [
-    "command",
-    route.path,
-    ...(scope === undefined ? [] : [scope.repositoryId]),
-    ...(scope?.worktreePath === undefined ? [] : [scope.worktreePath]),
-  ];
-}
-
-export function commandFailure<Route extends RequestableEnvironmentHttpRoute>(
-  route: Route,
-  error: unknown,
-): CommandFailure<Route> {
-  return error instanceof CommandCancelled
-    ? error
-    : environmentRouteFailure(route, error);
-}
-
-export type SettledCommand<Route extends RequestableEnvironmentHttpRoute> =
+export type CommandResult<Route extends RequestableEnvironmentHttpRoute> =
   | { readonly _tag: "Ok"; readonly value: RouteSuccess<Route> }
-  | { readonly _tag: "Failed"; readonly failure: CommandFailure<Route> };
+  | CommandFailure<Route>;
 
-export async function settleCommand<
-  Route extends RequestableEnvironmentHttpRoute,
->(
-  route: Route,
-  run: (input: RouteInput<Route>) => Promise<RouteSuccess<Route>>,
-  input: RouteInput<Route>,
-): Promise<SettledCommand<Route>> {
-  try {
-    return { _tag: "Ok", value: await run(input) };
-  } catch (error) {
-    return { _tag: "Failed", failure: commandFailure(route, error) };
-  }
+export type CommandInput<Route extends RequestableEnvironmentHttpRoute> =
+  RouteInput<Route> extends CommandTarget
+    ? Omit<RouteInput<Route>, keyof CommandTarget>
+    : RouteInput<Route>;
+
+export interface CommandAnswer {
+  readonly route: RequestableEnvironmentHttpRoute;
+  readonly input: unknown;
+  readonly value: unknown;
+  readonly version?: string;
+}
+
+type AnswerValue<Read extends RequestableEnvironmentHttpRoute> =
+  | RouteSuccess<Read>
+  | ((current: RouteSuccess<Read> | undefined) => RouteSuccess<Read>);
+
+export interface CommandOptions<Route extends RequestableEnvironmentHttpRoute> {
+  readonly target?: CommandTarget | undefined;
+  readonly before?: () => Promise<boolean>;
+  readonly answers?: (
+    value: RouteSuccess<Route>,
+    input: RouteInput<Route>,
+  ) => readonly CommandAnswer[];
+}
+
+export interface CommandRun<Route extends RequestableEnvironmentHttpRoute> {
+  readonly input: RouteInput<Route>;
+  readonly value: RouteSuccess<Route>;
+  readonly submittedAt: number;
+}
+
+interface CommandState<Route extends RequestableEnvironmentHttpRoute> {
+  readonly pending: boolean;
+  readonly result: CommandResult<Route> | undefined;
+  readonly input: RouteInput<Route> | undefined;
+  readonly submittedAt: number;
+}
+
+export function answer<Read extends RequestableEnvironmentHttpRoute>(
+  route: Read,
+  input: RouteInput<Read>,
+  value: AnswerValue<Read>,
+  version?: string,
+): CommandAnswer {
+  return { route, input, value, ...(version === undefined ? {} : { version }) };
 }
 
 export function useCommand<Route extends RequestableEnvironmentHttpRoute>(
   route: Route,
-  { repository, ...options }: CommandOptions<Route> = {},
+  { target: explicitTarget, before, answers }: CommandOptions<Route> = {},
 ) {
-  const { requests } = useEnvironment();
+  const scope = useRepositoryScope();
+  const environment = useEnvironment();
+  const queryClient = useQueryClient();
+  const scoped = targetsRepository(route);
+  const target = scoped ? (explicitTarget ?? scope) : undefined;
+  const key = commandKey(route, target);
   const running = useRef<AbortController | undefined>(undefined);
-  const mutation = useMutation<
-    RouteSuccess<Route>,
-    CommandFailure<Route>,
-    RouteInput<Route>
-  >({
-    ...options,
-    mutationKey: commandKey(route, repository),
-    mutationFn: (input) => runCommand(requests, route, input, running),
+  const mutation = useMutation<CommandResult<Route>, never, RouteInput<Route>>({
+    mutationKey: key,
+    mutationFn: async (input) => {
+      const ready = await prepare(before);
+      if (ready !== undefined) return ready;
+      const result = await request(environment.requests, route, input, running);
+      await settle(queryClient, environment.environmentId, input, result, {
+        repositoryId: scoped ? inputRepositoryId(input) : null,
+        answers,
+      });
+      return result;
+    },
   });
+  const runs = useMutationState({
+    filters: { mutationKey: key },
+    select: ({ state }): CommandState<Route> => ({
+      pending: state.status === "pending",
+      result: state.data as CommandResult<Route> | undefined,
+      input: state.variables as RouteInput<Route> | undefined,
+      submittedAt: state.submittedAt,
+    }),
+  });
+  const { mutateAsync, reset } = mutation;
+  const run = useCallback(
+    (input: CommandInput<Route>) => {
+      if (scoped && target === undefined)
+        throw new Error(`${route.path} needs a repository target.`);
+      return mutateAsync(
+        (target === undefined
+          ? input
+          : {
+              ...(input as object),
+              repositoryId: target.repositoryId,
+              worktreePath: target.worktreePath,
+            }) as RouteInput<Route>,
+      );
+    },
+    [mutateAsync, route.path, scoped, target],
+  );
   const cancel = useCallback(() => running.current?.abort(), []);
-  return { ...mutation, cancel };
+  const result = mutation.data;
+  const observed = scoped && target === undefined ? [] : runs;
+  return {
+    run,
+    cancel,
+    reset,
+    canRun:
+      environment.connected &&
+      environment.environmentId !== undefined &&
+      (route.capability !== "repository.write" || environment.writable) &&
+      (!scoped || target !== undefined),
+    running: observed.some(({ pending }) => pending),
+    lastOk: lastOk(observed),
+    failure: result === undefined || result._tag === "Ok" ? undefined : result,
+    input: mutation.variables,
+  };
 }
 
-async function runCommand<Route extends RequestableEnvironmentHttpRoute>(
+export type Command<Route extends RequestableEnvironmentHttpRoute> = ReturnType<
+  typeof useCommand<Route>
+>;
+
+function commandKey(
+  route: RequestableEnvironmentHttpRoute,
+  target: CommandTarget | undefined,
+) {
+  return [
+    "command",
+    route.path,
+    ...(target === undefined ? [] : [target.repositoryId, target.worktreePath]),
+  ];
+}
+
+function targetsRepository(route: RequestableEnvironmentHttpRoute) {
+  const request = route.request as { readonly fields?: object } | undefined;
+  return (
+    request?.fields !== undefined &&
+    "repositoryId" in request.fields &&
+    "worktreePath" in request.fields
+  );
+}
+
+async function prepare(
+  before: (() => Promise<boolean>) | undefined,
+): Promise<RequestFailure<never> | undefined> {
+  if (before === undefined) return undefined;
+  const ready = await before().catch(() => undefined);
+  if (ready === undefined) return { _tag: "Unanswered" };
+  return ready ? undefined : { _tag: "Cancelled" };
+}
+
+async function request<Route extends RequestableEnvironmentHttpRoute>(
   requests: EnvironmentRequestClient,
   route: Route,
   input: RouteInput<Route>,
   running: RefObject<AbortController | undefined>,
-) {
+): Promise<CommandResult<Route>> {
   const controller = new AbortController();
   running.current = controller;
   try {
     const value = await requests(route, input, { signal: controller.signal });
-    if (controller.signal.aborted) throw new CommandCancelled();
-    return value;
+    return controller.signal.aborted
+      ? { _tag: "Cancelled" }
+      : { _tag: "Ok", value };
   } catch (error) {
-    throw controller.signal.aborted
-      ? new CommandCancelled()
-      : environmentRouteFailure(route, error);
+    return controller.signal.aborted
+      ? { _tag: "Cancelled" }
+      : requestFailure(error);
   } finally {
     if (running.current === controller) running.current = undefined;
   }
+}
+
+async function settle<Route extends RequestableEnvironmentHttpRoute>(
+  queryClient: QueryClient,
+  environmentId: string | undefined,
+  input: RouteInput<Route>,
+  result: CommandResult<Route>,
+  {
+    repositoryId,
+    answers,
+  }: {
+    readonly repositoryId: string | null;
+    readonly answers: CommandOptions<Route>["answers"];
+  },
+) {
+  if (result._tag === "Cancelled" || result._tag === "AccessDenied") return;
+  const answered =
+    result._tag === "Ok" && answers !== undefined
+      ? await writeAnswers(
+          queryClient,
+          environmentId,
+          answers(result.value, input),
+        )
+      : new Set<string>();
+  const waits = result._tag === "Ok" && answered.size === 0;
+  const stale = (query: Query) =>
+    !answered.has(query.queryHash) && readsFrom(query, repositoryId);
+  void queryClient.invalidateQueries(
+    { predicate: (query) => stale(query) && query.meta?.changes === "index" },
+    { cancelRefetch: false },
+  );
+  const rereads = queryClient.invalidateQueries(
+    { predicate: (query) => stale(query) && query.meta?.changes !== "index" },
+    { cancelRefetch: waits },
+  );
+  if (waits) await rereads;
+}
+
+async function writeAnswers(
+  queryClient: QueryClient,
+  environmentId: string | undefined,
+  answers: readonly CommandAnswer[],
+) {
+  const answered = new Set<string>();
+  for (const { route, input, value, version } of answers) {
+    const queryKey = environmentQueryKey(
+      environmentId,
+      inputRepositoryId(input),
+      route,
+      input,
+      version,
+    );
+    if (
+      typeof value === "function" &&
+      queryClient.getQueryData(queryKey) === undefined
+    )
+      continue;
+    await queryClient.cancelQueries({ queryKey, exact: true });
+    queryClient.setQueryData(queryKey, value);
+    answered.add(hashKey(queryKey));
+  }
+  return answered;
+}
+
+function readsFrom(query: Query, repositoryId: string | null) {
+  return repositoryId === null
+    ? query.meta?.repositoryId === null
+    : invalidatedByChange(query.meta, [repositoryId]);
+}
+
+function lastOk<Route extends RequestableEnvironmentHttpRoute>(
+  runs: readonly CommandState<Route>[],
+): CommandRun<Route> | undefined {
+  const last = runs.findLast(({ result }) => result?._tag === "Ok");
+  return last?.result?._tag === "Ok" && last.input !== undefined
+    ? {
+        input: last.input,
+        value: last.result.value,
+        submittedAt: last.submittedAt,
+      }
+    : undefined;
 }

@@ -1,6 +1,6 @@
 import { type ReactNode, useMemo } from "react";
-import type { RepositoryScope } from "#web/features/repository-scope/repository-scope-provider";
 import { WorkspacePanel } from "#web/features/workspace-panel/workspace-panel";
+import type { RepositoryScope } from "#web/platform/query/repository-scope";
 
 export function RepositoryPanelProvider({
   environmentId,

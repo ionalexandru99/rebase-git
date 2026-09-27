@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import type { GraphCommandDefinition } from "#web/features/commit-commands/graph-command";
-import { useRepositoryScope } from "#web/features/repository-scope/repository-scope-provider";
+import { useRepositoryScope } from "#web/platform/query/repository-scope";
 
 export interface RefCreateRequest {
   readonly kind: "branch" | "tag";

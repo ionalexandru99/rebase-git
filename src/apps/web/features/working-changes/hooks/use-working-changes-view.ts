@@ -8,12 +8,6 @@ import type {
 import { useCallback, useMemo, useState } from "react";
 import { useDiffPreferences } from "#web/features/file-diff/hooks/use-diff-preferences";
 import {
-  type ChangesRequestFailure,
-  describeChangesFailure,
-  headMovedMessage,
-  storageUnavailableMessage,
-} from "#web/features/working-changes/changes-messages";
-import {
   splitConflicts,
   useConflicts,
 } from "#web/features/working-changes/conflicts/hooks/use-conflicts";
@@ -35,6 +29,16 @@ import {
 import { useCommitDraft } from "#web/features/working-changes/hooks/use-commit-draft";
 import { useWorkingChanges } from "#web/features/working-changes/hooks/use-working-changes";
 import type { CommitDraft } from "#web/persistence/working-changes/working-changes-store.contract";
+import {
+  describeFailure,
+  type RequestFailure,
+} from "#web/platform/query/request-failure";
+
+const headMovedMessage =
+  "HEAD changed while you were amending. Review the latest commit before enabling Amend again.";
+
+const storageUnavailableMessage =
+  "Could not access changes preferences or the commit draft in this browser.";
 
 export interface WorkingChangesTarget {
   readonly repositoryId: string;
@@ -96,52 +100,42 @@ export function useWorkingChangesView({
     setNotice(null);
     return changes;
   };
-  const fail = (failure: ChangesRequestFailure) =>
-    setProblem(describeChangesFailure(failure));
+  const fail = (failure: RequestFailure<{ readonly _tag: string }>) =>
+    setProblem(describeFailure(failure));
 
-  const act: ChangeAction = (action, section, selected, revision) => {
+  const act: ChangeAction = async (action, section, selected, revision) => {
     const current = begin();
     if (current === undefined) return;
-    actions.mutate.mutate(
-      {
-        ...scope,
-        ...viewing(selection),
-        revision: revision ?? current.revision,
-        action,
-        section,
-        selection:
-          shown.conflicted.length > 0
-            ? listedOnly(current, section, selected)
-            : selected,
-      },
-      { onError: fail },
-    );
+    const result = await actions.mutate.run({
+      amend: scope.amend,
+      ...viewing(selection),
+      revision: revision ?? current.revision,
+      action,
+      section,
+      selection:
+        shown.conflicted.length > 0
+          ? listedOnly(current, section, selected)
+          : selected,
+    });
+    if (result._tag !== "Ok") fail(result);
   };
 
-  const commit = () => {
+  const commit = async () => {
     const current = begin();
     if (current === undefined) return;
     const amended = amend.on;
-    actions.commit.mutate(
-      {
-        ...scope,
-        ...viewing(selection),
-        revision: current.revision,
-        message: commitMessage(draft.draft),
-      },
-      {
-        onSuccess: () => {
-          draft.clear(
-            amended
-              ? [draftKey, amendDraftKey(draftKey, current.head)]
-              : [draftKey],
-          );
-          setAmend(amendOff);
-          setNotice(amended ? "Commit amended." : "Changes committed.");
-        },
-        onError: fail,
-      },
+    const result = await actions.commit.run({
+      amend: amended,
+      ...viewing(selection),
+      revision: current.revision,
+      message: commitMessage(draft.draft),
+    });
+    if (result._tag !== "Ok") return fail(result);
+    draft.clear(
+      amended ? [draftKey, amendDraftKey(draftKey, current.head)] : [draftKey],
     );
+    setAmend(amendOff);
+    setNotice(amended ? "Commit amended." : "Changes committed.");
   };
 
   return {
@@ -168,8 +162,8 @@ export function useWorkingChangesView({
     error:
       problem ??
       conflicts.problem ??
-      (read.isError ? describeChangesFailure(read.error) : null) ??
-      (diff.isError ? describeChangesFailure(diff.error) : null) ??
+      (read.isError ? describeFailure(read.error) : null) ??
+      (diff.isError ? describeFailure(diff.error) : null) ??
       (draft.unavailable ? storageUnavailableMessage : null),
     notice,
     refresh: () => {

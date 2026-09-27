@@ -26,10 +26,10 @@ import { render } from "#tests-ui/runtime/render";
 import type { LocalEnvironmentSession } from "#web/app/environment/local-environment-session.contract";
 import { ApplicationShell } from "#web/app/shell/application-shell";
 import { RepositoryWorkspace } from "#web/app/workspace/repository-workspace";
-import { repositoryCatalogKey } from "#web/features/repository-catalog/hooks/use-repository-catalog";
+import { repositoryCatalogKey } from "#web/features/repository-catalog/use-repository-catalog";
 import type { RepositoryHistoryGateway } from "#web/features/repository-history/repository-history-reader";
-import { RepositoryScopeProvider } from "#web/features/repository-scope/repository-scope-provider";
 import { createEnvironmentQueryClient } from "#web/platform/query/environment-query-client";
+import { RepositoryScopeProvider } from "#web/platform/query/repository-scope";
 
 describe("application shell", () => {
   it("opens repository settings from the list without opening its graph", async () => {
@@ -139,7 +139,7 @@ describe("application shell", () => {
       .toBeVisible();
   });
 
-  it("opens a newly remembered repository even when the catalog read after it fails", async () => {
+  it("opens a newly remembered repository even when later catalog reads fail", async () => {
     const connected = await connectedSession();
     connected.catalogReads
       .mockReturnValueOnce({ repositories: [] })
@@ -166,7 +166,6 @@ describe("application shell", () => {
           .getByRole("row", { name: /^cached commit,/ }),
       )
       .toBeVisible();
-    await expect.poll(() => connected.catalogReads.mock.calls.length).toBe(2);
     await expect
       .element(
         page

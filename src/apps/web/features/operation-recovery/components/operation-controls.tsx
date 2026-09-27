@@ -1,8 +1,8 @@
-import type { OperationAction } from "@rebase/contracts";
+import type { OperationAction, RepositoryOperation } from "@rebase/contracts";
 import { type ReactNode, useRef, useState } from "react";
 import { Button } from "#web/components/ui/button";
+import { Confirmation } from "#web/components/ui/confirmation";
 import { OperationActionsMenu } from "#web/features/operation-recovery/components/operation-actions-menu";
-import { OperationConfirmation } from "#web/features/operation-recovery/components/operation-confirmation";
 import type { OperationRecoveryState } from "#web/features/operation-recovery/hooks/use-operation-recovery";
 import { operationLabel } from "#web/features/operation-recovery/operation-messages";
 import { cn } from "#web/lib/utils";
@@ -46,16 +46,17 @@ export function OperationControls({
   return (
     <div ref={root} tabIndex={-1} className="outline-none">
       {pending && operation ? (
-        <OperationConfirmation
-          action={pending.action}
-          operation={operation}
-          label={label}
+        <Confirmation
+          title={confirmationTitle(pending.action, operation, label)}
+          action={`Confirm ${pending.action}`}
+          busy={state.busy}
           disabled={unavailable}
-          cancel={settle}
-          confirm={() => {
+          onCancel={settle}
+          onConfirm={() => {
             execute(pending.action, pending.revision);
             settle();
           }}
+          className="border-t border-border p-3"
         />
       ) : (
         <>
@@ -109,4 +110,17 @@ export function OperationControls({
       ) : null}
     </div>
   );
+}
+
+function confirmationTitle(
+  action: OperationAction,
+  operation: RepositoryOperation,
+  label: string,
+) {
+  if (action === "abort")
+    return `Abort ${label.toLowerCase()}? Conflict-resolution edits may be lost.`;
+  const subject =
+    operation.commit?.slice(0, 8) ??
+    (operation.kind === "am" ? "this patch" : "this commit");
+  return `Skip ${subject}? Its changes will not be included.`;
 }
