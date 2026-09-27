@@ -247,10 +247,18 @@ export function findInHistory(
     return id === undefined ? [] : [id];
   });
   const direct = graph.ancestryRoute(roots, target);
-  const root =
+  const containing =
     direct === undefined
       ? containingRef(graph, refTargets, scope, target)
-      : undefined;
+      : "inScope";
+  const root =
+    containing === "inScope"
+      ? undefined
+      : (containing ?? {
+          name: graph.oid(target).slice(0, 7),
+          oid: graph.oid(target),
+          type: "commit" as const,
+        });
   const route =
     direct ??
     (root === undefined
@@ -288,7 +296,7 @@ function containingRef(
       scope.roots.some(
         (current) => current.type === root.type && current.name === root.name,
       )
-      ? undefined
+      ? "inScope"
       : root;
   }
   return undefined;

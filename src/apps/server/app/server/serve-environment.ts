@@ -26,6 +26,7 @@ import { repositoryHistoryFeature } from "#server/features/repository-history/re
 import { repositoryOperationsFeature } from "#server/features/repository-operations/repository-operations.ts";
 import { repositoryPullFeature } from "#server/features/repository-pull/repository-pull.feature.ts";
 import { repositoryPushFeature } from "#server/features/repository-push/repository-push.ts";
+import { repositoryReflogFeature } from "#server/features/repository-reflog/repository-reflog.ts";
 import { repositoryRefsFeature } from "#server/features/repository-refs/repository-refs.feature.ts";
 import {
   acquireEnvironmentContext,
@@ -129,6 +130,7 @@ export function environmentFeatures(dependencies: EnvironmentDependencies) {
       repositoryOperationsFeature(dependencies),
       yield* repositoryPullFeature(dependencies),
       repositoryPushFeature(dependencies),
+      repositoryReflogFeature(dependencies),
       yield* repositoryRefsFeature(dependencies),
     ]);
   });

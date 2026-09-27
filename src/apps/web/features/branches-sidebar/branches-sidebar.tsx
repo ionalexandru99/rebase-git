@@ -63,6 +63,7 @@ const noSelectedRefs: ReadonlySet<string> = new Set();
 export function BranchesSidebar({
   onBranchRenamed = () => undefined,
   onToggleHistoryRef = () => undefined,
+  onShowReflog,
   selectedHistoryRefKeys = noSelectedRefs,
 }: {
   readonly onBranchRenamed?: (rename: {
@@ -70,6 +71,7 @@ export function BranchesSidebar({
     readonly newName: string;
   }) => void;
   readonly onToggleHistoryRef?: (target: RepositoryRefTarget) => void;
+  readonly onShowReflog?: (branch: string) => void;
   readonly selectedHistoryRefKeys?: ReadonlySet<string>;
 }): JSX.Element {
   const activeWorktreePath = useRepositoryScope()?.worktreePath ?? "";
@@ -209,6 +211,7 @@ export function BranchesSidebar({
           { activeWorktreePath, writable: editing.writable },
           {
             checkout: onSelectRef,
+            showReflog: onShowReflog,
             pull: pull.allowed
               ? {
                   pulling: pull.pulling,

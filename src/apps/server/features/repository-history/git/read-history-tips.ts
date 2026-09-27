@@ -15,6 +15,9 @@ import { readShallowHistoryOids } from "#server/features/repository-history/git/
 
 const maximumRefsOutputBytes = 16 * 1_048_576;
 const maximumStashRootsBytes = 16 * 1_024;
+const maximumReflogRoots = 10_000;
+const maximumRoots = 40_512;
+const maximumReflogRootsBytes = 1_048_576;
 const refFormat = [
   "%(refname)",
   "%(objectname)",
@@ -30,36 +33,52 @@ export function readHistoryTips(
   readObjectFormat: ObjectFormatRead,
 ): Effect.Effect<RepositoryHistoryTips, RepositoryHistoryFailure> {
   return Effect.gen(function* () {
-    const [objectFormat, refsOutput, stashTipOutput, worktreesOutput] =
-      yield* Effect.all(
-        [
-          readObjectFormat,
-          runRepositoryGit(
-            git,
-            repositoryPath,
-            [
-              "for-each-ref",
-              `--format=${refFormat}`,
-              "refs/heads",
-              "refs/remotes",
-              "refs/tags",
-            ],
-            { maxOutputBytes: maximumRefsOutputBytes },
-          ),
-          runRepositoryGit(git, repositoryPath, [
+    const [
+      objectFormat,
+      refsOutput,
+      stashTipOutput,
+      worktreesOutput,
+      reflogOutput,
+    ] = yield* Effect.all(
+      [
+        readObjectFormat,
+        runRepositoryGit(
+          git,
+          repositoryPath,
+          [
             "for-each-ref",
-            "--format=%(objectname)",
-            "refs/stash",
-          ]),
-          runRepositoryGit(git, repositoryPath, [
-            "worktree",
-            "list",
-            "--porcelain",
-            "-z",
-          ]),
-        ],
-        { concurrency: "unbounded" },
-      );
+            `--format=${refFormat}`,
+            "refs/heads",
+            "refs/remotes",
+            "refs/tags",
+          ],
+          { maxOutputBytes: maximumRefsOutputBytes },
+        ),
+        runRepositoryGit(git, repositoryPath, [
+          "for-each-ref",
+          "--format=%(objectname)",
+          "refs/stash",
+        ]),
+        runRepositoryGit(git, repositoryPath, [
+          "worktree",
+          "list",
+          "--porcelain",
+          "-z",
+        ]),
+        runRepositoryGit(
+          git,
+          repositoryPath,
+          [
+            "rev-list",
+            "--reflog",
+            "--no-walk",
+            `--max-count=${maximumReflogRoots}`,
+          ],
+          { maxOutputBytes: maximumReflogRootsBytes },
+        ).pipe(Effect.orElseSucceed(() => "")),
+      ],
+      { concurrency: "unbounded" },
+    );
     const shallowOids = yield* readShallowHistoryOids(git, repositoryPath);
     const stashOutput =
       stashTipOutput.trim() === ""
@@ -72,13 +91,15 @@ export function readHistoryTips(
           );
     const refTargets = parseSnapshotRefs(refsOutput, objectFormat);
     const worktreeHeads = parseWorktreeHeads(worktreesOutput, objectFormat);
-    const rootOids = [
-      ...new Set([
-        ...refTargets.map((target) => target.oid),
-        ...worktreeHeads,
-        ...parseOids(stashOutput, objectFormat),
-      ]),
-    ].sort();
+    const refRoots = new Set([
+      ...refTargets.map((target) => target.oid),
+      ...worktreeHeads,
+      ...parseOids(stashOutput, objectFormat),
+    ]);
+    const reflogRoots = parseOids(reflogOutput, objectFormat)
+      .filter((oid) => !refRoots.has(oid))
+      .slice(0, Math.max(0, maximumRoots - refRoots.size));
+    const rootOids = [...refRoots, ...reflogRoots].sort();
     const targets = [
       ...refTargets,
       ...worktreeHeads.map((oid, index) => ({

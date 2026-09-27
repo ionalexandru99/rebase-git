@@ -1,7 +1,9 @@
 import type { RepositoryHistoryRefTarget } from "#contracts/repository-history/repository-history.contract.ts";
-import type { RepositoryRefTarget } from "#contracts/repository-refs/repository-refs.contract.ts";
 import { CommitRefPill } from "#web/features/commit-graph/components/commit-ref-labels.tsx";
-import type { HistoryScope } from "#web/features/commit-graph/scope/history-scope.ts";
+import type {
+  HistoryScope,
+  HistorySelection,
+} from "#web/features/commit-graph/scope/history-scope.ts";
 
 export function HistoryScopeStrip({
   onRemove,
@@ -11,12 +13,12 @@ export function HistoryScopeStrip({
   scope,
   selections,
 }: {
-  readonly onRemove: ((target: RepositoryRefTarget) => void) | undefined;
+  readonly onRemove: ((target: HistorySelection) => void) | undefined;
   readonly onAdd?: (() => void) | undefined;
   readonly onReset?: (() => void) | undefined;
   readonly roots: readonly RepositoryHistoryRefTarget[];
   readonly scope: HistoryScope;
-  readonly selections: readonly RepositoryRefTarget[];
+  readonly selections: readonly HistorySelection[];
 }) {
   const detachedHead = roots.find((root) => root.type === "head");
   return (
@@ -33,7 +35,9 @@ export function HistoryScopeStrip({
                 ? "remote-branch"
                 : selection._tag === "Tag"
                   ? "tag"
-                  : "branch",
+                  : selection._tag === "Commit"
+                    ? "commit"
+                    : "branch",
           }}
           onRemove={
             onRemove === undefined ? undefined : () => onRemove(selection)
@@ -70,12 +74,13 @@ export function HistoryScopeStrip({
   );
 }
 
-function scopeSelectionName(selection: RepositoryRefTarget) {
+function scopeSelectionName(selection: HistorySelection) {
+  if (selection._tag === "Commit") return selection.oid.slice(0, 7);
   return selection._tag === "RemoteBranch"
     ? `${selection.remote}/${selection.name}`
     : selection.name;
 }
 
-function scopeSelectionKey(selection: RepositoryRefTarget) {
+function scopeSelectionKey(selection: HistorySelection) {
   return `${selection._tag}\0${scopeSelectionName(selection)}`;
 }

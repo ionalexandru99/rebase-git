@@ -9,6 +9,7 @@ export interface Action {
   readonly label: string;
   readonly enabled: boolean;
   readonly reason?: string;
+  readonly detail?: string;
   readonly keys?: readonly string[];
   readonly group?: "create" | "edit" | "delete";
   readonly run: () => void;
@@ -25,7 +26,9 @@ export function ActionMenuItems({
 }) {
   return actions.map((action, index) => {
     const previous = actions[index - 1]?.group;
-    const hint = action.enabled ? keyLabel(action.keys?.[0]) : action.reason;
+    const hint = action.enabled
+      ? (action.detail ?? keyLabel(action.keys?.[0]))
+      : action.reason;
     return (
       <Fragment key={action.id}>
         {previous !== undefined && previous !== action.group ? (

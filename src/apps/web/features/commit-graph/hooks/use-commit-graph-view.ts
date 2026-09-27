@@ -7,7 +7,6 @@ import {
   useState,
 } from "react";
 import type { RepositoryHistoryRefTarget } from "#contracts/repository-history/repository-history.contract.ts";
-import type { RepositoryRefTarget } from "#contracts/repository-refs/repository-refs.contract.ts";
 import type { CommitGraphViewportHandle } from "#web/features/commit-graph/components/commit-graph-virtual-window.tsx";
 import { historyLabelTarget } from "#web/features/commit-graph/components/commit-ref-labels.tsx";
 import {
@@ -15,6 +14,7 @@ import {
   useCommitGraphSelection,
 } from "#web/features/commit-graph/hooks/use-commit-graph-selection.ts";
 import { useGraphRows } from "#web/features/commit-graph/hooks/use-graph-rows.ts";
+import type { HistorySelection } from "#web/features/commit-graph/scope/history-scope.ts";
 import { useRepositoryHistoryOrder } from "#web/features/repository-history/history-order.ts";
 import type { HistoryScopeQuery } from "#web/features/repository-history/history-view.ts";
 import {
@@ -42,9 +42,7 @@ export function useCommitGraphView({
   readonly roots: readonly RepositoryHistoryRefTarget[] | undefined;
   readonly scrollRef: RefObject<HTMLTableElement | null>;
   readonly viewportRef: RefObject<CommitGraphViewportHandle | null>;
-  readonly onRevealHistoryRef:
-    | ((target: RepositoryRefTarget) => void)
-    | undefined;
+  readonly onRevealHistoryRef: ((target: HistorySelection) => void) | undefined;
   readonly onActiveCommitChange:
     | ((oid: string | undefined) => void)
     | undefined;

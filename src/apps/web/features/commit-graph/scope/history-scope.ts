@@ -11,18 +11,22 @@ import {
 
 export const automaticHistoryScope = { _tag: "Automatic" } as const;
 
+export type HistorySelection =
+  | RepositoryRefTarget
+  | { readonly _tag: "Commit"; readonly oid: string };
+
 export type HistoryScope =
   | typeof automaticHistoryScope
   | {
       readonly _tag: "Custom";
-      readonly selections: readonly RepositoryRefTarget[];
+      readonly selections: readonly HistorySelection[];
     };
 
 export interface ResolvedHistoryScope {
   readonly roots: readonly RepositoryHistoryRefTarget[];
   readonly scope: HistoryScope;
   readonly selectedRefKeys: ReadonlySet<string>;
-  readonly selections: readonly RepositoryRefTarget[];
+  readonly selections: readonly HistorySelection[];
 }
 
 export function resolveHistoryScope(
@@ -65,7 +69,7 @@ export function resolveHistoryScope(
 
 export function toggleHistoryRef(
   scope: HistoryScope,
-  target: RepositoryRefTarget,
+  target: HistorySelection,
   refs: RepositoryRefs,
   activeWorktreePath: string,
 ): HistoryScope {
@@ -102,8 +106,10 @@ export function renameHistoryBranch(
   };
 }
 
-export function historyRefKey(target: RepositoryRefTarget): string {
+export function historyRefKey(target: HistorySelection): string {
   switch (target._tag) {
+    case "Commit":
+      return `commit\0${target.oid}`;
     case "LocalBranch":
       return `branch\0${target.name}`;
     case "RemoteBranch":
@@ -130,7 +136,7 @@ export function historyScopesEqual(left: HistoryScope, right: HistoryScope) {
 
 function resolved(
   scope: HistoryScope,
-  selections: readonly RepositoryRefTarget[],
+  selections: readonly HistorySelection[],
   roots: readonly RepositoryHistoryRefTarget[],
   refs: RepositoryRefs,
 ): ResolvedHistoryScope {
@@ -146,8 +152,10 @@ function resolved(
   };
 }
 
-function selectionExists(selection: RepositoryRefTarget, refs: RepositoryRefs) {
+function selectionExists(selection: HistorySelection, refs: RepositoryRefs) {
   switch (selection._tag) {
+    case "Commit":
+      return true;
     case "LocalBranch":
       return refs.branches.some((branch) => branch.name === selection.name);
     case "RemoteBranch":
@@ -161,10 +169,12 @@ function selectionExists(selection: RepositoryRefTarget, refs: RepositoryRefs) {
 }
 
 function selectionTargets(
-  selection: RepositoryRefTarget,
+  selection: HistorySelection,
   refs: RepositoryRefs,
-): readonly RepositoryRefTarget[] {
+): readonly HistorySelection[] {
   switch (selection._tag) {
+    case "Commit":
+      return [selection];
     case "LocalBranch": {
       const branch = refs.branches.find(
         (candidate) => candidate.name === selection.name,
@@ -190,10 +200,14 @@ function selectionTargets(
 }
 
 function selectionRoots(
-  selection: RepositoryRefTarget,
+  selection: HistorySelection,
   refs: RepositoryRefs,
 ): readonly RepositoryHistoryRefTarget[] {
   switch (selection._tag) {
+    case "Commit":
+      return [
+        { name: selection.oid.slice(0, 7), oid: selection.oid, type: "commit" },
+      ];
     case "LocalBranch": {
       const branch = refs.branches.find(
         (candidate) => candidate.name === selection.name,
@@ -272,7 +286,7 @@ function branchRoot(branch: LocalBranch) {
     : { name: branch.name, oid: branch.target, type: "branch" as const };
 }
 
-function uniqueSelections(selections: readonly RepositoryRefTarget[]) {
+function uniqueSelections(selections: readonly HistorySelection[]) {
   const seen = new Set<string>();
   return selections.filter((selection) => {
     const key = historyRefKey(selection);

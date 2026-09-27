@@ -12,10 +12,7 @@ import {
   useState,
 } from "react";
 import type { RepositoryHistoryRefTarget } from "#contracts/repository-history/repository-history.contract.ts";
-import type {
-  RepositoryRefs,
-  RepositoryRefTarget,
-} from "#contracts/repository-refs/repository-refs.contract.ts";
+import type { RepositoryRefs } from "#contracts/repository-refs/repository-refs.contract.ts";
 import { runAction } from "#web/components/ui/action-menu.tsx";
 import { Button } from "#web/components/ui/button.tsx";
 import { AuthorAvatars } from "#web/features/author-avatars/author-avatar.tsx";
@@ -49,7 +46,10 @@ import {
   commitGraphGutterWidth,
   graphMetadataColumns,
 } from "#web/features/commit-graph/layout/graph-geometry.ts";
-import type { HistoryScope } from "#web/features/commit-graph/scope/history-scope.ts";
+import type {
+  HistoryScope,
+  HistorySelection,
+} from "#web/features/commit-graph/scope/history-scope.ts";
 import { RepositoryHistorySearchControls } from "#web/features/history-search/components/repository-history-search-controls.tsx";
 import {
   describeHistoryFailure,
@@ -93,13 +93,13 @@ export function CommitGraph({
     | undefined;
   readonly onAddHistoryRef?: () => void;
   readonly onResetHistoryScope?: (() => void) | undefined;
-  readonly onRemoveHistoryRef?: (target: RepositoryRefTarget) => void;
-  readonly onRevealHistoryRef?: (target: RepositoryRefTarget) => void;
+  readonly onRemoveHistoryRef?: (target: HistorySelection) => void;
+  readonly onRevealHistoryRef?: (target: HistorySelection) => void;
   readonly history: RepositoryHistory | undefined;
   readonly repositoryName: string;
   readonly roots: readonly RepositoryHistoryRefTarget[] | undefined;
   readonly scope?: HistoryScope;
-  readonly selections?: readonly RepositoryRefTarget[];
+  readonly selections?: readonly HistorySelection[];
   readonly remoteProviders?: RepositoryRefs["remoteProviders"];
   readonly githubRepository?: GitHubRepository | undefined;
 }): JSX.Element {

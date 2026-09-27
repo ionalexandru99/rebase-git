@@ -15,6 +15,7 @@ import { RepositoryHistoryRpc } from "#contracts/repository-history/repository-h
 import { RepositoryOperationsApi } from "#contracts/repository-operations/repository-operations.contract.ts";
 import { RepositoryPullApi } from "#contracts/repository-pull/repository-pull.contract.ts";
 import { RepositoryPushApi } from "#contracts/repository-push/repository-push.contract.ts";
+import { RepositoryReflogApi } from "#contracts/repository-reflog/repository-reflog.contract.ts";
 import { RepositoryBranchesApi } from "#contracts/repository-refs/repository-branches.contract.ts";
 import { RepositoryRefsApi } from "#contracts/repository-refs/repository-refs.contract.ts";
 import { RepositoryTagsApi } from "#contracts/repository-refs/repository-tags.contract.ts";
@@ -71,6 +72,7 @@ export const EnvironmentRpc = RpcGroup.make(
   ...Object.values(RepositoryOperationsApi),
   ...Object.values(RepositoryPullApi),
   ...Object.values(RepositoryPushApi),
+  ...Object.values(RepositoryReflogApi),
   ...Object.values(RepositoryRefsApi),
   ...Object.values(RepositoryBranchesApi),
   ...Object.values(RepositoryTagsApi),

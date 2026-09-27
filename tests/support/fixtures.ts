@@ -6,6 +6,7 @@ import type {
 import type { ChangeDiff } from "#contracts/repository-comparison/repository-comparison.contract.ts";
 import type { RepositoryOperation } from "#contracts/repository-operations/repository-operations.contract.ts";
 import type { RepositoryFetchStatus } from "#contracts/repository-pull/repository-pull.contract.ts";
+import type { ReflogEntry } from "#contracts/repository-reflog/repository-reflog.contract.ts";
 import type {
   BranchUpstream,
   RepositoryRefs,
@@ -190,5 +191,19 @@ export function repositoryScope(
     writable: true,
     switchWorktree: () => undefined,
     ...scope,
+  };
+}
+
+export function reflogEntry(entry: Partial<ReflogEntry> = {}): ReflogEntry {
+  return {
+    oid: commitId,
+    previousOid: null,
+    action: "commit",
+    description: "Commit",
+    subject: "Commit",
+    recordedAt: 1_790_000_000,
+    orphaned: false,
+    steps: [],
+    ...entry,
   };
 }
