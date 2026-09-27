@@ -218,6 +218,31 @@ describe("application shell", () => {
       .toBeDisabled();
   });
 
+  it("hides remembered repositories when the device must pair again", async () => {
+    const connected = await connectedSession();
+    connected.finishSynchronization();
+    await render(
+      <ApplicationShell
+        desktopUpdates={undefined}
+        productVersion="test"
+        repositoryFilesystem={undefined}
+        repositoryHistory={connected.repositoryHistory}
+        session={connected.session}
+      />,
+    );
+    const repositories = page
+      .getByRole("main", { name: "Open project" })
+      .getByRole("option");
+    await expect.element(repositories.first()).toBeVisible();
+
+    connected.requirePairing();
+
+    await expect
+      .element(page.getByRole("status"))
+      .toHaveTextContent("Pairing required");
+    expect(repositories.elements()).toHaveLength(0);
+  });
+
   it("opens the project launcher from expanded and collapsed sidebars", async () => {
     await renderShell();
 
@@ -447,6 +472,7 @@ async function connectedSession(
     finishSynchronization,
     recordOpened,
     repositoryHistory,
+    requirePairing: () => publish({ _tag: "PairingRequired" }),
     session,
   };
 }

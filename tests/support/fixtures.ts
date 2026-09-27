@@ -37,6 +37,27 @@ export function mainAndTopicWorktrees(): RepositoryWorktree[] {
   return [worktree(mainPath, "main"), worktree(topicPath, "topic")];
 }
 
+export function branchScenarioRefs(): RepositoryRefs {
+  return repositoryRefs({
+    branches: [
+      {
+        name: "main",
+        upstream: upstream("origin/main", { behind: 2 }),
+        worktreePath: mainPath,
+      },
+      { name: "feature" },
+      { name: "topic", worktreePath: topicPath },
+    ],
+    remoteBranches: [
+      { name: "feature", remote: "origin" },
+      { name: "topic", remote: "origin" },
+      { name: "release", remote: "upstream" },
+    ],
+    tags: [{ name: "v1.0.0" }],
+    worktrees: mainAndTopicWorktrees(),
+  });
+}
+
 export function upstream(
   name: string,
   { ahead = 0, behind = 0, gone = false } = {},
@@ -44,11 +65,19 @@ export function upstream(
   return { ahead, behind, gone, name };
 }
 
-export function changedFile<Status extends ChangedFile["status"] = "M">(
+export function changedFile(
   path: string,
-  status = "M" as Status,
+): ChangedFile & { readonly status: "M" };
+export function changedFile<Status extends ChangedFile["status"]>(
+  path: string,
+  status: Status,
+  previousPath?: string | null,
+): ChangedFile & { readonly status: Status };
+export function changedFile(
+  path: string,
+  status: ChangedFile["status"] = "M",
   previousPath: string | null = null,
-) {
+): ChangedFile {
   return { path, previousPath, status };
 }
 

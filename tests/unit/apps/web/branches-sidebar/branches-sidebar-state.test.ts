@@ -1,10 +1,8 @@
 import { describe, expect, it } from "vite-plus/test";
 import {
-  mainAndTopicWorktrees,
+  branchScenarioRefs,
   mainPath,
-  repositoryRefs,
   topicPath,
-  upstream,
 } from "#tests-support/fixtures";
 import {
   buildBranchesSidebarRows,
@@ -16,7 +14,7 @@ import {
 describe("branches sidebar state", () => {
   it("expands local branches by default and keeps remotes and tags collapsed", () => {
     const rows = buildBranchesSidebarRows(
-      refs(),
+      branchScenarioRefs(),
       mainPath,
       defaultExpandedSections,
       "",
@@ -48,7 +46,7 @@ describe("branches sidebar state", () => {
 
   it("keeps the active branch ahead of branches in other worktrees", () => {
     const rows = buildBranchesSidebarRows(
-      refs(),
+      branchScenarioRefs(),
       topicPath,
       defaultExpandedSections,
       "",
@@ -63,7 +61,7 @@ describe("branches sidebar state", () => {
 
   it("expands matching sections and hides empty ones while filtering", () => {
     const rows = buildBranchesSidebarRows(
-      refs(),
+      branchScenarioRefs(),
       mainPath,
       defaultExpandedSections,
       "  FEAT ",
@@ -80,7 +78,7 @@ describe("branches sidebar state", () => {
   it("shows only the selected ref scope and expands its sections", () => {
     expect(
       buildBranchesSidebarRows(
-        refs(),
+        branchScenarioRefs(),
         mainPath,
         defaultExpandedSections,
         "",
@@ -95,7 +93,7 @@ describe("branches sidebar state", () => {
 
     expect(
       buildBranchesSidebarRows(
-        refs(),
+        branchScenarioRefs(),
         mainPath,
         defaultExpandedSections,
         "",
@@ -110,7 +108,7 @@ describe("branches sidebar state", () => {
     ]);
 
     const tags = buildBranchesSidebarRows(
-      refs(),
+      branchScenarioRefs(),
       mainPath,
       defaultExpandedSections,
       "",
@@ -124,7 +122,7 @@ describe("branches sidebar state", () => {
 
     expect(
       buildBranchesSidebarRows(
-        refs(),
+        branchScenarioRefs(),
         mainPath,
         defaultExpandedSections,
         "feat",
@@ -135,7 +133,7 @@ describe("branches sidebar state", () => {
 
   it("steps through rows without wrapping and toggles sections", () => {
     const rows = buildBranchesSidebarRows(
-      refs(),
+      branchScenarioRefs(),
       mainPath,
       toggleSection(defaultExpandedSections, "tags"),
       "",
@@ -150,24 +148,3 @@ describe("branches sidebar state", () => {
     expect(toggleSection(defaultExpandedSections, "branches").size).toBe(0);
   });
 });
-
-function refs() {
-  return repositoryRefs({
-    branches: [
-      {
-        name: "main",
-        upstream: upstream("origin/main", { behind: 2 }),
-        worktreePath: mainPath,
-      },
-      { name: "feature" },
-      { name: "topic", worktreePath: topicPath },
-    ],
-    remoteBranches: [
-      { name: "feature", remote: "origin" },
-      { name: "topic", remote: "origin" },
-      { name: "release", remote: "upstream" },
-    ],
-    tags: [{ name: "v1.0.0" }],
-    worktrees: mainAndTopicWorktrees(),
-  });
-}

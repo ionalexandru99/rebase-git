@@ -1,10 +1,8 @@
 import { describe, expect, it } from "vite-plus/test";
 import {
-  mainAndTopicWorktrees,
+  branchScenarioRefs,
   mainPath,
-  repositoryRefs,
   topicPath,
-  upstream,
 } from "#tests-support/fixtures";
 import {
   resolveActiveWorktreePath,
@@ -13,7 +11,7 @@ import {
 
 describe("repository ref activation", () => {
   it("switches worktrees for branches held elsewhere and checks out the rest", () => {
-    const current = refs();
+    const current = branchScenarioRefs();
 
     expect(
       resolveRefActivation(current, mainPath, {
@@ -60,28 +58,11 @@ describe("repository ref activation", () => {
   });
 
   it("falls back to the main worktree when the preferred path disappeared", () => {
-    expect(resolveActiveWorktreePath(refs(), topicPath)).toBe(topicPath);
-    expect(resolveActiveWorktreePath(refs(), "/gone")).toBe(mainPath);
+    expect(resolveActiveWorktreePath(branchScenarioRefs(), topicPath)).toBe(
+      topicPath,
+    );
+    expect(resolveActiveWorktreePath(branchScenarioRefs(), "/gone")).toBe(
+      mainPath,
+    );
   });
 });
-
-function refs() {
-  return repositoryRefs({
-    branches: [
-      {
-        name: "main",
-        upstream: upstream("origin/main", { behind: 2 }),
-        worktreePath: mainPath,
-      },
-      { name: "feature" },
-      { name: "topic", worktreePath: topicPath },
-    ],
-    remoteBranches: [
-      { name: "feature", remote: "origin" },
-      { name: "topic", remote: "origin" },
-      { name: "release", remote: "upstream" },
-    ],
-    tags: [{ name: "v1.0.0" }],
-    worktrees: mainAndTopicWorktrees(),
-  });
-}

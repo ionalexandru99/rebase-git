@@ -103,10 +103,7 @@ async function measureCommitGraph(
     await installGraphMeasurements(page);
     const pairingUrl = await server.waitForPairingUrl();
     await page.goto(pairingUrl);
-    await expect(page.getByRole("status")).toHaveAttribute(
-      "data-connection-state",
-      "Connected",
-    );
+    await expect(page.getByRole("status")).toHaveText("Available");
     await page.getByRole("button", { name: "Browse files" }).click();
     const picker = page.getByRole("dialog", { name: "Choose repository" });
     await picker

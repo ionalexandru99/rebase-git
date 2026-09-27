@@ -302,6 +302,11 @@ describe("branches sidebar", () => {
     await expect
       .element(screen.getByRole("treeitem", { name: /main/ }))
       .not.toBeInTheDocument();
+
+    await filter.fill("missing");
+    await expect
+      .element(screen.getByRole("status"))
+      .toHaveTextContent("No tags match.");
   });
 
   it("connects tree focus, navigation, expansion, and activation", async () => {
