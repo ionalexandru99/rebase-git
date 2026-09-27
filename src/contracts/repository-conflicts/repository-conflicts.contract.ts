@@ -7,12 +7,10 @@ import {
   RepositoryId,
   RepositoryPath,
 } from "@rebase/contracts/git/git-values.contract";
-import { OperationKind } from "@rebase/contracts/repository-operations/repository-operations.contract";
 import { Schema } from "effect";
 
 const Revision = Schema.String.check(Schema.isMaxLength(128));
 const ObjectId = Schema.String.check(Schema.isPattern(/^[a-f0-9]{40,64}$/));
-const Line = Schema.String.check(Schema.isMaxLength(100_000));
 
 export const ConflictScope = Schema.Struct({
   repositoryId: RepositoryId,
@@ -38,15 +36,8 @@ export const WholeFileChoice = Schema.Literals([
   "current",
   "incoming",
   "delete",
-  "worktree",
 ]);
 export type WholeFileChoice = typeof WholeFileChoice.Type;
-
-export const CommitSummary = Schema.Struct({
-  commit: ObjectId,
-  subject: Schema.String,
-});
-export type CommitSummary = typeof CommitSummary.Type;
 
 export const SideLabel = Schema.Struct({
   ref: Schema.NullOr(Schema.String),
@@ -64,7 +55,6 @@ export type ConflictSides = typeof ConflictSides.Type;
 
 export const ConflictStage = Schema.Struct({
   side: ConflictSide,
-  oid: ObjectId,
   bytes: Schema.Natural,
   binary: Schema.Boolean,
 });
@@ -81,11 +71,8 @@ export const ConflictFile = Schema.Struct({
 export type ConflictFile = typeof ConflictFile.Type;
 
 export const ConflictList = Schema.Struct({
-  operation: OperationKind,
   sides: ConflictSides,
   files: Schema.Array(ConflictFile),
-  resolved: Schema.Array(RepositoryPath),
-  mergeTool: Schema.NullOr(Schema.String),
 });
 export type ConflictList = typeof ConflictList.Type;
 
@@ -99,13 +86,9 @@ export type TokenMark = typeof TokenMark.Type;
 export const ConflictRegion = Schema.Struct({
   id: Schema.String,
   line: Schema.NullOr(Schema.Natural),
-  current: Schema.Array(Line),
-  base: Schema.Array(Line),
-  incoming: Schema.Array(Line),
-  blame: Schema.Struct({
-    current: Schema.NullOr(CommitSummary),
-    incoming: Schema.NullOr(CommitSummary),
-  }),
+  current: Schema.Array(Schema.String),
+  base: Schema.Array(Schema.String),
+  incoming: Schema.Array(Schema.String),
   marks: Schema.Struct({
     current: Schema.Array(TokenMark),
     incoming: Schema.Array(TokenMark),
@@ -116,7 +99,6 @@ export type ConflictRegion = typeof ConflictRegion.Type;
 
 export const ConflictDocument = Schema.Struct({
   file: ConflictFile,
-  sides: ConflictSides,
   content: Schema.String,
   regions: Schema.Array(ConflictRegion),
 });
@@ -156,9 +138,6 @@ export const ConflictFailure = Schema.TaggedStruct("ConflictFailed", {
     "Unsupported",
     "Markers",
     "TooLarge",
-    "NoMergeTool",
-    "GitRejected",
-    "Uncertain",
   ]),
   detail: Schema.String.check(Schema.isMaxLength(2048)),
 });
@@ -187,16 +166,6 @@ export const RepositoryConflictsHttpApi = {
   }),
   stage: repositoryCommand("/api/repositories/conflicts/stage", {
     request: StageConflict,
-    success: ConflictList,
-    failure: ConflictFailure,
-  }),
-  reopen: repositoryCommand("/api/repositories/conflicts/reopen", {
-    request: ConflictPath,
-    success: ConflictList,
-    failure: ConflictFailure,
-  }),
-  mergeTool: repositoryCommand("/api/repositories/conflicts/merge-tool", {
-    request: ConflictPath,
     success: ConflictList,
     failure: ConflictFailure,
   }),
