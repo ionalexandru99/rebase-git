@@ -10,9 +10,11 @@ import {
   type Navigation,
   worktreePathFor,
 } from "#web/app/shell/use-navigation";
+import {
+  resolveActiveWorktreePath,
+  useRepositoryRefs,
+} from "#web/features/refs/repository-refs";
 import { useCatalogRepository } from "#web/features/repository-catalog/use-repository-catalog";
-import { resolveActiveWorktreePath } from "#web/features/repository-refs/activate-repository-ref";
-import { useRepositoryRefs } from "#web/features/repository-refs/hooks/use-repository-refs";
 import { useEnvironment } from "#web/platform/query/environment-context";
 import { RepositoryScopeProvider } from "#web/platform/query/repository-scope";
 import { useStore } from "#web/platform/store/use-store";

@@ -67,7 +67,7 @@ export interface CommandRun<Route extends RequestableEnvironmentHttpRoute> {
   readonly submittedAt: number;
 }
 
-interface CommandState<Route extends RequestableEnvironmentHttpRoute> {
+export interface CommandState<Route extends RequestableEnvironmentHttpRoute> {
   readonly pending: boolean;
   readonly result: CommandResult<Route> | undefined;
   readonly input: RouteInput<Route> | undefined;
@@ -146,6 +146,7 @@ export function useCommand<Route extends RequestableEnvironmentHttpRoute>(
       (!scoped || target !== undefined),
     running: observed.some(({ pending }) => pending),
     lastOk: lastOk(observed),
+    latest: observed.at(-1),
     failure: result === undefined || result._tag === "Ok" ? undefined : result,
     input: mutation.variables,
   };

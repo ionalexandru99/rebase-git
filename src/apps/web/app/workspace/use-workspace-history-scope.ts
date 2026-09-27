@@ -11,7 +11,7 @@ import {
   automaticHistoryScope,
   type HistoryScope,
 } from "#web/features/commit-graph/scope/history-scope-model";
-import type { RepositoryRefsRead } from "#web/features/repository-refs/hooks/use-repository-refs";
+import type { RepositoryRefsRead } from "#web/features/refs/repository-refs";
 import type { RepositoryScope } from "#web/platform/query/repository-scope";
 
 export function useWorkspaceHistoryScope(

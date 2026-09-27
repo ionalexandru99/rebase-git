@@ -17,11 +17,14 @@ import {
   useRef,
   useState,
 } from "react";
+import { runAction } from "#web/components/ui/action-menu";
 import { Button } from "#web/components/ui/button";
 import { AuthorAvatars } from "#web/features/author-avatars/author-avatar";
 import type { GitHubRepository } from "#web/features/author-avatars/author-avatar-source";
-import { CommitCommandMenu } from "#web/features/commit-commands/commit-command-menu";
-import type { GraphCommandDefinition } from "#web/features/commit-commands/graph-command";
+import {
+  CommitActionMenu,
+  useCommitActions,
+} from "#web/features/commit-graph/commit-actions";
 import type {
   CommitGraphHandle,
   CommitGraphHistory,
@@ -43,7 +46,6 @@ import { CommitGraphVirtualWindow } from "#web/features/commit-graph/components/
 import { historyLabelTarget } from "#web/features/commit-graph/components/commit-ref-labels";
 import { GraphRefAppearance } from "#web/features/commit-graph/components/graph-ref-appearance";
 import { HistoryScopeStrip } from "#web/features/commit-graph/components/history-scope-strip";
-import { useCommitGraphCommands } from "#web/features/commit-graph/hooks/use-commit-graph-commands";
 import { useCommitGraphPages } from "#web/features/commit-graph/hooks/use-commit-graph-pages";
 import { useCommitGraphSelection } from "#web/features/commit-graph/hooks/use-commit-graph-selection";
 import { useCommitGraphViewport } from "#web/features/commit-graph/hooks/use-commit-graph-viewport";
@@ -54,9 +56,6 @@ import { graphRefLabels } from "#web/features/commit-graph/layout/graph-ref-labe
 import type { HistoryScope } from "#web/features/commit-graph/scope/history-scope-model";
 import type { CommitGraphSelectionMode } from "#web/features/commit-graph/selection/commit-graph-selection";
 import { RepositoryHistorySearchControls } from "#web/features/history-search/components/repository-history-search-controls";
-import { RepositoryFetchButton } from "#web/features/repository-fetch/components/repository-fetch-button";
-import { RepositoryHistoryFreshnessStatus } from "#web/features/repository-fetch/components/repository-history-freshness-status";
-import { useRepositoryHistoryFetch } from "#web/features/repository-fetch/hooks/use-repository-history-fetch";
 import { useRepositoryHistoryOrder } from "#web/features/repository-history/hooks/use-repository-history-order";
 import type { RepositoryHistoryQuery } from "#web/features/repository-history/repository-history-reader";
 import { useRepositoryScope } from "#web/platform/query/repository-scope";
@@ -65,7 +64,6 @@ const emptyRefLabels: readonly RepositoryHistoryRefTarget[] = [];
 
 export function CommitGraph({
   ref,
-  extraCommands,
   historyIdentity,
   onRemoveHistoryRef,
   onRevealHistoryRef,
@@ -82,7 +80,6 @@ export function CommitGraph({
   onOpenDetails,
   onActiveCommitChange,
 }: {
-  readonly extraCommands?: readonly GraphCommandDefinition[] | undefined;
   readonly onOpenDetails?: ((oid: string) => void) | undefined;
   readonly onActiveCommitChange?:
     | ((oid: string | undefined) => void)
@@ -151,7 +148,6 @@ export function CommitGraph({
     loading,
   });
   const { scrollRef, viewportRef } = viewport;
-  const fetch = useRepositoryHistoryFetch(reader, historySnapshot);
   const visibleCommits = commits;
   const error = paging.snapshot.error;
   const loadHistory = paging.reload;
@@ -269,12 +265,7 @@ export function CommitGraph({
     ? navigation.selection.activeOid
     : undefined;
 
-  const commands = useCommitGraphCommands({
-    extraCommands,
-    reader,
-    selectedOids: navigation.selection.selectedOids,
-    onOpenDetails,
-  });
+  const commands = useCommitActions({ reader, onOpenDetails });
   const handleKeyDown = (event: KeyboardEvent<HTMLElement>) => {
     if (event.defaultPrevented) return;
     if (
@@ -317,7 +308,7 @@ export function CommitGraph({
   const handleRowDoubleClick = (event: MouseEvent<HTMLElement>) => {
     const oid = eventCommitOid(event);
     if (oid === undefined || eventTargetMatches(event, "button")) return;
-    void commands.execute("graph.openDetails", commands.context(oid));
+    runAction(commands.actionsFor(oid).find(({ id }) => id === "openDetails"));
   };
   const handleRowContextMenu = (event: MouseEvent<HTMLElement>) => {
     const oid = eventCommitOid(event);
@@ -345,7 +336,6 @@ export function CommitGraph({
             offline={connected === false}
           />
         )}
-        <RepositoryFetchButton fetch={fetch} snapshot={historySnapshot} />
         {toolbarActions}
       </CommitGraphToolbar.Frame>
       <GraphRefAppearance
@@ -375,14 +365,12 @@ export function CommitGraph({
             {({ viewport, totalHeight, virtualRows }) => (
               <>
                 <div className="relative min-h-0 flex-1">
-                  <CommitCommandMenu
-                    context={
+                  <CommitActionMenu
+                    actions={
                       menuOid === undefined
                         ? undefined
-                        : commands.context(menuOid)
+                        : commands.actionsFor(menuOid)
                     }
-                    commands={commands.definitions}
-                    run={commands.run}
                     tabIndex={0}
                     restoreFocus={() => scrollRef.current?.focus()}
                   >
@@ -524,7 +512,7 @@ export function CommitGraph({
                         })}
                       </tbody>
                     </table>
-                  </CommitCommandMenu>
+                  </CommitActionMenu>
                   {loading && commits.length === 0 ? (
                     <CommitGraphLoading />
                   ) : null}
@@ -585,11 +573,6 @@ export function CommitGraph({
           {commands.error}
         </p>
       )}
-      <RepositoryHistoryFreshnessStatus
-        snapshot={historySnapshot}
-        fetching={fetch.fetching}
-        error={fetch.error}
-      />
     </section>
   );
 }

@@ -12,8 +12,8 @@ import {
 import { Button } from "#web/components/ui/button";
 import type { RepositoryHistoryStorageDiagnostics } from "#web/domain/repository-history/history-storage.contract";
 import { RepositoryHistoryCacheList } from "#web/features/history-storage/components/repository-history-cache-list";
+import { forgetAllRepositoryRefs } from "#web/features/refs/repository-refs";
 import { requestBrowserHistoryStorage } from "#web/features/repository-history/storage/browser-history-storage";
-import { forgetAllRepositoryRefs } from "#web/features/repository-refs/repository-refs-query";
 
 export function HistoryStorageSettings() {
   const [diagnostics, setDiagnostics] =
