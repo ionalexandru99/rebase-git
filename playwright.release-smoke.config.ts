@@ -2,6 +2,7 @@ import { defineConfig } from "@playwright/test";
 
 export default defineConfig({
   forbidOnly: Boolean(process.env.CI),
+  globalSetup: "./tests/support/virtual-display.ts",
   outputDir: "tests/.artifacts/playwright-release-smoke",
   reporter: [
     [process.env.CI ? "github" : "list"],

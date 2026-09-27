@@ -86,7 +86,12 @@ async function createTestEnvironment(testHome: string) {
 async function launchPackagedApplication(environment: Record<string, string>) {
   const childProcess = spawn(
     packagedExecutable(),
-    ["--remote-debugging-port=0", "--disable-gpu-sandbox", "--no-sandbox"],
+    [
+      "--ozone-platform=x11",
+      "--remote-debugging-port=0",
+      "--disable-gpu-sandbox",
+      "--no-sandbox",
+    ],
     {
       env: environment,
     },

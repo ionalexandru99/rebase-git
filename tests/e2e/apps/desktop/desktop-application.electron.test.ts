@@ -99,7 +99,7 @@ function launchApplication(environment: Record<string, string>) {
   return electron.launch({
     args: [
       resolve("src/apps/desktop/dist/package/main.js"),
-      "--headless",
+      "--ozone-platform=x11",
       "--disable-gpu",
       "--no-sandbox",
     ],

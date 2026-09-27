@@ -53,6 +53,7 @@ Run performance benchmarks only on local development machines, never in CI, incl
   - Release smoke: the produced artifact installs or launches and reports its identity.
 - Typed fakes and test data builders live once in `tests/support`; do not write full contract literals in test files. Production code has no option, export or attribute that only tests use.
 - Wait for conditions, never durations: poll or subscribe for the observable outcome and let the shared timeouts in `vitest.config.ts` and the Playwright configs be the only bound. No sleeps, private timers or per-test timeouts. In product code a duration is only a deadline that detects a hang, never pacing; bursts go through a queue that the consumer drains when free.
+- Desktop tests never open a window on the developer's display. On Linux the Playwright global setup starts a private Xvfb display and removes `WAYLAND_DISPLAY`; launch Electron with `--ozone-platform=x11`. Agents never run `pnpm dev:electron`.
 - A test that fails intermittently is a bug. Never rerun a pipeline to get green; find the cause and fix it.
 - Windows:
   - Git and process spawns cost 10 to 100 times more than on Linux. Build large repository states with `fastImport` from `#tests-support/git` and keep Git invocations per test to a handful.
