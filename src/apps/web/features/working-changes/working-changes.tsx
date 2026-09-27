@@ -54,6 +54,7 @@ export function WorkingChanges({
         <Confirmation
           title={`Discard ${discard.section} changes?`}
           action="Discard changes"
+          disabled={view.busy || view.loading}
           onCancel={() => setDiscard(null)}
           onConfirm={() => {
             setDiscard(null);

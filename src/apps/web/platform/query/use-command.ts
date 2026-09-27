@@ -257,6 +257,11 @@ async function writeAnswers(
       input,
       version,
     );
+    if (
+      typeof value === "function" &&
+      queryClient.getQueryData(queryKey) === undefined
+    )
+      continue;
     await queryClient.cancelQueries({ queryKey, exact: true });
     queryClient.setQueryData(queryKey, value);
     answered.add(hashKey(queryKey));
