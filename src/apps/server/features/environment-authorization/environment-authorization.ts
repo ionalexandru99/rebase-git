@@ -53,12 +53,17 @@ export interface EnvironmentAuthorization {
     EnvironmentAuthorizationRevoked,
     InvalidGrant | EnvironmentStorageError
   >;
+  readonly watchRevocation: (
+    authorizationId: string,
+    revoked: () => void,
+  ) => () => void;
 }
 
 export function createEnvironmentAuthorization(
   context: EnvironmentContext,
 ): EnvironmentAuthorization {
   const pairings = new Map<string, PairingEntry>();
+  const revocationWatchers = new Map<string, Set<() => void>>();
 
   return {
     authorize: (credential) => authorizeCredential(context, credential),
@@ -67,7 +72,24 @@ export function createEnvironmentAuthorization(
         createPairing(pairings, pairing?.replacesGrantsWithSameLabel ?? false),
       ),
     exchangePairing: (exchange) => exchangePairing(context, pairings, exchange),
-    revoke: (authorizationId) => revokeAuthorization(context, authorizationId),
+    revoke: (authorizationId) =>
+      revokeAuthorization(context, authorizationId).pipe(
+        Effect.tap(() =>
+          Effect.sync(() => {
+            for (const revoked of revocationWatchers.get(authorizationId) ?? [])
+              revoked();
+          }),
+        ),
+      ),
+    watchRevocation: (authorizationId, revoked) => {
+      const watchers = revocationWatchers.get(authorizationId) ?? new Set();
+      watchers.add(revoked);
+      revocationWatchers.set(authorizationId, watchers);
+      return () => {
+        watchers.delete(revoked);
+        if (watchers.size === 0) revocationWatchers.delete(authorizationId);
+      };
+    },
   };
 }
 

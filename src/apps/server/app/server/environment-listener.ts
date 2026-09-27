@@ -22,7 +22,6 @@ export interface EnvironmentListener {
   readonly host: string;
   readonly origin: string;
   readonly port: number;
-  readonly readiness: { value: boolean };
   readonly server: Server;
 }
 
@@ -44,14 +43,12 @@ export function acquireEnvironmentListener(
   return Effect.gen(function* () {
     const host = options.host ?? loopbackHost;
     const port = options.port ?? 0;
-    const readiness = { value: false };
     const runFork = yield* FiberSet.makeRuntime<never, void, never>();
     const runEnvironmentEffect: RunEnvironmentEffect = (effect, signal) => {
       runFork(effect, signal === undefined ? undefined : { signal });
     };
     const server = yield* Effect.acquireRelease(
       createHttpServer(
-        readiness,
         options.authorization,
         host,
         port,
@@ -76,14 +73,12 @@ export function acquireEnvironmentListener(
       host,
       origin: `http://${formatHostAddress(host)}:${listeningPort}`,
       port: listeningPort,
-      readiness,
       server,
     };
   });
 }
 
 function createHttpServer(
-  readiness: { value: boolean },
   authorization: EnvironmentListenerOptions["authorization"],
   host: string,
   port: number,
@@ -96,7 +91,6 @@ function createHttpServer(
         { maxHeaderSize: 16_384 },
         createEnvironmentHttpHandler(
           authorization,
-          () => readiness.value,
           runEnvironmentEffect,
           browserAssetsRoot,
         ),

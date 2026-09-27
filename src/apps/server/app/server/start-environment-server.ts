@@ -116,7 +116,6 @@ export function serveEnvironment(
       replacesGrantsWithSameLabel:
         options.pairingReplacesGrantsWithSameLabel ?? false,
     });
-    yield* markListenerReady(listener);
 
     return {
       environmentId: environment.id,
@@ -174,19 +173,6 @@ function runtimeMarker(listener: EnvironmentListener) {
     port: listener.port,
     startedAt: new Date().toISOString(),
   };
-}
-
-function markListenerReady(listener: EnvironmentListener) {
-  return Effect.gen(function* () {
-    yield* Effect.addFinalizer(() =>
-      Effect.sync(() => {
-        listener.readiness.value = false;
-      }),
-    );
-    yield* Effect.sync(() => {
-      listener.readiness.value = true;
-    });
-  });
 }
 
 function readCurrentEnvironment(context: EnvironmentContext) {

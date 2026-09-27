@@ -24,7 +24,6 @@ const changes: RepositoryChanges = {
     { path: "second.bin", previousPath: null, status: "M" },
   ],
   staged: [],
-  truncated: false,
   renamesLimited: false,
 };
 

@@ -48,9 +48,6 @@ describe("Electron application", () => {
       expect(firstWindow).toMatchObject({ renderer });
       expect(firstWindow?.credential).toMatch(/^rebase\.v1\./);
       expect(serverStarts).toBe(1);
-      await expect(
-        fetch(`${firstWindow?.environmentOrigin}/health`),
-      ).resolves.toMatchObject({ status: 200 });
 
       await application.activate();
       expect(host.windows).toHaveLength(1);
@@ -79,7 +76,7 @@ describe("Electron application", () => {
 
       expect(host.quitCalls).toBe(1);
       await expect(
-        fetch(`${firstWindow?.environmentOrigin}/health`),
+        fetch(firstWindow?.environmentOrigin ?? ""),
       ).rejects.toThrow();
       await expect(
         access(join(homeDirectory, ".rebase", "runtime", "runtime.json")),

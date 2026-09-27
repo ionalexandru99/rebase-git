@@ -10,14 +10,13 @@ import {
   type ProtocolMismatch,
   unauthorizedCloseCode,
 } from "@rebase/contracts";
-import { Cause, Deferred, Effect, Fiber, Layer, Queue, Stream } from "effect";
+import { Deferred, Effect, Fiber, Layer, Queue, Stream } from "effect";
 import { RpcSerialization, RpcServer } from "effect/unstable/rpc";
 import { Socket, SocketServer } from "effect/unstable/socket";
 import { type WebSocket, WebSocketServer } from "ws";
 import type { EnvironmentEventPublisher } from "#server/adapters/environment-transport/environment-event-publisher";
 import type { RunEnvironmentEffect } from "#server/adapters/environment-transport/environment-http-handler";
 import {
-  accessFailureStatus,
   expectedRequestOrigin,
   readSocketCredential,
   validateRequestHost,
@@ -27,10 +26,7 @@ import type {
   EnvironmentFeatures,
   RouteContext,
 } from "#server/adapters/environment-transport/environment-routes";
-import {
-  type EnvironmentAuthorization,
-  EnvironmentAuthorizationError,
-} from "#server/features/environment-authorization/environment-authorization";
+import type { EnvironmentAuthorization } from "#server/features/environment-authorization/environment-authorization";
 
 export interface EnvironmentSocketOptions {
   readonly authorization: EnvironmentAuthorization;
@@ -58,12 +54,6 @@ export function attachEnvironmentSocket(
       zlibDeflateOptions: { chunkSize: 1_024, level: 3, memLevel: 7 },
     },
   });
-  const accept = (request: IncomingMessage, socket: Duplex, head: Buffer) =>
-    Effect.callback<WebSocket>((resume) => {
-      webSocketServer.handleUpgrade(request, socket, head, (webSocket) =>
-        resume(Effect.succeed(webSocket)),
-      );
-    });
   const upgrade = (request: IncomingMessage, socket: Duplex, head: Buffer) => {
     if (upgradePath(request) !== environmentLivePath) {
       socket.end("HTTP/1.1 404 Not Found\r\nConnection: close\r\n\r\n");
@@ -71,21 +61,18 @@ export function attachEnvironmentSocket(
     }
     runEnvironmentEffect(
       authorizeUpgrade(request, options.authorization).pipe(
-        Effect.matchCauseEffect({
-          onFailure: (cause) =>
-            Effect.sync(() => rejectUpgrade(socket, Cause.squash(cause))),
+        Effect.matchCause({
+          onFailure: () => rejectUpgrade(socket),
           onSuccess: (authorized) =>
-            accept(request, socket, head).pipe(
-              Effect.flatMap((webSocket) =>
-                authorized._tag === "Unauthorized"
-                  ? Effect.sync(() =>
-                      webSocket.close(unauthorizedCloseCode, authorized.reason),
-                    )
-                  : serveEnvironmentRpc(webSocket, server, options, {
+            webSocketServer.handleUpgrade(request, socket, head, (webSocket) =>
+              authorized._tag === "Unauthorized"
+                ? webSocket.close(unauthorizedCloseCode, authorized.reason)
+                : runEnvironmentEffect(
+                    serveEnvironmentRpc(webSocket, server, options, {
                       device: authorized.device,
                       origin: expectedRequestOrigin(request),
                     }),
-              ),
+                  ),
             ),
         }),
       ),
@@ -106,16 +93,16 @@ function authorizeUpgrade(
     yield* validateRequestHost(request);
     const { credential, cookie } = readSocketCredential(request);
     yield* validateRequestOrigin(request, cookie && credential !== undefined);
-    return yield* authorization.authorize(credential).pipe(
-      Effect.map((device) => ({ _tag: "Authorized" as const, device })),
-      Effect.catchTag("EnvironmentAuthorizationError", (error) =>
-        Effect.succeed({
-          _tag: "Unauthorized" as const,
-          reason: error.failure._tag,
-        }),
-      ),
-    );
-  });
+    return yield* authorization.authorize(credential);
+  }).pipe(
+    Effect.map((device) => ({ _tag: "Authorized" as const, device })),
+    Effect.catchTag("EnvironmentAuthorizationError", (error) =>
+      Effect.succeed({
+        _tag: "Unauthorized" as const,
+        reason: error.failure._tag,
+      }),
+    ),
+  );
 }
 
 function serveEnvironmentRpc(
@@ -126,6 +113,7 @@ function serveEnvironmentRpc(
 ) {
   return Effect.gen(function* () {
     const disconnected = yield* Deferred.make<void>();
+    yield* closeOnRevocation(socket, options.authorization, context.device.id);
     const handlers = yield* environmentRpcHandlers(options, context);
     const transport = yield* Socket.fromWebSocket(
       Effect.acquireRelease(
@@ -142,7 +130,9 @@ function serveEnvironmentRpc(
           Effect.andThen(Effect.never),
         ),
     });
-    const serving = yield* RpcServer.make(EnvironmentRpc).pipe(
+    const serving = yield* RpcServer.make(EnvironmentRpc, {
+      disableFatalDefects: true,
+    }).pipe(
       Effect.provide(handlers),
       Effect.provide(
         RpcServer.layerProtocolSocketServer.pipe(
@@ -158,6 +148,21 @@ function serveEnvironmentRpc(
   }).pipe(
     Effect.scoped,
     Effect.catchCause(() => Effect.sync(() => socket.close(1011))),
+  );
+}
+
+function closeOnRevocation(
+  socket: WebSocket,
+  authorization: EnvironmentAuthorization,
+  authorizationId: string,
+) {
+  return Effect.acquireRelease(
+    Effect.sync(() =>
+      authorization.watchRevocation(authorizationId, () =>
+        socket.close(unauthorizedCloseCode, "RevokedGrant"),
+      ),
+    ),
+    (release) => Effect.sync(release),
   );
 }
 
@@ -241,14 +246,11 @@ function upgradePath(request: IncomingMessage) {
   }
 }
 
-function rejectUpgrade(socket: Duplex, error: unknown) {
+function rejectUpgrade(socket: Duplex) {
   if (socket.destroyed || !socket.writable) return;
-  const failure =
-    error instanceof EnvironmentAuthorizationError ? error.failure : undefined;
-  const status = failure === undefined ? 503 : accessFailureStatus(failure);
-  const body = JSON.stringify(failure ?? { _tag: "EnvironmentUnavailable" });
+  const body = JSON.stringify({ _tag: "EnvironmentUnavailable" });
   socket.end(
-    `HTTP/1.1 ${status} ${status === 403 ? "Forbidden" : "Service Unavailable"}\r\nContent-Type: application/json; charset=utf-8\r\nCache-Control: no-store\r\nContent-Length: ${Buffer.byteLength(body)}\r\nConnection: close\r\n\r\n${body}`,
+    `HTTP/1.1 503 Service Unavailable\r\nContent-Type: application/json; charset=utf-8\r\nCache-Control: no-store\r\nContent-Length: ${Buffer.byteLength(body)}\r\nConnection: close\r\n\r\n${body}`,
   );
 }
 

@@ -30,7 +30,6 @@ export const RepositoryChanges = Schema.Struct({
   message: Schema.String,
   unstaged: Schema.Array(ChangedFile),
   staged: Schema.Array(ChangedFile),
-  truncated: Schema.Boolean,
   renamesLimited: Schema.Boolean,
 });
 export type RepositoryChanges = typeof RepositoryChanges.Type;

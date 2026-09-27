@@ -6,7 +6,10 @@ import {
 import { type Query, type QueryClient, skipToken } from "@tanstack/react-query";
 import { useCallback, useEffect, useRef } from "react";
 import type { RepositoryHistoryObservation } from "#web/features/repository-history/repository-history-reader";
-import { useEnvironmentQuery } from "#web/platform/query/environment-query";
+import {
+  isRouteQuery,
+  useEnvironmentQuery,
+} from "#web/platform/query/environment-query";
 import { useRepositoryScope } from "#web/platform/query/repository-scope";
 import { describeFailure } from "#web/platform/query/request-failure";
 import { useCommand } from "#web/platform/query/use-command";
@@ -84,20 +87,21 @@ export function forgetRepositoryRefs(
   forget(
     queryClient,
     (query) =>
-      query.queryKey[1] === environmentId &&
-      (query.queryKey[2] === logicalRepositoryId ||
+      isRouteQuery(query, RepositoryRefsApi.read, environmentId) &&
+      (query.meta?.repositoryId === logicalRepositoryId ||
         (query.state.data as RepositoryRefs | undefined)
           ?.logicalRepositoryId === logicalRepositoryId),
   );
 }
 
 export function forgetAllRepositoryRefs(queryClient: QueryClient) {
-  forget(queryClient, () => true);
+  forget(queryClient, (query) => isRouteQuery(query, RepositoryRefsApi.read));
 }
 
-function forget(queryClient: QueryClient, matches: (query: Query) => boolean) {
-  const predicate = (query: Query) =>
-    query.queryKey[3] === RepositoryRefsApi.read._tag && matches(query);
+function forget(
+  queryClient: QueryClient,
+  predicate: (query: Query) => boolean,
+) {
   queryClient.removeQueries({ predicate, type: "inactive" });
   void queryClient.resetQueries({ predicate });
 }

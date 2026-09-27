@@ -75,7 +75,6 @@ async function fixture() {
     message: "",
     unstaged: [],
     staged: [],
-    truncated: false,
     renamesLimited: false,
   });
   const requests = fakeRequests(

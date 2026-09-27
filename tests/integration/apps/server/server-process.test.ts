@@ -38,9 +38,6 @@ describe("rebase serve", () => {
 
       expect(new URL(origin).hostname).toBe("127.0.0.1");
 
-      const response = await fetch(`${origin}/health`);
-      expect(response.status).toBe(200);
-      await expect(response.json()).resolves.toEqual({ status: "ready" });
       await verifyBrowserAssets(origin);
 
       const runtime = JSON.parse(await readFile(runtimePath, "utf8"));

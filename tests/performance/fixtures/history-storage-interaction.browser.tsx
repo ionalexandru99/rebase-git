@@ -1,7 +1,7 @@
 import {
-  encodeRepositoryHistoryBatch,
-  encodeRepositoryHistoryPage,
   type RepositoryCommit,
+  repositoryHistoryBatchJson,
+  repositoryHistoryPageJson,
 } from "@rebase/contracts";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Layer, ManagedRuntime } from "effect";
@@ -26,6 +26,8 @@ import {
   EnvironmentProvider,
 } from "#web/platform/query/environment-context";
 import { createEnvironmentQueryClient } from "#web/platform/query/environment-query-client";
+
+const encoder = new TextEncoder();
 
 const offlineEnvironment: Environment = {
   environmentId: undefined,
@@ -104,11 +106,15 @@ function fixture(count: number, disconnected = false) {
       snapshot,
     }),
   );
-  const encodedPage = encodeRepositoryHistoryPage(page);
-  const encodedBatches = batches.map(encodeRepositoryHistoryBatch);
+  const encodedPage = encoder.encode(repositoryHistoryPageJson(page));
+  const encodedBatches = batches.map((batch) =>
+    encoder.encode(repositoryHistoryBatchJson(batch)),
+  );
   const first = batches[0];
   if (first === undefined) throw new Error("Storage fixture is empty");
-  const empty = encodeRepositoryHistoryBatch({ ...first, commits: [] });
+  const empty = encoder.encode(
+    repositoryHistoryBatchJson({ ...first, commits: [] }),
+  );
   const gateway: RepositoryHistoryGateway = {
     read: async () => encodedPage,
     synchronize: async (request, accept, signal) => {

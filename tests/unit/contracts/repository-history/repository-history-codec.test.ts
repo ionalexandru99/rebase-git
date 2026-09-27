@@ -1,12 +1,14 @@
 import {
   decodeRepositoryHistoryBatch,
   decodeRepositoryHistoryPage,
-  encodeRepositoryHistoryBatch,
-  encodeRepositoryHistoryPage,
   maximumRepositoryHistorySequence,
   type RepositoryHistoryPage,
 } from "@rebase/contracts";
 import { describe, expect, it } from "vite-plus/test";
+import {
+  encodeRepositoryHistoryBatch,
+  encodeRepositoryHistoryPage,
+} from "#tests-support/repository-history-bytes";
 
 const requestId = "00000000-0000-4000-8000-000000000011";
 const repositoryId = "00000000-0000-4000-8000-000000000001";

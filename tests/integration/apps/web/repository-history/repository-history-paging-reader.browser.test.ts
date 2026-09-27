@@ -1,8 +1,6 @@
-import {
-  encodeRepositoryHistoryPage,
-  type RepositoryCommit,
-} from "@rebase/contracts";
+import type { RepositoryCommit } from "@rebase/contracts";
 import { describe, expect, it, vi } from "vite-plus/test";
+import { encodeRepositoryHistoryPage } from "#tests-support/repository-history-bytes";
 import { createBrowserRepositoryHistoryReader } from "#web/features/repository-history/browser-repository-history-reader";
 import type {
   RepositoryHistoryGateway,

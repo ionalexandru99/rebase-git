@@ -104,7 +104,6 @@ async function fixture() {
           status: "M" as const,
         })),
     ],
-    truncated: false,
     renamesLimited: false,
   });
   const list = (): ConflictList => ({

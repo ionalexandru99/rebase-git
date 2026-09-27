@@ -3,10 +3,11 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   EnvironmentAuthorizationApi,
-  EnvironmentPairingExchanged,
   type EnvironmentRoute,
   EnvironmentRpc,
-  environmentPairingExchangePath,
+  environmentLivePath,
+  environmentProtocol,
+  environmentSubprotocol,
   type RouteFailure,
   type RouteInput,
   type RouteSuccess,
@@ -14,6 +15,8 @@ import {
 import { Effect, Exit, Schema, Scope } from "effect";
 import { RpcClientError, RpcTest } from "effect/unstable/rpc";
 import { onTestFinished } from "vite-plus/test";
+import WebSocket from "ws";
+import { exchangeEnvironmentPairing } from "#desktop/app/desktop-application";
 import type { EnvironmentEventPublisher } from "#server/adapters/environment-transport/environment-event-publisher";
 import { environmentRpcHandlers } from "#server/adapters/environment-transport/environment-socket";
 import {
@@ -148,25 +151,61 @@ export async function exchangePairing(
   pairingUrl: string,
   label: string,
 ) {
-  const response = await fetch(
-    new URL(environmentPairingExchangePath, origin),
-    {
-      body: JSON.stringify({
-        label,
-        pairingMaterial: new URL(pairingUrl).hash.slice(1),
-      }),
-      headers: { "content-type": "application/json" },
-      method: "POST",
-    },
-  );
-  const body: unknown = await response.json();
-  if (!response.ok) throw body;
-  const exchanged = Schema.decodeUnknownSync(EnvironmentPairingExchanged)(body);
+  const exchanged = await exchangeEnvironmentPairing(origin, {
+    label,
+    pairingMaterial: new URL(pairingUrl).hash.slice(1),
+  });
   return {
     type: "bearer" as const,
     value: exchanged.credential,
     authorizationId: exchanged.authorization.id,
   };
+}
+
+export type SocketHello =
+  | { readonly _tag: "Answered"; readonly message: unknown }
+  | { readonly _tag: "Closed"; readonly code: number; readonly reason: string };
+
+export function helloOverSocket(
+  origin: string,
+  {
+    credential,
+    headers = {},
+    protocol = environmentProtocol,
+  }: {
+    readonly credential?: string;
+    readonly headers?: Record<string, string>;
+    readonly protocol?: number;
+  } = {},
+) {
+  return new Promise<SocketHello>((resolveHello, rejectHello) => {
+    const socket = new WebSocket(
+      `${origin.replace("http://", "ws://")}${environmentLivePath}`,
+      credential === undefined
+        ? [environmentSubprotocol]
+        : [environmentSubprotocol, credential],
+      { headers },
+    );
+    socket.once("error", rejectHello);
+    socket.once("close", (code, reason) =>
+      resolveHello({ _tag: "Closed", code, reason: reason.toString() }),
+    );
+    socket.once("open", () =>
+      socket.send(
+        JSON.stringify({
+          _tag: "Request",
+          id: "1",
+          tag: "Hello",
+          payload: { protocol },
+          headers: [],
+        }),
+      ),
+    );
+    socket.once("message", (data) => {
+      resolveHello({ _tag: "Answered", message: JSON.parse(data.toString()) });
+      socket.close();
+    });
+  });
 }
 
 function callRoute(

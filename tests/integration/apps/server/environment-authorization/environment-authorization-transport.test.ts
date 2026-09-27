@@ -2,16 +2,20 @@ import { request } from "node:http";
 import {
   EnvironmentAuthorizationApi,
   environmentBrowserSessionPath,
-  environmentLivePath,
   environmentPairingExchangePath,
-  environmentProtocol,
-  environmentSubprotocol,
   unauthorizedCloseCode,
 } from "@rebase/contracts";
+import { Effect } from "effect";
 import { describe, expect, it } from "vite-plus/test";
-import WebSocket from "ws";
-import { exchangePairing, openTestServer } from "#tests-support/server";
-import { EnvironmentAccessDenied } from "#web/app/environment/environment-connection";
+import {
+  exchangePairing,
+  helloOverSocket,
+  openTestServer,
+} from "#tests-support/server";
+import {
+  EnvironmentAccessDenied,
+  EnvironmentUnavailable,
+} from "#web/app/environment/environment-connection";
 
 describe("Environment authorization transport", () => {
   it("opens the socket with a browser session cookie only from the server origin", async () => {
@@ -35,19 +39,32 @@ describe("Environment authorization transport", () => {
     expect(cookieHeader).toContain("Path=/api");
     const cookie = cookieHeader.split(";")[0] ?? "";
 
-    await expect(helloWithCookie(origin, cookie, origin)).resolves.toContain(
-      '"sequence":0',
-    );
     await expect(
-      helloWithCookie(origin, cookie, "https://attacker.example"),
-    ).rejects.toThrow("403");
+      helloOverSocket(origin, { headers: { cookie, origin } }),
+    ).resolves.toMatchObject({
+      _tag: "Answered",
+      message: { exit: { _tag: "Success", value: { sequence: 0 } } },
+    });
+    await expect(
+      helloOverSocket(origin, {
+        headers: { cookie, origin: "https://attacker.example" },
+      }),
+    ).resolves.toEqual({
+      _tag: "Closed",
+      code: unauthorizedCloseCode,
+      reason: "InvalidOrigin",
+    });
 
     await requests(owner)(EnvironmentAuthorizationApi.revokeAuthorization, {
       authorizationId: session.authorization.id,
     });
-    await expect(helloWithCookie(origin, cookie, origin)).rejects.toThrow(
-      `${unauthorizedCloseCode} RevokedGrant`,
-    );
+    await expect(
+      helloOverSocket(origin, { headers: { cookie, origin } }),
+    ).resolves.toEqual({
+      _tag: "Closed",
+      code: unauthorizedCloseCode,
+      reason: "RevokedGrant",
+    });
   });
 
   it("requires the server origin for browser pairing", async () => {
@@ -133,53 +150,25 @@ describe("Environment authorization transport", () => {
     expect(response).toBe(403);
   });
 
-  it("pairs another device over the socket and refuses it once revoked", async () => {
+  it("pairs another device over the socket and cuts it off once revoked", async () => {
     const server = await openTestServer();
     const viewer = await server.pair("Review browser");
-    await expect(server.connect(viewer)).resolves.toHaveProperty(
-      "environmentId",
-      server.environmentId,
-    );
+    const connection = await server.connect(viewer);
+    expect(connection.environmentId).toBe(server.environmentId);
+
     await server.requests(server.owner)(
       EnvironmentAuthorizationApi.revokeAuthorization,
       { authorizationId: viewer.authorizationId },
+    );
+
+    await expect(Effect.runPromise(connection.closed)).resolves.toEqual(
+      new EnvironmentUnavailable(),
     );
     await expect(server.connect(viewer)).rejects.toEqual(
       new EnvironmentAccessDenied({ failure: { _tag: "RevokedGrant" } }),
     );
   });
 });
-
-function helloWithCookie(origin: string, cookie: string, socketOrigin: string) {
-  return new Promise<string>((resolveHello, rejectHello) => {
-    const socket = new WebSocket(
-      `${origin.replace("http://", "ws://")}${environmentLivePath}`,
-      [environmentSubprotocol],
-      { headers: { cookie, origin: socketOrigin } },
-    );
-    socket.once("unexpected-response", (_, response) =>
-      rejectHello(new Error(String(response.statusCode))),
-    );
-    socket.once("close", (code, reason) =>
-      rejectHello(new Error(`${code} ${reason.toString()}`)),
-    );
-    socket.once("open", () =>
-      socket.send(
-        JSON.stringify({
-          _tag: "Request",
-          id: "1",
-          tag: "Hello",
-          payload: { protocol: environmentProtocol },
-          headers: [],
-        }),
-      ),
-    );
-    socket.once("message", (data) => {
-      resolveHello(data.toString());
-      socket.close();
-    });
-  });
-}
 
 function postJson(origin: string, path: string, body: unknown) {
   return fetch(`${origin}${path}`, {

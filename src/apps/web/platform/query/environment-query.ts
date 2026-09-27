@@ -7,6 +7,7 @@ import type {
 import {
   hashKey,
   keepPreviousData,
+  type Query,
   type QueryClient,
   type SkipToken,
   skipToken,
@@ -54,6 +55,18 @@ export function environmentQueryKey<Route extends EnvironmentRoute>(
     input,
     ...(version === undefined ? [] : [version]),
   ] as const;
+}
+
+export function isRouteQuery(
+  query: Query,
+  route: EnvironmentRoute,
+  environmentId?: string,
+) {
+  const [, queryEnvironmentId, , tag] = query.queryKey;
+  return (
+    tag === route._tag &&
+    (environmentId === undefined || queryEnvironmentId === environmentId)
+  );
 }
 
 export function useEnvironmentQuery<Route extends EnvironmentRoute>(

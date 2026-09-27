@@ -56,7 +56,6 @@ async function fixture(
       })),
     ],
     staged,
-    truncated: false,
     renamesLimited,
   };
   const diff: ChangeDiff = {

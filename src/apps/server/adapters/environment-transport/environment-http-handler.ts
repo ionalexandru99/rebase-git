@@ -40,7 +40,6 @@ const decodeExchange = Schema.decodeUnknownSync(ExchangeEnvironmentPairing);
 
 export function createEnvironmentHttpHandler(
   authorization: EnvironmentAuthorization,
-  ready: () => boolean,
   runEnvironmentEffect: RunEnvironmentEffect,
   browserAssetsRoot?: string,
 ) {
@@ -53,7 +52,6 @@ export function createEnvironmentHttpHandler(
         request,
         response,
         authorization,
-        ready(),
         browserAssetsRoot,
       ).pipe(
         Effect.catch((error) =>
@@ -70,17 +68,9 @@ function respondToEnvironmentRequest(
   request: IncomingMessage,
   response: ServerResponse,
   authorization: EnvironmentAuthorization,
-  ready: boolean,
   browserAssetsRoot?: string,
 ): Effect.Effect<void, EnvironmentHttpError> {
   return Effect.gen(function* () {
-    if (request.url === "/health") {
-      if (request.method !== "GET") return rejectMethod(response, "GET");
-      writeJson(response, ready ? 200 : 503, {
-        status: ready ? "ready" : "starting",
-      });
-      return;
-    }
     yield* validateRequestHost(request);
     if (
       browserAssetsRoot !== undefined &&
@@ -92,7 +82,10 @@ function respondToEnvironmentRequest(
       response.writeHead(404).end();
       return;
     }
-    if (request.method !== "POST") return rejectMethod(response, "POST");
+    if (request.method !== "POST") {
+      response.writeHead(405, { allow: "POST" }).end();
+      return;
+    }
     yield* validateRequestOrigin(request, browserSession);
     const exchange = yield* readPairingExchange(request);
     const paired = yield* authorization.exchangePairing(exchange);
@@ -168,10 +161,6 @@ function readPairingExchange(request: IncomingMessage) {
       }),
     ),
   );
-}
-
-function rejectMethod(response: ServerResponse, method: string) {
-  response.writeHead(405, { allow: method }).end();
 }
 
 function writeJson(response: ServerResponse, status: number, value: unknown) {

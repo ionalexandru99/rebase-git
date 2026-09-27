@@ -27,7 +27,7 @@ export function ChangeFileTree({
   readonly writable: boolean;
   readonly act: ChangeAction;
 }) {
-  const { preferences, changes } = view;
+  const { preferences } = view;
   const [filter, setFilter] = useState("");
   return (
     <section
@@ -86,12 +86,6 @@ export function ChangeFileTree({
           act={act}
         />
       </div>
-      {changes?.truncated ? (
-        <p role="status" className="p-2 text-xs text-muted-foreground">
-          The file list is too large to display completely. All-file actions
-          still include every changed file.
-        </p>
-      ) : null}
     </section>
   );
 }

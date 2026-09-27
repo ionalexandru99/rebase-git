@@ -1,8 +1,6 @@
 import {
   type EnvironmentDirectory,
   EnvironmentFilesystemApi,
-  encodeRepositoryHistoryBatch,
-  encodeRepositoryHistoryPage,
   RepositoryCatalogApi,
   type RepositoryCatalogEntry,
   type RepositoryCommit,
@@ -11,6 +9,10 @@ import {
 } from "@rebase/contracts";
 import { describe, expect, it, vi } from "vite-plus/test";
 import { page, userEvent } from "vite-plus/test/browser";
+import {
+  encodeRepositoryHistoryBatch,
+  encodeRepositoryHistoryPage,
+} from "#tests-support/repository-history-bytes";
 import { repositoryScope } from "#tests-ui/apps/web/repository-scope/repository-scope-fixture";
 import {
   fakeRequests,

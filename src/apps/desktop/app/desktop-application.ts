@@ -59,7 +59,7 @@ export async function startDesktopApplication(
   }
 }
 
-async function exchangeEnvironmentPairing(
+export async function exchangeEnvironmentPairing(
   origin: string,
   exchange: ExchangeEnvironmentPairing,
 ) {

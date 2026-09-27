@@ -1,10 +1,9 @@
+import type { RepositoryCommit, RepositoryFreshness } from "@rebase/contracts";
+import { describe, expect, it, vi } from "vite-plus/test";
 import {
   encodeRepositoryHistoryBatch,
   encodeRepositoryHistoryPage,
-  type RepositoryCommit,
-  type RepositoryFreshness,
-} from "@rebase/contracts";
-import { describe, expect, it, vi } from "vite-plus/test";
+} from "#tests-support/repository-history-bytes";
 import { createBrowserRepositoryHistoryReader } from "#web/features/repository-history/browser-repository-history-reader";
 import {
   type RepositoryHistoryGateway,

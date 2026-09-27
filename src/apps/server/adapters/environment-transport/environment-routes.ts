@@ -128,25 +128,12 @@ export function repositoryRoutes({
         Effect.fail(repositoryRejected("GitFailed", error.detail)),
       ),
     );
-  const repositoryRoute = <Input, Success, Failure>(
-    definition: RepositoryRoute<Input, Success, Failure>,
-    handle: (
-      input: Input,
-    ) => Effect.Effect<
-      Success,
-      Failure | RepositoryRejected | EnvironmentTransportError
-    >,
-  ): RouteHandler => ({
-    route: definition,
-    handle: (input) =>
-      handle(input as Input).pipe(Effect.catchIf(isTransportError, Effect.die)),
-  });
   return {
     query: <Input extends WorktreeScope, Success, Failure>(
       definition: RepositoryRoute<Input, Success, Failure>,
       handle: RepositoryHandle<Input, Success, Failure>,
     ) =>
-      repositoryRoute(definition, (input) =>
+      route(definition, (input) =>
         access
           .requireWorktree(input)
           .pipe(Effect.andThen(handled(handle, input))),
@@ -156,7 +143,7 @@ export function repositoryRoutes({
       policy: CommandPolicy<Input>,
       handle: RepositoryHandle<Input, Success, Failure>,
     ) =>
-      repositoryRoute(definition, (input) =>
+      route(definition, (input) =>
         access
           .requireWorktree(input)
           .pipe(

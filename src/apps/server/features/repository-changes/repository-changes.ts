@@ -3,7 +3,6 @@ import {
   type ChangesWritten,
   type CommitChanges,
   changesFailed,
-  environmentMaxMessageBytes,
   type MutateChanges,
   type ReadChangeDiff,
   type RepositoryChanges,
@@ -27,9 +26,7 @@ export function readRepositoryChanges(
   scope: ChangesScope,
   git: GitCommandRunner,
 ) {
-  return readChanges(git, scope).pipe(
-    Effect.map((value) => fitChanges(value.snapshot)),
-  );
+  return readChanges(git, scope).pipe(Effect.map((value) => value.snapshot));
 }
 
 export function readRepositoryChangeDiff(
@@ -124,8 +121,6 @@ function requireCommittable(
   return Effect.void;
 }
 
-const writtenResponseBytes = environmentMaxMessageBytes - 32_768;
-
 function readWritten(
   git: GitCommandRunner,
   scope: ChangesScope,
@@ -133,7 +128,6 @@ function readWritten(
 ) {
   return Effect.gen(function* () {
     const { snapshot, base } = yield* readChanges(git, scope);
-    const changes = fitChanges(snapshot);
     const file =
       viewed &&
       snapshot[viewed.section].find((file) => file.path === viewed.path);
@@ -150,10 +144,7 @@ function readWritten(
             { base, previousPath: file.previousPath },
           ).pipe(Effect.catch(() => Effect.succeed(null)))
         : null;
-    const written: ChangesWritten = { changes, diff };
-    return Buffer.byteLength(JSON.stringify(written)) <= writtenResponseBytes
-      ? written
-      : { changes, diff: null };
+    return { changes: snapshot, diff } satisfies ChangesWritten;
   });
 }
 
@@ -162,25 +153,6 @@ function previousPathOf(snapshot: RepositoryChanges, viewed: ViewedChange) {
     snapshot[viewed.section].find((file) => file.path === viewed.path)
       ?.previousPath ?? null
   );
-}
-
-function fitChanges(snapshot: RepositoryChanges): RepositoryChanges {
-  let size = 0;
-  const fit = (files: RepositoryChanges["staged"]) =>
-    files.filter((file) => {
-      size += Buffer.byteLength(JSON.stringify(file));
-      return size < 800_000;
-    });
-  const unstaged = fit(snapshot.unstaged),
-    staged = fit(snapshot.staged);
-  return {
-    ...snapshot,
-    unstaged,
-    staged,
-    truncated:
-      unstaged.length !== snapshot.unstaged.length ||
-      staged.length !== snapshot.staged.length,
-  };
 }
 
 function verifyChanges(

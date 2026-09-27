@@ -1,7 +1,10 @@
-import { RepositoryCatalogApi } from "@rebase/contracts";
+import { join } from "node:path";
+import { RepositoryCatalogApi, RepositoryRefsApi } from "@rebase/contracts";
+import { Effect } from "effect";
 import { describe, expect, it, vi } from "vite-plus/test";
+import { createRepository } from "#tests-support/git";
 import { openTestServer } from "#tests-support/server";
-import { EnvironmentAccessDenied } from "#web/app/environment/environment-connection";
+import { environmentRequests } from "#web/app/environment/environment-connection";
 
 const repositoryId = "00000000-0000-4000-8000-000000000001";
 
@@ -31,16 +34,6 @@ describe("browser Environment connection", () => {
       .toEqual([[], [[repositoryId], "Refs"], [[repositoryId], "Index"]]);
   });
 
-  it("reports an unpaired credential as denied access", async () => {
-    const server = await openTestServer();
-
-    await expect(
-      server.connect({ type: "bearer", value: "rebase.v1.unpaired" }),
-    ).rejects.toEqual(
-      new EnvironmentAccessDenied({ failure: { _tag: "InvalidGrant" } }),
-    );
-  });
-
   it("answers requests and reports their failures as tagged rejections", async () => {
     const server = await openTestServer();
     const requests = server.requests(server.owner);
@@ -54,5 +47,34 @@ describe("browser Environment connection", () => {
       _tag: "Rejected",
       failure: { _tag: "RepositoryRejected", reason: "Missing" },
     });
+  });
+
+  it("fails only the request whose handler breaks and keeps the socket serving", async () => {
+    const server = await openTestServer({
+      git: (git) => ({
+        ...git,
+        run: (command) =>
+          command.arguments.includes("for-each-ref")
+            ? Effect.die(new Error("Unreadable refs"))
+            : git.run(command),
+      }),
+    });
+    const repositoryPath = join(server.home, "repository");
+    await createRepository(repositoryPath);
+    const changed = vi.fn();
+    const requests = environmentRequests(
+      (await server.connect(server.owner, { changed })).rpc,
+    );
+    const repository = await requests(RepositoryCatalogApi.remember, {
+      path: repositoryPath,
+    });
+
+    await expect(
+      requests(RepositoryRefsApi.read, { repositoryId: repository.id }),
+    ).rejects.toEqual({ _tag: "Unanswered" });
+    server.events.publishChanged([repository.id], "Index");
+    await expect
+      .poll(() => changed.mock.calls)
+      .toContainEqual([[repository.id], "Index"]);
   });
 });
