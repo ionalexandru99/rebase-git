@@ -5,17 +5,16 @@ import {
   IconBrandGit,
   IconBrandGithubFilled,
   IconBrandGitlab,
+  IconGitCommit,
   IconTag,
   IconX,
 } from "@tabler/icons-react";
 import { createContext, type ReactNode, useContext, useMemo } from "react";
 import type { RepositoryHistoryRefTarget } from "#contracts/repository-history/repository-history.contract.ts";
-import type {
-  RepositoryRefs,
-  RepositoryRefTarget,
-} from "#contracts/repository-refs/repository-refs.contract.ts";
+import type { RepositoryRefs } from "#contracts/repository-refs/repository-refs.contract.ts";
 import { CopyPill } from "#web/features/clipboard/components/copy-pill.tsx";
 import { graphLaneColor } from "#web/features/commit-graph/layout/graph-colors.ts";
+import type { HistorySelection } from "#web/features/commit-graph/scope/history-scope.ts";
 import {
   type CommitLaneRow,
   graphBranchColorIndex,
@@ -114,6 +113,9 @@ export function CommitRefPill({
         {label.type === "tag" ? (
           <IconTag aria-hidden="true" className="size-3" />
         ) : null}
+        {label.type === "commit" ? (
+          <IconGitCommit aria-hidden="true" className="size-3" />
+        ) : null}
         {name}
       </CopyPill>
       {onRemove === undefined ? null : (
@@ -133,7 +135,8 @@ export function CommitRefPill({
 
 export function historyLabelTarget(
   label: RepositoryHistoryRefTarget,
-): RepositoryRefTarget | undefined {
+): HistorySelection | undefined {
+  if (label.type === "commit") return { _tag: "Commit", oid: label.oid };
   if (label.type === "branch") return { _tag: "LocalBranch", name: label.name };
   if (label.type === "tag") return { _tag: "Tag", name: label.name };
   if (label.type === "remote-branch") {

@@ -16,7 +16,11 @@ import { RemoteSync } from "#web/features/remote-sync/remote-sync.tsx";
 import { useCatalogRepository } from "#web/features/repository-catalog/use-repository-catalog.ts";
 import { useRepositoryHistory } from "#web/features/repository-history/repository-history.ts";
 import { WorkspacePanel } from "#web/features/workspace-panel/workspace-panel.tsx";
-import { workingChangesPanel } from "#web/features/workspace-panel/workspace-panel-definitions.ts";
+import {
+  reflogPanel,
+  workingChangesPanel,
+} from "#web/features/workspace-panel/workspace-panel-definitions.ts";
+import { useWorkspacePanel } from "#web/features/workspace-panel/workspace-panel-provider.tsx";
 import { useEnvironment } from "#web/platform/query/environment-context.tsx";
 import {
   type RepositoryScope,
@@ -105,6 +109,18 @@ function Workspace({
   const repositoryRefs = useScopedRepositoryRefs();
   const { refs } = repositoryRefs;
   const historyScope = useHistoryScope(environmentId, scope, repositoryRefs);
+  const panel = useWorkspacePanel();
+  const showReflog = useCallback(
+    (name: string) => {
+      panel.execute({
+        type: "input",
+        kind: "reflog",
+        input: { _tag: "LocalBranch", name },
+      });
+      panel.execute({ type: "open", kind: "reflog" });
+    },
+    [panel.execute],
+  );
   const resolved = historyScope.resolvedScope;
   return (
     <>
@@ -123,6 +139,7 @@ function Workspace({
                 >
                   <BranchesSidebar
                     onBranchRenamed={historyScope.renameBranch}
+                    onShowReflog={showReflog}
                     onToggleHistoryRef={historyScope.toggleRef}
                     selectedHistoryRefKeys={
                       resolved?.selectedRefKeys ?? noRefKeys
@@ -179,7 +196,23 @@ function Workspace({
                     )
                   }
                 </WorkspacePanel.Main>
-                <WorkspacePanel.Pane contents={panelContents} />
+                <WorkspacePanel.Pane
+                  contents={{
+                    ...panelContents,
+                    reflog: (
+                      <Suspense fallback={null}>
+                        <reflogPanel.Content
+                          onOpenDetails={inspection.open}
+                          onShowInGraph={async (oid) => {
+                            await inspection.graphRef.current?.navigateToOid(
+                              oid,
+                            );
+                          }}
+                        />
+                      </Suspense>
+                    ),
+                  }}
+                />
               </WorkspacePanel.Group>
             )}
           </CommitInspectionBridge>

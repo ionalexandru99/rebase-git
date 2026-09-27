@@ -216,8 +216,12 @@ describe("history view", () => {
     expect(scopeOwned.rows(0, 1)[0]?.merge).toBeUndefined();
   });
 
-  it("finds a commit behind a collapsed merge or under a ref outside the scope", () => {
-    const graph = historyGraph([...mergeHistory, commit("topic", ["base"], 5)]);
+  it("finds a commit behind a collapsed merge, under a ref outside the scope or only in the reflog", () => {
+    const graph = historyGraph([
+      ...mergeHistory,
+      commit("topic", ["base"], 5),
+      commit("dropped", ["base"], 6),
+    ]);
     const refs = [{ name: "topic", oid: "topic", type: "branch" as const }];
     const view = (scope: HistoryScopeQuery) =>
       new HistoryView(graph, scope, refs);
@@ -230,6 +234,12 @@ describe("history view", () => {
     expect(
       findInHistory(graph, refs, historyScope(["main"]), "topic", view),
     ).toEqual({ index: 1, expanded: [], root: refs[0] });
+    expect(
+      findInHistory(graph, refs, historyScope(["merge"]), "dropped", view),
+    ).toMatchObject({
+      expanded: [],
+      root: { name: "dropped", oid: "dropped", type: "commit" },
+    });
     expect(
       findInHistory(graph, refs, historyScope(["merge"]), "missing", view),
     ).toBeUndefined();

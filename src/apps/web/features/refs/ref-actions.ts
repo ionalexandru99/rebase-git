@@ -51,6 +51,7 @@ export interface RefActionAccess {
 
 export interface RefActionHandlers {
   readonly checkout: (target: RepositoryRefTarget) => void;
+  readonly showReflog?: ((branch: string) => void) | undefined;
   readonly pull:
     | { readonly pulling: boolean; readonly run: (branch: string) => void }
     | undefined;
@@ -63,7 +64,7 @@ export function refActions(
   row: RefActionRow,
   refs: RepositoryRefs,
   { activeWorktreePath, writable }: RefActionAccess,
-  { checkout, pull, editing }: RefActionHandlers,
+  { checkout, pull, showReflog, editing }: RefActionHandlers,
 ): readonly Action[] {
   const readOnly = writable ? undefined : "Read only";
   const target = row.target;
@@ -106,6 +107,15 @@ export function refActions(
             enabled: !pull.pulling,
             run: () => pull.run(target.name),
           },
+        ]),
+    ...(showReflog === undefined || target._tag !== "LocalBranch"
+      ? []
+      : [
+          action({
+            id: "showReflog",
+            label: "Show reflog",
+            run: () => showReflog(target.name),
+          }),
         ]),
     action({
       id: "newBranch",

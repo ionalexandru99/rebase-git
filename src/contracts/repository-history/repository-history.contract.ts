@@ -16,7 +16,7 @@ const HistoryString = Schema.String.check(
 export const RepositoryHistoryRefTarget = Schema.Struct({
   name: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(1_024)),
   oid: ObjectId,
-  type: Schema.Literals(["branch", "head", "remote-branch", "tag"]),
+  type: Schema.Literals(["branch", "commit", "head", "remote-branch", "tag"]),
 });
 export type RepositoryHistoryRefTarget = typeof RepositoryHistoryRefTarget.Type;
 
