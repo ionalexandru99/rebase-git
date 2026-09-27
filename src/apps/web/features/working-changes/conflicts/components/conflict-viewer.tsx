@@ -134,7 +134,7 @@ function WorkingFile({ document }: { readonly document: ConflictDocument }) {
             <fieldset
               key={key}
               aria-label={`Region ${region}`}
-              className="border-status-connecting border-l-2 bg-status-connecting/10 pl-2.5"
+              className="border-foreground/15 border-l-2 bg-[repeating-linear-gradient(135deg,rgb(255_255_255/4%)_0_5px,transparent_5px_12px)] pl-2.5"
             >
               {lines.join("\n")}
             </fieldset>
