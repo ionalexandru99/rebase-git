@@ -1,12 +1,11 @@
-import type { RepositoryRefs } from "@rebase/contracts";
 import { describe, expect, it } from "vite-plus/test";
+import { repositoryRefs, worktree } from "#tests-support/fixtures";
 import {
   buildBranchesSidebarRows,
   defaultExpandedSections,
 } from "#web/features/branches-sidebar/branches-sidebar-state";
 
-const refs: RepositoryRefs = {
-  repositoryId: "00000000-0000-4000-8000-000000000001",
+const refs = repositoryRefs({
   branches: [
     { name: "feature/api/current", worktreePath: "/repo" },
     { name: "feature/api/other" },
@@ -15,20 +14,11 @@ const refs: RepositoryRefs = {
   ],
   remoteBranches: [{ name: "feature/api/current", remote: "origin" }],
   tags: [{ name: "release/v1" }],
-  truncated: { branches: false, remoteBranches: false, tags: false },
   worktrees: [
-    {
-      main: true,
-      path: "/repo",
-      head: { branch: "feature/api/current", commit: "a".repeat(40) },
-    },
-    {
-      main: false,
-      path: "/linked",
-      head: { branch: "bugfix/login", commit: "a".repeat(40) },
-    },
+    worktree("/repo", "feature/api/current"),
+    worktree("/linked", "bugfix/login"),
   ],
-};
+});
 
 function tree(query = "", folders: ReadonlyMap<string, boolean> = new Map()) {
   return buildBranchesSidebarRows(

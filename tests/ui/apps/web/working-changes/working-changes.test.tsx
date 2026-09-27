@@ -9,6 +9,11 @@ import {
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import { page } from "vite-plus/test/browser";
 import {
+  changeDiff,
+  changedFile,
+  repositoryChanges,
+} from "#tests-support/fixtures";
+import {
   fakeRequests,
   rejected,
   respond,
@@ -43,32 +48,21 @@ async function fixture(
     readonly draftKey?: string;
   } = {},
 ) {
-  let snapshot: RepositoryChanges = {
-    revision: "one",
-    head: "a".repeat(40),
+  let snapshot = repositoryChanges({
     message: "Old commit message",
-    unstaged: [
-      { path, previousPath: null, status: "M" },
-      ...extraPaths.map((path) => ({
-        path,
-        previousPath: null,
-        status: "M" as const,
-      })),
-    ],
+    unstaged: [path, ...extraPaths].map((path) => changedFile(path)),
     staged,
     renamesLimited,
-  };
-  const diff: ChangeDiff = {
-    path,
+  });
+  const diff = changeDiff(path, {
     revision: "diff-one",
     kind: "text",
     before,
     after,
     beforeBytes: before.length,
     afterBytes: after.length,
-    mime: null,
     patch,
-  };
+  });
   const mutations: MutateChanges[] = [];
   const commits: CommitChanges[] = [];
   let rejectCommit = false;
@@ -100,14 +94,8 @@ async function fixture(
       snapshot = {
         ...snapshot,
         revision: `revision-${mutations.length}`,
-        unstaged:
-          command.action === "stage"
-            ? []
-            : [{ path, previousPath: null, status: "M" }],
-        staged:
-          command.action === "stage"
-            ? [{ path, previousPath: null, status: "M" }]
-            : [],
+        unstaged: command.action === "stage" ? [] : [changedFile(path)],
+        staged: command.action === "stage" ? [changedFile(path)] : [],
       };
       return {
         changes: snapshot,
@@ -202,21 +190,18 @@ describe("working changes", () => {
     const source = "src/legacy/Button.tsx";
     await fixture([], {
       staged: [
-        { path: renamed, previousPath: source, status: "R" },
-        { path: "src/ui/Card.tsx", previousPath: null, status: "M" },
+        changedFile(renamed, "R", source),
+        changedFile("src/ui/Card.tsx"),
       ],
       diffs: {
-        [renamed]: {
-          path: renamed,
+        [renamed]: changeDiff(renamed, {
           revision: "renamed",
           kind: "text",
           before,
           after: before,
           beforeBytes: before.length,
           afterBytes: before.length,
-          mime: null,
-          patch: "",
-        },
+        }),
       },
     });
     const row = page.getByRole("button", {
@@ -511,7 +496,7 @@ describe("working changes", () => {
   });
   it("amends without reporting its own HEAD move as an outside change", async () => {
     const f = await fixture([], {
-      staged: [{ path: "src/other.ts", previousPath: null, status: "M" }],
+      staged: [changedFile("src/other.ts")],
     });
     const subject = page.getByRole("textbox", { name: "Commit subject" });
     await page.getByRole("checkbox", { name: "Amend", exact: true }).click();
@@ -549,7 +534,7 @@ describe("working changes", () => {
   });
   it("locks every write while one is running", async () => {
     const f = await fixture([], {
-      staged: [{ path: "src/other.ts", previousPath: null, status: "M" }],
+      staged: [changedFile("src/other.ts")],
     });
     await page
       .getByRole("textbox", { name: "Commit subject" })

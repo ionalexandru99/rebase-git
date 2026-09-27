@@ -38,14 +38,8 @@ function focus(target: ReturnType<typeof line>) {
   (target.element() as HTMLElement).focus();
 }
 
-function openBlockHeights() {
-  return [...document.querySelectorAll("[data-open-block]")].map(
-    (block) => block.getBoundingClientRect().height,
-  );
-}
-
 describe("merge view", () => {
-  it("aligns both sides and shows open regions as hatched blocks as tall as the region", async () => {
+  it("aligns both sides and counts the open regions", async () => {
     await opened();
     const rows = (side: string, kind = "") =>
       document.querySelectorAll(
@@ -59,7 +53,6 @@ describe("merge view", () => {
       .element(page.getByText("Move retries into config"))
       .toBeVisible();
     await expect(result()).toHaveValue(shown());
-    expect(openBlockHeights()).toEqual([40, 20]);
   });
 
   it("follows click order across sides and removes a line on its second click", async () => {

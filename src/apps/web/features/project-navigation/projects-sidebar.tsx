@@ -171,17 +171,10 @@ function ExpandedProjectsSidebar({
           <IconFolderPlus aria-hidden="true" />
         </Button>
       </div>
-      <div
-        className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto"
-        data-slot="project-list-scroll"
-      >
+      <div className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto">
         <div aria-label="Open projects" className="px-2 py-1.5" role="tree">
           {navigation.environments.length === 0 ? (
-            <span
-              className="sr-only"
-              data-connection-state={environmentStatus.connectionState}
-              role="status"
-            >
+            <span className="sr-only" role="status">
               {environmentStatus.status}
             </span>
           ) : null}
@@ -214,7 +207,6 @@ function ExpandedProjectsSidebar({
                       ? "sr-only"
                       : `shrink-0 truncate text-sm ${environmentStatus.availability === "unavailable" ? "text-status-unavailable" : "text-muted-foreground"}`
                   }
-                  data-connection-state={environmentStatus.connectionState}
                   role="status"
                 >
                   {environmentStatus.status}
@@ -325,11 +317,7 @@ function CollapsedProjectsSidebar({
 
       <div className="flex min-h-0 flex-1 flex-col items-center gap-1.5 pt-3">
         {navigation.environments.length === 0 ? (
-          <span
-            className="sr-only"
-            data-connection-state={environmentStatus.connectionState}
-            role="status"
-          >
+          <span className="sr-only" role="status">
             {environmentStatus.status}
           </span>
         ) : null}

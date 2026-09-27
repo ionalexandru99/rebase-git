@@ -147,10 +147,7 @@ export function GeneralSettings({
                   className="z-50 outline-none"
                   sideOffset={4}
                 >
-                  <Select.Popup
-                    className="w-[var(--anchor-width)] overflow-hidden rounded-md border border-border bg-popover p-1 text-popover-foreground shadow-lg outline-none"
-                    data-slot="release-channel-popup"
-                  >
+                  <Select.Popup className="w-[var(--anchor-width)] overflow-hidden rounded-md border border-border bg-popover p-1 text-popover-foreground shadow-lg outline-none">
                     <Select.List>
                       {releaseChannels.map((channel) => (
                         <Select.Item

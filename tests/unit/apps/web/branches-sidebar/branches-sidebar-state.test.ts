@@ -1,15 +1,17 @@
-import type { RepositoryRefs } from "@rebase/contracts";
 import { describe, expect, it } from "vite-plus/test";
+import {
+  mainAndTopicWorktrees,
+  mainPath,
+  repositoryRefs,
+  topicPath,
+  upstream,
+} from "#tests-support/fixtures";
 import {
   buildBranchesSidebarRows,
   defaultExpandedSections,
   stepRow,
   toggleSection,
 } from "#web/features/branches-sidebar/branches-sidebar-state";
-
-const commit = "a".repeat(40);
-const mainPath = "/repo";
-const topicPath = "/repo/.worktrees/topic";
 
 describe("branches sidebar state", () => {
   it("expands local branches by default and keeps remotes and tags collapsed", () => {
@@ -149,12 +151,12 @@ describe("branches sidebar state", () => {
   });
 });
 
-function refs(): RepositoryRefs {
-  return {
+function refs() {
+  return repositoryRefs({
     branches: [
       {
         name: "main",
-        upstream: { ahead: 0, behind: 2, gone: false, name: "origin/main" },
+        upstream: upstream("origin/main", { behind: 2 }),
         worktreePath: mainPath,
       },
       { name: "feature" },
@@ -165,12 +167,7 @@ function refs(): RepositoryRefs {
       { name: "topic", remote: "origin" },
       { name: "release", remote: "upstream" },
     ],
-    repositoryId: "00000000-0000-4000-8000-000000000001",
     tags: [{ name: "v1.0.0" }],
-    truncated: { branches: false, remoteBranches: false, tags: false },
-    worktrees: [
-      { head: { branch: "main", commit }, main: true, path: mainPath },
-      { head: { branch: "topic", commit }, main: false, path: topicPath },
-    ],
-  };
+    worktrees: mainAndTopicWorktrees(),
+  });
 }

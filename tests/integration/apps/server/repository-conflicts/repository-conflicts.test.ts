@@ -3,12 +3,12 @@ import { join } from "node:path";
 import { RepositoryConflictsApi } from "@rebase/contracts";
 import { Effect } from "effect";
 import { describe, expect, it } from "vite-plus/test";
-import { createConflictedRebase } from "#tests-support/conflicted-repository";
 import {
+  createConflictedRebase,
   createDivergedRepository,
+  git,
   startConflict,
-} from "#tests-support/diverged-repository";
-import { git } from "#tests-support/git";
+} from "#tests-support/git";
 import { openTestEnvironment } from "#tests-support/server";
 
 async function fixture(

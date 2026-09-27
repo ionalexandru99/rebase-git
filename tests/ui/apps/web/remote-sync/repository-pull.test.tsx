@@ -2,11 +2,18 @@ import {
   type PullFailure,
   type RepositoryFreshness,
   RepositoryPullApi,
-  type RepositoryRefs,
   RepositoryRefsApi,
 } from "@rebase/contracts";
 import { describe, expect, it, vi } from "vite-plus/test";
 import { page } from "vite-plus/test/browser";
+import {
+  commitId,
+  repositoryFreshness,
+  repositoryId,
+  repositoryRefs,
+  upstream,
+  worktree,
+} from "#tests-support/fixtures";
 import {
   CommitGraphFixture,
   history as graphHistory,
@@ -25,14 +32,7 @@ import { RemoteSync } from "#web/features/remote-sync/remote-sync";
 import type { RepositoryHistorySnapshot } from "#web/features/repository-history/repository-history-reader";
 import { RepositoryScopeProvider } from "#web/platform/query/repository-scope";
 
-const repositoryId = "00000000-0000-4000-8000-000000000001";
-const freshness: RepositoryFreshness = {
-  revision: 1,
-  fetching: false,
-  stale: false,
-  defaultIntervalSeconds: 300,
-  setting: { _tag: "Inherit" },
-};
+const freshness = repositoryFreshness({ revision: 1 });
 const history: RepositoryHistorySnapshot = {
   revision: 0,
   historyRevision: 0,
@@ -196,23 +196,16 @@ async function fixture({
   };
 }
 
-function refs(behind: number): RepositoryRefs {
-  const commit = "a".repeat(40);
-  return {
+function refs(behind: number) {
+  return repositoryRefs({
     branches: [
       {
         name: "main",
-        target: commit,
+        target: commitId,
         worktreePath: "/repo",
-        upstream: { name: "origin/main", ahead: 0, behind, gone: false },
+        upstream: upstream("origin/main", { behind }),
       },
     ],
-    remoteBranches: [],
-    repositoryId,
-    tags: [],
-    truncated: { branches: false, remoteBranches: false, tags: false },
-    worktrees: [
-      { head: { branch: "main", commit }, main: true, path: "/repo" },
-    ],
-  };
+    worktrees: [worktree("/repo", "main")],
+  });
 }

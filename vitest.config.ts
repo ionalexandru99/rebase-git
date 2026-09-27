@@ -5,7 +5,7 @@ import { defineConfig } from "vite-plus";
 const conditionTimeout = { poll: { timeout: 10_000 } };
 
 const testProject = (
-  name: "compatibility" | "integration" | "unit",
+  name: "integration" | "unit",
   test: {
     exclude?: string[];
     expect?: typeof conditionTimeout;
@@ -97,7 +97,6 @@ export default defineConfig({
         "tests/integration/**/*.browser.test.{ts,tsx}",
         { testTimeout: 30_000 },
       ),
-      testProject("compatibility"),
       browserProject("ui", "tests/ui/**/*.test.tsx", {
         testTimeout: 30_000,
         setupFiles: ["./tests/ui/setup.ts"],

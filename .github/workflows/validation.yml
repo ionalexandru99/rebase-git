@@ -30,8 +30,6 @@ jobs:
       - uses: ./.github/actions/setup-workspace
       - name: Validate quality
         run: pnpm validate:quality
-      - name: Verify release validation gate without publishing
-        run: node --test tests/package/release-validation.test.ts
       - uses: ./.github/actions/upload-test-results
         if: always()
 

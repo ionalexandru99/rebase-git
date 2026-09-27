@@ -1,12 +1,16 @@
 import {
   type RepositoryChangeKind,
-  type RepositoryChanges,
   RepositoryChangesApi,
   type RepositoryOperation,
   RepositoryOperationsApi,
 } from "@rebase/contracts";
 import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
 import { page } from "vite-plus/test/browser";
+import {
+  conflictedRebase,
+  repositoryChanges,
+  repositoryOperation,
+} from "#tests-support/fixtures";
 import { repositoryScope } from "#tests-ui/apps/web/repository-scope/repository-scope-fixture";
 import {
   fakeRequests,
@@ -25,27 +29,11 @@ const scope = repositoryScope({ repositoryId: crypto.randomUUID() });
 const panelKey = "operation-header";
 
 function conflicted(): RepositoryOperation {
-  return {
-    kind: "rebase",
-    phase: "conflicts",
-    revision: "one",
-    branch: "topic",
-    commit: "a".repeat(40),
-    mergedBranch: null,
-    progress: { current: 3, total: 8 },
-    unresolvedPaths: [path],
-    lock: null,
-    actions: [
-      { action: "continue", enabled: false, reason: "Resolve conflicts." },
-      { action: "skip", enabled: true, reason: null },
-      { action: "abort", enabled: true, reason: null },
-    ],
-  };
+  return conflictedRebase({ unresolvedPaths: [path] });
 }
 
 function ready(): RepositoryOperation {
-  return {
-    ...conflicted(),
+  return conflictedRebase({
     phase: "ready",
     revision: "two",
     unresolvedPaths: [],
@@ -53,7 +41,7 @@ function ready(): RepositoryOperation {
       { action: "continue", enabled: true, reason: null },
       { action: "abort", enabled: true, reason: null },
     ],
-  };
+  });
 }
 
 function showPanel(open: boolean) {
@@ -69,14 +57,7 @@ async function fixture() {
   const execute = vi.fn(
     (_command: { readonly revision: string }): RepositoryOperation => operation,
   );
-  const changes = (): RepositoryChanges => ({
-    revision: operation.revision,
-    head: "a".repeat(40),
-    message: "",
-    unstaged: [],
-    staged: [],
-    renamesLimited: false,
-  });
+  const changes = () => repositoryChanges({ revision: operation.revision });
   const requests = fakeRequests(
     respond(RepositoryOperationsApi.read, () => operation),
     respond(RepositoryOperationsApi.execute, (command) => execute(command)),
@@ -192,14 +173,5 @@ describe("operation header in the Diffs tab", () => {
 });
 
 function idle(): RepositoryOperation {
-  return {
-    ...ready(),
-    kind: "idle",
-    phase: "idle",
-    revision: "finished",
-    branch: null,
-    commit: null,
-    progress: null,
-    actions: [],
-  };
+  return repositoryOperation({ revision: "finished" });
 }

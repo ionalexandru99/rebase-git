@@ -1,14 +1,17 @@
-import type { RepositoryRefs } from "@rebase/contracts";
 import { describe, expect, it } from "vite-plus/test";
+import {
+  commitId,
+  mainAndTopicWorktrees,
+  mainPath,
+  repositoryRefs,
+  topicPath,
+  upstream,
+} from "#tests-support/fixtures";
 import {
   type BranchesSidebarRefRow,
   buildBranchesSidebarRows,
 } from "#web/features/branches-sidebar/branches-sidebar-state";
 import { refActions } from "#web/features/refs/ref-actions";
-
-const mainPath = "/repo";
-const topicPath = "/repo/.worktrees/topic";
-const commit = "a".repeat(40);
 
 describe("ref actions", () => {
   it("explains why a checked-out branch cannot be renamed or deleted", () => {
@@ -106,30 +109,24 @@ function reasons(name: string, writable = true) {
   );
 }
 
-function refs(): RepositoryRefs {
-  return {
+function refs() {
+  return repositoryRefs({
     branches: [
-      { name: "main", target: commit, worktreePath: mainPath },
-      { name: "feature", target: commit },
-      { name: "topic", target: commit, worktreePath: topicPath },
+      { name: "main", target: commitId, worktreePath: mainPath },
+      { name: "feature", target: commitId },
+      { name: "topic", target: commitId, worktreePath: topicPath },
       {
         name: "tracked",
-        target: commit,
-        upstream: { ahead: 0, behind: 0, gone: false, name: "origin/release" },
+        target: commitId,
+        upstream: upstream("origin/release"),
       },
       {
         name: "release",
-        target: commit,
-        upstream: { ahead: 0, behind: 0, gone: false, name: "origin/release" },
+        target: commitId,
+        upstream: upstream("origin/release"),
       },
     ],
-    remoteBranches: [{ name: "release", remote: "origin", target: commit }],
-    repositoryId: "00000000-0000-4000-8000-000000000001",
-    tags: [],
-    truncated: { branches: false, remoteBranches: false, tags: false },
-    worktrees: [
-      { head: { branch: "main", commit }, main: true, path: mainPath },
-      { head: { branch: "topic", commit }, main: false, path: topicPath },
-    ],
-  };
+    remoteBranches: [{ name: "release", remote: "origin", target: commitId }],
+    worktrees: mainAndTopicWorktrees(),
+  });
 }

@@ -14,7 +14,7 @@ import { answer } from "#web/platform/query/use-command";
 
 const noRepositories: readonly RepositoryCatalogEntry[] = [];
 
-export function repositoryCatalogKey(environmentId: string | undefined) {
+function repositoryCatalogKey(environmentId: string | undefined) {
   return environmentQueryKey(
     environmentId,
     null,

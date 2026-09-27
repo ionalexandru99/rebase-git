@@ -51,7 +51,7 @@ export function SidebarStatus({
   return null;
 }
 
-export function describeEmptyBranchesSidebar(
+function describeEmptyBranchesSidebar(
   scope: BranchesSidebarScope,
   query: string,
 ): string {

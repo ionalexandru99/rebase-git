@@ -2,9 +2,8 @@ import { mkdtemp, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import { expect, test } from "@playwright/test";
-import { createConflictedRebase } from "#tests-support/conflicted-repository";
 import { startEnvironmentServer } from "#tests-support/environment-server";
-import { git } from "#tests-support/git";
+import { createConflictedRebase, git } from "#tests-support/git";
 import { removeTemporaryDirectory } from "#tests-support/temporary-directory";
 
 test("resolves a paused rebase line by line and continues it", async ({
@@ -21,10 +20,7 @@ test("resolves a paused rebase line by line and continues it", async ({
   try {
     await page.goto(await server.waitForPairingUrl());
     const projects = page.getByRole("navigation", { name: "Projects" });
-    await expect(projects.getByRole("status")).toHaveAttribute(
-      "data-connection-state",
-      "Connected",
-    );
+    await expect(projects.getByRole("status")).toHaveText("Available");
     await page.getByRole("button", { name: "Browse files" }).click();
     const picker = page.getByRole("dialog", { name: "Choose repository" });
     await picker

@@ -19,10 +19,7 @@ test("opens a repository and checks out a local branch", async ({ page }) => {
     const pairingUrl = await server.waitForPairingUrl();
     await page.goto(pairingUrl);
     const projects = page.getByRole("navigation", { name: "Projects" });
-    await expect(projects.getByRole("status")).toHaveAttribute(
-      "data-connection-state",
-      "Connected",
-    );
+    await expect(projects.getByRole("status")).toHaveText("Available");
 
     await expect(page).toHaveURL(new URL("/", pairingUrl).href);
     const cookies = await page
@@ -36,18 +33,12 @@ test("opens a repository and checks out a local branch", async ({ page }) => {
       }),
     );
     await page.reload();
-    await expect(projects.getByRole("status")).toHaveAttribute(
-      "data-connection-state",
-      "Connected",
-    );
+    await expect(projects.getByRole("status")).toHaveText("Available");
 
     const reopened = await page.context().newPage();
     try {
       await reopened.goto(new URL("/", pairingUrl).href);
-      await expect(reopened.getByRole("status")).toHaveAttribute(
-        "data-connection-state",
-        "Connected",
-      );
+      await expect(reopened.getByRole("status")).toHaveText("Available");
     } finally {
       await reopened.close();
     }
@@ -120,10 +111,7 @@ test("reopens cached history and reveals a merged commit through offline search"
   try {
     await page.goto(await server.waitForPairingUrl());
     const projects = page.getByRole("navigation", { name: "Projects" });
-    await expect(projects.getByRole("status")).toHaveAttribute(
-      "data-connection-state",
-      "Connected",
-    );
+    await expect(projects.getByRole("status")).toHaveText("Available");
     await openRepository(page, "rebase-test");
     const history = page.getByRole("grid", { name: "Commit history" });
     const initial = history.getByRole("row", { name: /^initial,/ });
@@ -142,10 +130,7 @@ test("reopens cached history and reveals a merged commit through offline search"
     await expect(initial).toBeVisible();
 
     server.child.kill("SIGTERM");
-    await expect(projects.getByRole("status")).toHaveAttribute(
-      "data-connection-state",
-      "Reconnecting",
-    );
+    await expect(projects.getByRole("status")).toHaveText("Reconnecting");
     await initial.click();
     await expect(initial).toHaveAttribute("aria-selected", "true");
     const hidden = history.getByRole("row", { name: /^hidden feature work,/ });

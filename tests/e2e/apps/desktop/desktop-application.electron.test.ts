@@ -27,10 +27,7 @@ test("opens, closes, and reopens a recent repository after restart", async () =>
       const credential = await environmentCredential(window);
       expect(credential).toMatch(/^rebase\.v1\./);
       await window.reload();
-      await expect(window.getByRole("status")).toHaveAttribute(
-        "data-connection-state",
-        "Connected",
-      );
+      await expect(window.getByRole("status")).toHaveText("Available");
       expect(await environmentCredential(window)).toBe(credential);
       await openRepository(window, "rebase-test");
       const commit = window
@@ -112,10 +109,7 @@ function launchApplication(environment: Record<string, string>) {
 
 async function connectedWindow(application: ElectronApplication) {
   const window = await application.firstWindow();
-  await expect(window.getByRole("status")).toHaveAttribute(
-    "data-connection-state",
-    "Connected",
-  );
+  await expect(window.getByRole("status")).toHaveText("Available");
   return window;
 }
 

@@ -27,7 +27,7 @@ import {
   acquireEnvironment,
   environmentFeatures,
   serveEnvironment,
-} from "#server/app/server/start-environment-server";
+} from "#server/app/server/serve-environment";
 import type { RepositoryCoordination } from "#server/repository/repository-coordination";
 import { removeTemporaryDirectory } from "#tests-support/temporary-directory";
 import {

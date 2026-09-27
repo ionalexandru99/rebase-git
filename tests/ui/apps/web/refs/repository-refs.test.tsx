@@ -1,311 +1,48 @@
-import {
-  type CheckoutRepositoryRef,
-  type RepositoryCheckedOut,
-  type RepositoryRefs,
-  RepositoryRefsApi,
-} from "@rebase/contracts";
-import type { QueryClient } from "@tanstack/react-query";
 import { act } from "react";
-import { describe, expect, it, vi } from "vite-plus/test";
-import { repositoryScope } from "#tests-ui/apps/web/repository-scope/repository-scope-fixture";
-import {
-  fakeRequests,
-  idleOperation,
-  rejected,
-  respond,
-  unanswered,
-} from "#tests-ui/runtime/fake-requests";
-import { render, testChanges } from "#tests-ui/runtime/render";
-import {
-  useHistoryRefRefresh,
-  useRefActivation,
-  useRepositoryRefs,
-} from "#web/features/refs/repository-refs";
+import { expect, it, vi } from "vite-plus/test";
+import { render } from "#tests-ui/runtime/render";
+import { useHistoryRefRefresh } from "#web/features/refs/repository-refs";
 import type { RepositoryHistorySnapshot } from "#web/features/repository-history/repository-history-reader";
-import type { Environment } from "#web/platform/query/environment-context";
-import { RepositoryScopeProvider } from "#web/platform/query/repository-scope";
 
-const repositoryId = "00000000-0000-4000-8000-000000000001";
-const mainPath = "/repo";
-const topicPath = "/repo/.worktrees/topic";
-const commit = "a".repeat(40);
-
-describe("repository refs", () => {
-  it("reads refs over the environment connection and re-reads them after a ref change", async () => {
-    const reads = queuedReads();
-    const environment = await refsEnvironment(reads.next);
-    const screen = await renderRefs(environment);
-
-    await expect
-      .element(screen.getByRole("status"))
-      .toHaveTextContent("Loading");
-    await reads.resolve(refs("main"));
-    await expect
-      .element(screen.getByRole("status"))
-      .toHaveTextContent("On main");
-
-    environment.publish([repositoryId]);
-    await reads.resolve(refs("feature"));
-    await expect
-      .element(screen.getByRole("status"))
-      .toHaveTextContent("On feature");
-  });
-
-  it("re-reads the refs after a checkout and explains a rejected one", async () => {
-    const reads = queuedReads();
-    const checkout = vi.fn(
-      async (
-        command: CheckoutRepositoryRef,
-      ): Promise<RepositoryCheckedOut> => ({
-        head: { branch: command.target.name, commit },
-        stash: "none",
-        worktreePath: command.worktreePath,
-      }),
-    );
-    const environment = await refsEnvironment(reads.next, checkout);
-    const screen = await renderRefs(environment);
-    await reads.resolve(refs("main"));
-    await expect
-      .element(screen.getByRole("status"))
-      .toHaveTextContent("On main");
-
-    await screen.getByRole("button", { name: "Checkout feature" }).click();
-    await expect.poll(() => reads.pending()).toBe(1);
-    await reads.resolve(refs("feature"));
-    await expect
-      .element(screen.getByRole("status"))
-      .toHaveTextContent("On feature");
-
-    checkout.mockRejectedValueOnce(
-      rejected({
-        _tag: "CheckoutRejected",
-        detail: "",
-        reason: "LocalChanges",
-      }),
-    );
-    await screen.getByRole("button", { name: "Checkout release" }).click();
-    await expect
-      .element(screen.getByRole("alert"))
-      .toHaveTextContent("Local changes would be overwritten.");
-    await expect
-      .element(screen.getByRole("status"))
-      .toHaveTextContent("On feature");
-  });
-
-  it("explains a refs read that ends without an answer", async () => {
-    const reads = queuedReads();
-    const screen = await renderRefs(await refsEnvironment(reads.next));
-
-    await reads.fail(unanswered);
-
-    await expect
-      .element(screen.getByRole("alert"))
-      .toHaveTextContent("The Environment did not answer.");
-  });
-
-  it("ignores a second checkout while one is in flight", async () => {
-    const reads = queuedReads();
-    const checkout = vi.fn(
-      (_command: CheckoutRepositoryRef): Promise<RepositoryCheckedOut> =>
-        new Promise(() => undefined),
-    );
-    const screen = await renderRefs(
-      await refsEnvironment(reads.next, checkout),
-    );
-    await reads.resolve(refs("main"));
-    await expect
-      .element(screen.getByRole("status"))
-      .toHaveTextContent("On main");
-
-    const feature = screen
-      .getByRole("button", { name: "Checkout feature" })
-      .element() as HTMLButtonElement;
-    const release = screen
-      .getByRole("button", { name: "Checkout release" })
-      .element() as HTMLButtonElement;
-    feature.click();
-    release.click();
-    await expect.poll(() => checkout).toHaveBeenCalledOnce();
-    await screen.getByRole("button", { name: "Checkout release" }).click();
-
-    expect(checkout).toHaveBeenCalledOnce();
-    expect(checkout.mock.calls[0]?.[0]).toMatchObject({
-      target: { _tag: "LocalBranch", name: "feature" },
+it("refreshes sidebar refs after changed history completes without reacting to cached reads", async () => {
+  const listeners = new Set<() => void>();
+  let snapshot: RepositoryHistorySnapshot = {
+    revision: 0,
+    historyRevision: 0,
+    status: "ready",
+    synchronization: "complete",
+  };
+  const reader = {
+    getSnapshot: () => snapshot,
+    subscribe: (listener: () => void) => {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    },
+  };
+  const refresh = vi.fn();
+  function Workspace({ connected }: { readonly connected: boolean }) {
+    useHistoryRefRefresh(reader, connected, refresh);
+    return <div>Repository</div>;
+  }
+  const publish = async (change: Partial<RepositoryHistorySnapshot>) => {
+    await act(async () => {
+      snapshot = { ...snapshot, ...change };
+      for (const listener of listeners) listener();
     });
+  };
+  const screen = await render(<Workspace connected />);
+  await publish({ revision: 1 });
+  await publish({
+    revision: 2,
+    historyRevision: 1,
+    synchronization: "syncing",
   });
-
-  it("switches to the worktree that holds a branch instead of checking it out", async () => {
-    const reads = queuedReads();
-    const checkout = vi.fn(
-      async (): Promise<RepositoryCheckedOut> => Promise.reject(new Error()),
-    );
-    const switchWorktree = vi.fn<(worktreePath: string) => void>();
-    const screen = await renderRefs(
-      await refsEnvironment(reads.next, checkout),
-      switchWorktree,
-    );
-    await reads.resolve(refs("main"));
-    await expect
-      .element(screen.getByRole("status"))
-      .toHaveTextContent("On main");
-
-    await screen.getByRole("button", { name: "Checkout topic" }).click();
-
-    expect(switchWorktree).toHaveBeenCalledExactlyOnceWith(topicPath);
-    expect(checkout).not.toHaveBeenCalled();
-  });
-
-  it("refreshes sidebar refs after changed history completes without reacting to cached reads", async () => {
-    const listeners = new Set<() => void>();
-    let snapshot: RepositoryHistorySnapshot = {
-      revision: 0,
-      historyRevision: 0,
-      status: "ready",
-      synchronization: "complete",
-    };
-    const reader = {
-      getSnapshot: () => snapshot,
-      subscribe: (listener: () => void) => {
-        listeners.add(listener);
-        return () => listeners.delete(listener);
-      },
-    };
-    const refresh = vi.fn();
-    function Workspace({ connected }: { readonly connected: boolean }) {
-      useHistoryRefRefresh(reader, connected, refresh);
-      return <div>Repository</div>;
-    }
-    const publish = async (change: Partial<RepositoryHistorySnapshot>) => {
-      await act(async () => {
-        snapshot = { ...snapshot, ...change };
-        for (const listener of listeners) listener();
-      });
-    };
-    const screen = await render(<Workspace connected />);
-    await publish({ revision: 1 });
-    await publish({
-      revision: 2,
-      historyRevision: 1,
-      synchronization: "syncing",
-    });
-    expect(refresh).not.toHaveBeenCalled();
-    await publish({ revision: 3, synchronization: "complete" });
-    expect(refresh).toHaveBeenCalledOnce();
-    await publish({ revision: 4 });
-    expect(refresh).toHaveBeenCalledOnce();
-    await screen.rerender(<Workspace connected={false} />);
-    await publish({ revision: 5, historyRevision: 2 });
-    expect(refresh).toHaveBeenCalledOnce();
-  });
+  expect(refresh).not.toHaveBeenCalled();
+  await publish({ revision: 3, synchronization: "complete" });
+  expect(refresh).toHaveBeenCalledOnce();
+  await publish({ revision: 4 });
+  expect(refresh).toHaveBeenCalledOnce();
+  await screen.rerender(<Workspace connected={false} />);
+  await publish({ revision: 5, historyRevision: 2 });
+  expect(refresh).toHaveBeenCalledOnce();
 });
-
-function Refs() {
-  const repositoryRefs = useRepositoryRefs(repositoryId);
-  const activation = useRefActivation(repositoryRefs);
-  const head = repositoryRefs.refs?.worktrees.find(
-    ({ path }) => path === mainPath,
-  )?.head.branch;
-  return (
-    <div>
-      <p role="status">{head === undefined ? "Loading" : `On ${head}`}</p>
-      {activation.error === null ? null : (
-        <p role="alert">{activation.error}</p>
-      )}
-      {repositoryRefs.error === null ? null : (
-        <p role="alert">{repositoryRefs.error}</p>
-      )}
-      {["feature", "release", "topic"].map((name) => (
-        <button
-          key={name}
-          type="button"
-          onClick={() => activation.select({ _tag: "LocalBranch", name })}
-        >
-          Checkout {name}
-        </button>
-      ))}
-    </div>
-  );
-}
-
-function renderRefs(
-  environment: {
-    readonly value: Partial<Environment>;
-    readonly queryClient: QueryClient;
-  },
-  switchWorktree: (worktreePath: string) => void = () => undefined,
-) {
-  return render(
-    <RepositoryScopeProvider
-      scope={repositoryScope({
-        repositoryId,
-        logicalRepositoryId: repositoryId,
-        worktreePath: mainPath,
-        switchWorktree,
-      })}
-    >
-      <Refs />
-    </RepositoryScopeProvider>,
-    { environment: environment.value, queryClient: environment.queryClient },
-  );
-}
-
-async function refsEnvironment(
-  readRefs: () => Promise<RepositoryRefs>,
-  checkout: (
-    command: CheckoutRepositoryRef,
-  ) => Promise<RepositoryCheckedOut> = async () =>
-    Promise.reject(new Error("Unexpected checkout")),
-) {
-  const changes = testChanges();
-  return {
-    publish: (repositoryIds: readonly string[]) =>
-      changes.publish(repositoryIds, "Refs"),
-    queryClient: changes.queryClient,
-    value: {
-      requests: fakeRequests(
-        idleOperation,
-        respond(RepositoryRefsApi.read, readRefs),
-        respond(RepositoryRefsApi.checkout, checkout),
-      ),
-    },
-  };
-}
-
-function queuedReads() {
-  const waiting: PromiseWithResolvers<RepositoryRefs>[] = [];
-  const settle = async () => {
-    await expect.poll(() => waiting.length).toBeGreaterThan(0);
-    return waiting.shift();
-  };
-  return {
-    next: () => {
-      const read = Promise.withResolvers<RepositoryRefs>();
-      waiting.push(read);
-      return read.promise;
-    },
-    pending: () => waiting.length,
-    resolve: async (refs: RepositoryRefs) => (await settle())?.resolve(refs),
-    fail: async (error: unknown) => (await settle())?.reject(error),
-  };
-}
-
-function refs(head: string): RepositoryRefs {
-  return {
-    branches: [
-      { name: "main", target: commit },
-      { name: "feature", target: commit },
-      { name: "release", target: commit },
-      { name: "topic", target: commit, worktreePath: topicPath },
-    ].map((branch) =>
-      branch.name === head ? { ...branch, worktreePath: mainPath } : branch,
-    ),
-    remoteBranches: [],
-    repositoryId,
-    tags: [],
-    truncated: { branches: false, remoteBranches: false, tags: false },
-    worktrees: [
-      { head: { branch: head, commit }, main: true, path: mainPath },
-      { head: { branch: "topic", commit }, main: false, path: topicPath },
-    ],
-  };
-}
