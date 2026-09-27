@@ -44,6 +44,11 @@ export function WorkingChanges({
 }) {
   const view = useWorkingChangesView(target);
   const [discard, setDiscard] = useState<DiscardRequest | null>(null);
+  const [hunk, setHunk] = useState<{
+    readonly file: string;
+    readonly index: number;
+  } | null>(null);
+  const file = `${view.selection?.section}:${view.selection?.path}`;
   const act: ChangeAction = (action, section, selection) => {
     if (action === "discard" && view.changes !== undefined)
       setDiscard({ section, selection, revision: view.changes.revision });
@@ -118,10 +123,14 @@ export function WorkingChanges({
               }
             >
               <ChangeDiffViewer
-                key={`${view.selection?.section}:${view.selection?.path}:${view.diff?.revision}`}
+                key={`${file}:${view.diff?.revision}`}
                 view={view}
                 writable={writable}
                 act={act}
+                hunk={hunk?.file === file ? hunk.index : null}
+                onHunk={(index) =>
+                  setHunk(index === null ? null : { file, index })
+                }
               />
             </Suspense>
           )}
