@@ -72,6 +72,7 @@ export function RefEditingStatus({
       )}
       {deletion.deleted === undefined ? null : (
         <DeletedNotice
+          key={deletion.deleted.name}
           name={deletion.deleted.name}
           onDismiss={deletion.dismiss}
           onUndo={deletion.undo}
