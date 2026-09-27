@@ -2,7 +2,6 @@ import { defineConfig, devices } from "@playwright/test";
 
 export default defineConfig({
   forbidOnly: Boolean(process.env.CI),
-  globalSetup: "./tests/support/virtual-display.ts",
   outputDir: "tests/.artifacts/playwright",
   reporter: [
     [process.env.CI ? "github" : "list"],
