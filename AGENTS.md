@@ -44,7 +44,7 @@ Run performance benchmarks only on local development machines, never in CI, incl
 
 ## Tests
 
-- Code deleted, tests deleted. Do not test every scenario.
+- Behavior deleted, tests deleted. When a refactor keeps the behavior, move its test to the code that now owns it. Do not test every scenario.
 - Each risk has one owning layer; test it at the lowest layer that proves it and do not assert it again elsewhere.
   - Unit: server and domain logic in isolation with typed fakes. No infrastructure internals, cancellation, epochs, write ordering or fiber lifetimes; test the result the caller sees.
   - Integration: one real boundary such as Git, SQLite, the filesystem, a process, IPC, browser storage or the network.
