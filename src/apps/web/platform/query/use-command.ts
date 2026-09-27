@@ -97,7 +97,13 @@ export function useCommand<Route extends EnvironmentRoute>(
   const queryClient = useQueryClient();
   const scoped = targetsRepository(route);
   const target = scoped ? (explicitTarget ?? scope) : undefined;
-  const key = commandKey(route, target);
+  const key = commandKey(
+    route,
+    target ??
+      (requestHas(route, "repositoryId") && scope !== undefined
+        ? { repositoryId: scope.repositoryId }
+        : undefined),
+  );
   const running = useRef<AbortController | undefined>(undefined);
   const mutation = useMutation<CommandResult<Route>, never, RouteInput<Route>>({
     mutationKey: key,
@@ -163,22 +169,23 @@ export type Command<Route extends EnvironmentRoute> = ReturnType<
 
 function commandKey(
   route: EnvironmentRoute,
-  target: CommandTarget | undefined,
+  target: Partial<CommandTarget> | undefined,
 ) {
   return [
     "command",
     route._tag,
-    ...(target === undefined ? [] : [target.repositoryId, target.worktreePath]),
+    ...(target?.repositoryId === undefined ? [] : [target.repositoryId]),
+    ...(target?.worktreePath === undefined ? [] : [target.worktreePath]),
   ];
 }
 
 function targetsRepository(route: EnvironmentRoute) {
+  return requestHas(route, "repositoryId") && requestHas(route, "worktreePath");
+}
+
+function requestHas(route: EnvironmentRoute, field: string) {
   const request = route.payloadSchema as { readonly fields?: object };
-  return (
-    request.fields !== undefined &&
-    "repositoryId" in request.fields &&
-    "worktreePath" in request.fields
-  );
+  return request.fields !== undefined && field in request.fields;
 }
 
 async function prepare(
