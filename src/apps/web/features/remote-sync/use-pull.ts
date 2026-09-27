@@ -1,5 +1,5 @@
 import { RepositoryPullHttpApi } from "@rebase/contracts";
-import { useCallback } from "react";
+import { useCallback, useState } from "react";
 import type {
   RepositoryHistoryFetchCommands,
   RepositoryHistoryObservation,
@@ -29,7 +29,8 @@ export function usePull(reader: PullReader | undefined) {
     before: async () =>
       reader !== undefined && (await reader.fetch()).failure === undefined,
   });
-  const freshnessReady = isFreshnessReady(useHistorySnapshot(reader));
+  const freshnessReady = useStore(reader ?? idleHistory, isFreshnessReady);
+  const [mountedAt] = useState(Date.now);
   const pulling = command.running;
   const { run, canRun } = command;
 
@@ -51,6 +52,7 @@ export function usePull(reader: PullReader | undefined) {
     freshnessReady,
     error:
       latest?.result === undefined ||
+      latest.submittedAt < mountedAt ||
       latest.result._tag === "Ok" ||
       latest.result._tag === "Cancelled" ||
       latest.input === undefined
@@ -58,6 +60,8 @@ export function usePull(reader: PullReader | undefined) {
         : describePullFailure(latest.input.branch, latest.result),
   };
 }
+
+export type Pull = ReturnType<typeof usePull>;
 
 export function useHistorySnapshot(reader: PullReader | undefined) {
   return useStore(reader ?? idleHistory);

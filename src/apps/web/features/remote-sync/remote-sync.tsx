@@ -1,5 +1,5 @@
 import { IconArrowBarToDown, IconArrowDown } from "@tabler/icons-react";
-import { useCallback, useRef, useState } from "react";
+import { type ReactNode, useCallback, useRef, useState } from "react";
 import { ToolbarButton } from "#web/components/ui/toolbar-button";
 import { ErrorNotification } from "#web/features/notifications/components/error-notification";
 import { useOperationCommandState } from "#web/features/operation-recovery/hooks/use-operation-status";
@@ -8,22 +8,21 @@ import {
   useScopedRepositoryRefs,
 } from "#web/features/refs/repository-refs";
 import { describeRepositoryFetchError } from "#web/features/remote-sync/fetch-settings";
-import { PushControls } from "#web/features/remote-sync/push";
+import {
+  type Push,
+  PushButton,
+  PushNotice,
+  usePush,
+} from "#web/features/remote-sync/push";
 import { resolvePushTarget } from "#web/features/remote-sync/push-target";
 import {
+  type Pull,
   type PullReader,
   useHistorySnapshot,
   usePull,
 } from "#web/features/remote-sync/use-pull";
 import type { RepositoryHistorySnapshot } from "#web/features/repository-history/repository-history-reader";
 import { useRepositoryScope } from "#web/platform/query/repository-scope";
-
-export interface SyncConditions {
-  readonly canRun: boolean;
-  readonly freshnessReady: boolean;
-  readonly recoveryBusy: boolean;
-  readonly pulling: boolean;
-}
 
 interface FetchAttempt {
   readonly reader: PullReader;
@@ -33,12 +32,35 @@ interface FetchAttempt {
 
 export function RemoteSync({
   reader,
+  children,
 }: {
   readonly reader: PullReader | undefined;
+  readonly children: (actions: ReactNode) => ReactNode;
+}) {
+  const pull = usePull(reader);
+  const push = usePush();
+  return (
+    <>
+      <PushNotice push={push} />
+      {pull.error === undefined ? null : (
+        <ErrorNotification message={pull.error} />
+      )}
+      {children(<SyncActions reader={reader} pull={pull} push={push} />)}
+    </>
+  );
+}
+
+function SyncActions({
+  reader,
+  pull,
+  push,
+}: {
+  readonly reader: PullReader | undefined;
+  readonly pull: Pull;
+  readonly push: Push;
 }) {
   const snapshot = useHistorySnapshot(reader);
   const fetch = useFetch(reader, snapshot);
-  const pull = usePull(reader);
   const scope = useRepositoryScope();
   const { refs } = useScopedRepositoryRefs();
   const recoveryBusy = useOperationCommandState() === "busy";
@@ -49,12 +71,9 @@ export function RemoteSync({
   const incoming =
     refs?.branches.find(({ name }) => name === activeBranch)?.upstream
       ?.behind ?? 0;
-  const ready = syncReady({
-    canRun: pull.canRun,
-    freshnessReady: pull.freshnessReady,
-    recoveryBusy,
-    pulling: pull.pulling,
-  });
+  const pushTarget = resolvePushTarget(refs, activeBranch);
+  const ready =
+    pull.canRun && pull.freshnessReady && !recoveryBusy && !pull.pulling;
   return (
     <>
       <ToolbarButton
@@ -84,29 +103,20 @@ export function RemoteSync({
           )}
         </ToolbarButton>
       ) : null}
-      <PushControls
-        operationBusy={recoveryBusy}
-        target={resolvePushTarget(refs, activeBranch)}
-      />
+      {scope === undefined || pushTarget === undefined ? null : (
+        <PushButton
+          push={push}
+          target={pushTarget}
+          operationBusy={recoveryBusy}
+        />
+      )}
       <FreshnessNotice
         error={fetch.error}
         fetching={fetch.fetching}
         snapshot={snapshot}
       />
-      {pull.error === undefined ? null : (
-        <ErrorNotification message={pull.error} />
-      )}
     </>
   );
-}
-
-export function syncReady({
-  canRun,
-  freshnessReady,
-  recoveryBusy,
-  pulling,
-}: SyncConditions) {
-  return canRun && freshnessReady && !recoveryBusy && !pulling;
 }
 
 function useFetch(

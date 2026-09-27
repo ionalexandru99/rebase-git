@@ -111,77 +111,83 @@ function Workspace({
   return (
     <>
       <OperationRecoveryNotice key={worktreePath} repositoryName={name} />
-      <CommitInspectionBridge connected={scope.connected}>
-        {(inspection) => (
-          <WorkspacePanel.Group>
-            <ResizablePanel
-              defaultSize="16.5rem"
-              groupResizeBehavior="preserve-pixel-size"
-              id="branches"
-              maxSize="26rem"
-              minSize="12rem"
-            >
-              <BranchesSidebar
-                onBranchRenamed={historyScope.renameBranch}
-                onToggleHistoryRef={historyScope.toggleRef}
-                reader={reader}
-                selectedHistoryRefKeys={resolved?.selectedRefKeys ?? noRefKeys}
-              />
-            </ResizablePanel>
-            <ResizableHandle
-              aria-label="Resize branches sidebar"
-              className="z-10 bg-transparent after:w-2 focus-visible:ring-primary/40"
-            />
-            <WorkspacePanel.Main>
-              {() =>
-                mergePath !== null ? (
-                  <MergeView
-                    path={mergePath}
-                    onOpen={openMergeView}
-                    onClose={() => setMerging(null)}
-                    toolbarActions={<WorkspacePanel.Toggle />}
+      <RemoteSync reader={reader}>
+        {(syncActions) => (
+          <CommitInspectionBridge connected={scope.connected}>
+            {(inspection) => (
+              <WorkspacePanel.Group>
+                <ResizablePanel
+                  defaultSize="16.5rem"
+                  groupResizeBehavior="preserve-pixel-size"
+                  id="branches"
+                  maxSize="26rem"
+                  minSize="12rem"
+                >
+                  <BranchesSidebar
+                    onBranchRenamed={historyScope.renameBranch}
+                    onToggleHistoryRef={historyScope.toggleRef}
+                    reader={reader}
+                    selectedHistoryRefKeys={
+                      resolved?.selectedRefKeys ?? noRefKeys
+                    }
                   />
-                ) : (
-                  <main
-                    aria-label="Repository workspace"
-                    className="h-full rounded-none bg-repository"
-                  >
-                    <CommitGraph
-                      ref={inspection.graphRef}
-                      onOpenDetails={inspection.open}
-                      onActiveCommitChange={inspection.select}
-                      toolbarActions={
-                        <>
-                          <RemoteSync reader={reader} />
-                          <WorkspacePanel.Toggle />
-                        </>
-                      }
-                      githubRepository={refs?.githubRepository}
-                      remoteProviders={refs?.remoteProviders}
-                      historyIdentity={{
-                        environmentId,
-                        repositoryId: scope.logicalRepositoryId,
-                      }}
-                      onRemoveHistoryRef={historyScope.toggleRef}
-                      onRevealHistoryRef={historyScope.toggleRef}
-                      onAddHistoryRef={() =>
-                        requestRefIntent({ _tag: "FocusRefs" })
-                      }
-                      onResetHistoryScope={historyScope.reset}
-                      history={history}
-                      repositoryName={name}
-                      roots={resolved?.roots}
-                      scope={resolved?.scope ?? automaticHistoryScope}
-                      selections={resolved?.selections ?? []}
-                    />
-                  </main>
-                )
-              }
-            </WorkspacePanel.Main>
-            <WorkspacePanel.Pane contents={panelContents} />
-          </WorkspacePanel.Group>
+                </ResizablePanel>
+                <ResizableHandle
+                  aria-label="Resize branches sidebar"
+                  className="z-10 bg-transparent after:w-2 focus-visible:ring-primary/40"
+                />
+                <WorkspacePanel.Main>
+                  {() =>
+                    mergePath !== null ? (
+                      <MergeView
+                        path={mergePath}
+                        onOpen={openMergeView}
+                        onClose={() => setMerging(null)}
+                        toolbarActions={<WorkspacePanel.Toggle />}
+                      />
+                    ) : (
+                      <main
+                        aria-label="Repository workspace"
+                        className="h-full rounded-none bg-repository"
+                      >
+                        <CommitGraph
+                          ref={inspection.graphRef}
+                          onOpenDetails={inspection.open}
+                          onActiveCommitChange={inspection.select}
+                          toolbarActions={
+                            <>
+                              {syncActions}
+                              <WorkspacePanel.Toggle />
+                            </>
+                          }
+                          githubRepository={refs?.githubRepository}
+                          remoteProviders={refs?.remoteProviders}
+                          historyIdentity={{
+                            environmentId,
+                            repositoryId: scope.logicalRepositoryId,
+                          }}
+                          onRemoveHistoryRef={historyScope.toggleRef}
+                          onRevealHistoryRef={historyScope.toggleRef}
+                          onAddHistoryRef={() =>
+                            requestRefIntent({ _tag: "FocusRefs" })
+                          }
+                          onResetHistoryScope={historyScope.reset}
+                          history={history}
+                          repositoryName={name}
+                          roots={resolved?.roots}
+                          scope={resolved?.scope ?? automaticHistoryScope}
+                          selections={resolved?.selections ?? []}
+                        />
+                      </main>
+                    )
+                  }
+                </WorkspacePanel.Main>
+                <WorkspacePanel.Pane contents={panelContents} />
+              </WorkspacePanel.Group>
+            )}
+          </CommitInspectionBridge>
         )}
-      </CommitInspectionBridge>
+      </RemoteSync>
     </>
   );
 }

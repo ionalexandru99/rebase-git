@@ -168,13 +168,16 @@ describe("branches sidebar", () => {
 
   it("keeps a single click as focus and checks out on double click", async () => {
     const { checkouts, screen } = await renderSidebar();
-    const feature = screen.getByRole("treeitem", { name: "feature" });
+    const tree = screen.getByRole("tree", { name: "Branches" });
+    const feature = tree.getByRole("treeitem", { name: "feature" });
 
     await feature.click();
-    expect(checkouts).not.toHaveBeenCalled();
+    await expect.element(feature).toHaveAttribute("aria-selected", "true");
 
     await feature.dblClick();
     await expect.poll(() => checkouts).toHaveBeenCalledOnce();
+    await expect.element(tree).toHaveAttribute("aria-busy", "false");
+    expect(checkouts).toHaveBeenCalledOnce();
     expect(checkouts).toHaveBeenCalledWith({
       _tag: "LocalBranch",
       name: "feature",
@@ -183,6 +186,7 @@ describe("branches sidebar", () => {
     await feature.click({ button: "right" });
     await screen.getByRole("menuitem", { name: "Checkout" }).click();
     await expect.poll(() => checkouts).toHaveBeenCalledTimes(2);
+    await expect.element(tree).toHaveAttribute("aria-busy", "false");
     expect(checkouts).toHaveBeenLastCalledWith({
       _tag: "LocalBranch",
       name: "feature",

@@ -11,12 +11,12 @@ import { createRefActions } from "#web/features/refs/ref-actions";
 import type { RepositoryHistoryReadModel } from "#web/features/repository-history/repository-history-reader";
 import { useRepositoryScope } from "#web/platform/query/repository-scope";
 
-export interface CommitAccess {
+interface CommitAccess {
   readonly connected: boolean;
   readonly readable: boolean;
 }
 
-export interface CommitActionHandlers {
+interface CommitActionHandlers {
   readonly openDetails?: ((oid: string) => void) | undefined;
   readonly readCommit: (oid: string) => Promise<RepositoryCommit | undefined>;
   readonly writeClipboard: (text: string) => Promise<void>;
@@ -58,7 +58,7 @@ export function useCommitActions({
   return { actionsFor, error };
 }
 
-export function commitActions(
+function commitActions(
   oid: string,
   { connected, readable }: CommitAccess,
   { openDetails, readCommit, writeClipboard, attempt }: CommitActionHandlers,

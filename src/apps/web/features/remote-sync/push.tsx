@@ -30,28 +30,9 @@ import {
 import { useRepositoryScope } from "#web/platform/query/repository-scope";
 import { useCommand } from "#web/platform/query/use-command";
 
-type Push = ReturnType<typeof usePush>;
+export type Push = ReturnType<typeof usePush>;
 
-export function PushControls({
-  target,
-  operationBusy,
-}: {
-  readonly target: PushTarget | undefined;
-  readonly operationBusy: boolean;
-}) {
-  const push = usePush();
-  const scope = useRepositoryScope();
-  return (
-    <>
-      {scope === undefined || target === undefined ? null : (
-        <PushButton push={push} target={target} operationBusy={operationBusy} />
-      )}
-      <PushNotice push={push} />
-    </>
-  );
-}
-
-function usePush() {
+export function usePush() {
   const command = useCommand(RepositoryPushHttpApi.push);
   const [review, setReview] = useState<ForcePushReview | null>(null);
   const worktreePath = useRepositoryScope()?.worktreePath;
@@ -111,7 +92,7 @@ function usePush() {
   };
 }
 
-function PushButton({
+export function PushButton({
   push,
   target,
   operationBusy,
@@ -189,7 +170,7 @@ function pushLabel({ branch, upstream }: PushTarget) {
   return `Push ${upstream.ahead} commits to ${name}`;
 }
 
-function PushNotice({ push }: { readonly push: Push }) {
+export function PushNotice({ push }: { readonly push: Push }) {
   if (push.running !== null)
     return <PushProgress title={push.running} cancel={push.cancel} />;
   if (push.review !== null)

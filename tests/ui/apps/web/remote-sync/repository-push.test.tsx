@@ -2,6 +2,7 @@ import {
   type PushBranch,
   type PushRejected,
   RepositoryPushHttpApi,
+  type RepositoryRefs,
 } from "@rebase/contracts";
 import { EnvironmentHttpRejected } from "@rebase/environment-client";
 import { describe, expect, it, vi } from "vite-plus/test";
@@ -12,10 +13,16 @@ import {
   idleOperation,
   respond,
 } from "#tests-ui/runtime/fake-requests";
+import { fakeRpc } from "#tests-ui/runtime/fake-rpc";
 import { render } from "#tests-ui/runtime/render";
 import { NotificationsProvider } from "#web/features/notifications/notifications";
-import { PushControls } from "#web/features/remote-sync/push";
+import {
+  PushButton,
+  PushNotice,
+  usePush,
+} from "#web/features/remote-sync/push";
 import type { PushTarget } from "#web/features/remote-sync/push-target";
+import { RemoteSync } from "#web/features/remote-sync/remote-sync";
 import { RepositoryScopeProvider } from "#web/platform/query/repository-scope";
 
 const reviewed = "9c1e2f71".padEnd(40, "0");
@@ -33,6 +40,26 @@ function tracked(ahead: number, behind: number): PushTarget {
       remoteOid: reviewed,
     },
   };
+}
+
+function PushControls({ target }: { readonly target: PushTarget }) {
+  const push = usePush();
+  return (
+    <>
+      <PushButton push={push} target={target} operationBusy={false} />
+      <PushNotice push={push} />
+    </>
+  );
+}
+
+function pendingPush(aborted: () => void = () => {}) {
+  return (_command: PushBranch, signal: AbortSignal | undefined) =>
+    new Promise<never>((_resolve, reject) =>
+      signal?.addEventListener("abort", () => {
+        aborted();
+        reject(signal.reason);
+      }),
+    );
 }
 
 async function fixture(
@@ -57,7 +84,7 @@ async function fixture(
       <RepositoryScopeProvider
         scope={repositoryScope({ ...scope, worktreePath })}
       >
-        <PushControls operationBusy={false} target={target} />
+        <PushControls target={target} />
       </RepositoryScopeProvider>
     </NotificationsProvider>
   );
@@ -134,13 +161,7 @@ describe("repository push", () => {
   });
 
   it("reports a cancelled push as cancelled instead of pushed", async () => {
-    await fixture(
-      { branch: "spike", remotes: ["origin"] },
-      (_command, signal) =>
-        new Promise((_resolve, reject) =>
-          signal?.addEventListener("abort", () => reject(signal.reason)),
-        ),
-    );
+    await fixture({ branch: "spike", remotes: ["origin"] }, pendingPush());
 
     await page.getByRole("button", { name: "Push spike" }).click();
     await page
@@ -158,16 +179,7 @@ describe("repository push", () => {
 
   it("cancels the push and clears the review when the worktree changes", async () => {
     const aborted = vi.fn();
-    const f = await fixture(
-      tracked(3, 2),
-      (_command, signal) =>
-        new Promise((_resolve, reject) =>
-          signal?.addEventListener("abort", () => {
-            aborted();
-            reject(signal.reason);
-          }),
-        ),
-    );
+    const f = await fixture(tracked(3, 2), pendingPush(aborted));
     const forcePush = page.getByRole("button", {
       name: /^Force push feature\/444-push/,
     });
@@ -195,4 +207,69 @@ describe("repository push", () => {
       .element(page.getByText("The request was cancelled."))
       .not.toBeInTheDocument();
   });
+
+  it("keeps a running push when the graph toolbar closes", async () => {
+    const aborted = vi.fn();
+    const repositoryId = "00000000-0000-4000-8000-000000000001";
+    const requests = fakeRequests(
+      idleOperation,
+      respond(RepositoryPushHttpApi.push, (command, { signal }) =>
+        pendingPush(aborted)(command, signal),
+      ),
+    );
+    const snapshot = {
+      revision: 0,
+      historyRevision: 0,
+      status: "ready",
+    } as const;
+    const reader = {
+      fetch: vi.fn(async () => {
+        throw new Error("fetch is not expected");
+      }),
+      getSnapshot: () => snapshot,
+      subscribe: () => () => {},
+    };
+    const tree = (toolbar: boolean) => (
+      <NotificationsProvider>
+        <RepositoryScopeProvider
+          scope={repositoryScope({ repositoryId, worktreePath: "/repo" })}
+        >
+          <RemoteSync reader={reader}>
+            {(actions) => (toolbar ? actions : null)}
+          </RemoteSync>
+        </RepositoryScopeProvider>
+      </NotificationsProvider>
+    );
+    const view = await render(tree(true), {
+      environment: {
+        requests,
+        rpc: await fakeRpc(async () => spikeRefs(repositoryId)),
+      },
+    });
+    const pushButton = page.getByRole("button", { name: "Push spike" });
+    const progress = page.getByRole("region", { name: "Push progress" });
+
+    await pushButton.click();
+    await expect.element(progress).toBeVisible();
+    await view.rerender(tree(false));
+
+    await expect.element(pushButton).not.toBeInTheDocument();
+    await expect.element(progress).toBeVisible();
+    expect(aborted).not.toHaveBeenCalled();
+  });
 });
+
+function spikeRefs(repositoryId: string): RepositoryRefs {
+  const commit = "a".repeat(40);
+  return {
+    branches: [{ name: "spike", target: commit, worktreePath: "/repo" }],
+    remoteBranches: [],
+    remoteProviders: [{ remote: "origin", provider: "git" }],
+    repositoryId,
+    tags: [],
+    truncated: { branches: false, remoteBranches: false, tags: false },
+    worktrees: [
+      { head: { branch: "spike", commit }, main: true, path: "/repo" },
+    ],
+  };
+}

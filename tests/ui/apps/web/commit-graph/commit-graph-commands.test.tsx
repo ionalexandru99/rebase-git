@@ -79,6 +79,31 @@ describe("commit graph commands", () => {
       .not.toBeInTheDocument();
   });
 
+  it("explains missing commit metadata and needs read access for details", async () => {
+    const reader = historyReader({ commits: history(2), status: "ready" });
+    reader.getCommitSummaries.mockResolvedValue([]);
+    const openDetails = vi.fn();
+    const screen = await render(
+      <ScopedGraph
+        reader={reader}
+        scope={repositoryScope({ readable: false })}
+        onOpenDetails={openDetails}
+      />,
+    );
+    await screen
+      .getByRole("grid")
+      .getByRole("row", { name: /^Commit 1,/ })
+      .click({ button: "right" });
+    await expect
+      .element(screen.getByRole("menuitem", { name: "Open details" }))
+      .toHaveAttribute("aria-disabled", "true");
+    await screen.getByRole("menuitem", { name: "Copy commit subject" }).click();
+    await expect
+      .element(screen.getByRole("alert"))
+      .toHaveTextContent("Commit metadata is not available yet");
+    expect(openDetails).not.toHaveBeenCalled();
+  });
+
   it("selects the invoking commit and opens its menu from the keyboard", async () => {
     const commits = history(4);
     const reader = historyReader({ commits, status: "ready" });
@@ -128,9 +153,11 @@ describe("commit graph commands", () => {
 function ScopedGraph({
   reader,
   scope,
+  onOpenDetails,
 }: {
   readonly reader: ReturnType<typeof historyReader>;
   readonly scope: RepositoryScope;
+  readonly onOpenDetails?: (oid: string) => void;
 }) {
   return (
     <div style={{ height: 520, width: 900 }}>
@@ -139,6 +166,7 @@ function ScopedGraph({
           reader={reader}
           repositoryName="rebase-test"
           roots={[{ name: "main", oid: "0".repeat(40), type: "branch" }]}
+          onOpenDetails={onOpenDetails}
         />
       </RepositoryScopeProvider>
     </div>

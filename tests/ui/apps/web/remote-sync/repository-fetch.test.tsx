@@ -344,7 +344,7 @@ function Controls({
   return (
     <NotificationsProvider>
       <RepositoryScopeProvider scope={scope}>
-        <RemoteSync reader={reader} />
+        <RemoteSync reader={reader}>{(actions) => actions}</RemoteSync>
       </RepositoryScopeProvider>
       <RepositoryFetchSettings
         reader={reader}

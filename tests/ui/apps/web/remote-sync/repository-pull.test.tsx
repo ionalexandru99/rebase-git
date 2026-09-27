@@ -93,12 +93,16 @@ describe("repository pull", () => {
     await render(
       <div style={{ height: 520, width: 900 }}>
         <RepositoryScopeProvider scope={repositoryScope({ repositoryId })}>
-          <CommitGraphFixture
-            reader={reader}
-            repositoryName="rebase-test"
-            roots={[{ name: "main", oid: "0".repeat(40), type: "branch" }]}
-            toolbarActions={<RemoteSync reader={reader} />}
-          />
+          <RemoteSync reader={reader}>
+            {(actions) => (
+              <CommitGraphFixture
+                reader={reader}
+                repositoryName="rebase-test"
+                roots={[{ name: "main", oid: "0".repeat(40), type: "branch" }]}
+                toolbarActions={actions}
+              />
+            )}
+          </RemoteSync>
         </RepositoryScopeProvider>
       </div>,
       { environment: { requests, rpc: await fakeRpc(async () => refs(3)) } },
@@ -178,7 +182,7 @@ async function fixture({
   await render(
     <NotificationsProvider>
       <RepositoryScopeProvider scope={repositoryScope({ repositoryId })}>
-        <RemoteSync reader={reader} />
+        <RemoteSync reader={reader}>{(actions) => actions}</RemoteSync>
       </RepositoryScopeProvider>
     </NotificationsProvider>,
     { environment: { requests, rpc: await fakeRpc(async () => refs(0)) } },
