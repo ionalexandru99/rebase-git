@@ -19,6 +19,7 @@ import {
   started,
   uncertain,
 } from "#server/features/repository-operations/operation-outcome.ts";
+import { rebasePlanTodo } from "#server/features/repository-operations/rebase-plan.ts";
 import type { RepositoryCoordination } from "#server/repository/repository-coordination.ts";
 
 export function startOperation(
@@ -113,7 +114,7 @@ function startRebase(
   git: GitCommandRunner,
   coordination: RepositoryCoordination,
   { worktreePath: directory, expectedHead }: StartOperation,
-  { onto, stash }: StartRebase,
+  { onto, stash, plan }: StartRebase,
 ) {
   const revision = onto.ref ?? onto.commit;
   return Effect.gen(function* () {
@@ -153,12 +154,27 @@ function startRebase(
         "Stale",
         "Files changed in the worktree. Try again.",
       );
+    const todo =
+      plan === undefined
+        ? undefined
+        : yield* rebasePlanTodo(
+            git,
+            directory,
+            `${onto.commit}..${expectedHead}`,
+            plan,
+          );
     const output = yield* git
       .run({
         directory,
+        ...(todo === undefined
+          ? {}
+          : { globalArguments: ["-c", "sequence.editor=cat >"], input: todo }),
         arguments: [
           "rebase",
-          merges.length > 0 ? "--rebase-merges" : "--no-rebase-merges",
+          ...(todo === undefined ? [] : ["--interactive", "--empty=drop"]),
+          merges.length > 0 && todo === undefined
+            ? "--rebase-merges"
+            : "--no-rebase-merges",
           stash ? "--autostash" : "--no-autostash",
           "--end-of-options",
           revision,

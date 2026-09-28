@@ -160,8 +160,10 @@ export function OperationRecoveryNotice({
   const recovery = useOperationRecovery(scope, { polling: true });
   const panel = useWorkspacePanel();
   if (scope === undefined) return null;
-  const diffsVisible = panel.state.open && panel.state.active === "changes";
-  if (diffsVisible && showsOperationHeader(recovery.state)) return null;
+  const headerVisible =
+    panel.state.open &&
+    (panel.state.active === "changes" || panel.state.active === "rebase");
+  if (headerVisible && showsOperationHeader(recovery.state)) return null;
   return (
     <PersistentNotification>
       <OperationRecoveryToast

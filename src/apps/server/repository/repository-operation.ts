@@ -5,6 +5,8 @@ import { Effect } from "effect";
 import { repositoryRejected } from "#contracts/git/git-failures.contract.ts";
 import type {
   OperationKind,
+  PlanAction,
+  RebaseStep,
   RepositoryOperation,
 } from "#contracts/repository-operations/repository-operations.contract.ts";
 import {
@@ -101,7 +103,9 @@ export function readRepositoryOperation(
           edit,
           worktree.status,
         );
+    const steps = kind === "rebase" ? rebaseSteps(metadata) : null;
     const progress =
+      stepProgress(steps) ??
       operationProgress(metadata) ??
       (yield* sequenceProgress(git, worktreePath, metadata, worktree.head));
     return {
@@ -133,6 +137,7 @@ export function readRepositoryOperation(
       mergedBranch:
         kind === "merge" ? mergedBranchName(metadata.MERGE_MSG) : null,
       progress,
+      steps,
     } satisfies RepositoryOperation;
   });
 }
@@ -315,6 +320,51 @@ function mergedBranchName(message: string | null) {
     /^Merge (?:remote-tracking )?branch '([^']+)'/.exec(message ?? "")?.[1] ??
     null
   );
+}
+
+const planActions: Readonly<Record<string, PlanAction>> = {
+  pick: "pick",
+  p: "pick",
+  reword: "reword",
+  r: "reword",
+  edit: "edit",
+  e: "edit",
+  squash: "squash",
+  s: "squash",
+  fixup: "fixup",
+  f: "fixup",
+  drop: "drop",
+  d: "drop",
+};
+
+function rebaseSteps(metadata: Metadata): RebaseStep[] | null {
+  const steps: RebaseStep[] = [];
+  for (const [text, done] of [
+    [metadata["rebase-merge/done"], true],
+    [metadata["rebase-merge/git-rebase-todo"], false],
+  ] as const)
+    for (const line of (text ?? "").split("\n")) {
+      const trimmed = line.trim();
+      if (trimmed === "" || trimmed.startsWith("#")) continue;
+      const match = /^(\w+)\s+([0-9a-f]{40,64})(?:\s+(.*))?$/.exec(trimmed);
+      const action =
+        match?.[1] === undefined ? undefined : planActions[match[1]];
+      if (match === null || action === undefined) return null;
+      steps.push({
+        commit: match[2] ?? "",
+        action,
+        subject: (match[3] ?? "").replace(/^#\s*/, ""),
+        done,
+      });
+    }
+  return steps.length === 0 ? null : steps;
+}
+
+function stepProgress(steps: readonly RebaseStep[] | null) {
+  const current = steps?.filter((step) => step.done).length ?? 0;
+  return steps === null || current === 0
+    ? null
+    : { current, total: steps.length };
 }
 
 function operationProgress(metadata: Metadata) {

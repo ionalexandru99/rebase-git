@@ -53,6 +53,7 @@ export type RefAction = Action<
   | "checkout"
   | "merge"
   | "rebase"
+  | "interactiveRebase"
   | "pull"
   | "showReflog"
   | "newBranch"
@@ -80,6 +81,9 @@ export interface RefActionHandlers {
   readonly rebase?:
     | ((target: RepositoryRefTarget) => RefAction | undefined)
     | undefined;
+  readonly interactiveRebase?:
+    | ((target: RepositoryRefTarget) => RefAction | undefined)
+    | undefined;
   readonly showReflog?: ((branch: string) => void) | undefined;
   readonly pull:
     | { readonly pulling: boolean; readonly run: (branch: string) => void }
@@ -103,6 +107,7 @@ export function refActions(
     checkout,
     merge,
     rebase,
+    interactiveRebase,
     pull,
     pushTags,
     showReflog,
@@ -114,6 +119,7 @@ export function refActions(
   const startPoint = refStartPoint(target, refs);
   const mergeAction = merge?.(target);
   const rebaseAction = rebase?.(target);
+  const interactiveAction = interactiveRebase?.(target);
   const remove = (
     fields: Omit<ActionFields, "group" | "run">,
     deletion: RefDeletion | undefined,
@@ -143,6 +149,7 @@ export function refActions(
     action({ id: "checkout", label: "Checkout", run: () => checkout(target) }),
     ...(mergeAction === undefined ? [] : [mergeAction]),
     ...(rebaseAction === undefined ? [] : [rebaseAction]),
+    ...(interactiveAction === undefined ? [] : [interactiveAction]),
     ...(pull === undefined ||
     target._tag !== "LocalBranch" ||
     row.upstream === undefined

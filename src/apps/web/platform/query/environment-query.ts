@@ -6,6 +6,7 @@ import {
   QueryClient,
   type SkipToken,
   skipToken,
+  useQueries,
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
@@ -96,21 +97,51 @@ export function useEnvironmentQuery<Route extends EnvironmentRoute>(
     ...queryOptions,
     queryKey,
     queryFn:
-      input === skipToken
-        ? skipToken
-        : async ({ signal }) => {
-            try {
-              return await requests(route, input, { signal });
-            } catch (error) {
-              throw requestFailure(error);
-            }
-          },
+      input === skipToken ? skipToken : routeRequest(requests, route, input),
     enabled: active,
     meta: { changes, repositoryId, persist },
     ...(keepPrevious ? { placeholderData: keepPreviousData } : {}),
   });
   useCancelWhileInactive(useQueryClient(), hashKey(queryKey), active);
   return query;
+}
+
+export function useEnvironmentQueries<Route extends EnvironmentRoute>(
+  route: Route,
+  inputs: readonly RouteInput<Route>[],
+  { changes }: Pick<EnvironmentQueryOptions<RouteSuccess<Route>>, "changes">,
+) {
+  const { environmentId, requests, connected } = useEnvironment();
+  return useQueries({
+    queries: inputs.map((input) => {
+      const repositoryId = inputRepositoryId(input);
+      return {
+        queryKey: environmentQueryKey(
+          environmentId,
+          repositoryId,
+          route,
+          input,
+        ),
+        queryFn: routeRequest(requests, route, input),
+        enabled: connected && environmentId !== undefined,
+        meta: { changes, repositoryId, persist: false },
+      };
+    }),
+  });
+}
+
+function routeRequest<Route extends EnvironmentRoute>(
+  requests: ReturnType<typeof useEnvironment>["requests"],
+  route: Route,
+  input: RouteInput<Route>,
+) {
+  return async ({ signal }: { readonly signal: AbortSignal }) => {
+    try {
+      return (await requests(route, input, { signal })) as RouteSuccess<Route>;
+    } catch (error) {
+      throw requestFailure(error);
+    }
+  };
 }
 
 function useCancelWhileInactive(

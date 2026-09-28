@@ -34,6 +34,7 @@ import {
 import { render } from "#tests-support/render.tsx";
 import { NotificationsProvider } from "#web/features/notifications/notifications.tsx";
 import { useRebaseActions } from "#web/features/rebase/rebase-actions.ts";
+import type { RebasePlanTarget } from "#web/features/rebase/rebase-plan.ts";
 import { RepositoryScopeProvider } from "#web/platform/query/repository-scope.tsx";
 
 const base = historyOid(1);
@@ -81,6 +82,32 @@ describe("rebase from the graph menu", () => {
       .toHaveTextContent("Already on it");
   });
 
+  it("opens an interactive plan onto another branch or from a commit of the branch", async () => {
+    const f = await fixture();
+    await f.openMenu("Main one");
+    const onto = page.getByRole("menuitem", {
+      name: /^Interactive rebase onto main/,
+    });
+    await expect.element(onto).toHaveTextContent("2 commits");
+    await onto.click();
+    expect(f.planned).toHaveBeenLastCalledWith({
+      ref: "main",
+      commit: main,
+      from: false,
+    });
+    await f.openMenu("Topic two");
+    const from = page.getByRole("menuitem", {
+      name: /^Interactive rebase from here/,
+    });
+    await expect.element(from).toHaveTextContent("1 commit");
+    await from.click();
+    expect(f.planned).toHaveBeenLastCalledWith({
+      ref: null,
+      commit: topic,
+      from: true,
+    });
+  });
+
   it("shows Git's reason when the rebase is refused", async () => {
     const f = await fixture({
       _tag: "OperationFailed",
@@ -97,6 +124,7 @@ describe("rebase from the graph menu", () => {
 
 async function fixture(failure?: OperationFailure) {
   const started = vi.fn<(command: StartOperation) => void>();
+  const planned = vi.fn<(target: RebasePlanTarget) => void>();
   const reader = historyReader({
     commits: [
       historyCommit(topic, [pushed], 4, "Topic two"),
@@ -152,7 +180,7 @@ async function fixture(failure?: OperationFailure) {
     <NotificationsProvider>
       <div style={{ height: 520, width: 900 }}>
         <RepositoryScopeProvider scope={repositoryScope()}>
-          <RebaseGraph history={reader} />
+          <RebaseGraph history={reader} openPlan={planned} />
         </RepositoryScopeProvider>
       </div>
     </NotificationsProvider>,
@@ -160,6 +188,7 @@ async function fixture(failure?: OperationFailure) {
   );
   return {
     started,
+    planned,
     openMenu: (subject: string) =>
       screen
         .getByRole("grid")
@@ -168,8 +197,14 @@ async function fixture(failure?: OperationFailure) {
   };
 }
 
-function RebaseGraph({ history }: { readonly history: FakeRepositoryHistory }) {
-  const rebase = useRebaseActions(history);
+function RebaseGraph({
+  history,
+  openPlan,
+}: {
+  readonly history: FakeRepositoryHistory;
+  readonly openPlan: (target: RebasePlanTarget) => void;
+}) {
+  const rebase = useRebaseActions(history, openPlan);
   return (
     <CommitGraphFixture
       reader={history}

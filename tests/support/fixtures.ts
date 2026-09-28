@@ -153,6 +153,7 @@ export function repositoryOperation(
     unresolvedPaths: [],
     actions: [],
     lock: null,
+    steps: null,
     ...operation,
   };
 }
