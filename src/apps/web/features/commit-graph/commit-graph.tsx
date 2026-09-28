@@ -156,6 +156,7 @@ export function CommitGraph({
   const [previewing, setPreviewing] = useState(false);
   const commands = useCommitActions({
     history,
+    scope: scopeQuery,
     merge,
     rebase: rebase && {
       actionFor: (oid) => {
@@ -291,7 +292,12 @@ export function CommitGraph({
                   actions={
                     menuOid === undefined
                       ? undefined
-                      : commands.actionsFor(menuOid)
+                      : commands.actionsFor(
+                          menuOid,
+                          navigation.selected.has(menuOid)
+                            ? [...navigation.selected]
+                            : [menuOid],
+                        )
                   }
                   tabIndex={0}
                   restoreFocus={() => {
@@ -389,6 +395,7 @@ export function CommitGraph({
                             size={virtualRow.size}
                             start={virtualRow.start}
                             selected={navigation.selected.has(commit.oid)}
+                            order={commands.preview.indexOf(commit.oid) + 1}
                             active={
                               navigation.selection.activeOid === commit.oid
                             }

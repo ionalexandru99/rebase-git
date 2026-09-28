@@ -28,6 +28,7 @@ export const CommitGraphRow = memo(function CommitGraphRow({
   size,
   start,
   selected,
+  order,
   active,
   merge,
   busy,
@@ -40,6 +41,7 @@ export const CommitGraphRow = memo(function CommitGraphRow({
   readonly size: number;
   readonly start: number;
   readonly selected: boolean;
+  readonly order: number;
   readonly active: boolean;
   readonly merge: "collapsed" | "expanded" | undefined;
   readonly busy: boolean;
@@ -81,7 +83,12 @@ export const CommitGraphRow = memo(function CommitGraphRow({
       }}
       tabIndex={-1}
     >
-      <CommitGraphCommitCells commit={commit} labels={labels} graph={graph} />
+      <CommitGraphCommitCells
+        commit={commit}
+        labels={labels}
+        graph={graph}
+        order={order}
+      />
     </tr>
   );
 });

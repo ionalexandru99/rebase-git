@@ -72,10 +72,18 @@ export const StartRebase = Schema.TaggedStruct("Rebase", {
   stash: Schema.Boolean,
 });
 export type StartRebase = typeof StartRebase.Type;
+export const StartRevert = Schema.TaggedStruct("Revert", {
+  commits: Schema.Array(ObjectId).check(
+    Schema.isMinLength(1),
+    Schema.isMaxLength(256),
+  ),
+  commit: Schema.Boolean,
+});
+export type StartRevert = typeof StartRevert.Type;
 export const StartOperation = Schema.Struct({
   ...OperationScope.fields,
   expectedHead: ObjectId,
-  operation: Schema.Union([StartMerge, StartRebase]),
+  operation: Schema.Union([StartMerge, StartRebase, StartRevert]),
 });
 export type StartOperation = typeof StartOperation.Type;
 export const OperationStarted = Schema.Struct({
@@ -100,6 +108,7 @@ export const OperationFailure = Schema.TaggedStruct("OperationFailed", {
     "NotFastForward",
     "Unrelated",
     "WouldOverwrite",
+    "Empty",
   ]),
   detail: Schema.String.check(Schema.isMaxLength(2048)),
   paths: Schema.optionalKey(

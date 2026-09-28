@@ -11,10 +11,12 @@ export const CommitGraphCommitCells = memo(
     commit,
     labels,
     graph,
+    order,
   }: {
     readonly labels: readonly RepositoryHistoryRefTarget[];
     readonly commit: RepositoryCommit;
     readonly graph?: ReactNode;
+    readonly order: number;
   }) {
     const date = new Date(commit.committer.timestampSeconds * 1_000);
     const formattedDate = dateFormatter.format(date);
@@ -32,6 +34,7 @@ export const CommitGraphCommitCells = memo(
             key={commit.oid}
             subject={commit.subject}
             labels={labels}
+            order={order}
           />
         </td>
         <td
@@ -65,7 +68,8 @@ export const CommitGraphCommitCells = memo(
   (previous, next) =>
     previous.commit === next.commit &&
     previous.labels === next.labels &&
-    previous.graph === next.graph,
+    previous.graph === next.graph &&
+    previous.order === next.order,
 );
 
 const dateFormatter = new Intl.DateTimeFormat(undefined, {

@@ -116,6 +116,43 @@ export async function createMergeRepository(parent = tmpdir()) {
   return { directory, git };
 }
 
+export async function createRevertRepository(parent = tmpdir()) {
+  const { directory, git } = await createDivergedRepository(parent);
+  const step = (
+    mark: number,
+    message: string,
+    from: number | string,
+    entries: Record<string, string>,
+    options: { readonly ref?: string; readonly merge?: number } = {},
+  ) =>
+    commit(
+      `refs/heads/${options.ref ?? "history"}`,
+      message,
+      typeof from === "number" ? `:${from}` : from,
+      files(entries),
+      {
+        mark: `:${mark}`,
+        ...(options.merge === undefined ? {} : { merge: `:${options.merge}` }),
+      },
+    );
+  await fastImport(
+    directory,
+    step(10, "base", "refs/heads/main", {
+      "a.txt": "a\n",
+      "file.txt": "one\n",
+    }) +
+      step(11, "add b", 10, { "b.txt": "b\n" }) +
+      step(12, "add c", 11, { "c.txt": "c\n" }, { ref: "side" }) +
+      step(13, "elsewhere", 11, { "d.txt": "d\n" }, { ref: "elsewhere" }) +
+      step(14, "change a", 11, { "a.txt": "a2\n" }) +
+      step(15, "Merge side", 14, { "c.txt": "c\n" }, { merge: 12 }) +
+      step(16, "change file", 15, { "file.txt": "two\n" }) +
+      step(17, "change file again", 16, { "file.txt": "three\n" }),
+  );
+  await git("switch", "--quiet", "history");
+  return { directory, git };
+}
+
 export function startConflict(
   git: (...args: string[]) => Promise<unknown>,
   kind: "merge" | "rebase" | "cherry-pick" | "revert",
@@ -277,13 +314,15 @@ function commit(
   message: string,
   from: string | null | undefined,
   changes: string,
+  { mark, merge }: { readonly mark?: string; readonly merge?: string } = {},
 ) {
   return [
     `commit ${ref}\n`,
-    from === null ? "mark :1\n" : "",
+    from === null ? "mark :1\n" : mark === undefined ? "" : `mark ${mark}\n`,
     "committer Rebase test <rebase@example.test> 1700000000 +0000\n",
     `data ${Buffer.byteLength(message)}\n${message}\n`,
     from === null || from === undefined ? "" : `from ${from}\n`,
+    merge === undefined ? "" : `merge ${merge}\n`,
     changes,
     "\n",
   ].join("");
