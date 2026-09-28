@@ -12,6 +12,7 @@ import {
   respond,
 } from "#tests-support/fake-requests.ts";
 import {
+  changedFile,
   conflictedRebase,
   repositoryChanges,
   repositoryOperation,
@@ -57,7 +58,11 @@ async function fixture() {
   const execute = vi.fn(
     (_command: { readonly revision: string }): RepositoryOperation => operation,
   );
-  const changes = () => repositoryChanges({ revision: operation.revision });
+  const changes = () =>
+    repositoryChanges({
+      revision: operation.revision,
+      unstaged: operation.unresolvedPaths.map((file) => changedFile(file, "U")),
+    });
   const requests = fakeRequests(
     respond(RepositoryOperationsApi.read, () => operation),
     respond(RepositoryOperationsApi.execute, (command) => execute(command)),
@@ -141,6 +146,28 @@ describe("operation header in the Diffs tab", () => {
       .toBeVisible();
   });
 
+  it("skips a cherry-picked commit with nothing to commit in one click and leaves the resolved conflict", async () => {
+    showPanel(true);
+    const f = await fixture();
+    await expect
+      .element(page.getByRole("region", { name: "Conflict", exact: true }))
+      .toBeVisible();
+    f.set(nothingToCommit());
+    f.change("Index");
+
+    await expect
+      .element(header().getByRole("heading"))
+      .toHaveTextContent("Cherry-pick · nothing to commit · 2/3");
+    await expect
+      .element(page.getByRole("region", { name: "Conflict", exact: true }))
+      .not.toBeInTheDocument();
+    await header().getByRole("button", { name: "Skip commit" }).click();
+
+    expect(f.execute).toHaveBeenCalledWith(
+      expect.objectContaining({ action: "skip", revision: "empty" }),
+    );
+  });
+
   it("continues once more with the fresh revision after a stale rejection", async () => {
     showPanel(true);
     const f = await fixture();
@@ -171,6 +198,21 @@ describe("operation header in the Diffs tab", () => {
     ]);
   });
 });
+
+function nothingToCommit(): RepositoryOperation {
+  return repositoryOperation({
+    kind: "cherry-pick",
+    phase: "empty",
+    revision: "empty",
+    branch: "release",
+    progress: { current: 2, total: 3 },
+    actions: [
+      { action: "continue", enabled: false, reason: "Nothing to commit." },
+      { action: "skip", enabled: true, reason: null },
+      { action: "abort", enabled: true, reason: null },
+    ],
+  });
+}
 
 function idle(): RepositoryOperation {
   return repositoryOperation({ revision: "finished" });

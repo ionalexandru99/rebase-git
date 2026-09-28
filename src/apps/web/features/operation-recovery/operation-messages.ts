@@ -38,6 +38,8 @@ export function operationHeading(state: OperationRecoveryState) {
   if (state.busy) return `${label} · Working…`;
   if (state.checking) return "Checking Git state…";
   if (operation?.phase === "edit") return `${label} · Edit commit${progress}`;
+  if (operation?.phase === "empty")
+    return `${label} · nothing to commit${progress}`;
   if (conflicts)
     return `${label} · ${conflicts} ${conflicts === 1 ? "conflict" : "conflicts"}${progress}`;
   return `${label}${ready?.enabled ? " ready to continue" : " paused"}${progress}`;

@@ -8,16 +8,18 @@ import { Button } from "#web/components/ui/button.tsx";
 
 export function OperationActionsMenu({
   operation,
+  primary,
   disabled,
   choose,
 }: {
   readonly operation: RepositoryOperation;
+  readonly primary: OperationAction;
   readonly disabled: boolean;
   readonly choose: (action: OperationAction) => void;
 }) {
   const chosen = useRef(false);
   const actions = operation.actions.filter(
-    (action) => action.action !== "continue",
+    (action) => action.action !== "continue" && action.action !== primary,
   );
   if (actions.length === 0) return null;
   return (

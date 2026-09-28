@@ -17,6 +17,7 @@ import { runAction } from "#web/components/ui/action-menu.tsx";
 import { Button } from "#web/components/ui/button.tsx";
 import { AuthorAvatars } from "#web/features/author-avatars/author-avatar.tsx";
 import type { GitHubRepository } from "#web/features/author-avatars/author-avatar-source.ts";
+import type { CherryPick } from "#web/features/cherry-pick/cherry-pick-menu.tsx";
 import {
   CommitActionMenu,
   useCommitActions,
@@ -83,11 +84,13 @@ export function CommitGraph({
   toolbarActions,
   merge,
   rebase,
+  cherryPick,
   onOpenDetails,
   onActiveCommitChange,
 }: {
   readonly merge?: MergeActions | undefined;
   readonly rebase?: RebaseActions | undefined;
+  readonly cherryPick?: CherryPick | undefined;
   readonly onOpenDetails?: ((oid: string) => void) | undefined;
   readonly onActiveCommitChange?:
     | ((oid: string | undefined) => void)
@@ -221,6 +224,10 @@ export function CommitGraph({
     setMenuOid(oid);
     merge?.inspect(oid);
     rebase?.inspect(oid);
+    cherryPick?.open(
+      navigation.selected.has(oid) ? [...navigation.selected] : [oid],
+      scopeQuery,
+    );
     navigation.select(
       oid,
       index,
@@ -299,6 +306,7 @@ export function CommitGraph({
                             : [menuOid],
                         )
                   }
+                  lead={cherryPick?.menu}
                   tabIndex={0}
                   restoreFocus={() => {
                     setPreviewing(false);

@@ -5,6 +5,7 @@ import {
   ResizablePanel,
 } from "#web/components/ui/resizable.tsx";
 import { BranchesSidebar } from "#web/features/branches-sidebar/branches-sidebar.tsx";
+import { useCherryPick } from "#web/features/cherry-pick/cherry-pick-menu.tsx";
 import { CommitGraph } from "#web/features/commit-graph/commit-graph.tsx";
 import { automaticHistoryScope } from "#web/features/commit-graph/scope/history-scope.ts";
 import { useHistoryScope } from "#web/features/commit-graph/scope/use-history-scope.ts";
@@ -109,6 +110,7 @@ function Workspace({
   });
   const merge = useMergeActions(history);
   const rebase = useRebaseActions(history);
+  const cherryPick = useCherryPick(history);
   const name = useCatalogRepository(scope.repositoryId)?.name ?? "Repository";
   const repositoryRefs = useScopedRepositoryRefs();
   const { refs } = repositoryRefs;
@@ -173,6 +175,7 @@ function Workspace({
                         <CommitGraph
                           merge={merge}
                           rebase={rebase}
+                          cherryPick={cherryPick}
                           ref={inspection.graphRef}
                           onOpenDetails={inspection.open}
                           onActiveCommitChange={inspection.select}

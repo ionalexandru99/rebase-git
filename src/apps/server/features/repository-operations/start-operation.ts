@@ -1,21 +1,24 @@
 import { Effect } from "effect";
-import { repositoryRejected } from "#contracts/git/git-failures.contract.ts";
 import type {
   MergeMode,
-  OperationFailure,
-  OperationStarted,
-  RepositoryOperation,
   StartMerge,
   StartOperation,
   StartRebase,
   StartRevert,
 } from "#contracts/repository-operations/repository-operations.contract.ts";
 import {
-  type GitCommandOutput,
   type GitCommandRunner,
   runRepositoryGit,
   runRepositoryGitOutput,
 } from "#server/adapters/local-git/git-commands.ts";
+import { startCherryPick } from "#server/features/repository-operations/cherry-pick.ts";
+import {
+  operationFailure,
+  readCommit,
+  requireGitSuccess,
+  started,
+  uncertain,
+} from "#server/features/repository-operations/operation-outcome.ts";
 import type { RepositoryCoordination } from "#server/repository/repository-coordination.ts";
 
 export function startOperation(
@@ -31,6 +34,8 @@ export function startOperation(
       return startRebase(git, coordination, command, operation);
     case "Revert":
       return revertCommits(git, coordination, command, operation);
+    case "CherryPick":
+      return startCherryPick(git, coordination, command, operation);
   }
 }
 
@@ -234,22 +239,6 @@ function revertCommits(
   });
 }
 
-function started(
-  outcome: OperationStarted["outcome"],
-  operation: RepositoryOperation,
-): OperationStarted {
-  return { outcome, operation };
-}
-
-function readCommit(git: GitCommandRunner, directory: string, rev: string) {
-  return runRepositoryGit(
-    git,
-    directory,
-    ["rev-parse", "--verify", "--quiet", "--end-of-options", `${rev}^{commit}`],
-    { exitCodes: [0, 1] },
-  ).pipe(Effect.map((output) => output.trim()));
-}
-
 function onBranch(git: GitCommandRunner, directory: string) {
   return runRepositoryGitOutput(
     git,
@@ -257,50 +246,4 @@ function onBranch(git: GitCommandRunner, directory: string) {
     ["symbolic-ref", "--quiet", "HEAD"],
     { exitCodes: [0, 1] },
   ).pipe(Effect.map((output) => output.exitCode === 0));
-}
-
-export function requireGitSuccess(output: GitCommandOutput) {
-  if (output.exitCode === 0) return Effect.void;
-  const detail =
-    output.stderr ||
-    output.stdout ||
-    "Git rejected the action. Check the worktree and configured hooks.";
-  if (/\.lock['\s:]|another git process/i.test(detail))
-    return Effect.fail(repositoryRejected("Busy", detail));
-  if (/would be overwritten by merge/i.test(detail))
-    return Effect.fail({
-      ...operationError("WouldOverwrite", detail),
-      paths: detail
-        .split("\n")
-        .filter((line) => line.startsWith("\t"))
-        .map((line) => line.trim())
-        .filter((path) => path.length > 0)
-        .slice(0, 100),
-    });
-  return Effect.fail(
-    operationError(
-      /hook|pre-commit|commit-msg|pre-rebase|not committing merge/i.test(detail)
-        ? "HookFailed"
-        : "GitRejected",
-      detail,
-    ),
-  );
-}
-
-export function uncertain() {
-  return operationError(
-    "Uncertain",
-    "Git's result could not be confirmed. Refresh the worktree before trying again.",
-  );
-}
-
-function operationFailure(reason: OperationFailure["reason"], detail: string) {
-  return Effect.fail(operationError(reason, detail));
-}
-
-export function operationError(
-  reason: OperationFailure["reason"],
-  detail: string,
-): OperationFailure {
-  return { _tag: "OperationFailed", reason, detail: detail.slice(0, 2048) };
 }

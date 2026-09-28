@@ -1,3 +1,4 @@
+import type { CommitInspection } from "#contracts/commit-inspection/commit-inspection.contract.ts";
 import type { RepositoryCatalogEntry } from "#contracts/repository-catalog/repository-catalog.contract.ts";
 import type {
   ChangedFile,
@@ -83,6 +84,27 @@ export function changedFile(
   previousPath: string | null = null,
 ): ChangedFile {
   return { path, previousPath, status };
+}
+
+export function commitInspection(
+  inspection: Partial<CommitInspection> = {},
+): CommitInspection {
+  const identity = {
+    name: "Alex",
+    email: "alex@example.test",
+    date: "2026-09-15T10:00:00Z",
+  };
+  return {
+    oid: commitId,
+    message: "Commit",
+    author: identity,
+    committer: identity,
+    parents: [],
+    parentOid: null,
+    files: [],
+    truncated: false,
+    ...inspection,
+  };
 }
 
 export function changeDiff(

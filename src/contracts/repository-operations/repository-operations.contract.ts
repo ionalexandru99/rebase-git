@@ -30,7 +30,14 @@ export const OperationKind = Schema.Literals([
 export type OperationKind = typeof OperationKind.Type;
 export const RepositoryOperation = Schema.Struct({
   kind: OperationKind,
-  phase: Schema.Literals(["idle", "conflicts", "edit", "ready", "blocked"]),
+  phase: Schema.Literals([
+    "idle",
+    "conflicts",
+    "edit",
+    "ready",
+    "empty",
+    "blocked",
+  ]),
   revision: Schema.String,
   branch: Schema.NullOr(Schema.String),
   commit: Schema.NullOr(Schema.String),
@@ -80,10 +87,28 @@ export const StartRevert = Schema.TaggedStruct("Revert", {
   commit: Schema.Boolean,
 });
 export type StartRevert = typeof StartRevert.Type;
+export const CherryPickResult = Schema.Literals(["commit", "stage"]);
+export type CherryPickResult = typeof CherryPickResult.Type;
+export const StartCherryPick = Schema.TaggedStruct("CherryPick", {
+  commits: Schema.Array(ObjectId).check(
+    Schema.isMinLength(1),
+    Schema.isMaxLength(1_000),
+  ),
+  mainline: Schema.NullOr(
+    Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 64 })),
+  ),
+  result: CherryPickResult,
+});
+export type StartCherryPick = typeof StartCherryPick.Type;
 export const StartOperation = Schema.Struct({
   ...OperationScope.fields,
   expectedHead: ObjectId,
-  operation: Schema.Union([StartMerge, StartRebase, StartRevert]),
+  operation: Schema.Union([
+    StartMerge,
+    StartRebase,
+    StartRevert,
+    StartCherryPick,
+  ]),
 });
 export type StartOperation = typeof StartOperation.Type;
 export const OperationStarted = Schema.Struct({

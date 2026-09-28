@@ -34,6 +34,7 @@ type ExecuteRoute = typeof RepositoryOperationsApi.execute;
 const headerPhases: ReadonlySet<RepositoryOperation["phase"]> = new Set([
   "conflicts",
   "ready",
+  "empty",
   "edit",
 ]);
 

@@ -44,9 +44,9 @@ export function OperationControls({
   const label = operationLabel(state);
   const unavailable =
     !state.connected || state.checking || state.busy || !writable;
-  const ready = operation?.actions.find(
-    (action) => action.action === "continue",
-  );
+  const primary: OperationAction =
+    operation?.phase === "empty" ? "skip" : "continue";
+  const ready = operation?.actions.find((action) => action.action === primary);
   const pending =
     confirmation !== null && confirmation.revision === operation?.revision
       ? confirmation
@@ -95,14 +95,17 @@ export function OperationControls({
               <Button
                 size="xs"
                 disabled={unavailable || !ready.enabled}
-                onClick={() => execute("continue", operation.revision)}
+                onClick={() => execute(primary, operation.revision)}
               >
-                Continue {label.toLowerCase()}
+                {primary === "skip"
+                  ? "Skip commit"
+                  : `Continue ${label.toLowerCase()}`}
               </Button>
             ) : null}
             {active ? (
               <OperationActionsMenu
                 operation={operation}
+                primary={primary}
                 disabled={unavailable}
                 choose={(action) =>
                   setConfirmation({ action, revision: operation.revision })
