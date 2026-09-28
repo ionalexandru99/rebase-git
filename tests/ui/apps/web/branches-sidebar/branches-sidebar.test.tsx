@@ -367,7 +367,6 @@ describe("branches sidebar", () => {
   it("announces checkout progress and failures and ignores another checkout while one runs", async () => {
     const refusal = rejected({
       _tag: "CheckoutRejected",
-      detail: "",
       reason: "LocalChanges",
     });
     let answer = (): Promise<RepositoryCheckedOut> => Promise.reject(refusal);

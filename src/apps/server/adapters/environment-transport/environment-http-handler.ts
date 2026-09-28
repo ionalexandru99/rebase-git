@@ -57,6 +57,11 @@ export function createEnvironmentHttpHandler(
         Effect.catch((error) =>
           Effect.sync(() => writeEnvironmentHttpError(response, error)),
         ),
+        Effect.catchCause(() =>
+          Effect.sync(() => {
+            if (!response.headersSent) response.writeHead(500).end();
+          }),
+        ),
         Effect.ensuring(Effect.sync(() => response.off("close", abort))),
       ),
       abortController.signal,

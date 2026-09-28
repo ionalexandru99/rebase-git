@@ -147,6 +147,23 @@ describe("Environment authorization transport", () => {
     ).resolves.toHaveProperty("type", "bearer");
   });
 
+  it("answers 500 when the pairing exchange fails unexpectedly", async () => {
+    const { origin } = await openTestServer({
+      authorization: (authorization) => ({
+        ...authorization,
+        exchangePairing: (exchange) =>
+          exchange.label === "Broken"
+            ? Effect.die(new Error("Broken"))
+            : authorization.exchangePairing(exchange),
+      }),
+    });
+    const response = await postJson(origin, environmentPairingExchangePath, {
+      label: "Broken",
+      pairingMaterial: "123-456",
+    });
+    expect(response.status).toBe(500);
+  });
+
   it("rejects requests addressed to another host", async () => {
     const { origin } = await openTestServer();
     const response = await new Promise<number>(

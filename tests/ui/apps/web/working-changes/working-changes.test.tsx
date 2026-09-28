@@ -549,6 +549,26 @@ describe("working changes", () => {
     expect(f.mutations[0]?.viewed).toEqual({ section: "unstaged", path });
     expect(f.diffReads()).toBe(diffReads);
   });
+  it("drops the diffs written for earlier revisions of the viewed file", async () => {
+    const f = await fixture();
+    for (const write of [1, 2, 3, 4]) {
+      await page
+        .getByRole("button", { name: `Discard unstaged ${path}`, exact: true })
+        .click();
+      await page
+        .getByRole("button", { name: "Discard changes", exact: true })
+        .click();
+      await expect.poll(() => f.mutations.length).toBe(write);
+      await expect
+        .element(page.getByRole("button", { name: "Stage entire file" }))
+        .toBeEnabled();
+    }
+    const cachedDiffs = f.queryClient.getQueryCache().findAll({
+      predicate: ({ queryKey }) =>
+        queryKey[3] === RepositoryChangesApi.diff._tag,
+    });
+    expect(cachedDiffs.length).toBeLessThanOrEqual(2);
+  });
   it("reads the viewed diff again when Refresh follows a failed read", async () => {
     const f = await fixture([], { rejectDiffs: true });
     await expect

@@ -2,6 +2,7 @@ import {
   hashKey,
   type Query,
   type QueryClient,
+  type QueryKey,
   useMutation,
   useMutationState,
   useQueryClient,
@@ -262,9 +263,10 @@ async function writeAnswers(
 ) {
   const answered = new Set<string>();
   for (const { route, input, value, version } of answers) {
+    const repositoryId = inputRepositoryId(input);
     const queryKey = environmentQueryKey(
       environmentId,
-      inputRepositoryId(input),
+      repositoryId,
       route,
       input,
       version,
@@ -276,9 +278,28 @@ async function writeAnswers(
       continue;
     await queryClient.cancelQueries({ queryKey, exact: true });
     queryClient.setQueryData(queryKey, value);
-    answered.add(hashKey(queryKey));
+    const hash = hashKey(queryKey);
+    if (version !== undefined)
+      dropOtherVersions(
+        queryClient,
+        environmentQueryKey(environmentId, repositoryId, route, input),
+        hash,
+      );
+    answered.add(hash);
   }
   return answered;
+}
+
+function dropOtherVersions(
+  queryClient: QueryClient,
+  queryKey: QueryKey,
+  kept: string,
+) {
+  queryClient.removeQueries({
+    queryKey,
+    predicate: (query) =>
+      query.queryHash !== kept && query.getObserversCount() === 0,
+  });
 }
 
 function readsFrom(query: Query, repositoryId: string | null) {
