@@ -1,0 +1,256 @@
+import { Toast } from "@base-ui/react/toast";
+import { useState } from "react";
+import {
+  type MergeMode,
+  RepositoryOperationsApi,
+} from "#contracts/repository-operations/repository-operations.contract.ts";
+import type {
+  RepositoryRefs,
+  RepositoryRefTarget,
+} from "#contracts/repository-refs/repository-refs.contract.ts";
+import type { Action } from "#web/components/ui/action-menu.tsx";
+import { useOperation } from "#web/features/operation-recovery/hooks/use-operation.ts";
+import { operationKindLabel } from "#web/features/operation-recovery/operation-messages.ts";
+import {
+  activeHead,
+  useScopedRepositoryRefs,
+} from "#web/features/refs/repository-refs.ts";
+import type { HistoryRelation } from "#web/features/repository-history/history-graph.ts";
+import type { RepositoryHistory } from "#web/features/repository-history/repository-history.ts";
+import { useWorkspacePanel } from "#web/features/workspace-panel/workspace-panel-provider.tsx";
+import { useRepositoryScope } from "#web/platform/query/repository-scope.tsx";
+import { describeFailure } from "#web/platform/query/request-failure.ts";
+import {
+  answer,
+  type CommandFailure,
+  useCommand,
+} from "#web/platform/query/use-command.ts";
+
+export type MergeTarget = RepositoryRefTarget | string;
+
+export interface MergeActions {
+  readonly actionFor: (target: MergeTarget) => Action<"merge"> | undefined;
+  readonly inspect: (target: MergeTarget) => void;
+}
+
+interface MergeSource {
+  readonly label: string;
+  readonly ref: string | null;
+  readonly commit: string;
+}
+
+const modes: readonly { readonly mode: MergeMode; readonly label: string }[] = [
+  { mode: "merge", label: "Merge" },
+  { mode: "ff-only", label: "Fast-forward only" },
+  { mode: "no-ff", label: "Always create a merge commit" },
+  { mode: "squash", label: "Squash into staged changes" },
+];
+
+export function useMergeActions(
+  history: Pick<RepositoryHistory, "ask"> | undefined,
+): MergeActions {
+  const scope = useRepositoryScope();
+  const { refs } = useScopedRepositoryRefs();
+  const operation = useOperation(scope, false).data;
+  const panel = useWorkspacePanel();
+  const notifications = Toast.useToastManager();
+  const command = useCommand(RepositoryOperationsApi.start, {
+    answers: (value, { repositoryId, worktreePath }) => [
+      answer(
+        RepositoryOperationsApi.read,
+        { repositoryId, worktreePath },
+        value.operation,
+      ),
+    ],
+  });
+  const [relation, setRelation] = useState<{
+    readonly key: string;
+    readonly value: HistoryRelation | undefined;
+  }>();
+  const head =
+    refs === undefined || scope === undefined
+      ? undefined
+      : activeHead(refs, scope.worktreePath);
+  const sourceOf = (target: MergeTarget) =>
+    refs === undefined ? undefined : mergeSource(refs, target);
+  const relationKey = (source: MergeSource) =>
+    head === undefined ? undefined : `${source.commit}:${head.commit}`;
+
+  const inspect = (target: MergeTarget) => {
+    const source = sourceOf(target);
+    const key = source === undefined ? undefined : relationKey(source);
+    if (
+      history === undefined ||
+      source === undefined ||
+      head === undefined ||
+      key === undefined ||
+      relation?.key === key
+    )
+      return;
+    void history
+      .ask({ _tag: "Relation", from: source.commit, to: head.commit })
+      .then(
+        (value) => setRelation({ key, value }),
+        () => setRelation({ key, value: undefined }),
+      );
+  };
+
+  const start = async (source: MergeSource, mode: MergeMode) => {
+    if (head?.branch === undefined) return;
+    const branch = head.branch;
+    const result = await command.run({
+      expectedHead: head.commit,
+      operation: {
+        _tag: "Merge",
+        source: { ref: source.ref, commit: source.commit },
+        mode,
+      },
+    });
+    if (result._tag === "Ok") {
+      if (result.value.outcome === "Staged")
+        panel.execute({ type: "open", kind: "changes" });
+      return;
+    }
+    if (result._tag !== "Cancelled")
+      notifications.add({
+        title: describeMergeFailure(source.label, branch, result),
+      });
+  };
+
+  const actionFor = (target: MergeTarget): Action<"merge"> | undefined => {
+    const source = sourceOf(target);
+    if (
+      source === undefined ||
+      head === undefined ||
+      scope?.writable !== true ||
+      source.commit === head.commit
+    )
+      return undefined;
+    const known =
+      relation !== undefined && relation.key === relationKey(source)
+        ? relation.value
+        : undefined;
+    const reason =
+      head.branch === undefined
+        ? "Detached HEAD"
+        : operation !== undefined && operation.kind !== "idle"
+          ? `${operationKindLabel(operation.kind)} in progress`
+          : command.running
+            ? "Merging…"
+            : known?.ahead === 0
+              ? "Up to date"
+              : undefined;
+    const branch = head.branch ?? "HEAD";
+    return {
+      id: "merge",
+      label: `Merge into ${branch}`,
+      enabled: reason === undefined,
+      ...(reason === undefined ? {} : { reason }),
+      run: () => undefined,
+      submenu: {
+        title: `${source.label} → ${branch}`,
+        actions: modes.map(({ mode, label }) => {
+          const blocked =
+            mode === "ff-only" && known !== undefined && known.behind > 0;
+          const detail = modeDetail(mode, known);
+          return {
+            id: `merge.${mode}`,
+            label,
+            enabled: !blocked,
+            ...(blocked ? { reason: "Diverged" } : {}),
+            ...(detail === undefined ? {} : { detail }),
+            run: () => void start(source, mode),
+          };
+        }),
+      },
+    };
+  };
+
+  return { actionFor, inspect };
+}
+
+function modeDetail(mode: MergeMode, known: HistoryRelation | undefined) {
+  switch (mode) {
+    case "merge":
+      if (known === undefined) return undefined;
+      return known.behind === 0 ? "fast-forward" : "merge commit";
+    case "ff-only":
+      return "--ff-only";
+    case "no-ff":
+      return "--no-ff";
+    case "squash":
+      if (known === undefined) return undefined;
+      return `${known.ahead} ${known.ahead === 1 ? "commit" : "commits"}`;
+  }
+}
+
+function mergeSource(
+  refs: RepositoryRefs,
+  target: MergeTarget,
+): MergeSource | undefined {
+  if (typeof target === "string") {
+    const branch = refs.branches.find((local) => local.target === target);
+    if (branch !== undefined)
+      return { label: branch.name, ref: branch.name, commit: target };
+    const remote = refs.remoteBranches.find((ref) => ref.target === target);
+    if (remote !== undefined)
+      return remoteSource(remote.remote, remote.name, target);
+    return { label: target.slice(0, 8), ref: null, commit: target };
+  }
+  switch (target._tag) {
+    case "LocalBranch": {
+      const commit = refs.branches.find(
+        ({ name }) => name === target.name,
+      )?.target;
+      return commit === undefined
+        ? undefined
+        : { label: target.name, ref: target.name, commit };
+    }
+    case "RemoteBranch": {
+      const commit = refs.remoteBranches.find(
+        ({ name, remote }) => name === target.name && remote === target.remote,
+      )?.target;
+      return commit === undefined
+        ? undefined
+        : remoteSource(target.remote, target.name, commit);
+    }
+    case "Tag": {
+      const commit = refs.tags.find(({ name }) => name === target.name)?.target;
+      return commit === undefined
+        ? undefined
+        : { label: target.name, ref: target.name, commit };
+    }
+  }
+}
+
+function remoteSource(remote: string, name: string, commit: string) {
+  const ref = `${remote}/${name}`;
+  return { label: ref, ref, commit };
+}
+
+function describeMergeFailure(
+  source: string,
+  branch: string,
+  failure: CommandFailure<typeof RepositoryOperationsApi.start>,
+) {
+  return describeFailure(failure, {
+    OperationFailed: ({ reason, detail, paths = [] }) => {
+      switch (reason) {
+        case "WouldOverwrite":
+          return paths.length === 1
+            ? `Local changes to ${paths[0]} block the merge.`
+            : "Local changes block the merge.";
+        case "NotFastForward":
+          return `${branch} can't fast-forward to ${source}.`;
+        case "Unrelated":
+          return `${source} has no history in common with ${branch}.`;
+        case "Stale":
+          return `${source} or ${branch} moved. Try again.`;
+        case "Uncertain":
+          return "The merge may not have finished. Check the graph.";
+        default:
+          return detail;
+      }
+    },
+  });
+}

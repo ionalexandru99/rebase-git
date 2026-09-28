@@ -4,6 +4,7 @@ import type { OperationRecoveryState } from "#web/features/operation-recovery/ho
 const labels: Record<OperationKind, string> = {
   idle: "Git operation",
   merge: "Merge",
+  squash: "Squash",
   rebase: "Rebase",
   "cherry-pick": "Cherry-pick",
   revert: "Revert",
@@ -12,7 +13,13 @@ const labels: Record<OperationKind, string> = {
 };
 
 export function operationLabel(state: OperationRecoveryState) {
-  return labels[state.completed?.kind ?? state.operation?.kind ?? "unknown"];
+  return operationKindLabel(
+    state.completed?.kind ?? state.operation?.kind ?? "unknown",
+  );
+}
+
+export function operationKindLabel(kind: OperationKind) {
+  return labels[kind];
 }
 
 export function operationHeading(state: OperationRecoveryState) {

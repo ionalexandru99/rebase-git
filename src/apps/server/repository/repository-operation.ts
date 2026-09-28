@@ -25,6 +25,7 @@ const metadataNames = [
   "CHERRY_PICK_HEAD",
   "REVERT_HEAD",
   "MERGE_MSG",
+  "SQUASH_MSG",
   "AUTO_MERGE",
   "rebase-merge/head-name",
   "rebase-merge/onto",
@@ -66,9 +67,9 @@ export function readRepositoryOperation(
       directories.gitDirectory,
     );
     const lock = yield* readGitLock(directories);
-    const kind = identifyOperation(metadata, stamps);
+    const candidate = identifyOperation(metadata, stamps);
     const worktree =
-      kind === "idle"
+      candidate === "idle"
         ? idleWorktree
         : yield* inspectWorktree(git, worktreePath, directories.gitDirectory);
     const unresolvedPaths = [
@@ -79,6 +80,10 @@ export function readRepositoryOperation(
           .map((line) => line.slice(line.indexOf("\t") + 1)),
       ),
     ].sort();
+    const kind =
+      candidate === "squash" && unresolvedPaths.length === 0
+        ? "idle"
+        : candidate;
     const edit =
       kind === "rebase" &&
       metadata["rebase-merge/amend"] !== null &&
@@ -107,10 +112,12 @@ export function readRepositoryOperation(
       commit:
         (kind === "merge"
           ? metadata.MERGE_HEAD?.split("\n")[0]
-          : (metadata["rebase-merge/stopped-sha"] ??
-            metadata["rebase-apply/original-commit"] ??
-            metadata.CHERRY_PICK_HEAD ??
-            metadata.REVERT_HEAD)
+          : kind === "squash"
+            ? /^commit ([0-9a-f]+)$/m.exec(metadata.SQUASH_MSG ?? "")?.[1]
+            : (metadata["rebase-merge/stopped-sha"] ??
+              metadata["rebase-apply/original-commit"] ??
+              metadata.CHERRY_PICK_HEAD ??
+              metadata.REVERT_HEAD)
         )?.trim() ?? null,
       mergedBranch:
         kind === "merge" ? mergedBranchName(metadata.MERGE_MSG) : null,
@@ -224,7 +231,8 @@ function identifyOperation(
   const todo = metadata["sequencer/todo"]?.trimStart();
   if (todo?.startsWith("pick ")) return "cherry-pick";
   if (todo?.startsWith("revert ")) return "revert";
-  return stamps[2] === null ? "idle" : "unknown";
+  if (stamps[2] !== null) return "unknown";
+  return metadata.SQUASH_MSG === null ? "idle" : "squash";
 }
 
 function blockedReason(
@@ -261,6 +269,7 @@ function availableActions(
     enabled: lock === null,
     reason: lock === null ? null : reason,
   };
+  if (kind === "squash") return [{ action: "abort", ...unlocked }];
   const skippable =
     kind !== "merge" &&
     !edit &&

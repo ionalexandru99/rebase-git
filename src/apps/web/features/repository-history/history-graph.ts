@@ -5,6 +5,11 @@ import type {
 
 export type HistoryOrder = "topological" | "chronological";
 
+export interface HistoryRelation {
+  readonly ahead: number;
+  readonly behind: number;
+}
+
 export interface HistoryParentEdge {
   readonly childOid: string;
   readonly parentOid: string;
@@ -214,6 +219,42 @@ export class HistoryGraph {
     }
     if (index !== count) throw new Error("History topology is inconsistent");
     return result;
+  }
+
+  relation(from: string, to: string): HistoryRelation | undefined {
+    const source = this.ids.get(from);
+    const target = this.ids.get(to);
+    if (source === undefined || target === undefined) return undefined;
+    const positions = this.positionsOf();
+    const marks = new Uint8Array(this.oids.length);
+    const queue = new HistoryQueue(
+      (left, right) => (positions[left] ?? 0) - (positions[right] ?? 0),
+    );
+    const relation = { ahead: 0, behind: 0 };
+    let open = 0;
+    const paint = (id: number, mark: number) => {
+      const current = marks[id] ?? 0;
+      if ((current | mark) === current) return;
+      if (current === 0) queue.push(id);
+      if (current === 0 && mark !== 3) open += 1;
+      if (current !== 0 && current !== 3 && (current | mark) === 3) open -= 1;
+      marks[id] = current | mark;
+    };
+    paint(source, 1);
+    paint(target, 2);
+    for (let id = queue.pop(); id !== undefined && open > 0; id = queue.pop()) {
+      const mark = marks[id] ?? 0;
+      if (mark !== 3) {
+        open -= 1;
+        if (mark === 1) relation.ahead += 1;
+        else relation.behind += 1;
+      }
+      for (const parent of this.parentIds(id)) {
+        if (parent < 0) return undefined;
+        paint(parent, mark);
+      }
+    }
+    return relation;
   }
 
   ancestryRoute(roots: readonly number[], target: number) {

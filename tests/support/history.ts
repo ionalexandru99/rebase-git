@@ -195,6 +195,8 @@ export function fakeRepositoryHistory({
           const commit = byOid.get(oid);
           return commit === undefined ? [] : [commit];
         });
+      case "Relation":
+        return graph.relation(query.from, query.to);
       case "Storage":
         return {
           caches: [],

@@ -10,6 +10,7 @@ import {
   ContextMenuTrigger,
 } from "#web/components/ui/context-menu.tsx";
 import { writeClipboardText } from "#web/features/clipboard/write-clipboard-text.ts";
+import type { MergeActions } from "#web/features/merge/merge-actions.ts";
 import { createRefActions } from "#web/features/refs/ref-actions.ts";
 import type { RepositoryHistory } from "#web/features/repository-history/repository-history.ts";
 import { useRepositoryScope } from "#web/platform/query/repository-scope.tsx";
@@ -21,6 +22,7 @@ interface CommitAccess {
 
 interface CommitActionHandlers {
   readonly openDetails?: ((oid: string) => void) | undefined;
+  readonly merge: Action | undefined;
   readonly readCommit: (oid: string) => Promise<RepositoryCommit | undefined>;
   readonly writeClipboard: (text: string) => Promise<void>;
   readonly attempt: (work: () => Promise<string | undefined>) => void;
@@ -28,9 +30,11 @@ interface CommitActionHandlers {
 
 export function useCommitActions({
   history,
+  merge,
   onOpenDetails,
 }: {
   readonly history: Pick<RepositoryHistory, "ask"> | undefined;
+  readonly merge?: MergeActions | undefined;
   readonly onOpenDetails?: ((oid: string) => void) | undefined;
 }) {
   const scope = useRepositoryScope();
@@ -49,6 +53,7 @@ export function useCommitActions({
   const actionsFor = (oid: string): readonly Action[] => [
     ...commitActions(oid, access, {
       openDetails: onOpenDetails,
+      merge: merge?.actionFor(oid),
       readCommit: async (commit) =>
         (await history?.ask({ _tag: "Commits", oids: [commit] }))?.[0],
       writeClipboard: writeClipboardText,
@@ -62,7 +67,13 @@ export function useCommitActions({
 function commitActions(
   oid: string,
   { connected, readable }: CommitAccess,
-  { openDetails, readCommit, writeClipboard, attempt }: CommitActionHandlers,
+  {
+    openDetails,
+    merge,
+    readCommit,
+    writeClipboard,
+    attempt,
+  }: CommitActionHandlers,
 ): readonly Action[] {
   return [
     ...(openDetails === undefined
@@ -79,6 +90,7 @@ function commitActions(
               }),
           },
         ]),
+    ...(merge === undefined ? [] : [merge]),
     {
       id: "copySha",
       label: "Copy commit SHA",

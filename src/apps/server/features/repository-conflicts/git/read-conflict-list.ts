@@ -85,7 +85,7 @@ function baseCommit(
   incoming: string | null,
 ) {
   if (incoming === null) return Effect.succeed(null);
-  if (kind === "merge")
+  if (kind === "merge" || kind === "squash")
     return firstLine(
       runRepositoryGit(git, directory, ["merge-base", "HEAD", incoming], {
         exitCodes: [0, 1],

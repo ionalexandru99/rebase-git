@@ -4,6 +4,8 @@ import {
   repositoryQuery,
 } from "#contracts/environment-connection/environment-route.contract.ts";
 import {
+  ObjectId,
+  RefName,
   RepositoryId,
   RepositoryPath,
 } from "#contracts/git/git-values.contract.ts";
@@ -18,6 +20,7 @@ export type OperationAction = typeof OperationAction.Type;
 export const OperationKind = Schema.Literals([
   "idle",
   "merge",
+  "squash",
   "rebase",
   "cherry-pick",
   "revert",
@@ -52,6 +55,34 @@ export const ExecuteOperation = Schema.Struct({
   action: OperationAction,
 });
 export type ExecuteOperation = typeof ExecuteOperation.Type;
+export const MergeMode = Schema.Literals([
+  "merge",
+  "ff-only",
+  "no-ff",
+  "squash",
+]);
+export type MergeMode = typeof MergeMode.Type;
+export const StartMerge = Schema.TaggedStruct("Merge", {
+  source: Schema.Struct({ ref: Schema.NullOr(RefName), commit: ObjectId }),
+  mode: MergeMode,
+});
+export const StartOperation = Schema.Struct({
+  ...OperationScope.fields,
+  expectedHead: ObjectId,
+  operation: Schema.Union([StartMerge]),
+});
+export type StartOperation = typeof StartOperation.Type;
+export const OperationStarted = Schema.Struct({
+  outcome: Schema.Literals([
+    "UpToDate",
+    "FastForwarded",
+    "Committed",
+    "Staged",
+    "Stopped",
+  ]),
+  operation: RepositoryOperation,
+});
+export type OperationStarted = typeof OperationStarted.Type;
 export const OperationFailure = Schema.TaggedStruct("OperationFailed", {
   reason: Schema.Literals([
     "Stale",
@@ -59,8 +90,14 @@ export const OperationFailure = Schema.TaggedStruct("OperationFailed", {
     "HookFailed",
     "GitRejected",
     "Uncertain",
+    "NotFastForward",
+    "Unrelated",
+    "WouldOverwrite",
   ]),
   detail: Schema.String.check(Schema.isMaxLength(2048)),
+  paths: Schema.optionalKey(
+    Schema.Array(RepositoryPath).check(Schema.isMaxLength(100)),
+  ),
 });
 export type OperationFailure = typeof OperationFailure.Type;
 export const RepositoryOperationsApi = {
@@ -71,6 +108,11 @@ export const RepositoryOperationsApi = {
   execute: repositoryCommand("repositories/operations/execute", {
     request: ExecuteOperation,
     success: RepositoryOperation,
+    failure: OperationFailure,
+  }),
+  start: repositoryCommand("repositories/operations/start", {
+    request: StartOperation,
+    success: OperationStarted,
     failure: OperationFailure,
   }),
 };

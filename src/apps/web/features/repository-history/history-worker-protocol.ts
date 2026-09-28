@@ -4,6 +4,7 @@ import type {
   RepositoryHistoryRefTarget,
 } from "#contracts/repository-history/repository-history.contract.ts";
 import type { CommitLaneRow } from "#web/features/repository-history/commit-lanes.ts";
+import type { HistoryRelation } from "#web/features/repository-history/history-graph.ts";
 import type {
   HistoryScopeQuery,
   HistoryTarget,
@@ -106,6 +107,7 @@ export type HistoryQuery =
       readonly cursor?: string;
     }
   | { readonly _tag: "Commits"; readonly oids: readonly string[] }
+  | { readonly _tag: "Relation"; readonly from: string; readonly to: string }
   | { readonly _tag: "Storage"; readonly action: HistoryStorageAction };
 
 export interface HistoryAnswers {
@@ -115,6 +117,7 @@ export interface HistoryAnswers {
   readonly Find: HistoryTarget | undefined;
   readonly Search: HistorySearchPage;
   readonly Commits: readonly RepositoryCommit[];
+  readonly Relation: HistoryRelation | undefined;
   readonly Storage: HistoryStorage;
 }
 

@@ -352,6 +352,7 @@ async function renderRepositoryWorkspace() {
         <RepositoryWorkspace />
       </RepositoryScopeProvider>
     </div>,
+    { wrapper: NotificationsProvider },
   );
 }
 
