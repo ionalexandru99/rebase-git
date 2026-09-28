@@ -13,6 +13,7 @@ import { useMergeActions } from "#web/features/merge/merge-actions.ts";
 import { MergeView } from "#web/features/merge-view/merge-view.tsx";
 import { OperationRecoveryNotice } from "#web/features/operation-recovery/components/operation-recovery-toast.tsx";
 import { useRebaseActions } from "#web/features/rebase/rebase-actions.ts";
+import type { RebasePlanTarget } from "#web/features/rebase/rebase-plan.ts";
 import { requestRefIntent } from "#web/features/refs/ref-actions.ts";
 import { useScopedRepositoryRefs } from "#web/features/refs/repository-refs.ts";
 import { RemoteSync } from "#web/features/remote-sync/remote-sync.tsx";
@@ -20,6 +21,7 @@ import { useCatalogRepository } from "#web/features/repository-catalog/use-repos
 import { useRepositoryHistory } from "#web/features/repository-history/repository-history.ts";
 import { WorkspacePanel } from "#web/features/workspace-panel/workspace-panel.tsx";
 import {
+  rebasePanel,
   reflogPanel,
   workingChangesPanel,
 } from "#web/features/workspace-panel/workspace-panel-definitions.ts";
@@ -109,13 +111,20 @@ function Workspace({
     logicalRepositoryId: scope.logicalRepositoryId,
   });
   const merge = useMergeActions(history);
-  const rebase = useRebaseActions(history);
+  const panel = useWorkspacePanel();
+  const openRebasePlan = useCallback(
+    (input: RebasePlanTarget) => {
+      panel.execute({ type: "input", kind: "rebase", input });
+      panel.execute({ type: "open", kind: "rebase" });
+    },
+    [panel.execute],
+  );
+  const rebase = useRebaseActions(history, openRebasePlan);
   const cherryPick = useCherryPick(history);
   const name = useCatalogRepository(scope.repositoryId)?.name ?? "Repository";
   const repositoryRefs = useScopedRepositoryRefs();
   const { refs } = repositoryRefs;
   const historyScope = useHistoryScope(environmentId, scope, repositoryRefs);
-  const panel = useWorkspacePanel();
   const showReflog = useCallback(
     (name: string) => {
       panel.execute({
@@ -125,6 +134,10 @@ function Workspace({
       });
       panel.execute({ type: "open", kind: "reflog" });
     },
+    [panel.execute],
+  );
+  const closeRebasePlan = useCallback(
+    () => panel.execute({ type: "close", kind: "rebase" }),
     [panel.execute],
   );
   const resolved = historyScope.resolvedScope;
@@ -219,6 +232,14 @@ function Workspace({
                               oid,
                             );
                           }}
+                        />
+                      </Suspense>
+                    ),
+                    rebase: (
+                      <Suspense fallback={null}>
+                        <rebasePanel.Content
+                          history={history}
+                          onClose={closeRebasePlan}
                         />
                       </Suspense>
                     ),

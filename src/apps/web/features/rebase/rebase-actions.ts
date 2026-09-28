@@ -7,6 +7,7 @@ import type { RepositoryRefs } from "#contracts/repository-refs/repository-refs.
 import type { Action } from "#web/components/ui/action-menu.tsx";
 import { useOperation } from "#web/features/operation-recovery/hooks/use-operation.ts";
 import { operationKindLabel } from "#web/features/operation-recovery/operation-messages.ts";
+import type { RebasePlanTarget } from "#web/features/rebase/rebase-plan.ts";
 import {
   activeHead,
   type RefSource,
@@ -23,12 +24,16 @@ import { answer, useCommand } from "#web/platform/query/use-command.ts";
 
 export interface RebaseActions {
   readonly actionFor: (target: RefSourceTarget) => Action<"rebase"> | undefined;
+  readonly interactiveFor: (
+    target: RefSourceTarget,
+  ) => Action<"interactiveRebase"> | undefined;
   readonly inspect: (target: RefSourceTarget) => void;
   readonly moving: (target: RefSourceTarget) => readonly string[];
 }
 
 export function useRebaseActions(
   history: Pick<RepositoryHistory, "ask"> | undefined,
+  openPlan?: (target: RebasePlanTarget) => void,
 ): RebaseActions {
   const scope = useRepositoryScope();
   const { refs } = useScopedRepositoryRefs();
@@ -48,25 +53,7 @@ export function useRebaseActions(
     readonly key: string;
     readonly value: HistoryRange | undefined;
   }>();
-  const changes = useEnvironmentQuery(
-    RepositoryChangesApi.read,
-    scope === undefined || !inspected
-      ? skipToken
-      : {
-          repositoryId: scope.repositoryId,
-          worktreePath: scope.worktreePath,
-          amend: false,
-        },
-    { changes: "index", keepPrevious: true },
-  );
-  const changed =
-    changes.data === undefined
-      ? undefined
-      : new Set(
-          [...changes.data.staged, ...changes.data.unstaged]
-            .filter(({ status }) => status !== "?")
-            .map(({ path }) => path),
-        ).size;
+  const changed = useChangedFileCount(inspected);
   const head =
     refs === undefined || scope === undefined
       ? undefined
@@ -156,12 +143,60 @@ export function useRebaseActions(
     };
   };
 
-  const moving = (target: RefSourceTarget) => {
+  const interactiveFor = (
+    target: RefSourceTarget,
+  ): Action<"interactiveRebase"> | undefined => {
     const source = sourceOf(target);
-    return source === undefined ? [] : (known(source)?.moving ?? []);
+    if (
+      openPlan === undefined ||
+      source === undefined ||
+      head === undefined ||
+      scope?.writable !== true
+    )
+      return undefined;
+    const planned = known(source);
+    const from =
+      typeof target === "string" &&
+      (source.ref === null || source.ref === head.branch) &&
+      planned?.based === true;
+    const count =
+      planned === undefined ? undefined : planned.count + (from ? 1 : 0);
+    if (count === 0) return undefined;
+    const reason =
+      head.branch === undefined
+        ? "Detached HEAD"
+        : operation !== undefined && operation.kind !== "idle"
+          ? `${operationKindLabel(operation.kind)} in progress`
+          : undefined;
+    const plan: RebasePlanTarget = {
+      ref: from ? null : source.ref,
+      commit: source.commit,
+      from,
+    };
+    return {
+      id: "interactiveRebase",
+      label: from
+        ? "Interactive rebase from here"
+        : `Interactive rebase onto ${source.label}`,
+      enabled: reason === undefined,
+      ...(reason === undefined ? {} : { reason }),
+      ...(count === undefined
+        ? {}
+        : { detail: `${count} ${count === 1 ? "commit" : "commits"}` }),
+      run: () => openPlan(plan),
+    };
   };
 
-  return { actionFor, inspect, moving };
+  const moving = (target: RefSourceTarget) => {
+    const source = sourceOf(target);
+    const planned = source === undefined ? undefined : known(source);
+    if (source === undefined || planned === undefined) return [];
+    return planned.based && typeof target === "string"
+      ? [...planned.moving, source.commit]
+      : planned.moving;
+  };
+
+  return { actionFor, interactiveFor, inspect, moving };
 }
 
 function upstreamCommit(
@@ -187,4 +222,26 @@ function rebaseHint(range: HistoryRange, changed: number | undefined) {
   ]
     .filter((part) => part !== undefined)
     .join(" · ");
+}
+
+export function useChangedFileCount(enabled: boolean) {
+  const scope = useRepositoryScope();
+  const changes = useEnvironmentQuery(
+    RepositoryChangesApi.read,
+    scope === undefined || !enabled
+      ? skipToken
+      : {
+          repositoryId: scope.repositoryId,
+          worktreePath: scope.worktreePath,
+          amend: false,
+        },
+    { changes: "index", keepPrevious: true },
+  );
+  return changes.data === undefined
+    ? undefined
+    : new Set(
+        [...changes.data.staged, ...changes.data.unstaged]
+          .filter(({ status }) => status !== "?")
+          .map(({ path }) => path),
+      ).size;
 }

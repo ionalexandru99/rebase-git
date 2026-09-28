@@ -252,6 +252,7 @@ export function BranchesSidebar({
             checkout: onSelectRef,
             merge: merge?.actionFor,
             rebase: rebase?.actionFor,
+            interactiveRebase: rebase?.interactiveFor,
             showReflog: onShowReflog,
             pull: pull.allowed
               ? {

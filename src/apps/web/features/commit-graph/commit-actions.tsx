@@ -44,7 +44,7 @@ interface CommitAccess {
 interface CommitActionHandlers {
   readonly openDetails?: ((oid: string) => void) | undefined;
   readonly merge: Action | undefined;
-  readonly rebase: Action | undefined;
+  readonly rebase: readonly (Action | undefined)[];
   readonly revert: readonly Action[];
   readonly readCommit: (oid: string) => Promise<RepositoryCommit | undefined>;
   readonly writeClipboard: (text: string) => Promise<void>;
@@ -61,7 +61,9 @@ export function useCommitActions({
   readonly history: Pick<RepositoryHistory, "ask"> | undefined;
   readonly scope: HistoryScopeQuery | undefined;
   readonly merge?: MergeActions | undefined;
-  readonly rebase?: Pick<RebaseActions, "actionFor"> | undefined;
+  readonly rebase?:
+    | Pick<RebaseActions, "actionFor" | "interactiveFor">
+    | undefined;
   readonly onOpenDetails?: ((oid: string) => void) | undefined;
 }) {
   const scope = useRepositoryScope();
@@ -85,7 +87,7 @@ export function useCommitActions({
     ...commitActions(oid, access, {
       openDetails: onOpenDetails,
       merge: merge?.actionFor(oid),
-      rebase: rebase?.actionFor(oid),
+      rebase: [rebase?.actionFor(oid), rebase?.interactiveFor(oid)],
       revert: revert.actionsFor(selected),
       readCommit: async (commit) =>
         (await history?.ask({ _tag: "Commits", oids: [commit] }))?.[0],
@@ -221,7 +223,7 @@ function commitActions(
           },
         ]),
     ...(merge === undefined ? [] : [merge]),
-    ...(rebase === undefined ? [] : [rebase]),
+    ...rebase.filter((action) => action !== undefined),
     ...revert,
     {
       id: "copySha",

@@ -4,10 +4,12 @@ import {
   IconGitCommit,
   IconGitPullRequest,
   IconHistory,
+  IconListDetails,
 } from "@tabler/icons-react";
 import { lazy } from "react";
 import { isObjectId } from "#contracts/git/git-values.contract.ts";
 import { isReflogRef } from "#contracts/repository-reflog/repository-reflog.contract.ts";
+import { isRebasePlanTarget } from "#web/features/rebase/rebase-plan.ts";
 import type { WorkspacePanelDefinition } from "#web/features/workspace-panel/workspace-panel-model.ts";
 
 export const workingChangesPanel = {
@@ -37,6 +39,20 @@ export const reflogPanel = {
   description: "Find where branches pointed before",
 } satisfies WorkspacePanelDefinition;
 
+export const rebasePanel = {
+  acceptsInput: isRebasePlanTarget,
+  Content: lazy(() =>
+    import("#web/features/rebase/rebase-panel.tsx").then((module) => ({
+      default: module.RebasePanel,
+    })),
+  ),
+  label: "Rebase",
+  icon: IconListDetails,
+  available: true,
+  launchable: false,
+  description: "Edit an interactive rebase plan",
+} satisfies WorkspacePanelDefinition;
+
 const commitInspectionPanel = {
   acceptsInput: isObjectId,
   Content: lazy(() =>
@@ -55,6 +71,7 @@ const definitions = {
   commit: commitInspectionPanel,
   changes: workingChangesPanel,
   reflog: reflogPanel,
+  rebase: rebasePanel,
   code: {
     label: "Code",
     icon: IconCode,

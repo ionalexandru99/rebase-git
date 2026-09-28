@@ -28,6 +28,29 @@ export const OperationKind = Schema.Literals([
   "unknown",
 ]);
 export type OperationKind = typeof OperationKind.Type;
+export const PlanAction = Schema.Literals([
+  "pick",
+  "reword",
+  "edit",
+  "squash",
+  "fixup",
+  "drop",
+]);
+export type PlanAction = typeof PlanAction.Type;
+export const PlanStep = Schema.Struct({
+  commit: ObjectId,
+  action: PlanAction,
+  message: Schema.NullOr(
+    Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(32000)),
+  ),
+});
+export type PlanStep = typeof PlanStep.Type;
+export const RebaseStep = Schema.Struct({
+  commit: ObjectId,
+  action: PlanAction,
+  done: Schema.Boolean,
+});
+export type RebaseStep = typeof RebaseStep.Type;
 export const RepositoryOperation = Schema.Struct({
   kind: OperationKind,
   phase: Schema.Literals([
@@ -54,6 +77,7 @@ export const RepositoryOperation = Schema.Struct({
     }),
   ),
   lock: Schema.NullOr(Schema.String),
+  steps: Schema.NullOr(Schema.Array(RebaseStep)),
 });
 export type RepositoryOperation = typeof RepositoryOperation.Type;
 export const ExecuteOperation = Schema.Struct({
@@ -77,6 +101,12 @@ export type StartMerge = typeof StartMerge.Type;
 export const StartRebase = Schema.TaggedStruct("Rebase", {
   onto: Schema.Struct({ ref: Schema.NullOr(RefName), commit: ObjectId }),
   stash: Schema.Boolean,
+  plan: Schema.optionalKey(
+    Schema.Array(PlanStep).check(
+      Schema.isMinLength(1),
+      Schema.isMaxLength(1_000),
+    ),
+  ),
 });
 export type StartRebase = typeof StartRebase.Type;
 export const StartRevert = Schema.TaggedStruct("Revert", {

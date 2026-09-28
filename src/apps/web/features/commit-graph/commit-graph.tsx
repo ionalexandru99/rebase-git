@@ -166,6 +166,10 @@ export function CommitGraph({
         const action = rebase.actionFor(oid);
         return action && { ...action, onHighlight: setPreviewing };
       },
+      interactiveFor: (oid) => {
+        const action = rebase.interactiveFor(oid);
+        return action && { ...action, onHighlight: setPreviewing };
+      },
     },
     onOpenDetails,
   });
