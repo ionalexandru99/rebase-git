@@ -15,7 +15,7 @@ export interface Action<Id extends string = string> {
   readonly reason?: string;
   readonly detail?: string;
   readonly keys?: readonly string[];
-  readonly group?: "create" | "edit" | "delete";
+  readonly group?: "create" | "edit" | "delete" | "operation";
   readonly onHighlight?: (highlighted: boolean) => void;
   readonly submenu?: {
     readonly title: string;

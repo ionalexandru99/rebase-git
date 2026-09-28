@@ -12,9 +12,11 @@ import { graphMetadataWidth } from "#web/features/commit-graph/layout/graph-geom
 export function CommitMessage({
   subject,
   labels,
+  order,
 }: {
   readonly subject: string;
   readonly labels: readonly RepositoryHistoryRefTarget[];
+  readonly order: number;
 }) {
   const { viewport, content, edges, measure, scroll } =
     useCommitMessageScroll();
@@ -44,6 +46,11 @@ export function CommitMessage({
             ref={content}
             className="flex h-full w-max items-center gap-2 whitespace-nowrap pr-6"
           >
+            {order > 0 ? (
+              <span className="grid h-4 min-w-4 shrink-0 place-items-center rounded-sm bg-primary/25 px-1 font-mono text-[10px] font-semibold">
+                {order}
+              </span>
+            ) : null}
             <span className="shrink-0">{subject}</span>
             <CommitRefLabels labels={labels} />
           </div>

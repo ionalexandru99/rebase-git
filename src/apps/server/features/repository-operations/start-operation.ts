@@ -8,6 +8,7 @@ import type {
   StartMerge,
   StartOperation,
   StartRebase,
+  StartRevert,
 } from "#contracts/repository-operations/repository-operations.contract.ts";
 import {
   type GitCommandOutput,
@@ -23,9 +24,14 @@ export function startOperation(
   command: StartOperation,
 ) {
   const { operation } = command;
-  return operation._tag === "Merge"
-    ? startMerge(git, coordination, command, operation)
-    : startRebase(git, coordination, command, operation);
+  switch (operation._tag) {
+    case "Merge":
+      return startMerge(git, coordination, command, operation);
+    case "Rebase":
+      return startRebase(git, coordination, command, operation);
+    case "Revert":
+      return revertCommits(git, coordination, command, operation);
+  }
 }
 
 const mergeArguments: Readonly<Record<MergeMode, readonly string[]>> = {
@@ -172,6 +178,59 @@ function startRebase(
           : "Rebased",
       state,
     );
+  });
+}
+
+function revertCommits(
+  git: GitCommandRunner,
+  coordination: RepositoryCoordination,
+  { worktreePath: directory, expectedHead }: StartOperation,
+  { commits, commit }: StartRevert,
+) {
+  return Effect.gen(function* () {
+    if ((yield* readCommit(git, directory, "HEAD")) !== expectedHead)
+      return yield* operationFailure("Stale", "HEAD moved. Try again.");
+    const outside = yield* runRepositoryGit(git, directory, [
+      "rev-list",
+      ...commits,
+      "--not",
+      "HEAD",
+    ]);
+    const foreign = commits.find((oid) => outside.includes(oid));
+    if (foreign !== undefined)
+      return yield* operationFailure(
+        "Incompatible",
+        `${foreign.slice(0, 8)} is not in the checked-out branch.`,
+      );
+    const output = yield* git
+      .run({
+        directory,
+        arguments: [
+          "revert",
+          "--no-edit",
+          "--mainline",
+          "1",
+          ...(commit ? [] : ["--no-commit"]),
+          ...commits,
+        ],
+        timeoutMilliseconds: 120_000,
+      })
+      .pipe(Effect.mapError(uncertain), Effect.uninterruptible);
+    const state = yield* coordination.operation(directory);
+    const empty = /nothing to commit/i.test(
+      `${output.stdout}\n${output.stderr}`,
+    );
+    if (output.exitCode === 0)
+      return started(commit ? "Committed" : "Staged", state);
+    if (state.kind === "revert" && (state.phase === "conflicts" || empty))
+      return started("Stopped", state);
+    if (empty)
+      return yield* operationFailure(
+        "Empty",
+        "Nothing to revert. The changes are already undone.",
+      );
+    yield* requireGitSuccess(output);
+    return started("Stopped", state);
   });
 }
 
