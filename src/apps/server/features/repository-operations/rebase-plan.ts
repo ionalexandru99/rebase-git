@@ -53,6 +53,13 @@ export function rebasePlanTodo(
     const problem = planProblem(plan);
     if (problem !== undefined)
       return yield* operationFailure("Incompatible", problem);
+    const signed =
+      (yield* runRepositoryGit(
+        git,
+        directory,
+        ["config", "--type=bool", "--get", "commit.gpgSign"],
+        { exitCodes: [0, 1] },
+      )).trim() === "true";
     const lines: string[] = [];
     for (const step of plan) {
       const original = replayed.get(step.commit);
@@ -64,7 +71,7 @@ export function rebasePlanTodo(
               directory,
               [
                 "commit-tree",
-                "--no-gpg-sign",
+                signed ? "-S" : "--no-gpg-sign",
                 `${step.commit}^{tree}`,
                 ...(original.parent === "" ? [] : ["-p", original.parent]),
               ],
@@ -73,14 +80,14 @@ export function rebasePlanTodo(
                 environment: {
                   GIT_AUTHOR_NAME: original.name ?? "",
                   GIT_AUTHOR_EMAIL: original.email ?? "",
-                  GIT_AUTHOR_DATE: original.date ?? "",
+                  GIT_AUTHOR_DATE: `@${original.date ?? ""}`,
                 },
               },
             )).trim();
       const subject = (step.message ?? original?.subject ?? "").split(
         /\r?\n/,
       )[0];
-      lines.push(`${todoCommands[step.action]} ${commit} ${subject}`.trim());
+      lines.push(`${todoCommands[step.action]} ${commit} # ${subject}`);
     }
     return `${lines.join("\n")}\n`;
   });
