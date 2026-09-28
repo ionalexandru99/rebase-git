@@ -4,15 +4,14 @@ import {
   type MergeMode,
   RepositoryOperationsApi,
 } from "#contracts/repository-operations/repository-operations.contract.ts";
-import type {
-  RepositoryRefs,
-  RepositoryRefTarget,
-} from "#contracts/repository-refs/repository-refs.contract.ts";
 import type { Action } from "#web/components/ui/action-menu.tsx";
 import { useOperation } from "#web/features/operation-recovery/hooks/use-operation.ts";
 import { operationKindLabel } from "#web/features/operation-recovery/operation-messages.ts";
 import {
   activeHead,
+  type RefSource,
+  type RefSourceTarget,
+  refSource,
   useScopedRepositoryRefs,
 } from "#web/features/refs/repository-refs.ts";
 import type { HistoryRelation } from "#web/features/repository-history/history-graph.ts";
@@ -26,17 +25,9 @@ import {
   useCommand,
 } from "#web/platform/query/use-command.ts";
 
-export type MergeTarget = RepositoryRefTarget | string;
-
 export interface MergeActions {
-  readonly actionFor: (target: MergeTarget) => Action<"merge"> | undefined;
-  readonly inspect: (target: MergeTarget) => void;
-}
-
-interface MergeSource {
-  readonly label: string;
-  readonly ref: string | null;
-  readonly commit: string;
+  readonly actionFor: (target: RefSourceTarget) => Action<"merge"> | undefined;
+  readonly inspect: (target: RefSourceTarget) => void;
 }
 
 const modes: readonly { readonly mode: MergeMode; readonly label: string }[] = [
@@ -71,12 +62,12 @@ export function useMergeActions(
     refs === undefined || scope === undefined
       ? undefined
       : activeHead(refs, scope.worktreePath);
-  const sourceOf = (target: MergeTarget) =>
-    refs === undefined ? undefined : mergeSource(refs, target);
-  const relationKey = (source: MergeSource) =>
+  const sourceOf = (target: RefSourceTarget) =>
+    refs === undefined ? undefined : refSource(refs, target);
+  const relationKey = (source: RefSource) =>
     head === undefined ? undefined : `${source.commit}:${head.commit}`;
 
-  const inspect = (target: MergeTarget) => {
+  const inspect = (target: RefSourceTarget) => {
     const source = sourceOf(target);
     const key = source === undefined ? undefined : relationKey(source);
     if (
@@ -95,7 +86,7 @@ export function useMergeActions(
       );
   };
 
-  const start = async (source: MergeSource, mode: MergeMode) => {
+  const start = async (source: RefSource, mode: MergeMode) => {
     if (head?.branch === undefined) return;
     const branch = head.branch;
     const result = await command.run({
@@ -117,7 +108,7 @@ export function useMergeActions(
       });
   };
 
-  const actionFor = (target: MergeTarget): Action<"merge"> | undefined => {
+  const actionFor = (target: RefSourceTarget): Action<"merge"> | undefined => {
     const source = sourceOf(target);
     if (
       source === undefined ||
@@ -182,50 +173,6 @@ function modeDetail(mode: MergeMode, known: HistoryRelation | undefined) {
       if (known === undefined) return undefined;
       return `${known.ahead} ${known.ahead === 1 ? "commit" : "commits"}`;
   }
-}
-
-function mergeSource(
-  refs: RepositoryRefs,
-  target: MergeTarget,
-): MergeSource | undefined {
-  if (typeof target === "string") {
-    const branch = refs.branches.find((local) => local.target === target);
-    if (branch !== undefined)
-      return { label: branch.name, ref: branch.name, commit: target };
-    const remote = refs.remoteBranches.find((ref) => ref.target === target);
-    if (remote !== undefined)
-      return remoteSource(remote.remote, remote.name, target);
-    return { label: target.slice(0, 8), ref: null, commit: target };
-  }
-  switch (target._tag) {
-    case "LocalBranch": {
-      const commit = refs.branches.find(
-        ({ name }) => name === target.name,
-      )?.target;
-      return commit === undefined
-        ? undefined
-        : { label: target.name, ref: target.name, commit };
-    }
-    case "RemoteBranch": {
-      const commit = refs.remoteBranches.find(
-        ({ name, remote }) => name === target.name && remote === target.remote,
-      )?.target;
-      return commit === undefined
-        ? undefined
-        : remoteSource(target.remote, target.name, commit);
-    }
-    case "Tag": {
-      const commit = refs.tags.find(({ name }) => name === target.name)?.target;
-      return commit === undefined
-        ? undefined
-        : { label: target.name, ref: target.name, commit };
-    }
-  }
-}
-
-function remoteSource(remote: string, name: string, commit: string) {
-  const ref = `${remote}/${name}`;
-  return { label: ref, ref, commit };
 }
 
 function describeMergeFailure(

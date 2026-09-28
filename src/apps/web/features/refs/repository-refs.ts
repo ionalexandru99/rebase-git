@@ -180,3 +180,55 @@ export function resolveActiveWorktreePath(
     preferredPath
   );
 }
+
+export type RefSourceTarget = RepositoryRefTarget | string;
+
+export interface RefSource {
+  readonly label: string;
+  readonly ref: string | null;
+  readonly commit: string;
+}
+
+export function refSource(
+  refs: RepositoryRefs,
+  target: RefSourceTarget,
+): RefSource | undefined {
+  if (typeof target === "string") {
+    const branch = refs.branches.find((local) => local.target === target);
+    if (branch !== undefined)
+      return { label: branch.name, ref: branch.name, commit: target };
+    const remote = refs.remoteBranches.find((ref) => ref.target === target);
+    if (remote !== undefined)
+      return remoteSource(remote.remote, remote.name, target);
+    return { label: target.slice(0, 8), ref: null, commit: target };
+  }
+  switch (target._tag) {
+    case "LocalBranch": {
+      const commit = refs.branches.find(
+        ({ name }) => name === target.name,
+      )?.target;
+      return commit === undefined
+        ? undefined
+        : { label: target.name, ref: target.name, commit };
+    }
+    case "RemoteBranch": {
+      const commit = refs.remoteBranches.find(
+        ({ name, remote }) => name === target.name && remote === target.remote,
+      )?.target;
+      return commit === undefined
+        ? undefined
+        : remoteSource(target.remote, target.name, commit);
+    }
+    case "Tag": {
+      const commit = refs.tags.find(({ name }) => name === target.name)?.target;
+      return commit === undefined
+        ? undefined
+        : { label: target.name, ref: target.name, commit };
+    }
+  }
+}
+
+function remoteSource(remote: string, name: string, commit: string) {
+  const ref = `${remote}/${name}`;
+  return { label: ref, ref, commit };
+}

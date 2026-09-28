@@ -31,6 +31,7 @@ export const CommitGraphRow = memo(function CommitGraphRow({
   active,
   merge,
   busy,
+  mark,
 }: {
   readonly commit: RepositoryCommit;
   readonly labels: readonly RepositoryHistoryRefTarget[];
@@ -42,6 +43,7 @@ export const CommitGraphRow = memo(function CommitGraphRow({
   readonly active: boolean;
   readonly merge: "collapsed" | "expanded" | undefined;
   readonly busy: boolean;
+  readonly mark?: "moving" | "base" | undefined;
 }) {
   const graph = useMemo(
     () =>
@@ -67,7 +69,7 @@ export const CommitGraphRow = memo(function CommitGraphRow({
         selected
           ? "text-foreground"
           : "text-foreground hover:[--graph-row-background:color-mix(in_oklab,var(--accent)_35%,var(--repository))]"
-      }`}
+      } ${mark === undefined ? "" : `before:pointer-events-none before:absolute before:inset-0 before:z-[5] before:border-primary ${mark === "base" ? "before:border" : "before:border-l-[3px]"}`}`}
       data-active={active ? "true" : undefined}
       data-oid={commit.oid}
       id={commitRowId(commit.oid)}

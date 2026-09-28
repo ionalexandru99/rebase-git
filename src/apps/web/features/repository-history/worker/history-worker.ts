@@ -285,6 +285,8 @@ async function ask(
       return replica.commits(query.oids);
     case "Relation":
       return replica.relation(query.from, query.to);
+    case "Range":
+      return replica.range(query.head, query.onto, query.upstream);
   }
 }
 

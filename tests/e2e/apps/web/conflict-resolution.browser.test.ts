@@ -6,12 +6,13 @@ import { startEnvironmentServer } from "#tests-support/environment-server.ts";
 import { createConflictedRebase, git } from "#tests-support/git.ts";
 import { removeTemporaryDirectory } from "#tests-support/temporary-directory.ts";
 
-test("resolves a paused rebase line by line and continues it", async ({
+test("rebases onto main from the branch menu, resolves the conflict line by line and continues", async ({
   page,
 }) => {
   const testHome = await mkdtemp(join(tmpdir(), "rebase-conflicts-e2e-"));
   const repositoryPath = await createConflictedRebase(testHome, {
     files: "text",
+    paused: false,
   });
   await git(repositoryPath, "config", "user.name", "Rebase test");
   await git(repositoryPath, "config", "user.email", "rebase@example.test");
@@ -33,6 +34,11 @@ test("resolves a paused rebase line by line and continues it", async ({
       .click();
     await expect(picker).not.toBeVisible();
 
+    await page
+      .getByRole("navigation", { name: "Branches" })
+      .getByRole("treeitem", { name: "main", exact: true })
+      .click({ button: "right" });
+    await page.getByRole("menuitem", { name: /^Rebase onto main/ }).click();
     await page.getByRole("button", { name: "Review conflicts" }).click();
     const conflicts = page.getByRole("region", { name: "Conflicted files" });
     await expect(

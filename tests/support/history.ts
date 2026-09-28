@@ -197,6 +197,8 @@ export function fakeRepositoryHistory({
         });
       case "Relation":
         return graph.relation(query.from, query.to);
+      case "Range":
+        return graph.range(query.head, query.onto, query.upstream);
       case "Storage":
         return {
           caches: [],

@@ -11,6 +11,7 @@ import { useHistoryScope } from "#web/features/commit-graph/scope/use-history-sc
 import { useMergeActions } from "#web/features/merge/merge-actions.ts";
 import { MergeView } from "#web/features/merge-view/merge-view.tsx";
 import { OperationRecoveryNotice } from "#web/features/operation-recovery/components/operation-recovery-toast.tsx";
+import { useRebaseActions } from "#web/features/rebase/rebase-actions.ts";
 import { requestRefIntent } from "#web/features/refs/ref-actions.ts";
 import { useScopedRepositoryRefs } from "#web/features/refs/repository-refs.ts";
 import { RemoteSync } from "#web/features/remote-sync/remote-sync.tsx";
@@ -107,6 +108,7 @@ function Workspace({
     logicalRepositoryId: scope.logicalRepositoryId,
   });
   const merge = useMergeActions(history);
+  const rebase = useRebaseActions(history);
   const name = useCatalogRepository(scope.repositoryId)?.name ?? "Repository";
   const repositoryRefs = useScopedRepositoryRefs();
   const { refs } = repositoryRefs;
@@ -141,6 +143,7 @@ function Workspace({
                 >
                   <BranchesSidebar
                     merge={merge}
+                    rebase={rebase}
                     onBranchRenamed={historyScope.renameBranch}
                     onShowReflog={showReflog}
                     onToggleHistoryRef={historyScope.toggleRef}
@@ -169,6 +172,7 @@ function Workspace({
                       >
                         <CommitGraph
                           merge={merge}
+                          rebase={rebase}
                           ref={inspection.graphRef}
                           onOpenDetails={inspection.open}
                           onActiveCommitChange={inspection.select}

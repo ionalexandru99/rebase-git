@@ -11,6 +11,7 @@ import {
 } from "#web/components/ui/context-menu.tsx";
 import { writeClipboardText } from "#web/features/clipboard/write-clipboard-text.ts";
 import type { MergeActions } from "#web/features/merge/merge-actions.ts";
+import type { RebaseActions } from "#web/features/rebase/rebase-actions.ts";
 import { createRefActions } from "#web/features/refs/ref-actions.ts";
 import type { RepositoryHistory } from "#web/features/repository-history/repository-history.ts";
 import { useRepositoryScope } from "#web/platform/query/repository-scope.tsx";
@@ -23,6 +24,7 @@ interface CommitAccess {
 interface CommitActionHandlers {
   readonly openDetails?: ((oid: string) => void) | undefined;
   readonly merge: Action | undefined;
+  readonly rebase: Action | undefined;
   readonly readCommit: (oid: string) => Promise<RepositoryCommit | undefined>;
   readonly writeClipboard: (text: string) => Promise<void>;
   readonly attempt: (work: () => Promise<string | undefined>) => void;
@@ -31,10 +33,12 @@ interface CommitActionHandlers {
 export function useCommitActions({
   history,
   merge,
+  rebase,
   onOpenDetails,
 }: {
   readonly history: Pick<RepositoryHistory, "ask"> | undefined;
   readonly merge?: MergeActions | undefined;
+  readonly rebase?: Pick<RebaseActions, "actionFor"> | undefined;
   readonly onOpenDetails?: ((oid: string) => void) | undefined;
 }) {
   const scope = useRepositoryScope();
@@ -54,6 +58,7 @@ export function useCommitActions({
     ...commitActions(oid, access, {
       openDetails: onOpenDetails,
       merge: merge?.actionFor(oid),
+      rebase: rebase?.actionFor(oid),
       readCommit: async (commit) =>
         (await history?.ask({ _tag: "Commits", oids: [commit] }))?.[0],
       writeClipboard: writeClipboardText,
@@ -70,6 +75,7 @@ function commitActions(
   {
     openDetails,
     merge,
+    rebase,
     readCommit,
     writeClipboard,
     attempt,
@@ -91,6 +97,7 @@ function commitActions(
           },
         ]),
     ...(merge === undefined ? [] : [merge]),
+    ...(rebase === undefined ? [] : [rebase]),
     {
       id: "copySha",
       label: "Copy commit SHA",
@@ -135,7 +142,7 @@ export function CommitActionMenu({
       }}
     >
       <ContextMenuTrigger render={children} tabIndex={tabIndex} />
-      <ContextMenuContent>
+      <ContextMenuContent className="w-max min-w-50 max-w-md">
         {actions === undefined ? null : (
           <ActionMenuItems
             actions={actions}

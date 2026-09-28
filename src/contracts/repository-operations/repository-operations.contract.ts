@@ -66,10 +66,16 @@ export const StartMerge = Schema.TaggedStruct("Merge", {
   source: Schema.Struct({ ref: Schema.NullOr(RefName), commit: ObjectId }),
   mode: MergeMode,
 });
+export type StartMerge = typeof StartMerge.Type;
+export const StartRebase = Schema.TaggedStruct("Rebase", {
+  onto: Schema.Struct({ ref: Schema.NullOr(RefName), commit: ObjectId }),
+  stash: Schema.Boolean,
+});
+export type StartRebase = typeof StartRebase.Type;
 export const StartOperation = Schema.Struct({
   ...OperationScope.fields,
   expectedHead: ObjectId,
-  operation: Schema.Union([StartMerge]),
+  operation: Schema.Union([StartMerge, StartRebase]),
 });
 export type StartOperation = typeof StartOperation.Type;
 export const OperationStarted = Schema.Struct({
@@ -77,6 +83,7 @@ export const OperationStarted = Schema.Struct({
     "UpToDate",
     "FastForwarded",
     "Committed",
+    "Rebased",
     "Staged",
     "Stopped",
   ]),
