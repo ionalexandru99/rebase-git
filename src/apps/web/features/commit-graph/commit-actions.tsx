@@ -1,4 +1,10 @@
-import { type ReactElement, useCallback, useRef, useState } from "react";
+import {
+  type ReactElement,
+  type ReactNode,
+  useCallback,
+  useRef,
+  useState,
+} from "react";
 import type { RepositoryCommit } from "#contracts/repository-history/repository-history.contract.ts";
 import { RepositoryOperationsApi } from "#contracts/repository-operations/repository-operations.contract.ts";
 import {
@@ -246,12 +252,14 @@ function commitActions(
 export function CommitActionMenu({
   children,
   actions,
+  lead,
   restoreFocus,
   tabIndex = -1,
 }: {
   readonly tabIndex?: number;
   readonly children: ReactElement;
   readonly actions: readonly Action[] | undefined;
+  readonly lead?: ReactNode;
   readonly restoreFocus: () => void;
 }) {
   return (
@@ -262,6 +270,7 @@ export function CommitActionMenu({
     >
       <ContextMenuTrigger render={children} tabIndex={tabIndex} />
       <ContextMenuContent className="w-max min-w-50 max-w-md">
+        {lead}
         {actions === undefined ? null : (
           <ActionMenuItems
             actions={actions}

@@ -88,16 +88,27 @@ export function readRepositoryOperation(
       kind === "rebase" &&
       metadata["rebase-merge/amend"] !== null &&
       unresolvedPaths.length === 0;
-    const reason = blockedReason(
-      kind,
-      lock,
-      unresolvedPaths.length,
-      edit,
-      worktree.status,
-    );
+    const empty =
+      unresolvedPaths.length === 0 &&
+      (metadata.CHERRY_PICK_HEAD ?? metadata.REVERT_HEAD) !== null &&
+      !hasStagedChanges(worktree.status);
+    const reason = empty
+      ? (lockedReason(lock) ?? "Nothing to commit. Skip this commit.")
+      : blockedReason(
+          kind,
+          lock,
+          unresolvedPaths.length,
+          edit,
+          worktree.status,
+        );
+    const progress =
+      operationProgress(metadata) ??
+      (yield* sequenceProgress(git, worktreePath, metadata, worktree.head));
     return {
       kind,
-      phase: operationPhase(kind, unresolvedPaths.length, edit),
+      phase: empty
+        ? "empty"
+        : operationPhase(kind, unresolvedPaths.length, edit),
       actions: availableActions(kind, metadata, stamps, edit, lock, reason),
       unresolvedPaths,
       lock,
@@ -121,7 +132,7 @@ export function readRepositoryOperation(
         )?.trim() ?? null,
       mergedBranch:
         kind === "merge" ? mergedBranchName(metadata.MERGE_MSG) : null,
-      progress: operationProgress(metadata),
+      progress,
     } satisfies RepositoryOperation;
   });
 }
@@ -235,6 +246,12 @@ function identifyOperation(
   return metadata.SQUASH_MSG === null ? "idle" : "squash";
 }
 
+function lockedReason(lock: string | null) {
+  return lock === null
+    ? null
+    : "Git is using this worktree. Check again when it finishes.";
+}
+
 function blockedReason(
   kind: OperationKind,
   lock: string | null,
@@ -242,8 +259,8 @@ function blockedReason(
   edit: boolean,
   status: string,
 ) {
-  if (lock !== null)
-    return "Git is using this worktree. Check again when it finishes.";
+  const locked = lockedReason(lock);
+  if (locked !== null) return locked;
   if (unresolved)
     return `Resolve and stage ${unresolved} ${unresolved === 1 ? "file" : "files"} to continue.`;
   if (edit && status.length > 0)
@@ -273,6 +290,7 @@ function availableActions(
   const skippable =
     kind !== "merge" &&
     !edit &&
+    !/no-commit\s*=\s*true/.test(metadata["sequencer/opts"] ?? "") &&
     (kind !== "rebase" ||
       metadata["rebase-merge/stopped-sha"] !== null ||
       stamps[1] !== null);
@@ -312,6 +330,43 @@ function operationProgress(metadata: Metadata) {
     total >= current
     ? { current, total }
     : null;
+}
+
+function hasStagedChanges(status: string) {
+  return status
+    .split("\0")
+    .some((line) => line.length > 2 && line[0] !== " " && line[0] !== "?");
+}
+
+function sequenceProgress(
+  git: GitCommandRunner,
+  worktreePath: string,
+  metadata: Metadata,
+  head: string | null,
+) {
+  const start = metadata["sequencer/head"]?.trim();
+  const remaining = (metadata["sequencer/todo"] ?? "")
+    .split("\n")
+    .filter((line) => /^(pick|revert|p|r)\s/.test(line)).length;
+  if (
+    start === undefined ||
+    head === null ||
+    remaining === 0 ||
+    /no-commit\s*=\s*true/.test(metadata["sequencer/opts"] ?? "")
+  )
+    return Effect.succeed(null);
+  return inspect(git, worktreePath, [
+    "rev-list",
+    "--count",
+    `${start}..${head}`,
+  ]).pipe(
+    Effect.map((output) => {
+      const done = Number(output.trim());
+      return Number.isSafeInteger(done)
+        ? { current: done + 1, total: done + remaining }
+        : null;
+    }),
+  );
 }
 
 function readOperationFile(directory: string, name: string) {

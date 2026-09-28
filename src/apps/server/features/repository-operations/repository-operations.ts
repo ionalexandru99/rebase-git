@@ -11,12 +11,13 @@ import {
   repositoryRoutes,
 } from "#server/adapters/environment-transport/environment-routes.ts";
 import type { GitCommandRunner } from "#server/adapters/local-git/git-commands.ts";
+import { continueStagedCherryPick } from "#server/features/repository-operations/cherry-pick.ts";
 import {
   operationError,
   requireGitSuccess,
-  startOperation,
   uncertain,
-} from "#server/features/repository-operations/start-operation.ts";
+} from "#server/features/repository-operations/operation-outcome.ts";
+import { startOperation } from "#server/features/repository-operations/start-operation.ts";
 import type { RepositoryCoordination } from "#server/repository/repository-coordination.ts";
 
 export function repositoryOperationsFeature(
@@ -58,6 +59,14 @@ function recoverRepositoryOperation(
   return Effect.gen(function* () {
     const state = yield* coordination.operation(command.worktreePath);
     yield* validateRecoveryAction(state, command);
+    if (
+      state.kind === "cherry-pick" &&
+      command.action === "continue" &&
+      (yield* continueStagedCherryPick(git, command.worktreePath))
+    )
+      return yield* coordination
+        .operation(command.worktreePath)
+        .pipe(Effect.mapError(uncertain));
     const output = yield* git
       .run({
         directory: command.worktreePath,
@@ -78,19 +87,19 @@ function recoverRepositoryOperation(
           ),
         ),
       );
-    if (command.action === "abort" || !advancedToConflict(state, operation))
+    if (command.action === "abort" || !advancedToStop(state, operation))
       yield* requireGitSuccess(output);
     return operation;
   }).pipe(Effect.uninterruptible);
 }
 
-function advancedToConflict(
+function advancedToStop(
   previous: RepositoryOperation,
   current: RepositoryOperation,
 ) {
   return (
     current.kind === previous.kind &&
-    current.phase === "conflicts" &&
+    (current.phase === "conflicts" || current.phase === "empty") &&
     ((current.commit !== null && current.commit !== previous.commit) ||
       (current.progress !== null &&
         previous.progress !== null &&

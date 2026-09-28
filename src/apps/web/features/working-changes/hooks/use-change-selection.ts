@@ -44,7 +44,7 @@ function settled(
   selection: SelectedChange,
   changes: RepositoryChanges | undefined,
   conflicted: readonly string[],
-): SelectedChange {
+): SelectedChange | null {
   if (changes === undefined) return selection;
   const { path } = selection;
   if (selection.section !== "conflicts")
@@ -56,5 +56,5 @@ function settled(
     return { section: "staged", path };
   if (changes.unstaged.some((file) => file.path === path))
     return { section: "unstaged", path };
-  return selection;
+  return firstChange(changes, conflicted);
 }

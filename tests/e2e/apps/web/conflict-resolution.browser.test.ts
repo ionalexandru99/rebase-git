@@ -73,7 +73,9 @@ test("rebases onto main from the branch menu, resolves the conflict line by line
     );
     await operation.getByRole("button", { name: "Continue rebase" }).click();
     await expect
-      .poll(() => git(repositoryPath, "status", "--porcelain"))
+      .poll(() =>
+        git(repositoryPath, "--no-optional-locks", "status", "--porcelain"),
+      )
       .toBe("");
     await expect
       .poll(() => git(repositoryPath, "log", "-1", "--format=%s"))

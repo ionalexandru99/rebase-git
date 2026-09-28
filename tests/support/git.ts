@@ -253,6 +253,83 @@ const incoming = {
 
 const textFiles = new Set(["two.txt", "added.txt"]);
 
+export async function createCherryPickRepository(parent = tmpdir()) {
+  const directory = await realpath(
+    await mkdtemp(join(parent, "rebase-cherry-pick-")),
+  );
+  await createRepository(directory, { commits: [] });
+  await git(directory, "config", "user.name", "Rebase test");
+  await git(directory, "config", "user.email", "rebase@example.test");
+  await git(directory, "config", "commit.gpgsign", "false");
+  await fastImport(
+    directory,
+    commit(
+      "refs/heads/main",
+      "base",
+      null,
+      files({ "a.txt": "a\n", "b.txt": "b\n", "c.txt": "c\n", "r.txt": "3\n" }),
+    ) +
+      commit(
+        "refs/heads/release",
+        "release",
+        ":1",
+        files({ "a.txt": "a release\n", "b.txt": "b main\n" }),
+      ) +
+      commit(
+        "refs/heads/main",
+        "change a",
+        ":1",
+        files({ "a.txt": "a main\n" }),
+        {
+          mark: ":3",
+        },
+      ) +
+      commit(
+        "refs/heads/main",
+        "change b",
+        ":3",
+        files({ "b.txt": "b main\n" }),
+        {
+          mark: ":4",
+        },
+      ) +
+      commit("refs/heads/side", "change r", ":4", files({ "r.txt": "5\n" }), {
+        mark: ":5",
+      }) +
+      commit(
+        "refs/heads/main",
+        "change c",
+        ":4",
+        files({ "c.txt": "c main\n" }),
+        {
+          mark: ":6",
+        },
+      ) +
+      commit("refs/heads/main", "merge side", ":6", files({ "r.txt": "5\n" }), {
+        mark: ":7",
+        merge: ":5",
+      }),
+  );
+  await git(directory, "checkout", "--force", "release");
+  const log = await git(directory, "log", "--format=%H %s", "main");
+  const oid = (subject: string) => {
+    const line = log.split("\n").find((entry) => entry.slice(41) === subject);
+    if (line === undefined)
+      throw new Error(`Missing fixture commit ${subject}`);
+    return line.slice(0, 40);
+  };
+  return {
+    directory,
+    oids: {
+      base: oid("base"),
+      changeA: oid("change a"),
+      changeB: oid("change b"),
+      changeC: oid("change c"),
+      mergeSide: oid("merge side"),
+    },
+  };
+}
+
 export async function createConflictedRebase(
   parent = tmpdir(),
   {
