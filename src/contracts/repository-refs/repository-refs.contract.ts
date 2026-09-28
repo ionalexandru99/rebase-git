@@ -57,6 +57,7 @@ export type RemoteDefaultBranch = typeof RemoteDefaultBranch.Type;
 export const RepositoryTag = Schema.Struct({
   name: RefName,
   target: Schema.optional(ObjectId),
+  object: Schema.optional(ObjectId),
 });
 export type RepositoryTag = typeof RepositoryTag.Type;
 

@@ -7,7 +7,9 @@ import type {
   PushBranch,
   PushDestination,
   PushRejected,
+  PushTags,
   RemoteBranchUpdated,
+  TagsPushed,
 } from "#contracts/repository-push/repository-push.contract.ts";
 import { RepositoryPushApi } from "#contracts/repository-push/repository-push.contract.ts";
 import type { EnvironmentFeature } from "#server/adapters/environment-transport/environment-routes.ts";
@@ -58,17 +60,89 @@ function pushRemoteBranch(git: GitCommandRunner, command: PushBranch) {
   });
 }
 
+function pushTagsToRemote(
+  git: GitCommandRunner,
+  { worktreePath, remote, tags }: PushTags,
+) {
+  const refs = tags.map((tag) => `refs/tags/${tag}`);
+  return Effect.gen(function* () {
+    yield* requireRemote(git, worktreePath, remote);
+    const output = yield* git
+      .run({
+        directory: worktreePath,
+        arguments: [
+          "push",
+          "--porcelain",
+          "--atomic",
+          remote,
+          ...refs.map((ref) => `${ref}:${ref}`),
+        ],
+        timeoutMilliseconds: pushTimeoutMilliseconds,
+      })
+      .pipe(
+        Effect.mapError((error) =>
+          error.reason === "Timeout"
+            ? pushError(
+                "Uncertain",
+                `The push to ${remote} did not finish. Fetch to see which tags arrived.`,
+              )
+            : repositoryRejected(
+                "GitFailed",
+                `Git could not run the push (${error.reason}).`,
+              ),
+        ),
+      );
+    const statuses = tags.map((tag, index) => ({
+      tag,
+      status: pushRefStatus(output.stdout, refs[index] ?? ""),
+    }));
+    if (output.exitCode === 0)
+      return {
+        remote,
+        pushed: statuses
+          .filter(({ status }) => status?.flag !== "=")
+          .map(({ tag }) => tag),
+        upToDate: statuses
+          .filter(({ status }) => status?.flag === "=")
+          .map(({ tag }) => tag),
+      } satisfies TagsPushed;
+    const existing = statuses
+      .filter(({ status }) => status?.summary.includes("(already exists)"))
+      .map(({ tag }) => tag);
+    return yield* Effect.fail(
+      existing.length > 0
+        ? pushError("TagExists", existing.join(", "))
+        : classifyPushFailure(output, refs[0] ?? ""),
+    );
+  });
+}
+
+function requireRemote(
+  git: GitCommandRunner,
+  directory: string,
+  remote: string,
+) {
+  return runRepositoryGit(git, directory, ["remote"]).pipe(
+    Effect.flatMap((remotes) =>
+      remotes.split("\n").includes(remote)
+        ? Effect.void
+        : Effect.fail(
+            pushError(
+              "RemoteMissing",
+              `The remote "${remote}" does not exist.`,
+            ),
+          ),
+    ),
+  );
+}
+
 function requireDestination(
   git: GitCommandRunner,
   directory: string,
   { remote, branch }: PushDestination,
 ) {
   return Effect.gen(function* () {
-    const remotes = yield* runRepositoryGit(git, directory, ["remote"]);
-    if (!remotes.split("\n").includes(remote))
-      return yield* Effect.fail(
-        pushError("RemoteMissing", `The remote "${remote}" does not exist.`),
-      );
+    yield* requireRemote(git, directory, remote);
     yield* runRepositoryGit(git, directory, [
       "check-ref-format",
       `refs/heads/${branch}`,
@@ -147,6 +221,11 @@ export function repositoryPushFeature(
         RepositoryPushApi.push,
         { name: "push", locks: { refs: "wait" }, duringOperation: "block" },
         (input, git) => pushRemoteBranch(git, input),
+      ),
+      command(
+        RepositoryPushApi.pushTags,
+        { name: "push", locks: { refs: "wait" }, duringOperation: "proceed" },
+        (input, git) => pushTagsToRemote(git, input),
       ),
     ],
   };

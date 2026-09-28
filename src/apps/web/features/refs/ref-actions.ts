@@ -15,7 +15,12 @@ import type { RefKind, StartPoint } from "#web/features/refs/ref-kinds.ts";
 
 export type RefIntent =
   | { readonly _tag: "DraftRef"; readonly kind: RefKind; readonly oid: string }
-  | { readonly _tag: "FocusRefs" };
+  | { readonly _tag: "FocusRefs" }
+  | {
+      readonly _tag: "RunRefAction";
+      readonly target: RepositoryRefTarget;
+      readonly id: RefAction["id"];
+    };
 
 type RefIntentListener = (intent: RefIntent) => void;
 
@@ -56,6 +61,9 @@ export type RefAction = Action<
   | "deleteRemote"
   | "deleteBoth"
   | "deleteTag"
+  | "deleteTagBoth"
+  | `deleteTagOn:${string}`
+  | `pushTag:${string}`
 >;
 
 export interface RefActionAccess {
@@ -72,16 +80,22 @@ export interface RefActionHandlers {
   readonly pull:
     | { readonly pulling: boolean; readonly run: (branch: string) => void }
     | undefined;
+  readonly pushTags: TagPushHandler | undefined;
   readonly editing: Pick<RefEditing, "draft" | "change"> & {
     readonly deletion: Pick<RefEditing["deletion"], "request">;
   };
+}
+
+export interface TagPushHandler {
+  readonly pushing: boolean;
+  readonly run: (tags: readonly string[], remote: string) => void;
 }
 
 export function refActions(
   row: RefActionRow,
   refs: RepositoryRefs,
   { activeWorktreePath, writable }: RefActionAccess,
-  { checkout, merge, pull, showReflog, editing }: RefActionHandlers,
+  { checkout, merge, pull, pushTags, showReflog, editing }: RefActionHandlers,
 ): readonly RefAction[] {
   const readOnly = writable ? undefined : "Read only";
   const target = row.target;
@@ -147,19 +161,55 @@ export function refActions(
       },
     }),
   ];
-  if (target._tag === "Tag")
+  if (target._tag === "Tag") {
+    const tag = refs.tags.find(({ name }) => name === target.name);
+    const object = tag?.object ?? tag?.target;
+    const remotes = tagRemotes(refs);
+    const only = remotes.length === 1 ? remotes[0] : undefined;
+    const deletion = (
+      local: boolean,
+      remote: string | undefined,
+    ): RefDeletion | undefined =>
+      object === undefined
+        ? undefined
+        : {
+            kind: "tag",
+            name: target.name,
+            ...(local ? { local: { object } } : {}),
+            ...(remote === undefined ? {} : { remote: { remote, object } }),
+          };
     return [
       ...common,
+      ...pushTagActions([target.name], remotes, readOnly, pushTags),
       remove(
         {
           id: "deleteTag",
-          label: "Delete tag",
+          label: "Delete local",
           reason: readOnly,
           keys: deleteKeys,
         },
-        { kind: "tag", name: target.name },
+        deletion(true, undefined),
       ),
+      ...remotes.map((remote) =>
+        remove(
+          {
+            id: `deleteTagOn:${remote}`,
+            label: `Delete on ${remote}…`,
+            reason: readOnly,
+          },
+          deletion(false, remote),
+        ),
+      ),
+      ...(only === undefined
+        ? []
+        : [
+            remove(
+              { id: "deleteTagBoth", label: "Delete both…", reason: readOnly },
+              deletion(true, only),
+            ),
+          ]),
     ];
+  }
   if (target._tag === "RemoteBranch")
     return [...common, ...deleteOnRemote(remoteBranch(target, refs))];
   const branch = refs.branches.find(({ name }) => name === target.name);
@@ -212,6 +262,56 @@ export function refActions(
           ),
         ]),
   ];
+}
+
+export function selectedTagActions(
+  names: readonly string[],
+  refs: RepositoryRefs,
+  { writable }: Pick<RefActionAccess, "writable">,
+  pushTags: TagPushHandler | undefined,
+): readonly RefAction[] {
+  return pushTagActions(
+    names,
+    tagRemotes(refs),
+    writable ? undefined : "Read only",
+    pushTags,
+  );
+}
+
+function pushTagActions(
+  names: readonly string[],
+  remotes: readonly string[],
+  readOnly: string | undefined,
+  pushTags: TagPushHandler | undefined,
+): readonly RefAction[] {
+  const subject = names.length === 1 ? "" : ` ${names.length} tags`;
+  const reason =
+    readOnly ??
+    (pushTags === undefined ? "Unavailable" : undefined) ??
+    (pushTags?.pushing ? "Pushing" : undefined);
+  if (remotes.length === 0)
+    return [
+      action({
+        id: "pushTag:",
+        label: `Push${subject}`,
+        group: "edit",
+        reason: "No remotes",
+        run: () => undefined,
+      }),
+    ];
+  return remotes.map((remote) =>
+    action({
+      id: `pushTag:${remote}`,
+      label: `Push${subject} to ${remote}`,
+      group: "edit",
+      reason,
+      run: () => pushTags?.run(names, remote),
+    }),
+  );
+}
+
+function tagRemotes(refs: RepositoryRefs): readonly string[] {
+  return refs.remoteProviders?.map(({ remote }) => remote) ?? [];
 }
 
 export function createRefActions(

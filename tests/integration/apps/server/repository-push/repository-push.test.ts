@@ -243,3 +243,51 @@ describe("pushing branches", () => {
       .toBe(pushed);
   });
 });
+
+describe("pushing tags", () => {
+  it("publishes the chosen tags and reports the ones the remote already has", async () => {
+    const f = await fixture();
+    await git(f.local, "tag", "-a", "v1.0", "-m", "Release 1.0");
+    await git(f.local, "tag", "--no-sign", "v1.1");
+    await git(f.local, "tag", "--no-sign", "local-only");
+    const pushTags = (tags: readonly string[]) =>
+      Effect.runPromise(
+        f.service.pushTags({ ...f.scope, remote: "origin", tags }),
+      );
+
+    await expect(pushTags(["v1.0"])).resolves.toEqual({
+      remote: "origin",
+      pushed: ["v1.0"],
+      upToDate: [],
+    });
+    await expect(pushTags(["v1.0", "v1.1"])).resolves.toEqual({
+      remote: "origin",
+      pushed: ["v1.1"],
+      upToDate: ["v1.0"],
+    });
+    expect(await f.tip(f.remote, "refs/tags/v1.0")).toBe(
+      await f.tip(f.local, "refs/tags/v1.0"),
+    );
+    expect(await git(f.remote, "tag", "--list")).toBe("v1.0\nv1.1");
+  });
+
+  it("pushes none of the tags when the remote has one of them on another commit", async () => {
+    const f = await fixture();
+    await commit(f.other, "their release");
+    await git(f.other, "tag", "--no-sign", "v2.0");
+    await git(f.other, "push", "origin", "refs/tags/v2.0");
+    await git(f.local, "tag", "--no-sign", "v2.0");
+    await git(f.local, "tag", "--no-sign", "v2.1");
+
+    expect(
+      await f.failure(
+        f.service.pushTags({
+          ...f.scope,
+          remote: "origin",
+          tags: ["v2.0", "v2.1"],
+        }),
+      ),
+    ).toMatchObject({ reason: "TagExists", detail: "v2.0" });
+    expect(await git(f.remote, "tag", "--list")).toBe("v2.0");
+  });
+});

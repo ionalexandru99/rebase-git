@@ -6,6 +6,7 @@ import type {
   RouteInput,
   RouteSuccess,
 } from "#contracts/environment-connection/environment-route.contract.ts";
+import { RepositoryPushApi } from "#contracts/repository-push/repository-push.contract.ts";
 import { RepositoryBranchesApi } from "#contracts/repository-refs/repository-branches.contract.ts";
 import {
   type RepositoryRefs,
@@ -31,19 +32,22 @@ import {
 import { render } from "#tests-support/render.tsx";
 import { BranchesSidebar } from "#web/features/branches-sidebar/branches-sidebar.tsx";
 import { CommitActionMenu } from "#web/features/commit-graph/commit-actions.tsx";
+import { CommitRefPill } from "#web/features/commit-graph/components/commit-ref-labels.tsx";
 import { NotificationsProvider } from "#web/features/notifications/notifications.tsx";
 import { createRefActions } from "#web/features/refs/ref-actions.ts";
 import { RepositoryScopeProvider } from "#web/platform/query/repository-scope.tsx";
 
 const main = commitId;
 const spike = "b".repeat(40);
+const annotated = "c".repeat(40);
 const scope = { repositoryId, worktreePath: mainPath };
 
 type RefRoute =
   | keyof typeof RepositoryBranchesApi
   | keyof typeof RepositoryRefsApi
   | "createTag"
-  | "deleteTag";
+  | "deleteTag"
+  | "pushTags";
 
 interface BranchRename {
   readonly name: string;
@@ -290,7 +294,7 @@ describe("ref editing", () => {
       .element(screen.getByRole("alert"))
       .toHaveTextContent("origin/main no longer exists.");
   });
-  it("creates a tag from the graph menu and deletes it from the sidebar", async () => {
+  it("creates a lightweight tag from the graph menu and deletes it from the sidebar", async () => {
     const environment = await refsEnvironment();
     const screen = await renderBranches(environment, spike);
     await screen
@@ -302,6 +306,9 @@ describe("ref editing", () => {
     });
     await expect.element(name).toHaveFocus();
 
+    await expect
+      .element(screen.getByText("Lightweight", { exact: true }))
+      .toBeVisible();
     await userEvent.keyboard("v1.0{Enter}");
     const tag = screen.getByRole("treeitem", { name: "v1.0" });
     await expect.element(tag).toBeVisible();
@@ -312,7 +319,7 @@ describe("ref editing", () => {
     });
 
     await tag.click({ button: "right" });
-    await screen.getByRole("menuitem", { name: /Delete tag/ }).click();
+    await screen.getByRole("menuitem", { name: /Delete local/ }).click();
     const confirmation = screen.getByRole("alertdialog", {
       name: "Delete tag v1.0",
     });
@@ -327,7 +334,115 @@ describe("ref editing", () => {
     expect(environment.requested).toHaveBeenCalledWith("deleteTag", {
       ...scope,
       name: "v1.0",
+      local: { object: spike },
     });
+  });
+
+  it("creates an annotated tag from a message and shows its annotation under the row", async () => {
+    const environment = await refsEnvironment();
+    const screen = await renderBranches(environment, spike);
+    await screen
+      .getByRole("button", { name: `Commit ${spike.slice(0, 7)}` })
+      .click({ button: "right" });
+    await screen.getByRole("menuitem", { name: "Create tag here…" }).click();
+
+    await userEvent.keyboard("v2.0");
+    await screen
+      .getByRole("textbox", { name: "Tag message" })
+      .fill("Release 2.0");
+    await expect
+      .element(screen.getByText("Annotated", { exact: true }))
+      .toBeVisible();
+    await userEvent.keyboard("{Control>}{Enter}{/Control}");
+
+    await expect
+      .element(screen.getByRole("treeitem", { name: "v2.0" }))
+      .toBeVisible();
+    expect(environment.requested).toHaveBeenCalledWith("createTag", {
+      ...scope,
+      name: "v2.0",
+      target: spike,
+      message: "Release 2.0",
+    });
+    const details = screen.getByRole("region", { name: "v2.0 details" });
+    await expect.element(details).toHaveTextContent("Release 2.0");
+    await expect.element(details).toHaveTextContent("Tag author");
+    await expect
+      .element(details)
+      .toHaveTextContent(
+        `tag ${annotated.slice(0, 7)} → commit ${spike.slice(0, 7)}`,
+      );
+  });
+
+  it("pushes the selected tags to a remote and deletes one there after confirming", async () => {
+    const environment = await refsEnvironment();
+    const screen = await renderBranches(environment);
+    await screen.getByRole("treeitem", { name: "Tags" }).click();
+    await screen.getByRole("treeitem", { name: "v0.9" }).click();
+    await screen
+      .getByRole("treeitem", { name: "v0.8" })
+      .click({ modifiers: ["ControlOrMeta"] });
+
+    await screen
+      .getByRole("treeitem", { name: "v0.8" })
+      .click({ button: "right" });
+    await screen
+      .getByRole("menuitem", { name: "Push 2 tags to origin" })
+      .click();
+    await expect
+      .element(screen.getByText("Pushed v0.9 and v0.8 to origin"))
+      .toBeVisible();
+    expect(environment.requested).toHaveBeenCalledWith("pushTags", {
+      ...scope,
+      remote: "origin",
+      tags: ["v0.9", "v0.8"],
+    });
+
+    await screen.getByRole("treeitem", { name: "v0.9" }).click();
+    await screen
+      .getByRole("treeitem", { name: "v0.9" })
+      .click({ button: "right" });
+    await screen.getByRole("menuitem", { name: "Delete on origin…" }).click();
+    await screen
+      .getByRole("alertdialog", { name: "Delete tag v0.9 on origin?" })
+      .getByRole("button", { name: "Delete", exact: true })
+      .click();
+    expect(environment.requested).toHaveBeenLastCalledWith("deleteTag", {
+      ...scope,
+      name: "v0.9",
+      remote: { remote: "origin", object: main },
+    });
+    await expect
+      .element(screen.getByText("Deleted v0.9 on origin"))
+      .toBeVisible();
+    await expect
+      .element(screen.getByText("Pushed v0.9 and v0.8 to origin"))
+      .not.toBeInTheDocument();
+  });
+
+  it("runs a graph tag label's menu through the sidebar instead of the commit menu", async () => {
+    const environment = await refsEnvironment();
+    const screen = await renderBranches(environment, spike, undefined, true);
+
+    await screen
+      .getByRole("button", { name: "Copy v0.9" })
+      .click({ button: "right" });
+    await expect
+      .element(screen.getByRole("menuitem", { name: "Create branch here…" }))
+      .not.toBeInTheDocument();
+    await screen.getByRole("menuitem", { name: /Delete local/ }).click();
+    await screen
+      .getByRole("alertdialog", { name: "Delete tag v0.9?" })
+      .getByRole("button", { name: "Delete", exact: true })
+      .click();
+
+    await expect
+      .poll(() => environment.requested)
+      .toHaveBeenCalledWith("deleteTag", {
+        ...scope,
+        name: "v0.9",
+        local: { object: main },
+      });
   });
 
   it("reports a tag that could not be deleted", async () => {
@@ -413,7 +528,11 @@ async function refsEnvironment() {
       target: main,
     })),
     reply("createTag", RepositoryTagsApi.create, (command) => {
-      const tag = { name: command.name, target: command.target };
+      const tag = {
+        name: command.name,
+        target: command.target,
+        ...(command.message === undefined ? {} : { object: annotated }),
+      };
       current = { ...current, tags: [...current.tags, tag] };
       return tag;
     }),
@@ -424,6 +543,19 @@ async function refsEnvironment() {
       };
       return { name: command.name };
     }),
+    reply("pushTags", RepositoryPushApi.pushTags, ({ remote, tags }) => ({
+      remote,
+      pushed: tags,
+      upToDate: [],
+    })),
+    respond(RepositoryTagsApi.annotation, async ({ name }) => ({
+      name,
+      object: annotated,
+      target: spike,
+      tagger: { name: "Tag author", date: "2026-09-25T17:40:00+03:00" },
+      message: "Release 2.0",
+      signed: false,
+    })),
     reply("checkout", RepositoryRefsApi.checkout, (command) => {
       const head = { branch: command.target.name, commit: spike };
       current = {
@@ -453,6 +585,7 @@ function renderBranches(
   environment: Awaited<ReturnType<typeof refsEnvironment>>,
   createBranchAt?: string,
   onBranchRenamed: (rename: BranchRename) => void = () => undefined,
+  tagLabel = false,
 ) {
   return render(
     <NotificationsProvider>
@@ -462,6 +595,7 @@ function renderBranches(
         <BranchWorkspace
           createBranchAt={createBranchAt}
           onBranchRenamed={onBranchRenamed}
+          tagLabel={tagLabel}
         />
       </RepositoryScopeProvider>
     </NotificationsProvider>,
@@ -472,9 +606,11 @@ function renderBranches(
 function BranchWorkspace({
   createBranchAt,
   onBranchRenamed,
+  tagLabel,
 }: {
   readonly createBranchAt: string | undefined;
   readonly onBranchRenamed: (rename: BranchRename) => void;
+  readonly tagLabel: boolean;
 }) {
   return (
     <>
@@ -486,7 +622,13 @@ function BranchWorkspace({
           })}
           restoreFocus={() => undefined}
         >
-          <button type="button">Commit {createBranchAt.slice(0, 7)}</button>
+          {tagLabel ? (
+            <div>
+              <CommitRefPill label={{ name: "v0.9", type: "tag" }} />
+            </div>
+          ) : (
+            <button type="button">Commit {createBranchAt.slice(0, 7)}</button>
+          )}
         </CommitActionMenu>
       )}
       <div style={{ height: 520, width: 320 }}>
@@ -513,7 +655,11 @@ function refs(): RepositoryRefs {
       { name: "main", remote: "origin", target: main },
       { name: "release", remote: "origin", target: main },
     ],
-    tags: [{ name: "v0.9", target: main }],
+    remoteProviders: [{ remote: "origin", provider: "git" }],
+    tags: [
+      { name: "v0.9", target: main },
+      { name: "v0.8", target: spike },
+    ],
     worktrees: mainAndTopicWorktrees(),
   });
 }

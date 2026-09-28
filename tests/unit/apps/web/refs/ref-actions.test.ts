@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vite-plus/test";
+import type { RepositoryRefs } from "#contracts/repository-refs/repository-refs.contract.ts";
 import {
   commitId,
   mainAndTopicWorktrees,
@@ -65,6 +66,36 @@ describe("ref actions", () => {
     ]);
   });
 
+  it("pushes or deletes a tag on each remote and offers both only with one remote", () => {
+    expect(reasons("v1.0")).toEqual({
+      checkout: undefined,
+      newBranch: undefined,
+      "pushTag:origin": undefined,
+      deleteTag: undefined,
+      "deleteTagOn:origin": undefined,
+      deleteTagBoth: undefined,
+    });
+    expect(
+      Object.keys(
+        reasons("v1.0", true, [
+          { remote: "origin", provider: "github" },
+          { remote: "upstream", provider: "git" },
+        ]),
+      ),
+    ).toEqual([
+      "checkout",
+      "newBranch",
+      "pushTag:origin",
+      "pushTag:upstream",
+      "deleteTag",
+      "deleteTagOn:origin",
+      "deleteTagOn:upstream",
+    ]);
+    expect(reasons("v1.0", true, [])).toMatchObject({
+      "pushTag:": "No remotes",
+    });
+  });
+
   it("disables every write without repository write access", () => {
     expect(reasons("feature", false)).toEqual({
       checkout: undefined,
@@ -76,12 +107,18 @@ describe("ref actions", () => {
   });
 });
 
-function reasons(name: string, writable = true) {
-  const repository = refs();
+function reasons(
+  name: string,
+  writable = true,
+  remoteProviders: RepositoryRefs["remoteProviders"] = [
+    { remote: "origin", provider: "git" },
+  ],
+) {
+  const repository = { ...refs(), remoteProviders };
   const row = buildBranchesSidebarRows(
     repository,
     mainPath,
-    new Set(["branches", "remote:origin"]),
+    new Set(["branches", "remote:origin", "tags"]),
     "",
   ).find(
     (candidate): candidate is BranchesSidebarRefRow =>
@@ -99,6 +136,7 @@ function reasons(name: string, writable = true) {
       {
         checkout: () => undefined,
         pull: undefined,
+        pushTags: { pushing: false, run: () => undefined },
         editing: {
           draft: () => undefined,
           change: () => undefined,
@@ -127,6 +165,7 @@ function refs() {
       },
     ],
     remoteBranches: [{ name: "release", remote: "origin", target: commitId }],
+    tags: [{ name: "v1.0", target: commitId }],
     worktrees: mainAndTopicWorktrees(),
   });
 }

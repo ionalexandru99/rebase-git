@@ -69,9 +69,12 @@ export function RefEditingStatus({
             onConfirm={deletion.confirm}
             title={deletionTitle(deletion.pending.deletion)}
           >
-            {deletion.pending.failure === undefined ? undefined : (
+            {deletion.pending.failure !== undefined ? (
               <UnmergedCommits failure={deletion.pending.failure} />
-            )}
+            ) : deletion.pending.deletion.kind === "tag" &&
+              deletion.pending.deletion.remote !== undefined ? (
+              <p>Anyone who already fetched it keeps their copy.</p>
+            ) : undefined}
           </Confirmation>
         </PersistentNotification>
       )}
@@ -81,6 +84,12 @@ export function RefEditingStatus({
           name={deletion.deleted.name}
           onDismiss={deletion.dismiss}
           onUndo={deletion.undo}
+        />
+      )}
+      {editing.notice === undefined ? null : (
+        <DoneNotice
+          message={editing.notice}
+          onDismiss={editing.dismissNotice}
         />
       )}
       <RefAlert message={checkoutError ?? undefined} />
@@ -151,6 +160,36 @@ function DeletedNotice({
         <Button onClick={onUndo} size="xs" variant="ghost">
           Undo
         </Button>
+        <Button
+          aria-label="Dismiss notification"
+          onClick={onDismiss}
+          size="icon-xs"
+          variant="ghost"
+        >
+          <IconX aria-hidden="true" />
+        </Button>
+      </div>
+    </PersistentNotification>
+  );
+}
+
+export function DoneNotice({
+  message,
+  onDismiss,
+}: {
+  readonly message: string;
+  readonly onDismiss: () => void;
+}) {
+  return (
+    <PersistentNotification>
+      <div className="flex items-center gap-3 px-3 py-2" role="status">
+        <IconCircleCheck
+          aria-hidden="true"
+          className="size-4 shrink-0 text-status-available"
+        />
+        <p className="min-w-0 flex-1 wrap-anywhere text-sm font-medium">
+          {message}
+        </p>
         <Button
           aria-label="Dismiss notification"
           onClick={onDismiss}

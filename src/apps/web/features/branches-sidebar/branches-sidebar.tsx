@@ -33,6 +33,7 @@ import {
   refRowId,
   refSectionId,
   scopeShowing,
+  selectTagRows,
   toggleSection,
 } from "#web/features/branches-sidebar/branches-sidebar-state.ts";
 import { SidebarStatus } from "#web/features/branches-sidebar/sidebar-status.tsx";
@@ -43,7 +44,13 @@ import {
 } from "#web/features/branches-sidebar/sidebar-view-controls.tsx";
 import { historyRefKey } from "#web/features/commit-graph/scope/history-scope.ts";
 import type { MergeActions } from "#web/features/merge/merge-actions.ts";
-import { refActions, useRefIntent } from "#web/features/refs/ref-actions.ts";
+import {
+  type RefAction,
+  type RefActionRow,
+  refActions,
+  selectedTagActions,
+  useRefIntent,
+} from "#web/features/refs/ref-actions.ts";
 import { useRefEditing } from "#web/features/refs/ref-editing.ts";
 import { RefEditingStatus } from "#web/features/refs/ref-editing-status.tsx";
 import {
@@ -55,11 +62,14 @@ import {
   useRefActivation,
   useScopedRepositoryRefs,
 } from "#web/features/refs/repository-refs.ts";
+import { TagDetails } from "#web/features/refs/tag-details.tsx";
+import { TagPushStatus, useTagPush } from "#web/features/refs/tag-push.tsx";
 import { usePull } from "#web/features/remote-sync/use-pull.ts";
 import { useRepositoryScope } from "#web/platform/query/repository-scope.tsx";
 
 const overscanRows = 12;
 const noSelectedRefs: ReadonlySet<string> = new Set();
+const noSelectedTags: ReadonlySet<string> = new Set();
 
 export function BranchesSidebar({
   merge,
@@ -81,6 +91,8 @@ export function BranchesSidebar({
   const repositoryRefs = useScopedRepositoryRefs();
   const activation = useRefActivation(repositoryRefs);
   const pull = usePull();
+  const tagPush = useTagPush();
+  const [selectedTags, setSelectedTags] = useState(noSelectedTags);
   const [query, setQuery] = useState("");
   const filterQuery = useDeferredValue(query);
   const [scope, setScope] = useState<BranchesSidebarScope>("all");
@@ -151,9 +163,13 @@ export function BranchesSidebar({
     if (draftSectionId !== undefined)
       setScope((current) => scopeShowing(current, draftSectionId));
   }, [draftSectionId]);
+  const detailsRowId = rows.find(
+    (row) =>
+      row.id === activeRowId && row.kind === "ref" && row.target._tag === "Tag",
+  )?.id;
   const items = useMemo(
-    () => branchesSidebarItems(rows, draftSectionId),
-    [rows, draftSectionId],
+    () => branchesSidebarItems(rows, draftSectionId, detailsRowId),
+    [rows, draftSectionId, detailsRowId],
   );
   const getItemKey = useCallback(
     (index: number) => items[index]?.id ?? index,
@@ -198,6 +214,23 @@ export function BranchesSidebar({
       editing.draft(intent.kind, commitStartPoint(intent.oid));
       return;
     }
+    if (intent._tag === "RunRefAction") {
+      const key = historyRefKey(intent.target);
+      const row = rowsRef.current.find(
+        (candidate) =>
+          candidate.kind === "ref" && historyRefKey(candidate.target) === key,
+      );
+      runAction(
+        clearingNotices(
+          refActionsFor(
+            row?.kind === "ref"
+              ? row
+              : { id: key, name: intent.target.name, target: intent.target },
+          ),
+        ).find((action) => action.id === intent.id),
+      );
+      return;
+    }
     treeRef.current?.focus();
     setActiveRowId(
       (current) =>
@@ -205,7 +238,7 @@ export function BranchesSidebar({
     );
   });
 
-  const actionsFor = (row: BranchesSidebarRefRow) =>
+  const refActionsFor = (row: RefActionRow) =>
     refs === undefined
       ? []
       : refActions(
@@ -222,9 +255,41 @@ export function BranchesSidebar({
                   run: (branch) => void pull.pull(branch),
                 }
               : undefined,
+            pushTags: tagPush.handler,
             editing,
           },
         );
+
+  const actionsFor = (row: BranchesSidebarRefRow) =>
+    clearingNotices(
+      refs !== undefined && selectedTags.size > 1 && selectedTags.has(row.id)
+        ? selectedTagActions(
+            rows.flatMap((candidate) =>
+              selectedTags.has(candidate.id) && candidate.kind === "ref"
+                ? [candidate.name]
+                : [],
+            ),
+            refs,
+            { writable: editing.writable },
+            tagPush.handler,
+          )
+        : refActionsFor(row),
+    );
+
+  const clearingNotices = (actions: readonly RefAction[]) =>
+    actions.map((action) => ({
+      ...action,
+      run: () => {
+        tagPush.dismiss();
+        editing.dismissNotice();
+        action.run();
+      },
+    }));
+
+  const moveActive = (rowId: string | undefined) => {
+    setSelectedTags(noSelectedTags);
+    setActiveRowId(rowId);
+  };
 
   const setRowExpanded = (
     row: Exclude<BranchesSidebarRow, { kind: "ref" }>,
@@ -276,13 +341,18 @@ export function BranchesSidebar({
       event.preventDefault();
       return;
     }
+    if (event.key === "Escape" && selectedTags.size > 0) {
+      event.preventDefault();
+      setSelectedTags(noSelectedTags);
+      return;
+    }
     const handled = treeKeyAction(event.key, {
       activeRow,
       collapse: (row) => setRowExpanded(row, false),
       expand: (row) => setRowExpanded(row, true),
       hasQuery: query.length > 0,
       rows,
-      setActive: setActiveRowId,
+      setActive: moveActive,
       toggleHistoryRef: (row) => onToggleHistoryRef(row.target),
       activate: activateRow,
       clearQuery: () => setQuery(""),
@@ -346,6 +416,7 @@ export function BranchesSidebar({
         }
         aria-busy={activation.checkingOut}
         aria-label="Branches"
+        aria-multiselectable="true"
         className={`group/tree min-h-0 flex-1 overflow-x-hidden overflow-y-auto [scrollbar-width:none] px-2 pb-2 outline-none [&::-webkit-scrollbar]:hidden focus-visible:ring-2 focus-visible:ring-sidebar-ring/40 ${activation.checkingOut ? "cursor-progress opacity-70" : ""}`}
         onKeyDown={handleTreeKeyDown}
         ref={treeRef}
@@ -381,6 +452,20 @@ export function BranchesSidebar({
                   />
                 </div>
               );
+            if (item.kind === "details") {
+              const tag = refs?.tags.find(({ name }) => name === item.row.name);
+              return tag === undefined ? null : (
+                <div
+                  className="absolute top-0 left-0 w-full"
+                  data-index={virtualItem.index}
+                  key={item.id}
+                  ref={virtualizer.measureElement}
+                  style={position}
+                >
+                  <TagDetails level={item.row.level} tag={tag} />
+                </div>
+              );
+            }
             if (item.kind !== "row") return null;
             const row = item.row;
             const style = { ...position, height: virtualItem.size };
@@ -398,12 +483,16 @@ export function BranchesSidebar({
                 actions={actionsFor(row)}
                 active={row.id === activeRowId}
                 key={row.id}
-                onActivate={() => {
+                onActivate={(mode) => {
+                  setSelectedTags((current) =>
+                    selectTagRows(rows, current, activeRowId, row.id, mode),
+                  );
                   setActiveRowId(row.id);
                   merge?.inspect(row.target);
                 }}
                 onToggleHistory={() => onToggleHistoryRef(row.target)}
                 row={row}
+                selected={selectedTags.has(row.id)}
                 selectedInHistory={selectedHistoryRefKeys.has(
                   historyRefKey(row.target),
                 )}
@@ -425,6 +514,7 @@ export function BranchesSidebar({
         editing={editing}
         remoteBranches={refs?.remoteBranches ?? []}
       />
+      <TagPushStatus push={tagPush} />
     </nav>
   );
 }

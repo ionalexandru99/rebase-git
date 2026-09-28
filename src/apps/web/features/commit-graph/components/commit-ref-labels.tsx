@@ -15,6 +15,7 @@ import type { RepositoryRefs } from "#contracts/repository-refs/repository-refs.
 import { CopyPill } from "#web/features/clipboard/components/copy-pill.tsx";
 import { graphLaneColor } from "#web/features/commit-graph/layout/graph-colors.ts";
 import type { HistorySelection } from "#web/features/commit-graph/scope/history-scope.ts";
+import { TagLabelMenu } from "#web/features/refs/tag-label-menu.tsx";
 import {
   type CommitLaneRow,
   graphBranchColorIndex,
@@ -92,7 +93,7 @@ export function CommitRefPill({
   const remote = separator > 0 ? label.name.slice(0, separator) : undefined;
   const name =
     remote === undefined ? label.name : label.name.slice(separator + 1);
-  return (
+  const pill = (
     <span
       className="group/ref relative inline-flex shrink-0 items-center rounded-[5px] border font-sans text-[.85rem] leading-none"
       style={{
@@ -130,6 +131,11 @@ export function CommitRefPill({
         </button>
       )}
     </span>
+  );
+  return label.type === "tag" ? (
+    <TagLabelMenu name={label.name}>{pill}</TagLabelMenu>
+  ) : (
+    pill
   );
 }
 

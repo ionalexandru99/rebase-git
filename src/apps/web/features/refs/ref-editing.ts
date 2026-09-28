@@ -42,7 +42,12 @@ export type RefDeletion =
       readonly local?: Targeted<LocalBranch>;
       readonly remote?: Targeted<RemoteBranch>;
     }
-  | { readonly kind: "tag"; readonly name: string };
+  | {
+      readonly kind: "tag";
+      readonly name: string;
+      readonly local?: { readonly object: string };
+      readonly remote?: { readonly remote: string; readonly object: string };
+    };
 
 interface PendingDeletion {
   readonly deletion: RefDeletion;
@@ -88,6 +93,7 @@ export function useRefEditing({
   const [error, setError] = useState<string>();
   const [pending, setPending] = useState<PendingDeletion>();
   const [deleted, setDeleted] = useState<DeletedBranch>();
+  const [notice, setNotice] = useState<string>();
   const latestPending = useRef(pending);
   latestPending.current = pending;
 
@@ -105,6 +111,7 @@ export function useRefEditing({
 
   const begin = (next: RefEdit) => {
     setError(undefined);
+    setNotice(undefined);
     setEdit(next);
   };
 
@@ -113,7 +120,7 @@ export function useRefEditing({
     reveal(kind, name);
   };
 
-  const create = async (name: string) => {
+  const create = async (name: string, message?: string) => {
     if (edit?.kind !== "create") return undefined;
     const { ref, startPoint } = edit;
     if (!creates[ref].canRun) {
@@ -129,7 +136,11 @@ export function useRefEditing({
               ? {}
               : { track: startPoint.track }),
           })
-        : await creates.tag.run({ name, target: startPoint.oid });
+        : await creates.tag.run({
+            name,
+            target: startPoint.oid,
+            ...(message === undefined ? {} : { message }),
+          });
     if (created._tag !== "Ok") return describeRefFailure(name, created);
     finish(ref, name);
     if (ref === "branch") onCreated(name);
@@ -164,7 +175,7 @@ export function useRefEditing({
     setError(undefined);
     const result =
       deletion.kind === "tag"
-        ? await deletes.tag.run({ name: deletion.name })
+        ? await deletes.tag.run(tagDeletionInput(deletion))
         : await deletes.branch.run(branchDeletionInput(deletion, force));
     const unmerged =
       force || result._tag === "Ok" ? undefined : notMerged(result);
@@ -177,6 +188,7 @@ export function useRefEditing({
     else {
       const restorable = deletedBranch(deletion, refs);
       if (restorable !== undefined) setDeleted(restorable);
+      setNotice(remoteDeletionNotice(deletion));
     }
     const current = latestPending.current;
     if (current !== undefined && current.deletion !== deletion) return;
@@ -199,6 +211,8 @@ export function useRefEditing({
   return {
     edit,
     error,
+    notice,
+    dismissNotice: () => setNotice(undefined),
     writable: creates.branch.canRun,
     cancel,
     create,
@@ -216,6 +230,7 @@ export function useRefEditing({
       undo: () => void undo(),
       request: (deletion: RefDeletion) => {
         setError(undefined);
+        setNotice(undefined);
         if (confirmsFirst(deletion)) setPending({ deletion, busy: false });
         else if (deletes[deletion.kind].canRun) void remove(deletion, false);
       },
@@ -233,7 +248,12 @@ export function useRefEditing({
 }
 
 export function deletionTitle(deletion: RefDeletion) {
-  if (deletion.kind === "tag") return `Delete tag ${deletion.name}?`;
+  if (deletion.kind === "tag") {
+    const { name, local, remote } = deletion;
+    if (remote === undefined) return `Delete tag ${name}?`;
+    if (local === undefined) return `Delete tag ${name} on ${remote.remote}?`;
+    return `Delete tag ${name} locally and on ${remote.remote}?`;
+  }
   const { local, remote } = deletion;
   if (remote === undefined) return `Delete ${local?.name ?? ""}?`;
   if (local === undefined) return `Delete ${remote.name} on ${remote.remote}?`;
@@ -252,6 +272,14 @@ function upstreamTarget(
     : { name: branch.name, remote: branch.remote };
 }
 
+function remoteDeletionNotice(deletion: RefDeletion) {
+  if (deletion.kind !== "tag" || deletion.remote === undefined)
+    return undefined;
+  return deletion.local === undefined
+    ? `Deleted ${deletion.name} on ${deletion.remote.remote}`
+    : `Deleted ${deletion.name} locally and on ${deletion.remote.remote}`;
+}
+
 function confirmsFirst(deletion: RefDeletion) {
   return deletion.kind === "tag" || deletion.remote !== undefined;
 }
@@ -260,6 +288,18 @@ function deletedName(deletion: RefDeletion) {
   return deletion.kind === "tag"
     ? deletion.name
     : (deletion.local?.name ?? deletion.remote?.name ?? "");
+}
+
+function tagDeletionInput({
+  name,
+  local,
+  remote,
+}: Extract<RefDeletion, { kind: "tag" }>) {
+  return {
+    name,
+    ...(local === undefined ? {} : { local }),
+    ...(remote === undefined ? {} : { remote }),
+  };
 }
 
 function branchDeletionInput(

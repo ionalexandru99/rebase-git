@@ -60,7 +60,14 @@ export type BranchesSidebarItem =
       readonly kind: "row";
       readonly row: BranchesSidebarRow;
     }
-  | { readonly id: "ref-draft"; readonly kind: "draft" };
+  | { readonly id: "ref-draft"; readonly kind: "draft" }
+  | {
+      readonly id: "tag-details";
+      readonly kind: "details";
+      readonly row: BranchesSidebarRefRow;
+    };
+
+export type TagSelectionMode = "replace" | "toggle" | "range" | "keep";
 
 const kindSections: Record<RefKind, string> = {
   branch: localBranchesSectionId,
@@ -203,12 +210,17 @@ export function refSectionId(kind: RefKind) {
 export function branchesSidebarItems(
   rows: readonly BranchesSidebarRow[],
   draftSectionId: string | undefined,
+  detailsRowId?: string,
 ): readonly BranchesSidebarItem[] {
-  const items: BranchesSidebarItem[] = rows.map((row) => ({
-    id: row.id,
-    kind: "row",
-    row,
-  }));
+  const items: BranchesSidebarItem[] = rows.flatMap(
+    (row): BranchesSidebarItem[] =>
+      row.id === detailsRowId && row.kind === "ref"
+        ? [
+            { id: row.id, kind: "row", row },
+            { id: "tag-details", kind: "details", row },
+          ]
+        : [{ id: row.id, kind: "row", row }],
+  );
   if (draftSectionId !== undefined)
     items.splice(draftPosition(rows, draftSectionId), 0, {
       id: "ref-draft",
@@ -219,7 +231,42 @@ export function branchesSidebarItems(
 
 export function estimateItemHeight(item: BranchesSidebarItem | undefined) {
   if (item?.kind === "draft") return 40;
+  if (item?.kind === "details") return 56;
   return item?.row.kind === "section" && item.row.separator ? 44 : 32;
+}
+
+export function selectTagRows(
+  rows: readonly BranchesSidebarRow[],
+  selected: ReadonlySet<string>,
+  anchorId: string | undefined,
+  rowId: string,
+  mode: TagSelectionMode,
+): ReadonlySet<string> {
+  const isTag = (id: string | undefined) =>
+    rows.some(
+      (row) => row.id === id && row.kind === "ref" && row.target._tag === "Tag",
+    );
+  if (!isTag(rowId) || mode === "replace") return new Set();
+  if (mode === "keep") return selected.has(rowId) ? selected : new Set();
+  if (mode === "toggle") {
+    const next = new Set(
+      selected.size === 0 && isTag(anchorId) && anchorId !== undefined
+        ? [anchorId]
+        : selected,
+    );
+    if (next.has(rowId)) next.delete(rowId);
+    else next.add(rowId);
+    return next;
+  }
+  const from = rows.findIndex((row) => row.id === anchorId);
+  const to = rows.findIndex((row) => row.id === rowId);
+  if (from < 0 || !isTag(anchorId)) return new Set([rowId]);
+  return new Set(
+    rows
+      .slice(Math.min(from, to), Math.max(from, to) + 1)
+      .filter((row) => isTag(row.id))
+      .map((row) => row.id),
+  );
 }
 
 export function refRowId(sectionId: string, name: string) {
