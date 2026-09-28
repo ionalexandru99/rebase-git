@@ -101,9 +101,9 @@ describe("interactive rebase tab", () => {
         branch: "topic",
         actions: [{ action: "continue", enabled: true, reason: null }],
         steps: [
-          { commit: engine, action: "pick", done: true },
-          { commit: wip, action: "edit", done: true },
-          { commit: tests, action: "pick", done: false },
+          { commit: engine, action: "pick", subject: "Add engine", done: true },
+          { commit: wip, action: "edit", subject: "wip", done: true },
+          { commit: tests, action: "pick", subject: "Add tests", done: false },
         ],
       }),
     );
@@ -116,6 +116,27 @@ describe("interactive rebase tab", () => {
     await expect
       .element(f.screen.getByRole("listitem").nth(1))
       .toHaveTextContent(/edit.*wip/);
+  });
+  it("keeps another operation's controls in reach while the plan waits", async () => {
+    const f = await fixture(
+      repositoryOperation({
+        kind: "merge",
+        phase: "conflicts",
+        revision: "b".repeat(64),
+        branch: "topic",
+        unresolvedPaths: ["engine.ts"],
+        actions: [
+          { action: "continue", enabled: false, reason: "Resolve 1 file." },
+          { action: "abort", enabled: true, reason: null },
+        ],
+      }),
+    );
+    await expect
+      .element(f.screen.getByRole("button", { name: "Continue merge" }))
+      .toBeVisible();
+    await expect
+      .element(f.screen.getByText("Another operation is in progress."))
+      .toBeVisible();
   });
 });
 

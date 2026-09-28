@@ -38,7 +38,6 @@ const metadataNames = [
   "rebase-merge/amend",
   "rebase-merge/done",
   "rebase-merge/git-rebase-todo",
-  "rebase-merge/interactive",
   "rebase-apply/rebasing",
   "rebase-apply/applying",
   "rebase-apply/next",
@@ -339,20 +338,26 @@ const planActions: Readonly<Record<string, PlanAction>> = {
 };
 
 function rebaseSteps(metadata: Metadata): RebaseStep[] | null {
-  if (metadata["rebase-merge/interactive"] === null) return null;
-  const parse = (text: string | null, done: boolean) =>
-    (text ?? "").split("\n").flatMap((line) => {
-      const match = /^(\w+)\s+(-[cC]\s+)?([0-9a-f]{40,64})\b/.exec(line.trim());
+  const steps: RebaseStep[] = [];
+  for (const [text, done] of [
+    [metadata["rebase-merge/done"], true],
+    [metadata["rebase-merge/git-rebase-todo"], false],
+  ] as const)
+    for (const line of (text ?? "").split("\n")) {
+      const trimmed = line.trim();
+      if (trimmed === "" || trimmed.startsWith("#")) continue;
+      const match = /^(\w+)\s+([0-9a-f]{40,64})(?:\s+(.*))?$/.exec(trimmed);
       const action =
         match?.[1] === undefined ? undefined : planActions[match[1]];
-      return match === null || match[2] !== undefined || action === undefined
-        ? []
-        : [{ commit: match[3] ?? "", action, done }];
-    });
-  return [
-    ...parse(metadata["rebase-merge/done"], true),
-    ...parse(metadata["rebase-merge/git-rebase-todo"], false),
-  ];
+      if (match === null || action === undefined) return null;
+      steps.push({
+        commit: match[2] ?? "",
+        action,
+        subject: (match[3] ?? "").replace(/^#\s*/, ""),
+        done,
+      });
+    }
+  return steps.length === 0 ? null : steps;
 }
 
 function stepProgress(steps: readonly RebaseStep[] | null) {

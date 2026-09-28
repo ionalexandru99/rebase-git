@@ -48,6 +48,7 @@ export type PlanStep = typeof PlanStep.Type;
 export const RebaseStep = Schema.Struct({
   commit: ObjectId,
   action: PlanAction,
+  subject: Schema.String,
   done: Schema.Boolean,
 });
 export type RebaseStep = typeof RebaseStep.Type;

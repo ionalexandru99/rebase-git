@@ -12,6 +12,7 @@ import { Deferred, Effect, Stream } from "effect";
 export interface GitCommand {
   readonly arguments: readonly string[];
   readonly directory: string;
+  readonly environment?: Readonly<Record<string, string>>;
   readonly globalArguments?: readonly string[];
   readonly input?: string;
   readonly indexFile?: string;
@@ -281,8 +282,10 @@ function gitArguments(command: GitCommand) {
 }
 
 function gitEnvironment(command: GitCommand) {
+  const { GIT_SEQUENCE_EDITOR: _, ...inherited } = process.env;
   return {
-    ...process.env,
+    ...inherited,
+    ...command.environment,
     GIT_EDITOR: "true",
     GIT_OPTIONAL_LOCKS: "0",
     GIT_TERMINAL_PROMPT: "0",

@@ -80,7 +80,9 @@ export function PlanEditor({
       ? "Rebasing…"
       : messages.loading
         ? "Loading messages…"
-        : undefined);
+        : changed === undefined
+          ? "Checking changes…"
+          : undefined);
   const select = (index: number) =>
     setSelected(Math.max(0, Math.min(rows.length - 1, index)));
   const editMessage = (next: string) => {
@@ -113,13 +115,18 @@ export function PlanEditor({
   const failure = error ?? problem?.text;
   return (
     <section
-      aria-label="Interactive rebase"
-      className="flex h-full min-h-0 flex-col bg-background text-[.85rem]"
+      aria-label="Rebase plan"
+      className="flex min-h-0 flex-1 flex-col"
       onKeyDown={(event) => {
         if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) {
           event.preventDefault();
           void start();
-        } else if (event.key === "Escape" && !command.running) {
+        } else if (
+          event.key === "Escape" &&
+          !command.running &&
+          !(event.target instanceof HTMLInputElement) &&
+          !(event.target instanceof HTMLTextAreaElement)
+        ) {
           event.preventDefault();
           close();
         }

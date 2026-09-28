@@ -49,7 +49,7 @@ async function fixture() {
       }),
     );
   const log = () =>
-    git(directory, "log", "--format=%s|%b|%an", "topic~0", "--not", "main~2");
+    git(directory, "log", "--format=%s|%an", "topic~0", "--not", "main~2");
   return { directory, tip, step, start, execute, log };
 }
 
@@ -59,28 +59,36 @@ describe("Rebase with an edited plan", () => {
     expect(
       (
         await f.start([
-          f.step("shared", "reword", "Shared change, reworded"),
+          f.step("shared", "reword", "#12 Shared change, reworded"),
           f.step("one", "pick", "One and file\n\nFolded together"),
           f.step("file", "squash"),
         ])
       ).outcome,
     ).toBe("Rebased");
     expect(await f.log()).toBe(
-      "One and file|Folded together|Rebase test\nShared change, reworded||Rebase test",
+      "One and file|Rebase test\n#12 Shared change, reworded|Rebase test",
+    );
+    expect(await git(f.directory, "log", "-1", "--format=%b", "topic")).toBe(
+      "Folded together",
     );
     expect(await readFile(join(f.directory, "file.txt"), "utf8")).toBe(
       "topic\n",
     );
   });
 
-  it("drops a commit and folds a fixup into the commit below it", async () => {
+  it("drops a commit and folds a fixup into the commit below it, whatever sequence editor the environment names", async () => {
     const f = await fixture();
-    await f.start([
-      f.step("shared", "pick"),
-      f.step("file", "fixup"),
-      f.step("one", "drop"),
-    ]);
-    expect(await f.log()).toBe("shared change||Rebase test");
+    process.env.GIT_SEQUENCE_EDITOR = "true";
+    try {
+      await f.start([
+        f.step("shared", "pick"),
+        f.step("file", "fixup"),
+        f.step("one", "drop"),
+      ]);
+    } finally {
+      delete process.env.GIT_SEQUENCE_EDITOR;
+    }
+    expect(await f.log()).toBe("shared change|Rebase test");
     expect(
       await git(f.directory, "ls-files", "one.txt", "file.txt", "shared.txt"),
     ).toBe("file.txt\nshared.txt");
@@ -100,9 +108,9 @@ describe("Rebase with an edited plan", () => {
         phase: "edit",
         progress: { current: 1, total: 3 },
         steps: [
-          { action: "edit", done: true },
-          { action: "reword", done: false },
-          { action: "pick", done: false },
+          { action: "edit", subject: "topic one", done: true },
+          { action: "pick", subject: "File, reworded", done: false },
+          { action: "pick", subject: "shared change", done: false },
         ],
       },
     });
@@ -129,6 +137,21 @@ describe("Rebase with an edited plan", () => {
     ).toBe("conflicts");
     expect((await f.execute("abort")).kind).toBe("idle");
     expect(await f.tip("topic")).toBe(started);
+  });
+
+  it("keeps a new message with its commit when Git drops that commit as already applied", async () => {
+    const f = await fixture();
+    await f.start(
+      [
+        f.step("one", "pick"),
+        f.step("file", "drop"),
+        f.step("shared", "reword", "Shared, reworded"),
+      ],
+      { ref: "main", commit: await f.tip("main") },
+    );
+    expect(await git(f.directory, "log", "--format=%s", "main..topic")).toBe(
+      "topic one",
+    );
   });
 
   it("refuses plans that miss a commit or fold into nothing, without running Git", async () => {

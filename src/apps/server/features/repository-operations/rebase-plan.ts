@@ -6,6 +6,15 @@ import {
 } from "#server/adapters/local-git/git-commands.ts";
 import { operationFailure } from "#server/features/repository-operations/operation-outcome.ts";
 
+const todoCommands: Readonly<Record<PlanStep["action"], string>> = {
+  pick: "pick",
+  reword: "pick",
+  edit: "edit",
+  squash: "fixup",
+  fixup: "fixup",
+  drop: "drop",
+};
+
 export function rebasePlanTodo(
   git: GitCommandRunner,
   directory: string,
@@ -13,18 +22,29 @@ export function rebasePlanTodo(
   plan: readonly PlanStep[],
 ) {
   return Effect.gen(function* () {
-    const replayed = (yield* runRepositoryGit(git, directory, [
-      "rev-list",
-      "--no-merges",
-      range,
-    ]))
-      .split("\n")
-      .filter(Boolean);
-    const planned = new Set(plan.map((step) => step.commit));
+    const replayed = new Map(
+      (yield* runRepositoryGit(git, directory, [
+        "log",
+        "--no-merges",
+        "--format=%H%x00%P%x00%an%x00%ae%x00%ad%x00%s",
+        "--date=raw",
+        range,
+      ]))
+        .split("\n")
+        .filter(Boolean)
+        .map((line) => {
+          const [commit = "", parents = "", name, email, date, subject] =
+            line.split("\0");
+          return [
+            commit,
+            { parent: parents.split(" ")[0] ?? "", name, email, date, subject },
+          ] as const;
+        }),
+    );
     if (
-      planned.size !== plan.length ||
-      replayed.length !== plan.length ||
-      replayed.some((commit) => !planned.has(commit))
+      new Set(plan.map((step) => step.commit)).size !== plan.length ||
+      replayed.size !== plan.length ||
+      plan.some((step) => !replayed.has(step.commit))
     )
       return yield* operationFailure(
         "Stale",
@@ -34,31 +54,34 @@ export function rebasePlanTodo(
     if (problem !== undefined)
       return yield* operationFailure("Incompatible", problem);
     const lines: string[] = [];
-    let message: string | undefined;
     for (const step of plan) {
-      const kept = step.action !== "drop" && !folds(step);
-      if (kept && message !== undefined) {
-        lines.push(`fixup -C ${message}`);
-        message = undefined;
-      }
-      lines.push(
-        `${step.action === "squash" ? "fixup" : step.action} ${step.commit}`,
-      );
-      if (step.message !== null)
-        message = (yield* runRepositoryGit(
-          git,
-          directory,
-          [
-            "commit-tree",
-            "--no-gpg-sign",
-            `${step.commit}^{tree}`,
-            "-p",
-            step.commit,
-          ],
-          { input: step.message },
-        )).trim();
+      const original = replayed.get(step.commit);
+      const commit =
+        step.message === null || original === undefined
+          ? step.commit
+          : (yield* runRepositoryGit(
+              git,
+              directory,
+              [
+                "commit-tree",
+                "--no-gpg-sign",
+                `${step.commit}^{tree}`,
+                ...(original.parent === "" ? [] : ["-p", original.parent]),
+              ],
+              {
+                input: `${step.message}\n`,
+                environment: {
+                  GIT_AUTHOR_NAME: original.name ?? "",
+                  GIT_AUTHOR_EMAIL: original.email ?? "",
+                  GIT_AUTHOR_DATE: original.date ?? "",
+                },
+              },
+            )).trim();
+      const subject = (step.message ?? original?.subject ?? "").split(
+        /\r?\n/,
+      )[0];
+      lines.push(`${todoCommands[step.action]} ${commit} ${subject}`.trim());
     }
-    if (message !== undefined) lines.push(`fixup -C ${message}`);
     return `${lines.join("\n")}\n`;
   });
 }
