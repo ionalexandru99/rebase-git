@@ -212,6 +212,11 @@ export class HistoryReplica {
     return record === undefined ? [] : readCommits(record.id, oids);
   }
 
+  async range(head: string, onto: string, upstream: string | undefined) {
+    await this.loading;
+    return this.graph.range(head, onto, upstream);
+  }
+
   async clear(remove: boolean) {
     this.paused = true;
     await this.stop();

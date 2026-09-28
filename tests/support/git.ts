@@ -128,6 +128,63 @@ export function startConflict(
   );
 }
 
+export async function createRebaseRepository(parent = tmpdir()) {
+  const directory = await realpath(await mkdtemp(join(parent, "rebase-onto-")));
+  await createRepository(directory, { commits: [] });
+  await git(directory, "config", "user.name", "Rebase test");
+  await git(directory, "config", "user.email", "rebase@example.test");
+  await git(directory, "config", "commit.gpgsign", "false");
+  await fastImport(
+    directory,
+    commit(
+      "refs/heads/main",
+      "base",
+      null,
+      files({ "file.txt": "base\n", "shared.txt": "base\n" }),
+    ) +
+      commit(
+        "refs/heads/topic",
+        "topic one",
+        ":1",
+        files({ "one.txt": "one\n" }),
+      ) +
+      commit(
+        "refs/heads/topic",
+        "topic file",
+        undefined,
+        files({ "file.txt": "topic\n" }),
+      ) +
+      commit(
+        "refs/heads/topic",
+        "shared change",
+        undefined,
+        files({ "shared.txt": "changed\n" }),
+      ) +
+      commit("refs/heads/side", "side", ":1", files({ "side.txt": "side\n" })) +
+      commit(
+        "refs/heads/merged",
+        "merged one",
+        ":1",
+        files({ "merged.txt": "merged\n" }),
+      ) +
+      "commit refs/heads/merged\ncommitter Rebase test <rebase@example.test> 1700000000 +0000\ndata 10\nmerge side\nmerge refs/heads/side\n\n" +
+      commit(
+        "refs/heads/main",
+        "main file",
+        ":1",
+        files({ "file.txt": "main\n" }),
+      ) +
+      commit(
+        "refs/heads/main",
+        "shared change",
+        undefined,
+        files({ "shared.txt": "changed\n" }),
+      ),
+  );
+  await git(directory, "checkout", "--force", "topic");
+  return directory;
+}
+
 const lines = (...values: string[]) =>
   values.map((line) => `${line}\n`).join("");
 const letters = ["a", "b", "c", "d", "e", "f", "g", "h"];
@@ -161,7 +218,10 @@ const textFiles = new Set(["two.txt", "added.txt"]);
 
 export async function createConflictedRebase(
   parent = tmpdir(),
-  { files: kept = "all" }: { readonly files?: "all" | "text" } = {},
+  {
+    files: kept = "all",
+    paused = true,
+  }: { readonly files?: "all" | "text"; readonly paused?: boolean } = {},
 ) {
   const only = (entries: Record<string, string>) =>
     kept === "all"
@@ -193,6 +253,7 @@ export async function createConflictedRebase(
       ),
   );
   await git(directory, "checkout", "--force", "topic");
+  if (!paused) return directory;
   await git(directory, "rebase", "main").then(
     () => {
       throw new Error("Expected the rebase to stop on conflicts.");
@@ -214,7 +275,7 @@ function files(entries: Record<string, string>) {
 function commit(
   ref: string,
   message: string,
-  from: string | null,
+  from: string | null | undefined,
   changes: string,
 ) {
   return [
@@ -222,7 +283,7 @@ function commit(
     from === null ? "mark :1\n" : "",
     "committer Rebase test <rebase@example.test> 1700000000 +0000\n",
     `data ${Buffer.byteLength(message)}\n${message}\n`,
-    from === null ? "" : `from ${from}\n`,
+    from === null || from === undefined ? "" : `from ${from}\n`,
     changes,
     "\n",
   ].join("");

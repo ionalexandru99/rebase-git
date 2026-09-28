@@ -52,6 +52,7 @@ import type {
 } from "#web/features/commit-graph/scope/history-scope.ts";
 import { RepositoryHistorySearchControls } from "#web/features/history-search/components/repository-history-search-controls.tsx";
 import type { MergeActions } from "#web/features/merge/merge-actions.ts";
+import type { RebaseActions } from "#web/features/rebase/rebase-actions.ts";
 import {
   describeHistoryFailure,
   type RepositoryHistory,
@@ -81,10 +82,12 @@ export function CommitGraph({
   remoteProviders,
   toolbarActions,
   merge,
+  rebase,
   onOpenDetails,
   onActiveCommitChange,
 }: {
   readonly merge?: MergeActions | undefined;
+  readonly rebase?: RebaseActions | undefined;
   readonly onOpenDetails?: ((oid: string) => void) | undefined;
   readonly onActiveCommitChange?:
     | ((oid: string | undefined) => void)
@@ -150,7 +153,21 @@ export function CommitGraph({
   );
   useImperativeHandle(ref, () => ({ navigateToOid, focusSelection }));
 
-  const commands = useCommitActions({ history, merge, onOpenDetails });
+  const [previewing, setPreviewing] = useState(false);
+  const commands = useCommitActions({
+    history,
+    merge,
+    rebase: rebase && {
+      actionFor: (oid) => {
+        const action = rebase.actionFor(oid);
+        return action && { ...action, onHighlight: setPreviewing };
+      },
+    },
+    onOpenDetails,
+  });
+  const moving = new Set(
+    previewing && menuOid !== undefined ? rebase?.moving(menuOid) : [],
+  );
   const handleKeyDown = (event: KeyboardEvent<HTMLElement>) => {
     if (event.defaultPrevented) return;
     if (
@@ -202,6 +219,7 @@ export function CommitGraph({
     beginNavigation();
     setMenuOid(oid);
     merge?.inspect(oid);
+    rebase?.inspect(oid);
     navigation.select(
       oid,
       index,
@@ -276,7 +294,10 @@ export function CommitGraph({
                       : commands.actionsFor(menuOid)
                   }
                   tabIndex={0}
-                  restoreFocus={() => scrollRef.current?.focus()}
+                  restoreFocus={() => {
+                    setPreviewing(false);
+                    scrollRef.current?.focus();
+                  }}
                 >
                   <table
                     aria-activedescendant={
@@ -376,6 +397,13 @@ export function CommitGraph({
                               merge !== undefined &&
                               merge !== shownMerges.get(commit.oid) &&
                               failure === undefined
+                            }
+                            mark={
+                              moving.has(commit.oid)
+                                ? "moving"
+                                : previewing && commit.oid === menuOid
+                                  ? "base"
+                                  : undefined
                             }
                           />
                         );

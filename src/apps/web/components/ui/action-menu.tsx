@@ -16,6 +16,7 @@ export interface Action<Id extends string = string> {
   readonly detail?: string;
   readonly keys?: readonly string[];
   readonly group?: "create" | "edit" | "delete";
+  readonly onHighlight?: (highlighted: boolean) => void;
   readonly submenu?: {
     readonly title: string;
     readonly actions: readonly Action[];
@@ -51,6 +52,8 @@ export function ActionMenuItems({
           <ContextMenuItem
             className={className}
             disabled={!action.enabled}
+            onFocus={() => action.onHighlight?.(true)}
+            onBlur={() => action.onHighlight?.(false)}
             onClick={() => {
               onRun?.(action);
               action.run();

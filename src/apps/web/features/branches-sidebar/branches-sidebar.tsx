@@ -44,6 +44,7 @@ import {
 } from "#web/features/branches-sidebar/sidebar-view-controls.tsx";
 import { historyRefKey } from "#web/features/commit-graph/scope/history-scope.ts";
 import type { MergeActions } from "#web/features/merge/merge-actions.ts";
+import type { RebaseActions } from "#web/features/rebase/rebase-actions.ts";
 import {
   type RefAction,
   type RefActionRow,
@@ -73,12 +74,14 @@ const noSelectedTags: ReadonlySet<string> = new Set();
 
 export function BranchesSidebar({
   merge,
+  rebase,
   onBranchRenamed = () => undefined,
   onToggleHistoryRef = () => undefined,
   onShowReflog,
   selectedHistoryRefKeys = noSelectedRefs,
 }: {
   readonly merge?: MergeActions | undefined;
+  readonly rebase?: RebaseActions | undefined;
   readonly onBranchRenamed?: (rename: {
     readonly name: string;
     readonly newName: string;
@@ -248,6 +251,7 @@ export function BranchesSidebar({
           {
             checkout: onSelectRef,
             merge: merge?.actionFor,
+            rebase: rebase?.actionFor,
             showReflog: onShowReflog,
             pull: pull.allowed
               ? {
@@ -489,6 +493,7 @@ export function BranchesSidebar({
                   );
                   setActiveRowId(row.id);
                   merge?.inspect(row.target);
+                  rebase?.inspect(row.target);
                 }}
                 onToggleHistory={() => onToggleHistoryRef(row.target)}
                 row={row}

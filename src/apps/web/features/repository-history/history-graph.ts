@@ -15,6 +15,15 @@ export interface HistoryParentEdge {
   readonly parentOid: string;
 }
 
+export interface HistoryRange {
+  readonly moving: readonly string[];
+  readonly count: number;
+  readonly pushed: number;
+  readonly based: boolean;
+}
+
+const rangeOids = 2_000;
+
 export class HistoryGraph {
   private readonly ids = new Map<string, number>();
   private readonly oids: string[] = [];
@@ -158,6 +167,40 @@ export class HistoryGraph {
       }
     }
     return seen;
+  }
+
+  range(
+    headOid: string,
+    ontoOid: string,
+    upstreamOid: string | undefined,
+  ): HistoryRange | undefined {
+    const head = this.ids.get(headOid);
+    const onto = this.ids.get(ontoOid);
+    if (head === undefined || onto === undefined) return undefined;
+    const base = this.reachable([onto], () => true);
+    if (base[head])
+      return { moving: [], count: 0, pushed: 0, based: head === onto };
+    let based = false;
+    const moving = this.reachable([head], (_child, _slot, parent) => {
+      if (parent === onto) based = true;
+      return !base[parent];
+    });
+    const upstream =
+      upstreamOid === undefined ? undefined : this.ids.get(upstreamOid);
+    const published =
+      upstream === undefined
+        ? undefined
+        : this.reachable([upstream], (_child, _slot, parent) => !base[parent]);
+    const oids: string[] = [];
+    let count = 0;
+    let pushed = 0;
+    for (let id = 0; id < moving.length; id += 1) {
+      if (!moving[id]) continue;
+      count += 1;
+      if (published?.[id]) pushed += 1;
+      if (oids.length < rangeOids) oids.push(this.oid(id));
+    }
+    return { moving: oids, count, pushed, based };
   }
 
   order(reachable: Uint8Array, order: HistoryOrder): Int32Array {

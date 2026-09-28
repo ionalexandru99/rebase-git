@@ -52,6 +52,7 @@ export interface RefActionRow {
 export type RefAction = Action<
   | "checkout"
   | "merge"
+  | "rebase"
   | "pull"
   | "showReflog"
   | "newBranch"
@@ -76,6 +77,9 @@ export interface RefActionHandlers {
   readonly merge?:
     | ((target: RepositoryRefTarget) => RefAction | undefined)
     | undefined;
+  readonly rebase?:
+    | ((target: RepositoryRefTarget) => RefAction | undefined)
+    | undefined;
   readonly showReflog?: ((branch: string) => void) | undefined;
   readonly pull:
     | { readonly pulling: boolean; readonly run: (branch: string) => void }
@@ -95,12 +99,21 @@ export function refActions(
   row: RefActionRow,
   refs: RepositoryRefs,
   { activeWorktreePath, writable }: RefActionAccess,
-  { checkout, merge, pull, pushTags, showReflog, editing }: RefActionHandlers,
+  {
+    checkout,
+    merge,
+    rebase,
+    pull,
+    pushTags,
+    showReflog,
+    editing,
+  }: RefActionHandlers,
 ): readonly RefAction[] {
   const readOnly = writable ? undefined : "Read only";
   const target = row.target;
   const startPoint = refStartPoint(target, refs);
   const mergeAction = merge?.(target);
+  const rebaseAction = rebase?.(target);
   const remove = (
     fields: Omit<ActionFields, "group" | "run">,
     deletion: RefDeletion | undefined,
@@ -129,6 +142,7 @@ export function refActions(
   const common: readonly RefAction[] = [
     action({ id: "checkout", label: "Checkout", run: () => checkout(target) }),
     ...(mergeAction === undefined ? [] : [mergeAction]),
+    ...(rebaseAction === undefined ? [] : [rebaseAction]),
     ...(pull === undefined ||
     target._tag !== "LocalBranch" ||
     row.upstream === undefined
