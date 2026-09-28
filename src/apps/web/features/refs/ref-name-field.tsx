@@ -10,14 +10,20 @@ function RefNameField({
   onCancel,
   onSubmit,
   problem,
+  withMessage = false,
 }: {
   readonly initialName: string;
   readonly label: string;
   readonly onCancel: () => void;
-  readonly onSubmit: (name: string) => Promise<string | undefined>;
+  readonly onSubmit: (
+    name: string,
+    message: string | undefined,
+  ) => Promise<string | undefined>;
   readonly problem: (name: string) => string | undefined;
+  readonly withMessage?: boolean;
 }) {
   const [name, setName] = useState(initialName);
+  const [annotation, setAnnotation] = useState("");
   const [failure, setFailure] = useState<string>();
   const [pending, setPending] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -39,7 +45,10 @@ function RefNameField({
       return;
     }
     setPending(true);
-    const refused = await onSubmit(name);
+    const refused = await onSubmit(
+      name,
+      annotation.trim().length === 0 ? undefined : annotation,
+    );
     setPending(false);
     if (refused !== undefined) setFailure(refused);
   };
@@ -78,6 +87,38 @@ function RefNameField({
         spellCheck={false}
         value={name}
       />
+      {withMessage ? (
+        <textarea
+          aria-label="Tag message"
+          className="min-h-14 w-full min-w-0 resize-none rounded-md border border-input bg-input/20 px-[calc(--spacing(3)-1px)] py-1 text-[.8rem] leading-snug outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30 dark:bg-input/30"
+          onChange={(event) => {
+            setAnnotation(event.target.value);
+            setFailure(undefined);
+          }}
+          onKeyDown={(event) => {
+            if (event.key !== "Enter" || !(event.ctrlKey || event.metaKey))
+              return;
+            event.preventDefault();
+            if (!pending) void submit();
+          }}
+          placeholder="Message (optional)"
+          readOnly={pending}
+          rows={2}
+          spellCheck={false}
+          value={annotation}
+        />
+      ) : null}
+      {withMessage && message === undefined ? (
+        <p className="flex justify-between gap-2 px-1 text-xs leading-4 text-muted-foreground">
+          <span>
+            <span className="font-medium text-foreground">
+              {annotation.trim().length === 0 ? "Lightweight" : "Annotated"}
+            </span>{" "}
+            tag
+          </span>
+          <span>{annotation.trim().length === 0 ? "Enter" : "Ctrl+Enter"}</span>
+        </p>
+      ) : null}
       {message === undefined ? null : (
         <p
           className="px-1 text-xs leading-4 text-status-unavailable"
@@ -110,6 +151,7 @@ export function RefEditField({
           label={refKinds[ref].draftLabel(startPoint.label)}
           onCancel={editing.cancel}
           onSubmit={editing.create}
+          withMessage={ref === "tag"}
           problem={(name) =>
             refNameProblem(
               ref,
@@ -131,7 +173,7 @@ export function RefEditField({
         initialName={edit.branch.name}
         label={`Rename ${edit.branch.name}`}
         onCancel={editing.cancel}
-        onSubmit={editing.rename}
+        onSubmit={(name) => editing.rename(name)}
         problem={(name) =>
           refNameProblem("branch", name, refs?.branches ?? [], edit.branch.name)
         }

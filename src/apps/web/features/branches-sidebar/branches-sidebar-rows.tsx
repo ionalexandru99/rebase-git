@@ -23,6 +23,7 @@ import {
   type BranchesSidebarRefRow,
   type BranchesSidebarSectionRow,
   localBranchesSectionId,
+  type TagSelectionMode,
   tagsSectionId,
 } from "#web/features/branches-sidebar/branches-sidebar-state.ts";
 import type { RefAction } from "#web/features/refs/ref-actions.ts";
@@ -94,6 +95,7 @@ export function SectionRow({
 export function RefRow({
   actions,
   active,
+  selected,
   onActivate,
   onToggleHistory,
   row,
@@ -102,7 +104,8 @@ export function RefRow({
 }: {
   readonly actions: readonly RefAction[];
   readonly active: boolean;
-  readonly onActivate: () => void;
+  readonly selected: boolean;
+  readonly onActivate: (mode: TagSelectionMode) => void;
   readonly onToggleHistory: () => void;
   readonly row: BranchesSidebarRefRow;
   readonly selectedInHistory: boolean;
@@ -120,7 +123,7 @@ export function RefRow({
       <ContextMenuTrigger
         render={
           <div
-            className={`group absolute top-0 left-0 flex w-full cursor-default items-center rounded-md text-[.85rem] outline-none select-none hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground ${row.current ? "font-medium text-sidebar-accent-foreground" : "text-sidebar-foreground"} ${active ? "bg-sidebar-accent ring-1 ring-sidebar-ring/60 ring-inset" : ""}`}
+            className={`group absolute top-0 left-0 flex w-full cursor-default items-center rounded-md text-[.85rem] outline-none select-none hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground ${row.current ? "font-medium text-sidebar-accent-foreground" : "text-sidebar-foreground"} ${active ? "ring-1 ring-sidebar-ring/60 ring-inset" : ""} ${active || selected ? "bg-sidebar-accent" : ""}`}
             style={style}
           >
             <TreeGuides level={row.level} />
@@ -130,19 +133,25 @@ export function RefRow({
               aria-setsize={row.setSize}
               aria-label={refRowLabel(row)}
               aria-current={row.current ? "true" : undefined}
-              aria-selected={active}
+              aria-selected={active || selected}
               className="relative flex h-full min-w-0 flex-1 items-center gap-2 rounded-md pr-8 text-left outline-none"
               style={{ paddingLeft: 10 + (row.level - 2) * 18 }}
               id={rowElementId(row.id)}
               onClick={(event) => {
-                onActivate();
+                onActivate(
+                  event.shiftKey
+                    ? "range"
+                    : event.ctrlKey || event.metaKey
+                      ? "toggle"
+                      : "replace",
+                );
                 if (
                   event.target instanceof Element &&
                   event.target.closest("[data-upstream-indicator]") !== null
                 )
                   run("upstream");
               }}
-              onContextMenu={onActivate}
+              onContextMenu={() => onActivate("keep")}
               onDoubleClick={() => run("checkout")}
               role="treeitem"
               tabIndex={-1}

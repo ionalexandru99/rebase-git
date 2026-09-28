@@ -36,9 +36,28 @@ export const RemoteBranchUpdated = Schema.Struct({
 });
 export type RemoteBranchUpdated = typeof RemoteBranchUpdated.Type;
 
+export const PushTags = Schema.Struct({
+  repositoryId: RepositoryId,
+  worktreePath: RepositoryPath,
+  remote: RemoteName,
+  tags: Schema.Array(RefName).check(
+    Schema.isMinLength(1),
+    Schema.isMaxLength(100),
+  ),
+});
+export type PushTags = typeof PushTags.Type;
+
+export const TagsPushed = Schema.Struct({
+  remote: RemoteName,
+  pushed: Schema.Array(RefName),
+  upToDate: Schema.Array(RefName),
+});
+export type TagsPushed = typeof TagsPushed.Type;
+
 export const PushRejectedReason = Schema.Literals([
   "RemoteMissing",
   "InvalidBranch",
+  "TagExists",
   "NonFastForward",
   "LeaseRejected",
   "HookDeclined",
@@ -58,6 +77,11 @@ export const RepositoryPushApi = {
   push: repositoryCommand("repositories/push", {
     request: PushBranch,
     success: RemoteBranchUpdated,
+    failure: PushRejected,
+  }),
+  pushTags: repositoryCommand("repositories/push/tags", {
+    request: PushTags,
+    success: TagsPushed,
     failure: PushRejected,
   }),
 };

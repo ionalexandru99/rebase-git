@@ -39,6 +39,7 @@ import { refCommand } from "#server/features/repository-refs/git/ref-git.ts";
 import {
   createTag,
   deleteTag,
+  readTagAnnotation,
 } from "#server/features/repository-refs/git/repository-tags.ts";
 import { acquireRepositoryChangePublisher } from "#server/features/repository-refs/repository-change-publisher.ts";
 import type { RepositoryAccess } from "#server/repository/repository-access.ts";
@@ -64,7 +65,7 @@ export function repositoryRefsFeature(
 ) {
   return Effect.gen(function* () {
     const { access, git } = dependencies;
-    const { command } = repositoryRoutes(dependencies);
+    const { command, query } = repositoryRoutes(dependencies);
     const changes = yield* acquireRepositoryChangePublisher(
       git,
       dependencies.watcher,
@@ -117,6 +118,9 @@ export function repositoryRefsFeature(
         ),
         command(RepositoryTagsApi.delete, tagPolicy, (input, git) =>
           deleteTag(git, input),
+        ),
+        query(RepositoryTagsApi.annotation, (input, git) =>
+          readTagAnnotation(git, input),
         ),
       ],
     } satisfies EnvironmentFeature;

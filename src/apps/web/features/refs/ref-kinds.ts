@@ -2,7 +2,10 @@ import type {
   BranchUpstreamTarget,
   RepositoryBranchesApi,
 } from "#contracts/repository-refs/repository-branches.contract.ts";
-import type { RepositoryTagsApi } from "#contracts/repository-refs/repository-tags.contract.ts";
+import type {
+  RepositoryTagsApi,
+  TagRejected,
+} from "#contracts/repository-refs/repository-tags.contract.ts";
 import { describeFailure } from "#web/platform/query/request-failure.ts";
 import type { CommandFailure } from "#web/platform/query/use-command.ts";
 
@@ -80,9 +83,21 @@ export function describeRefFailure(
     BranchMoved: ({ name }) => `${name} changed since it was shown. Try again.`,
     BranchNotMerged: ({ count, name }) =>
       `${count} commits exist only on ${name}.`,
-    TagRejected: ({ reason }) =>
-      reason === "Exists"
-        ? `${name} already exists.`
-        : `${name} is not a valid tag name.`,
+    TagRejected: ({ reason }) => tagRejection(name, reason),
   });
+}
+
+function tagRejection(name: string, reason: TagRejected["reason"]) {
+  switch (reason) {
+    case "Exists":
+      return `${name} already exists.`;
+    case "InvalidName":
+      return `${name} is not a valid tag name.`;
+    case "MessageRequired":
+      return "Your Git settings sign every tag. Add a message.";
+    case "Moved":
+      return `${name} changed since it was shown. Try again.`;
+    case "RemoteDiffers":
+      return `The remote's ${name} is missing or is not the tag you have. Nothing was deleted.`;
+  }
 }

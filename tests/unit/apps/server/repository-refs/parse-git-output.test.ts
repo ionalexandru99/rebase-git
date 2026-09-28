@@ -97,7 +97,7 @@ describe("git ref parsing", () => {
     ]);
   });
 
-  it("uses commit targets for lightweight and annotated tags", () => {
+  it("uses commit targets for tags and keeps an annotated tag's own object", () => {
     const peeledCommit = "b".repeat(40);
     const records = parseForEachRef(
       [
@@ -118,7 +118,7 @@ describe("git ref parsing", () => {
 
     expect(records.map(tagFromRecord)).toEqual([
       { name: "lightweight", target: commit },
-      { name: "annotated", target: peeledCommit },
+      { name: "annotated", target: peeledCommit, object: commit },
       undefined,
     ]);
   });

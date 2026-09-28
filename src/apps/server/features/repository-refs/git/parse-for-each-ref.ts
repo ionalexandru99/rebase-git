@@ -139,9 +139,12 @@ export function tagFromRecord(
       : record.peeledObjectType === "commit"
         ? record.peeledObject
         : undefined;
-  return target === undefined
-    ? undefined
-    : { name: record.name.slice(tagPrefix.length), target };
+  if (target === undefined) return undefined;
+  return {
+    name: record.name.slice(tagPrefix.length),
+    target,
+    ...(record.objectType === "tag" ? { object: record.commit } : {}),
+  };
 }
 
 function parseTracking(track: string) {
