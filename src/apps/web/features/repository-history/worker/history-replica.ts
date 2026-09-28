@@ -201,6 +201,11 @@ export class HistoryReplica {
     };
   }
 
+  async relation(from: string, to: string) {
+    await this.loading;
+    return this.graph.relation(from, to);
+  }
+
   async commits(oids: readonly string[]) {
     await this.loading;
     const record = this.record;

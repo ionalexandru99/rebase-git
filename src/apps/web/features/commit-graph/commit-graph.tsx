@@ -51,6 +51,7 @@ import type {
   HistorySelection,
 } from "#web/features/commit-graph/scope/history-scope.ts";
 import { RepositoryHistorySearchControls } from "#web/features/history-search/components/repository-history-search-controls.tsx";
+import type { MergeActions } from "#web/features/merge/merge-actions.ts";
 import {
   describeHistoryFailure,
   type RepositoryHistory,
@@ -79,9 +80,11 @@ export function CommitGraph({
   githubRepository,
   remoteProviders,
   toolbarActions,
+  merge,
   onOpenDetails,
   onActiveCommitChange,
 }: {
+  readonly merge?: MergeActions | undefined;
   readonly onOpenDetails?: ((oid: string) => void) | undefined;
   readonly onActiveCommitChange?:
     | ((oid: string | undefined) => void)
@@ -147,7 +150,7 @@ export function CommitGraph({
   );
   useImperativeHandle(ref, () => ({ navigateToOid, focusSelection }));
 
-  const commands = useCommitActions({ history, onOpenDetails });
+  const commands = useCommitActions({ history, merge, onOpenDetails });
   const handleKeyDown = (event: KeyboardEvent<HTMLElement>) => {
     if (event.defaultPrevented) return;
     if (
@@ -198,6 +201,7 @@ export function CommitGraph({
     if (oid === undefined || index === undefined) return;
     beginNavigation();
     setMenuOid(oid);
+    merge?.inspect(oid);
     navigation.select(
       oid,
       index,

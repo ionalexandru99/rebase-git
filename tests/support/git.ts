@@ -90,6 +90,32 @@ export async function createDivergedRepository(parent = tmpdir()) {
   return { directory, git };
 }
 
+export async function createMergeRepository(parent = tmpdir()) {
+  const { directory, git } = await createDivergedRepository(parent);
+  await fastImport(
+    directory,
+    commit(
+      "refs/heads/clean",
+      "clean",
+      "refs/heads/main^",
+      files({ "new.txt": "clean\n" }),
+    ) +
+      commit(
+        "refs/heads/ahead",
+        "ahead",
+        "refs/heads/main",
+        files({ "ahead.txt": "ahead\n" }),
+      ) +
+      commit(
+        "refs/heads/lonely",
+        "lonely",
+        null,
+        files({ "lonely.txt": "lonely\n" }),
+      ),
+  );
+  return { directory, git };
+}
+
 export function startConflict(
   git: (...args: string[]) => Promise<unknown>,
   kind: "merge" | "rebase" | "cherry-pick" | "revert",

@@ -42,6 +42,7 @@ import {
   useBranchesSidebarView,
 } from "#web/features/branches-sidebar/sidebar-view-controls.tsx";
 import { historyRefKey } from "#web/features/commit-graph/scope/history-scope.ts";
+import type { MergeActions } from "#web/features/merge/merge-actions.ts";
 import { refActions, useRefIntent } from "#web/features/refs/ref-actions.ts";
 import { useRefEditing } from "#web/features/refs/ref-editing.ts";
 import { RefEditingStatus } from "#web/features/refs/ref-editing-status.tsx";
@@ -61,11 +62,13 @@ const overscanRows = 12;
 const noSelectedRefs: ReadonlySet<string> = new Set();
 
 export function BranchesSidebar({
+  merge,
   onBranchRenamed = () => undefined,
   onToggleHistoryRef = () => undefined,
   onShowReflog,
   selectedHistoryRefKeys = noSelectedRefs,
 }: {
+  readonly merge?: MergeActions | undefined;
   readonly onBranchRenamed?: (rename: {
     readonly name: string;
     readonly newName: string;
@@ -211,6 +214,7 @@ export function BranchesSidebar({
           { activeWorktreePath, writable: editing.writable },
           {
             checkout: onSelectRef,
+            merge: merge?.actionFor,
             showReflog: onShowReflog,
             pull: pull.allowed
               ? {
@@ -394,7 +398,10 @@ export function BranchesSidebar({
                 actions={actionsFor(row)}
                 active={row.id === activeRowId}
                 key={row.id}
-                onActivate={() => setActiveRowId(row.id)}
+                onActivate={() => {
+                  setActiveRowId(row.id);
+                  merge?.inspect(row.target);
+                }}
                 onToggleHistory={() => onToggleHistoryRef(row.target)}
                 row={row}
                 selectedInHistory={selectedHistoryRefKeys.has(

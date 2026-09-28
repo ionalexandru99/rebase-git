@@ -1,7 +1,11 @@
+import { IconChevronRight } from "@tabler/icons-react";
 import { Fragment } from "react";
 import {
+  ContextMenuContent,
   ContextMenuItem,
   ContextMenuSeparator,
+  ContextMenuSubmenu,
+  ContextMenuSubmenuTrigger,
 } from "#web/components/ui/context-menu.tsx";
 
 export interface Action<Id extends string = string> {
@@ -12,6 +16,10 @@ export interface Action<Id extends string = string> {
   readonly detail?: string;
   readonly keys?: readonly string[];
   readonly group?: "create" | "edit" | "delete";
+  readonly submenu?: {
+    readonly title: string;
+    readonly actions: readonly Action[];
+  };
   readonly run: () => void;
 }
 
@@ -21,7 +29,7 @@ export function ActionMenuItems({
   onRun,
 }: {
   readonly actions: readonly Action[];
-  readonly className?: string;
+  readonly className?: string | undefined;
   readonly onRun?: (action: Action) => void;
 }) {
   return actions.map((action, index) => {
@@ -29,24 +37,50 @@ export function ActionMenuItems({
     const hint = action.enabled
       ? (action.detail ?? keyLabel(action.keys?.[0]))
       : action.reason;
+    const label = <span className="flex-1">{action.label}</span>;
+    const hinted =
+      hint === undefined ? null : (
+        <span className="text-[.7rem] text-muted-foreground">{hint}</span>
+      );
     return (
       <Fragment key={action.id}>
         {previous !== undefined && previous !== action.group ? (
           <ContextMenuSeparator />
         ) : null}
-        <ContextMenuItem
-          className={className}
-          disabled={!action.enabled}
-          onClick={() => {
-            onRun?.(action);
-            action.run();
-          }}
-        >
-          <span className="flex-1">{action.label}</span>
-          {hint === undefined ? null : (
-            <span className="text-[.7rem] text-muted-foreground">{hint}</span>
-          )}
-        </ContextMenuItem>
+        {action.submenu === undefined ? (
+          <ContextMenuItem
+            className={className}
+            disabled={!action.enabled}
+            onClick={() => {
+              onRun?.(action);
+              action.run();
+            }}
+          >
+            {label}
+            {hinted}
+          </ContextMenuItem>
+        ) : (
+          <ContextMenuSubmenu disabled={!action.enabled}>
+            <ContextMenuSubmenuTrigger className={className}>
+              {label}
+              {hinted}
+              <IconChevronRight
+                aria-hidden="true"
+                className="size-3.5 text-muted-foreground"
+              />
+            </ContextMenuSubmenuTrigger>
+            <ContextMenuContent submenu className="w-72">
+              <p className="mb-1 truncate border-border border-b px-2 pt-1 pb-1.5 font-mono text-[.7rem] text-muted-foreground">
+                {action.submenu.title}
+              </p>
+              <ActionMenuItems
+                actions={action.submenu.actions}
+                className={className}
+                {...(onRun === undefined ? {} : { onRun })}
+              />
+            </ContextMenuContent>
+          </ContextMenuSubmenu>
+        )}
       </Fragment>
     );
   });
