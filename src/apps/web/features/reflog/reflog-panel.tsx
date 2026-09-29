@@ -4,8 +4,6 @@ import {
   isReflogRef,
   type ReflogRef,
   RepositoryReflogApi,
-  type ResetDiscardsChanges,
-  type ResetMode,
 } from "#contracts/repository-reflog/repository-reflog.contract.ts";
 import type {
   RepositoryRefs,
@@ -13,45 +11,35 @@ import type {
 } from "#contracts/repository-refs/repository-refs.contract.ts";
 import type { Action } from "#web/components/ui/action-menu.tsx";
 import { Button } from "#web/components/ui/button.tsx";
-import { Confirmation } from "#web/components/ui/confirmation.tsx";
 import { writeClipboardText } from "#web/features/clipboard/write-clipboard-text.ts";
 import { ErrorNotification } from "#web/features/notifications/components/error-notification.tsx";
-import { PersistentNotification } from "#web/features/notifications/components/persistent-notification.tsx";
-import { useOperation } from "#web/features/operation-recovery/hooks/use-operation.ts";
 import {
   ReflogList,
   type ReflogRow,
-  short,
 } from "#web/features/reflog/reflog-list.tsx";
 import { createRefActions } from "#web/features/refs/ref-actions.ts";
 import {
   activeHead,
   useScopedRepositoryRefs,
 } from "#web/features/refs/repository-refs.ts";
+import type { ResetActions } from "#web/features/reset/reset-actions.tsx";
 import { usePanelFeature } from "#web/features/workspace-panel/api.ts";
 import { useEnvironmentQuery } from "#web/platform/query/environment-query.ts";
 import {
   type RepositoryScope,
   useRepositoryScope,
 } from "#web/platform/query/repository-scope.tsx";
-import { describeFailure } from "#web/platform/query/request-failure.ts";
-import { useCommand } from "#web/platform/query/use-command.ts";
 
 type Head = RepositoryWorktree["head"];
 
-interface PendingDiscard {
-  readonly target: string;
-  readonly expectedHead: string;
-  readonly failure: ResetDiscardsChanges;
-}
-
 const head: ReflogRef = { _tag: "Head" };
-const listedDiscards = 3;
 
 export function ReflogPanel({
+  reset,
   onShowInGraph,
   onOpenDetails,
 }: {
+  readonly reset?: ResetActions | undefined;
   readonly onShowInGraph?: (oid: string) => Promise<void>;
   readonly onOpenDetails?: (oid: string) => void;
 }) {
@@ -76,8 +64,6 @@ export function ReflogPanel({
         },
     { changes: "refs", enabled: feature?.active !== false },
   );
-  const operation = useOperation(scope, false).data;
-  const reset = useReflogReset(current);
   const [graphError, setGraphError] = useState<string>();
 
   const showInGraph = (oid: string) => {
@@ -92,18 +78,16 @@ export function ReflogPanel({
     );
   };
 
-  const blocked = moveBlocked(scope, ref, refs, current, operation?.kind);
+  const blocked = otherBranch(ref, refs, current);
   const actionsFor = (row: ReflogRow) =>
     reflogActions(row, {
       scope,
-      current,
       blocked,
       showInGraph: onShowInGraph === undefined ? undefined : showInGraph,
       openDetails: onOpenDetails,
-      move: reset.move,
+      reset,
     });
 
-  const error = reset.error ?? graphError;
   return (
     <section aria-label="Reflog" className="flex h-full min-h-0 flex-col">
       <ReflogScopes
@@ -119,16 +103,9 @@ export function ReflogPanel({
         status={reflog.status}
         truncated={reflog.data?.truncated ?? false}
       />
-      {reset.pending === undefined ? null : (
-        <DiscardConfirmation
-          busy={reset.running}
-          onCancel={reset.cancel}
-          onConfirm={reset.confirm}
-          pending={reset.pending}
-          title={`Move ${headLabel(current)} to ${short(reset.pending.target)} and discard changes?`}
-        />
+      {graphError === undefined ? null : (
+        <ErrorNotification message={graphError} />
       )}
-      {error === undefined ? null : <ErrorNotification message={error} />}
     </section>
   );
 }
@@ -181,71 +158,12 @@ function ReflogScopes({
   );
 }
 
-function useReflogReset(current: Head | undefined) {
-  const reset = useCommand(RepositoryReflogApi.reset);
-  const [pending, setPending] = useState<PendingDiscard>();
-  const [error, setError] = useState<string>();
-  const run = async (
-    target: string,
-    mode: ResetMode,
-    expectedHead: string,
-    discard?: string,
-  ) => {
-    setError(undefined);
-    const result = await reset.run({
-      target,
-      mode,
-      expectedHead,
-      ...(discard === undefined ? {} : { discard }),
-    });
-    const failure = result._tag === "Rejected" ? result.failure : undefined;
-    setPending(
-      failure?._tag === "ResetDiscardsChanges"
-        ? { target, expectedHead, failure }
-        : undefined,
-    );
-    if (result._tag === "Ok" || failure?._tag === "ResetDiscardsChanges")
-      return;
-    setError(
-      describeFailure(result, {
-        HeadMoved: (moved) =>
-          `${headLabel(current)} moved to ${short(moved.head)} before the reset ran. Nothing changed.`,
-        RefMissing: () => "That commit no longer exists.",
-      }),
-    );
-  };
-  return {
-    pending,
-    error,
-    running: reset.running,
-    move: (target: string, mode: ResetMode) => {
-      if (current !== undefined) void run(target, mode, current.commit);
-    },
-    confirm: () => {
-      if (pending !== undefined)
-        void run(
-          pending.target,
-          "hard",
-          pending.expectedHead,
-          pending.failure.fingerprint,
-        );
-    },
-    cancel: () => setPending(undefined),
-  };
-}
-
-function moveBlocked(
-  scope: RepositoryScope | undefined,
+function otherBranch(
   ref: ReflogRef,
   refs: RepositoryRefs | undefined,
   current: Head | undefined,
-  operation: string | undefined,
 ) {
-  if (!scope?.writable) return "Read only";
-  if (operation !== undefined && operation !== "idle")
-    return `${operationLabel(operation)} in progress`;
-  if (current === undefined) return "No commits yet";
-  if (ref._tag === "Head" || current.branch === ref.name) return undefined;
+  if (ref._tag === "Head" || current?.branch === ref.name) return undefined;
   return refs?.branches.find((branch) => branch.name === ref.name)
     ?.worktreePath === undefined
     ? "Not checked out"
@@ -256,29 +174,15 @@ function reflogActions(
   row: ReflogRow,
   context: {
     readonly scope: RepositoryScope | undefined;
-    readonly current: Head | undefined;
     readonly blocked: string | undefined;
     readonly showInGraph: ((oid: string) => void) | undefined;
     readonly openDetails: ((oid: string) => void) | undefined;
-    readonly move: (target: string, mode: ResetMode) => void;
+    readonly reset: ResetActions | undefined;
   },
 ): readonly Action[] {
-  const { scope, current, showInGraph, openDetails } = context;
+  const { scope, blocked, showInGraph, openDetails } = context;
   const readable = scope?.readable ?? false;
-  const reason =
-    context.blocked ??
-    (row.oid === current?.commit ? "Already here" : undefined);
-  const subject =
-    current?.branch === undefined ? "Move HEAD here" : "Move branch here";
-  const move = (mode: ResetMode, label: string): Action => ({
-    id: `reset.${mode}`,
-    label: `${subject}, ${label}`,
-    group: "edit",
-    detail: mode,
-    enabled: reason === undefined,
-    ...(reason === undefined ? {} : { reason }),
-    run: () => context.move(row.oid, mode),
-  });
+  const reset = context.reset?.actionFor(row.oid);
   return [
     {
       id: "showInGraph",
@@ -299,9 +203,17 @@ function reflogActions(
     })
       .filter((action) => action.id === "branch.createHere")
       .map((action): Action => ({ ...action, group: "create" })),
-    move("soft", "keep changes staged"),
-    move("mixed", "keep changes unstaged"),
-    move("hard", "discard changes…"),
+    ...(reset === undefined
+      ? []
+      : [
+          {
+            ...reset,
+            group: "edit" as const,
+            ...(blocked === undefined
+              ? {}
+              : { enabled: false, reason: blocked }),
+          },
+        ]),
     {
       id: "copySha",
       label: "Copy commit SHA",
@@ -317,62 +229,6 @@ function reflogActions(
   ];
 }
 
-function DiscardConfirmation({
-  pending,
-  title,
-  busy,
-  onConfirm,
-  onCancel,
-}: {
-  readonly pending: PendingDiscard;
-  readonly title: string;
-  readonly busy: boolean;
-  readonly onConfirm: () => void;
-  readonly onCancel: () => void;
-}) {
-  const { paths, count } = pending.failure;
-  const hidden = count - Math.min(count, listedDiscards);
-  return (
-    <PersistentNotification>
-      <Confirmation
-        action="Discard and move"
-        busy={busy}
-        className="px-3 py-2"
-        key={pending.failure.fingerprint}
-        onCancel={onCancel}
-        onConfirm={onConfirm}
-        title={title}
-      >
-        <p>
-          {count === 1
-            ? "Uncommitted edits in 1 file will be lost."
-            : `Uncommitted edits in ${count} files will be lost.`}{" "}
-          The reflog can't bring them back.
-        </p>
-        <ul className="mt-1.5 flex flex-col gap-0.5">
-          {paths.slice(0, listedDiscards).map((path) => (
-            <li className="truncate font-mono text-foreground" key={path}>
-              {path}
-            </li>
-          ))}
-        </ul>
-        {hidden === 0 ? null : <p className="mt-0.5">and {hidden} more</p>}
-        <p className="mt-1.5">Files not listed are kept.</p>
-      </Confirmation>
-    </PersistentNotification>
-  );
-}
-
 function refKey(ref: ReflogRef) {
   return ref._tag === "Head" ? "HEAD" : `refs/heads/${ref.name}`;
-}
-
-function headLabel(current: Head | undefined) {
-  return current?.branch ?? "HEAD";
-}
-
-function operationLabel(kind: string) {
-  return kind === "am"
-    ? "Patch"
-    : `${kind.charAt(0).toUpperCase()}${kind.slice(1)}`;
 }

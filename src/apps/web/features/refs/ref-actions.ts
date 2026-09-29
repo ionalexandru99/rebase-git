@@ -13,6 +13,7 @@ import type {
   RefEditing,
 } from "#web/features/refs/ref-editing.ts";
 import type { RefKind, StartPoint } from "#web/features/refs/ref-kinds.ts";
+import type { ResetActionId } from "#web/features/reset/reset-actions.tsx";
 
 export type RefIntent =
   | { readonly _tag: "DraftRef"; readonly kind: RefKind; readonly oid: string }
@@ -56,6 +57,7 @@ export type RefAction = Action<
   | `merge.${MergeMode}`
   | "rebase"
   | "interactiveRebase"
+  | ResetActionId
   | "pull"
   | "showReflog"
   | "newBranch"
@@ -83,6 +85,9 @@ export interface RefActionHandlers {
   readonly interactiveRebase?:
     | ((target: RepositoryRefTarget) => RefAction | undefined)
     | undefined;
+  readonly reset?:
+    | ((target: RepositoryRefTarget) => RefAction | undefined)
+    | undefined;
   readonly showReflog?: ((branch: string) => void) | undefined;
   readonly pull:
     | { readonly pulling: boolean; readonly run: (branch: string) => void }
@@ -107,6 +112,7 @@ export function refActions(
     merge,
     rebase,
     interactiveRebase,
+    reset,
     pull,
     pushTags,
     showReflog,
@@ -119,6 +125,7 @@ export function refActions(
   const mergeAction = merge?.(target);
   const rebaseAction = rebase?.(target);
   const interactiveAction = interactiveRebase?.(target);
+  const resetAction = reset?.(target);
   const remove = (
     fields: Omit<ActionFields, "group" | "run">,
     deletion: RefDeletion | undefined,
@@ -159,6 +166,7 @@ export function refActions(
     ...(mergeAction === undefined ? [] : [mergeAction]),
     ...(rebaseAction === undefined ? [] : [rebaseAction]),
     ...(interactiveAction === undefined ? [] : [interactiveAction]),
+    ...(resetAction === undefined ? [] : [resetAction]),
     ...(pull === undefined ||
     target._tag !== "LocalBranch" ||
     row.upstream === undefined

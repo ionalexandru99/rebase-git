@@ -58,6 +58,7 @@ import {
   describeHistoryFailure,
   type RepositoryHistory,
 } from "#web/features/repository-history/repository-history.ts";
+import type { ResetActions } from "#web/features/reset/reset-actions.tsx";
 import { useRepositoryScope } from "#web/platform/query/repository-scope.tsx";
 
 export interface CommitGraphHandle {
@@ -84,12 +85,14 @@ export function CommitGraph({
   toolbarActions,
   merge,
   rebase,
+  reset,
   cherryPick,
   onOpenDetails,
   onActiveCommitChange,
 }: {
   readonly merge?: MergeActions | undefined;
   readonly rebase?: RebaseActions | undefined;
+  readonly reset?: ResetActions | undefined;
   readonly cherryPick?: CherryPick | undefined;
   readonly onOpenDetails?: ((oid: string) => void) | undefined;
   readonly onActiveCommitChange?:
@@ -171,6 +174,7 @@ export function CommitGraph({
         return action && { ...action, onHighlight: setPreviewing };
       },
     },
+    reset,
     onOpenDetails,
   });
   const moving = new Set(
