@@ -12,6 +12,7 @@ import {
   commitGraphGutterWidth,
   commitGraphNodePosition,
   graphMetadataColumns,
+  graphRowHeight,
 } from "#web/features/commit-graph/layout/graph-geometry.ts";
 import type { CommitLaneRow } from "#web/features/repository-history/commit-lanes.ts";
 
@@ -25,7 +26,6 @@ export const CommitGraphRow = memo(function CommitGraphRow({
   labels,
   lane,
   rowIndex,
-  size,
   start,
   selected,
   order,
@@ -38,8 +38,7 @@ export const CommitGraphRow = memo(function CommitGraphRow({
   readonly labels: readonly RepositoryHistoryRefTarget[];
   readonly lane: CommitLaneRow | undefined;
   readonly rowIndex: number;
-  readonly size: number;
-  readonly start: number;
+  readonly start: number | undefined;
   readonly selected: boolean;
   readonly order: number;
   readonly active: boolean;
@@ -67,7 +66,7 @@ export const CommitGraphRow = memo(function CommitGraphRow({
       aria-expanded={merge === undefined ? undefined : merge === "expanded"}
       aria-busy={busy ? true : undefined}
       aria-selected={selected}
-      className={`absolute left-0 grid w-full cursor-default items-center bg-[var(--graph-row-background)] text-[.85rem] after:pointer-events-none after:absolute after:inset-0 after:z-[5] data-[active=true]:after:border data-[active=true]:after:border-primary/70 ${
+      className={`${start === undefined ? "relative" : "absolute left-0"} grid w-full cursor-default items-center bg-[var(--graph-row-background)] text-[.85rem] after:pointer-events-none after:absolute after:inset-0 after:z-[5] data-[active=true]:after:border data-[active=true]:after:border-primary/70 ${
         selected
           ? "text-foreground"
           : "text-foreground hover:[--graph-row-background:color-mix(in_oklab,var(--accent)_35%,var(--repository))]"
@@ -77,7 +76,7 @@ export const CommitGraphRow = memo(function CommitGraphRow({
       id={commitRowId(commit.oid)}
       style={{
         gridTemplateColumns: `${lane === undefined ? 28 : commitGraphGutterWidth([lane])}px minmax(0, 1fr) ${graphMetadataColumns}`,
-        height: size,
+        height: graphRowHeight,
         top: start,
         ...(selected ? selectedRowStyle : {}),
       }}

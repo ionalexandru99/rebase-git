@@ -9,8 +9,6 @@ import {
   type RefObject,
   useEffect,
   useImperativeHandle,
-  useMemo,
-  useState,
 } from "react";
 import {
   graphHeaderHeight,
@@ -19,6 +17,12 @@ import {
 
 const overscanRows = 6;
 const emptyViewport = { width: 0, height: 0 };
+
+export interface GraphVirtualRow {
+  readonly index: number;
+  readonly key: string;
+  readonly start: number | undefined;
+}
 
 export interface CommitGraphViewportHandle {
   readonly scrollToIndex: (index: number) => void;
@@ -46,7 +50,8 @@ export function CommitGraphVirtualWindow({
   readonly children: (viewport: {
     readonly viewport: { readonly width: number; readonly height: number };
     readonly totalHeight: number;
-    readonly virtualRows: readonly VirtualItem[];
+    readonly flowStart: number;
+    readonly virtualRows: readonly GraphVirtualRow[];
   }) => ReactNode;
 }) {
   const virtualizer = useVirtualizer({
@@ -83,22 +88,18 @@ export function CommitGraphVirtualWindow({
     },
   });
   const viewport = virtualizer.scrollRect ?? emptyViewport;
-  const absoluteRows = virtualizer.getVirtualItems();
-  const [rowSlots, setRowSlots] = useState<readonly (string | undefined)[]>([]);
-  const rowKey = (index: number) => oids[index - start] ?? `row-${index}`;
-  const rowKeys = absoluteRows.map((row) => rowKey(row.index));
-  const nextSlots = reconcileRowSlots(rowSlots, rowKeys);
-  const virtualRows = useMemo(
-    () =>
-      absoluteRows.map((row) => ({
-        ...row,
-        start: row.start - graphHeaderHeight,
-        end: row.end - graphHeaderHeight,
-        key: nextSlots.indexOf(oids[row.index - start] ?? `row-${row.index}`),
-        index: row.index - start,
-      })),
-    [absoluteRows, oids, nextSlots, start],
-  );
+  const items = virtualizer.getVirtualItems();
+  const detached = detachedIndex(items, activeIndex);
+  const flowStart =
+    (items.find(
+      (item) =>
+        item.index !== detached && oids[item.index - start] !== undefined,
+    )?.start ?? graphHeaderHeight) - graphHeaderHeight;
+  const virtualRows = items.map((item) => ({
+    index: item.index - start,
+    key: oids[item.index - start] ?? `row-${item.index}`,
+    start: item.index === detached ? item.start - graphHeaderHeight : undefined,
+  }));
   const first = Math.floor((virtualizer.scrollOffset ?? 0) / rowHeight);
   const last =
     first +
@@ -118,35 +119,25 @@ export function CommitGraphVirtualWindow({
     scrollToIndex: (index) =>
       virtualizer.scrollToIndex(index, { align: "auto" }),
   }));
-  if (nextSlots !== rowSlots) {
-    setRowSlots(nextSlots);
-    return null;
-  }
   return children({
     viewport,
     totalHeight: Math.max(0, virtualizer.getTotalSize() - graphHeaderHeight),
+    flowStart,
     virtualRows,
   });
 }
 
-function reconcileRowSlots(
-  previous: readonly (string | undefined)[],
-  keys: readonly string[],
+function detachedIndex(
+  items: readonly VirtualItem[],
+  activeIndex: number | undefined,
 ) {
-  const current = new Set(keys);
-  if (
-    keys.every((key) => previous.includes(key)) &&
-    previous.every((key) => key === undefined || current.has(key))
-  )
-    return previous;
-  const slots = previous.map((key) =>
-    key !== undefined && current.has(key) ? key : undefined,
-  );
-  for (const key of keys) {
-    if (slots.includes(key)) continue;
-    const available = slots.indexOf(undefined);
-    if (available < 0) slots.push(key);
-    else slots[available] = key;
-  }
-  return slots;
+  const others = items.filter((item) => item.index !== activeIndex);
+  const first = others[0]?.index;
+  const last = others.at(-1)?.index;
+  return activeIndex !== undefined &&
+    first !== undefined &&
+    last !== undefined &&
+    (activeIndex < first || activeIndex > last)
+    ? activeIndex
+    : undefined;
 }
