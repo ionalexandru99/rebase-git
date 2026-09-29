@@ -89,7 +89,8 @@ export function ConflictMerge({
     >
       <div className="flex shrink-0 flex-wrap items-center gap-1 border-border border-b p-2">
         <span className="px-1 text-xs whitespace-nowrap text-muted-foreground">
-          {document.file.openRegions} of {Math.max(total, 1)} open
+          {document.file.openRegions} of{" "}
+          {Math.max(total, document.file.openRegions)} open
         </span>
         <Button
           variant="ghost"

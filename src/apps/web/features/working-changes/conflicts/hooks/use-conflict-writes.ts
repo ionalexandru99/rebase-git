@@ -5,8 +5,17 @@ import {
   RepositoryConflictsApi,
 } from "#contracts/repository-conflicts/repository-conflicts.contract.ts";
 import { conflictReason } from "#web/features/working-changes/conflicts/hooks/use-conflicts.ts";
-import { describeFailure } from "#web/platform/query/request-failure.ts";
-import { answer, useCommand } from "#web/platform/query/use-command.ts";
+import {
+  describeFailure,
+  requestFailure,
+} from "#web/platform/query/request-failure.ts";
+import {
+  answer,
+  type CommandFailure,
+  useCommand,
+} from "#web/platform/query/use-command.ts";
+
+const writeRoute = RepositoryConflictsApi.write;
 
 interface WriteQueue {
   revision: string;
@@ -20,7 +29,7 @@ export function useConflictWrites(
   document: ConflictDocument,
   reload: () => void,
 ) {
-  const { run } = useCommand(RepositoryConflictsApi.write, {
+  const { run } = useCommand(writeRoute, {
     target: input,
     answers: (written, { repositoryId, worktreePath, path }) => [
       answer(
@@ -52,7 +61,10 @@ export function useConflictWrites(
         path: input.path,
         revision: state.revision,
         content,
-      });
+      }).catch(
+        (error: unknown): CommandFailure<typeof writeRoute> =>
+          requestFailure(error),
+      );
       state.running = false;
       if (result._tag === "Ok") state.revision = result.value.file.revision;
       else {
