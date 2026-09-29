@@ -75,31 +75,9 @@ export const ConflictList = Schema.Struct({
 });
 export type ConflictList = typeof ConflictList.Type;
 
-export const TokenMark = Schema.Struct({
-  line: Schema.Natural,
-  start: Schema.Natural,
-  end: Schema.Natural,
-});
-export type TokenMark = typeof TokenMark.Type;
-
-export const ConflictRegion = Schema.Struct({
-  id: Schema.String,
-  line: Schema.NullOr(Schema.Natural),
-  current: Schema.Array(Schema.String),
-  base: Schema.Array(Schema.String),
-  incoming: Schema.Array(Schema.String),
-  marks: Schema.Struct({
-    current: Schema.Array(TokenMark),
-    incoming: Schema.Array(TokenMark),
-  }),
-  open: Schema.Boolean,
-});
-export type ConflictRegion = typeof ConflictRegion.Type;
-
 export const ConflictDocument = Schema.Struct({
   file: ConflictFile,
   content: Schema.String,
-  regions: Schema.Array(ConflictRegion),
 });
 export type ConflictDocument = typeof ConflictDocument.Type;
 

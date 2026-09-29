@@ -7,6 +7,7 @@ import {
   createContext,
   type ReactNode,
   Suspense,
+  useCallback,
   useContext,
   useEffect,
   useLayoutEffect,
@@ -87,6 +88,12 @@ function ProjectViews({
   const open = useStore(session.store, (panel) => panel.open);
   const active = useStore(session.store, (panel) => panel.active);
   const inputs = useStore(session.store, (panel) => panel.inputs);
+  const expanded = useStore(session.store, (panel) => panel.expanded === true);
+  const expand = useCallback(
+    (next: boolean) =>
+      session.store.dispatch({ type: "expand", expanded: next }),
+    [session.store],
+  );
   const view = useStore(session);
   return tabs.map((kind) => (
     <RetainedPanelView key={kind} target={view.targets[kind]}>
@@ -100,6 +107,8 @@ function ProjectViews({
           active === kind
         }
         input={inputs?.[kind]}
+        expanded={expanded}
+        expand={expand}
       >
         {view.contents[kind] ??
           (session.scope && workspacePanelDefinitions[kind].Content ? (
@@ -117,17 +126,21 @@ function PanelFeatureScope({
   environment,
   active,
   input,
+  expanded,
+  expand,
   children,
 }: {
   readonly scope: WorkspacePanelScope | undefined;
   readonly environment: WorkspacePanelEnvironment | undefined;
   readonly active: boolean;
   readonly input: unknown;
+  readonly expanded: boolean;
+  readonly expand: (expanded: boolean) => void;
   readonly children: ReactNode;
 }) {
   const value = useMemo(
-    () => ({ scope, environment, active, input }),
-    [scope, environment, active, input],
+    () => ({ scope, environment, active, input, expanded, expand }),
+    [scope, environment, active, input, expanded, expand],
   );
   return (
     <PanelFeatureContext.Provider value={value}>

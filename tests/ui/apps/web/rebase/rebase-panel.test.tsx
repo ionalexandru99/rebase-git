@@ -195,6 +195,8 @@ async function fixture(operation = repositoryOperation()) {
             environment: undefined,
             active: true,
             input: target,
+            expanded: false,
+            expand: () => {},
           }}
         >
           <div style={{ height: 520, width: 440 }}>

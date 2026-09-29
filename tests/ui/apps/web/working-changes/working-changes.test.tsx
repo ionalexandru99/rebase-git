@@ -134,7 +134,6 @@ async function fixture(
           active: true,
         }}
         writable
-        openMergeView={() => {}}
       />
     </div>,
     { environment: { requests }, queryClient },

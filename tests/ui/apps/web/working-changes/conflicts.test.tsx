@@ -11,6 +11,7 @@ import {
   type ConflictList,
   RepositoryConflictsApi,
   type StageConflict,
+  type WriteConflict,
 } from "#contracts/repository-conflicts/repository-conflicts.contract.ts";
 import {
   fakeRequests,
@@ -82,7 +83,11 @@ async function fixture() {
   const stages: StageConflict[] = [];
   const choices: ChooseConflict[] = [];
   const mutations: MutateChanges[] = [];
-  const mergeViews: string[] = [];
+  const writes: WriteConflict[] = [];
+  const markersLeft = () =>
+    !writes.some(
+      (write) => write.path === conflicted && !write.content.includes("<<<"),
+    );
   const conflictRow = (path: string) => changedFile(path, "U");
   const changes = () =>
     repositoryChanges({
@@ -105,21 +110,15 @@ async function fixture() {
   const document = (path: string): ConflictDocument => {
     const file = files.find((candidate) => candidate.path === path);
     if (file === undefined) throw new Error(`No conflict for ${path}`);
-    if (path !== conflicted) return { file, content: "", regions: [] };
+    if (path !== conflicted)
+      throw rejected({
+        _tag: "ConflictFailed",
+        reason: "Unsupported",
+        detail: "Resolve it as a whole file.",
+      });
     return {
       file,
       content: ["export const status = 1;", ...marker, ""].join("\n"),
-      regions: [
-        {
-          id: "one",
-          line: 2,
-          current: ["export const reader = readCurrent;"],
-          base: [],
-          incoming: ["export const reader = readIncoming;"],
-          marks: { current: [], incoming: [] },
-          open: true,
-        },
-      ],
     };
   };
   const requests = fakeRequests(
@@ -132,7 +131,7 @@ async function fixture() {
     respond(RepositoryConflictsApi.document, ({ path }) => document(path)),
     respond(RepositoryConflictsApi.stage, (command) => {
       stages.push(command);
-      if (command.path === conflicted && !command.allowMarkers)
+      if (command.path === conflicted && !command.allowMarkers && markersLeft())
         throw rejected({
           _tag: "ConflictFailed",
           reason: "Markers",
@@ -140,6 +139,16 @@ async function fixture() {
         });
       unresolved.delete(command.path);
       return list();
+    }),
+    respond(RepositoryConflictsApi.write, (command) => {
+      writes.push(command);
+      const file = files.find(({ path }) => path === command.path);
+      if (file === undefined)
+        throw new Error(`No conflict for ${command.path}`);
+      return {
+        file: { ...file, revision: `${file.revision}-saved`, openRegions: 0 },
+        content: command.content,
+      };
     }),
     respond(RepositoryConflictsApi.choose, (command) => {
       choices.push(command);
@@ -158,7 +167,6 @@ async function fixture() {
           active: true,
         }}
         writable
-        openMergeView={(path) => mergeViews.push(path)}
       />
     </div>,
     { environment: { requests } },
@@ -166,7 +174,7 @@ async function fixture() {
   await expect
     .element(page.getByRole("region", { name: "Conflicted files" }))
     .toBeVisible();
-  return { stages, choices, mutations, mergeViews };
+  return { stages, choices, mutations, writes };
 }
 
 const row = (path: string) =>
@@ -199,16 +207,34 @@ describe("conflicts in the Diffs tab", () => {
     });
   });
 
-  it("shows the working file with its conflict block delimited", async () => {
-    await fixture();
+  it("saves the block taken in the working file and marks it resolved with the saved revision", async () => {
+    const f = await fixture();
     await expect
       .element(row(conflicted))
       .toHaveAttribute("aria-pressed", "true");
     const file = page.getByRole("region", { name: "Working file" });
-    await expect.element(file).toHaveTextContent("export const status = 1;");
+
+    await file.getByRole("button", { name: "Accept incoming change" }).click();
+
     await expect
-      .element(file.getByRole("group", { name: "Region 1" }))
-      .toHaveTextContent(marker.join(" "));
+      .poll(() => f.writes.at(-1))
+      .toMatchObject({
+        path: conflicted,
+        revision: "app-1",
+        content:
+          "export const status = 1;\nexport const reader = readIncoming;\n",
+      });
+    await page
+      .getByRole("button", { name: "Mark resolved", exact: true })
+      .click();
+    await expect.element(row(removed)).toHaveAttribute("aria-pressed", "true");
+    expect(f.stages).toEqual([
+      expect.objectContaining({
+        path: conflicted,
+        revision: "app-1-saved",
+        allowMarkers: false,
+      }),
+    ]);
   });
 
   it("confirms before marking a file with markers resolved", async () => {
@@ -241,19 +267,10 @@ describe("conflicts in the Diffs tab", () => {
     expect(f.stages[2]).toMatchObject({ path: conflicted, revision: "app-1" });
   });
 
-  it("offers the versions and whole-file choices the file has and hands off to the merge view", async () => {
+  it("offers only the whole-file choices a file deleted on one side has", async () => {
     const f = await fixture();
     await row(removed).click();
-    const versions = page.getByRole("group", { name: "Conflict versions" });
-    const version = (name: string) => versions.getByRole("button", { name });
-    await expect
-      .element(version(`Current ${current.slice(0, 8)}`))
-      .toBeDisabled();
     await expect.element(page.getByText("No file")).toBeVisible();
-
-    await version(`Incoming ${incoming.slice(0, 8)}`).click();
-    await version("Merge view").click();
-    expect(f.mergeViews).toEqual([removed, removed]);
 
     await page.getByRole("button", { name: "Whole file" }).click();
     await expect
