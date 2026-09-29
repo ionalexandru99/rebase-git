@@ -200,6 +200,7 @@ export function fakeRepositoryHistory({
       case "Range":
         return graph.range(query.head, query.onto);
       case "Storage":
+      case "ClearCache":
         return {
           caches: [],
           persistent: false,

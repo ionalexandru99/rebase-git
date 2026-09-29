@@ -24,3 +24,33 @@ it("releases the history of a tab that closes without closing its history", asyn
 
   await expect.poll(open).toBe(false);
 });
+
+it("clears the stored history of a closed repository", async () => {
+  const observer = openRepositoryHistory();
+  onTestFinished(() => observer.close());
+  const cache = {
+    environmentId: crypto.randomUUID(),
+    repositoryId: crypto.randomUUID(),
+  };
+  const history = openRepositoryHistory({
+    ...cache,
+    logicalRepositoryId: cache.repositoryId,
+  });
+  const stored = async () => {
+    const storage = await observer.ask({ _tag: "Storage", action: "inspect" });
+    return storage.caches.find(
+      (current) => current.repositoryId === cache.repositoryId,
+    )?.open;
+  };
+  await expect.poll(stored).toBe(true);
+  history.close();
+  await expect.poll(stored).toBe(false);
+
+  const storage = await observer.ask({ _tag: "ClearCache", cache });
+
+  expect(
+    storage.caches.some(
+      (current) => current.repositoryId === cache.repositoryId,
+    ),
+  ).toBe(false);
+});

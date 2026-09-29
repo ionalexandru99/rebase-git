@@ -8,6 +8,7 @@ import {
   watchLease,
 } from "#web/features/repository-history/history-lease.ts";
 import type {
+  HistoryCacheKey,
   HistoryClientMessage,
   HistoryIdentity,
   HistoryPortOffer,
@@ -268,6 +269,7 @@ async function ask(
   signal: AbortSignal,
 ): Promise<unknown> {
   if (query._tag === "Storage") return manageStorage(client, query.action);
+  if (query._tag === "ClearCache") return clearCache(query.cache);
   const replica = client.replica;
   if (replica === undefined) throw new Error("History is not open");
   switch (query._tag) {
@@ -306,6 +308,22 @@ async function manageStorage(
       synchronize(client);
     } else await replica.clear(action === "remove");
   }
+  return describeStorage();
+}
+
+async function clearCache({ environmentId, repositoryId }: HistoryCacheKey) {
+  const replica = replicas.get(replicaKey(environmentId, repositoryId));
+  if (replica === undefined)
+    await clearRepository(environmentId, repositoryId, true);
+  else {
+    await replica.rebuild();
+    const client = [...clients].find((current) => current.replica === replica);
+    if (client !== undefined) synchronize(client);
+  }
+  return describeStorage();
+}
+
+function describeStorage() {
   return describeHistoryStorage((environmentId, repositoryId) =>
     replicas.has(replicaKey(environmentId, repositoryId)),
   );
