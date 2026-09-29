@@ -108,12 +108,7 @@ describe("repository tags", () => {
     const { worktreePath, head } = await fixture();
     await git(worktreePath, "config", "tag.gpgSign", "true");
     await git(worktreePath, "config", "gpg.format", "ssh");
-    await git(
-      worktreePath,
-      "config",
-      "user.signingKey",
-      join(worktreePath, "missing-key"),
-    );
+    await git(worktreePath, "config", "user.signingKey", "");
     const create = (message?: string) =>
       Effect.runPromise(
         createTag(runner, {
@@ -131,6 +126,9 @@ describe("repository tags", () => {
     });
     await expect(create("Signed release")).rejects.toMatchObject({
       _tag: "RepositoryRejected",
+      detail: expect.stringContaining(
+        "user.signingKey needs to be set for ssh signing",
+      ),
     });
     await expect(git(worktreePath, "tag", "--list")).resolves.toBe("");
   });
