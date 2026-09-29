@@ -145,11 +145,6 @@ export function RefRow({
                       ? "toggle"
                       : "replace",
                 );
-                if (
-                  event.target instanceof Element &&
-                  event.target.closest("[data-upstream-indicator]") !== null
-                )
-                  run("upstream");
               }}
               onContextMenu={() => onActivate("keep")}
               onDoubleClick={() => run("checkout")}
@@ -191,7 +186,10 @@ export function RefRow({
           </div>
         }
       />
-      <ContextMenuContent className="w-64" finalFocus={() => !acted.current}>
+      <ContextMenuContent
+        className="w-max min-w-64 max-w-md"
+        finalFocus={() => !acted.current}
+      >
         <ActionMenuItems
           actions={actions}
           onRun={(action) => {
@@ -280,19 +278,11 @@ function UpstreamIndicator({
 }) {
   if (upstream.gone)
     return (
-      <span
-        className="shrink-0 text-xs text-status-unavailable"
-        data-upstream-indicator
-      >
-        gone
-      </span>
+      <span className="shrink-0 text-xs text-status-unavailable">gone</span>
     );
   if (upstream.ahead === 0 && upstream.behind === 0) return null;
   return (
-    <span
-      className="flex shrink-0 items-center gap-1 text-xs font-normal tabular-nums"
-      data-upstream-indicator
-    >
+    <span className="flex shrink-0 items-center gap-1 text-xs font-normal tabular-nums">
       {upstream.ahead > 0 ? (
         <span
           role="img"

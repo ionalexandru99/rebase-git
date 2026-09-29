@@ -26,9 +26,11 @@ import {
 } from "#web/platform/query/use-command.ts";
 
 export interface MergeActions {
-  readonly actionFor: (target: RefSourceTarget) => Action<"merge"> | undefined;
+  readonly actionFor: (target: RefSourceTarget) => MergeAction | undefined;
   readonly inspect: (target: RefSourceTarget) => void;
 }
+
+type MergeAction = Action<"merge" | `merge.${MergeMode}`>;
 
 const modes: readonly { readonly mode: MergeMode; readonly label: string }[] = [
   { mode: "merge", label: "Merge" },
@@ -108,7 +110,7 @@ export function useMergeActions(
       });
   };
 
-  const actionFor = (target: RefSourceTarget): Action<"merge"> | undefined => {
+  const actionFor = (target: RefSourceTarget): MergeAction | undefined => {
     const source = sourceOf(target);
     if (
       source === undefined ||
@@ -139,11 +141,15 @@ export function useMergeActions(
       ...(reason === undefined ? {} : { reason }),
       run: () => undefined,
       submenu: {
-        title: `${source.label} → ${branch}`,
         actions: modes.map(({ mode, label }) => {
           const blocked =
             mode === "ff-only" && known !== undefined && known.behind > 0;
-          const detail = modeDetail(mode, known);
+          const detail =
+            mode !== "merge" || known === undefined
+              ? undefined
+              : known.behind === 0
+                ? "fast-forward"
+                : "merge commit";
           return {
             id: `merge.${mode}`,
             label,
@@ -158,21 +164,6 @@ export function useMergeActions(
   };
 
   return { actionFor, inspect };
-}
-
-function modeDetail(mode: MergeMode, known: HistoryRelation | undefined) {
-  switch (mode) {
-    case "merge":
-      if (known === undefined) return undefined;
-      return known.behind === 0 ? "fast-forward" : "merge commit";
-    case "ff-only":
-      return "--ff-only";
-    case "no-ff":
-      return "--no-ff";
-    case "squash":
-      if (known === undefined) return undefined;
-      return `${known.ahead} ${known.ahead === 1 ? "commit" : "commits"}`;
-  }
 }
 
 function describeMergeFailure(

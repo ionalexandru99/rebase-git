@@ -143,35 +143,6 @@ describe("repository branches", () => {
     });
   });
 
-  it("sets and removes the upstream of a branch", async () => {
-    const fixture = await createFixture();
-    const setUpstream = (
-      upstream: {
-        readonly name: string;
-        readonly remote: string;
-      } | null,
-    ) =>
-      withBranches(fixture, ({ branches, repositoryId }) =>
-        branches.setUpstream({
-          name: "spike",
-          repositoryId,
-          upstream,
-          worktreePath: fixture.repositoryPath,
-        }),
-      );
-
-    await expect(
-      setUpstream({ name: "main", remote: "origin" }),
-    ).resolves.toMatchObject({
-      name: "spike",
-      upstream: { ahead: 2, behind: 0, name: "origin/main" },
-    });
-    await expect(setUpstream(null)).resolves.not.toHaveProperty("upstream");
-    await expect(
-      setUpstream({ name: "missing", remote: "origin" }),
-    ).rejects.toMatchObject({ _tag: "RefMissing", name: "origin/missing" });
-  });
-
   it("deletes a merged branch at once and returns its target for undo", async () => {
     const fixture = await createFixture();
     const merged = await git(fixture.repositoryPath, "rev-parse", "merged");

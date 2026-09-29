@@ -1,5 +1,8 @@
 import type { ReactElement } from "react";
-import { ActionMenuItems } from "#web/components/ui/action-menu.tsx";
+import {
+  ActionMenuItems,
+  replaceRuns,
+} from "#web/components/ui/action-menu.tsx";
 import {
   ContextMenu,
   ContextMenuContent,
@@ -27,7 +30,7 @@ export function TagLabelMenu({
         onContextMenu={(event) => event.stopPropagation()}
         render={children}
       />
-      <ContextMenuContent className="w-64">
+      <ContextMenuContent className="w-max min-w-64 max-w-md">
         <TagLabelActions name={name} />
       </ContextMenuContent>
     </ContextMenu>
@@ -39,25 +42,25 @@ function TagLabelActions({ name }: { readonly name: string }) {
   const { refs } = useScopedRepositoryRefs();
   if (scope === undefined || refs === undefined) return null;
   const target = { _tag: "Tag", name } as const;
-  const actions = refActions(
-    { id: name, name, target },
-    refs,
-    { activeWorktreePath: scope.worktreePath, writable: scope.writable },
-    {
-      checkout: ignored,
-      pull: undefined,
-      pushTags: { pushing: false, run: ignored },
-      editing: {
-        draft: ignored,
-        change: ignored,
-        deletion: { request: ignored },
+  const actions = replaceRuns(
+    refActions(
+      { id: name, name, target },
+      refs,
+      { activeWorktreePath: scope.worktreePath, writable: scope.writable },
+      {
+        checkout: ignored,
+        pull: undefined,
+        pushTags: { pushing: false, run: ignored },
+        editing: {
+          draft: ignored,
+          startRename: ignored,
+          deletion: { request: ignored },
+        },
       },
-    },
-  ).map((action) => ({
-    ...action,
-    run: () =>
+    ),
+    (action) => () =>
       requestRefIntent({ _tag: "RunRefAction", target, id: action.id }),
-  }));
+  );
   return (
     <ActionMenuItems
       actions={actions}

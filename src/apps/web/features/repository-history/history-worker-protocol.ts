@@ -115,7 +115,6 @@ export type HistoryQuery =
       readonly _tag: "Range";
       readonly head: string;
       readonly onto: string;
-      readonly upstream?: string;
     }
   | { readonly _tag: "Storage"; readonly action: HistoryStorageAction };
 

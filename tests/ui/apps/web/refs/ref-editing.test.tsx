@@ -217,7 +217,8 @@ describe("ref editing", () => {
     await screen
       .getByRole("treeitem", { name: "feature/merged" })
       .click({ button: "right" });
-    await screen.getByRole("menuitem", { name: "Delete both" }).click();
+    await screen.getByRole("menuitem", { name: "Delete" }).click();
+    await screen.getByRole("menuitem", { name: "Both" }).click();
 
     const confirmation = screen.getByRole("alertdialog", {
       name: "Delete feature/merged locally and on origin",
@@ -253,47 +254,9 @@ describe("ref editing", () => {
       .toHaveAttribute("aria-disabled", "true");
     await expect
       .element(screen.getByRole("menuitem", { name: /Delete/ }))
-      .toHaveTextContent("Delete localIn another worktree");
+      .toHaveTextContent("DeleteIn another worktree");
   });
 
-  it("sets the upstream from the branch menu", async () => {
-    const environment = await refsEnvironment();
-    const screen = await renderBranches(environment);
-    await screen
-      .getByRole("treeitem", { name: "feature/spike" })
-      .click({ button: "right" });
-    await screen.getByRole("menuitem", { name: /Upstream/ }).click();
-
-    await expect
-      .element(screen.getByRole("combobox", { name: "Filter remote branches" }))
-      .toHaveFocus();
-    await userEvent.keyboard("main");
-    await screen.getByRole("option", { name: "origin/main" }).click();
-    await expect
-      .poll(() => environment.requested)
-      .toHaveBeenCalledWith("setUpstream", {
-        ...scope,
-        name: "feature/spike",
-        upstream: { name: "main", remote: "origin" },
-      });
-  });
-  it("shows an upstream failure after the picker closes", async () => {
-    const environment = await refsEnvironment();
-    environment.rejectNext("setUpstream", {
-      _tag: "RefMissing",
-      name: "origin/main",
-    });
-    const screen = await renderBranches(environment);
-    await screen
-      .getByRole("treeitem", { name: "feature/spike" })
-      .click({ button: "right" });
-    await screen.getByRole("menuitem", { name: /Upstream/ }).click();
-    await screen.getByRole("option", { name: "origin/main" }).click();
-
-    await expect
-      .element(screen.getByRole("alert"))
-      .toHaveTextContent("origin/main no longer exists.");
-  });
   it("creates a lightweight tag from the graph menu and deletes it from the sidebar", async () => {
     const environment = await refsEnvironment();
     const screen = await renderBranches(environment, spike);
@@ -319,7 +282,8 @@ describe("ref editing", () => {
     });
 
     await tag.click({ button: "right" });
-    await screen.getByRole("menuitem", { name: /Delete local/ }).click();
+    await screen.getByRole("menuitem", { name: "Delete" }).click();
+    await screen.getByRole("menuitem", { name: /^Local/ }).click();
     const confirmation = screen.getByRole("alertdialog", {
       name: "Delete tag v1.0",
     });
@@ -402,7 +366,8 @@ describe("ref editing", () => {
     await screen
       .getByRole("treeitem", { name: "v0.9" })
       .click({ button: "right" });
-    await screen.getByRole("menuitem", { name: "Delete on origin…" }).click();
+    await screen.getByRole("menuitem", { name: "Delete" }).click();
+    await screen.getByRole("menuitem", { name: "On origin…" }).click();
     await screen
       .getByRole("alertdialog", { name: "Delete tag v0.9 on origin?" })
       .getByRole("button", { name: "Delete", exact: true })
@@ -430,7 +395,8 @@ describe("ref editing", () => {
     await expect
       .element(screen.getByRole("menuitem", { name: "Create branch here…" }))
       .not.toBeInTheDocument();
-    await screen.getByRole("menuitem", { name: /Delete local/ }).click();
+    await screen.getByRole("menuitem", { name: "Delete" }).click();
+    await screen.getByRole("menuitem", { name: /^Local/ }).click();
     await screen
       .getByRole("alertdialog", { name: "Delete tag v0.9?" })
       .getByRole("button", { name: "Delete", exact: true })
@@ -523,10 +489,6 @@ async function refsEnvironment() {
         ...(remote === undefined ? {} : { remote }),
       };
     }),
-    reply("setUpstream", RepositoryBranchesApi.setUpstream, ({ name }) => ({
-      name,
-      target: main,
-    })),
     reply("createTag", RepositoryTagsApi.create, (command) => {
       const tag = {
         name: command.name,

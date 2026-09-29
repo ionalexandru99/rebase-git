@@ -3,7 +3,6 @@ import { skipToken } from "@tanstack/react-query";
 import { useState } from "react";
 import { RepositoryChangesApi } from "#contracts/repository-changes/repository-changes.contract.ts";
 import { RepositoryOperationsApi } from "#contracts/repository-operations/repository-operations.contract.ts";
-import type { RepositoryRefs } from "#contracts/repository-refs/repository-refs.contract.ts";
 import type { Action } from "#web/components/ui/action-menu.tsx";
 import { useOperation } from "#web/features/operation-recovery/hooks/use-operation.ts";
 import { operationKindLabel } from "#web/features/operation-recovery/operation-messages.ts";
@@ -58,13 +57,10 @@ export function useRebaseActions(
     refs === undefined || scope === undefined
       ? undefined
       : activeHead(refs, scope.worktreePath);
-  const upstream = upstreamCommit(refs, head?.branch);
   const sourceOf = (target: RefSourceTarget) =>
     refs === undefined ? undefined : refSource(refs, target);
   const rangeKey = (source: RefSource) =>
-    head === undefined
-      ? undefined
-      : `${source.commit}:${head.commit}:${upstream ?? ""}`;
+    head === undefined ? undefined : `${source.commit}:${head.commit}`;
   const known = (source: RefSource) =>
     range !== undefined && range.key === rangeKey(source)
       ? range.value
@@ -87,7 +83,6 @@ export function useRebaseActions(
         _tag: "Range",
         head: head.commit,
         onto: source.commit,
-        ...(upstream === undefined ? {} : { upstream }),
       })
       .then(
         (value) => setRange({ key, value }),
@@ -131,14 +126,11 @@ export function useRebaseActions(
               : changed === undefined
                 ? "Checking changes…"
                 : undefined;
-    const detail =
-      planned === undefined ? undefined : rebaseHint(planned, changed);
     return {
       id: "rebase",
-      label: `Rebase onto ${source.label}`,
+      label: "Rebase onto here",
       enabled: reason === undefined,
       ...(reason === undefined ? {} : { reason }),
-      ...(detail === undefined ? {} : { detail }),
       run: () => void start(source, (changed ?? 0) > 0),
     };
   };
@@ -159,9 +151,7 @@ export function useRebaseActions(
       typeof target === "string" &&
       (source.ref === null || source.ref === head.branch) &&
       planned?.based === true;
-    const count =
-      planned === undefined ? undefined : planned.count + (from ? 1 : 0);
-    if (count === 0) return undefined;
+    if (planned?.count === 0 && !from) return undefined;
     const reason =
       head.branch === undefined
         ? "Detached HEAD"
@@ -177,12 +167,9 @@ export function useRebaseActions(
       id: "interactiveRebase",
       label: from
         ? "Interactive rebase from here"
-        : `Interactive rebase onto ${source.label}`,
+        : "Interactive rebase onto here",
       enabled: reason === undefined,
       ...(reason === undefined ? {} : { reason }),
-      ...(count === undefined
-        ? {}
-        : { detail: `${count} ${count === 1 ? "commit" : "commits"}` }),
       run: () => openPlan(plan),
     };
   };
@@ -197,31 +184,6 @@ export function useRebaseActions(
   };
 
   return { actionFor, interactiveFor, inspect, moving };
-}
-
-function upstreamCommit(
-  refs: RepositoryRefs | undefined,
-  branch: string | undefined,
-) {
-  const upstream = refs?.branches.find(({ name }) => name === branch)?.upstream;
-  if (upstream === undefined || upstream.gone) return undefined;
-  return refs?.remoteBranches.find(
-    ({ name, remote }) => `${remote}/${name}` === upstream.name,
-  )?.target;
-}
-
-function rebaseHint(range: HistoryRange, changed: number | undefined) {
-  return [
-    range.count === 0
-      ? "fast-forward"
-      : `${range.count} ${range.count === 1 ? "commit" : "commits"}`,
-    range.pushed > 0 ? `${range.pushed} pushed` : undefined,
-    (changed ?? 0) > 0
-      ? `stashes ${changed} ${changed === 1 ? "file" : "files"}`
-      : undefined,
-  ]
-    .filter((part) => part !== undefined)
-    .join(" · ");
 }
 
 export function useChangedFileCount(enabled: boolean) {

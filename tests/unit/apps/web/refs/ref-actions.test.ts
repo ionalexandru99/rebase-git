@@ -8,6 +8,7 @@ import {
   topicPath,
   upstream,
 } from "#tests-support/fixtures.ts";
+import { everyAction } from "#web/components/ui/action-menu.tsx";
 import {
   type BranchesSidebarRefRow,
   buildBranchesSidebarRows,
@@ -15,27 +16,23 @@ import {
 import { refActions } from "#web/features/refs/ref-actions.ts";
 
 describe("ref actions", () => {
-  it("explains why a checked-out branch cannot be renamed or deleted", () => {
+  it("offers no checkout of the current branch and explains why it cannot be deleted", () => {
     expect(reasons("main")).toEqual({
-      checkout: undefined,
-      delete: "Checked out",
+      deleteLocal: "Checked out",
       newBranch: undefined,
       rename: undefined,
-      upstream: undefined,
     });
     expect(reasons("topic")).toEqual({
       checkout: undefined,
-      delete: "In another worktree",
+      deleteLocal: "In another worktree",
       newBranch: undefined,
       rename: "In another worktree",
-      upstream: undefined,
     });
     expect(reasons("feature")).toEqual({
       checkout: undefined,
-      delete: undefined,
+      deleteLocal: undefined,
       newBranch: undefined,
       rename: undefined,
-      upstream: undefined,
     });
   });
 
@@ -43,15 +40,15 @@ describe("ref actions", () => {
     expect(reasons("release")).toEqual({
       checkout: undefined,
       delete: undefined,
+      deleteLocal: undefined,
+      "deleteOn:origin": undefined,
       deleteBoth: undefined,
-      deleteRemote: undefined,
       newBranch: undefined,
       rename: undefined,
-      upstream: undefined,
     });
     expect(reasons("origin/release")).toEqual({
       checkout: undefined,
-      deleteRemote: undefined,
+      "deleteOn:origin": undefined,
       newBranch: undefined,
     });
   });
@@ -61,8 +58,7 @@ describe("ref actions", () => {
       "checkout",
       "newBranch",
       "rename",
-      "upstream",
-      "delete",
+      "deleteLocal",
     ]);
   });
 
@@ -71,9 +67,10 @@ describe("ref actions", () => {
       checkout: undefined,
       newBranch: undefined,
       "pushTag:origin": undefined,
-      deleteTag: undefined,
-      "deleteTagOn:origin": undefined,
-      deleteTagBoth: undefined,
+      delete: undefined,
+      deleteLocal: undefined,
+      "deleteOn:origin": undefined,
+      deleteBoth: undefined,
     });
     expect(
       Object.keys(
@@ -87,9 +84,10 @@ describe("ref actions", () => {
       "newBranch",
       "pushTag:origin",
       "pushTag:upstream",
-      "deleteTag",
-      "deleteTagOn:origin",
-      "deleteTagOn:upstream",
+      "delete",
+      "deleteLocal",
+      "deleteOn:origin",
+      "deleteOn:upstream",
     ]);
     expect(reasons("v1.0", true, [])).toMatchObject({
       "pushTag:": "No remotes",
@@ -99,11 +97,11 @@ describe("ref actions", () => {
   it("disables every write without repository write access", () => {
     expect(reasons("feature", false)).toEqual({
       checkout: undefined,
-      delete: "Read only",
+      deleteLocal: "Read only",
       newBranch: "Read only",
       rename: "Read only",
-      upstream: "Read only",
     });
+    expect(reasons("release", false)).toMatchObject({ delete: "Read only" });
   });
 });
 
@@ -129,20 +127,22 @@ function reasons(
   );
   if (row === undefined) throw new Error(`Missing row ${name}`);
   return Object.fromEntries(
-    refActions(
-      row,
-      repository,
-      { activeWorktreePath: mainPath, writable },
-      {
-        checkout: () => undefined,
-        pull: undefined,
-        pushTags: { pushing: false, run: () => undefined },
-        editing: {
-          draft: () => undefined,
-          change: () => undefined,
-          deletion: { request: () => undefined },
+    everyAction(
+      refActions(
+        row,
+        repository,
+        { activeWorktreePath: mainPath, writable },
+        {
+          checkout: () => undefined,
+          pull: undefined,
+          pushTags: { pushing: false, run: () => undefined },
+          editing: {
+            draft: () => undefined,
+            startRename: () => undefined,
+            deletion: { request: () => undefined },
+          },
         },
-      },
+      ),
     ).map((action) => [action.id, action.reason]),
   );
 }
