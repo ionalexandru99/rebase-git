@@ -22,11 +22,7 @@ import {
   activeHead,
   useScopedRepositoryRefs,
 } from "#web/features/refs/repository-refs.ts";
-import {
-  type ResetActions,
-  ResetConfirmation,
-  useResetActions,
-} from "#web/features/reset/reset-actions.tsx";
+import type { ResetActions } from "#web/features/reset/reset-actions.tsx";
 import { usePanelFeature } from "#web/features/workspace-panel/api.ts";
 import { useEnvironmentQuery } from "#web/platform/query/environment-query.ts";
 import {
@@ -39,9 +35,11 @@ type Head = RepositoryWorktree["head"];
 const head: ReflogRef = { _tag: "Head" };
 
 export function ReflogPanel({
+  reset,
   onShowInGraph,
   onOpenDetails,
 }: {
+  readonly reset?: ResetActions | undefined;
   readonly onShowInGraph?: (oid: string) => Promise<void>;
   readonly onOpenDetails?: (oid: string) => void;
 }) {
@@ -66,7 +64,6 @@ export function ReflogPanel({
         },
     { changes: "refs", enabled: feature?.active !== false },
   );
-  const reset = useResetActions();
   const [graphError, setGraphError] = useState<string>();
 
   const showInGraph = (oid: string) => {
@@ -106,7 +103,6 @@ export function ReflogPanel({
         status={reflog.status}
         truncated={reflog.data?.truncated ?? false}
       />
-      <ResetConfirmation reset={reset} />
       {graphError === undefined ? null : (
         <ErrorNotification message={graphError} />
       )}
@@ -181,12 +177,12 @@ function reflogActions(
     readonly blocked: string | undefined;
     readonly showInGraph: ((oid: string) => void) | undefined;
     readonly openDetails: ((oid: string) => void) | undefined;
-    readonly reset: ResetActions;
+    readonly reset: ResetActions | undefined;
   },
 ): readonly Action[] {
   const { scope, blocked, showInGraph, openDetails } = context;
   const readable = scope?.readable ?? false;
-  const reset = context.reset.actionFor(row.oid);
+  const reset = context.reset?.actionFor(row.oid);
   return [
     {
       id: "showInGraph",

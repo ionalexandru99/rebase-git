@@ -202,6 +202,7 @@ function Workspace({
                     reflog: (
                       <Suspense fallback={null}>
                         <reflogPanel.Content
+                          reset={reset}
                           onOpenDetails={inspection.open}
                           onShowInGraph={async (oid) => {
                             await inspection.graphRef.current?.navigateToOid(

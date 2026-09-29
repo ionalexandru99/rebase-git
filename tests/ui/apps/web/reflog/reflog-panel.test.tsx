@@ -21,6 +21,7 @@ import {
 import { render } from "#tests-support/render.tsx";
 import { NotificationsProvider } from "#web/features/notifications/notifications.tsx";
 import { ReflogPanel } from "#web/features/reflog/reflog-panel.tsx";
+import { useResetActions } from "#web/features/reset/reset-actions.tsx";
 import { RepositoryScopeProvider } from "#web/platform/query/repository-scope.tsx";
 
 const head = commitId;
@@ -116,13 +117,25 @@ function renderPanel(
     <NotificationsProvider>
       <RepositoryScopeProvider scope={repositoryScope()}>
         <div style={{ height: 480 }}>
-          <ReflogPanel
-            onOpenDetails={() => undefined}
-            onShowInGraph={onShowInGraph}
-          />
+          <ResetReflogPanel onShowInGraph={onShowInGraph} />
         </div>
       </RepositoryScopeProvider>
     </NotificationsProvider>,
     { environment: { requests: reflog.requests } },
+  );
+}
+
+function ResetReflogPanel({
+  onShowInGraph,
+}: {
+  readonly onShowInGraph: (oid: string) => Promise<void>;
+}) {
+  const reset = useResetActions();
+  return (
+    <ReflogPanel
+      onOpenDetails={() => undefined}
+      onShowInGraph={onShowInGraph}
+      reset={reset}
+    />
   );
 }
