@@ -297,7 +297,7 @@ export function CommitGraph({
             onRange={onRange}
             onPageSize={setPageSize}
           >
-            {({ viewport, totalHeight, virtualRows }) => (
+            {({ viewport, totalHeight, flowStart, virtualRows }) => (
               <div className="relative min-h-0 flex-1">
                 <CommitActionMenu
                   actions={
@@ -386,9 +386,15 @@ export function CommitGraph({
                     >
                       <CommitGraphCanvas
                         laneRows={laneRows}
+                        offset={start}
                         virtualRows={virtualRows}
                         scrollRef={scrollRef}
                         viewportWidth={viewport.width}
+                      />
+                      <tr
+                        inert
+                        className="block"
+                        style={{ height: flowStart }}
                       />
                       {virtualRows.map((virtualRow) => {
                         const row = windowRows[virtualRow.index];
@@ -404,7 +410,6 @@ export function CommitGraph({
                             }
                             lane={row.lane}
                             rowIndex={start + virtualRow.index + 2}
-                            size={virtualRow.size}
                             start={virtualRow.start}
                             selected={navigation.selected.has(commit.oid)}
                             order={commands.preview.indexOf(commit.oid) + 1}

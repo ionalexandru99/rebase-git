@@ -43,6 +43,43 @@ for (const deviceScaleFactor of [1, 2]) {
   });
 }
 
+test("keeps style and layout work small while scrolling fast", async ({
+  page,
+}) => {
+  test.skip(Boolean(process.env.CI), "Local performance benchmark");
+  await withGraphFixture(page, async () => {
+    await mountGraph(page, 32);
+    const session = await page.context().newCDPSession(page);
+    await session.send("Performance.enable");
+    const renderingSeconds = async () => {
+      const { metrics } = await session.send("Performance.getMetrics");
+      return metrics
+        .filter(
+          ({ name }) =>
+            name === "RecalcStyleDuration" || name === "LayoutDuration",
+        )
+        .reduce((sum, { value }) => sum + value, 0);
+    };
+    const frames = 240;
+    const before = await renderingSeconds();
+    await page.evaluate(async (frames) => {
+      const path = "/tests/performance/fixtures/graph-scroll.browser.ts";
+      const fixture: typeof import("#tests-performance/fixtures/graph-scroll.browser.ts") =
+        await import(path);
+      await fixture.scrollGraph(400, frames);
+    }, frames);
+    const milliseconds = ((await renderingSeconds()) - before) * 1_000;
+    process.stdout.write(
+      `fast scroll style and layout ${(milliseconds / frames).toFixed(2)} ms per frame\n`,
+    );
+    assertTimingBudget(
+      "fast scroll style and layout per frame",
+      milliseconds / frames,
+      3,
+    );
+  });
+});
+
 test("moves the keyboard selection through loaded rows", async ({ page }) => {
   test.skip(Boolean(process.env.CI), "Local performance benchmark");
   await withGraphFixture(page, async () => {

@@ -1,4 +1,3 @@
-import type { VirtualItem } from "@tanstack/react-virtual";
 import {
   memo,
   type RefObject,
@@ -7,6 +6,7 @@ import {
   useRef,
   useState,
 } from "react";
+import type { GraphVirtualRow } from "#web/features/commit-graph/components/commit-graph-virtual-window.tsx";
 import {
   commitGraphGutterWidth,
   graphRowHeight,
@@ -18,12 +18,14 @@ const tileRows = 32;
 
 export function CommitGraphCanvas({
   laneRows,
+  offset,
   virtualRows,
   scrollRef,
   viewportWidth,
 }: {
   readonly laneRows: readonly CommitLaneRow[];
-  readonly virtualRows: readonly VirtualItem[];
+  readonly offset: number;
+  readonly virtualRows: readonly GraphVirtualRow[];
   readonly scrollRef: RefObject<HTMLTableElement | null>;
   readonly viewportWidth: number;
 }) {
@@ -37,10 +39,6 @@ export function CommitGraphCanvas({
     element.addEventListener("scroll", scroll, { passive: true });
     return () => element.removeEventListener("scroll", scroll);
   }, [scrollRef]);
-  const offset =
-    virtualRows[0] === undefined
-      ? 0
-      : virtualRows[0].start / graphRowHeight - virtualRows[0].index;
   const tiles = new Set(
     virtualRows.map((row) => Math.floor((row.index + offset) / tileRows)),
   );

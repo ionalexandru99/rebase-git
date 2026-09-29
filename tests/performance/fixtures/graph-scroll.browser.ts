@@ -242,6 +242,17 @@ export async function measureGraphScroll(laneCount: number) {
   }
 }
 
+export async function scrollGraph(pixelsPerFrame: number, frames: number) {
+  const grid = document.querySelector<HTMLTableElement>('table[role="grid"]');
+  if (grid === null) throw new Error("Missing graph grid");
+  for (let frame = 0; frame < frames; frame += 1) {
+    grid.scrollTop += pixelsPerFrame;
+    await new Promise<void>((resolve) =>
+      requestAnimationFrame(() => resolve()),
+    );
+  }
+}
+
 export async function measureKeyboardNavigation(presses: number) {
   const grid = document.querySelector<HTMLTableElement>('table[role="grid"]');
   if (grid === null) throw new Error("Missing graph grid");
