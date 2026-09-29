@@ -28,6 +28,7 @@ import {
 } from "#web/features/refs/repository-refs.ts";
 import type { HistoryScopeQuery } from "#web/features/repository-history/history-view.ts";
 import type { RepositoryHistory } from "#web/features/repository-history/repository-history.ts";
+import type { ResetActions } from "#web/features/reset/reset-actions.tsx";
 import { useRepositoryScope } from "#web/platform/query/repository-scope.tsx";
 import { describeFailure } from "#web/platform/query/request-failure.ts";
 import { answer, useCommand } from "#web/platform/query/use-command.ts";
@@ -45,6 +46,7 @@ interface CommitActionHandlers {
   readonly openDetails?: ((oid: string) => void) | undefined;
   readonly merge: Action | undefined;
   readonly rebase: readonly (Action | undefined)[];
+  readonly reset: Action | undefined;
   readonly revert: readonly Action[];
   readonly readCommit: (oid: string) => Promise<RepositoryCommit | undefined>;
   readonly writeClipboard: (text: string) => Promise<void>;
@@ -56,6 +58,7 @@ export function useCommitActions({
   scope: historyScope,
   merge,
   rebase,
+  reset,
   onOpenDetails,
 }: {
   readonly history: Pick<RepositoryHistory, "ask"> | undefined;
@@ -64,6 +67,7 @@ export function useCommitActions({
   readonly rebase?:
     | Pick<RebaseActions, "actionFor" | "interactiveFor">
     | undefined;
+  readonly reset?: Pick<ResetActions, "actionFor"> | undefined;
   readonly onOpenDetails?: ((oid: string) => void) | undefined;
 }) {
   const scope = useRepositoryScope();
@@ -88,6 +92,7 @@ export function useCommitActions({
       openDetails: onOpenDetails,
       merge: merge?.actionFor(oid),
       rebase: [rebase?.actionFor(oid), rebase?.interactiveFor(oid)],
+      reset: reset?.actionFor(oid),
       revert: revert.actionsFor(selected),
       readCommit: async (commit) =>
         (await history?.ask({ _tag: "Commits", oids: [commit] }))?.[0],
@@ -201,6 +206,7 @@ function commitActions(
     openDetails,
     merge,
     rebase,
+    reset,
     revert,
     readCommit,
     writeClipboard,
@@ -224,6 +230,7 @@ function commitActions(
         ]),
     ...(merge === undefined ? [] : [merge]),
     ...rebase.filter((action) => action !== undefined),
+    ...(reset === undefined ? [] : [reset]),
     ...revert,
     {
       id: "copySha",

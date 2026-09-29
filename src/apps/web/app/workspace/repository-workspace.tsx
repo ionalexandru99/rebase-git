@@ -18,6 +18,10 @@ import { useScopedRepositoryRefs } from "#web/features/refs/repository-refs.ts";
 import { RemoteSync } from "#web/features/remote-sync/remote-sync.tsx";
 import { useCatalogRepository } from "#web/features/repository-catalog/use-repository-catalog.ts";
 import { useRepositoryHistory } from "#web/features/repository-history/repository-history.ts";
+import {
+  ResetConfirmation,
+  useResetActions,
+} from "#web/features/reset/reset-actions.tsx";
 import { WorkspacePanel } from "#web/features/workspace-panel/workspace-panel.tsx";
 import {
   rebasePanel,
@@ -99,6 +103,7 @@ function Workspace({
   );
   const rebase = useRebaseActions(history, openRebasePlan);
   const cherryPick = useCherryPick(history);
+  const reset = useResetActions();
   const name = useCatalogRepository(scope.repositoryId)?.name ?? "Repository";
   const repositoryRefs = useScopedRepositoryRefs();
   const { refs } = repositoryRefs;
@@ -122,6 +127,7 @@ function Workspace({
   return (
     <>
       <OperationRecoveryNotice key={worktreePath} repositoryName={name} />
+      <ResetConfirmation reset={reset} />
       <RemoteSync>
         {(syncActions) => (
           <CommitInspectionBridge connected={scope.connected}>
@@ -137,6 +143,7 @@ function Workspace({
                   <BranchesSidebar
                     merge={merge}
                     rebase={rebase}
+                    reset={reset}
                     onBranchRenamed={historyScope.renameBranch}
                     onShowReflog={showReflog}
                     onToggleHistoryRef={historyScope.toggleRef}
@@ -158,6 +165,7 @@ function Workspace({
                       <CommitGraph
                         merge={merge}
                         rebase={rebase}
+                        reset={reset}
                         cherryPick={cherryPick}
                         ref={inspection.graphRef}
                         onOpenDetails={inspection.open}

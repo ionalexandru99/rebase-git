@@ -71,6 +71,7 @@ import {
 import { TagDetails } from "#web/features/refs/tag-details.tsx";
 import { TagPushStatus, useTagPush } from "#web/features/refs/tag-push.tsx";
 import { usePull } from "#web/features/remote-sync/use-pull.ts";
+import type { ResetActions } from "#web/features/reset/reset-actions.tsx";
 import { useRepositoryScope } from "#web/platform/query/repository-scope.tsx";
 
 const overscanRows = 12;
@@ -80,6 +81,7 @@ const noSelectedTags: ReadonlySet<string> = new Set();
 export function BranchesSidebar({
   merge,
   rebase,
+  reset,
   onBranchRenamed = () => undefined,
   onToggleHistoryRef = () => undefined,
   onShowReflog,
@@ -87,6 +89,7 @@ export function BranchesSidebar({
 }: {
   readonly merge?: MergeActions | undefined;
   readonly rebase?: RebaseActions | undefined;
+  readonly reset?: ResetActions | undefined;
   readonly onBranchRenamed?: (rename: {
     readonly name: string;
     readonly newName: string;
@@ -260,6 +263,7 @@ export function BranchesSidebar({
             merge: merge?.actionFor,
             rebase: rebase?.actionFor,
             interactiveRebase: rebase?.interactiveFor,
+            reset: reset?.actionFor,
             showReflog: onShowReflog,
             pull: pull.allowed
               ? {

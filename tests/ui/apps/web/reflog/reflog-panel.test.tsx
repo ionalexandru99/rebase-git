@@ -1,24 +1,19 @@
 import { describe, expect, it, vi } from "vite-plus/test";
 import { userEvent } from "vite-plus/test/browser";
-import type { RepositoryOperation } from "#contracts/repository-operations/repository-operations.contract.ts";
-import { RepositoryOperationsApi } from "#contracts/repository-operations/repository-operations.contract.ts";
 import {
   RepositoryReflogApi,
-  type ResetFailure,
   type ResetToCommit,
 } from "#contracts/repository-reflog/repository-reflog.contract.ts";
 import { RepositoryRefsApi } from "#contracts/repository-refs/repository-refs.contract.ts";
 import {
   fakeRequests,
-  rejected,
+  idleOperation,
   respond,
 } from "#tests-support/fake-requests.ts";
 import {
   commitId,
-  conflictedRebase,
   mainPath,
   reflogEntry,
-  repositoryOperation,
   repositoryRefs,
   repositoryScope,
   worktree,
@@ -49,17 +44,15 @@ describe("reflog panel", () => {
     await screen
       .getByRole("treeitem", { name: /Retry checkout on timeout/ })
       .click({ button: "right" });
-    await expect
-      .element(screen.getByRole("menuitem", { name: /keep changes staged/ }))
-      .toHaveTextContent("soft");
     await screen.getByRole("menuitem", { name: /Show in graph/ }).click();
     expect(shown).toHaveBeenCalledWith(beforeRebase);
 
     await screen
       .getByRole("treeitem", { name: /Retry checkout on timeout/ })
       .click({ button: "right" });
+    await screen.getByRole("menuitem", { name: "Reset" }).click();
     await screen
-      .getByRole("menuitem", { name: /keep changes unstaged/ })
+      .getByRole("menuitem", { name: "Keep changes unstaged" })
       .click();
     await vi.waitFor(() =>
       expect(reflog.resets).toEqual([
@@ -71,68 +64,12 @@ describe("reflog panel", () => {
       ]),
     );
   });
-
-  it("lists the files a hard reset discards and sends the confirmed fingerprint", async () => {
-    const reflog = reflogFixture();
-    reflog.failures.push({
-      _tag: "ResetDiscardsChanges",
-      paths: ["src/config.ts", "src/retry.ts"],
-      count: 2,
-      fingerprint: "f".repeat(64),
-    });
-    const screen = await renderPanel(reflog);
-
-    await screen
-      .getByRole("treeitem", { name: /Retry checkout on timeout/ })
-      .click({ button: "right" });
-    await screen.getByRole("menuitem", { name: /discard changes/ }).click();
-    const confirmation = screen.getByRole("alertdialog");
-    await expect
-      .element(confirmation)
-      .toHaveTextContent("Uncommitted edits in 2 files will be lost.");
-    await expect.element(confirmation).toHaveTextContent("src/retry.ts");
-
-    await screen.getByRole("button", { name: "Discard and move" }).click();
-    await expect.element(confirmation).not.toBeInTheDocument();
-    expect(reflog.resets.at(-1)).toMatchObject({
-      mode: "hard",
-      discard: "f".repeat(64),
-    });
-  });
-
-  it("explains why the branch cannot move and reports a moved head", async () => {
-    const rebasing = reflogFixture(conflictedRebase());
-    const blocked = await renderPanel(rebasing);
-    await blocked
-      .getByRole("treeitem", { name: /Retry checkout on timeout/ })
-      .click({ button: "right" });
-    await expect
-      .element(blocked.getByRole("menuitem", { name: /keep changes staged/ }))
-      .toHaveTextContent("Rebase in progress");
-    await expect
-      .element(blocked.getByRole("menuitem", { name: /keep changes staged/ }))
-      .toHaveAttribute("aria-disabled", "true");
-    await userEvent.keyboard("{Escape}");
-    await blocked.unmount();
-
-    const moved = reflogFixture();
-    moved.failures.push({ _tag: "HeadMoved", head: picked });
-    const screen = await renderPanel(moved);
-    await screen
-      .getByRole("treeitem", { name: /Retry checkout on timeout/ })
-      .click({ button: "right" });
-    await screen.getByRole("menuitem", { name: /keep changes staged/ }).click();
-    await expect
-      .element(screen.getByText(/moved to ccccccc before the reset ran/))
-      .toBeVisible();
-  });
 });
 
-function reflogFixture(operation: RepositoryOperation = repositoryOperation()) {
+function reflogFixture() {
   const resets: ResetToCommit[] = [];
-  const failures: ResetFailure[] = [];
   const requests = fakeRequests(
-    respond(RepositoryOperationsApi.read, async () => operation),
+    idleOperation,
     respond(RepositoryRefsApi.read, async () =>
       repositoryRefs({
         branches: [
@@ -165,12 +102,10 @@ function reflogFixture(operation: RepositoryOperation = repositoryOperation()) {
     })),
     respond(RepositoryReflogApi.reset, async (command) => {
       resets.push(command);
-      const failure = failures.shift();
-      if (failure !== undefined) throw rejected(failure);
       return { head: command.target };
     }),
   );
-  return { requests, resets, failures };
+  return { requests, resets };
 }
 
 function renderPanel(
