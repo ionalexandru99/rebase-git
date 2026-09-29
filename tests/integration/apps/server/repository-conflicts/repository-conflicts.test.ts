@@ -129,49 +129,16 @@ describe("repository conflicts", () => {
     });
   });
 
-  it("builds a two-region document with base text, including an empty base and a renamed file", async () => {
+  it("reads the working file of a conflict that exists on both sides", async () => {
     const f = await fixture();
 
     const document = await f.document("two.txt");
     const added = await f.document("added.txt");
-    const renamed = await f.document("new-name.txt");
 
     expect(document.content).toBe(await f.content("two.txt"));
     expect(document.file.openRegions).toBe(2);
-    expect(document.regions).toMatchObject([
-      {
-        id: "0",
-        line: 2,
-        open: true,
-        current: ["B current"],
-        base: ["b"],
-        incoming: ["B incoming"],
-      },
-      {
-        id: "1",
-        line: 13,
-        open: true,
-        current: ["G current"],
-        base: ["g"],
-        incoming: ["G incoming"],
-      },
-    ]);
-    expect(added.regions).toMatchObject([
-      {
-        open: true,
-        current: ["added by current"],
-        base: [],
-        incoming: ["added by incoming"],
-      },
-    ]);
-    expect(renamed.regions).toMatchObject([
-      {
-        open: true,
-        current: ["line 0 current"],
-        base: ["line 0"],
-        incoming: ["line 0 incoming"],
-      },
-    ]);
+    expect(added.content).toBe(await f.content("added.txt"));
+    expect(added.file.kind).toBe("both-added");
   });
 
   it("saves an edit without staging it and rejects a stale revision", async () => {
@@ -193,10 +160,7 @@ describe("repository conflicts", () => {
 
     expect(await f.content("two.txt")).toBe(edited);
     expect(saved.file.openRegions).toBe(1);
-    expect(saved.regions.map(({ open, line }) => ({ open, line }))).toEqual([
-      { open: false, line: null },
-      { open: true, line: 7 },
-    ]);
+    expect(saved.content).toBe(edited);
     expect((await f.unmerged("two.txt")).split("\n")).toHaveLength(3);
     await expect(
       Effect.runPromise(

@@ -10,6 +10,8 @@ export const PanelFeatureContext = createContext<
       readonly environment: WorkspacePanelEnvironment | undefined;
       readonly active: boolean;
       readonly input: unknown;
+      readonly expanded: boolean;
+      readonly expand: (expanded: boolean) => void;
     }
   | undefined
 >(undefined);

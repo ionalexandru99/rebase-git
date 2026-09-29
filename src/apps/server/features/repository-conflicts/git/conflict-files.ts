@@ -11,7 +11,6 @@ import {
   runRepositoryGit,
 } from "#server/adapters/local-git/git-commands.ts";
 import { worktreeFile } from "#server/features/repository-changes/git/change-files.ts";
-import { markerBlocks } from "#server/features/repository-conflicts/conflict-regions.ts";
 import { binary } from "#server/repository/comparison/build-change-diff.ts";
 import { fingerprint } from "#server/repository/comparison/fingerprint.ts";
 import {
@@ -20,7 +19,7 @@ import {
 } from "#server/repository/comparison/read-blobs.ts";
 import type { RepositoryFileContent } from "#server/repository/comparison/read-object-file.ts";
 
-export interface StageEntry {
+interface StageEntry {
   readonly side: ConflictSide;
   readonly mode: string;
   readonly oid: string;
@@ -29,9 +28,7 @@ export interface StageEntry {
 export interface ConflictSnapshot {
   readonly file: ConflictFile;
   readonly stages: readonly StageEntry[];
-  readonly blobs: ReadonlyMap<string, GitBlob>;
   readonly worktree: RepositoryFileContent;
-  readonly markerSize: number;
 }
 
 interface SnapshotSources {
@@ -221,9 +218,7 @@ function conflictSnapshot(
   const text = worktreeText(worktree);
   return {
     stages,
-    blobs,
     worktree,
-    markerSize,
     file: {
       path,
       revision: fingerprint(
@@ -242,10 +237,33 @@ function conflictSnapshot(
           binary: binary(blob?.content ?? null),
         };
       }),
-      openRegions: text === null ? 0 : markerBlocks(text, markerSize).length,
+      openRegions: text === null ? 0 : countMarkerBlocks(text, markerSize),
       choices: wholeFileChoices(stages, kind),
     },
   };
+}
+
+export function countMarkerBlocks(text: string, size: number) {
+  const open = "<".repeat(size);
+  const separator = "=".repeat(size);
+  const close = ">".repeat(size);
+  let section: "outside" | "current" | "incoming" = "outside";
+  let count = 0;
+  for (const raw of text.split("\n")) {
+    const line = raw.endsWith("\r") ? raw.slice(0, -1) : raw;
+    if (isMarker(line, open)) section = "current";
+    else if (section === "current" && isMarker(line, separator))
+      section = "incoming";
+    else if (section === "incoming" && isMarker(line, close)) {
+      section = "outside";
+      count += 1;
+    }
+  }
+  return count;
+}
+
+function isMarker(line: string, marker: string) {
+  return line === marker || line.startsWith(`${marker} `);
 }
 
 function wholeFileChoices(stages: readonly StageEntry[], kind: ConflictKind) {

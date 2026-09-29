@@ -5,6 +5,7 @@ import type {
   RepositoryChanges,
 } from "#contracts/repository-changes/repository-changes.contract.ts";
 import type { ChangeDiff } from "#contracts/repository-comparison/repository-comparison.contract.ts";
+import type { ConflictDocument } from "#contracts/repository-conflicts/repository-conflicts.contract.ts";
 import type { RepositoryOperation } from "#contracts/repository-operations/repository-operations.contract.ts";
 import type { RepositoryFetchStatus } from "#contracts/repository-pull/repository-pull.contract.ts";
 import type { ReflogEntry } from "#contracts/repository-reflog/repository-reflog.contract.ts";
@@ -122,6 +123,30 @@ export function changeDiff(
     mime: null,
     patch: "",
     ...diff,
+  };
+}
+
+export function conflictDocument(
+  path: string,
+  content: string,
+  revision = path,
+): ConflictDocument {
+  return {
+    file: {
+      path,
+      revision,
+      kind: "both-modified",
+      stages: [
+        { side: "base", bytes: content.length, binary: false },
+        { side: "current", bytes: content.length, binary: false },
+        { side: "incoming", bytes: content.length, binary: false },
+      ],
+      openRegions: content
+        .split("\n")
+        .filter((line) => line.startsWith(">>>>>>>")).length,
+      choices: ["current", "incoming"],
+    },
+    content,
   };
 }
 

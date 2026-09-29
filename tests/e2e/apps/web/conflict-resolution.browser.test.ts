@@ -6,7 +6,7 @@ import { startEnvironmentServer } from "#tests-support/environment-server.ts";
 import { createConflictedRebase, git } from "#tests-support/git.ts";
 import { removeTemporaryDirectory } from "#tests-support/temporary-directory.ts";
 
-test("rebases onto main from the branch menu, resolves the conflict line by line and continues", async ({
+test("rebases onto main from the branch menu, resolves each conflict block in the Diffs tab and continues", async ({
   page,
 }) => {
   const testHome = await mkdtemp(join(tmpdir(), "rebase-conflicts-e2e-"));
@@ -48,26 +48,40 @@ test("rebases onto main from the branch menu, resolves the conflict line by line
     ).toBeVisible();
 
     await conflicts.getByRole("button", { name: "Conflict two.txt" }).click();
-    await page.getByRole("button", { name: "Merge view" }).click();
-    const mergeView = page.getByRole("region", { name: "Merge view" });
-    await expect(mergeView.getByText("2 of 2 open")).toBeVisible();
-    await mergeView
-      .getByRole("button", { name: "Current line 1, region 1" })
+    await expect(
+      page.getByRole("button", { name: "Restore side panel" }),
+    ).toBeVisible();
+    const file = page.getByRole("region", { name: "Working file" });
+    await file
+      .getByRole("button", { name: "Accept current change" })
+      .first()
       .click();
-    await mergeView
-      .getByRole("button", { name: "Incoming line 1, region 2" })
-      .click();
-    await expect(mergeView.getByText("0 of 2 open")).toBeVisible();
+    const incoming = file.getByRole("button", {
+      name: "Accept incoming change",
+    });
+    await expect(incoming).toHaveCount(1);
+    await incoming.click();
     await expect
       .poll(() => readFile(join(repositoryPath, "two.txt"), "utf8"))
       .toBe("a\nB current\nc\nd\ne\nf\nG incoming\nh\n");
-    await mergeView.getByRole("button", { name: "Mark resolved" }).click();
-
-    await expect(mergeView.getByText("1 of 1 open")).toBeVisible();
-    await mergeView
-      .getByRole("button", { name: "Take incoming, region 1" })
+    await page
+      .getByRole("button", { name: "Mark resolved", exact: true })
       .click();
-    await mergeView.getByRole("button", { name: "Mark resolved" }).click();
+
+    await expect(
+      conflicts.getByRole("button", { name: "Conflict added.txt" }),
+    ).toHaveAttribute("aria-pressed", "true");
+    await expect(incoming).toHaveCount(1);
+    await incoming.click();
+    await expect
+      .poll(() => readFile(join(repositoryPath, "added.txt"), "utf8"))
+      .toBe("added by incoming\n");
+    await page
+      .getByRole("button", { name: "Mark resolved", exact: true })
+      .click();
+    await expect(
+      page.getByRole("button", { name: "Expand side panel" }),
+    ).toBeVisible();
 
     const operation = page.getByRole("region", { name: "Operation" });
     await expect(operation.getByRole("heading")).toContainText(

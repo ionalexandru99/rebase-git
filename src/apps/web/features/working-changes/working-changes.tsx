@@ -36,11 +36,9 @@ const ChangeDiffViewer = lazy(
 export function WorkingChanges({
   target,
   writable,
-  openMergeView,
 }: {
   readonly target: WorkingChangesTarget;
   readonly writable: boolean;
-  readonly openMergeView: (path: string) => void;
 }) {
   const view = useWorkingChangesView(target);
   const [discard, setDiscard] = useState<DiscardRequest | null>(null);
@@ -111,8 +109,11 @@ export function WorkingChanges({
           {view.selection?.section === "conflicts" ? (
             <ConflictViewer
               view={view}
+              scope={{
+                repositoryId: target.repositoryId,
+                worktreePath: target.worktreePath,
+              }}
               writable={writable}
-              openMergeView={openMergeView}
             />
           ) : (
             <Suspense
@@ -174,11 +175,7 @@ function describeDiscard(selection: ChangeSelection) {
   return "Discard every change in this section, including files hidden by the filter.";
 }
 
-export function WorkingChangesPanel({
-  openMergeView,
-}: {
-  readonly openMergeView?: (path: string) => void;
-}) {
+export function WorkingChangesPanel() {
   const feature = usePanelFeature();
   if (feature?.scope === undefined || feature.environment === undefined)
     return <Disconnected />;
@@ -201,14 +198,11 @@ export function WorkingChangesPanel({
             active: connected && active,
           }}
           writable={connected && writable}
-          openMergeView={openMergeView ?? ignoreMergeView}
         />
       </div>
     </DiffWorkerPool>
   );
 }
-
-function ignoreMergeView() {}
 
 function Disconnected() {
   return (

@@ -1,4 +1,4 @@
-import { type JSX, Suspense, useCallback, useMemo, useState } from "react";
+import { type JSX, Suspense, useCallback, useMemo } from "react";
 import { CommitInspectionBridge } from "#web/app/workspace/commit-inspection-bridge.tsx";
 import {
   ResizableHandle,
@@ -10,7 +10,6 @@ import { CommitGraph } from "#web/features/commit-graph/commit-graph.tsx";
 import { automaticHistoryScope } from "#web/features/commit-graph/scope/history-scope.ts";
 import { useHistoryScope } from "#web/features/commit-graph/scope/use-history-scope.ts";
 import { useMergeActions } from "#web/features/merge/merge-actions.ts";
-import { MergeView } from "#web/features/merge-view/merge-view.tsx";
 import { OperationRecoveryNotice } from "#web/features/operation-recovery/components/operation-recovery-toast.tsx";
 import { useRebaseActions } from "#web/features/rebase/rebase-actions.ts";
 import type { RebasePlanTarget } from "#web/features/rebase/rebase-plan.ts";
@@ -23,7 +22,6 @@ import { WorkspacePanel } from "#web/features/workspace-panel/workspace-panel.ts
 import {
   rebasePanel,
   reflogPanel,
-  workingChangesPanel,
 } from "#web/features/workspace-panel/workspace-panel-definitions.ts";
 import { useWorkspacePanel } from "#web/features/workspace-panel/workspace-panel-provider.tsx";
 import { useEnvironment } from "#web/platform/query/environment-context.tsx";
@@ -85,26 +83,6 @@ function Workspace({
   readonly scope: RepositoryScope;
 }) {
   const { worktreePath } = scope;
-  const [merging, setMerging] = useState<{
-    readonly worktreePath: string;
-    readonly path: string;
-  } | null>(null);
-  const mergePath =
-    merging?.worktreePath === worktreePath ? merging.path : null;
-  const openMergeView = useCallback(
-    (path: string) => setMerging({ worktreePath, path }),
-    [worktreePath],
-  );
-  const panelContents = useMemo(
-    () => ({
-      changes: (
-        <Suspense fallback={null}>
-          <workingChangesPanel.Content openMergeView={openMergeView} />
-        </Suspense>
-      ),
-    }),
-    [openMergeView],
-  );
   const history = useRepositoryHistory({
     environmentId,
     repositoryId: scope.repositoryId,
@@ -172,57 +150,47 @@ function Workspace({
                   className="z-10 bg-transparent after:w-2 focus-visible:ring-primary/40"
                 />
                 <WorkspacePanel.Main>
-                  {() =>
-                    mergePath !== null ? (
-                      <MergeView
-                        path={mergePath}
-                        onOpen={openMergeView}
-                        onClose={() => setMerging(null)}
-                        toolbarActions={<WorkspacePanel.Toggle />}
+                  {() => (
+                    <main
+                      aria-label="Repository workspace"
+                      className="h-full rounded-none bg-repository"
+                    >
+                      <CommitGraph
+                        merge={merge}
+                        rebase={rebase}
+                        cherryPick={cherryPick}
+                        ref={inspection.graphRef}
+                        onOpenDetails={inspection.open}
+                        onActiveCommitChange={inspection.select}
+                        toolbarActions={
+                          <>
+                            {syncActions}
+                            <WorkspacePanel.Toggle />
+                          </>
+                        }
+                        githubRepository={refs?.githubRepository}
+                        remoteProviders={refs?.remoteProviders}
+                        historyIdentity={{
+                          environmentId,
+                          repositoryId: scope.logicalRepositoryId,
+                        }}
+                        onRemoveHistoryRef={historyScope.toggleRef}
+                        onRevealHistoryRef={historyScope.toggleRef}
+                        onAddHistoryRef={() =>
+                          requestRefIntent({ _tag: "FocusRefs" })
+                        }
+                        onResetHistoryScope={historyScope.reset}
+                        history={history}
+                        repositoryName={name}
+                        roots={resolved?.roots}
+                        scope={resolved?.scope ?? automaticHistoryScope}
+                        selections={resolved?.selections ?? []}
                       />
-                    ) : (
-                      <main
-                        aria-label="Repository workspace"
-                        className="h-full rounded-none bg-repository"
-                      >
-                        <CommitGraph
-                          merge={merge}
-                          rebase={rebase}
-                          cherryPick={cherryPick}
-                          ref={inspection.graphRef}
-                          onOpenDetails={inspection.open}
-                          onActiveCommitChange={inspection.select}
-                          toolbarActions={
-                            <>
-                              {syncActions}
-                              <WorkspacePanel.Toggle />
-                            </>
-                          }
-                          githubRepository={refs?.githubRepository}
-                          remoteProviders={refs?.remoteProviders}
-                          historyIdentity={{
-                            environmentId,
-                            repositoryId: scope.logicalRepositoryId,
-                          }}
-                          onRemoveHistoryRef={historyScope.toggleRef}
-                          onRevealHistoryRef={historyScope.toggleRef}
-                          onAddHistoryRef={() =>
-                            requestRefIntent({ _tag: "FocusRefs" })
-                          }
-                          onResetHistoryScope={historyScope.reset}
-                          history={history}
-                          repositoryName={name}
-                          roots={resolved?.roots}
-                          scope={resolved?.scope ?? automaticHistoryScope}
-                          selections={resolved?.selections ?? []}
-                        />
-                      </main>
-                    )
-                  }
+                    </main>
+                  )}
                 </WorkspacePanel.Main>
                 <WorkspacePanel.Pane
                   contents={{
-                    ...panelContents,
                     reflog: (
                       <Suspense fallback={null}>
                         <reflogPanel.Content
