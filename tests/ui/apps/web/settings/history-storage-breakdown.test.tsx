@@ -3,37 +3,39 @@ import { page } from "vite-plus/test/browser";
 import { RepositoryCatalogApi } from "#contracts/repository-catalog/repository-catalog.contract.ts";
 import { fakeRequests, respond } from "#tests-support/fake-requests.ts";
 import { catalogEntry } from "#tests-support/fixtures.ts";
+import { historyCache } from "#tests-support/history.ts";
 import { render } from "#tests-support/render.tsx";
 import { HistoryStorageBreakdown } from "#web/features/history-storage/history-storage-breakdown.tsx";
-import type {
-  HistoryCache,
-  HistoryStorage,
-} from "#web/features/repository-history/history-worker-protocol.ts";
+import type { HistoryStorage } from "#web/features/repository-history/history-worker-protocol.ts";
 
 const environmentId = "00000000-0000-4000-8000-000000000100";
 
-function cache(entry: Partial<HistoryCache>): HistoryCache {
-  return {
-    environmentId,
-    repositoryId: "repository",
-    estimatedBytes: 1024,
-    commitCount: 1,
-    lastOpenedAt: 0,
-    open: false,
-    state: "complete",
-    ...entry,
-  };
-}
-
 const storage: HistoryStorage = {
-  persistent: false,
   usageBytes: 3 * 1024 * 1024,
   quotaBytes: 10 * 1024 * 1024 * 1024,
   caches: [
-    cache({ repositoryId: "api-server", commitCount: 12_904 }),
-    cache({ repositoryId: "rebase-git", commitCount: 82_401, open: true }),
-    cache({ repositoryId: "forgotten", commitCount: 1_230 }),
-    cache({ repositoryId: "never-synced", commitCount: 0 }),
+    historyCache({
+      environmentId,
+      repositoryId: "api-server",
+      commitCount: 12_904,
+    }),
+    historyCache({
+      environmentId,
+      repositoryId: "rebase-logical",
+      commitCount: 82_401,
+      open: true,
+    }),
+    historyCache({
+      environmentId,
+      repositoryId: "forgotten",
+      commitCount: 1_230,
+    }),
+    historyCache({ repositoryId: "api-server", commitCount: 40 }),
+    historyCache({
+      environmentId,
+      repositoryId: "never-synced",
+      commitCount: 0,
+    }),
   ],
 };
 
@@ -52,6 +54,7 @@ async function renderBreakdown() {
             repositories: [
               catalogEntry({
                 id: "rebase-git",
+                logicalRepositoryId: "rebase-logical",
                 name: "rebase-git",
                 path: "/code/rebase-git",
               }),
@@ -70,7 +73,7 @@ async function renderBreakdown() {
 }
 
 describe("history storage breakdown", () => {
-  it("names stored repositories, largest first, and hides empty closed caches", async () => {
+  it("names stored repositories by their history key, largest first, and hides empty closed caches", async () => {
     await renderBreakdown();
 
     await expect.element(page.getByText("/code/rebase-git")).toBeVisible();
@@ -84,6 +87,7 @@ describe("history storage breakdown", () => {
       expect.stringMatching(
         /^Removed repositoryNo longer in your projects1,230/,
       ),
+      expect.stringMatching(/^Unknown repositoryFrom another environment40/),
     ]);
   });
 

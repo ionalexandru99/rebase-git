@@ -70,7 +70,6 @@ export interface HistoryCache extends HistoryCacheKey {
 
 export interface HistoryStorage {
   readonly caches: readonly HistoryCache[];
-  readonly persistent: boolean;
   readonly usageBytes?: number;
   readonly quotaBytes?: number;
 }

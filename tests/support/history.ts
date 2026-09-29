@@ -15,6 +15,7 @@ import {
 } from "#web/features/repository-history/history-view.ts";
 import type {
   HistoryAnswers,
+  HistoryCache,
   HistoryQuery,
   HistorySnapshot,
 } from "#web/features/repository-history/history-worker-protocol.ts";
@@ -22,6 +23,19 @@ import type { RepositoryHistory } from "#web/features/repository-history/reposit
 
 export function historyOid(index: number) {
   return index.toString(16).padStart(40, "0");
+}
+
+export function historyCache(entry: Partial<HistoryCache>): HistoryCache {
+  return {
+    environmentId: "environment",
+    repositoryId: "repository",
+    estimatedBytes: 1024,
+    commitCount: 1,
+    lastOpenedAt: 0,
+    open: false,
+    state: "complete",
+    ...entry,
+  };
 }
 
 export function historyIdentity(index: number) {
@@ -203,7 +217,6 @@ export function fakeRepositoryHistory({
       case "ClearCache":
         return {
           caches: [],
-          persistent: false,
         } satisfies HistoryAnswers["Storage"];
     }
   };

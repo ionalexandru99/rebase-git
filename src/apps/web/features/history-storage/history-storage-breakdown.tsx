@@ -21,7 +21,13 @@ interface StoredHistory {
   readonly cache: HistoryCache;
   readonly name: string;
   readonly detail: string;
+  readonly label: string;
   readonly color: string;
+}
+
+interface Catalog {
+  readonly repositories: readonly RepositoryCatalogEntry[];
+  readonly loaded: boolean;
 }
 
 export function HistoryStorageBreakdown({
@@ -34,12 +40,8 @@ export function HistoryStorageBreakdown({
   readonly onClear: (cache: HistoryCache) => void;
 }) {
   const { environmentId } = useEnvironment();
-  const { repositories } = useRepositoryCatalog();
-  const histories = storedHistories(
-    storage.caches,
-    repositories,
-    environmentId,
-  );
+  const catalog = useRepositoryCatalog();
+  const histories = storedHistories(storage.caches, catalog, environmentId);
   const commitCount = histories.reduce(
     (total, { cache }) => total + cache.commitCount,
     0,
@@ -96,7 +98,7 @@ export function HistoryStorageBreakdown({
             </tr>
           </thead>
           <tbody>
-            {histories.map(({ cache, name, detail, color }) => (
+            {histories.map(({ cache, name, detail, label, color }) => (
               <tr className="border-t border-border" key={cacheKey(cache)}>
                 <td className="px-3 py-3">
                   <div className="flex items-center gap-2.5">
@@ -129,7 +131,7 @@ export function HistoryStorageBreakdown({
                   <Button
                     size="icon-sm"
                     variant="ghost"
-                    aria-label={`Clear history for ${name}`}
+                    aria-label={label}
                     disabled={pending}
                     onClick={() => onClear(cache)}
                   >
@@ -152,7 +154,7 @@ export function HistoryStorageBreakdown({
 
 function storedHistories(
   caches: readonly HistoryCache[],
-  repositories: readonly RepositoryCatalogEntry[],
+  catalog: Catalog,
   environmentId: string | undefined,
 ): readonly StoredHistory[] {
   let colors = 0;
@@ -162,35 +164,47 @@ function storedHistories(
     .map((cache) => {
       const repository =
         cache.environmentId === environmentId
-          ? catalogRepository(repositories, cache.repositoryId)
+          ? catalog.repositories.find(
+              ({ id, logicalRepositoryId }) =>
+                (logicalRepositoryId ?? id) === cache.repositoryId,
+            )
           : undefined;
-      if (repository === undefined)
+      if (repository === undefined) {
+        const unnamed = unnamedHistory(cache, catalog, environmentId);
         return {
           cache,
-          name: "Removed repository",
-          detail: "No longer in your projects",
+          ...unnamed,
+          label: `Clear history for ${unnamed.name.toLowerCase()} with ${cache.commitCount.toLocaleString()} commits`,
           color: "bg-muted-foreground",
         };
+      }
       const color = repositoryColors[colors++ % repositoryColors.length];
       return {
         cache,
         name: repository.name,
         detail: repository.path,
+        label: `Clear history for ${repository.name}`,
         color: color ?? "bg-primary",
       };
     });
 }
 
-function catalogRepository(
-  repositories: readonly RepositoryCatalogEntry[],
-  repositoryId: string,
+function unnamedHistory(
+  cache: HistoryCache,
+  catalog: Catalog,
+  environmentId: string | undefined,
 ) {
-  return (
-    repositories.find(({ id }) => id === repositoryId) ??
-    repositories.find(
-      ({ logicalRepositoryId }) => logicalRepositoryId === repositoryId,
-    )
-  );
+  if (cache.environmentId !== environmentId)
+    return {
+      name: "Unknown repository",
+      detail: "From another environment",
+    };
+  if (!catalog.loaded)
+    return {
+      name: "Unknown repository",
+      detail: "Your project list is unavailable",
+    };
+  return { name: "Removed repository", detail: "No longer in your projects" };
 }
 
 function cacheKey(cache: HistoryCache) {

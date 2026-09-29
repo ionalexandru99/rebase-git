@@ -14,10 +14,9 @@ type IsOpen = (environmentId: string, repositoryId: string) => boolean;
 export async function describeHistoryStorage(
   isOpen: IsOpen,
 ): Promise<HistoryStorage> {
-  const [records, estimate, persistent] = await Promise.all([
+  const [records, estimate] = await Promise.all([
     readRepositories(),
     navigator.storage?.estimate().catch((): StorageEstimate => ({})),
-    navigator.storage?.persisted().catch(() => false),
   ]);
   const usage = estimate?.usage;
   const totalCommits = records.reduce(
@@ -40,7 +39,6 @@ export async function describeHistoryStorage(
       open: isOpen(record.environmentId, record.repositoryId),
       state: cacheState(record),
     })),
-    persistent: persistent ?? false,
     ...(usage === undefined ? {} : { usageBytes: usage }),
     ...(estimate?.quota === undefined ? {} : { quotaBytes: estimate.quota }),
   };
