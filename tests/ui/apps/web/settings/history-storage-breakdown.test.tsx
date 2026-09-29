@@ -12,7 +12,7 @@ const environmentId = "00000000-0000-4000-8000-000000000100";
 
 const storage: HistoryStorage = {
   usageBytes: 3 * 1024 * 1024,
-  quotaBytes: 10 * 1024 * 1024 * 1024,
+  quotaBytes: 5 * 1024 * 1024,
   caches: [
     historyCache({
       environmentId,
@@ -78,7 +78,7 @@ describe("history storage breakdown", () => {
 
     await expect.element(page.getByText("/code/rebase-git")).toBeVisible();
     await expect
-      .element(page.getByText("10.0 GB available in this browser"))
+      .element(page.getByText("2.0 MB available in this browser"))
       .toBeVisible();
     const rows = page.getByRole("row").elements().slice(1);
     expect(rows.map((row) => row.textContent)).toEqual([

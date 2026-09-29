@@ -317,7 +317,10 @@ async function clearCache({ environmentId, repositoryId }: HistoryCacheKey) {
     await clearRepository(environmentId, repositoryId, true);
   else {
     await replica.rebuild();
-    const client = [...clients].find((current) => current.replica === replica);
+    const client = [...clients].find(
+      (current) =>
+        current.replica === replica && current.environment !== undefined,
+    );
     if (client !== undefined) synchronize(client);
   }
   return describeStorage();

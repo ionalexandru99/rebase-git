@@ -59,7 +59,10 @@ export function HistoryStorageBreakdown({
             </p>
             {storage.quotaBytes === undefined ? null : (
               <p className="text-sm text-muted-foreground">
-                {formatCacheSize(storage.quotaBytes)} available in this browser
+                {formatCacheSize(
+                  Math.max(0, storage.quotaBytes - storage.usageBytes),
+                )}{" "}
+                available in this browser
               </p>
             )}
           </div>
