@@ -91,8 +91,10 @@ export function CommitGraphVirtualWindow({
   const items = virtualizer.getVirtualItems();
   const detached = detachedIndex(items, activeIndex);
   const flowStart =
-    (items.find((item) => item.index !== detached)?.start ??
-      graphHeaderHeight) - graphHeaderHeight;
+    (items.find(
+      (item) =>
+        item.index !== detached && oids[item.index - start] !== undefined,
+    )?.start ?? graphHeaderHeight) - graphHeaderHeight;
   const virtualRows = items.map((item) => ({
     index: item.index - start,
     key: oids[item.index - start] ?? `row-${item.index}`,

@@ -161,6 +161,31 @@ describe("commit graph layout", () => {
     expect(row.element().getBoundingClientRect().height).toBe(26);
   });
 
+  it("keeps loaded rows in place while the rows above them are still loading", async () => {
+    const reader = historyReader({ commits: history(1_000), status: "ready" });
+    const screen = await renderGraph(reader);
+    const grid = screen.getByRole("grid").element();
+    await expect
+      .element(screen.getByRole("row", { name: /^Commit 0,/ }))
+      .toBeVisible();
+    grid.scrollTop = 600 * 26;
+    grid.dispatchEvent(new Event("scroll"));
+    await expect
+      .element(screen.getByRole("row", { name: /^Commit 600,/ }))
+      .toBeVisible();
+    reader.hold = new Promise(() => undefined);
+    grid.scrollTop = 395 * 26;
+    grid.dispatchEvent(new Event("scroll"));
+    const row = screen.getByRole("row", { name: /^Commit 400,/ });
+    await expect
+      .poll(
+        () =>
+          row.element().getBoundingClientRect().top -
+          grid.getBoundingClientRect().top,
+      )
+      .toBe(28 + 5 * 26);
+  });
+
   it("pins metadata over long messages and uses matching solid and tinted branch pills", async () => {
     const commits = history(4).map((commit, index) => ({
       ...commit,
