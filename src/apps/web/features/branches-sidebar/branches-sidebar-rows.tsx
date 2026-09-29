@@ -112,8 +112,6 @@ export function RefRow({
   readonly style: CSSProperties;
 }) {
   const acted = useRef(false);
-  const run = (id: RefAction["id"]) =>
-    runAction(actions.find((action) => action.id === id));
   return (
     <ContextMenu
       onOpenChange={(open) => {
@@ -147,7 +145,9 @@ export function RefRow({
                 );
               }}
               onContextMenu={() => onActivate("keep")}
-              onDoubleClick={() => run("checkout")}
+              onDoubleClick={() =>
+                runAction(actions.find(({ id }) => id === "checkout"))
+              }
               role="treeitem"
               tabIndex={-1}
               type="button"

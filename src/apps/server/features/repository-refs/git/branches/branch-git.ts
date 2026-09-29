@@ -54,7 +54,7 @@ export function requireBranchTarget(
   git: GitCommandRunner,
   directory: string,
   name: string,
-  expectedTarget: string | undefined,
+  expectedTarget: string,
 ) {
   return readBranchTarget(git, directory, name).pipe(
     Effect.flatMap((target) => {
@@ -63,7 +63,7 @@ export function requireBranchTarget(
           _tag: "RefMissing",
           name,
         });
-      if (expectedTarget !== undefined && target !== expectedTarget)
+      if (target !== expectedTarget)
         return Effect.fail<RepositoryBranchesOperationFailure>({
           _tag: "BranchMoved",
           name,
