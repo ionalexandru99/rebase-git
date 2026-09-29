@@ -55,9 +55,12 @@ export interface HistorySearchPage {
   readonly commitCount: number;
 }
 
-export interface HistoryCache {
+export interface HistoryCacheKey {
   readonly environmentId: string;
   readonly repositoryId: string;
+}
+
+export interface HistoryCache extends HistoryCacheKey {
   readonly estimatedBytes?: number;
   readonly commitCount: number;
   readonly lastOpenedAt: number;
@@ -67,7 +70,6 @@ export interface HistoryCache {
 
 export interface HistoryStorage {
   readonly caches: readonly HistoryCache[];
-  readonly persistent: boolean;
   readonly usageBytes?: number;
   readonly quotaBytes?: number;
 }
@@ -116,7 +118,8 @@ export type HistoryQuery =
       readonly head: string;
       readonly onto: string;
     }
-  | { readonly _tag: "Storage"; readonly action: HistoryStorageAction };
+  | { readonly _tag: "Storage"; readonly action: HistoryStorageAction }
+  | { readonly _tag: "ClearCache"; readonly cache: HistoryCacheKey };
 
 export interface HistoryAnswers {
   readonly Rows: HistoryRows;
@@ -128,6 +131,7 @@ export interface HistoryAnswers {
   readonly Relation: HistoryRelation | undefined;
   readonly Range: HistoryRange | undefined;
   readonly Storage: HistoryStorage;
+  readonly ClearCache: HistoryStorage;
 }
 
 export interface HistoryPortOffer {

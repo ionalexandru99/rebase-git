@@ -15,7 +15,6 @@ const identity = {
   repositoryId: "repository-1",
 };
 const diagnostics: HistoryStorage = {
-  persistent: true,
   usageBytes: 2048,
   quotaBytes: 4096,
   caches: [

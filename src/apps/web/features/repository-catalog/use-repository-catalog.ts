@@ -54,6 +54,7 @@ export function useRepositoryCatalog() {
   );
   return {
     repositories: catalog.data?.repositories ?? noRepositories,
+    loaded: catalog.data !== undefined,
     findRepository,
   };
 }

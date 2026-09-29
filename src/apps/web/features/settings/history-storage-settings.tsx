@@ -10,13 +10,24 @@ import {
   AlertDialogTitle,
 } from "#web/components/ui/alert-dialog.tsx";
 import { Button } from "#web/components/ui/button.tsx";
-import { RepositoryHistoryCacheList } from "#web/features/history-storage/components/repository-history-cache-list.tsx";
-import { forgetAllRepositoryRefs } from "#web/features/refs/repository-refs.ts";
-import type { HistoryStorage } from "#web/features/repository-history/history-worker-protocol.ts";
+import { HistoryStorageBreakdown } from "#web/features/history-storage/history-storage-breakdown.tsx";
+import {
+  forgetAllRepositoryRefs,
+  forgetRepositoryRefs,
+} from "#web/features/refs/repository-refs.ts";
+import type {
+  HistoryQuery,
+  HistoryStorage,
+} from "#web/features/repository-history/history-worker-protocol.ts";
 import { openRepositoryHistory } from "#web/features/repository-history/repository-history.ts";
 
+type StorageQuery = Extract<HistoryQuery, { _tag: "Storage" | "ClearCache" }>;
+
+const inspect: StorageQuery = { _tag: "Storage", action: "inspect" };
+const clearAll: StorageQuery = { _tag: "Storage", action: "clear-all" };
+
 export function HistoryStorageSettings() {
-  const [diagnostics, setDiagnostics] = useState<HistoryStorage>();
+  const [storage, setStorage] = useState<HistoryStorage>();
   const [error, setError] = useState<string>();
   const [pending, setPending] = useState(false);
   const [confirming, setConfirming] = useState(false);
@@ -24,7 +35,7 @@ export function HistoryStorageSettings() {
   const operation = useRef<AbortController | undefined>(undefined);
   const queryClient = useQueryClient();
   const run = useCallback(
-    async (action: "inspect" | "clear") => {
+    async (query: StorageQuery) => {
       operation.current?.abort();
       const current = new AbortController();
       operation.current = current;
@@ -32,11 +43,17 @@ export function HistoryStorageSettings() {
       setError(undefined);
       setMessage(undefined);
       try {
-        setDiagnostics(await readHistoryStorage(action, current.signal));
-        if (action === "clear") {
+        setStorage(await askHistoryStorage(query, current.signal));
+        if (query._tag === "ClearCache")
+          forgetRepositoryRefs(
+            queryClient,
+            query.cache.environmentId,
+            query.cache.repositoryId,
+          );
+        else if (query.action === "clear-all") {
           forgetAllRepositoryRefs(queryClient);
           setMessage(
-            "All history caches cleared. Rebuild or reopen a repository to load history.",
+            "All history cleared. Reopen a repository to download its history again.",
           );
         }
       } catch {
@@ -48,15 +65,28 @@ export function HistoryStorageSettings() {
     [queryClient],
   );
   useEffect(() => {
-    void run("inspect");
+    void run(inspect);
     return () => operation.current?.abort();
   }, [run]);
   return (
     <div className="mx-auto w-full max-w-4xl px-4 pt-10 pb-16 sm:px-8 sm:pt-12">
       <h1 className="text-xl font-semibold tracking-tight">History storage</h1>
+      <p className="mt-1 text-sm text-muted-foreground">
+        Commit history kept in this browser so the graph opens instantly.
+        Clearing it never touches your repository files.
+      </p>
       <div className="mt-8 space-y-4" aria-busy={pending}>
-        {diagnostics === undefined ? null : (
-          <RepositoryHistoryCacheList diagnostics={diagnostics} />
+        {storage === undefined ? null : (
+          <HistoryStorageBreakdown
+            storage={storage}
+            pending={pending}
+            onClear={({ environmentId, repositoryId }) =>
+              void run({
+                _tag: "ClearCache",
+                cache: { environmentId, repositoryId },
+              })
+            }
+          />
         )}
         {pending ? (
           <p role="status" className="text-sm text-muted-foreground">
@@ -73,41 +103,29 @@ export function HistoryStorageSettings() {
             {message}
           </p>
         )}
-        <div className="flex gap-2">
-          <Button
-            size="sm"
-            variant="destructive"
-            disabled={
-              pending ||
-              diagnostics === undefined ||
-              diagnostics.caches.length === 0
-            }
-            onClick={() => setConfirming(true)}
-          >
-            Clear all caches
-          </Button>
-          <Button
-            size="sm"
-            variant="outline"
-            disabled={pending}
-            onClick={() => void run("inspect")}
-          >
-            Refresh
-          </Button>
-        </div>
+        <Button
+          size="sm"
+          variant="destructive"
+          disabled={
+            pending || storage === undefined || storage.caches.length === 0
+          }
+          onClick={() => setConfirming(true)}
+        >
+          Clear all history
+        </Button>
       </div>
       <AlertDialog open={confirming} onOpenChange={setConfirming}>
         <AlertDialogContent>
-          <AlertDialogTitle>Clear all caches?</AlertDialogTitle>
+          <AlertDialogTitle>Clear all history?</AlertDialogTitle>
           <AlertDialogDescription>
-            Clear cached history for every repository in this client, including
-            open repositories. Git files stay on disk. Rebuild or reopen
-            repositories to load history.
+            Clear stored history for every repository in this browser, including
+            open repositories. Repository files stay on disk. Reopen a
+            repository to download its history again.
           </AlertDialogDescription>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={() => void run("clear")}>
-              Clear all caches
+            <AlertDialogAction onClick={() => void run(clearAll)}>
+              Clear all history
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -116,19 +134,10 @@ export function HistoryStorageSettings() {
   );
 }
 
-async function readHistoryStorage(
-  action: "inspect" | "clear",
-  signal: AbortSignal,
-) {
+async function askHistoryStorage(query: StorageQuery, signal: AbortSignal) {
   const storage = openRepositoryHistory();
   try {
-    return await storage.ask(
-      {
-        _tag: "Storage",
-        action: action === "clear" ? "clear-all" : "inspect",
-      },
-      signal,
-    );
+    return await storage.ask(query, signal);
   } finally {
     storage.close();
   }
