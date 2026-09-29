@@ -43,15 +43,14 @@ const pushed = historyOid(3);
 const topic = historyOid(4);
 
 describe("rebase from the graph menu", () => {
-  it("rebases the checked-out branch onto the row's branch and stashes the changed files it named", async () => {
+  it("rebases the checked-out branch onto the row's branch and stashes the changed files", async () => {
     const f = await fixture();
     await f.openMenu("Main one");
-    const item = page.getByRole("menuitem", { name: /^Rebase onto main/ });
-    await expect
-      .element(item)
-      .toHaveTextContent(
-        "Rebase onto main2 commits · 1 pushed · stashes 1 file",
-      );
+    const item = page.getByRole("menuitem", {
+      name: "Rebase onto here",
+      exact: true,
+    });
+    await expect.element(item).not.toHaveAttribute("aria-disabled", "true");
     await item.click();
     await expect
       .poll(() => f.started)
@@ -70,37 +69,26 @@ describe("rebase from the graph menu", () => {
   it("says why a commit the branch already contains is not a target", async () => {
     const f = await fixture();
     await f.openMenu("Topic one");
-    await expect
-      .element(
-        page.getByRole("menuitem", { name: /^Rebase onto origin\/topic/ }),
-      )
-      .toHaveAttribute("aria-disabled", "true");
-    await expect
-      .element(
-        page.getByRole("menuitem", { name: /^Rebase onto origin\/topic/ }),
-      )
-      .toHaveTextContent("Already on it");
+    const item = page.getByRole("menuitem", { name: /^Rebase onto here/ });
+    await expect.element(item).toHaveAttribute("aria-disabled", "true");
+    await expect.element(item).toHaveTextContent("Already on it");
   });
 
   it("opens an interactive plan onto another branch or from a commit of the branch", async () => {
     const f = await fixture();
     await f.openMenu("Main one");
-    const onto = page.getByRole("menuitem", {
-      name: /^Interactive rebase onto main/,
-    });
-    await expect.element(onto).toHaveTextContent("2 commits");
-    await onto.click();
+    await page
+      .getByRole("menuitem", { name: "Interactive rebase onto here" })
+      .click();
     expect(f.planned).toHaveBeenLastCalledWith({
       ref: "main",
       commit: main,
       from: false,
     });
     await f.openMenu("Topic two");
-    const from = page.getByRole("menuitem", {
-      name: /^Interactive rebase from here/,
-    });
-    await expect.element(from).toHaveTextContent("1 commit");
-    await from.click();
+    await page
+      .getByRole("menuitem", { name: "Interactive rebase from here" })
+      .click();
     expect(f.planned).toHaveBeenLastCalledWith({
       ref: null,
       commit: topic,
@@ -115,7 +103,12 @@ describe("rebase from the graph menu", () => {
       detail: "topic moved. Try the rebase again.",
     });
     await f.openMenu("Main one");
-    await page.getByRole("menuitem", { name: /^Rebase onto main/ }).click();
+    const item = page.getByRole("menuitem", {
+      name: "Rebase onto here",
+      exact: true,
+    });
+    await expect.element(item).not.toHaveAttribute("aria-disabled", "true");
+    await item.click();
     await expect
       .element(page.getByText("topic moved. Try the rebase again."))
       .toBeVisible();

@@ -215,8 +215,11 @@ describe("branches sidebar", () => {
       .getByRole("treeitem", { name: "main, current branch" })
       .click({ button: "right" });
     await expect
-      .element(screen.getByRole("menuitem", { name: "Checkout" }))
+      .element(screen.getByRole("menuitem", { name: /^Rename/ }))
       .toBeVisible();
+    await expect
+      .element(screen.getByRole("menuitem", { name: "Checkout" }))
+      .not.toBeInTheDocument();
     await expect
       .element(screen.getByRole("menuitem", { name: "Pull" }))
       .not.toBeInTheDocument();

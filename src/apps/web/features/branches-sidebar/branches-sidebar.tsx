@@ -12,7 +12,12 @@ import {
   useState,
 } from "react";
 import type { RepositoryRefTarget } from "#contracts/repository-refs/repository-refs.contract.ts";
-import { keyAction, runAction } from "#web/components/ui/action-menu.tsx";
+import {
+  everyAction,
+  keyAction,
+  replaceRuns,
+  runAction,
+} from "#web/components/ui/action-menu.tsx";
 import { Input } from "#web/components/ui/input.tsx";
 import { treeKeyAction } from "#web/features/branches-sidebar/branches-sidebar-keyboard.ts";
 import {
@@ -224,11 +229,13 @@ export function BranchesSidebar({
           candidate.kind === "ref" && historyRefKey(candidate.target) === key,
       );
       runAction(
-        clearingNotices(
-          refActionsFor(
-            row?.kind === "ref"
-              ? row
-              : { id: key, name: intent.target.name, target: intent.target },
+        everyAction(
+          clearingNotices(
+            refActionsFor(
+              row?.kind === "ref"
+                ? row
+                : { id: key, name: intent.target.name, target: intent.target },
+            ),
           ),
         ).find((action) => action.id === intent.id),
       );
@@ -282,14 +289,11 @@ export function BranchesSidebar({
     );
 
   const clearingNotices = (actions: readonly RefAction[]) =>
-    actions.map((action) => ({
-      ...action,
-      run: () => {
-        tagPush.dismiss();
-        editing.dismissNotice();
-        action.run();
-      },
-    }));
+    replaceRuns(actions, (action) => () => {
+      tagPush.dismiss();
+      editing.dismissNotice();
+      action.run();
+    });
 
   const moveActive = (rowId: string | undefined) => {
     setSelectedTags(noSelectedTags);
@@ -514,12 +518,7 @@ export function BranchesSidebar({
           scope={scope}
         />
       </div>
-      <RefEditingStatus
-        anchor={(rowId) => document.getElementById(rowElementId(rowId))}
-        checkoutError={activation.error}
-        editing={editing}
-        remoteBranches={refs?.remoteBranches ?? []}
-      />
+      <RefEditingStatus checkoutError={activation.error} editing={editing} />
       <TagPushStatus push={tagPush} />
     </nav>
   );

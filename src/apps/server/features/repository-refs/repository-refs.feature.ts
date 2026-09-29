@@ -7,7 +7,6 @@ import {
   type CreateRepositoryBranch,
   RepositoryBranchesApi,
   type RepositoryBranchesOperationFailure,
-  type SetRepositoryBranchUpstream,
 } from "#contracts/repository-refs/repository-branches.contract.ts";
 import { RepositoryRefsApi } from "#contracts/repository-refs/repository-refs.contract.ts";
 import { RepositoryTagsApi } from "#contracts/repository-refs/repository-tags.contract.ts";
@@ -26,7 +25,6 @@ import type { RepositoryWatcher } from "#server/adapters/local-git/local-reposit
 import { branchWriteFailed } from "#server/features/repository-refs/git/branches/branch-failures.ts";
 import {
   readLocalBranch,
-  requireBranchTarget,
   requireRemoteBranch,
   requireValidBranchName,
   setUpstreamArguments,
@@ -107,9 +105,6 @@ export function repositoryRefsFeature(
         command(branches.rename, branchPolicy, (input, git) =>
           renameBranch(git, access, input),
         ),
-        command(branches.setUpstream, branchPolicy, (input, git) =>
-          setBranchUpstream(git, access, input),
-        ),
         command(branches.delete, branchPolicy, (input, git) =>
           deleteBranch(git, access, input),
         ),
@@ -160,43 +155,4 @@ function createBranch(
     const worktrees = yield* access.worktrees(worktreePath);
     return yield* readLocalBranch(git, worktreePath, worktrees, name);
   });
-}
-
-function setBranchUpstream(
-  git: GitCommandRunner,
-  access: RepositoryAccess,
-  command: SetRepositoryBranchUpstream,
-) {
-  const { name, upstream, worktreePath } = command;
-  return Effect.gen(function* () {
-    yield* requireBranchTarget(git, worktreePath, name, undefined);
-    if (upstream === null) yield* unsetUpstream(git, worktreePath, name);
-    else {
-      yield* requireRemoteBranch(git, worktreePath, upstream);
-      yield* runRepositoryGit(
-        git,
-        worktreePath,
-        setUpstreamArguments(name, upstream),
-        refCommand,
-      ).pipe(Effect.mapError((error) => branchWriteFailed(error, name)));
-    }
-    const worktrees = yield* access.worktrees(worktreePath);
-    return yield* readLocalBranch(git, worktreePath, worktrees, name);
-  });
-}
-
-function unsetUpstream(git: GitCommandRunner, directory: string, name: string) {
-  return runRepositoryGit(
-    git,
-    directory,
-    ["branch", "--unset-upstream", name],
-    refCommand,
-  ).pipe(
-    Effect.asVoid,
-    Effect.catchIf(
-      (error) => /has no upstream information/i.test(error.detail),
-      () => Effect.void,
-    ),
-    Effect.mapError((error) => branchWriteFailed(error, name)),
-  );
 }

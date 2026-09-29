@@ -17,10 +17,7 @@ export interface Action<Id extends string = string> {
   readonly keys?: readonly string[];
   readonly group?: "create" | "edit" | "delete" | "operation";
   readonly onHighlight?: (highlighted: boolean) => void;
-  readonly submenu?: {
-    readonly title: string;
-    readonly actions: readonly Action[];
-  };
+  readonly submenu?: { readonly actions: readonly Action<Id>[] };
   readonly run: () => void;
 }
 
@@ -38,10 +35,14 @@ export function ActionMenuItems({
     const hint = action.enabled
       ? (action.detail ?? keyLabel(action.keys?.[0]))
       : action.reason;
-    const label = <span className="flex-1">{action.label}</span>;
+    const label = (
+      <span className="min-w-0 flex-1 truncate">{action.label}</span>
+    );
     const hinted =
       hint === undefined ? null : (
-        <span className="text-[.7rem] text-muted-foreground">{hint}</span>
+        <span className="shrink-0 whitespace-nowrap text-[.7rem] text-muted-foreground">
+          {hint}
+        </span>
       );
     return (
       <Fragment key={action.id}>
@@ -72,10 +73,7 @@ export function ActionMenuItems({
                 className="size-3.5 text-muted-foreground"
               />
             </ContextMenuSubmenuTrigger>
-            <ContextMenuContent submenu className="w-72">
-              <p className="mb-1 truncate border-border border-b px-2 pt-1 pb-1.5 font-mono text-[.7rem] text-muted-foreground">
-                {action.submenu.title}
-              </p>
+            <ContextMenuContent submenu className="w-max min-w-40 max-w-md">
               <ActionMenuItems
                 actions={action.submenu.actions}
                 className={className}
@@ -95,7 +93,29 @@ export function runAction(action: Action | undefined): boolean {
 }
 
 export function keyAction(actions: readonly Action[], key: string) {
-  return actions.find((action) => action.keys?.includes(key));
+  return everyAction(actions).find((action) => action.keys?.includes(key));
+}
+
+export function everyAction<Id extends string>(
+  actions: readonly Action<Id>[],
+): readonly Action<Id>[] {
+  return actions.flatMap((action) => [
+    action,
+    ...everyAction(action.submenu?.actions ?? []),
+  ]);
+}
+
+export function replaceRuns<Id extends string>(
+  actions: readonly Action<Id>[],
+  run: (action: Action<Id>) => () => void,
+): readonly Action<Id>[] {
+  return actions.map((action) => ({
+    ...action,
+    run: run(action),
+    ...(action.submenu === undefined
+      ? {}
+      : { submenu: { actions: replaceRuns(action.submenu.actions, run) } }),
+  }));
 }
 
 function keyLabel(key: string | undefined) {

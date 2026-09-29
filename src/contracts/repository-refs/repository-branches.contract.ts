@@ -40,14 +40,6 @@ export const RenameRepositoryBranch = Schema.Struct({
 });
 export type RenameRepositoryBranch = typeof RenameRepositoryBranch.Type;
 
-export const SetRepositoryBranchUpstream = Schema.Struct({
-  ...BranchScope,
-  name: RefName,
-  upstream: Schema.NullOr(BranchUpstreamTarget),
-});
-export type SetRepositoryBranchUpstream =
-  typeof SetRepositoryBranchUpstream.Type;
-
 const DeletedLocalBranch = Schema.Struct({ name: RefName, target: ObjectId });
 const DeletedRemoteBranch = Schema.Struct({
   name: RefName,
@@ -122,11 +114,6 @@ export const RepositoryBranchesApi = {
   rename: repositoryCommand("repositories/branches/rename", {
     request: RenameRepositoryBranch,
     success: RepositoryBranchRenamed,
-    failure: RepositoryBranchesOperationFailure,
-  }),
-  setUpstream: repositoryCommand("repositories/branches/upstream", {
-    request: SetRepositoryBranchUpstream,
-    success: LocalBranch,
     failure: RepositoryBranchesOperationFailure,
   }),
 };

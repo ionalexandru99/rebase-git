@@ -286,7 +286,7 @@ async function ask(
     case "Relation":
       return replica.relation(query.from, query.to);
     case "Range":
-      return replica.range(query.head, query.onto, query.upstream);
+      return replica.range(query.head, query.onto);
   }
 }
 

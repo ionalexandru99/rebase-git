@@ -68,16 +68,12 @@ describe("merge actions", () => {
       .element(screen.getByRole("menuitem", { name: /^Merge into main/ }))
       .toBeVisible();
     await userEvent.keyboard("{ArrowDown}{ArrowRight}");
-    await expect.element(screen.getByText("topic → main")).toBeVisible();
     await expect
       .element(screen.getByRole("menuitem", { name: /^Merge(?! into)/ }))
       .toHaveTextContent("merge commit");
     await expect
       .element(screen.getByRole("menuitem", { name: /^Fast-forward only/ }))
       .toHaveAttribute("aria-disabled", "true");
-    await expect
-      .element(screen.getByRole("menuitem", { name: /^Squash/ }))
-      .toHaveTextContent("1 commit");
     await expect
       .element(screen.getByRole("menuitem", { name: /^Merge(?! into)/ }))
       .toHaveFocus();

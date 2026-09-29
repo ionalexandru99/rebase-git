@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react";
+import type { MergeMode } from "#contracts/repository-operations/repository-operations.contract.ts";
 import type {
   BranchUpstream,
   LocalBranch,
@@ -52,19 +53,17 @@ export interface RefActionRow {
 export type RefAction = Action<
   | "checkout"
   | "merge"
+  | `merge.${MergeMode}`
   | "rebase"
   | "interactiveRebase"
   | "pull"
   | "showReflog"
   | "newBranch"
   | "rename"
-  | "upstream"
   | "delete"
-  | "deleteRemote"
+  | "deleteLocal"
+  | `deleteOn:${string}`
   | "deleteBoth"
-  | "deleteTag"
-  | "deleteTagBoth"
-  | `deleteTagOn:${string}`
   | `pushTag:${string}`
 >;
 
@@ -89,7 +88,7 @@ export interface RefActionHandlers {
     | { readonly pulling: boolean; readonly run: (branch: string) => void }
     | undefined;
   readonly pushTags: TagPushHandler | undefined;
-  readonly editing: Pick<RefEditing, "draft" | "change"> & {
+  readonly editing: Pick<RefEditing, "draft" | "startRename"> & {
     readonly deletion: Pick<RefEditing["deletion"], "request">;
   };
 }
@@ -137,16 +136,26 @@ export function refActions(
     return [
       remove(
         {
-          id: "deleteRemote",
-          label: `Delete on ${remote.remote}`,
+          id: `deleteOn:${remote.remote}`,
+          label: `On ${remote.remote}`,
           reason: readOnly,
         },
         branch && { kind: "branch", remote: branch },
       ),
     ];
   };
+  const current =
+    localBranch(target, refs)?.worktreePath === activeWorktreePath;
   const common: readonly RefAction[] = [
-    action({ id: "checkout", label: "Checkout", run: () => checkout(target) }),
+    ...(current
+      ? []
+      : [
+          action({
+            id: "checkout",
+            label: "Checkout",
+            run: () => checkout(target),
+          }),
+        ]),
     ...(mergeAction === undefined ? [] : [mergeAction]),
     ...(rebaseAction === undefined ? [] : [rebaseAction]),
     ...(interactiveAction === undefined ? [] : [interactiveAction]),
@@ -202,37 +211,42 @@ export function refActions(
     return [
       ...common,
       ...pushTagActions([target.name], remotes, readOnly, pushTags),
-      remove(
-        {
-          id: "deleteTag",
-          label: "Delete local",
-          reason: readOnly,
-          keys: deleteKeys,
-        },
-        deletion(true, undefined),
-      ),
-      ...remotes.map((remote) =>
+      ...deleteMenu([
         remove(
           {
-            id: `deleteTagOn:${remote}`,
-            label: `Delete on ${remote}…`,
+            id: "deleteLocal",
+            label: "Local",
             reason: readOnly,
+            keys: deleteKeys,
           },
-          deletion(false, remote),
+          deletion(true, undefined),
         ),
-      ),
-      ...(only === undefined
-        ? []
-        : [
-            remove(
-              { id: "deleteTagBoth", label: "Delete both…", reason: readOnly },
-              deletion(true, only),
-            ),
-          ]),
+        ...remotes.map((remote) =>
+          remove(
+            {
+              id: `deleteOn:${remote}`,
+              label: `On ${remote}…`,
+              reason: readOnly,
+            },
+            deletion(false, remote),
+          ),
+        ),
+        ...(only === undefined
+          ? []
+          : [
+              remove(
+                { id: "deleteBoth", label: "Both…", reason: readOnly },
+                deletion(true, only),
+              ),
+            ]),
+      ]),
     ];
   }
   if (target._tag === "RemoteBranch")
-    return [...common, ...deleteOnRemote(remoteBranch(target, refs))];
+    return [
+      ...common,
+      ...deleteMenu(deleteOnRemote(remoteBranch(target, refs))),
+    ];
   const branch = refs.branches.find(({ name }) => name === target.name);
   if (branch === undefined) return common;
   const elsewhere =
@@ -255,33 +269,48 @@ export function refActions(
       group: "edit",
       reason: readOnly ?? elsewhere,
       keys: ["F2"],
-      run: () => editing.change("rename", branch, row.id),
+      run: () => editing.startRename(branch, row.id),
     }),
-    action({
-      id: "upstream",
-      label: "Upstream…",
-      group: "edit",
-      reason: readOnly,
-      run: () => editing.change("upstream", branch, row.id),
-    }),
-    remove(
-      {
-        id: "delete",
-        label: "Delete local",
-        reason: checkedOut,
-        keys: deleteKeys,
-      },
-      local && { kind: "branch", local },
-    ),
-    ...deleteOnRemote(counterpart),
-    ...(counterpart === undefined
-      ? []
-      : [
-          remove(
-            { id: "deleteBoth", label: "Delete both", reason: checkedOut },
-            local && remote && { kind: "branch", local, remote },
-          ),
-        ]),
+    ...deleteMenu([
+      remove(
+        {
+          id: "deleteLocal",
+          label: "Local",
+          reason: checkedOut,
+          keys: deleteKeys,
+        },
+        local && { kind: "branch", local },
+      ),
+      ...deleteOnRemote(counterpart),
+      ...(counterpart === undefined
+        ? []
+        : [
+            remove(
+              { id: "deleteBoth", label: "Both", reason: checkedOut },
+              local && remote && { kind: "branch", local, remote },
+            ),
+          ]),
+    ]),
+  ];
+}
+
+function deleteMenu(choices: readonly RefAction[]): readonly RefAction[] {
+  const [first] = choices;
+  if (first === undefined) return [];
+  if (choices.length === 1) return [{ ...first, label: "Delete" }];
+  const enabled = choices.some((choice) => choice.enabled);
+  return [
+    {
+      id: "delete",
+      label: "Delete",
+      group: "delete",
+      enabled,
+      ...(enabled || first.reason === undefined
+        ? {}
+        : { reason: first.reason }),
+      run: () => undefined,
+      submenu: { actions: choices },
+    },
   ];
 }
 

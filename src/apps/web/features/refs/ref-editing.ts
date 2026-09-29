@@ -29,7 +29,7 @@ type RefEdit =
       readonly startPoint: StartPoint;
     }
   | {
-      readonly kind: "rename" | "upstream";
+      readonly kind: "rename";
       readonly branch: LocalBranch;
       readonly rowId: string;
     };
@@ -88,7 +88,6 @@ export function useRefEditing({
     tag: useCommand(RepositoryTagsApi.delete),
   };
   const renameBranch = useCommand(RepositoryBranchesApi.rename);
-  const setBranchUpstream = useCommand(RepositoryBranchesApi.setUpstream);
   const [edit, setEdit] = useState<RefEdit>();
   const [error, setError] = useState<string>();
   const [pending, setPending] = useState<PendingDeletion>();
@@ -163,14 +162,6 @@ export function useRefEditing({
     return undefined;
   };
 
-  const setUpstream = async (upstream: BranchUpstreamTarget | null) => {
-    if (!setBranchUpstream.canRun || edit?.kind !== "upstream") return;
-    const { name } = edit.branch;
-    const result = await setBranchUpstream.run({ name, upstream });
-    if (result._tag === "Ok") reveal("branch", name);
-    else setError(describeRefFailure(name, result));
-  };
-
   const remove = async (deletion: RefDeletion, force: boolean) => {
     setError(undefined);
     const result =
@@ -217,11 +208,10 @@ export function useRefEditing({
     cancel,
     create,
     rename,
-    setUpstream,
     draft: (kind: RefKind, startPoint: StartPoint) =>
       begin({ kind: "create", ref: kind, startPoint }),
-    change: (kind: "rename" | "upstream", branch: LocalBranch, rowId: string) =>
-      begin({ kind, branch, rowId }),
+    startRename: (branch: LocalBranch, rowId: string) =>
+      begin({ kind: "rename", branch, rowId }),
     deletion: {
       pending,
       deleted,
