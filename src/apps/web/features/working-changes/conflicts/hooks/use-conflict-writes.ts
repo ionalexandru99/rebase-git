@@ -5,15 +5,8 @@ import {
   RepositoryConflictsApi,
 } from "#contracts/repository-conflicts/repository-conflicts.contract.ts";
 import { conflictReason } from "#web/features/working-changes/conflicts/hooks/use-conflicts.ts";
-import {
-  describeFailure,
-  requestFailure,
-} from "#web/platform/query/request-failure.ts";
-import {
-  answer,
-  type CommandFailure,
-  useCommand,
-} from "#web/platform/query/use-command.ts";
+import { describeFailure } from "#web/platform/query/request-failure.ts";
+import { answer, useCommand } from "#web/platform/query/use-command.ts";
 
 const writeRoute = RepositoryConflictsApi.write;
 
@@ -57,25 +50,25 @@ export function useConflictWrites(
     async (content: string) => {
       const state = queue.current;
       state.running = true;
-      const result = await run({
-        path: input.path,
-        revision: state.revision,
-        content,
-      }).catch(
-        (error: unknown): CommandFailure<typeof writeRoute> =>
-          requestFailure(error),
-      );
-      state.running = false;
-      if (result._tag === "Ok") state.revision = result.value.file.revision;
-      else {
+      try {
+        const result = await run({
+          path: input.path,
+          revision: state.revision,
+          content,
+        });
+        if (result._tag === "Ok") state.revision = result.value.file.revision;
+        else {
+          state.pending = null;
+          if (conflictReason(result) === "Stale") reload();
+          else setProblem(describeFailure(result));
+        }
+      } finally {
+        state.running = false;
+        const next = state.pending;
         state.pending = null;
-        if (conflictReason(result) === "Stale") reload();
-        else setProblem(describeFailure(result));
+        if (next !== null) void send(next);
+        else for (const waiter of state.waiters.splice(0)) waiter();
       }
-      const next = state.pending;
-      state.pending = null;
-      if (next !== null) return void send(next);
-      for (const waiter of state.waiters.splice(0)) waiter();
     },
     [run, input.path, reload],
   );
