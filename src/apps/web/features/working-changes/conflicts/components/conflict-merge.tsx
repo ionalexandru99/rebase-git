@@ -16,6 +16,7 @@ import type {
 } from "#contracts/repository-conflicts/repository-conflicts.contract.ts";
 import { Button } from "#web/components/ui/button.tsx";
 import { Confirmation } from "#web/components/ui/confirmation.tsx";
+import { diffSurfaceCSS } from "#web/features/file-diff/components/diff-content.tsx";
 import { WholeFileMenu } from "#web/features/working-changes/conflicts/components/whole-file-menu.tsx";
 import {
   type ConflictEdit,
@@ -213,6 +214,7 @@ function ExcerptBlocks({
     const file = new UnresolvedFile(
       {
         theme: "pierre-dark",
+        unsafeCSS: diffSurfaceCSS,
         overflow: "scroll",
         disableFileHeader: true,
         disableLineNumbers: true,

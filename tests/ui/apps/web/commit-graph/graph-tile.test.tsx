@@ -90,11 +90,11 @@ describe("graph tile endpoints", () => {
     drawGraphTile(canvas, plan.rows, 0, 64, 1);
     const pixels = context.getImageData(0, 0, canvas.width, canvas.height).data;
     const alphas = pixels.filter((_, index) => index % 4 === 3);
-    expect(Math.max(...alphas)).toBe(128);
-    expect(context.getImageData(16, 26, 1, 1).data[3]).toBe(128);
+    expect(Math.max(...alphas)).toBe(102);
+    expect(context.getImageData(16, 26, 1, 1).data[3]).toBe(102);
   });
 
-  it("paints remote rails softer than local rails without changing their hue", () => {
+  it("paints remote rails softer and remote nodes hollow without changing their hue", () => {
     const plan = appendCommitLanes(
       createCommitLaneCheckpoint(),
       [
@@ -113,13 +113,14 @@ describe("graph tile endpoints", () => {
     drawGraphTile(canvas, plan.rows, 0, 64, 1);
     const remote = context.getImageData(16, 22, 1, 1).data;
     const local = context.getImageData(16, 48, 1, 1).data;
-    expect(remote[3]).toBe(128);
+    expect(remote[3]).toBe(102);
     expect(local[3]).toBe(255);
     for (const channel of [0, 1, 2])
       expect(
         Math.abs((remote[channel] ?? 0) - (local[channel] ?? 0)),
       ).toBeLessThanOrEqual(1);
     expect(context.getImageData(16, 13, 1, 1).data[3]).toBe(0);
+    expect(context.getImageData(16, 39, 1, 1).data[3]).toBe(255);
   });
 
   it("starts new tips at their circles and preserves incoming rails across pages", () => {

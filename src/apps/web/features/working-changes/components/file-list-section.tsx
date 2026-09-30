@@ -88,7 +88,7 @@ export function FileListSection<File extends { readonly path: string }>({
                   "group absolute inset-x-0 flex h-8 items-center gap-1 rounded-md pr-1",
                   chosen(row)
                     ? "bg-sidebar-accent text-sidebar-accent-foreground"
-                    : "hover:bg-sidebar-accent/60",
+                    : "hover:bg-sidebar-accent/75",
                 )}
                 style={{
                   transform: `translateY(${item.start}px)`,

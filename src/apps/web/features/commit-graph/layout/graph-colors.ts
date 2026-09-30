@@ -8,7 +8,7 @@ import {
 } from "#web/features/repository-history/commit-lanes.ts";
 import type { RepositoryHistory } from "#web/features/repository-history/repository-history.ts";
 
-export const graphRemoteOpacity = 0.5;
+export const graphRemoteOpacity = 0.4;
 
 const palette = [
   "#4C9AFF",

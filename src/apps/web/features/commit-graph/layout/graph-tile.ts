@@ -23,6 +23,7 @@ function graphTilePaths(
 ) {
   const strokes = new Map<string, LaneStroke>();
   const centers = new Path2D();
+  const dots = new Map<string, Path2D>();
   for (const [index, row] of rows.entries()) {
     const top = index * graphRowHeight;
     const center = top + graphRowHeight / 2;
@@ -68,13 +69,21 @@ function graphTilePaths(
       );
     }
     if (nodeX < -4 || nodeX > width + 4) continue;
-    const path = laneStroke(strokes, graphNodeColor(row), row.nodeRemote);
+    if (!row.nodeRemote) {
+      const color = graphNodeColor(row);
+      const dot = dots.get(color) ?? new Path2D();
+      dots.set(color, dot);
+      dot.moveTo(nodeX + 4, center);
+      dot.arc(nodeX, center, 4, 0, Math.PI * 2);
+      continue;
+    }
+    const path = laneStroke(strokes, graphNodeColor(row), true);
     path.moveTo(nodeX + 3, center);
     path.arc(nodeX, center, 3, 0, Math.PI * 2);
     centers.moveTo(nodeX + 2, center);
     centers.arc(nodeX, center, 2, 0, Math.PI * 2);
   }
-  return { strokes, centers };
+  return { strokes, centers, dots };
 }
 
 function laneStroke(
@@ -135,7 +144,7 @@ export function drawGraphTile(
   context.lineCap = "butt";
   context.lineWidth = 2;
   context.clearRect(0, 0, width, height);
-  const { strokes, centers } = graphTilePaths(rows, left, width);
+  const { strokes, centers, dots } = graphTilePaths(rows, left, width);
   for (const { path, color, opacity } of strokes.values()) {
     context.strokeStyle = color;
     context.globalAlpha = opacity;
@@ -145,4 +154,8 @@ export function drawGraphTile(
   context.globalCompositeOperation = "destination-out";
   context.fill(centers);
   context.globalCompositeOperation = "source-over";
+  for (const [color, dot] of dots) {
+    context.fillStyle = color;
+    context.fill(dot);
+  }
 }

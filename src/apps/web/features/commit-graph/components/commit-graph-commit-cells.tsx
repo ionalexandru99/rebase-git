@@ -52,7 +52,7 @@ export const CommitGraphCommitCells = memo(
           className="sticky right-28 z-[4] flex h-full items-center bg-[var(--graph-row-background)] pr-3 font-sans text-[.85rem] text-muted-foreground"
           aria-label={`Commit SHA ${commit.oid}`}
         >
-          {shortOid(commit.oid)}
+          <span>{shortOid(commit.oid)}</span>
         </td>
         <td
           role="gridcell"
