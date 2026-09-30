@@ -186,7 +186,7 @@ function ReflogRows({
           aria-expanded={row.group?.expanded}
           aria-level={row.nested ? 2 : 1}
           aria-selected={row.id === activeId}
-          className={`grid h-7 cursor-default grid-cols-[14px_4.25rem_minmax(0,1fr)_auto_2.5rem] items-center gap-2 pr-3 whitespace-nowrap select-none aria-selected:bg-primary/12 aria-selected:ring-1 aria-selected:ring-primary/60 aria-selected:ring-inset ${row.nested ? "pl-8 text-muted-foreground" : "pl-3"}`}
+          className={`grid h-7 cursor-default grid-cols-[14px_4.25rem_minmax(0,1fr)_auto_2.5rem] items-center gap-2 pr-3 whitespace-nowrap select-none aria-selected:bg-primary/12 ${row.nested ? "pl-8 text-muted-foreground" : "pl-3"}`}
           data-row-id={row.id}
           id={rowElementId(row.id)}
           role="treeitem"

@@ -68,7 +68,7 @@ export function SectionRow({
       aria-level={row.level}
       aria-posinset={row.position}
       aria-setsize={row.setSize}
-      className={`absolute top-0 left-0 flex w-full cursor-default items-center gap-1.5 rounded-md text-left text-sidebar-foreground outline-none select-none hover:text-sidebar-accent-foreground ${folder ? "text-[.81rem]" : "text-[.72rem] font-semibold tracking-wide uppercase"} ${!folder && row.separator ? "pt-3 before:absolute before:inset-x-0 before:top-0 before:border-t before:border-sidebar-border" : ""} ${active ? "ring-1 ring-sidebar-ring/60 ring-inset" : ""}`}
+      className={`absolute top-0 left-0 flex w-full cursor-default items-center gap-1.5 rounded-md text-left text-sidebar-foreground outline-none select-none hover:text-sidebar-accent-foreground ${folder ? "text-[.81rem]" : "text-[.72rem] font-semibold tracking-wide uppercase"} ${!folder && row.separator ? "pt-3 before:absolute before:inset-x-0 before:top-0 before:border-t before:border-sidebar-border" : ""} ${active ? "bg-sidebar-accent/60" : ""}`}
       id={rowElementId(row.id)}
       onClick={() => {
         onActivate();
@@ -121,7 +121,7 @@ export function RefRow({
       <ContextMenuTrigger
         render={
           <div
-            className={`group absolute top-0 left-0 flex w-full cursor-default items-center rounded-md text-[.85rem] outline-none select-none hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground ${row.current ? "font-medium text-sidebar-accent-foreground" : "text-sidebar-foreground"} ${active ? "ring-1 ring-sidebar-ring/60 ring-inset" : ""} ${active || selected ? "bg-sidebar-accent" : ""}`}
+            className={`group absolute top-0 left-0 flex w-full cursor-default items-center rounded-md text-[.85rem] outline-none select-none hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground ${row.current ? "font-medium text-sidebar-accent-foreground" : "text-sidebar-foreground"} ${active || selected ? "bg-sidebar-accent" : ""}`}
             style={style}
           >
             <TreeGuides level={row.level} />
