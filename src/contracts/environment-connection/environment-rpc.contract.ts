@@ -1,10 +1,5 @@
 import { Schema } from "effect";
-import {
-  Rpc,
-  type RpcClient,
-  type RpcClientError,
-  RpcGroup,
-} from "effect/unstable/rpc";
+import { Rpc, type RpcClient, type RpcClientError, RpcGroup } from "effect/rpc";
 import { CommitInspectionApi } from "#contracts/commit-inspection/commit-inspection.contract.ts";
 import { EnvironmentAuthorizationApi } from "#contracts/environment-authorization/environment-authorization.contract.ts";
 import { EnvironmentFilesystemApi } from "#contracts/environment-filesystem/environment-filesystem.contract.ts";

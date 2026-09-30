@@ -93,15 +93,10 @@ function boundedPatch(
   oldText: string,
   newText: string,
 ) {
-  return createTwoFilesPatch(
-    JSON.stringify(previousPath),
-    JSON.stringify(path),
-    oldText,
-    newText,
-    "",
-    "",
-    { context: 3, timeout: patchTimeoutMilliseconds },
-  );
+  return createTwoFilesPatch(previousPath, path, oldText, newText, "", "", {
+    context: 3,
+    timeout: patchTimeoutMilliseconds,
+  });
 }
 
 export function binary(content: Buffer | null) {

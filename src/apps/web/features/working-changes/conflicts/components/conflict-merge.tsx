@@ -219,15 +219,9 @@ function ExcerptBlocks({
         disableFileHeader: true,
         disableLineNumbers: true,
         maxContextLines: Number.POSITIVE_INFINITY,
-        onMergeConflictAction: ({ resolution, conflict }, instance) => {
+        onMergeConflictAction: ({ resolution, conflict }) => {
           const { edit, undo } = resolutionEdit(excerpt, conflict, resolution);
-          const pending = resolve.current(revision, edit, undo);
-          const resolved = instance.resolveConflict(
-            conflict.conflictIndex,
-            resolution,
-          );
-          if (pending != null && resolved !== undefined)
-            instance.render(resolved);
+          void resolve.current(revision, edit, undo);
         },
       },
       pool,

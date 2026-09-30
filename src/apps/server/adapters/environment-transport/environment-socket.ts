@@ -1,8 +1,9 @@
 import type { IncomingMessage, Server } from "node:http";
 import type { Duplex } from "node:stream";
 import { Deferred, Effect, Fiber, Layer, Queue, Stream } from "effect";
-import { RpcSerialization, RpcServer } from "effect/unstable/rpc";
-import { Socket, SocketServer } from "effect/unstable/socket";
+import { NetAddress } from "effect/net";
+import { RpcSerialization, RpcServer } from "effect/rpc";
+import { Socket, SocketServer } from "effect/socket";
 import { type WebSocket, WebSocketServer } from "ws";
 import {
   type EnvironmentChanged,
@@ -232,11 +233,11 @@ function requireEveryProcedure(features: EnvironmentFeatures) {
     throw new Error(`Procedure ${unserved} must have exactly one handler.`);
 }
 
-function socketAddress(server: Server): SocketServer.Address {
+function socketAddress(server: Server): NetAddress.SocketAddress {
   const address = server.address();
   return typeof address === "string" || address === null
-    ? { _tag: "UnixAddress", path: String(address) }
-    : { _tag: "TcpAddress", hostname: address.address, port: address.port };
+    ? NetAddress.unixPathAddress(String(address))
+    : NetAddress.inetAddressFromIpStringUnsafe(address.address, address.port);
 }
 
 function upgradePath(request: IncomingMessage) {

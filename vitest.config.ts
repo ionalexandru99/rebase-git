@@ -28,7 +28,7 @@ const browserProject = (
 ) => ({
   extends: "./src/apps/web/vite.config.ts",
   optimizeDeps: {
-    include: ["effect/unstable/rpc", "effect/unstable/socket"],
+    include: ["effect/rpc", "effect/socket"],
   },
   test: {
     browser: {
