@@ -146,7 +146,7 @@ export function conflictDocument(
         .filter((line) => line.startsWith(">>>>>>>")).length,
       choices: ["current", "incoming"],
     },
-    content,
+    excerpts: [{ line: 1, text: content }],
   };
 }
 

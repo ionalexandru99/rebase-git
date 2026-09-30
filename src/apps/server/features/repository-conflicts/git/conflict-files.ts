@@ -1,3 +1,4 @@
+import { open } from "node:fs/promises";
 import { Effect } from "effect";
 import type {
   ConflictFailure,
@@ -10,7 +11,15 @@ import {
   type GitCommandRunner,
   runRepositoryGit,
 } from "#server/adapters/local-git/git-commands.ts";
-import { worktreeFile } from "#server/features/repository-changes/git/change-files.ts";
+import { changeIo } from "#server/features/repository-changes/git/change-failures.ts";
+import {
+  safeChangePath,
+  worktreeFile,
+} from "#server/features/repository-changes/git/change-files.ts";
+import {
+  type ConflictText,
+  conflictText,
+} from "#server/features/repository-conflicts/git/conflict-text.ts";
 import { binary } from "#server/repository/comparison/build-change-diff.ts";
 import { fingerprint } from "#server/repository/comparison/fingerprint.ts";
 import {
@@ -29,6 +38,7 @@ export interface ConflictSnapshot {
   readonly file: ConflictFile;
   readonly stages: readonly StageEntry[];
   readonly worktree: RepositoryFileContent;
+  readonly text: ConflictText | null;
 }
 
 interface SnapshotSources {
@@ -53,6 +63,7 @@ const kinds: Record<string, ConflictKind> = {
 };
 
 const defaultMarkerSize = 7;
+const binarySniffBytes = 8000;
 const gitlink = "160000";
 const symlink = "120000";
 
@@ -128,14 +139,6 @@ export function requireConflict(
   });
 }
 
-export function worktreeText(worktree: RepositoryFileContent) {
-  return worktree.content !== null &&
-    worktree.mode !== symlink &&
-    !binary(worktree.content)
-    ? worktree.content.toString("utf8")
-    : null;
-}
-
 function parseStageEntries(output: string) {
   const entries = new Map<string, StageEntry[]>();
   for (const record of output.split("\0").filter(Boolean)) {
@@ -201,9 +204,31 @@ function readConflictSnapshot(
   stages: readonly StageEntry[],
   sources: SnapshotSources,
 ) {
-  return worktreeFile(directory, path).pipe(
+  return readConflictWorktree(directory, path).pipe(
     Effect.map((worktree) => conflictSnapshot(path, stages, worktree, sources)),
   );
+}
+
+function readConflictWorktree(directory: string, path: string) {
+  return Effect.gen(function* () {
+    const worktree = yield* worktreeFile(directory, path);
+    if (worktree.content !== null || worktree.mode === gitlink) return worktree;
+    if (worktree.identity === "missing") return worktree;
+    const target = yield* safeChangePath(directory, path);
+    const content = yield* changeIo(async () => {
+      const file = await open(target, "r");
+      try {
+        const head = Buffer.alloc(binarySniffBytes);
+        const { bytesRead } = await file.read(head, 0, binarySniffBytes, 0);
+        return head.subarray(0, bytesRead).includes(0)
+          ? null
+          : await file.readFile();
+      } finally {
+        await file.close();
+      }
+    });
+    return { ...worktree, content };
+  });
 }
 
 function conflictSnapshot(
@@ -215,10 +240,16 @@ function conflictSnapshot(
   const markerSize = markerSizes.get(path) ?? defaultMarkerSize;
   const kind =
     kinds[stages.map((stage) => stage.side).join(",")] ?? "both-modified";
-  const text = worktreeText(worktree);
+  const text =
+    worktree.content !== null &&
+    worktree.mode !== symlink &&
+    !binary(worktree.content)
+      ? conflictText(worktree.content, markerSize)
+      : null;
   return {
     stages,
     worktree,
+    text,
     file: {
       path,
       revision: fingerprint(
@@ -237,33 +268,10 @@ function conflictSnapshot(
           binary: binary(blob?.content ?? null),
         };
       }),
-      openRegions: text === null ? 0 : countMarkerBlocks(text, markerSize),
+      openRegions: text?.blocks.length ?? 0,
       choices: wholeFileChoices(stages, kind),
     },
   };
-}
-
-export function countMarkerBlocks(text: string, size: number) {
-  const open = "<".repeat(size);
-  const separator = "=".repeat(size);
-  const close = ">".repeat(size);
-  let section: "outside" | "current" | "incoming" = "outside";
-  let count = 0;
-  for (const raw of text.split("\n")) {
-    const line = raw.endsWith("\r") ? raw.slice(0, -1) : raw;
-    if (isMarker(line, open)) section = "current";
-    else if (section === "current" && isMarker(line, separator))
-      section = "incoming";
-    else if (section === "incoming" && isMarker(line, close)) {
-      section = "outside";
-      count += 1;
-    }
-  }
-  return count;
-}
-
-function isMarker(line: string, marker: string) {
-  return line === marker || line.startsWith(`${marker} `);
 }
 
 function wholeFileChoices(stages: readonly StageEntry[], kind: ConflictKind) {

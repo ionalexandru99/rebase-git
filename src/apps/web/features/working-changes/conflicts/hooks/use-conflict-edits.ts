@@ -1,0 +1,83 @@
+import type {
+  MergeConflictRegion,
+  MergeConflictResolution,
+} from "@pierre/diffs";
+import { useRef, useState } from "react";
+import {
+  type ConflictExcerpt,
+  type ConflictPath,
+  RepositoryConflictsApi,
+} from "#contracts/repository-conflicts/repository-conflicts.contract.ts";
+import { conflictReason } from "#web/features/working-changes/conflicts/hooks/use-conflicts.ts";
+import { describeFailure } from "#web/platform/query/request-failure.ts";
+import { answer, useCommand } from "#web/platform/query/use-command.ts";
+
+export interface ConflictEdit {
+  readonly line: number;
+  readonly count: number;
+  readonly text: string;
+}
+
+export function useConflictEdits(input: ConflictPath, reload: () => void) {
+  const edit = useCommand(RepositoryConflictsApi.edit, {
+    target: input,
+    answers: (edited, { repositoryId, worktreePath, path }) => [
+      answer(
+        RepositoryConflictsApi.document,
+        { repositoryId, worktreePath, path },
+        edited,
+      ),
+    ],
+  });
+  const [problem, setProblem] = useState<string | null>(null);
+  const busy = useRef(false);
+  const run = async (revision: string, change: ConflictEdit) => {
+    try {
+      const result = await edit.run({ path: input.path, revision, ...change });
+      if (result._tag === "Ok") return true;
+      if (conflictReason(result) === "Stale") reload();
+      else setProblem(describeFailure(result));
+      return false;
+    } finally {
+      busy.current = false;
+    }
+  };
+  return {
+    problem,
+    running: edit.running,
+    apply: (revision: string, change: ConflictEdit) => {
+      if (busy.current) return null;
+      busy.current = true;
+      setProblem(null);
+      return run(revision, change);
+    },
+  };
+}
+
+export function resolutionEdit(
+  excerpt: ConflictExcerpt,
+  conflict: MergeConflictRegion,
+  resolution: MergeConflictResolution,
+) {
+  const lines = excerpt.text.split(/(?<=\n)/);
+  const block = lines.slice(conflict.startLineIndex, conflict.endLineIndex + 1);
+  const current = lines.slice(
+    conflict.startLineIndex + 1,
+    conflict.baseMarkerLineIndex ?? conflict.separatorLineIndex,
+  );
+  const incoming = lines.slice(
+    conflict.separatorLineIndex + 1,
+    conflict.endLineIndex,
+  );
+  const kept =
+    resolution === "current"
+      ? current
+      : resolution === "incoming"
+        ? incoming
+        : [...current, ...incoming];
+  const line = excerpt.line + conflict.startLineIndex;
+  return {
+    edit: { line, count: block.length, text: kept.join("") },
+    undo: { line, count: kept.length, text: block.join("") },
+  };
+}

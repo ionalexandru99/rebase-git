@@ -8,11 +8,11 @@ import {
   type ConflictSnapshot,
   conflictFailed,
   requireConflict,
-  worktreeText,
 } from "#server/features/repository-conflicts/git/conflict-files.ts";
-import { previewByteLimit } from "#server/repository/comparison/read-blobs.ts";
+import { conflictExcerpts } from "#server/features/repository-conflicts/git/conflict-text.ts";
 
 const textModes = new Set(["100644", "100755"]);
+const excerptByteLimit = 1_000_000;
 
 export function readConflictDocument(
   git: GitCommandRunner,
@@ -25,8 +25,8 @@ export function readConflictDocument(
       input.path,
     );
     yield* requireTextOnBothSides(snapshot);
-    const content = yield* documentContent(snapshot);
-    return { file: snapshot.file, content } satisfies ConflictDocument;
+    const excerpts = yield* documentExcerpts(snapshot);
+    return { file: snapshot.file, excerpts } satisfies ConflictDocument;
   });
 }
 
@@ -46,10 +46,6 @@ function requireTextOnBothSides({ stages, file }: ConflictSnapshot) {
         "Links and submodules can only be resolved as a whole file.",
       ),
     );
-  if (file.stages.some((stage) => stage.bytes > previewByteLimit))
-    return Effect.fail(
-      conflictFailed("TooLarge", "This file is too large to merge here."),
-    );
   if (file.stages.some((stage) => stage.binary))
     return Effect.fail(
       conflictFailed(
@@ -60,19 +56,26 @@ function requireTextOnBothSides({ stages, file }: ConflictSnapshot) {
   return Effect.void;
 }
 
-function documentContent({ worktree }: ConflictSnapshot) {
-  if (worktree.identity === "missing") return Effect.succeed("");
-  if (worktree.bytes > previewByteLimit)
+function documentExcerpts({ worktree, text }: ConflictSnapshot) {
+  if (worktree.identity === "missing") return Effect.succeed([]);
+  if (text === null)
     return Effect.fail(
-      conflictFailed("TooLarge", "This file is too large to merge here."),
+      conflictFailed(
+        "Unsupported",
+        "The working file is not text. Resolve it as a whole file.",
+      ),
     );
-  const text = worktreeText(worktree);
-  return text === null
+  const excerpts = conflictExcerpts(text);
+  const bytes = excerpts.reduce(
+    (total, { text }) => total + Buffer.byteLength(text),
+    0,
+  );
+  return bytes > excerptByteLimit
     ? Effect.fail(
         conflictFailed(
-          "Unsupported",
-          "The working file is not text. Resolve it as a whole file.",
+          "TooLarge",
+          "These conflicts are too large to merge here. Resolve them in your editor or take a whole side.",
         ),
       )
-    : Effect.succeed(text);
+    : Effect.succeed(excerpts);
 }

@@ -9,9 +9,9 @@ import {
   type ConflictDocument,
   type ConflictFile,
   type ConflictList,
+  type EditConflict,
   RepositoryConflictsApi,
   type StageConflict,
-  type WriteConflict,
 } from "#contracts/repository-conflicts/repository-conflicts.contract.ts";
 import {
   fakeRequests,
@@ -83,10 +83,10 @@ async function fixture() {
   const stages: StageConflict[] = [];
   const choices: ChooseConflict[] = [];
   const mutations: MutateChanges[] = [];
-  const writes: WriteConflict[] = [];
+  const edits: EditConflict[] = [];
   const markersLeft = () =>
-    !writes.some(
-      (write) => write.path === conflicted && !write.content.includes("<<<"),
+    !edits.some(
+      (edit) => edit.path === conflicted && !edit.text.includes("<<<"),
     );
   const conflictRow = (path: string) => changedFile(path, "U");
   const changes = () =>
@@ -118,7 +118,12 @@ async function fixture() {
       });
     return {
       file,
-      content: ["export const status = 1;", ...marker, ""].join("\n"),
+      excerpts: [
+        {
+          line: 1,
+          text: ["export const status = 1;", ...marker, ""].join("\n"),
+        },
+      ],
     };
   };
   const requests = fakeRequests(
@@ -140,14 +145,14 @@ async function fixture() {
       unresolved.delete(command.path);
       return list();
     }),
-    respond(RepositoryConflictsApi.write, (command) => {
-      writes.push(command);
+    respond(RepositoryConflictsApi.edit, (command) => {
+      edits.push(command);
       const file = files.find(({ path }) => path === command.path);
       if (file === undefined)
         throw new Error(`No conflict for ${command.path}`);
       return {
         file: { ...file, revision: `${file.revision}-saved`, openRegions: 0 },
-        content: command.content,
+        excerpts: [],
       };
     }),
     respond(RepositoryConflictsApi.choose, (command) => {
@@ -174,7 +179,7 @@ async function fixture() {
   await expect
     .element(page.getByRole("region", { name: "Conflicted files" }))
     .toBeVisible();
-  return { stages, choices, mutations, writes };
+  return { stages, choices, mutations, edits };
 }
 
 const row = (path: string) =>
@@ -217,12 +222,13 @@ describe("conflicts in the Diffs tab", () => {
     await file.getByRole("button", { name: "Accept incoming change" }).click();
 
     await expect
-      .poll(() => f.writes.at(-1))
+      .poll(() => f.edits.at(-1))
       .toMatchObject({
         path: conflicted,
         revision: "app-1",
-        content:
-          "export const status = 1;\nexport const reader = readIncoming;\n",
+        line: 2,
+        count: 5,
+        text: "export const reader = readIncoming;\n",
       });
     await page
       .getByRole("button", { name: "Mark resolved", exact: true })

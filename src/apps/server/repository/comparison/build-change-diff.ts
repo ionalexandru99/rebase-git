@@ -1,3 +1,4 @@
+import { isUtf8 } from "node:buffer";
 import { createTwoFilesPatch } from "diff";
 import type { ChangeDiff } from "#contracts/repository-comparison/repository-comparison.contract.ts";
 import { fingerprint } from "#server/repository/comparison/fingerprint.ts";
@@ -104,11 +105,7 @@ function boundedPatch(
 }
 
 export function binary(content: Buffer | null) {
-  return (
-    content !== null &&
-    (content.includes(0) ||
-      !Buffer.from(content.toString("utf8")).equals(content))
-  );
+  return content !== null && (content.includes(0) || !isUtf8(content));
 }
 function imageMime(path: string) {
   const extension = path.split(".").at(-1)?.toLowerCase();

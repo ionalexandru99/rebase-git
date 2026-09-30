@@ -1,4 +1,4 @@
-import { readFile } from "node:fs/promises";
+import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { Effect } from "effect";
 import { describe, expect, it } from "vite-plus/test";
@@ -129,49 +129,50 @@ describe("repository conflicts", () => {
     });
   });
 
-  it("reads the working file of a conflict that exists on both sides", async () => {
+  it("reads only the conflict blocks of a working file, however large", async () => {
     const f = await fixture();
+    const original = await f.content("two.txt");
+    const filler = "unchanged line\n".repeat(20_000);
+    await writeFile(join(f.directory, "two.txt"), `${filler}${original}`);
 
     const document = await f.document("two.txt");
     const added = await f.document("added.txt");
 
-    expect(document.content).toBe(await f.content("two.txt"));
     expect(document.file.openRegions).toBe(2);
-    expect(added.content).toBe(await f.content("added.txt"));
+    expect(document.excerpts.map(({ line }) => line)).toEqual([19_999]);
+    expect(document.excerpts[0]?.text).toBe(
+      `unchanged line\nunchanged line\n${original}`,
+    );
+    expect(added.excerpts.map(({ text }) => text).join("")).toBe(
+      await f.content("added.txt"),
+    );
     expect(added.file.kind).toBe("both-added");
   });
 
-  it("saves an edit without staging it and rejects a stale revision", async () => {
+  it("replaces lines of the working file without staging it and rejects a stale revision", async () => {
     const f = await fixture();
     const loaded = await f.document("two.txt");
-    const edited = loaded.content.replace(
-      /<<<<<<< HEAD\nB current\n[\s\S]*?>>>>>>> [^\n]*\n/,
-      "B merged\n",
-    );
-
-    const saved = await Effect.runPromise(
-      f.service.write({
-        ...f.scope,
-        path: "two.txt",
-        revision: loaded.file.revision,
-        content: edited,
-      }),
-    );
-
-    expect(await f.content("two.txt")).toBe(edited);
-    expect(saved.file.openRegions).toBe(1);
-    expect(saved.content).toBe(edited);
-    expect((await f.unmerged("two.txt")).split("\n")).toHaveLength(3);
-    await expect(
+    const edit = (revision: string) =>
       Effect.runPromise(
-        f.service.write({
+        f.service.edit({
           ...f.scope,
           path: "two.txt",
-          revision: loaded.file.revision,
-          content: "lost\n",
+          revision,
+          line: 2,
+          count: 7,
+          text: "B merged\n",
         }),
-      ),
-    ).rejects.toMatchObject({ reason: "Stale" });
+      );
+
+    const saved = await edit(loaded.file.revision);
+
+    const edited = await f.content("two.txt");
+    expect(edited).toMatch(/^a\nB merged\nc\n/);
+    expect(saved.file.openRegions).toBe(1);
+    expect((await f.unmerged("two.txt")).split("\n")).toHaveLength(3);
+    await expect(edit(loaded.file.revision)).rejects.toMatchObject({
+      reason: "Stale",
+    });
     expect(await f.content("two.txt")).toBe(edited);
   });
 
