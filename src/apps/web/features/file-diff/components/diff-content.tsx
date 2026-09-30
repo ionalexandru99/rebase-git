@@ -6,6 +6,9 @@ import type { ChangeDiff } from "#contracts/repository-comparison/repository-com
 import type { DiffPreferences } from "#web/domain/file-diff/diff-preferences.contract.ts";
 import type { createChangeDiffModel } from "#web/features/file-diff/diff-model.ts";
 
+export const diffSurfaceCSS =
+  ":host { --diffs-bg: var(--repository); background-color: var(--repository); }";
+
 export function DiffContent({
   diff,
   metadata,
@@ -38,6 +41,7 @@ export function DiffContent({
         selectedLines={selection?.range ?? null}
         options={{
           theme: "pierre-dark",
+          unsafeCSS: diffSurfaceCSS,
           diffStyle: preferences.split ? "split" : "unified",
           overflow: preferences.wrap ? "wrap" : "scroll",
           expandUnchanged: expandContext,

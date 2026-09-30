@@ -18,7 +18,7 @@ import type { CommitLaneRow } from "#web/features/repository-history/commit-lane
 
 const selectedRowStyle = {
   "--graph-row-background":
-    "color-mix(in oklab, var(--primary) 12%, var(--repository))",
+    "color-mix(in oklab, var(--primary) 28%, var(--repository))",
 } as CSSProperties;
 
 export const CommitGraphRow = memo(function CommitGraphRow({
@@ -66,11 +66,11 @@ export const CommitGraphRow = memo(function CommitGraphRow({
       aria-expanded={merge === undefined ? undefined : merge === "expanded"}
       aria-busy={busy ? true : undefined}
       aria-selected={selected}
-      className={`${start === undefined ? "relative" : "absolute left-0"} grid w-full cursor-default items-center bg-[var(--graph-row-background)] text-[.85rem] data-[active=true]:[--graph-row-background:color-mix(in_oklab,var(--accent)_35%,var(--repository))] ${
+      className={`${start === undefined ? "relative" : "absolute left-0"} grid w-full cursor-default items-center bg-[var(--graph-row-background)] text-[.85rem] data-[active=true]:[--graph-row-background:color-mix(in_oklab,var(--accent)_85%,var(--repository))] ${
         selected
-          ? "text-foreground"
-          : "text-foreground hover:[--graph-row-background:color-mix(in_oklab,var(--accent)_35%,var(--repository))]"
-      } ${mark === undefined ? "" : `before:pointer-events-none before:absolute before:inset-0 before:z-[5] before:border-primary ${mark === "base" ? "before:border" : "before:border-l-[3px]"}`}`}
+          ? "text-foreground after:pointer-events-none after:absolute after:inset-0 after:z-[5] after:shadow-[inset_2px_0_0_var(--primary)]"
+          : "text-foreground hover:[--graph-row-background:color-mix(in_oklab,var(--accent)_85%,var(--repository))]"
+      } ${lane?.nodeRemote ? "[&>td:not(:first-child)>*]:opacity-50" : ""} ${mark === undefined ? "" : `before:pointer-events-none before:absolute before:inset-0 before:z-[5] before:border-primary ${mark === "base" ? "before:border" : "before:border-l-[3px]"}`}`}
       data-active={active ? "true" : undefined}
       data-oid={commit.oid}
       id={commitRowId(commit.oid)}
