@@ -92,7 +92,7 @@ async function fixture(
 }
 
 describe("cherry-pick from the graph menu", () => {
-  it("previews the selection oldest first onto the current checkout and runs it in that order", async () => {
+  it("previews the selection oldest first and runs it in that order", async () => {
     const { screen, start, row } = await fixture(history(4));
     await row(0).click();
     await userEvent.keyboard("{Control>}");
@@ -101,15 +101,13 @@ describe("cherry-pick from the graph menu", () => {
 
     await row(0).click({ button: "right" });
 
-    await expect
-      .element(screen.getByRole("menu"))
-      .toHaveTextContent(`Ontorelease${commitId.slice(0, 7)}`);
-    await expect
-      .element(screen.getByRole("list", { name: "Cherry-pick order" }))
-      .toHaveTextContent(`1${short(2)}Commit 22${short(0)}Commit 0`);
     await screen
       .getByRole("menuitem", { name: "Cherry-pick 2 commits" })
       .click();
+    await expect
+      .element(screen.getByRole("list", { name: "Cherry-pick order" }))
+      .toHaveTextContent(`1${short(2)}Commit 22${short(0)}Commit 0`);
+    await screen.getByRole("menuitem", { name: "Commit", exact: true }).click();
     expect(start).toHaveBeenCalledWith(
       expect.objectContaining({
         expectedHead: commitId,
@@ -151,15 +149,16 @@ describe("cherry-pick from the graph menu", () => {
     });
 
     await row(0).click({ button: "right" });
+    await screen
+      .getByRole("menuitem", { name: "Cherry-pick", exact: true })
+      .click();
 
     await expect
       .element(
-        screen.getByRole("menuitem", {
-          name: "Stage commit without committing",
-        }),
+        screen.getByRole("menuitem", { name: "Stage without committing" }),
       )
       .toHaveAttribute("aria-disabled", "true");
-    await screen.getByRole("menuitem", { name: "Cherry-pick commit" }).click();
+    await screen.getByRole("menuitem", { name: "Commit", exact: true }).click();
     await expect
       .element(screen.getByRole("menuitem", { name: /Commit 1/ }))
       .toHaveTextContent("retry.ts");

@@ -38,8 +38,9 @@ test("rebases onto main from the branch menu, resolves each conflict block in th
       .getByRole("navigation", { name: "Branches" })
       .getByRole("treeitem", { name: "main", exact: true })
       .click({ button: "right" });
+    await page.getByRole("menuitem", { name: "Rebase", exact: true }).click();
     await page
-      .getByRole("menuitem", { name: "Rebase onto here", exact: true })
+      .getByRole("menuitem", { name: "Onto here", exact: true })
       .click();
     await page.getByRole("button", { name: "Review conflicts" }).click();
     const conflicts = page.getByRole("region", { name: "Conflicted files" });

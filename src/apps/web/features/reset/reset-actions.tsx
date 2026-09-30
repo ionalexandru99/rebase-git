@@ -118,6 +118,7 @@ export function useResetActions(): ResetActions {
     return {
       id: "reset",
       label: "Reset",
+      group: "operation",
       enabled: reason === undefined,
       ...(reason === undefined ? {} : { reason }),
       run: () => undefined,

@@ -3,7 +3,7 @@ import { skipToken } from "@tanstack/react-query";
 import { useState } from "react";
 import { RepositoryChangesApi } from "#contracts/repository-changes/repository-changes.contract.ts";
 import { RepositoryOperationsApi } from "#contracts/repository-operations/repository-operations.contract.ts";
-import type { Action } from "#web/components/ui/action-menu.tsx";
+import { type Action, submenu } from "#web/components/ui/action-menu.tsx";
 import { useOperation } from "#web/features/operation-recovery/hooks/use-operation.ts";
 import { operationKindLabel } from "#web/features/operation-recovery/operation-messages.ts";
 import type { RebasePlanTarget } from "#web/features/rebase/rebase-plan.ts";
@@ -21,11 +21,17 @@ import { useRepositoryScope } from "#web/platform/query/repository-scope.tsx";
 import { describeFailure } from "#web/platform/query/request-failure.ts";
 import { answer, useCommand } from "#web/platform/query/use-command.ts";
 
+export type RebaseActionId = "rebase" | "rebase.onto" | "rebase.interactive";
+
+interface RebaseChoice {
+  readonly action: Action<RebaseActionId>;
+  readonly alone: string;
+}
+
 export interface RebaseActions {
-  readonly actionFor: (target: RefSourceTarget) => Action<"rebase"> | undefined;
-  readonly interactiveFor: (
+  readonly actionFor: (
     target: RefSourceTarget,
-  ) => Action<"interactiveRebase"> | undefined;
+  ) => Action<RebaseActionId> | undefined;
   readonly inspect: (target: RefSourceTarget) => void;
   readonly moving: (target: RefSourceTarget) => readonly string[];
 }
@@ -104,7 +110,7 @@ export function useRebaseActions(
       notifications.add({ title: describeFailure(result) });
   };
 
-  const actionFor = (target: RefSourceTarget): Action<"rebase"> | undefined => {
+  const ontoFor = (target: RefSourceTarget): RebaseChoice | undefined => {
     const source = sourceOf(target);
     if (
       source === undefined ||
@@ -127,17 +133,20 @@ export function useRebaseActions(
                 ? "Checking changes…"
                 : undefined;
     return {
-      id: "rebase",
-      label: "Rebase onto here",
-      enabled: reason === undefined,
-      ...(reason === undefined ? {} : { reason }),
-      run: () => void start(source, (changed ?? 0) > 0),
+      alone: "Rebase onto here",
+      action: {
+        id: "rebase.onto",
+        label: "Onto here",
+        enabled: reason === undefined,
+        ...(reason === undefined ? {} : { reason }),
+        run: () => void start(source, (changed ?? 0) > 0),
+      },
     };
   };
 
   const interactiveFor = (
     target: RefSourceTarget,
-  ): Action<"interactiveRebase"> | undefined => {
+  ): RebaseChoice | undefined => {
     const source = sourceOf(target);
     if (
       openPlan === undefined ||
@@ -164,14 +173,33 @@ export function useRebaseActions(
       from,
     };
     return {
-      id: "interactiveRebase",
-      label: from
+      alone: from
         ? "Interactive rebase from here"
         : "Interactive rebase onto here",
-      enabled: reason === undefined,
-      ...(reason === undefined ? {} : { reason }),
-      run: () => openPlan(plan),
+      action: {
+        id: "rebase.interactive",
+        label: from ? "Interactive from here" : "Interactive onto here",
+        enabled: reason === undefined,
+        ...(reason === undefined ? {} : { reason }),
+        run: () => openPlan(plan),
+      },
     };
+  };
+
+  const actionFor = (
+    target: RefSourceTarget,
+  ): Action<RebaseActionId> | undefined => {
+    const choices = [ontoFor(target), interactiveFor(target)].filter(
+      (choice) => choice !== undefined,
+    );
+    const [only] = choices;
+    if (only === undefined) return undefined;
+    if (choices.length === 1)
+      return { ...only.action, label: only.alone, group: "operation" };
+    return submenu(
+      { id: "rebase", label: "Rebase", group: "operation" },
+      choices.map(({ action }) => action),
+    );
   };
 
   const moving = (target: RefSourceTarget) => {
@@ -183,7 +211,7 @@ export function useRebaseActions(
       : planned.moving;
   };
 
-  return { actionFor, interactiveFor, inspect, moving };
+  return { actionFor, inspect, moving };
 }
 
 export function useChangedFileCount(enabled: boolean) {

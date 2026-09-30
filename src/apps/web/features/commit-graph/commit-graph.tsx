@@ -13,7 +13,7 @@ import {
 } from "react";
 import type { RepositoryHistoryRefTarget } from "#contracts/repository-history/repository-history.contract.ts";
 import type { RepositoryRefs } from "#contracts/repository-refs/repository-refs.contract.ts";
-import { runAction } from "#web/components/ui/action-menu.tsx";
+import { type Action, runAction } from "#web/components/ui/action-menu.tsx";
 import { Button } from "#web/components/ui/button.tsx";
 import { AuthorAvatars } from "#web/features/author-avatars/author-avatar.tsx";
 import type { GitHubRepository } from "#web/features/author-avatars/author-avatar-source.ts";
@@ -163,16 +163,10 @@ export function CommitGraph({
   const commands = useCommitActions({
     history,
     scope: scopeQuery,
+    cherryPick,
     merge,
     rebase: rebase && {
-      actionFor: (oid) => {
-        const action = rebase.actionFor(oid);
-        return action && { ...action, onHighlight: setPreviewing };
-      },
-      interactiveFor: (oid) => {
-        const action = rebase.interactiveFor(oid);
-        return action && { ...action, onHighlight: setPreviewing };
-      },
+      actionFor: (oid) => highlighted(rebase.actionFor(oid), setPreviewing),
     },
     reset,
     onOpenDetails,
@@ -314,7 +308,6 @@ export function CommitGraph({
                             : [menuOid],
                         )
                   }
-                  lead={cherryPick?.menu}
                   tabIndex={0}
                   restoreFocus={() => {
                     setPreviewing(false);
@@ -519,3 +512,26 @@ function Title({ repositoryName }: { readonly repositoryName: string }) {
   );
 }
 const CommitGraphToolbar = { Frame, Title };
+
+function highlighted<Id extends string>(
+  action: Action<Id> | undefined,
+  onHighlight: (highlighted: boolean) => void,
+): Action<Id> | undefined {
+  return (
+    action && {
+      ...action,
+      onHighlight,
+      ...(action.submenu === undefined
+        ? {}
+        : {
+            submenu: {
+              ...action.submenu,
+              actions: action.submenu.actions.map((choice) => ({
+                ...choice,
+                onHighlight,
+              })),
+            },
+          }),
+    }
+  );
+}

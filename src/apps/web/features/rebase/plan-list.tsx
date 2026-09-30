@@ -174,10 +174,7 @@ export function PlanList({
             </span>
           </ContextMenuTrigger>
           <ContextMenuContent className="w-52">
-            <ActionMenuItems
-              actions={rowActions(index)}
-              className="text-[.85rem] sm:text-[.85rem]"
-            />
+            <ActionMenuItems actions={rowActions(index)} />
           </ContextMenuContent>
         </ContextMenu>
       ))}

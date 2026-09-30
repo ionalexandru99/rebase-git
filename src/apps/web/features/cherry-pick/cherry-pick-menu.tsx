@@ -10,7 +10,7 @@ import {
   type RepositoryOperation,
   RepositoryOperationsApi,
 } from "#contracts/repository-operations/repository-operations.contract.ts";
-import type { RepositoryHead } from "#contracts/repository-refs/repository-refs.contract.ts";
+import type { Action } from "#web/components/ui/action-menu.tsx";
 import {
   ContextMenuContent,
   ContextMenuItem,
@@ -43,8 +43,6 @@ interface CherryPickPlan {
 }
 
 type Run = (result: CherryPickResult, mainline: number | null) => void;
-
-const itemClassName = "text-[.85rem] sm:text-[.85rem]";
 
 export type CherryPick = ReturnType<typeof useCherryPick>;
 
@@ -121,25 +119,37 @@ export function useCherryPick(
       });
   };
 
-  const menu =
-    plan === undefined ||
-    head === undefined ||
-    repository === undefined ? undefined : (
-      <CherryPickItems
-        plan={plan}
-        head={head}
-        repository={repository}
-        blocked={blockedReason(repository, {
-          canRun: start.canRun,
-          running: start.running,
-          operation,
-          plan,
-        })}
-        staged={(changes.data?.staged.length ?? 0) > 0}
-        run={run}
-      />
-    );
-  return { open, menu };
+  const action = (): Action | undefined => {
+    if (plan === undefined || head === undefined || repository === undefined)
+      return undefined;
+    const count = plan.commits.length;
+    const blocked = blockedReason(repository, {
+      canRun: start.canRun,
+      running: start.running,
+      operation,
+      plan,
+    });
+    return {
+      id: "cherryPick",
+      label: count === 1 ? "Cherry-pick" : `Cherry-pick ${count} commits`,
+      group: "operation",
+      enabled: blocked === undefined,
+      ...(blocked === undefined ? {} : { reason: blocked }),
+      run: () => undefined,
+      submenu: {
+        actions: [],
+        lead: (
+          <CherryPickItems
+            plan={plan}
+            repository={repository}
+            staged={(changes.data?.staged.length ?? 0) > 0}
+            run={run}
+          />
+        ),
+      },
+    };
+  };
+  return { open, action };
 }
 
 async function resolvePlan(
@@ -194,30 +204,17 @@ function blockedReason(
 
 function CherryPickItems({
   plan,
-  head,
   repository,
-  blocked,
   staged,
   run,
 }: {
   readonly plan: CherryPickPlan;
-  readonly head: RepositoryHead;
   readonly repository: RepositoryScope;
-  readonly blocked: string | undefined;
   readonly staged: boolean;
   readonly run: Run;
 }) {
-  const count = plan.commits.length;
-  const noun = count === 1 ? "commit" : `${count} commits`;
   return (
     <>
-      <p className="flex items-center gap-1.5 px-2 pt-1.5 pb-1 text-[.7rem] text-muted-foreground">
-        Onto
-        <span className="font-medium text-foreground">
-          {head.branch ?? "HEAD"}
-        </span>
-        <span className="font-mono">{head.commit.slice(0, 7)}</span>
-      </p>
       <ol
         aria-label="Cherry-pick order"
         className="max-h-64 overflow-y-auto px-1 pb-1"
@@ -239,20 +236,19 @@ function CherryPickItems({
       </ol>
       <ContextMenuSeparator />
       <ResultItem
-        label={`Cherry-pick ${noun}`}
-        reason={blocked}
+        label="Commit"
+        reason={undefined}
         plan={plan}
         repository={repository}
         run={(mainline) => run("commit", mainline)}
       />
       <ResultItem
-        label={`Stage ${noun} without committing`}
-        reason={blocked ?? (staged ? "Staged changes" : undefined)}
+        label="Stage without committing"
+        reason={staged ? "Staged changes" : undefined}
         plan={plan}
         repository={repository}
         run={(mainline) => run("stage", mainline)}
       />
-      <ContextMenuSeparator />
     </>
   );
 }
@@ -274,7 +270,6 @@ function ResultItem({
   if (merge === undefined || reason !== undefined)
     return (
       <ContextMenuItem
-        className={itemClassName}
         disabled={reason !== undefined}
         onClick={() => run(null)}
       >
@@ -286,7 +281,7 @@ function ResultItem({
     );
   return (
     <ContextMenuSubmenu>
-      <ContextMenuSubmenuTrigger className={itemClassName}>
+      <ContextMenuSubmenuTrigger>
         <span className="flex-1">{label}</span>
         <IconChevronRight
           aria-hidden="true"
@@ -337,7 +332,7 @@ function ParentItem({
   );
   const files = inspection.data?.files;
   return (
-    <ContextMenuItem className={itemClassName} onClick={onClick}>
+    <ContextMenuItem onClick={onClick}>
       <span className="shrink-0 font-mono text-[.75rem] text-muted-foreground">
         {parent.slice(0, 7)}
       </span>

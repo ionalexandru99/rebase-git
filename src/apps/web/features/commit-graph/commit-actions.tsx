@@ -1,21 +1,17 @@
-import {
-  type ReactElement,
-  type ReactNode,
-  useCallback,
-  useRef,
-  useState,
-} from "react";
+import { type ReactElement, useCallback, useRef, useState } from "react";
 import type { RepositoryCommit } from "#contracts/repository-history/repository-history.contract.ts";
 import { RepositoryOperationsApi } from "#contracts/repository-operations/repository-operations.contract.ts";
 import {
   type Action,
   ActionMenuItems,
+  submenu,
 } from "#web/components/ui/action-menu.tsx";
 import {
   ContextMenu,
   ContextMenuContent,
   ContextMenuTrigger,
 } from "#web/components/ui/context-menu.tsx";
+import type { CherryPick } from "#web/features/cherry-pick/cherry-pick-menu.tsx";
 import { writeClipboardText } from "#web/features/clipboard/write-clipboard-text.ts";
 import type { MergeActions } from "#web/features/merge/merge-actions.ts";
 import { useOperation } from "#web/features/operation-recovery/hooks/use-operation.ts";
@@ -44,10 +40,12 @@ interface CommitAccess {
 
 interface CommitActionHandlers {
   readonly openDetails?: ((oid: string) => void) | undefined;
+  readonly cherryPick: Action | undefined;
   readonly merge: Action | undefined;
-  readonly rebase: readonly (Action | undefined)[];
+  readonly rebase: Action | undefined;
+  readonly revert: Action | undefined;
   readonly reset: Action | undefined;
-  readonly revert: readonly Action[];
+  readonly create: readonly Action[];
   readonly readCommit: (oid: string) => Promise<RepositoryCommit | undefined>;
   readonly writeClipboard: (text: string) => Promise<void>;
   readonly attempt: Attempt;
@@ -56,6 +54,7 @@ interface CommitActionHandlers {
 export function useCommitActions({
   history,
   scope: historyScope,
+  cherryPick,
   merge,
   rebase,
   reset,
@@ -63,10 +62,9 @@ export function useCommitActions({
 }: {
   readonly history: Pick<RepositoryHistory, "ask"> | undefined;
   readonly scope: HistoryScopeQuery | undefined;
+  readonly cherryPick?: Pick<CherryPick, "action"> | undefined;
   readonly merge?: MergeActions | undefined;
-  readonly rebase?:
-    | Pick<RebaseActions, "actionFor" | "interactiveFor">
-    | undefined;
+  readonly rebase?: Pick<RebaseActions, "actionFor"> | undefined;
   readonly reset?: Pick<ResetActions, "actionFor"> | undefined;
   readonly onOpenDetails?: ((oid: string) => void) | undefined;
 }) {
@@ -90,16 +88,17 @@ export function useCommitActions({
   ): readonly Action[] => [
     ...commitActions(oid, access, {
       openDetails: onOpenDetails,
+      cherryPick: cherryPick?.action(),
       merge: merge?.actionFor(oid),
-      rebase: [rebase?.actionFor(oid), rebase?.interactiveFor(oid)],
+      rebase: rebase?.actionFor(oid),
+      revert: revert.actionFor(selected),
       reset: reset?.actionFor(oid),
-      revert: revert.actionsFor(selected),
+      create: createRefActions(oid, access),
       readCommit: async (commit) =>
         (await history?.ask({ _tag: "Commits", oids: [commit] }))?.[0],
       writeClipboard: writeClipboardText,
       attempt,
     }),
-    ...createRefActions(oid, access),
   ];
   return { actionsFor, error, preview: revert.preview };
 }
@@ -149,8 +148,8 @@ function useRevertActions(
       () => undefined,
     );
   };
-  const actionsFor = (commits: readonly string[]): readonly Action[] => {
-    if (head === undefined || repository?.writable !== true) return [];
+  const actionFor = (commits: readonly string[]): Action | undefined => {
+    if (head === undefined || repository?.writable !== true) return undefined;
     const run = (commit: boolean) =>
       attempt(async () => {
         const result = await start.run({
@@ -174,29 +173,37 @@ function useRevertActions(
     const shared = {
       enabled: reason === undefined && start.canRun,
       ...(reason === undefined ? {} : { reason }),
-      group: "operation" as const,
       onHighlight: (on: boolean) => show(on ? commits : []),
     };
-    return [
-      {
-        ...shared,
-        id: "revert",
-        label:
-          commits.length === 1
-            ? "Revert commit"
-            : `Revert ${commits.length} commits`,
-        ...(head.branch === undefined ? {} : { detail: `on ${head.branch}` }),
-        run: () => run(true),
-      },
-      {
-        ...shared,
-        id: "revertWithoutCommit",
-        label: "Revert without committing",
-        run: () => run(false),
-      },
-    ];
+    return {
+      ...submenu(
+        {
+          id: "revert",
+          label:
+            commits.length === 1
+              ? "Revert"
+              : `Revert ${commits.length} commits`,
+          group: "operation",
+        },
+        [
+          {
+            ...shared,
+            id: "revert.commit",
+            label: "Commit",
+            run: () => run(true),
+          },
+          {
+            ...shared,
+            id: "revert.stage",
+            label: "Stage without committing",
+            run: () => run(false),
+          },
+        ],
+      ),
+      onHighlight: shared.onHighlight,
+    };
   };
-  return { actionsFor, preview };
+  return { actionFor, preview };
 }
 
 function commitActions(
@@ -204,15 +211,33 @@ function commitActions(
   { connected, readable }: CommitAccess,
   {
     openDetails,
+    cherryPick,
     merge,
     rebase,
-    reset,
     revert,
+    reset,
+    create,
     readCommit,
     writeClipboard,
     attempt,
   }: CommitActionHandlers,
 ): readonly Action[] {
+  const copy = (
+    id: string,
+    label: string,
+    text: () => Promise<string | undefined>,
+  ) => ({
+    id,
+    label,
+    enabled: true,
+    run: () =>
+      attempt(async () => {
+        const value = await text();
+        if (value === undefined) return "Commit metadata is not available yet";
+        await writeClipboard(value);
+        return undefined;
+      }),
+  });
   return [
     ...(openDetails === undefined
       ? []
@@ -228,47 +253,30 @@ function commitActions(
               }),
           },
         ]),
-    ...(merge === undefined ? [] : [merge]),
-    ...rebase.filter((action) => action !== undefined),
-    ...(reset === undefined ? [] : [reset]),
-    ...revert,
-    {
-      id: "copySha",
-      label: "Copy commit SHA",
-      enabled: true,
-      run: () =>
-        attempt(async () => {
-          await writeClipboard(oid);
-          return undefined;
-        }),
-    },
-    {
-      id: "copySubject",
-      label: "Copy commit subject",
-      enabled: true,
-      run: () =>
-        attempt(async () => {
-          const commit = await readCommit(oid);
-          if (commit === undefined)
-            return "Commit metadata is not available yet";
-          await writeClipboard(commit.subject);
-          return undefined;
-        }),
-    },
+    ...[cherryPick, merge, rebase, revert, reset].filter(
+      (action) => action !== undefined,
+    ),
+    ...create,
+    submenu({ id: "copy", label: "Copy", group: "edit" }, [
+      copy("copySha", "SHA", async () => oid),
+      copy(
+        "copySubject",
+        "Subject",
+        async () => (await readCommit(oid))?.subject,
+      ),
+    ]),
   ];
 }
 
 export function CommitActionMenu({
   children,
   actions,
-  lead,
   restoreFocus,
   tabIndex = -1,
 }: {
   readonly tabIndex?: number;
   readonly children: ReactElement;
   readonly actions: readonly Action[] | undefined;
-  readonly lead?: ReactNode;
   readonly restoreFocus: () => void;
 }) {
   return (
@@ -279,13 +287,7 @@ export function CommitActionMenu({
     >
       <ContextMenuTrigger render={children} tabIndex={tabIndex} />
       <ContextMenuContent className="w-max min-w-50 max-w-md">
-        {lead}
-        {actions === undefined ? null : (
-          <ActionMenuItems
-            actions={actions}
-            className="text-[.85rem] sm:text-[.85rem]"
-          />
-        )}
+        {actions === undefined ? null : <ActionMenuItems actions={actions} />}
       </ContextMenuContent>
     </ContextMenu>
   );

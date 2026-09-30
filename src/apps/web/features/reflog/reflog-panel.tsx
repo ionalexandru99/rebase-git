@@ -9,7 +9,7 @@ import type {
   RepositoryRefs,
   RepositoryWorktree,
 } from "#contracts/repository-refs/repository-refs.contract.ts";
-import type { Action } from "#web/components/ui/action-menu.tsx";
+import { type Action, submenu } from "#web/components/ui/action-menu.tsx";
 import { Button } from "#web/components/ui/button.tsx";
 import { writeClipboardText } from "#web/features/clipboard/write-clipboard-text.ts";
 import { ErrorNotification } from "#web/features/notifications/components/error-notification.tsx";
@@ -197,35 +197,31 @@ function reflogActions(
       enabled: openDetails !== undefined && readable,
       run: () => openDetails?.(row.oid),
     },
-    ...createRefActions(row.oid, {
-      connected: scope?.connected ?? false,
-      writable: scope?.writable ?? false,
-    })
-      .filter((action) => action.id === "branch.createHere")
-      .map((action): Action => ({ ...action, group: "create" })),
     ...(reset === undefined
       ? []
       : [
-          {
-            ...reset,
-            group: "edit" as const,
-            ...(blocked === undefined
-              ? {}
-              : { enabled: false, reason: blocked }),
-          },
+          blocked === undefined
+            ? reset
+            : { ...reset, enabled: false, reason: blocked },
         ]),
-    {
-      id: "copySha",
-      label: "Copy commit SHA",
-      enabled: true,
-      run: () => void writeClipboardText(row.oid),
-    },
-    {
-      id: "copySubject",
-      label: "Copy commit subject",
-      enabled: true,
-      run: () => void writeClipboardText(row.subject),
-    },
+    ...createRefActions(row.oid, {
+      connected: scope?.connected ?? false,
+      writable: scope?.writable ?? false,
+    }).filter((action) => action.id === "branch.createHere"),
+    submenu({ id: "copy", label: "Copy", group: "edit" }, [
+      {
+        id: "copySha",
+        label: "SHA",
+        enabled: true,
+        run: () => void writeClipboardText(row.oid),
+      },
+      {
+        id: "copySubject",
+        label: "Subject",
+        enabled: true,
+        run: () => void writeClipboardText(row.subject),
+      },
+    ]),
   ];
 }
 

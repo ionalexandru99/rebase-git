@@ -1,5 +1,5 @@
 import { IconChevronRight } from "@tabler/icons-react";
-import { Fragment } from "react";
+import { Fragment, type ReactNode } from "react";
 import {
   ContextMenuContent,
   ContextMenuItem,
@@ -15,23 +15,24 @@ export interface Action<Id extends string = string> {
   readonly reason?: string;
   readonly detail?: string;
   readonly keys?: readonly string[];
-  readonly group?: "create" | "edit" | "delete" | "operation";
+  readonly group?: "operation" | "edit" | "delete";
   readonly onHighlight?: (highlighted: boolean) => void;
-  readonly submenu?: { readonly actions: readonly Action<Id>[] };
+  readonly submenu?: {
+    readonly actions: readonly Action<Id>[];
+    readonly lead?: ReactNode;
+  };
   readonly run: () => void;
 }
 
 export function ActionMenuItems({
   actions,
-  className,
   onRun,
 }: {
   readonly actions: readonly Action[];
-  readonly className?: string | undefined;
   readonly onRun?: (action: Action) => void;
 }) {
   return actions.map((action, index) => {
-    const previous = actions[index - 1]?.group;
+    const previous = actions[index - 1];
     const hint = action.enabled
       ? (action.detail ?? keyLabel(action.keys?.[0]))
       : action.reason;
@@ -46,12 +47,11 @@ export function ActionMenuItems({
       );
     return (
       <Fragment key={action.id}>
-        {previous !== undefined && previous !== action.group ? (
+        {previous !== undefined && previous.group !== action.group ? (
           <ContextMenuSeparator />
         ) : null}
         {action.submenu === undefined ? (
           <ContextMenuItem
-            className={className}
             disabled={!action.enabled}
             onFocus={() => action.onHighlight?.(true)}
             onBlur={() => action.onHighlight?.(false)}
@@ -65,7 +65,10 @@ export function ActionMenuItems({
           </ContextMenuItem>
         ) : (
           <ContextMenuSubmenu disabled={!action.enabled}>
-            <ContextMenuSubmenuTrigger className={className}>
+            <ContextMenuSubmenuTrigger
+              onFocus={() => action.onHighlight?.(true)}
+              onBlur={() => action.onHighlight?.(false)}
+            >
               {label}
               {hinted}
               <IconChevronRight
@@ -74,9 +77,9 @@ export function ActionMenuItems({
               />
             </ContextMenuSubmenuTrigger>
             <ContextMenuContent submenu className="w-max min-w-40 max-w-md">
+              {action.submenu.lead}
               <ActionMenuItems
                 actions={action.submenu.actions}
-                className={className}
                 {...(onRun === undefined ? {} : { onRun })}
               />
             </ContextMenuContent>
@@ -85,6 +88,21 @@ export function ActionMenuItems({
       </Fragment>
     );
   });
+}
+
+export function submenu<Id extends string>(
+  parent: Pick<Action<Id>, "id" | "label" | "group">,
+  choices: readonly Action<Id>[],
+): Action<Id> {
+  const enabled = choices.some((choice) => choice.enabled);
+  const reason = enabled ? undefined : choices[0]?.reason;
+  return {
+    ...parent,
+    enabled,
+    ...(reason === undefined ? {} : { reason }),
+    run: () => undefined,
+    submenu: { actions: choices },
+  };
 }
 
 export function runAction(action: Action | undefined): boolean {

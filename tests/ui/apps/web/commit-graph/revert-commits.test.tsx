@@ -82,13 +82,11 @@ describe("revert commits from the graph", () => {
     await userEvent.keyboard("{/Control}");
 
     await row(1).click({ button: "right" });
-    const revert = screen.getByRole("menuitem", { name: /^Revert 2 commits/ });
-    await expect.element(revert).toHaveTextContent("on main");
-    await revert.hover();
+    await screen.getByRole("menuitem", { name: "Revert 2 commits" }).hover();
 
     await expect.element(row(1)).toHaveTextContent("1Commit 1");
     await expect.element(row(3)).toHaveTextContent("2Commit 3");
-    await revert.click();
+    await screen.getByRole("menuitem", { name: "Commit", exact: true }).click();
     await expect.poll(() => started).toHaveLength(1);
     expect(started[0]?.expectedHead).toBe(commitId);
     expect(started[0]?.operation).toEqual({
@@ -106,7 +104,7 @@ describe("revert commits from the graph", () => {
 
     await row(2).click({ button: "right" });
 
-    const revert = screen.getByRole("menuitem", { name: /^Revert commit/ });
+    const revert = screen.getByRole("menuitem", { name: /^Revert/ });
     await expect.element(revert).toHaveAttribute("aria-disabled", "true");
     await expect.element(revert).toHaveTextContent("Rebase in progress");
   });
@@ -123,8 +121,9 @@ describe("revert commits from the graph", () => {
     });
 
     await row(2).click({ button: "right" });
+    await screen.getByRole("menuitem", { name: "Revert", exact: true }).click();
     await screen
-      .getByRole("menuitem", { name: "Revert without committing" })
+      .getByRole("menuitem", { name: "Stage without committing" })
       .click();
 
     await expect

@@ -393,7 +393,7 @@ describe("ref editing", () => {
       .getByRole("button", { name: "Copy v0.9" })
       .click({ button: "right" });
     await expect
-      .element(screen.getByRole("menuitem", { name: "Create branch here…" }))
+      .element(screen.getByRole("menuitem", { name: "Create tag here…" }))
       .not.toBeInTheDocument();
     await screen.getByRole("menuitem", { name: "Delete" }).click();
     await screen.getByRole("menuitem", { name: /^Local/ }).click();
