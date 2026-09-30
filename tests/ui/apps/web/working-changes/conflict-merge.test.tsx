@@ -32,7 +32,7 @@ function applyEdit(
   return lines.join("");
 }
 
-async function fixture() {
+async function fixture(waitForSave: () => Promise<void> = async () => {}) {
   const edits: EditConflict[] = [];
   let saved = content;
   const input = { repositoryId, worktreePath: "/repo", path };
@@ -46,8 +46,9 @@ async function fixture() {
   };
   const requests = fakeRequests(
     respond(RepositoryConflictsApi.document, () => document),
-    respond(RepositoryConflictsApi.edit, (command) => {
+    respond(RepositoryConflictsApi.edit, async (command) => {
       edits.push(command);
+      await waitForSave();
       saved = applyEdit(saved, command);
       return conflictDocument(path, saved, `saved-${edits.length}`);
     }),
@@ -107,4 +108,23 @@ it("undoes the last choice by writing the conflict block back", async () => {
   await expect
     .element(page.getByRole("button", { name: "Undo" }))
     .toBeDisabled();
+});
+
+it("keeps remaining choices on the saved revision while an edit is pending", async () => {
+  let complete: () => void = () => {};
+  const saving = new Promise<void>((resolve) => {
+    complete = resolve;
+  });
+  const { edits, file } = await fixture(() => saving);
+  const incoming = file.getByRole("button", { name: "Accept incoming change" });
+
+  await incoming.first().click();
+  await expect.poll(() => edits.length).toBe(1);
+  expect(incoming.all()).toHaveLength(12);
+
+  complete();
+  await expect.poll(() => incoming.all().length).toBe(11);
+  await incoming.first().click();
+  await expect.poll(() => edits.length).toBe(2);
+  expect(edits[1]?.revision).toBe("saved-1");
 });

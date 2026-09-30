@@ -1,5 +1,5 @@
 import { Schema } from "effect";
-import { Rpc, RpcGroup } from "effect/unstable/rpc";
+import { Rpc, RpcGroup } from "effect/rpc";
 import { ObjectId, RepositoryId } from "#contracts/git/git-values.contract.ts";
 
 const HistoryTips = Schema.Array(ObjectId).check(Schema.isMaxLength(40_512));

@@ -2,7 +2,7 @@ import { mkdtemp, realpath } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Effect, Exit, Schema, Scope } from "effect";
-import { RpcClientError, RpcTest } from "effect/unstable/rpc";
+import { RpcClientError, RpcTest } from "effect/rpc";
 import { onTestFinished } from "vite-plus/test";
 import WebSocket from "ws";
 import { EnvironmentAuthorizationApi } from "#contracts/environment-authorization/environment-authorization.contract.ts";

@@ -12,12 +12,8 @@ import {
   Scope,
   Stream,
 } from "effect";
-import {
-  RpcClient,
-  RpcClientError,
-  RpcSerialization,
-} from "effect/unstable/rpc";
-import { Socket } from "effect/unstable/socket";
+import { RpcClient, RpcClientError, RpcSerialization } from "effect/rpc";
+import { Socket } from "effect/socket";
 import {
   type EnvironmentAccessFailure,
   EnvironmentAuthorizationFailure,

@@ -261,8 +261,8 @@ function contentPatch(
   after: string | null,
 ) {
   return createTwoFilesPatch(
-    before === null ? "/dev/null" : JSON.stringify(`a/${diff.path}`),
-    after === null ? "/dev/null" : JSON.stringify(`b/${diff.path}`),
+    before === null ? "/dev/null" : `a/${diff.path}`,
+    after === null ? "/dev/null" : `b/${diff.path}`,
     before ?? "",
     after ?? "",
     "",

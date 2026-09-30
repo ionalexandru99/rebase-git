@@ -6,8 +6,8 @@ import { resolve } from "node:path";
 import { promisify } from "node:util";
 import { expect, test } from "@playwright/test";
 import { Effect, Exit, Scope, Stream } from "effect";
-import { RpcClient, RpcSerialization } from "effect/unstable/rpc";
-import { Socket } from "effect/unstable/socket";
+import { RpcClient, RpcSerialization } from "effect/rpc";
+import { Socket } from "effect/socket";
 import {
   EnvironmentRpc,
   environmentLivePath,

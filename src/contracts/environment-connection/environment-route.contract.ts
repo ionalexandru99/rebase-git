@@ -1,5 +1,5 @@
 import { Schema } from "effect";
-import { Rpc } from "effect/unstable/rpc";
+import { Rpc } from "effect/rpc";
 import { RepositoryRejected } from "#contracts/git/git-failures.contract.ts";
 
 export interface EnvironmentRoute extends Rpc.Any {
