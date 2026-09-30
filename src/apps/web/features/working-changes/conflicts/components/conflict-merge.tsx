@@ -4,20 +4,24 @@ import { IconArrowDown, IconArrowUp } from "@tabler/icons-react";
 import {
   type CSSProperties,
   type KeyboardEvent,
-  type RefObject,
   useEffect,
   useRef,
   useState,
 } from "react";
 import type {
   ConflictDocument,
+  ConflictExcerpt,
   ConflictList,
   ConflictPath,
 } from "#contracts/repository-conflicts/repository-conflicts.contract.ts";
 import { Button } from "#web/components/ui/button.tsx";
 import { Confirmation } from "#web/components/ui/confirmation.tsx";
 import { WholeFileMenu } from "#web/features/working-changes/conflicts/components/whole-file-menu.tsx";
-import { useConflictWrites } from "#web/features/working-changes/conflicts/hooks/use-conflict-writes.ts";
+import {
+  type ConflictEdit,
+  resolutionEdit,
+  useConflictEdits,
+} from "#web/features/working-changes/conflicts/hooks/use-conflict-edits.ts";
 import {
   useConflictActions,
   useConflictDocument,
@@ -46,13 +50,15 @@ export function ConflictMerge({
   const query = useConflictDocument(input);
   const document = query.data ?? loaded;
   const { refetch } = query;
-  const [history, setHistory] = useState<readonly string[]>([]);
-  const writes = useConflictWrites(input, document, () => {
+  const revision = document.file.revision;
+  const [history, setHistory] = useState<readonly ConflictEdit[]>([]);
+  const [failures, setFailures] = useState(0);
+  const edits = useConflictEdits(input, () => {
     setHistory([]);
     void refetch();
   });
   const actions = useConflictActions(input, {
-    revision: writes.revision,
+    revision: () => revision,
     onResolved: (list: ConflictList) => {
       const next =
         list.files.find(({ openRegions }) => openRegions > 0) ?? list.files[0];
@@ -62,25 +68,33 @@ export function ConflictMerge({
   });
   const [total] = useState(document.file.openRegions);
   const pane = useRef<HTMLElement>(null);
-  const disabled = !writable || actions.busy;
-  const settle = async () => {
-    await writes.settled();
-    actions.reset();
-  };
-  const undo = () => {
+  const disabled = !writable || actions.busy || edits.running;
+  const undo = async () => {
     const previous = history.at(-1);
     if (previous === undefined || disabled) return;
-    setHistory(history.slice(0, -1));
-    writes.save(previous);
+    if (await edits.apply(revision, previous))
+      setHistory((past) => past.slice(0, -1));
+  };
+  const resolveBlock = (
+    from: string,
+    edit: ConflictEdit,
+    reverse: ConflictEdit,
+  ) => {
+    if (!writable || actions.busy) return null;
+    actions.reset();
+    return edits.apply(from, edit)?.then((applied) => {
+      if (applied) setHistory((past) => [...past, reverse]);
+      else setFailures((count) => count + 1);
+    });
   };
   const onKeyDown = (event: KeyboardEvent<HTMLElement>) => {
     const key = keyAction(event);
     if (key === null) return;
     event.preventDefault();
-    if (key === "undo") undo();
+    if (key === "undo") void undo();
     else jumpToBlock(pane.current, key);
   };
-  const problem = writes.problem ?? actions.problem;
+  const problem = edits.problem ?? actions.problem;
   return (
     <section
       className="flex h-full min-h-0 min-w-0 flex-col bg-background"
@@ -115,7 +129,7 @@ export function ConflictMerge({
           size="xs"
           aria-keyshortcuts="Control+Z Meta+Z"
           disabled={disabled || history.length === 0}
-          onClick={undo}
+          onClick={() => void undo()}
         >
           Undo
         </Button>
@@ -123,10 +137,7 @@ export function ConflictMerge({
         <WholeFileMenu
           choices={document.file.choices}
           disabled={disabled}
-          onChoose={async (choice) => {
-            await settle();
-            await actions.choose(input.path, choice);
-          }}
+          onChoose={(choice) => actions.choose(input.path, choice)}
         />
         {actions.confirming === input.path ? (
           <Confirmation
@@ -142,10 +153,7 @@ export function ConflictMerge({
           <Button
             size="xs"
             disabled={disabled}
-            onClick={async () => {
-              await settle();
-              await actions.resolve(input.path, false);
-            }}
+            onClick={() => void actions.resolve(input.path, false)}
           >
             Mark resolved
           </Button>
@@ -159,83 +167,101 @@ export function ConflictMerge({
           {problem}
         </p>
       )}
-      <UnresolvedBlocks
-        paneRef={pane}
-        path={input.path}
-        content={document.content}
-        revision={document.file.revision}
-        onResolve={(resolved, previous) => {
-          setHistory((past) => [...past, previous]);
-          writes.save(resolved);
-        }}
-      />
+      <section
+        ref={pane}
+        aria-label="Working file"
+        className="min-h-0 flex-1 overflow-auto"
+        style={diffsStyle}
+      >
+        {document.excerpts.map((excerpt) => (
+          <ExcerptBlocks
+            key={`${revision}:${failures}:${excerpt.line}`}
+            path={input.path}
+            revision={revision}
+            excerpt={excerpt}
+            onResolve={resolveBlock}
+          />
+        ))}
+      </section>
     </section>
   );
 }
 
-function UnresolvedBlocks({
-  paneRef,
+function ExcerptBlocks({
   path,
-  content,
   revision,
+  excerpt,
   onResolve,
 }: {
-  readonly paneRef: RefObject<HTMLElement | null>;
   readonly path: string;
-  readonly content: string;
   readonly revision: string;
-  readonly onResolve: (resolved: string, previous: string) => void;
+  readonly excerpt: ConflictExcerpt;
+  readonly onResolve: (
+    revision: string,
+    edit: ConflictEdit,
+    reverse: ConflictEdit,
+  ) => Promise<void> | null | undefined;
 }) {
   const pool = useWorkerPool();
-  const shown = useRef<{ content: string; file: UnresolvedFile } | null>(null);
+  const container = useRef<HTMLDivElement>(null);
   const resolve = useRef(onResolve);
   resolve.current = onResolve;
 
   useEffect(() => {
-    const container = paneRef.current;
-    if (container === null || shown.current?.content === content) return;
-    shown.current?.file.cleanUp();
+    const element = container.current;
+    if (element === null) return;
     const file = new UnresolvedFile(
       {
         theme: "pierre-dark",
         overflow: "scroll",
-        onMergeConflictResolve: (resolved) => {
-          const current = shown.current;
-          if (current === null) return;
-          const previous = current.content;
-          current.content = resolved.contents;
-          file.rerender();
-          resolve.current(resolved.contents, previous);
+        disableFileHeader: true,
+        disableLineNumbers: true,
+        maxContextLines: Number.POSITIVE_INFINITY,
+        onMergeConflictAction: ({ resolution, conflict }, instance) => {
+          const { edit, undo } = resolutionEdit(excerpt, conflict, resolution);
+          const pending = resolve.current(revision, edit, undo);
+          const resolved = instance.resolveConflict(
+            conflict.conflictIndex,
+            resolution,
+          );
+          if (pending != null && resolved !== undefined)
+            instance.render(resolved);
         },
       },
       pool,
     );
-    shown.current = { content, file };
     file.render({
-      file: { name: path, contents: content, cacheKey: revision },
-      containerWrapper: container,
+      file: {
+        name: path,
+        contents: excerpt.text,
+        cacheKey: `${revision}:${excerpt.line}`,
+      },
+      containerWrapper: element,
     });
-  }, [content, path, pool, revision, paneRef]);
-
-  useEffect(() => () => shown.current?.file.cleanUp(), []);
+    return () => file.cleanUp();
+  }, [excerpt, path, pool, revision]);
 
   return (
-    <section
-      ref={paneRef}
-      aria-label="Working file"
-      className="min-h-0 flex-1 overflow-auto"
-      style={diffsStyle}
-    />
+    <>
+      <p className="border-border border-b bg-muted/40 px-3 py-1 font-mono text-muted-foreground text-xs">
+        Line {excerpt.line.toLocaleString()}
+      </p>
+      <div ref={container} />
+    </>
   );
 }
 
 function jumpToBlock(pane: HTMLElement | null, direction: 1 | -1) {
-  const blocks = pane
-    ?.querySelector("diffs-container")
-    ?.shadowRoot?.querySelectorAll('[data-merge-conflict="marker-start"]');
-  if (pane == null || blocks === undefined) return;
+  if (pane === null) return;
+  const blocks = [...pane.querySelectorAll("diffs-container")].flatMap(
+    (container) => [
+      ...(container.shadowRoot?.querySelectorAll(
+        '[data-merge-conflict="marker-start"]',
+      ) ?? []),
+    ],
+  );
   const top = pane.getBoundingClientRect().top + blockLead;
-  const offsets = [...blocks].map(
+  const offsets = blocks.map(
     (block) => block.getBoundingClientRect().top - top,
   );
   const offset =

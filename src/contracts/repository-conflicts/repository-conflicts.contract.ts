@@ -75,9 +75,17 @@ export const ConflictList = Schema.Struct({
 });
 export type ConflictList = typeof ConflictList.Type;
 
+const LineNumber = Schema.Int.check(Schema.isGreaterThan(0));
+
+export const ConflictExcerpt = Schema.Struct({
+  line: LineNumber,
+  text: Schema.String,
+});
+export type ConflictExcerpt = typeof ConflictExcerpt.Type;
+
 export const ConflictDocument = Schema.Struct({
   file: ConflictFile,
-  content: Schema.String,
+  excerpts: Schema.Array(ConflictExcerpt),
 });
 export type ConflictDocument = typeof ConflictDocument.Type;
 
@@ -87,12 +95,14 @@ export const ConflictPath = Schema.Struct({
 });
 export type ConflictPath = typeof ConflictPath.Type;
 
-export const WriteConflict = Schema.Struct({
+export const EditConflict = Schema.Struct({
   ...ConflictPath.fields,
   revision: Revision,
-  content: Schema.String,
+  line: LineNumber,
+  count: Schema.Natural,
+  text: Schema.String,
 });
-export type WriteConflict = typeof WriteConflict.Type;
+export type EditConflict = typeof EditConflict.Type;
 
 export const ChooseConflict = Schema.Struct({
   ...ConflictPath.fields,
@@ -131,8 +141,8 @@ export const RepositoryConflictsApi = {
     success: ConflictDocument,
     failure: ConflictFailure,
   }),
-  write: repositoryCommand("repositories/conflicts/write", {
-    request: WriteConflict,
+  edit: repositoryCommand("repositories/conflicts/edit", {
+    request: EditConflict,
     success: ConflictDocument,
     failure: ConflictFailure,
   }),

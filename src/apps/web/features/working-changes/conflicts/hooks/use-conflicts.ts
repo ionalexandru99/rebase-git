@@ -183,7 +183,8 @@ export function useConflicts(
     document: document.data,
     wholeFileOnly: documentOnlyWhole,
     documentProblem:
-      document.error === null || documentOnlyWhole
+      document.error === null ||
+      conflictReason(document.error) === "Unsupported"
         ? null
         : describeFailure(document.error),
     problem:

@@ -1,8 +1,8 @@
 import { expect, it } from "vite-plus/test";
 import { page, userEvent } from "vite-plus/test/browser";
 import {
+  type EditConflict,
   RepositoryConflictsApi,
-  type WriteConflict,
 } from "#contracts/repository-conflicts/repository-conflicts.contract.ts";
 import { fakeRequests, respond } from "#tests-support/fake-requests.ts";
 import { conflictDocument, repositoryId } from "#tests-support/fixtures.ts";
@@ -23,15 +23,33 @@ const content = Array.from({ length: 12 }, (_, index) => [
   .flat()
   .join("\n");
 
+function applyEdit(
+  text: string,
+  { line, count, text: inserted }: EditConflict,
+) {
+  const lines = text.split(/(?<=\n)/);
+  lines.splice(line - 1, count, inserted);
+  return lines.join("");
+}
+
 async function fixture() {
-  const writes: WriteConflict[] = [];
+  const edits: EditConflict[] = [];
+  let saved = content;
   const input = { repositoryId, worktreePath: "/repo", path };
-  const document = conflictDocument(path, content);
+  const lines = content.split(/(?<=\n)/);
+  const document = {
+    ...conflictDocument(path, content),
+    excerpts: [
+      { line: 1, text: lines.slice(0, 48).join("") },
+      { line: 49, text: lines.slice(48).join("") },
+    ],
+  };
   const requests = fakeRequests(
     respond(RepositoryConflictsApi.document, () => document),
-    respond(RepositoryConflictsApi.write, (command) => {
-      writes.push(command);
-      return conflictDocument(path, command.content, `saved-${writes.length}`);
+    respond(RepositoryConflictsApi.edit, (command) => {
+      edits.push(command);
+      saved = applyEdit(saved, command);
+      return conflictDocument(path, saved, `saved-${edits.length}`);
     }),
   );
   await render(
@@ -49,24 +67,27 @@ async function fixture() {
   await expect
     .element(file.getByRole("button", { name: "Accept both" }).first())
     .toBeVisible();
-  return { writes, file };
+  return { edits, file, saved: () => saved };
 }
 
-it("jumps between conflict blocks with the toolbar and the keyboard", async () => {
+it("jumps between conflict blocks across excerpts with the toolbar and the keyboard", async () => {
   const { file } = await fixture();
   const scrolled = () => file.element().scrollTop;
+  const secondExcerpt = () =>
+    page.getByText("Line 49").element().getBoundingClientRect().top -
+    file.element().getBoundingClientRect().top;
 
-  await page.getByRole("button", { name: "Next conflict" }).click();
-  await page.getByRole("button", { name: "Next conflict" }).click();
-  await expect.poll(scrolled).toBeGreaterThan(0);
-  const second = scrolled();
+  for (let block = 0; block < 8; block++)
+    await page.getByRole("button", { name: "Next conflict" }).click();
+  await expect.poll(secondExcerpt).toBeLessThan(0);
+  const eighth = scrolled();
   await userEvent.keyboard("{Alt>}{ArrowUp}{/Alt}");
 
-  await expect.poll(scrolled).toBeLessThan(second);
+  await expect.poll(scrolled).toBeLessThan(eighth);
 });
 
-it("undoes the last choice by saving the file as it was before", async () => {
-  const { writes, file } = await fixture();
+it("undoes the last choice by writing the conflict block back", async () => {
+  const { edits, file, saved } = await fixture();
   await expect.element(page.getByText("12 of 12 open")).toBeVisible();
 
   await file
@@ -76,7 +97,12 @@ it("undoes the last choice by saving the file as it was before", async () => {
   await expect.element(page.getByText("11 of 12 open")).toBeVisible();
   await page.getByRole("button", { name: "Undo" }).click();
 
-  await expect.poll(() => writes.at(-1)?.content).toBe(content);
+  await expect.poll(() => edits.length).toBe(2);
+  expect(edits.map(({ line, count }) => ({ line, count }))).toEqual([
+    { line: 2, count: 5 },
+    { line: 2, count: 1 },
+  ]);
+  expect(saved()).toBe(content);
   await expect.element(page.getByText("12 of 12 open")).toBeVisible();
   await expect
     .element(page.getByRole("button", { name: "Undo" }))

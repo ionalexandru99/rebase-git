@@ -2,10 +2,10 @@ import { writeFile } from "node:fs/promises";
 import { Effect } from "effect";
 import {
   type ChooseConflict,
+  type EditConflict,
   RepositoryConflictsApi,
   type StageConflict,
   type WholeFileChoice,
-  type WriteConflict,
 } from "#contracts/repository-conflicts/repository-conflicts.contract.ts";
 import {
   type EnvironmentFeature,
@@ -22,9 +22,9 @@ import {
   conflictFailed,
   requireConflict,
 } from "#server/features/repository-conflicts/git/conflict-files.ts";
+import { replaceLines } from "#server/features/repository-conflicts/git/conflict-text.ts";
 import { readConflictDocument } from "#server/features/repository-conflicts/git/read-conflict-document.ts";
 import { readConflictList } from "#server/features/repository-conflicts/git/read-conflict-list.ts";
-import { previewByteLimit } from "#server/repository/comparison/read-blobs.ts";
 import type {
   RepositoryCoordination,
   RepositoryWritePolicy,
@@ -32,7 +32,7 @@ import type {
 
 const specialModes = new Set(["120000", "160000"]);
 
-function writeConflict(git: GitCommandRunner, input: WriteConflict) {
+function editConflict(git: GitCommandRunner, input: EditConflict) {
   return Effect.gen(function* () {
     const snapshot = yield* requireConflict(
       git,
@@ -40,10 +40,6 @@ function writeConflict(git: GitCommandRunner, input: WriteConflict) {
       input.path,
       input.revision,
     );
-    if (Buffer.byteLength(input.content) > previewByteLimit)
-      return yield* Effect.fail(
-        conflictFailed("TooLarge", "This file is too large to save here."),
-      );
     if (specialModes.has(snapshot.worktree.mode))
       return yield* Effect.fail(
         conflictFailed(
@@ -51,8 +47,27 @@ function writeConflict(git: GitCommandRunner, input: WriteConflict) {
           "Links and submodules can only be resolved as a whole file.",
         ),
       );
+    const content =
+      snapshot.worktree.identity === "missing"
+        ? Buffer.alloc(0)
+        : snapshot.text?.content;
+    if (content === undefined)
+      return yield* Effect.fail(
+        conflictFailed(
+          "Unsupported",
+          "The working file is not text. Resolve it as a whole file.",
+        ),
+      );
+    const edited = replaceLines(content, input.line, input.count, input.text);
+    if (edited === null)
+      return yield* Effect.fail(
+        conflictFailed(
+          "Stale",
+          "The file changed since it was loaded. Review the refreshed conflict.",
+        ),
+      );
     const target = yield* safeChangePath(input.worktreePath, input.path);
-    yield* changeIo(() => writeFile(target, input.content));
+    yield* changeIo(() => writeFile(target, edited));
     return yield* readConflictDocument(git, input);
   });
 }
@@ -145,7 +160,7 @@ export function repositoryConflictsFeature(
         readConflictList(git, coordination, input.worktreePath),
       ),
       query(api.document, (input, git) => readConflictDocument(git, input)),
-      command(api.write, resolve, (input, git) => writeConflict(git, input)),
+      command(api.edit, resolve, (input, git) => editConflict(git, input)),
       command(api.choose, resolve, (input, git) =>
         chooseWholeFile(git, coordination, input),
       ),
