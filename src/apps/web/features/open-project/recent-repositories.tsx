@@ -39,7 +39,7 @@ export function RecentRepositories({
           >
             <button
               aria-selected={activeKey === item.key}
-              className="grid h-16 min-w-0 flex-1 grid-cols-[2.5rem_minmax(0,1fr)_auto] items-center gap-3 rounded-md px-2.5 text-left text-foreground outline-none hover:bg-accent disabled:opacity-42 data-[active=true]:bg-accent data-[active=true]:shadow-[inset_0_0_0_1px_rgb(124_140_255/48%)]"
+              className="grid h-16 min-w-0 flex-1 grid-cols-[2.5rem_minmax(0,1fr)_auto] items-center gap-3 rounded-md px-2.5 text-left text-foreground outline-none hover:bg-accent disabled:opacity-42 data-[active=true]:bg-accent"
               data-active={activeKey === item.key}
               disabled={item.disabled}
               id={openProjectItemId(item.key)}
