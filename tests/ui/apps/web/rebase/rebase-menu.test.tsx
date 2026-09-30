@@ -46,10 +46,8 @@ describe("rebase from the graph menu", () => {
   it("rebases the checked-out branch onto the row's branch and stashes the changed files", async () => {
     const f = await fixture();
     await f.openMenu("Main one");
-    const item = page.getByRole("menuitem", {
-      name: "Rebase onto here",
-      exact: true,
-    });
+    await openRebase();
+    const item = page.getByRole("menuitem", { name: "Onto here", exact: true });
     await expect.element(item).not.toHaveAttribute("aria-disabled", "true");
     await item.click();
     await expect
@@ -69,7 +67,8 @@ describe("rebase from the graph menu", () => {
   it("says why a commit the branch already contains is not a target", async () => {
     const f = await fixture();
     await f.openMenu("Topic one");
-    const item = page.getByRole("menuitem", { name: /^Rebase onto here/ });
+    await openRebase();
+    const item = page.getByRole("menuitem", { name: /^Onto here/ });
     await expect.element(item).toHaveAttribute("aria-disabled", "true");
     await expect.element(item).toHaveTextContent("Already on it");
   });
@@ -77,9 +76,8 @@ describe("rebase from the graph menu", () => {
   it("opens an interactive plan onto another branch or from a commit of the branch", async () => {
     const f = await fixture();
     await f.openMenu("Main one");
-    await page
-      .getByRole("menuitem", { name: "Interactive rebase onto here" })
-      .click();
+    await openRebase();
+    await page.getByRole("menuitem", { name: "Interactive onto here" }).click();
     expect(f.planned).toHaveBeenLastCalledWith({
       ref: "main",
       commit: main,
@@ -103,10 +101,8 @@ describe("rebase from the graph menu", () => {
       detail: "topic moved. Try the rebase again.",
     });
     await f.openMenu("Main one");
-    const item = page.getByRole("menuitem", {
-      name: "Rebase onto here",
-      exact: true,
-    });
+    await openRebase();
+    const item = page.getByRole("menuitem", { name: "Onto here", exact: true });
     await expect.element(item).not.toHaveAttribute("aria-disabled", "true");
     await item.click();
     await expect
@@ -114,6 +110,10 @@ describe("rebase from the graph menu", () => {
       .toBeVisible();
   });
 });
+
+function openRebase() {
+  return page.getByRole("menuitem", { name: "Rebase", exact: true }).click();
+}
 
 async function fixture(failure?: OperationFailure) {
   const started = vi.fn<(command: StartOperation) => void>();

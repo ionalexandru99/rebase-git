@@ -61,10 +61,5 @@ function TagLabelActions({ name }: { readonly name: string }) {
     (action) => () =>
       requestRefIntent({ _tag: "RunRefAction", target, id: action.id }),
   );
-  return (
-    <ActionMenuItems
-      actions={actions}
-      className="text-[.85rem] sm:text-[.85rem]"
-    />
-  );
+  return <ActionMenuItems actions={actions} />;
 }

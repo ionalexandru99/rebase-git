@@ -51,6 +51,11 @@ describe("reflog panel", () => {
     await screen
       .getByRole("treeitem", { name: /Retry checkout on timeout/ })
       .click({ button: "right" });
+    await expect
+      .poll(
+        () => screen.getByRole("menu").getByRole("separator").elements().length,
+      )
+      .toBe(2);
     await screen.getByRole("menuitem", { name: "Reset" }).click();
     await screen
       .getByRole("menuitem", { name: "Keep changes unstaged" })

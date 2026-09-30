@@ -62,7 +62,7 @@ describe("reset actions", () => {
     await expect
       .element(screen.getByRole("menuitem", { name: "Reset" }))
       .toBeVisible();
-    await userEvent.keyboard("{ArrowDown}{ArrowRight}");
+    await userEvent.keyboard("{ArrowDown}{ArrowDown}{ArrowRight}");
     await expect
       .element(screen.getByRole("menuitem", { name: "Keep changes staged" }))
       .toHaveFocus();

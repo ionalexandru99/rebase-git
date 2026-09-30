@@ -137,6 +137,7 @@ export function useMergeActions(
     return {
       id: "merge",
       label: `Merge into ${branch}`,
+      group: "operation",
       enabled: reason === undefined,
       ...(reason === undefined ? {} : { reason }),
       run: () => undefined,

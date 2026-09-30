@@ -45,9 +45,7 @@ describe("commit graph commands", () => {
       .click({ button: "right" });
     await expect
       .element(screen.getByRole("menu"))
-      .toHaveTextContent(
-        "Copy commit SHACopy commit subjectCreate branch here…Create tag here…",
-      );
+      .toHaveTextContent("Create branch here…Create tag here…Copy");
     await userEvent.keyboard("{Escape}");
 
     await screen.rerender(
@@ -60,9 +58,7 @@ describe("commit graph commands", () => {
       .getByRole("grid")
       .getByRole("row", { name: /^Commit 1,/ })
       .click({ button: "right" });
-    await expect
-      .element(screen.getByRole("menu"))
-      .toHaveTextContent("Copy commit SHACopy commit subject");
+    await expect.element(screen.getByRole("menu")).toHaveTextContent("Copy");
     await expect
       .element(screen.getByRole("menuitem", { name: "Create tag here…" }))
       .not.toBeInTheDocument();
@@ -91,7 +87,8 @@ describe("commit graph commands", () => {
     await expect
       .element(screen.getByRole("menuitem", { name: "Open details" }))
       .toHaveAttribute("aria-disabled", "true");
-    await screen.getByRole("menuitem", { name: "Copy commit subject" }).click();
+    await screen.getByRole("menuitem", { name: "Copy" }).click();
+    await screen.getByRole("menuitem", { name: "Subject" }).click();
     await expect
       .element(screen.getByRole("alert"))
       .toHaveTextContent("Commit metadata is not available yet");
@@ -108,14 +105,16 @@ describe("commit graph commands", () => {
     await grid
       .getByRole("row", { name: /^Commit 2,/ })
       .click({ button: "right" });
-    await screen.getByRole("menuitem", { name: "Copy commit subject" }).click();
+    await screen.getByRole("menuitem", { name: "Copy" }).click();
+    await screen.getByRole("menuitem", { name: "Subject" }).click();
     expect(copy).toHaveBeenLastCalledWith("Commit 2");
     await expect
       .element(grid.getByRole("row", { name: /^Commit 0,/ }))
       .toHaveAttribute("aria-selected", "false");
     await expect.element(grid).toHaveFocus();
     await userEvent.keyboard("{Shift>}{F10}{/Shift}");
-    await screen.getByRole("menuitem", { name: "Copy commit SHA" }).click();
+    await screen.getByRole("menuitem", { name: "Copy" }).click();
+    await screen.getByRole("menuitem", { name: "SHA" }).click();
     expect(copy).toHaveBeenLastCalledWith(commits[2]?.oid);
     await userEvent.keyboard("{Control>}");
     await grid.getByRole("row", { name: /^Commit 0,/ }).click();

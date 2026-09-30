@@ -7,7 +7,8 @@ import type {
   RepositoryRefs,
   RepositoryRefTarget,
 } from "#contracts/repository-refs/repository-refs.contract.ts";
-import type { Action } from "#web/components/ui/action-menu.tsx";
+import { type Action, submenu } from "#web/components/ui/action-menu.tsx";
+import type { RebaseActionId } from "#web/features/rebase/rebase-actions.ts";
 import type {
   RefDeletion,
   RefEditing,
@@ -55,8 +56,7 @@ export type RefAction = Action<
   | "checkout"
   | "merge"
   | `merge.${MergeMode}`
-  | "rebase"
-  | "interactiveRebase"
+  | RebaseActionId
   | ResetActionId
   | "pull"
   | "showReflog"
@@ -66,6 +66,7 @@ export type RefAction = Action<
   | "deleteLocal"
   | `deleteOn:${string}`
   | "deleteBoth"
+  | "pushTags"
   | `pushTag:${string}`
 >;
 
@@ -80,9 +81,6 @@ export interface RefActionHandlers {
     | ((target: RepositoryRefTarget) => RefAction | undefined)
     | undefined;
   readonly rebase?:
-    | ((target: RepositoryRefTarget) => RefAction | undefined)
-    | undefined;
-  readonly interactiveRebase?:
     | ((target: RepositoryRefTarget) => RefAction | undefined)
     | undefined;
   readonly reset?:
@@ -111,7 +109,6 @@ export function refActions(
     checkout,
     merge,
     rebase,
-    interactiveRebase,
     reset,
     pull,
     pushTags,
@@ -124,7 +121,6 @@ export function refActions(
   const startPoint = refStartPoint(target, refs);
   const mergeAction = merge?.(target);
   const rebaseAction = rebase?.(target);
-  const interactiveAction = interactiveRebase?.(target);
   const resetAction = reset?.(target);
   const remove = (
     fields: Omit<ActionFields, "group" | "run">,
@@ -163,10 +159,6 @@ export function refActions(
             run: () => checkout(target),
           }),
         ]),
-    ...(mergeAction === undefined ? [] : [mergeAction]),
-    ...(rebaseAction === undefined ? [] : [rebaseAction]),
-    ...(interactiveAction === undefined ? [] : [interactiveAction]),
-    ...(resetAction === undefined ? [] : [resetAction]),
     ...(pull === undefined ||
     target._tag !== "LocalBranch" ||
     row.upstream === undefined
@@ -188,10 +180,13 @@ export function refActions(
             run: () => showReflog(target.name),
           }),
         ]),
+    ...[mergeAction, rebaseAction, resetAction].filter(
+      (operation) => operation !== undefined,
+    ),
     action({
       id: "newBranch",
-      label: "New branch from here…",
-      group: "create",
+      label: "Create branch here…",
+      group: "edit",
       reason:
         readOnly ?? (startPoint === undefined ? "No commits yet" : undefined),
       run: () => {
@@ -306,20 +301,7 @@ function deleteMenu(choices: readonly RefAction[]): readonly RefAction[] {
   const [first] = choices;
   if (first === undefined) return [];
   if (choices.length === 1) return [{ ...first, label: "Delete" }];
-  const enabled = choices.some((choice) => choice.enabled);
-  return [
-    {
-      id: "delete",
-      label: "Delete",
-      group: "delete",
-      enabled,
-      ...(enabled || first.reason === undefined
-        ? {}
-        : { reason: first.reason }),
-      run: () => undefined,
-      submenu: { actions: choices },
-    },
-  ];
+  return [submenu({ id: "delete", label: "Delete", group: "delete" }, choices)];
 }
 
 export function selectedTagActions(
@@ -357,15 +339,23 @@ function pushTagActions(
         run: () => undefined,
       }),
     ];
-  return remotes.map((remote) =>
+  const push = (remote: string, label: string) =>
     action({
       id: `pushTag:${remote}`,
-      label: `Push${subject} to ${remote}`,
+      label,
       group: "edit",
       reason,
       run: () => pushTags?.run(names, remote),
-    }),
-  );
+    });
+  const [only] = remotes;
+  if (remotes.length === 1 && only !== undefined)
+    return [push(only, `Push${subject} to ${only}`)];
+  return [
+    submenu(
+      { id: "pushTags", label: `Push${subject}`, group: "edit" },
+      remotes.map((remote) => push(remote, `To ${remote}`)),
+    ),
+  ];
 }
 
 function tagRemotes(refs: RepositoryRefs): readonly string[] {
@@ -383,6 +373,7 @@ export function createRefActions(
   return createHere.map(({ kind, label }) => ({
     id: `${kind}.createHere`,
     label,
+    group: "edit" as const,
     enabled: connected,
     run: () => requestRefIntent({ _tag: "DraftRef", kind, oid }),
   }));

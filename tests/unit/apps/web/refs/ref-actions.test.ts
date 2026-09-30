@@ -82,6 +82,7 @@ describe("ref actions", () => {
     ).toEqual([
       "checkout",
       "newBranch",
+      "pushTags",
       "pushTag:origin",
       "pushTag:upstream",
       "delete",
