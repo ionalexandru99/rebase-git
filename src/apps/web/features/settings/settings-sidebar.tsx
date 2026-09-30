@@ -40,7 +40,7 @@ export function SettingsSidebar({
           aria-label="Search settings"
           className="pl-9"
           onChange={(event) => setQuery(event.target.value)}
-          placeholder="Search settings..."
+          placeholder="Search settings…"
           value={query}
         />
       </div>

@@ -67,7 +67,6 @@ export function ChangeFileSection({
       files={files}
       tree={preferences.tree}
       filter={filter}
-      emptyLabel={`No ${section} files`}
       chosen={(row) =>
         checked.has(row.key) ||
         (selection?.section === section && selection.path === row.key)
@@ -89,8 +88,7 @@ export function ChangeFileSection({
             role="status"
             className="shrink-0 px-3 py-1.5 text-xs text-muted-foreground"
           >
-            Too many changed files to match renames. Moved files show as deleted
-            and added.
+            Renames not detected: too many changed files.
           </p>
         ) : null
       }

@@ -34,8 +34,7 @@ export function ChangeFileTree({
       className="flex h-full min-h-0 flex-col bg-sidebar"
       aria-label="Changed files"
     >
-      <div className="flex h-11 shrink-0 items-center justify-between gap-2 border-border border-b px-3">
-        <span className="text-xs font-semibold">Files</span>
+      <div className="flex h-11 shrink-0 items-center justify-end gap-2 border-border border-b px-3">
         <div className="flex gap-1">
           <Button
             size="xs"

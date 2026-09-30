@@ -1,6 +1,5 @@
 import {
   type WorkspacePanelKind,
-  workspacePanelDefinitions,
   workspacePanelKinds,
 } from "#web/features/workspace-panel/workspace-panel-definitions.ts";
 import type {
@@ -25,9 +24,6 @@ function openPanel(
   state: WorkspacePanelState,
   kind: WorkspacePanelKind,
 ): WorkspacePanelState {
-  if (!workspacePanelDefinitions[kind].available) {
-    return state;
-  }
   if (state.open && state.active === kind) {
     return state;
   }

@@ -80,7 +80,7 @@ describe("history replica in browser storage", () => {
     const f = fixture();
     await f.synchronize(tips(["c1"]), [historyCommit("c1", [], 1)]);
 
-    await f.replica.clear(false);
+    await f.replica.clear();
 
     expect(await f.oids(["c1"])).toEqual([]);
     expect(f.snapshot().status).toBe("empty");
@@ -94,7 +94,7 @@ describe("history replica in browser storage", () => {
     const f = fixture();
     await f.synchronize(tips(["c1"]), [historyCommit("c1", [], 1)]);
 
-    const cleared = f.replica.clear(false);
+    const cleared = f.replica.clear();
     f.replica.synchronize({ socket: f.socket, repositoryId });
     await cleared;
 

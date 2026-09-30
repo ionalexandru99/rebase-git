@@ -153,7 +153,7 @@ export function RepositoryHistorySearchControls({
                         size="xs"
                         variant="ghost"
                       >
-                        Retry search
+                        Retry
                       </Button>
                     </div>
                   )}

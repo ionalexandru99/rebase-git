@@ -217,19 +217,19 @@ export class HistoryReplica {
     return this.graph.range(head, onto);
   }
 
-  async clear(remove: boolean) {
+  async clear() {
     this.paused = true;
     await this.stop();
     await this.loading;
     await this.writing;
-    await clearRepository(this.environmentId, this.repositoryId, remove);
+    await clearRepository(this.environmentId, this.repositoryId, false);
     this.reset();
     this.record = undefined;
     this.changed();
   }
 
   async rebuild() {
-    await this.clear(false);
+    await this.clear();
     this.paused = false;
     this.loading = this.load();
     await this.loading;

@@ -36,12 +36,9 @@ export function RefEditingStatus({
             onConfirm={deletion.confirm}
             title={deletionTitle(deletion.pending.deletion)}
           >
-            {deletion.pending.failure !== undefined ? (
+            {deletion.pending.failure === undefined ? undefined : (
               <UnmergedCommits failure={deletion.pending.failure} />
-            ) : deletion.pending.deletion.kind === "tag" &&
-              deletion.pending.deletion.remote !== undefined ? (
-              <p>Anyone who already fetched it keeps their copy.</p>
-            ) : undefined}
+            )}
           </Confirmation>
         </PersistentNotification>
       )}

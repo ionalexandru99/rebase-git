@@ -62,7 +62,7 @@ export function WorkingChanges({
       {discard === null ? null : (
         <Confirmation
           title={`Discard ${discard.section} changes?`}
-          action="Discard changes"
+          action="Discard"
           disabled={view.busy || view.loading}
           onCancel={() => setDiscard(null)}
           onConfirm={() => {
@@ -76,8 +76,7 @@ export function WorkingChanges({
           }}
           className="shrink-0 border-border border-b p-3"
         >
-          {describeDiscard(discard.selection)} This cannot be undone. Unrelated
-          edits will be preserved; overlapping edits will stop the operation.
+          {describeDiscard(discard.selection)} This cannot be undone.
         </Confirmation>
       )}
       {view.error ? (
@@ -94,14 +93,6 @@ export function WorkingChanges({
           >
             Refresh
           </Button>
-        </div>
-      ) : null}
-      {view.notice ? (
-        <div
-          role="status"
-          className="shrink-0 border-border border-b px-3 py-2 text-xs text-muted-foreground"
-        >
-          {view.notice}
         </div>
       ) : null}
       <ResizablePanelGroup orientation="horizontal" className="min-h-0 flex-1">
@@ -169,10 +160,10 @@ export function WorkingChanges({
 
 function describeDiscard(selection: ChangeSelection) {
   if (selection._tag === "Lines")
-    return `Discard ${selection.lines.length} selected changed lines in ${selection.path}.`;
+    return `${selection.lines.length} selected lines in ${selection.path}.`;
   if (selection._tag === "Files")
-    return `Discard changes in ${selection.paths.length} selected ${selection.paths.length === 1 ? "file" : "files"}.`;
-  return "Discard every change in this section, including files hidden by the filter.";
+    return `${selection.paths.length} selected ${selection.paths.length === 1 ? "file" : "files"}.`;
+  return "Includes files hidden by the filter.";
 }
 
 export function WorkingChangesPanel() {

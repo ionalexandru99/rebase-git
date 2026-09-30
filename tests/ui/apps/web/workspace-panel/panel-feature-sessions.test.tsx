@@ -321,7 +321,7 @@ it("pauses retained sessions while a different environment is current", async ()
   const requests = f.requestCount();
   await f.showEnvironment("other-environment");
   await expect
-    .element(page.getByText("Reconnect to the environment to inspect commits."))
+    .element(page.getByText("Reconnect to inspect commits."))
     .toBeVisible();
   await f.showEnvironment("environment");
   await expect

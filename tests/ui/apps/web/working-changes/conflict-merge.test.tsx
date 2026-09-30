@@ -88,13 +88,13 @@ it("jumps between conflict blocks across excerpts with the toolbar and the keybo
 
 it("undoes the last choice by writing the conflict block back", async () => {
   const { edits, file, saved } = await fixture();
-  await expect.element(page.getByText("12 of 12 open")).toBeVisible();
+  await expect.element(page.getByText("12/12 open")).toBeVisible();
 
   await file
     .getByRole("button", { name: "Accept incoming change" })
     .first()
     .click();
-  await expect.element(page.getByText("11 of 12 open")).toBeVisible();
+  await expect.element(page.getByText("11/12 open")).toBeVisible();
   await page.getByRole("button", { name: "Undo" }).click();
 
   await expect.poll(() => edits.length).toBe(2);
@@ -103,7 +103,7 @@ it("undoes the last choice by writing the conflict block back", async () => {
     { line: 2, count: 1 },
   ]);
   expect(saved()).toBe(content);
-  await expect.element(page.getByText("12 of 12 open")).toBeVisible();
+  await expect.element(page.getByText("12/12 open")).toBeVisible();
   await expect
     .element(page.getByRole("button", { name: "Undo" }))
     .toBeDisabled();

@@ -30,7 +30,7 @@ self.onmessage = async ({ data }: MessageEvent<"seed" | "run">) => {
     self.postMessage({ _tag: "Seeded", visible: visible.repositoryId });
     return;
   }
-  await maintenance.replica.clear(false);
+  await maintenance.replica.clear();
   armed = true;
   await maintenance.replica.rebuild();
   await seed(maintenance);

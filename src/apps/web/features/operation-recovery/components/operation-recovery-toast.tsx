@@ -91,28 +91,11 @@ export function OperationRecoveryToast({
             {repositoryName}
             {operation?.branch ? ` · ${operation.branch}` : ""}
           </p>
-          {!state.connected && (
-            <p className="px-3 pb-3 text-xs text-muted-foreground">
-              Waiting to reconnect. Git state will be checked before another
-              action.
-            </p>
-          )}
           {!state.completed && (
             <>
-              {operation?.phase === "edit" && (
-                <p className="px-3 pb-3 text-xs text-muted-foreground">
-                  Amend this commit in Diffs, or continue unchanged.
-                </p>
-              )}
               {ready?.reason && (
                 <p className="px-3 pb-3 text-xs text-muted-foreground">
                   {ready.reason}
-                </p>
-              )}
-              {operation?.kind === "unknown" && (
-                <p className="px-3 pb-3 text-xs text-muted-foreground">
-                  Git metadata could not be recognized. Recovery actions are
-                  unavailable.
                 </p>
               )}
               {!writable && active && state.connected && (

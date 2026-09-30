@@ -92,10 +92,12 @@ export function DiffContent({
                 : "This diff could not be displayed."
               : `${diff.kind === "binary" ? "Binary file" : diff.kind === "symlink" ? "Symbolic link" : "Submodule"} changed.`}
       </p>
-      <p className="text-xs">
-        {diff.beforeBytes.toLocaleString()} → {diff.afterBytes.toLocaleString()}{" "}
-        bytes
-      </p>
+      {diff.beforeBytes === diff.afterBytes ? null : (
+        <p className="text-xs">
+          {diff.beforeBytes.toLocaleString()} →{" "}
+          {diff.afterBytes.toLocaleString()} bytes
+        </p>
+      )}
     </div>
   );
 }

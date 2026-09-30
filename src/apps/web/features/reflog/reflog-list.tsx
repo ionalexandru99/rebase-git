@@ -122,12 +122,6 @@ export function ReflogList({
                 Showing the newest 2,000 entries.
               </p>
             ) : null}
-            {rows.length === 0 ? null : (
-              <p className="px-3 pt-3 pb-2 text-[.7rem] text-muted-foreground">
-                Git removes entries after 90 days, or 30 for commits no branch
-                reaches. Edits that were never committed are not recorded.
-              </p>
-            )}
           </div>
         }
       />
@@ -157,13 +151,7 @@ function ReflogRows({
         {status === "pending" ? null : status === "error" ? (
           <p>The reflog could not be read.</p>
         ) : (
-          <>
-            <p className="text-foreground">No reflog entries yet.</p>
-            <p className="mt-1">
-              Git records them for changes made in this clone and keeps them 90
-              days by default.
-            </p>
-          </>
+          <p className="text-foreground">No reflog entries yet.</p>
         )}
       </div>
     );

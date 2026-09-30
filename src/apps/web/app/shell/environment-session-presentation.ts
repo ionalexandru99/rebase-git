@@ -16,28 +16,24 @@ export function environmentSessionPresentation(
       return {
         availability: "connecting",
         connectionState: state._tag,
-        detail: "Exchanging the one-time pairing code.",
         status: "Authorizing",
       };
     case "Connecting":
       return {
         availability: "connecting",
         connectionState: state._tag,
-        detail: "Opening the local client session.",
         status: "Connecting",
       };
     case "Connected":
       return {
         availability: "available",
         connectionState: state._tag,
-        detail: `Environment ${state.environmentId}`,
         status: "Available",
       };
     case "Reconnecting":
       return {
         availability: "connecting",
         connectionState: state._tag,
-        detail: `Reconnect attempt ${state.attempt}`,
         status: "Reconnecting",
       };
     case "AuthorizationFailed":

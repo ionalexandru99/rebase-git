@@ -60,7 +60,6 @@ export function testEnvironment(
     status: {
       availability: "available",
       connectionState: "Connected",
-      detail: "Test environment",
       status: "Available",
     },
     ...environment,

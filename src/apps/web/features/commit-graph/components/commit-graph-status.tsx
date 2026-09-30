@@ -73,7 +73,7 @@ export function CommitGraphPageRetry({
         size="xs"
         variant="outline"
       >
-        Retry loading history
+        Retry
       </Button>
     </div>
   );

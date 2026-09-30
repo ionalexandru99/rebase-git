@@ -6,7 +6,6 @@ import {
   SettingsSection,
 } from "#web/components/ui/settings-layout.tsx";
 import { writeClipboardText } from "#web/features/clipboard/write-clipboard-text.ts";
-import { localEnvironment } from "#web/features/project-navigation/local-environment.ts";
 import { forgetRepositoryRefs } from "#web/features/refs/repository-refs.ts";
 import { RepositoryFetchSettings } from "#web/features/remote-sync/fetch-settings.tsx";
 import {
@@ -74,18 +73,11 @@ export function RepositorySettingsPage({
         >
           Repository settings
         </h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          {repository.name} · {localEnvironment.name}
-        </p>
-        <SettingsSection title="History">
-          {identity === undefined ? (
-            <p className="text-sm text-muted-foreground">
-              Connect to the environment to load repository preferences.
-            </p>
-          ) : (
+        {identity === undefined ? null : (
+          <SettingsSection title="Graph">
             <RepositoryOrderSettings identity={identity} />
-          )}
-        </SettingsSection>
+          </SettingsSection>
+        )}
         {history === undefined || identity === undefined ? (
           <p role="status" className="mt-8 text-sm text-muted-foreground">
             {environmentId === undefined
@@ -103,7 +95,6 @@ export function RepositorySettingsPage({
         )}
         <SettingsSection title="Repository">
           <RepositoryDetailsSettings
-            name={repository.name}
             path={path}
             connected={connected}
             canRemove={removal.canRun}

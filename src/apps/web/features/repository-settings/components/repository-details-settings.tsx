@@ -12,7 +12,6 @@ import { Button } from "#web/components/ui/button.tsx";
 import { SettingsRow } from "#web/components/ui/settings-layout.tsx";
 
 export function RepositoryDetailsSettings({
-  name,
   path,
   connected,
   canRemove,
@@ -20,7 +19,6 @@ export function RepositoryDetailsSettings({
   reveal,
   remove,
 }: {
-  readonly name: string;
   readonly path: string;
   readonly connected: boolean;
   readonly canRemove: boolean;
@@ -80,7 +78,7 @@ export function RepositoryDetailsSettings({
         title="Remove from Rebase"
         description={
           canRemove
-            ? "Keeps the repository and its files on disk."
+            ? undefined
             : "Connect with repository catalog access to remove this repository."
         }
       >
@@ -108,8 +106,7 @@ export function RepositoryDetailsSettings({
         <AlertDialogContent>
           <AlertDialogTitle>Remove repository?</AlertDialogTitle>
           <AlertDialogDescription>
-            Remove {name} from Rebase? The repository and its files will stay on
-            disk.
+            The repository and its files stay on disk.
           </AlertDialogDescription>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>

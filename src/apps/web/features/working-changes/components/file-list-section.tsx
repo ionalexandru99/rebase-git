@@ -24,7 +24,6 @@ export function FileListSection<File extends { readonly path: string }>({
   files,
   tree,
   filter,
-  emptyLabel,
   action,
   notice,
   footer,
@@ -37,7 +36,6 @@ export function FileListSection<File extends { readonly path: string }>({
   readonly files: readonly File[];
   readonly tree: boolean;
   readonly filter: string;
-  readonly emptyLabel: string;
   readonly action?: ReactNode;
   readonly notice?: ReactNode;
   readonly footer?: (open: boolean) => ReactNode;
@@ -105,10 +103,8 @@ export function FileListSection<File extends { readonly path: string }>({
             );
           })}
         </div>
-        {open && rows.length === 0 ? (
-          <p className="p-3 text-xs text-muted-foreground">
-            {files.length ? "No matching files" : emptyLabel}
-          </p>
+        {open && files.length > 0 && rows.length === 0 ? (
+          <p className="p-3 text-xs text-muted-foreground">No matching files</p>
         ) : null}
       </div>
       {footer?.(open)}
