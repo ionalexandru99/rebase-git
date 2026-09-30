@@ -66,7 +66,10 @@ function documentExcerpts({ worktree, text }: ConflictSnapshot) {
       ),
     );
   const excerpts = conflictExcerpts(text);
-  const bytes = excerpts.reduce((total, { text }) => total + text.length, 0);
+  const bytes = excerpts.reduce(
+    (total, { text }) => total + Buffer.byteLength(text),
+    0,
+  );
   return bytes > excerptByteLimit
     ? Effect.fail(
         conflictFailed(

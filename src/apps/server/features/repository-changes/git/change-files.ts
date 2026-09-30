@@ -36,11 +36,7 @@ export function safeChangePath(directory: string, path: string) {
   });
 }
 
-export function worktreeFile(
-  directory: string,
-  path: string,
-  byteLimit = previewByteLimit,
-) {
+export function worktreeFile(directory: string, path: string) {
   return Effect.gen(function* () {
     const target = yield* safeChangePath(directory, path);
     return yield* changeIo(async (): Promise<RepositoryFileContent> => {
@@ -58,7 +54,7 @@ export function worktreeFile(
             ? "100755"
             : "100644";
       const content =
-        mode === "160000" || info.size > byteLimit
+        mode === "160000" || info.size > previewByteLimit
           ? null
           : mode === "120000"
             ? Buffer.from(await readlink(target))

@@ -1,3 +1,4 @@
+import { open } from "node:fs/promises";
 import { Effect } from "effect";
 import type {
   ConflictFailure,
@@ -10,7 +11,11 @@ import {
   type GitCommandRunner,
   runRepositoryGit,
 } from "#server/adapters/local-git/git-commands.ts";
-import { worktreeFile } from "#server/features/repository-changes/git/change-files.ts";
+import { changeIo } from "#server/features/repository-changes/git/change-failures.ts";
+import {
+  safeChangePath,
+  worktreeFile,
+} from "#server/features/repository-changes/git/change-files.ts";
 import {
   type ConflictText,
   conflictText,
@@ -58,6 +63,7 @@ const kinds: Record<string, ConflictKind> = {
 };
 
 const defaultMarkerSize = 7;
+const binarySniffBytes = 8000;
 const gitlink = "160000";
 const symlink = "120000";
 
@@ -198,9 +204,31 @@ function readConflictSnapshot(
   stages: readonly StageEntry[],
   sources: SnapshotSources,
 ) {
-  return worktreeFile(directory, path, Number.POSITIVE_INFINITY).pipe(
+  return readConflictWorktree(directory, path).pipe(
     Effect.map((worktree) => conflictSnapshot(path, stages, worktree, sources)),
   );
+}
+
+function readConflictWorktree(directory: string, path: string) {
+  return Effect.gen(function* () {
+    const worktree = yield* worktreeFile(directory, path);
+    if (worktree.content !== null || worktree.mode === gitlink) return worktree;
+    if (worktree.identity === "missing") return worktree;
+    const target = yield* safeChangePath(directory, path);
+    const content = yield* changeIo(async () => {
+      const file = await open(target, "r");
+      try {
+        const head = Buffer.alloc(binarySniffBytes);
+        const { bytesRead } = await file.read(head, 0, binarySniffBytes, 0);
+        return head.subarray(0, bytesRead).includes(0)
+          ? null
+          : await file.readFile();
+      } finally {
+        await file.close();
+      }
+    });
+    return { ...worktree, content };
+  });
 }
 
 function conflictSnapshot(
