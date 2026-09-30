@@ -584,13 +584,19 @@ jobs:
         with:
           node-version-file: .node-version
 
-      - name: Update package version
+      - id: next
+        name: Set next package version
         env:
           RELEASE_VERSION: ${{ needs.package.outputs.version }}
-        run: npm pkg set "version=$RELEASE_VERSION"
+        shell: bash
+        run: |
+          next_version="${RELEASE_VERSION%.*}.$(( ${RELEASE_VERSION##*.} + 1 ))"
+          npm pkg set "version=$next_version"
+          echo "version=$next_version" >> "$GITHUB_OUTPUT"
 
       - name: Commit package version
         env:
+          NEXT_VERSION: ${{ steps.next.outputs.version }}
           RELEASE_TAG: ${{ needs.package.outputs.tag }}
         shell: bash
         run: |
@@ -600,7 +606,7 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add package.json
-          git commit -m "chore(release): prepare $RELEASE_TAG"
+          git commit -m "chore(release): start $NEXT_VERSION after $RELEASE_TAG"
           for attempt in 1 2 3; do
             if git push origin HEAD:main; then
               exit 0
