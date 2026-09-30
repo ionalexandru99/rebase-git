@@ -31,7 +31,6 @@ export function HistoryStorageSettings() {
   const [error, setError] = useState<string>();
   const [pending, setPending] = useState(false);
   const [confirming, setConfirming] = useState(false);
-  const [message, setMessage] = useState<string>();
   const operation = useRef<AbortController | undefined>(undefined);
   const queryClient = useQueryClient();
   const run = useCallback(
@@ -41,7 +40,6 @@ export function HistoryStorageSettings() {
       operation.current = current;
       setPending(true);
       setError(undefined);
-      setMessage(undefined);
       try {
         setStorage(await askHistoryStorage(query, current.signal));
         if (query._tag === "ClearCache")
@@ -50,12 +48,8 @@ export function HistoryStorageSettings() {
             query.cache.environmentId,
             query.cache.repositoryId,
           );
-        else if (query.action === "clear-all") {
+        else if (query.action === "clear-all")
           forgetAllRepositoryRefs(queryClient);
-          setMessage(
-            "All history cleared. Reopen a repository to download its history again.",
-          );
-        }
       } catch {
         if (current.signal.aborted) return;
         setError("History storage could not be updated. Try again.");
@@ -73,7 +67,6 @@ export function HistoryStorageSettings() {
       <h1 className="text-xl font-semibold tracking-tight">History storage</h1>
       <p className="mt-1 text-sm text-muted-foreground">
         Commit history kept in this browser so the graph opens instantly.
-        Clearing it never touches your repository files.
       </p>
       <div className="mt-8 space-y-4" aria-busy={pending}>
         {storage === undefined ? null : (
@@ -98,11 +91,6 @@ export function HistoryStorageSettings() {
             {error}
           </p>
         )}
-        {message === undefined ? null : (
-          <p role="status" className="text-sm text-muted-foreground">
-            {message}
-          </p>
-        )}
         <Button
           size="sm"
           variant="destructive"
@@ -118,9 +106,8 @@ export function HistoryStorageSettings() {
         <AlertDialogContent>
           <AlertDialogTitle>Clear all history?</AlertDialogTitle>
           <AlertDialogDescription>
-            Clear stored history for every repository in this browser, including
-            open repositories. Repository files stay on disk. Reopen a
-            repository to download its history again.
+            Repository files stay on disk. Reopen a repository to download its
+            history again.
           </AlertDialogDescription>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>

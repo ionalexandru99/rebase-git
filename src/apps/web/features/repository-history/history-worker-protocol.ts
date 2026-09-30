@@ -78,7 +78,6 @@ export type HistoryStorageAction =
   | "inspect"
   | "clear"
   | "rebuild"
-  | "remove"
   | "clear-all";
 
 export type HistoryQuery =

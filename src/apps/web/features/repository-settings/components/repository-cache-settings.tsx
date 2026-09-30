@@ -26,7 +26,6 @@ export function RepositoryCacheSettings(
       environmentId === props.identity.environmentId &&
       repositoryId === props.identity.repositoryId,
   );
-  const unavailable = cache.removed || cache.pending;
   return (
     <>
       <SettingsRow title="Cached history" description="Stored in this client.">
@@ -38,15 +37,12 @@ export function RepositoryCacheSettings(
             : `${formatCacheSize(current.estimatedBytes)} · ${current.commitCount.toLocaleString()} commits`}
         </span>
       </SettingsRow>
-      <SettingsRow
-        title="Repair or clear history"
-        description="Repository files stay on disk."
-      >
+      <SettingsRow title="Repair or clear history">
         <Button
           size="sm"
           variant="outline"
           aria-label="Rebuild cache"
-          disabled={unavailable || !props.connected}
+          disabled={cache.pending || !props.connected}
           onClick={() => cache.setConfirmation("rebuild")}
         >
           Rebuild
@@ -54,7 +50,7 @@ export function RepositoryCacheSettings(
         <Button
           size="sm"
           variant="outline"
-          disabled={unavailable}
+          disabled={cache.pending}
           onClick={() => cache.setConfirmation("clear")}
         >
           Clear cache
@@ -68,9 +64,7 @@ export function RepositoryCacheSettings(
           Clear unused history, then rebuild this cache.
         </p>
       ) : null}
-      {cache.snapshot.failure !== undefined &&
-      !cache.storageUnavailable &&
-      !cache.removed ? (
+      {cache.snapshot.failure !== undefined && !cache.storageUnavailable ? (
         <p role="alert" className="text-sm text-destructive">
           {cache.snapshot.failure._tag === "Offline"
             ? "Reconnect to finish history synchronization."
@@ -82,17 +76,12 @@ export function RepositoryCacheSettings(
           Updating history storage…
         </p>
       ) : null}
-      {cache.snapshot.synchronization === "syncing" && !cache.removed ? (
+      {cache.snapshot.synchronization === "syncing" ? (
         <p role="status" className="text-sm text-muted-foreground">
           Synchronizing history · {cache.snapshot.commitCount.toLocaleString()}{" "}
           commits stored
         </p>
       ) : null}
-      {cache.message === undefined ? null : (
-        <p role="status" className="text-sm text-muted-foreground">
-          {cache.message}
-        </p>
-      )}
       {cache.error === undefined ? null : (
         <div role="alert" className="text-sm text-destructive">
           {cache.error}
@@ -106,24 +95,6 @@ export function RepositoryCacheSettings(
           </Button>
         </div>
       )}
-      <details className="px-4 text-sm text-muted-foreground">
-        <summary className="cursor-pointer py-2">Storage details</summary>
-        <div className="space-y-3 py-3">
-          <p>
-            Cache sizes are estimates. Open repositories are protected from
-            automatic eviction.
-          </p>
-          {current === undefined ? null : <p>History: {current.state}</p>}
-          <Button
-            size="sm"
-            variant="outline"
-            disabled={unavailable}
-            onClick={() => cache.setConfirmation("remove")}
-          >
-            Remove cache
-          </Button>
-        </div>
-      </details>
       <AlertDialog
         open={cache.confirmation !== undefined}
         onOpenChange={(open) => {

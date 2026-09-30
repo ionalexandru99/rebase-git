@@ -202,8 +202,15 @@ describe("application shell", () => {
       .element(page.getByRole("heading", { level: 1, name: "Projects" }))
       .toBeVisible();
     await expect
-      .element(page.getByRole("status"))
-      .toHaveTextContent("Pairing required");
+      .element(page.getByText("Pairing required"))
+      .toBeInTheDocument();
+    await expect
+      .element(
+        page.getByText(
+          "Open the pairing URL printed by the local Rebase process.",
+        ),
+      )
+      .toBeVisible();
     await expect
       .element(page.getByRole("main", { name: "Open project" }))
       .toBeVisible();
@@ -234,8 +241,8 @@ describe("application shell", () => {
     connected.requirePairing();
 
     await expect
-      .element(page.getByRole("status"))
-      .toHaveTextContent("Pairing required");
+      .element(page.getByText("Pairing required"))
+      .toBeInTheDocument();
     expect(repositories.elements()).toHaveLength(0);
   });
 

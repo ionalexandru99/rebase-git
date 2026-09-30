@@ -171,9 +171,7 @@ export default function ChangeDiffViewer({
       {lines.length > 0 ? (
         <div className="flex shrink-0 flex-wrap items-center gap-2 border-border border-b bg-accent/40 px-3 py-1.5">
           <span className="mr-auto text-xs">
-            {current === null
-              ? `${lines.length} changed ${lines.length === 1 ? "line" : "lines"} selected`
-              : `Hunk ${current + 1} of ${hunks.length} · ${lines.length} changed ${lines.length === 1 ? "line" : "lines"}`}
+            {`${lines.length} ${lines.length === 1 ? "line" : "lines"} selected`}
           </span>
           <Button
             size="xs"
@@ -212,7 +210,7 @@ export default function ChangeDiffViewer({
             {previousPath} → {diff.path}
           </div>
           <p className="p-4 text-sm text-muted-foreground">
-            File renamed. Content unchanged.
+            Content unchanged.
           </p>
         </>
       ) : (

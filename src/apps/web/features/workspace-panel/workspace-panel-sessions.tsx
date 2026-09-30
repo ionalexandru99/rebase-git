@@ -111,11 +111,7 @@ function ProjectViews({
         expand={expand}
       >
         {view.contents[kind] ??
-          (session.scope && workspacePanelDefinitions[kind].Content ? (
-            <PanelContent kind={kind} />
-          ) : (
-            <PanelPlaceholder kind={kind} />
-          ))}
+          (session.scope ? <PanelContent kind={kind} /> : null)}
       </PanelFeatureScope>
     </RetainedPanelView>
   ));
@@ -173,27 +169,13 @@ function useProjectEnvironment(
   }, [scope, environment]);
 }
 
-function PanelPlaceholder({ kind }: { readonly kind: WorkspacePanelKind }) {
-  const definition = workspacePanelDefinitions[kind];
-  return (
-    <div className="flex h-full min-h-40 flex-col items-center justify-center gap-3 p-6 text-center">
-      <definition.icon
-        aria-hidden="true"
-        className="size-7 text-muted-foreground/60"
-      />
-      <h2 className="text-sm font-medium">{definition.label}</h2>
-      <p className="text-xs text-muted-foreground">Coming soon</p>
-    </div>
-  );
-}
-
 function PanelContent({ kind }: { readonly kind: WorkspacePanelKind }) {
   const Content = workspacePanelDefinitions[kind].Content;
-  return Content ? (
+  return (
     <Suspense fallback={null}>
       <Content />
     </Suspense>
-  ) : null;
+  );
 }
 
 export function usePanelSession(

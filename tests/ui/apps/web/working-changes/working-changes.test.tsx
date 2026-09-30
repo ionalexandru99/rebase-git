@@ -224,9 +224,7 @@ describe("working changes", () => {
     await expect
       .element(page.getByText(`${source} → ${renamed}`))
       .toBeVisible();
-    await expect
-      .element(page.getByText("File renamed. Content unchanged."))
-      .toBeVisible();
+    await expect.element(page.getByText("Content unchanged.")).toBeVisible();
     await page.getByRole("button", { name: "List", exact: true }).click();
     await expect.element(row).toHaveTextContent("src/{legacy → ui}/Button.tsx");
     await page.getByRole("button", { name: "Tree", exact: true }).click();
@@ -234,10 +232,8 @@ describe("working changes", () => {
   it("says when too many files changed to match renames", async () => {
     await fixture([], { renamesLimited: true });
     await expect
-      .element(page.getByRole("status").filter({ hasText: "match renames" }))
-      .toHaveTextContent(
-        "Too many changed files to match renames. Moved files show as deleted and added.",
-      );
+      .element(page.getByRole("status"))
+      .toHaveTextContent("Renames not detected: too many changed files.");
   });
   it("collapses folders and sections independently without changing Git state", async () => {
     const f = await fixture(["src/nested/change.ts"]);
@@ -266,11 +262,10 @@ describe("working changes", () => {
     await expect.element(folder).toBeVisible();
     await expect.element(nested).toHaveAttribute("aria-expanded", "false");
     await page.getByRole("button", { name: "Collapse staged" }).click();
-    await expect
-      .element(page.getByText("No staged files"))
-      .not.toBeInTheDocument();
     await page.getByRole("button", { name: "Expand staged" }).click();
-    await expect.element(page.getByText("No staged files")).toBeVisible();
+    await expect
+      .element(page.getByRole("button", { name: "Collapse staged" }))
+      .toHaveAttribute("aria-expanded", "true");
     expect(f.mutations).toEqual([]);
   });
   it.each(["Control", "Meta"] as const)(
@@ -452,7 +447,10 @@ describe("working changes", () => {
       .toBeVisible();
     await next.click();
     await expect
-      .element(page.getByText("Hunk 1 of 2 · 2 changed lines"))
+      .element(page.getByText("Hunk 1/2", { exact: true }))
+      .toBeVisible();
+    await expect
+      .element(page.getByText("2 lines selected", { exact: true }))
       .toBeVisible();
     await next.click();
     await expect
@@ -464,9 +462,7 @@ describe("working changes", () => {
       .click();
     await expect.element(page.getByRole("alertdialog")).toBeVisible();
     expect(f.mutations).toHaveLength(0);
-    await page
-      .getByRole("button", { name: "Discard changes", exact: true })
-      .click();
+    await page.getByRole("button", { name: "Discard", exact: true }).click();
     await expect.poll(() => f.mutations.length).toBe(1);
     expect(f.mutations[0]).toMatchObject({
       action: "discard",
@@ -479,7 +475,7 @@ describe("working changes", () => {
       },
     });
     await expect
-      .element(page.getByText("Hunk 1 of 1 · 2 changed lines"))
+      .element(page.getByText("Hunk 1/1", { exact: true }))
       .toBeVisible();
     await expect
       .element(page.getByRole("button", { name: "Stage hunk", exact: true }))
@@ -514,9 +510,6 @@ describe("working changes", () => {
     await expect
       .element(page.getByRole("textbox", { name: "Commit subject" }))
       .toHaveValue("");
-    await expect
-      .element(page.getByRole("status"))
-      .toHaveTextContent("Changes committed.");
     expect(f.commits).toHaveLength(2);
   });
   it("re-reads the changes when a write finds them stale", async () => {
@@ -538,9 +531,7 @@ describe("working changes", () => {
     await page
       .getByRole("button", { name: `Discard unstaged ${path}`, exact: true })
       .click();
-    await page
-      .getByRole("button", { name: "Discard changes", exact: true })
-      .click();
+    await page.getByRole("button", { name: "Discard", exact: true }).click();
     await expect.poll(() => f.mutations.length).toBe(1);
     await expect
       .element(page.getByRole("button", { name: "Stage entire file" }))
@@ -554,9 +545,7 @@ describe("working changes", () => {
       await page
         .getByRole("button", { name: `Discard unstaged ${path}`, exact: true })
         .click();
-      await page
-        .getByRole("button", { name: "Discard changes", exact: true })
-        .click();
+      await page.getByRole("button", { name: "Discard", exact: true }).click();
       await expect.poll(() => f.mutations.length).toBe(write);
       await expect
         .element(page.getByRole("button", { name: "Stage entire file" }))
@@ -600,8 +589,8 @@ describe("working changes", () => {
     await expect.poll(() => f.queryClient.isFetching()).toBe(0);
     release();
     await expect
-      .element(page.getByRole("status"))
-      .toHaveTextContent("Commit amended.");
+      .element(page.getByRole("checkbox", { name: "Amend", exact: true }))
+      .not.toBeChecked();
     await expect.element(page.getByRole("alert")).not.toBeInTheDocument();
   });
   it("lets Amend be turned off after the amend read fails", async () => {

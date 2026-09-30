@@ -13,9 +13,9 @@ import {
 } from "#web/components/ui/tabs.tsx";
 import { WorkspacePanelLauncher } from "#web/features/workspace-panel/components/workspace-panel-launcher.tsx";
 import {
+  launchablePanels,
   type WorkspacePanelKind,
   workspacePanelDefinitions,
-  workspacePanelKinds,
 } from "#web/features/workspace-panel/workspace-panel-definitions.ts";
 import { useWorkspacePanel } from "#web/features/workspace-panel/workspace-panel-provider.tsx";
 import { PanelSessionTarget } from "#web/features/workspace-panel/workspace-panel-sessions.tsx";
@@ -169,28 +169,22 @@ function WorkspacePanelEmptyState() {
           Open a tab
         </h2>
         <div className="grid grid-cols-2 gap-2">
-          {workspacePanelKinds
-            .filter((kind) => workspacePanelDefinitions[kind].launchable)
-            .map((kind) => {
-              const feature = workspacePanelDefinitions[kind];
-              return (
-                <Button
-                  key={kind}
-                  disabled={!workspacePanelDefinitions[kind].available}
-                  variant="ghost"
-                  className="h-auto min-h-20 min-w-0 flex-col items-start justify-center gap-2.5 whitespace-normal border-border bg-card px-3 py-3 text-left hover:border-foreground/20 sm:h-auto"
-                  onClick={() => panel.execute({ type: "open", kind })}
-                >
-                  <span className="flex items-center gap-2 text-xs font-normal">
-                    <feature.icon aria-hidden="true" className="size-3.5" />
-                    {feature.label}
-                  </span>
-                  <span className="text-[10px] font-normal text-muted-foreground">
-                    {feature.description}
-                  </span>
-                </Button>
-              );
-            })}
+          {launchablePanels.map(({ kind, definition }) => (
+            <Button
+              key={kind}
+              variant="ghost"
+              className="h-auto min-h-20 min-w-0 flex-col items-start justify-center gap-2.5 whitespace-normal border-border bg-card px-3 py-3 text-left hover:border-foreground/20 sm:h-auto"
+              onClick={() => panel.execute({ type: "open", kind })}
+            >
+              <span className="flex items-center gap-2 text-xs font-normal">
+                <definition.icon aria-hidden="true" className="size-3.5" />
+                {definition.label}
+              </span>
+              <span className="text-[10px] font-normal text-muted-foreground">
+                {definition.description}
+              </span>
+            </Button>
+          ))}
         </div>
       </div>
     </div>

@@ -53,7 +53,7 @@ export function CommitInspection({
     >
       {!connected ? (
         <p role="status" className="p-3 text-sm text-muted-foreground">
-          Reconnect to the environment to inspect commits.
+          Reconnect to inspect commits.
         </p>
       ) : null}
       {error ? (
@@ -134,7 +134,7 @@ export function CommitInspectionPanel() {
   if (scope === undefined || environment === undefined) {
     return (
       <p className="p-4 text-sm text-muted-foreground">
-        Connect to the environment to inspect commits.
+        Reconnect to inspect commits.
       </p>
     );
   }

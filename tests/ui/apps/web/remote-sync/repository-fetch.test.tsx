@@ -80,9 +80,6 @@ describe("repository fetch controls", () => {
       name: "Interval in seconds",
     });
     await expect.element(interval).toHaveValue(600);
-    await expect
-      .element(interval)
-      .toHaveAccessibleDescription("Fetch every 1 to 86,400 seconds.");
     await interval.fill("90");
     await f.publish({
       ...fresh,
@@ -192,7 +189,7 @@ describe("repository fetch controls", () => {
       .element(page.getByRole("combobox", { name: "Automatic fetch" }))
       .toBeDisabled();
     await expect
-      .element(page.getByText("Reconnect to the server and try again."))
+      .element(page.getByText("Reconnect to change fetch settings."))
       .toBeVisible();
   });
 

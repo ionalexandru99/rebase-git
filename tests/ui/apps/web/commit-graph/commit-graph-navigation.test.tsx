@@ -226,7 +226,7 @@ describe("commit graph navigation", () => {
     await expect
       .element(screen.getByRole("alert"))
       .toHaveTextContent("This browser cannot store repository history.");
-    await screen.getByRole("button", { name: "Retry loading history" }).click();
+    await screen.getByRole("button", { name: "Retry" }).click();
     await expect
       .element(grid.getByRole("row", { name: /^Commit 801,/ }))
       .toBeVisible();
@@ -585,7 +585,7 @@ describe("commit graph navigation", () => {
     await expect
       .element(screen.getByRole("row", { name: /^Commit 0,/ }))
       .toBeVisible();
-    await screen.getByRole("button", { name: "Stale. Retry" }).click();
+    await screen.getByRole("button", { name: "Refresh history" }).click();
     expect(reader.synchronizations()).toBe(1);
   });
 });

@@ -201,7 +201,9 @@ describe("conflicts in the Diffs tab", () => {
         )
         .not.toBeInTheDocument();
     }
-    await expect.element(page.getByText("No staged files")).toBeVisible();
+    await expect
+      .element(page.getByRole("button", { name: "Collapse staged" }))
+      .toHaveTextContent("Staged 0");
 
     await page.getByRole("button", { name: "Stage all", exact: true }).click();
 

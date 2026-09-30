@@ -31,12 +31,12 @@ export function RepositoryFetchSettings({
   const disabled =
     !configure.canRun || !canConfigure || status.data === undefined;
   const disabledReason = !configure.canRun
-    ? "Reconnect to the server and try again."
+    ? "Reconnect to change fetch settings."
     : status.error !== null
       ? describeFailure(status.error)
       : !canConfigure
         ? "Connect with repository write access to change fetch settings."
-        : "Loading fetch settings.";
+        : undefined;
   const [draft, setDraft] = useState<{
     readonly mode: RepositoryFetchSetting["_tag"];
     readonly seconds: string;
@@ -57,7 +57,7 @@ export function RepositoryFetchSettings({
       mode === "Interval" &&
       (!Number.isInteger(interval) || interval < 1 || interval > 86_400)
     ) {
-      setError("Enter a whole number from 1 to 86400 seconds.");
+      setError("Enter a whole number from 1 to 86,400.");
       return;
     }
     const next: RepositoryFetchSetting =
@@ -105,18 +105,10 @@ export function RepositoryFetchSettings({
           </select>
         </SettingsRow>
         {mode === "Interval" ? (
-          <SettingsRow
-            title="Custom interval"
-            description="Fetch every 1 to 86,400 seconds."
-            descriptionId={`${id}-interval`}
-          >
+          <SettingsRow title="Interval in seconds">
             <Input
               aria-label="Interval in seconds"
-              aria-describedby={
-                error === undefined
-                  ? `${id}-interval`
-                  : `${id}-interval ${id}-error`
-              }
+              aria-describedby={error === undefined ? undefined : `${id}-error`}
               aria-invalid={error !== undefined}
               className="w-32"
               max={86_400}
@@ -141,9 +133,9 @@ export function RepositoryFetchSettings({
           {error}
         </p>
       )}
-      {disabled ? (
+      {disabled && disabledReason !== undefined ? (
         <p className="mt-3 mb-0 text-xs text-muted-foreground">
-          {disabledReason ?? "Fetch settings are unavailable."}
+          {disabledReason}
         </p>
       ) : null}
       <div className="mt-2 flex justify-end px-4">
@@ -153,7 +145,7 @@ export function RepositoryFetchSettings({
           type="submit"
           variant="outline"
         >
-          {saving ? "Saving" : "Save"}
+          {saving ? "Saving…" : "Save"}
         </Button>
       </div>
     </form>

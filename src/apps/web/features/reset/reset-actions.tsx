@@ -175,7 +175,6 @@ export function ResetConfirmation({ reset }: { readonly reset: ResetActions }) {
           ))}
         </ul>
         {hidden === 0 ? null : <p className="mt-0.5">and {hidden} more</p>}
-        <p className="mt-1.5">Files not listed are kept.</p>
       </Confirmation>
     </PersistentNotification>
   );

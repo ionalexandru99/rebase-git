@@ -1,12 +1,9 @@
 import { useCallback, useEffect, useState } from "react";
-import type {
-  HistoryStorage,
-  HistoryStorageAction,
-} from "#web/features/repository-history/history-worker-protocol.ts";
+import type { HistoryStorage } from "#web/features/repository-history/history-worker-protocol.ts";
 import type { RepositoryHistory } from "#web/features/repository-history/repository-history.ts";
 import { useStore } from "#web/platform/store/use-store.ts";
 
-export type HistoryCacheAction = Exclude<HistoryStorageAction, "inspect">;
+export type HistoryCacheAction = "clear" | "rebuild";
 
 export interface HistoryCacheIdentity {
   readonly environmentId: string;
@@ -22,16 +19,14 @@ export function useHistoryCacheManagement({
   readonly identity: HistoryCacheIdentity;
   readonly onCacheChanged: (
     action: HistoryCacheAction,
-    identity?: HistoryCacheIdentity,
+    identity: HistoryCacheIdentity,
   ) => void | Promise<void>;
 }) {
   const snapshot = useStore(history);
   const [diagnostics, setDiagnostics] = useState<HistoryStorage>();
   const [confirmation, setConfirmation] = useState<HistoryCacheAction>();
   const [pending, setPending] = useState(false);
-  const [removed, setRemoved] = useState(false);
   const [error, setError] = useState<string>();
-  const [message, setMessage] = useState<string>();
   const refresh = useCallback(async () => {
     setError(undefined);
     try {
@@ -52,39 +47,18 @@ export function useHistoryCacheManagement({
     setConfirmation(undefined);
     setPending(true);
     setError(undefined);
-    setMessage(undefined);
     try {
       await history.ask({ _tag: "Storage", action });
-      if (action === "remove") {
-        setRemoved(true);
-        setDiagnostics(
-          (value) =>
-            value && {
-              ...value,
-              caches: value.caches.filter(
-                (cache) =>
-                  cache.environmentId !== identity.environmentId ||
-                  cache.repositoryId !== identity.repositoryId,
-              ),
-            },
-        );
-      }
-      setMessage(historyCacheActions[action].result);
-      if (action !== "remove") await refresh();
+      await refresh();
       try {
-        await onCacheChanged(
-          action,
-          action === "clear-all" ? undefined : identity,
-        );
+        await onCacheChanged(action, identity);
       } catch {
         setError(
           "The cache changed, but the repository view could not refresh. Reopen the repository to update it.",
         );
       }
     } catch {
-      setError(
-        "The cache action could not finish. Refresh storage details and try again.",
-      );
+      setError("The cache action could not finish. Try again.");
     } finally {
       setPending(false);
     }
@@ -101,9 +75,7 @@ export function useHistoryCacheManagement({
     confirmation,
     setConfirmation,
     pending,
-    removed,
     error,
-    message,
     refresh,
     manage,
     exhausted,
@@ -113,31 +85,15 @@ export function useHistoryCacheManagement({
 
 export const historyCacheActions: Record<
   HistoryCacheAction,
-  { label: string; description: string; result: string }
+  { label: string; description: string }
 > = {
   clear: {
     label: "Clear cache",
     description:
-      "Clear this repository’s cached history and pause synchronization. Rebuild or reopen the repository to load history.",
-    result: "Cache cleared. Rebuild or reopen the repository to load history.",
+      "History stops syncing until you rebuild or reopen the repository.",
   },
   rebuild: {
     label: "Rebuild cache",
-    description:
-      "Clear this repository’s cached history and download it again. The environment must be connected.",
-    result: "Cache rebuild requested.",
-  },
-  remove: {
-    label: "Remove cache",
-    description:
-      "Remove this repository’s cached history and close its history readers. Reopen the repository to download history again.",
-    result: "Cache removed. Reopen the repository to load history.",
-  },
-  "clear-all": {
-    label: "Clear all caches",
-    description:
-      "Clear cached history for every repository, including open repositories. Rebuild or reopen a repository to load its history.",
-    result:
-      "All history caches cleared. Rebuild or reopen a repository to load history.",
+    description: "Download this repository’s history again.",
   },
 };

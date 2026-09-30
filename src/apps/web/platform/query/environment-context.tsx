@@ -22,7 +22,7 @@ export type EnvironmentConnectionState =
 export interface EnvironmentStatus {
   readonly availability: EnvironmentAvailability;
   readonly connectionState: EnvironmentConnectionState;
-  readonly detail: string;
+  readonly detail?: string;
   readonly status: string;
 }
 

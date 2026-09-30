@@ -156,7 +156,7 @@ describe("operation header in the Diffs tab", () => {
 
     await expect
       .element(header().getByRole("heading"))
-      .toHaveTextContent("Cherry-pick · nothing to commit · 2/3");
+      .toHaveTextContent("Cherry-pick · Nothing to commit · 2/3");
     await expect
       .element(page.getByRole("region", { name: "Conflict", exact: true }))
       .not.toBeInTheDocument();

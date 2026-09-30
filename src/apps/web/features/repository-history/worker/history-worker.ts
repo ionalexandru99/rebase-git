@@ -298,7 +298,7 @@ async function manageStorage(
 ) {
   const replica = client.replica;
   if (action === "clear-all") {
-    for (const current of replicas.values()) await current.clear(false);
+    for (const current of replicas.values()) await current.clear();
     for (const record of await readRepositories())
       await clearRepository(record.environmentId, record.repositoryId, false);
   } else if (action !== "inspect") {
@@ -306,7 +306,7 @@ async function manageStorage(
     if (action === "rebuild") {
       await replica.rebuild();
       synchronize(client);
-    } else await replica.clear(action === "remove");
+    } else await replica.clear();
   }
   return describeStorage();
 }

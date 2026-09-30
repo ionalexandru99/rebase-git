@@ -63,9 +63,7 @@ function readPanelState(
       return initialWorkspacePanelState;
     if (!("tabs" in saved) || !Array.isArray(saved.tabs))
       return initialWorkspacePanelState;
-    const tabs = [...new Set(saved.tabs.filter(isWorkspacePanelKind))].filter(
-      (kind) => workspacePanelDefinitions[kind].available,
-    );
+    const tabs = [...new Set(saved.tabs.filter(isWorkspacePanelKind))];
     const active =
       "active" in saved &&
       isWorkspacePanelKind(saved.active) &&

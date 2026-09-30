@@ -7,10 +7,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "#web/components/ui/dropdown-menu.tsx";
-import {
-  workspacePanelDefinitions,
-  workspacePanelKinds,
-} from "#web/features/workspace-panel/workspace-panel-definitions.ts";
+import { launchablePanels } from "#web/features/workspace-panel/workspace-panel-definitions.ts";
 import { useWorkspacePanel } from "#web/features/workspace-panel/workspace-panel-provider.tsx";
 
 export function WorkspacePanelLauncher() {
@@ -47,28 +44,19 @@ export function WorkspacePanelLauncher() {
           );
         }}
       >
-        <div className="flex items-center justify-between gap-3 px-2 py-2 text-[10px] text-muted-foreground">
-          <span>Coming soon</span>
-        </div>
-        {workspacePanelKinds
-          .filter((kind) => workspacePanelDefinitions[kind].launchable)
-          .map((kind) => {
-            const feature = workspacePanelDefinitions[kind];
-            return (
-              <DropdownMenuItem
-                key={kind}
-                disabled={!workspacePanelDefinitions[kind].available}
-                onClick={() => {
-                  openedTab.current = true;
-                  panel.setLauncherOpen(false);
-                  panel.execute({ type: "open", kind });
-                }}
-              >
-                <feature.icon aria-hidden="true" />
-                {feature.label}
-              </DropdownMenuItem>
-            );
-          })}
+        {launchablePanels.map(({ kind, definition }) => (
+          <DropdownMenuItem
+            key={kind}
+            onClick={() => {
+              openedTab.current = true;
+              panel.setLauncherOpen(false);
+              panel.execute({ type: "open", kind });
+            }}
+          >
+            <definition.icon aria-hidden="true" />
+            {definition.label}
+          </DropdownMenuItem>
+        ))}
       </DropdownMenuContent>
     </DropdownMenu>
   );

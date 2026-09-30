@@ -470,7 +470,7 @@ export function CommitGraph({
           size="sm"
           variant="ghost"
         >
-          Stale. Retry
+          Refresh history
         </Button>
       ) : null}
       {commands.error === undefined ? null : (

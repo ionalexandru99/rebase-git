@@ -108,7 +108,7 @@ describe("operation recovery toast", () => {
       .element(page.getByRole("button", { name: "Cancel", exact: true }))
       .toHaveFocus();
     expect(f.execute).not.toHaveBeenCalled();
-    await page.getByRole("button", { name: "Confirm abort" }).click();
+    await page.getByRole("button", { name: "Abort", exact: true }).click();
     expect(f.execute).toHaveBeenCalledExactlyOnceWith("abort", "one");
   });
 
@@ -120,7 +120,7 @@ describe("operation recovery toast", () => {
       f.tree(snapshot(conflictedRebase({ revision: "two" }))),
     );
     await expect
-      .element(page.getByRole("button", { name: "Confirm skip" }))
+      .element(page.getByRole("button", { name: "Skip", exact: true }))
       .not.toBeInTheDocument();
     await expect
       .element(

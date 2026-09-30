@@ -59,9 +59,6 @@ export function RecentRepositories({
                 </span>
               </span>
               <span className="text-right text-[.68rem] text-muted-foreground">
-                <span className="mb-[.18rem] block text-foreground/60">
-                  {item.environment.name}
-                </span>
                 <span className="block">
                   {formatLastOpened(item.repository.lastOpenedAt ?? "")}
                 </span>

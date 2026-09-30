@@ -43,7 +43,7 @@ describe("workspace panel", () => {
     await expect.element(page.getByTestId("graph")).toBeVisible();
   });
 
-  it("shows unavailable features as disabled and uses one toggle without remounting the graph", async () => {
+  it("uses one toggle without remounting the graph", async () => {
     await renderPanel();
     const graph = page
       .getByRole("button", { name: "Graph selection" })
@@ -51,11 +51,6 @@ describe("workspace panel", () => {
     const panel = page.getByRole("complementary", { name: "Side panel" });
     await expect.element(panel).not.toBeInTheDocument();
     await page.getByRole("button", { name: "Show side panel" }).click();
-    for (const name of ["Code", "Pull requests"]) {
-      await expect
-        .element(page.getByRole("button", { name: `${name} Coming soon` }))
-        .toBeDisabled();
-    }
     await page.getByRole("button", { name: "Hide side panel" }).click();
     await expect.element(panel).not.toBeInTheDocument();
     await page.getByRole("button", { name: "Show side panel" }).click();
@@ -67,7 +62,7 @@ describe("workspace panel", () => {
     ).toBe(graph);
   });
 
-  it("restores panel preferences without reopening unavailable saved tabs", async () => {
+  it("restores panel preferences without reopening unknown saved tabs", async () => {
     localStorage.setItem(
       "rebase:workspace-panel:v1:saved",
       JSON.stringify({

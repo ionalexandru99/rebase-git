@@ -62,7 +62,6 @@ export function useWorkingChangesView({
 }: WorkingChangesTarget) {
   const [amend, setAmend] = useState<Amend>(amendOff);
   const [problem, setProblem] = useState<string | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
   const scope: ChangesScope = { repositoryId, worktreePath, amend: amend.on };
   const read = useWorkingChanges(scope, active);
   const shown = useMemo(() => splitConflicts(read.data), [read.data]);
@@ -97,7 +96,6 @@ export function useWorkingChangesView({
   const begin = (): RepositoryChanges | undefined => {
     if (changes === undefined || busy || loading) return undefined;
     setProblem(null);
-    setNotice(null);
     return changes;
   };
   const fail = (failure: RequestFailure<{ readonly _tag: string }>) =>
@@ -135,7 +133,6 @@ export function useWorkingChangesView({
       amended ? [draftKey, amendDraftKey(draftKey, current.head)] : [draftKey],
     );
     setAmend(amendOff);
-    setNotice(amended ? "Commit amended." : "Changes committed.");
   };
 
   return {
@@ -153,10 +150,7 @@ export function useWorkingChangesView({
       } else if (begin() !== undefined) setAmend({ on: true });
     },
     draft: draft.draft,
-    editDraft: (next: CommitDraft) => {
-      if (notice !== null) setNotice(null);
-      draft.edit(next);
-    },
+    editDraft: (next: CommitDraft) => draft.edit(next),
     busy,
     loading,
     error:
@@ -165,7 +159,6 @@ export function useWorkingChangesView({
       (read.isError ? describeFailure(read.error) : null) ??
       (diff.isError ? describeFailure(diff.error) : null) ??
       (draft.unavailable ? storageUnavailableMessage : null),
-    notice,
     refresh: () => {
       setProblem(null);
       void read.refetch();

@@ -60,7 +60,7 @@ export function OperationControls({
       {pending && operation ? (
         <Confirmation
           title={confirmationTitle(pending.action, operation, label)}
-          action={`Confirm ${pending.action}`}
+          action={pending.action === "abort" ? "Abort" : "Skip"}
           busy={state.busy}
           disabled={unavailable}
           onCancel={settle}
@@ -97,9 +97,11 @@ export function OperationControls({
                 disabled={unavailable || !ready.enabled}
                 onClick={() => execute(primary, operation.revision)}
               >
-                {primary === "skip"
-                  ? "Skip commit"
-                  : `Continue ${label.toLowerCase()}`}
+                {primary === "continue"
+                  ? `Continue ${label.toLowerCase()}`
+                  : operation.kind === "am"
+                    ? "Skip patch"
+                    : "Skip commit"}
               </Button>
             ) : null}
             {active ? (

@@ -1,7 +1,6 @@
 import { describe, expect, it, vi } from "vite-plus/test";
 import { page, userEvent } from "vite-plus/test/browser";
 import { render } from "vitest-browser-react";
-import type { HistoryCacheAction } from "#web/features/history-storage/use-history-cache-management.ts";
 import type {
   HistorySnapshot,
   HistoryStorage,
@@ -47,7 +46,7 @@ function historyReader() {
     refTargets: [],
   });
   const getCacheDiagnostics = vi.fn(async () => diagnostics);
-  const manageCache = vi.fn(async (_action: HistoryCacheAction) => {});
+  const manageCache = vi.fn(async (_action: string) => {});
   const history: RepositoryHistory = {
     getSnapshot: store.getSnapshot,
     subscribe: store.subscribe,
@@ -77,17 +76,13 @@ async function openDialog(reader = historyReader()) {
       onCacheChanged={changed}
     />,
   );
-  await screen.getByText("Storage details", { exact: true }).click();
   return { screen, reader, changed };
 }
 
 describe("repository history storage", () => {
-  it("shows the repository cache size and protection details", async () => {
+  it("shows the repository cache size", async () => {
     await openDialog();
     await expect.element(page.getByText(/1.0 KB/)).toBeVisible();
-    await expect
-      .element(page.getByText(/Open repositories are protected/))
-      .toBeVisible();
   });
 
   it("requires confirmation and leaves history untouched when cancelled", async () => {
@@ -105,21 +100,16 @@ describe("repository history storage", () => {
       .toHaveFocus();
   });
 
-  it("reports a successful removal separately from a failed view refresh", async () => {
+  it("reports a failed view refresh after the cache changed", async () => {
     const { reader, changed } = await openDialog();
     changed.mockRejectedValueOnce(new Error("View refresh failed"));
     await page
-      .getByRole("button", { name: "Remove cache", exact: true })
+      .getByRole("button", { name: "Clear cache", exact: true })
       .click();
     await page
       .getByRole("alertdialog")
-      .getByRole("button", { name: "Remove cache", exact: true })
+      .getByRole("button", { name: "Clear cache", exact: true })
       .click();
-    await expect
-      .element(
-        page.getByText("Cache removed. Reopen the repository to load history."),
-      )
-      .toBeVisible();
     await expect
       .element(
         page.getByText(
@@ -127,20 +117,15 @@ describe("repository history storage", () => {
         ),
       )
       .toBeVisible();
-    await expect
-      .element(page.getByRole("button", { name: "Rebuild cache", exact: true }))
-      .toBeDisabled();
-    expect(reader.manageCache).toHaveBeenCalledExactlyOnceWith("remove");
+    expect(reader.manageCache).toHaveBeenCalledExactlyOnceWith("clear");
   });
 
-  it.each(["clear", "rebuild", "remove"] as const)(
+  it.each(["clear", "rebuild"] as const)(
     "confirms %s and reports the affected identity",
     async (action) => {
       const labels = {
         clear: "Clear cache",
         rebuild: "Rebuild cache",
-        remove: "Remove cache",
-        "clear-all": "Clear all caches",
       };
       const { reader, changed } = await openDialog();
       await page
@@ -157,12 +142,6 @@ describe("repository history storage", () => {
       await expect
         .element(page.getByRole("alertdialog"))
         .not.toBeInTheDocument();
-      if (action === "remove")
-        await expect
-          .element(
-            page.getByRole("button", { name: "Rebuild cache", exact: true }),
-          )
-          .toBeDisabled();
     },
   );
 
@@ -238,11 +217,7 @@ describe("repository history storage", () => {
       .getByRole("button", { name: "Clear cache", exact: true })
       .click();
     await expect
-      .element(
-        page.getByText(
-          "The cache action could not finish. Refresh storage details and try again.",
-        ),
-      )
+      .element(page.getByText("The cache action could not finish. Try again."))
       .toBeVisible();
     await expect
       .element(page.getByRole("button", { name: "Rebuild cache", exact: true }))

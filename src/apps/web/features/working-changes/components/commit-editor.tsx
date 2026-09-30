@@ -40,9 +40,7 @@ export function CommitEditor({
       className="flex h-full min-h-0 flex-col gap-2 overflow-y-auto border-border border-t bg-background p-3"
       aria-label="Commit editor"
     >
-      {blocked && (operation == null || operation.kind === "idle") ? (
-        <p className="text-xs text-muted-foreground">Checking Git state…</p>
-      ) : blocked && amendAllowed ? (
+      {blocked && amendAllowed ? (
         <p className="text-xs text-muted-foreground">
           Enable Amend to edit this rebase commit.
         </p>

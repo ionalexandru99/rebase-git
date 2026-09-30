@@ -13,19 +13,11 @@ describe("settings panel", () => {
       .element(page.getByRole("heading", { level: 1, name: "General" }))
       .toBeVisible();
     await expect
-      .element(page.getByRole("heading", { level: 2, name: "About" }))
+      .element(page.getByRole("heading", { level: 3, name: "Version" }))
       .toBeVisible();
     await expect
       .element(page.getByRole("combobox", { name: "Release channel" }))
-      .toBeDisabled();
-    await expect
-      .element(page.getByRole("switch", { name: "Check automatically" }))
-      .toBeDisabled();
-    await expect
-      .element(
-        page.getByText("Update checks are available in the Electron app."),
-      )
-      .toBeVisible();
+      .not.toBeInTheDocument();
 
     const search = settings.getByRole("textbox", { name: "Search settings" });
     await search.fill("history");
@@ -42,8 +34,8 @@ describe("settings panel", () => {
       .getByRole("button", { name: "General", exact: true })
       .click();
     await expect
-      .element(page.getByRole("combobox", { name: "Release channel" }))
-      .toHaveTextContent("Stable");
+      .element(page.getByRole("heading", { level: 1, name: "General" }))
+      .toBeVisible();
 
     await settings.getByRole("button", { name: "Back" }).click();
     expect(closeSettings).toHaveBeenCalledOnce();

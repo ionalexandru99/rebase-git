@@ -45,7 +45,8 @@ export function OpenProjectScreen({
   readonly onOpenSettings: (repositoryId: string) => void;
 }): JSX.Element {
   const environments = useOpenProjectEnvironments();
-  const browseAvailable = useEnvironment().status.availability === "available";
+  const environmentStatus = useEnvironment().status;
+  const browseAvailable = environmentStatus.availability === "available";
   const [folderPickerOpen, setFolderPickerOpen] = useState(false);
   const [expandedEnvironmentIds, setExpandedEnvironmentIds] = useState<
     ReadonlySet<string>
@@ -173,6 +174,14 @@ export function OpenProjectScreen({
           onKeyDown={handleSearchKeyDown}
           query={query}
         />
+        {environmentStatus.detail === undefined ? null : (
+          <p
+            role="status"
+            className={`mt-4 text-sm ${environmentStatus.availability === "unavailable" ? "text-status-unavailable" : "text-muted-foreground"}`}
+          >
+            {environmentStatus.detail}
+          </p>
+        )}
         {!hasRepositories ? (
           <ColdStart browseAvailable={browseAvailable} onBrowse={onBrowse} />
         ) : hasMatches ? (
@@ -244,9 +253,6 @@ function ColdStart({
         <strong className="block truncate text-[.82rem] font-semibold">
           Open a repository from your file system
         </strong>
-        <span className="block truncate text-[.72rem] text-muted-foreground">
-          Choose a folder containing a Git repository
-        </span>
       </span>
       <IconChevronRight
         aria-hidden="true"
@@ -267,10 +273,6 @@ function EmptySearch() {
       <strong className="text-[.82rem] font-semibold">
         No repositories found
       </strong>
-      <p className="mt-1 max-w-72 text-[.72rem] text-muted-foreground">
-        Browse your file system to open a repository that Rebase does not know
-        yet.
-      </p>
     </div>
   );
 }

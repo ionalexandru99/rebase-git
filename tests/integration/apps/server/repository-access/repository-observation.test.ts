@@ -133,14 +133,17 @@ it("shares canonical directory aliases and makes release idempotent", async () =
       ).toHaveLength(1);
       first.close();
       first.close();
-      await execute("git", [
-        "-C",
-        directory,
-        "symbolic-ref",
-        "HEAD",
-        "refs/heads/changed",
-      ]);
-      await waitForObservation(() => expect(changed).toHaveBeenCalled());
+      await waitForObservation(
+        () => expect(changed).toHaveBeenCalled(),
+        () =>
+          execute("git", [
+            "-C",
+            directory,
+            "symbolic-ref",
+            "HEAD",
+            "refs/heads/changed",
+          ]),
+      );
     } finally {
       first.close();
       second.close();

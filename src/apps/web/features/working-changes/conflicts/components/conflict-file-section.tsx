@@ -38,7 +38,6 @@ export function ConflictFileSection({
       files={conflicts.rows}
       tree={view.preferences.tree}
       filter={filter}
-      emptyLabel="No matching files"
       chosen={(row) => chosen(row.key)}
     >
       {(row, { collapsed, toggle }) => {

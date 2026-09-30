@@ -63,7 +63,7 @@ export default function CommitDiff({
         <div role="alert" className="p-3 text-sm">
           {diff.error}{" "}
           <Button size="xs" variant="ghost" onClick={diff.retry}>
-            Retry diff
+            Retry
           </Button>
         </div>
       ) : value ? (
@@ -71,7 +71,7 @@ export default function CommitDiff({
         value.kind === "text" &&
         value.before === value.after ? (
           <p className="p-4 text-sm text-muted-foreground">
-            File renamed. Content unchanged.
+            Content unchanged.
           </p>
         ) : (
           <DiffContent

@@ -6,15 +6,15 @@ import type {
 } from "#web/features/workspace-panel/workspace-panel-definitions.ts";
 import type { ReadableStore } from "#web/platform/store/store.ts";
 
-export interface WorkspacePanelDefinition {
+export type WorkspacePanelDefinition = {
   readonly acceptsInput?: (input: unknown) => boolean;
-  readonly Content?: ComponentType;
+  readonly Content: ComponentType;
   readonly label: string;
   readonly icon: typeof IconCode;
-  readonly available: boolean;
-  readonly launchable: boolean;
-  readonly description: string;
-}
+} & (
+  | { readonly launchable: true; readonly description: string }
+  | { readonly launchable: false }
+);
 
 export interface WorkspacePanelState {
   readonly inputs?: Partial<Record<WorkspacePanelKind, unknown>>;

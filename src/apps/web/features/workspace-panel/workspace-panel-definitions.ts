@@ -1,8 +1,6 @@
 import {
-  IconCode,
   IconFileDiff,
   IconGitCommit,
-  IconGitPullRequest,
   IconHistory,
   IconListDetails,
 } from "@tabler/icons-react";
@@ -20,7 +18,6 @@ export const workingChangesPanel = {
   ),
   label: "Diffs",
   icon: IconFileDiff,
-  available: true,
   launchable: true,
   description: "Review and commit working changes",
 } satisfies WorkspacePanelDefinition;
@@ -34,7 +31,6 @@ export const reflogPanel = {
   ),
   label: "Reflog",
   icon: IconHistory,
-  available: true,
   launchable: true,
   description: "Find where branches pointed before",
 } satisfies WorkspacePanelDefinition;
@@ -48,9 +44,7 @@ export const rebasePanel = {
   ),
   label: "Rebase",
   icon: IconListDetails,
-  available: true,
   launchable: false,
-  description: "Edit an interactive rebase plan",
 } satisfies WorkspacePanelDefinition;
 
 const commitInspectionPanel = {
@@ -62,9 +56,7 @@ const commitInspectionPanel = {
   ),
   label: "Commit",
   icon: IconGitCommit,
-  available: true,
   launchable: false,
-  description: "Inspect a selected commit",
 } satisfies WorkspacePanelDefinition;
 
 const definitions = {
@@ -72,20 +64,6 @@ const definitions = {
   changes: workingChangesPanel,
   reflog: reflogPanel,
   rebase: rebasePanel,
-  code: {
-    label: "Code",
-    icon: IconCode,
-    available: false,
-    launchable: true,
-    description: "Coming soon",
-  },
-  "pull-request": {
-    label: "Pull requests",
-    icon: IconGitPullRequest,
-    available: false,
-    launchable: true,
-    description: "Coming soon",
-  },
 } satisfies Record<string, WorkspacePanelDefinition>;
 
 export type WorkspacePanelKind = keyof typeof definitions;
@@ -102,3 +80,7 @@ export const workspacePanelDefinitions: Readonly<
 export const workspacePanelKinds = Object.keys(
   definitions,
 ) as WorkspacePanelKind[];
+export const launchablePanels = workspacePanelKinds.flatMap((kind) => {
+  const definition = workspacePanelDefinitions[kind];
+  return definition.launchable ? [{ kind, definition }] : [];
+});

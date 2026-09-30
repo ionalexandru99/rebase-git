@@ -417,7 +417,7 @@ describe("history search controls", () => {
     await expect
       .element(page.getByRole("alert"))
       .toHaveTextContent("Could not search cached history.");
-    await page.getByRole("button", { name: "Retry search" }).click();
+    await page.getByRole("button", { name: "Retry" }).click();
     await page
       .getByRole("button", { name: /Repair shallow history 1/ })
       .click();

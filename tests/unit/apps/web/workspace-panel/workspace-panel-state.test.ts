@@ -1,26 +1,10 @@
 import { describe, expect, it } from "vite-plus/test";
 import {
-  workspacePanelDefinitions,
-  workspacePanelKinds,
-} from "#web/features/workspace-panel/workspace-panel-definitions.ts";
-import {
   initialWorkspacePanelState,
   reduceWorkspacePanel,
 } from "#web/features/workspace-panel/workspace-panel-state.ts";
 
 describe("workspace panel state", () => {
-  it("does not open unavailable features", () => {
-    for (const kind of workspacePanelKinds) {
-      if (workspacePanelDefinitions[kind].available) continue;
-      expect(
-        reduceWorkspacePanel(initialWorkspacePanelState, {
-          type: "open",
-          kind,
-        }),
-      ).toBe(initialWorkspacePanelState);
-    }
-  });
-
   it("preserves the panel width while hiding and showing it", () => {
     const resized = reduceWorkspacePanel(initialWorkspacePanelState, {
       type: "resize",
