@@ -1,11 +1,12 @@
 import { useQueryClient } from "@tanstack/react-query";
-import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef } from "react";
 import { RepositoryCatalogApi } from "#contracts/repository-catalog/repository-catalog.contract.ts";
 import {
   SettingsRow,
   SettingsSection,
 } from "#web/components/ui/settings-layout.tsx";
 import { writeClipboardText } from "#web/features/clipboard/write-clipboard-text.ts";
+import { useErrorToast } from "#web/features/notifications/notifications.tsx";
 import { forgetRepositoryRefs } from "#web/features/refs/repository-refs.ts";
 import { RepositoryFetchSettings } from "#web/features/remote-sync/fetch-settings.tsx";
 import {
@@ -21,7 +22,6 @@ import type { RepositoryHistory } from "#web/features/repository-history/reposit
 import { RepositoryCacheSettings } from "#web/features/repository-settings/components/repository-cache-settings.tsx";
 import { RepositoryDetailsSettings } from "#web/features/repository-settings/components/repository-details-settings.tsx";
 import { useEnvironment } from "#web/platform/query/environment-context.tsx";
-import { describeFailure } from "#web/platform/query/request-failure.ts";
 import { useCommand } from "#web/platform/query/use-command.ts";
 
 export function RepositorySettingsPage({
@@ -40,6 +40,7 @@ export function RepositorySettingsPage({
   const removal = useCommand(RepositoryCatalogApi.remove, {
     answers: catalogWithout,
   });
+  const errorToast = useErrorToast();
   const logicalRepositoryId = repository?.logicalRepositoryId ?? repositoryId;
   const heading = useRef<HTMLHeadingElement>(null);
   const identity = useMemo(
@@ -102,9 +103,8 @@ export function RepositorySettingsPage({
             reveal={reveal === undefined ? undefined : () => reveal(path)}
             remove={async () => {
               const result = await removal.run({ repositoryId });
-              if (result._tag !== "Ok")
-                throw new Error(describeFailure(result));
-              onRemoved();
+              if (result._tag === "Ok") onRemoved();
+              else errorToast.failure("removeRepository", result);
             }}
           />
         </SettingsSection>
@@ -163,43 +163,34 @@ function RepositoryOrderSettings({
     identity.environmentId,
     identity.repositoryId,
   );
-  const [error, setError] = useState(false);
+  const errorToast = useErrorToast();
   return (
-    <>
-      <SettingsRow
-        title="History ordering"
-        description="Saved for this repository in this client."
-        descriptionId={descriptionId}
+    <SettingsRow
+      title="History ordering"
+      description="Saved for this repository in this client."
+      descriptionId={descriptionId}
+    >
+      <select
+        aria-label="History ordering"
+        aria-describedby={descriptionId}
+        className="h-8 rounded-md border border-input bg-background px-3 text-sm"
+        value={order}
+        onChange={(event) => {
+          try {
+            saveRepositoryHistoryOrder(
+              identity,
+              event.currentTarget.value === "chronological"
+                ? "chronological"
+                : "topological",
+            );
+          } catch {
+            errorToast.show("saveHistoryOrder");
+          }
+        }}
       >
-        <select
-          aria-label="History ordering"
-          aria-describedby={descriptionId}
-          className="h-8 rounded-md border border-input bg-background px-3 text-sm"
-          value={order}
-          onChange={(event) => {
-            try {
-              saveRepositoryHistoryOrder(
-                identity,
-                event.currentTarget.value === "chronological"
-                  ? "chronological"
-                  : "topological",
-              );
-              setError(false);
-            } catch {
-              setError(true);
-            }
-          }}
-        >
-          <option value="topological">Topological</option>
-          <option value="chronological">Chronological</option>
-        </select>
-      </SettingsRow>
-      {error ? (
-        <p role="alert" className="text-sm text-destructive">
-          Could not save history ordering. Check this client's storage and try
-          again.
-        </p>
-      ) : null}
-    </>
+        <option value="topological">Topological</option>
+        <option value="chronological">Chronological</option>
+      </select>
+    </SettingsRow>
   );
 }

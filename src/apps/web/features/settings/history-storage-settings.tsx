@@ -11,6 +11,7 @@ import {
 } from "#web/components/ui/alert-dialog.tsx";
 import { Button } from "#web/components/ui/button.tsx";
 import { HistoryStorageBreakdown } from "#web/features/history-storage/history-storage-breakdown.tsx";
+import { useErrorToast } from "#web/features/notifications/notifications.tsx";
 import {
   forgetAllRepositoryRefs,
   forgetRepositoryRefs,
@@ -33,6 +34,7 @@ export function HistoryStorageSettings() {
   const [confirming, setConfirming] = useState(false);
   const operation = useRef<AbortController | undefined>(undefined);
   const queryClient = useQueryClient();
+  const errorToast = useErrorToast();
   const run = useCallback(
     async (query: StorageQuery) => {
       operation.current?.abort();
@@ -52,11 +54,16 @@ export function HistoryStorageSettings() {
           forgetAllRepositoryRefs(queryClient);
       } catch {
         if (current.signal.aborted) return;
-        setError("History storage could not be updated. Try again.");
+        if (query === inspect)
+          setError("Unable to read history storage. Try again.");
+        else
+          errorToast.show(
+            query._tag === "ClearCache" ? "clearHistory" : "clearAllHistory",
+          );
       }
       setPending(false);
     },
-    [queryClient],
+    [queryClient, errorToast],
   );
   useEffect(() => {
     void run(inspect);

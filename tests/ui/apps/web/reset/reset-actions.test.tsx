@@ -28,7 +28,6 @@ import {
   historyOid,
 } from "#tests-support/history.ts";
 import { render } from "#tests-support/render.tsx";
-import { NotificationsProvider } from "#web/features/notifications/notifications.tsx";
 import {
   ResetConfirmation,
   useResetActions,
@@ -165,13 +164,11 @@ async function openReset(
 function renderReset(reset: ReturnType<typeof resetFixture>) {
   const history = fakeRepositoryHistory({ commits });
   return render(
-    <NotificationsProvider>
-      <RepositoryScopeProvider scope={repositoryScope()}>
-        <div style={{ height: 420, width: 900 }}>
-          <ResetGraph history={history} />
-        </div>
-      </RepositoryScopeProvider>
-    </NotificationsProvider>,
+    <RepositoryScopeProvider scope={repositoryScope()}>
+      <div style={{ height: 420, width: 900 }}>
+        <ResetGraph history={history} />
+      </div>
+    </RepositoryScopeProvider>,
     { environment: { requests: reset.requests } },
   );
 }

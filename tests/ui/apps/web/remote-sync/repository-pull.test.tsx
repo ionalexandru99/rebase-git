@@ -27,7 +27,6 @@ import {
   worktree,
 } from "#tests-support/fixtures.ts";
 import { render } from "#tests-support/render.tsx";
-import { NotificationsProvider } from "#web/features/notifications/notifications.tsx";
 import { RemoteSync } from "#web/features/remote-sync/remote-sync.tsx";
 import { RepositoryScopeProvider } from "#web/platform/query/repository-scope.tsx";
 
@@ -60,6 +59,12 @@ describe("repository pull", () => {
     await expect
       .element(page.getByRole("button", { name: "Pull" }))
       .toBeEnabled();
+    await expect
+      .element(
+        page.getByText("Git could not fetch from the remote. Try again."),
+      )
+      .toBeVisible();
+    expect(page.getByText("Couldn’t pull changes").elements()).toHaveLength(0);
     expect(f.requested).not.toHaveBeenCalled();
   });
 
@@ -174,11 +179,9 @@ async function fixture({
     }),
   );
   await render(
-    <NotificationsProvider>
-      <RepositoryScopeProvider scope={repositoryScope({ repositoryId })}>
-        <RemoteSync>{(actions) => actions}</RemoteSync>
-      </RepositoryScopeProvider>
-    </NotificationsProvider>,
+    <RepositoryScopeProvider scope={repositoryScope({ repositoryId })}>
+      <RemoteSync>{(actions) => actions}</RemoteSync>
+    </RepositoryScopeProvider>,
     { environment: { requests } },
   );
   return {

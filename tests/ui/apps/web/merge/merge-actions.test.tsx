@@ -27,7 +27,6 @@ import {
 } from "#tests-support/history.ts";
 import { render } from "#tests-support/render.tsx";
 import { useMergeActions } from "#web/features/merge/merge-actions.ts";
-import { NotificationsProvider } from "#web/features/notifications/notifications.tsx";
 import { WorkspacePanel } from "#web/features/workspace-panel/workspace-panel.tsx";
 import { useWorkspacePanel } from "#web/features/workspace-panel/workspace-panel-provider.tsx";
 import { RepositoryScopeProvider } from "#web/platform/query/repository-scope.tsx";
@@ -154,16 +153,14 @@ async function renderMerge(started: (input: Start) => OperationStarted) {
     respond(RepositoryOperationsApi.start, (input) => started(input)),
   );
   return render(
-    <NotificationsProvider>
-      <WorkspacePanel.Provider scopeKey={crypto.randomUUID()}>
-        <RepositoryScopeProvider scope={repositoryScope()}>
-          <div style={{ height: 420, width: 900 }}>
-            <MergeGraph history={history} />
-          </div>
-          <PanelProbe />
-        </RepositoryScopeProvider>
-      </WorkspacePanel.Provider>
-    </NotificationsProvider>,
+    <WorkspacePanel.Provider scopeKey={crypto.randomUUID()}>
+      <RepositoryScopeProvider scope={repositoryScope()}>
+        <div style={{ height: 420, width: 900 }}>
+          <MergeGraph history={history} />
+        </div>
+        <PanelProbe />
+      </RepositoryScopeProvider>
+    </WorkspacePanel.Provider>,
     { environment: { requests } },
   );
 }

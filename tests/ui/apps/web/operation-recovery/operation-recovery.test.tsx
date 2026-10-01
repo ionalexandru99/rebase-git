@@ -20,9 +20,7 @@ import {
   testChanges,
   testEnvironment,
 } from "#tests-support/render.tsx";
-import { ErrorNotification } from "#web/features/notifications/components/error-notification.tsx";
 import { PersistentNotification } from "#web/features/notifications/components/persistent-notification.tsx";
-import { NotificationsProvider } from "#web/features/notifications/notifications.tsx";
 import {
   OperationRecoveryNotice,
   OperationRecoveryToast,
@@ -49,19 +47,17 @@ async function fixture(initial = snapshot()) {
     refresh = vi.fn(),
     dismiss = vi.fn();
   const tree = (state = initial) => (
-    <NotificationsProvider>
-      <PersistentNotification>
-        <OperationRecoveryToast
-          state={state}
-          repositoryName="catalog-api"
-          writable
-          execute={execute}
-          review={review}
-          refresh={refresh}
-          dismiss={dismiss}
-        />
-      </PersistentNotification>
-    </NotificationsProvider>
+    <PersistentNotification>
+      <OperationRecoveryToast
+        state={state}
+        repositoryName="catalog-api"
+        writable
+        execute={execute}
+        review={review}
+        refresh={refresh}
+        dismiss={dismiss}
+      />
+    </PersistentNotification>
   );
   const view = await render(tree());
   return { view, tree, execute, review, refresh, dismiss };
@@ -157,31 +153,6 @@ describe("operation recovery toast", () => {
       .toBeDisabled();
   });
 
-  it("keeps the operation visible when ordinary error notifications exceed the queue limit", async () => {
-    await render(
-      <NotificationsProvider>
-        <ErrorNotification message="First error" />
-        <ErrorNotification message="Second error" />
-        <ErrorNotification message="Third error" />
-        <ErrorNotification message="Fourth error" />
-        <PersistentNotification>
-          <OperationRecoveryToast
-            state={snapshot()}
-            repositoryName="catalog-api"
-            writable
-            execute={vi.fn()}
-            review={vi.fn()}
-            refresh={vi.fn()}
-            dismiss={vi.fn()}
-          />
-        </PersistentNotification>
-      </NotificationsProvider>,
-    );
-    await expect
-      .element(page.getByRole("button", { name: "Review conflicts" }))
-      .toBeVisible();
-  });
-
   it("rediscovers after reconnect and repository changes without repeating a mutation", async () => {
     const f = await liveFixture(readyToContinue());
     await expect
@@ -224,7 +195,7 @@ describe("operation recovery toast", () => {
     expect(f.execute).not.toHaveBeenCalled();
   });
 
-  it("keeps a failed action visible when the next read finds the operation finished", async () => {
+  it("keeps a failed action toast when the next read finds the operation finished", async () => {
     const f = await liveFixture(readyToContinue());
     f.execute.mockImplementation(() => {
       f.set(idle());
@@ -236,21 +207,17 @@ describe("operation recovery toast", () => {
     });
     await page.getByRole("button", { name: "Continue rebase" }).click();
     await expect
-      .element(page.getByRole("alert"))
-      .toHaveTextContent("Git stopped responding.");
+      .element(page.getByText("Git stopped responding."))
+      .toBeVisible();
     const reads = f.read.mock.calls.length;
     f.change("Refs");
     await expect.poll(() => f.read.mock.calls.length).toBeGreaterThan(reads);
     await expect
-      .element(page.getByRole("alert"))
-      .toHaveTextContent("Git stopped responding.");
-    await expect
-      .element(page.getByRole("heading", { name: "Rebase completed" }))
-      .not.toBeInTheDocument();
-    await page.getByRole("button", { name: "Check again" }).click();
-    await expect
       .element(page.getByRole("region", { name: "Git operation" }))
       .not.toBeInTheDocument();
+    await expect
+      .element(page.getByText("Git stopped responding."))
+      .toBeVisible();
     expect(f.execute).toHaveBeenCalledOnce();
   });
 
@@ -327,13 +294,11 @@ async function liveFixture(initial: RepositoryOperation) {
         connected,
       })}
     >
-      <NotificationsProvider>
-        <RepositoryScopeProvider scope={{ ...scope, connected }}>
-          <WorkspacePanel.Provider scopeKey="operation-test">
-            <OperationRecoveryNotice repositoryName="catalog-api" />
-          </WorkspacePanel.Provider>
-        </RepositoryScopeProvider>
-      </NotificationsProvider>
+      <RepositoryScopeProvider scope={{ ...scope, connected }}>
+        <WorkspacePanel.Provider scopeKey="operation-test">
+          <OperationRecoveryNotice repositoryName="catalog-api" />
+        </WorkspacePanel.Provider>
+      </RepositoryScopeProvider>
     </EnvironmentProvider>
   );
   const view = await render(tree(true), {

@@ -14,15 +14,12 @@ const deletedNoticeMilliseconds = 10_000;
 
 export function RefEditingStatus({
   editing,
-  checkoutError,
 }: {
   readonly editing: RefEditing;
-  readonly checkoutError: string | null;
 }) {
   const { deletion } = editing;
   return (
     <>
-      <RefAlert message={editing.error} />
       {deletion.pending === undefined ? null : (
         <PersistentNotification>
           <Confirmation
@@ -56,19 +53,7 @@ export function RefEditingStatus({
           onDismiss={editing.dismissNotice}
         />
       )}
-      <RefAlert message={checkoutError ?? undefined} />
     </>
-  );
-}
-
-function RefAlert({ message }: { readonly message: string | undefined }) {
-  return message === undefined ? null : (
-    <p
-      className="mx-3 mb-3 rounded-md border border-status-unavailable/40 bg-status-unavailable/10 px-3 py-2 text-xs text-foreground"
-      role="alert"
-    >
-      {message}
-    </p>
   );
 }
 

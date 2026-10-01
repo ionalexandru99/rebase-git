@@ -18,7 +18,6 @@ import {
 import { repositoryScope } from "#tests-support/fixtures.ts";
 import { render } from "#tests-support/render.tsx";
 import { RepositoryWorkspace } from "#web/app/workspace/repository-workspace.tsx";
-import { NotificationsProvider } from "#web/features/notifications/notifications.tsx";
 import { useRepositoryRefs } from "#web/features/refs/repository-refs.ts";
 import {
   openRepository,
@@ -99,7 +98,7 @@ it("keeps restored refs unconfirmed until a live read answers", async () => {
 
   await expect
     .element(screen.getByRole("alert"))
-    .toHaveTextContent("The Environment did not answer.");
+    .toHaveTextContent("The server did not answer.");
   await expect
     .element(screen.getByRole("status"))
     .toHaveTextContent("Restored feature, main");
@@ -145,7 +144,7 @@ it("keeps restored refs restored through a branch write until a live read answer
   reads[0]?.reject(unanswered);
   await expect
     .element(screen.getByRole("alert"))
-    .toHaveTextContent("The Environment did not answer.");
+    .toHaveTextContent("The server did not answer.");
 
   await screen.getByRole("button", { name: "Rename main" }).click();
   await expect.poll(() => reads).toHaveLength(2);
@@ -195,20 +194,18 @@ it.each(["Automatic", "Custom"] as const)(
       },
     });
     const screen = await render(
-      <NotificationsProvider>
-        <div style={{ height: 720, width: 1280 }}>
-          <RepositoryScopeProvider
-            scope={repositoryScope({
-              repositoryId: refs.repositoryId,
-              logicalRepositoryId: logicalId,
-              worktreePath: "/feature",
-              connected: false,
-            })}
-          >
-            <RepositoryWorkspace />
-          </RepositoryScopeProvider>
-        </div>
-      </NotificationsProvider>,
+      <div style={{ height: 720, width: 1280 }}>
+        <RepositoryScopeProvider
+          scope={repositoryScope({
+            repositoryId: refs.repositoryId,
+            logicalRepositoryId: logicalId,
+            worktreePath: "/feature",
+            connected: false,
+          })}
+        >
+          <RepositoryWorkspace />
+        </RepositoryScopeProvider>
+      </div>,
       {
         environment: { environmentId, connected: false },
         queryClient,

@@ -7,6 +7,7 @@ import type {
   RepositoryChanges,
 } from "#contracts/repository-changes/repository-changes.contract.ts";
 import { useDiffPreferences } from "#web/features/file-diff/hooks/use-diff-preferences.ts";
+import { useErrorToast } from "#web/features/notifications/notifications.tsx";
 import {
   splitConflicts,
   useConflicts,
@@ -29,10 +30,7 @@ import {
   useWorkingChanges,
 } from "#web/features/working-changes/hooks/use-working-changes.ts";
 import type { CommitDraft } from "#web/persistence/working-changes/working-changes-store.ts";
-import {
-  describeFailure,
-  type RequestFailure,
-} from "#web/platform/query/request-failure.ts";
+import { describeFailure } from "#web/platform/query/request-failure.ts";
 
 const headMovedMessage =
   "HEAD changed while you were amending. Review the latest commit before enabling Amend again.";
@@ -61,12 +59,15 @@ export function useWorkingChangesView({
   active,
 }: WorkingChangesTarget) {
   const [amend, setAmend] = useState<Amend>(amendOff);
-  const [problem, setProblem] = useState<string | null>(null);
+  const errorToast = useErrorToast();
   const scope: ChangesScope = { repositoryId, worktreePath, amend: amend.on };
   const read = useWorkingChanges(scope, active);
   const shown = useMemo(() => splitConflicts(read.data), [read.data]);
   const changes = read.isPlaceholderData ? undefined : shown.changes;
-  const headMoved = useCallback(() => setProblem(headMovedMessage), []);
+  const headMoved = useCallback(
+    () => errorToast.show("commit", headMovedMessage),
+    [errorToast],
+  );
   const [selection, select] = useChangeSelection(
     shown.changes,
     shown.conflicted,
@@ -95,11 +96,8 @@ export function useWorkingChangesView({
   const busy = actions.busy || conflicts.busy;
   const begin = (): RepositoryChanges | undefined => {
     if (changes === undefined || busy || loading) return undefined;
-    setProblem(null);
     return changes;
   };
-  const fail = (failure: RequestFailure<{ readonly _tag: string }>) =>
-    setProblem(describeFailure(failure));
 
   const act: ChangeAction = async (action, section, selected, revision) => {
     const current = begin();
@@ -115,7 +113,7 @@ export function useWorkingChangesView({
           ? listedOnly(current, section, selected)
           : selected,
     });
-    if (result._tag !== "Ok") fail(result);
+    errorToast.failure(action, result);
   };
 
   const commit = async () => {
@@ -128,7 +126,7 @@ export function useWorkingChangesView({
       revision: current.revision,
       message: commitMessage(draft.draft),
     });
-    if (result._tag !== "Ok") return fail(result);
+    if (result._tag !== "Ok") return errorToast.failure("commit", result);
     draft.clear(
       amended ? [draftKey, amendDraftKey(draftKey, current.head)] : [draftKey],
     );
@@ -154,13 +152,11 @@ export function useWorkingChangesView({
     busy,
     loading,
     error:
-      problem ??
       conflicts.problem ??
       (read.isError ? describeFailure(read.error) : null) ??
       (diff.isError ? describeFailure(diff.error) : null) ??
       (draft.unavailable ? storageUnavailableMessage : null),
     refresh: () => {
-      setProblem(null);
       void read.refetch();
       if (diff.isError) void diff.refetch();
       conflicts.refresh();

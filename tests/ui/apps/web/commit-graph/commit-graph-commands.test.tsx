@@ -90,8 +90,8 @@ describe("commit graph commands", () => {
     await screen.getByRole("menuitem", { name: "Copy" }).click();
     await screen.getByRole("menuitem", { name: "Subject" }).click();
     await expect
-      .element(screen.getByRole("alert"))
-      .toHaveTextContent("Commit metadata is not available yet");
+      .element(screen.getByText("Commit metadata is not available yet."))
+      .toBeVisible();
     expect(openDetails).not.toHaveBeenCalled();
   });
 

@@ -10,6 +10,10 @@ import {
 import { Button } from "#web/components/ui/button.tsx";
 import { SettingsRow as SettingRow } from "#web/components/ui/settings-layout.tsx";
 import { Switch } from "#web/components/ui/switch.tsx";
+import {
+  type ErrorAction,
+  useErrorToast,
+} from "#web/features/notifications/notifications.tsx";
 
 const releaseChannelLabels: Record<ReleaseChannel, string> = {
   nightly: "Nightly",
@@ -40,7 +44,7 @@ export function GeneralSettings({
   readonly updateSnapshot: DesktopUpdateSnapshot | undefined;
 }): JSX.Element {
   const snapshot = updateSnapshot ?? unavailableSnapshot;
-  const [actionError, setActionError] = useState<string>();
+  const errorToast = useErrorToast();
   const [settingsPending, setSettingsPending] = useState(false);
   const desktopAvailable = desktopUpdates !== undefined;
   const desktopReady =
@@ -61,23 +65,24 @@ export function GeneralSettings({
     desktopReady && !settingsPending && snapshot.status._tag === "Ready";
 
   const changeSetting = async (action: () => Promise<void>) => {
-    setActionError(undefined);
     setSettingsPending(true);
     try {
       await action();
-    } catch (error) {
-      setActionError(errorMessage(error));
+    } catch {
+      errorToast.show("saveUpdateSettings");
     } finally {
       setSettingsPending(false);
     }
   };
 
-  const runAction = async (action: () => Promise<void>) => {
-    setActionError(undefined);
+  const runAction = async (
+    action: () => Promise<void>,
+    failure: ErrorAction,
+  ) => {
     try {
       await action();
-    } catch (error) {
-      setActionError(errorMessage(error));
+    } catch {
+      errorToast.show(failure);
     }
   };
 
@@ -174,7 +179,7 @@ export function GeneralSettings({
             snapshot,
             desktopAvailable,
             desktopReady,
-            actionError ?? updateLoadError,
+            updateLoadError,
           )}
           descriptionId="updates-description"
           liveDescription
@@ -186,7 +191,10 @@ export function GeneralSettings({
               disabled={!canCheck}
               onClick={() => {
                 if (desktopUpdates !== undefined) {
-                  void runAction(() => desktopUpdates.checkForUpdates());
+                  void runAction(
+                    () => desktopUpdates.checkForUpdates(),
+                    "checkUpdates",
+                  );
                 }
               }}
               size="sm"
@@ -199,7 +207,10 @@ export function GeneralSettings({
               disabled={!canInstall}
               onClick={() => {
                 if (desktopUpdates !== undefined) {
-                  void runAction(() => desktopUpdates.installUpdate());
+                  void runAction(
+                    () => desktopUpdates.installUpdate(),
+                    "installUpdate",
+                  );
                 }
               }}
               size="sm"
@@ -232,10 +243,10 @@ function updateDescription(
   snapshot: DesktopUpdateSnapshot,
   desktopAvailable: boolean,
   desktopReady: boolean,
-  actionError: string | undefined,
+  loadError: string | undefined,
 ) {
   if (!desktopAvailable) return "Updates are managed by the desktop app.";
-  if (actionError !== undefined) return actionError;
+  if (loadError !== undefined) return loadError;
   if (!desktopReady) return "";
 
   switch (snapshot.status._tag) {
@@ -254,8 +265,4 @@ function updateDescription(
     case "Idle":
       return "";
   }
-}
-
-function errorMessage(error: unknown) {
-  return error instanceof Error ? error.message : "The update action failed.";
 }

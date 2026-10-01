@@ -157,6 +157,12 @@ async function fixture() {
     }),
     respond(RepositoryConflictsApi.choose, (command) => {
       choices.push(command);
+      if (command.path === logo)
+        throw rejected({
+          _tag: "ConflictFailed",
+          reason: "Stale",
+          detail: "The conflict changed on disk.",
+        });
       unresolved.delete(command.path);
       return list();
     }),
@@ -293,5 +299,16 @@ describe("conflicts in the Diffs tab", () => {
         choice: "delete",
       }),
     ]);
+  });
+
+  it("shows a failed whole-file choice as a toast and keeps the conflict", async () => {
+    await fixture();
+    await row(logo).click();
+    await page.getByRole("button", { name: "Whole file" }).click();
+    await page.getByRole("menuitem", { name: "Use incoming" }).click();
+    await expect
+      .element(page.getByText("The conflict changed on disk."))
+      .toBeVisible();
+    await expect.element(row(logo)).toBeVisible();
   });
 });

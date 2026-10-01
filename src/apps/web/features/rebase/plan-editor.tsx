@@ -3,6 +3,7 @@ import { CommitInspectionApi } from "#contracts/commit-inspection/commit-inspect
 import { RepositoryOperationsApi } from "#contracts/repository-operations/repository-operations.contract.ts";
 import { Button } from "#web/components/ui/button.tsx";
 import { Input } from "#web/components/ui/input.tsx";
+import { useErrorToast } from "#web/features/notifications/notifications.tsx";
 import { PlanList } from "#web/features/rebase/plan-list.tsx";
 import { useChangedFileCount } from "#web/features/rebase/rebase-actions.ts";
 import {
@@ -22,7 +23,6 @@ import {
 } from "#web/features/rebase/rebase-plan.ts";
 import { useEnvironmentQueries } from "#web/platform/query/environment-query.ts";
 import type { RepositoryScope } from "#web/platform/query/repository-scope.tsx";
-import { describeFailure } from "#web/platform/query/request-failure.ts";
 import { answer, useCommand } from "#web/platform/query/use-command.ts";
 
 export function PlanEditor({
@@ -44,7 +44,7 @@ export function PlanEditor({
   const [rows, setRows] = useState<readonly PlanRow[]>([]);
   const [selected, setSelected] = useState(0);
   const [edits, setEdits] = useState<PlanMessages>({});
-  const [error, setError] = useState<string>();
+  const errorToast = useErrorToast();
   const subject = useRef<HTMLInputElement>(null);
   const changed = useChangedFileCount(true);
   const command = useCommand(RepositoryOperationsApi.start, {
@@ -90,7 +90,6 @@ export function PlanEditor({
   };
   const start = async () => {
     if (loaded._tag !== "Ready" || status !== undefined || problem) return;
-    setError(undefined);
     const result = await command.run({
       expectedHead: head,
       operation: {
@@ -100,9 +99,8 @@ export function PlanEditor({
         plan: planSteps(rows, messages.values),
       },
     });
-    if (result._tag === "Ok") {
-      if (result.value.outcome !== "Stopped") close();
-    } else if (result._tag !== "Cancelled") setError(describeFailure(result));
+    if (result._tag !== "Ok") errorToast.failure("rebase", result);
+    else if (result.value.outcome !== "Stopped") close();
   };
 
   if (loaded._tag !== "Ready")
@@ -112,7 +110,6 @@ export function PlanEditor({
       </p>
     );
   const [messageSubject = "", ...messageBody] = (message ?? "").split("\n");
-  const failure = error ?? problem?.text;
   return (
     <section
       aria-label="Rebase plan"
@@ -193,9 +190,9 @@ export function PlanEditor({
         </section>
       )}
       <footer className="flex shrink-0 flex-wrap items-center gap-2 border-border border-t px-3 py-2">
-        {failure === undefined ? null : (
+        {problem === undefined ? null : (
           <p role="alert" className="basis-full text-xs text-destructive">
-            {failure}
+            {problem.text}
           </p>
         )}
         <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">

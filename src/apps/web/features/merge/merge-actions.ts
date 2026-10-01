@@ -1,10 +1,11 @@
-import { Toast } from "@base-ui/react/toast";
 import { useState } from "react";
+import type { RouteFailure } from "#contracts/environment-connection/environment-route.contract.ts";
 import {
   type MergeMode,
   RepositoryOperationsApi,
 } from "#contracts/repository-operations/repository-operations.contract.ts";
 import type { Action } from "#web/components/ui/action-menu.tsx";
+import { useErrorToast } from "#web/features/notifications/notifications.tsx";
 import { useOperation } from "#web/features/operation-recovery/hooks/use-operation.ts";
 import { operationKindLabel } from "#web/features/operation-recovery/operation-messages.ts";
 import {
@@ -18,12 +19,11 @@ import type { HistoryRelation } from "#web/features/repository-history/history-g
 import type { RepositoryHistory } from "#web/features/repository-history/repository-history.ts";
 import { useWorkspacePanel } from "#web/features/workspace-panel/workspace-panel-provider.tsx";
 import { useRepositoryScope } from "#web/platform/query/repository-scope.tsx";
-import { describeFailure } from "#web/platform/query/request-failure.ts";
 import {
-  answer,
-  type CommandFailure,
-  useCommand,
-} from "#web/platform/query/use-command.ts";
+  type FailureMessages,
+  gitMessage,
+} from "#web/platform/query/request-failure.ts";
+import { answer, useCommand } from "#web/platform/query/use-command.ts";
 
 export interface MergeActions {
   readonly actionFor: (target: RefSourceTarget) => MergeAction | undefined;
@@ -46,7 +46,7 @@ export function useMergeActions(
   const { refs } = useScopedRepositoryRefs();
   const operation = useOperation(scope, false).data;
   const panel = useWorkspacePanel();
-  const notifications = Toast.useToastManager();
+  const errorToast = useErrorToast();
   const command = useCommand(RepositoryOperationsApi.start, {
     answers: (value, { repositoryId, worktreePath }) => [
       answer(
@@ -99,15 +99,13 @@ export function useMergeActions(
         mode,
       },
     });
-    if (result._tag === "Ok") {
-      if (result.value.outcome === "Staged")
-        panel.execute({ type: "open", kind: "changes" });
-      return;
-    }
-    if (result._tag !== "Cancelled")
-      notifications.add({
-        title: describeMergeFailure(source.label, branch, result),
-      });
+    if (result._tag === "Ok" && result.value.outcome === "Staged")
+      panel.execute({ type: "open", kind: "changes" });
+    errorToast.failure(
+      "merge",
+      result,
+      mergeFailureMessages(source.label, branch),
+    );
   };
 
   const actionFor = (target: RefSourceTarget): MergeAction | undefined => {
@@ -167,12 +165,11 @@ export function useMergeActions(
   return { actionFor, inspect };
 }
 
-function describeMergeFailure(
+function mergeFailureMessages(
   source: string,
   branch: string,
-  failure: CommandFailure<typeof RepositoryOperationsApi.start>,
-) {
-  return describeFailure(failure, {
+): FailureMessages<RouteFailure<typeof RepositoryOperationsApi.start>> {
+  return {
     OperationFailed: ({ reason, detail, paths = [] }) => {
       switch (reason) {
         case "WouldOverwrite":
@@ -188,8 +185,8 @@ function describeMergeFailure(
         case "Uncertain":
           return "The merge may not have finished. Check the graph.";
         default:
-          return detail;
+          return gitMessage(detail);
       }
     },
-  });
+  };
 }

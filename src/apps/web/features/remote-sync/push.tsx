@@ -14,11 +14,10 @@ import {
   DropdownMenuItem,
 } from "#web/components/ui/dropdown-menu.tsx";
 import { ToolbarButton } from "#web/components/ui/toolbar-button.tsx";
-import { ErrorNotification } from "#web/features/notifications/components/error-notification.tsx";
 import { PersistentNotification } from "#web/features/notifications/components/persistent-notification.tsx";
+import { useErrorToast } from "#web/features/notifications/notifications.tsx";
 import {
   describeProgress,
-  describePushFailure,
   destinationName,
   type ForcePushReview,
   fastForwardRequest,
@@ -26,6 +25,7 @@ import {
   forcePushReview,
   type PushRequest,
   type PushTarget,
+  pushFailureMessages,
 } from "#web/features/remote-sync/push-target.ts";
 import { useRepositoryScope } from "#web/platform/query/repository-scope.tsx";
 import { useCommand } from "#web/platform/query/use-command.ts";
@@ -34,6 +34,7 @@ export type Push = ReturnType<typeof usePush>;
 
 export function usePush() {
   const command = useCommand(RepositoryPushApi.push);
+  const errorToast = useErrorToast();
   const [review, setReview] = useState<ForcePushReview | null>(null);
   const worktreePath = useRepositoryScope()?.worktreePath;
   const { cancel, reset } = command;
@@ -49,21 +50,24 @@ export function usePush() {
     command.running && command.input !== undefined
       ? describeProgress(command.input)
       : null;
-  const notice =
-    command.failure !== undefined && command.input !== undefined
-      ? describePushFailure(command.failure, command.input.destination)
-      : null;
 
   const pushBranch = (request: PushRequest) => {
     if (!command.canRun || command.running) return;
     setReview(null);
-    void command.run(request);
+    void command
+      .run(request)
+      .then((result) =>
+        errorToast.failure(
+          "push",
+          result,
+          pushFailureMessages(request.destination),
+        ),
+      );
   };
 
   const requestForcePush = (target: PushTarget) => {
     const review = forcePushReview(target);
     if (review === undefined || command.running) return;
-    command.reset();
     setReview(review);
   };
 
@@ -71,7 +75,6 @@ export function usePush() {
     canRun: command.canRun,
     running,
     review,
-    notice,
     push: (target: PushTarget) => {
       const upstream = target.upstream;
       if (upstream !== undefined && !upstream.gone && upstream.behind > 0) {
@@ -184,7 +187,6 @@ export function PushNotice({ push }: { readonly push: Push }) {
         />
       </PersistentNotification>
     );
-  if (push.notice !== null) return <ErrorNotification message={push.notice} />;
   return null;
 }
 

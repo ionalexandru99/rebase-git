@@ -34,7 +34,6 @@ import {
 import type { FakeRepositoryHistory } from "#tests-support/history.ts";
 import { render } from "#tests-support/render.tsx";
 import { useCherryPick } from "#web/features/cherry-pick/cherry-pick-menu.tsx";
-import { NotificationsProvider } from "#web/features/notifications/notifications.tsx";
 import { WorkspacePanel } from "#web/features/workspace-panel/workspace-panel.tsx";
 import { RepositoryScopeProvider } from "#web/platform/query/repository-scope.tsx";
 
@@ -71,17 +70,15 @@ async function fixture(
     respond(RepositoryOperationsApi.start, (input) => start(input)),
   );
   const screen = await render(
-    <NotificationsProvider>
-      <WorkspacePanel.Provider scopeKey={crypto.randomUUID()}>
-        <RepositoryScopeProvider scope={repositoryScope()}>
-          <div style={{ height: 520, width: 900 }}>
-            <CherryPickGraph
-              history={historyReader({ commits, status: "ready" })}
-            />
-          </div>
-        </RepositoryScopeProvider>
-      </WorkspacePanel.Provider>
-    </NotificationsProvider>,
+    <WorkspacePanel.Provider scopeKey={crypto.randomUUID()}>
+      <RepositoryScopeProvider scope={repositoryScope()}>
+        <div style={{ height: 520, width: 900 }}>
+          <CherryPickGraph
+            history={historyReader({ commits, status: "ready" })}
+          />
+        </div>
+      </RepositoryScopeProvider>
+    </WorkspacePanel.Provider>,
     { environment: { requests } },
   );
   const row = (index: number) =>

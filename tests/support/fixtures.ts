@@ -1,4 +1,5 @@
 import type { CommitInspection } from "#contracts/commit-inspection/commit-inspection.contract.ts";
+import type { DesktopUpdates } from "#contracts/desktop-updates/desktop-updates.contract.ts";
 import type { RepositoryCatalogEntry } from "#contracts/repository-catalog/repository-catalog.contract.ts";
 import type {
   ChangedFile,
@@ -253,5 +254,22 @@ export function reflogEntry(entry: Partial<ReflogEntry> = {}): ReflogEntry {
     orphaned: false,
     steps: [],
     ...entry,
+  };
+}
+
+export function desktopUpdates(
+  updates: Partial<DesktopUpdates> = {},
+): DesktopUpdates {
+  return {
+    checkForUpdates: async () => {},
+    getSnapshot: async () => ({
+      settings: { checkAutomatically: false, releaseChannel: "stable" },
+      status: { _tag: "Idle" },
+    }),
+    installUpdate: async () => {},
+    selectReleaseChannel: async () => {},
+    setCheckAutomatically: async () => {},
+    subscribe: () => () => {},
+    ...updates,
   };
 }

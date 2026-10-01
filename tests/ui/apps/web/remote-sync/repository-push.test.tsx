@@ -22,7 +22,6 @@ import {
   worktree,
 } from "#tests-support/fixtures.ts";
 import { render } from "#tests-support/render.tsx";
-import { NotificationsProvider } from "#web/features/notifications/notifications.tsx";
 import {
   PushButton,
   PushNotice,
@@ -87,13 +86,11 @@ async function fixture(
     }),
   );
   const tree = (worktreePath: string) => (
-    <NotificationsProvider>
-      <RepositoryScopeProvider
-        scope={repositoryScope({ ...scope, worktreePath })}
-      >
-        <PushControls target={target} />
-      </RepositoryScopeProvider>
-    </NotificationsProvider>
+    <RepositoryScopeProvider
+      scope={repositoryScope({ ...scope, worktreePath })}
+    >
+      <PushControls target={target} />
+    </RepositoryScopeProvider>
   );
   const view = await render(tree(scope.worktreePath), {
     environment: { requests },
@@ -167,7 +164,7 @@ describe("repository push", () => {
     }
   });
 
-  it("reports a cancelled push as cancelled instead of pushed", async () => {
+  it("cancels a running push without reporting a failure", async () => {
     await fixture({ branch: "spike", remotes: ["origin"] }, pendingPush());
 
     await page.getByRole("button", { name: "Push spike" }).click();
@@ -177,11 +174,11 @@ describe("repository push", () => {
       .click();
 
     await expect
-      .element(page.getByText("The request was cancelled."))
-      .toBeVisible();
-    await expect
       .element(page.getByRole("button", { name: "Push spike" }))
       .toHaveTextContent("Push");
+    await expect
+      .element(page.getByText("The request was cancelled."))
+      .not.toBeInTheDocument();
   });
 
   it("cancels the push and clears the review when the worktree changes", async () => {
@@ -234,13 +231,11 @@ describe("repository push", () => {
       ),
     );
     const tree = (toolbar: boolean) => (
-      <NotificationsProvider>
-        <RepositoryScopeProvider
-          scope={repositoryScope({ repositoryId, worktreePath: "/repo" })}
-        >
-          <RemoteSync>{(actions) => (toolbar ? actions : null)}</RemoteSync>
-        </RepositoryScopeProvider>
-      </NotificationsProvider>
+      <RepositoryScopeProvider
+        scope={repositoryScope({ repositoryId, worktreePath: "/repo" })}
+      >
+        <RemoteSync>{(actions) => (toolbar ? actions : null)}</RemoteSync>
+      </RepositoryScopeProvider>
     );
     const view = await render(tree(true), {
       environment: { requests },

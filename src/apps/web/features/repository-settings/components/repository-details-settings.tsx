@@ -10,6 +10,10 @@ import {
 } from "#web/components/ui/alert-dialog.tsx";
 import { Button } from "#web/components/ui/button.tsx";
 import { SettingsRow } from "#web/components/ui/settings-layout.tsx";
+import {
+  type ErrorAction,
+  useErrorToast,
+} from "#web/features/notifications/notifications.tsx";
 
 export function RepositoryDetailsSettings({
   path,
@@ -28,21 +32,20 @@ export function RepositoryDetailsSettings({
 }) {
   const [confirming, setConfirming] = useState(false);
   const [pending, setPending] = useState(false);
-  const [error, setError] = useState<string>();
   const [message, setMessage] = useState<string>();
-  const run = async (action: () => Promise<void>, success?: string) => {
+  const errorToast = useErrorToast();
+  const run = async (
+    action: () => Promise<void>,
+    failure: ErrorAction,
+    success?: string,
+  ) => {
     setPending(true);
-    setError(undefined);
     setMessage(undefined);
     try {
       await action();
       setMessage(success);
-    } catch (cause) {
-      setError(
-        cause instanceof Error
-          ? cause.message
-          : "The repository action failed. Try again.",
-      );
+    } catch {
+      errorToast.show(failure);
     } finally {
       setPending(false);
     }
@@ -59,7 +62,7 @@ export function RepositoryDetailsSettings({
           size="sm"
           variant="outline"
           disabled={pending}
-          onClick={() => void run(copyPath, "Path copied.")}
+          onClick={() => void run(copyPath, "copyPath", "Path copied.")}
         >
           Copy path
         </Button>
@@ -68,7 +71,7 @@ export function RepositoryDetailsSettings({
             size="sm"
             variant="outline"
             disabled={pending || !connected}
-            onClick={() => void run(reveal)}
+            onClick={() => void run(reveal, "revealRepository")}
           >
             Reveal
           </Button>
@@ -97,11 +100,6 @@ export function RepositoryDetailsSettings({
           {message}
         </p>
       )}
-      {error === undefined ? null : (
-        <p role="alert" className="text-sm text-destructive">
-          {error}
-        </p>
-      )}
       <AlertDialog open={confirming} onOpenChange={setConfirming}>
         <AlertDialogContent>
           <AlertDialogTitle>Remove repository?</AlertDialogTitle>
@@ -110,7 +108,9 @@ export function RepositoryDetailsSettings({
           </AlertDialogDescription>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={() => void run(remove)}>
+            <AlertDialogAction
+              onClick={() => void run(remove, "removeRepository")}
+            >
               Remove repository
             </AlertDialogAction>
           </AlertDialogFooter>

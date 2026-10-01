@@ -1,5 +1,7 @@
 import { describe, expect, it, vi } from "vite-plus/test";
 import { page } from "vite-plus/test/browser";
+import type { DesktopUpdates } from "#contracts/desktop-updates/desktop-updates.contract.ts";
+import { desktopUpdates } from "#tests-support/fixtures.ts";
 import { render } from "#tests-support/render.tsx";
 import { SettingsPanel } from "#web/features/settings/settings-panel.tsx";
 
@@ -44,6 +46,26 @@ describe("settings panel", () => {
     expect(closeSettings).toHaveBeenCalledOnce();
   });
 
+  it("shows a failed update check as a notification and keeps the update state", async () => {
+    await renderSettings(
+      vi.fn(),
+      desktopUpdates({
+        checkForUpdates: async () => {
+          throw new Error("net::ERR_INTERNET_DISCONNECTED");
+        },
+      }),
+    );
+
+    await page.getByRole("button", { name: "Check for updates" }).click();
+
+    await expect
+      .element(page.getByText("Couldn’t check for updates"))
+      .toBeVisible();
+    expect(
+      page.getByText("net::ERR_INTERNET_DISCONNECTED").elements(),
+    ).toHaveLength(0);
+  });
+
   it("keeps settings content inside a narrow viewport", async () => {
     await page.viewport(640, 720);
     await renderSettings(vi.fn());
@@ -56,11 +78,14 @@ describe("settings panel", () => {
   });
 });
 
-async function renderSettings(closeSettings: () => void) {
+async function renderSettings(
+  closeSettings: () => void,
+  updates?: DesktopUpdates,
+) {
   return render(
     <SettingsPanel
       closeSettings={closeSettings}
-      desktopUpdates={undefined}
+      desktopUpdates={updates}
       productVersion="0.0.2-test"
     />,
   );

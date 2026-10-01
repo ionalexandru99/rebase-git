@@ -19,7 +19,6 @@ import {
   worktree,
 } from "#tests-support/fixtures.ts";
 import { render } from "#tests-support/render.tsx";
-import { NotificationsProvider } from "#web/features/notifications/notifications.tsx";
 import { ReflogPanel } from "#web/features/reflog/reflog-panel.tsx";
 import { useResetActions } from "#web/features/reset/reset-actions.tsx";
 import { RepositoryScopeProvider } from "#web/platform/query/repository-scope.tsx";
@@ -70,6 +69,21 @@ describe("reflog panel", () => {
       ]),
     );
   });
+
+  it("shows a toast when the commit cannot be shown in the graph", async () => {
+    const screen = await renderPanel(reflogFixture(), async () => {
+      throw new Error("The commit is not in the cached history.");
+    });
+
+    await screen
+      .getByRole("treeitem", { name: /Retry checkout on timeout/ })
+      .click({ button: "right" });
+    await screen.getByRole("menuitem", { name: /Show in graph/ }).click();
+
+    await expect
+      .element(screen.getByText("The commit is not in the cached history."))
+      .toBeVisible();
+  });
 });
 
 function reflogFixture() {
@@ -119,13 +133,11 @@ function renderPanel(
   onShowInGraph: (oid: string) => Promise<void> = async () => undefined,
 ) {
   return render(
-    <NotificationsProvider>
-      <RepositoryScopeProvider scope={repositoryScope()}>
-        <div style={{ height: 480 }}>
-          <ResetReflogPanel onShowInGraph={onShowInGraph} />
-        </div>
-      </RepositoryScopeProvider>
-    </NotificationsProvider>,
+    <RepositoryScopeProvider scope={repositoryScope()}>
+      <div style={{ height: 480 }}>
+        <ResetReflogPanel onShowInGraph={onShowInGraph} />
+      </div>
+    </RepositoryScopeProvider>,
     { environment: { requests: reflog.requests } },
   );
 }

@@ -27,7 +27,6 @@ import { render } from "#tests-support/render.tsx";
 import type { LocalEnvironmentSession } from "#web/app/environment/local-environment-session.ts";
 import { ApplicationShell } from "#web/app/shell/application-shell.tsx";
 import { RepositoryWorkspace } from "#web/app/workspace/repository-workspace.tsx";
-import { NotificationsProvider } from "#web/features/notifications/notifications.tsx";
 import { RepositoryScopeProvider } from "#web/platform/query/repository-scope.tsx";
 
 describe("application shell", () => {
@@ -40,7 +39,6 @@ describe("application shell", () => {
         repositoryFilesystem={undefined}
         session={connected.session}
       />,
-      { wrapper: NotificationsProvider },
     );
     await page
       .getByRole("button", { name: "Repository settings for rebase-test" })
@@ -70,7 +68,6 @@ describe("application shell", () => {
         repositoryFilesystem={undefined}
         session={connected.session}
       />,
-      { wrapper: NotificationsProvider },
     );
     await page
       .getByRole("main", { name: "Open project" })
@@ -121,7 +118,6 @@ describe("application shell", () => {
         repositoryFilesystem={undefined}
         session={connected.session}
       />,
-      { wrapper: NotificationsProvider },
     );
     const picker = await chooseFolder("repo");
     await expect.element(picker).not.toBeInTheDocument();
@@ -148,7 +144,6 @@ describe("application shell", () => {
         repositoryFilesystem={undefined}
         session={connected.session}
       />,
-      { wrapper: NotificationsProvider },
     );
     await chooseFolder("repo");
     await expect
@@ -181,7 +176,6 @@ describe("application shell", () => {
         repositoryFilesystem={undefined}
         session={connected.session}
       />,
-      { wrapper: NotificationsProvider },
     );
     const picker = await chooseFolder("repo");
     await expect
@@ -231,7 +225,6 @@ describe("application shell", () => {
         repositoryFilesystem={undefined}
         session={connected.session}
       />,
-      { wrapper: NotificationsProvider },
     );
     const repositories = page
       .getByRole("main", { name: "Open project" })
@@ -307,7 +300,6 @@ describe("application shell", () => {
         repositoryFilesystem={undefined}
         session={connected.session}
       />,
-      { wrapper: NotificationsProvider },
     );
     await page
       .getByRole("main", { name: "Open project" })
@@ -348,7 +340,6 @@ async function renderShell() {
       repositoryFilesystem={undefined}
       session={pairingRequiredSession()}
     />,
-    { wrapper: NotificationsProvider },
   );
 }
 
@@ -359,7 +350,6 @@ async function renderRepositoryWorkspace() {
         <RepositoryWorkspace />
       </RepositoryScopeProvider>
     </div>,
-    { wrapper: NotificationsProvider },
   );
 }
 

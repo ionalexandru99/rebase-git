@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import { userEvent } from "vite-plus/test/browser";
-import { render } from "vitest-browser-react";
+import { render } from "#tests-support/render.tsx";
 import {
   CommitRefLabels,
   GraphRefAppearance,
@@ -61,7 +61,7 @@ describe("commit reference pills", () => {
     ).toHaveLength(1);
   });
 
-  it("reports a failed clipboard write inside the pill", async () => {
+  it("reports a failed clipboard write in a notification", async () => {
     vi.spyOn(document, "execCommand").mockReturnValue(false);
     vi.spyOn(navigator.clipboard, "writeText").mockRejectedValue(
       new Error("Unavailable"),
@@ -73,8 +73,8 @@ describe("commit reference pills", () => {
     );
     await screen.getByRole("button", { name: "Copy feature/cache" }).click();
     await expect
-      .element(screen.getByRole("status"))
-      .toHaveTextContent("Could not copy feature/cache");
+      .element(screen.getByText("Couldn’t copy to the clipboard"))
+      .toBeVisible();
   });
 
   it("falls back to selection copying after an async clipboard rejection", async () => {

@@ -8,7 +8,10 @@ import type {
   RepositoryPathRejected,
 } from "#contracts/repository-catalog/repository-catalog.contract.ts";
 import type { QueryFailure } from "#web/platform/query/environment-query.ts";
-import { describeFailure } from "#web/platform/query/request-failure.ts";
+import {
+  describeFailure,
+  rejection,
+} from "#web/platform/query/request-failure.ts";
 import type { CommandFailure } from "#web/platform/query/use-command.ts";
 
 export function filterDirectoryEntries(
@@ -60,9 +63,10 @@ const directoryProblems: Record<
 export function repositorySelectionError(
   failure: CommandFailure<typeof RepositoryCatalogApi.remember>,
 ) {
-  return describeFailure(failure, {
-    RepositoryPathRejected: ({ reason }) => pathProblems[reason],
-  });
+  const rejected = rejection(failure);
+  return rejected?._tag === "RepositoryPathRejected"
+    ? pathProblems[rejected.reason]
+    : undefined;
 }
 
 export function directoryListingError(

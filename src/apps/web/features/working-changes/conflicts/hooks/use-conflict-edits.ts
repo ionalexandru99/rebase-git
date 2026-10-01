@@ -2,14 +2,14 @@ import type {
   MergeConflictRegion,
   MergeConflictResolution,
 } from "@pierre/diffs";
-import { useRef, useState } from "react";
+import { useRef } from "react";
 import {
   type ConflictExcerpt,
   type ConflictPath,
   RepositoryConflictsApi,
 } from "#contracts/repository-conflicts/repository-conflicts.contract.ts";
+import { useErrorToast } from "#web/features/notifications/notifications.tsx";
 import { conflictReason } from "#web/features/working-changes/conflicts/hooks/use-conflicts.ts";
-import { describeFailure } from "#web/platform/query/request-failure.ts";
 import { answer, useCommand } from "#web/platform/query/use-command.ts";
 
 export interface ConflictEdit {
@@ -29,26 +29,24 @@ export function useConflictEdits(input: ConflictPath, reload: () => void) {
       ),
     ],
   });
-  const [problem, setProblem] = useState<string | null>(null);
+  const errorToast = useErrorToast();
   const busy = useRef(false);
   const run = async (revision: string, change: ConflictEdit) => {
     try {
       const result = await edit.run({ path: input.path, revision, ...change });
       if (result._tag === "Ok") return true;
       if (conflictReason(result) === "Stale") reload();
-      else setProblem(describeFailure(result));
+      else errorToast.failure("resolveConflict", result);
       return false;
     } finally {
       busy.current = false;
     }
   };
   return {
-    problem,
     running: edit.running,
     apply: (revision: string, change: ConflictEdit) => {
       if (busy.current) return null;
       busy.current = true;
-      setProblem(null);
       return run(revision, change);
     },
   };

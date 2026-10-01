@@ -5,6 +5,7 @@ import {
   RepositoryRefsApi,
   type RepositoryRefTarget,
 } from "#contracts/repository-refs/repository-refs.contract.ts";
+import { useErrorToast } from "#web/features/notifications/notifications.tsx";
 import {
   isRouteQuery,
   useEnvironmentQuery,
@@ -29,7 +30,6 @@ export type RepositoryRefActivation =
 export interface RefActivation {
   readonly select: (target: RepositoryRefTarget) => void;
   readonly checkingOut: boolean;
-  readonly error: string | null;
 }
 
 export function useRepositoryRefs(
@@ -90,6 +90,7 @@ export function useRefActivation({
 }: RepositoryRefsRead): RefActivation {
   const scope = useRepositoryScope();
   const checkout = useCommand(RepositoryRefsApi.checkout);
+  const errorToast = useErrorToast();
   const { run } = checkout;
   const checkingOut = useRef(false);
   const select = useCallback(
@@ -106,26 +107,23 @@ export function useRefActivation({
         scope.switchWorktree(activation.worktreePath);
       else if (activation._tag === "Checkout") {
         checkingOut.current = true;
-        void run({ target: activation.target }).finally(() => {
-          checkingOut.current = false;
-        });
+        void run({ target: activation.target })
+          .then((result) =>
+            errorToast.failure("checkout", result, {
+              CheckoutRejected: ({ reason }) =>
+                reason === "StashFailed"
+                  ? "Local changes could not be stashed."
+                  : "Local changes would be overwritten.",
+            }),
+          )
+          .finally(() => {
+            checkingOut.current = false;
+          });
       }
     },
-    [run, refs, restored, scope],
+    [run, refs, restored, scope, errorToast],
   );
-  return {
-    select,
-    checkingOut: checkout.running,
-    error:
-      checkout.failure === undefined
-        ? null
-        : describeFailure(checkout.failure, {
-            CheckoutRejected: ({ reason }) =>
-              reason === "StashFailed"
-                ? "Local changes could not be stashed."
-                : "Local changes would be overwritten.",
-          }),
-  };
+  return { select, checkingOut: checkout.running };
 }
 
 export function resolveRefActivation(

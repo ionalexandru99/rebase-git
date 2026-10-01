@@ -19,7 +19,6 @@ import {
   repositoryScope,
 } from "#tests-support/fixtures.ts";
 import { render, testChanges } from "#tests-support/render.tsx";
-import { NotificationsProvider } from "#web/features/notifications/notifications.tsx";
 import { OperationRecoveryNotice } from "#web/features/operation-recovery/components/operation-recovery-toast.tsx";
 import { WorkingChanges } from "#web/features/working-changes/working-changes.tsx";
 import { WorkspacePanel } from "#web/features/workspace-panel/workspace-panel.tsx";
@@ -69,27 +68,25 @@ async function fixture() {
     respond(RepositoryChangesApi.read, () => changes()),
   );
   await render(
-    <NotificationsProvider>
-      <RepositoryScopeProvider scope={scope}>
-        <WorkspacePanel.Provider scopeKey={panelKey}>
-          <OperationRecoveryNotice repositoryName="catalog-api" />
-          <div
-            className="dark text-foreground"
-            style={{ width: 1100, height: 700 }}
-          >
-            <WorkingChanges
-              target={{
-                repositoryId: scope.repositoryId,
-                worktreePath: scope.worktreePath,
-                draftKey: JSON.stringify([crypto.randomUUID()]),
-                active: true,
-              }}
-              writable
-            />
-          </div>
-        </WorkspacePanel.Provider>
-      </RepositoryScopeProvider>
-    </NotificationsProvider>,
+    <RepositoryScopeProvider scope={scope}>
+      <WorkspacePanel.Provider scopeKey={panelKey}>
+        <OperationRecoveryNotice repositoryName="catalog-api" />
+        <div
+          className="dark text-foreground"
+          style={{ width: 1100, height: 700 }}
+        >
+          <WorkingChanges
+            target={{
+              repositoryId: scope.repositoryId,
+              worktreePath: scope.worktreePath,
+              draftKey: JSON.stringify([crypto.randomUUID()]),
+              active: true,
+            }}
+            writable
+          />
+        </div>
+      </WorkspacePanel.Provider>
+    </RepositoryScopeProvider>,
     { environment: { requests }, queryClient: environmentChanges.queryClient },
   );
   return {

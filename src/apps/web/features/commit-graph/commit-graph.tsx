@@ -473,14 +473,6 @@ export function CommitGraph({
           Refresh history
         </Button>
       ) : null}
-      {commands.error === undefined ? null : (
-        <p
-          className="m-0 border-border border-t px-3 py-2 text-[.85rem] text-destructive"
-          role="alert"
-        >
-          {commands.error}
-        </p>
-      )}
     </section>
   );
 }

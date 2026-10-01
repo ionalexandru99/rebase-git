@@ -6,6 +6,7 @@ import {
 import { Button } from "#web/components/ui/button.tsx";
 import { Input } from "#web/components/ui/input.tsx";
 import { SettingsRow } from "#web/components/ui/settings-layout.tsx";
+import { useErrorToast } from "#web/features/notifications/notifications.tsx";
 import { useEnvironmentQuery } from "#web/platform/query/environment-query.ts";
 import { describeFailure } from "#web/platform/query/request-failure.ts";
 import { useCommand } from "#web/platform/query/use-command.ts";
@@ -49,6 +50,7 @@ export function RepositoryFetchSettings({
     );
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string>();
+  const errorToast = useErrorToast();
   const save = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (disabled || saving) return;
@@ -70,7 +72,7 @@ export function RepositoryFetchSettings({
       .run({ repositoryId, setting: next })
       .then((result) => {
         if (result._tag === "Ok") setDraft(undefined);
-        else setError(describeFailure(result));
+        else errorToast.failure("saveFetchSettings", result);
       })
       .finally(() => setSaving(false));
   };

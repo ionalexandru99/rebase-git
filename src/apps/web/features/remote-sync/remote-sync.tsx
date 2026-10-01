@@ -1,7 +1,6 @@
 import { IconArrowBarToDown, IconArrowDown } from "@tabler/icons-react";
 import type { ReactNode } from "react";
 import { ToolbarButton } from "#web/components/ui/toolbar-button.tsx";
-import { ErrorNotification } from "#web/features/notifications/components/error-notification.tsx";
 import { useOperationCommandState } from "#web/features/operation-recovery/hooks/use-operation-status.ts";
 import {
   activeHead,
@@ -31,9 +30,6 @@ export function RemoteSync({
   return (
     <>
       <PushNotice push={push} />
-      {pull.error === undefined ? null : (
-        <ErrorNotification message={pull.error} />
-      )}
       {children(<SyncActions pull={pull} push={push} />)}
     </>
   );
@@ -95,7 +91,7 @@ function SyncActions({
           operationBusy={recoveryBusy}
         />
       )}
-      <FetchNotice
+      <FetchStatus
         connected={scope?.connected !== false}
         failed={fetch.failed}
         fetching={fetch.fetching}
@@ -104,7 +100,7 @@ function SyncActions({
   );
 }
 
-function FetchNotice({
+function FetchStatus({
   connected,
   fetching,
   failed,
@@ -113,10 +109,12 @@ function FetchNotice({
   readonly fetching: boolean;
   readonly failed: boolean;
 }) {
-  if (fetching) return null;
-  if (!connected) return <ErrorNotification message="You're offline" />;
-  if (failed) return <ErrorNotification message="Fetch failed" />;
-  return null;
+  if (fetching || (connected && !failed)) return null;
+  return (
+    <span className="text-xs text-status-unavailable" role="status">
+      {connected ? "Fetch failed" : "You're offline"}
+    </span>
+  );
 }
 
 function pullLabel(pulling: boolean, incoming: number) {

@@ -12,7 +12,11 @@ import type {
 import { type Action, submenu } from "#web/components/ui/action-menu.tsx";
 import { Button } from "#web/components/ui/button.tsx";
 import { writeClipboardText } from "#web/features/clipboard/write-clipboard-text.ts";
-import { ErrorNotification } from "#web/features/notifications/components/error-notification.tsx";
+import {
+  type ErrorAction,
+  type ErrorToast,
+  useErrorToast,
+} from "#web/features/notifications/notifications.tsx";
 import {
   ReflogList,
   type ReflogRow,
@@ -64,16 +68,14 @@ export function ReflogPanel({
         },
     { changes: "refs", enabled: feature?.active !== false },
   );
-  const [graphError, setGraphError] = useState<string>();
+  const errorToast = useErrorToast();
 
   const showInGraph = (oid: string) => {
     if (onShowInGraph === undefined) return;
-    setGraphError(undefined);
     onShowInGraph(oid).catch((reason: unknown) =>
-      setGraphError(
-        reason instanceof Error
-          ? reason.message
-          : "The commit could not be shown in the graph.",
+      errorToast.show(
+        "showInGraph",
+        reason instanceof Error ? reason.message : undefined,
       ),
     );
   };
@@ -86,6 +88,7 @@ export function ReflogPanel({
       showInGraph: onShowInGraph === undefined ? undefined : showInGraph,
       openDetails: onOpenDetails,
       reset,
+      errorToast,
     });
 
   return (
@@ -103,9 +106,6 @@ export function ReflogPanel({
         status={reflog.status}
         truncated={reflog.data?.truncated ?? false}
       />
-      {graphError === undefined ? null : (
-        <ErrorNotification message={graphError} />
-      )}
     </section>
   );
 }
@@ -178,9 +178,12 @@ function reflogActions(
     readonly showInGraph: ((oid: string) => void) | undefined;
     readonly openDetails: ((oid: string) => void) | undefined;
     readonly reset: ResetActions | undefined;
+    readonly errorToast: ErrorToast;
   },
 ): readonly Action[] {
-  const { scope, blocked, showInGraph, openDetails } = context;
+  const { scope, blocked, showInGraph, openDetails, errorToast } = context;
+  const copy = (text: string, failed: ErrorAction) =>
+    void writeClipboardText(text).catch(() => errorToast.show(failed));
   const readable = scope?.readable ?? false;
   const reset = context.reset?.actionFor(row.oid);
   return [
@@ -213,13 +216,13 @@ function reflogActions(
         id: "copySha",
         label: "SHA",
         enabled: true,
-        run: () => void writeClipboardText(row.oid),
+        run: () => copy(row.oid, "copySha"),
       },
       {
         id: "copySubject",
         label: "Subject",
         enabled: true,
-        run: () => void writeClipboardText(row.subject),
+        run: () => copy(row.subject, "copySubject"),
       },
     ]),
   ];

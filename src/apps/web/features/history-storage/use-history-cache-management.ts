@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { useErrorToast } from "#web/features/notifications/notifications.tsx";
 import type { HistoryStorage } from "#web/features/repository-history/history-worker-protocol.ts";
 import type { RepositoryHistory } from "#web/features/repository-history/repository-history.ts";
 import { useStore } from "#web/platform/store/use-store.ts";
@@ -27,6 +28,7 @@ export function useHistoryCacheManagement({
   const [confirmation, setConfirmation] = useState<HistoryCacheAction>();
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string>();
+  const errorToast = useErrorToast();
   const refresh = useCallback(async () => {
     setError(undefined);
     try {
@@ -46,19 +48,19 @@ export function useHistoryCacheManagement({
   async function manage(action: HistoryCacheAction) {
     setConfirmation(undefined);
     setPending(true);
-    setError(undefined);
     try {
       await history.ask({ _tag: "Storage", action });
       await refresh();
       try {
         await onCacheChanged(action, identity);
       } catch {
-        setError(
-          "The cache changed, but the repository view could not refresh. Reopen the repository to update it.",
+        errorToast.show(
+          "refreshRepository",
+          "The cache changed. Reopen the repository to update it.",
         );
       }
     } catch {
-      setError("The cache action could not finish. Try again.");
+      errorToast.show(action === "clear" ? "clearCache" : "rebuildCache");
     } finally {
       setPending(false);
     }
