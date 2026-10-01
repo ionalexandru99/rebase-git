@@ -17,7 +17,10 @@ describe("settings panel", () => {
       .toBeVisible();
     await expect
       .element(page.getByRole("combobox", { name: "Release channel" }))
-      .not.toBeInTheDocument();
+      .toBeDisabled();
+    await expect
+      .element(page.getByRole("button", { name: "Check for updates" }))
+      .toHaveAccessibleDescription("Updates are managed by the desktop app.");
 
     const search = settings.getByRole("textbox", { name: "Search settings" });
     await search.fill("history");

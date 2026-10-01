@@ -90,127 +90,124 @@ export function GeneralSettings({
             {productVersion}
           </span>
         </SettingRow>
-        {desktopAvailable ? (
-          <>
-            <SettingRow
-              description={
-                desktopReady ? "Stable follows full releases." : undefined
+        <SettingRow
+          description={
+            desktopReady ? "Stable follows full releases." : undefined
+          }
+          descriptionId="release-channel-description"
+          title="Release channel"
+        >
+          <Select.Root
+            disabled={!desktopReady || settingsPending || channelLocked}
+            items={releaseChannels}
+            onValueChange={(value) => {
+              if (value !== null && desktopUpdates !== undefined) {
+                void changeSetting(() =>
+                  desktopUpdates.selectReleaseChannel(value),
+                );
               }
-              descriptionId="release-channel-description"
-              title="Release channel"
+            }}
+            value={snapshot.settings.releaseChannel}
+          >
+            <Select.Trigger
+              aria-describedby="release-channel-description"
+              aria-label="Release channel"
+              className="flex h-8 w-40 shrink-0 items-center justify-between rounded-md border border-input bg-input/30 px-3 text-sm text-foreground outline-none hover:bg-accent data-disabled:cursor-not-allowed data-disabled:opacity-45 data-pressed:bg-accent focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30"
             >
-              <Select.Root
-                disabled={!desktopReady || settingsPending || channelLocked}
-                items={releaseChannels}
-                onValueChange={(value) => {
-                  if (value !== null && desktopUpdates !== undefined) {
-                    void changeSetting(() =>
-                      desktopUpdates.selectReleaseChannel(value),
-                    );
-                  }
-                }}
-                value={snapshot.settings.releaseChannel}
+              <Select.Value />
+              <Select.Icon>
+                <IconChevronDown
+                  aria-hidden="true"
+                  className="size-4 text-muted-foreground"
+                />
+              </Select.Icon>
+            </Select.Trigger>
+            <Select.Portal>
+              <Select.Positioner
+                align="end"
+                alignItemWithTrigger={false}
+                className="z-50 outline-none"
+                sideOffset={4}
               >
-                <Select.Trigger
-                  aria-describedby="release-channel-description"
-                  aria-label="Release channel"
-                  className="flex h-8 w-40 shrink-0 items-center justify-between rounded-md border border-input bg-input/30 px-3 text-sm text-foreground outline-none hover:bg-accent data-disabled:cursor-not-allowed data-disabled:opacity-45 data-pressed:bg-accent focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30"
-                >
-                  <Select.Value />
-                  <Select.Icon>
-                    <IconChevronDown
-                      aria-hidden="true"
-                      className="size-4 text-muted-foreground"
-                    />
-                  </Select.Icon>
-                </Select.Trigger>
-                <Select.Portal>
-                  <Select.Positioner
-                    align="end"
-                    alignItemWithTrigger={false}
-                    className="z-50 outline-none"
-                    sideOffset={4}
-                  >
-                    <Select.Popup className="w-[var(--anchor-width)] overflow-hidden rounded-md border border-border bg-popover p-1 text-popover-foreground shadow-lg outline-none">
-                      <Select.List>
-                        {releaseChannels.map((channel) => (
-                          <Select.Item
-                            className="flex h-8 cursor-default items-center rounded-sm px-2 text-sm outline-none select-none data-highlighted:bg-accent data-highlighted:text-accent-foreground"
-                            key={channel.value}
-                            value={channel.value}
-                          >
-                            <Select.ItemText>{channel.label}</Select.ItemText>
-                          </Select.Item>
-                        ))}
-                      </Select.List>
-                    </Select.Popup>
-                  </Select.Positioner>
-                </Select.Portal>
-              </Select.Root>
-            </SettingRow>
-            <SettingRow
-              description={
-                desktopReady
-                  ? "Check the selected channel when Rebase starts."
-                  : undefined
+                <Select.Popup className="w-[var(--anchor-width)] overflow-hidden rounded-md border border-border bg-popover p-1 text-popover-foreground shadow-lg outline-none">
+                  <Select.List>
+                    {releaseChannels.map((channel) => (
+                      <Select.Item
+                        className="flex h-8 cursor-default items-center rounded-sm px-2 text-sm outline-none select-none data-highlighted:bg-accent data-highlighted:text-accent-foreground"
+                        key={channel.value}
+                        value={channel.value}
+                      >
+                        <Select.ItemText>{channel.label}</Select.ItemText>
+                      </Select.Item>
+                    ))}
+                  </Select.List>
+                </Select.Popup>
+              </Select.Positioner>
+            </Select.Portal>
+          </Select.Root>
+        </SettingRow>
+        <SettingRow
+          description={
+            desktopReady
+              ? "Check the selected channel when Rebase starts."
+              : undefined
+          }
+          descriptionId="automatic-update-description"
+          title="Check automatically"
+        >
+          <Switch
+            aria-describedby="automatic-update-description"
+            aria-label="Check automatically"
+            checked={snapshot.settings.checkAutomatically}
+            disabled={!desktopReady || settingsPending}
+            onCheckedChange={(checked) => {
+              if (desktopUpdates !== undefined) {
+                void changeSetting(() =>
+                  desktopUpdates.setCheckAutomatically(checked),
+                );
               }
-              descriptionId="automatic-update-description"
-              title="Check automatically"
+            }}
+          />
+        </SettingRow>
+        <SettingRow
+          description={updateDescription(
+            snapshot,
+            desktopAvailable,
+            desktopReady,
+            actionError ?? updateLoadError,
+          )}
+          descriptionId="updates-description"
+          liveDescription
+          title="Updates"
+        >
+          <div className="flex flex-wrap items-center gap-2 md:shrink-0">
+            <Button
+              aria-describedby="updates-description"
+              disabled={!canCheck}
+              onClick={() => {
+                if (desktopUpdates !== undefined) {
+                  void runAction(() => desktopUpdates.checkForUpdates());
+                }
+              }}
+              size="sm"
+              variant="outline"
             >
-              <Switch
-                aria-describedby="automatic-update-description"
-                aria-label="Check automatically"
-                checked={snapshot.settings.checkAutomatically}
-                disabled={!desktopReady || settingsPending}
-                onCheckedChange={(checked) => {
-                  if (desktopUpdates !== undefined) {
-                    void changeSetting(() =>
-                      desktopUpdates.setCheckAutomatically(checked),
-                    );
-                  }
-                }}
-              />
-            </SettingRow>
-            <SettingRow
-              description={updateDescription(
-                snapshot,
-                desktopReady,
-                actionError ?? updateLoadError,
-              )}
-              descriptionId="updates-description"
-              liveDescription
-              title="Updates"
+              {checkButtonLabel(snapshot)}
+            </Button>
+            <Button
+              aria-describedby="updates-description"
+              disabled={!canInstall}
+              onClick={() => {
+                if (desktopUpdates !== undefined) {
+                  void runAction(() => desktopUpdates.installUpdate());
+                }
+              }}
+              size="sm"
             >
-              <div className="flex flex-wrap items-center gap-2 md:shrink-0">
-                <Button
-                  aria-describedby="updates-description"
-                  disabled={!canCheck}
-                  onClick={() => {
-                    if (desktopUpdates !== undefined) {
-                      void runAction(() => desktopUpdates.checkForUpdates());
-                    }
-                  }}
-                  size="sm"
-                  variant="outline"
-                >
-                  {checkButtonLabel(snapshot)}
-                </Button>
-                <Button
-                  aria-describedby="updates-description"
-                  disabled={!canInstall}
-                  onClick={() => {
-                    if (desktopUpdates !== undefined) {
-                      void runAction(() => desktopUpdates.installUpdate());
-                    }
-                  }}
-                  size="sm"
-                >
-                  Update now
-                </Button>
-              </div>
-            </SettingRow>
-          </>
-        ) : null}
+              Update now
+            </Button>
+          </div>
+        </SettingRow>
       </div>
     </div>
   );
@@ -233,9 +230,11 @@ function checkButtonLabel(snapshot: DesktopUpdateSnapshot) {
 
 function updateDescription(
   snapshot: DesktopUpdateSnapshot,
+  desktopAvailable: boolean,
   desktopReady: boolean,
   actionError: string | undefined,
 ) {
+  if (!desktopAvailable) return "Updates are managed by the desktop app.";
   if (actionError !== undefined) return actionError;
   if (!desktopReady) return "";
 
