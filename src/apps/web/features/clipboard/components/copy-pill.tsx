@@ -1,5 +1,6 @@
 import { type CSSProperties, type ReactNode, useEffect, useState } from "react";
 import { writeClipboardText } from "#web/features/clipboard/write-clipboard-text.ts";
+import { useErrorToast } from "#web/features/notifications/notifications.tsx";
 
 export function CopyPill({
   value,
@@ -12,10 +13,8 @@ export function CopyPill({
   readonly className?: string;
   readonly style?: CSSProperties;
 }) {
-  const [feedback, setFeedback] = useState<{
-    readonly text: string;
-    readonly success: boolean;
-  }>();
+  const [feedback, setFeedback] = useState<string>();
+  const errorToast = useErrorToast();
   useEffect(() => {
     if (feedback === undefined) return;
     const timer = setTimeout(() => setFeedback(undefined), 1_400);
@@ -32,9 +31,9 @@ export function CopyPill({
         const wide = event.currentTarget.offsetWidth >= 60;
         try {
           await writeClipboardText(value);
-          setFeedback({ text: wide ? "✓ Copied" : "✓", success: true });
+          setFeedback(wide ? "✓ Copied" : "✓");
         } catch {
-          setFeedback({ text: wide ? "Copy failed" : "!", success: false });
+          errorToast.show("copy");
         }
       }}
     >
@@ -48,13 +47,11 @@ export function CopyPill({
           className="absolute inset-0 flex items-center justify-center"
           aria-hidden="true"
         >
-          {feedback.text}
+          {feedback}
         </span>
       )}
       <span className="sr-only" role="status">
-        {feedback === undefined
-          ? ""
-          : `${feedback.success ? "Copied" : "Could not copy"} ${value}`}
+        {feedback === undefined ? "" : `Copied ${value}`}
       </span>
     </button>
   );

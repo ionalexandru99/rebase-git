@@ -521,7 +521,7 @@ export function BranchesSidebar({
           scope={scope}
         />
       </div>
-      <RefEditingStatus checkoutError={activation.error} editing={editing} />
+      <RefEditingStatus editing={editing} />
       <TagPushStatus push={tagPush} />
     </nav>
   );

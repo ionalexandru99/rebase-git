@@ -1,4 +1,4 @@
-import { type ReactElement, useCallback, useRef, useState } from "react";
+import { type ReactElement, useRef, useState } from "react";
 import type { RepositoryCommit } from "#contracts/repository-history/repository-history.contract.ts";
 import { RepositoryOperationsApi } from "#contracts/repository-operations/repository-operations.contract.ts";
 import {
@@ -14,6 +14,10 @@ import {
 import type { CherryPick } from "#web/features/cherry-pick/cherry-pick-menu.tsx";
 import { writeClipboardText } from "#web/features/clipboard/write-clipboard-text.ts";
 import type { MergeActions } from "#web/features/merge/merge-actions.ts";
+import {
+  type ErrorToast,
+  useErrorToast,
+} from "#web/features/notifications/notifications.tsx";
 import { useOperation } from "#web/features/operation-recovery/hooks/use-operation.ts";
 import { operationKindLabel } from "#web/features/operation-recovery/operation-messages.ts";
 import type { RebaseActions } from "#web/features/rebase/rebase-actions.ts";
@@ -26,10 +30,7 @@ import type { HistoryScopeQuery } from "#web/features/repository-history/history
 import type { RepositoryHistory } from "#web/features/repository-history/repository-history.ts";
 import type { ResetActions } from "#web/features/reset/reset-actions.tsx";
 import { useRepositoryScope } from "#web/platform/query/repository-scope.tsx";
-import { describeFailure } from "#web/platform/query/request-failure.ts";
 import { answer, useCommand } from "#web/platform/query/use-command.ts";
-
-type Attempt = (work: () => Promise<string | undefined>) => void;
 
 const maximumReverted = 256;
 
@@ -48,7 +49,7 @@ interface CommitActionHandlers {
   readonly create: readonly Action[];
   readonly readCommit: (oid: string) => Promise<RepositoryCommit | undefined>;
   readonly writeClipboard: (text: string) => Promise<void>;
-  readonly attempt: Attempt;
+  readonly errorToast: ErrorToast;
 }
 
 export function useCommitActions({
@@ -69,19 +70,13 @@ export function useCommitActions({
   readonly onOpenDetails?: ((oid: string) => void) | undefined;
 }) {
   const scope = useRepositoryScope();
-  const [error, setError] = useState<string>();
-  const attempt = useCallback((work: () => Promise<string | undefined>) => {
-    setError(undefined);
-    void work().then(setError, () =>
-      setError("The command could not be completed. Try again."),
-    );
-  }, []);
+  const errorToast = useErrorToast();
   const access = {
     connected: scope?.connected ?? false,
     readable: scope?.readable ?? false,
     writable: scope?.writable ?? false,
   };
-  const revert = useRevertActions(history, historyScope, attempt);
+  const revert = useRevertActions(history, historyScope, errorToast);
   const actionsFor = (
     oid: string,
     selected: readonly string[] = [oid],
@@ -97,16 +92,16 @@ export function useCommitActions({
       readCommit: async (commit) =>
         (await history?.ask({ _tag: "Commits", oids: [commit] }))?.[0],
       writeClipboard: writeClipboardText,
-      attempt,
+      errorToast,
     }),
   ];
-  return { actionsFor, error, preview: revert.preview };
+  return { actionsFor, preview: revert.preview };
 }
 
 function useRevertActions(
   history: Pick<RepositoryHistory, "ask"> | undefined,
   scope: HistoryScopeQuery | undefined,
-  attempt: Attempt,
+  errorToast: ErrorToast,
 ) {
   const repository = useRepositoryScope();
   const { refs } = useScopedRepositoryRefs();
@@ -151,17 +146,17 @@ function useRevertActions(
   const actionFor = (commits: readonly string[]): Action | undefined => {
     if (head === undefined || repository?.writable !== true) return undefined;
     const run = (commit: boolean) =>
-      attempt(async () => {
-        const result = await start.run({
-          expectedHead: head.commit,
-          operation: {
-            _tag: "Revert",
-            commits: await newestFirst(commits),
-            commit,
-          },
-        });
-        return result._tag === "Ok" ? undefined : describeFailure(result);
-      });
+      void newestFirst(commits)
+        .then((ordered) =>
+          start.run({
+            expectedHead: head.commit,
+            operation: { _tag: "Revert", commits: ordered, commit },
+          }),
+        )
+        .then(
+          (result) => errorToast.failure("revert", result),
+          () => errorToast.show("revert"),
+        );
     const reason =
       operation !== undefined && operation.kind !== "idle"
         ? `${operationKindLabel(operation.kind)} in progress`
@@ -219,11 +214,11 @@ function commitActions(
     create,
     readCommit,
     writeClipboard,
-    attempt,
+    errorToast,
   }: CommitActionHandlers,
 ): readonly Action[] {
   const copy = (
-    id: string,
+    id: "copySha" | "copySubject",
     label: string,
     text: () => Promise<string | undefined>,
   ) => ({
@@ -231,12 +226,13 @@ function commitActions(
     label,
     enabled: true,
     run: () =>
-      attempt(async () => {
-        const value = await text();
-        if (value === undefined) return "Commit metadata is not available yet";
-        await writeClipboard(value);
-        return undefined;
-      }),
+      void text()
+        .then((value) =>
+          value === undefined
+            ? errorToast.show(id, "Commit metadata is not available yet.")
+            : writeClipboard(value),
+        )
+        .catch(() => errorToast.show(id)),
   });
   return [
     ...(openDetails === undefined
@@ -246,11 +242,7 @@ function commitActions(
             id: "openDetails",
             label: "Open details",
             enabled: connected && readable,
-            run: () =>
-              attempt(async () => {
-                openDetails(oid);
-                return undefined;
-              }),
+            run: () => openDetails(oid),
           },
         ]),
     ...[cherryPick, merge, rebase, revert, reset].filter(

@@ -82,7 +82,7 @@ export function ConflictMerge({
     reverse: ConflictEdit,
   ) => {
     if (!writable || actions.busy) return null;
-    actions.reset();
+    actions.cancel();
     return edits.apply(from, edit)?.then((applied) => {
       if (applied) setHistory((past) => [...past, reverse]);
       else setFailures((count) => count + 1);
@@ -95,7 +95,6 @@ export function ConflictMerge({
     if (key === "undo") void undo();
     else jumpToBlock(pane.current, key);
   };
-  const problem = edits.problem ?? actions.problem;
   return (
     <section
       className="flex h-full min-h-0 min-w-0 flex-col bg-background"
@@ -160,14 +159,6 @@ export function ConflictMerge({
           </Button>
         )}
       </div>
-      {problem === null ? null : (
-        <p
-          role="alert"
-          className="shrink-0 border-border border-b px-3 py-2 text-xs text-destructive"
-        >
-          {problem}
-        </p>
-      )}
       <section
         ref={pane}
         aria-label="Working file"

@@ -7,6 +7,7 @@ import {
   render as renderComponent,
 } from "vitest-browser-react";
 import { fakeRequests, idleOperation } from "#tests-support/fake-requests.ts";
+import { NotificationsProvider } from "#web/features/notifications/notifications.tsx";
 import {
   type Environment,
   EnvironmentProvider,
@@ -41,7 +42,9 @@ export function render(
     wrapper: ({ children }) => (
       <QueryClientProvider client={queryClient}>
         <EnvironmentProvider environment={value}>
-          {Wrapper === undefined ? children : <Wrapper>{children}</Wrapper>}
+          <NotificationsProvider>
+            {Wrapper === undefined ? children : <Wrapper>{children}</Wrapper>}
+          </NotificationsProvider>
         </EnvironmentProvider>
       </QueryClientProvider>
     ),

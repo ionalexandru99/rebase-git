@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vite-plus/test";
 import { page, userEvent } from "vite-plus/test/browser";
-import { render } from "vitest-browser-react";
+import { render } from "#tests-support/render.tsx";
 import type {
   HistorySnapshot,
   HistoryStorage,
@@ -113,7 +113,7 @@ describe("repository history storage", () => {
     await expect
       .element(
         page.getByText(
-          "The cache changed, but the repository view could not refresh. Reopen the repository to update it.",
+          "The cache changed. Reopen the repository to update it.",
         ),
       )
       .toBeVisible();
@@ -217,7 +217,7 @@ describe("repository history storage", () => {
       .getByRole("button", { name: "Clear cache", exact: true })
       .click();
     await expect
-      .element(page.getByText("The cache action could not finish. Try again."))
+      .element(page.getByText("Couldn’t clear the cache"))
       .toBeVisible();
     await expect
       .element(page.getByRole("button", { name: "Rebuild cache", exact: true }))

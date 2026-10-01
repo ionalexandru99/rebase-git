@@ -1,4 +1,3 @@
-import { Toast } from "@base-ui/react/toast";
 import { useState } from "react";
 import {
   RepositoryReflogApi,
@@ -8,6 +7,7 @@ import {
 import type { Action } from "#web/components/ui/action-menu.tsx";
 import { Confirmation } from "#web/components/ui/confirmation.tsx";
 import { PersistentNotification } from "#web/features/notifications/components/persistent-notification.tsx";
+import { useErrorToast } from "#web/features/notifications/notifications.tsx";
 import { useOperation } from "#web/features/operation-recovery/hooks/use-operation.ts";
 import { operationKindLabel } from "#web/features/operation-recovery/operation-messages.ts";
 import {
@@ -17,7 +17,6 @@ import {
   useScopedRepositoryRefs,
 } from "#web/features/refs/repository-refs.ts";
 import { useRepositoryScope } from "#web/platform/query/repository-scope.tsx";
-import { describeFailure } from "#web/platform/query/request-failure.ts";
 import { useCommand } from "#web/platform/query/use-command.ts";
 
 export type ResetActionId = "reset" | `reset.${ResetMode}`;
@@ -51,7 +50,7 @@ export function useResetActions(): ResetActions {
   const scope = useRepositoryScope();
   const { refs } = useScopedRepositoryRefs();
   const operation = useOperation(scope, false).data;
-  const notifications = Toast.useToastManager();
+  const errorToast = useErrorToast();
   const command = useCommand(RepositoryReflogApi.reset);
   const [pending, setPending] = useState<PendingDiscard>();
   const head =
@@ -77,18 +76,11 @@ export function useResetActions(): ResetActions {
         ? { ...reset, failure }
         : undefined,
     );
-    if (
-      result._tag === "Ok" ||
-      result._tag === "Cancelled" ||
-      failure?._tag === "ResetDiscardsChanges"
-    )
-      return;
-    notifications.add({
-      title: describeFailure(result, {
-        HeadMoved: () =>
-          `${reset.branch} moved before the reset ran. Nothing changed.`,
-        RefMissing: () => "That commit no longer exists.",
-      }),
+    if (failure?._tag === "ResetDiscardsChanges") return;
+    errorToast.failure("reset", result, {
+      HeadMoved: () =>
+        `${reset.branch} moved before the reset ran. Nothing changed.`,
+      RefMissing: () => "That commit no longer exists.",
     });
   };
 

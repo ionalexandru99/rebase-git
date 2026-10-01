@@ -1,9 +1,9 @@
-import { Toast } from "@base-ui/react/toast";
 import { skipToken } from "@tanstack/react-query";
 import { useState } from "react";
 import { RepositoryChangesApi } from "#contracts/repository-changes/repository-changes.contract.ts";
 import { RepositoryOperationsApi } from "#contracts/repository-operations/repository-operations.contract.ts";
 import { type Action, submenu } from "#web/components/ui/action-menu.tsx";
+import { useErrorToast } from "#web/features/notifications/notifications.tsx";
 import { useOperation } from "#web/features/operation-recovery/hooks/use-operation.ts";
 import { operationKindLabel } from "#web/features/operation-recovery/operation-messages.ts";
 import type { RebasePlanTarget } from "#web/features/rebase/rebase-plan.ts";
@@ -18,7 +18,6 @@ import type { HistoryRange } from "#web/features/repository-history/history-grap
 import type { RepositoryHistory } from "#web/features/repository-history/repository-history.ts";
 import { useEnvironmentQuery } from "#web/platform/query/environment-query.ts";
 import { useRepositoryScope } from "#web/platform/query/repository-scope.tsx";
-import { describeFailure } from "#web/platform/query/request-failure.ts";
 import { answer, useCommand } from "#web/platform/query/use-command.ts";
 
 export type RebaseActionId = "rebase" | "rebase.onto" | "rebase.interactive";
@@ -43,7 +42,7 @@ export function useRebaseActions(
   const scope = useRepositoryScope();
   const { refs } = useScopedRepositoryRefs();
   const operation = useOperation(scope, false).data;
-  const notifications = Toast.useToastManager();
+  const errorToast = useErrorToast();
   const command = useCommand(RepositoryOperationsApi.start, {
     answers: (value, { repositoryId, worktreePath }) => [
       answer(
@@ -106,8 +105,7 @@ export function useRebaseActions(
         stash,
       },
     });
-    if (result._tag !== "Ok" && result._tag !== "Cancelled")
-      notifications.add({ title: describeFailure(result) });
+    errorToast.failure("rebase", result);
   };
 
   const ontoFor = (target: RefSourceTarget): RebaseChoice | undefined => {

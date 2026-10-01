@@ -362,7 +362,7 @@ describe("branches sidebar", () => {
     reads[0]?.reject(unanswered);
     await expect
       .element(screen.getByRole("alert"))
-      .toHaveTextContent("The Environment did not answer.");
+      .toHaveTextContent("The server did not answer.");
     await screen.getByRole("button", { name: "Retry" }).click();
     await expect.poll(() => reads.length).toBe(2);
   });
@@ -382,8 +382,12 @@ describe("branches sidebar", () => {
 
     await feature.dblClick();
     await expect
-      .element(screen.getByRole("alert"))
-      .toHaveTextContent("Local changes would be overwritten.");
+      .element(screen.getByText("Couldn’t switch branches"))
+      .toBeVisible();
+    await expect
+      .element(screen.getByText("Local changes would be overwritten."))
+      .toBeVisible();
+    await expect.element(feature).toHaveAttribute("aria-selected", "true");
 
     answer = () => new Promise(() => undefined);
     await feature.dblClick();

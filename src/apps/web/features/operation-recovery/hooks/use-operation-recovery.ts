@@ -6,10 +6,10 @@ import type {
   RepositoryOperation,
   RepositoryOperationsApi,
 } from "#contracts/repository-operations/repository-operations.contract.ts";
+import { useErrorToast } from "#web/features/notifications/notifications.tsx";
 import { useOperationAction } from "#web/features/operation-recovery/hooks/use-operation.ts";
 import { useWorktreeOperation } from "#web/features/operation-recovery/hooks/use-operation-status.ts";
 import { useRepositoryScope } from "#web/platform/query/repository-scope.tsx";
-import { describeFailure } from "#web/platform/query/request-failure.ts";
 import type {
   Command,
   CommandResult,
@@ -54,6 +54,7 @@ export function useOperationRecovery(
   const status = useWorktreeOperation(scope, options);
   const matched = status === null ? undefined : scope;
   const action = useOperationAction(matched);
+  const errorToast = useErrorToast();
   const finished = lastExecution(action, matched);
   const [retrying, setRetrying] = useState(false);
   const [observedKind, setObservedKind] = useState<OperationKind | null>(null);
@@ -82,11 +83,15 @@ export function useOperationRecovery(
       setRetrying(true);
       const fresh = await status.read();
       if (stillReady(fresh, operation.kind))
-        await action.run({ action: choice, revision: fresh.revision });
+        errorToast.failure(
+          choice,
+          await action.run({ action: choice, revision: fresh.revision }),
+        );
       setRetrying(false);
     };
     void action.run({ action: choice, revision }).then((result) => {
       if (choice === "continue" && staleRejection(result)) void continueFresh();
+      else errorToast.failure(choice, result);
     });
   };
 
@@ -95,10 +100,7 @@ export function useOperationRecovery(
     connected,
     checking: status?.checking ?? true,
     busy,
-    error:
-      action.failure === undefined || retrying
-        ? (status?.error ?? null)
-        : describeFailure(action.failure),
+    error: status?.error ?? null,
     completed:
       operation?.kind === "idle" &&
       observedKind !== null &&
@@ -111,10 +113,7 @@ export function useOperationRecovery(
     state,
     writable: action.canRun,
     execute,
-    refresh: () => {
-      action.reset();
-      status?.refresh();
-    },
+    refresh: () => status?.refresh(),
     dismiss: () => {
       if (finished !== null) setForgotten(finished.submittedAt);
     },

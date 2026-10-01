@@ -127,7 +127,9 @@ describe("revert commits from the graph", () => {
       .click();
 
     await expect
-      .element(screen.getByRole("alert"))
-      .toHaveTextContent("Nothing to revert. The changes are already undone.");
+      .element(
+        screen.getByText("Nothing to revert. The changes are already undone."),
+      )
+      .toBeVisible();
   });
 });

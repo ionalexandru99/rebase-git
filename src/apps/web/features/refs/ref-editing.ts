@@ -11,9 +11,14 @@ import type {
 } from "#contracts/repository-refs/repository-refs.contract.ts";
 import { RepositoryTagsApi } from "#contracts/repository-refs/repository-tags.contract.ts";
 import {
-  describeRefFailure,
+  type ErrorAction,
+  useErrorToast,
+} from "#web/features/notifications/notifications.tsx";
+import {
+  namingFailure,
   type RefKind,
   type RefRoute,
+  refFailureMessages,
   type StartPoint,
 } from "#web/features/refs/ref-kinds.ts";
 import { rejection } from "#web/platform/query/request-failure.ts";
@@ -88,8 +93,8 @@ export function useRefEditing({
     tag: useCommand(RepositoryTagsApi.delete),
   };
   const renameBranch = useCommand(RepositoryBranchesApi.rename);
+  const errorToast = useErrorToast();
   const [edit, setEdit] = useState<RefEdit>();
-  const [error, setError] = useState<string>();
   const [pending, setPending] = useState<PendingDeletion>();
   const [deleted, setDeleted] = useState<DeletedBranch>();
   const [notice, setNotice] = useState<string>();
@@ -109,9 +114,19 @@ export function useRefEditing({
   const dismiss = useCallback(() => setDeleted(undefined), []);
 
   const begin = (next: RefEdit) => {
-    setError(undefined);
     setNotice(undefined);
     setEdit(next);
+  };
+
+  const refused = (
+    action: ErrorAction,
+    name: string,
+    failure: CommandFailure<RefRoute>,
+  ) => {
+    const naming = namingFailure(name, failure);
+    if (naming === undefined)
+      errorToast.failure(action, failure, refFailureMessages(name));
+    return naming;
   };
 
   const finish = (kind: RefKind, name: string) => {
@@ -140,7 +155,12 @@ export function useRefEditing({
             target: startPoint.oid,
             ...(message === undefined ? {} : { message }),
           });
-    if (created._tag !== "Ok") return describeRefFailure(name, created);
+    if (created._tag !== "Ok")
+      return refused(
+        ref === "branch" ? "createBranch" : "createTag",
+        name,
+        created,
+      );
     finish(ref, name);
     if (ref === "branch") onCreated(name);
     return undefined;
@@ -155,7 +175,8 @@ export function useRefEditing({
         name,
         newName,
       });
-      if (renamed._tag !== "Ok") return describeRefFailure(newName, renamed);
+      if (renamed._tag !== "Ok")
+        return refused("renameBranch", newName, renamed);
       onRenamed({ name, newName });
     }
     finish("branch", newName);
@@ -163,7 +184,6 @@ export function useRefEditing({
   };
 
   const remove = async (deletion: RefDeletion, force: boolean) => {
-    setError(undefined);
     const result =
       deletion.kind === "tag"
         ? await deletes.tag.run(tagDeletionInput(deletion))
@@ -175,7 +195,11 @@ export function useRefEditing({
       return;
     }
     if (result._tag !== "Ok")
-      setError(describeRefFailure(deletedName(deletion), result));
+      errorToast.failure(
+        deletion.kind === "tag" ? "deleteTag" : "deleteBranch",
+        result,
+        refFailureMessages(deletedName(deletion)),
+      );
     else {
       const restorable = deletedBranch(deletion, refs);
       if (restorable !== undefined) setDeleted(restorable);
@@ -196,12 +220,16 @@ export function useRefEditing({
       ...(deleted.track === undefined ? {} : { track: deleted.track }),
     });
     if (restored._tag === "Ok") reveal("branch", deleted.name);
-    else setError(describeRefFailure(deleted.name, restored));
+    else
+      errorToast.failure(
+        "restoreBranch",
+        restored,
+        refFailureMessages(deleted.name),
+      );
   };
 
   return {
     edit,
-    error,
     notice,
     dismissNotice: () => setNotice(undefined),
     writable: creates.branch.canRun,
@@ -219,7 +247,6 @@ export function useRefEditing({
       dismiss,
       undo: () => void undo(),
       request: (deletion: RefDeletion) => {
-        setError(undefined);
         setNotice(undefined);
         if (confirmsFirst(deletion)) setPending({ deletion, busy: false });
         else if (deletes[deletion.kind].canRun) void remove(deletion, false);

@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { RepositoryCommit } from "#contracts/repository-history/repository-history.contract.ts";
+import { useErrorToast } from "#web/features/notifications/notifications.tsx";
 import type { HistorySearchPage } from "#web/features/repository-history/history-worker-protocol.ts";
 import type { RepositoryHistory } from "#web/features/repository-history/repository-history.ts";
 
 const pageSize = 20;
 const restoredPages = 5;
+const searchFailed = "Could not search cached history.";
 
 interface HistorySearchState {
   readonly text: string;
@@ -14,7 +16,7 @@ interface HistorySearchState {
   readonly loading: boolean;
   readonly navigating: boolean;
   readonly selected: number;
-  readonly error: "search" | "navigate" | undefined;
+  readonly error: string | undefined;
 }
 
 const emptySearch: HistorySearchState = {
@@ -34,6 +36,7 @@ export function useHistorySearch(
   onNavigate: (oid: string, signal: AbortSignal) => Promise<void>,
 ) {
   const [state, setState] = useState(emptySearch);
+  const errorToast = useErrorToast();
   const navigating = state.navigating;
   const latest = useRef(state);
   const running = useRef<AbortController | undefined>(undefined);
@@ -75,7 +78,7 @@ export function useHistorySearch(
         },
         () => {
           if (!signal.aborted)
-            publish({ ...latest.current, loading: false, error: "search" });
+            publish({ ...latest.current, loading: false, error: searchFailed });
         },
       );
     },
@@ -126,25 +129,15 @@ export function useHistorySearch(
           publish({ ...latest.current, loading: false, navigating: false });
       },
       () => {
-        if (!signal.aborted)
-          publish({
-            ...latest.current,
-            loading: false,
-            navigating: false,
-            error: "navigate",
-          });
+        if (signal.aborted) return;
+        publish({ ...latest.current, loading: false, navigating: false });
+        errorToast.show("openSearchResult");
       },
     );
   };
 
   return {
     ...state,
-    error:
-      state.error === undefined
-        ? undefined
-        : state.error === "search"
-          ? "Could not search cached history."
-          : "Could not open this search result.",
     setText: (value: string) => {
       const text = value.slice(0, 256);
       if (text === latest.current.text) return;
@@ -164,7 +157,7 @@ export function useHistorySearch(
       const signal = begin();
       void loadPage(signal).catch(() => {
         if (!signal.aborted)
-          publish({ ...latest.current, loading: false, error: "search" });
+          publish({ ...latest.current, loading: false, error: searchFailed });
       });
     },
     navigate: open,

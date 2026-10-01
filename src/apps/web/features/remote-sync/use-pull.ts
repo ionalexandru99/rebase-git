@@ -1,13 +1,22 @@
 import { skipToken } from "@tanstack/react-query";
-import { useCallback, useState } from "react";
-import { RepositoryPullApi } from "#contracts/repository-pull/repository-pull.contract.ts";
+import { useCallback } from "react";
+import type { RouteFailure } from "#contracts/environment-connection/environment-route.contract.ts";
+import {
+  type FetchFailed,
+  RepositoryPullApi,
+} from "#contracts/repository-pull/repository-pull.contract.ts";
+import { useErrorToast } from "#web/features/notifications/notifications.tsx";
 import { useEnvironmentQuery } from "#web/platform/query/environment-query.ts";
 import { useRepositoryScope } from "#web/platform/query/repository-scope.tsx";
-import { describeFailure } from "#web/platform/query/request-failure.ts";
-import {
-  type CommandFailure,
-  useCommand,
-} from "#web/platform/query/use-command.ts";
+import type { FailureMessages } from "#web/platform/query/request-failure.ts";
+import { useCommand } from "#web/platform/query/use-command.ts";
+
+const fetchProblems: Record<FetchFailed["reason"], string> = {
+  GitUnavailable: "Git could not start on the server.",
+  Timeout: "The remote took too long to answer.",
+  OutputTooLarge: "Git returned more output than Rebase can read.",
+  Failed: "Git could not fetch from the remote. Try again.",
+};
 
 export function useFetch() {
   const scope = useRepositoryScope();
@@ -18,13 +27,19 @@ export function useFetch() {
     { changes: "refs" },
   );
   const command = useCommand(RepositoryPullApi.fetch);
+  const errorToast = useErrorToast();
   const { run } = command;
   const execute = useCallback(
     () =>
       repositoryId === undefined
         ? Promise.resolve(false)
-        : run({ repositoryId }).then((result) => result._tag === "Ok"),
-    [repositoryId, run],
+        : run({ repositoryId }).then((result) => {
+            errorToast.failure("fetch", result, {
+              FetchFailed: ({ reason }) => fetchProblems[reason],
+            });
+            return result._tag === "Ok";
+          }),
+    [repositoryId, run, errorToast],
   );
   return {
     status: status.data,
@@ -43,19 +58,22 @@ export function usePull() {
   const scope = useRepositoryScope();
   const fetch = useFetch();
   const command = useCommand(RepositoryPullApi.pull, { before: fetch.execute });
-  const [mountedAt] = useState(Date.now);
+  const errorToast = useErrorToast();
   const pulling = command.running;
   const { run, canRun } = command;
 
   const pull = useCallback(
     async (branch: string) => {
       if (!canRun || pulling) return;
-      await run({ branch });
+      errorToast.failure(
+        "pull",
+        await run({ branch }),
+        pullFailureMessages(branch),
+      );
     },
-    [canRun, pulling, run],
+    [canRun, pulling, run, errorToast],
   );
 
-  const latest = command.latest;
   return {
     available: scope !== undefined,
     allowed: canRun,
@@ -63,24 +81,15 @@ export function usePull() {
     pull,
     pulling,
     ready: fetch.ready,
-    error:
-      latest?.result === undefined ||
-      latest.submittedAt < mountedAt ||
-      latest.result._tag === "Ok" ||
-      latest.result._tag === "Cancelled" ||
-      latest.input === undefined
-        ? undefined
-        : describePullFailure(latest.input.branch, latest.result),
   };
 }
 
 export type Pull = ReturnType<typeof usePull>;
 
-function describePullFailure(
+function pullFailureMessages(
   branch: string,
-  failure: CommandFailure<typeof RepositoryPullApi.pull>,
-) {
-  return describeFailure(failure, {
+): FailureMessages<RouteFailure<typeof RepositoryPullApi.pull>> {
+  return {
     PullDiverged: ({ upstream }) => `${branch} has diverged from ${upstream}.`,
     PullWouldOverwrite: ({ paths }) =>
       paths.length === 1
@@ -92,5 +101,5 @@ function describePullFailure(
         : `${upstream} was deleted.`,
     PullUncertain: () => "Pull may not have finished.",
     BranchMissing: () => `${branch} no longer exists.`,
-  });
+  };
 }

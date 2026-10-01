@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vite-plus/test";
-import { userEvent } from "vite-plus/test/browser";
+import { page, userEvent } from "vite-plus/test/browser";
 import { CommitInspectionApi } from "#contracts/commit-inspection/commit-inspection.contract.ts";
 import { RepositoryChangesApi } from "#contracts/repository-changes/repository-changes.contract.ts";
 import {
@@ -7,7 +7,11 @@ import {
   type StartOperation,
 } from "#contracts/repository-operations/repository-operations.contract.ts";
 import { RepositoryRefsApi } from "#contracts/repository-refs/repository-refs.contract.ts";
-import { fakeRequests, respond } from "#tests-support/fake-requests.ts";
+import {
+  fakeRequests,
+  rejected,
+  respond,
+} from "#tests-support/fake-requests.ts";
 import {
   commitInspection,
   mainPath,
@@ -22,7 +26,6 @@ import {
   historyOid,
 } from "#tests-support/history.ts";
 import { render } from "#tests-support/render.tsx";
-import { NotificationsProvider } from "#web/features/notifications/notifications.tsx";
 import { RebasePanel } from "#web/features/rebase/rebase-panel.tsx";
 import type { RebasePlanTarget } from "#web/features/rebase/rebase-plan.ts";
 import { PanelFeatureContext } from "#web/features/workspace-panel/api.ts";
@@ -90,6 +93,25 @@ describe("interactive rebase tab", () => {
     await expect
       .element(f.screen.getByRole("button", { name: "Start rebase" }))
       .toBeDisabled();
+  });
+
+  it("shows a failed start as a toast and keeps the plan open", async () => {
+    const f = await fixture();
+    f.started.mockImplementation(() => {
+      throw rejected({
+        _tag: "OperationFailed",
+        reason: "GitRejected",
+        detail: "Git refused the rebase.",
+      });
+    });
+    await f.screen.getByRole("button", { name: "Start rebase" }).click();
+    await expect
+      .element(page.getByText("Git refused the rebase."))
+      .toBeVisible();
+    await expect
+      .element(f.screen.getByRole("region", { name: "Rebase plan" }))
+      .toBeVisible();
+    expect(f.closed).not.toHaveBeenCalled();
   });
 
   it("shows where a running plan stopped under the operation controls", async () => {
@@ -187,24 +209,22 @@ async function fixture(operation = repositoryOperation()) {
   );
   const target: RebasePlanTarget = { ref: "main", commit: main, from: false };
   const screen = await render(
-    <NotificationsProvider>
-      <RepositoryScopeProvider scope={repositoryScope()}>
-        <PanelFeatureContext.Provider
-          value={{
-            scope: undefined,
-            environment: undefined,
-            active: true,
-            input: target,
-            expanded: false,
-            expand: () => {},
-          }}
-        >
-          <div style={{ height: 520, width: 440 }}>
-            <RebasePanel history={history} onClose={closed} />
-          </div>
-        </PanelFeatureContext.Provider>
-      </RepositoryScopeProvider>
-    </NotificationsProvider>,
+    <RepositoryScopeProvider scope={repositoryScope()}>
+      <PanelFeatureContext.Provider
+        value={{
+          scope: undefined,
+          environment: undefined,
+          active: true,
+          input: target,
+          expanded: false,
+          expand: () => {},
+        }}
+      >
+        <div style={{ height: 520, width: 440 }}>
+          <RebasePanel history={history} onClose={closed} />
+        </div>
+      </PanelFeatureContext.Provider>
+    </RepositoryScopeProvider>,
     { environment: { requests } },
   );
   return { screen, started, closed };

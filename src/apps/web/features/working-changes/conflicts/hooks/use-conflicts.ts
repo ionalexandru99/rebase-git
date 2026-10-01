@@ -14,6 +14,7 @@ import {
   RepositoryConflictsApi,
   type WholeFileChoice,
 } from "#contracts/repository-conflicts/repository-conflicts.contract.ts";
+import { useErrorToast } from "#web/features/notifications/notifications.tsx";
 import { useEnvironmentQuery } from "#web/platform/query/environment-query.ts";
 import {
   describeFailure,
@@ -110,48 +111,40 @@ export function useConflictActions(
   const stage = useCommand(RepositoryConflictsApi.stage, options);
   const choose = useCommand(RepositoryConflictsApi.choose, options);
   const [markers, setMarkers] = useState<string | null>(null);
-  const failure = stage.failure ?? choose.failure;
+  const errorToast = useErrorToast();
   const settled = (
     result: CommandResult<
       typeof RepositoryConflictsApi.stage | typeof RepositoryConflictsApi.choose
     >,
   ) => {
     if (result._tag === "Ok") onResolved?.(result.value);
+    else errorToast.failure("resolveConflict", result);
   };
   const input = (path: string) => {
     const current = revision(path);
     return current === undefined ? undefined : { path, revision: current };
   };
-  const reset = () => {
-    setMarkers(null);
-    stage.reset();
-    choose.reset();
-  };
+  const cancel = () => setMarkers(null);
   return {
     busy: stage.running || choose.running,
     confirming: markers,
-    problem:
-      failure === undefined || markers !== null
-        ? null
-        : describeFailure(failure),
     resolve: async (path: string, allowMarkers: boolean) => {
       const request = input(path);
       if (request === undefined) return;
-      reset();
+      cancel();
       const result = await stage.run({ ...request, allowMarkers });
       const markersRemain =
         result._tag !== "Ok" && conflictReason(result) === "Markers";
       if (!allowMarkers && markersRemain) setMarkers(path);
-      settled(result);
+      else settled(result);
     },
     choose: async (path: string, choice: WholeFileChoice) => {
       const request = input(path);
       if (request === undefined) return;
-      reset();
+      cancel();
       settled(await choose.run({ ...request, choice }));
     },
-    cancel: reset,
-    reset,
+    cancel,
   };
 }
 
@@ -187,11 +180,8 @@ export function useConflicts(
       conflictReason(document.error) === "Unsupported"
         ? null
         : describeFailure(document.error),
-    problem:
-      actions.problem ??
-      (list.error === null ? null : describeFailure(list.error)),
+    problem: list.error === null ? null : describeFailure(list.error),
     refresh: () => {
-      actions.reset();
       if (list.isError) void list.refetch();
       if (document.isError) void document.refetch();
     },

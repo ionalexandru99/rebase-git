@@ -308,8 +308,8 @@ describe("working changes", () => {
     await expect.element(amend).not.toBeChecked();
     await expect.element(subject).toHaveValue("New commit draft");
     await expect
-      .element(page.getByRole("alert"))
-      .toHaveTextContent("HEAD changed while you were amending");
+      .element(page.getByText("HEAD changed while you were amending"))
+      .toBeVisible();
   });
   it("re-reads changes when the server reports this repository changed or the window regains focus", async () => {
     const f = await fixture();
@@ -498,8 +498,8 @@ describe("working changes", () => {
       .getByRole("button", { name: "Commit 1 file", exact: true })
       .click();
     await expect
-      .element(page.getByRole("alert"))
-      .toHaveTextContent("Commit hook rejected this message.");
+      .element(page.getByText("Commit hook rejected this message."))
+      .toBeVisible();
     await expect
       .element(page.getByRole("textbox", { name: "Commit subject" }))
       .toHaveValue("Keep the draft");
@@ -517,9 +517,7 @@ describe("working changes", () => {
     f.rejectMutationsAsStale();
     const reads = f.reads();
     await page.getByRole("button", { name: "Stage entire file" }).click();
-    await expect
-      .element(page.getByRole("alert"))
-      .toHaveTextContent("The changes moved on.");
+    await expect.element(page.getByText("The changes moved on.")).toBeVisible();
     expect(f.reads()).toBeGreaterThan(reads);
     await expect
       .element(page.getByRole("button", { name: "Stage entire file" }))
@@ -561,7 +559,7 @@ describe("working changes", () => {
     const f = await fixture([], { rejectDiffs: true });
     await expect
       .element(page.getByRole("alert"))
-      .toHaveTextContent("The Environment did not answer.");
+      .toHaveTextContent("The server did not answer.");
     const diffReads = f.diffReads();
     f.acceptDiffs();
     await page.getByRole("button", { name: "Refresh", exact: true }).click();

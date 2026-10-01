@@ -4,44 +4,38 @@ import {
   RepositoryPushApi,
   type TagsPushed,
 } from "#contracts/repository-push/repository-push.contract.ts";
-import { ErrorNotification } from "#web/features/notifications/components/error-notification.tsx";
 import { PersistentNotification } from "#web/features/notifications/components/persistent-notification.tsx";
+import { useErrorToast } from "#web/features/notifications/notifications.tsx";
 import type { TagPushHandler } from "#web/features/refs/ref-actions.ts";
 import { DoneNotice } from "#web/features/refs/ref-editing-status.tsx";
-import { describeFailure } from "#web/platform/query/request-failure.ts";
+import { gitMessage } from "#web/platform/query/request-failure.ts";
 import { useCommand } from "#web/platform/query/use-command.ts";
 
 export type TagPush = ReturnType<typeof useTagPush>;
 
 export function useTagPush() {
   const command = useCommand(RepositoryPushApi.pushTags);
+  const errorToast = useErrorToast();
   const [pushed, setPushed] = useState<TagsPushed>();
-  const [attempt, setAttempt] = useState(0);
   const handler: TagPushHandler | undefined = command.canRun
     ? {
         pushing: command.running,
         run: (tags, remote) => {
           if (command.running) return;
           setPushed(undefined);
-          setAttempt((current) => current + 1);
           void command.run({ remote, tags }).then((result) => {
             if (result._tag === "Ok") setPushed(result.value);
+            errorToast.failure("pushTags", result, {
+              PushRejected: (rejected) => describeRejection(rejected, remote),
+            });
           });
         },
       }
     : undefined;
   return {
     handler,
-    attempt,
     pushing: command.running ? command.input : undefined,
     pushed,
-    failure:
-      command.failure === undefined || command.input === undefined
-        ? undefined
-        : describeFailure(command.failure, {
-            PushRejected: (rejected) =>
-              describeRejection(rejected, command.input?.remote ?? ""),
-          }),
     dismiss: () => setPushed(undefined),
   };
 }
@@ -55,8 +49,6 @@ export function TagPushStatus({ push }: { readonly push: TagPush }) {
         </p>
       </PersistentNotification>
     );
-  if (push.failure !== undefined)
-    return <ErrorNotification key={push.attempt} message={push.failure} />;
   if (push.pushed === undefined) return null;
   return (
     <DoneNotice
@@ -80,7 +72,7 @@ function describeRejection({ reason, detail }: PushRejected, remote: string) {
     case "TagExists":
       return `${remote} already has ${detail} on another commit. Nothing was pushed.`;
     case "HookDeclined":
-      return `Rejected by hook: ${detail}`;
+      return gitMessage(detail, `${remote} rejected the tags.`);
     case "Authentication":
       return `${remote} rejected the credentials.`;
     case "Network":
@@ -88,7 +80,7 @@ function describeRejection({ reason, detail }: PushRejected, remote: string) {
     case "RemoteMissing":
       return `Remote ${remote} not found.`;
     default:
-      return detail || "Push failed.";
+      return gitMessage(detail);
   }
 }
 

@@ -33,7 +33,6 @@ import { render } from "#tests-support/render.tsx";
 import { BranchesSidebar } from "#web/features/branches-sidebar/branches-sidebar.tsx";
 import { CommitActionMenu } from "#web/features/commit-graph/commit-actions.tsx";
 import { CommitRefPill } from "#web/features/commit-graph/components/commit-ref-labels.tsx";
-import { NotificationsProvider } from "#web/features/notifications/notifications.tsx";
 import { createRefActions } from "#web/features/refs/ref-actions.ts";
 import { RepositoryScopeProvider } from "#web/platform/query/repository-scope.tsx";
 
@@ -119,8 +118,18 @@ describe("ref editing", () => {
     await userEvent.keyboard("{F2}");
     await userEvent.keyboard("{Control>}a{/Control}spike/refs{Enter}");
     await expect
-      .element(screen.getByRole("alert"))
-      .toHaveTextContent("feature/spike changed since it was shown.");
+      .element(screen.getByText("Couldn’t rename the branch"))
+      .toBeVisible();
+    await expect
+      .element(
+        screen.getByText(
+          "feature/spike changed since it was shown. Try again.",
+        ),
+      )
+      .toBeVisible();
+    await expect
+      .element(screen.getByRole("textbox", { name: "Rename feature/spike" }))
+      .toHaveValue("spike/refs");
     expect(renamed).not.toHaveBeenCalled();
 
     await userEvent.keyboard("{Enter}");
@@ -550,17 +559,15 @@ function renderBranches(
   tagLabel = false,
 ) {
   return render(
-    <NotificationsProvider>
-      <RepositoryScopeProvider
-        scope={repositoryScope({ ...scope, logicalRepositoryId: repositoryId })}
-      >
-        <BranchWorkspace
-          createBranchAt={createBranchAt}
-          onBranchRenamed={onBranchRenamed}
-          tagLabel={tagLabel}
-        />
-      </RepositoryScopeProvider>
-    </NotificationsProvider>,
+    <RepositoryScopeProvider
+      scope={repositoryScope({ ...scope, logicalRepositoryId: repositoryId })}
+    >
+      <BranchWorkspace
+        createBranchAt={createBranchAt}
+        onBranchRenamed={onBranchRenamed}
+        tagLabel={tagLabel}
+      />
+    </RepositoryScopeProvider>,
     { environment: environment.environment },
   );
 }

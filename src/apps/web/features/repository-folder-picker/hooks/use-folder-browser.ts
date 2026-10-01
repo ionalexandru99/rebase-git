@@ -4,6 +4,7 @@ import {
   RepositoryCatalogApi,
   type RepositoryCatalogEntry,
 } from "#contracts/repository-catalog/repository-catalog.contract.ts";
+import { useErrorToast } from "#web/features/notifications/notifications.tsx";
 import { catalogWith } from "#web/features/repository-catalog/use-repository-catalog.ts";
 import {
   directoryListingError,
@@ -29,6 +30,7 @@ export function useFolderBrowser(
   const remember = useCommand(RepositoryCatalogApi.remember, {
     answers: catalogWith,
   });
+  const errorToast = useErrorToast();
   const directory = listing.isError ? undefined : listing.data;
   const selectedPath =
     directory === undefined
@@ -68,6 +70,8 @@ export function useFolderBrowser(
       if (selectedPath === undefined || remember.running) return;
       const result = await remember.run({ path: selectedPath });
       if (result._tag === "Ok") onRepositoryOpened(result.value);
+      else if (repositorySelectionError(result) === undefined)
+        errorToast.failure("openRepository", result);
     },
   };
 }

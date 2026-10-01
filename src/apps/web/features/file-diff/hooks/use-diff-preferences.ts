@@ -3,6 +3,7 @@ import {
   type DiffPreferences,
   defaultDiffPreferences,
 } from "#web/domain/file-diff/diff-preferences.contract.ts";
+import { useErrorToast } from "#web/features/notifications/notifications.tsx";
 import {
   readDiffPreferences,
   saveDiffPreferences,
@@ -10,6 +11,7 @@ import {
 
 export function useDiffPreferences() {
   const [preferences, setPreferences] = useState(defaultDiffPreferences);
+  const errorToast = useErrorToast();
   const chosen = useRef(false);
   useEffect(() => {
     let current = true;
@@ -23,10 +25,18 @@ export function useDiffPreferences() {
       current = false;
     };
   }, []);
-  const choose = useCallback((next: DiffPreferences) => {
-    chosen.current = true;
-    setPreferences(next);
-    saveDiffPreferences(next).catch(() => undefined);
-  }, []);
+  const choose = useCallback(
+    (next: DiffPreferences) => {
+      chosen.current = true;
+      setPreferences(next);
+      saveDiffPreferences(next).catch(() =>
+        errorToast.show(
+          "saveDiffSettings",
+          "The setting applies until you reload Rebase.",
+        ),
+      );
+    },
+    [errorToast],
+  );
   return [preferences, choose] as const;
 }

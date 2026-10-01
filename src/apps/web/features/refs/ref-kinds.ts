@@ -1,3 +1,4 @@
+import type { RouteFailure } from "#contracts/environment-connection/environment-route.contract.ts";
 import type {
   BranchUpstreamTarget,
   RepositoryBranchesApi,
@@ -6,7 +7,11 @@ import type {
   RepositoryTagsApi,
   TagRejected,
 } from "#contracts/repository-refs/repository-tags.contract.ts";
-import { describeFailure } from "#web/platform/query/request-failure.ts";
+import {
+  describeFailure,
+  type FailureMessages,
+  rejection,
+} from "#web/platform/query/request-failure.ts";
 import type { CommandFailure } from "#web/platform/query/use-command.ts";
 
 export type RefKind = "branch" | "tag";
@@ -73,18 +78,34 @@ function isControlOrSpace(character: string) {
   return code <= 0x20 || code === 0x7f;
 }
 
-export function describeRefFailure(
+export function namingFailure(name: string, failure: CommandFailure<RefRoute>) {
+  const rejected = rejection(failure);
+  const naming =
+    rejected?._tag === "InvalidBranchName" ||
+    rejected?._tag === "BranchExists" ||
+    (rejected?._tag === "TagRejected" && namingReasons.has(rejected.reason));
+  return naming
+    ? describeFailure(failure, refFailureMessages(name))
+    : undefined;
+}
+
+const namingReasons = new Set<TagRejected["reason"]>([
+  "Exists",
+  "InvalidName",
+  "MessageRequired",
+]);
+
+export function refFailureMessages(
   name: string,
-  failure: CommandFailure<RefRoute>,
-) {
-  return describeFailure(failure, {
+): FailureMessages<RouteFailure<RefRoute>> {
+  return {
     InvalidBranchName: ({ name }) => `${name} is not a valid branch name.`,
     BranchExists: ({ name }) => `${name} already exists.`,
     BranchMoved: ({ name }) => `${name} changed since it was shown. Try again.`,
     BranchNotMerged: ({ count, name }) =>
       `${count} commits exist only on ${name}.`,
     TagRejected: ({ reason }) => tagRejection(name, reason),
-  });
+  };
 }
 
 function tagRejection(name: string, reason: TagRejected["reason"]) {

@@ -1,6 +1,6 @@
 import { act } from "react";
 import { describe, expect, it, vi } from "vite-plus/test";
-import { page, userEvent } from "vite-plus/test/browser";
+import { page } from "vite-plus/test/browser";
 import {
   type FetchFailed,
   type RepositoryFetchSetting,
@@ -17,7 +17,6 @@ import {
 } from "#tests-support/fake-requests.ts";
 import { fetchStatus, repositoryScope } from "#tests-support/fixtures.ts";
 import { render, testChanges } from "#tests-support/render.tsx";
-import { NotificationsProvider } from "#web/features/notifications/notifications.tsx";
 import { RepositoryFetchSettings } from "#web/features/remote-sync/fetch-settings.tsx";
 import { RemoteSync } from "#web/features/remote-sync/remote-sync.tsx";
 import { RepositoryScopeProvider } from "#web/platform/query/repository-scope.tsx";
@@ -29,39 +28,6 @@ const failed = fetchStatus({
 });
 
 describe("repository fetch controls", () => {
-  it("keeps an error dismissed while it lasts and announces a later failure", async () => {
-    const f = await fixture(failed);
-    const notification = page.getByRole("dialog", {
-      name: "Fetch failed",
-      exact: true,
-    });
-    await expect.element(notification).toBeVisible();
-    await page.getByRole("button", { name: "Dismiss notification" }).click();
-    await f.publish({ ...failed, defaultIntervalSeconds: 600 });
-    await expect.element(notification).not.toBeInTheDocument();
-    await f.publish(fresh);
-    await f.publish(failed);
-    await expect.element(notification).toBeVisible();
-  });
-
-  it("preserves focus when an error arrives and lets the keyboard dismiss it", async () => {
-    const f = await fixture(fresh);
-    const fetch = page.getByRole("button", { name: "Fetch", exact: true });
-    await expect.element(fetch).toBeEnabled();
-    fetch.element().focus();
-    await f.publish(failed);
-    await expect
-      .element(page.getByRole("dialog", { name: "Fetch failed", exact: true }))
-      .toBeVisible();
-    await expect.element(fetch).toHaveFocus();
-    await userEvent.keyboard("{F6}{Tab}{Tab}");
-    const dismiss = page.getByRole("button", { name: "Dismiss notification" });
-    await expect.element(dismiss).toHaveFocus();
-    await userEvent.keyboard("{Enter}");
-    await expect.element(dismiss).not.toBeInTheDocument();
-    await expect.element(fetch).toHaveFocus();
-  });
-
   it("updates clean settings from other clients while preserving an edited interval", async () => {
     const f = await fixture({
       ...fresh,
@@ -94,19 +60,21 @@ describe("repository fetch controls", () => {
       .toHaveBeenLastCalledWith({ _tag: "Interval", seconds: 90 });
   });
 
-  it("shows a failed fetch toast and clears it when fetching from the toolbar", async () => {
+  it("reports a failed toolbar fetch once and clears its status after a fetch succeeds", async () => {
     const f = await fixture(fresh);
     f.fetch.mockRejectedValueOnce(unanswered);
     const fetch = page.getByRole("button", { name: "Fetch", exact: true });
     await fetch.click();
     await expect
-      .element(page.getByRole("dialog", { name: "Fetch failed", exact: true }))
+      .element(page.getByText("Couldn’t fetch changes"))
       .toBeVisible();
-    await fetch.click();
     await expect
-      .element(page.getByRole("dialog", { name: "Fetch failed", exact: true }))
-      .not.toBeInTheDocument();
+      .element(page.getByRole("status"))
+      .toHaveTextContent("Fetch failed");
+    await fetch.click();
+    await expect.element(page.getByRole("status")).not.toBeInTheDocument();
     expect(f.fetch).toHaveBeenCalledTimes(2);
+    expect(page.getByText("Couldn’t fetch changes").elements()).toHaveLength(1);
   });
 
   it("disables duplicate fetches and shows background fetch failures", async () => {
@@ -124,11 +92,14 @@ describe("repository fetch controls", () => {
       .toBeEnabled();
     await f.publish(failed);
     await expect
-      .element(page.getByRole("dialog", { name: "Fetch failed", exact: true }))
-      .toBeVisible();
+      .element(page.getByRole("status"))
+      .toHaveTextContent("Fetch failed");
     await expect
       .element(page.getByRole("button", { name: "Fetch", exact: true }))
       .toBeEnabled();
+    expect(page.getByText("Couldn’t fetch changes").elements()).toHaveLength(0);
+    await f.publish(fresh);
+    await expect.element(page.getByRole("status")).not.toBeInTheDocument();
   });
 
   it("saves custom, disabled, and inherited intervals", async () => {
@@ -166,15 +137,13 @@ describe("repository fetch controls", () => {
       .fill("90");
     await page.getByRole("button", { name: "Save", exact: true }).click();
     await expect
-      .element(page.getByRole("alert"))
-      .toHaveTextContent(
-        "The Environment did not answer. Check the connection and try again.",
-      );
+      .element(page.getByText("Couldn’t save automatic fetch"))
+      .toBeVisible();
     await expect
       .element(page.getByRole("spinbutton", { name: "Interval in seconds" }))
       .toHaveValue(90);
     await page.getByRole("button", { name: "Save", exact: true }).click();
-    await expect.element(page.getByRole("alert")).not.toBeInTheDocument();
+    await expect.poll(() => f.configure).toHaveBeenCalledTimes(2);
   });
 
   it("shows offline and disables fetching and its configuration", async () => {
@@ -183,8 +152,8 @@ describe("repository fetch controls", () => {
       .element(page.getByRole("button", { name: "Fetch", exact: true }))
       .toBeDisabled();
     await expect
-      .element(page.getByRole("dialog", { name: "You're offline" }))
-      .toBeVisible();
+      .element(page.getByRole("status"))
+      .toHaveTextContent("You're offline");
     await expect
       .element(page.getByRole("combobox", { name: "Automatic fetch" }))
       .toBeDisabled();
@@ -222,7 +191,7 @@ async function fixture(
   );
   const changes = testChanges();
   await render(
-    <NotificationsProvider>
+    <>
       <RepositoryScopeProvider scope={{ ...scope, connected }}>
         <RemoteSync>{(actions) => actions}</RemoteSync>
       </RepositoryScopeProvider>
@@ -230,7 +199,7 @@ async function fixture(
         repositoryId={scope.repositoryId}
         canConfigure={canConfigure}
       />
-    </NotificationsProvider>,
+    </>,
     {
       queryClient: changes.queryClient,
       environment: {

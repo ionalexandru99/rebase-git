@@ -9,7 +9,7 @@ export type RequestFailure<Failure> =
   | { readonly _tag: "Unanswered" }
   | { readonly _tag: "Cancelled" };
 
-type TaggedFailure = { readonly _tag: string };
+export type TaggedFailure = { readonly _tag: string };
 
 export type FailureMessages<Failure extends TaggedFailure> = {
   readonly [Tag in Failure["_tag"]]?: (
@@ -53,7 +53,7 @@ export function describeFailure<Failure extends TaggedFailure>(
 ): string {
   switch (failure._tag) {
     case "Unanswered":
-      return "The Environment did not answer. Check the connection and try again.";
+      return "The server did not answer. Check the connection and try again.";
     case "Cancelled":
       return "The request was cancelled.";
     case "Rejected":
@@ -90,9 +90,35 @@ function sharedWording(failure: TaggedFailure): string {
 }
 
 function detailOf(failure: TaggedFailure) {
-  return "detail" in failure &&
-    typeof failure.detail === "string" &&
-    failure.detail.length > 0
-    ? failure.detail
-    : "Git could not complete the operation.";
+  return gitMessage(
+    "detail" in failure && typeof failure.detail === "string"
+      ? failure.detail
+      : "",
+  );
+}
+
+export function gitMessage(detail: string, summary?: string) {
+  const lines = detail
+    .split("\n")
+    .map((line) => line.trimEnd())
+    .filter((line) => line.trim().length > 0 && !line.startsWith("hint:"));
+  const headline =
+    summary ??
+    sentence(
+      lines.find((line) => /^(fatal|error):/.test(line)) ?? lines[0] ?? "",
+    );
+  if (headline === undefined) return "Git could not complete the operation.";
+  return lines.length > 1 || (summary !== undefined && lines.length > 0)
+    ? `${headline}\n\n${lines.join("\n")}`
+    : headline;
+}
+
+function sentence(line: string) {
+  const text = line
+    .trim()
+    .replace(/^(fatal|error|warning):\s*/, "")
+    .replace(/:$/, "");
+  if (text.length === 0) return undefined;
+  const capitalized = text.charAt(0).toUpperCase() + text.slice(1);
+  return /[.!?]$/.test(capitalized) ? capitalized : `${capitalized}.`;
 }

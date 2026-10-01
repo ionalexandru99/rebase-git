@@ -1,3 +1,4 @@
+import type { RouteFailure } from "#contracts/environment-connection/environment-route.contract.ts";
 import type {
   PushBranch,
   PushDestination,
@@ -5,11 +6,11 @@ import type {
   RepositoryPushApi,
 } from "#contracts/repository-push/repository-push.contract.ts";
 import type { RepositoryRefs } from "#contracts/repository-refs/repository-refs.contract.ts";
-import { describeFailure } from "#web/platform/query/request-failure.ts";
-import type {
-  CommandFailure,
-  CommandInput,
-} from "#web/platform/query/use-command.ts";
+import {
+  type FailureMessages,
+  gitMessage,
+} from "#web/platform/query/request-failure.ts";
+import type { CommandInput } from "#web/platform/query/use-command.ts";
 
 export type PushRequest = CommandInput<typeof RepositoryPushApi.push>;
 
@@ -127,13 +128,12 @@ export function describeProgress({ destination, mode }: PushBranch) {
   return `${mode._tag === "ForceWithLease" ? "Force pushing" : "Pushing"} to ${destinationName(destination)}`;
 }
 
-export function describePushFailure(
-  failure: CommandFailure<typeof RepositoryPushApi.push>,
+export function pushFailureMessages(
   destination: PushDestination,
-) {
-  return describeFailure(failure, {
+): FailureMessages<RouteFailure<typeof RepositoryPushApi.push>> {
+  return {
     PushRejected: (rejected) => describePushRejection(rejected, destination),
-  });
+  };
 }
 
 function describePushRejection(
@@ -147,7 +147,7 @@ function describePushRejection(
     case "LeaseRejected":
       return `Rejected: ${name} moved since your last fetch. Fetch and review.`;
     case "HookDeclined":
-      return `Rejected by hook: ${detail}`;
+      return gitMessage(detail, `${name} rejected the push.`);
     case "Authentication":
       return `${destination.remote} rejected the credentials.`;
     case "Network":
@@ -155,6 +155,6 @@ function describePushRejection(
     case "RemoteMissing":
       return `Remote ${destination.remote} not found.`;
     default:
-      return detail || "Push failed.";
+      return gitMessage(detail);
   }
 }

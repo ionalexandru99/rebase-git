@@ -1,4 +1,3 @@
-import { Toast } from "@base-ui/react/toast";
 import { IconChevronRight } from "@tabler/icons-react";
 import { skipToken } from "@tanstack/react-query";
 import { useRef, useState } from "react";
@@ -18,6 +17,7 @@ import {
   ContextMenuSubmenu,
   ContextMenuSubmenuTrigger,
 } from "#web/components/ui/context-menu.tsx";
+import { useErrorToast } from "#web/features/notifications/notifications.tsx";
 import { useOperation } from "#web/features/operation-recovery/hooks/use-operation.ts";
 import { operationKindLabel } from "#web/features/operation-recovery/operation-messages.ts";
 import {
@@ -32,7 +32,6 @@ import {
   type RepositoryScope,
   useRepositoryScope,
 } from "#web/platform/query/repository-scope.tsx";
-import { describeFailure } from "#web/platform/query/request-failure.ts";
 import { answer, useCommand } from "#web/platform/query/use-command.ts";
 
 interface CherryPickPlan {
@@ -53,7 +52,7 @@ export function useCherryPick(
   const { refs } = useScopedRepositoryRefs();
   const operation = useOperation(repository, false).data;
   const panel = useWorkspacePanel();
-  const notifications = Toast.useToastManager();
+  const errorToast = useErrorToast();
   const head =
     refs === undefined || repository === undefined
       ? undefined
@@ -109,13 +108,9 @@ export function useCherryPick(
         },
       })
       .then((outcome) => {
-        if (outcome._tag === "Ok") {
-          if (outcome.value.outcome === "Staged")
-            panel.execute({ type: "open", kind: "changes" });
-          return;
-        }
-        if (outcome._tag !== "Cancelled")
-          notifications.add({ title: describeFailure(outcome) });
+        if (outcome._tag === "Ok" && outcome.value.outcome === "Staged")
+          panel.execute({ type: "open", kind: "changes" });
+        errorToast.failure("cherryPick", outcome);
       });
   };
 

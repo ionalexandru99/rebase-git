@@ -32,7 +32,6 @@ import {
   historyOid,
 } from "#tests-support/history.ts";
 import { render } from "#tests-support/render.tsx";
-import { NotificationsProvider } from "#web/features/notifications/notifications.tsx";
 import { useRebaseActions } from "#web/features/rebase/rebase-actions.ts";
 import type { RebasePlanTarget } from "#web/features/rebase/rebase-plan.ts";
 import { RepositoryScopeProvider } from "#web/platform/query/repository-scope.tsx";
@@ -170,13 +169,11 @@ async function fixture(failure?: OperationFailure) {
     }),
   );
   const screen = await render(
-    <NotificationsProvider>
-      <div style={{ height: 520, width: 900 }}>
-        <RepositoryScopeProvider scope={repositoryScope()}>
-          <RebaseGraph history={reader} openPlan={planned} />
-        </RepositoryScopeProvider>
-      </div>
-    </NotificationsProvider>,
+    <div style={{ height: 520, width: 900 }}>
+      <RepositoryScopeProvider scope={repositoryScope()}>
+        <RebaseGraph history={reader} openPlan={planned} />
+      </RepositoryScopeProvider>
+    </div>,
     { environment: { requests } },
   );
   return {
