@@ -3,11 +3,8 @@ import { Effect } from "effect";
 import { describe, expect, it } from "vite-plus/test";
 import { PullRequestsApi } from "#contracts/pull-requests/pull-requests.contract.ts";
 import { createRepository, git } from "#tests-support/git.ts";
-import {
-  fakeAzureDevOps,
-  fakeGitHub,
-  openTestEnvironment,
-} from "#tests-support/server.ts";
+import { fakeAzureDevOps, fakeGitHub } from "#tests-support/git-hosts.ts";
+import { openTestEnvironment } from "#tests-support/server.ts";
 
 describe("branch pull requests", () => {
   it("finds pull requests by each branch's upstream on the GitHub remote", async () => {
@@ -155,15 +152,13 @@ describe("Azure DevOps pull requests", () => {
     ]);
   });
 
-  it("reads the visualstudio.com remote form", async () => {
+  it.each([
+    "https://acme.visualstudio.com/DefaultCollection/Rebase/_git/Rebase",
+    "acme@vs-ssh.visualstudio.com:v3/acme/Rebase/Rebase",
+    "https://dev.azure.com/acme/_git/Rebase",
+  ])("reads the %s remote form", async (origin) => {
     const { azureDevOps } = fakeAzureDevOps({ main: [{ id: 1, checks: [] }] });
-    const f = await fixture(
-      {
-        origin:
-          "https://acme.visualstudio.com/DefaultCollection/Rebase/_git/Rebase",
-      },
-      { azureDevOps },
-    );
+    const f = await fixture({ origin }, { azureDevOps });
     await f.track("main", "origin", "main");
 
     await expect(f.list()).resolves.toEqual([

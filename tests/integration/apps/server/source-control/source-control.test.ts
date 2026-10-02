@@ -4,11 +4,8 @@ import { describe, expect, it } from "vite-plus/test";
 import { PullRequestsApi } from "#contracts/pull-requests/pull-requests.contract.ts";
 import { SourceControlApi } from "#contracts/source-control/source-control.contract.ts";
 import { createRepository, git } from "#tests-support/git.ts";
-import {
-  fakeAzureDevOps,
-  fakeGitHub,
-  openTestEnvironment,
-} from "#tests-support/server.ts";
+import { fakeAzureDevOps, fakeGitHub } from "#tests-support/git-hosts.ts";
+import { openTestEnvironment } from "#tests-support/server.ts";
 
 describe("source control", () => {
   it("reports Git, the GitHub and Azure DevOps logins and the hosts that are coming soon", async () => {

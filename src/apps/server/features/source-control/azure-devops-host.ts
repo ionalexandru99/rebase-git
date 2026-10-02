@@ -152,7 +152,7 @@ function listPullRequests(
             Effect.orElseSucceed(() => undefined),
           )
         : Effect.succeed(undefined);
-    const answers = yield* Effect.forEach(
+    return yield* Effect.forEach(
       tracked,
       (branch) =>
         read(pullRequestsUrl(repository, branch), decodePullRequestList).pipe(
@@ -169,15 +169,12 @@ function listPullRequests(
           Effect.map(
             (pullRequests): BranchPullRequests => ({
               branch: branch.branch,
-              pullRequests: pullRequests.sort(
-                (left, right) => openFirst(left) - openFirst(right),
-              ),
+              pullRequests,
             }),
           ),
         ),
       { concurrency: branchesAtOnce },
     );
-    return answers.filter(({ pullRequests }) => pullRequests.length > 0);
   });
 }
 
@@ -340,8 +337,4 @@ function checksState(
     return "Pending";
   if (statuses.includes("approved")) return "Passing";
   return undefined;
-}
-
-function openFirst(pullRequest: PullRequest) {
-  return pullRequest.state === "Open" || pullRequest.state === "Draft" ? 0 : 1;
 }

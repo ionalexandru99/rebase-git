@@ -1,6 +1,9 @@
 import { Effect } from "effect";
 import { repositoryRejected } from "#contracts/git/git-failures.contract.ts";
-import { PullRequestsApi } from "#contracts/pull-requests/pull-requests.contract.ts";
+import {
+  type PullRequest,
+  PullRequestsApi,
+} from "#contracts/pull-requests/pull-requests.contract.ts";
 import {
   type EnvironmentFeature,
   route,
@@ -16,6 +19,8 @@ import {
 import { gitHostFor } from "#server/features/source-control/git-host.ts";
 import type { SourceControl } from "#server/features/source-control/source-control.ts";
 import type { RepositoryAccess } from "#server/repository/repository-access.ts";
+
+const pullRequestsPerBranch = 10;
 
 export function pullRequestsFeature({
   access,
@@ -67,8 +72,24 @@ function listPullRequests(
         return url === undefined ? [] : [{ ...branch, remoteUrl: url }];
       },
     );
-    return yield* host.pullRequests(remoteUrl, branches);
+    return (yield* host.pullRequests(remoteUrl, branches)).flatMap(
+      ({ branch, pullRequests }) =>
+        pullRequests.length === 0
+          ? []
+          : [
+              {
+                branch,
+                pullRequests: [...pullRequests]
+                  .sort((left, right) => openFirst(left) - openFirst(right))
+                  .slice(0, pullRequestsPerBranch),
+              },
+            ],
+    );
   });
+}
+
+function openFirst(pullRequest: PullRequest) {
+  return pullRequest.state === "Open" || pullRequest.state === "Draft" ? 0 : 1;
 }
 
 function readTrackedBranches(git: GitCommandRunner, directory: string) {

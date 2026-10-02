@@ -120,11 +120,7 @@ function listPullRequests(
           ),
         ),
     { concurrency: 4 },
-  ).pipe(
-    Effect.map((answers) =>
-      answers.flat().filter(({ pullRequests }) => pullRequests.length > 0),
-    ),
-  );
+  ).pipe(Effect.map((answers) => answers.flat()));
 }
 
 function githubRepository(remoteUrl: string) {
@@ -195,8 +191,7 @@ function branchPullRequests(
         (node) =>
           node.headRepositoryOwner?.login.toLowerCase() === owner.toLowerCase(),
       )
-      .map(pullRequest)
-      .sort((left, right) => openFirst(left) - openFirst(right)),
+      .map(pullRequest),
   };
 }
 
@@ -225,10 +220,6 @@ function checksState(state: string | undefined): PullRequest["checks"] {
   if (state === "FAILURE" || state === "ERROR") return "Failing";
   if (state === "PENDING" || state === "EXPECTED") return "Pending";
   return undefined;
-}
-
-function openFirst(pullRequest: PullRequest) {
-  return pullRequest.state === "Open" || pullRequest.state === "Draft" ? 0 : 1;
 }
 
 function chunks<Item>(items: readonly Item[], size: number) {
