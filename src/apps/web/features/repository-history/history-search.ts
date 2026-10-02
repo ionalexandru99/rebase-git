@@ -26,11 +26,12 @@ export async function searchHistory(
     query.text.length > 256
   )
     throw new Error("History search query exceeds its limits");
-  let next = decodeCursor(repository, query.text, query.cursor);
+  const after = decodeCursor(repository, query.text, query.cursor);
   const matches = matchingHistoryMetadata(query.text, refTargets);
   const commits: RepositoryCommit[] = [];
   if (normalizeHistorySearch(query.text) === "") return { commits };
   const newest = graph.newest();
+  let next = resumePosition(graph, newest, after);
   const end = Math.min(newest.length, next + maximumScannedCommits);
   while (next < end && commits.length < query.limit) {
     signal.throwIfAborted();
@@ -53,7 +54,14 @@ export async function searchHistory(
     }
   }
   return next < newest.length
-    ? { commits, cursor: encodeCursor(repository, query.text, next) }
+    ? {
+        commits,
+        cursor: encodeCursor(
+          repository,
+          query.text,
+          graph.oid(newest[next - 1] ?? -1),
+        ),
+      }
     : { commits };
 }
 
@@ -85,9 +93,21 @@ function normalizeHistorySearch(text: string) {
   return text.trim().toLowerCase().replace(/\s+/g, " ");
 }
 
-function encodeCursor(repository: number, text: string, next: number) {
+function resumePosition(
+  graph: HistoryGraph,
+  newest: Int32Array,
+  after: string | undefined,
+) {
+  if (after === undefined) return 0;
+  const position = newest.indexOf(graph.id(after) ?? -1);
+  if (position < 0)
+    throw new Error("History search cursor does not match this query");
+  return position + 1;
+}
+
+function encodeCursor(repository: number, text: string, oid: string) {
   return encodeURIComponent(
-    JSON.stringify([4, repository, normalizeHistorySearch(text), next]),
+    JSON.stringify([4, repository, normalizeHistorySearch(text), oid]),
   );
 }
 
@@ -96,7 +116,7 @@ function decodeCursor(
   text: string,
   cursor: string | undefined,
 ) {
-  if (cursor === undefined) return 0;
+  if (cursor === undefined) return undefined;
   try {
     const value: unknown = JSON.parse(decodeURIComponent(cursor));
     if (
@@ -105,8 +125,8 @@ function decodeCursor(
       value[0] === 4 &&
       value[1] === repository &&
       value[2] === normalizeHistorySearch(text) &&
-      Number.isInteger(value[3]) &&
-      value[3] > 0
+      typeof value[3] === "string" &&
+      /^[0-9a-f]{40}([0-9a-f]{24})?$/.test(value[3])
     )
       return value[3];
   } catch {}
