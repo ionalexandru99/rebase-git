@@ -57,9 +57,9 @@ export function readRepositoryRefs(
     const worktrees = yield* canonicalizeWorktrees(output.worktrees);
     return fitRepositoryRefs({
       remoteProviders: output.remoteMetadata.remoteProviders,
-      ...(output.remoteMetadata.githubRepository === undefined
+      ...(output.remoteMetadata.hostedRepository === undefined
         ? {}
-        : { githubRepository: output.remoteMetadata.githubRepository }),
+        : { hostedRepository: output.remoteMetadata.hostedRepository }),
       branches: canonicalizeBranchWorktrees(
         output.branches.flatMap(withDefined(localBranchFromRecord)),
         output.worktrees,
@@ -136,18 +136,30 @@ function readRemoteMetadata(git: GitCommandRunner, directory: string) {
     { timeoutMilliseconds: 5_000, maxOutputBytes: 65_536 },
   ).pipe(
     Effect.map((remotes) => ({
-      githubRepository: githubRepositoryFromRemotes(remotes),
+      hostedRepository: hostedRepositoryFromRemotes(remotes),
       remoteProviders: remoteProvidersFromConfig(remotes),
     })),
     Effect.catch(() =>
-      Effect.succeed({ githubRepository: undefined, remoteProviders: [] }),
+      Effect.succeed({ hostedRepository: undefined, remoteProviders: [] }),
     ),
   );
 }
 
-export function githubRepositoryFromRemotes(
+const hostedProviders = new Map<
+  string,
+  NonNullable<RepositoryRefs["hostedRepository"]>["provider"]
+>([
+  ["github.com", "github"],
+  ["bitbucket.org", "bitbucket"],
+  ["codeberg.org", "codeberg"],
+  ["gitlab.com", "gitlab"],
+  ["dev.azure.com", "azure"],
+  ["ssh.dev.azure.com", "azure"],
+]);
+
+export function hostedRepositoryFromRemotes(
   output: string,
-): RepositoryRefs["githubRepository"] {
+): RepositoryRefs["hostedRepository"] {
   const remotes = output
     .trim()
     .split("\n")
@@ -160,20 +172,41 @@ export function githubRepositoryFromRemotes(
   const origin = remotes.find((remote) => remote.remote === "origin");
   const url =
     origin?.url ?? (remotes.length === 1 ? remotes[0]?.url : undefined);
-  if (url === undefined) return undefined;
-  const match =
-    /^(?:https:\/\/github\.com\/|git@github\.com:|ssh:\/\/git@github\.com\/)([a-zA-Z0-9-]{1,39})\/([a-zA-Z0-9_.-]{1,100}?)\/?$/.exec(
-      url,
-    );
-  const owner = match?.[1];
-  const name = match?.[2]?.replace(/\.git$/, "");
+  const location = url === undefined ? undefined : remoteLocation(url);
+  const provider =
+    location === undefined ? undefined : hostedProviders.get(location.host);
+  if (location === undefined || provider === undefined) return undefined;
+  if (provider === "gitlab" || provider === "azure") return { provider };
+  const [owner, name, ...rest] = location.path
+    .replace(/^\/+|\/+$/g, "")
+    .replace(/\.git$/, "")
+    .split("/");
   return owner === undefined ||
     name === undefined ||
-    name === "" ||
-    name === "." ||
-    name === ".."
+    rest.length > 0 ||
+    !isHostedName(owner) ||
+    !isHostedName(name)
     ? undefined
-    : { owner, name };
+    : { provider, owner, name };
+}
+
+function remoteLocation(address: string) {
+  if (address.includes("://")) {
+    try {
+      const url = new URL(address);
+      return { host: url.hostname.toLowerCase(), path: url.pathname };
+    } catch {
+      return undefined;
+    }
+  }
+  const match = /^(?:[^@/]+@)?([^/:]+):(.+)$/.exec(address);
+  return match?.[1] === undefined || match[2] === undefined
+    ? undefined
+    : { host: match[1].toLowerCase(), path: match[2] };
+}
+
+function isHostedName(value: string) {
+  return /^(?!\.{1,2}$)[\w.-]{1,100}$/.test(value);
 }
 
 type Provider = NonNullable<

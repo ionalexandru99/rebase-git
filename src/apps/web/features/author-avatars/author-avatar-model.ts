@@ -2,9 +2,11 @@ import {
   type AuthorAvatarSource,
   type AvatarAuthor,
   AvatarUnavailable,
-  type GitHubRepository,
-} from "#web/features/author-avatars/author-avatar-source.ts";
-import { githubAvatarSource } from "#web/features/author-avatars/github-avatar-source.ts";
+} from "#web/features/author-avatars/author-avatar-providers.ts";
+import type {
+  AuthorAvatarStore,
+  CachedAvatar,
+} from "#web/features/author-avatars/author-avatar-store.ts";
 
 export interface AuthorAvatarModel {
   readonly get: (email: string) => string | undefined;
@@ -16,14 +18,8 @@ export interface AuthorAvatarModel {
 }
 
 const concurrentLookups = 2;
-const cachedAuthors = 512;
-const avatarLifetimeMilliseconds = 86_400_000;
-const missingAvatarLifetimeMilliseconds = 60_000;
-
-interface CachedAvatar {
-  readonly url: string | undefined;
-  readonly expires: number;
-}
+const avatarLifetimeMilliseconds = 7 * 86_400_000;
+const retryAfterFailureMilliseconds = 60_000;
 
 interface PendingLookup {
   readonly listeners: Set<() => void>;
@@ -31,22 +27,36 @@ interface PendingLookup {
 }
 
 export function createAuthorAvatarModel(
-  repository: GitHubRepository,
-  source: AuthorAvatarSource = githubAvatarSource,
+  source: AuthorAvatarSource,
+  store: AuthorAvatarStore,
 ): AuthorAvatarModel {
   const cache = new Map<string, CachedAvatar>();
   const pending = new Map<string, PendingLookup>();
   const permits = createPermits(concurrentLookups);
+  const loaded = store.load(source.provider).then(
+    (stored) => {
+      for (const [email, avatar] of stored)
+        if (!cache.has(email)) cache.set(email, avatar);
+    },
+    () => undefined,
+  );
   let pausedUntil = 0;
   let closed = false;
+
+  const fresh = (key: string) => {
+    const cached = cache.get(key);
+    return cached !== undefined && cached.expires > Date.now()
+      ? cached
+      : undefined;
+  };
 
   const resolveUnlessPaused = async (
     author: AvatarAuthor,
     signal: AbortSignal,
   ) => {
-    if (Date.now() < pausedUntil) return undefined;
+    if (Date.now() < pausedUntil) throw new AvatarUnavailable(pausedUntil);
     try {
-      return await source.resolve(repository, author, signal);
+      return await source.resolve(author, signal);
     } catch (error) {
       if (error instanceof AvatarUnavailable && error.retryAt !== undefined)
         pausedUntil = Math.max(pausedUntil, error.retryAt);
@@ -54,28 +64,26 @@ export function createAuthorAvatarModel(
     }
   };
 
-  const lookup = async (author: AvatarAuthor, signal: AbortSignal) => {
+  const lookup = async (
+    key: string,
+    author: AvatarAuthor,
+    signal: AbortSignal,
+  ) => {
+    await loaded;
+    if (fresh(key) !== undefined) return;
     try {
-      return await permits(signal, () => resolveUnlessPaused(author, signal));
+      const url = await permits(signal, () =>
+        resolveUnlessPaused(author, signal),
+      );
+      const avatar = { url, expires: Date.now() + avatarLifetimeMilliseconds };
+      cache.set(key, avatar);
+      store.save(source.provider, key, avatar);
     } catch (error) {
       if (signal.aborted) throw error;
-      return undefined;
-    }
-  };
-
-  const remember = (key: string, url: string | undefined) => {
-    cache.delete(key);
-    cache.set(key, {
-      url,
-      expires:
-        Date.now() +
-        (url === undefined
-          ? missingAvatarLifetimeMilliseconds
-          : avatarLifetimeMilliseconds),
-    });
-    while (cache.size > cachedAuthors) {
-      const oldest = cache.keys().next().value;
-      if (oldest !== undefined) cache.delete(oldest);
+      cache.set(key, {
+        url: undefined,
+        expires: Date.now() + retryAfterFailureMilliseconds,
+      });
     }
   };
 
@@ -85,10 +93,9 @@ export function createAuthorAvatarModel(
       controller: new AbortController(),
     };
     pending.set(key, request);
-    lookup(author, request.controller.signal).then(
-      (url) => {
+    lookup(key, author, request.controller.signal).then(
+      () => {
         if (closed || pending.get(key) !== request) return;
-        remember(key, url);
         pending.delete(key);
         for (const notify of request.listeners) notify();
       },
@@ -102,8 +109,7 @@ export function createAuthorAvatarModel(
     subscribe: (author, listener) => {
       if (closed) return () => {};
       const key = author.author.email.toLowerCase();
-      const cached = cache.get(key);
-      if (cached !== undefined && cached.expires > Date.now()) return () => {};
+      if (fresh(key) !== undefined) return () => {};
       const request = pending.get(key) ?? start(key, author);
       request.listeners.add(listener);
       return () => {

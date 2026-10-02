@@ -16,7 +16,7 @@ import type { RepositoryRefs } from "#contracts/repository-refs/repository-refs.
 import { type Action, runAction } from "#web/components/ui/action-menu.tsx";
 import { Button } from "#web/components/ui/button.tsx";
 import { AuthorAvatars } from "#web/features/author-avatars/author-avatar.tsx";
-import type { GitHubRepository } from "#web/features/author-avatars/author-avatar-source.ts";
+import type { HostedRepository } from "#web/features/author-avatars/author-avatar-providers.ts";
 import type { CherryPick } from "#web/features/cherry-pick/cherry-pick-menu.tsx";
 import {
   CommitActionMenu,
@@ -80,7 +80,7 @@ export function CommitGraph({
   roots,
   scope,
   selections,
-  githubRepository,
+  hostedRepository,
   remoteProviders,
   toolbarActions,
   merge,
@@ -113,7 +113,7 @@ export function CommitGraph({
   readonly scope?: HistoryScope;
   readonly selections?: readonly HistorySelection[];
   readonly remoteProviders?: RepositoryRefs["remoteProviders"];
-  readonly githubRepository?: GitHubRepository | undefined;
+  readonly hostedRepository?: HostedRepository | undefined;
 }): JSX.Element {
   const [menuOid, setMenuOid] = useState<string>();
   const connected = useRepositoryScope()?.connected;
@@ -280,7 +280,7 @@ export function CommitGraph({
             selections={selections}
           />
         )}
-        <AuthorAvatars repository={githubRepository}>
+        <AuthorAvatars repository={hostedRepository}>
           <CommitGraphVirtualWindow
             ref={viewportRef}
             scrollRef={scrollRef}

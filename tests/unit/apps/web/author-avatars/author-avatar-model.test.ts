@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vite-plus/test";
+import { memoryAvatarStore } from "#tests-support/fixtures.ts";
 import { createAuthorAvatarModel } from "#web/features/author-avatars/author-avatar-model.ts";
-import { AvatarUnavailable } from "#web/features/author-avatars/author-avatar-source.ts";
+import { AvatarUnavailable } from "#web/features/author-avatars/author-avatar-providers.ts";
 
 const author = {
   oid: "a".repeat(40),
@@ -11,11 +12,10 @@ const author = {
     timezoneOffsetMinutes: 0,
   },
 };
-const repository = { owner: "alex", name: "rebase" };
 const avatar = "https://avatars.githubusercontent.com/u/123?s=40";
 
 function neverResolves(aborted: () => void) {
-  return (_repository: unknown, _author: unknown, signal: AbortSignal) =>
+  return (_author: unknown, signal: AbortSignal) =>
     new Promise<string | undefined>((_resolve, reject) => {
       signal.addEventListener("abort", () => {
         aborted();
@@ -30,7 +30,10 @@ describe("author avatar loading", () => {
       string | undefined
     >();
     const resolve = vi.fn(() => promise);
-    const model = createAuthorAvatarModel(repository, { resolve });
+    const model = createAuthorAvatarModel(
+      { provider: "github", resolve },
+      memoryAvatarStore(),
+    );
     try {
       const first = vi.fn();
       const second = vi.fn();
@@ -57,7 +60,10 @@ describe("author avatar loading", () => {
   it("cancels work when its last visible row leaves and resumes on return", async () => {
     const aborted = vi.fn();
     const resolve = vi.fn(neverResolves(aborted));
-    const model = createAuthorAvatarModel(repository, { resolve });
+    const model = createAuthorAvatarModel(
+      { provider: "github", resolve },
+      memoryAvatarStore(),
+    );
     try {
       const leave = model.subscribe(author, vi.fn());
       await expect.poll(() => resolve).toHaveBeenCalledOnce();
@@ -75,7 +81,10 @@ describe("author avatar loading", () => {
     const resolve = vi.fn(() =>
       Promise.reject(new AvatarUnavailable(Date.now() + 60_000)),
     );
-    const model = createAuthorAvatarModel(repository, { resolve });
+    const model = createAuthorAvatarModel(
+      { provider: "github", resolve },
+      memoryAvatarStore(),
+    );
     try {
       const done = vi.fn();
       model.subscribe(author, done);
@@ -97,12 +106,15 @@ describe("author avatar loading", () => {
 
   it("runs at most two lookups at once and starts a queued author when one finishes", async () => {
     const lookups = new Map<string, PromiseWithResolvers<string | undefined>>();
-    const resolve = vi.fn((_repository: unknown, lookup: { oid: string }) => {
+    const resolve = vi.fn((lookup: { oid: string }) => {
       const pending = Promise.withResolvers<string | undefined>();
       lookups.set(lookup.oid, pending);
       return pending.promise;
     });
-    const model = createAuthorAvatarModel(repository, { resolve });
+    const model = createAuthorAvatarModel(
+      { provider: "github", resolve },
+      memoryAvatarStore(),
+    );
     try {
       for (const name of ["first", "second", "third"])
         model.subscribe(
@@ -127,7 +139,10 @@ describe("author avatar loading", () => {
       lookups.push(pending);
       return pending.promise;
     });
-    const model = createAuthorAvatarModel(repository, { resolve });
+    const model = createAuthorAvatarModel(
+      { provider: "github", resolve },
+      memoryAvatarStore(),
+    );
     try {
       const queued = vi.fn();
       for (const name of ["first", "second", "third"])
@@ -140,6 +155,54 @@ describe("author avatar loading", () => {
         lookup.reject(new AvatarUnavailable(Date.now() + 60_000));
       await expect.poll(() => queued).toHaveBeenCalledOnce();
       expect(resolve).toHaveBeenCalledTimes(2);
+    } finally {
+      model.dispose();
+    }
+  });
+
+  it("shows an avatar stored in the last week without a lookup", async () => {
+    const resolve = vi.fn();
+    const model = createAuthorAvatarModel(
+      { provider: "github", resolve },
+      memoryAvatarStore({
+        "alex@example.test": { url: avatar, expires: Date.now() + 60_000 },
+      }),
+    );
+    try {
+      const done = vi.fn();
+      model.subscribe(author, done);
+      await expect.poll(() => done).toHaveBeenCalledOnce();
+      expect(model.get(author.author.email)).toBe(avatar);
+      expect(resolve).not.toHaveBeenCalled();
+    } finally {
+      model.dispose();
+    }
+  });
+
+  it("stores answers for a week and keeps failures in memory only", async () => {
+    const resolve = vi
+      .fn()
+      .mockResolvedValueOnce(avatar)
+      .mockRejectedValueOnce(new AvatarUnavailable());
+    const store = memoryAvatarStore();
+    const model = createAuthorAvatarModel(
+      { provider: "github", resolve },
+      store,
+    );
+    try {
+      const found = vi.fn();
+      const failed = vi.fn();
+      model.subscribe(author, found);
+      model.subscribe(
+        { ...author, author: { email: "other@example.test" } },
+        failed,
+      );
+      await expect.poll(() => found).toHaveBeenCalledOnce();
+      await expect.poll(() => failed).toHaveBeenCalledOnce();
+      expect([...store.saved.keys()]).toEqual(["alex@example.test"]);
+      expect(store.saved.get("alex@example.test")?.expires).toBeGreaterThan(
+        Date.now() + 6 * 86_400_000,
+      );
     } finally {
       model.dispose();
     }

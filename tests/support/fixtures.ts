@@ -15,6 +15,10 @@ import type {
   RepositoryRefs,
   RepositoryWorktree,
 } from "#contracts/repository-refs/repository-refs.contract.ts";
+import type {
+  AuthorAvatarStore,
+  CachedAvatar,
+} from "#web/features/author-avatars/author-avatar-store.ts";
 import type { RepositoryScope } from "#web/platform/query/repository-scope.tsx";
 
 export const repositoryId = "00000000-0000-4000-8000-000000000001";
@@ -271,5 +275,16 @@ export function desktopUpdates(
     setCheckAutomatically: async () => {},
     subscribe: () => () => {},
     ...updates,
+  };
+}
+
+export function memoryAvatarStore(
+  stored: Readonly<Record<string, CachedAvatar>> = {},
+): AuthorAvatarStore & { readonly saved: Map<string, CachedAvatar> } {
+  const saved = new Map<string, CachedAvatar>();
+  return {
+    saved,
+    load: async () => new Map(Object.entries(stored)),
+    save: (_provider, email, avatar) => saved.set(email, avatar),
   };
 }

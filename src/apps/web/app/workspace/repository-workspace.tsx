@@ -176,7 +176,7 @@ function Workspace({
                             <WorkspacePanel.Toggle />
                           </>
                         }
-                        githubRepository={refs?.githubRepository}
+                        hostedRepository={refs?.hostedRepository}
                         remoteProviders={refs?.remoteProviders}
                         historyIdentity={{
                           environmentId,
