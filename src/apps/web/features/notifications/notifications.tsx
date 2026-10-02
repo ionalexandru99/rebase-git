@@ -1,8 +1,12 @@
 import { Toast } from "@base-ui/react/toast";
-import { IconAlertCircle, IconX } from "@tabler/icons-react";
-import { type ReactNode, useEffect, useMemo, useState } from "react";
-import { Button } from "#web/components/ui/button.tsx";
+import { type ReactNode, useMemo, useRef, useState } from "react";
 import { PersistentNotificationOutlet } from "#web/features/notifications/components/persistent-notification.tsx";
+import {
+  type NoticeData,
+  NotificationStack,
+  type NotifiedRepository,
+} from "#web/features/notifications/notification-stack.tsx";
+import { useRepositoryScope } from "#web/platform/query/repository-scope.tsx";
 import {
   describeFailure,
   type FailureMessages,
@@ -66,15 +70,58 @@ const visibleToasts = 3;
 const unanswered =
   "The server stopped responding. Reconnect and check the result before trying again.";
 
-export function useErrorToast() {
-  const { add } = Toast.useToastManager();
+type Notice = {
+  readonly type: "error" | "success" | "loading";
+  readonly title: string;
+  readonly description?: string | undefined;
+  readonly action?: { readonly label: string; readonly run: () => void };
+};
+
+function useActionToasts() {
+  const { add, close, toasts } = Toast.useToastManager<NoticeData>();
+  const shown = useRef(toasts);
+  shown.current = toasts;
+  const repositoryId = useRepositoryScope()?.repositoryId;
   return useMemo(() => {
-    const show = (action: ErrorAction, description?: string) => {
-      add({
-        title: errorTitles[action],
-        ...(description === undefined ? {} : { description }),
-      });
+    const idFor = (action: ErrorAction) => `${repositoryId ?? ""}/${action}`;
+    return {
+      put: (action: ErrorAction, notice: Notice) => {
+        const id = idFor(action);
+        const button = notice.action;
+        const previous = shown.current.find((toast) => toast.id === id);
+        if (previous !== undefined && previous.type !== "loading") close(id);
+        add({
+          id,
+          type: notice.type,
+          title: notice.title,
+          description: notice.description ?? "",
+          actionProps:
+            button === undefined
+              ? {}
+              : {
+                  children: button.label,
+                  onClick: () => {
+                    close(id);
+                    button.run();
+                  },
+                },
+          data: { repositoryId },
+        });
+      },
+      close: (action: ErrorAction) => close(idFor(action)),
     };
+  }, [add, close, repositoryId]);
+}
+
+export function useErrorToast() {
+  const toasts = useActionToasts();
+  return useMemo(() => {
+    const show = (action: ErrorAction, description?: string) =>
+      toasts.put(action, {
+        type: "error",
+        title: errorTitles[action],
+        description,
+      });
     return {
       show,
       failure: <Failure extends TaggedFailure>(
@@ -82,7 +129,11 @@ export function useErrorToast() {
         result: { readonly _tag: "Ok" } | RequestFailure<Failure>,
         messages?: FailureMessages<Failure>,
       ) => {
-        if (result._tag === "Ok" || result._tag === "Cancelled") return;
+        if (result._tag === "Ok") return;
+        if (result._tag === "Cancelled") {
+          toasts.close(action);
+          return;
+        }
         show(
           action,
           result._tag === "Unanswered"
@@ -91,12 +142,55 @@ export function useErrorToast() {
         );
       },
     };
-  }, [add]);
+  }, [toasts]);
+}
+
+export type StatusToast = ReturnType<typeof useStatusToast>;
+
+export function useStatusToast() {
+  const toasts = useActionToasts();
+  return useMemo(
+    () => ({
+      progress: (action: ErrorAction, title: string, cancel?: () => void) => {
+        askToNotifyFromTheBackground();
+        toasts.put(action, {
+          type: "loading",
+          title,
+          ...(cancel === undefined
+            ? {}
+            : { action: { label: "Cancel", run: cancel } }),
+        });
+      },
+      success: (action: ErrorAction, title: string, undo?: () => void) =>
+        toasts.put(action, {
+          type: "success",
+          title,
+          ...(undo === undefined
+            ? {}
+            : { action: { label: "Undo", run: undo } }),
+        }),
+    }),
+    [toasts],
+  );
+}
+
+function askToNotifyFromTheBackground() {
+  if (
+    typeof Notification !== "undefined" &&
+    Notification.permission === "default"
+  )
+    void Notification.requestPermission();
 }
 
 export function NotificationsProvider({
+  repositories,
+  currentRepositoryId,
+  openRepository,
   children,
 }: {
+  readonly repositories: readonly NotifiedRepository[];
+  readonly currentRepositoryId: string | undefined;
+  readonly openRepository: (repositoryId: string) => void;
   readonly children: ReactNode;
 }) {
   const [outlet, setOutlet] = useState<HTMLDivElement | null>(null);
@@ -104,52 +198,13 @@ export function NotificationsProvider({
     <Toast.Provider timeout={8_000} limit={visibleToasts}>
       <PersistentNotificationOutlet.Provider value={outlet}>
         {children}
-        <Notifications persistentOutlet={setOutlet} />
+        <NotificationStack
+          currentRepositoryId={currentRepositoryId}
+          openRepository={openRepository}
+          persistentOutlet={setOutlet}
+          repositories={repositories}
+        />
       </PersistentNotificationOutlet.Provider>
     </Toast.Provider>
-  );
-}
-
-function Notifications({
-  persistentOutlet,
-}: {
-  readonly persistentOutlet: (element: HTMLDivElement | null) => void;
-}) {
-  const { toasts, close } = Toast.useToastManager();
-  useEffect(() => {
-    for (const toast of toasts)
-      if (toast.limited && toast.transitionStatus !== "ending") close(toast.id);
-  }, [toasts, close]);
-  return (
-    <Toast.Portal>
-      <Toast.Viewport className="pointer-events-none fixed top-14 right-4 z-100 flex w-[calc(100%-2rem)] max-w-90 flex-col gap-2 outline-none">
-        <div ref={persistentOutlet} className="empty:hidden" />
-        {toasts.map((toast) => (
-          <Toast.Root
-            key={toast.id}
-            toast={toast}
-            className="pointer-events-auto shrink-0 rounded-lg border border-border bg-popover text-popover-foreground shadow-lg outline-none data-ending-style:hidden data-limited:hidden"
-          >
-            <Toast.Content className="flex items-start gap-3 px-3 py-2.5">
-              <IconAlertCircle
-                aria-hidden="true"
-                className="mt-0.5 size-4 shrink-0 text-status-unavailable"
-              />
-              <div className="min-w-0 flex-1">
-                <Toast.Title className="text-sm font-medium" />
-                <Toast.Description className="mt-1 max-h-[min(240px,40vh)] overflow-y-auto whitespace-pre-line wrap-anywhere text-sm text-muted-foreground empty:hidden" />
-              </div>
-              <Toast.Close
-                aria-hidden={false}
-                aria-label="Dismiss notification"
-                render={<Button size="icon-xs" variant="ghost" />}
-              >
-                <IconX aria-hidden="true" />
-              </Toast.Close>
-            </Toast.Content>
-          </Toast.Root>
-        ))}
-      </Toast.Viewport>
-    </Toast.Portal>
   );
 }

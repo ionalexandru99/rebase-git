@@ -1,7 +1,4 @@
-import { IconCircleCheck, IconX } from "@tabler/icons-react";
-import { useEffect } from "react";
 import type { BranchNotMerged } from "#contracts/repository-refs/repository-branches.contract.ts";
-import { Button } from "#web/components/ui/button.tsx";
 import { Confirmation } from "#web/components/ui/confirmation.tsx";
 import { PersistentNotification } from "#web/features/notifications/components/persistent-notification.tsx";
 import {
@@ -10,50 +7,30 @@ import {
 } from "#web/features/refs/ref-editing.ts";
 
 const listedCommits = 3;
-const deletedNoticeMilliseconds = 10_000;
 
 export function RefEditingStatus({
   editing,
 }: {
   readonly editing: RefEditing;
 }) {
-  const { deletion } = editing;
+  const { pending } = editing.deletion;
+  if (pending === undefined) return null;
   return (
-    <>
-      {deletion.pending === undefined ? null : (
-        <PersistentNotification>
-          <Confirmation
-            action="Delete"
-            busy={deletion.pending.busy}
-            className="px-3 py-2"
-            key={
-              deletion.pending.failure === undefined ? "confirm" : "unmerged"
-            }
-            onCancel={deletion.cancel}
-            onConfirm={deletion.confirm}
-            title={deletionTitle(deletion.pending.deletion)}
-          >
-            {deletion.pending.failure === undefined ? undefined : (
-              <UnmergedCommits failure={deletion.pending.failure} />
-            )}
-          </Confirmation>
-        </PersistentNotification>
-      )}
-      {deletion.deleted === undefined ? null : (
-        <DeletedNotice
-          key={deletion.deleted.name}
-          name={deletion.deleted.name}
-          onDismiss={deletion.dismiss}
-          onUndo={deletion.undo}
-        />
-      )}
-      {editing.notice === undefined ? null : (
-        <DoneNotice
-          message={editing.notice}
-          onDismiss={editing.dismissNotice}
-        />
-      )}
-    </>
+    <PersistentNotification>
+      <Confirmation
+        action="Delete"
+        busy={pending.busy}
+        className="px-3 py-2"
+        key={pending.failure === undefined ? "confirm" : "unmerged"}
+        onCancel={editing.deletion.cancel}
+        onConfirm={editing.deletion.confirm}
+        title={deletionTitle(pending.deletion)}
+      >
+        {pending.failure === undefined ? undefined : (
+          <UnmergedCommits failure={pending.failure} />
+        )}
+      </Confirmation>
+    </PersistentNotification>
   );
 }
 
@@ -80,74 +57,5 @@ function UnmergedCommits({ failure }: { readonly failure: BranchNotMerged }) {
         <p className="mt-0.5 text-muted-foreground">and {hidden} more</p>
       )}
     </>
-  );
-}
-
-function DeletedNotice({
-  name,
-  onDismiss,
-  onUndo,
-}: {
-  readonly name: string;
-  readonly onDismiss: () => void;
-  readonly onUndo: () => void;
-}) {
-  useEffect(() => {
-    const timeout = setTimeout(onDismiss, deletedNoticeMilliseconds);
-    return () => clearTimeout(timeout);
-  }, [onDismiss]);
-  return (
-    <PersistentNotification>
-      <div className="flex items-center gap-3 px-3 py-2" role="status">
-        <IconCircleCheck
-          aria-hidden="true"
-          className="size-4 shrink-0 text-status-available"
-        />
-        <p className="min-w-0 flex-1 wrap-anywhere text-sm font-medium">
-          Deleted {name}
-        </p>
-        <Button onClick={onUndo} size="xs" variant="ghost">
-          Undo
-        </Button>
-        <Button
-          aria-label="Dismiss notification"
-          onClick={onDismiss}
-          size="icon-xs"
-          variant="ghost"
-        >
-          <IconX aria-hidden="true" />
-        </Button>
-      </div>
-    </PersistentNotification>
-  );
-}
-
-export function DoneNotice({
-  message,
-  onDismiss,
-}: {
-  readonly message: string;
-  readonly onDismiss: () => void;
-}) {
-  return (
-    <PersistentNotification>
-      <div className="flex items-center gap-3 px-3 py-2" role="status">
-        <IconCircleCheck
-          aria-hidden="true"
-          className="size-4 shrink-0 text-status-available"
-        />
-        <p className="min-w-0 flex-1 wrap-anywhere text-sm font-medium">
-          {message}
-        </p>
-        <Button
-          aria-label="Dismiss notification"
-          onClick={onDismiss}
-          size="icon-xs"
-          variant="ghost"
-        >
-          <IconX aria-hidden="true" />
-        </Button>
-      </div>
-    </PersistentNotification>
   );
 }

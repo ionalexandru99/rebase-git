@@ -1,5 +1,5 @@
 import { type QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import type { ReactNode } from "react";
+import type { ComponentProps, ReactNode } from "react";
 import { afterEach } from "vite-plus/test";
 import {
   cleanup,
@@ -28,10 +28,14 @@ export function render(
   {
     environment = {},
     queryClient = createEnvironmentQueryClient(),
+    notifications = {},
     ...options
   }: RenderOptions & {
     environment?: Partial<Environment>;
     queryClient?: QueryClient;
+    notifications?: Partial<
+      Omit<ComponentProps<typeof NotificationsProvider>, "children">
+    >;
   } = {},
 ) {
   const value = testEnvironment(environment);
@@ -42,7 +46,11 @@ export function render(
     wrapper: ({ children }) => (
       <QueryClientProvider client={queryClient}>
         <EnvironmentProvider environment={value}>
-          <NotificationsProvider>
+          <NotificationsProvider
+            currentRepositoryId={notifications.currentRepositoryId}
+            openRepository={notifications.openRepository ?? (() => {})}
+            repositories={notifications.repositories ?? []}
+          >
             {Wrapper === undefined ? children : <Wrapper>{children}</Wrapper>}
           </NotificationsProvider>
         </EnvironmentProvider>

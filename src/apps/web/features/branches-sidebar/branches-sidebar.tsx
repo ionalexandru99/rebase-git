@@ -15,7 +15,6 @@ import type { RepositoryRefTarget } from "#contracts/repository-refs/repository-
 import {
   everyAction,
   keyAction,
-  replaceRuns,
   runAction,
 } from "#web/components/ui/action-menu.tsx";
 import { Button } from "#web/components/ui/button.tsx";
@@ -53,7 +52,6 @@ import type { MergeActions } from "#web/features/merge/merge-actions.ts";
 import type { PullRequests } from "#web/features/pull-requests/pull-requests.tsx";
 import type { RebaseActions } from "#web/features/rebase/rebase-actions.ts";
 import {
-  type RefAction,
   type RefActionRow,
   refActions,
   selectedTagActions,
@@ -71,7 +69,7 @@ import {
   useScopedRepositoryRefs,
 } from "#web/features/refs/repository-refs.ts";
 import { TagDetails } from "#web/features/refs/tag-details.tsx";
-import { TagPushStatus, useTagPush } from "#web/features/refs/tag-push.tsx";
+import { useTagPush } from "#web/features/refs/tag-push.tsx";
 import { usePull } from "#web/features/remote-sync/use-pull.ts";
 import type { ResetActions } from "#web/features/reset/reset-actions.tsx";
 import { useRepositoryScope } from "#web/platform/query/repository-scope.tsx";
@@ -238,12 +236,10 @@ export function BranchesSidebar({
       );
       runAction(
         everyAction(
-          clearingNotices(
-            refActionsFor(
-              row?.kind === "ref"
-                ? row
-                : { id: key, name: intent.target.name, target: intent.target },
-            ),
+          refActionsFor(
+            row?.kind === "ref"
+              ? row
+              : { id: key, name: intent.target.name, target: intent.target },
           ),
         ).find((action) => action.id === intent.id),
       );
@@ -276,33 +272,24 @@ export function BranchesSidebar({
                   run: (branch) => void pull.pull(branch),
                 }
               : undefined,
-            pushTags: tagPush.handler,
+            pushTags: tagPush,
             editing,
           },
         );
 
   const actionsFor = (row: BranchesSidebarRefRow) =>
-    clearingNotices(
-      refs !== undefined && selectedTags.size > 1 && selectedTags.has(row.id)
-        ? selectedTagActions(
-            rows.flatMap((candidate) =>
-              selectedTags.has(candidate.id) && candidate.kind === "ref"
-                ? [candidate.name]
-                : [],
-            ),
-            refs,
-            { writable: editing.writable },
-            tagPush.handler,
-          )
-        : refActionsFor(row),
-    );
-
-  const clearingNotices = (actions: readonly RefAction[]) =>
-    replaceRuns(actions, (action) => () => {
-      tagPush.dismiss();
-      editing.dismissNotice();
-      action.run();
-    });
+    refs !== undefined && selectedTags.size > 1 && selectedTags.has(row.id)
+      ? selectedTagActions(
+          rows.flatMap((candidate) =>
+            selectedTags.has(candidate.id) && candidate.kind === "ref"
+              ? [candidate.name]
+              : [],
+          ),
+          refs,
+          { writable: editing.writable },
+          tagPush,
+        )
+      : refActionsFor(row);
 
   const moveActive = (rowId: string | undefined) => {
     setSelectedTags(noSelectedTags);
@@ -551,7 +538,6 @@ export function BranchesSidebar({
         />
       </div>
       <RefEditingStatus editing={editing} />
-      <TagPushStatus push={tagPush} />
     </nav>
   );
 }

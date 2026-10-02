@@ -389,9 +389,6 @@ describe("ref editing", () => {
     await expect
       .element(screen.getByText("Deleted v0.9 on origin"))
       .toBeVisible();
-    await expect
-      .element(screen.getByText("Pushed v0.9 and v0.8 to origin"))
-      .not.toBeInTheDocument();
   });
 
   it("runs a graph tag label's menu through the sidebar instead of the commit menu", async () => {
