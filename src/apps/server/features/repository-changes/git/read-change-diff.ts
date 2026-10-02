@@ -28,7 +28,7 @@ export function readChangeDiff(
 ) {
   return Effect.gen(function* () {
     yield* safeChangePath(command.worktreePath, command.path);
-    const [before, working] = yield* Effect.all(
+    const [before, after] = yield* Effect.all(
       [
         objectFile(
           git,
@@ -38,29 +38,40 @@ export function readChangeDiff(
         ),
         command.section === "staged"
           ? objectFile(git, command.worktreePath, command.path, index)
-          : worktreeFile(command.worktreePath, command.path),
+          : readWorktreeFile(git, command.worktreePath, command.path, index),
       ],
       { concurrency: 2 },
     );
-    const after =
-      command.section === "unstaged" &&
-      working.mode.startsWith("100") &&
-      working.content !== null &&
-      !binary(working.content)
-        ? {
-            ...working,
-            content: yield* cleanFileContent(
-              git,
-              index,
-              command.worktreePath,
-              command.path,
-              working.content,
-            ),
-          }
-        : working;
     return buildChangeDiff(command.path, base, before, after, {
       previousPath: previousPath ?? command.path,
     });
+  });
+}
+
+export function readWorktreeFile(
+  git: GitCommandRunner,
+  directory: string,
+  path: string,
+  index: GitCommandOptions = {},
+) {
+  return Effect.gen(function* () {
+    const working = yield* worktreeFile(directory, path);
+    if (
+      !working.mode.startsWith("100") ||
+      working.content === null ||
+      binary(working.content)
+    )
+      return working;
+    return {
+      ...working,
+      content: yield* cleanFileContent(
+        git,
+        index,
+        directory,
+        path,
+        working.content,
+      ),
+    };
   });
 }
 

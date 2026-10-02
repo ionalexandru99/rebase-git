@@ -21,6 +21,7 @@ export default function CommitDiff({
   diff,
   preferences,
   choosePreferences,
+  preview,
 }: {
   readonly files: readonly CommitFile[];
   readonly path: string | null;
@@ -28,6 +29,7 @@ export default function CommitDiff({
   readonly diff: CommitDiffRead;
   readonly preferences: DiffPreferences;
   readonly choosePreferences: (preferences: DiffPreferences) => void;
+  readonly preview: boolean;
 }) {
   const [expanded, setExpanded] = useState(false);
   const index = files.findIndex((file) => file.path === path);
@@ -35,9 +37,10 @@ export default function CommitDiff({
   const next = files[index + 1];
   const file = files[index];
   const value = diff.value ?? null;
+  const previousPath = preview ? null : (file?.previousPath ?? null);
   const { metadata, hasHiddenContext } = useMemo(
-    () => createChangeDiffModel(value, file?.previousPath ?? null),
-    [value, file?.previousPath],
+    () => createChangeDiffModel(value, previousPath),
+    [value, previousPath],
   );
   return (
     <section
@@ -53,9 +56,14 @@ export default function CommitDiff({
         previous={previous ? () => select(previous.path) : undefined}
         next={next ? () => select(next.path) : undefined}
       />
+      {preview ? (
+        <p className="shrink-0 border-border border-b px-3 py-1.5 text-xs text-muted-foreground">
+          Working tree after restore
+        </p>
+      ) : null}
       {file && (!metadata || value?.before === value?.after) ? (
         <div className="shrink-0 break-all border-border border-b px-3 py-2 font-mono text-xs">
-          {file.previousPath ? `${file.previousPath} → ` : ""}
+          {previousPath ? `${previousPath} → ` : ""}
           {file.path}
         </div>
       ) : null}
@@ -67,9 +75,13 @@ export default function CommitDiff({
           </Button>
         </div>
       ) : value ? (
-        file?.status === "R" &&
-        value.kind === "text" &&
-        value.before === value.after ? (
+        preview && value.kind === "text" && value.before === value.after ? (
+          <p className="p-4 text-sm text-muted-foreground">
+            The working tree already has this version.
+          </p>
+        ) : file?.status === "R" &&
+          value.kind === "text" &&
+          value.before === value.after ? (
           <p className="p-4 text-sm text-muted-foreground">
             Content unchanged.
           </p>

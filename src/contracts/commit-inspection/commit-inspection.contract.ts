@@ -1,5 +1,8 @@
 import { Schema } from "effect";
-import { repositoryQuery } from "#contracts/environment-connection/environment-route.contract.ts";
+import {
+  repositoryCommand,
+  repositoryQuery,
+} from "#contracts/environment-connection/environment-route.contract.ts";
 import {
   ObjectId,
   RepositoryId,
@@ -7,6 +10,8 @@ import {
 } from "#contracts/git/git-values.contract.ts";
 import { ChangesFailure } from "#contracts/repository-changes/repository-changes.contract.ts";
 import { ChangeDiff } from "#contracts/repository-comparison/repository-comparison.contract.ts";
+
+const Fingerprint = Schema.String.check(Schema.isMaxLength(128));
 
 export const InspectCommit = Schema.Struct({
   repositoryId: RepositoryId,
@@ -43,6 +48,30 @@ export const CommitInspection = Schema.Struct({
   truncated: Schema.Boolean,
 });
 export type CommitInspection = typeof CommitInspection.Type;
+export const RestoreSource = Schema.Literals(["commit", "parent"]);
+export type RestoreSource = typeof RestoreSource.Type;
+export const PreviewRestore = Schema.Struct({
+  ...InspectCommit.fields,
+  source: RestoreSource,
+  path: RepositoryPath,
+});
+export type PreviewRestore = typeof PreviewRestore.Type;
+export const RestoreFiles = Schema.Struct({
+  ...InspectCommit.fields,
+  source: RestoreSource,
+  paths: Schema.Array(RepositoryPath).check(
+    Schema.isMinLength(1),
+    Schema.isMaxLength(1000),
+  ),
+  overwrite: Schema.optional(Fingerprint),
+});
+export type RestoreFiles = typeof RestoreFiles.Type;
+export const RestoreOverwrites = Schema.TaggedStruct("RestoreOverwrites", {
+  paths: Schema.Array(RepositoryPath).check(Schema.isMaxLength(20)),
+  count: Schema.Natural,
+  fingerprint: Fingerprint,
+});
+export type RestoreOverwrites = typeof RestoreOverwrites.Type;
 export const CommitInspectionApi = {
   inspect: repositoryQuery("repositories/commits/inspect", {
     request: InspectCommit,
@@ -53,5 +82,15 @@ export const CommitInspectionApi = {
     request: InspectCommitDiff,
     success: ChangeDiff,
     failure: ChangesFailure,
+  }),
+  previewRestore: repositoryQuery("repositories/commits/restore-preview", {
+    request: PreviewRestore,
+    success: ChangeDiff,
+    failure: ChangesFailure,
+  }),
+  restore: repositoryCommand("repositories/commits/restore", {
+    request: RestoreFiles,
+    success: Schema.Void,
+    failure: Schema.Union([ChangesFailure, RestoreOverwrites]),
   }),
 };
