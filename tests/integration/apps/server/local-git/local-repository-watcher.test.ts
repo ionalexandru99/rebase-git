@@ -13,39 +13,29 @@ const committer = "committer Rebase test <rebase@example.test> 0 +0000\n";
 
 describe("local repository watcher", () => {
   for (const entry of ["logs/refs", "logs"])
-    it.skipIf(process.platform === "win32" && entry === "logs")(
-      `continues watching stash history after ${entry} is replaced`,
-      async () => {
-        const fixture = await createFixture();
-        const gitDirectory = join(fixture.local, ".git");
-        const changes = await watch(gitDirectory);
-        await waitForObservation(
-          () => expect(changes.count()).toBeGreaterThan(0),
-          () => git(fixture.local, "branch", "-f", "watcher-ready"),
-        );
-        const beforeReplacement = changes.count();
-        await rename(
-          join(gitDirectory, entry),
-          join(fixture.root, "previous-logs"),
-        );
-        await mkdir(join(gitDirectory, "logs", "refs"), { recursive: true });
-        await waitForObservation(() =>
-          expect(changes.count()).toBeGreaterThan(beforeReplacement),
-        );
-        let writes = 0;
-        const beforeWrite = changes.count();
-        await waitForObservation(
-          () => expect(changes.count()).toBeGreaterThan(beforeWrite),
-          () => {
-            writes += 1;
-            return writeFile(
-              join(gitDirectory, "logs", "refs", "stash"),
-              `stash ${writes}`,
-            );
-          },
-        );
-      },
-    );
+    it(`continues watching stash history after ${entry} is replaced`, async () => {
+      const fixture = await createFixture();
+      const gitDirectory = join(fixture.local, ".git");
+      const changes = await watch(gitDirectory);
+      await waitForObservation(
+        () => expect(changes.count()).toBeGreaterThan(0),
+        () => git(fixture.local, "branch", "-f", "watcher-ready"),
+      );
+      const beforeReplacement = changes.count();
+      await rename(
+        join(gitDirectory, entry),
+        join(fixture.root, "previous-logs"),
+      );
+      await mkdir(join(gitDirectory, "logs", "refs"), { recursive: true });
+      await waitForObservation(() =>
+        expect(changes.count()).toBeGreaterThan(beforeReplacement),
+      );
+      const beforeWrite = changes.count();
+      await writeFile(join(gitDirectory, "logs", "refs", "stash"), "stash");
+      await waitForObservation(() =>
+        expect(changes.count()).toBeGreaterThan(beforeWrite),
+      );
+    });
 
   it("watches Git paths with forward slashes on every platform", async () => {
     const fixture = await createFixture();
