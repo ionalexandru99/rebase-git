@@ -94,6 +94,33 @@ describe("Rebase with an edited plan", () => {
     ).toBe("file.txt\nshared.txt");
   });
 
+  it("drops commits that are not next to each other and keeps the rest", async () => {
+    const f = await fixture();
+    await f.start([
+      f.step("one", "drop"),
+      f.step("file", "pick"),
+      f.step("shared", "drop"),
+    ]);
+    expect(await f.log()).toBe("topic file|Rebase test");
+    expect(await readFile(join(f.directory, "file.txt"), "utf8")).toBe(
+      "topic\n",
+    );
+    expect(await readFile(join(f.directory, "shared.txt"), "utf8")).toBe(
+      "base\n",
+    );
+    expect(await git(f.directory, "ls-files", "one.txt")).toBe("");
+  });
+
+  it("leaves the branch at the base when every commit above it is dropped", async () => {
+    const f = await fixture();
+    await f.start([
+      f.step("one", "drop"),
+      f.step("file", "drop"),
+      f.step("shared", "drop"),
+    ]);
+    expect(await f.tip("topic")).toBe(await f.tip("main~2"));
+  });
+
   it("stops at an edit, reports the plan, and finishes through the shared lifecycle", async () => {
     const f = await fixture();
     const started = await f.start([

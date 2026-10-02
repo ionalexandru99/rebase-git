@@ -20,6 +20,7 @@ import {
 } from "#web/features/notifications/notifications.tsx";
 import { useOperation } from "#web/features/operation-recovery/hooks/use-operation.ts";
 import { operationKindLabel } from "#web/features/operation-recovery/operation-messages.ts";
+import type { DropCommits } from "#web/features/rebase/drop-commits.tsx";
 import type { RebaseActions } from "#web/features/rebase/rebase-actions.ts";
 import { createRefActions } from "#web/features/refs/ref-actions.ts";
 import {
@@ -45,6 +46,7 @@ interface CommitActionHandlers {
   readonly merge: Action | undefined;
   readonly rebase: Action | undefined;
   readonly revert: Action | undefined;
+  readonly drop: Action | undefined;
   readonly reset: Action | undefined;
   readonly create: readonly Action[];
   readonly readCommit: (oid: string) => Promise<RepositoryCommit | undefined>;
@@ -58,6 +60,7 @@ export function useCommitActions({
   cherryPick,
   merge,
   rebase,
+  drop,
   reset,
   onOpenDetails,
 }: {
@@ -66,6 +69,7 @@ export function useCommitActions({
   readonly cherryPick?: Pick<CherryPick, "action"> | undefined;
   readonly merge?: MergeActions | undefined;
   readonly rebase?: Pick<RebaseActions, "actionFor"> | undefined;
+  readonly drop?: Pick<DropCommits, "action"> | undefined;
   readonly reset?: Pick<ResetActions, "actionFor"> | undefined;
   readonly onOpenDetails?: ((oid: string) => void) | undefined;
 }) {
@@ -87,6 +91,7 @@ export function useCommitActions({
       merge: merge?.actionFor(oid),
       rebase: rebase?.actionFor(oid),
       revert: revert.actionFor(selected),
+      drop: drop?.action(),
       reset: reset?.actionFor(oid),
       create: createRefActions(oid, access),
       readCommit: async (commit) =>
@@ -210,6 +215,7 @@ function commitActions(
     merge,
     rebase,
     revert,
+    drop,
     reset,
     create,
     readCommit,
@@ -245,7 +251,7 @@ function commitActions(
             run: () => openDetails(oid),
           },
         ]),
-    ...[cherryPick, merge, rebase, revert, reset].filter(
+    ...[cherryPick, merge, rebase, revert, drop, reset].filter(
       (action) => action !== undefined,
     ),
     ...create,
