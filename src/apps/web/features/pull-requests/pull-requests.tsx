@@ -73,7 +73,7 @@ export function CurrentPullRequest({
       onClick={() => openPullRequest(pullRequest)}
     >
       <PullRequestStateIcon pullRequest={pullRequest} />
-      <span className="tabular-nums">#{pullRequest.number}</span>
+      <span className="tabular-nums">{reference(pullRequest)}</span>
       <PullRequestChecksIcon pullRequest={pullRequest} />
     </ToolbarButton>
   );
@@ -110,7 +110,7 @@ export function PullRequestChecksIcon({
 
 export function describePullRequest(pullRequest: PullRequest) {
   const checks = visibleChecks(pullRequest);
-  return `pull request #${pullRequest.number}, ${pullRequest.state.toLowerCase()}${checks === undefined ? "" : `, checks ${checks.toLowerCase()}`}`;
+  return `${terms[pullRequest.kind].name} ${reference(pullRequest)}, ${pullRequest.state.toLowerCase()}${checks === undefined ? "" : `, checks ${checks.toLowerCase()}`}`;
 }
 
 function visibleChecks(pullRequest: PullRequest) {
@@ -127,16 +127,16 @@ function pullRequestAction(
   if (pullRequests.length === 1)
     return {
       id: "openPullRequest",
-      label: "Open pull request",
+      label: `Open ${terms[only.kind].name}`,
       enabled: true,
       run: () => openPullRequest(only),
     };
   return submenu(
-    { id: "pullRequests", label: "Pull requests" },
+    { id: "pullRequests", label: terms[only.kind].plural },
     pullRequests.map((pullRequest) => ({
       id: `openPullRequest:${pullRequest.number}`,
       label: pullRequest.title,
-      detail: `#${pullRequest.number}`,
+      detail: reference(pullRequest),
       icon: <PullRequestStateIcon pullRequest={pullRequest} />,
       enabled: true,
       run: () => openPullRequest(pullRequest),
@@ -144,9 +144,18 @@ function pullRequestAction(
   );
 }
 
+function reference(pullRequest: PullRequest) {
+  return `${terms[pullRequest.kind].sigil}${pullRequest.number}`;
+}
+
 function openPullRequest(pullRequest: PullRequest) {
   window.open(pullRequest.url, "_blank", "noopener,noreferrer");
 }
+
+const terms = {
+  PullRequest: { name: "pull request", plural: "Pull requests", sigil: "#" },
+  MergeRequest: { name: "merge request", plural: "Merge requests", sigil: "!" },
+} as const;
 
 const stateIcons = {
   Open: { Icon: IconGitPullRequest, className: "text-status-available" },

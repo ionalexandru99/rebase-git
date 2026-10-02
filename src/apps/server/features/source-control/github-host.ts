@@ -7,6 +7,7 @@ import type {
 } from "#contracts/pull-requests/pull-requests.contract.ts";
 import { hostedRepositoryFromUrl } from "#server/features/repository-refs/git/read-repository-refs.ts";
 import {
+  chunks,
   type GitHost,
   hostTool,
   type TrackedBranch,
@@ -74,8 +75,9 @@ function gh(args: readonly string[]) {
 export function createGitHubHost(cli: GitHubCli): GitHost {
   return {
     kind: "github",
-    serves: (remoteUrl) => githubRepository(remoteUrl) !== undefined,
-    tool: hostTool(cli.version, cli.account),
+    serves: (remoteUrl) =>
+      Effect.succeed(githubRepository(remoteUrl) !== undefined),
+    tool: hostTool("github.com", cli.version, cli.account),
     pullRequests: (remoteUrl, branches) =>
       listPullRequests(cli, remoteUrl, branches),
   };
@@ -200,6 +202,7 @@ function pullRequest(node: PullRequestNode): PullRequest {
     node.commits.nodes[0]?.commit.statusCheckRollup?.state,
   );
   return {
+    kind: "PullRequest",
     number: node.number,
     url: node.url,
     title: node.title,
@@ -220,10 +223,4 @@ function checksState(state: string | undefined): PullRequest["checks"] {
   if (state === "FAILURE" || state === "ERROR") return "Failing";
   if (state === "PENDING" || state === "EXPECTED") return "Pending";
   return undefined;
-}
-
-function chunks<Item>(items: readonly Item[], size: number) {
-  return Array.from({ length: Math.ceil(items.length / size) }, (_, index) =>
-    items.slice(index * size, index * size + size),
-  );
 }

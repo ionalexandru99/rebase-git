@@ -243,6 +243,7 @@ export function pullRequest(
   pullRequest: Partial<PullRequest> = {},
 ): PullRequest {
   return {
+    kind: "PullRequest",
     number,
     url: `https://github.com/octo/rebase/pull/${number}`,
     title: `Pull request ${number}`,
@@ -258,17 +259,20 @@ export function sourceControlDiscovery({
     kind: "github",
     enabled: true,
     version: "gh version 2.101.0 (2026-09-15)",
-    account: "octo",
+    accounts: [{ host: "github.com", account: "octo" }],
   },
+  gitlab = { _tag: "Missing", kind: "gitlab", enabled: true },
 }: {
   readonly git?: GitStatus;
   readonly github?: GitHostStatus;
+  readonly gitlab?: GitHostStatus;
 } = {}) {
   return {
     git,
     hosts: [
       github,
-      ...(["gitlab", "azure-devops", "bitbucket", "forgejo"] as const).map(
+      gitlab,
+      ...(["azure-devops", "bitbucket", "forgejo"] as const).map(
         (kind) => ({ _tag: "ComingSoon", kind }) as const,
       ),
     ],

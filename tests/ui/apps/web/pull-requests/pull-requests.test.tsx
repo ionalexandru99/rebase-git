@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import { userEvent } from "vite-plus/test/browser";
+import type { RouteSuccess } from "#contracts/environment-connection/environment-route.contract.ts";
 import { PullRequestsApi } from "#contracts/pull-requests/pull-requests.contract.ts";
 import { RepositoryRefsApi } from "#contracts/repository-refs/repository-refs.contract.ts";
 import {
@@ -74,6 +75,23 @@ describe("branch pull requests", () => {
       "noopener,noreferrer",
     );
   });
+
+  it("names GitLab merge requests the GitLab way", async () => {
+    const screen = await renderPullRequests([
+      {
+        branch: "feature",
+        pullRequests: [pullRequest(4, { kind: "MergeRequest" })],
+      },
+    ]);
+
+    await screen
+      .getByRole("treeitem", { name: "feature, merge request !4, open" })
+      .click({ button: "right" });
+
+    await expect
+      .element(screen.getByRole("menuitem", { name: "Open merge request" }))
+      .toBeVisible();
+  });
 });
 
 function PullRequestsHarness() {
@@ -88,7 +106,25 @@ function PullRequestsHarness() {
   );
 }
 
-function renderPullRequests() {
+function renderPullRequests(
+  branches: RouteSuccess<typeof PullRequestsApi.list> = [
+    {
+      branch: "main",
+      pullRequests: [pullRequest(7, { checks: "Passing" })],
+    },
+    {
+      branch: "feature",
+      pullRequests: [pullRequest(9, { checks: "Failing" })],
+    },
+    {
+      branch: "topic",
+      pullRequests: [
+        pullRequest(12, { state: "Draft" }),
+        pullRequest(11, { state: "Merged" }),
+      ],
+    },
+  ],
+) {
   return render(
     <RepositoryScopeProvider
       scope={repositoryScope({ repositoryId, worktreePath: mainPath })}
@@ -109,23 +145,7 @@ function renderPullRequests() {
               worktrees: mainAndTopicWorktrees(),
             }),
           ),
-          respond(PullRequestsApi.list, async () => [
-            {
-              branch: "main",
-              pullRequests: [pullRequest(7, { checks: "Passing" })],
-            },
-            {
-              branch: "feature",
-              pullRequests: [pullRequest(9, { checks: "Failing" })],
-            },
-            {
-              branch: "topic",
-              pullRequests: [
-                pullRequest(12, { state: "Draft" }),
-                pullRequest(11, { state: "Merged" }),
-              ],
-            },
-          ]),
+          respond(PullRequestsApi.list, async () => branches),
         ),
       },
     },

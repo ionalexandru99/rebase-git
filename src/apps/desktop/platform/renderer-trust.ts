@@ -26,7 +26,9 @@ const pullRequestHosts = new Set(["github.com", "dev.azure.com"]);
 export function isExternalPullRequestLink(target: string) {
   const targetUrl = URL.parse(target);
   return (
-    targetUrl?.protocol === "https:" && pullRequestHosts.has(targetUrl.host)
+    targetUrl?.protocol === "https:" &&
+    (pullRequestHosts.has(targetUrl.host) ||
+      /\/-\/merge_requests\/\d+$/.test(targetUrl.pathname))
   );
 }
 

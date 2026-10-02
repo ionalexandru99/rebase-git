@@ -7,7 +7,7 @@ import { render } from "#tests-support/render.tsx";
 import { SourceControlSettings } from "#web/features/settings/source-control-settings.tsx";
 
 describe("source control settings", () => {
-  it("shows the GitHub login and switches GitHub off on the server", async () => {
+  it("shows the signed in accounts and switches GitHub off on the server", async () => {
     let enabled = true;
     const saved: unknown[] = [];
     await render(<SourceControlSettings />, {
@@ -20,7 +20,17 @@ describe("source control settings", () => {
                 kind: "github",
                 enabled,
                 version: "gh version 2.101.0 (2026-09-15)",
-                account: "octo",
+                accounts: [{ host: "github.com", account: "octo" }],
+              },
+              gitlab: {
+                _tag: "SignedIn",
+                kind: "gitlab",
+                enabled: true,
+                version: "glab 1.120.0 (78790114c)",
+                accounts: [
+                  { host: "gitlab.com", account: "tanuki" },
+                  { host: "git.example.com", account: "tanuki" },
+                ],
               },
             }),
           ),
@@ -34,12 +44,19 @@ describe("source control settings", () => {
 
     await expect.element(page.getByText("git version 2.51.0")).toBeVisible();
     expect(page.getByText("octo", { exact: true }).elements()).toHaveLength(0);
-    await page.getByRole("button", { name: "Show account" }).click();
+    await page
+      .getByRole("button", { name: "Show account on github.com" })
+      .click();
     await expect
-      .element(page.getByRole("button", { name: "Hide account octo" }))
+      .element(
+        page.getByRole("button", { name: "Hide account octo on github.com" }),
+      )
       .toHaveTextContent("octo");
     await expect
-      .element(page.getByText("Support for GitLab is coming soon."))
+      .element(page.getByText(/on gitlab\.com, .* on git\.example\.com$/))
+      .toBeVisible();
+    await expect
+      .element(page.getByText("Support for Bitbucket is coming soon."))
       .toBeVisible();
     const github = page.getByRole("switch", { name: "Use GitHub" });
     await expect.element(github).toBeChecked();

@@ -33,6 +33,7 @@ import {
 import type { EnvironmentAuthorization } from "#server/features/environment-authorization/environment-authorization.ts";
 import type { AzureDevOpsClient } from "#server/features/source-control/azure-devops-host.ts";
 import type { GitHubCli } from "#server/features/source-control/github-host.ts";
+import type { GitLabCli } from "#server/features/source-control/gitlab-host.ts";
 import type { RepositoryCoordination } from "#server/repository/repository-coordination.ts";
 import { removeTemporaryDirectory } from "#tests-support/temporary-directory.ts";
 import {
@@ -73,6 +74,7 @@ interface EnvironmentOverrides {
   readonly git?: ((git: GitCommandRunner) => GitCommandRunner) | undefined;
   readonly github?: GitHubCli;
   readonly azureDevOps?: AzureDevOpsClient;
+  readonly gitlab?: GitLabCli;
   readonly coordination?: (
     coordination: RepositoryCoordination,
   ) => RepositoryCoordination;
@@ -263,6 +265,7 @@ function acquireTestDependencies(overrides: EnvironmentOverrides) {
       events: overrides.events?.(environment.events) ?? environment.events,
       github: overrides.github ?? environment.github,
       azureDevOps: overrides.azureDevOps ?? environment.azureDevOps,
+      gitlab: overrides.gitlab ?? environment.gitlab,
       home,
     };
   });

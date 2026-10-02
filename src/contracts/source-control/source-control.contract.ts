@@ -11,7 +11,10 @@ export const GitHostKind = Schema.Literals([
 export type GitHostKind = typeof GitHostKind.Type;
 
 const ToolVersion = Schema.String.check(Schema.isMaxLength(256));
-const Account = Schema.String.check(Schema.isMaxLength(256));
+const HostAccount = Schema.Struct({
+  host: Schema.String.check(Schema.isMaxLength(256)),
+  account: Schema.String.check(Schema.isMaxLength(256)),
+});
 
 export const GitStatus = Schema.Union([
   Schema.TaggedStruct("Available", { version: ToolVersion }),
@@ -34,7 +37,10 @@ export const GitHostStatus = Schema.Union([
     kind: GitHostKind,
     enabled: Schema.Boolean,
     version: ToolVersion,
-    account: Account,
+    accounts: Schema.Array(HostAccount).check(
+      Schema.isMinLength(1),
+      Schema.isMaxLength(16),
+    ),
   }),
 ]);
 export type GitHostStatus = typeof GitHostStatus.Type;

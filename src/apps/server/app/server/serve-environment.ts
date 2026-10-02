@@ -38,6 +38,10 @@ import {
   createGitHubHost,
 } from "#server/features/source-control/github-host.ts";
 import {
+  createGitLabCli,
+  createGitLabHost,
+} from "#server/features/source-control/gitlab-host.ts";
+import {
   createSourceControl,
   sourceControlFeature,
 } from "#server/features/source-control/source-control.ts";
@@ -126,6 +130,7 @@ export function acquireEnvironment(home: string, git: GitCommandRunner) {
       events: createEnvironmentEventPublisher(),
       git,
       github: createGitHubCli(),
+      gitlab: createGitLabCli(),
       paths,
       watcher,
     };
@@ -140,6 +145,7 @@ export function environmentFeatures(dependencies: EnvironmentDependencies) {
       [
         createGitHubHost(dependencies.github),
         createAzureDevOpsHost(dependencies.azureDevOps),
+        createGitLabHost(dependencies.gitlab),
       ],
     );
     return combineEnvironmentFeatures([
