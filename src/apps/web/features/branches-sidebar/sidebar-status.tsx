@@ -63,6 +63,8 @@ function describeEmptyBranchesSidebar(
       return matching ? "No remote branches match." : "No remote branches.";
     case "tags":
       return matching ? "No tags match." : "No tags.";
+    case "stashes":
+      return matching ? "No stashes match." : "No stashes.";
     default:
       return matching ? "No branches match." : "No branches or tags.";
   }

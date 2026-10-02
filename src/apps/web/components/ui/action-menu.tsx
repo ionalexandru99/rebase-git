@@ -80,7 +80,10 @@ export function ActionMenuItems({
                 className="size-3.5 text-muted-foreground"
               />
             </ContextMenuSubmenuTrigger>
-            <ContextMenuContent submenu className="w-max min-w-40 max-w-md">
+            <ContextMenuContent
+              submenu
+              className="max-h-[min(24rem,var(--available-height))] w-max min-w-40 max-w-md overflow-y-auto"
+            >
               {action.submenu.lead}
               <ActionMenuItems
                 actions={action.submenu.actions}

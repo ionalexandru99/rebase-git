@@ -16,6 +16,7 @@ import type {
   RepositoryRefs,
   RepositoryWorktree,
 } from "#contracts/repository-refs/repository-refs.contract.ts";
+import type { RepositoryStash } from "#contracts/repository-stashes/repository-stashes.contract.ts";
 import type {
   GitHostStatus,
   GitStatus,
@@ -305,6 +306,21 @@ export function reflogEntry(entry: Partial<ReflogEntry> = {}): ReflogEntry {
     orphaned: false,
     steps: [],
     ...entry,
+  };
+}
+
+export function repositoryStash(
+  stash: Partial<RepositoryStash> = {},
+): RepositoryStash {
+  return {
+    oid: "5".repeat(40),
+    name: "Try larger limits",
+    named: true,
+    auto: false,
+    branch: "main",
+    staged: false,
+    recordedAt: 1_790_000_000,
+    ...stash,
   };
 }
 

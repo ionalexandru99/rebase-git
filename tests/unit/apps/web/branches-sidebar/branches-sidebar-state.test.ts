@@ -2,6 +2,7 @@ import { describe, expect, it } from "vite-plus/test";
 import {
   branchScenarioRefs,
   mainPath,
+  repositoryStash,
   topicPath,
 } from "#tests-support/fixtures.ts";
 import {
@@ -145,6 +146,40 @@ describe("branches sidebar state", () => {
     expect(stepRow(rows, "ref:branches:feature", 1)).toBe(
       "section:remote:origin",
     );
-    expect(toggleSection(defaultExpandedSections, "branches").size).toBe(0);
+    expect(
+      toggleSection(defaultExpandedSections, "branches").has("branches"),
+    ).toBe(false);
+  });
+
+  it("lists stashes after tags, filters them by name, and keeps the section while one is named", () => {
+    const reflog = repositoryStash({ oid: "1".repeat(40), name: "Reflog" });
+    const wip = repositoryStash({ oid: "2".repeat(40), name: "WIP on main" });
+    const ids = (
+      query: string,
+      scope: "all" | "stashes",
+      list = [reflog, wip],
+      drafting = false,
+    ) =>
+      buildBranchesSidebarRows(
+        branchScenarioRefs(),
+        mainPath,
+        defaultExpandedSections,
+        query,
+        scope,
+        undefined,
+        { list, drafting },
+      ).map((row) => row.id);
+
+    expect(ids("", "all").slice(-3)).toEqual([
+      "section:stashes",
+      `stash:${reflog.oid}`,
+      `stash:${wip.oid}`,
+    ]);
+    expect(ids("reflog", "stashes")).toEqual([
+      "section:stashes",
+      `stash:${reflog.oid}`,
+    ]);
+    expect(ids("", "all", [])).not.toContain("section:stashes");
+    expect(ids("", "stashes", [], true)).toEqual(["section:stashes"]);
   });
 });

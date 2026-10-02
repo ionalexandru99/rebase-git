@@ -20,6 +20,7 @@ const scopeOptions: readonly {
   { label: "Local", value: "local" },
   { label: "Remote", value: "remote" },
   { label: "Tags", value: "tags" },
+  { label: "Stashes", value: "stashes" },
 ];
 
 export function useBranchesSidebarView() {
@@ -80,7 +81,7 @@ export function BranchesSidebarScopeFilter({
   return (
     <div
       aria-label="Branch scope"
-      className="mx-3 mt-2 mb-1.5 grid grid-cols-[.72fr_1fr_1.34fr_.9fr] gap-0.5 rounded-md border border-sidebar-border/50 bg-muted/30 p-0.5"
+      className="mx-3 mt-2 mb-1.5 grid grid-cols-[.6fr_.85fr_1.1fr_.75fr_1.15fr] gap-0.5 rounded-md border border-sidebar-border/50 bg-muted/30 p-0.5"
       role="radiogroup"
     >
       {scopeOptions.map((option) => (

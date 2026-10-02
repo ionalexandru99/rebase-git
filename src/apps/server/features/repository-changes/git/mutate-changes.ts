@@ -214,7 +214,7 @@ function renameSources(
   );
 }
 
-const patchOptions = [
+export const patchOptions = [
   "--binary",
   "--no-color",
   "--no-ext-diff",
@@ -223,7 +223,7 @@ const patchOptions = [
   "--dst-prefix=b/",
 ];
 
-function createdFilesPatch(
+export function createdFilesPatch(
   git: GitCommandRunner,
   index: GitCommandOptions,
   directory: string,

@@ -42,7 +42,7 @@ const submoduleMode = "160000";
 function inspectCommit(git: GitCommandRunner, command: InspectCommit) {
   return Effect.gen(function* () {
     const metadata = yield* readMetadata(git, command);
-    const files = yield* readFiles(git, command, metadata.parentOid);
+    const files = yield* readCommitFiles(git, command, metadata.parentOid);
     let bytes = Buffer.byteLength(JSON.stringify(metadata));
     const visible = files.filter((file) => {
       bytes += Buffer.byteLength(JSON.stringify(file));
@@ -187,7 +187,7 @@ function readMetadata(git: GitCommandRunner, command: InspectCommit) {
   });
 }
 
-function readFiles(
+export function readCommitFiles(
   git: GitCommandRunner,
   command: InspectCommit,
   parentOid: string | null,

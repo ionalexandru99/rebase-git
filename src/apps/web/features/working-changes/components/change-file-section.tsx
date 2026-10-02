@@ -10,7 +10,9 @@ import type {
   ChangedFile,
   ChangeSection,
 } from "#contracts/repository-changes/repository-changes.contract.ts";
+import type { Action } from "#web/components/ui/action-menu.tsx";
 import { Button } from "#web/components/ui/button.tsx";
+import { useStashMenu } from "#web/features/stashes/stashes.ts";
 import {
   FileListSection,
   RowLead,
@@ -60,6 +62,37 @@ export function ChangeFileSection({
   const actionLabel = section === "unstaged" ? "Stage" : "Unstage";
   const Arrow = section === "unstaged" ? IconArrowDown : IconArrowUp;
   const AllArrow = section === "unstaged" ? IconChevronsDown : IconChevronsUp;
+  const stashMenu = useStashMenu();
+  const rowActions = (paths: readonly string[]): readonly Action[] => {
+    const files = { _tag: "Files", paths } as const;
+    const stashable =
+      changes !== undefined &&
+      paths.every((path) =>
+        changes[section].some(
+          (file) => file.path === path && file.status !== "U",
+        ),
+      );
+    return [
+      {
+        id: action,
+        label: actionLabel,
+        enabled: !disabled,
+        run: () => act(action, section, files),
+      },
+      stashMenu(
+        stashable && !disabled
+          ? { revision: changes.revision, section, paths }
+          : undefined,
+      ),
+      {
+        id: "discard",
+        label: "Discard…",
+        enabled: !disabled,
+        group: "delete",
+        run: () => act("discard", section, files),
+      },
+    ];
+  };
   return (
     <FileListSection
       name={`${label} files`}
@@ -67,6 +100,13 @@ export function ChangeFileSection({
       files={files}
       tree={preferences.tree}
       filter={filter}
+      menu={(row) =>
+        rowActions(
+          row.paths.length > 0 && row.paths.every((path) => checked.has(path))
+            ? selected
+            : row.paths,
+        )
+      }
       chosen={(row) =>
         checked.has(row.key) ||
         (selection?.section === section && selection.path === row.key)
@@ -133,6 +173,11 @@ export function ChangeFileSection({
               aria-label={`${isFolder ? "Folder" : label} ${row.key}${previousPath ? ` renamed from ${previousPath}` : ""}`}
               aria-expanded={isFolder ? !collapsed.has(row.key) : undefined}
               aria-pressed={row.paths.every((path) => checked.has(path))}
+              onContextMenu={() => {
+                if (row.paths.every((path) => checked.has(path))) return;
+                anchor.current = row.key;
+                setChecked(new Set(row.paths));
+              }}
               onClick={(event) => {
                 if (event.metaKey || event.ctrlKey || event.shiftKey) {
                   const start = rows.findIndex(
