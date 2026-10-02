@@ -73,8 +73,11 @@ describe("repository fetch controls", () => {
       .toHaveTextContent("Fetch failed");
     await fetch.click();
     await expect.element(page.getByRole("status")).not.toBeInTheDocument();
+    await expect.element(page.getByText("Fetched changes")).toBeVisible();
+    await expect
+      .element(page.getByText("Couldn’t fetch changes"))
+      .not.toBeInTheDocument();
     expect(f.fetch).toHaveBeenCalledTimes(2);
-    expect(page.getByText("Couldn’t fetch changes").elements()).toHaveLength(1);
   });
 
   it("disables duplicate fetches and shows background fetch failures", async () => {

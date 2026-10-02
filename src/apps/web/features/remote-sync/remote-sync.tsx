@@ -59,7 +59,7 @@ function SyncActions({
     <>
       <ToolbarButton
         disabled={!ready || fetch.fetching}
-        onClick={() => void fetch.execute()}
+        onClick={fetch.fetchNow}
       >
         <IconArrowDown aria-hidden="true" className="size-3.5" />
         {fetch.fetching ? "Fetching" : "Fetch"}

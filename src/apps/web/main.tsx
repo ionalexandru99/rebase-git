@@ -6,7 +6,6 @@ import {
   readDesktopHostBridge,
 } from "#web/app/environment/browser-local-environment-session.ts";
 import { ApplicationShell } from "#web/app/shell/application-shell.tsx";
-import { NotificationsProvider } from "#web/features/notifications/notifications.tsx";
 import { connectRepositoryHistory } from "#web/features/repository-history/repository-history.ts";
 import { createEnvironmentInvalidation } from "#web/platform/query/environment-invalidation.ts";
 import { createEnvironmentQueryClient } from "#web/platform/query/environment-query.ts";
@@ -35,14 +34,12 @@ createRoot(rootElement).render(
       client={queryClient}
       persistOptions={queryPersistence}
     >
-      <NotificationsProvider>
-        <ApplicationShell
-          desktopUpdates={desktopHost?.updates}
-          productVersion={productVersion}
-          repositoryFilesystem={desktopHost}
-          session={session}
-        />
-      </NotificationsProvider>
+      <ApplicationShell
+        desktopUpdates={desktopHost?.updates}
+        productVersion={productVersion}
+        repositoryFilesystem={desktopHost}
+        session={session}
+      />
     </PersistQueryClientProvider>
   </StrictMode>,
 );

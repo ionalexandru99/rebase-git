@@ -3,7 +3,6 @@ import {
   IconArrowDown,
   IconArrowUp,
   IconChevronDown,
-  IconCircleFilled,
 } from "@tabler/icons-react";
 import { useEffect, useState } from "react";
 import { RepositoryPushApi } from "#contracts/repository-push/repository-push.contract.ts";
@@ -15,9 +14,13 @@ import {
 } from "#web/components/ui/dropdown-menu.tsx";
 import { ToolbarButton } from "#web/components/ui/toolbar-button.tsx";
 import { PersistentNotification } from "#web/features/notifications/components/persistent-notification.tsx";
-import { useErrorToast } from "#web/features/notifications/notifications.tsx";
+import {
+  useErrorToast,
+  useStatusToast,
+} from "#web/features/notifications/notifications.tsx";
 import {
   describeProgress,
+  describePushed,
   destinationName,
   type ForcePushReview,
   fastForwardRequest,
@@ -35,34 +38,28 @@ export type Push = ReturnType<typeof usePush>;
 export function usePush() {
   const command = useCommand(RepositoryPushApi.push);
   const errorToast = useErrorToast();
+  const statusToast = useStatusToast();
   const [review, setReview] = useState<ForcePushReview | null>(null);
   const worktreePath = useRepositoryScope()?.worktreePath;
-  const { cancel, reset } = command;
   useEffect(() => {
     if (worktreePath === undefined) return;
-    return () => {
-      cancel();
-      reset();
-      setReview(null);
-    };
-  }, [worktreePath, cancel, reset]);
-  const running =
-    command.running && command.input !== undefined
-      ? describeProgress(command.input)
-      : null;
+    return () => setReview(null);
+  }, [worktreePath]);
 
   const pushBranch = (request: PushRequest) => {
     if (!command.canRun || command.running) return;
     setReview(null);
-    void command
-      .run(request)
-      .then((result) =>
+    statusToast.progress("push", describeProgress(request), command.cancel);
+    void command.run(request).then((result) => {
+      if (result._tag === "Ok")
+        statusToast.success("push", describePushed(request));
+      else
         errorToast.failure(
           "push",
           result,
           pushFailureMessages(request.destination),
-        ),
-      );
+        );
+    });
   };
 
   const requestForcePush = (target: PushTarget) => {
@@ -73,7 +70,7 @@ export function usePush() {
 
   return {
     canRun: command.canRun,
-    running,
+    running: command.running,
     review,
     push: (target: PushTarget) => {
       const upstream = target.upstream;
@@ -88,10 +85,7 @@ export function usePush() {
     confirm: () => {
       if (review !== null) pushBranch(forcePushRequest(review));
     },
-    cancel: () => {
-      if (command.running) command.cancel();
-      else setReview(null);
-    },
+    cancel: () => setReview(null),
   };
 }
 
@@ -106,7 +100,7 @@ export function PushButton({
 }) {
   const upstream = target.upstream;
   const tracked = upstream !== undefined && !upstream.gone;
-  const busy = !push.canRun || operationBusy || push.running !== null;
+  const busy = !push.canRun || operationBusy || push.running;
   const canPush = !tracked || upstream.ahead > 0;
   const canForcePush = tracked && upstream.remoteOid !== undefined;
   return (
@@ -118,7 +112,7 @@ export function PushButton({
         onClick={() => push.push(target)}
       >
         <IconArrowUp aria-hidden="true" className="size-3.5" />
-        {push.running === null ? "Push" : "Pushing"}
+        {push.running ? "Pushing" : "Push"}
         {tracked && upstream.ahead > 0 ? (
           <span className="text-status-available tabular-nums">
             {upstream.ahead}
@@ -174,8 +168,6 @@ function pushLabel({ branch, upstream }: PushTarget) {
 }
 
 export function PushNotice({ push }: { readonly push: Push }) {
-  if (push.running !== null)
-    return <PushProgress title={push.running} cancel={push.cancel} />;
   if (push.review !== null)
     return (
       <PersistentNotification>
@@ -222,41 +214,5 @@ function ForcePushConfirmation({
         </span>
       ) : null}
     </Confirmation>
-  );
-}
-
-function PushProgress({
-  title,
-  cancel,
-}: {
-  readonly title: string;
-  readonly cancel: () => void;
-}) {
-  return (
-    <PersistentNotification>
-      <section
-        aria-label="Push progress"
-        className="flex items-center gap-2 px-3 py-2 outline-none"
-        onKeyDown={(event) => {
-          if (event.key !== "Escape") return;
-          event.stopPropagation();
-          cancel();
-        }}
-      >
-        <IconCircleFilled
-          aria-hidden="true"
-          className="size-2 shrink-0 text-status-connecting"
-        />
-        <h2
-          aria-live="polite"
-          className="min-w-0 flex-1 wrap-anywhere text-xs font-semibold"
-        >
-          {title}
-        </h2>
-        <Button size="xs" variant="ghost" onClick={cancel}>
-          Cancel
-        </Button>
-      </section>
-    </PersistentNotification>
   );
 }

@@ -5,7 +5,10 @@ import {
   type FetchFailed,
   RepositoryPullApi,
 } from "#contracts/repository-pull/repository-pull.contract.ts";
-import { useErrorToast } from "#web/features/notifications/notifications.tsx";
+import {
+  useErrorToast,
+  useStatusToast,
+} from "#web/features/notifications/notifications.tsx";
 import { useEnvironmentQuery } from "#web/platform/query/environment-query.ts";
 import { useRepositoryScope } from "#web/platform/query/repository-scope.tsx";
 import type { FailureMessages } from "#web/platform/query/request-failure.ts";
@@ -28,6 +31,7 @@ export function useFetch() {
   );
   const command = useCommand(RepositoryPullApi.fetch);
   const errorToast = useErrorToast();
+  const statusToast = useStatusToast();
   const { run } = command;
   const execute = useCallback(
     () =>
@@ -41,6 +45,12 @@ export function useFetch() {
           }),
     [repositoryId, run, errorToast],
   );
+  const fetchNow = () => {
+    statusToast.progress("fetch", "Fetching changes");
+    void execute().then((fetched) => {
+      if (fetched) statusToast.success("fetch", "Fetched changes");
+    });
+  };
   return {
     status: status.data,
     ready: status.data !== undefined && scope?.connected === true,
@@ -49,6 +59,7 @@ export function useFetch() {
       command.failure !== undefined ||
       (status.data?.failure !== undefined && !command.running),
     execute,
+    fetchNow,
   };
 }
 
@@ -59,19 +70,25 @@ export function usePull() {
   const fetch = useFetch();
   const command = useCommand(RepositoryPullApi.pull, { before: fetch.execute });
   const errorToast = useErrorToast();
+  const statusToast = useStatusToast();
   const pulling = command.running;
   const { run, canRun } = command;
 
   const pull = useCallback(
     async (branch: string) => {
       if (!canRun || pulling) return;
-      errorToast.failure(
-        "pull",
-        await run({ branch }),
-        pullFailureMessages(branch),
-      );
+      statusToast.progress("pull", `Pulling ${branch}`);
+      const result = await run({ branch });
+      if (result._tag === "Ok")
+        statusToast.success(
+          "pull",
+          result.value.outcome === "UpToDate"
+            ? `${branch} is already up to date`
+            : `Pulled ${branch}`,
+        );
+      else errorToast.failure("pull", result, pullFailureMessages(branch));
     },
-    [canRun, pulling, run, errorToast],
+    [canRun, pulling, run, errorToast, statusToast],
   );
 
   return {

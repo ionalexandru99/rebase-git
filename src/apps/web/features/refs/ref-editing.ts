@@ -13,6 +13,7 @@ import { RepositoryTagsApi } from "#contracts/repository-refs/repository-tags.co
 import {
   type ErrorAction,
   useErrorToast,
+  useStatusToast,
 } from "#web/features/notifications/notifications.tsx";
 import {
   namingFailure,
@@ -94,10 +95,9 @@ export function useRefEditing({
   };
   const renameBranch = useCommand(RepositoryBranchesApi.rename);
   const errorToast = useErrorToast();
+  const statusToast = useStatusToast();
   const [edit, setEdit] = useState<RefEdit>();
   const [pending, setPending] = useState<PendingDeletion>();
-  const [deleted, setDeleted] = useState<DeletedBranch>();
-  const [notice, setNotice] = useState<string>();
   const latestPending = useRef(pending);
   latestPending.current = pending;
 
@@ -111,12 +111,7 @@ export function useRefEditing({
     focusTree();
   }, [focusTree]);
 
-  const dismiss = useCallback(() => setDeleted(undefined), []);
-
-  const begin = (next: RefEdit) => {
-    setNotice(undefined);
-    setEdit(next);
-  };
+  const begin = (next: RefEdit) => setEdit(next);
 
   const refused = (
     action: ErrorAction,
@@ -202,8 +197,14 @@ export function useRefEditing({
       );
     else {
       const restorable = deletedBranch(deletion, refs);
-      if (restorable !== undefined) setDeleted(restorable);
-      setNotice(remoteDeletionNotice(deletion));
+      if (restorable !== undefined)
+        statusToast.success(
+          "deleteBranch",
+          `Deleted ${restorable.name}`,
+          () => void undo(restorable),
+        );
+      const notice = remoteDeletionNotice(deletion);
+      if (notice !== undefined) statusToast.success("deleteTag", notice);
     }
     const current = latestPending.current;
     if (current !== undefined && current.deletion !== deletion) return;
@@ -211,9 +212,8 @@ export function useRefEditing({
     focusTree();
   };
 
-  const undo = async () => {
-    if (!creates.branch.canRun || deleted === undefined) return;
-    setDeleted(undefined);
+  const undo = async (deleted: DeletedBranch) => {
+    if (!creates.branch.canRun) return;
     const restored = await creates.branch.run({
       name: deleted.name,
       startPoint: deleted.target,
@@ -230,8 +230,6 @@ export function useRefEditing({
 
   return {
     edit,
-    notice,
-    dismissNotice: () => setNotice(undefined),
     writable: creates.branch.canRun,
     cancel,
     create,
@@ -242,12 +240,8 @@ export function useRefEditing({
       begin({ kind: "rename", branch, rowId }),
     deletion: {
       pending,
-      deleted,
       cancel: cancelDeletion,
-      dismiss,
-      undo: () => void undo(),
       request: (deletion: RefDeletion) => {
-        setNotice(undefined);
         if (confirmsFirst(deletion)) setPending({ deletion, busy: false });
         else if (deletes[deletion.kind].canRun) void remove(deletion, false);
       },

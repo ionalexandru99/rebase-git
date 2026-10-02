@@ -107,7 +107,9 @@ describe("repository push", () => {
 
     await page.getByRole("button", { name: "Push spike" }).click();
 
-    await expect.poll(() => f.pushed.mock.calls.length).toBe(1);
+    await expect
+      .element(page.getByText("Pushed to origin/spike"))
+      .toBeVisible();
     expect(f.pushed).toHaveBeenCalledWith({
       ...scope,
       branch: "spike",
@@ -164,24 +166,24 @@ describe("repository push", () => {
     }
   });
 
-  it("cancels a running push without reporting a failure", async () => {
+  it("cancels a running push from its notification without reporting a failure", async () => {
     await fixture({ branch: "spike", remotes: ["origin"] }, pendingPush());
+    const progress = page.getByText("Pushing to origin/spike");
 
     await page.getByRole("button", { name: "Push spike" }).click();
-    await page
-      .getByRole("region", { name: "Push progress" })
-      .getByRole("button", { name: "Cancel" })
-      .click();
+    await expect.element(progress).toBeVisible();
+    await page.getByRole("button", { name: "Cancel" }).click();
 
     await expect
       .element(page.getByRole("button", { name: "Push spike" }))
       .toHaveTextContent("Push");
+    await expect.element(progress).not.toBeInTheDocument();
     await expect
       .element(page.getByText("The request was cancelled."))
       .not.toBeInTheDocument();
   });
 
-  it("cancels the push and clears the review when the worktree changes", async () => {
+  it("keeps a running push and clears the review when the worktree changes", async () => {
     const aborted = vi.fn();
     const f = await fixture(tracked(3, 2), pendingPush(aborted));
     const forcePush = page.getByRole("button", {
@@ -190,6 +192,7 @@ describe("repository push", () => {
     const confirmation = page.getByRole("alertdialog", {
       name: /^Force push to /,
     });
+    const progress = page.getByText("Force pushing to origin/feature/444-push");
 
     await forcePush.click();
     await expect.element(confirmation).toBeVisible();
@@ -198,18 +201,11 @@ describe("repository push", () => {
 
     await forcePush.click();
     await confirmation.getByRole("button", { name: "Force push" }).click();
-    await expect
-      .element(page.getByRole("region", { name: "Push progress" }))
-      .toBeVisible();
+    await expect.element(progress).toBeVisible();
     await f.switchWorktree("/repo");
 
-    await expect.poll(() => aborted.mock.calls.length).toBe(1);
-    await expect
-      .element(page.getByRole("region", { name: "Push progress" }))
-      .not.toBeInTheDocument();
-    await expect
-      .element(page.getByText("The request was cancelled."))
-      .not.toBeInTheDocument();
+    await expect.element(progress).toBeVisible();
+    expect(aborted).not.toHaveBeenCalled();
   });
 
   it("keeps a running push when the graph toolbar closes", async () => {
@@ -241,7 +237,7 @@ describe("repository push", () => {
       environment: { requests },
     });
     const pushButton = page.getByRole("button", { name: "Push spike" });
-    const progress = page.getByRole("region", { name: "Push progress" });
+    const progress = page.getByText("Pushing to origin/spike");
 
     await pushButton.click();
     await expect.element(progress).toBeVisible();

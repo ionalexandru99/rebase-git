@@ -16,6 +16,7 @@ import {
   visibleProjects,
 } from "#web/app/shell/use-navigation.ts";
 import { RepositoryWorkspace } from "#web/app/workspace/repository-workspace.tsx";
+import { NotificationsProvider } from "#web/features/notifications/notifications.tsx";
 import { OpenProjectScreen } from "#web/features/open-project/open-project-screen.tsx";
 import type { ProjectNavigationRepository } from "#web/features/project-navigation/project-navigation.ts";
 import { ProjectsSidebar } from "#web/features/project-navigation/projects-sidebar.tsx";
@@ -68,82 +69,111 @@ function Shell({
   const repositorySettingsId = useCatalogRepository(
     navigation.repositorySettingsId,
   )?.id;
+  const repositories = useMemo(
+    () =>
+      navigation.projects.environments.flatMap(
+        ({ repositories }) => repositories,
+      ),
+    [navigation.projects.environments],
+  );
+  const openNotifiedRepository = useCallback(
+    (repositoryId: string) => {
+      const repository = repositories.find(({ id }) => id === repositoryId);
+      if (repository !== undefined) openRepository(repository);
+    },
+    [repositories, openRepository],
+  );
   return (
-    <RepositorySelectionProvider navigation={navigation} navigate={navigate}>
-      <PanelSessions
-        navigation={navigation}
-        visible={!navigation.settingsOpen && repositorySettingsId === undefined}
-      >
-        <ApplicationLayout
-          onSidebarCollapsedChange={(collapsed) =>
-            navigate({ type: "collapse-sidebar", collapsed })
-          }
-          sidebar={(panel) => (
-            <ProjectsSidebar
-              closeRepository={(_, { id }) =>
-                navigate({ type: "close-repository", repositoryId: id })
-              }
-              collapse={panel.collapse}
-              expand={panel.expand}
-              navigation={projects}
-              openProject={() => navigate({ type: "show-open-project" })}
-              openSettings={() =>
-                navigate({ type: "show-settings", open: true })
-              }
-              openRepositorySettings={(_, { id }) =>
-                navigate({ type: "show-repository-settings", repositoryId: id })
-              }
-              selectRepository={(_, repository) => openRepository(repository)}
-              toggleEnvironment={(environmentId) =>
-                navigate({ type: "toggle-environment", environmentId })
-              }
-            />
-          )}
-          repositorySettings={
-            repositorySettingsId === undefined ? undefined : (
-              <RepositorySettingsView
-                repositoryId={repositorySettingsId}
-                reveal={
-                  repositoryFilesystem === undefined
-                    ? undefined
-                    : (path) => repositoryFilesystem.revealRepository(path)
-                }
-                onRemoved={() =>
-                  navigate({
-                    type: "close-repository",
-                    repositoryId: repositorySettingsId,
-                  })
-                }
-              />
-            )
-          }
-          settings={
-            navigation.settingsOpen ? (
-              <SettingsPanel
-                closeSettings={() =>
-                  navigate({ type: "show-settings", open: false })
-                }
-                desktopUpdates={desktopUpdates}
-                productVersion={productVersion}
-              />
-            ) : undefined
+    <NotificationsProvider
+      currentRepositoryId={
+        navigation.projects.workspaceView === "repository"
+          ? navigation.projects.selectedRepositoryId
+          : undefined
+      }
+      openRepository={openNotifiedRepository}
+      repositories={repositories}
+    >
+      <RepositorySelectionProvider navigation={navigation} navigate={navigate}>
+        <PanelSessions
+          navigation={navigation}
+          visible={
+            !navigation.settingsOpen && repositorySettingsId === undefined
           }
         >
-          {projects.workspaceView === "open-project" ? (
-            <OpenProjectScreen
-              key={navigation.openProjectRequest}
-              onOpenRepository={openRepository}
-              onRepositoryRemembered={showRepository}
-              onOpenSettings={(repositoryId) =>
-                navigate({ type: "show-repository-settings", repositoryId })
-              }
-            />
-          ) : (
-            <RepositoryWorkspace />
-          )}
-        </ApplicationLayout>
-      </PanelSessions>
-    </RepositorySelectionProvider>
+          <ApplicationLayout
+            onSidebarCollapsedChange={(collapsed) =>
+              navigate({ type: "collapse-sidebar", collapsed })
+            }
+            sidebar={(panel) => (
+              <ProjectsSidebar
+                closeRepository={(_, { id }) =>
+                  navigate({ type: "close-repository", repositoryId: id })
+                }
+                collapse={panel.collapse}
+                expand={panel.expand}
+                navigation={projects}
+                openProject={() => navigate({ type: "show-open-project" })}
+                openSettings={() =>
+                  navigate({ type: "show-settings", open: true })
+                }
+                openRepositorySettings={(_, { id }) =>
+                  navigate({
+                    type: "show-repository-settings",
+                    repositoryId: id,
+                  })
+                }
+                selectRepository={(_, repository) => openRepository(repository)}
+                toggleEnvironment={(environmentId) =>
+                  navigate({ type: "toggle-environment", environmentId })
+                }
+              />
+            )}
+            repositorySettings={
+              repositorySettingsId === undefined ? undefined : (
+                <RepositorySettingsView
+                  repositoryId={repositorySettingsId}
+                  reveal={
+                    repositoryFilesystem === undefined
+                      ? undefined
+                      : (path) => repositoryFilesystem.revealRepository(path)
+                  }
+                  onRemoved={() =>
+                    navigate({
+                      type: "close-repository",
+                      repositoryId: repositorySettingsId,
+                    })
+                  }
+                />
+              )
+            }
+            settings={
+              navigation.settingsOpen ? (
+                <SettingsPanel
+                  closeSettings={() =>
+                    navigate({ type: "show-settings", open: false })
+                  }
+                  desktopUpdates={desktopUpdates}
+                  productVersion={productVersion}
+                />
+              ) : undefined
+            }
+          >
+            {projects.workspaceView === "open-project" ? (
+              <OpenProjectScreen
+                key={navigation.openProjectRequest}
+                onOpenRepository={openRepository}
+                onRepositoryRemembered={showRepository}
+                onOpenSettings={(repositoryId) =>
+                  navigate({ type: "show-repository-settings", repositoryId })
+                }
+              />
+            ) : (
+              <RepositoryWorkspace />
+            )}
+          </ApplicationLayout>
+        </PanelSessions>
+      </RepositorySelectionProvider>
+    </NotificationsProvider>
   );
 }
 
