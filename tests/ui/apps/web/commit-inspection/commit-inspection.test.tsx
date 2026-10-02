@@ -1,9 +1,13 @@
 import { describe, expect, it, vi } from "vite-plus/test";
+import { userEvent } from "vite-plus/test/browser";
 import {
   CommitInspectionApi,
   type CommitInspection as Details,
   type InspectCommit,
   type InspectCommitDiff,
+  type PreviewRestore,
+  type RestoreFiles,
+  type RestoreOverwrites,
 } from "#contracts/commit-inspection/commit-inspection.contract.ts";
 import type { ChangeDiff } from "#contracts/repository-comparison/repository-comparison.contract.ts";
 import {
@@ -12,7 +16,11 @@ import {
   historyOid,
   historyReader,
 } from "#tests-support/commit-graph-fixture.tsx";
-import { fakeRequests, respond } from "#tests-support/fake-requests.ts";
+import {
+  fakeRequests,
+  rejected,
+  respond,
+} from "#tests-support/fake-requests.ts";
 import {
   changeDiff,
   changedFile,
@@ -73,9 +81,21 @@ async function fixture(
       overrides.diff ?? ((command: InspectCommitDiff) => diff(command.path)),
     ),
   };
+  const restores: RestoreFiles[] = [];
+  const previews: PreviewRestore[] = [];
+  const overwrites: RestoreOverwrites[] = [];
   const requests = fakeRequests(
     respond(CommitInspectionApi.inspect, (command) => client.inspect(command)),
     respond(CommitInspectionApi.inspectDiff, (command) => client.diff(command)),
+    respond(CommitInspectionApi.previewRestore, (command) => {
+      previews.push(command);
+      return diff(command.path, 333);
+    }),
+    respond(CommitInspectionApi.restore, async (command) => {
+      restores.push(command);
+      const failure = overwrites.shift();
+      if (failure !== undefined) throw rejected(failure);
+    }),
   );
   const reader = historyReader({ commits: history(40), status: "ready" });
   const scopeKey = crypto.randomUUID();
@@ -119,6 +139,7 @@ async function fixture(
                         worktreePath: "/repo",
                       }}
                       connected={connected}
+                      writable
                     />
                   ),
                   changes: (
@@ -139,6 +160,9 @@ async function fixture(
   return {
     screen,
     client,
+    restores,
+    previews,
+    overwrites,
     grid: screen.getByRole("grid"),
     scopeKey,
     connect: (connected: boolean) => screen.rerender(tree(connected)),
@@ -367,4 +391,90 @@ it("preserves the restored inspector target across connection-driven graph notif
     .element(screen.getByRole("button", { name: /second.bin/ }))
     .toHaveAttribute("aria-pressed", "true");
   expect(client.inspect).toHaveBeenCalledTimes(1);
+});
+
+describe("restoring files from a commit", () => {
+  it("previews and restores the selected files from before the commit", async () => {
+    const { screen, grid, previews, restores } = await fixture();
+    await grid.getByRole("row", { name: /^Commit 0,/ }).dblClick();
+    await screen.getByRole("button", { name: /first.bin/ }).click();
+    await screen
+      .getByRole("button", { name: /second.bin/ })
+      .click({ modifiers: ["Control"] });
+    await screen
+      .getByRole("button", { name: /second.bin/ })
+      .click({ button: "right" });
+    await screen.getByRole("menuitem", { name: "Restore" }).click();
+    await screen.getByRole("menuitem", { name: "Before this commit" }).hover();
+    await expect
+      .element(screen.getByText("Working tree after restore"))
+      .toBeVisible();
+    expect(previews.at(-1)).toMatchObject({
+      source: "parent",
+      path: "src/second.bin",
+      parentOid: historyOid(1),
+    });
+    await screen.getByRole("menuitem", { name: "Before this commit" }).click();
+    await expect.poll(() => restores).toHaveLength(1);
+    expect(restores[0]).toMatchObject({
+      oid: historyOid(0),
+      parentOid: historyOid(1),
+      source: "parent",
+      paths: ["src/first.bin", "src/second.bin", "old.bin"],
+    });
+    await expect
+      .element(screen.getByText("Working tree after restore"))
+      .not.toBeInTheDocument();
+  });
+
+  it("restores exactly the highlighted rows after deselecting the open file", async () => {
+    const { screen, grid, restores } = await fixture();
+    await grid.getByRole("row", { name: /^Commit 0,/ }).dblClick();
+    const first = screen.getByRole("button", { name: /first.bin/ });
+    const second = screen.getByRole("button", { name: /second.bin/ });
+    await second.click({ modifiers: ["Control"] });
+    await first.click({ modifiers: ["Control"] });
+    await expect.element(first).toHaveAttribute("aria-pressed", "false");
+    await expect.element(second).toHaveAttribute("aria-pressed", "true");
+    await second.click({ button: "right" });
+    await screen.getByRole("menuitem", { name: "Restore" }).click();
+    await screen
+      .getByRole("menuitem", { name: "This commit", exact: true })
+      .click();
+    await expect.poll(() => restores).toHaveLength(1);
+    expect(restores[0]?.paths).toEqual(["src/second.bin", "old.bin"]);
+  });
+
+  it("asks before replacing uncommitted edits and sends the confirmed fingerprint", async () => {
+    const { screen, grid, overwrites, restores } = await fixture();
+    overwrites.push({
+      _tag: "RestoreOverwrites",
+      paths: ["src/first.bin"],
+      count: 1,
+      fingerprint: "f".repeat(64),
+    });
+    await grid.getByRole("row", { name: /^Commit 0,/ }).dblClick();
+    (
+      screen.getByRole("button", { name: /first.bin/ }).element() as HTMLElement
+    ).focus();
+    await userEvent.keyboard("{Shift>}{F10}{/Shift}");
+    await screen.getByRole("menuitem", { name: "Restore" }).click();
+    await screen
+      .getByRole("menuitem", { name: "This commit", exact: true })
+      .click();
+    const confirmation = screen.getByRole("alertdialog", {
+      name: "Replace uncommitted edits in src/first.bin?",
+    });
+    await expect.element(confirmation).toBeVisible();
+    await screen.getByRole("button", { name: "Replace and restore" }).click();
+    await expect.element(confirmation).not.toBeInTheDocument();
+    expect(restores).toEqual([
+      expect.objectContaining({ source: "commit", paths: ["src/first.bin"] }),
+      expect.objectContaining({
+        source: "commit",
+        paths: ["src/first.bin"],
+        overwrite: "f".repeat(64),
+      }),
+    ]);
+  });
 });

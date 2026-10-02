@@ -9,6 +9,11 @@ import {
 import { Button } from "#web/components/ui/button.tsx";
 import { CommitFiles } from "#web/features/commit-inspection/components/commit-files.tsx";
 import { CommitMetadata } from "#web/features/commit-inspection/components/commit-metadata.tsx";
+import {
+  RestoreConfirmation,
+  type RestorePreview,
+  useRestoreFiles,
+} from "#web/features/commit-inspection/restore-files.tsx";
 import { DiffWorkerPool } from "#web/features/file-diff/components/diff-worker-pool.tsx";
 import { useDiffPreferences } from "#web/features/file-diff/hooks/use-diff-preferences.ts";
 import { usePanelFeature } from "#web/features/workspace-panel/api.ts";
@@ -27,9 +32,11 @@ interface SelectedFile {
 export function CommitInspection({
   scope,
   connected,
+  writable,
 }: {
   readonly scope: InspectionScope;
   readonly connected: boolean;
+  readonly writable: boolean;
 }) {
   const feature = usePanelFeature();
   const active = connected && feature?.active !== false;
@@ -38,7 +45,10 @@ export function CommitInspection({
   const details = inspection.data;
   const [selected, setSelected] = useState<SelectedFile>();
   const path = details === undefined ? null : selectedPath(details, selected);
+  const restore = useRestoreFiles(scope, details, connected && writable);
+  const preview = useRestorePreview(scope, details, restore.preview, active);
   const diff = useCommitDiff(scope, details, path, active);
+  const shown = restore.preview === undefined ? diff : preview;
   const [preferences, choosePreferences] = useDiffPreferences();
   const error = inspection.isError ? describeFailure(inspection.error) : null;
   const retry = () => void inspection.refetch();
@@ -91,16 +101,24 @@ export function CommitInspection({
                   path={path}
                   select={select}
                   diff={{
-                    value: diff.data,
-                    loading: diff.isLoading,
-                    error: diff.isError ? describeFailure(diff.error) : null,
-                    retry: () => void diff.refetch(),
+                    value: shown.data,
+                    loading: shown.isLoading,
+                    error: shown.isError ? describeFailure(shown.error) : null,
+                    retry: () => void shown.refetch(),
                   }}
+                  preview={restore.preview !== undefined}
                   preferences={preferences}
                   choosePreferences={choosePreferences}
                 />
               </Suspense>
-              <CommitFiles files={details.files} path={path} select={select} />
+              <CommitFiles
+                key={details.oid}
+                files={details.files}
+                path={path}
+                select={select}
+                actionsFor={restore.actionsFor}
+                onMenuClose={restore.endPreview}
+              />
             </div>
           )}
         </>
@@ -111,6 +129,7 @@ export function CommitInspection({
             : "Select a commit in the graph."}
         </p>
       ) : null}
+      <RestoreConfirmation restore={restore} />
     </section>
   );
 }
@@ -146,6 +165,7 @@ export function CommitInspectionPanel() {
           worktreePath: scope.worktreePath,
         }}
         connected={environment.connected}
+        writable={environment.writable}
       />
     </DiffWorkerPool>
   );
@@ -182,6 +202,29 @@ function commitDiffInput(
     path,
     ...(previousPath == null ? {} : { previousPath }),
   };
+}
+
+function useRestorePreview(
+  { repositoryId, worktreePath }: InspectionScope,
+  details: CommitDetails | undefined,
+  preview: RestorePreview | undefined,
+  enabled: boolean,
+) {
+  return useEnvironmentQuery(
+    CommitInspectionApi.previewRestore,
+    details === undefined || preview === undefined
+      ? skipToken
+      : {
+          repositoryId,
+          worktreePath,
+          oid: details.oid,
+          ...(details.parentOid === null
+            ? {}
+            : { parentOid: details.parentOid }),
+          ...preview,
+        },
+    { enabled, changes: "index" },
+  );
 }
 
 type InspectionScope = Pick<InspectCommit, "repositoryId" | "worktreePath">;

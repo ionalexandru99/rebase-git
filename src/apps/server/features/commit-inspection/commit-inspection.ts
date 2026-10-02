@@ -23,6 +23,10 @@ import {
   type CommitSide,
   readCommitChange,
 } from "#server/features/commit-inspection/read-commit-change.ts";
+import {
+  previewRestore,
+  restoreFiles,
+} from "#server/features/commit-inspection/restore-files.ts";
 import { buildChangeDiff } from "#server/repository/comparison/build-change-diff.ts";
 import {
   type GitBlob,
@@ -236,12 +240,22 @@ function readFiles(
 export function commitInspectionFeature(
   dependencies: RepositoryDependencies,
 ): EnvironmentFeature {
-  const { query } = repositoryRoutes(dependencies);
+  const { command, query } = repositoryRoutes(dependencies);
   const api = CommitInspectionApi;
   return {
     routes: [
       query(api.inspect, (input, git) => inspectCommit(git, input)),
       query(api.inspectDiff, (input, git) => inspectCommitDiff(git, input)),
+      query(api.previewRestore, (input, git) => previewRestore(git, input)),
+      command(
+        api.restore,
+        {
+          name: "restore",
+          locks: { worktree: "wait" },
+          duringOperation: "block",
+        },
+        (input, git) => restoreFiles(git, input),
+      ),
     ],
   };
 }

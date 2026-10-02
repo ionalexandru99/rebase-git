@@ -31,6 +31,7 @@ const errorTitles = {
   cherryPick: "Couldn’t cherry-pick",
   reset: "Couldn’t reset the branch",
   revert: "Couldn’t revert the commit",
+  restore: "Couldn’t restore the files",
   copySha: "Couldn’t copy the commit SHA",
   copySubject: "Couldn’t copy the commit subject",
   copyPath: "Couldn’t copy the path",
