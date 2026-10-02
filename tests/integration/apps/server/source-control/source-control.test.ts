@@ -4,10 +4,14 @@ import { describe, expect, it } from "vite-plus/test";
 import { PullRequestsApi } from "#contracts/pull-requests/pull-requests.contract.ts";
 import { SourceControlApi } from "#contracts/source-control/source-control.contract.ts";
 import { createRepository, git } from "#tests-support/git.ts";
-import { fakeGitHub, openTestEnvironment } from "#tests-support/server.ts";
+import {
+  fakeAzureDevOps,
+  fakeGitHub,
+  openTestEnvironment,
+} from "#tests-support/server.ts";
 
 describe("source control", () => {
-  it("reports Git, the GitHub login and the hosts that are coming soon", async () => {
+  it("reports Git, the GitHub and Azure DevOps logins and the hosts that are coming soon", async () => {
     const f = await fixture();
 
     const { git: gitStatus, hosts } = await f.discover();
@@ -25,7 +29,13 @@ describe("source control", () => {
         account: "octo",
       },
       { _tag: "ComingSoon", kind: "gitlab" },
-      { _tag: "ComingSoon", kind: "azure-devops" },
+      {
+        _tag: "SignedIn",
+        kind: "azure-devops",
+        enabled: true,
+        version: "azure-cli 2.78.0",
+        account: "octo@example.com",
+      },
       { _tag: "ComingSoon", kind: "bitbucket" },
       { _tag: "ComingSoon", kind: "forgejo" },
     ]);
@@ -70,7 +80,10 @@ describe("source control", () => {
 
 async function fixture(tool: Parameters<typeof fakeGitHub>[1] = {}) {
   const { github, requests } = fakeGitHub({ main: [{ number: 1 }] }, tool);
-  const environment = await openTestEnvironment({ github });
+  const environment = await openTestEnvironment({
+    github,
+    azureDevOps: fakeAzureDevOps({}).azureDevOps,
+  });
   const repositoryPath = join(environment.home, "repository");
   await createRepository(repositoryPath);
   await git(

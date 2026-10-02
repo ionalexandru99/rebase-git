@@ -31,6 +31,7 @@ import {
   serveEnvironment,
 } from "#server/app/server/serve-environment.ts";
 import type { EnvironmentAuthorization } from "#server/features/environment-authorization/environment-authorization.ts";
+import type { AzureDevOpsClient } from "#server/features/source-control/azure-devops-host.ts";
 import type { GitHubCli } from "#server/features/source-control/github-host.ts";
 import type { RepositoryCoordination } from "#server/repository/repository-coordination.ts";
 import { removeTemporaryDirectory } from "#tests-support/temporary-directory.ts";
@@ -71,6 +72,7 @@ interface EnvironmentOverrides {
     | undefined;
   readonly git?: ((git: GitCommandRunner) => GitCommandRunner) | undefined;
   readonly github?: GitHubCli;
+  readonly azureDevOps?: AzureDevOpsClient;
   readonly coordination?: (
     coordination: RepositoryCoordination,
   ) => RepositoryCoordination;
@@ -215,6 +217,68 @@ export function fakeGitHub(
   return { github, requests };
 }
 
+export interface AzureDevOpsPullRequestNode {
+  readonly id: number;
+  readonly status?: "active" | "completed" | "abandoned";
+  readonly isDraft?: boolean;
+  readonly fork?: boolean;
+  readonly checks?: readonly string[];
+}
+
+export function fakeAzureDevOps(
+  byHead: Readonly<
+    Record<string, readonly AzureDevOpsPullRequestNode[]>
+  > | null,
+  {
+    version = "azure-cli 2.78.0",
+    account = "octo@example.com",
+  }: {
+    readonly version?: string | null;
+    readonly account?: string | null;
+  } = {},
+) {
+  const requests: string[] = [];
+  const nodes = Object.values(byHead ?? {}).flat();
+  const azureDevOps: AzureDevOpsClient = {
+    version: Effect.succeed(version ?? undefined),
+    account: Effect.succeed(account ?? undefined),
+    accessToken:
+      byHead === null
+        ? Effect.fail({ _tag: "PullRequestsUnavailable" })
+        : Effect.succeed("token"),
+    get: (url) => {
+      requests.push(url);
+      const query = new URL(url).searchParams;
+      const source = query.get("searchCriteria.sourceRefName");
+      const value =
+        source === null
+          ? (
+              nodes.find(
+                ({ id }) =>
+                  String(id) === query.get("artifactId")?.split("/").at(-1),
+              )?.checks ?? []
+            ).map((status) => ({
+              status,
+              configuration: {
+                type: { id: "0609b952-1397-4640-95ec-e00a01b2c241" },
+              },
+            }))
+          : (byHead?.[source.slice("refs/heads/".length)] ?? []).map(
+              (node) => ({
+                pullRequestId: node.id,
+                title: `Pull request ${node.id}`,
+                status: node.status ?? "active",
+                isDraft: node.isDraft ?? false,
+                ...(node.fork === true ? { forkSource: {} } : {}),
+                repository: { project: { id: "project-id" } },
+              }),
+            );
+      return Effect.succeed(JSON.stringify({ value }));
+    },
+  };
+  return { azureDevOps, requests };
+}
+
 export async function exchangePairing(
   origin: string,
   pairingUrl: string,
@@ -321,6 +385,7 @@ function acquireTestDependencies(overrides: EnvironmentOverrides) {
         environment.coordination,
       events: overrides.events?.(environment.events) ?? environment.events,
       github: overrides.github ?? environment.github,
+      azureDevOps: overrides.azureDevOps ?? environment.azureDevOps,
       home,
     };
   });

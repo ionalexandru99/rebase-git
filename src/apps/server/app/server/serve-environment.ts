@@ -30,6 +30,10 @@ import { repositoryPushFeature } from "#server/features/repository-push/reposito
 import { repositoryReflogFeature } from "#server/features/repository-reflog/repository-reflog.ts";
 import { repositoryRefsFeature } from "#server/features/repository-refs/repository-refs.feature.ts";
 import {
+  createAzureDevOpsClient,
+  createAzureDevOpsHost,
+} from "#server/features/source-control/azure-devops-host.ts";
+import {
   createGitHubCli,
   createGitHubHost,
 } from "#server/features/source-control/github-host.ts";
@@ -115,6 +119,7 @@ export function acquireEnvironment(home: string, git: GitCommandRunner) {
     return {
       access: createRepositoryAccess(catalog, git, watcher),
       authorization: createEnvironmentAuthorization(context),
+      azureDevOps: createAzureDevOpsClient(),
       catalog,
       context,
       coordination: createRepositoryCoordination(git),
@@ -132,7 +137,10 @@ export function environmentFeatures(dependencies: EnvironmentDependencies) {
     const sourceControl = createSourceControl(
       dependencies.context,
       dependencies.git,
-      [createGitHubHost(dependencies.github)],
+      [
+        createGitHubHost(dependencies.github),
+        createAzureDevOpsHost(dependencies.azureDevOps),
+      ],
     );
     return combineEnvironmentFeatures([
       environmentAuthorizationFeature(dependencies.authorization),

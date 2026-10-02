@@ -27,7 +27,7 @@ import {
 import { startManagedEnvironmentServer } from "#desktop/platform/environment/environment-supervisor.ts";
 import {
   createTrustedIpcHandler,
-  isExternalGitHubLink,
+  isExternalPullRequestLink,
   isTrustedRendererLocation,
   type TrustedIpcHandler,
 } from "#desktop/platform/renderer-trust.ts";
@@ -125,7 +125,7 @@ async function openWindow(
   registerEnvironmentCredentialIpc(window, options, trusted);
   preventUntrustedNavigation(window, options.renderer);
   window.webContents.setWindowOpenHandler(({ url }) => {
-    if (isExternalGitHubLink(url)) void shell.openExternal(url);
+    if (isExternalPullRequestLink(url)) void shell.openExternal(url);
     return { action: "deny" };
   });
   window.once("ready-to-show", () => window.show());

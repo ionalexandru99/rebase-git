@@ -203,7 +203,7 @@ export function hostedRepositoryFromUrl(
     : { provider, owner, name };
 }
 
-function remoteLocation(address: string) {
+export function remoteLocation(address: string) {
   if (address.includes("://")) {
     try {
       const url = new URL(address);

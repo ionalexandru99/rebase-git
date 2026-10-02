@@ -21,9 +21,13 @@ export function isTrustedRendererLocation(
   );
 }
 
-export function isExternalGitHubLink(target: string) {
+const pullRequestHosts = new Set(["github.com", "dev.azure.com"]);
+
+export function isExternalPullRequestLink(target: string) {
   const targetUrl = URL.parse(target);
-  return targetUrl?.protocol === "https:" && targetUrl.host === "github.com";
+  return (
+    targetUrl?.protocol === "https:" && pullRequestHosts.has(targetUrl.host)
+  );
 }
 
 export function createTrustedIpcHandler(
