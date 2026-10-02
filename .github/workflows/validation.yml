@@ -77,6 +77,17 @@ jobs:
       - name: Smoke-test clean npm installation
         timeout-minutes: 10
         run: node tests/package/smoke-packed-package.ts package-artifact
+      - name: Cache Electron downloads
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cache/electron
+            ~/.cache/electron-builder
+            ~/Library/Caches/electron
+            ~/Library/Caches/electron-builder
+            ~/AppData/Local/electron/Cache
+            ~/AppData/Local/electron-builder/Cache
+          key: electron-downloads-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('workspace with spaces/pnpm-lock.yaml') }}
       - name: Install Electron
         run: pnpm exec install-electron
       - name: Package and launch desktop application
