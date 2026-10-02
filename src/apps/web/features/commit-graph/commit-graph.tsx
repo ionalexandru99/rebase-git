@@ -82,6 +82,7 @@ export function CommitGraph({
   selections,
   hostedRepository,
   remoteProviders,
+  titleActions,
   toolbarActions,
   merge,
   rebase,
@@ -98,6 +99,7 @@ export function CommitGraph({
   readonly onActiveCommitChange?:
     | ((oid: string | undefined) => void)
     | undefined;
+  readonly titleActions?: ReactNode;
   readonly toolbarActions?: ReactNode;
   readonly ref?: Ref<CommitGraphHandle>;
   readonly historyIdentity?:
@@ -255,7 +257,9 @@ export function CommitGraph({
       className="flex h-full min-h-0 flex-col bg-repository"
     >
       <CommitGraphToolbar.Frame>
-        <CommitGraphToolbar.Title repositoryName={repositoryName} />
+        <CommitGraphToolbar.Title repositoryName={repositoryName}>
+          {titleActions}
+        </CommitGraphToolbar.Title>
         {history === undefined ? null : (
           <RepositoryHistorySearchControls
             history={history}
@@ -496,11 +500,20 @@ function Frame({ children }: { readonly children: ReactNode }) {
     </header>
   );
 }
-function Title({ repositoryName }: { readonly repositoryName: string }) {
+function Title({
+  repositoryName,
+  children,
+}: {
+  readonly repositoryName: string;
+  readonly children: ReactNode;
+}) {
   return (
-    <h1 className="mr-auto min-w-0 max-w-48 truncate text-[.85rem] font-semibold text-foreground">
-      {repositoryName}
-    </h1>
+    <div className="mr-auto flex min-w-0 items-center gap-2">
+      <h1 className="min-w-0 max-w-48 truncate text-[.85rem] font-semibold text-foreground">
+        {repositoryName}
+      </h1>
+      {children}
+    </div>
   );
 }
 const CommitGraphToolbar = { Frame, Title };

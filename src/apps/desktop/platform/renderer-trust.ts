@@ -21,6 +21,11 @@ export function isTrustedRendererLocation(
   );
 }
 
+export function isExternalGitHubLink(target: string) {
+  const targetUrl = URL.parse(target);
+  return targetUrl?.protocol === "https:" && targetUrl.host === "github.com";
+}
+
 export function createTrustedIpcHandler(
   renderer: DesktopRenderer,
 ): TrustedIpcHandler {

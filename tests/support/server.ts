@@ -31,6 +31,7 @@ import {
   serveEnvironment,
 } from "#server/app/server/serve-environment.ts";
 import type { EnvironmentAuthorization } from "#server/features/environment-authorization/environment-authorization.ts";
+import type { GitHubCli } from "#server/features/pull-requests/pull-requests.ts";
 import type { RepositoryCoordination } from "#server/repository/repository-coordination.ts";
 import { removeTemporaryDirectory } from "#tests-support/temporary-directory.ts";
 import {
@@ -69,6 +70,7 @@ interface EnvironmentOverrides {
     | ((events: EnvironmentEventPublisher) => EnvironmentEventPublisher)
     | undefined;
   readonly git?: ((git: GitCommandRunner) => GitCommandRunner) | undefined;
+  readonly github?: GitHubCli;
   readonly coordination?: (
     coordination: RepositoryCoordination,
   ) => RepositoryCoordination;
@@ -150,6 +152,58 @@ export function openTestServer(overrides: EnvironmentOverrides = {}) {
       };
     }),
   );
+}
+
+export interface GitHubPullRequestNode {
+  readonly number: number;
+  readonly state?: "OPEN" | "CLOSED" | "MERGED";
+  readonly isDraft?: boolean;
+  readonly owner?: string;
+  readonly checks?: string;
+}
+
+export function fakeGitHub(
+  byHead: Readonly<Record<string, readonly GitHubPullRequestNode[]>> | null,
+) {
+  const requests: Readonly<Record<string, string>>[] = [];
+  const github: GitHubCli = {
+    graphql: (_query, variables) => {
+      requests.push(variables);
+      if (byHead === null)
+        return Effect.fail({ _tag: "PullRequestsUnavailable" });
+      const repository = Object.fromEntries(
+        Object.entries(variables)
+          .filter(([alias]) => /^b\d+$/.test(alias))
+          .map(([alias, head]) => [
+            alias,
+            {
+              nodes: (byHead[head] ?? []).map((node) => ({
+                number: node.number,
+                url: `https://github.com/${variables.owner}/${variables.name}/pull/${node.number}`,
+                title: `Pull request ${node.number}`,
+                state: node.state ?? "OPEN",
+                isDraft: node.isDraft ?? false,
+                headRepositoryOwner: { login: node.owner ?? variables.owner },
+                commits: {
+                  nodes: [
+                    {
+                      commit: {
+                        statusCheckRollup:
+                          node.checks === undefined
+                            ? null
+                            : { state: node.checks },
+                      },
+                    },
+                  ],
+                },
+              })),
+            },
+          ]),
+      );
+      return Effect.succeed(JSON.stringify({ data: { repository } }));
+    },
+  };
+  return { github, requests };
 }
 
 export async function exchangePairing(
@@ -257,6 +311,7 @@ function acquireTestDependencies(overrides: EnvironmentOverrides) {
         overrides.coordination?.(environment.coordination) ??
         environment.coordination,
       events: overrides.events?.(environment.events) ?? environment.events,
+      github: overrides.github ?? environment.github,
       home,
     };
   });

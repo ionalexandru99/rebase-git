@@ -11,6 +11,10 @@ import { automaticHistoryScope } from "#web/features/commit-graph/scope/history-
 import { useHistoryScope } from "#web/features/commit-graph/scope/use-history-scope.ts";
 import { useMergeActions } from "#web/features/merge/merge-actions.ts";
 import { OperationRecoveryNotice } from "#web/features/operation-recovery/components/operation-recovery-toast.tsx";
+import {
+  CurrentPullRequest,
+  usePullRequests,
+} from "#web/features/pull-requests/pull-requests.tsx";
 import { useRebaseActions } from "#web/features/rebase/rebase-actions.ts";
 import type { RebasePlanTarget } from "#web/features/rebase/rebase-plan.ts";
 import { requestRefIntent } from "#web/features/refs/ref-actions.ts";
@@ -104,6 +108,7 @@ function Workspace({
   const rebase = useRebaseActions(history, openRebasePlan);
   const cherryPick = useCherryPick(history);
   const reset = useResetActions();
+  const pullRequests = usePullRequests();
   const name = useCatalogRepository(scope.repositoryId)?.name ?? "Repository";
   const repositoryRefs = useScopedRepositoryRefs();
   const { refs } = repositoryRefs;
@@ -142,6 +147,7 @@ function Workspace({
                 >
                   <BranchesSidebar
                     merge={merge}
+                    pullRequests={pullRequests}
                     rebase={rebase}
                     reset={reset}
                     onBranchRenamed={historyScope.renameBranch}
@@ -170,6 +176,9 @@ function Workspace({
                         ref={inspection.graphRef}
                         onOpenDetails={inspection.open}
                         onActiveCommitChange={inspection.select}
+                        titleActions={
+                          <CurrentPullRequest pullRequests={pullRequests} />
+                        }
                         toolbarActions={
                           <>
                             {syncActions}

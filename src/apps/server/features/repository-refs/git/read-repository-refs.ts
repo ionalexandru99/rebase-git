@@ -172,7 +172,13 @@ export function hostedRepositoryFromRemotes(
   const origin = remotes.find((remote) => remote.remote === "origin");
   const url =
     origin?.url ?? (remotes.length === 1 ? remotes[0]?.url : undefined);
-  const location = url === undefined ? undefined : remoteLocation(url);
+  return url === undefined ? undefined : hostedRepositoryFromUrl(url);
+}
+
+export function hostedRepositoryFromUrl(
+  url: string,
+): RepositoryRefs["hostedRepository"] {
+  const location = remoteLocation(url);
   const provider =
     location === undefined ? undefined : hostedProviders.get(location.host);
   if (location === undefined || provider === undefined) return undefined;

@@ -1,7 +1,7 @@
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Schema } from "effect";
-import { app, BrowserWindow, dialog, ipcMain } from "electron";
+import { app, BrowserWindow, dialog, ipcMain, shell } from "electron";
 import electronUpdater, { type AppUpdater } from "electron-updater";
 import {
   type DesktopUpdateSnapshot,
@@ -27,6 +27,7 @@ import {
 import { startManagedEnvironmentServer } from "#desktop/platform/environment/environment-supervisor.ts";
 import {
   createTrustedIpcHandler,
+  isExternalGitHubLink,
   isTrustedRendererLocation,
   type TrustedIpcHandler,
 } from "#desktop/platform/renderer-trust.ts";
@@ -123,7 +124,10 @@ async function openWindow(
 
   registerEnvironmentCredentialIpc(window, options, trusted);
   preventUntrustedNavigation(window, options.renderer);
-  window.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
+  window.webContents.setWindowOpenHandler(({ url }) => {
+    if (isExternalGitHubLink(url)) void shell.openExternal(url);
+    return { action: "deny" };
+  });
   window.once("ready-to-show", () => window.show());
 
   try {

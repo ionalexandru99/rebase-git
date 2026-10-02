@@ -50,6 +50,7 @@ import {
 } from "#web/features/branches-sidebar/sidebar-view-controls.tsx";
 import { historyRefKey } from "#web/features/commit-graph/scope/history-scope.ts";
 import type { MergeActions } from "#web/features/merge/merge-actions.ts";
+import type { PullRequests } from "#web/features/pull-requests/pull-requests.tsx";
 import type { RebaseActions } from "#web/features/rebase/rebase-actions.ts";
 import {
   type RefAction,
@@ -81,6 +82,7 @@ const noSelectedTags: ReadonlySet<string> = new Set();
 
 export function BranchesSidebar({
   merge,
+  pullRequests,
   rebase,
   reset,
   onBranchRenamed = () => undefined,
@@ -89,6 +91,7 @@ export function BranchesSidebar({
   selectedHistoryRefKeys = noSelectedRefs,
 }: {
   readonly merge?: MergeActions | undefined;
+  readonly pullRequests?: PullRequests | undefined;
   readonly rebase?: RebaseActions | undefined;
   readonly reset?: ResetActions | undefined;
   readonly onBranchRenamed?: (rename: {
@@ -266,6 +269,7 @@ export function BranchesSidebar({
             rebase: rebase?.actionFor,
             reset: reset?.actionFor,
             showReflog: onShowReflog,
+            pullRequests: pullRequests?.actionFor,
             pull: pull.allowed
               ? {
                   pulling: pull.pulling,
@@ -524,6 +528,11 @@ export function BranchesSidebar({
                   rebase?.inspect(row.target);
                 }}
                 onToggleHistory={() => onToggleHistoryRef(row.target)}
+                pullRequest={
+                  row.target._tag === "LocalBranch"
+                    ? pullRequests?.forBranch(row.name)[0]
+                    : undefined
+                }
                 row={row}
                 selected={selectedTags.has(row.id)}
                 selectedInHistory={selectedHistoryRefKeys.has(
