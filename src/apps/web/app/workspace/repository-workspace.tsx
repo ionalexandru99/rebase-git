@@ -15,6 +15,10 @@ import {
   CurrentPullRequest,
   usePullRequests,
 } from "#web/features/pull-requests/pull-requests.tsx";
+import {
+  DropConfirmation,
+  useDropCommits,
+} from "#web/features/rebase/drop-commits.tsx";
 import { useRebaseActions } from "#web/features/rebase/rebase-actions.ts";
 import type { RebasePlanTarget } from "#web/features/rebase/rebase-plan.ts";
 import { requestRefIntent } from "#web/features/refs/ref-actions.ts";
@@ -107,6 +111,7 @@ function Workspace({
   );
   const rebase = useRebaseActions(history, openRebasePlan);
   const cherryPick = useCherryPick(history);
+  const drop = useDropCommits(history);
   const reset = useResetActions();
   const pullRequests = usePullRequests();
   const name = useCatalogRepository(scope.repositoryId)?.name ?? "Repository";
@@ -133,6 +138,7 @@ function Workspace({
     <>
       <OperationRecoveryNotice key={worktreePath} repositoryName={name} />
       <ResetConfirmation reset={reset} />
+      <DropConfirmation drop={drop} />
       <RemoteSync>
         {(syncActions) => (
           <CommitInspectionBridge connected={scope.connected}>
@@ -173,6 +179,7 @@ function Workspace({
                         rebase={rebase}
                         reset={reset}
                         cherryPick={cherryPick}
+                        drop={drop}
                         ref={inspection.graphRef}
                         onOpenDetails={inspection.open}
                         onActiveCommitChange={inspection.select}

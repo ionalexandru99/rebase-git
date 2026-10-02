@@ -31,7 +31,7 @@ export type LoadedPlan =
       readonly rows: readonly PlanRow[];
     };
 
-const maximumPlanCommits = 1_000;
+export const maximumPlanCommits = 1_000;
 
 export function isRebasePlanTarget(input: unknown): input is RebasePlanTarget {
   return (

@@ -94,6 +94,16 @@ describe("Rebase with an edited plan", () => {
     ).toBe("file.txt\nshared.txt");
   });
 
+  it("leaves the branch at the base when every commit above it is dropped", async () => {
+    const f = await fixture();
+    await f.start([
+      f.step("one", "drop"),
+      f.step("file", "drop"),
+      f.step("shared", "drop"),
+    ]);
+    expect(await f.tip("topic")).toBe(await f.tip("main~2"));
+  });
+
   it("stops at an edit, reports the plan, and finishes through the shared lifecycle", async () => {
     const f = await fixture();
     const started = await f.start([

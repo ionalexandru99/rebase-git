@@ -53,6 +53,7 @@ import type {
 } from "#web/features/commit-graph/scope/history-scope.ts";
 import { RepositoryHistorySearchControls } from "#web/features/history-search/components/repository-history-search-controls.tsx";
 import type { MergeActions } from "#web/features/merge/merge-actions.ts";
+import type { DropCommits } from "#web/features/rebase/drop-commits.tsx";
 import type { RebaseActions } from "#web/features/rebase/rebase-actions.ts";
 import {
   describeHistoryFailure,
@@ -88,6 +89,7 @@ export function CommitGraph({
   rebase,
   reset,
   cherryPick,
+  drop,
   onOpenDetails,
   onActiveCommitChange,
 }: {
@@ -95,6 +97,7 @@ export function CommitGraph({
   readonly rebase?: RebaseActions | undefined;
   readonly reset?: ResetActions | undefined;
   readonly cherryPick?: CherryPick | undefined;
+  readonly drop?: DropCommits | undefined;
   readonly onOpenDetails?: ((oid: string) => void) | undefined;
   readonly onActiveCommitChange?:
     | ((oid: string | undefined) => void)
@@ -170,6 +173,7 @@ export function CommitGraph({
     rebase: rebase && {
       actionFor: (oid) => highlighted(rebase.actionFor(oid), setPreviewing),
     },
+    drop,
     reset,
     onOpenDetails,
   });
@@ -228,10 +232,11 @@ export function CommitGraph({
     setMenuOid(oid);
     merge?.inspect(oid);
     rebase?.inspect(oid);
-    cherryPick?.open(
-      navigation.selected.has(oid) ? [...navigation.selected] : [oid],
-      scopeQuery,
-    );
+    const selection = navigation.selected.has(oid)
+      ? [...navigation.selected]
+      : [oid];
+    cherryPick?.open(selection, scopeQuery);
+    drop?.open(selection, scopeQuery);
     navigation.select(
       oid,
       index,
