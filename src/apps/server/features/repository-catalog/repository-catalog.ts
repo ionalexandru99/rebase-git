@@ -3,7 +3,7 @@ import { realpath } from "node:fs";
 import { stat } from "node:fs/promises";
 import { basename, isAbsolute } from "node:path";
 import { promisify } from "node:util";
-import { asc, countDistinct, eq, sql } from "drizzle-orm";
+import { and, asc, countDistinct, eq, ne, sql } from "drizzle-orm";
 import { Effect } from "effect";
 import { repositoryRejected } from "#contracts/git/git-failures.contract.ts";
 import {
@@ -103,9 +103,12 @@ function ensureRepositoryIdentity(
             })
             .from(repositoryCatalogTable)
             .where(
-              eq(
-                repositoryCatalogTable.gitCommonDirectory,
-                resolved.gitCommonDirectory,
+              and(
+                eq(
+                  repositoryCatalogTable.gitCommonDirectory,
+                  resolved.gitCommonDirectory,
+                ),
+                ne(repositoryCatalogTable.id, repository.id),
               ),
             )
             .get();
