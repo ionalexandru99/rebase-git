@@ -28,9 +28,11 @@ async function fixture() {
       file("100644", spaced, "old\n"),
       file("100644", "binary.bin", "\u0000\u0001\u0002"),
       file("120000", "link", "keep.txt"),
+      file("100644", "nested/inner.txt", "inner\n"),
     ]) +
       commit("Change", 1_700_000_100, [
         "D gone.txt\n",
+        "D nested/inner.txt\n",
         file("100644", spaced, "new\n"),
         file("100644", "added.txt", "added\n"),
         file("100644", "binary.bin", "\u0003\u0004"),
@@ -135,5 +137,30 @@ describe("restoring files from a commit", () => {
     expect(await f.read(spaced)).toBe("old\n");
     expect(await f.read("keep.txt")).toBe("keep\n");
     expect(await git(f.directory, "show", ":keep.txt")).toBe("staged");
+  });
+
+  it("counts local work that Git status hides as edits", async () => {
+    const f = await fixture();
+    await git(f.directory, "update-index", "--skip-worktree", "keep.txt");
+    await writeFile(join(f.directory, "keep.txt"), "local override\n");
+    await writeFile(join(f.directory, "nested"), "a file where a folder was\n");
+
+    const failure = await Effect.runPromise(
+      Effect.flip(
+        f.service.restore({
+          ...f.scope,
+          source: "parent",
+          paths: ["keep.txt", "nested/inner.txt"],
+        }),
+      ),
+    );
+
+    expect(failure).toMatchObject({
+      _tag: "RestoreOverwrites",
+      paths: ["keep.txt", "nested"],
+      count: 2,
+    });
+    expect(await f.read("keep.txt")).toBe("local override\n");
+    expect(await f.read("nested")).toBe("a file where a folder was\n");
   });
 });

@@ -53,12 +53,11 @@ export function CommitFiles({
   );
   const [checked, setChecked] = useState<ReadonlySet<string>>(new Set());
   const anchor = useRef<string | null>(null);
-  const chosen = [...checked].filter((key) =>
-    files.some((file) => file.path === key),
-  );
-  const targets = chosen.length > 0 ? chosen : path === null ? [] : [path];
-  const actions =
-    path === null || !targets.includes(path) ? [] : actionsFor(targets, path);
+  const selected: ReadonlySet<string> =
+    path !== null && checked.has(path)
+      ? checked
+      : new Set(path === null ? [] : [path]);
+  const actions = path === null ? [] : actionsFor([...selected], path);
 
   const click = (
     event: MouseEvent<HTMLButtonElement>,
@@ -66,25 +65,26 @@ export function CommitFiles({
     index: number,
   ) => {
     if (event.metaKey || event.ctrlKey || event.shiftKey) {
-      const start = rows.findIndex((entry) => entry.key === anchor.current);
+      const start = rows.findIndex(
+        (entry) => entry.key === (anchor.current ?? path),
+      );
       const paths =
         event.shiftKey && start >= 0
           ? rows
               .slice(Math.min(start, index), Math.max(start, index) + 1)
               .flatMap((entry) => (entry.file ? entry.paths : []))
           : row.paths;
-      setChecked((current) => {
-        const next = new Set(event.shiftKey ? [] : current);
-        if (next.size === 0 && path !== null && !event.shiftKey) next.add(path);
-        const remove =
-          !event.shiftKey && paths.every((entry) => next.has(entry));
-        for (const entry of paths) {
-          if (remove) next.delete(entry);
-          else next.add(entry);
-        }
-        return next;
-      });
+      const next = new Set(event.shiftKey ? [] : selected);
+      const remove = !event.shiftKey && paths.every((entry) => next.has(entry));
+      for (const entry of paths) {
+        if (remove) next.delete(entry);
+        else next.add(entry);
+      }
       if (!event.shiftKey) anchor.current = row.key;
+      setChecked(next);
+      const [first] = next;
+      if (path !== null && !next.has(path) && first !== undefined)
+        select(first);
       return;
     }
     anchor.current = row.key;
@@ -105,7 +105,7 @@ export function CommitFiles({
       event.stopPropagation();
       return;
     }
-    if (!row.paths.every((entry) => targets.includes(entry))) {
+    if (!row.paths.every((entry) => selected.has(entry))) {
       anchor.current = row.key;
       setChecked(new Set(row.paths));
     }
@@ -138,9 +138,7 @@ export function CommitFiles({
           <button
             type="button"
             aria-pressed={
-              file !== undefined
-                ? path === file.path || chosen.includes(file.path)
-                : undefined
+              file !== undefined ? selected.has(file.path) : undefined
             }
             aria-expanded={
               file === undefined ? !collapsed.has(row.key) : undefined

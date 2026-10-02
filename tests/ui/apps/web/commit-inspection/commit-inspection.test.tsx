@@ -427,6 +427,24 @@ describe("restoring files from a commit", () => {
       .not.toBeInTheDocument();
   });
 
+  it("restores exactly the highlighted rows after deselecting the open file", async () => {
+    const { screen, grid, restores } = await fixture();
+    await grid.getByRole("row", { name: /^Commit 0,/ }).dblClick();
+    const first = screen.getByRole("button", { name: /first.bin/ });
+    const second = screen.getByRole("button", { name: /second.bin/ });
+    await second.click({ modifiers: ["Control"] });
+    await first.click({ modifiers: ["Control"] });
+    await expect.element(first).toHaveAttribute("aria-pressed", "false");
+    await expect.element(second).toHaveAttribute("aria-pressed", "true");
+    await second.click({ button: "right" });
+    await screen.getByRole("menuitem", { name: "Restore" }).click();
+    await screen
+      .getByRole("menuitem", { name: "This commit", exact: true })
+      .click();
+    await expect.poll(() => restores).toHaveLength(1);
+    expect(restores[0]?.paths).toEqual(["src/second.bin", "old.bin"]);
+  });
+
   it("asks before replacing uncommitted edits and sends the confirmed fingerprint", async () => {
     const { screen, grid, overwrites, restores } = await fixture();
     overwrites.push({

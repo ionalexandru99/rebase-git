@@ -12,6 +12,7 @@ import { ChangesFailure } from "#contracts/repository-changes/repository-changes
 import { ChangeDiff } from "#contracts/repository-comparison/repository-comparison.contract.ts";
 
 const Fingerprint = Schema.String.check(Schema.isMaxLength(128));
+export const maximumRestorePaths = 1000;
 
 export const InspectCommit = Schema.Struct({
   repositoryId: RepositoryId,
@@ -61,7 +62,7 @@ export const RestoreFiles = Schema.Struct({
   source: RestoreSource,
   paths: Schema.Array(RepositoryPath).check(
     Schema.isMinLength(1),
-    Schema.isMaxLength(1000),
+    Schema.isMaxLength(maximumRestorePaths),
   ),
   overwrite: Schema.optional(Fingerprint),
 });

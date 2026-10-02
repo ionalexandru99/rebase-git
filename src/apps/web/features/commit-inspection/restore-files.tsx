@@ -2,6 +2,7 @@ import { useState } from "react";
 import {
   type CommitInspection,
   CommitInspectionApi,
+  maximumRestorePaths,
   type RestoreFiles,
   type RestoreOverwrites,
   type RestoreSource,
@@ -86,6 +87,12 @@ export function useRestoreFiles(
           : [file.path, file.previousPath],
       );
     if (files.length === 0) return [];
+    const reason =
+      files.length > maximumRestorePaths
+        ? `Over ${maximumRestorePaths.toLocaleString()} files`
+        : command.running
+          ? "Restoring…"
+          : undefined;
     const highlight = (source: RestoreSource) => (highlighted: boolean) =>
       setPreview((current) =>
         highlighted
@@ -100,8 +107,8 @@ export function useRestoreFiles(
         ({ source, label }): Action => ({
           id: `restore.${source}`,
           label,
-          enabled: !command.running,
-          ...(command.running ? { reason: "Restoring…" } : {}),
+          enabled: reason === undefined,
+          ...(reason === undefined ? {} : { reason }),
           onHighlight: highlight(source),
           run: () =>
             void run({

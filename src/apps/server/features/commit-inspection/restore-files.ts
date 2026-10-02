@@ -1,4 +1,5 @@
-import { rm } from "node:fs/promises";
+import { lstat, rm } from "node:fs/promises";
+import { join } from "node:path";
 import { Effect } from "effect";
 import type {
   PreviewRestore,
@@ -49,15 +50,23 @@ export function restoreFiles(git: GitCommandRunner, command: RestoreFiles) {
     const source = yield* restoreSource(git, command);
     yield* requireOverwriteConfirmed(git, directory, paths, command.overwrite);
     const present = yield* sourcePaths(git, directory, source, paths);
+    const removed = targets.filter(
+      (_, index) => !present.has(paths[index] ?? ""),
+    );
+    const folders = yield* changeIo(() =>
+      Promise.all(removed.map((target) => isFolder(target))),
+    );
+    const folder = removed.find((_, index) => folders[index]);
+    if (folder !== undefined)
+      return yield* Effect.fail(
+        changesFailed(
+          "Unsupported",
+          `${folder} is a folder in the working tree. Move it before restoring.`,
+        ),
+      );
     yield* Effect.uninterruptible(
       Effect.gen(function* () {
-        yield* changeIo(() =>
-          Promise.all(
-            targets
-              .filter((_, index) => !present.has(paths[index] ?? ""))
-              .map((target) => rm(target, { force: true })),
-          ),
-        );
+        yield* changeIo(() => Promise.all(removed.map(removeFile)));
         const restored = paths.filter((path) => present.has(path));
         if (restored.length === 0) return;
         yield* runRepositoryGit(
@@ -107,30 +116,52 @@ function requireOverwriteConfirmed(
   overwrite: string | undefined,
 ) {
   return Effect.gen(function* () {
-    const edited = (yield* Effect.forEach(chunks(paths), (chunk) =>
-      runRepositoryGit(
-        git,
-        directory,
-        [
-          "status",
-          "--porcelain=v1",
-          "-z",
-          "--untracked-files=all",
-          "--ignored=matching",
-          "--no-renames",
-          "--",
-          ...chunk,
-        ],
-        {
-          globalArguments: ["--no-optional-locks"],
-          maxOutputBytes: 16 * 1_048_576,
-        },
-      ),
-    ))
-      .flatMap((output) => output.split("\0"))
-      .filter((record) => record.length > 3 && hasLocalEdits(record))
-      .map((record) => record.slice(3))
-      .sort();
+    const checked = [
+      ...paths,
+      ...(yield* changeIo(() => blockingAncestors(directory, paths))),
+    ];
+    const read = (args: readonly string[]) =>
+      Effect.forEach(chunks(checked), (chunk) =>
+        runRepositoryGit(
+          git,
+          directory,
+          [...args, "--", ...chunk.map((path) => `:(literal,icase)${path}`)],
+          {
+            literalPathspecs: false,
+            globalArguments: ["--no-optional-locks"],
+            maxOutputBytes: 16 * 1_048_576,
+          },
+        ),
+      ).pipe(
+        Effect.map((outputs) =>
+          outputs.flatMap((output) => output.split("\0")),
+        ),
+      );
+    const [statuses, entries] = yield* Effect.all([
+      read([
+        "status",
+        "--porcelain=v1",
+        "-z",
+        "--untracked-files=all",
+        "--ignored=matching",
+        "--no-renames",
+      ]),
+      read(["ls-files", "-v", "-z"]),
+    ]);
+    const hidden = entries
+      .filter((entry) => entry.length > 2 && hidesEdits(entry))
+      .map((entry) => entry.slice(2));
+    const existing = yield* changeIo(() =>
+      Promise.all(hidden.map((path) => exists(join(directory, path)))),
+    );
+    const edited = [
+      ...new Set([
+        ...statuses
+          .filter((record) => record.length > 3 && hasLocalEdits(record))
+          .map((record) => record.slice(3)),
+        ...hidden.filter((_, index) => existing[index]),
+      ]),
+    ].sort();
     if (edited.length === 0) return;
     const identities = yield* worktreeIdentities(directory, edited);
     const confirmed = fingerprint(...identities);
@@ -145,8 +176,56 @@ function requireOverwriteConfirmed(
 }
 
 function hasLocalEdits(record: string) {
-  const worktree = record[1];
-  return worktree !== " " && worktree !== "D";
+  const state = record.slice(0, 2);
+  return (
+    state.includes("U") ||
+    state === "AA" ||
+    state === "DD" ||
+    (state[1] !== " " && state[1] !== "D")
+  );
+}
+
+function hidesEdits(entry: string) {
+  const tag = entry[0] ?? "";
+  return tag === "S" || tag !== tag.toUpperCase();
+}
+
+async function blockingAncestors(directory: string, paths: readonly string[]) {
+  const ancestors = new Set(
+    paths.flatMap((path) =>
+      path
+        .split("/")
+        .slice(0, -1)
+        .map((_, index, parts) => parts.slice(0, index + 1).join("/")),
+    ),
+  );
+  const blocking = await Promise.all(
+    [...ancestors].map(async (ancestor) => {
+      const info = await lstat(join(directory, ancestor)).catch(() => null);
+      return info !== null && !info.isDirectory() ? [ancestor] : [];
+    }),
+  );
+  return blocking.flat();
+}
+
+function exists(target: string) {
+  return lstat(target).then(
+    () => true,
+    () => false,
+  );
+}
+
+function isFolder(target: string) {
+  return lstat(target).then(
+    (info) => info.isDirectory(),
+    () => false,
+  );
+}
+
+async function removeFile(target: string) {
+  await rm(target, { force: true }).catch((error: NodeJS.ErrnoException) => {
+    if (error.code !== "ENOTDIR") throw error;
+  });
 }
 
 function sourcePaths(
