@@ -1,4 +1,4 @@
-import { realpathSync, type WatchEventType, watch } from "node:fs";
+import { lstatSync, realpathSync, type WatchEventType, watch } from "node:fs";
 import { join, relative, sep } from "node:path";
 import { Effect } from "effect";
 import type { RepositoryChangeKind } from "#contracts/environment-connection/environment-rpc.contract.ts";
@@ -31,6 +31,11 @@ const watchedRootEntries = new Set([
 ]);
 const recursiveEntries = ["refs", "worktrees"] as const;
 const separatelyWatchedEntries = new Set<string>([...recursiveEntries, "logs"]);
+const stashLogs = new Set(["refs", "refs/stash", "refs/stash.lock"]);
+const watchGitDirectory =
+  process.platform === "darwin" || process.platform === "win32"
+    ? watchGitDirectoryRecursively
+    : watchGitEntriesSeparately;
 
 export function createLocalRepositoryWatcher(): RepositoryWatcher {
   const directories = new Map<
@@ -75,7 +80,53 @@ export function createLocalRepositoryWatcher(): RepositoryWatcher {
   };
 }
 
-function watchGitDirectory(
+function watchGitDirectoryRecursively(
+  gitDirectory: string,
+  onChange: (kind: RepositoryChangeKind) => void,
+): RepositoryWatchHandle {
+  try {
+    const watcher = watch(
+      gitDirectory,
+      { persistent: false, recursive: true },
+      (event, fileName) => {
+        if (fileName === null) return onChange("Refs");
+        const kind = gitDirectoryChange(fileName.split(sep));
+        if (kind === undefined) return;
+        if (event === "change" && isDirectory(join(gitDirectory, fileName)))
+          return;
+        onChange(kind);
+      },
+    );
+    watcher.on("error", () => watcher.close());
+    return watcher;
+  } catch {
+    return { close: () => {} };
+  }
+}
+
+function gitDirectoryChange([entry, ...nested]: readonly string[]):
+  | RepositoryChangeKind
+  | undefined {
+  if (entry === undefined) return undefined;
+  if (nested.length === 0) {
+    if (entry === "index") return "Index";
+    return watchedRootEntries.has(entry) ? "Refs" : undefined;
+  }
+  if (entry === "refs") return "Refs";
+  if (entry === "worktrees") return worktreeChange(nested);
+  if (entry === "logs" && stashLogs.has(nested.join("/"))) return "Refs";
+  return undefined;
+}
+
+function isDirectory(path: string) {
+  try {
+    return lstatSync(path).isDirectory();
+  } catch {
+    return false;
+  }
+}
+
+function watchGitEntriesSeparately(
   gitDirectory: string,
   onChange: (kind: RepositoryChangeKind) => void,
 ): RepositoryWatchHandle {
@@ -83,7 +134,9 @@ function watchGitDirectory(
   const watchRecursively = (entry: (typeof recursiveEntries)[number]) => {
     if (watchers.has(entry)) return;
     const watcher = tryWatch(join(gitDirectory, entry), true, (path) =>
-      onChange(entry === "worktrees" ? worktreeChange(path) : "Refs"),
+      onChange(
+        entry === "worktrees" ? worktreeChange(path?.split(sep) ?? []) : "Refs",
+      ),
     );
     if (watcher !== undefined) watchers.set(entry, watcher);
   };
@@ -158,8 +211,11 @@ function watchGitDirectory(
   };
 }
 
-function worktreeChange(path: string | undefined): RepositoryChangeKind {
-  const [, file, ...nested] = path?.split(sep) ?? [];
+function worktreeChange([
+  ,
+  file,
+  ...nested
+]: readonly string[]): RepositoryChangeKind {
   return nested.length === 0 &&
     file !== undefined &&
     (file === "index" || file.startsWith("index."))
