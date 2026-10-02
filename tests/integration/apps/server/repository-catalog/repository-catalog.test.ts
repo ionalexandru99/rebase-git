@@ -1,6 +1,7 @@
 import { access, mkdir, mkdtemp, realpath, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { eq } from "drizzle-orm";
 import { Effect, Stream } from "effect";
 import { describe, expect, it, onTestFinished } from "vite-plus/test";
 import {
@@ -144,6 +145,12 @@ describe("repository catalog", () => {
             .update(repositoryCatalogTable)
             .set({ gitCommonDirectory: null, logicalRepositoryId: null }),
         );
+        yield* context.write("Could not simulate legacy color", (database) =>
+          database
+            .update(repositoryCatalogTable)
+            .set({ color: "red" })
+            .where(eq(repositoryCatalogTable.id, feature.id)),
+        );
         return {
           feature: yield* catalog.find(feature.id),
           main: yield* catalog.find(main.id),
@@ -155,6 +162,7 @@ describe("repository catalog", () => {
     expect(result.feature?.logicalRepositoryId).toBe(
       result.main?.logicalRepositoryId,
     );
+    expect(result.feature?.color).toBe(result.main?.color);
   });
 
   it("records an open and removes only the catalog entry", async () => {

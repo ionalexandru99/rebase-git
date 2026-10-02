@@ -98,6 +98,7 @@ function ensureRepositoryIdentity(
         async (database) => {
           const linkedRepository = await database
             .select({
+              color: repositoryCatalogTable.color,
               logicalRepositoryId: repositoryCatalogTable.logicalRepositoryId,
             })
             .from(repositoryCatalogTable)
@@ -115,6 +116,7 @@ function ensureRepositoryIdentity(
           const repaired = await database
             .update(repositoryCatalogTable)
             .set({
+              color: linkedRepository?.color ?? repository.color,
               gitCommonDirectory: resolved.gitCommonDirectory,
               logicalRepositoryId,
             })
