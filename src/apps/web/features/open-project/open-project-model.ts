@@ -1,7 +1,9 @@
 import type { TablerIcon } from "@tabler/icons-react";
+import type { RepositoryColor } from "#contracts/repository-catalog/repository-catalog.contract.ts";
 import type { EnvironmentAvailability } from "#web/platform/query/environment-context.tsx";
 
 export interface OpenProjectRepository {
+  readonly color: RepositoryColor;
   readonly environmentId: string;
   readonly id: string;
   readonly lastOpenedAt?: string;

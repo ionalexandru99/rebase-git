@@ -217,6 +217,7 @@ export function catalogEntry(
     name: "repository",
     path: mainPath,
     addedAt: "2026-09-04T12:00:00.000Z",
+    color: "blue",
     lastOpenedAt: "2026-09-04T12:00:00.000Z",
     ...entry,
   };

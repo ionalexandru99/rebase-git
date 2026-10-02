@@ -1,6 +1,6 @@
 import type { JSX } from "react";
 import type { OpenProjectRepository } from "#web/features/open-project/open-project-model.ts";
-import { repositoryInitials } from "#web/features/open-project/open-project-state.ts";
+import { RepositoryBadge } from "#web/features/repository-catalog/repository-badge.tsx";
 import { RepositorySettingsButton } from "#web/features/repository-settings/components/repository-settings-button.tsx";
 
 export function RepositoryRow({
@@ -37,9 +37,11 @@ export function RepositoryRow({
         tabIndex={-1}
         type="button"
       >
-        <span className="grid size-7.5 place-items-center rounded-[.45rem] bg-secondary text-[.67rem] font-semibold text-secondary-foreground">
-          {repositoryInitials(repository.name)}
-        </span>
+        <RepositoryBadge
+          className="size-7.5 rounded-[.45rem] text-[.67rem]"
+          color={repository.color}
+          name={repository.name}
+        />
         <span className="flex min-w-0 items-baseline gap-[.65rem] max-[650px]:block">
           <strong className="shrink-0 truncate text-[.8rem] font-medium text-foreground">
             {repository.name}

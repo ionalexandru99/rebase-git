@@ -12,8 +12,21 @@ const RepositoryName = Schema.String.check(
   Schema.isMaxLength(255),
 );
 
+export const RepositoryColor = Schema.Literals([
+  "blue",
+  "green",
+  "violet",
+  "orange",
+  "lime",
+  "cyan",
+  "red",
+  "amber",
+]);
+export type RepositoryColor = typeof RepositoryColor.Type;
+
 export const RepositoryCatalogEntry = Schema.Struct({
   addedAt: IsoDate,
+  color: RepositoryColor,
   id: RepositoryId,
   lastOpenedAt: IsoDate,
   logicalRepositoryId: Schema.optionalKey(RepositoryId),

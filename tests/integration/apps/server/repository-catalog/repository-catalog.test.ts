@@ -1,6 +1,7 @@
 import { access, mkdir, mkdtemp, realpath, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { eq } from "drizzle-orm";
 import { Effect, Stream } from "effect";
 import { describe, expect, it, onTestFinished } from "vite-plus/test";
 import {
@@ -79,6 +80,34 @@ describe("repository catalog", () => {
     expect(repositories[0]?.logicalRepositoryId).toBe(
       repositories[1]?.logicalRepositoryId,
     );
+    expect(repositories[0]?.color).toBe(repositories[1]?.color);
+  });
+
+  it("gives each new repository the color fewest repositories use", async () => {
+    const root = await createTemporaryDirectory();
+    const first = join(root, "first");
+    const second = join(root, "second");
+    const third = join(root, "third");
+    const fourth = join(root, "fourth");
+    await Promise.all(
+      [first, second, third, fourth].map((path) => createRepository(path)),
+    );
+
+    const colors = await withCatalog((catalog) =>
+      Effect.gen(function* () {
+        const blue = yield* catalog.remember(first);
+        const green = yield* catalog.remember(second);
+        const violet = yield* catalog.remember(third);
+        yield* catalog.remove(green.id);
+        const reused = yield* catalog.remember(fourth);
+        const reopened = yield* catalog.remember(first);
+        return [blue, green, violet, reused, reopened].map(
+          ({ color }) => color,
+        );
+      }),
+    );
+
+    expect(colors).toEqual(["blue", "green", "violet", "green", "blue"]);
   });
 
   it("creates a new logical identity after the last catalog entry is removed", async () => {
@@ -116,6 +145,12 @@ describe("repository catalog", () => {
             .update(repositoryCatalogTable)
             .set({ gitCommonDirectory: null, logicalRepositoryId: null }),
         );
+        yield* context.write("Could not simulate legacy color", (database) =>
+          database
+            .update(repositoryCatalogTable)
+            .set({ color: "red" })
+            .where(eq(repositoryCatalogTable.id, feature.id)),
+        );
         return {
           feature: yield* catalog.find(feature.id),
           main: yield* catalog.find(main.id),
@@ -127,6 +162,7 @@ describe("repository catalog", () => {
     expect(result.feature?.logicalRepositoryId).toBe(
       result.main?.logicalRepositoryId,
     );
+    expect(result.feature?.color).toBe(result.main?.color);
   });
 
   it("records an open and removes only the catalog entry", async () => {

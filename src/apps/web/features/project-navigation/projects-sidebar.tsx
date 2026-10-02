@@ -21,6 +21,7 @@ import type {
   ProjectNavigationState,
 } from "#web/features/project-navigation/project-navigation.ts";
 import { filterEnvironmentRepositories } from "#web/features/project-navigation/project-navigation-state.ts";
+import { RepositoryBadge } from "#web/features/repository-catalog/repository-badge.tsx";
 import { RepositorySettingsButton } from "#web/features/repository-settings/components/repository-settings-button.tsx";
 import {
   type EnvironmentStatus,
@@ -234,9 +235,11 @@ function ExpandedProjectsSidebar({
                         }
                         type="button"
                       >
-                        <span className="grid size-7.5 shrink-0 place-items-center rounded-md bg-secondary text-sm font-semibold">
-                          {repositoryInitials(repository.name)}
-                        </span>
+                        <RepositoryBadge
+                          className="size-7.5 rounded-md text-sm"
+                          color={repository.color}
+                          name={repository.name}
+                        />
                         <span className="min-w-0 truncate">
                           {repository.name}
                         </span>
@@ -349,7 +352,7 @@ function CollapsedProjectsSidebar({
                             : undefined
                         }
                         aria-label={repository.name}
-                        className={`grid size-10 place-items-center rounded-md bg-secondary text-sm font-semibold text-sidebar-foreground outline-none hover:bg-sidebar-accent focus-visible:ring-2 focus-visible:ring-sidebar-ring/40 disabled:pointer-events-none disabled:opacity-45 ${navigation.selectedRepositoryId === repository.id ? "bg-sidebar-accent" : ""}`}
+                        className={`rounded-md outline-none hover:brightness-125 focus-visible:ring-2 focus-visible:ring-sidebar-ring/40 disabled:pointer-events-none disabled:opacity-45 ${navigation.selectedRepositoryId === repository.id ? "ring-[1.5px] ring-sidebar-accent-foreground ring-offset-2 ring-offset-sidebar" : ""}`}
                         disabled={repository.disabled}
                         key={repository.id}
                         onClick={() =>
@@ -357,7 +360,11 @@ function CollapsedProjectsSidebar({
                         }
                         type="button"
                       >
-                        {repositoryInitials(repository.name)}
+                        <RepositoryBadge
+                          className="size-10 rounded-md text-sm"
+                          color={repository.color}
+                          name={repository.name}
+                        />
                       </button>
                     ),
                   )
@@ -400,14 +407,4 @@ function SidebarSettings({
       <IconSettings aria-hidden="true" data-icon="inline-end" />
     </Button>
   );
-}
-
-function repositoryInitials(name: string): string {
-  return name
-    .split(/[-_\s]+/)
-    .map((part) => part[0])
-    .filter((character): character is string => character !== undefined)
-    .join("")
-    .slice(0, 2)
-    .toUpperCase();
 }

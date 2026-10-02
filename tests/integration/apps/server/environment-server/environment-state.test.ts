@@ -30,6 +30,7 @@ const createRepositoryCatalogMigration = generatedMigrations[3];
 const addLogicalRepositoryIdentityMigration = generatedMigrations[4];
 const removeDormantActivityMigration = generatedMigrations[5];
 const ownerOnlyAuthorizationMigration = generatedMigrations[6];
+const repositoryColorMigration = generatedMigrations[7];
 
 if (
   createEnvironmentMigration === undefined ||
@@ -38,9 +39,10 @@ if (
   createRepositoryCatalogMigration === undefined ||
   addLogicalRepositoryIdentityMigration === undefined ||
   removeDormantActivityMigration === undefined ||
-  ownerOnlyAuthorizationMigration === undefined
+  ownerOnlyAuthorizationMigration === undefined ||
+  repositoryColorMigration === undefined
 ) {
-  throw new Error("Expected seven generated Environment state migrations.");
+  throw new Error("Expected eight generated Environment state migrations.");
 }
 
 afterEach(async () => {
@@ -148,6 +150,11 @@ describe("Environment state", () => {
         name: ownerOnlyAuthorizationMigration.name,
         version: 7,
       },
+      {
+        checksum_length: 64,
+        name: repositoryColorMigration.name,
+        version: 8,
+      },
     ]);
     database.close();
 
@@ -194,6 +201,7 @@ describe("Environment state", () => {
               (database) =>
                 database
                   .select({
+                    color: repositoryCatalogTable.color,
                     id: repositoryCatalogTable.id,
                     logicalRepositoryId:
                       repositoryCatalogTable.logicalRepositoryId,
@@ -223,9 +231,22 @@ describe("Environment state", () => {
         version === 5
           ? [
               {
+                color: "green",
                 id: "repo",
                 logicalRepositoryId: "logical-repo",
                 gitCommonDirectory: "/repo/.git",
+              },
+              {
+                color: "green",
+                id: "repo-worktree",
+                logicalRepositoryId: "logical-repo",
+                gitCommonDirectory: "/repo/.git",
+              },
+              {
+                color: "blue",
+                id: "other",
+                logicalRepositoryId: "logical-other",
+                gitCommonDirectory: "/other/.git",
               },
             ]
           : [],
@@ -256,16 +277,17 @@ describe("Environment state", () => {
       generatedMigrationEntry(addLogicalRepositoryIdentityMigration, 5),
       generatedMigrationEntry(removeDormantActivityMigration, 6),
       generatedMigrationEntry(ownerOnlyAuthorizationMigration, 7),
+      generatedMigrationEntry(repositoryColorMigration, 8),
       {
         checksum: "future",
-        createdAt: ownerOnlyAuthorizationMigration.folderMillis + 1,
+        createdAt: repositoryColorMigration.folderMillis + 1,
         name: "future",
-        version: 8,
+        version: 9,
       },
     ]);
 
     await expect(openState(newerPaths)).rejects.toThrow(
-      "The state database is at version 8, but this Rebase build supports version 7.",
+      "The state database is at version 9, but this Rebase build supports version 8.",
     );
   });
 
@@ -292,7 +314,7 @@ describe("Environment state", () => {
       database
         .prepare("SELECT max(id) AS version FROM __drizzle_migrations")
         .get(),
-    ).toEqual({ version: 7 });
+    ).toEqual({ version: 8 });
     database.close();
   });
 
@@ -406,19 +428,30 @@ async function seedLegacyDatabase(
         "2026-08-20T10:00:00.000Z",
       );
     if (version === 5) {
-      database
-        .prepare(
-          "INSERT INTO repository_catalog (id, name, path, added_at, last_opened_at, logical_repository_id, git_common_directory) VALUES (?, ?, ?, ?, ?, ?, ?)",
-        )
-        .run(
-          "repo",
-          "Saved repo",
-          "/repo",
-          "2026-09-04",
-          "2026-09-05",
-          "logical-repo",
-          "/repo/.git",
-        );
+      const insertRepository = database.prepare(
+        "INSERT INTO repository_catalog (id, name, path, added_at, last_opened_at, logical_repository_id, git_common_directory) VALUES (?, ?, ?, '2026-09-04', '2026-09-05', ?, ?)",
+      );
+      insertRepository.run(
+        "repo",
+        "Saved repo",
+        "/repo",
+        "logical-repo",
+        "/repo/.git",
+      );
+      insertRepository.run(
+        "repo-worktree",
+        "Saved worktree",
+        "/repo-worktree",
+        "logical-repo",
+        "/repo/.git",
+      );
+      insertRepository.run(
+        "other",
+        "Other repo",
+        "/other",
+        "logical-other",
+        "/other/.git",
+      );
     }
     database.exec("COMMIT");
   } finally {

@@ -298,6 +298,7 @@ function useOpenProjectEnvironments(): readonly OpenProjectEnvironment[] {
               id: localEnvironment.id,
               name: localEnvironment.name,
               repositories: repositories.map((repository) => ({
+                color: repository.color,
                 environmentId: localEnvironment.id,
                 id: repository.id,
                 lastOpenedAt: repository.lastOpenedAt,

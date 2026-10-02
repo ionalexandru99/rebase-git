@@ -3,8 +3,13 @@ import {
   initialNavigation,
   reduceNavigation,
 } from "#web/app/shell/use-navigation.ts";
+import type { ProjectNavigationRepository } from "#web/features/project-navigation/project-navigation.ts";
 
-const repository = { id: "payments", name: "payments" };
+const repository: ProjectNavigationRepository = {
+  color: "blue",
+  id: "payments",
+  name: "payments",
+};
 
 describe("shell navigation", () => {
   it("opens a repository in place of its settings", () => {
