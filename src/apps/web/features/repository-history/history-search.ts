@@ -2,13 +2,15 @@ import type {
   RepositoryCommit,
   RepositoryHistoryRefTarget,
 } from "#contracts/repository-history/repository-history.contract.ts";
-import { readCommitChunk } from "#web/features/repository-history/history-database.ts";
+import { readCommits } from "#web/features/repository-history/history-database.ts";
+import type { HistoryGraph } from "#web/features/repository-history/history-graph.ts";
 
 const maximumScannedCommits = 4_096;
 const chunkSize = 256;
 
 export async function searchHistory(
   repository: number,
+  graph: HistoryGraph,
   refTargets: readonly RepositoryHistoryRefTarget[],
   query: {
     readonly text: string;
@@ -24,27 +26,35 @@ export async function searchHistory(
     query.text.length > 256
   )
     throw new Error("History search query exceeds its limits");
-  let after = decodeCursor(repository, query.text, query.cursor);
+  let next = decodeCursor(repository, query.text, query.cursor);
   const matches = matchingHistoryMetadata(query.text, refTargets);
   const commits: RepositoryCommit[] = [];
   if (normalizeHistorySearch(query.text) === "") return { commits };
-  let scanned = 0;
-  while (scanned < maximumScannedCommits && commits.length < query.limit) {
+  const newest = graph.newest();
+  const end = Math.min(newest.length, next + maximumScannedCommits);
+  while (next < end && commits.length < query.limit) {
     signal.throwIfAborted();
-    const chunk = await readCommitChunk(repository, after, chunkSize);
+    const oids = Array.from(
+      newest.subarray(next, Math.min(end, next + chunkSize)),
+      (id) => graph.oid(id),
+    );
+    const chunk = new Map(
+      (await readCommits(repository, oids)).map((commit) => [
+        commit.oid,
+        commit,
+      ]),
+    );
     signal.throwIfAborted();
-    for (const record of chunk) {
-      after = record.commit.oid;
-      scanned += 1;
-      if (matches(record.commit)) commits.push(record.commit);
+    for (const oid of oids) {
+      next += 1;
+      const commit = chunk.get(oid);
+      if (commit !== undefined && matches(commit)) commits.push(commit);
       if (commits.length === query.limit) break;
     }
-    if (chunk.length < chunkSize && commits.length < query.limit)
-      return { commits };
   }
-  return after === undefined
-    ? { commits }
-    : { commits, cursor: encodeCursor(repository, query.text, after) };
+  return next < newest.length
+    ? { commits, cursor: encodeCursor(repository, query.text, next) }
+    : { commits };
 }
 
 export function matchingHistoryMetadata(
@@ -75,9 +85,9 @@ function normalizeHistorySearch(text: string) {
   return text.trim().toLowerCase().replace(/\s+/g, " ");
 }
 
-function encodeCursor(repository: number, text: string, oid: string) {
+function encodeCursor(repository: number, text: string, next: number) {
   return encodeURIComponent(
-    JSON.stringify([3, repository, normalizeHistorySearch(text), oid]),
+    JSON.stringify([4, repository, normalizeHistorySearch(text), next]),
   );
 }
 
@@ -86,17 +96,17 @@ function decodeCursor(
   text: string,
   cursor: string | undefined,
 ) {
-  if (cursor === undefined) return undefined;
+  if (cursor === undefined) return 0;
   try {
     const value: unknown = JSON.parse(decodeURIComponent(cursor));
     if (
       Array.isArray(value) &&
       value.length === 4 &&
-      value[0] === 3 &&
+      value[0] === 4 &&
       value[1] === repository &&
       value[2] === normalizeHistorySearch(text) &&
-      typeof value[3] === "string" &&
-      /^[0-9a-f]{40}([0-9a-f]{24})?$/.test(value[3])
+      Number.isInteger(value[3]) &&
+      value[3] > 0
     )
       return value[3];
   } catch {}

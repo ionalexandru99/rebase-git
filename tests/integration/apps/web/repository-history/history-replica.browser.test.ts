@@ -68,10 +68,10 @@ describe("history replica in browser storage", () => {
     expect(await reopened.oids(["main"])).toEqual(["main", "base"]);
     expect(await reopened.oids(["topic"])).toEqual(["topic", "base"]);
     const found = await reopened.replica.search(
-      { text: "topic", limit: 20 },
+      { text: "change", limit: 20 },
       new AbortController().signal,
     );
-    expect(found.commits.map(({ oid }) => oid)).toEqual(["topic"]);
+    expect(found.commits.map(({ oid }) => oid)).toEqual(["topic", "main"]);
     expect(found.complete).toBe(true);
     expect(reopened.requests).toEqual([]);
   });

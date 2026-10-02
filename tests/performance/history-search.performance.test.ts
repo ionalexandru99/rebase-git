@@ -81,6 +81,11 @@ test("cached metadata search on repository history and 250,000 merge-heavy commi
       const databasePath = "/features/repository-history/history-database.ts";
       const database: typeof import("#web/features/repository-history/history-database.ts") =
         await import(databasePath);
+      const graphPath = "/features/repository-history/history-graph.ts";
+      const {
+        HistoryGraph,
+      }: typeof import("#web/features/repository-history/history-graph.ts") =
+        await import(graphPath);
       const searchPath = "/features/repository-history/history-search.ts";
       const {
         searchHistory,
@@ -154,6 +159,7 @@ test("cached metadata search on repository history and 250,000 merge-heavy commi
             type: "branch" as const,
           },
         ];
+        const graph = new HistoryGraph();
         const seedStarted = performance.now();
         const record = await database.openRepository(
           environmentId,
@@ -165,6 +171,8 @@ test("cached metadata search on repository history and 250,000 merge-heavy commi
               `history-search: storing ${corpus.name} ${offset}/${corpus.count}`,
             );
           const commits = await corpus.read(offset, 1_000);
+          for (const [index, commit] of commits.entries())
+            graph.add(commit, offset + index);
           await database.storeCommits(
             { ...record, commitCount: offset + commits.length },
             commits.map((commit, index) => ({
@@ -178,7 +186,7 @@ test("cached metadata search on repository history and 250,000 merge-heavy commi
         const search = (
           query: { text: string; limit: number; cursor?: string },
           signal = new AbortController().signal,
-        ) => searchHistory(record.id, roots, query, signal);
+        ) => searchHistory(record.id, graph, roots, query, signal);
         for (const text of corpus.queries) {
           const measureUntilMatch = async () => {
             let cursor: string | undefined;
