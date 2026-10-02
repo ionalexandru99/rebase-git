@@ -42,7 +42,11 @@ describe("repository refs", () => {
       "https://gitlab.com/team/rebase.git",
     );
     const result = await withRefsService(fixture, ({ refs }) => refs.read());
-    expect(result.githubRepository).toEqual({ owner: "alex", name: "rebase" });
+    expect(result.hostedRepository).toEqual({
+      provider: "github",
+      owner: "alex",
+      name: "rebase",
+    });
     expect(result.remoteProviders).toEqual([
       { remote: "origin", provider: "github" },
       { remote: "upstream", provider: "gitlab" },

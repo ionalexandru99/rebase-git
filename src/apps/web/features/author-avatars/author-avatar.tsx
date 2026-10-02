@@ -12,7 +12,11 @@ import {
   type AuthorAvatarModel,
   createAuthorAvatarModel,
 } from "#web/features/author-avatars/author-avatar-model.ts";
-import type { GitHubRepository } from "#web/features/author-avatars/author-avatar-source.ts";
+import {
+  avatarSourceFor,
+  type HostedRepository,
+} from "#web/features/author-avatars/author-avatar-providers.ts";
+import { browserAvatarStore } from "#web/features/author-avatars/author-avatar-store.ts";
 
 const AvatarContext = createContext<AuthorAvatarModel | undefined>(undefined);
 
@@ -20,35 +24,27 @@ export function AuthorAvatars({
   repository,
   children,
 }: {
-  readonly repository: GitHubRepository | undefined;
+  readonly repository: HostedRepository | undefined;
   readonly children: ReactNode;
 }) {
   const [state, setState] = useState<{
     readonly model: AuthorAvatarModel;
-    readonly owner: string;
-    readonly name: string;
+    readonly repository: HostedRepository | undefined;
   }>();
-  const owner = repository?.owner;
-  const name = repository?.name;
   useEffect(() => {
-    const next =
-      owner === undefined || name === undefined
+    const model =
+      repository === undefined
         ? undefined
-        : createAuthorAvatarModel({ owner, name });
-    setState(
-      next === undefined || owner === undefined || name === undefined
-        ? undefined
-        : { model: next, owner, name },
-    );
-    return () => next?.dispose();
-  }, [owner, name]);
+        : createAuthorAvatarModel(
+            avatarSourceFor(repository),
+            browserAvatarStore,
+          );
+    setState(model === undefined ? undefined : { model, repository });
+    return () => model?.dispose();
+  }, [repository]);
   return (
     <AvatarContext
-      value={
-        state?.owner === owner && state?.name === name
-          ? state?.model
-          : undefined
-      }
+      value={state?.repository === repository ? state?.model : undefined}
     >
       {children}
     </AvatarContext>
