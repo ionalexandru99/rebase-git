@@ -101,7 +101,7 @@ jobs:
       - uses: ./.github/actions/setup-workspace
       - name: Install browser and Electron
         run: |
-          pnpm exec playwright install --with-deps chromium
+          pnpm exec playwright install chromium
           pnpm exec install-electron
       - name: Validate browser
         run: pnpm validate:browser
