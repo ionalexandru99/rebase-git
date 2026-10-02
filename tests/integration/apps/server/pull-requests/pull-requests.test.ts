@@ -3,7 +3,11 @@ import { Effect } from "effect";
 import { describe, expect, it } from "vite-plus/test";
 import { PullRequestsApi } from "#contracts/pull-requests/pull-requests.contract.ts";
 import { createRepository, git } from "#tests-support/git.ts";
-import { fakeAzureDevOps, fakeGitHub } from "#tests-support/git-hosts.ts";
+import {
+  fakeAzureDevOps,
+  fakeGitHub,
+  fakeGitLab,
+} from "#tests-support/git-hosts.ts";
 import { openTestEnvironment } from "#tests-support/server.ts";
 
 describe("branch pull requests", () => {
@@ -30,6 +34,7 @@ describe("branch pull requests", () => {
         branch: "topic",
         pullRequests: [
           {
+            kind: "PullRequest",
             number: 9,
             url: "https://github.com/Octo/rebase/pull/9",
             title: "Pull request 9",
@@ -37,6 +42,7 @@ describe("branch pull requests", () => {
             checks: "Pending",
           },
           {
+            kind: "PullRequest",
             number: 7,
             url: "https://github.com/Octo/rebase/pull/7",
             title: "Pull request 7",
@@ -104,13 +110,20 @@ describe("Azure DevOps pull requests", () => {
       {
         branch: "main",
         pullRequests: [
-          { number: 4, url: url(4), title: "Pull request 4", state: "Closed" },
+          {
+            kind: "PullRequest",
+            number: 4,
+            url: url(4),
+            title: "Pull request 4",
+            state: "Closed",
+          },
         ],
       },
       {
         branch: "mirrored",
         pullRequests: [
           {
+            kind: "PullRequest",
             number: 3,
             url: url(3),
             title: "Pull request 3",
@@ -123,13 +136,20 @@ describe("Azure DevOps pull requests", () => {
         branch: "topic",
         pullRequests: [
           {
+            kind: "PullRequest",
             number: 9,
             url: url(9),
             title: "Pull request 9",
             state: "Draft",
             checks: "Pending",
           },
-          { number: 7, url: url(7), title: "Pull request 7", state: "Merged" },
+          {
+            kind: "PullRequest",
+            number: 7,
+            url: url(7),
+            title: "Pull request 7",
+            state: "Merged",
+          },
         ],
       },
     ]);
@@ -166,6 +186,7 @@ describe("Azure DevOps pull requests", () => {
         branch: "main",
         pullRequests: [
           {
+            kind: "PullRequest",
             number: 1,
             url: "https://dev.azure.com/acme/Rebase/_git/Rebase/pullrequest/1",
             title: "Pull request 1",
@@ -186,6 +207,66 @@ describe("Azure DevOps pull requests", () => {
     await expect(f.list()).rejects.toEqual({
       _tag: "PullRequestsUnavailable",
     });
+  });
+
+  it("finds merge requests on a GitLab server that glab is signed in to", async () => {
+    const gitlab = fakeGitLab(
+      {
+        "remote-topic": [
+          { iid: 5, project: "fork/rebase" },
+          { iid: 4, state: "merged" },
+          { iid: 6, draft: true, pipeline: "RUNNING" },
+        ],
+      },
+      { accounts: { "git.example.com": "tanuki" } },
+    );
+    const f = await fixture(
+      { origin: "git@git.example.com:group/sub/rebase.git" },
+      { gitlab: gitlab.gitlab },
+    );
+    await f.track("topic", "origin", "remote-topic");
+
+    await expect(f.list()).resolves.toEqual([
+      {
+        branch: "topic",
+        pullRequests: [
+          {
+            kind: "MergeRequest",
+            number: 6,
+            url: "https://git.example.com/group/sub/rebase/-/merge_requests/6",
+            title: "Merge request 6",
+            state: "Draft",
+            checks: "Pending",
+          },
+          {
+            kind: "MergeRequest",
+            number: 4,
+            url: "https://git.example.com/group/sub/rebase/-/merge_requests/4",
+            title: "Merge request 4",
+            state: "Merged",
+          },
+        ],
+      },
+    ]);
+    expect(gitlab.requests).toEqual([
+      {
+        hostname: "git.example.com",
+        fullPath: "group/sub/rebase",
+        b0: "remote-topic",
+      },
+    ]);
+  });
+
+  it("asks nothing when glab is not signed in to the remote's server", async () => {
+    const gitlab = fakeGitLab({}, { accounts: {} });
+    const f = await fixture(
+      { origin: "https://gitlab.com/group/rebase.git" },
+      { gitlab: gitlab.gitlab },
+    );
+    await f.track("main", "origin", "main");
+
+    await expect(f.list()).resolves.toEqual([]);
+    expect(gitlab.requests).toEqual([]);
   });
 });
 

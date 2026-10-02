@@ -117,8 +117,9 @@ function az(args: readonly string[]) {
 export function createAzureDevOpsHost(client: AzureDevOpsClient): GitHost {
   return {
     kind: "azure-devops",
-    serves: (remoteUrl) => azureRepository(remoteUrl) !== undefined,
-    tool: hostTool(client.version, client.account),
+    serves: (remoteUrl) =>
+      Effect.succeed(azureRepository(remoteUrl) !== undefined),
+    tool: hostTool("dev.azure.com", client.version, client.account),
     pullRequests: (remoteUrl, branches) =>
       listPullRequests(client, remoteUrl, branches),
   };
@@ -310,6 +311,7 @@ function pullRequest(
   checks: PullRequest["checks"],
 ): PullRequest {
   return {
+    kind: "PullRequest",
     number: node.pullRequestId,
     url: `${projectUrl(repository)}/_git/${encodeURIComponent(repository.name)}/pullrequest/${node.pullRequestId}`,
     title: node.title,

@@ -8,7 +8,7 @@ import {
   IconRefresh,
   type TablerIcon,
 } from "@tabler/icons-react";
-import { type ReactNode, useState } from "react";
+import { Fragment, type ReactNode, useState } from "react";
 import {
   type GitHostKind,
   type GitHostStatus,
@@ -49,7 +49,24 @@ const hostDescriptors: Record<GitHostKind, HostDescriptor> = {
       </>
     ),
   },
-  gitlab: { label: "GitLab", icon: IconBrandGitlab, color: "text-[#fc6d26]" },
+  gitlab: {
+    label: "GitLab",
+    icon: IconBrandGitlab,
+    color: "text-[#fc6d26]",
+    install: (
+      <>
+        Install the GitLab command-line tool (<Code>glab</Code>) via
+        https://gitlab.com/gitlab-org/cli or your package manager (for example{" "}
+        <Code>brew install glab</Code>).
+      </>
+    ),
+    signIn: (
+      <>
+        Sign in with <Code>glab auth login</Code> on the server to show merge
+        requests.
+      </>
+    ),
+  },
   "azure-devops": {
     label: "Azure DevOps",
     icon: IconBrandAzure,
@@ -191,7 +208,13 @@ function HostRow({ host }: { readonly host: GitHostStatus }) {
       summary={
         host._tag === "SignedIn" ? (
           <>
-            Authenticated as <HiddenAccount account={host.account} />
+            Authenticated as{" "}
+            {host.accounts.map(({ host: server, account }, index) => (
+              <Fragment key={server}>
+                {index === 0 ? null : ", "}
+                <HiddenAccount account={account} host={server} /> on {server}
+              </Fragment>
+            ))}
           </>
         ) : host._tag === "SignedOut" ? (
           descriptor.signIn
@@ -292,11 +315,19 @@ function Checking({ failed }: { readonly failed: boolean }) {
   );
 }
 
-function HiddenAccount({ account }: { readonly account: string }) {
+function HiddenAccount({
+  account,
+  host,
+}: {
+  readonly account: string;
+  readonly host: string;
+}) {
   const [shown, setShown] = useState(false);
   return (
     <button
-      aria-label={shown ? `Hide account ${account}` : "Show account"}
+      aria-label={
+        shown ? `Hide account ${account} on ${host}` : `Show account on ${host}`
+      }
       aria-pressed={shown}
       className={`cursor-pointer rounded-sm font-mono text-[.625rem] hover:text-foreground ${shown ? "text-foreground/90" : "blur-xs select-none"}`}
       onClick={() => setShown((current) => !current)}

@@ -63,7 +63,7 @@ function listPullRequests(
     const host =
       remoteUrl === undefined
         ? undefined
-        : gitHostFor(yield* sourceControl.enabledHosts, remoteUrl);
+        : yield* gitHostFor(yield* sourceControl.enabledHosts, remoteUrl);
     if (remoteUrl === undefined || host === undefined) return [];
     const urls = remoteUrls(remotes);
     const branches = (yield* readTrackedBranches(git, directory)).flatMap(

@@ -4,11 +4,15 @@ import { describe, expect, it } from "vite-plus/test";
 import { PullRequestsApi } from "#contracts/pull-requests/pull-requests.contract.ts";
 import { SourceControlApi } from "#contracts/source-control/source-control.contract.ts";
 import { createRepository, git } from "#tests-support/git.ts";
-import { fakeAzureDevOps, fakeGitHub } from "#tests-support/git-hosts.ts";
+import {
+  fakeAzureDevOps,
+  fakeGitHub,
+  fakeGitLab,
+} from "#tests-support/git-hosts.ts";
 import { openTestEnvironment } from "#tests-support/server.ts";
 
 describe("source control", () => {
-  it("reports Git, the GitHub and Azure DevOps logins and the hosts that are coming soon", async () => {
+  it("reports Git, the GitHub, GitLab and Azure DevOps logins and the hosts that are coming soon", async () => {
     const f = await fixture();
 
     const { git: gitStatus, hosts } = await f.discover();
@@ -23,15 +27,24 @@ describe("source control", () => {
         kind: "github",
         enabled: true,
         version: "gh version 2.101.0 (2026-09-15)",
-        account: "octo",
+        accounts: [{ host: "github.com", account: "octo" }],
       },
-      { _tag: "ComingSoon", kind: "gitlab" },
+      {
+        _tag: "SignedIn",
+        kind: "gitlab",
+        enabled: true,
+        version: "glab 1.120.0 (78790114c)",
+        accounts: [
+          { host: "gitlab.com", account: "tanuki" },
+          { host: "git.example.com", account: "tanuki" },
+        ],
+      },
       {
         _tag: "SignedIn",
         kind: "azure-devops",
         enabled: true,
         version: "azure-cli 2.78.0",
-        account: "octo@example.com",
+        accounts: [{ host: "dev.azure.com", account: "octo@example.com" }],
       },
       { _tag: "ComingSoon", kind: "bitbucket" },
       { _tag: "ComingSoon", kind: "forgejo" },
@@ -80,6 +93,9 @@ async function fixture(tool: Parameters<typeof fakeGitHub>[1] = {}) {
   const environment = await openTestEnvironment({
     github,
     azureDevOps: fakeAzureDevOps({}).azureDevOps,
+    gitlab: fakeGitLab(null, {
+      accounts: { "gitlab.com": "tanuki", "git.example.com": "tanuki" },
+    }).gitlab,
   });
   const repositoryPath = join(environment.home, "repository");
   await createRepository(repositoryPath);

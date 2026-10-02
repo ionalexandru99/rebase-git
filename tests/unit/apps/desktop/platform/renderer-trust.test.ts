@@ -42,7 +42,7 @@ describe("trusted IPC handler", () => {
 });
 
 describe("external links", () => {
-  it("opens only https GitHub and Azure DevOps links in the system browser", () => {
+  it("opens only https GitHub, Azure DevOps and GitLab merge request links in the system browser", () => {
     expect(
       isExternalPullRequestLink("https://github.com/octo/rebase/pull/7"),
     ).toBe(true);
@@ -57,6 +57,14 @@ describe("external links", () => {
         "https://dev.azure.com/acme/rebase/_git/rebase/pullrequest/7",
       ),
     ).toBe(true);
+    expect(
+      isExternalPullRequestLink(
+        "https://git.example.com/group/sub/rebase/-/merge_requests/7",
+      ),
+    ).toBe(true);
+    expect(
+      isExternalPullRequestLink("https://git.example.com/group/rebase"),
+    ).toBe(false);
     expect(isExternalPullRequestLink("file:///etc/passwd")).toBe(false);
   });
 });
