@@ -2,6 +2,8 @@ import { type ReactNode, useLayoutEffect, useRef } from "react";
 import { Button } from "#web/components/ui/button.tsx";
 import { cn } from "#web/lib/utils.ts";
 
+const listedItems = 3;
+
 export function Confirmation({
   title,
   children,
@@ -71,5 +73,29 @@ export function Confirmation({
         </Button>
       </div>
     </section>
+  );
+}
+
+export function ConfirmationList({
+  items,
+  total = items.length,
+  className,
+}: {
+  readonly items: readonly string[];
+  readonly total?: number;
+  readonly className?: string;
+}) {
+  const hidden = total - Math.min(total, listedItems);
+  return (
+    <>
+      <ul className="mt-1.5 flex flex-col gap-0.5">
+        {items.slice(0, listedItems).map((item) => (
+          <li className={cn("truncate text-foreground", className)} key={item}>
+            {item}
+          </li>
+        ))}
+      </ul>
+      {hidden === 0 ? null : <p className="mt-0.5">and {hidden} more</p>}
+    </>
   );
 }

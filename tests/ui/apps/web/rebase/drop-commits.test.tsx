@@ -72,11 +72,6 @@ describe("drop commits from the graph", () => {
         _tag: "Rebase",
         onto: { ref: null, commit: base },
         stash: false,
-        plan: [
-          { commit: debug, action: "drop", message: null },
-          { commit: retry, action: "pick", message: null },
-          { commit: typo, action: "drop", message: null },
-        ],
       },
     });
   });
@@ -108,17 +103,13 @@ describe("drop commits from the graph", () => {
     { reason: "Read only", writable: false },
     { reason: "Detached HEAD", head: { commit: typo } },
     { reason: "Rebase in progress", operation: conflictedRebase() },
-    { reason: "Root commit", subject: "Base" },
-  ])(
-    "says why it can't drop: $reason",
-    async ({ reason, subject, ...state }) => {
-      const f = await renderDrop(state);
-      await f.row(subject ?? "Add retry").click({ button: "right" });
-      const drop = f.screen.getByRole("menuitem", { name: /^Drop commit/ });
-      await expect.element(drop).toHaveAttribute("aria-disabled", "true");
-      await expect.element(drop).toHaveTextContent(reason);
-    },
-  );
+  ])("says why it can't drop: $reason", async ({ reason, ...state }) => {
+    const f = await renderDrop(state);
+    await f.row("Add retry").click({ button: "right" });
+    const drop = f.screen.getByRole("menuitem", { name: /^Drop commit/ });
+    await expect.element(drop).toHaveAttribute("aria-disabled", "true");
+    await expect.element(drop).toHaveTextContent(reason);
+  });
 });
 
 async function renderDrop({

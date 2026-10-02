@@ -5,7 +5,10 @@ import {
   type ResetMode,
 } from "#contracts/repository-reflog/repository-reflog.contract.ts";
 import type { Action } from "#web/components/ui/action-menu.tsx";
-import { Confirmation } from "#web/components/ui/confirmation.tsx";
+import {
+  Confirmation,
+  ConfirmationList,
+} from "#web/components/ui/confirmation.tsx";
 import { PersistentNotification } from "#web/features/notifications/components/persistent-notification.tsx";
 import { useErrorToast } from "#web/features/notifications/notifications.tsx";
 import { useOperation } from "#web/features/operation-recovery/hooks/use-operation.ts";
@@ -44,7 +47,6 @@ const modes: readonly { readonly mode: ResetMode; readonly label: string }[] = [
   { mode: "mixed", label: "Keep changes unstaged" },
   { mode: "hard", label: "Discard changes…" },
 ];
-const listedDiscards = 3;
 
 export function useResetActions(): ResetActions {
   const scope = useRepositoryScope();
@@ -141,7 +143,6 @@ export function ResetConfirmation({ reset }: { readonly reset: ResetActions }) {
   const { pending } = reset;
   if (pending === undefined) return null;
   const { paths, count, fingerprint } = pending.failure;
-  const hidden = count - Math.min(count, listedDiscards);
   return (
     <PersistentNotification>
       <Confirmation
@@ -159,14 +160,7 @@ export function ResetConfirmation({ reset }: { readonly reset: ResetActions }) {
             : `Uncommitted edits in ${count} files will be lost.`}{" "}
           The reflog can't bring them back.
         </p>
-        <ul className="mt-1.5 flex flex-col gap-0.5">
-          {paths.slice(0, listedDiscards).map((path) => (
-            <li className="truncate font-mono text-foreground" key={path}>
-              {path}
-            </li>
-          ))}
-        </ul>
-        {hidden === 0 ? null : <p className="mt-0.5">and {hidden} more</p>}
+        <ConfirmationList className="font-mono" items={paths} total={count} />
       </Confirmation>
     </PersistentNotification>
   );

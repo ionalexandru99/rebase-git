@@ -5,12 +5,16 @@ import {
   RepositoryOperationsApi,
 } from "#contracts/repository-operations/repository-operations.contract.ts";
 import type { Action } from "#web/components/ui/action-menu.tsx";
-import { Confirmation } from "#web/components/ui/confirmation.tsx";
+import {
+  Confirmation,
+  ConfirmationList,
+} from "#web/components/ui/confirmation.tsx";
 import { PersistentNotification } from "#web/features/notifications/components/persistent-notification.tsx";
 import { useErrorToast } from "#web/features/notifications/notifications.tsx";
 import { useOperation } from "#web/features/operation-recovery/hooks/use-operation.ts";
 import { operationKindLabel } from "#web/features/operation-recovery/operation-messages.ts";
 import { useChangedFileCount } from "#web/features/rebase/rebase-actions.ts";
+import { maximumPlanCommits } from "#web/features/rebase/rebase-plan.ts";
 import {
   activeHead,
   useScopedRepositoryRefs,
@@ -20,7 +24,7 @@ import type { RepositoryHistory } from "#web/features/repository-history/reposit
 import { useRepositoryScope } from "#web/platform/query/repository-scope.tsx";
 import { answer, useCommand } from "#web/platform/query/use-command.ts";
 
-export type DropPlan =
+type DropPlan =
   | {
       readonly _tag: "Blocked";
       readonly dropped: readonly RepositoryCommit[];
@@ -41,9 +45,6 @@ interface PendingDrop {
 }
 
 export type DropCommits = ReturnType<typeof useDropCommits>;
-
-const maximumPlanCommits = 1_000;
-const listedCommits = 3;
 
 export async function dropPlan(
   history: Pick<RepositoryHistory, "ask">,
@@ -68,24 +69,29 @@ export async function dropPlan(
   const oldest = dropped.at(-1);
   if (oldest === undefined) return undefined;
   const onto = oldest.parents[0];
-  if (onto === undefined) {
-    const range = await history.ask({ _tag: "Range", head, onto: oldest.oid });
-    return range?.based === true || head === oldest.oid
-      ? { _tag: "Blocked", dropped, reason: "Root commit" }
-      : undefined;
-  }
-  const range = await history.ask({ _tag: "Range", head, onto });
-  if (range === undefined) return undefined;
+  const range = await history.ask({
+    _tag: "Range",
+    head,
+    onto: onto ?? oldest.oid,
+  });
+  if (range === undefined || !range.based) return undefined;
+  const moving = new Set(onto === undefined ? [oldest.oid] : []);
+  for (const oid of range.moving) moving.add(oid);
+  if (
+    range.count <= range.moving.length &&
+    dropped.some(({ oid }) => !moving.has(oid))
+  )
+    return undefined;
+  if (onto === undefined)
+    return { _tag: "Blocked", dropped, reason: "Root commit" };
+  if (dropped.some(({ parents }) => parents.length > 1))
+    return { _tag: "Blocked", dropped, reason: "Merge commit" };
   if (range.count > maximumPlanCommits)
     return {
       _tag: "Blocked",
       dropped,
       reason: `${maximumPlanCommits.toLocaleString("en-US")} commits at most`,
     };
-  const moving = new Set(range.moving);
-  if (dropped.some(({ oid }) => !moving.has(oid))) return undefined;
-  if (dropped.some(({ parents }) => parents.length > 1))
-    return { _tag: "Blocked", dropped, reason: "Merge commit" };
   const commits = new Map(
     (await history.ask({ _tag: "Commits", oids: range.moving })).map(
       (commit) => [commit.oid, commit],
@@ -229,7 +235,6 @@ export function DropConfirmation({ drop }: { readonly drop: DropCommits }) {
   const { branch, plan } = pending;
   const [only] = plan.dropped;
   const count = plan.dropped.length;
-  const hidden = count - Math.min(count, listedCommits);
   return (
     <PersistentNotification>
       <Confirmation
@@ -244,17 +249,11 @@ export function DropConfirmation({ drop }: { readonly drop: DropCommits }) {
             : `Drop ${count} commits from ${branch}?`
         }
       >
-        {count === 1 ? <p>It is removed from {branch}.</p> : null}
-        {count === 1 ? null : (
-          <ul className="flex flex-col gap-0.5">
-            {plan.dropped.slice(0, listedCommits).map((commit) => (
-              <li className="truncate text-foreground" key={commit.oid}>
-                {commitLine(commit)}
-              </li>
-            ))}
-          </ul>
+        {count === 1 ? (
+          <p>It is removed from {branch}.</p>
+        ) : (
+          <ConfirmationList items={plan.dropped.map(commitLine)} />
         )}
-        {hidden === 0 ? null : <p className="mt-0.5">and {hidden} more</p>}
         {plan.pushed ? (
           <p className="mt-1.5">
             {count === 1 ? "It was" : "Some were"} already pushed, so you'll

@@ -9,7 +9,7 @@ import { dropPlan } from "#web/features/rebase/drop-commits.tsx";
 
 const oid = (name: string) => name.padEnd(40, "0");
 const commit = (name: string, parents: readonly string[], order: number) =>
-  historyCommit(oid(name), parents.map(oid), order, `fixup! ${name}`);
+  historyCommit(oid(name), parents.map(oid), order);
 
 function plan(
   commits: readonly RepositoryCommit[],
@@ -62,6 +62,27 @@ describe("drop plan", () => {
       commit("a", [], 1),
     ];
     expect(await plan(side, ["d", "s"])).toBeUndefined();
+    expect(await plan(side, ["a", "s"])).toBeUndefined();
+  });
+
+  it("hides commits off the branch before blocking a range over 1,000 commits", async () => {
+    const long = [
+      commit("e", ["c0."], 2_000),
+      ...Array.from({ length: 1_001 }, (_, index) =>
+        commit(
+          `c${index}.`,
+          [index === 1_000 ? "a" : `c${index + 1}.`],
+          1_999 - index,
+        ),
+      ),
+      commit("s", ["a"], 1),
+      commit("a", [], 0),
+    ];
+    expect(await plan(long, ["s"])).toBeUndefined();
+    expect(await plan(long, ["c1000."])).toMatchObject({
+      _tag: "Blocked",
+      reason: "1,000 commits at most",
+    });
   });
 
   it("blocks merges in the selection or between it and HEAD, and the root commit", async () => {
