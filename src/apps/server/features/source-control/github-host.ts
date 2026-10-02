@@ -6,9 +6,10 @@ import type {
   PullRequestsUnavailable,
 } from "#contracts/pull-requests/pull-requests.contract.ts";
 import { hostedRepositoryFromUrl } from "#server/features/repository-refs/git/read-repository-refs.ts";
-import type {
-  GitHost,
-  TrackedBranch,
+import {
+  type GitHost,
+  hostTool,
+  type TrackedBranch,
 } from "#server/features/source-control/git-host.ts";
 
 export interface GitHubCli {
@@ -74,14 +75,7 @@ export function createGitHubHost(cli: GitHubCli): GitHost {
   return {
     kind: "github",
     serves: (remoteUrl) => githubRepository(remoteUrl) !== undefined,
-    tool: Effect.gen(function* () {
-      const version = yield* cli.version;
-      if (version === undefined) return { _tag: "Missing" } as const;
-      const account = yield* cli.account;
-      return account === undefined
-        ? ({ _tag: "SignedOut", version } as const)
-        : ({ _tag: "SignedIn", version, account } as const);
-    }),
+    tool: hostTool(cli.version, cli.account),
     pullRequests: (remoteUrl, branches) =>
       listPullRequests(cli, remoteUrl, branches),
   };
@@ -126,11 +120,7 @@ function listPullRequests(
           ),
         ),
     { concurrency: 4 },
-  ).pipe(
-    Effect.map((answers) =>
-      answers.flat().filter(({ pullRequests }) => pullRequests.length > 0),
-    ),
-  );
+  ).pipe(Effect.map((answers) => answers.flat()));
 }
 
 function githubRepository(remoteUrl: string) {
@@ -201,8 +191,7 @@ function branchPullRequests(
         (node) =>
           node.headRepositoryOwner?.login.toLowerCase() === owner.toLowerCase(),
       )
-      .map(pullRequest)
-      .sort((left, right) => openFirst(left) - openFirst(right)),
+      .map(pullRequest),
   };
 }
 
@@ -231,10 +220,6 @@ function checksState(state: string | undefined): PullRequest["checks"] {
   if (state === "FAILURE" || state === "ERROR") return "Failing";
   if (state === "PENDING" || state === "EXPECTED") return "Pending";
   return undefined;
-}
-
-function openFirst(pullRequest: PullRequest) {
-  return pullRequest.state === "Open" || pullRequest.state === "Draft" ? 0 : 1;
 }
 
 function chunks<Item>(items: readonly Item[], size: number) {

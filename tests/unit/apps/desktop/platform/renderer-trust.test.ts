@@ -2,7 +2,7 @@ import type { IpcMainInvokeEvent } from "electron";
 import { describe, expect, it, vi } from "vite-plus/test";
 import {
   createTrustedIpcHandler,
-  isExternalGitHubLink,
+  isExternalPullRequestLink,
 } from "#desktop/platform/renderer-trust.ts";
 
 const { fromWebContents } = vi.hoisted(() => ({ fromWebContents: vi.fn() }));
@@ -42,17 +42,22 @@ describe("trusted IPC handler", () => {
 });
 
 describe("external links", () => {
-  it("opens only https GitHub links in the system browser", () => {
-    expect(isExternalGitHubLink("https://github.com/octo/rebase/pull/7")).toBe(
-      true,
-    );
-    expect(isExternalGitHubLink("http://github.com/octo/rebase/pull/7")).toBe(
+  it("opens only https GitHub and Azure DevOps links in the system browser", () => {
+    expect(
+      isExternalPullRequestLink("https://github.com/octo/rebase/pull/7"),
+    ).toBe(true);
+    expect(
+      isExternalPullRequestLink("http://github.com/octo/rebase/pull/7"),
+    ).toBe(false);
+    expect(isExternalPullRequestLink("https://github.com.evil.example/")).toBe(
       false,
     );
-    expect(isExternalGitHubLink("https://github.com.evil.example/")).toBe(
-      false,
-    );
-    expect(isExternalGitHubLink("file:///etc/passwd")).toBe(false);
+    expect(
+      isExternalPullRequestLink(
+        "https://dev.azure.com/acme/rebase/_git/rebase/pullrequest/7",
+      ),
+    ).toBe(true);
+    expect(isExternalPullRequestLink("file:///etc/passwd")).toBe(false);
   });
 });
 

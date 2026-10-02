@@ -54,6 +54,19 @@ const hostDescriptors: Record<GitHostKind, HostDescriptor> = {
     label: "Azure DevOps",
     icon: IconBrandAzure,
     color: "text-[#3b8eea]",
+    install: (
+      <>
+        Install the Azure command-line tool (<Code>az</Code>) via
+        https://aka.ms/installazurecli or your package manager (for example{" "}
+        <Code>brew install azure-cli</Code>).
+      </>
+    ),
+    signIn: (
+      <>
+        Sign in with <Code>az login --allow-no-subscriptions</Code> on the
+        server to show pull requests.
+      </>
+    ),
   },
   bitbucket: {
     label: "Bitbucket",

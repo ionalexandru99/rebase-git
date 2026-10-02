@@ -1,4 +1,4 @@
-import type { Effect } from "effect";
+import { Effect } from "effect";
 import type {
   BranchPullRequests,
   PullRequestsUnavailable,
@@ -32,4 +32,18 @@ export interface GitHost {
 
 export function gitHostFor(hosts: readonly GitHost[], remoteUrl: string) {
   return hosts.find((host) => host.serves(remoteUrl));
+}
+
+export function hostTool(
+  version: Effect.Effect<string | undefined>,
+  account: Effect.Effect<string | undefined>,
+): Effect.Effect<GitHostTool> {
+  return Effect.gen(function* () {
+    const installed = yield* version;
+    if (installed === undefined) return { _tag: "Missing" } as const;
+    const signedIn = yield* account;
+    return signedIn === undefined
+      ? ({ _tag: "SignedOut", version: installed } as const)
+      : ({ _tag: "SignedIn", version: installed, account: signedIn } as const);
+  });
 }

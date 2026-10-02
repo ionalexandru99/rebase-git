@@ -5,7 +5,7 @@ import { RefName, RepositoryId } from "#contracts/git/git-values.contract.ts";
 export const PullRequest = Schema.Struct({
   number: Schema.Int.check(Schema.isGreaterThan(0)),
   url: Schema.String.check(
-    Schema.isPattern(/^https:\/\/github\.com\//),
+    Schema.isPattern(/^https:\/\/(?:github\.com|dev\.azure\.com)\//),
     Schema.isMaxLength(2_048),
   ),
   title: Schema.String.check(Schema.isMaxLength(1_024)),
