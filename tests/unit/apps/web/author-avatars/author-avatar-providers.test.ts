@@ -127,15 +127,19 @@ describe("author avatar providers", () => {
     expect(await bitbucket.resolve(author, signal())).toBe(gravatar);
   });
 
-  it("reports rate limits instead of falling back", async () => {
-    respond(
-      new Response(null, {
-        status: 403,
-        headers: { "x-ratelimit-remaining": "0" },
-      }),
-    );
-    await expect(github.resolve(author, signal())).rejects.toBeInstanceOf(
-      AvatarUnavailable,
-    );
-  });
+  it.each([
+    new Response(null, {
+      status: 403,
+      headers: { "x-ratelimit-remaining": "0" },
+    }),
+    new Response(null, { status: 503 }),
+  ])(
+    "reports rate limits and outages instead of falling back",
+    async (response) => {
+      respond(response);
+      await expect(github.resolve(author, signal())).rejects.toBeInstanceOf(
+        AvatarUnavailable,
+      );
+    },
+  );
 });

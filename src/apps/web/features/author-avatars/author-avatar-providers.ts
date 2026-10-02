@@ -188,6 +188,7 @@ async function send(url: string, signal: AbortSignal, method: "GET" | "HEAD") {
       response.headers.get("x-ratelimit-remaining") === "0")
   )
     throw new AvatarUnavailable(retryAt(response.headers));
+  if (response.status >= 500) throw new AvatarUnavailable();
   return response;
 }
 
