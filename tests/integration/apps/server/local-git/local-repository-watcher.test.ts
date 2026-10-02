@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, rename, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rename, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Effect } from "effect";
@@ -21,19 +21,21 @@ describe("local repository watcher", () => {
         () => expect(changes.count()).toBeGreaterThan(0),
         () => git(fixture.local, "branch", "-f", "watcher-ready"),
       );
-      const beforeReplacement = changes.count();
       await rename(
         join(gitDirectory, entry),
         join(fixture.root, "previous-logs"),
       );
       await mkdir(join(gitDirectory, "logs", "refs"), { recursive: true });
+      const index = join(gitDirectory, "index");
+      const beforeIndex = changes.index();
+      await writeFile(index, await readFile(index));
       await waitForObservation(() =>
-        expect(changes.count()).toBeGreaterThan(beforeReplacement),
+        expect(changes.index()).toBeGreaterThan(beforeIndex),
       );
-      const beforeWrite = changes.count();
+      const beforeWrite = changes.refs();
       await writeFile(join(gitDirectory, "logs", "refs", "stash"), "stash");
       await waitForObservation(() =>
-        expect(changes.count()).toBeGreaterThan(beforeWrite),
+        expect(changes.refs()).toBeGreaterThan(beforeWrite),
       );
     });
 
@@ -85,6 +87,7 @@ async function watch(gitDirectory: string) {
   return {
     count: () => kinds.length,
     refs: () => kinds.filter((kind) => kind === "Refs").length,
+    index: () => kinds.filter((kind) => kind === "Index").length,
   };
 }
 
