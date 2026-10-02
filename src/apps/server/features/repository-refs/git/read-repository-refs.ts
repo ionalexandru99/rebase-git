@@ -160,19 +160,26 @@ const hostedProviders = new Map<
 export function hostedRepositoryFromRemotes(
   output: string,
 ): RepositoryRefs["hostedRepository"] {
-  const remotes = output
-    .trim()
-    .split("\n")
-    .flatMap((line) => {
+  const url = primaryRemoteUrl(output);
+  return url === undefined ? undefined : hostedRepositoryFromUrl(url);
+}
+
+export function primaryRemoteUrl(output: string) {
+  const urls = remoteUrls(output);
+  return (
+    urls.get("origin") ?? (urls.size === 1 ? [...urls.values()][0] : undefined)
+  );
+}
+
+export function remoteUrls(output: string) {
+  return new Map(
+    output.split("\n").flatMap((line) => {
       const match = /^remote\.(.+)\.url\s+(.+)$/.exec(line.trim());
       return match?.[1] === undefined || match[2] === undefined
         ? []
-        : [{ remote: match[1], url: match[2] }];
-    });
-  const origin = remotes.find((remote) => remote.remote === "origin");
-  const url =
-    origin?.url ?? (remotes.length === 1 ? remotes[0]?.url : undefined);
-  return url === undefined ? undefined : hostedRepositoryFromUrl(url);
+        : [[match[1], match[2]] as const];
+    }),
+  );
 }
 
 export function hostedRepositoryFromUrl(

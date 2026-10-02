@@ -17,6 +17,10 @@ import type {
   RepositoryWorktree,
 } from "#contracts/repository-refs/repository-refs.contract.ts";
 import type {
+  GitHostStatus,
+  GitStatus,
+} from "#contracts/source-control/source-control.contract.ts";
+import type {
   AuthorAvatarStore,
   CachedAvatar,
 } from "#web/features/author-avatars/author-avatar-store.ts";
@@ -244,6 +248,30 @@ export function pullRequest(
     title: `Pull request ${number}`,
     state: "Open",
     ...pullRequest,
+  };
+}
+
+export function sourceControlDiscovery({
+  git = { _tag: "Available", version: "git version 2.51.0" },
+  github = {
+    _tag: "SignedIn",
+    kind: "github",
+    enabled: true,
+    version: "gh version 2.101.0 (2026-09-15)",
+    account: "octo",
+  },
+}: {
+  readonly git?: GitStatus;
+  readonly github?: GitHostStatus;
+} = {}) {
+  return {
+    git,
+    hosts: [
+      github,
+      ...(["gitlab", "azure-devops", "bitbucket", "forgejo"] as const).map(
+        (kind) => ({ _tag: "ComingSoon", kind }) as const,
+      ),
+    ],
   };
 }
 
