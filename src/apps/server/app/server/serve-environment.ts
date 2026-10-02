@@ -16,10 +16,7 @@ import {
   environmentAuthorizationFeature,
 } from "#server/features/environment-authorization/environment-authorization.ts";
 import { environmentFilesystemFeature } from "#server/features/environment-filesystem/environment-filesystem.ts";
-import {
-  createGitHubCli,
-  pullRequestsFeature,
-} from "#server/features/pull-requests/pull-requests.ts";
+import { pullRequestsFeature } from "#server/features/pull-requests/pull-requests.ts";
 import {
   createRepositoryCatalog,
   repositoryCatalogFeature,
@@ -32,6 +29,14 @@ import { repositoryPullFeature } from "#server/features/repository-pull/reposito
 import { repositoryPushFeature } from "#server/features/repository-push/repository-push.ts";
 import { repositoryReflogFeature } from "#server/features/repository-reflog/repository-reflog.ts";
 import { repositoryRefsFeature } from "#server/features/repository-refs/repository-refs.feature.ts";
+import {
+  createGitHubCli,
+  createGitHubHost,
+} from "#server/features/source-control/github-host.ts";
+import {
+  createSourceControl,
+  sourceControlFeature,
+} from "#server/features/source-control/source-control.ts";
 import {
   acquireEnvironmentContext,
   type EnvironmentContext,
@@ -124,6 +129,11 @@ export function acquireEnvironment(home: string, git: GitCommandRunner) {
 
 export function environmentFeatures(dependencies: EnvironmentDependencies) {
   return Effect.gen(function* () {
+    const sourceControl = createSourceControl(
+      dependencies.context,
+      dependencies.git,
+      [createGitHubHost(dependencies.github)],
+    );
     return combineEnvironmentFeatures([
       environmentAuthorizationFeature(dependencies.authorization),
       environmentFilesystemFeature(),
@@ -134,10 +144,11 @@ export function environmentFeatures(dependencies: EnvironmentDependencies) {
       repositoryHistoryFeature(dependencies),
       repositoryOperationsFeature(dependencies),
       yield* repositoryPullFeature(dependencies),
-      pullRequestsFeature(dependencies),
+      pullRequestsFeature({ ...dependencies, sourceControl }),
       repositoryPushFeature(dependencies),
       repositoryReflogFeature(dependencies),
       yield* repositoryRefsFeature(dependencies),
+      sourceControlFeature({ events: dependencies.events, sourceControl }),
     ]);
   });
 }

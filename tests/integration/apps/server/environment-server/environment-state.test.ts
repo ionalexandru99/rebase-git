@@ -31,6 +31,7 @@ const addLogicalRepositoryIdentityMigration = generatedMigrations[4];
 const removeDormantActivityMigration = generatedMigrations[5];
 const ownerOnlyAuthorizationMigration = generatedMigrations[6];
 const repositoryColorMigration = generatedMigrations[7];
+const gitHostEnabledMigration = generatedMigrations[8];
 
 if (
   createEnvironmentMigration === undefined ||
@@ -40,9 +41,10 @@ if (
   addLogicalRepositoryIdentityMigration === undefined ||
   removeDormantActivityMigration === undefined ||
   ownerOnlyAuthorizationMigration === undefined ||
-  repositoryColorMigration === undefined
+  repositoryColorMigration === undefined ||
+  gitHostEnabledMigration === undefined
 ) {
-  throw new Error("Expected eight generated Environment state migrations.");
+  throw new Error("Expected nine generated Environment state migrations.");
 }
 
 afterEach(async () => {
@@ -154,6 +156,11 @@ describe("Environment state", () => {
         checksum_length: 64,
         name: repositoryColorMigration.name,
         version: 8,
+      },
+      {
+        checksum_length: 64,
+        name: gitHostEnabledMigration.name,
+        version: 9,
       },
     ]);
     database.close();
@@ -278,16 +285,17 @@ describe("Environment state", () => {
       generatedMigrationEntry(removeDormantActivityMigration, 6),
       generatedMigrationEntry(ownerOnlyAuthorizationMigration, 7),
       generatedMigrationEntry(repositoryColorMigration, 8),
+      generatedMigrationEntry(gitHostEnabledMigration, 9),
       {
         checksum: "future",
-        createdAt: repositoryColorMigration.folderMillis + 1,
+        createdAt: gitHostEnabledMigration.folderMillis + 1,
         name: "future",
-        version: 9,
+        version: 10,
       },
     ]);
 
     await expect(openState(newerPaths)).rejects.toThrow(
-      "The state database is at version 9, but this Rebase build supports version 8.",
+      "The state database is at version 10, but this Rebase build supports version 9.",
     );
   });
 
@@ -314,7 +322,7 @@ describe("Environment state", () => {
       database
         .prepare("SELECT max(id) AS version FROM __drizzle_migrations")
         .get(),
-    ).toEqual({ version: 8 });
+    ).toEqual({ version: 9 });
     database.close();
   });
 

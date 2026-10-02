@@ -68,3 +68,8 @@ export const repositoryCatalogTable = sqliteTable(
     index("repository_catalog_name").on(repository.name, repository.path),
   ],
 );
+
+export const gitHostTable = sqliteTable("git_host", {
+  enabled: integer("enabled", { mode: "boolean" }).notNull(),
+  kind: text("kind").primaryKey(),
+});

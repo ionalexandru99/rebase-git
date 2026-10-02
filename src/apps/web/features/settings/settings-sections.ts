@@ -1,5 +1,6 @@
 import {
   IconDatabase,
+  IconGitBranch,
   IconSettings,
   type TablerIcon,
 } from "@tabler/icons-react";
@@ -10,6 +11,7 @@ import type {
 } from "#contracts/desktop-updates/desktop-updates.contract.ts";
 import { GeneralSettings } from "#web/features/settings/general-settings.tsx";
 import { HistoryStorageSettings } from "#web/features/settings/history-storage-settings.tsx";
+import { SourceControlSettings } from "#web/features/settings/source-control-settings.tsx";
 
 export interface SettingsSectionContext {
   readonly desktopUpdates: DesktopUpdates | undefined;
@@ -31,6 +33,12 @@ export const settingsSections = [
     label: "General",
     icon: IconSettings,
     Content: GeneralSettings,
+  },
+  {
+    id: "source-control",
+    label: "Source control",
+    icon: IconGitBranch,
+    Content: SourceControlSettings,
   },
   {
     id: "history-storage",

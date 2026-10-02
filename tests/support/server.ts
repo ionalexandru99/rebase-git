@@ -31,7 +31,7 @@ import {
   serveEnvironment,
 } from "#server/app/server/serve-environment.ts";
 import type { EnvironmentAuthorization } from "#server/features/environment-authorization/environment-authorization.ts";
-import type { GitHubCli } from "#server/features/pull-requests/pull-requests.ts";
+import type { GitHubCli } from "#server/features/source-control/github-host.ts";
 import type { RepositoryCoordination } from "#server/repository/repository-coordination.ts";
 import { removeTemporaryDirectory } from "#tests-support/temporary-directory.ts";
 import {
@@ -164,9 +164,18 @@ export interface GitHubPullRequestNode {
 
 export function fakeGitHub(
   byHead: Readonly<Record<string, readonly GitHubPullRequestNode[]>> | null,
+  {
+    version = "gh version 2.101.0 (2026-09-15)",
+    account = "octo",
+  }: {
+    readonly version?: string | null;
+    readonly account?: string | null;
+  } = {},
 ) {
   const requests: Readonly<Record<string, string>>[] = [];
   const github: GitHubCli = {
+    version: Effect.succeed(version ?? undefined),
+    account: Effect.succeed(account ?? undefined),
     graphql: (_query, variables) => {
       requests.push(variables);
       if (byHead === null)

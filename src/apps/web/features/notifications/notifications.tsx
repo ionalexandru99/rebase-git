@@ -59,6 +59,7 @@ const errorTitles = {
   checkUpdates: "Couldn’t check for updates",
   installUpdate: "Couldn’t install the update",
   saveUpdateSettings: "Couldn’t save the update settings",
+  saveSourceControl: "Couldn’t save the source control settings",
 } as const;
 
 export type ErrorAction = keyof typeof errorTitles;
