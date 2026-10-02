@@ -3,9 +3,9 @@ import type { OpenProjectRepository } from "#web/features/open-project/open-proj
 import {
   formatLastOpened,
   type OpenProjectRepositoryItem,
-  repositoryInitials,
 } from "#web/features/open-project/open-project-state.ts";
 import { openProjectItemId } from "#web/features/open-project/repository-row.tsx";
+import { RepositoryBadge } from "#web/features/repository-catalog/repository-badge.tsx";
 import { RepositorySettingsButton } from "#web/features/repository-settings/components/repository-settings-button.tsx";
 
 export function RecentRepositories({
@@ -49,7 +49,11 @@ export function RecentRepositories({
               tabIndex={-1}
               type="button"
             >
-              <RepositoryInitials name={item.repository.name} />
+              <RepositoryBadge
+                className="size-9 rounded-[.45rem] text-xs"
+                color={item.repository.color}
+                name={item.repository.name}
+              />
               <span className="min-w-0">
                 <strong className="mb-[.12rem] block truncate text-[.86rem] font-semibold">
                   {item.repository.name}
@@ -72,13 +76,5 @@ export function RecentRepositories({
         ))}
       </div>
     </section>
-  );
-}
-
-export function RepositoryInitials({ name }: { readonly name: string }) {
-  return (
-    <span className="grid size-9 shrink-0 place-items-center rounded-[.45rem] bg-secondary text-xs font-semibold text-secondary-foreground">
-      {repositoryInitials(name)}
-    </span>
   );
 }

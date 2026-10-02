@@ -77,16 +77,6 @@ export function keyboardRepositoryItems(
   return [...recent, ...catalog].filter((item) => !item.disabled);
 }
 
-export function repositoryInitials(name: string): string {
-  return name
-    .split(/[-_\s]+/)
-    .map((part) => part[0])
-    .filter((character): character is string => character !== undefined)
-    .join("")
-    .slice(0, 2)
-    .toUpperCase();
-}
-
 export function formatLastOpened(
   lastOpenedAt: string,
   now: Date = new Date(),

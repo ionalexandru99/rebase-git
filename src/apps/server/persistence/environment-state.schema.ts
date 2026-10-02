@@ -6,6 +6,7 @@ import {
   sqliteTable,
   text,
 } from "drizzle-orm/sqlite-core";
+import { RepositoryColor } from "#contracts/repository-catalog/repository-catalog.contract.ts";
 
 export const environmentTable = sqliteTable(
   "environment",
@@ -38,6 +39,9 @@ export const repositoryCatalogTable = sqliteTable(
   "repository_catalog",
   {
     addedAt: text("added_at").notNull(),
+    color: text("color", { enum: RepositoryColor.literals })
+      .notNull()
+      .default("blue"),
     gitCommonDirectory: text("git_common_directory"),
     id: text("id").primaryKey(),
     lastOpenedAt: text("last_opened_at").notNull(),

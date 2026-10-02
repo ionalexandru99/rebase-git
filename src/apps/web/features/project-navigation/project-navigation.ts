@@ -1,6 +1,8 @@
+import type { RepositoryColor } from "#contracts/repository-catalog/repository-catalog.contract.ts";
 import type { EnvironmentAvailability } from "#web/platform/query/environment-context.tsx";
 
 export interface ProjectNavigationRepository {
+  readonly color: RepositoryColor;
   readonly id: string;
   readonly name: string;
 }

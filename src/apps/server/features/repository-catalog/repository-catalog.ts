@@ -3,14 +3,15 @@ import { realpath } from "node:fs";
 import { stat } from "node:fs/promises";
 import { basename, isAbsolute } from "node:path";
 import { promisify } from "node:util";
-import { asc, eq } from "drizzle-orm";
+import { asc, countDistinct, eq } from "drizzle-orm";
 import { Effect } from "effect";
 import { repositoryRejected } from "#contracts/git/git-failures.contract.ts";
-import type {
-  RepositoryCatalogEntry,
-  RepositoryPathRejected,
+import {
+  RepositoryCatalogApi,
+  type RepositoryCatalogEntry,
+  RepositoryColor,
+  type RepositoryPathRejected,
 } from "#contracts/repository-catalog/repository-catalog.contract.ts";
-import { RepositoryCatalogApi } from "#contracts/repository-catalog/repository-catalog.contract.ts";
 import type { EnvironmentFeature } from "#server/adapters/environment-transport/environment-routes.ts";
 import { route } from "#server/adapters/environment-transport/environment-routes.ts";
 import {
@@ -141,6 +142,7 @@ function rememberRepository(
       async (database) => {
         const linkedRepository = await database
           .select({
+            color: repositoryCatalogTable.color,
             logicalRepositoryId: repositoryCatalogTable.logicalRepositoryId,
           })
           .from(repositoryCatalogTable)
@@ -153,10 +155,24 @@ function rememberRepository(
           .get();
         const logicalRepositoryId =
           linkedRepository?.logicalRepositoryId ?? randomUUID();
+        const color =
+          linkedRepository?.color ??
+          leastUsedColor(
+            await database
+              .select({
+                color: repositoryCatalogTable.color,
+                repositories: countDistinct(
+                  repositoryCatalogTable.logicalRepositoryId,
+                ),
+              })
+              .from(repositoryCatalogTable)
+              .groupBy(repositoryCatalogTable.color),
+          );
         const remembered = await database
           .insert(repositoryCatalogTable)
           .values({
             addedAt: openedAt,
+            color,
             gitCommonDirectory: repository.gitCommonDirectory,
             id: randomUUID(),
             lastOpenedAt: openedAt,
@@ -179,6 +195,19 @@ function rememberRepository(
       },
     );
   });
+}
+
+function leastUsedColor(
+  usage: readonly {
+    readonly color: RepositoryColor;
+    readonly repositories: number;
+  }[],
+): RepositoryColor {
+  const repositoriesWith = (color: RepositoryColor) =>
+    usage.find((used) => used.color === color)?.repositories ?? 0;
+  return RepositoryColor.literals.reduce((least, color) =>
+    repositoriesWith(color) < repositoriesWith(least) ? color : least,
+  );
 }
 
 function recordRepositoryOpened(
@@ -332,6 +361,7 @@ function catalogEntry(
 ): RepositoryCatalogEntry {
   return {
     addedAt: repository.addedAt,
+    color: repository.color,
     id: repository.id,
     lastOpenedAt: repository.lastOpenedAt,
     ...(repository.logicalRepositoryId === null

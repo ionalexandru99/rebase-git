@@ -131,6 +131,7 @@ function withFetch(
     path: id === linkedId ? "/linked" : "/repo",
     name: "repo",
     addedAt: "2026-09-04T00:00:00.000Z",
+    color: "blue",
     lastOpenedAt: "2026-09-04T00:00:00.000Z",
   });
   const access: RepositoryAccess = {

@@ -6,7 +6,6 @@ import {
   formatLastOpened,
   keyboardRepositoryItems,
   recentRepositoryItems,
-  repositoryInitials,
 } from "#web/features/open-project/open-project-state.ts";
 
 const TestEnvironmentIcon = (() =>
@@ -102,10 +101,9 @@ describe("open project state", () => {
     ]);
   });
 
-  it("formats repository initials and compact recent times", () => {
+  it("formats compact recent times", () => {
     const now = new Date("2026-08-24T15:00:00");
 
-    expect(repositoryInitials("rebase-git")).toBe("RG");
     expect(formatLastOpened("2026-08-24T13:00:00", now)).toBe("2h");
     expect(formatLastOpened("2026-08-23T20:00:00", now)).toBe("Yesterday");
   });
@@ -121,6 +119,7 @@ function environmentFixtures(): readonly OpenProjectEnvironment[] {
       name: "Local Environment",
       repositories: [
         {
+          color: "blue",
           environmentId: "local",
           id: "workbench",
           lastOpenedAt: "2026-08-22T10:00:00Z",
@@ -128,6 +127,7 @@ function environmentFixtures(): readonly OpenProjectEnvironment[] {
           path: "~/Personal/workbench",
         },
         {
+          color: "blue",
           environmentId: "local",
           id: "rebase",
           lastOpenedAt: "2026-08-24T12:00:00Z",
@@ -135,6 +135,7 @@ function environmentFixtures(): readonly OpenProjectEnvironment[] {
           path: "~/Code/rebase-git",
         },
         {
+          color: "blue",
           environmentId: "local",
           id: "api",
           lastOpenedAt: "2026-08-21T10:00:00Z",
@@ -152,6 +153,7 @@ function environmentFixtures(): readonly OpenProjectEnvironment[] {
       name: "Build server",
       repositories: [
         {
+          color: "blue",
           environmentId: "build",
           id: "infrastructure",
           lastOpenedAt: "2026-08-19T10:00:00Z",
@@ -159,6 +161,7 @@ function environmentFixtures(): readonly OpenProjectEnvironment[] {
           path: "/srv/git/infrastructure",
         },
         {
+          color: "blue",
           environmentId: "build",
           id: "ci",
           lastOpenedAt: "2026-08-20T10:00:00Z",

@@ -25,8 +25,8 @@ describe("project navigation state", () => {
     expect(
       environmentRepositories(unavailable.environments[0] ?? unreachable()),
     ).toEqual([
-      { disabled: true, id: "payments", name: "payments" },
-      { disabled: true, id: "worker", name: "worker" },
+      { color: "blue", disabled: true, id: "payments", name: "payments" },
+      { color: "blue", disabled: true, id: "worker", name: "worker" },
     ]);
   });
 
@@ -46,7 +46,7 @@ describe("project navigation state", () => {
     const environment = state.environments[0] ?? unreachable();
 
     expect(filterEnvironmentRepositories(environment, "WORK")).toEqual([
-      { disabled: false, id: "worker", name: "worker" },
+      { color: "blue", disabled: false, id: "worker", name: "worker" },
     ]);
     expect(filterEnvironmentRepositories(environment, "  ")).toHaveLength(2);
     expect(environment.repositories).toHaveLength(2);
@@ -81,6 +81,7 @@ describe("project navigation state", () => {
     const state = showOpenProject(navigationState());
 
     const selected = openProjectRepository(state, "office", {
+      color: "blue",
       id: "worker",
       name: "worker",
     });
@@ -90,8 +91,8 @@ describe("project navigation state", () => {
       workspaceView: "repository",
     });
     expect(selected.environments[0]?.repositories).toEqual([
-      { id: "payments", name: "payments" },
-      { id: "worker", name: "worker" },
+      { color: "blue", id: "payments", name: "payments" },
+      { color: "blue", id: "worker", name: "worker" },
     ]);
   });
 
@@ -99,18 +100,20 @@ describe("project navigation state", () => {
     const state = showOpenProject(navigationState());
 
     const selected = openProjectRepository(state, "office", {
+      color: "blue",
       id: "api",
       name: "api",
     });
     const selectedAgain = openProjectRepository(selected, "office", {
+      color: "blue",
       id: "api",
       name: "api",
     });
 
     expect(selectedAgain.environments[0]?.repositories).toEqual([
-      { id: "payments", name: "payments" },
-      { id: "worker", name: "worker" },
-      { id: "api", name: "api" },
+      { color: "blue", id: "payments", name: "payments" },
+      { color: "blue", id: "worker", name: "worker" },
+      { color: "blue", id: "api", name: "api" },
     ]);
   });
 
@@ -120,6 +123,7 @@ describe("project navigation state", () => {
     );
 
     const selected = openProjectRepository(state, "office", {
+      color: "blue",
       id: "api",
       name: "api",
     });
@@ -137,7 +141,7 @@ describe("project navigation state", () => {
       workspaceView: "open-project",
     });
     expect(removed.environments[0]?.repositories).toEqual([
-      { id: "worker", name: "worker" },
+      { color: "blue", id: "worker", name: "worker" },
     ]);
   });
 
@@ -162,8 +166,8 @@ function navigationState(): ProjectNavigationState {
         id: "office",
         name: "Office PC",
         repositories: [
-          { id: "payments", name: "payments" },
-          { id: "worker", name: "worker" },
+          { color: "blue", id: "payments", name: "payments" },
+          { color: "blue", id: "worker", name: "worker" },
         ],
       },
     ],
