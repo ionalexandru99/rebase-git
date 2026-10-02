@@ -32,21 +32,8 @@ export function createGitHubCli(): GitHubCli {
       Effect.map((output) => output.split("\n")[0]?.trim() || undefined),
       Effect.orElseSucceed(() => undefined),
     ),
-    account: gh([
-      "auth",
-      "status",
-      "--hostname",
-      "github.com",
-      "--json",
-      "hosts",
-    ]).pipe(
-      Effect.flatMap(decodeAuthStatus),
-      Effect.map(
-        ({ hosts }) =>
-          hosts["github.com"]?.find(
-            ({ active, state }) => active && state === "success",
-          )?.login,
-      ),
+    account: gh(["api", "user", "--jq", ".login"]).pipe(
+      Effect.map((output) => output.trim() || undefined),
       Effect.orElseSucceed(() => undefined),
     ),
     graphql: (query, variables) =>
@@ -82,23 +69,6 @@ function gh(args: readonly string[]) {
     );
   });
 }
-
-const decodeAuthStatus = Schema.decodeUnknownEffect(
-  Schema.fromJsonString(
-    Schema.Struct({
-      hosts: Schema.Record(
-        Schema.String,
-        Schema.Array(
-          Schema.Struct({
-            active: Schema.Boolean,
-            state: Schema.String,
-            login: Schema.String,
-          }),
-        ),
-      ),
-    }),
-  ),
-);
 
 export function createGitHubHost(cli: GitHubCli): GitHost {
   return {
