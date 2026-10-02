@@ -1,5 +1,6 @@
 import type { CommitInspection } from "#contracts/commit-inspection/commit-inspection.contract.ts";
 import type { DesktopUpdates } from "#contracts/desktop-updates/desktop-updates.contract.ts";
+import type { PullRequest } from "#contracts/pull-requests/pull-requests.contract.ts";
 import type { RepositoryCatalogEntry } from "#contracts/repository-catalog/repository-catalog.contract.ts";
 import type {
   ChangedFile,
@@ -229,6 +230,19 @@ export function fetchStatus(
     defaultIntervalSeconds: 300,
     setting: { _tag: "Inherit" },
     ...status,
+  };
+}
+
+export function pullRequest(
+  number: number,
+  pullRequest: Partial<PullRequest> = {},
+): PullRequest {
+  return {
+    number,
+    url: `https://github.com/octo/rebase/pull/${number}`,
+    title: `Pull request ${number}`,
+    state: "Open",
+    ...pullRequest,
   };
 }
 

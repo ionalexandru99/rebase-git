@@ -14,6 +14,7 @@ export interface Action<Id extends string = string> {
   readonly enabled: boolean;
   readonly reason?: string;
   readonly detail?: string;
+  readonly icon?: ReactNode;
   readonly keys?: readonly string[];
   readonly group?: "operation" | "edit" | "delete";
   readonly onHighlight?: (highlighted: boolean) => void;
@@ -37,7 +38,10 @@ export function ActionMenuItems({
       ? (action.detail ?? keyLabel(action.keys?.[0]))
       : action.reason;
     const label = (
-      <span className="min-w-0 flex-1 truncate">{action.label}</span>
+      <>
+        {action.icon}
+        <span className="min-w-0 flex-1 truncate">{action.label}</span>
+      </>
     );
     const hinted =
       hint === undefined ? null : (

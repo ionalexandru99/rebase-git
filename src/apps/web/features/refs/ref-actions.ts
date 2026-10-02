@@ -60,6 +60,9 @@ export type RefAction = Action<
   | ResetActionId
   | "pull"
   | "showReflog"
+  | "pullRequests"
+  | "openPullRequest"
+  | `openPullRequest:${number}`
   | "newBranch"
   | "rename"
   | "delete"
@@ -87,6 +90,9 @@ export interface RefActionHandlers {
     | ((target: RepositoryRefTarget) => RefAction | undefined)
     | undefined;
   readonly showReflog?: ((branch: string) => void) | undefined;
+  readonly pullRequests?:
+    | ((target: RepositoryRefTarget) => RefAction | undefined)
+    | undefined;
   readonly pull:
     | { readonly pulling: boolean; readonly run: (branch: string) => void }
     | undefined;
@@ -113,6 +119,7 @@ export function refActions(
     pull,
     pushTags,
     showReflog,
+    pullRequests,
     editing,
   }: RefActionHandlers,
 ): readonly RefAction[] {
@@ -122,6 +129,7 @@ export function refActions(
   const mergeAction = merge?.(target);
   const rebaseAction = rebase?.(target);
   const resetAction = reset?.(target);
+  const pullRequestAction = pullRequests?.(target);
   const remove = (
     fields: Omit<ActionFields, "group" | "run">,
     deletion: RefDeletion | undefined,
@@ -180,6 +188,7 @@ export function refActions(
             run: () => showReflog(target.name),
           }),
         ]),
+    ...(pullRequestAction === undefined ? [] : [pullRequestAction]),
     ...[mergeAction, rebaseAction, resetAction].filter(
       (operation) => operation !== undefined,
     ),

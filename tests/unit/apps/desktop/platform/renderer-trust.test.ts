@@ -1,6 +1,9 @@
 import type { IpcMainInvokeEvent } from "electron";
 import { describe, expect, it, vi } from "vite-plus/test";
-import { createTrustedIpcHandler } from "#desktop/platform/renderer-trust.ts";
+import {
+  createTrustedIpcHandler,
+  isExternalGitHubLink,
+} from "#desktop/platform/renderer-trust.ts";
 
 const { fromWebContents } = vi.hoisted(() => ({ fromWebContents: vi.fn() }));
 
@@ -35,6 +38,21 @@ describe("trusted IPC handler", () => {
     expect(() => handler(invokeEvent("https://evil.example/"), "x")).toThrow(
       "main Rebase window",
     );
+  });
+});
+
+describe("external links", () => {
+  it("opens only https GitHub links in the system browser", () => {
+    expect(isExternalGitHubLink("https://github.com/octo/rebase/pull/7")).toBe(
+      true,
+    );
+    expect(isExternalGitHubLink("http://github.com/octo/rebase/pull/7")).toBe(
+      false,
+    );
+    expect(isExternalGitHubLink("https://github.com.evil.example/")).toBe(
+      false,
+    );
+    expect(isExternalGitHubLink("file:///etc/passwd")).toBe(false);
   });
 });
 

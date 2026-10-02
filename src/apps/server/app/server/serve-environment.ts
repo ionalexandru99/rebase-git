@@ -17,6 +17,10 @@ import {
 } from "#server/features/environment-authorization/environment-authorization.ts";
 import { environmentFilesystemFeature } from "#server/features/environment-filesystem/environment-filesystem.ts";
 import {
+  createGitHubCli,
+  pullRequestsFeature,
+} from "#server/features/pull-requests/pull-requests.ts";
+import {
   createRepositoryCatalog,
   repositoryCatalogFeature,
 } from "#server/features/repository-catalog/repository-catalog.ts";
@@ -111,6 +115,7 @@ export function acquireEnvironment(home: string, git: GitCommandRunner) {
       coordination: createRepositoryCoordination(git),
       events: createEnvironmentEventPublisher(),
       git,
+      github: createGitHubCli(),
       paths,
       watcher,
     };
@@ -129,6 +134,7 @@ export function environmentFeatures(dependencies: EnvironmentDependencies) {
       repositoryHistoryFeature(dependencies),
       repositoryOperationsFeature(dependencies),
       yield* repositoryPullFeature(dependencies),
+      pullRequestsFeature(dependencies),
       repositoryPushFeature(dependencies),
       repositoryReflogFeature(dependencies),
       yield* repositoryRefsFeature(dependencies),

@@ -11,6 +11,7 @@ import {
   IconTag,
 } from "@tabler/icons-react";
 import { type CSSProperties, useRef } from "react";
+import type { PullRequest } from "#contracts/pull-requests/pull-requests.contract.ts";
 import type { BranchUpstream } from "#contracts/repository-refs/repository-refs.contract.ts";
 import { ActionMenuItems, runAction } from "#web/components/ui/action-menu.tsx";
 import {
@@ -26,6 +27,11 @@ import {
   type TagSelectionMode,
   tagsSectionId,
 } from "#web/features/branches-sidebar/branches-sidebar-state.ts";
+import {
+  describePullRequest,
+  PullRequestChecksIcon,
+  PullRequestStateIcon,
+} from "#web/features/pull-requests/pull-requests.tsx";
 import type { RefAction } from "#web/features/refs/ref-actions.ts";
 
 export function rowElementId(rowId: string): string {
@@ -98,6 +104,7 @@ export function RefRow({
   selected,
   onActivate,
   onToggleHistory,
+  pullRequest,
   row,
   selectedInHistory,
   style,
@@ -107,6 +114,7 @@ export function RefRow({
   readonly selected: boolean;
   readonly onActivate: (mode: TagSelectionMode) => void;
   readonly onToggleHistory: () => void;
+  readonly pullRequest: PullRequest | undefined;
   readonly row: BranchesSidebarRefRow;
   readonly selectedInHistory: boolean;
   readonly style: CSSProperties;
@@ -129,7 +137,7 @@ export function RefRow({
               aria-level={row.level}
               aria-posinset={row.position}
               aria-setsize={row.setSize}
-              aria-label={refRowLabel(row)}
+              aria-label={refRowLabel(row, pullRequest)}
               aria-current={row.current ? "true" : undefined}
               aria-selected={active || selected}
               className="relative flex h-full min-w-0 flex-1 items-center gap-2 rounded-md pr-8 text-left outline-none"
@@ -152,10 +160,16 @@ export function RefRow({
               tabIndex={-1}
               type="button"
             >
-              <RefIcon row={row} />
+              <RefIcon pullRequest={pullRequest} row={row} />
               <span className="min-w-0 truncate">{row.label}</span>
               {row.upstream === undefined ? null : (
                 <UpstreamIndicator upstream={row.upstream} />
+              )}
+              {pullRequest === undefined ? null : (
+                <PullRequestChecksIcon
+                  className="ml-auto"
+                  pullRequest={pullRequest}
+                />
               )}
               {row.checkout?.kind !== "worktree" ? null : (
                 <svg
@@ -244,7 +258,13 @@ function HistorySelectionButton({
   );
 }
 
-function RefIcon({ row }: { readonly row: BranchesSidebarRefRow }) {
+function RefIcon({
+  pullRequest,
+  row,
+}: {
+  readonly pullRequest: PullRequest | undefined;
+  readonly row: BranchesSidebarRefRow;
+}) {
   if (row.current)
     return (
       <span
@@ -254,6 +274,8 @@ function RefIcon({ row }: { readonly row: BranchesSidebarRefRow }) {
         <span className="size-1.5 rounded-full bg-primary" />
       </span>
     );
+  if (pullRequest !== undefined)
+    return <PullRequestStateIcon pullRequest={pullRequest} />;
   const Icon = row.target._tag === "Tag" ? IconTag : IconGitBranch;
   return (
     <Icon
@@ -263,11 +285,15 @@ function RefIcon({ row }: { readonly row: BranchesSidebarRefRow }) {
   );
 }
 
-function refRowLabel(row: BranchesSidebarRefRow): string {
+function refRowLabel(
+  row: BranchesSidebarRefRow,
+  pullRequest: PullRequest | undefined,
+): string {
   return [
     row.name,
     ...(row.current ? ["current branch"] : []),
     ...(row.checkout?.kind === "worktree" ? ["linked worktree"] : []),
+    ...(pullRequest === undefined ? [] : [describePullRequest(pullRequest)]),
   ].join(", ");
 }
 
