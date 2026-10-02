@@ -3,7 +3,7 @@ import { realpath } from "node:fs";
 import { stat } from "node:fs/promises";
 import { basename, isAbsolute } from "node:path";
 import { promisify } from "node:util";
-import { asc, countDistinct, eq } from "drizzle-orm";
+import { asc, countDistinct, eq, sql } from "drizzle-orm";
 import { Effect } from "effect";
 import { repositoryRejected } from "#contracts/git/git-failures.contract.ts";
 import {
@@ -162,7 +162,7 @@ function rememberRepository(
               .select({
                 color: repositoryCatalogTable.color,
                 repositories: countDistinct(
-                  repositoryCatalogTable.logicalRepositoryId,
+                  sql`coalesce(${repositoryCatalogTable.logicalRepositoryId}, ${repositoryCatalogTable.id})`,
                 ),
               })
               .from(repositoryCatalogTable)
@@ -182,6 +182,7 @@ function rememberRepository(
           })
           .onConflictDoUpdate({
             set: {
+              color,
               gitCommonDirectory: repository.gitCommonDirectory,
               lastOpenedAt: openedAt,
               logicalRepositoryId,
