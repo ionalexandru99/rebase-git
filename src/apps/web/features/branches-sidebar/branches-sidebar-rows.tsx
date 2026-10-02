@@ -8,6 +8,7 @@ import {
   IconFolder,
   IconFolderOpen,
   IconGitBranch,
+  IconStack2,
   IconTag,
 } from "@tabler/icons-react";
 import { type CSSProperties, useRef } from "react";
@@ -24,6 +25,7 @@ import {
   type BranchesSidebarRefRow,
   type BranchesSidebarSectionRow,
   localBranchesSectionId,
+  stashesSectionId,
   type TagSelectionMode,
   tagsSectionId,
 } from "#web/features/branches-sidebar/branches-sidebar-state.ts";
@@ -60,7 +62,9 @@ export function SectionRow({
       ? IconGitBranch
       : row.sectionId === tagsSectionId
         ? IconTag
-        : IconCloud;
+        : row.sectionId === stashesSectionId
+          ? IconStack2
+          : IconCloud;
   return (
     <button
       aria-expanded={row.expanded}

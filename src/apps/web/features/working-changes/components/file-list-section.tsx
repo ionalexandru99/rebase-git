@@ -4,7 +4,16 @@ import {
   IconFolder,
 } from "@tabler/icons-react";
 import { type ReactNode, useState } from "react";
+import {
+  type Action,
+  ActionMenuItems,
+} from "#web/components/ui/action-menu.tsx";
 import { Button } from "#web/components/ui/button.tsx";
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuTrigger,
+} from "#web/components/ui/context-menu.tsx";
 import type { ChangeTreeRow } from "#web/features/file-diff/file-tree.ts";
 import { useFileRows } from "#web/features/file-diff/hooks/use-file-rows.ts";
 import { ChangeFileIcon } from "#web/features/working-changes/components/change-file-icon.tsx";
@@ -28,6 +37,7 @@ export function FileListSection<File extends { readonly path: string }>({
   notice,
   footer,
   chosen,
+  menu,
   children,
 }: {
   readonly name: string;
@@ -40,6 +50,7 @@ export function FileListSection<File extends { readonly path: string }>({
   readonly notice?: ReactNode;
   readonly footer?: (open: boolean) => ReactNode;
   readonly chosen: (row: ChangeTreeRow<File>) => boolean;
+  readonly menu?: (row: ChangeTreeRow<File>) => readonly Action[];
   readonly children: (
     row: ChangeTreeRow<File>,
     context: FileRowContext<File>,
@@ -79,7 +90,7 @@ export function FileListSection<File extends { readonly path: string }>({
           {virtualizer.getVirtualItems().map((item) => {
             const row = rows[item.index];
             if (!row) return null;
-            return (
+            const element = (
               <div
                 key={row.key}
                 className={cn(
@@ -100,6 +111,16 @@ export function FileListSection<File extends { readonly path: string }>({
                   toggle,
                 })}
               </div>
+            );
+            return menu === undefined ? (
+              element
+            ) : (
+              <ContextMenu key={row.key}>
+                <ContextMenuTrigger render={element} />
+                <ContextMenuContent className="w-max min-w-48 max-w-md">
+                  <ActionMenuItems actions={menu(row)} />
+                </ContextMenuContent>
+              </ContextMenu>
             );
           })}
         </div>

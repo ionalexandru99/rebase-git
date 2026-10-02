@@ -59,7 +59,9 @@ describe("branch prefix tree", () => {
       },
     );
     expect(
-      rows.filter((row) => row.kind !== "section").map((row) => row.label),
+      rows
+        .filter((row) => row.kind === "ref" || row.kind === "folder")
+        .map((row) => row.label),
     ).toEqual([
       "alpha",
       "nested",

@@ -129,6 +129,17 @@ function Workspace({
     },
     [panel.execute],
   );
+  const openStash = useCallback(
+    (oid: string) => {
+      panel.store.dispatch({
+        type: "input",
+        kind: "stash",
+        input: { _tag: "Stash", oid },
+      });
+      panel.store.dispatch({ type: "open", kind: "stash" });
+    },
+    [panel.store],
+  );
   const closeRebasePlan = useCallback(
     () => panel.execute({ type: "close", kind: "rebase" }),
     [panel.execute],
@@ -158,6 +169,7 @@ function Workspace({
                     reset={reset}
                     onBranchRenamed={historyScope.renameBranch}
                     onShowReflog={showReflog}
+                    onOpenStash={openStash}
                     onToggleHistoryRef={historyScope.toggleRef}
                     selectedHistoryRefKeys={
                       resolved?.selectedRefKeys ?? noRefKeys

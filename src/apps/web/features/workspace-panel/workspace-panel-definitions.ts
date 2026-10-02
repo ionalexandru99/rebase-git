@@ -3,11 +3,13 @@ import {
   IconGitCommit,
   IconHistory,
   IconListDetails,
+  IconStack2,
 } from "@tabler/icons-react";
 import { lazy } from "react";
 import { isObjectId } from "#contracts/git/git-values.contract.ts";
 import { isReflogRef } from "#contracts/repository-reflog/repository-reflog.contract.ts";
 import { isRebasePlanTarget } from "#web/features/rebase/rebase-plan.ts";
+import { isStashInput } from "#web/features/stashes/stashes.ts";
 import type { WorkspacePanelDefinition } from "#web/features/workspace-panel/workspace-panel-model.ts";
 
 export const workingChangesPanel = {
@@ -59,11 +61,24 @@ const commitInspectionPanel = {
   launchable: false,
 } satisfies WorkspacePanelDefinition;
 
+const stashPanel = {
+  acceptsInput: isStashInput,
+  Content: lazy(() =>
+    import("#web/features/stashes/stash-panel.tsx").then((module) => ({
+      default: module.StashPanel,
+    })),
+  ),
+  label: "Stash",
+  icon: IconStack2,
+  launchable: false,
+} satisfies WorkspacePanelDefinition;
+
 const definitions = {
   commit: commitInspectionPanel,
   changes: workingChangesPanel,
   reflog: reflogPanel,
   rebase: rebasePanel,
+  stash: stashPanel,
 } satisfies Record<string, WorkspacePanelDefinition>;
 
 export type WorkspacePanelKind = keyof typeof definitions;

@@ -26,6 +26,7 @@ import {
   SectionRow,
 } from "#web/features/branches-sidebar/branches-sidebar-rows.tsx";
 import {
+  type BranchesSidebarExpandableRow,
   type BranchesSidebarRefRow,
   type BranchesSidebarRow,
   type BranchesSidebarScope,
@@ -39,6 +40,7 @@ import {
   refSectionId,
   scopeShowing,
   selectTagRows,
+  stashesSectionId,
   toggleSection,
 } from "#web/features/branches-sidebar/branches-sidebar-state.ts";
 import { SidebarStatus } from "#web/features/branches-sidebar/sidebar-status.tsx";
@@ -65,6 +67,7 @@ import {
 } from "#web/features/refs/ref-kinds.ts";
 import { RefEditField } from "#web/features/refs/ref-name-field.tsx";
 import {
+  activeHead,
   useRefActivation,
   useScopedRepositoryRefs,
 } from "#web/features/refs/repository-refs.ts";
@@ -72,6 +75,16 @@ import { TagDetails } from "#web/features/refs/tag-details.tsx";
 import { useTagPush } from "#web/features/refs/tag-push.tsx";
 import { usePull } from "#web/features/remote-sync/use-pull.ts";
 import type { ResetActions } from "#web/features/reset/reset-actions.tsx";
+import {
+  StashDropConfirmation,
+  StashNameField,
+  StashRow,
+} from "#web/features/stashes/stash-sidebar.tsx";
+import {
+  useStashCommands,
+  useStashDraft,
+  useStashes,
+} from "#web/features/stashes/stashes.ts";
 import { useRepositoryScope } from "#web/platform/query/repository-scope.tsx";
 
 const overscanRows = 12;
@@ -86,6 +99,7 @@ export function BranchesSidebar({
   onBranchRenamed = () => undefined,
   onToggleHistoryRef = () => undefined,
   onShowReflog,
+  onOpenStash = () => undefined,
   selectedHistoryRefKeys = noSelectedRefs,
 }: {
   readonly merge?: MergeActions | undefined;
@@ -98,6 +112,7 @@ export function BranchesSidebar({
   }) => void;
   readonly onToggleHistoryRef?: (target: RepositoryRefTarget) => void;
   readonly onShowReflog?: (branch: string) => void;
+  readonly onOpenStash?: (oid: string) => void;
   readonly selectedHistoryRefKeys?: ReadonlySet<string>;
 }): JSX.Element {
   const activeWorktreePath = useRepositoryScope()?.worktreePath ?? "";
@@ -105,6 +120,9 @@ export function BranchesSidebar({
   const activation = useRefActivation(repositoryRefs);
   const pull = usePull();
   const tagPush = useTagPush();
+  const stashes = useStashes();
+  const stashCommands = useStashCommands();
+  const stashDraft = useStashDraft();
   const [selectedTags, setSelectedTags] = useState(noSelectedTags);
   const [query, setQuery] = useState("");
   const filterQuery = useDeferredValue(query);
@@ -138,6 +156,7 @@ export function BranchesSidebar({
             filterQuery,
             scope,
             { view, folders: expandedFolders },
+            { list: stashes, drafting: stashDraft.selection !== undefined },
           ),
     [
       activeWorktreePath,
@@ -146,6 +165,8 @@ export function BranchesSidebar({
       filterQuery,
       refs,
       scope,
+      stashDraft.selection,
+      stashes,
       view,
     ],
   );
@@ -177,13 +198,23 @@ export function BranchesSidebar({
     if (draftSectionId !== undefined)
       setScope((current) => scopeShowing(current, draftSectionId));
   }, [draftSectionId]);
+  useEffect(() => {
+    if (stashDraft.selection !== undefined)
+      setScope((current) => scopeShowing(current, stashesSectionId));
+  }, [stashDraft.selection]);
   const detailsRowId = rows.find(
     (row) =>
       row.id === activeRowId && row.kind === "ref" && row.target._tag === "Tag",
   )?.id;
   const items = useMemo(
-    () => branchesSidebarItems(rows, draftSectionId, detailsRowId),
-    [rows, draftSectionId, detailsRowId],
+    () =>
+      branchesSidebarItems(
+        rows,
+        draftSectionId,
+        detailsRowId,
+        stashDraft.selection !== undefined,
+      ),
+    [rows, draftSectionId, detailsRowId, stashDraft.selection],
   );
   const getItemKey = useCallback(
     (index: number) => items[index]?.id ?? index,
@@ -200,7 +231,9 @@ export function BranchesSidebar({
     if (items.length > 0) virtualizer.measure();
   }, [items, virtualizer]);
 
-  const draftIndex = items.findIndex((item) => item.kind === "draft");
+  const draftIndex = items.findIndex(
+    (item) => item.kind === "draft" || item.kind === "stash-draft",
+  );
   useEffect(() => {
     if (draftIndex >= 0) virtualizer.scrollToIndex(draftIndex);
   }, [draftIndex, virtualizer]);
@@ -297,7 +330,7 @@ export function BranchesSidebar({
   };
 
   const setRowExpanded = (
-    row: Exclude<BranchesSidebarRow, { kind: "ref" }>,
+    row: BranchesSidebarExpandableRow,
     expanded: boolean,
   ) => {
     if (row.kind === "folder") {
@@ -313,6 +346,7 @@ export function BranchesSidebar({
 
   const activateRow = (row: BranchesSidebarRow) => {
     if (row.kind === "ref") onSelectRef(row.target);
+    else if (row.kind === "stash") onOpenStash(row.stash.oid);
     else setRowExpanded(row, !row.expanded);
   };
 
@@ -332,11 +366,18 @@ export function BranchesSidebar({
   const handleTreeKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     const activeRow = rows.find((row) => row.id === activeRowId);
     if (
-      activeRow?.kind === "ref" &&
+      (activeRow?.kind === "ref" || activeRow?.kind === "stash") &&
       (event.key === "ContextMenu" || (event.key === "F10" && event.shiftKey))
     ) {
       event.preventDefault();
       openRowMenu(activeRow.id);
+      return;
+    }
+    if (
+      activeRow?.kind === "stash" &&
+      runAction(keyAction(stashCommands.actionsFor(activeRow.stash), event.key))
+    ) {
+      event.preventDefault();
       return;
     }
     if (
@@ -456,6 +497,31 @@ export function BranchesSidebar({
             const position = {
               transform: `translateY(${virtualItem.start}px)`,
             };
+            if (item.kind === "stash-draft")
+              return stashDraft.selection === undefined ? null : (
+                <div
+                  className="absolute top-0 left-0 w-full"
+                  data-index={virtualItem.index}
+                  key={item.id}
+                  ref={virtualizer.measureElement}
+                  style={position}
+                >
+                  <StashNameField
+                    commands={stashCommands}
+                    initialName={`WIP on ${
+                      (refs === undefined
+                        ? undefined
+                        : activeHead(refs, activeWorktreePath)?.branch) ??
+                      "(no branch)"
+                    }`}
+                    onDone={() => {
+                      stashDraft.cancel();
+                      focusTree();
+                    }}
+                    selection={stashDraft.selection}
+                  />
+                </div>
+              );
             const editsRow =
               item.kind === "draft" ||
               (edit?.kind === "rename" && edit.rowId === item.id);
@@ -492,6 +558,21 @@ export function BranchesSidebar({
             if (item.kind !== "row") return null;
             const row = item.row;
             const style = { ...position, height: virtualItem.size };
+            if (row.kind === "stash")
+              return (
+                <StashRow
+                  actions={stashCommands.actionsFor(row.stash)}
+                  active={row.id === activeRowId}
+                  elementId={rowElementId(row.id)}
+                  key={row.id}
+                  onActivate={() => setActiveRowId(row.id)}
+                  onOpen={() => onOpenStash(row.stash.oid)}
+                  position={row.position}
+                  setSize={row.setSize}
+                  stash={row.stash}
+                  style={style}
+                />
+              );
             return row.kind !== "ref" ? (
               <SectionRow
                 active={row.id === activeRowId}
@@ -538,6 +619,7 @@ export function BranchesSidebar({
         />
       </div>
       <RefEditingStatus editing={editing} />
+      <StashDropConfirmation commands={stashCommands} />
     </nav>
   );
 }

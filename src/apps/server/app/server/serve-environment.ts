@@ -29,6 +29,7 @@ import { repositoryPullFeature } from "#server/features/repository-pull/reposito
 import { repositoryPushFeature } from "#server/features/repository-push/repository-push.ts";
 import { repositoryReflogFeature } from "#server/features/repository-reflog/repository-reflog.ts";
 import { repositoryRefsFeature } from "#server/features/repository-refs/repository-refs.feature.ts";
+import { repositoryStashesFeature } from "#server/features/repository-stashes/repository-stashes.ts";
 import {
   createAzureDevOpsClient,
   createAzureDevOpsHost,
@@ -162,6 +163,7 @@ export function environmentFeatures(dependencies: EnvironmentDependencies) {
       repositoryPushFeature(dependencies),
       repositoryReflogFeature(dependencies),
       yield* repositoryRefsFeature(dependencies),
+      repositoryStashesFeature(dependencies),
       sourceControlFeature({ events: dependencies.events, sourceControl }),
     ]);
   });

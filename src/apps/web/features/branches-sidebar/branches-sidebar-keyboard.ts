@@ -1,9 +1,8 @@
 import {
   type BranchesSidebarRow,
+  type BranchesSidebarExpandableRow as ExpandableRow,
   stepRow,
 } from "#web/features/branches-sidebar/branches-sidebar-state.ts";
-
-type ExpandableRow = Exclude<BranchesSidebarRow, { kind: "ref" }>;
 
 export function treeKeyAction(
   key: string,
@@ -36,7 +35,12 @@ export function treeKeyAction(
       actions.setActive(rows.at(-1)?.id);
       return true;
     case "ArrowRight": {
-      if (activeRow === undefined || activeRow.kind === "ref") return false;
+      if (
+        activeRow === undefined ||
+        activeRow.kind === "ref" ||
+        activeRow.kind === "stash"
+      )
+        return false;
       if (!activeRow.expanded) actions.expand(activeRow);
       else {
         const child =
@@ -52,7 +56,11 @@ export function treeKeyAction(
     }
     case "ArrowLeft":
       if (activeRow === undefined) return false;
-      if (activeRow.kind !== "ref" && activeRow.expanded)
+      if (
+        activeRow.kind !== "ref" &&
+        activeRow.kind !== "stash" &&
+        activeRow.expanded
+      )
         actions.collapse(activeRow);
       else if (activeRow.kind !== "section")
         actions.setActive(activeRow.parentId);

@@ -4,6 +4,7 @@ import type {
   RepositoryRefs,
   RepositoryRefTarget,
 } from "#contracts/repository-refs/repository-refs.contract.ts";
+import type { RepositoryStash } from "#contracts/repository-stashes/repository-stashes.contract.ts";
 import {
   type BranchesSidebarFolderRow,
   buildBranchTree,
@@ -14,8 +15,14 @@ import { activeHead } from "#web/features/refs/repository-refs.ts";
 
 export const localBranchesSectionId = "branches";
 export const tagsSectionId = "tags";
+export const stashesSectionId = "stashes";
 
-export type BranchesSidebarScope = "all" | "local" | "remote" | "tags";
+export type BranchesSidebarScope =
+  | "all"
+  | "local"
+  | "remote"
+  | "tags"
+  | "stashes";
 export type BranchesSidebarView = "linear" | "tree";
 
 export interface BranchesSidebarTreeOptions {
@@ -49,10 +56,29 @@ export interface BranchesSidebarRefRow extends RowHierarchy {
   };
 }
 
+export interface BranchesSidebarStashRow extends RowHierarchy {
+  readonly id: string;
+  readonly kind: "stash";
+  readonly parentId: string;
+  readonly sectionId: string;
+  readonly stash: RepositoryStash;
+}
+
+export interface BranchesSidebarStashes {
+  readonly list: readonly RepositoryStash[];
+  readonly drafting: boolean;
+}
+
 export type BranchesSidebarRow =
   | BranchesSidebarRefRow
   | BranchesSidebarFolderRow
-  | BranchesSidebarSectionRow;
+  | BranchesSidebarSectionRow
+  | BranchesSidebarStashRow;
+
+export type BranchesSidebarExpandableRow = Exclude<
+  BranchesSidebarRow,
+  { kind: "ref" | "stash" }
+>;
 
 export type BranchesSidebarItem =
   | {
@@ -61,6 +87,7 @@ export type BranchesSidebarItem =
       readonly row: BranchesSidebarRow;
     }
   | { readonly id: "ref-draft"; readonly kind: "draft" }
+  | { readonly id: "stash-draft"; readonly kind: "stash-draft" }
   | {
       readonly id: "tag-details";
       readonly kind: "details";
@@ -76,7 +103,10 @@ const kindSections: Record<RefKind, string> = {
 
 export const defaultExpandedSections: ReadonlySet<string> = new Set([
   localBranchesSectionId,
+  stashesSectionId,
 ]);
+
+const noStashes: BranchesSidebarStashes = { list: [], drafting: false };
 
 export function remoteSectionId(remote: string): string {
   return `remote:${remote}`;
@@ -89,6 +119,7 @@ export function buildBranchesSidebarRows(
   query: string,
   scope: BranchesSidebarScope = "all",
   tree?: BranchesSidebarTreeOptions,
+  stashes: BranchesSidebarStashes = noStashes,
 ): readonly BranchesSidebarRow[] {
   const matches = createMatcher(query);
   const filtering = query.trim().length > 0 || scope !== "all";
@@ -153,20 +184,33 @@ export function buildBranchesSidebarRows(
       title: "Tags",
       truncated: refs.truncated.tags,
     },
+    {
+      refs: [],
+      stashes: stashes.list.filter((stash) => matches(stash.name)),
+      sectionId: stashesSectionId,
+      scope: "stashes",
+      title: "Stashes",
+      truncated: false,
+    },
   ];
 
   const visibleSections = sections
     .filter(sectionMatchesScope(scope))
-    .filter((section) => !filtering || section.refs.length > 0)
     .filter(
       (section) =>
-        section.scope !== "tags" ||
-        section.refs.length > 0 ||
-        section.truncated,
+        (section.scope === "stashes" && stashes.drafting) ||
+        ((!filtering || sectionSize(section) > 0) &&
+          (section.scope !== "tags" ||
+            section.refs.length > 0 ||
+            section.truncated) &&
+          (section.scope !== "stashes" || sectionSize(section) > 0)),
     );
   let previousExpanded = false;
-  return visibleSections.flatMap((section, index) => {
-    const expanded = filtering || expandedSections.has(section.sectionId);
+  return visibleSections.flatMap((section, index): BranchesSidebarRow[] => {
+    const expanded =
+      filtering ||
+      expandedSections.has(section.sectionId) ||
+      (section.scope === "stashes" && stashes.drafting);
     const header: BranchesSidebarSectionRow = {
       level: 1,
       position: index + 1,
@@ -181,6 +225,22 @@ export function buildBranchesSidebarRows(
     };
     previousExpanded = expanded;
     if (!expanded) return [header];
+    if (section.stashes !== undefined)
+      return [
+        header,
+        ...section.stashes.map(
+          (stash, position): BranchesSidebarStashRow => ({
+            id: `stash:${stash.oid}`,
+            kind: "stash",
+            level: 2,
+            parentId: header.id,
+            position: position + 1,
+            sectionId: section.sectionId,
+            setSize: section.stashes?.length ?? 0,
+            stash,
+          }),
+        ),
+      ];
     const refRows = section.refs.map(
       (ref, position): BranchesSidebarRefRow => ({
         ...ref,
@@ -211,6 +271,7 @@ export function branchesSidebarItems(
   rows: readonly BranchesSidebarRow[],
   draftSectionId: string | undefined,
   detailsRowId?: string,
+  stashDraft = false,
 ): readonly BranchesSidebarItem[] {
   const items: BranchesSidebarItem[] = rows.flatMap(
     (row): BranchesSidebarItem[] =>
@@ -226,11 +287,21 @@ export function branchesSidebarItems(
       id: "ref-draft",
       kind: "draft",
     });
+  if (stashDraft) {
+    const header = items.findIndex(
+      (item) => item.id === `section:${stashesSectionId}`,
+    );
+    items.splice(header < 0 ? items.length : header + 1, 0, {
+      id: "stash-draft",
+      kind: "stash-draft",
+    });
+  }
   return items;
 }
 
 export function estimateItemHeight(item: BranchesSidebarItem | undefined) {
   if (item?.kind === "draft") return 40;
+  if (item?.kind === "stash-draft") return 52;
   if (item?.kind === "details") return 56;
   return item?.row.kind === "section" && item.row.separator ? 44 : 32;
 }
@@ -292,7 +363,9 @@ export function scopeShowing(
       ? "local"
       : sectionId === tagsSectionId
         ? "tags"
-        : "remote";
+        : sectionId === stashesSectionId
+          ? "stashes"
+          : "remote";
   return scope === "all" || scope === sectionScope ? scope : sectionScope;
 }
 
@@ -340,6 +413,10 @@ function draftPosition(rows: readonly BranchesSidebarRow[], sectionId: string) {
   return sectionId === localBranchesSectionId ? 0 : rows.length;
 }
 
+function sectionSize(section: SectionDraft) {
+  return section.refs.length + (section.stashes?.length ?? 0);
+}
+
 function createMatcher(query: string) {
   const normalized = query.trim().toLocaleLowerCase();
   return (name: string) =>
@@ -380,6 +457,7 @@ interface SectionDraft {
     | "position"
     | "setSize"
   >[];
+  readonly stashes?: readonly RepositoryStash[];
   readonly sectionId: string;
   readonly scope: Exclude<BranchesSidebarScope, "all">;
   readonly title: string;
