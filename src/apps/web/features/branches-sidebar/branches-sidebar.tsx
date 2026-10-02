@@ -1,4 +1,4 @@
-import { IconSearch } from "@tabler/icons-react";
+import { IconSearch, IconX } from "@tabler/icons-react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import {
   type JSX,
@@ -18,6 +18,7 @@ import {
   replaceRuns,
   runAction,
 } from "#web/components/ui/action-menu.tsx";
+import { Button } from "#web/components/ui/button.tsx";
 import { Input } from "#web/components/ui/input.tsx";
 import { treeKeyAction } from "#web/features/branches-sidebar/branches-sidebar-keyboard.ts";
 import {
@@ -116,6 +117,7 @@ export function BranchesSidebar({
   >(() => new Map());
   const [activeRowId, setActiveRowId] = useState<string>();
   const treeRef = useRef<HTMLDivElement>(null);
+  const filterRef = useRef<HTMLInputElement>(null);
   const refs = repositoryRefs.refs;
   const onSelectRef = activation.select;
   const folderRepositoryRef = useRef(refs?.repositoryId);
@@ -372,6 +374,11 @@ export function BranchesSidebar({
     if (handled) event.preventDefault();
   };
 
+  const clearFilter = () => {
+    setQuery("");
+    filterRef.current?.focus();
+  };
+
   const handleFilterKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
     if (event.key === "ArrowDown") {
       event.preventDefault();
@@ -391,7 +398,7 @@ export function BranchesSidebar({
     }
     if (event.key === "Escape") {
       event.preventDefault();
-      if (query.length > 0) setQuery("");
+      if (query.length > 0) clearFilter();
       else treeRef.current?.focus();
     }
   };
@@ -414,12 +421,25 @@ export function BranchesSidebar({
         />
         <Input
           aria-label="Filter branches"
-          className="pl-9"
+          className="pr-9 pl-9"
           onChange={(event) => setQuery(event.target.value)}
           onKeyDown={handleFilterKeyDown}
           placeholder="Filter branches"
+          ref={filterRef}
           value={query}
         />
+        {query === "" ? null : (
+          <Button
+            aria-label="Clear filter"
+            className="absolute inset-y-0 right-1 my-auto text-muted-foreground"
+            onClick={clearFilter}
+            size="icon-xs"
+            type="button"
+            variant="ghost"
+          >
+            <IconX aria-hidden="true" />
+          </Button>
+        )}
       </div>
       <BranchesSidebarScopeFilter onChange={setScope} scope={scope} />
       <div

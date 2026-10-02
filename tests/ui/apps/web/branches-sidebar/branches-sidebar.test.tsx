@@ -285,6 +285,14 @@ describe("branches sidebar", () => {
 
     await userEvent.keyboard("{Escape}");
     await expect.element(filter).toHaveValue("");
+    const clear = screen.getByRole("button", { name: "Clear filter" });
+    await expect.element(clear).not.toBeInTheDocument();
+
+    await filter.fill("feat");
+    await clear.click();
+    await expect.element(filter).toHaveValue("");
+    await expect.element(filter).toHaveFocus();
+    await expect.element(clear).not.toBeInTheDocument();
 
     const tags = screen.getByRole("radio", { name: "Tags" });
     await screen
