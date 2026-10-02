@@ -35,6 +35,7 @@ export class HistoryGraph {
   private added: number[] = [];
   private reranked = false;
   private positions: Int32Array | undefined;
+  private newestOrder: Int32Array | undefined;
 
   static fromTopology(topology: StoredTopology) {
     const graph = new HistoryGraph();
@@ -92,9 +93,11 @@ export class HistoryGraph {
       if (this.ranks[known] !== rank) {
         this.ranks[known] = rank;
         this.reranked = true;
+        this.newestOrder = undefined;
       }
       return;
     }
+    this.newestOrder = undefined;
     const id = this.oids.length;
     this.ids.set(commit.oid, id);
     this.oids.push(commit.oid);
@@ -187,6 +190,14 @@ export class HistoryGraph {
       if (oids.length < rangeOids) oids.push(this.oid(id));
     }
     return { moving: oids, count, based };
+  }
+
+  newest(): Int32Array {
+    this.newestOrder ??= Int32Array.from(this.ordered()).sort(
+      (left, right) =>
+        (this.timestamps[right] ?? 0) - (this.timestamps[left] ?? 0),
+    );
+    return this.newestOrder;
   }
 
   order(reachable: Uint8Array, order: HistoryOrder): Int32Array {

@@ -192,7 +192,13 @@ export class HistoryReplica {
     const page =
       record === undefined
         ? { commits: [] }
-        : await searchHistory(record.id, this.refTargets, query, signal);
+        : await searchHistory(
+            record.id,
+            this.graph,
+            this.refTargets,
+            query,
+            signal,
+          );
     return {
       ...page,
       complete:
