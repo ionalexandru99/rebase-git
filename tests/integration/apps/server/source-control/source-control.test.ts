@@ -4,13 +4,11 @@ import { describe, expect, it } from "vite-plus/test";
 import { PullRequestsApi } from "#contracts/pull-requests/pull-requests.contract.ts";
 import { SourceControlApi } from "#contracts/source-control/source-control.contract.ts";
 import { createRepository, git } from "#tests-support/git.ts";
-import {
-  fakeAzureDevOps,
-  fakeBitbucket,
-  fakeForgejo,
-  fakeGitHub,
-  fakeGitLab,
-} from "#tests-support/git-hosts.ts";
+import { fakeAzureDevOps } from "#tests-support/git-hosts/azure-devops.ts";
+import { fakeBitbucket } from "#tests-support/git-hosts/bitbucket.ts";
+import { fakeForgejo } from "#tests-support/git-hosts/forgejo.ts";
+import { fakeGitHub } from "#tests-support/git-hosts/github.ts";
+import { fakeGitLab } from "#tests-support/git-hosts/gitlab.ts";
 import { openTestEnvironment } from "#tests-support/server.ts";
 
 describe("source control", () => {
@@ -153,18 +151,20 @@ async function fixture(
   const { github, requests } = fakeGitHub({ main: [{ number: 1 }] }, tool);
   const bitbucket = fakeBitbucket({}, bitbucketUser);
   const environment = await openTestEnvironment({
-    bitbucket: bitbucket.bitbucket,
-    github,
-    azureDevOps: fakeAzureDevOps({}).azureDevOps,
-    gitlab: fakeGitLab(null, {
-      accounts: { "gitlab.com": "tanuki", "git.example.com": "tanuki" },
-    }).gitlab,
-    forgejo: fakeForgejo(null, {
-      logins: [
-        { url: "https://codeberg.org", user: "forge" },
-        { url: "https://git.example.com", user: "forge" },
-      ],
-    }).forgejo,
+    gitHosts: {
+      bitbucket: bitbucket.bitbucket,
+      github,
+      azureDevOps: fakeAzureDevOps({}).azureDevOps,
+      gitlab: fakeGitLab(null, {
+        accounts: { "gitlab.com": "tanuki", "git.example.com": "tanuki" },
+      }).gitlab,
+      forgejo: fakeForgejo(null, {
+        logins: [
+          { url: "https://codeberg.org", user: "forge" },
+          { url: "https://git.example.com", user: "forge" },
+        ],
+      }).forgejo,
+    },
   });
   const repositoryPath = join(environment.home, "repository");
   await createRepository(repositoryPath);

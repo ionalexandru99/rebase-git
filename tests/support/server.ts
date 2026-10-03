@@ -31,11 +31,7 @@ import {
   serveEnvironment,
 } from "#server/app/server/serve-environment.ts";
 import type { EnvironmentAuthorization } from "#server/features/environment-authorization/environment-authorization.ts";
-import type { AzureDevOpsClient } from "#server/features/source-control/azure-devops-host.ts";
-import type { BitbucketClient } from "#server/features/source-control/bitbucket-host.ts";
-import type { TeaCli } from "#server/features/source-control/forgejo-host.ts";
-import type { GitHubCli } from "#server/features/source-control/github-host.ts";
-import type { GitLabCli } from "#server/features/source-control/gitlab-host.ts";
+import type { GitHostClients } from "#server/features/source-control/source-control.ts";
 import type { RepositoryCoordination } from "#server/repository/repository-coordination.ts";
 import { removeTemporaryDirectory } from "#tests-support/temporary-directory.ts";
 import {
@@ -74,11 +70,7 @@ interface EnvironmentOverrides {
     | ((events: EnvironmentEventPublisher) => EnvironmentEventPublisher)
     | undefined;
   readonly git?: ((git: GitCommandRunner) => GitCommandRunner) | undefined;
-  readonly github?: GitHubCli;
-  readonly azureDevOps?: AzureDevOpsClient;
-  readonly gitlab?: GitLabCli;
-  readonly forgejo?: TeaCli;
-  readonly bitbucket?: BitbucketClient;
+  readonly gitHosts?: Partial<GitHostClients>;
   readonly coordination?: (
     coordination: RepositoryCoordination,
   ) => RepositoryCoordination;
@@ -267,11 +259,7 @@ function acquireTestDependencies(overrides: EnvironmentOverrides) {
         overrides.coordination?.(environment.coordination) ??
         environment.coordination,
       events: overrides.events?.(environment.events) ?? environment.events,
-      github: overrides.github ?? environment.github,
-      azureDevOps: overrides.azureDevOps ?? environment.azureDevOps,
-      gitlab: overrides.gitlab ?? environment.gitlab,
-      forgejo: overrides.forgejo ?? environment.forgejo,
-      bitbucket: overrides.bitbucket ?? environment.bitbucket,
+      gitHosts: { ...environment.gitHosts, ...overrides.gitHosts },
       home,
     };
   });

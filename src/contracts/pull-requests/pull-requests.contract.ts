@@ -1,6 +1,7 @@
 import { Schema } from "effect";
 import { repositoryQuery } from "#contracts/environment-connection/environment-route.contract.ts";
 import { RefName, RepositoryId } from "#contracts/git/git-values.contract.ts";
+import type { GitHostKind } from "#contracts/source-control/source-control.contract.ts";
 
 export const PullRequest = Schema.Struct({
   kind: Schema.Literals(["PullRequest", "MergeRequest"]),
@@ -36,3 +37,22 @@ export const PullRequestsApi = {
     failure: PullRequestsUnavailable,
   }),
 };
+
+const pullRequestLinks: Record<GitHostKind, RegExp> = {
+  github: /^github\.com\/[^/]+\/[^/]+\/pull\/\d+$/,
+  gitlab: /^[^/]+\/.+\/-\/merge_requests\/\d+$/,
+  "azure-devops":
+    /^dev\.azure\.com\/[^/]+\/[^/]+\/_git\/[^/]+\/pullrequest\/\d+$/,
+  bitbucket: /^bitbucket\.org\/[^/]+\/[^/]+\/pull-requests\/\d+$/,
+  forgejo: /^[^/]+\/.+\/pulls\/\d+$/,
+};
+
+export function isPullRequestLink(url: string, kind: GitHostKind) {
+  const link = URL.parse(url);
+  return (
+    link?.protocol === "https:" &&
+    link.search === "" &&
+    link.hash === "" &&
+    pullRequestLinks[kind].test(`${link.host}${link.pathname}`)
+  );
+}
