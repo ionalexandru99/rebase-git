@@ -24,7 +24,12 @@ export type GitHostTool =
     }
   | { readonly _tag: "Token"; readonly saved: BitbucketToken | null };
 
-export type PullRequestsByHead = ReadonlyMap<string, readonly PullRequest[]>;
+export type HostedPullRequest = PullRequest & { readonly headCommit?: string };
+
+export type PullRequestsByHead = ReadonlyMap<
+  string,
+  readonly HostedPullRequest[]
+>;
 
 export interface HostedRepository {
   readonly id: string;
@@ -164,8 +169,13 @@ export function hostGet(
 export function pullRequest(
   fields: Omit<PullRequest, "checks">,
   checks: PullRequest["checks"],
-): PullRequest {
-  return checks === undefined ? fields : { ...fields, checks };
+  headCommit?: string | null,
+): HostedPullRequest {
+  return {
+    ...fields,
+    ...(checks === undefined ? {} : { checks }),
+    ...(headCommit === undefined || headCommit === null ? {} : { headCommit }),
+  };
 }
 
 export function eachHead(
@@ -173,7 +183,7 @@ export function eachHead(
   concurrency: number,
   read: (
     head: string,
-  ) => Effect.Effect<readonly PullRequest[], PullRequestsUnavailable>,
+  ) => Effect.Effect<readonly HostedPullRequest[], PullRequestsUnavailable>,
 ): Effect.Effect<PullRequestsByHead, PullRequestsUnavailable> {
   return Effect.forEach(
     heads,
@@ -188,7 +198,7 @@ export function inBatches(
   read: (
     batch: readonly string[],
   ) => Effect.Effect<
-    readonly (readonly PullRequest[])[],
+    readonly (readonly HostedPullRequest[])[],
     PullRequestsUnavailable
   >,
 ): Effect.Effect<PullRequestsByHead, PullRequestsUnavailable> {

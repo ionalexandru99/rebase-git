@@ -7,6 +7,7 @@ import { remoteLocation } from "#server/features/repository-refs/git/read-reposi
 import {
   type GitHost,
   type GitHostAccount,
+  type HostedPullRequest,
   hostCommandOutput,
   inBatches,
   pullRequest,
@@ -154,7 +155,7 @@ ${indexes.map((index) => `    b${index}: mergeRequests(sourceBranches: [$b${inde
   }
 }
 fragment mergeRequest on MergeRequest {
-  iid webUrl title state draft
+  iid webUrl title state draft diffHeadSha
   sourceProject { fullPath }
   headPipeline { status }
 }`;
@@ -166,6 +167,7 @@ const MergeRequestNode = Schema.Struct({
   title: Schema.String,
   state: Schema.Literals(["opened", "closed", "locked", "merged"]),
   draft: Schema.Boolean,
+  diffHeadSha: Schema.optionalKey(Schema.NullOr(Schema.String)),
   sourceProject: Schema.NullOr(Schema.Struct({ fullPath: Schema.String })),
   headPipeline: Schema.NullOr(Schema.Struct({ status: Schema.String })),
 });
@@ -189,7 +191,7 @@ const decodeResponse = (output: string) =>
 function mergeRequests(
   nodes: readonly MergeRequestNode[],
   project: GitLabProject,
-): readonly PullRequest[] {
+): readonly HostedPullRequest[] {
   return nodes
     .filter(
       (node) =>
@@ -214,6 +216,7 @@ function mergeRequests(
                   : "Open",
         },
         pipelineState(node.headPipeline?.status),
+        node.diffHeadSha,
       ),
     );
 }

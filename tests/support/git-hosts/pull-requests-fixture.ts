@@ -22,6 +22,7 @@ export async function pullRequestsFixture(
   return {
     repositoryId,
     repositoryPath,
+    events: environment.events,
     routes: environment.routes,
     sourceControl: environment.routes(SourceControlApi),
     list: () => Effect.runPromise(service.list({ repositoryId })),

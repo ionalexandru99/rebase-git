@@ -52,7 +52,7 @@ export function listPullRequests(
   git: GitCommandRunner,
   sourceControl: SourceControl,
   directory: string,
-  wanted: (branch: string) => boolean = () => true,
+  wanted: (branch: TrackedBranch) => boolean = () => true,
 ) {
   return Effect.gen(function* () {
     const remotes = yield* runRepositoryGit(
@@ -70,10 +70,10 @@ export function listPullRequests(
     const { host, repository } = found;
     const urls = remoteUrls(remotes);
     const branches = (yield* readTrackedBranches(git, directory)).filter(
-      ({ branch, remote }) => {
-        const url = urls.get(remote);
+      (tracked) => {
+        const url = urls.get(tracked.remote);
         return (
-          wanted(branch) &&
+          wanted(tracked) &&
           url !== undefined &&
           host.repositoryId(url) === repository.id
         );
@@ -105,6 +105,12 @@ function openFirst(pullRequest: PullRequest) {
   return pullRequest.state === "Open" || pullRequest.state === "Draft" ? 0 : 1;
 }
 
+export interface TrackedBranch {
+  readonly branch: string;
+  readonly remote: string;
+  readonly head: string;
+}
+
 function readTrackedBranches(git: GitCommandRunner, directory: string) {
   return runRepositoryGit(
     git,
@@ -117,7 +123,7 @@ function readTrackedBranches(git: GitCommandRunner, directory: string) {
     { maxOutputBytes: 16 * 1_048_576 },
   ).pipe(
     Effect.map((output) =>
-      output.split("\n").flatMap((line) => {
+      output.split("\n").flatMap((line): TrackedBranch[] => {
         const [ref = "", remote = "", head = ""] = line.split("\0");
         return ref.startsWith("refs/heads/") &&
           remote !== "" &&

@@ -7,6 +7,7 @@ import { remoteLocation } from "#server/features/repository-refs/git/read-reposi
 import {
   eachHead,
   type GitHost,
+  type HostedPullRequest,
   hostCommandOutput,
   hostGet,
   pullRequest,
@@ -246,6 +247,9 @@ const PullRequestNode = Schema.Struct({
   status: Schema.String,
   isDraft: Schema.optionalKey(Schema.Boolean),
   forkSource: Schema.optionalKey(Schema.Unknown),
+  lastMergeSourceCommit: Schema.optionalKey(
+    Schema.NullOr(Schema.Struct({ commitId: Schema.String })),
+  ),
   repository: Schema.Struct({
     project: Schema.Struct({ id: Schema.String }),
   }),
@@ -273,7 +277,7 @@ function azurePullRequest(
   repository: AzureRepository,
   node: PullRequestNode,
   checks: PullRequest["checks"],
-): PullRequest {
+): HostedPullRequest {
   return pullRequest(
     {
       kind: "PullRequest",
@@ -290,6 +294,7 @@ function azurePullRequest(
             : "Closed",
     },
     checks,
+    node.lastMergeSourceCommit?.commitId,
   );
 }
 

@@ -8,21 +8,50 @@ import { fakeGitHub } from "#tests-support/git-hosts/github.ts";
 import { pullRequestsFixture } from "#tests-support/git-hosts/pull-requests-fixture.ts";
 
 const remoteUrl = "git@github.com:Octo/rebase.git";
+
+type PullRequestNode = {
+  readonly number: number;
+  readonly state?: "MERGED";
+  readonly head?: string;
+};
 const day = expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/);
 
 describe("branch settling", () => {
-  it("settles branches whose pull request merged after a fetch, except the main checkout and branches kept active", async () => {
-    const { github, requests } = fakeGitHub({
-      "remote-topic": [{ number: 7, state: "MERGED" }],
-      main: [{ number: 1, state: "MERGED" }],
-      mirrored: [{ number: 3, state: "MERGED" }, { number: 4 }],
-      elsewhere: [{ number: 5, state: "MERGED" }],
-    });
+  it("settles branches whose merged pull request holds their tip after a fetch, except the main checkout, the remote default branch and branches kept active", async () => {
+    const byHead: Record<string, PullRequestNode[]> = {};
+    const { github, requests } = fakeGitHub(byHead);
     const f = await settlingFixture(github);
+    const tip = await git(f.repositoryPath, "rev-parse", "HEAD");
+    const later = await git(
+      f.repositoryPath,
+      "commit-tree",
+      "HEAD^{tree}",
+      "-p",
+      "HEAD",
+      "-m",
+      "later",
+    );
+    await git(f.repositoryPath, "branch", "reused", later);
+    await git(f.repositoryPath, "branch", "release");
+    await git(
+      f.repositoryPath,
+      "symbolic-ref",
+      "refs/remotes/origin/HEAD",
+      "refs/remotes/origin/release",
+    );
+    const merged = (head: string) =>
+      ({ number: 1, state: "MERGED", head }) as const;
+    Object.assign(byHead, {
+      "remote-topic": [merged(later.slice(0, 12))],
+      main: [merged(tip)],
+      mirrored: [merged(tip), { number: 4 }],
+      elsewhere: [merged(tip)],
+      reused: [merged(tip), merged("f".repeat(40))],
+      release: [merged(tip)],
+    });
     await f.track("topic", "origin", "remote-topic");
-    await f.track("main", "origin", "main");
-    await f.track("mirrored", "origin", "mirrored");
-    await f.track("elsewhere", "origin", "elsewhere");
+    for (const branch of ["main", "mirrored", "elsewhere", "reused", "release"])
+      await f.track(branch, "origin", branch);
     await git(
       f.repositoryPath,
       "config",
@@ -34,11 +63,17 @@ describe("branch settling", () => {
 
     await expect.poll(f.settled).toEqual({ topic: day });
     expect(requests).toEqual([
-      { owner: "Octo", name: "rebase", b0: "mirrored", b1: "remote-topic" },
+      {
+        owner: "Octo",
+        name: "rebase",
+        b0: "mirrored",
+        b1: "reused",
+        b2: "remote-topic",
+      },
     ]);
   });
 
-  it("stores the settling switch and settles or unsettles the existing branches of a selection by hand", async () => {
+  it("stores the settling switch for every client and settles or unsettles the existing branches of a selection by hand", async () => {
     const f = await settlingFixture(fakeGitHub({}).github);
     const scope = {
       repositoryId: f.repositoryId,
@@ -48,9 +83,14 @@ describe("branch settling", () => {
     await expect(f.settling.settings(scope)).resolves.toEqual({
       autoSettle: true,
     });
+    const changed: unknown[] = [];
+    f.events.subscribe((_, repositoryIds, kind) =>
+      changed.push([repositoryIds, kind]),
+    );
     await expect(
       f.settling.saveSettings({ ...scope, autoSettle: false }),
     ).resolves.toEqual({ autoSettle: false });
+    expect(changed).toEqual([[[f.repositoryId], "Refs"]]);
     await expect(f.settling.settings(scope)).resolves.toEqual({
       autoSettle: false,
     });

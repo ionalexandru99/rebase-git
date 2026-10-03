@@ -302,10 +302,7 @@ describe("ref editing", () => {
         names: ["feature/done", "feature/spike"],
         settled: true,
       });
-    const settled = tree.getByRole("treeitem", {
-      name: "Settled",
-      exact: true,
-    });
+    const settled = tree.getByRole("treeitem", { name: /^Settled \(\d+\)$/ });
     await expect.element(settled).toHaveTextContent("Settled (2)");
     await expect.element(spike).not.toBeInTheDocument();
 

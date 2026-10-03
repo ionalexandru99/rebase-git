@@ -6,6 +6,7 @@ import type {
 import { hostedRepositoryFromUrl } from "#server/features/repository-refs/git/read-repository-refs.ts";
 import {
   type GitHost,
+  type HostedPullRequest,
   hostCommandOutput,
   inBatches,
   pullRequest,
@@ -117,7 +118,7 @@ ${indexes.map((index) => `    b${index}: pullRequests(headRefName: $b${index}, f
   }
 }
 fragment pullRequest on PullRequest {
-  number url title state isDraft
+  number url title state isDraft headRefOid
   headRepositoryOwner { login }
   commits(last: 1) { nodes { commit { statusCheckRollup { state } } } }
 }`;
@@ -129,6 +130,7 @@ const PullRequestNode = Schema.Struct({
   title: Schema.String,
   state: Schema.Literals(["OPEN", "CLOSED", "MERGED"]),
   isDraft: Schema.Boolean,
+  headRefOid: Schema.optionalKey(Schema.String),
   headRepositoryOwner: Schema.NullOr(Schema.Struct({ login: Schema.String })),
   commits: Schema.Struct({
     nodes: Schema.Array(
@@ -163,7 +165,7 @@ const decodeResponse = (output: string) =>
 function pullRequests(
   nodes: readonly PullRequestNode[],
   owner: string,
-): readonly PullRequest[] {
+): readonly HostedPullRequest[] {
   return nodes
     .filter(
       (node) =>
@@ -186,6 +188,7 @@ function pullRequests(
                 : "Closed",
         },
         checksState(node.commits.nodes[0]?.commit.statusCheckRollup?.state),
+        node.headRefOid,
       ),
     );
 }
