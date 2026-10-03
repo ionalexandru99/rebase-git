@@ -42,7 +42,7 @@ describe("trusted IPC handler", () => {
 });
 
 describe("external links", () => {
-  it("opens only https GitHub, Azure DevOps and GitLab merge request links in the system browser", () => {
+  it("opens only https GitHub, Azure DevOps, GitLab and Forgejo pull request links in the system browser", () => {
     expect(
       isExternalPullRequestLink("https://github.com/octo/rebase/pull/7"),
     ).toBe(true);
@@ -61,6 +61,9 @@ describe("external links", () => {
       isExternalPullRequestLink(
         "https://git.example.com/group/sub/rebase/-/merge_requests/7",
       ),
+    ).toBe(true);
+    expect(
+      isExternalPullRequestLink("https://codeberg.org/forge/rebase/pulls/7"),
     ).toBe(true);
     expect(
       isExternalPullRequestLink("https://git.example.com/group/rebase"),

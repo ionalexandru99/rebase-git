@@ -99,6 +99,19 @@ const hostDescriptors: Record<GitHostKind, HostDescriptor> = {
     label: "Forgejo / Gitea",
     icon: IconGitFork,
     color: "text-[#ff6600]",
+    install: (
+      <>
+        Install the Gitea command-line tool (<Code>tea</Code>) 0.12 or newer via
+        https://gitea.com/gitea/tea or your package manager (for example{" "}
+        <Code>brew install tea</Code>).
+      </>
+    ),
+    signIn: (
+      <>
+        Sign in with <Code>tea login add</Code> on the server to show pull
+        requests.
+      </>
+    ),
   },
 };
 
@@ -200,7 +213,7 @@ function HostRow({ host }: { readonly host: GitHostStatus }) {
           <>
             Authenticated as{" "}
             {host.accounts.map(({ host: server, account }, index) => (
-              <Fragment key={server}>
+              <Fragment key={`${account}@${server}`}>
                 {index === 0 ? null : ", "}
                 <HiddenAccount account={account} host={server} /> on {server}
               </Fragment>

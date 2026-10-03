@@ -6,13 +6,14 @@ import { SourceControlApi } from "#contracts/source-control/source-control.contr
 import { createRepository, git } from "#tests-support/git.ts";
 import {
   fakeAzureDevOps,
+  fakeForgejo,
   fakeGitHub,
   fakeGitLab,
 } from "#tests-support/git-hosts.ts";
 import { openTestEnvironment } from "#tests-support/server.ts";
 
 describe("source control", () => {
-  it("reports Git, the GitHub, GitLab and Azure DevOps logins and the hosts that are coming soon", async () => {
+  it("reports Git, the logins of every host and the hosts that are coming soon", async () => {
     const f = await fixture();
 
     const { git: gitStatus, hosts } = await f.discover();
@@ -47,7 +48,16 @@ describe("source control", () => {
         accounts: [{ host: "dev.azure.com", account: "octo@example.com" }],
       },
       { _tag: "ComingSoon", kind: "bitbucket" },
-      { _tag: "ComingSoon", kind: "forgejo" },
+      {
+        _tag: "SignedIn",
+        kind: "forgejo",
+        enabled: true,
+        version: "tea 0.16.0",
+        accounts: [
+          { host: "codeberg.org", account: "forge" },
+          { host: "git.example.com", account: "forge" },
+        ],
+      },
     ]);
   });
 
@@ -96,6 +106,12 @@ async function fixture(tool: Parameters<typeof fakeGitHub>[1] = {}) {
     gitlab: fakeGitLab(null, {
       accounts: { "gitlab.com": "tanuki", "git.example.com": "tanuki" },
     }).gitlab,
+    forgejo: fakeForgejo(null, {
+      logins: [
+        { url: "https://codeberg.org", user: "forge" },
+        { url: "https://git.example.com", user: "forge" },
+      ],
+    }).forgejo,
   });
   const repositoryPath = join(environment.home, "repository");
   await createRepository(repositoryPath);

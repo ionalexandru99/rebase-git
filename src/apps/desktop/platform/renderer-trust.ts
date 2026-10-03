@@ -28,7 +28,7 @@ export function isExternalPullRequestLink(target: string) {
   return (
     targetUrl?.protocol === "https:" &&
     (pullRequestHosts.has(targetUrl.host) ||
-      /\/-\/merge_requests\/\d+$/.test(targetUrl.pathname))
+      /\/(?:-\/merge_requests|pulls)\/\d+$/.test(targetUrl.pathname))
   );
 }
 
