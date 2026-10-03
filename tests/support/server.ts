@@ -32,6 +32,7 @@ import {
 } from "#server/app/server/serve-environment.ts";
 import type { EnvironmentAuthorization } from "#server/features/environment-authorization/environment-authorization.ts";
 import type { AzureDevOpsClient } from "#server/features/source-control/azure-devops-host.ts";
+import type { TeaCli } from "#server/features/source-control/forgejo-host.ts";
 import type { GitHubCli } from "#server/features/source-control/github-host.ts";
 import type { GitLabCli } from "#server/features/source-control/gitlab-host.ts";
 import type { RepositoryCoordination } from "#server/repository/repository-coordination.ts";
@@ -75,6 +76,7 @@ interface EnvironmentOverrides {
   readonly github?: GitHubCli;
   readonly azureDevOps?: AzureDevOpsClient;
   readonly gitlab?: GitLabCli;
+  readonly forgejo?: TeaCli;
   readonly coordination?: (
     coordination: RepositoryCoordination,
   ) => RepositoryCoordination;
@@ -266,6 +268,7 @@ function acquireTestDependencies(overrides: EnvironmentOverrides) {
       github: overrides.github ?? environment.github,
       azureDevOps: overrides.azureDevOps ?? environment.azureDevOps,
       gitlab: overrides.gitlab ?? environment.gitlab,
+      forgejo: overrides.forgejo ?? environment.forgejo,
       home,
     };
   });

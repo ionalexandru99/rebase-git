@@ -35,6 +35,10 @@ import {
   createAzureDevOpsHost,
 } from "#server/features/source-control/azure-devops-host.ts";
 import {
+  createForgejoHost,
+  createTeaCli,
+} from "#server/features/source-control/forgejo-host.ts";
+import {
   createGitHubCli,
   createGitHubHost,
 } from "#server/features/source-control/github-host.ts";
@@ -129,6 +133,7 @@ export function acquireEnvironment(home: string, git: GitCommandRunner) {
       context,
       coordination: createRepositoryCoordination(git),
       events: createEnvironmentEventPublisher(),
+      forgejo: createTeaCli(),
       git,
       github: createGitHubCli(),
       gitlab: createGitLabCli(),
@@ -147,6 +152,7 @@ export function environmentFeatures(dependencies: EnvironmentDependencies) {
         createGitHubHost(dependencies.github),
         createAzureDevOpsHost(dependencies.azureDevOps),
         createGitLabHost(dependencies.gitlab),
+        createForgejoHost(dependencies.forgejo),
       ],
     );
     return combineEnvironmentFeatures([
