@@ -1,4 +1,4 @@
-import { Effect } from "effect";
+import { Array as Arrays, Effect } from "effect";
 import type { RepositoryRejected } from "#contracts/git/git-failures.contract.ts";
 import type {
   BranchCommitSummary,
@@ -25,6 +25,7 @@ import type { RepositoryAccess } from "#server/repository/repository-access.ts";
 
 const listedCommits = 20;
 const unmergedChecks = 8;
+const pushedPerCommand = 100;
 const pushCommand = { literalPathspecs: false, timeoutMilliseconds: 120_000 };
 
 type LocalTarget = NonNullable<BranchDeletion["local"]>;
@@ -207,7 +208,12 @@ function deleteRemotes(
   remotes: readonly RemoteTarget[],
 ) {
   return Effect.forEach(
-    Map.groupBy(remotes, ({ remote }) => remote),
+    [...Map.groupBy(remotes, ({ remote }) => remote)].flatMap(
+      ([remote, group]) =>
+        Arrays.chunksOf(group, pushedPerCommand).map(
+          (batch) => [remote, batch] as const,
+        ),
+    ),
     ([remote, group]) =>
       runRepositoryGit(
         git,

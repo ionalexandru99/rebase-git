@@ -217,7 +217,7 @@ describe("ref editing", () => {
       });
   });
 
-  it("deletes the selected branches in one request, confirms only those that would lose commits and restores all with Undo", async () => {
+  it("deletes the selected branches in one request, confirms only those that would lose commits and restores all with Undo unselected", async () => {
     const environment = await refsEnvironment();
     const lost = {
       commits: [{ oid: spike, subject: "Try refs index" }],
@@ -231,6 +231,9 @@ describe("ref editing", () => {
     await tree
       .getByRole("treeitem", { name: "feature/wip" })
       .click({ modifiers: ["Shift"] });
+    await tree
+      .getByRole("treeitem", { name: "feature/done" })
+      .click({ modifiers: ["ControlOrMeta"] });
 
     await userEvent.keyboard("{Delete}");
     await expect
@@ -239,13 +242,14 @@ describe("ref editing", () => {
         ...scope,
         branches: [
           { local: { name: "feature/merged", target: main } },
-          { local: { name: "feature/done", target: main } },
           { local: { name: "feature/spike", target: spike } },
           { local: { name: "feature/wip", target: spike } },
         ],
         force: false,
       });
-    await expect.element(screen.getByText("Deleted 2 branches")).toBeVisible();
+    await expect
+      .element(screen.getByText("Deleted feature/merged"))
+      .toBeVisible();
     const warning = screen.getByRole("alertdialog", {
       name: "Delete 2 branches?",
     });
@@ -269,15 +273,13 @@ describe("ref editing", () => {
       .element(tree.getByRole("treeitem", { name: "feature/wip" }))
       .not.toBeInTheDocument();
 
-    await expect.element(screen.getByText("Deleted 4 branches")).toBeVisible();
+    await expect.element(screen.getByText("Deleted 3 branches")).toBeVisible();
     await screen.getByRole("button", { name: "Undo" }).click();
-    for (const name of [
-      "feature/merged",
-      "feature/done",
-      "feature/spike",
-      "feature/wip",
-    ])
+    for (const name of ["feature/merged", "feature/spike", "feature/wip"])
       await expect.element(tree.getByRole("treeitem", { name })).toBeVisible();
+    await expect
+      .element(tree.getByRole("treeitem", { name: "feature/wip" }))
+      .toHaveAttribute("aria-selected", "false");
   });
 
   it("confirms before deleting a branch locally and on its remote", async () => {

@@ -318,7 +318,8 @@ export function selectedBranchActions(
   editing: RefActionHandlers["editing"],
 ): readonly RefAction[] {
   const readOnly = writable ? undefined : "Read only";
-  const branches = refs.branches.filter(({ name }) => names.includes(name));
+  const selected = new Set(names);
+  const branches = refs.branches.filter(({ name }) => selected.has(name));
   const checkedOut =
     readOnly ??
     (branches.some(({ worktreePath }) => worktreePath !== undefined)
