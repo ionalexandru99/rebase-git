@@ -24,6 +24,7 @@ export function BranchCardTrigger(
   return (
     <PreviewCard.Trigger
       delay={500}
+      closeDelay={0}
       {...props}
       onFocus={(event) => {
         event.preventBaseUIHandler();
