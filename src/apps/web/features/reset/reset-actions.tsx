@@ -98,7 +98,9 @@ export function useResetActions(): ResetActions {
     )
       return undefined;
     const reason =
-      operation !== undefined && operation.kind !== "idle"
+      operation !== undefined &&
+      operation.kind !== "idle" &&
+      !(operation.kind === "rebase" && operation.phase === "edit")
         ? `${operationKindLabel(operation.kind)} in progress`
         : command.running
           ? "Resetting…"

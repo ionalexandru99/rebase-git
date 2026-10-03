@@ -6,6 +6,7 @@ import { Deferred, Effect, Fiber } from "effect";
 import { expect, it } from "vite-plus/test";
 import { RepositoryChangesApi } from "#contracts/repository-changes/repository-changes.contract.ts";
 import { RepositoryOperationsApi } from "#contracts/repository-operations/repository-operations.contract.ts";
+import { RepositoryReflogApi } from "#contracts/repository-reflog/repository-reflog.contract.ts";
 import {
   type CheckoutRepositoryRef,
   RepositoryRefsApi,
@@ -38,6 +39,7 @@ async function fixture() {
   const changes = environment.routes(RepositoryChangesApi);
   const operations = environment.routes(RepositoryOperationsApi);
   const refs = environment.routes(RepositoryRefsApi);
+  const reflog = environment.routes(RepositoryReflogApi);
   const scope = { repositoryId, worktreePath: directory };
   const continueOperation = async () =>
     Effect.runPromise(
@@ -54,10 +56,28 @@ async function fixture() {
     git,
     coordination,
     changes,
+    reflog,
     checkout,
     scope,
+    readOperation: () => Effect.runPromise(operations.read(scope)),
     continueOperation,
   };
+}
+
+async function stopToEditTopic(f: Awaited<ReturnType<typeof fixture>>) {
+  const todo = join(f.directory, ".git", "edit-todo.sh");
+  await writeFile(
+    todo,
+    '#!/bin/sh\nprintf "edit %s topic\\n" "$(git rev-parse HEAD)" > "$1"\n',
+    { mode: 0o755 },
+  );
+  await exec("git", ["-C", f.directory, "rebase", "-i", "HEAD~1"], {
+    env: {
+      ...process.env,
+      GIT_SEQUENCE_EDITOR: `sh '${todo}'`,
+      GIT_EDITOR: "true",
+    },
+  });
 }
 
 it("rejects incompatible writes during a merge and stages its resolution", async () => {
@@ -106,19 +126,7 @@ it("rejects incompatible writes during a merge and stages its resolution", async
 it("amends the commit at a rebase edit stop before continuing", async () => {
   const f = await fixture();
   await f.git("checkout", "topic");
-  const todo = join(f.directory, ".git", "edit-todo.sh");
-  await writeFile(
-    todo,
-    '#!/bin/sh\nprintf "edit %s topic\\n" "$(git rev-parse HEAD)" > "$1"\n',
-    { mode: 0o755 },
-  );
-  await exec("git", ["-C", f.directory, "rebase", "-i", "HEAD~1"], {
-    env: {
-      ...process.env,
-      GIT_SEQUENCE_EDITOR: `sh '${todo}'`,
-      GIT_EDITOR: "true",
-    },
-  });
+  await stopToEditTopic(f);
   await writeFile(join(f.directory, "file.txt"), "amended\n");
   await f.git("add", "file.txt");
   const amendment = { ...f.scope, amend: true };
@@ -132,6 +140,61 @@ it("amends the commit at a rebase edit stop before continuing", async () => {
   );
   expect((await f.continueOperation()).kind).toBe("idle");
   expect((await f.git("show", "HEAD:file.txt")).stdout).toBe("amended\n");
+});
+
+it("splits the commit at a rebase edit stop with a reset and plain commits", async () => {
+  const f = await fixture();
+  await f.git("checkout", "topic");
+  await writeFile(join(f.directory, "a.txt"), "a\n");
+  await writeFile(join(f.directory, "b.txt"), "b\n");
+  await f.git("add", "a.txt", "b.txt");
+  await f.git("commit", "-m", "both parts");
+  await stopToEditTopic(f);
+  const [head = "", parent = ""] = (
+    await f.git("rev-parse", "HEAD", "HEAD~1")
+  ).stdout
+    .trim()
+    .split("\n");
+  await Effect.runPromise(
+    f.reflog.reset({
+      ...f.scope,
+      target: parent,
+      mode: "mixed",
+      expectedHead: head,
+    }),
+  );
+  const continueAction = async () =>
+    (await f.readOperation()).actions.find((a) => a.action === "continue");
+  const blocked = {
+    action: "continue",
+    enabled: false,
+    reason: "Commit or amend your changes before continuing the rebase.",
+  };
+  const changes = { ...f.scope, amend: false };
+  for (const part of ["a", "b"]) {
+    expect(await continueAction()).toEqual(blocked);
+    const written = await Effect.runPromise(
+      f.changes.mutate({
+        ...changes,
+        revision: (await Effect.runPromise(f.changes.read(changes))).revision,
+        section: "unstaged",
+        action: "stage",
+        selection: { _tag: "Files", paths: [`${part}.txt`] },
+      }),
+    );
+    await Effect.runPromise(
+      f.changes.commit({
+        ...changes,
+        revision: written.changes.revision,
+        message: `part ${part}`,
+      }),
+    );
+  }
+
+  expect((await f.continueOperation()).kind).toBe("idle");
+  expect(
+    (await f.git("log", "--format=%s", "--name-only", "-3")).stdout.trim(),
+  ).toBe("part b\n\nb.txt\npart a\n\na.txt\ntopic\n\nfile.txt");
 });
 
 it("skips a contended fetch while ref writers queue across worktrees", async () => {

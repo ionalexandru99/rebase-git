@@ -27,6 +27,7 @@ import { withChangeIndex } from "#server/features/repository-changes/git/change-
 import { mutateChanges } from "#server/features/repository-changes/git/mutate-changes.ts";
 import { readChangeDiff } from "#server/features/repository-changes/git/read-change-diff.ts";
 import { readChanges } from "#server/features/repository-changes/git/read-changes.ts";
+import { atRebaseEditStop } from "#server/repository/repository-coordination.ts";
 
 export function readRepositoryChanges(
   scope: ChangesScope,
@@ -222,21 +223,11 @@ export function repositoryChangesFeature(
       ),
       command(
         api.commit,
-        (input) =>
-          input.amend
-            ? {
-                name: "amend",
-                locks: { refs: "wait", worktree: "wait" },
-                duringOperation: {
-                  allowWhen: (operation) =>
-                    operation.kind === "rebase" && operation.phase === "edit",
-                },
-              }
-            : {
-                name: "commit",
-                locks: { refs: "wait", worktree: "wait" },
-                duringOperation: "block",
-              },
+        (input) => ({
+          name: input.amend ? "amend" : "commit",
+          locks: { refs: "wait", worktree: "wait" },
+          duringOperation: atRebaseEditStop,
+        }),
         commitRepositoryChanges,
       ),
     ],
