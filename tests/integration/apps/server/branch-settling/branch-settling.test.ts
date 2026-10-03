@@ -183,7 +183,7 @@ describe("branch settling", () => {
       ]);
     await expect(
       git(f.repositoryPath, "worktree", "list", "--porcelain"),
-    ).resolves.toContain(moved);
+    ).resolves.toContain(moved.replaceAll("\\", "/"));
   });
 
   it("stores the settling switch for every client and settles or unsettles the existing branches of a selection by hand", async () => {
