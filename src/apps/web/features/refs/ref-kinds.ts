@@ -101,7 +101,7 @@ export function refFailureMessages(
   return {
     InvalidBranchName: ({ name }) => `${name} is not a valid branch name.`,
     BranchExists: ({ name }) => `${name} already exists.`,
-    BranchMoved: ({ name }) => `${name} changed since it was shown. Try again.`,
+    BranchMoved: ({ name }) => `${name} changed since it was shown.`,
     BranchNotMerged: ({ count, name }) =>
       `${count} commits exist only on ${name}.`,
     TagRejected: ({ reason }) => tagRejection(name, reason),
@@ -117,7 +117,7 @@ function tagRejection(name: string, reason: TagRejected["reason"]) {
     case "MessageRequired":
       return "Your Git settings sign every tag. Add a message.";
     case "Moved":
-      return `${name} changed since it was shown. Try again.`;
+      return `${name} changed since it was shown.`;
     case "RemoteDiffers":
       return `The remote's ${name} is missing or is not the tag you have. Nothing was deleted.`;
   }

@@ -260,7 +260,7 @@ function rejectionMessage(reason: StashRejected["reason"]) {
     case "LocalChanges":
       return "Your changes to some of these files would be overwritten. Commit or stash them first.";
     case "IndexConflict":
-      return "The staged changes can’t be restored here. Try Unstage everything.";
+      return "The staged changes can't be restored here. Try Unstage everything.";
     case "DoesNotFit":
       return "These changes overlap what that stash already holds. Nothing was stashed.";
     case "Unborn":

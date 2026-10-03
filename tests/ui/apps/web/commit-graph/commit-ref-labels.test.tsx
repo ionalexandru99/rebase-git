@@ -73,7 +73,7 @@ describe("commit reference pills", () => {
     );
     await screen.getByRole("button", { name: "Copy feature/cache" }).click();
     await expect
-      .element(screen.getByText("Couldn’t copy to the clipboard"))
+      .element(screen.getByText("Couldn't copy to the clipboard"))
       .toBeVisible();
   });
 

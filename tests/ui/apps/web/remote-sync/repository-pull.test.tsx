@@ -60,11 +60,9 @@ describe("repository pull", () => {
       .element(page.getByRole("button", { name: "Pull" }))
       .toBeEnabled();
     await expect
-      .element(
-        page.getByText("Git could not fetch from the remote. Try again."),
-      )
+      .element(page.getByText("Git could not fetch from the remote."))
       .toBeVisible();
-    expect(page.getByText("Couldn’t pull changes").elements()).toHaveLength(0);
+    expect(page.getByText("Couldn't pull").elements()).toHaveLength(0);
     expect(f.requested).not.toHaveBeenCalled();
   });
 

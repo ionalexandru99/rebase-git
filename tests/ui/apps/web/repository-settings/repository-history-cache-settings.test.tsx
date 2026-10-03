@@ -217,7 +217,7 @@ describe("repository history storage", () => {
       .getByRole("button", { name: "Clear cache", exact: true })
       .click();
     await expect
-      .element(page.getByText("Couldn’t clear the cache"))
+      .element(page.getByText("Couldn't clear the cache"))
       .toBeVisible();
     await expect
       .element(page.getByRole("button", { name: "Rebuild cache", exact: true }))

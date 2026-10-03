@@ -181,7 +181,7 @@ function mergeFailureMessages(
         case "Unrelated":
           return `${source} has no history in common with ${branch}.`;
         case "Stale":
-          return `${source} or ${branch} moved. Try again.`;
+          return `${source} or ${branch} moved.`;
         case "Uncertain":
           return "The merge may not have finished. Check the graph.";
         default:

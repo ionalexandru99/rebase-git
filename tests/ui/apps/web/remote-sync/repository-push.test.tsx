@@ -140,10 +140,9 @@ describe("repository push", () => {
 
     await expect
       .element(
-        page.getByText(
-          "Rejected: origin/feature/444-push moved since your last fetch.",
-          { exact: false },
-        ),
+        page.getByText("origin/feature/444-push moved since your last fetch.", {
+          exact: false,
+        }),
       )
       .toBeVisible();
     expect(f.pushed).toHaveBeenCalledOnce();

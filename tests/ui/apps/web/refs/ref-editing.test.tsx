@@ -118,14 +118,10 @@ describe("ref editing", () => {
     await userEvent.keyboard("{F2}");
     await userEvent.keyboard("{Control>}a{/Control}spike/refs{Enter}");
     await expect
-      .element(screen.getByText("Couldn’t rename the branch"))
+      .element(screen.getByText("Couldn't rename the branch"))
       .toBeVisible();
     await expect
-      .element(
-        screen.getByText(
-          "feature/spike changed since it was shown. Try again.",
-        ),
-      )
+      .element(screen.getByText("feature/spike changed since it was shown."))
       .toBeVisible();
     await expect
       .element(screen.getByRole("textbox", { name: "Rename feature/spike" }))

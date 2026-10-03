@@ -14,7 +14,10 @@ export function PersistentNotification({
   return outlet === null
     ? null
     : createPortal(
-        <div className="pointer-events-auto rounded-lg border border-border bg-popover text-popover-foreground shadow-lg empty:hidden">
+        <div
+          data-notification
+          className="pointer-events-auto rounded-lg border border-border bg-popover text-popover-foreground shadow-lg empty:hidden"
+        >
           {children}
         </div>,
         outlet,

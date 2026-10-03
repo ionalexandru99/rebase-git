@@ -18,7 +18,7 @@ const fetchProblems: Record<FetchFailed["reason"], string> = {
   GitUnavailable: "Git could not start on the server.",
   Timeout: "The remote took too long to answer.",
   OutputTooLarge: "Git returned more output than Rebase can read.",
-  Failed: "Git could not fetch from the remote. Try again.",
+  Failed: "Git could not fetch from the remote.",
 };
 
 export function useFetch() {
@@ -48,7 +48,7 @@ export function useFetch() {
   const fetchNow = () => {
     statusToast.progress("fetch", "Fetching changes");
     void execute().then((fetched) => {
-      if (fetched) statusToast.success("fetch", "Fetched changes");
+      if (fetched) statusToast.close("fetch");
     });
   };
   return {

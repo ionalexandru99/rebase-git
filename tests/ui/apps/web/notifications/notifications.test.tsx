@@ -1,6 +1,6 @@
 import { useRef } from "react";
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
-import { page } from "vite-plus/test/browser";
+import { page, userEvent } from "vite-plus/test/browser";
 import { repositoryScope } from "#tests-support/fixtures.ts";
 import { render } from "#tests-support/render.tsx";
 import { PersistentNotification } from "#web/features/notifications/components/persistent-notification.tsx";
@@ -25,7 +25,7 @@ describe("notifications", () => {
     await page.getByRole("button", { name: "Fail" }).click();
     const body = page.getByText(branch);
     await expect
-      .element(page.getByText("Couldn’t push changes", { exact: true }))
+      .element(page.getByText("Couldn't push", { exact: true }))
       .toBeVisible();
     const element = body.element();
     expect(element.scrollHeight).toBeGreaterThan(element.clientHeight);
@@ -90,7 +90,54 @@ describe("notifications", () => {
 
     await expect.element(page.getByText("Step 5")).toBeInTheDocument();
     await expect.element(page.getByText("Step 1")).not.toBeInTheDocument();
-    expect(stack.element().textContent).toMatch(/^Couldn’t push changesStep 5/);
+    expect(stack.element().textContent).toMatch(/^Couldn't pushStep 5/);
+  });
+
+  it("puts the action at the bottom right, reachable by keyboard, and closes the toast when used", async () => {
+    const undo = vi.fn<() => void>();
+    await render(<Undoable undo={undo} />);
+
+    await page.getByRole("button", { name: "Delete" }).click();
+    const title = page.getByText("Deleted feature/login", { exact: true });
+    const action = page.getByRole("button", { name: "Undo" });
+    await expect.element(action).toBeVisible();
+    const text = title.element().getBoundingClientRect();
+    const button = action.element().getBoundingClientRect();
+    const dismiss = page
+      .getByRole("button", { name: "Dismiss notification" })
+      .element()
+      .getBoundingClientRect();
+    expect(button.top).toBeGreaterThanOrEqual(text.bottom);
+    expect(button.right).toBe(dismiss.right);
+
+    await userEvent.keyboard("{F6}");
+    await userEvent.tab();
+    await userEvent.tab();
+    await userEvent.tab();
+    await expect.element(action).toHaveFocus();
+    await userEvent.keyboard("{Enter}");
+
+    expect(undo).toHaveBeenCalledOnce();
+    await expect.element(title).not.toBeInTheDocument();
+  });
+
+  it("centers the icon, title and dismiss button of a title-only toast", async () => {
+    await render(<Push />);
+
+    await page.getByRole("button", { name: "Finish" }).click();
+
+    const title = page.getByText("Pushed to origin/main", { exact: true });
+    await expect.element(title).toBeVisible();
+    const dismiss = page.getByRole("button", { name: "Dismiss notification" });
+    const card = page.getByRole("dialog", { name: "Pushed to origin/main" });
+    const icon = card.element().querySelector("svg");
+    const middle = (element: Element | null | undefined) => {
+      const box = element?.getBoundingClientRect();
+      return box === undefined ? Number.NaN : box.top + box.height / 2;
+    };
+    expect(
+      [title.element(), dismiss.element(), icon, card.element()].map(middle),
+    ).toEqual(Array(4).fill(middle(title.element())));
   });
 
   it("names the repository a notification came from and opens it", async () => {
@@ -118,7 +165,7 @@ describe("notifications", () => {
     expect(openRepository).toHaveBeenCalledWith("api");
   });
 
-  it("sends a system notification for a result that arrives in the background", async () => {
+  it("sends a system notification with the first line of a result that arrives in the background", async () => {
     const shown =
       vi.fn<(title: string, options: NotificationOptions) => void>();
     vi.stubGlobal(
@@ -135,7 +182,9 @@ describe("notifications", () => {
     vi.spyOn(document, "hasFocus").mockReturnValue(false);
     await render(
       <RepositoryScopeProvider scope={repositoryScope({ repositoryId: "api" })}>
-        <Push />
+        <Failure
+          body={"origin/main rejected the push.\n\nremote: protected branch"}
+        />
       </RepositoryScopeProvider>,
       {
         notifications: {
@@ -145,13 +194,18 @@ describe("notifications", () => {
       },
     );
 
-    await page.getByRole("button", { name: "Start" }).click();
-    await page.getByRole("button", { name: "Finish" }).click();
+    await page.getByRole("button", { name: "Fail" }).click();
 
     await expect
       .poll(() => shown.mock.calls)
       .toEqual([
-        ["Pushed to origin/main", { body: "api-server", tag: "api/push" }],
+        [
+          "Couldn't push",
+          {
+            body: "api-server\norigin/main rejected the push.",
+            tag: "api/push",
+          },
+        ],
       ]);
   });
 });
@@ -200,5 +254,19 @@ function Push() {
         Finish
       </button>
     </>
+  );
+}
+
+function Undoable({ undo }: { readonly undo: () => void }) {
+  const statusToast = useStatusToast();
+  return (
+    <button
+      type="button"
+      onClick={() =>
+        statusToast.success("deleteBranch", "Deleted feature/login", undo)
+      }
+    >
+      Delete
+    </button>
   );
 }

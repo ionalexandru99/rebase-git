@@ -32,8 +32,7 @@ import {
 import type { CommitDraft } from "#web/persistence/working-changes/working-changes-store.ts";
 import { describeFailure } from "#web/platform/query/request-failure.ts";
 
-const headMovedMessage =
-  "HEAD changed while you were amending. Review the latest commit before enabling Amend again.";
+const headMovedMessage = "HEAD changed while you were amending.";
 
 const storageUnavailableMessage =
   "Could not access changes preferences or the commit draft in this browser.";

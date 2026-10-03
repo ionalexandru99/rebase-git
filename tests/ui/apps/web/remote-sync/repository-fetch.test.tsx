@@ -65,17 +65,17 @@ describe("repository fetch controls", () => {
     f.fetch.mockRejectedValueOnce(unanswered);
     const fetch = page.getByRole("button", { name: "Fetch", exact: true });
     await fetch.click();
-    await expect
-      .element(page.getByText("Couldn’t fetch changes"))
-      .toBeVisible();
+    await expect.element(page.getByText("Couldn't fetch")).toBeVisible();
     await expect
       .element(page.getByRole("status"))
       .toHaveTextContent("Fetch failed");
     await fetch.click();
     await expect.element(page.getByRole("status")).not.toBeInTheDocument();
-    await expect.element(page.getByText("Fetched changes")).toBeVisible();
     await expect
-      .element(page.getByText("Couldn’t fetch changes"))
+      .element(page.getByText("Fetching changes"))
+      .not.toBeInTheDocument();
+    await expect
+      .element(page.getByText("Couldn't fetch"))
       .not.toBeInTheDocument();
     expect(f.fetch).toHaveBeenCalledTimes(2);
   });
@@ -100,7 +100,7 @@ describe("repository fetch controls", () => {
     await expect
       .element(page.getByRole("button", { name: "Fetch", exact: true }))
       .toBeEnabled();
-    expect(page.getByText("Couldn’t fetch changes").elements()).toHaveLength(0);
+    expect(page.getByText("Couldn't fetch").elements()).toHaveLength(0);
     await f.publish(fresh);
     await expect.element(page.getByRole("status")).not.toBeInTheDocument();
   });
@@ -137,7 +137,7 @@ describe("repository fetch controls", () => {
       .fill("90");
     await page.getByRole("button", { name: "Save", exact: true }).click();
     await expect
-      .element(page.getByText("Couldn’t save automatic fetch"))
+      .element(page.getByText("Couldn't save automatic fetch"))
       .toBeVisible();
     await expect
       .element(page.getByRole("spinbutton", { name: "Interval in seconds" }))

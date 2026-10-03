@@ -88,36 +88,56 @@ function Notice({
 }) {
   return (
     <Toast.Root toast={toast} swipeDirection="right" className={noticeClass}>
-      <Toast.Content className="flex items-start gap-3 overflow-hidden px-3 py-2.5 transition-opacity duration-200 data-behind:opacity-0 data-expanded:opacity-100">
-        <NoticeIcon type={toast.type} />
-        <div className="min-w-0 flex-1">
-          {elsewhere === undefined ? null : (
-            <p className="truncate text-xs text-muted-foreground">
-              {elsewhere.name}
-            </p>
+      <Toast.Content className="overflow-hidden px-3 py-2.5 transition-opacity duration-200 data-behind:opacity-0 data-expanded:opacity-100">
+        <div className="flex items-start gap-3">
+          <NoticeIcon type={toast.type} />
+          <div className="min-w-0 flex-1">
+            <div className="flex items-baseline gap-1.5 text-sm">
+              <Toast.Title className="min-w-0 font-medium wrap-anywhere" />
+              {elsewhere === undefined ? null : (
+                <>
+                  <span aria-hidden="true" className="text-muted-foreground">
+                    ·
+                  </span>
+                  <span className="max-w-[40%] shrink-0 truncate text-muted-foreground">
+                    {elsewhere.name}
+                  </span>
+                </>
+              )}
+            </div>
+            <Toast.Description className="mt-1 max-h-[min(240px,40vh)] overflow-y-auto whitespace-pre-line wrap-anywhere text-sm text-muted-foreground" />
+          </div>
+          {toast.type === "loading" ? null : (
+            <Toast.Close
+              aria-hidden={false}
+              aria-label="Dismiss notification"
+              render={
+                <Button
+                  className="-my-1 sm:-my-0.5"
+                  size="icon-xs"
+                  variant="ghost"
+                />
+              }
+            >
+              <IconX aria-hidden="true" />
+            </Toast.Close>
           )}
-          <Toast.Title className="text-sm font-medium wrap-anywhere" />
-          <Toast.Description className="mt-1 max-h-[min(240px,40vh)] overflow-y-auto whitespace-pre-line wrap-anywhere text-sm text-muted-foreground" />
         </div>
-        {elsewhere === undefined ? null : (
-          <Button
-            aria-label={`Open ${elsewhere.name}`}
-            onClick={() => openRepository(elsewhere.id)}
-            size="xs"
-            variant="ghost"
-          >
-            Open
-          </Button>
-        )}
-        <Toast.Action render={<Button size="xs" variant="ghost" />} />
-        {toast.type === "loading" ? null : (
-          <Toast.Close
-            aria-hidden={false}
-            aria-label="Dismiss notification"
-            render={<Button size="icon-xs" variant="ghost" />}
-          >
-            <IconX aria-hidden="true" />
-          </Toast.Close>
+        {toast.actionProps?.children === undefined &&
+        elsewhere === undefined ? null : (
+          <div className="mt-2.5 flex justify-end gap-1.5">
+            {elsewhere === undefined ? null : (
+              <Button
+                aria-label={`Open ${elsewhere.name}`}
+                onClick={() => openRepository(elsewhere.id)}
+                size="xs"
+                variant="ghost"
+              >
+                Open
+              </Button>
+            )}
+            <Toast.Action render={<Button size="xs" variant="outline" />} />
+          </div>
         )}
       </Toast.Content>
     </Toast.Root>
@@ -162,7 +182,7 @@ function useBackgroundNotifications(
       if (toast.type === "loading" || !canNotifyFromTheBackground()) continue;
       const repository = repositoryOf(toast);
       const notification = new Notification(String(toast.title), {
-        body: [repository?.name, toast.description]
+        body: [repository?.name, firstLine(toast.description)]
           .filter((line) => typeof line === "string" && line !== "")
           .join("\n"),
         tag: toast.id,
@@ -183,4 +203,8 @@ function canNotifyFromTheBackground() {
     typeof Notification !== "undefined" &&
     Notification.permission === "granted"
   );
+}
+
+function firstLine(text: unknown) {
+  return typeof text === "string" ? text.split("\n", 1)[0] : undefined;
 }

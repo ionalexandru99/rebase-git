@@ -61,7 +61,7 @@ describe("settings panel", () => {
     await page.getByRole("button", { name: "Check for updates" }).click();
 
     await expect
-      .element(page.getByText("Couldn’t check for updates"))
+      .element(page.getByText("Couldn't check for updates"))
       .toBeVisible();
     expect(
       page.getByText("net::ERR_INTERNET_DISCONNECTED").elements(),

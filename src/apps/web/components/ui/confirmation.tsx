@@ -55,7 +55,9 @@ export function Confirmation({
       }}
       role="alertdialog"
     >
-      <p className="min-w-0 flex-1 font-medium wrap-anywhere">{title}</p>
+      <p className="min-w-0 flex-1 font-medium wrap-anywhere in-data-notification:basis-full">
+        {title}
+      </p>
       {children === undefined || children === null ? null : (
         <div className="basis-full text-muted-foreground">{children}</div>
       )}

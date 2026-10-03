@@ -390,7 +390,7 @@ describe("branches sidebar", () => {
 
     await feature.dblClick();
     await expect
-      .element(screen.getByText("Couldn’t switch branches"))
+      .element(screen.getByText("Couldn't switch branches"))
       .toBeVisible();
     await expect
       .element(screen.getByText("Local changes would be overwritten."))
