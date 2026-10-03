@@ -102,6 +102,7 @@ export function useFolderBrowser(
       return;
     }
     if (action === "Initialize") {
+      if (initialBranch.trim() === "") return;
       const result = await initialize.run({
         path: selectedPath,
         branch: initialBranch.trim(),

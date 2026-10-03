@@ -1,4 +1,4 @@
-import { readdir, realpath, stat } from "node:fs/promises";
+import { readdir, realpath, rm, stat } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, isAbsolute } from "node:path";
 import { Effect } from "effect";
@@ -99,7 +99,16 @@ export function createRepositoryCreation({
             ),
             timeoutMilliseconds: cloneDeadlineMilliseconds,
           })
-          .pipe(Effect.mapError(gitNotCreated));
+          .pipe(
+            Effect.mapError(gitNotCreated),
+            Effect.onInterrupt(() =>
+              before === "Missing"
+                ? Effect.promise(() =>
+                    rm(path, { recursive: true, force: true }),
+                  )
+                : Effect.void,
+            ),
+          );
         if (output.exitCode !== 0) {
           const after = yield* destination(path);
           return yield* Effect.fail({
@@ -129,7 +138,7 @@ export function createRepositoryCreation({
           .pipe(Effect.mapError(gitNotCreated));
         if (output.exitCode !== 0)
           return yield* Effect.fail(
-            notCreated("GitFailed", output.stderr.trim()),
+            notCreated("GitFailed", withoutCredentials(output.stderr)),
           );
         return yield* remember(path);
       }),

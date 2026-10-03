@@ -142,7 +142,10 @@ async function insideRepository(path: string): Promise<boolean> {
 function holdsRepository(path: string) {
   return access(join(path, ".git")).then(
     () => true,
-    () => false,
+    (cause: unknown) => {
+      const code = fileSystemErrorCode(cause);
+      return code !== "ENOENT" && code !== "ENOTDIR";
+    },
   );
 }
 

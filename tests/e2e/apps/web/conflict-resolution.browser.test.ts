@@ -26,7 +26,7 @@ test("rebases onto main from the branch menu, resolves each conflict block in th
     const picker = page.getByRole("dialog", { name: "Choose repository" });
     await picker
       .getByRole("button", {
-        name: new RegExp(`^${basename(repositoryPath)} Folder`),
+        name: new RegExp(`^${basename(repositoryPath)} Repository`),
       })
       .click();
     await page
