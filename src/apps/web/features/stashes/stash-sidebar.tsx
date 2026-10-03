@@ -1,4 +1,4 @@
-import { type CSSProperties, useLayoutEffect, useRef, useState } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 import type { RepositoryStash } from "#contracts/repository-stashes/repository-stashes.contract.ts";
 import {
   type Action,
@@ -26,7 +26,6 @@ export function StashRow({
   setSize,
   onActivate,
   onOpen,
-  style,
 }: {
   readonly stash: RepositoryStash;
   readonly actions: readonly Action[];
@@ -36,15 +35,13 @@ export function StashRow({
   readonly setSize: number;
   readonly onActivate: () => void;
   readonly onOpen: () => void;
-  readonly style: CSSProperties;
 }) {
   return (
     <ContextMenu>
       <ContextMenuTrigger
         render={
           <div
-            className={`absolute top-0 left-0 flex w-full cursor-default items-center rounded-md text-[.85rem] text-sidebar-foreground outline-none select-none hover:bg-sidebar-accent/75 hover:text-sidebar-accent-foreground ${active ? "bg-sidebar-accent" : ""}`}
-            style={style}
+            className={`flex h-8 w-full cursor-default items-center rounded-md text-[.85rem] text-sidebar-foreground outline-none select-none hover:bg-sidebar-accent/75 hover:text-sidebar-accent-foreground ${active ? "bg-sidebar-accent" : ""}`}
           >
             <button
               aria-label={stashLabel(stash)}
