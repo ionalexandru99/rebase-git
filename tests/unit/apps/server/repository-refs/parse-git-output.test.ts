@@ -86,6 +86,12 @@ describe("git ref parsing", () => {
       `HEAD ${commit}`,
       "detached",
       "",
+      "worktree /media/usb/fix",
+      `HEAD ${commit}`,
+      "branch refs/heads/fix",
+      "locked on the external drive",
+      "prunable gitdir file points to non-existent location",
+      "",
       "worktree /bare.git",
       "bare",
       "",
@@ -94,6 +100,13 @@ describe("git ref parsing", () => {
     expect(parseWorktreeList(stdout)).toEqual([
       { head: { branch: "main", commit }, main: true, path: "/repo" },
       { head: { commit }, main: false, path: "/repo/.worktrees/spike" },
+      {
+        head: { branch: "fix", commit },
+        main: false,
+        path: "/media/usb/fix",
+        locked: "on the external drive",
+        missing: true,
+      },
     ]);
   });
 

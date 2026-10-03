@@ -45,7 +45,9 @@ describe("commit graph commands", () => {
       .click({ button: "right" });
     await expect
       .element(screen.getByRole("menu"))
-      .toHaveTextContent("Create branch here…Create tag here…Copy");
+      .toHaveTextContent(
+        "Create branch here…Create worktree here…Create tag here…Copy",
+      );
     await userEvent.keyboard("{Escape}");
 
     await screen.rerender(

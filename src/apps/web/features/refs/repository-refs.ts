@@ -169,12 +169,13 @@ export function resolveActiveWorktreePath(
   refs: RepositoryRefs,
   preferredPath: string,
 ): string {
-  if (refs.worktrees.some((worktree) => worktree.path === preferredPath)) {
+  const present = refs.worktrees.filter((worktree) => !worktree.missing);
+  if (present.some((worktree) => worktree.path === preferredPath)) {
     return preferredPath;
   }
   return (
-    refs.worktrees.find((worktree) => worktree.main)?.path ??
-    refs.worktrees[0]?.path ??
+    present.find((worktree) => worktree.main)?.path ??
+    present[0]?.path ??
     preferredPath
   );
 }

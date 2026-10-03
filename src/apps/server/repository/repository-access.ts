@@ -216,6 +216,7 @@ function worktreeFromEntry(
     return undefined;
   }
   const branch = fields.get("branch");
+  const locked = fields.get("locked");
   return {
     head: {
       ...(branch?.startsWith(branchPrefix)
@@ -225,5 +226,7 @@ function worktreeFromEntry(
     },
     main,
     path,
+    ...(locked === undefined ? {} : { locked: locked.slice(0, 1_024) }),
+    ...(fields.has("prunable") ? { missing: true } : {}),
   };
 }

@@ -13,8 +13,16 @@ import type {
   RefDeletion,
   RefEditing,
 } from "#web/features/refs/ref-editing.ts";
-import type { RefKind, StartPoint } from "#web/features/refs/ref-kinds.ts";
+import {
+  commitStartPoint,
+  type RefKind,
+  type StartPoint,
+} from "#web/features/refs/ref-kinds.ts";
 import type { ResetActionId } from "#web/features/reset/reset-actions.tsx";
+import {
+  requestWorktreeDraft,
+  worktreeName,
+} from "#web/features/worktrees/worktrees.ts";
 
 export type RefIntent =
   | { readonly _tag: "DraftRef"; readonly kind: RefKind; readonly oid: string }
@@ -64,6 +72,7 @@ export type RefAction = Action<
   | "openPullRequest"
   | `openPullRequest:${number}`
   | "newBranch"
+  | "newWorktree"
   | "rename"
   | "delete"
   | "deleteLocal"
@@ -155,15 +164,18 @@ export function refActions(
       ),
     ];
   };
-  const current =
-    localBranch(target, refs)?.worktreePath === activeWorktreePath;
+  const holder = localBranch(target, refs)?.worktreePath;
+  const current = holder === activeWorktreePath;
   const common: readonly RefAction[] = [
     ...(current
       ? []
       : [
           action({
             id: "checkout",
-            label: "Checkout",
+            label:
+              holder === undefined
+                ? "Checkout"
+                : `Switch to ${worktreeName(holder)}`,
             run: () => checkout(target),
           }),
         ]),
@@ -202,6 +214,20 @@ export function refActions(
         if (startPoint !== undefined) editing.draft("branch", startPoint);
       },
     }),
+    ...(holder !== undefined ||
+    target._tag === "Tag" ||
+    startPoint === undefined
+      ? []
+      : [
+          action({
+            id: "newWorktree",
+            label: "Open in new worktree",
+            group: "edit",
+            reason: readOnly,
+            run: () =>
+              requestWorktreeDraft({ name: target.name, start: startPoint }),
+          }),
+        ]),
   ];
   if (target._tag === "Tag") {
     const tag = refs.tags.find(({ name }) => name === target.name);
@@ -379,13 +405,25 @@ export function createRefActions(
   }: { readonly connected: boolean; readonly writable: boolean },
 ): readonly Action[] {
   if (!writable) return [];
-  return createHere.map(({ kind, label }) => ({
+  const [branch, tag] = createHere.map(({ kind, label }) => ({
     id: `${kind}.createHere`,
     label,
     group: "edit" as const,
     enabled: connected,
     run: () => requestRefIntent({ _tag: "DraftRef", kind, oid }),
   }));
+  return [
+    ...(branch === undefined ? [] : [branch]),
+    {
+      id: "worktree.createHere",
+      label: "Create worktree here…",
+      group: "edit",
+      enabled: connected,
+      run: () =>
+        requestWorktreeDraft({ name: "", start: commitStartPoint(oid) }),
+    },
+    ...(tag === undefined ? [] : [tag]),
+  ];
 }
 
 const deleteKeys = ["Delete", "Backspace"];
