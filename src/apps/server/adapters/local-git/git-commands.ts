@@ -7,6 +7,7 @@ import {
 import { lstat } from "node:fs/promises";
 import { join } from "node:path";
 import { Readable } from "node:stream";
+import { StringDecoder } from "node:string_decoder";
 import { Deferred, Effect, Stream } from "effect";
 
 export interface GitCommand {
@@ -21,11 +22,15 @@ export interface GitCommand {
   readonly outputEncoding?: "utf8" | "base64";
   readonly maxOutputBytes?: number;
   readonly timeoutMilliseconds?: number;
+  readonly progress?: (output: string) => void;
 }
 
 export type GitCommandOptions = Omit<GitCommand, "arguments" | "directory">;
 
-type GitStreamCommand = Omit<GitCommand, "outputEncoding" | "maxOutputBytes">;
+type GitStreamCommand = Omit<
+  GitCommand,
+  "outputEncoding" | "maxOutputBytes" | "progress"
+>;
 
 type GitStreamOptions = Omit<GitStreamCommand, "arguments" | "directory">;
 
@@ -65,6 +70,13 @@ const hexadecimal = /^[0-9a-f]+$/;
 const defaultTimeoutMilliseconds = 30_000;
 const defaultMaximumOutputBytes = 16 * 1_048_576;
 const maximumDetailLength = 2_048;
+const progressLines = [
+  /^[A-Z][a-z]+(?: [a-z]+)*: +\d+% \(\d+\/\d+\)(?:, [\d.]+ (?:[KMG]iB|bytes?)(?: \| [\d.]+ (?:[KMG]iB|bytes?)\/s)?)?(?:, done\.)?$/,
+  /^(?:Enumerating|Counting) objects: \d+(?:, done\.)?$/,
+  /^Delta compression using up to \d+ threads?$/,
+  /^Total \d+ \(delta \d+\), reused \d+ \(delta \d+\)/,
+  /^Rebasing \(\d+\/\d+\)$/,
+];
 
 export function createLocalGitCommandRunner(): GitCommandRunner {
   return {
@@ -186,7 +198,10 @@ function runLocalGitCommand(command: GitCommand) {
       },
       (error, output, errorOutput) => {
         const stdout = output.toString(command.outputEncoding ?? "utf8");
-        const stderr = errorOutput.toString("utf8");
+        const stderr =
+          command.progress === undefined
+            ? errorOutput.toString("utf8")
+            : withoutProgress(errorOutput.toString("utf8"));
         if (error === null) {
           resume(Effect.succeed({ exitCode: 0, stderr, stdout }));
           return;
@@ -199,9 +214,34 @@ function runLocalGitCommand(command: GitCommand) {
         );
       },
     );
+    const { progress } = command;
+    if (progress !== undefined) {
+      const decoder = new StringDecoder("utf8");
+      child.stderr?.on("data", (chunk: Buffer) => {
+        const text = decoder.write(chunk);
+        if (text !== "") progress(text);
+      });
+    }
     child.stdin?.once("error", () => undefined);
     child.stdin?.end(command.input);
   });
+}
+
+function withoutProgress(stderr: string) {
+  return stderr
+    .split("\n")
+    .flatMap((line) => {
+      const kept = line
+        .split("\r")
+        .filter((segment) => segment !== "" && !isProgressLine(segment));
+      return kept.length === 0 && line !== "" ? [] : [kept.join("\n")];
+    })
+    .join("\n");
+}
+
+function isProgressLine(segment: string) {
+  const line = segment.replace(/^remote: /, "").trimEnd();
+  return progressLines.some((pattern) => pattern.test(line));
 }
 
 function streamLocalGitCommand(command: GitStreamCommand) {

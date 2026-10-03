@@ -1,9 +1,11 @@
 import { join } from "node:path";
-import { Effect } from "effect";
+import { Deferred, Effect } from "effect";
 import { describe, expect, it, vi } from "vite-plus/test";
 import { RepositoryCatalogApi } from "#contracts/repository-catalog/repository-catalog.contract.ts";
+import { RepositoryPullApi } from "#contracts/repository-pull/repository-pull.contract.ts";
+import { RepositoryPushApi } from "#contracts/repository-push/repository-push.contract.ts";
 import { RepositoryRefsApi } from "#contracts/repository-refs/repository-refs.contract.ts";
-import { createRepository } from "#tests-support/git.ts";
+import { cloneRepository, createRepository, git } from "#tests-support/git.ts";
 import { openTestServer } from "#tests-support/server.ts";
 import { environmentRequests } from "#web/platform/environment/environment-connection.ts";
 
@@ -77,5 +79,72 @@ describe("browser Environment connection", () => {
     await expect
       .poll(() => changed.mock.calls)
       .toContainEqual([[repository.id], "Index"]);
+  });
+
+  it("reports Git progress while a fetch and a push run", async () => {
+    const holds = {
+      fetch: Effect.runSync(Deferred.make<void>()),
+      push: Effect.runSync(Deferred.make<void>()),
+    };
+    const release = (verb: keyof typeof holds) =>
+      Effect.runSync(Deferred.succeed(holds[verb], undefined));
+    const server = await openTestServer({
+      git: (git) => ({
+        ...git,
+        run: (command) => {
+          const verb = command.arguments[0];
+          return verb === "fetch" || verb === "push"
+            ? git
+                .run(command)
+                .pipe(Effect.tap(() => Deferred.await(holds[verb])))
+            : git.run(command);
+        },
+      }),
+    });
+    const remote = join(server.home, "remote.git");
+    const local = join(server.home, "local");
+    const other = join(server.home, "other");
+    await git(server.home, "init", "--bare", "-b", "main", remote);
+    await createRepository(local);
+    await git(local, "remote", "add", "origin", remote);
+    await git(local, "push", "-u", "origin", "main");
+    await cloneRepository(remote, other);
+    await git(other, "commit", "--allow-empty", "-m", "theirs");
+    await git(other, "push", "origin", "main");
+    const requests = server.requests(server.owner);
+    const { id } = await requests(RepositoryCatalogApi.remember, {
+      path: local,
+    });
+    const fetched: number[] = [];
+    const pushed: number[] = [];
+
+    const fetching = requests(
+      RepositoryPullApi.fetch,
+      { repositoryId: id },
+      { progress: (percent) => fetched.push(percent) },
+    );
+    await expect.poll(() => fetched.at(-1)).toBeGreaterThan(0);
+    release("fetch");
+    await fetching;
+    await git(local, "merge", "--ff-only", "origin/main");
+    await git(local, "commit", "--allow-empty", "-m", "mine");
+    const pushing = requests(
+      RepositoryPushApi.push,
+      {
+        repositoryId: id,
+        worktreePath: local,
+        branch: "main",
+        destination: { remote: "origin", branch: "main" },
+        setUpstream: false,
+        mode: { _tag: "FastForward" },
+      },
+      { progress: (percent) => pushed.push(percent) },
+    );
+    await expect.poll(() => pushed.at(-1)).toBe(95);
+    release("push");
+    await pushing;
+
+    expect(fetched).toEqual(fetched.toSorted((a, b) => a - b));
+    expect(pushed).toEqual(pushed.toSorted((a, b) => a - b));
   });
 });

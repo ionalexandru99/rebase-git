@@ -8,7 +8,10 @@ import {
 import { useEffect, useRef } from "react";
 import { Button } from "#web/components/ui/button.tsx";
 
-export type NoticeData = { readonly repositoryId: string | undefined };
+export type NoticeData = {
+  readonly repositoryId: string | undefined;
+  readonly percent?: number;
+};
 
 export type NotifiedRepository = {
   readonly id: string;
@@ -90,7 +93,11 @@ function Notice({
     <Toast.Root toast={toast} swipeDirection="right" className={noticeClass}>
       <Toast.Content className="overflow-hidden px-3 py-2.5 transition-opacity duration-200 data-behind:opacity-0 data-expanded:opacity-100">
         <div className="flex items-start gap-3">
-          <NoticeIcon type={toast.type} />
+          <NoticeIcon
+            type={toast.type}
+            percent={toast.data?.percent}
+            label={String(toast.title)}
+          />
           <div className="min-w-0 flex-1">
             <div className="flex items-baseline gap-1.5 text-sm">
               <Toast.Title className="min-w-0 font-medium wrap-anywhere" />
@@ -144,7 +151,17 @@ function Notice({
   );
 }
 
-function NoticeIcon({ type }: { readonly type: string | undefined }) {
+function NoticeIcon({
+  type,
+  percent,
+  label,
+}: {
+  readonly type: string | undefined;
+  readonly percent: number | undefined;
+  readonly label: string;
+}) {
+  if (type === "loading" && percent !== undefined)
+    return <ProgressRing percent={percent} label={label} />;
   if (type === "loading")
     return (
       <span
@@ -164,6 +181,49 @@ function NoticeIcon({ type }: { readonly type: string | undefined }) {
       aria-hidden="true"
       className="mt-0.5 size-4 shrink-0 text-status-unavailable"
     />
+  );
+}
+
+const ringRadius = 6;
+const ringLength = 2 * Math.PI * ringRadius;
+
+function ProgressRing({
+  percent,
+  label,
+}: {
+  readonly percent: number;
+  readonly label: string;
+}) {
+  return (
+    <svg
+      role="progressbar"
+      aria-label={label}
+      aria-valuemin={0}
+      aria-valuemax={100}
+      aria-valuenow={percent}
+      className="mt-0.5 size-4 shrink-0 -rotate-90"
+      viewBox="0 0 16 16"
+    >
+      <circle
+        cx="8"
+        cy="8"
+        r={ringRadius}
+        fill="none"
+        strokeWidth="2"
+        className="stroke-foreground/15"
+      />
+      <circle
+        cx="8"
+        cy="8"
+        r={ringRadius}
+        fill="none"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeDasharray={ringLength}
+        strokeDashoffset={ringLength * (1 - percent / 100)}
+        className="stroke-primary transition-[stroke-dashoffset] duration-150 motion-reduce:transition-none"
+      />
+    </svg>
   );
 }
 

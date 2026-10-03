@@ -10,6 +10,10 @@ import {
   acquireEnvironmentListener,
   type EnvironmentListener,
 } from "#server/app/server/environment-listener.ts";
+import {
+  commandProgressFeature,
+  createCommandProgress,
+} from "#server/features/command-progress/command-progress.ts";
 import { commitInspectionFeature } from "#server/features/commit-inspection/commit-inspection.ts";
 import {
   createEnvironmentAuthorization,
@@ -122,6 +126,7 @@ export function acquireEnvironment(home: string, git: GitCommandRunner) {
       git,
       gitHosts: createGitHostClients(),
       paths,
+      progress: createCommandProgress(),
       watcher,
     };
   });
@@ -142,6 +147,7 @@ export function environmentFeatures(dependencies: EnvironmentDependencies) {
       repositoryChangesFeature(dependencies),
       repositoryConflictsFeature(dependencies),
       repositoryHistoryFeature(dependencies),
+      commandProgressFeature(dependencies.progress),
       repositoryOperationsFeature(dependencies),
       yield* repositoryPullFeature(dependencies),
       pullRequestsFeature({ ...dependencies, sourceControl }),

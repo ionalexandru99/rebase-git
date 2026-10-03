@@ -123,6 +123,43 @@ describe("repository pull", () => {
       .toBeEnabled();
   });
 
+  it("shows the fetch and then the pull progress in one toast that turns into the result", async () => {
+    const fetched = Promise.withResolvers<RepositoryFetchStatus>();
+    const pulled = Promise.withResolvers<{ outcome: "FastForwarded" }>();
+    const requests = fakeRequests(
+      idleOperation,
+      respond(RepositoryRefsApi.read, async () => refs(1)),
+      respond(RepositoryPullApi.fetchStatus, async () => status),
+      respond(RepositoryPullApi.fetch, (_input, { progress }) => {
+        progress?.(60);
+        return fetched.promise;
+      }),
+      respond(RepositoryPullApi.pull, (_input, { progress }) => {
+        progress?.(30);
+        return pulled.promise;
+      }),
+    );
+    await render(
+      <RepositoryScopeProvider scope={repositoryScope({ repositoryId })}>
+        <RemoteSync>{(actions) => actions}</RemoteSync>
+      </RepositoryScopeProvider>,
+      { environment: { requests } },
+    );
+
+    await page.getByRole("button", { name: "Pull 1 incoming commit" }).click();
+    await expect
+      .element(page.getByRole("progressbar", { name: "Fetching" }))
+      .toHaveAttribute("aria-valuenow", "60");
+    fetched.resolve(status);
+    await expect
+      .element(page.getByRole("progressbar", { name: "Pulling" }))
+      .toHaveAttribute("aria-valuenow", "30");
+    pulled.resolve({ outcome: "FastForwarded" });
+
+    await expect.element(page.getByText("Pulled main")).toBeVisible();
+    await expect.element(page.getByRole("progressbar")).not.toBeInTheDocument();
+  });
+
   it.each<[PullFailure, string]>([
     [
       { _tag: "PullDiverged", upstream: "origin/main" },

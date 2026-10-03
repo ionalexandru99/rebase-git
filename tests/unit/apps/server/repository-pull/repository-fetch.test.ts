@@ -7,6 +7,7 @@ import {
   type GitCommandRunner,
   gitFailed,
 } from "#server/adapters/local-git/git-commands.ts";
+import { createCommandProgress } from "#server/features/command-progress/command-progress.ts";
 import {
   acquireRepositoryFetch,
   type RepositoryFetch,
@@ -150,6 +151,7 @@ function withFetch(
         },
         events,
         git: runner,
+        progress: createCommandProgress(),
       });
       yield* test(fetch, git, events);
     }).pipe(Effect.scoped, Effect.provide(TestClock.layer())),

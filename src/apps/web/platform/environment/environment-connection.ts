@@ -34,6 +34,7 @@ import type {
 } from "#contracts/repository-history/repository-history.contract.ts";
 import type { EnvironmentRequests } from "#web/platform/query/environment-context.tsx";
 import type { EnvironmentInvalidation } from "#web/platform/query/environment-invalidation.ts";
+import { inputRepositoryId } from "#web/platform/query/environment-query.ts";
 import type { RequestFailure } from "#web/platform/query/request-failure.ts";
 
 export type EnvironmentCredential =
@@ -115,13 +116,31 @@ export function environmentRequests(
   return async (route, input, options) => {
     const call = procedures[route._tag];
     if (call === undefined) throw unanswered;
+    const repositoryId = inputRepositoryId(input);
     const exit = await Effect.runPromiseExit(
-      call(input),
+      options?.progress === undefined || repositoryId === null
+        ? call(input)
+        : watchProgress(rpc, repositoryId, route._tag, options.progress).pipe(
+            Effect.raceFirst(call(input)),
+          ),
       options?.signal === undefined ? undefined : { signal: options.signal },
     );
     if (Exit.isSuccess(exit)) return exit.value as RouteSuccess<typeof route>;
     throw requestFailure(exit.cause);
   };
+}
+
+function watchProgress(
+  rpc: EnvironmentRpcClient,
+  repositoryId: string,
+  route: string,
+  progress: (percent: number) => void,
+) {
+  return rpc.WatchCommandProgress({ repositoryId, route }).pipe(
+    Stream.runForEach(({ percent }) => Effect.sync(() => progress(percent))),
+    Effect.ignore,
+    Effect.andThen(Effect.never),
+  );
 }
 
 export interface EnvironmentSocket {

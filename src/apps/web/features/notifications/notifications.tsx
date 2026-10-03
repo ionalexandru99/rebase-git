@@ -90,11 +90,17 @@ type Notice = {
   readonly type: "error" | "success" | "loading";
   readonly title: string;
   readonly description?: string | undefined;
+  readonly percent?: number | undefined;
   readonly action?: { readonly label: string; readonly run: () => void };
 };
 
+type ProgressOptions = {
+  readonly cancel?: () => void;
+  readonly percent?: number;
+};
+
 function useActionToasts() {
-  const { add, close, toasts } = Toast.useToastManager<NoticeData>();
+  const { add, close, update, toasts } = Toast.useToastManager<NoticeData>();
   const shown = useRef(toasts);
   shown.current = toasts;
   const repositoryId = useRepositoryScope()?.repositoryId;
@@ -121,12 +127,17 @@ function useActionToasts() {
                     button.run();
                   },
                 },
-          data: { repositoryId },
+          data:
+            notice.percent === undefined
+              ? { repositoryId }
+              : { repositoryId, percent: notice.percent },
         });
       },
+      advance: (action: ErrorAction, percent: number) =>
+        update(idFor(action), { data: { repositoryId, percent } }),
       close: (action: ErrorAction) => close(idFor(action)),
     };
-  }, [add, close, repositoryId]);
+  }, [add, close, update, repositoryId]);
 }
 
 const OpenGitIdentity = createContext<() => void>(() => {});
@@ -178,16 +189,22 @@ export function useStatusToast() {
   const toasts = useActionToasts();
   return useMemo(
     () => ({
-      progress: (action: ErrorAction, title: string, cancel?: () => void) => {
+      progress: (
+        action: ErrorAction,
+        title: string,
+        { cancel, percent }: ProgressOptions = {},
+      ) => {
         askToNotifyFromTheBackground();
         toasts.put(action, {
           type: "loading",
           title,
+          percent,
           ...(cancel === undefined
             ? {}
             : { action: { label: "Cancel", run: cancel } }),
         });
       },
+      advance: toasts.advance,
       success: (action: ErrorAction, title: string, undo?: () => void) =>
         toasts.put(action, {
           type: "success",

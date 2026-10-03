@@ -145,6 +145,7 @@ function mergeFastForward(
       "merge",
       "--ff-only",
       "--no-stat",
+      "--progress",
       upstreamTarget,
     ],
     pullCommand,

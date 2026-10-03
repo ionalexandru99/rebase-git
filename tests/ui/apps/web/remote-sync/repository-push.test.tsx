@@ -29,6 +29,7 @@ import {
 } from "#web/features/remote-sync/push.tsx";
 import type { PushTarget } from "#web/features/remote-sync/push-target.ts";
 import { RemoteSync } from "#web/features/remote-sync/remote-sync.tsx";
+import type { RequestOptions } from "#web/platform/query/environment-context.tsx";
 import { RepositoryScopeProvider } from "#web/platform/query/repository-scope.tsx";
 
 const reviewed = "9c1e2f71".padEnd(40, "0");
@@ -59,28 +60,29 @@ function PushControls({ target }: { readonly target: PushTarget }) {
 }
 
 function pendingPush(aborted: () => void = () => {}) {
-  return (_command: PushBranch, signal: AbortSignal | undefined) =>
-    new Promise<never>((_resolve, reject) =>
+  return (_command: PushBranch, { signal, progress }: RequestOptions) =>
+    new Promise<never>((_resolve, reject) => {
+      progress?.(45);
       signal?.addEventListener("abort", () => {
         aborted();
         reject(signal.reason);
-      }),
-    );
+      });
+    });
 }
 
 async function fixture(
   target: PushTarget,
   respondTo: (
     command: PushBranch,
-    signal: AbortSignal | undefined,
+    options: RequestOptions,
   ) => Promise<PushRejected | null> = async () => null,
 ) {
   const pushed = vi.fn<(command: PushBranch) => void>();
   const requests = fakeRequests(
     idleOperation,
-    respond(RepositoryPushApi.push, async (command, { signal }) => {
+    respond(RepositoryPushApi.push, async (command, options) => {
       pushed(command);
-      const failure = await respondTo(command, signal);
+      const failure = await respondTo(command, options);
       if (failure !== null) throw rejected(failure);
       return { destination: command.destination, target: reviewed };
     }),
@@ -108,7 +110,7 @@ describe("repository push", () => {
     await page.getByRole("button", { name: "Push spike" }).click();
 
     await expect
-      .element(page.getByText("Pushed to origin/spike"))
+      .element(page.getByText("Pushed", { exact: true }))
       .toBeVisible();
     expect(f.pushed).toHaveBeenCalledWith({
       ...scope,
@@ -167,10 +169,10 @@ describe("repository push", () => {
 
   it("cancels a running push from its notification without reporting a failure", async () => {
     await fixture({ branch: "spike", remotes: ["origin"] }, pendingPush());
-    const progress = page.getByText("Pushing to origin/spike");
+    const progress = page.getByRole("progressbar", { name: "Pushing" });
 
     await page.getByRole("button", { name: "Push spike" }).click();
-    await expect.element(progress).toBeVisible();
+    await expect.element(progress).toHaveAttribute("aria-valuenow", "45");
     await page.getByRole("button", { name: "Cancel" }).click();
 
     await expect
@@ -191,7 +193,7 @@ describe("repository push", () => {
     const confirmation = page.getByRole("alertdialog", {
       name: /^Force push to /,
     });
-    const progress = page.getByText("Force pushing to origin/feature/444-push");
+    const progress = page.getByRole("progressbar", { name: "Force pushing" });
 
     await forcePush.click();
     await expect.element(confirmation).toBeVisible();
@@ -221,8 +223,8 @@ describe("repository push", () => {
         }),
       ),
       respond(RepositoryPullApi.fetchStatus, async () => fetchStatus()),
-      respond(RepositoryPushApi.push, (command, { signal }) =>
-        pendingPush(aborted)(command, signal),
+      respond(RepositoryPushApi.push, (command, options) =>
+        pendingPush(aborted)(command, options),
       ),
     );
     const tree = (toolbar: boolean) => (
@@ -236,7 +238,7 @@ describe("repository push", () => {
       environment: { requests },
     });
     const pushButton = page.getByRole("button", { name: "Push spike" });
-    const progress = page.getByText("Pushing to origin/spike");
+    const progress = page.getByRole("progressbar", { name: "Pushing" });
 
     await pushButton.click();
     await expect.element(progress).toBeVisible();

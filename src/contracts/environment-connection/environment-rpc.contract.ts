@@ -1,5 +1,6 @@
 import { Schema } from "effect";
 import { Rpc, type RpcClient, type RpcClientError, RpcGroup } from "effect/rpc";
+import { CommandProgressRpc } from "#contracts/command-progress/command-progress.contract.ts";
 import { CommitInspectionApi } from "#contracts/commit-inspection/commit-inspection.contract.ts";
 import { EnvironmentAuthorizationApi } from "#contracts/environment-authorization/environment-authorization.contract.ts";
 import { EnvironmentFilesystemApi } from "#contracts/environment-filesystem/environment-filesystem.contract.ts";
@@ -81,7 +82,7 @@ export const EnvironmentRpc = RpcGroup.make(
   ...Object.values(RepositoryWorktreesApi),
   ...Object.values(SourceControlApi),
   ...Object.values(GitIdentityApi),
-).merge(RepositoryHistoryRpc);
+).merge(RepositoryHistoryRpc, CommandProgressRpc);
 
 export type EnvironmentRpcs = RpcGroup.Rpcs<typeof EnvironmentRpc>;
 

@@ -1,16 +1,18 @@
 import { Cause, Effect, Fiber, Option, Semaphore } from "effect";
 import type { RepositoryRejected } from "#contracts/git/git-failures.contract.ts";
 import { repositoryRejected } from "#contracts/git/git-failures.contract.ts";
-import type {
-  FetchFailed,
-  RepositoryFetchSetting,
-  RepositoryFetchStatus,
+import {
+  type FetchFailed,
+  type RepositoryFetchSetting,
+  type RepositoryFetchStatus,
+  RepositoryPullApi,
 } from "#contracts/repository-pull/repository-pull.contract.ts";
 import type { EnvironmentEventPublisher } from "#server/adapters/environment-transport/environment-event-publisher.ts";
 import {
   type GitCommandRunner,
   runRepositoryGit,
 } from "#server/adapters/local-git/git-commands.ts";
+import type { CommandProgress } from "#server/features/command-progress/command-progress.ts";
 import type { RepositoryAccess } from "#server/repository/repository-access.ts";
 import type { RepositoryCoordination } from "#server/repository/repository-coordination.ts";
 
@@ -36,11 +38,13 @@ export function acquireRepositoryFetch({
   coordination,
   events,
   git,
+  progress,
 }: {
   readonly access: RepositoryAccess;
   readonly coordination: RepositoryCoordination;
   readonly events: EnvironmentEventPublisher;
   readonly git: GitCommandRunner;
+  readonly progress: CommandProgress;
 }) {
   return Effect.gen(function* () {
     const scope = yield* Effect.scope;
@@ -97,6 +101,10 @@ export function acquireRepositoryFetch({
           git,
           coordination,
           repository.path,
+          progress.reporter(
+            repository.repositoryIds,
+            RepositoryPullApi.fetch._tag,
+          ),
         ).pipe(
           Effect.tap((failure) =>
             Effect.gen(function* () {
@@ -183,6 +191,7 @@ function runFetch(
   git: GitCommandRunner,
   coordination: RepositoryCoordination,
   path: string,
+  report: (output: string) => void,
 ) {
   return coordination
     .run(
@@ -192,7 +201,10 @@ function runFetch(
         locks: { refs: "ifAvailable" },
         duringOperation: "proceed",
       },
-      runRepositoryGit(git, path, ["fetch"], { timeoutMilliseconds: 120_000 }),
+      runRepositoryGit(git, path, ["fetch", "--progress"], {
+        timeoutMilliseconds: 120_000,
+        progress: report,
+      }),
     )
     .pipe(
       Effect.as<FetchFailed | undefined>(undefined),
