@@ -410,7 +410,7 @@ describe("repository branches", () => {
     ).resolves.toBe("");
   });
 
-  it("deletes remote branches that are already gone from the remote along with the rest", async () => {
+  it("deletes remote branches that are already gone from the remote along with the rest and keeps a tag of the same name", async () => {
     const fixture = await createFixture();
     await git(
       fixture.repositoryPath,
@@ -420,6 +420,7 @@ describe("repository branches", () => {
       "origin",
       "merged",
       "main:kept",
+      "main:refs/tags/merged",
     );
     await git(join(fixture.root, "origin.git"), "branch", "-D", "merged");
     const merged = await git(fixture.repositoryPath, "rev-parse", "merged");
@@ -453,8 +454,8 @@ describe("repository branches", () => {
       ),
     ).resolves.toBe("");
     await expect(
-      git(fixture.repositoryPath, "ls-remote", "--heads", "origin", "kept"),
-    ).resolves.toBe("");
+      git(fixture.repositoryPath, "ls-remote", "origin", "kept", "merged"),
+    ).resolves.toMatch(/^\S+\trefs\/tags\/merged$/);
   });
 
   it("keeps a remote branch that one of several push URLs refused to delete", async () => {
