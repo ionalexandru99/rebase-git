@@ -10,10 +10,8 @@ import {
   acquireEnvironmentListener,
   type EnvironmentListener,
 } from "#server/app/server/environment-listener.ts";
-import {
-  branchSettlingFeature,
-  settleBranchesAfterFetch,
-} from "#server/features/branch-settling/branch-settling.ts";
+import { branchSettlingFeature } from "#server/features/branch-settling/branch-settling.ts";
+import { settleBranchesAfterFetch } from "#server/features/branch-settling/settle-after-fetch.ts";
 import {
   commandProgressFeature,
   createCommandProgress,

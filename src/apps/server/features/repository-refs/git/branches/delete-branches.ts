@@ -51,11 +51,7 @@ interface PushPasses {
 export function deleteBranches(
   git: GitCommandRunner,
   access: RepositoryAccess,
-  {
-    branches,
-    force,
-    worktreePath,
-  }: Omit<DeleteRepositoryBranches, "repositoryId">,
+  { branches, force, worktreePath }: DeleteRepositoryBranches,
 ): Effect.Effect<
   RepositoryBranchesDeleted,
   RepositoryBranchesOperationFailure | RepositoryRejected | GitFailed
@@ -378,7 +374,7 @@ function forgetRemoteRefs(
   );
 }
 
-function deleteLocals(
+export function deleteLocals(
   git: GitCommandRunner,
   directory: string,
   locals: readonly LocalTarget[],

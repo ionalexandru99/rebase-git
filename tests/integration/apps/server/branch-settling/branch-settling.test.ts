@@ -1,5 +1,5 @@
 import { existsSync } from "node:fs";
-import { appendFile, writeFile } from "node:fs/promises";
+import { appendFile, mkdir, rename, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { Effect } from "effect";
 import { describe, expect, it } from "vite-plus/test";
@@ -98,18 +98,15 @@ describe("branch settling", () => {
     pullRequests.unique = [
       { number: 10, state: "MERGED", head: "0123456789".repeat(4) },
     ];
-    const settled = (branch: string, day = "2000-01-01") =>
-      `[branch "${branch}"]\n\trebaseSettled = ${day}\n\tremote = origin\n\tmerge = refs/heads/${branch}\n`;
     await appendFile(
       join(f.repositoryPath, ".git", "config"),
       ["main", "topic", "mirrored", "elsewhere", "squashed", "unique"]
-        .map((branch) => settled(branch))
+        .map((branch) => settledConfig(branch))
         .join("") +
-        settled("fresh", new Date().toISOString().slice(0, 10)) +
+        settledConfig("fresh", new Date().toISOString().slice(0, 10)) +
         '[remote "origin"]\n\tfetch = ^refs/heads/squashed\n\tfetch = ^refs/heads/unique\n',
     );
-    const worktree = (branch: string) =>
-      join(f.repositoryPath, "..", `worktree-${branch}`);
+    const worktree = (branch: string) => worktreePath(f, branch);
     await git(f.repositoryPath, "worktree", "add", worktree("topic"), "topic");
     await git(
       f.repositoryPath,
@@ -135,6 +132,58 @@ describe("branch settling", () => {
       .toEqual(["elsewhere", "fresh", "main", "mirrored", "unique"]);
     expect(existsSync(worktree("topic"))).toBe(false);
     expect(existsSync(worktree("mirrored"))).toBe(true);
+  });
+
+  it("keeps settled branches that are being rebased, sit in a moved worktree or were used again", async () => {
+    const pullRequests: Record<
+      string,
+      { number: number; state?: "MERGED"; head?: string }[]
+    > = {};
+    const f = await settlingFixture(fakeGitHub(pullRequests).github);
+    const main = await git(f.repositoryPath, "rev-parse", "main");
+    const branches = ["rebasing", "moved", "reopened", "reused", "done"];
+    await fastImport(
+      f.repositoryPath,
+      `${branches.map((branch) => `reset refs/heads/${branch}\nfrom refs/heads/main\n\n`).join("")}commit refs/heads/reused\ncommitter Rebase test <rebase@example.test> 1700000000 +0000\ndata 5\nagain\nfrom refs/heads/main\n\n`,
+    );
+    pullRequests.reopened = [{ number: 11 }];
+    pullRequests.reused = [{ number: 12, state: "MERGED", head: main }];
+    await appendFile(
+      join(f.repositoryPath, ".git", "config"),
+      branches.map((branch) => settledConfig(branch)).join(""),
+    );
+    const rebasing = worktreePath(f, "rebasing");
+    await git(f.repositoryPath, "worktree", "add", "--detach", rebasing);
+    const rebaseState = await git(
+      rebasing,
+      "rev-parse",
+      "--path-format=absolute",
+      "--git-path",
+      "rebase-merge",
+    );
+    await mkdir(rebaseState);
+    await writeFile(join(rebaseState, "head-name"), "refs/heads/rebasing\n");
+    const moved = worktreePath(f, "moved");
+    await git(f.repositoryPath, "worktree", "add", moved, "moved");
+    await rename(moved, `${moved}-elsewhere`);
+
+    await f.fetch();
+
+    await expect
+      .poll(f.branches)
+      .toEqual([
+        "elsewhere",
+        "main",
+        "mirrored",
+        "moved",
+        "rebasing",
+        "reopened",
+        "reused",
+        "topic",
+      ]);
+    await expect(
+      git(f.repositoryPath, "worktree", "list", "--porcelain"),
+    ).resolves.toContain(moved);
   });
 
   it("stores the settling switch for every client and settles or unsettles the existing branches of a selection by hand", async () => {
@@ -175,6 +224,14 @@ describe("branch settling", () => {
     ).resolves.toBe("false");
   });
 });
+
+function settledConfig(branch: string, day = "2000-01-01") {
+  return `[branch "${branch}"]\n\trebaseSettled = ${day}\n\tremote = origin\n\tmerge = refs/heads/${branch}\n`;
+}
+
+function worktreePath(f: { readonly repositoryPath: string }, branch: string) {
+  return join(f.repositoryPath, "..", `worktree-${branch}`);
+}
 
 async function settlingFixture(
   github: ReturnType<typeof fakeGitHub>["github"],
