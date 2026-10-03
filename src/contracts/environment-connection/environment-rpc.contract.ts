@@ -17,6 +17,7 @@ import { RepositoryBranchesApi } from "#contracts/repository-refs/repository-bra
 import { RepositoryRefsApi } from "#contracts/repository-refs/repository-refs.contract.ts";
 import { RepositoryTagsApi } from "#contracts/repository-refs/repository-tags.contract.ts";
 import { RepositoryStashesApi } from "#contracts/repository-stashes/repository-stashes.contract.ts";
+import { RepositoryWorktreesApi } from "#contracts/repository-worktrees/repository-worktrees.contract.ts";
 import { SourceControlApi } from "#contracts/source-control/source-control.contract.ts";
 
 export const environmentProtocol = 5;
@@ -77,6 +78,7 @@ export const EnvironmentRpc = RpcGroup.make(
   ...Object.values(RepositoryBranchesApi),
   ...Object.values(RepositoryTagsApi),
   ...Object.values(RepositoryStashesApi),
+  ...Object.values(RepositoryWorktreesApi),
   ...Object.values(SourceControlApi),
   ...Object.values(GitIdentityApi),
 ).merge(RepositoryHistoryRpc);

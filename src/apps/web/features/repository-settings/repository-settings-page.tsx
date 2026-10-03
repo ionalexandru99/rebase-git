@@ -23,6 +23,7 @@ import {
 import type { RepositoryHistory } from "#web/features/repository-history/repository-history.ts";
 import { RepositoryCacheSettings } from "#web/features/repository-settings/components/repository-cache-settings.tsx";
 import { RepositoryDetailsSettings } from "#web/features/repository-settings/components/repository-details-settings.tsx";
+import { WorktreeFolderSettings } from "#web/features/worktrees/worktree-folder-settings.tsx";
 import { useEnvironment } from "#web/platform/query/environment-context.tsx";
 import { useCommand } from "#web/platform/query/use-command.ts";
 
@@ -83,6 +84,7 @@ export function RepositorySettingsPage({
         ) : (
           <RepositoryHistorySettings
             history={history}
+            path={path}
             repositoryId={repositoryId}
             identity={identity}
             connected={connected}
@@ -110,12 +112,14 @@ export function RepositorySettingsPage({
 
 function RepositoryHistorySettings({
   history,
+  path,
   repositoryId,
   identity,
   connected,
   canConfigure,
 }: {
   readonly history: RepositoryHistory;
+  readonly path: string;
   readonly repositoryId: string;
   readonly identity: RepositoryHistoryIdentity;
   readonly connected: boolean;
@@ -128,6 +132,11 @@ function RepositoryHistorySettings({
         <RepositoryIdentityRow repositoryId={repositoryId} />
         <RepositoryFetchSettings
           repositoryId={repositoryId}
+          canConfigure={canConfigure}
+        />
+        <WorktreeFolderSettings
+          repositoryId={repositoryId}
+          path={path}
           canConfigure={canConfigure}
         />
       </SettingsSection>

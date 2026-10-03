@@ -57,6 +57,7 @@ describe("ref actions", () => {
     expect(Object.keys(reasons("tracked"))).toEqual([
       "checkout",
       "newBranch",
+      "newWorktree",
       "rename",
       "deleteLocal",
     ]);
@@ -100,6 +101,7 @@ describe("ref actions", () => {
       checkout: undefined,
       deleteLocal: "Read only",
       newBranch: "Read only",
+      newWorktree: "Read only",
       rename: "Read only",
     });
     expect(reasons("release", false)).toMatchObject({ delete: "Read only" });

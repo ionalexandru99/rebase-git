@@ -22,6 +22,8 @@ export const RepositoryWorktree = Schema.Struct({
   head: RepositoryHead,
   main: Schema.Boolean,
   path: RepositoryPath,
+  locked: Schema.optionalKey(Schema.String.check(Schema.isMaxLength(1_024))),
+  missing: Schema.optionalKey(Schema.Boolean),
 });
 export type RepositoryWorktree = typeof RepositoryWorktree.Type;
 

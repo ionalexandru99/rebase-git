@@ -36,6 +36,7 @@ import {
   reflogPanel,
 } from "#web/features/workspace-panel/workspace-panel-definitions.ts";
 import { useWorkspacePanel } from "#web/features/workspace-panel/workspace-panel-provider.tsx";
+import { WorktreeSwitcher } from "#web/features/worktrees/worktree-switcher.tsx";
 import { useEnvironment } from "#web/platform/query/environment-context.tsx";
 import {
   type RepositoryScope,
@@ -196,7 +197,10 @@ function Workspace({
                         onOpenDetails={inspection.open}
                         onActiveCommitChange={inspection.select}
                         titleActions={
-                          <CurrentPullRequest pullRequests={pullRequests} />
+                          <>
+                            <WorktreeSwitcher />
+                            <CurrentPullRequest pullRequests={pullRequests} />
+                          </>
                         }
                         toolbarActions={
                           <>

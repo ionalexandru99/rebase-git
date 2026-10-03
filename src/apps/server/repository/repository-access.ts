@@ -1,4 +1,5 @@
 import { realpath } from "node:fs";
+import { resolve } from "node:path";
 import { promisify } from "node:util";
 import { Effect } from "effect";
 import {
@@ -103,10 +104,16 @@ export function canonicalizeWorktrees(
 ) {
   return Effect.all(
     worktrees.map((worktree) =>
-      Effect.promise(async () => ({
-        ...worktree,
-        path: await realpathNative(worktree.path).catch(() => worktree.path),
-      })),
+      Effect.promise(() =>
+        realpathNative(worktree.path).then(
+          (path) => ({ ...worktree, path }),
+          (error: NodeJS.ErrnoException) => ({
+            ...worktree,
+            path: resolve(worktree.path),
+            ...(error.code === "ENOENT" ? { missing: true } : {}),
+          }),
+        ),
+      ),
     ),
     { concurrency: "unbounded" },
   );
@@ -216,6 +223,7 @@ function worktreeFromEntry(
     return undefined;
   }
   const branch = fields.get("branch");
+  const locked = fields.get("locked");
   return {
     head: {
       ...(branch?.startsWith(branchPrefix)
@@ -225,5 +233,7 @@ function worktreeFromEntry(
     },
     main,
     path,
+    ...(locked === undefined ? {} : { locked: locked.slice(0, 1_024) }),
+    ...(fields.has("prunable") ? { missing: true } : {}),
   };
 }
