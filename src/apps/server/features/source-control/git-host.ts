@@ -31,6 +31,8 @@ export type PullRequestsByHead = ReadonlyMap<
   readonly HostedPullRequest[]
 >;
 
+export type HeadAnswer = readonly HostedPullRequest[] | undefined;
+
 export interface HostedRepository {
   readonly id: string;
   readonly pullRequests: (
@@ -181,15 +183,13 @@ export function pullRequest(
 export function eachHead(
   heads: readonly string[],
   concurrency: number,
-  read: (
-    head: string,
-  ) => Effect.Effect<readonly HostedPullRequest[], PullRequestsUnavailable>,
+  read: (head: string) => Effect.Effect<HeadAnswer, PullRequestsUnavailable>,
 ): Effect.Effect<PullRequestsByHead, PullRequestsUnavailable> {
   return Effect.forEach(
     heads,
     (head) => read(head).pipe(Effect.map((found) => [head, found] as const)),
     { concurrency },
-  ).pipe(Effect.map((entries) => new Map(entries)));
+  ).pipe(Effect.map(answeredHeads));
 }
 
 export function inBatches(
@@ -197,10 +197,7 @@ export function inBatches(
   size: number,
   read: (
     batch: readonly string[],
-  ) => Effect.Effect<
-    readonly (readonly HostedPullRequest[])[],
-    PullRequestsUnavailable
-  >,
+  ) => Effect.Effect<readonly HeadAnswer[], PullRequestsUnavailable>,
 ): Effect.Effect<PullRequestsByHead, PullRequestsUnavailable> {
   const batches = Array.from(
     { length: Math.ceil(heads.length / size) },
@@ -211,9 +208,27 @@ export function inBatches(
     (batch) =>
       read(batch).pipe(
         Effect.map((answers) =>
-          batch.map((head, index) => [head, answers[index] ?? []] as const),
+          batch.map((head, index) => [head, answers[index]] as const),
         ),
       ),
     { concurrency: 4 },
-  ).pipe(Effect.map((entries) => new Map(entries.flat())));
+  ).pipe(Effect.map((entries) => answeredHeads(entries.flat())));
+}
+
+export function pageAnswer(
+  read: number,
+  pageSize: number,
+  found: readonly HostedPullRequest[],
+): HeadAnswer {
+  return read < pageSize || found.length > 0 ? found : undefined;
+}
+
+function answeredHeads(
+  entries: readonly (readonly [string, HeadAnswer])[],
+): PullRequestsByHead {
+  return new Map(
+    entries.flatMap(([head, found]) =>
+      found === undefined ? [] : [[head, found] as const],
+    ),
+  );
 }

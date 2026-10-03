@@ -173,7 +173,8 @@ function listPullRequests(
 ) {
   return Effect.gen(function* () {
     const wanted = new Set(heads);
-    const nodes = (yield* readPullRequests(cli, login.name, repository)).filter(
+    const read = yield* readPullRequests(cli, login.name, repository);
+    const nodes = read.nodes.filter(
       (node) =>
         wanted.has(node.head.ref) &&
         node.head.repo?.full_name.toLowerCase() === fullName(repository) &&
@@ -191,12 +192,14 @@ function listPullRequests(
       { concurrency: checksAtOnce },
     );
     return new Map(
-      heads.map((head) => [
-        head,
-        found
+      heads.flatMap((head) => {
+        const pullRequests = found
           .filter((candidate) => candidate.head === head)
-          .map(({ pullRequest }) => pullRequest),
-      ]),
+          .map(({ pullRequest }) => pullRequest);
+        return read.complete || pullRequests.length > 0
+          ? [[head, pullRequests] as const]
+          : [];
+      }),
     );
   });
 }
@@ -206,7 +209,10 @@ function readPullRequests(
   login: string,
   repository: ForgejoRepository,
   page = 1,
-): Effect.Effect<readonly PullRequestNode[], PullRequestsUnavailable> {
+): Effect.Effect<
+  { readonly nodes: readonly PullRequestNode[]; readonly complete: boolean },
+  PullRequestsUnavailable
+> {
   return cli
     .api(
       login,
@@ -222,9 +228,12 @@ function readPullRequests(
       Effect.mapError(() => unavailable),
       Effect.flatMap((nodes) =>
         nodes.length < pageSize || page === pagesRead
-          ? Effect.succeed(nodes)
+          ? Effect.succeed({ nodes, complete: nodes.length < pageSize })
           : readPullRequests(cli, login, repository, page + 1).pipe(
-              Effect.map((rest) => [...nodes, ...rest]),
+              Effect.map((rest) => ({
+                ...rest,
+                nodes: [...nodes, ...rest.nodes],
+              })),
             ),
       ),
     );

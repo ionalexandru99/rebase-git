@@ -29,8 +29,13 @@ export const SettleBranches = Schema.Struct({
 });
 export type SettleBranches = typeof SettleBranches.Type;
 
+export const defaultDeleteSettledAfter = 3;
+
 export const BranchSettings = Schema.Struct({
   autoSettle: Schema.Boolean,
+  deleteSettledAfter: Schema.Int.check(
+    Schema.isBetween({ minimum: 0, maximum: 365 }),
+  ),
 });
 export type BranchSettings = typeof BranchSettings.Type;
 

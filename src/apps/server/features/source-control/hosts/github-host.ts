@@ -9,6 +9,7 @@ import {
   type HostedPullRequest,
   hostCommandOutput,
   inBatches,
+  pageAnswer,
   pullRequest,
   runHostCommand,
   signedInTool,
@@ -83,13 +84,17 @@ export function createGitHubHost(cli: GitHubCli): GitHost {
                 })
                 .pipe(
                   Effect.flatMap(decodeResponse),
-                  Effect.map(({ data }) =>
-                    batch.map((_, index) =>
-                      pullRequests(
-                        data.repository?.[`b${index}`]?.nodes ?? [],
-                        repository.owner,
-                      ),
-                    ),
+                  Effect.flatMap(({ data: { repository: answers } }) =>
+                    answers === null
+                      ? Effect.fail(unavailable)
+                      : Effect.succeed(
+                          batch.map((_, index) =>
+                            headAnswer(
+                              answers[`b${index}`]?.nodes,
+                              repository.owner,
+                            ),
+                          ),
+                        ),
                   ),
                 ),
             ),
@@ -161,6 +166,19 @@ const decodeResponse = (output: string) =>
       }),
     ),
   )(output).pipe(Effect.mapError(() => unavailable));
+
+function headAnswer(
+  nodes: readonly PullRequestNode[] | undefined,
+  owner: string,
+) {
+  return nodes === undefined
+    ? undefined
+    : pageAnswer(
+        nodes.length,
+        pullRequestsPerBranch,
+        pullRequests(nodes, owner),
+      );
+}
 
 function pullRequests(
   nodes: readonly PullRequestNode[],

@@ -39,6 +39,9 @@ export function pullRequestsFeature({
           Effect.flatMap((repository) =>
             listPullRequests(git, sourceControl, repository.path),
           ),
+          Effect.map((branches) =>
+            branches.filter(({ pullRequests }) => pullRequests.length > 0),
+          ),
           Effect.catchTag("GitFailed", (failure) =>
             Effect.fail(repositoryRejected("GitFailed", failure.detail)),
           ),
@@ -84,15 +87,14 @@ export function listPullRequests(
       ...new Set(branches.map(({ head }) => head)),
     ]);
     return branches.flatMap(({ branch, head }) => {
-      const pullRequests = (byHead.get(head) ?? []).filter(({ url }) =>
-        isPullRequestLink(url, host.kind),
-      );
-      return pullRequests.length === 0
+      const answer = byHead.get(head);
+      return answer === undefined
         ? []
         : [
             {
               branch,
-              pullRequests: pullRequests
+              pullRequests: answer
+                .filter(({ url }) => isPullRequestLink(url, host.kind))
                 .sort((left, right) => openFirst(left) - openFirst(right))
                 .slice(0, pullRequestsPerBranch),
             },

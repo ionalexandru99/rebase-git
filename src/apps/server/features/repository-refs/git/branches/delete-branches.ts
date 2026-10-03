@@ -88,7 +88,7 @@ export function deleteBranches(
   });
 }
 
-function readRefTargets(git: GitCommandRunner, directory: string) {
+export function readRefTargets(git: GitCommandRunner, directory: string) {
   return runRepositoryGit(
     git,
     directory,
@@ -155,7 +155,7 @@ function targetProblem(
   return target === expected ? undefined : { _tag: "BranchMoved", name };
 }
 
-function unmergedBranches(
+export function unmergedBranches(
   git: GitCommandRunner,
   directory: string,
   branches: readonly BranchDeletion[],
@@ -374,7 +374,7 @@ function forgetRemoteRefs(
   );
 }
 
-function deleteLocals(
+export function deleteLocals(
   git: GitCommandRunner,
   directory: string,
   locals: readonly LocalTarget[],

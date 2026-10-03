@@ -10,10 +10,8 @@ import {
   acquireEnvironmentListener,
   type EnvironmentListener,
 } from "#server/app/server/environment-listener.ts";
-import {
-  branchSettlingFeature,
-  settleMergedBranches,
-} from "#server/features/branch-settling/branch-settling.ts";
+import { branchSettlingFeature } from "#server/features/branch-settling/branch-settling.ts";
+import { settleBranchesAfterFetch } from "#server/features/branch-settling/settle-after-fetch.ts";
 import {
   commandProgressFeature,
   createCommandProgress,
@@ -155,7 +153,10 @@ export function environmentFeatures(dependencies: EnvironmentDependencies) {
       repositoryOperationsFeature(dependencies),
       yield* repositoryPullFeature({
         ...dependencies,
-        afterFetch: settleMergedBranches({ ...dependencies, sourceControl }),
+        afterFetch: settleBranchesAfterFetch({
+          ...dependencies,
+          sourceControl,
+        }),
       }),
       pullRequestsFeature({ ...dependencies, sourceControl }),
       repositoryPushFeature(dependencies),
