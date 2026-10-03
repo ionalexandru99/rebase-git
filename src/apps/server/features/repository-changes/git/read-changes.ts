@@ -13,7 +13,10 @@ import {
   runRepositoryGitOutput,
 } from "#server/adapters/local-git/git-commands.ts";
 import { changeIo } from "#server/features/repository-changes/git/change-failures.ts";
-import { worktreeIdentities } from "#server/features/repository-changes/git/change-files.ts";
+import {
+  worktreeIdentities,
+  worktreeLineCounts,
+} from "#server/features/repository-changes/git/change-files.ts";
 import { fingerprint } from "#server/repository/comparison/fingerprint.ts";
 
 export function readChanges(git: GitCommandRunner, scope: ChangesScope) {
@@ -25,49 +28,70 @@ export function readChanges(git: GitCommandRunner, scope: ChangesScope) {
         changesFailed("Unsupported", "There is no commit to amend."),
       );
     const base = yield* comparisonBase(git, directory, head, scope.amend);
-    const [status, stagedDiff, index, message] = yield* Effect.all(
-      [
-        runRepositoryGit(git, directory, [
-          "status",
-          "--porcelain=v1",
-          "--no-renames",
-          "-z",
-          "--untracked-files=all",
-        ]),
-        runRepositoryGitOutput(git, directory, [
-          "diff",
-          "--cached",
-          "--find-renames",
-          `-l${renameLimit}`,
-          "--name-status",
-          "-z",
-          base,
-        ]),
-        indexIdentity(indexPath),
-        head === null
-          ? Effect.succeed("")
-          : runRepositoryGit(git, directory, [
-              "log",
-              "-1",
-              "--format=%B",
-              head,
-            ]),
-      ],
-      { concurrency: 4 },
+    const [status, unstagedLines, stagedDiff, index, message] =
+      yield* Effect.all(
+        [
+          runRepositoryGit(git, directory, [
+            "status",
+            "--porcelain=v1",
+            "--no-renames",
+            "-z",
+            "--untracked-files=all",
+          ]),
+          runRepositoryGit(git, directory, [
+            "diff",
+            "--numstat",
+            "--no-renames",
+            "-z",
+          ]),
+          runRepositoryGitOutput(git, directory, [
+            "diff",
+            "--cached",
+            "--find-renames",
+            `-l${renameLimit}`,
+            "--raw",
+            "--numstat",
+            "-z",
+            base,
+          ]),
+          indexIdentity(indexPath),
+          head === null
+            ? Effect.succeed("")
+            : runRepositoryGit(git, directory, [
+                "log",
+                "-1",
+                "--format=%B",
+                head,
+              ]),
+        ],
+        { concurrency: 5 },
+      );
+    const records = status
+      .split("\0")
+      .filter((record) => record.length > 0)
+      .map((record) => ({ xy: record.slice(0, 2), path: record.slice(3) }))
+      .filter(({ xy }) => xy[1] !== " " || conflicted(xy));
+    const untracked = records.flatMap(({ xy, path }) =>
+      xy === "??" ? [path] : [],
     );
-    const unstaged: ChangedFile[] = [];
-    for (const record of status.split("\0")) {
-      if (!record) continue;
-      const xy = record.slice(0, 2);
-      const path = record.slice(3);
-      const conflict = xy.includes("U") || xy === "AA" || xy === "DD";
-      if (xy[1] !== " " || conflict)
-        unstaged.push({
-          path,
-          previousPath: null,
-          status: conflict ? "U" : fileStatus(xy[1]),
-        });
-    }
+    const untrackedLines = yield* worktreeLineCounts(directory, untracked);
+    const counted = new Map([
+      ...lineCounts(unstagedLines),
+      ...untracked.map(
+        (path, index) => [path, untrackedLines[index] ?? null] as const,
+      ),
+    ]);
+    const unstaged = records.map(
+      ({ xy, path }): ChangedFile =>
+        conflicted(xy)
+          ? { path, previousPath: null, status: "U", lines: null }
+          : {
+              path,
+              previousPath: null,
+              status: fileStatus(xy[1]),
+              lines: counted.get(path) ?? null,
+            },
+    );
     const staged = stagedFiles(stagedDiff.stdout);
     const paths = [
       ...new Set(
@@ -164,9 +188,10 @@ const renameLimit = 1000;
 
 function stagedFiles(output: string) {
   const fields = output.split("\0");
-  const files: ChangedFile[] = [];
-  for (let i = 0; i + 1 < fields.length; ) {
-    const status = fields[i++] ?? "";
+  const files: Omit<ChangedFile, "lines">[] = [];
+  let i = 0;
+  while (fields[i]?.startsWith(":")) {
+    const status = fields[i++]?.split(" ").at(-1) ?? "";
     const first = fields[i++];
     const renamed = status.startsWith("R");
     const path = renamed ? fields[i++] : first;
@@ -177,7 +202,36 @@ function stagedFiles(output: string) {
         status: renamed ? "R" : fileStatus(status),
       });
   }
-  return files;
+  const counted = lineCounts(fields.slice(i).join("\0"));
+  return files.map(
+    (file): ChangedFile => ({ ...file, lines: counted.get(file.path) ?? null }),
+  );
+}
+
+function conflicted(xy: string) {
+  return xy.includes("U") || xy === "AA" || xy === "DD";
+}
+
+function lineCounts(output: string) {
+  const fields = output.split("\0");
+  const counts = new Map<string, ChangedFile["lines"]>();
+  for (let i = 0; i < fields.length; ) {
+    const [added = "", removed = "", path] = (fields[i++] ?? "").split("\t");
+    if (path === undefined) continue;
+    let target: string | undefined = path;
+    if (path === "") {
+      target = fields[i + 1];
+      i += 2;
+    }
+    if (target)
+      counts.set(
+        target,
+        added === "-"
+          ? null
+          : { added: Number(added), removed: Number(removed) },
+      );
+  }
+  return counts;
 }
 
 function fileStatus(status: string | undefined): ChangedFile["status"] {

@@ -32,7 +32,7 @@ it("retains nested scroll coordinates when detached views are shown again", asyn
         >
           <WorkspacePanel.Group>
             <ResizablePanel id="graph" minSize="20%">
-              <WorkspacePanel.Toggle />
+              <WorkspacePanel.Controls />
             </ResizablePanel>
             <WorkspacePanel.Pane
               contents={{

@@ -22,6 +22,9 @@ export const ChangedFile = Schema.Struct({
   path: RepositoryPath,
   previousPath: Schema.NullOr(RepositoryPath),
   status: Schema.Literals(["A", "M", "D", "R", "T", "U", "?"]),
+  lines: Schema.NullOr(
+    Schema.Struct({ added: Schema.Number, removed: Schema.Number }),
+  ),
 });
 export type ChangedFile = typeof ChangedFile.Type;
 export const RepositoryChanges = Schema.Struct({

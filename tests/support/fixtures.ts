@@ -89,13 +89,15 @@ export function changedFile<Status extends ChangedFile["status"]>(
   path: string,
   status: Status,
   previousPath?: string | null,
+  lines?: ChangedFile["lines"],
 ): ChangedFile & { readonly status: Status };
 export function changedFile(
   path: string,
   status: ChangedFile["status"] = "M",
   previousPath: string | null = null,
+  lines: ChangedFile["lines"] = null,
 ): ChangedFile {
-  return { path, previousPath, status };
+  return { path, previousPath, status, lines };
 }
 
 export function commitInspection(

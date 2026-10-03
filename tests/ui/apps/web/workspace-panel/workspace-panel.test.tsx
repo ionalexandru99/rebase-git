@@ -12,18 +12,16 @@ describe("workspace panel", () => {
     await render(
       <div className="dark" style={{ width: 1200, height: 600 }}>
         <WorkspacePanel.Provider scopeKey="expanded">
+          <WorkspacePanel.Controls />
           <WorkspacePanel.Group>
             <ResizablePanel id="branches" defaultSize="20%" minSize="15%">
               <div data-testid="branch-content">Branches</div>
             </ResizablePanel>
             <WorkspacePanel.Main>
               {() => (
-                <>
-                  <WorkspacePanel.Toggle />
-                  <button type="button" data-testid="graph">
-                    Graph
-                  </button>
-                </>
+                <button type="button" data-testid="graph">
+                  Graph
+                </button>
               )}
             </WorkspacePanel.Main>
             <WorkspacePanel.Pane />
@@ -41,6 +39,38 @@ describe("workspace panel", () => {
     await page.getByRole("button", { name: "Restore side panel" }).click();
     await expect.poll(panelWidth).toBeCloseTo(width, -1);
     await expect.element(page.getByTestId("graph")).toBeVisible();
+  });
+
+  it("keeps the panel toggle in one place and hides the panel while it is expanded", async () => {
+    await render(
+      <div className="dark" style={{ width: 1200, height: 600 }}>
+        <WorkspacePanel.Provider scopeKey="pinned">
+          <WorkspacePanel.Controls />
+          <WorkspacePanel.Group>
+            <ResizablePanel id="branches" defaultSize="20%" minSize="15%" />
+            <WorkspacePanel.Main>{() => null}</WorkspacePanel.Main>
+            <WorkspacePanel.Pane />
+          </WorkspacePanel.Group>
+        </WorkspacePanel.Provider>
+      </div>,
+    );
+    const place = () => {
+      const { right, top } = page
+        .getByRole("button", { name: /side panel$/, expanded: true })
+        .or(page.getByRole("button", { name: "Show side panel" }))
+        .element()
+        .getBoundingClientRect();
+      return `${right},${top}`;
+    };
+    const closed = place();
+    await page.getByRole("button", { name: "Show side panel" }).click();
+    expect(place()).toBe(closed);
+    await page.getByRole("button", { name: "Expand side panel" }).click();
+    expect(place()).toBe(closed);
+    await page.getByRole("button", { name: "Hide side panel" }).click();
+    await expect
+      .element(page.getByRole("complementary", { name: "Side panel" }))
+      .not.toBeInTheDocument();
   });
 
   it("uses one toggle without remounting the graph", async () => {
@@ -148,7 +178,7 @@ async function renderPanel(scopeKey = "panel-test") {
       <WorkspacePanel.Provider scopeKey={scopeKey}>
         <WorkspacePanel.Group>
           <ResizablePanel id="graph" minSize="20%">
-            <WorkspacePanel.Toggle />
+            <WorkspacePanel.Controls />
             <button type="button">Graph selection</button>
           </ResizablePanel>
           <WorkspacePanel.Pane />
@@ -188,7 +218,7 @@ it("migrates a shared previous layout into only the first repository", async () 
       >
         <WorkspacePanel.Group>
           <ResizablePanel id="graph" minSize="20%">
-            <WorkspacePanel.Toggle />
+            <WorkspacePanel.Controls />
           </ResizablePanel>
           <WorkspacePanel.Pane />
         </WorkspacePanel.Group>

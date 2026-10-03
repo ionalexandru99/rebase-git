@@ -1,4 +1,6 @@
 import {
+  IconArrowsDiagonal,
+  IconArrowsDiagonalMinimize2,
   IconLayoutSidebarRightCollapse,
   IconLayoutSidebarRightExpand,
 } from "@tabler/icons-react";
@@ -74,25 +76,48 @@ function Group({ children }: { readonly children: ReactNode }) {
   );
 }
 
-function Toggle() {
+function Controls() {
   const panel = useWorkspacePanel();
+  const { open, expanded } = panel.state;
   return (
-    <Button
-      aria-label={panel.state.open ? "Hide side panel" : "Show side panel"}
-      aria-expanded={panel.state.open}
-      variant="ghost"
-      size="icon-sm"
-      className="border-0 bg-transparent shadow-none aria-expanded:bg-transparent"
-      onClick={() =>
-        panel.execute({ type: "visibility", open: !panel.state.open })
-      }
-    >
-      {panel.state.open ? (
-        <IconLayoutSidebarRightCollapse aria-hidden="true" />
-      ) : (
-        <IconLayoutSidebarRightExpand aria-hidden="true" />
-      )}
-    </Button>
+    <div className="fixed top-0 right-0 z-30 flex h-12 items-center gap-0.5 pr-2">
+      {open ? (
+        <Button
+          size="icon-sm"
+          variant="ghost"
+          aria-label={expanded ? "Restore side panel" : "Expand side panel"}
+          aria-pressed={expanded === true}
+          onClick={() => panel.execute({ type: "expand", expanded: !expanded })}
+        >
+          {expanded ? (
+            <IconArrowsDiagonalMinimize2 aria-hidden="true" />
+          ) : (
+            <IconArrowsDiagonal aria-hidden="true" />
+          )}
+        </Button>
+      ) : null}
+      <Button
+        aria-label={open ? "Hide side panel" : "Show side panel"}
+        aria-expanded={open}
+        variant="ghost"
+        size="icon-sm"
+        className="border-0 bg-transparent shadow-none aria-expanded:bg-transparent"
+        onClick={() => panel.execute({ type: "visibility", open: !open })}
+      >
+        {open ? (
+          <IconLayoutSidebarRightCollapse aria-hidden="true" />
+        ) : (
+          <IconLayoutSidebarRightExpand aria-hidden="true" />
+        )}
+      </Button>
+    </div>
+  );
+}
+
+function ControlsSpace() {
+  const { state } = useWorkspacePanel();
+  return state.open ? null : (
+    <span aria-hidden="true" className="w-8 shrink-0" />
   );
 }
 
@@ -152,7 +177,8 @@ export const WorkspacePanel = {
   Sessions: WorkspacePanelSessions,
   Provider: WorkspacePanelProvider,
   Group,
-  Toggle,
+  Controls,
+  ControlsSpace,
   Pane,
   Main,
 };

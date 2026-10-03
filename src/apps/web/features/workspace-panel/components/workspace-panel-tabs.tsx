@@ -1,8 +1,4 @@
-import {
-  IconArrowsMaximize,
-  IconArrowsMinimize,
-  IconX,
-} from "@tabler/icons-react";
+import { IconX } from "@tabler/icons-react";
 import { type ReactNode, useLayoutEffect, useRef } from "react";
 import { Button } from "#web/components/ui/button.tsx";
 import {
@@ -56,7 +52,7 @@ export function WorkspacePanelTabs({
       }}
       className="flex h-full min-h-0 flex-col bg-background text-foreground"
     >
-      <div className="flex h-11 shrink-0 items-center gap-1 border-border border-b px-2">
+      <div className="flex h-12 shrink-0 items-center gap-1 border-border border-b pr-20 pl-2">
         <div className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto py-1">
           {tabs.length > 0 ? (
             <>
@@ -74,23 +70,6 @@ export function WorkspacePanelTabs({
             </>
           ) : null}
         </div>
-        <Button
-          size="icon-xs"
-          variant="ghost"
-          aria-label={
-            panel.state.expanded ? "Restore side panel" : "Expand side panel"
-          }
-          aria-pressed={panel.state.expanded === true}
-          onClick={() =>
-            panel.execute({ type: "expand", expanded: !panel.state.expanded })
-          }
-        >
-          {panel.state.expanded ? (
-            <IconArrowsMinimize />
-          ) : (
-            <IconArrowsMaximize />
-          )}
-        </Button>
       </div>
       {tabs.map((kind) => {
         return (

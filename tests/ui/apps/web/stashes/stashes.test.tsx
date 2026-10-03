@@ -110,6 +110,7 @@ describe("stashes", () => {
       ]),
     );
 
+    await screen.getByRole("button", { name: "Dismiss notification" }).click();
     const first = screen.getByRole("button", {
       name: "Unstaged a.ts",
       exact: true,

@@ -93,6 +93,32 @@ async function fixture(
 }
 
 describe("working changes through Git", () => {
+  it("counts the lines each changed file adds and removes", async () => {
+    const f = await fixture();
+    await writeFile(join(f.directory, "file.txt"), "one\nTWO\nthree\nfour\n");
+    await writeFile(join(f.directory, "staged.txt"), "a\nb\nc\n");
+    await f.git("add", "staged.txt");
+    await writeFile(join(f.directory, "new.txt"), "x\ny");
+    await writeFile(join(f.directory, "image.bin"), Buffer.from([0, 255, 0]));
+    const changes = await f.read();
+    expect(changes.staged).toEqual([
+      {
+        path: "staged.txt",
+        previousPath: null,
+        status: "A",
+        lines: { added: 3, removed: 0 },
+      },
+    ]);
+    expect(
+      Object.fromEntries(
+        changes.unstaged.map((file) => [file.path, file.lines]),
+      ),
+    ).toEqual({
+      "file.txt": { added: 2, removed: 1 },
+      "new.txt": { added: 2, removed: 0 },
+      "image.bin": null,
+    });
+  });
   it("rejects external edits while preparing stage", async () => {
     let changed = false;
     const f = await fixture(true, async (command) => {
@@ -471,7 +497,12 @@ describe("renamed files through Git", () => {
   it("reads a staged rename with its source and content diff", async () => {
     const f = await renamed();
     expect((await f.read()).staged).toEqual([
-      { path: "moved.txt", previousPath: "file.txt", status: "R" },
+      {
+        path: "moved.txt",
+        previousPath: "file.txt",
+        status: "R",
+        lines: { added: 1, removed: 1 },
+      },
     ]);
     const diff = await f.diff("staged", false, "moved.txt");
     expect(diff.before).toBe(original);
@@ -510,7 +541,12 @@ describe("renamed files through Git", () => {
       lines: ["-2", "+2"],
     });
     expect((await f.read()).staged).toEqual([
-      { path: "moved.txt", previousPath: "file.txt", status: "R" },
+      {
+        path: "moved.txt",
+        previousPath: "file.txt",
+        status: "R",
+        lines: { added: 0, removed: 0 },
+      },
     ]);
     expect((await f.git("show", ":moved.txt")).stdout).toBe(original);
     expect(await readFile(join(f.directory, "moved.txt"), "utf8")).toBe(edited);
@@ -565,7 +601,12 @@ describe("renamed files through Git", () => {
       const f = await fixture();
       await f.git("mv", "file.txt", "File.txt");
       expect((await f.read()).staged).toEqual([
-        { path: "File.txt", previousPath: "file.txt", status: "R" },
+        {
+          path: "File.txt",
+          previousPath: "file.txt",
+          status: "R",
+          lines: { added: 0, removed: 0 },
+        },
       ]);
       await f.mutate("discard", "staged");
       const changes = await f.read();

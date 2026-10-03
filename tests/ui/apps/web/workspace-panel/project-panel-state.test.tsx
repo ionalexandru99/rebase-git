@@ -13,7 +13,7 @@ it("restores all open panel tabs after leaving a project and collapsing its pane
       <WorkspacePanel.Provider key={project} scopeKey={project}>
         <WorkspacePanel.Group>
           <ResizablePanel id="graph" minSize="20%">
-            <WorkspacePanel.Toggle />
+            <WorkspacePanel.Controls />
             <Inspect />
           </ResizablePanel>
           <WorkspacePanel.Pane />

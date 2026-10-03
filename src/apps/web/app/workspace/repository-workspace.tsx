@@ -148,6 +148,7 @@ function Workspace({
   const resolved = historyScope.resolvedScope;
   return (
     <>
+      <WorkspacePanel.Controls />
       <OperationRecoveryNotice key={worktreePath} repositoryName={name} />
       <ResetConfirmation reset={reset} />
       <DropConfirmation drop={drop} />
@@ -205,7 +206,7 @@ function Workspace({
                         toolbarActions={
                           <>
                             {syncActions}
-                            <WorkspacePanel.Toggle />
+                            <WorkspacePanel.ControlsSpace />
                           </>
                         }
                         hostedRepository={refs?.hostedRepository}

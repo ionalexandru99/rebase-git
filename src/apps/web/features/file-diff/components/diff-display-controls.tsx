@@ -1,7 +1,20 @@
-import { IconArrowDown, IconArrowUp, IconTextWrap } from "@tabler/icons-react";
+import {
+  IconArrowAutofitHeight,
+  IconArrowDown,
+  IconArrowUp,
+  IconLayoutColumns,
+  IconLayoutRows,
+  IconTextWrap,
+} from "@tabler/icons-react";
 import type { ReactNode } from "react";
 import { Button } from "#web/components/ui/button.tsx";
+import { IconSwitch, IconToggles } from "#web/components/ui/icon-switch.tsx";
 import type { DiffPreferences } from "#web/domain/file-diff/diff-preferences.contract.ts";
+
+const layoutOptions = [
+  { value: "unified", label: "Unified", Icon: IconLayoutRows },
+  { value: "split", label: "Split", Icon: IconLayoutColumns },
+] as const;
 
 export function DiffDisplayControls({
   expanded,
@@ -22,48 +35,37 @@ export function DiffDisplayControls({
 }) {
   return (
     <fieldset
-      className="flex shrink-0 flex-wrap items-center gap-1 border-border border-b p-2"
+      className="flex shrink-0 flex-wrap items-center gap-1.5 border-border border-b p-2"
       aria-label="Diff display controls"
     >
-      <Button
-        size="xs"
-        variant="ghost"
-        aria-pressed={!prefs.split}
-        className="aria-pressed:bg-sidebar-accent aria-pressed:text-sidebar-accent-foreground"
-        onClick={() => onPreferences({ ...prefs, split: false })}
-      >
-        Unified
-      </Button>
-      <Button
-        size="xs"
-        variant="ghost"
-        aria-pressed={prefs.split}
-        className="aria-pressed:bg-sidebar-accent aria-pressed:text-sidebar-accent-foreground"
-        onClick={() => onPreferences({ ...prefs, split: true })}
-      >
-        Split
-      </Button>
-      <Button
-        size="icon-xs"
-        variant="ghost"
-        aria-label="Word wrap"
-        aria-pressed={prefs.wrap}
-        className="aria-pressed:bg-sidebar-accent aria-pressed:text-sidebar-accent-foreground"
-        onClick={() => onPreferences({ ...prefs, wrap: !prefs.wrap })}
-      >
-        <IconTextWrap />
-      </Button>
-      {onExpand ? (
-        <Button
-          size="xs"
-          variant="ghost"
-          aria-pressed={expanded}
-          className="aria-pressed:bg-sidebar-accent aria-pressed:text-sidebar-accent-foreground"
-          onClick={() => onExpand(!expanded)}
-        >
-          {expanded ? "Hide unchanged lines" : "Show unchanged lines"}
-        </Button>
-      ) : null}
+      <IconSwitch
+        label="Diff layout"
+        options={layoutOptions}
+        value={prefs.split ? "split" : "unified"}
+        onChange={(layout) =>
+          onPreferences({ ...prefs, split: layout === "split" })
+        }
+      />
+      <IconToggles
+        toggles={[
+          {
+            label: "Word wrap",
+            Icon: IconTextWrap,
+            pressed: prefs.wrap,
+            onChange: (wrap) => onPreferences({ ...prefs, wrap }),
+          },
+          ...(onExpand
+            ? [
+                {
+                  label: "Show unchanged lines",
+                  Icon: IconArrowAutofitHeight,
+                  pressed: expanded,
+                  onChange: onExpand,
+                },
+              ]
+            : []),
+        ]}
+      />
       <div className="ml-auto flex">
         {children}
         <Button

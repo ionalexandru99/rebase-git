@@ -19,6 +19,7 @@ import {
   keyAction,
   runAction,
 } from "#web/components/ui/action-menu.tsx";
+import { IconSwitch } from "#web/components/ui/icon-switch.tsx";
 import {
   BranchCard,
   createBranchCardHandle,
@@ -52,7 +53,7 @@ import { DockedTree } from "#web/features/branches-sidebar/docked-tree.tsx";
 import { SidebarStatus } from "#web/features/branches-sidebar/sidebar-status.tsx";
 import {
   BranchesSidebarFilter,
-  BranchesSidebarViewSelector,
+  branchViewOptions,
   useBranchesSidebarView,
 } from "#web/features/branches-sidebar/sidebar-view-controls.tsx";
 import { historyRefKey } from "#web/features/commit-graph/scope/history-scope.ts";
@@ -553,7 +554,12 @@ export function BranchesSidebar({
         <h2 className="min-w-0 flex-1 truncate text-base font-semibold">
           Branches
         </h2>
-        <BranchesSidebarViewSelector view={view} onChange={setView} />
+        <IconSwitch
+          label="Branch view"
+          options={branchViewOptions}
+          value={view}
+          onChange={setView}
+        />
       </div>
       <BranchesSidebarFilter
         onKeyDown={handleFilterKeyDown}
