@@ -1,5 +1,6 @@
 import { realpath } from "node:fs";
-import { resolve } from "node:path";
+import { lstat } from "node:fs/promises";
+import { join, resolve } from "node:path";
 import { promisify } from "node:util";
 import { Effect } from "effect";
 import {
@@ -81,9 +82,17 @@ export function createRepositoryAccess(
           .read(scope.worktreePath)
           .pipe(
             Effect.catch((failure) =>
-              isGitRejection(failure)
-                ? Effect.succeed(undefined)
-                : Effect.fail(worktreesUnreadable()),
+              !isGitRejection(failure)
+                ? Effect.fail(worktreesUnreadable())
+                : hasGitEntry(scope.worktreePath).pipe(
+                    Effect.flatMap((present) =>
+                      present
+                        ? Effect.fail(
+                            repositoryRejected("GitFailed", failure.detail),
+                          )
+                        : Effect.succeed(undefined),
+                    ),
+                  ),
             ),
           );
         if (
@@ -114,6 +123,15 @@ function readWorktreeLocation(git: GitCommandRunner, directory: string) {
         commonDirectory: canonicalizePath(commonDirectory),
       });
     }),
+  );
+}
+
+function hasGitEntry(directory: string) {
+  return Effect.promise(() =>
+    lstat(join(directory, ".git")).then(
+      () => true,
+      () => false,
+    ),
   );
 }
 

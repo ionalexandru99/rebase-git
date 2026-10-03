@@ -189,6 +189,7 @@ function inspectWorktree(
         "status",
         "--porcelain=v2",
         "--branch",
+        "--no-ahead-behind",
         "--no-renames",
         "-z",
         "--untracked-files=no",
