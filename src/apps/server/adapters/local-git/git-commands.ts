@@ -1,4 +1,5 @@
 import {
+  type ChildProcess,
   type ChildProcessWithoutNullStreams,
   type ExecFileException,
   execFile,
@@ -208,7 +209,7 @@ function rejectedByGit(exitCode: number, stderr: string): GitFailed {
 }
 
 function runLocalGitCommand(command: GitCommand) {
-  return Effect.callback<GitCommandOutput, GitFailed>((resume, signal) => {
+  return Effect.callback<GitCommandOutput, GitFailed>((resume) => {
     const child = execFile(
       "git",
       gitArguments(command),
@@ -216,7 +217,6 @@ function runLocalGitCommand(command: GitCommand) {
         encoding: "buffer",
         env: gitEnvironment(command),
         maxBuffer: command.maxOutputBytes ?? defaultMaximumOutputBytes,
-        signal,
         timeout: command.timeoutMilliseconds ?? defaultTimeoutMilliseconds,
         windowsHide: true,
       },
@@ -248,6 +248,25 @@ function runLocalGitCommand(command: GitCommand) {
     }
     child.stdin?.once("error", () => undefined);
     child.stdin?.end(command.input);
+    return stopGit(child);
+  });
+}
+
+function stopGit(child: ChildProcess) {
+  return Effect.callback<void>((resume) => {
+    if (child.exitCode !== null || child.signalCode !== null) {
+      resume(Effect.void);
+      return;
+    }
+    child.once("exit", () => resume(Effect.void));
+    if (process.platform === "win32" && child.pid !== undefined)
+      execFile(
+        "taskkill",
+        ["/pid", String(child.pid), "/T", "/F"],
+        { windowsHide: true },
+        () => undefined,
+      );
+    else child.kill();
   });
 }
 

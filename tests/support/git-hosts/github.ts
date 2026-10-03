@@ -10,20 +10,45 @@ interface GitHubPullRequestNode {
   readonly head?: string;
 }
 
+interface GitHubRepository {
+  readonly name: string;
+  readonly private?: boolean;
+}
+
 export function fakeGitHub(
   byHead: Readonly<Record<string, readonly GitHubPullRequestNode[]>> | null,
   {
     version = "gh version 2.101.0 (2026-09-15)",
     account = "octo",
+    protocol = "https",
+    repositories = [],
   }: {
     readonly version?: string | null;
     readonly account?: string | null;
+    readonly protocol?: "https" | "ssh";
+    readonly repositories?: readonly GitHubRepository[];
   } = {},
 ) {
   const requests: Readonly<Record<string, string>>[] = [];
   const github: GitHubCli = {
     version: Effect.succeed(version ?? undefined),
     account: Effect.succeed(account ?? undefined),
+    protocol: Effect.succeed(protocol),
+    repositories: (page) =>
+      Effect.succeed(
+        JSON.stringify(
+          repositories
+            .slice((page - 1) * 100, page * 100)
+            .map((repository) => ({
+              full_name: repository.name,
+              private: repository.private ?? false,
+              description: null,
+              pushed_at: "2026-10-01T10:00:00Z",
+              clone_url: `https://github.com/${repository.name}.git`,
+              ssh_url: `git@github.com:${repository.name}.git`,
+            })),
+        ),
+      ),
     graphql: (_query, variables) => {
       requests.push(variables);
       if (byHead === null)

@@ -34,6 +34,7 @@ const repositoryColorMigration = generatedMigrations[7];
 const gitHostEnabledMigration = generatedMigrations[8];
 const bitbucketTokenMigration = generatedMigrations[9];
 const pullStrategySettingsMigration = generatedMigrations[10];
+const cloneFolderMigration = generatedMigrations[11];
 
 if (
   createEnvironmentMigration === undefined ||
@@ -46,7 +47,8 @@ if (
   repositoryColorMigration === undefined ||
   gitHostEnabledMigration === undefined ||
   bitbucketTokenMigration === undefined ||
-  pullStrategySettingsMigration === undefined
+  pullStrategySettingsMigration === undefined ||
+  cloneFolderMigration === undefined
 ) {
   throw new Error("Expected eleven generated Environment state migrations.");
 }
@@ -176,6 +178,11 @@ describe("Environment state", () => {
         name: pullStrategySettingsMigration.name,
         version: 11,
       },
+      {
+        checksum_length: 64,
+        name: cloneFolderMigration.name,
+        version: 12,
+      },
     ]);
     database.close();
 
@@ -302,16 +309,17 @@ describe("Environment state", () => {
       generatedMigrationEntry(gitHostEnabledMigration, 9),
       generatedMigrationEntry(bitbucketTokenMigration, 10),
       generatedMigrationEntry(pullStrategySettingsMigration, 11),
+      generatedMigrationEntry(cloneFolderMigration, 12),
       {
         checksum: "future",
-        createdAt: pullStrategySettingsMigration.folderMillis + 1,
+        createdAt: cloneFolderMigration.folderMillis + 1,
         name: "future",
-        version: 12,
+        version: 13,
       },
     ]);
 
     await expect(openState(newerPaths)).rejects.toThrow(
-      "The state database is at version 12, but this Rebase build supports version 11.",
+      "The state database is at version 13, but this Rebase build supports version 12.",
     );
   });
 
@@ -338,7 +346,7 @@ describe("Environment state", () => {
       database
         .prepare("SELECT max(id) AS version FROM __drizzle_migrations")
         .get(),
-    ).toEqual({ version: 11 });
+    ).toEqual({ version: 12 });
     database.close();
   });
 

@@ -1,6 +1,5 @@
 import {
   IconChevronRight,
-  IconDeviceLaptop,
   IconFolderPlus,
   IconSearch,
 } from "@tabler/icons-react";
@@ -9,29 +8,26 @@ import {
   type KeyboardEvent,
   useCallback,
   useEffect,
-  useMemo,
   useRef,
   useState,
 } from "react";
-import type {
-  OpenProjectEnvironment,
-  OpenProjectRepository,
-} from "#web/features/open-project/open-project-model.ts";
+import { cloneDestinationId } from "#web/features/open-project/clone-line.tsx";
 import {
-  catalogRepositoryItems,
-  filterOpenProjectEnvironments,
-  keyboardRepositoryItems,
-  recentRepositoryItems,
-} from "#web/features/open-project/open-project-state.ts";
+  HostRepositoriesGroup,
+  UrlGroup,
+} from "#web/features/open-project/clone-sources.tsx";
+import type { OpenProjectRepository } from "#web/features/open-project/open-project-model.ts";
 import { OpenProjectToolbar } from "#web/features/open-project/open-project-toolbar.tsx";
 import { RecentRepositories } from "#web/features/open-project/recent-repositories.tsx";
 import { RepositoryEnvironmentGroup } from "#web/features/open-project/repository-environment-group.tsx";
 import { openProjectItemId } from "#web/features/open-project/repository-row.tsx";
+import { useOpenProjectResults } from "#web/features/open-project/use-open-project-results.ts";
 import { localEnvironment } from "#web/features/project-navigation/local-environment.ts";
 import type { ProjectNavigationRepository } from "#web/features/project-navigation/project-navigation.ts";
-import { useRepositoryCatalog } from "#web/features/repository-catalog/use-repository-catalog.ts";
 import { RepositoryFolderPicker } from "#web/features/repository-folder-picker/repository-folder-browser.tsx";
 import { useEnvironment } from "#web/platform/query/environment-context.tsx";
+
+const _noHosts = [] as const;
 
 export function OpenProjectScreen({
   onOpenRepository,
@@ -44,38 +40,30 @@ export function OpenProjectScreen({
   ) => void;
   readonly onOpenSettings: (repositoryId: string) => void;
 }): JSX.Element {
-  const environments = useOpenProjectEnvironments();
   const environmentStatus = useEnvironment().status;
   const browseAvailable = environmentStatus.availability === "available";
   const [folderPickerOpen, setFolderPickerOpen] = useState(false);
   const [expandedEnvironmentIds, setExpandedEnvironmentIds] = useState<
     ReadonlySet<string>
   >(() => new Set([localEnvironment.id]));
+  const [collapsedGroupIds, setCollapsedGroupIds] = useState<
+    ReadonlySet<string>
+  >(() => new Set());
   const [query, setQuery] = useState("");
   const [activeKey, setActiveKey] = useState<string>();
+  const [expandedKey, setExpandedKey] = useState<string>();
   const inputRef = useRef<HTMLInputElement>(null);
-  const filteredEnvironments = useMemo(
-    () => filterOpenProjectEnvironments(environments, query),
-    [environments, query],
-  );
-  const recentItems = useMemo(
-    () => recentRepositoryItems(filteredEnvironments),
-    [filteredEnvironments],
-  );
-  const catalogItems = useMemo(
-    () => catalogRepositoryItems(filteredEnvironments, expandedEnvironmentIds),
-    [expandedEnvironmentIds, filteredEnvironments],
-  );
-  const keyboardItems = useMemo(
-    () => keyboardRepositoryItems(recentItems, catalogItems),
-    [catalogItems, recentItems],
-  );
-  const hasRepositories = environments.some(
-    (environment) => environment.repositories.length > 0,
-  );
-  const hasMatches = filteredEnvironments.some(
-    (environment) => environment.repositories.length > 0,
-  );
+  const {
+    environments,
+    filteredEnvironments,
+    recentItems,
+    groups,
+    pastedUrl,
+    keyboardItems,
+    hasRepositories,
+    hasMatches,
+    hasCloneSources,
+  } = useOpenProjectResults(query, expandedEnvironmentIds, collapsedGroupIds);
 
   useEffect(() => {
     inputRef.current?.focus();
@@ -108,6 +96,20 @@ export function OpenProjectScreen({
   const onBrowse = () => {
     if (browseAvailable) setFolderPickerOpen(true);
   };
+  const setGroupCollapsed = (groupId: string, collapsed: boolean) =>
+    setCollapsedGroupIds((current) => {
+      const next = new Set(current);
+      if (collapsed) next.add(groupId);
+      else next.delete(groupId);
+      return next;
+    });
+  const cloneActions = {
+    activeKey,
+    expandedKey,
+    onActivate: setActiveKey,
+    onExpand: setExpandedKey,
+    onCloned: onRepositoryRemembered,
+  };
   const setEnvironmentExpanded = (environmentId: string, open: boolean) =>
     setExpandedEnvironmentIds((current) => {
       const next = new Set(current);
@@ -128,7 +130,9 @@ export function OpenProjectScreen({
       const activeItem = keyboardItems.find((item) => item.key === activeKey);
       if (activeItem === undefined) return;
       event.preventDefault();
-      openRepository(activeItem.repository);
+      if (!("source" in activeItem)) openRepository(activeItem.repository);
+      else if (expandedKey !== activeItem.key) setExpandedKey(activeItem.key);
+      else document.getElementById(cloneDestinationId(activeItem.key))?.focus();
       return;
     }
 
@@ -184,19 +188,27 @@ export function OpenProjectScreen({
         )}
         {!hasRepositories ? (
           <ColdStart browseAvailable={browseAvailable} onBrowse={onBrowse} />
-        ) : hasMatches ? (
+        ) : null}
+        {hasMatches || hasCloneSources ? (
           <div
             aria-label="Repositories"
             id="open-project-results"
             role="listbox"
           >
-            <RecentRepositories
-              activeKey={activeKey}
-              items={recentItems}
-              onActivate={setActiveKey}
-              onOpen={openRepository}
-              onOpenSettings={openSettings}
-            />
+            {pastedUrl === undefined ? null : (
+              <div className="mt-[1.6rem]">
+                <UrlGroup source={pastedUrl} {...cloneActions} />
+              </div>
+            )}
+            {hasMatches ? (
+              <RecentRepositories
+                activeKey={activeKey}
+                items={recentItems}
+                onActivate={setActiveKey}
+                onOpen={openRepository}
+                onOpenSettings={openSettings}
+              />
+            ) : null}
             <div className="mt-[2.4rem] space-y-[1.2rem]">
               {filteredEnvironments
                 .filter((environment) => environment.repositories.length > 0)
@@ -214,11 +226,20 @@ export function OpenProjectScreen({
                     open={expandedEnvironmentIds.has(environment.id)}
                   />
                 ))}
+              {groups.map((group) => (
+                <HostRepositoriesGroup
+                  group={group}
+                  key={group.id}
+                  onOpenChange={(open) => setGroupCollapsed(group.id, !open)}
+                  open={!collapsedGroupIds.has(group.id)}
+                  {...cloneActions}
+                />
+              ))}
             </div>
           </div>
-        ) : (
+        ) : hasRepositories ? (
           <EmptySearch />
-        )}
+        ) : null}
       </div>
       <RepositoryFolderPicker
         environments={environments}
@@ -281,33 +302,4 @@ function keyboardDirection(key: string): -1 | 0 | 1 {
   if (key === "ArrowDown" || key === "ArrowRight") return 1;
   if (key === "ArrowUp" || key === "ArrowLeft") return -1;
   return 0;
-}
-
-function useOpenProjectEnvironments(): readonly OpenProjectEnvironment[] {
-  const { repositories } = useRepositoryCatalog();
-  const { availability, connectionState, status } = useEnvironment().status;
-  return useMemo(
-    () =>
-      connectionState === "PairingRequired"
-        ? []
-        : [
-            {
-              availability,
-              icon: IconDeviceLaptop,
-              iconColor: "var(--primary)",
-              id: localEnvironment.id,
-              name: localEnvironment.name,
-              repositories: repositories.map((repository) => ({
-                color: repository.color,
-                environmentId: localEnvironment.id,
-                id: repository.id,
-                lastOpenedAt: repository.lastOpenedAt,
-                name: repository.name,
-                path: repository.path,
-              })),
-              status,
-            },
-          ],
-    [availability, connectionState, repositories, status],
-  );
 }

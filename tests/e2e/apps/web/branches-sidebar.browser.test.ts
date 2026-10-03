@@ -45,7 +45,9 @@ test("opens a repository and checks out a local branch", async ({ page }) => {
 
     await page.getByRole("button", { name: "Browse files" }).click();
     const picker = page.getByRole("dialog", { name: "Choose repository" });
-    await picker.getByRole("button", { name: /^rebase-test Folder/ }).click();
+    await picker
+      .getByRole("button", { name: /^rebase-test Repository/ })
+      .click();
     await page
       .getByRole("button", { name: "Open repository", exact: true })
       .click();
@@ -153,7 +155,7 @@ async function openRepository(page: Page, name: string) {
   await page.getByRole("button", { name: "Browse files" }).click();
   const picker = page.getByRole("dialog", { name: "Choose repository" });
   await picker
-    .getByRole("button", { name: new RegExp(`^${name} Folder`) })
+    .getByRole("button", { name: new RegExp(`^${name} Repository`) })
     .click();
   await page
     .getByRole("button", { name: "Open repository", exact: true })

@@ -20,6 +20,10 @@ import {
 export interface GitHubCli {
   readonly version: Effect.Effect<string | undefined>;
   readonly account: Effect.Effect<string | undefined>;
+  readonly protocol: Effect.Effect<string | undefined>;
+  readonly repositories: (
+    page: number,
+  ) => Effect.Effect<string, PullRequestsUnavailable>;
   readonly graphql: (
     query: string,
     variables: Readonly<Record<string, string>>,
@@ -27,6 +31,8 @@ export interface GitHubCli {
 }
 
 const branchesPerRequest = 50;
+const repositoriesPerPage = 100;
+const repositoryPages = 10;
 const pullRequestsPerBranch = 10;
 const env = { GH_PROMPT_DISABLED: "1" };
 
@@ -44,6 +50,24 @@ export function createGitHubCli(): GitHubCli {
         succeeded ? stdout.trim() || undefined : undefined,
       ),
     ),
+    protocol: runHostCommand(
+      "gh",
+      ["config", "get", "git_protocol", "--host", "github.com"],
+      { env },
+    ).pipe(
+      Effect.map(({ succeeded, stdout }) =>
+        succeeded ? stdout.trim() || undefined : undefined,
+      ),
+    ),
+    repositories: (page) =>
+      hostCommandOutput(
+        "gh",
+        [
+          "api",
+          `user/repos?affiliation=owner,collaborator,organization_member&sort=pushed&per_page=${repositoriesPerPage}&page=${page}`,
+        ],
+        { env },
+      ),
     graphql: (query, variables) =>
       hostCommandOutput(
         "gh",
@@ -67,6 +91,27 @@ export function createGitHubHost(cli: GitHubCli): GitHost {
     kind: "github",
     tool: signedInTool(cli.version, singleAccount("github.com", cli.account)),
     repositoryId: (remoteUrl) => githubRepository(remoteUrl)?.id,
+    cloneable: Effect.gen(function* () {
+      const account = yield* cli.account;
+      if (account === undefined) return undefined;
+      const ssh = (yield* cli.protocol) === "ssh";
+      const repositories = yield* readRepositoryPages(cli, 1);
+      return {
+        kind: "github" as const,
+        account,
+        repositories: repositories.map((repository) => ({
+          name: repository.full_name,
+          url: ssh ? repository.ssh_url : repository.clone_url,
+          private: repository.private,
+          ...(repository.description === null
+            ? {}
+            : { description: repository.description.slice(0, 1_024) }),
+          ...(repository.pushed_at === null
+            ? {}
+            : { updatedAt: new Date(repository.pushed_at).toISOString() }),
+        })),
+      };
+    }).pipe(Effect.orElseSucceed(() => undefined)),
     repository: (remoteUrl) => {
       const repository = githubRepository(remoteUrl);
       return Effect.succeed(
@@ -102,6 +147,40 @@ export function createGitHubHost(cli: GitHubCli): GitHost {
       );
     },
   };
+}
+
+const RepositoryPage = Schema.fromJsonString(
+  Schema.Array(
+    Schema.Struct({
+      full_name: Schema.String,
+      private: Schema.Boolean,
+      description: Schema.NullOr(Schema.String),
+      pushed_at: Schema.NullOr(Schema.String),
+      clone_url: Schema.String,
+      ssh_url: Schema.String,
+    }),
+  ),
+);
+type RepositoryPage = typeof RepositoryPage.Type;
+
+function readRepositoryPages(
+  cli: GitHubCli,
+  page: number,
+): Effect.Effect<RepositoryPage, PullRequestsUnavailable> {
+  return cli.repositories(page).pipe(
+    Effect.flatMap((output) =>
+      Schema.decodeUnknownEffect(RepositoryPage)(output).pipe(
+        Effect.mapError(() => unavailable),
+      ),
+    ),
+    Effect.flatMap((repositories) =>
+      repositories.length < repositoriesPerPage || page >= repositoryPages
+        ? Effect.succeed(repositories)
+        : readRepositoryPages(cli, page + 1).pipe(
+            Effect.map((next) => [...repositories, ...next]),
+          ),
+    ),
+  );
 }
 
 function githubRepository(remoteUrl: string) {

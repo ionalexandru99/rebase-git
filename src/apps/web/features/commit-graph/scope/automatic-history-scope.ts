@@ -24,7 +24,10 @@ export function resolveAutomaticHistoryRoots(
       type: "branch",
     });
     addUpstream(roots, activeBranch, refs);
-  } else if (activeWorktree !== undefined) {
+  } else if (
+    activeWorktree !== undefined &&
+    activeWorktree.head.branch === undefined
+  ) {
     addRoot(roots, {
       name: "HEAD",
       oid: activeWorktree.head.commit,

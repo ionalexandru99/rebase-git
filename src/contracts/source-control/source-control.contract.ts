@@ -1,5 +1,7 @@
 import { Schema } from "effect";
 import { route } from "#contracts/environment-connection/environment-route.contract.ts";
+import { IsoDate } from "#contracts/environment-connection/iso-date.contract.ts";
+import { RemoteUrl } from "#contracts/git/git-values.contract.ts";
 
 export const GitHostKind = Schema.Literals([
   "github",
@@ -65,12 +67,35 @@ export const GitHostStatus = Schema.Union([
 ]);
 export type GitHostStatus = typeof GitHostStatus.Type;
 
+export const CloneableRepository = Schema.Struct({
+  name: HostText,
+  url: RemoteUrl,
+  private: Schema.Boolean,
+  description: Schema.optionalKey(
+    Schema.String.check(Schema.isMaxLength(1_024)),
+  ),
+  updatedAt: Schema.optionalKey(IsoDate),
+});
+export type CloneableRepository = typeof CloneableRepository.Type;
+
+export const HostRepositories = Schema.Struct({
+  kind: GitHostKind,
+  account: HostText,
+  repositories: Schema.Array(CloneableRepository).check(
+    Schema.isMaxLength(1_000),
+  ),
+});
+export type HostRepositories = typeof HostRepositories.Type;
+
 export const SourceControlApi = {
   discover: route("source-control/discover", {
     success: Schema.Struct({
       git: GitStatus,
       hosts: Schema.Array(GitHostStatus).check(Schema.isMaxLength(16)),
     }),
+  }),
+  cloneable: route("source-control/cloneable", {
+    success: Schema.Array(HostRepositories).check(Schema.isMaxLength(16)),
   }),
   setHostEnabled: route("source-control/set-host-enabled", {
     request: Schema.Struct({ kind: GitHostKind, enabled: Schema.Boolean }),

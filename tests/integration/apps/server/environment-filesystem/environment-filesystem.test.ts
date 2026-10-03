@@ -4,6 +4,7 @@ import { basename, join } from "node:path";
 import { Effect } from "effect";
 import { afterEach, describe, expect, it } from "vite-plus/test";
 import { createEnvironmentFilesystem } from "#server/features/environment-filesystem/environment-filesystem.ts";
+import { createRepository } from "#tests-support/git.ts";
 import { removeTemporaryDirectory } from "#tests-support/temporary-directory.ts";
 
 const directories = new Set<string>();
@@ -16,6 +17,26 @@ afterEach(async () => {
 });
 
 describe("Environment filesystem", () => {
+  it("marks repositories and folders that sit inside one", async () => {
+    const root = await createTemporaryDirectory();
+    await createRepository(join(root, "storefront"));
+    await mkdir(join(root, "storefront", "src"));
+    await mkdir(join(root, "notes"));
+    const filesystem = createEnvironmentFilesystem(root);
+
+    const home = await Effect.runPromise(filesystem.listDirectory());
+    const inside = await Effect.runPromise(
+      filesystem.listDirectory(join(root, "storefront")),
+    );
+
+    expect(home.repository).toBe(false);
+    expect(home.entries.map(({ kind, name }) => ({ kind, name }))).toEqual([
+      { kind: "Folder", name: "notes" },
+      { kind: "Repository", name: "storefront" },
+    ]);
+    expect(inside.repository).toBe(true);
+  });
+
   it("lists the configured home with folders first and plain file kinds", async () => {
     const root = await createTemporaryDirectory();
     await mkdir(join(root, "workbench"));
