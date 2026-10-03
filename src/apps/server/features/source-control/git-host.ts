@@ -7,6 +7,7 @@ import type {
 import type {
   BitbucketToken,
   GitHostKind,
+  HostRepositories,
 } from "#contracts/source-control/source-control.contract.ts";
 
 export interface GitHostAccount {
@@ -47,6 +48,7 @@ export interface GitHost {
   readonly repository: (
     remoteUrl: string,
   ) => Effect.Effect<HostedRepository | undefined>;
+  readonly cloneable?: Effect.Effect<HostRepositories | undefined>;
 }
 
 interface HostCommandResult {

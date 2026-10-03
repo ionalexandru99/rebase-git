@@ -45,6 +45,7 @@ export const EnvironmentDirectory = Schema.Struct({
   ),
   parentPath: Schema.optional(EnvironmentPath),
   path: EnvironmentPath,
+  repository: Schema.Boolean,
   truncated: Schema.Boolean,
 });
 export type EnvironmentDirectory = typeof EnvironmentDirectory.Type;

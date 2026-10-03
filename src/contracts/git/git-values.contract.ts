@@ -15,6 +15,12 @@ export const RepositoryPath = Schema.String.check(
 );
 export type RepositoryPath = typeof RepositoryPath.Type;
 
+export const RemoteUrl = Schema.String.check(
+  Schema.isMaxLength(4_096),
+  Schema.isPattern(/^[^\s-]\S*$/),
+);
+export type RemoteUrl = typeof RemoteUrl.Type;
+
 export const RefName = Schema.String.check(
   Schema.isMinLength(1),
   Schema.isMaxLength(1_024),

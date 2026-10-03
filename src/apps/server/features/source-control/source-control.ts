@@ -1,5 +1,7 @@
+import { readFile } from "node:fs/promises";
 import { homedir } from "node:os";
-import { eq } from "drizzle-orm";
+import { join } from "node:path";
+import { eq, isNotNull } from "drizzle-orm";
 import { Effect } from "effect";
 import {
   type GitHostKind,
@@ -41,7 +43,10 @@ import {
   type GitLabCli,
 } from "#server/features/source-control/hosts/gitlab-host.ts";
 import type { EnvironmentContext } from "#server/persistence/environment-context.ts";
-import { gitHostTable } from "#server/persistence/environment-state.schema.ts";
+import {
+  gitHostTable,
+  repositoryCatalogTable,
+} from "#server/persistence/environment-state.schema.ts";
 
 export type SourceControl = ReturnType<typeof createSourceControl>;
 
@@ -89,11 +94,41 @@ export function createSourceControl(
       ),
   );
 
+  const enabledHosts = disabledKinds.pipe(
+    Effect.map((disabled) => hosts.filter(({ kind }) => !disabled.has(kind))),
+  );
+
   return {
     bitbucket,
-    enabledHosts: disabledKinds.pipe(
-      Effect.map((disabled) => hosts.filter(({ kind }) => !disabled.has(kind))),
-    ),
+    enabledHosts,
+    cloneable: Effect.gen(function* () {
+      const [enabled, remotes] = yield* Effect.all(
+        [enabledHosts, catalogRemotes(context)],
+        { concurrency: "unbounded" },
+      );
+      const lists = yield* Effect.forEach(
+        enabled,
+        (host) =>
+          (host.cloneable ?? Effect.succeed(undefined)).pipe(
+            Effect.map((list) => {
+              if (list === undefined) return [];
+              const cloned = new Set(
+                remotes.map((url) => host.repositoryId(url) ?? url),
+              );
+              return [
+                {
+                  ...list,
+                  repositories: list.repositories.filter(
+                    ({ url }) => !cloned.has(host.repositoryId(url) ?? url),
+                  ),
+                },
+              ];
+            }),
+          ),
+        { concurrency: "unbounded" },
+      );
+      return lists.flat();
+    }),
     discover: Effect.gen(function* () {
       const disabled = yield* disabledKinds;
       return yield* Effect.all(
@@ -129,6 +164,7 @@ export function sourceControlFeature({
   return {
     routes: [
       route(SourceControlApi.discover, () => sourceControl.discover),
+      route(SourceControlApi.cloneable, () => sourceControl.cloneable),
       route(SourceControlApi.setHostEnabled, ({ kind, enabled }) =>
         sourceControl.setHostEnabled(kind, enabled).pipe(changed),
       ),
@@ -140,6 +176,39 @@ export function sourceControlFeature({
       ),
     ],
   } satisfies EnvironmentFeature;
+}
+
+function catalogRemotes(context: EnvironmentContext) {
+  return context
+    .read("Could not read repository catalog", (database) =>
+      database
+        .selectDistinct({
+          directory: repositoryCatalogTable.gitCommonDirectory,
+        })
+        .from(repositoryCatalogTable)
+        .where(isNotNull(repositoryCatalogTable.gitCommonDirectory)),
+    )
+    .pipe(
+      Effect.flatMap((rows) =>
+        Effect.promise(() =>
+          Promise.all(
+            rows.map(({ directory }) =>
+              readFile(join(directory ?? "", "config"), "utf8").then(
+                remoteUrls,
+                () => [],
+              ),
+            ),
+          ),
+        ),
+      ),
+      Effect.map((urls) => urls.flat()),
+    );
+}
+
+function remoteUrls(config: string) {
+  return [...config.matchAll(/^\s*url\s*=\s*(.+?)\s*$/gm)].flatMap(
+    (match) => match[1] ?? [],
+  );
 }
 
 function gitStatus(git: GitCommandRunner): Effect.Effect<GitStatus> {

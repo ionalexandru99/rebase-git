@@ -91,6 +91,7 @@ export const bitbucketTokenTable = sqliteTable(
 export const serverSettingTable = sqliteTable(
   "server_setting",
   {
+    cloneFolder: text("clone_folder"),
     pullStrategy: text("pull_strategy", { enum: PullStrategy.literals })
       .notNull()
       .default("ask"),

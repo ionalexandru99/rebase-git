@@ -24,6 +24,7 @@ import {
 import { environmentFilesystemFeature } from "#server/features/environment-filesystem/environment-filesystem.ts";
 import { gitIdentityFeature } from "#server/features/git-identity/git-identity.ts";
 import { pullRequestsFeature } from "#server/features/pull-requests/pull-requests.ts";
+import { createRepositoryCreation } from "#server/features/repository-catalog/create-repository.ts";
 import {
   createRepositoryCatalog,
   repositoryCatalogFeature,
@@ -143,7 +144,10 @@ export function environmentFeatures(dependencies: EnvironmentDependencies) {
     return combineEnvironmentFeatures([
       environmentAuthorizationFeature(dependencies.authorization),
       environmentFilesystemFeature(),
-      repositoryCatalogFeature(dependencies.catalog),
+      repositoryCatalogFeature(
+        dependencies.catalog,
+        createRepositoryCreation(dependencies),
+      ),
       commitInspectionFeature(dependencies),
       repositoryChangesFeature(dependencies),
       repositoryConflictsFeature(dependencies),

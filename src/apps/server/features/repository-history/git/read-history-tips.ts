@@ -168,7 +168,7 @@ function parseWorktreeHeads(output: string, objectFormat: GitObjectFormat) {
     .split("\0")
     .filter((field) => field.startsWith("HEAD "))
     .map((field) => field.slice(5))
-    .filter((oid) => isGitObjectId(oid, objectFormat));
+    .filter((oid) => isGitObjectId(oid, objectFormat) && /[^0]/.test(oid));
 }
 
 function parseOids(output: string, objectFormat: GitObjectFormat) {

@@ -37,6 +37,23 @@ describe("Automatic history roots", () => {
     ]);
   });
 
+  it("has no root while the active branch has no commits yet", () => {
+    const current = refs({
+      branches: [],
+      remoteBranches: [],
+      remoteDefaultBranches: [],
+      worktrees: [
+        {
+          head: { branch: "main", commit: "0".repeat(40) },
+          main: true,
+          path: "/repo",
+        },
+      ],
+    });
+
+    expect(resolveAutomaticHistoryRoots(current, "/repo")).toEqual([]);
+  });
+
   it("uses an unambiguous remote default and a detached active HEAD", () => {
     const current = refs({
       branches: [

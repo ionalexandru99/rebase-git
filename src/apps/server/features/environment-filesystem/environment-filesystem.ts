@@ -1,5 +1,5 @@
 import { type Dirent, realpath } from "node:fs";
-import { readdir, stat } from "node:fs/promises";
+import { access, readdir, stat } from "node:fs/promises";
 import { homedir } from "node:os";
 import { basename, dirname, extname, isAbsolute, join, parse } from "node:path";
 import { promisify } from "node:util";
@@ -48,8 +48,11 @@ function listEnvironmentDirectory(
   return Effect.gen(function* () {
     const path = yield* canonicalizeDirectory(requestedPath);
     const directoryEntries = yield* readDirectory(path, includeHidden);
-    const inspectedEntries = yield* Effect.promise(() =>
-      inspectEntries(path, directoryEntries.slice(0, maximumEntries)),
+    const [inspectedEntries, repository] = yield* Effect.promise(() =>
+      Promise.all([
+        inspectEntries(path, directoryEntries.slice(0, maximumEntries)),
+        insideRepository(path),
+      ]),
     );
     const parent = dirname(path);
     return {
@@ -57,6 +60,7 @@ function listEnvironmentDirectory(
       entries: inspectedEntries,
       ...(parent === path ? {} : { parentPath: parent }),
       path,
+      repository,
       truncated: directoryEntries.length > inspectedEntries.length,
     } satisfies EnvironmentDirectory;
   });
@@ -112,7 +116,12 @@ async function inspectEntries(
       const type =
         (metadata?.isDirectory() ?? entry.isDirectory()) ? "directory" : "file";
       return {
-        kind: type === "directory" ? "Folder" : fileKind(entry.name),
+        kind:
+          type === "file"
+            ? fileKind(entry.name)
+            : (await holdsRepository(path))
+              ? "Repository"
+              : "Folder",
         ...(metadata === undefined
           ? {}
           : { modifiedAt: metadata.mtime.toISOString() }),
@@ -121,6 +130,19 @@ async function inspectEntries(
         type,
       } satisfies EnvironmentDirectoryEntry;
     }),
+  );
+}
+
+async function insideRepository(path: string): Promise<boolean> {
+  if (await holdsRepository(path)) return true;
+  const parent = dirname(path);
+  return parent !== path && insideRepository(parent);
+}
+
+function holdsRepository(path: string) {
+  return access(join(path, ".git")).then(
+    () => true,
+    () => false,
   );
 }
 

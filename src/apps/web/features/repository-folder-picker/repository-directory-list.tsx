@@ -1,5 +1,5 @@
-import { IconFile, IconFolder } from "@tabler/icons-react";
-import type { JSX } from "react";
+import { IconFile, IconFolder, IconFolderPlus } from "@tabler/icons-react";
+import { type JSX, useEffect, useRef } from "react";
 import type { EnvironmentDirectoryEntry } from "#contracts/environment-filesystem/environment-filesystem.contract.ts";
 import { modifiedDateLabel } from "#web/features/repository-folder-picker/repository-folder-picker-state.ts";
 import { cn } from "#web/lib/utils.ts";
@@ -8,22 +8,35 @@ export function RepositoryDirectoryList({
   entries,
   error,
   loading,
+  newFolder,
+  onCancelNewFolder,
   onEnter,
+  onNameNewFolder,
   onParent,
   onSelect,
+  onSubmitNewFolder,
   selectedPath,
   truncated,
 }: {
   readonly entries: readonly EnvironmentDirectoryEntry[];
   readonly error: string | undefined;
   readonly loading: boolean;
+  readonly newFolder: string | undefined;
+  readonly onCancelNewFolder: () => void;
   readonly onEnter: (path: string) => void;
+  readonly onNameNewFolder: (name: string) => void;
+  readonly onSubmitNewFolder: () => void;
   readonly onParent: () => void;
   readonly onSelect: (path: string) => void;
   readonly selectedPath: string | undefined;
   readonly truncated: boolean;
 }): JSX.Element {
   const directories = entries.filter((entry) => entry.type === "directory");
+  const newFolderRef = useRef<HTMLInputElement>(null);
+  const naming = newFolder !== undefined;
+  useEffect(() => {
+    if (naming) newFolderRef.current?.focus();
+  }, [naming]);
 
   const moveSelection = (direction: -1 | 1) => {
     if (directories.length === 0) return;
@@ -56,59 +69,93 @@ export function RepositoryDirectoryList({
           <DirectoryMessage>Loading directory…</DirectoryMessage>
         ) : error !== undefined ? (
           <DirectoryMessage>{error}</DirectoryMessage>
-        ) : entries.length === 0 ? (
+        ) : newFolder === undefined && entries.length === 0 ? (
           <DirectoryMessage>This folder is empty.</DirectoryMessage>
         ) : (
-          entries.map((entry) =>
-            entry.type === "directory" ? (
-              <button
-                aria-pressed={selectedPath === entry.path}
-                className={rowClassName(selectedPath === entry.path)}
-                id={directoryOptionId(
-                  directories.findIndex(
-                    (directory) => directory.path === entry.path,
-                  ),
-                )}
-                key={entry.path}
-                onClick={() => onSelect(entry.path)}
-                onDoubleClick={() => onEnter(entry.path)}
-                onKeyDown={(event) => {
-                  if (event.key === "ArrowDown" || event.key === "ArrowUp") {
-                    event.preventDefault();
-                    moveSelection(event.key === "ArrowDown" ? 1 : -1);
-                    return;
-                  }
-                  if (event.key === "ArrowLeft") {
-                    event.preventDefault();
-                    onParent();
-                    return;
-                  }
-                  if (
-                    event.key === "ArrowRight" ||
-                    (event.key === "Enter" && !event.ctrlKey && !event.metaKey)
-                  ) {
-                    event.preventDefault();
-                    onEnter(entry.path);
-                  }
-                }}
-                type="button"
-              >
-                <EntryName entry={entry} />
-                <EntryMetadata>{entry.kind}</EntryMetadata>
-                <EntryMetadata className="max-[600px]:hidden">
-                  {modifiedDateLabel(entry.modifiedAt)}
-                </EntryMetadata>
-              </button>
-            ) : (
-              <div className={rowClassName(false)} key={entry.path}>
-                <EntryName entry={entry} />
-                <EntryMetadata>{entry.kind}</EntryMetadata>
-                <EntryMetadata className="max-[600px]:hidden">
-                  {modifiedDateLabel(entry.modifiedAt)}
-                </EntryMetadata>
+          <>
+            {newFolder === undefined ? null : (
+              <div className={rowClassName(true)}>
+                <span className="flex min-w-0 items-center gap-[.65rem]">
+                  <IconFolderPlus
+                    aria-hidden="true"
+                    className="size-4 shrink-0 text-foreground/65"
+                  />
+                  <input
+                    aria-label="New folder name"
+                    ref={newFolderRef}
+                    className="h-7 w-64 min-w-0 rounded-md border border-ring bg-transparent px-2 text-[.8rem] text-foreground outline-none"
+                    onChange={(event) => onNameNewFolder(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") {
+                        event.preventDefault();
+                        onSubmitNewFolder();
+                      }
+                      if (event.key === "Escape") {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        onCancelNewFolder();
+                      }
+                    }}
+                    value={newFolder}
+                  />
+                </span>
+                <EntryMetadata>New folder</EntryMetadata>
+                <span />
               </div>
-            ),
-          )
+            )}
+            {entries.map((entry) =>
+              entry.type === "directory" ? (
+                <button
+                  aria-pressed={selectedPath === entry.path}
+                  className={rowClassName(selectedPath === entry.path)}
+                  id={directoryOptionId(
+                    directories.findIndex(
+                      (directory) => directory.path === entry.path,
+                    ),
+                  )}
+                  key={entry.path}
+                  onClick={() => onSelect(entry.path)}
+                  onDoubleClick={() => onEnter(entry.path)}
+                  onKeyDown={(event) => {
+                    if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+                      event.preventDefault();
+                      moveSelection(event.key === "ArrowDown" ? 1 : -1);
+                      return;
+                    }
+                    if (event.key === "ArrowLeft") {
+                      event.preventDefault();
+                      onParent();
+                      return;
+                    }
+                    if (
+                      event.key === "ArrowRight" ||
+                      (event.key === "Enter" &&
+                        !event.ctrlKey &&
+                        !event.metaKey)
+                    ) {
+                      event.preventDefault();
+                      onEnter(entry.path);
+                    }
+                  }}
+                  type="button"
+                >
+                  <EntryName entry={entry} />
+                  <EntryMetadata>{entry.kind}</EntryMetadata>
+                  <EntryMetadata className="max-[600px]:hidden">
+                    {modifiedDateLabel(entry.modifiedAt)}
+                  </EntryMetadata>
+                </button>
+              ) : (
+                <div className={rowClassName(false)} key={entry.path}>
+                  <EntryName entry={entry} />
+                  <EntryMetadata>{entry.kind}</EntryMetadata>
+                  <EntryMetadata className="max-[600px]:hidden">
+                    {modifiedDateLabel(entry.modifiedAt)}
+                  </EntryMetadata>
+                </div>
+              ),
+            )}
+          </>
         )}
         {truncated && !loading && error === undefined ? (
           <p className="px-3 py-2 text-[.68rem] text-muted-foreground">

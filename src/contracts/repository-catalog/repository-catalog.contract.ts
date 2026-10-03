@@ -3,6 +3,8 @@ import { route } from "#contracts/environment-connection/environment-route.contr
 import { IsoDate } from "#contracts/environment-connection/iso-date.contract.ts";
 import { RepositoryRejected } from "#contracts/git/git-failures.contract.ts";
 import {
+  RefName,
+  RemoteUrl,
   RepositoryId,
   RepositoryPath,
 } from "#contracts/git/git-values.contract.ts";
@@ -76,6 +78,40 @@ export const RepositoryPathRejected = Schema.TaggedStruct(
 );
 export type RepositoryPathRejected = typeof RepositoryPathRejected.Type;
 
+export const RepositoryDefaults = Schema.Struct({
+  cloneFolder: RepositoryPath,
+  initialBranch: RefName,
+});
+export type RepositoryDefaults = typeof RepositoryDefaults.Type;
+
+export const CloneRepository = Schema.Struct({
+  repositoryId: RepositoryId,
+  url: RemoteUrl,
+  path: RepositoryPath,
+});
+export type CloneRepository = typeof CloneRepository.Type;
+
+export const InitializeRepository = Schema.Struct({
+  path: RepositoryPath,
+  branch: RefName,
+});
+export type InitializeRepository = typeof InitializeRepository.Type;
+
+export const RepositoryNotCreated = Schema.TaggedStruct(
+  "RepositoryNotCreated",
+  {
+    reason: Schema.Literals([
+      "MalformedPath",
+      "DestinationNotEmpty",
+      "InsideRepository",
+      "GitFailed",
+    ]),
+    detail: Schema.optionalKey(Schema.String.check(Schema.isMaxLength(2_048))),
+    leftover: Schema.optionalKey(RepositoryPath),
+  },
+);
+export type RepositoryNotCreated = typeof RepositoryNotCreated.Type;
+
 export const RepositoryCatalogApi = {
   list: route("repositories/list", {
     success: RepositoryCatalog,
@@ -89,6 +125,24 @@ export const RepositoryCatalogApi = {
     request: RememberRepository,
     success: RepositoryCatalogEntry,
     failure: RepositoryPathRejected,
+  }),
+  defaults: route("repositories/defaults", {
+    success: RepositoryDefaults,
+  }),
+  setCloneFolder: route("repositories/set-clone-folder", {
+    request: Schema.Struct({ path: RepositoryPath }),
+    success: Schema.Void,
+    failure: RepositoryPathRejected,
+  }),
+  clone: route("repositories/clone", {
+    request: CloneRepository,
+    success: RepositoryCatalogEntry,
+    failure: RepositoryNotCreated,
+  }),
+  initialize: route("repositories/initialize", {
+    request: InitializeRepository,
+    success: RepositoryCatalogEntry,
+    failure: RepositoryNotCreated,
   }),
   remove: route("repositories/remove", {
     request: RemoveRepository,

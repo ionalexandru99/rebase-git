@@ -14,6 +14,13 @@ import {
 } from "#web/platform/query/request-failure.ts";
 import type { CommandFailure } from "#web/platform/query/use-command.ts";
 
+export function childPath(folder: string, name: string) {
+  const separator = folder.includes("\\") && !folder.includes("/") ? "\\" : "/";
+  return folder.endsWith(separator)
+    ? `${folder}${name}`
+    : `${folder}${separator}${name}`;
+}
+
 export function filterDirectoryEntries(
   entries: readonly EnvironmentDirectoryEntry[],
   query: string,

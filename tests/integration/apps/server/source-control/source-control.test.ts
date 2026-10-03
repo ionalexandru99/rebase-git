@@ -60,6 +60,33 @@ describe("source control", () => {
     ]);
   });
 
+  it("lists GitHub repositories to clone over the configured protocol, without the ones already open", async () => {
+    const f = await fixture({
+      protocol: "ssh",
+      repositories: [
+        { name: "octo/rebase" },
+        { name: "octo/storefront", private: true },
+      ],
+    });
+
+    const hosts = await f.cloneable();
+
+    expect(hosts).toEqual([
+      {
+        kind: "github",
+        account: "octo",
+        repositories: [
+          {
+            name: "octo/storefront",
+            url: "git@github.com:octo/storefront.git",
+            private: true,
+            updatedAt: "2026-10-01T10:00:00.000Z",
+          },
+        ],
+      },
+    ]);
+  });
+
   it("reports a missing or signed out GitHub CLI", async () => {
     const missing = await fixture({ version: null });
     const signedOut = await fixture({ account: null });
@@ -190,6 +217,7 @@ async function fixture(
     removeToken: () =>
       Effect.runPromise(sourceControl.removeBitbucketToken(undefined)),
     discover: () => Effect.runPromise(sourceControl.discover(undefined)),
+    cloneable: () => Effect.runPromise(sourceControl.cloneable(undefined)),
     setEnabled: (enabled: boolean) =>
       Effect.runPromise(
         sourceControl.setHostEnabled({ kind: "github", enabled }),

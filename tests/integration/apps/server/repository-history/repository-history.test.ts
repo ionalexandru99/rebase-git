@@ -87,6 +87,18 @@ describe("repository history synchronization", () => {
     });
   });
 
+  it("answers a repository without commits with no tips instead of an error", async () => {
+    const history = await openHistory();
+    const path = join(history.home, "empty");
+    await createRepository(path, { commits: [] });
+
+    const synchronized = await history.synchronize(path);
+
+    expect(synchronized.tips.rootOids).toEqual([]);
+    expect(synchronized.tips.refTargets).toEqual([]);
+    expect(synchronized.commits).toEqual([]);
+  });
+
   it("keeps nested and octopus merges in topological order", async () => {
     const history = await openHistory();
     const path = join(history.home, "merges");

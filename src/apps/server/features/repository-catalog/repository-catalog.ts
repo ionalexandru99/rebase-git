@@ -19,6 +19,7 @@ import {
   isGitRejection,
   runRepositoryGit,
 } from "#server/adapters/local-git/git-commands.ts";
+import type { RepositoryCreation } from "#server/features/repository-catalog/create-repository.ts";
 import type { EnvironmentContext } from "#server/persistence/environment-context.ts";
 import {
   repositoryCatalogTable,
@@ -38,7 +39,8 @@ export function createRepositoryCatalog(
     list: () => listRepositories(context),
     recordOpened: (repositoryId: string) =>
       recordRepositoryOpened(context, repositoryId),
-    remember: (path: string) => rememberRepository(context, git, path),
+    remember: (path: string, repositoryId?: string) =>
+      rememberRepository(context, git, path, repositoryId),
     remove: (repositoryId: string) => removeRepository(context, repositoryId),
   };
 }
@@ -141,6 +143,7 @@ function rememberRepository(
   context: EnvironmentContext,
   git: GitCommandRunner,
   requestedPath: string,
+  repositoryId: string = randomUUID(),
 ) {
   return Effect.gen(function* () {
     const repository = yield* resolveRepository(git, requestedPath);
@@ -182,7 +185,7 @@ function rememberRepository(
             addedAt: openedAt,
             color,
             gitCommonDirectory: repository.gitCommonDirectory,
-            id: randomUUID(),
+            id: repositoryId,
             lastOpenedAt: openedAt,
             logicalRepositoryId,
             name: basename(repository.path),
@@ -405,6 +408,7 @@ function catalogEntry(
 
 export function repositoryCatalogFeature(
   catalog: RepositoryCatalog,
+  creation: RepositoryCreation,
 ): EnvironmentFeature {
   const api = RepositoryCatalogApi;
   return {
@@ -417,6 +421,10 @@ export function repositoryCatalogFeature(
         catalog.recordOpened(input.repositoryId),
       ),
       route(api.remove, (input) => catalog.remove(input.repositoryId)),
+      route(api.defaults, () => creation.defaults),
+      route(api.setCloneFolder, (input) => creation.setCloneFolder(input.path)),
+      route(api.clone, (input) => creation.clone(input)),
+      route(api.initialize, (input) => creation.initialize(input)),
     ],
   };
 }

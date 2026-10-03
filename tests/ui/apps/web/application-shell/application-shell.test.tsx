@@ -324,7 +324,7 @@ async function chooseFolder(name: string) {
   await page.getByRole("button", { name: "Browse files" }).click();
   const picker = page.getByRole("dialog", { name: "Choose repository" });
   await picker
-    .getByRole("button", { name: new RegExp(`^${name} Folder`) })
+    .getByRole("button", { name: new RegExp(`^${name} Repository`) })
     .click();
   await picker
     .getByRole("button", { name: "Open repository", exact: true })
@@ -386,8 +386,9 @@ async function connectedSession(
     path: "/",
     breadcrumbs: [{ name: "/", path: "/" }],
     entries: [
-      { kind: "Folder", name: "repo", path: "/repo", type: "directory" },
+      { kind: "Repository", name: "repo", path: "/repo", type: "directory" },
     ],
+    repository: false,
     truncated: false,
   };
   const refs = repositoryRefs({

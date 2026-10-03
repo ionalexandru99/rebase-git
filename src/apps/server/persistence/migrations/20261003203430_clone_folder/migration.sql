@@ -1,0 +1,1 @@
+ALTER TABLE `server_setting` ADD `clone_folder` text;
