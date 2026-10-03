@@ -14,18 +14,68 @@ import {
   route,
 } from "#server/adapters/environment-transport/environment-routes.ts";
 import type { GitCommandRunner } from "#server/adapters/local-git/git-commands.ts";
-import type { Bitbucket } from "#server/features/source-control/bitbucket-host.ts";
 import type { GitHost } from "#server/features/source-control/git-host.ts";
+import {
+  type AzureDevOpsClient,
+  createAzureDevOpsClient,
+  createAzureDevOpsHost,
+} from "#server/features/source-control/hosts/azure-devops-host.ts";
+import {
+  type BitbucketClient,
+  createBitbucket,
+  createBitbucketClient,
+} from "#server/features/source-control/hosts/bitbucket-host.ts";
+import {
+  createForgejoHost,
+  createTeaCli,
+  type TeaCli,
+} from "#server/features/source-control/hosts/forgejo-host.ts";
+import {
+  createGitHubCli,
+  createGitHubHost,
+  type GitHubCli,
+} from "#server/features/source-control/hosts/github-host.ts";
+import {
+  createGitLabCli,
+  createGitLabHost,
+  type GitLabCli,
+} from "#server/features/source-control/hosts/gitlab-host.ts";
 import type { EnvironmentContext } from "#server/persistence/environment-context.ts";
 import { gitHostTable } from "#server/persistence/environment-state.schema.ts";
 
 export type SourceControl = ReturnType<typeof createSourceControl>;
 
+export interface GitHostClients {
+  readonly azureDevOps: AzureDevOpsClient;
+  readonly bitbucket: BitbucketClient;
+  readonly forgejo: TeaCli;
+  readonly github: GitHubCli;
+  readonly gitlab: GitLabCli;
+}
+
+export function createGitHostClients(): GitHostClients {
+  return {
+    azureDevOps: createAzureDevOpsClient(),
+    bitbucket: createBitbucketClient(),
+    forgejo: createTeaCli(),
+    github: createGitHubCli(),
+    gitlab: createGitLabCli(),
+  };
+}
+
 export function createSourceControl(
   context: EnvironmentContext,
   git: GitCommandRunner,
-  hosts: readonly GitHost[],
+  clients: GitHostClients,
 ) {
+  const bitbucket = createBitbucket(context, clients.bitbucket);
+  const hosts: readonly GitHost[] = [
+    createGitHubHost(clients.github),
+    createAzureDevOpsHost(clients.azureDevOps),
+    bitbucket.host,
+    createGitLabHost(clients.gitlab),
+    createForgejoHost(clients.forgejo),
+  ];
   const disabledKinds = context.read(
     "Could not read Git host settings",
     async (database) =>
@@ -40,6 +90,7 @@ export function createSourceControl(
   );
 
   return {
+    bitbucket,
     enabledHosts: disabledKinds.pipe(
       Effect.map((disabled) => hosts.filter(({ kind }) => !disabled.has(kind))),
     ),
@@ -70,11 +121,9 @@ export function createSourceControl(
 export function sourceControlFeature({
   events,
   sourceControl,
-  bitbucket,
 }: {
   readonly events: EnvironmentEventPublisher;
   readonly sourceControl: SourceControl;
-  readonly bitbucket: Bitbucket;
 }) {
   const changed = Effect.tap(() => Effect.sync(() => events.publishChanged()));
   return {
@@ -84,10 +133,10 @@ export function sourceControlFeature({
         sourceControl.setHostEnabled(kind, enabled).pipe(changed),
       ),
       route(SourceControlApi.saveBitbucketToken, (token) =>
-        bitbucket.save(token).pipe(changed),
+        sourceControl.bitbucket.save(token).pipe(changed),
       ),
       route(SourceControlApi.removeBitbucketToken, () =>
-        bitbucket.remove.pipe(changed),
+        sourceControl.bitbucket.remove.pipe(changed),
       ),
     ],
   } satisfies EnvironmentFeature;

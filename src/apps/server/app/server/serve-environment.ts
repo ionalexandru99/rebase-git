@@ -32,26 +32,7 @@ import { repositoryReflogFeature } from "#server/features/repository-reflog/repo
 import { repositoryRefsFeature } from "#server/features/repository-refs/repository-refs.feature.ts";
 import { repositoryStashesFeature } from "#server/features/repository-stashes/repository-stashes.ts";
 import {
-  createAzureDevOpsClient,
-  createAzureDevOpsHost,
-} from "#server/features/source-control/azure-devops-host.ts";
-import {
-  createBitbucket,
-  createBitbucketClient,
-} from "#server/features/source-control/bitbucket-host.ts";
-import {
-  createForgejoHost,
-  createTeaCli,
-} from "#server/features/source-control/forgejo-host.ts";
-import {
-  createGitHubCli,
-  createGitHubHost,
-} from "#server/features/source-control/github-host.ts";
-import {
-  createGitLabCli,
-  createGitLabHost,
-} from "#server/features/source-control/gitlab-host.ts";
-import {
+  createGitHostClients,
   createSourceControl,
   sourceControlFeature,
 } from "#server/features/source-control/source-control.ts";
@@ -133,16 +114,12 @@ export function acquireEnvironment(home: string, git: GitCommandRunner) {
     return {
       access: createRepositoryAccess(catalog, git, watcher),
       authorization: createEnvironmentAuthorization(context),
-      azureDevOps: createAzureDevOpsClient(),
-      bitbucket: createBitbucketClient(),
       catalog,
       context,
       coordination: createRepositoryCoordination(git),
       events: createEnvironmentEventPublisher(),
-      forgejo: createTeaCli(),
       git,
-      github: createGitHubCli(),
-      gitlab: createGitLabCli(),
+      gitHosts: createGitHostClients(),
       paths,
       watcher,
     };
@@ -151,20 +128,10 @@ export function acquireEnvironment(home: string, git: GitCommandRunner) {
 
 export function environmentFeatures(dependencies: EnvironmentDependencies) {
   return Effect.gen(function* () {
-    const bitbucket = createBitbucket(
-      dependencies.context,
-      dependencies.bitbucket,
-    );
     const sourceControl = createSourceControl(
       dependencies.context,
       dependencies.git,
-      [
-        createGitHubHost(dependencies.github),
-        createAzureDevOpsHost(dependencies.azureDevOps),
-        bitbucket.host,
-        createGitLabHost(dependencies.gitlab),
-        createForgejoHost(dependencies.forgejo),
-      ],
+      dependencies.gitHosts,
     );
     return combineEnvironmentFeatures([
       environmentAuthorizationFeature(dependencies.authorization),
@@ -182,11 +149,7 @@ export function environmentFeatures(dependencies: EnvironmentDependencies) {
       yield* repositoryRefsFeature(dependencies),
       repositoryStashesFeature(dependencies),
       gitIdentityFeature(dependencies),
-      sourceControlFeature({
-        events: dependencies.events,
-        sourceControl,
-        bitbucket,
-      }),
+      sourceControlFeature({ events: dependencies.events, sourceControl }),
     ]);
   });
 }

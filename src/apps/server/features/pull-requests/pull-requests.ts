@@ -1,6 +1,7 @@
 import { Effect } from "effect";
 import { repositoryRejected } from "#contracts/git/git-failures.contract.ts";
 import {
+  isPullRequestLink,
   type PullRequest,
   PullRequestsApi,
 } from "#contracts/pull-requests/pull-requests.contract.ts";
@@ -16,7 +17,7 @@ import {
   primaryRemoteUrl,
   remoteUrls,
 } from "#server/features/repository-refs/git/read-repository-refs.ts";
-import { gitHostFor } from "#server/features/source-control/git-host.ts";
+import { repositoryFor } from "#server/features/source-control/git-host.ts";
 import type { SourceControl } from "#server/features/source-control/source-control.ts";
 import type { RepositoryAccess } from "#server/repository/repository-access.ts";
 
@@ -60,31 +61,38 @@ function listPullRequests(
       { exitCodes: [0, 1], maxOutputBytes: 65_536 },
     );
     const remoteUrl = primaryRemoteUrl(remotes);
-    const host =
+    const found =
       remoteUrl === undefined
         ? undefined
-        : yield* gitHostFor(yield* sourceControl.enabledHosts, remoteUrl);
-    if (remoteUrl === undefined || host === undefined) return [];
+        : yield* repositoryFor(yield* sourceControl.enabledHosts, remoteUrl);
+    if (found === undefined) return [];
+    const { host, repository } = found;
     const urls = remoteUrls(remotes);
-    const branches = (yield* readTrackedBranches(git, directory)).flatMap(
-      ({ remote, ...branch }) => {
+    const branches = (yield* readTrackedBranches(git, directory)).filter(
+      ({ remote }) => {
         const url = urls.get(remote);
-        return url === undefined ? [] : [{ ...branch, remoteUrl: url }];
+        return url !== undefined && host.repositoryId(url) === repository.id;
       },
     );
-    return (yield* host.pullRequests(remoteUrl, branches)).flatMap(
-      ({ branch, pullRequests }) =>
-        pullRequests.length === 0
-          ? []
-          : [
-              {
-                branch,
-                pullRequests: [...pullRequests]
-                  .sort((left, right) => openFirst(left) - openFirst(right))
-                  .slice(0, pullRequestsPerBranch),
-              },
-            ],
-    );
+    if (branches.length === 0) return [];
+    const byHead = yield* repository.pullRequests([
+      ...new Set(branches.map(({ head }) => head)),
+    ]);
+    return branches.flatMap(({ branch, head }) => {
+      const pullRequests = (byHead.get(head) ?? []).filter(({ url }) =>
+        isPullRequestLink(url, host.kind),
+      );
+      return pullRequests.length === 0
+        ? []
+        : [
+            {
+              branch,
+              pullRequests: pullRequests
+                .sort((left, right) => openFirst(left) - openFirst(right))
+                .slice(0, pullRequestsPerBranch),
+            },
+          ];
+    });
   });
 }
 

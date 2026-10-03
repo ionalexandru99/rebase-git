@@ -1,6 +1,8 @@
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { BrowserWindow, type IpcMainInvokeEvent } from "electron";
+import { isPullRequestLink } from "#contracts/pull-requests/pull-requests.contract.ts";
+import { GitHostKind } from "#contracts/source-control/source-control.contract.ts";
 import type { DesktopRenderer } from "#desktop/app/desktop-application.ts";
 
 export type TrustedIpcHandler = <Arguments extends readonly unknown[], Result>(
@@ -21,19 +23,8 @@ export function isTrustedRendererLocation(
   );
 }
 
-const pullRequestHosts = new Set([
-  "github.com",
-  "dev.azure.com",
-  "bitbucket.org",
-]);
-
 export function isExternalPullRequestLink(target: string) {
-  const targetUrl = URL.parse(target);
-  return (
-    targetUrl?.protocol === "https:" &&
-    (pullRequestHosts.has(targetUrl.host) ||
-      /\/(?:-\/merge_requests|pulls)\/\d+$/.test(targetUrl.pathname))
-  );
+  return GitHostKind.literals.some((kind) => isPullRequestLink(target, kind));
 }
 
 export function createTrustedIpcHandler(

@@ -1,15 +1,18 @@
-import { execFile } from "node:child_process";
 import { Effect, Schema } from "effect";
 import type {
-  BranchPullRequests,
   PullRequest,
   PullRequestsUnavailable,
 } from "#contracts/pull-requests/pull-requests.contract.ts";
 import { remoteLocation } from "#server/features/repository-refs/git/read-repository-refs.ts";
 import {
+  eachHead,
   type GitHost,
-  hostTool,
-  type TrackedBranch,
+  hostCommandOutput,
+  hostGet,
+  pullRequest,
+  signedInTool,
+  singleAccount,
+  unavailable,
 } from "#server/features/source-control/git-host.ts";
 
 export interface AzureDevOpsClient {
@@ -23,14 +26,12 @@ export interface AzureDevOpsClient {
 }
 
 interface AzureRepository {
+  readonly id: string;
   readonly organization: string;
   readonly project: string;
   readonly name: string;
 }
 
-const unavailable: PullRequestsUnavailable = {
-  _tag: "PullRequestsUnavailable",
-};
 const azureDevOpsResource = "499b84ac-1321-427f-aa17-267ca6975798";
 const pullRequestsPerBranch = 10;
 const branchesAtOnce = 8;
@@ -40,6 +41,8 @@ const checkPolicyTypes = new Set([
 ]);
 
 export function createAzureDevOpsClient(): AzureDevOpsClient {
+  const az = (args: readonly string[]) =>
+    hostCommandOutput("az", args, { shim: true });
   return {
     version: az(["version", "--output", "json"]).pipe(
       Effect.flatMap(
@@ -78,64 +81,41 @@ export function createAzureDevOpsClient(): AzureDevOpsClient {
       ),
     ),
     get: (url, accessToken) =>
-      Effect.tryPromise({
-        try: async (signal) => {
-          const response = await fetch(url, {
-            headers: {
-              accept: "application/json",
-              authorization: `Bearer ${accessToken}`,
-            },
-            redirect: "error",
-            signal: AbortSignal.any([signal, AbortSignal.timeout(30_000)]),
-          });
-          if (!response.ok) throw new Error(`HTTP ${response.status}`);
-          return response.text();
-        },
-        catch: () => unavailable,
-      }),
-  };
-}
-
-function az(args: readonly string[]) {
-  const [command, prefix] =
-    process.platform === "win32"
-      ? [process.env.ComSpec ?? "cmd.exe", ["/d", "/c", "az"]]
-      : ["az", []];
-  return Effect.callback<string, PullRequestsUnavailable>((resume, signal) => {
-    execFile(
-      command,
-      [...prefix, ...args],
-      { signal, timeout: 30_000, windowsHide: true },
-      (error, stdout) =>
-        resume(
-          error === null ? Effect.succeed(stdout) : Effect.fail(unavailable),
+      hostGet(url, { authorization: `Bearer ${accessToken}` }).pipe(
+        Effect.flatMap(({ status, body }) =>
+          status >= 200 && status < 300
+            ? Effect.succeed(body)
+            : Effect.fail(unavailable),
         ),
-    );
-  });
+      ),
+  };
 }
 
 export function createAzureDevOpsHost(client: AzureDevOpsClient): GitHost {
   return {
     kind: "azure-devops",
-    serves: (remoteUrl) =>
-      Effect.succeed(azureRepository(remoteUrl) !== undefined),
-    tool: hostTool("dev.azure.com", client.version, client.account),
-    pullRequests: (remoteUrl, branches) =>
-      listPullRequests(client, remoteUrl, branches),
+    tool: signedInTool(
+      client.version,
+      singleAccount("dev.azure.com", client.account),
+    ),
+    repositoryId: (remoteUrl) => azureRepository(remoteUrl)?.id,
+    repository: (remoteUrl) => {
+      const repository = azureRepository(remoteUrl);
+      return Effect.succeed(
+        repository && {
+          id: repository.id,
+          pullRequests: (heads) => listPullRequests(client, repository, heads),
+        },
+      );
+    },
   };
 }
 
 function listPullRequests(
   client: AzureDevOpsClient,
-  remoteUrl: string,
-  branches: readonly TrackedBranch[],
+  repository: AzureRepository,
+  heads: readonly string[],
 ) {
-  const repository = azureRepository(remoteUrl);
-  const tracked = branches.filter(({ remoteUrl }) =>
-    sameRepository(azureRepository(remoteUrl), repository),
-  );
-  if (repository === undefined || tracked.length === 0)
-    return Effect.succeed([]);
   return Effect.gen(function* () {
     const accessToken = yield* client.accessToken;
     const read = <A>(
@@ -153,28 +133,21 @@ function listPullRequests(
             Effect.orElseSucceed(() => undefined),
           )
         : Effect.succeed(undefined);
-    return yield* Effect.forEach(
-      tracked,
-      (branch) =>
-        read(pullRequestsUrl(repository, branch), decodePullRequestList).pipe(
-          Effect.flatMap(({ value }) =>
-            Effect.forEach(
-              value.filter((node) => node.forkSource === undefined),
-              (node) =>
-                checks(node).pipe(
-                  Effect.map((state) => pullRequest(repository, node, state)),
+    return yield* eachHead(heads, branchesAtOnce, (head) =>
+      read(pullRequestsUrl(repository, head), decodePullRequestList).pipe(
+        Effect.flatMap(({ value }) =>
+          Effect.forEach(
+            value.filter((node) => node.forkSource === undefined),
+            (node) =>
+              checks(node).pipe(
+                Effect.map((state) =>
+                  azurePullRequest(repository, node, state),
                 ),
-              { concurrency: "unbounded" },
-            ),
-          ),
-          Effect.map(
-            (pullRequests): BranchPullRequests => ({
-              branch: branch.branch,
-              pullRequests,
-            }),
+              ),
+            { concurrency: "unbounded" },
           ),
         ),
-      { concurrency: branchesAtOnce },
+      ),
     );
   });
 }
@@ -234,29 +207,20 @@ function repositoryOf(
   name: string | undefined,
 ): AzureRepository | undefined {
   return organization && project && name
-    ? { organization, project, name }
+    ? {
+        id: `${organization}/${project}/${name}`.toLowerCase(),
+        organization,
+        project,
+        name,
+      }
     : undefined;
-}
-
-function sameRepository(
-  candidate: AzureRepository | undefined,
-  repository: AzureRepository | undefined,
-) {
-  return (
-    candidate !== undefined &&
-    repository !== undefined &&
-    candidate.organization.toLowerCase() ===
-      repository.organization.toLowerCase() &&
-    candidate.project.toLowerCase() === repository.project.toLowerCase() &&
-    candidate.name.toLowerCase() === repository.name.toLowerCase()
-  );
 }
 
 function projectUrl({ organization, project }: AzureRepository) {
   return `https://dev.azure.com/${encodeURIComponent(organization)}/${encodeURIComponent(project)}`;
 }
 
-function pullRequestsUrl(repository: AzureRepository, { head }: TrackedBranch) {
+function pullRequestsUrl(repository: AzureRepository, head: string) {
   return `${projectUrl(repository)}/_apis/git/repositories/${encodeURIComponent(repository.name)}/pullrequests?${new URLSearchParams(
     {
       "searchCriteria.sourceRefName": `refs/heads/${head}`,
@@ -305,26 +269,28 @@ const decodeEvaluations = Schema.decodeUnknownEffect(
   Schema.fromJsonString(Schema.Struct({ value: Schema.Array(Evaluation) })),
 );
 
-function pullRequest(
+function azurePullRequest(
   repository: AzureRepository,
   node: PullRequestNode,
   checks: PullRequest["checks"],
 ): PullRequest {
-  return {
-    kind: "PullRequest",
-    number: node.pullRequestId,
-    url: `${projectUrl(repository)}/_git/${encodeURIComponent(repository.name)}/pullrequest/${node.pullRequestId}`,
-    title: node.title,
-    state:
-      node.status === "active"
-        ? node.isDraft === true
-          ? "Draft"
-          : "Open"
-        : node.status === "completed"
-          ? "Merged"
-          : "Closed",
-    ...(checks === undefined ? {} : { checks }),
-  };
+  return pullRequest(
+    {
+      kind: "PullRequest",
+      number: node.pullRequestId,
+      url: `${projectUrl(repository)}/_git/${encodeURIComponent(repository.name)}/pullrequest/${node.pullRequestId}`,
+      title: node.title,
+      state:
+        node.status === "active"
+          ? node.isDraft === true
+            ? "Draft"
+            : "Open"
+          : node.status === "completed"
+            ? "Merged"
+            : "Closed",
+    },
+    checks,
+  );
 }
 
 function checksState(

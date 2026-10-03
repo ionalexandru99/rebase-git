@@ -1,13 +1,15 @@
-import { execFile } from "node:child_process";
 import { Effect, Schema } from "effect";
 import type {
   PullRequest,
   PullRequestsUnavailable,
 } from "#contracts/pull-requests/pull-requests.contract.ts";
 import { remoteLocation } from "#server/features/repository-refs/git/read-repository-refs.ts";
-import type {
-  GitHost,
-  TrackedBranch,
+import {
+  type GitHost,
+  hostCommandOutput,
+  pullRequest,
+  signedInTool,
+  unavailable,
 } from "#server/features/source-control/git-host.ts";
 
 export interface TeaCli {
@@ -28,21 +30,19 @@ interface TeaLogin {
 }
 
 interface ForgejoRepository {
+  readonly id: string;
   readonly host: string;
   readonly server: string | undefined;
   readonly owner: string;
   readonly name: string;
 }
 
-const unavailable: PullRequestsUnavailable = {
-  _tag: "PullRequestsUnavailable",
-};
 const pageSize = 50;
 const pagesRead = 4;
 const checksAtOnce = 8;
-const accountsShown = 16;
 
 export function createTeaCli(): TeaCli {
+  const tea = (args: readonly string[]) => hostCommandOutput("tea", args);
   return {
     version: tea(["--version"]).pipe(
       Effect.map((output) => /(\d+)\.(\d+)\.\d+/.exec(output)),
@@ -61,47 +61,34 @@ export function createTeaCli(): TeaCli {
   };
 }
 
-function tea(args: readonly string[]) {
-  return Effect.callback<string, PullRequestsUnavailable>((resume, signal) => {
-    execFile(
-      "tea",
-      args,
-      {
-        maxBuffer: 16 * 1_048_576,
-        signal,
-        timeout: 30_000,
-        windowsHide: true,
-      },
-      (error, stdout) =>
-        resume(
-          error === null ? Effect.succeed(stdout) : Effect.fail(unavailable),
-        ),
-    );
-  });
-}
-
 export function createForgejoHost(cli: TeaCli): GitHost {
   return {
     kind: "forgejo",
-    serves: (remoteUrl) => {
+    tool: signedInTool(
+      cli.version,
+      readLogins(cli).pipe(
+        Effect.map((logins) =>
+          logins.map(({ server, account }) => ({ host: server, account })),
+        ),
+      ),
+    ),
+    repositoryId: (remoteUrl) => forgejoRepository(remoteUrl)?.id,
+    repository: (remoteUrl) => {
       const repository = forgejoRepository(remoteUrl);
-      if (repository === undefined) return Effect.succeed(false);
+      if (repository === undefined) return Effect.succeed(undefined);
       return readLogins(cli).pipe(
-        Effect.map((logins) => loginFor(logins, repository) !== undefined),
+        Effect.map((logins) => {
+          const login = loginFor(logins, repository);
+          return (
+            login && {
+              id: repository.id,
+              pullRequests: (heads: readonly string[]) =>
+                listPullRequests(cli, login, repository, heads),
+            }
+          );
+        }),
       );
     },
-    tool: Effect.gen(function* () {
-      const version = yield* cli.version;
-      if (version === undefined) return { _tag: "Missing" } as const;
-      const accounts = (yield* readLogins(cli))
-        .map(({ server, account }) => ({ host: server, account }))
-        .slice(0, accountsShown);
-      return accounts.length === 0
-        ? ({ _tag: "SignedOut", version } as const)
-        : ({ _tag: "SignedIn", version, accounts } as const);
-    }),
-    pullRequests: (remoteUrl, branches) =>
-      listPullRequests(cli, remoteUrl, branches),
   };
 }
 
@@ -162,6 +149,7 @@ function forgejoRepository(remoteUrl: string): ForgejoRepository | undefined {
   return location === undefined || location.host === "" || !owner || !name
     ? undefined
     : {
+        id: `${location.host}/${owner}/${name}`.toLowerCase(),
         host: location.host,
         server:
           url?.protocol === "https:" || url?.protocol === "http:"
@@ -178,25 +166,15 @@ function fullName({ owner, name }: ForgejoRepository) {
 
 function listPullRequests(
   cli: TeaCli,
-  remoteUrl: string,
-  branches: readonly TrackedBranch[],
+  login: TeaLogin,
+  repository: ForgejoRepository,
+  heads: readonly string[],
 ) {
   return Effect.gen(function* () {
-    const repository = forgejoRepository(remoteUrl);
-    if (repository === undefined) return [];
-    const tracked = branches.filter(({ remoteUrl }) => {
-      const candidate = forgejoRepository(remoteUrl);
-      return (
-        candidate?.host === repository.host &&
-        fullName(candidate) === fullName(repository)
-      );
-    });
-    const login = loginFor(yield* readLogins(cli), repository);
-    if (login === undefined || tracked.length === 0) return [];
-    const heads = new Set(tracked.map(({ head }) => head));
+    const wanted = new Set(heads);
     const nodes = (yield* readPullRequests(cli, login.name, repository)).filter(
       (node) =>
-        heads.has(node.head.ref) &&
+        wanted.has(node.head.ref) &&
         node.head.repo?.full_name.toLowerCase() === fullName(repository) &&
         isServerLink(node.html_url, login.server),
     );
@@ -206,17 +184,19 @@ function listPullRequests(
         checksOf(cli, login.name, repository, node).pipe(
           Effect.map((checks) => ({
             head: node.head.ref,
-            pullRequest: pullRequest(node, checks),
+            pullRequest: forgejoPullRequest(node, checks),
           })),
         ),
       { concurrency: checksAtOnce },
     );
-    return tracked.map(({ branch, head }) => ({
-      branch,
-      pullRequests: found
-        .filter((candidate) => candidate.head === head)
-        .map(({ pullRequest }) => pullRequest),
-    }));
+    return new Map(
+      heads.map((head) => [
+        head,
+        found
+          .filter((candidate) => candidate.head === head)
+          .map(({ pullRequest }) => pullRequest),
+      ]),
+    );
   });
 }
 
@@ -302,24 +282,26 @@ const decodeStatus = Schema.decodeUnknownEffect(
   ),
 );
 
-function pullRequest(
+function forgejoPullRequest(
   node: PullRequestNode,
   checks: PullRequest["checks"],
 ): PullRequest {
-  return {
-    kind: "PullRequest",
-    number: node.number,
-    url: node.html_url,
-    title: node.title,
-    state: node.merged
-      ? "Merged"
-      : node.state !== "open"
-        ? "Closed"
-        : node.draft === true
-          ? "Draft"
-          : "Open",
-    ...(checks === undefined ? {} : { checks }),
-  };
+  return pullRequest(
+    {
+      kind: "PullRequest",
+      number: node.number,
+      url: node.html_url,
+      title: node.title,
+      state: node.merged
+        ? "Merged"
+        : node.state !== "open"
+          ? "Closed"
+          : node.draft === true
+            ? "Draft"
+            : "Open",
+    },
+    checks,
+  );
 }
 
 function checksState({
