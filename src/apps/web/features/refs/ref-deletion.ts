@@ -120,22 +120,30 @@ export function useRefDeletion({
       branches: deletion.branches.map(branchDeletionInput),
       force,
     });
+    const [first] = deletion.branches;
+    const messages = refFailureMessages(
+      first === undefined ? "" : branchLabel(first),
+    );
     if (result._tag !== "Ok") {
-      const [first] = deletion.branches;
-      errorToast.failure(
-        "deleteBranch",
-        result,
-        refFailureMessages(first === undefined ? "" : branchLabel(first)),
-      );
+      errorToast.failure("deleteBranch", result, messages);
       return undefined;
     }
-    const { deleted, unmerged } = result.value;
+    const { deleted, unmerged, failure } = result.value;
     const among = (list: readonly BranchDeletion[]) =>
       deletion.branches.filter((branch) =>
         list.some((other) => sameBranch(branchDeletionInput(branch), other)),
       );
     const now = deletedBranches(among(deleted), refs);
     const restorable = now === undefined ? earlier : [...earlier, ...now];
+    if (failure !== undefined) {
+      errorToast.failure(
+        "deleteBranch",
+        { _tag: "Rejected", failure },
+        messages,
+        restorable.length === 0 ? undefined : () => void undo(restorable),
+      );
+      return undefined;
+    }
     if (now !== undefined) {
       const [only] = restorable;
       statusToast.success(

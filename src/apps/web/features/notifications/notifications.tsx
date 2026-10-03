@@ -177,6 +177,7 @@ export function useErrorToast() {
         action: ErrorAction,
         result: { readonly _tag: "Ok" } | RequestFailure<Failure>,
         messages?: FailureMessages<Failure>,
+        undo?: () => void,
       ) => {
         if (result._tag === "Ok") return;
         if (result._tag === "Cancelled") {
@@ -190,7 +191,9 @@ export function useErrorToast() {
             : describeFailure(result, messages),
           identityMissing(result)
             ? { label: "Open settings", run: openGitIdentity }
-            : undefined,
+            : undo === undefined
+              ? undefined
+              : { label: "Undo", run: undo },
         );
       },
     };

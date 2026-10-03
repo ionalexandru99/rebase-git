@@ -1,4 +1,4 @@
-import { Array as Arrays, Effect } from "effect";
+import { Array as Arrays, Effect, Result } from "effect";
 import type { RepositoryRejected } from "#contracts/git/git-failures.contract.ts";
 import type {
   BranchCommitSummary,
@@ -50,20 +50,25 @@ export function deleteBranches(
     const unmerged = force
       ? []
       : yield* unmergedBranches(git, worktreePath, branches, refs);
-    const deleted = branches.filter(
+    const deleting = branches.filter(
       (branch) => !unmerged.some((entry) => entry.branch === branch),
     );
-    yield* deleteRemotes(
+    const remotes = yield* deleteRemotes(
       git,
       worktreePath,
-      deleted.flatMap(({ remote }) => (remote === undefined ? [] : [remote])),
+      deleting.flatMap(({ remote }) => (remote === undefined ? [] : [remote])),
+    );
+    const deleted = deleting.filter(
+      ({ remote }) => remote === undefined || remotes.deleted.includes(remote),
     );
     yield* deleteLocals(
       git,
       worktreePath,
       deleted.flatMap(({ local }) => (local === undefined ? [] : [local])),
     );
-    return { deleted, unmerged };
+    if (remotes.failure === undefined) return { deleted, unmerged };
+    if (deleted.length === 0) return yield* Effect.fail(remotes.failure);
+    return { deleted, unmerged, failure: remotes.failure };
   });
 }
 
@@ -207,43 +212,61 @@ function deleteRemotes(
   directory: string,
   remotes: readonly RemoteTarget[],
 ) {
-  return Effect.forEach(
-    [...Map.groupBy(remotes, ({ remote }) => remote)].flatMap(
-      ([remote, group]) =>
-        Arrays.chunksOf(group, pushedPerCommand).map(
-          (batch) => [remote, batch] as const,
-        ),
-    ),
+  return Effect.gen(function* () {
+    const deleted: RemoteTarget[] = [];
+    for (const [remote, batch] of remoteBatches(remotes)) {
+      const pushed = yield* Effect.result(
+        pushDeletes(git, directory, remote, batch),
+      );
+      if (Result.isFailure(pushed)) return { deleted, failure: pushed.failure };
+      deleted.push(...batch);
+    }
+    return { deleted };
+  });
+}
+
+function remoteBatches(remotes: readonly RemoteTarget[]) {
+  return [...Map.groupBy(remotes, ({ remote }) => remote)].flatMap(
     ([remote, group]) =>
-      runRepositoryGit(
-        git,
-        directory,
-        [
-          "push",
-          ...group.map(
-            ({ name, target }) =>
-              `--force-with-lease=refs/heads/${name}:${target}`,
-          ),
-          remote,
-          "--delete",
-          ...group.map(({ name }) => name),
-        ],
-        pushCommand,
-      ).pipe(
-        Effect.mapError(
-          (error): RepositoryBranchesOperationFailure | RepositoryRejected => {
-            const rejected =
-              /\[rejected\].*?(\S+) \((?:stale info|fetch first)\)/.exec(
-                error.detail,
-              )?.[1];
-            const name = `${remote}/${rejected ?? group[0]?.name ?? ""}`;
-            return isGitRejection(error) && rejected !== undefined
-              ? { _tag: "BranchMoved", name }
-              : branchWriteFailed(error, name);
-          },
-        ),
+      Arrays.chunksOf(group, pushedPerCommand).map(
+        (batch) => [remote, batch] as const,
       ),
-    { discard: true },
+  );
+}
+
+function pushDeletes(
+  git: GitCommandRunner,
+  directory: string,
+  remote: string,
+  batch: readonly RemoteTarget[],
+) {
+  return runRepositoryGit(
+    git,
+    directory,
+    [
+      "push",
+      "--atomic",
+      ...batch.map(
+        ({ name, target }) => `--force-with-lease=refs/heads/${name}:${target}`,
+      ),
+      remote,
+      "--delete",
+      ...batch.map(({ name }) => name),
+    ],
+    pushCommand,
+  ).pipe(
+    Effect.mapError(
+      (error): RepositoryBranchesOperationFailure | RepositoryRejected => {
+        const rejected =
+          /\[rejected\].*?(\S+) \((?:stale info|fetch first)\)/.exec(
+            error.detail,
+          )?.[1];
+        const name = `${remote}/${rejected ?? batch[0]?.name ?? ""}`;
+        return isGitRejection(error) && rejected !== undefined
+          ? { _tag: "BranchMoved", name }
+          : branchWriteFailed(error, name);
+      },
+    ),
   );
 }
 

@@ -9,6 +9,7 @@ import type {
 import { RepositoryPushApi } from "#contracts/repository-push/repository-push.contract.ts";
 import {
   RepositoryBranchesApi,
+  type RepositoryBranchesDeleted,
   type UnmergedBranch,
 } from "#contracts/repository-refs/repository-branches.contract.ts";
 import {
@@ -317,6 +318,49 @@ describe("ref editing", () => {
       .not.toBeInTheDocument();
   });
 
+  it("reports a remote that refused the deletion and offers Undo for the branches it did delete", async () => {
+    const environment = await refsEnvironment();
+    environment.failRemotesNext({
+      _tag: "BranchMoved",
+      name: "origin/feature/merged",
+    });
+    const screen = await renderBranches(environment);
+    const tree = screen.getByRole("tree", { name: "Branches" });
+    await tree.getByRole("treeitem", { name: "feature/merged" }).click();
+    await tree
+      .getByRole("treeitem", { name: "feature/done" })
+      .click({ modifiers: ["ControlOrMeta"] });
+    await tree
+      .getByRole("treeitem", { name: "feature/done" })
+      .click({ button: "right" });
+    await screen.getByRole("menuitem", { name: "Delete" }).click();
+    await screen.getByRole("menuitem", { name: "Both" }).click();
+    await screen
+      .getByRole("alertdialog")
+      .getByRole("button", { name: "Delete", exact: true })
+      .click();
+
+    await expect
+      .element(
+        screen.getByText("origin/feature/merged changed since it was shown."),
+      )
+      .toBeVisible();
+    const done = tree.getByRole("treeitem", { name: "feature/done" });
+    await expect.element(done).not.toBeInTheDocument();
+    await expect
+      .element(tree.getByRole("treeitem", { name: "feature/merged" }))
+      .toBeVisible();
+    await screen.getByRole("button", { name: "Undo" }).click();
+    await expect.element(done).toBeVisible();
+    await expect
+      .poll(() => environment.requested)
+      .toHaveBeenCalledWith("create", {
+        ...scope,
+        name: "feature/done",
+        startPoint: main,
+      });
+  });
+
   it("opens the branch menu from the keyboard and shows why checked-out branches cannot change", async () => {
     const screen = await renderBranches(await refsEnvironment());
     await screen
@@ -513,6 +557,7 @@ async function refsEnvironment() {
   const requested = vi.fn<(route: RefRoute, command: unknown) => void>();
   const rejections = new Map<RefRoute, RefFailure>();
   const unmergedBranches = new Map<string, UnmergedCommits>();
+  let remoteFailure: RepositoryBranchesDeleted["failure"];
   let current = refs();
   const reply = <Route extends EnvironmentRoute>(
     name: RefRoute,
@@ -557,8 +602,12 @@ async function refsEnvironment() {
             const lost = unmergedBranches.get(branch.local?.name ?? "");
             return lost === undefined ? [] : [{ branch, ...lost }];
           });
+      const failure = remoteFailure;
+      remoteFailure = undefined;
       const deleted = command.branches.filter(
-        (branch) => !unmerged.some((entry) => entry.branch === branch),
+        (branch) =>
+          !unmerged.some((entry) => entry.branch === branch) &&
+          (failure === undefined || branch.remote === undefined),
       );
       const removed = (name: string, remote?: string) =>
         deleted.some((branch) =>
@@ -573,7 +622,9 @@ async function refsEnvironment() {
           ({ name, remote }) => !removed(name, remote),
         ),
       };
-      return { deleted, unmerged };
+      return failure === undefined
+        ? { deleted, unmerged }
+        : { deleted, unmerged, failure };
     }),
     reply("createTag", RepositoryTagsApi.create, (command) => {
       const tag = {
@@ -627,6 +678,11 @@ async function refsEnvironment() {
       rejections.set(route, failure),
     keepUnmerged: (name: string, lost: UnmergedCommits) =>
       unmergedBranches.set(name, lost),
+    failRemotesNext: (
+      failure: NonNullable<RepositoryBranchesDeleted["failure"]>,
+    ) => {
+      remoteFailure = failure;
+    },
     environment: { requests },
   };
 }

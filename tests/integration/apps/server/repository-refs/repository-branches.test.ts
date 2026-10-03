@@ -353,6 +353,59 @@ describe("repository branches", () => {
       git(fixture.repositoryPath, "ls-remote", "--heads", "origin", "shared"),
     ).resolves.not.toBe("");
   });
+  it("deletes a remote batch atomically and reports what earlier batches deleted when a later one fails", async () => {
+    const fixture = await createFixture();
+    const origin = join(fixture.root, "origin.git");
+    await git(fixture.repositoryPath, "remote", "add", "mirror", origin);
+    await git(fixture.repositoryPath, "push", "-q", "-u", "origin", "merged");
+    await git(fixture.repositoryPath, "push", "-q", "origin", "main:shared");
+    await git(fixture.repositoryPath, "push", "-q", "origin", "main:kept");
+    await git(fixture.repositoryPath, "fetch", "-q", "mirror");
+    const merged = await git(fixture.repositoryPath, "rev-parse", "merged");
+    const main = await git(fixture.repositoryPath, "rev-parse", "main");
+    const teammate = join(fixture.root, "teammate");
+    await cloneRepository(origin, teammate, "-q");
+    await git(teammate, "checkout", "-q", "shared");
+    await git(teammate, "commit", "--allow-empty", "-m", "teammate work");
+    await git(teammate, "push", "-q", "origin", "shared");
+    const both = {
+      local: { name: "merged", target: merged },
+      remote: { name: "merged", remote: "origin", target: merged },
+    };
+
+    const result = await withBranches(fixture, ({ branches, repositoryId }) =>
+      branches.delete({
+        branches: [
+          both,
+          { remote: { name: "kept", remote: "mirror", target: main } },
+          { remote: { name: "shared", remote: "mirror", target: main } },
+        ],
+        force: true,
+        repositoryId,
+        worktreePath: fixture.repositoryPath,
+      }),
+    );
+
+    expect(result).toEqual({
+      deleted: [both],
+      unmerged: [],
+      failure: { _tag: "BranchMoved", name: "mirror/shared" },
+    });
+    await expect(
+      git(
+        fixture.repositoryPath,
+        "ls-remote",
+        "--heads",
+        "origin",
+        "merged",
+        "kept",
+        "shared",
+      ).then((heads) => heads.split("\n").map((line) => line.split("\t")[1])),
+    ).resolves.toEqual(["refs/heads/kept", "refs/heads/shared"]);
+    await expect(
+      git(fixture.repositoryPath, "branch", "--list", "merged"),
+    ).resolves.toBe("");
+  });
 });
 
 async function withBranches<Value, Failure>(

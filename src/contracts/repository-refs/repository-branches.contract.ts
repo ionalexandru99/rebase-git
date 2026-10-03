@@ -1,5 +1,6 @@
 import { Schema } from "effect";
 import { repositoryCommand } from "#contracts/environment-connection/environment-route.contract.ts";
+import { RepositoryRejected } from "#contracts/git/git-failures.contract.ts";
 import {
   ObjectId,
   RefName,
@@ -91,12 +92,6 @@ export const UnmergedBranch = Schema.Struct({
 });
 export type UnmergedBranch = typeof UnmergedBranch.Type;
 
-export const RepositoryBranchesDeleted = Schema.Struct({
-  deleted: Schema.Array(BranchDeletion).check(Schema.isMaxLength(1_000)),
-  unmerged: Schema.Array(UnmergedBranch).check(Schema.isMaxLength(1_000)),
-});
-export type RepositoryBranchesDeleted = typeof RepositoryBranchesDeleted.Type;
-
 export const RepositoryBranchesOperationFailure = Schema.Union([
   RefMissing,
   BranchCheckedOutElsewhere,
@@ -106,6 +101,15 @@ export const RepositoryBranchesOperationFailure = Schema.Union([
 ]);
 export type RepositoryBranchesOperationFailure =
   typeof RepositoryBranchesOperationFailure.Type;
+
+export const RepositoryBranchesDeleted = Schema.Struct({
+  deleted: Schema.Array(BranchDeletion).check(Schema.isMaxLength(1_000)),
+  unmerged: Schema.Array(UnmergedBranch).check(Schema.isMaxLength(1_000)),
+  failure: Schema.optional(
+    Schema.Union([RepositoryBranchesOperationFailure, RepositoryRejected]),
+  ),
+});
+export type RepositoryBranchesDeleted = typeof RepositoryBranchesDeleted.Type;
 
 export const RepositoryBranchesApi = {
   create: repositoryCommand("repositories/branches/create", {
