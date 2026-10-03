@@ -145,6 +145,7 @@ function withFetch(
     Effect.gen(function* () {
       const fetch = yield* acquireRepositoryFetch({
         access,
+        afterFetch: () => Effect.void,
         coordination: {
           run: (_directory, _policy, operation) => operation,
           operation: () => Effect.die("Fetch never reads operations."),

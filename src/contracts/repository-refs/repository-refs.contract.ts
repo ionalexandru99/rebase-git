@@ -1,4 +1,5 @@
 import { Schema } from "effect";
+import { SettledDay } from "#contracts/branch-settling/branch-settling.contract.ts";
 import {
   repositoryCommand,
   route,
@@ -37,6 +38,7 @@ export type BranchUpstream = typeof BranchUpstream.Type;
 
 export const LocalBranch = Schema.Struct({
   name: RefName,
+  settled: Schema.optional(SettledDay),
   target: Schema.optional(ObjectId),
   upstream: Schema.optional(BranchUpstream),
   worktreePath: Schema.optional(RepositoryPath),

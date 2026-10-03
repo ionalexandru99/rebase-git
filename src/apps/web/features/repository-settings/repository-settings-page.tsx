@@ -6,6 +6,7 @@ import {
   SettingsRow,
   SettingsSection,
 } from "#web/components/ui/settings-layout.tsx";
+import { BranchSettings } from "#web/features/branch-settling/branch-settings.tsx";
 import { writeClipboardText } from "#web/features/clipboard/write-clipboard-text.ts";
 import { RepositoryIdentityRow } from "#web/features/git-identity/git-identity.tsx";
 import { useErrorToast } from "#web/features/notifications/notifications.tsx";
@@ -142,6 +143,11 @@ function RepositoryHistorySettings({
         />
         <RepositoryPullStrategyRow repositoryId={repositoryId} />
       </SettingsSection>
+      <BranchSettings
+        repositoryId={repositoryId}
+        path={path}
+        canConfigure={canConfigure}
+      />
       <SettingsSection title="History storage · This browser">
         <RepositoryCacheSettings
           history={history}

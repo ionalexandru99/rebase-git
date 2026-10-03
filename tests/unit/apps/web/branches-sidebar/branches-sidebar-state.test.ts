@@ -100,6 +100,51 @@ describe("branches sidebar state", () => {
     });
   });
 
+  it("moves settled branches out of Local into a Settled section docked above the remotes", () => {
+    const current = branchScenarioRefs();
+    const refs = {
+      ...current,
+      branches: current.branches.map((branch) =>
+        branch.name === "feature"
+          ? { ...branch, settled: "2026-10-01" }
+          : branch,
+      ),
+    };
+    const rows = buildBranchesSidebarRows(
+      refs,
+      mainPath,
+      toggleSection(defaultExpandedSections, "settled"),
+      "",
+    );
+
+    const { local, docked } = dockItems(branchesSidebarItems(rows, undefined));
+    expect(local.map((item) => item.id)).toEqual([
+      "ref:branches:main",
+      "ref:branches:topic",
+    ]);
+    expect(docked.map((item) => item.id).slice(0, 3)).toEqual([
+      "section:settled",
+      "ref:settled:feature",
+      "section:remote:origin",
+    ]);
+    expect(rows[3]).toMatchObject({ count: 1, scope: "settled" });
+    expect(
+      buildBranchesSidebarRows(
+        refs,
+        mainPath,
+        defaultExpandedSections,
+        "",
+        "local",
+      ).map((row) => row.id),
+    ).toEqual([
+      "section:branches",
+      "ref:branches:main",
+      "ref:branches:topic",
+      "section:settled",
+      "ref:settled:feature",
+    ]);
+  });
+
   it("keeps the active branch ahead of branches in other worktrees", () => {
     const rows = buildBranchesSidebarRows(
       branchScenarioRefs(),

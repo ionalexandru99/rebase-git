@@ -8,6 +8,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { BranchSettlingApi } from "#contracts/branch-settling/branch-settling.contract.ts";
 import type { PullRequest } from "#contracts/pull-requests/pull-requests.contract.ts";
 import type {
   RemoteBranch,
@@ -58,6 +59,7 @@ import {
 } from "#web/features/branches-sidebar/sidebar-view-controls.tsx";
 import { historyRefKey } from "#web/features/commit-graph/scope/history-scope.ts";
 import type { MergeActions } from "#web/features/merge/merge-actions.ts";
+import { useErrorToast } from "#web/features/notifications/notifications.tsx";
 import type { PullRequests } from "#web/features/pull-requests/pull-requests.tsx";
 import type { RebaseActions } from "#web/features/rebase/rebase-actions.ts";
 import {
@@ -94,6 +96,7 @@ import {
   useStashes,
 } from "#web/features/stashes/stashes.ts";
 import { useRepositoryScope } from "#web/platform/query/repository-scope.tsx";
+import { useCommand } from "#web/platform/query/use-command.ts";
 
 const noSelectedRefs: ReadonlySet<string> = new Set();
 const noPullRequests: readonly PullRequest[] = [];
@@ -132,6 +135,12 @@ export function BranchesSidebar({
   const stashes = useStashes();
   const stashCommands = useStashCommands();
   const stashDraft = useStashDraft();
+  const settling = useCommand(BranchSettlingApi.settle);
+  const errorToast = useErrorToast();
+  const settle = (names: readonly string[], settled: boolean) =>
+    void settling
+      .run({ names, settled })
+      .then((result) => errorToast.failure("settleBranches", result));
   const [selectedRows, setSelectedRows] = useState(noSelectedRows);
   const [query, setQuery] = useState("");
   const filterQuery = useDeferredValue(query);
@@ -301,6 +310,7 @@ export function BranchesSidebar({
                 }
               : undefined,
             pushTags: tagPush,
+            settle,
             editing,
           },
         );
@@ -324,7 +334,7 @@ export function BranchesSidebar({
             selectedNames,
             refs,
             { writable: editing.writable },
-            editing,
+            { editing, settle },
           );
   const actionsFor = (row: BranchesSidebarRefRow) =>
     selectionActions !== undefined && selectedRows.has(row.id)

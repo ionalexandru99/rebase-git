@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
 import { userEvent } from "vite-plus/test/browser";
+import { BranchSettlingApi } from "#contracts/branch-settling/branch-settling.contract.ts";
 import type {
   EnvironmentRoute,
   RouteFailure,
@@ -50,7 +51,8 @@ type RefRoute =
   | keyof typeof RepositoryRefsApi
   | "createTag"
   | "deleteTag"
-  | "pushTags";
+  | "pushTags"
+  | "settle";
 
 interface BranchRename {
   readonly name: string;
@@ -281,6 +283,41 @@ describe("ref editing", () => {
     await expect
       .element(tree.getByRole("treeitem", { name: "feature/wip" }))
       .toHaveAttribute("aria-selected", "false");
+  });
+
+  it("settles the selected branches into the Settled section and unsettles one from there", async () => {
+    const environment = await refsEnvironment();
+    const screen = await renderBranches(environment);
+    const tree = screen.getByRole("tree", { name: "Branches" });
+    await tree.getByRole("treeitem", { name: "feature/done" }).click();
+    const spike = tree.getByRole("treeitem", { name: "feature/spike" });
+    await spike.click({ modifiers: ["ControlOrMeta"] });
+
+    await spike.click({ button: "right" });
+    await screen.getByRole("menuitem", { name: "Settle" }).click();
+    await expect
+      .poll(() => environment.requested)
+      .toHaveBeenCalledWith("settle", {
+        ...scope,
+        names: ["feature/done", "feature/spike"],
+        settled: true,
+      });
+    const settled = tree.getByRole("treeitem", {
+      name: "Settled",
+      exact: true,
+    });
+    await expect.element(settled).toHaveTextContent("Settled (2)");
+    await expect.element(spike).not.toBeInTheDocument();
+
+    await settled.click();
+    await spike.click({ button: "right" });
+    await screen.getByRole("menuitem", { name: "Unsettle" }).click();
+    await expect.element(settled).toHaveTextContent("Settled (1)");
+    expect(environment.requested).toHaveBeenLastCalledWith("settle", {
+      ...scope,
+      names: ["feature/spike"],
+      settled: false,
+    });
   });
 
   it("confirms before deleting a branch locally and on its remote", async () => {
@@ -669,6 +706,16 @@ async function refsEnvironment() {
       return failure === undefined
         ? { deleted, unmerged }
         : { deleted, unmerged, failure };
+    }),
+    reply("settle", BranchSettlingApi.settle, ({ names, settled }) => {
+      branches((all) =>
+        all.map((branch) => {
+          if (!names.includes(branch.name)) return branch;
+          const { settled: _previous, ...active } = branch;
+          return settled ? { ...active, settled: "2026-10-03" } : active;
+        }),
+      );
+      return {};
     }),
     reply("createTag", RepositoryTagsApi.create, (command) => {
       const tag = {

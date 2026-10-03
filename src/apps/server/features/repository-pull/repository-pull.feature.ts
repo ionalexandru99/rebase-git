@@ -29,6 +29,7 @@ import type { RepositoryCoordination } from "#server/repository/repository-coord
 
 export function repositoryPullFeature(
   dependencies: RepositoryDependencies & {
+    readonly afterFetch: (directory: string) => Effect.Effect<void>;
     readonly context: EnvironmentContext;
     readonly events: EnvironmentEventPublisher;
   },

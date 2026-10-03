@@ -1,5 +1,6 @@
 import type {
   BranchUpstream,
+  LocalBranch,
   RemoteBranch,
   RepositoryRefs,
   RepositoryRefTarget,
@@ -14,6 +15,7 @@ import type { RefKind } from "#web/features/refs/ref-kinds.ts";
 import { activeHead } from "#web/features/refs/repository-refs.ts";
 
 export const localBranchesSectionId = "branches";
+export const settledSectionId = "settled";
 export const tagsSectionId = "tags";
 export const stashesSectionId = "stashes";
 
@@ -23,7 +25,9 @@ export type BranchesSidebarScope =
   | "remote"
   | "tags"
   | "stashes";
-export type BranchesSidebarSectionScope = Exclude<BranchesSidebarScope, "all">;
+export type BranchesSidebarSectionScope =
+  | Exclude<BranchesSidebarScope, "all">
+  | "settled";
 export type BranchesSidebarView = "linear" | "tree";
 
 export interface BranchesSidebarTreeOptions {
@@ -127,38 +131,49 @@ export function buildBranchesSidebarRows(
   const filtering = query.trim().length > 0 || scope !== "all";
   const currentBranch = activeHead(refs, activeWorktreePath)?.branch;
   const mainPath = refs.worktrees.find((worktree) => worktree.main)?.path;
+  const localRefs = (branches: readonly LocalBranch[]): SectionDraft["refs"] =>
+    branches
+      .toSorted(
+        (left, right) =>
+          branchPriority(left.name, left.worktreePath, currentBranch) -
+          branchPriority(right.name, right.worktreePath, currentBranch),
+      )
+      .filter((branch) => matches(branch.name))
+      .map((branch) => ({
+        current: branch.name === currentBranch,
+        name: branch.name,
+        target: { _tag: "LocalBranch", name: branch.name },
+        ...(branch.upstream === undefined ? {} : { upstream: branch.upstream }),
+        ...(branch.worktreePath === undefined
+          ? {}
+          : {
+              checkout: {
+                kind:
+                  branch.worktreePath === mainPath
+                    ? ("repository" as const)
+                    : ("worktree" as const),
+                path: branch.worktreePath,
+              },
+            }),
+      }));
   const sections: readonly SectionDraft[] = [
     {
-      refs: refs.branches
-        .toSorted(
-          (left, right) =>
-            branchPriority(left.name, left.worktreePath, currentBranch) -
-            branchPriority(right.name, right.worktreePath, currentBranch),
-        )
-        .filter((branch) => matches(branch.name))
-        .map((branch) => ({
-          current: branch.name === currentBranch,
-          name: branch.name,
-          target: { _tag: "LocalBranch", name: branch.name },
-          ...(branch.upstream === undefined
-            ? {}
-            : { upstream: branch.upstream }),
-          ...(branch.worktreePath === undefined
-            ? {}
-            : {
-                checkout: {
-                  kind:
-                    branch.worktreePath === mainPath
-                      ? ("repository" as const)
-                      : ("worktree" as const),
-                  path: branch.worktreePath,
-                },
-              }),
-        })),
+      refs: localRefs(
+        refs.branches.filter((branch) => branch.settled === undefined),
+      ),
       sectionId: localBranchesSectionId,
       scope: "local",
       title: "Local",
       truncated: refs.truncated.branches,
+    },
+    {
+      refs: localRefs(
+        refs.branches.filter((branch) => branch.settled !== undefined),
+      ),
+      sectionId: settledSectionId,
+      scope: "settled",
+      title: "Settled",
+      truncated: false,
     },
     ...groupByRemote(refs.remoteBranches).map(([remote, branches]) => ({
       refs: branches
@@ -202,7 +217,7 @@ export function buildBranchesSidebarRows(
       (section) =>
         (section.scope === "stashes" && stashes.drafting) ||
         ((!filtering || sectionSize(section) > 0) &&
-          (section.scope !== "tags" ||
+          ((section.scope !== "tags" && section.scope !== "settled") ||
             section.refs.length > 0 ||
             section.truncated) &&
           (section.scope !== "stashes" || sectionSize(section) > 0)),
@@ -389,7 +404,7 @@ export function scopeShowing(
   sectionId: string,
 ): BranchesSidebarScope {
   const sectionScope =
-    sectionId === localBranchesSectionId
+    sectionId === localBranchesSectionId || sectionId === settledSectionId
       ? "local"
       : sectionId === tagsSectionId
         ? "tags"
@@ -400,7 +415,10 @@ export function scopeShowing(
 }
 
 function sectionMatchesScope(scope: BranchesSidebarScope) {
-  return (section: SectionDraft) => scope === "all" || section.scope === scope;
+  return (section: SectionDraft) =>
+    scope === "all" ||
+    section.scope === scope ||
+    (scope === "local" && section.scope === "settled");
 }
 
 export function toggleSection(

@@ -110,8 +110,10 @@ describe("ref actions", () => {
           refs(),
           { writable: true },
           {
-            ...handlers.editing,
-            deletion: { request: (deletion) => requested.push(deletion) },
+            editing: {
+              ...handlers.editing,
+              deletion: { request: (deletion) => requested.push(deletion) },
+            },
           },
         ),
       );
@@ -136,6 +138,39 @@ describe("ref actions", () => {
         selection(["feature", "main"]).map(({ id, reason }) => [id, reason]),
       ),
     ).toEqual({ deleteLocal: "Checked out" });
+  });
+
+  it("settles the selection next to Delete and unsettles it once every branch is settled", () => {
+    const settled: [readonly string[], boolean][] = [];
+    const current = refs();
+    const repository = {
+      ...current,
+      branches: current.branches.map((branch) =>
+        branch.name === "release"
+          ? { ...branch, settled: "2026-10-01" }
+          : branch,
+      ),
+    };
+    const selection = (names: readonly string[]) =>
+      selectedBranchActions(
+        names,
+        repository,
+        { writable: true },
+        {
+          editing: handlers.editing,
+          settle: (names, next) => settled.push([names, next]),
+        },
+      );
+
+    const mixed = selection(["feature", "release"]);
+    expect(mixed.map(({ id }) => id)).toEqual(["settle", "delete"]);
+    runAction(mixed[0]);
+    runAction(selection(["release"])[0]);
+    expect(selection(["release"])[0]?.label).toBe("Unsettle");
+    expect(settled).toEqual([
+      [["feature", "release"], true],
+      [["release"], false],
+    ]);
   });
 
   it("fast-forwards a branch that is not checked out unless it has diverged", () => {

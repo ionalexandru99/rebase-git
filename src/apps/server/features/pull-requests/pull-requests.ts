@@ -48,10 +48,11 @@ export function pullRequestsFeature({
   } satisfies EnvironmentFeature;
 }
 
-function listPullRequests(
+export function listPullRequests(
   git: GitCommandRunner,
   sourceControl: SourceControl,
   directory: string,
+  wanted: (branch: string) => boolean = () => true,
 ) {
   return Effect.gen(function* () {
     const remotes = yield* runRepositoryGit(
@@ -69,9 +70,13 @@ function listPullRequests(
     const { host, repository } = found;
     const urls = remoteUrls(remotes);
     const branches = (yield* readTrackedBranches(git, directory)).filter(
-      ({ remote }) => {
+      ({ branch, remote }) => {
         const url = urls.get(remote);
-        return url !== undefined && host.repositoryId(url) === repository.id;
+        return (
+          wanted(branch) &&
+          url !== undefined &&
+          host.repositoryId(url) === repository.id
+        );
       },
     );
     if (branches.length === 0) return [];

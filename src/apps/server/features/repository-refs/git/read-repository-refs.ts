@@ -1,4 +1,5 @@
-import { Effect } from "effect";
+import { Effect, Schema } from "effect";
+import { SettledDay } from "#contracts/branch-settling/branch-settling.contract.ts";
 import type {
   LocalBranch,
   RepositoryRefs,
@@ -50,20 +51,22 @@ export function readRepositoryRefs(
         ),
         tags: listRefs(git, repository.path, "refs/tags", "-creatordate"),
         worktrees: readWorktrees(git, repository.path),
-        remoteMetadata: readRemoteMetadata(git, repository.path),
+        config: readRefsConfig(git, repository.path),
       },
       { concurrency: "unbounded" },
     );
     const worktrees = yield* canonicalizeWorktrees(output.worktrees);
+    const hostedRepository = hostedRepositoryFromRemotes(output.config);
     return fitRepositoryRefs({
-      remoteProviders: output.remoteMetadata.remoteProviders,
-      ...(output.remoteMetadata.hostedRepository === undefined
-        ? {}
-        : { hostedRepository: output.remoteMetadata.hostedRepository }),
-      branches: canonicalizeBranchWorktrees(
-        output.branches.flatMap(withDefined(localBranchFromRecord)),
-        output.worktrees,
-        worktrees,
+      remoteProviders: remoteProvidersFromConfig(output.config),
+      ...(hostedRepository === undefined ? {} : { hostedRepository }),
+      branches: withSettlements(
+        canonicalizeBranchWorktrees(
+          output.branches.flatMap(withDefined(localBranchFromRecord)),
+          output.worktrees,
+          worktrees,
+        ),
+        branchSettlements(output.config),
       ),
       logicalRepositoryId: repository.logicalRepositoryId ?? repository.id,
       remoteBranches: output.remoteBranches.flatMap(
@@ -128,21 +131,42 @@ function withDefined<Input, Output>(
   };
 }
 
-function readRemoteMetadata(git: GitCommandRunner, directory: string) {
+function readRefsConfig(git: GitCommandRunner, directory: string) {
   return runRepositoryGit(
     git,
     directory,
-    ["config", "--get-regexp", "^remote\\..*\\.url$"],
-    { timeoutMilliseconds: 5_000, maxOutputBytes: 65_536 },
-  ).pipe(
-    Effect.map((remotes) => ({
-      hostedRepository: hostedRepositoryFromRemotes(remotes),
-      remoteProviders: remoteProvidersFromConfig(remotes),
-    })),
-    Effect.catch(() =>
-      Effect.succeed({ hostedRepository: undefined, remoteProviders: [] }),
-    ),
+    [
+      "config",
+      "--get-regexp",
+      "^(remote\\..*\\.url|branch\\..*\\.rebasesettled)$",
+    ],
+    { timeoutMilliseconds: 5_000, maxOutputBytes: 4 * 1_048_576 },
+  ).pipe(Effect.catch(() => Effect.succeed("")));
+}
+
+export function branchSettlements(output: string) {
+  return new Map(
+    output.split("\n").flatMap((line) => {
+      const match = /^branch\.(.+)\.rebasesettled(?: (.*))?$/.exec(line.trim());
+      return match?.[1] === undefined
+        ? []
+        : [[match[1], match[2] ?? ""] as const];
+    }),
   );
+}
+
+const isSettledDay = Schema.is(SettledDay);
+
+function withSettlements(
+  branches: readonly LocalBranch[],
+  settlements: ReadonlyMap<string, string>,
+) {
+  return settlements.size === 0
+    ? branches
+    : branches.map((branch) => {
+        const settled = settlements.get(branch.name);
+        return isSettledDay(settled) ? { ...branch, settled } : branch;
+      });
 }
 
 const hostedProviders = new Map<

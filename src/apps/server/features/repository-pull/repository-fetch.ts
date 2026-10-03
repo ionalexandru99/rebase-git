@@ -35,12 +35,14 @@ export type RepositoryFetch = Effect.Success<
 
 export function acquireRepositoryFetch({
   access,
+  afterFetch,
   coordination,
   events,
   git,
   progress,
 }: {
   readonly access: RepositoryAccess;
+  readonly afterFetch: (directory: string) => Effect.Effect<void>;
   readonly coordination: RepositoryCoordination;
   readonly events: EnvironmentEventPublisher;
   readonly git: GitCommandRunner;
@@ -106,6 +108,9 @@ export function acquireRepositoryFetch({
             RepositoryPullApi.fetch._tag,
           ),
         ).pipe(
+          Effect.tap((failure) =>
+            failure === undefined ? afterFetch(repository.path) : Effect.void,
+          ),
           Effect.tap((failure) =>
             Effect.gen(function* () {
               repository.fetching = undefined;
