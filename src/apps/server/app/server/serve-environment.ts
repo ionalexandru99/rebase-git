@@ -116,10 +116,9 @@ export function acquireEnvironment(home: string, git: GitCommandRunner) {
   return Effect.gen(function* () {
     const paths = environmentPaths(join(home, ".rebase"));
     const context = yield* acquireEnvironmentContext(paths);
-    const watcher = createLocalRepositoryWatcher();
     const catalog = createRepositoryCatalog(context, git);
     return {
-      access: createRepositoryAccess(catalog, git, watcher),
+      access: createRepositoryAccess(catalog, git),
       authorization: createEnvironmentAuthorization(context),
       catalog,
       context,
@@ -129,7 +128,7 @@ export function acquireEnvironment(home: string, git: GitCommandRunner) {
       gitHosts: createGitHostClients(),
       paths,
       progress: createCommandProgress(),
-      watcher,
+      watcher: createLocalRepositoryWatcher(),
     };
   });
 }

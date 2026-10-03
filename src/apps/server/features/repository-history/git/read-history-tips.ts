@@ -10,7 +10,7 @@ import {
   isGitObjectId,
   runRepositoryGit,
 } from "#server/adapters/local-git/git-commands.ts";
-import type { ObjectFormatRead } from "#server/features/repository-history/git/read-object-format.ts";
+import type { HistoryLayoutRead } from "#server/features/repository-history/git/history-layout.ts";
 import { readShallowHistoryOids } from "#server/features/repository-history/git/shallow-repository-history.ts";
 
 const maximumRefsOutputBytes = 16 * 1_048_576;
@@ -30,18 +30,17 @@ const refFormat = [
 export function readHistoryTips(
   git: GitCommandRunner,
   repositoryPath: string,
-  readObjectFormat: ObjectFormatRead,
+  readLayout: HistoryLayoutRead,
 ): Effect.Effect<RepositoryHistoryTips, RepositoryHistoryFailure> {
   return Effect.gen(function* () {
     const [
-      objectFormat,
+      { objectFormat, shallowFile },
       refsOutput,
-      stashTipOutput,
       worktreesOutput,
       reflogOutput,
     ] = yield* Effect.all(
       [
-        readObjectFormat,
+        readLayout,
         runRepositoryGit(
           git,
           repositoryPath,
@@ -51,14 +50,10 @@ export function readHistoryTips(
             "refs/heads",
             "refs/remotes",
             "refs/tags",
+            "refs/stash",
           ],
           { maxOutputBytes: maximumRefsOutputBytes },
         ),
-        runRepositoryGit(git, repositoryPath, [
-          "for-each-ref",
-          "--format=%(objectname)",
-          "refs/stash",
-        ]),
         runRepositoryGit(git, repositoryPath, [
           "worktree",
           "list",
@@ -79,16 +74,15 @@ export function readHistoryTips(
       ],
       { concurrency: "unbounded" },
     );
-    const shallowOids = yield* readShallowHistoryOids(git, repositoryPath);
-    const stashOutput =
-      stashTipOutput.trim() === ""
-        ? ""
-        : yield* runRepositoryGit(
-            git,
-            repositoryPath,
-            ["reflog", "show", "--format=%H", "refs/stash"],
-            { maxOutputBytes: maximumStashRootsBytes },
-          );
+    const shallowOids = yield* readShallowHistoryOids(shallowFile);
+    const stashOutput = !hasStash(refsOutput)
+      ? ""
+      : yield* runRepositoryGit(
+          git,
+          repositoryPath,
+          ["reflog", "show", "--format=%H", "refs/stash"],
+          { maxOutputBytes: maximumStashRootsBytes },
+        );
     const refTargets = parseSnapshotRefs(refsOutput, objectFormat);
     const worktreeHeads = parseWorktreeHeads(worktreesOutput, objectFormat);
     const refRoots = new Set([
@@ -163,6 +157,10 @@ function parseSnapshotRefs(
     }
   }
   return refs;
+}
+
+function hasStash(refsOutput: string) {
+  return refsOutput.split("\n").some((line) => line.startsWith("refs/stash\0"));
 }
 
 function parseWorktreeHeads(output: string, objectFormat: GitObjectFormat) {

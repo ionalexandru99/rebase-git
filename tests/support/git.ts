@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { mkdir, mkdtemp, realpath } from "node:fs/promises";
+import { appendFile, mkdir, mkdtemp, realpath } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { promisify } from "node:util";
@@ -34,7 +34,10 @@ export async function createRepository(
 ) {
   await mkdir(path, { recursive: true });
   await git(path, "init", "-b", "main");
-  await git(path, "config", "core.autocrlf", "false");
+  await appendFile(
+    join(path, ".git", "config"),
+    "[core]\n\tautocrlf = false\n",
+  );
   for (const message of commits)
     await git(path, "commit", "--allow-empty", "-m", message);
   for (const branch of branches) await git(path, "branch", branch);

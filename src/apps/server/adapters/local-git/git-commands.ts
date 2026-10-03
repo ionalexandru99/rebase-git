@@ -143,7 +143,31 @@ export function readGitCommonDirectory(
   ).pipe(Effect.map((output) => output.trim()));
 }
 
-export function readGitEntryIdentity(directory: string) {
+export function cacheByGitEntry<A, E>(
+  read: (directory: string) => Effect.Effect<A, E>,
+) {
+  const entries = new Map<
+    string,
+    { readonly identity: string; readonly value: A }
+  >();
+  return {
+    read: (directory: string) =>
+      Effect.gen(function* () {
+        const identity = yield* readGitEntryIdentity(directory);
+        const cached = entries.get(directory);
+        if (identity !== undefined && cached?.identity === identity)
+          return cached.value;
+        const value = yield* read(directory);
+        if (identity !== undefined) entries.set(directory, { identity, value });
+        return value;
+      }),
+    forget: (directory: string) => {
+      entries.delete(directory);
+    },
+  };
+}
+
+function readGitEntryIdentity(directory: string) {
   return Effect.promise(() =>
     lstat(join(directory, ".git"), { bigint: true }).then(
       (info) =>

@@ -6,9 +6,8 @@ import {
 } from "#contracts/git/git-failures.contract.ts";
 import type { RepositoryOperation } from "#contracts/repository-operations/repository-operations.contract.ts";
 import {
+  cacheByGitEntry,
   type GitCommandRunner,
-  readGitCommonDirectory,
-  readGitEntryIdentity,
   runRepositoryGit,
 } from "#server/adapters/local-git/git-commands.ts";
 import {
@@ -89,27 +88,15 @@ export function createRepositoryCoordination(
           }
         }),
     );
-  const directories = new Map<
-    string,
-    { readonly identity: string; readonly paths: GitDirectories }
-  >();
-  const gitDirectories = (directory: string) =>
-    Effect.gen(function* () {
-      const identity = yield* readGitEntryIdentity(directory);
-      const cached = directories.get(directory);
-      if (identity !== undefined && cached?.identity === identity)
-        return cached.paths;
-      const paths = yield* resolveGitDirectories(git, directory);
-      if (identity !== undefined)
-        directories.set(directory, { identity, paths });
-      return paths;
-    });
+  const directories = cacheByGitEntry((directory) =>
+    resolveGitDirectories(git, directory),
+  );
   const forgetOnError = <A, E, R>(
     directory: string,
     effect: Effect.Effect<A, E, R>,
   ) =>
     effect.pipe(
-      Effect.onError(() => Effect.sync(() => directories.delete(directory))),
+      Effect.onError(() => Effect.sync(() => directories.forget(directory))),
     );
   return {
     run: (directory, policy, operation) =>
@@ -117,7 +104,7 @@ export function createRepositoryCoordination(
         directory,
         Effect.gen(function* () {
           const { refs, worktree } = policy.locks;
-          const paths = yield* gitDirectories(directory);
+          const paths = yield* directories.read(directory);
           const guarded = requireCompatibleWrite(
             git,
             directory,
@@ -136,11 +123,13 @@ export function createRepositoryCoordination(
     operation: (directory) =>
       forgetOnError(
         directory,
-        gitDirectories(directory).pipe(
-          Effect.flatMap((paths) =>
-            readRepositoryOperation(git, directory, paths),
+        directories
+          .read(directory)
+          .pipe(
+            Effect.flatMap((paths) =>
+              readRepositoryOperation(git, directory, paths),
+            ),
           ),
-        ),
       ),
   };
 }
@@ -178,11 +167,18 @@ function resolveGitDirectories(
   directory: string,
 ): Effect.Effect<GitDirectories, RepositoryRejected> {
   return Effect.gen(function* () {
-    const gitDirectory = (yield* runRepositoryGit(git, directory, [
-      "rev-parse",
-      "--absolute-git-dir",
-    ])).trimEnd();
-    const commonDirectory = yield* readGitCommonDirectory(git, directory);
+    const [gitDirectory = "", commonDirectory = ""] = (yield* runRepositoryGit(
+      git,
+      directory,
+      [
+        "rev-parse",
+        "--path-format=absolute",
+        "--absolute-git-dir",
+        "--git-common-dir",
+      ],
+    ))
+      .trimEnd()
+      .split("\n");
     return yield* Effect.tryPromise({
       try: async () => ({
         gitDirectory: await realpath(gitDirectory),

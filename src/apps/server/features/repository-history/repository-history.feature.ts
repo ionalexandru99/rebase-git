@@ -14,11 +14,11 @@ import {
   findHistoryRepository,
   historyWireFailure,
 } from "#server/features/repository-history/git/history-failures.ts";
-import { readHistoryTips } from "#server/features/repository-history/git/read-history-tips.ts";
 import {
-  createObjectFormatCache,
-  type ObjectFormatRead,
-} from "#server/features/repository-history/git/read-object-format.ts";
+  createHistoryLayoutCache,
+  type HistoryLayoutRead,
+} from "#server/features/repository-history/git/history-layout.ts";
+import { readHistoryTips } from "#server/features/repository-history/git/read-history-tips.ts";
 import { streamRepositoryHistory } from "#server/features/repository-history/git/stream-repository-history.ts";
 import type { RepositoryAccess } from "#server/repository/repository-access.ts";
 
@@ -26,7 +26,7 @@ export function repositoryHistoryFeature(dependencies: {
   readonly access: RepositoryAccess;
   readonly git: GitCommandRunner;
 }) {
-  const objectFormat = createObjectFormatCache(dependencies.git);
+  const layout = createHistoryLayoutCache(dependencies.git);
   const synchronize = (
     request: SynchronizeRepositoryHistory,
     emit: (
@@ -39,7 +39,7 @@ export function repositoryHistoryFeature(dependencies: {
           dependencies.git,
           repository.path,
           request,
-          objectFormat(repository.path),
+          layout(repository.path),
           emit,
         ),
       ),
@@ -78,13 +78,13 @@ function synchronizeRepositoryHistory(
   git: GitCommandRunner,
   repositoryPath: string,
   request: SynchronizeRepositoryHistory,
-  readObjectFormat: ObjectFormatRead,
+  readLayout: HistoryLayoutRead,
   emit: (
     update: RepositoryHistoryUpdate,
   ) => Effect.Effect<void, RepositoryHistoryFailure>,
 ) {
   return Effect.gen(function* () {
-    const tips = yield* readHistoryTips(git, repositoryPath, readObjectFormat);
+    const tips = yield* readHistoryTips(git, repositoryPath, readLayout);
     yield* emit(tips);
     yield* streamRepositoryHistory(
       git,
