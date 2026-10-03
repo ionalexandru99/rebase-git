@@ -75,12 +75,7 @@ export function readRepositoryOperation(
         ? idleWorktree
         : yield* inspectWorktree(git, worktreePath, directories.gitDirectory);
     const unresolvedPaths = [
-      ...new Set(
-        worktree.unresolved
-          .split("\0")
-          .filter(Boolean)
-          .map((line) => line.slice(line.indexOf("\t") + 1)),
-      ),
+      ...new Set(worktree.unresolved.split("\0").filter(Boolean)),
     ].sort();
     const kind =
       candidate === "squash" && unresolvedPaths.length === 0
@@ -189,25 +184,17 @@ function inspectWorktree(
   gitDirectory: string,
 ) {
   return Effect.gen(function* () {
-    const head = yield* inspect(
-      git,
-      worktreePath,
-      ["rev-parse", "--verify", "--quiet", "HEAD"],
-      [0, 1],
-    ).pipe(Effect.map((output) => output.trim() || null));
+    const { head, unresolved, status } = parseWorktreeStatus(
+      yield* inspect(git, worktreePath, [
+        "status",
+        "--porcelain=v2",
+        "--branch",
+        "--no-renames",
+        "-z",
+        "--untracked-files=no",
+      ]),
+    );
     const index = yield* operationFileStamp(gitDirectory, "index");
-    const unresolved = yield* inspect(git, worktreePath, [
-      "ls-files",
-      "--unmerged",
-      "-z",
-    ]);
-    const status = yield* inspect(git, worktreePath, [
-      "status",
-      "--porcelain=v1",
-      "--no-renames",
-      "-z",
-      "--untracked-files=no",
-    ]);
     const worktree = yield* Effect.forEach(
       status.split("\0").filter(Boolean),
       (record) => operationFileStamp(worktreePath, record.slice(3)),
@@ -217,18 +204,38 @@ function inspectWorktree(
   });
 }
 
+function parseWorktreeStatus(output: string) {
+  let head: string | null = null;
+  const unresolved: string[] = [];
+  const status: string[] = [];
+  for (const record of output.split("\0")) {
+    if (record.startsWith("# branch.oid ")) {
+      const oid = record.slice("# branch.oid ".length);
+      head = oid === "(initial)" ? null : oid;
+      continue;
+    }
+    const fields = record.split(" ");
+    const pathField = { "1": 8, u: 10 }[fields[0] ?? ""];
+    if (pathField === undefined) continue;
+    const path = fields.slice(pathField).join(" ");
+    status.push(`${(fields[1] ?? "").replaceAll(".", " ")} ${path}`);
+    if (fields[0] === "u") unresolved.push(path);
+  }
+  return {
+    head,
+    unresolved: unresolved.join("\0"),
+    status: status.join("\0"),
+  };
+}
+
 function inspect(
   git: GitCommandRunner,
   worktreePath: string,
   args: readonly string[],
-  exitCodes?: readonly number[],
 ) {
-  return runRepositoryGit(
-    git,
-    worktreePath,
-    args,
-    exitCodes === undefined ? {} : { exitCodes },
-  ).pipe(Effect.mapError((error) => inspectionFailed(error.detail)));
+  return runRepositoryGit(git, worktreePath, args).pipe(
+    Effect.mapError((error) => inspectionFailed(error.detail)),
+  );
 }
 
 function identifyOperation(

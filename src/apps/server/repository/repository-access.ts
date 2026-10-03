@@ -9,14 +9,11 @@ import {
 import type { RepositoryCatalogEntry } from "#contracts/repository-catalog/repository-catalog.contract.ts";
 import type { RepositoryWorktree } from "#contracts/repository-refs/repository-refs.contract.ts";
 import {
+  cacheByGitEntry,
   type GitCommandRunner,
-  readGitCommonDirectory,
+  isGitRejection,
   runRepositoryGit,
 } from "#server/adapters/local-git/git-commands.ts";
-import type {
-  RepositoryWatcher,
-  RepositoryWatchHandle,
-} from "#server/adapters/local-git/local-repository-watcher.ts";
 import type { EnvironmentStorageError } from "#server/persistence/sqlite/storage-operation.ts";
 
 const realpathNative = promisify(realpath.native);
@@ -48,9 +45,10 @@ export function createRepositoryAccess(
     >;
   },
   git: GitCommandRunner,
-  watcher: RepositoryWatcher,
 ): RepositoryAccess {
-  const worktreePaths = createWorktreePathCache(git, watcher);
+  const locations = cacheByGitEntry((directory) =>
+    readWorktreeLocation(git, directory),
+  );
   const repository = (repositoryId: string) =>
     catalog
       .find(repositoryId)
@@ -76,10 +74,22 @@ export function createRepositoryAccess(
     requireWorktree: (scope) =>
       Effect.gen(function* () {
         const entry = yield* repository(scope.repositoryId);
-        const known = yield* worktreePaths
-          .contains(entry.path, scope.worktreePath)
+        const owner = yield* locations
+          .read(entry.path)
           .pipe(Effect.mapError(worktreesUnreadable));
-        if (!known)
+        const worktree = yield* locations
+          .read(scope.worktreePath)
+          .pipe(
+            Effect.catch((failure) =>
+              isGitRejection(failure)
+                ? Effect.succeed(undefined)
+                : Effect.fail(worktreesUnreadable()),
+            ),
+          );
+        if (
+          worktree?.root !== scope.worktreePath ||
+          worktree.commonDirectory !== owner.commonDirectory
+        )
           return yield* Effect.fail(
             repositoryRejected(
               "Missing",
@@ -88,6 +98,27 @@ export function createRepositoryAccess(
           );
       }),
   };
+}
+
+function readWorktreeLocation(git: GitCommandRunner, directory: string) {
+  return runRepositoryGit(git, directory, [
+    "rev-parse",
+    "--path-format=absolute",
+    "--show-toplevel",
+    "--git-common-dir",
+  ]).pipe(
+    Effect.flatMap((output) => {
+      const [root = "", commonDirectory = ""] = output.trimEnd().split("\n");
+      return Effect.all({
+        root: canonicalizePath(root),
+        commonDirectory: canonicalizePath(commonDirectory),
+      });
+    }),
+  );
+}
+
+function canonicalizePath(path: string) {
+  return Effect.promise(() => realpathNative(path).catch(() => resolve(path)));
 }
 
 export function readWorktrees(git: GitCommandRunner, directory: string) {
@@ -126,61 +157,6 @@ export function parseWorktreeList(
     const worktree = worktreeFromEntry(entry, index === 0);
     return worktree === undefined ? [] : [worktree];
   });
-}
-
-interface WorktreePaths {
-  paths?: ReadonlySet<string>;
-  watch?: RepositoryWatchHandle | undefined;
-}
-
-function createWorktreePathCache(
-  git: GitCommandRunner,
-  watcher: RepositoryWatcher,
-) {
-  const cache = new Map<string, WorktreePaths>();
-  const forget = (repositoryPath: string, entry: WorktreePaths) => {
-    if (cache.get(repositoryPath) === entry) cache.delete(repositoryPath);
-    const watch = entry.watch;
-    entry.watch = undefined;
-    watch?.close();
-  };
-  const reload = (repositoryPath: string) => {
-    const entry: WorktreePaths = {};
-    let changed = false;
-    return Effect.gen(function* () {
-      const directory = yield* readGitCommonDirectory(git, repositoryPath);
-      entry.watch = yield* watcher.watch(directory, (kind) => {
-        if (kind === "Index") return;
-        changed = true;
-        forget(repositoryPath, entry);
-      });
-      const worktrees = yield* readWorktrees(git, repositoryPath).pipe(
-        Effect.flatMap(canonicalizeWorktrees),
-      );
-      entry.paths = new Set(worktrees.map((worktree) => worktree.path));
-      if (!changed) {
-        const previous = cache.get(repositoryPath);
-        if (previous !== undefined) forget(repositoryPath, previous);
-        cache.set(repositoryPath, entry);
-      }
-      return entry.paths;
-    }).pipe(
-      Effect.onExit(() =>
-        Effect.sync(() => {
-          if (cache.get(repositoryPath) !== entry)
-            forget(repositoryPath, entry);
-        }),
-      ),
-    );
-  };
-  return {
-    contains: (repositoryPath: string, worktreePath: string) =>
-      cache.get(repositoryPath)?.paths?.has(worktreePath)
-        ? Effect.succeed(true)
-        : reload(repositoryPath).pipe(
-            Effect.map((paths) => paths.has(worktreePath)),
-          ),
-  };
 }
 
 function worktreesUnreadable() {

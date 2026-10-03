@@ -14,62 +14,50 @@ import { historyFailed } from "#server/features/repository-history/git/history-f
 const maximumShallowBytes = 4 * 1_048_576;
 const maximumShallowOutputBytes = 8 * 1_048_576;
 
-export function readShallowHistoryOids(
-  git: GitCommandRunner,
-  directory: string,
-) {
-  return runRepositoryGit(
-    git,
-    directory,
-    ["rev-parse", "--path-format=absolute", "--git-path", "shallow"],
-    { maxOutputBytes: maximumShallowOutputBytes },
-  ).pipe(
-    Effect.flatMap((path) =>
-      Effect.tryPromise({
-        try: async () => {
-          const file = await open(path.trim(), "r").catch((error: unknown) => {
-            if (
-              typeof error === "object" &&
-              error !== null &&
-              "code" in error &&
-              error.code === "ENOENT"
-            )
-              return undefined;
-            throw error;
-          });
-          if (file === undefined) return [];
-          try {
-            const buffer = Buffer.alloc(maximumShallowBytes + 1);
-            let bytesRead = 0;
-            while (bytesRead < buffer.length) {
-              const result = await file.read(
-                buffer,
-                bytesRead,
-                buffer.length - bytesRead,
-                bytesRead,
-              );
-              if (result.bytesRead === 0) break;
-              bytesRead += result.bytesRead;
-            }
-            if (bytesRead > maximumShallowBytes)
-              throw new Error("Shallow boundary data is too large");
-            const oids = buffer
-              .subarray(0, bytesRead)
-              .toString("utf8")
-              .trim()
-              .split("\n")
-              .filter(Boolean);
-            if (oids.length > 40_512 || oids.some((oid) => !isGitObjectId(oid)))
-              throw new Error("Invalid shallow boundary");
-            return [...new Set(oids)].sort();
-          } finally {
-            await file.close();
-          }
-        },
-        catch: () => historyFailed("Could not read shallow repository history"),
-      }),
-    ),
-  );
+export function readShallowHistoryOids(shallowFile: string) {
+  return Effect.tryPromise({
+    try: async () => {
+      const file = await open(shallowFile, "r").catch((error: unknown) => {
+        if (
+          typeof error === "object" &&
+          error !== null &&
+          "code" in error &&
+          error.code === "ENOENT"
+        )
+          return undefined;
+        throw error;
+      });
+      if (file === undefined) return [];
+      try {
+        const buffer = Buffer.alloc(maximumShallowBytes + 1);
+        let bytesRead = 0;
+        while (bytesRead < buffer.length) {
+          const result = await file.read(
+            buffer,
+            bytesRead,
+            buffer.length - bytesRead,
+            bytesRead,
+          );
+          if (result.bytesRead === 0) break;
+          bytesRead += result.bytesRead;
+        }
+        if (bytesRead > maximumShallowBytes)
+          throw new Error("Shallow boundary data is too large");
+        const oids = buffer
+          .subarray(0, bytesRead)
+          .toString("utf8")
+          .trim()
+          .split("\n")
+          .filter(Boolean);
+        if (oids.length > 40_512 || oids.some((oid) => !isGitObjectId(oid)))
+          throw new Error("Invalid shallow boundary");
+        return [...new Set(oids)].sort();
+      } finally {
+        await file.close();
+      }
+    },
+    catch: () => historyFailed("Could not read shallow repository history"),
+  });
 }
 
 export function restoreShallowCommitParents(
