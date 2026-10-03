@@ -12,9 +12,10 @@ import {
   type RepositoryRejected,
   repositoryRejected,
 } from "#contracts/git/git-failures.contract.ts";
-import type {
-  GitCommandRunner,
-  GitFailed,
+import {
+  type GitCommandRunner,
+  type GitFailed,
+  isIdentityMissing,
 } from "#server/adapters/local-git/git-commands.ts";
 import type { EnvironmentAuthorizationError } from "#server/features/environment-authorization/environment-authorization.ts";
 import { EnvironmentStorageError } from "#server/persistence/sqlite/storage-operation.ts";
@@ -128,7 +129,7 @@ export function repositoryRoutes({
     handle(input, git).pipe(
       Effect.catchIf(isGitFailed, (error) =>
         Effect.fail(
-          identityMissing.test(error.detail)
+          isIdentityMissing(error.detail)
             ? repositoryRejected(
                 "IdentityMissing",
                 "Add your name and email to commit.",
@@ -167,9 +168,6 @@ export function repositoryRoutes({
       ),
   };
 }
-
-const identityMissing =
-  /Please tell me who you are|unable to auto-detect email address|empty ident name/;
 
 function isTransportError(error: unknown): error is EnvironmentTransportError {
   return (

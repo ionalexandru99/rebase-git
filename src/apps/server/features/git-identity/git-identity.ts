@@ -15,6 +15,7 @@ import {
 import {
   type GitCommandRunner,
   type GitFailed,
+  gitFailed,
   runRepositoryGit,
 } from "#server/adapters/local-git/git-commands.ts";
 import type { RepositoryAccess } from "#server/repository/repository-access.ts";
@@ -24,8 +25,14 @@ const fields = ["name", "email"] as const;
 const inheritedScopes = ["system", "global"];
 const localScopes = ["local", "worktree"];
 
-type ScopedValue = { readonly scope: string; readonly value: string };
+type Field = (typeof fields)[number];
 type ConfigScope = "--global" | "--local";
+type ScopedValue = {
+  readonly scope: string;
+  readonly origin: string;
+  readonly value: string;
+};
+type ScopedValues = ReadonlyMap<Field, readonly ScopedValue[]>;
 
 export function gitIdentityFeature({
   access,
@@ -36,33 +43,29 @@ export function gitIdentityFeature({
   readonly events: EnvironmentEventPublisher;
   readonly git: GitCommandRunner;
 }) {
-  const readEnvironment = readIdentity(git, homedir()).pipe(
-    Effect.map((values) => pick(values, inheritedScopes)),
-    Effect.mapError(identityFailed),
-  );
-  const readRepository = (path: string) =>
-    readIdentity(git, path).pipe(
-      Effect.map(
-        (values): RepositoryIdentity => ({
-          local: pick(values, localScopes),
-          inherited: pick(values, inheritedScopes),
-        }),
-      ),
-    );
-  const changed = Effect.sync(() => events.publishChanged());
+  const repositoryIdentity = (values: ScopedValues): RepositoryIdentity => ({
+    local: pick(values, localScopes),
+    inherited: pick(values, inheritedScopes),
+  });
   return {
     routes: [
-      route(GitIdentityApi.read, () => readEnvironment),
-      route(GitIdentityApi.save, (identity) =>
-        writeIdentity(git, homedir(), "--global", identity).pipe(
+      route(GitIdentityApi.read, () =>
+        readIdentity(git, homedir()).pipe(
+          Effect.map((values) => pick(values, inheritedScopes)),
           Effect.mapError(identityFailed),
-          Effect.andThen(changed),
-          Effect.andThen(readEnvironment),
+        ),
+      ),
+      route(GitIdentityApi.save, (identity) =>
+        saveIdentity(git, homedir(), "--global", identity).pipe(
+          Effect.tap(() => Effect.sync(() => events.publishChanged())),
+          Effect.map((values) => pick(values, inheritedScopes)),
+          Effect.mapError(identityFailed),
         ),
       ),
       route(GitIdentityApi.readRepository, ({ repositoryId }) =>
         access.repository(repositoryId).pipe(
-          Effect.flatMap(({ path }) => readRepository(path)),
+          Effect.flatMap(({ path }) => readIdentity(git, path)),
+          Effect.map(repositoryIdentity),
           Effect.catchTag("GitFailed", ({ detail }) =>
             Effect.fail(repositoryRejected("GitFailed", detail)),
           ),
@@ -71,11 +74,12 @@ export function gitIdentityFeature({
       route(GitIdentityApi.saveRepository, ({ repositoryId, identity }) =>
         access.repository(repositoryId).pipe(
           Effect.flatMap(({ path }) =>
-            writeIdentity(git, path, "--local", identity).pipe(
-              Effect.andThen(changed),
-              Effect.andThen(readRepository(path)),
-            ),
+            saveIdentity(git, path, "--local", identity),
           ),
+          Effect.tap(() =>
+            Effect.sync(() => events.publishChanged([repositoryId])),
+          ),
+          Effect.map(repositoryIdentity),
           Effect.catchTag("GitFailed", ({ detail }) =>
             Effect.fail(repositoryRejected("GitFailed", detail)),
           ),
@@ -85,36 +89,75 @@ export function gitIdentityFeature({
   } satisfies EnvironmentFeature;
 }
 
+function saveIdentity(
+  git: GitCommandRunner,
+  directory: string,
+  scope: ConfigScope,
+  identity: GitIdentity,
+) {
+  const scopes = scope === "--global" ? inheritedScopes : localScopes;
+  return writeIdentity(git, directory, scope, identity).pipe(
+    Effect.andThen(readIdentity(git, directory)),
+    Effect.tap((values) => {
+      const field = fields.find(
+        (candidate) =>
+          (winner(values, scopes, candidate)?.value.trim() || undefined) !==
+          identity[candidate],
+      );
+      const shadow = field && winner(values, scopes, field);
+      return field === undefined || shadow === undefined
+        ? Effect.void
+        : Effect.fail(
+            gitFailed(
+              "Failed",
+              `${shadow.origin.replace(/^file:/, "")} sets ${keys[field]}, so change it there.`,
+            ),
+          );
+    }),
+  );
+}
+
 function readIdentity(git: GitCommandRunner, directory: string) {
   return Effect.forEach(fields, (field) =>
     runRepositoryGit(
       git,
       directory,
-      ["config", "-z", "--show-scope", "--get-all", keys[field]],
+      [
+        "config",
+        "-z",
+        "--show-scope",
+        "--show-origin",
+        "--get-all",
+        keys[field],
+      ],
       { exitCodes: [0, 1] },
     ).pipe(Effect.map((output) => [field, scopedValues(output)] as const)),
-  ).pipe(Effect.map((entries) => new Map(entries)));
+  ).pipe(Effect.map((entries): ScopedValues => new Map(entries)));
 }
 
 function scopedValues(output: string): readonly ScopedValue[] {
   const parts = output.split("\0");
   const values: ScopedValue[] = [];
-  for (let index = 0; index + 1 < parts.length; index += 2)
-    values.push({ scope: parts[index] ?? "", value: parts[index + 1] ?? "" });
+  for (let index = 0; index + 2 < parts.length; index += 3)
+    values.push({
+      scope: parts[index] ?? "",
+      origin: parts[index + 1] ?? "",
+      value: parts[index + 2] ?? "",
+    });
   return values;
 }
 
-function pick(
-  values: ReadonlyMap<keyof typeof keys, readonly ScopedValue[]>,
-  scopes: readonly string[],
-): GitIdentity {
+function winner(values: ScopedValues, scopes: readonly string[], field: Field) {
+  return values
+    .get(field)
+    ?.filter(({ scope }) => scopes.includes(scope))
+    .at(-1);
+}
+
+function pick(values: ScopedValues, scopes: readonly string[]): GitIdentity {
   const identity: { name?: string; email?: string } = {};
   for (const field of fields) {
-    const value = values
-      .get(field)
-      ?.filter(({ scope }) => scopes.includes(scope))
-      .at(-1)
-      ?.value.trim();
+    const value = winner(values, scopes, field)?.value.trim();
     if (value) identity[field] = value;
   }
   return identity;

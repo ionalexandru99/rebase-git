@@ -76,6 +76,10 @@ function Shell({
       ),
     [navigation.projects.environments],
   );
+  const openGitIdentity = useCallback(
+    () => navigate({ type: "show-settings", section: "source-control" }),
+    [navigate],
+  );
   const openNotifiedRepository = useCallback(
     (repositoryId: string) => {
       const repository = repositories.find(({ id }) => id === repositoryId);
@@ -90,9 +94,7 @@ function Shell({
           ? navigation.projects.selectedRepositoryId
           : undefined
       }
-      openGitIdentity={() =>
-        navigate({ type: "show-settings", section: "source-control" })
-      }
+      openGitIdentity={openGitIdentity}
       openRepository={openNotifiedRepository}
       repositories={repositories}
     >

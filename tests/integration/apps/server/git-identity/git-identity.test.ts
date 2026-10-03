@@ -34,6 +34,22 @@ describe("Git identity", () => {
     expect(await f.globalConfig("--get", "core.editor")).toBe("vim");
   });
 
+  it("names the included file that still sets the name after saving", async () => {
+    const f = await fixture();
+    await f.globalConfig("user.name", "First Name");
+    await writeFile(join(f.home, "local.inc"), "[user]\n\tname = Old Name\n");
+    await f.globalConfig("include.path", join(f.home, "local.inc"));
+
+    const saved = f.save({ name: "Ada Lovelace" });
+
+    await expect(saved).rejects.toMatchObject({
+      _tag: "IdentityFailed",
+      detail: expect.stringMatching(
+        /local\.inc sets user\.name, so change it there\.$/,
+      ),
+    });
+  });
+
   it("lets a repository override the inherited identity and fall back when the override is removed", async () => {
     const f = await fixture();
     await f.save({ name: "Ada Lovelace", email: "ada@example.com" });
@@ -89,6 +105,7 @@ async function fixture() {
   const env = {
     HOME: home,
     XDG_CONFIG_HOME: join(home, ".config"),
+    GIT_CONFIG_GLOBAL: join(home, ".gitconfig"),
     GIT_CONFIG_NOSYSTEM: "1",
   };
   const isolate = (command: GitCommand): GitCommand => ({

@@ -17,9 +17,14 @@ export const GitIdentity = Schema.Struct({
 });
 export type GitIdentity = typeof GitIdentity.Type;
 
+const SavedIdentity = Schema.Struct({
+  name: Schema.optionalKey(Schema.String),
+  email: Schema.optionalKey(Schema.String),
+});
+
 export const RepositoryIdentity = Schema.Struct({
-  local: GitIdentity,
-  inherited: GitIdentity,
+  local: SavedIdentity,
+  inherited: SavedIdentity,
 });
 export type RepositoryIdentity = typeof RepositoryIdentity.Type;
 
@@ -30,12 +35,12 @@ export type IdentityFailed = typeof IdentityFailed.Type;
 
 export const GitIdentityApi = {
   read: route("git-identity/read", {
-    success: GitIdentity,
+    success: SavedIdentity,
     failure: IdentityFailed,
   }),
   save: route("git-identity/save", {
     request: GitIdentity,
-    success: GitIdentity,
+    success: SavedIdentity,
     failure: IdentityFailed,
   }),
   readRepository: repositoryQuery("repositories/identity", {

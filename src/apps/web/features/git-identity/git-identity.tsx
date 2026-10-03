@@ -37,7 +37,9 @@ export function ServerIdentityRow({
     <SettingsRow
       {...(missing ? { badge: "Identity missing" } : {})}
       description={
-        saved === undefined || missing ? (
+        identity.error !== null ? (
+          `Available · ${describeFailure(identity.error)}`
+        ) : saved === undefined || missing ? (
           `Available${missing ? " · Add your name and email to commit." : ""}`
         ) : (
           <>
@@ -51,7 +53,10 @@ export function ServerIdentityRow({
             details: {
               label: "Git identity",
               open: open ?? missing,
-              onOpenChange: setOpen,
+              onOpenChange: (next: boolean) => {
+                save.reset();
+                setOpen(next);
+              },
               content: (
                 <IdentityForm
                   busy={save.running || !save.canRun}
@@ -102,8 +107,10 @@ export function RepositoryIdentityRow({
   return (
     <SettingsRow
       description={
-        effective === undefined ? undefined : effective.name === undefined ||
-          effective.email === undefined ? (
+        identity.error !== null ? (
+          describeFailure(identity.error)
+        ) : effective === undefined ? undefined : effective.name ===
+            undefined || effective.email === undefined ? (
           "Add your name and email to commit."
         ) : (
           <>
@@ -118,7 +125,10 @@ export function RepositoryIdentityRow({
             details: {
               label: "Repository identity",
               open,
-              onOpenChange: setOpen,
+              onOpenChange: (next: boolean) => {
+                save.reset();
+                setOpen(next);
+              },
               content: (
                 <IdentityForm
                   busy={save.running || !save.canRun}
