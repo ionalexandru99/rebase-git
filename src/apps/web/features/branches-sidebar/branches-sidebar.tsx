@@ -15,6 +15,10 @@ import {
   keyAction,
   runAction,
 } from "#web/components/ui/action-menu.tsx";
+import {
+  BranchCard,
+  createBranchCardHandle,
+} from "#web/features/branches-sidebar/branch-card.tsx";
 import { treeKeyAction } from "#web/features/branches-sidebar/branches-sidebar-keyboard.ts";
 import {
   RefRow,
@@ -135,6 +139,7 @@ export function BranchesSidebar({
     ReadonlyMap<string, boolean>
   >(() => new Map());
   const [activeRowId, setActiveRowId] = useState<string>();
+  const [branchCard] = useState(createBranchCardHandle);
   const treeRef = useRef<HTMLDivElement>(null);
   const refs = repositoryRefs.refs;
   const onSelectRef = activation.select;
@@ -490,6 +495,7 @@ export function BranchesSidebar({
       <RefRow
         actions={actionsFor(row)}
         active={row.id === activeRowId}
+        card={row.target._tag === "LocalBranch" ? branchCard : undefined}
         key={row.id}
         onActivate={(mode) => {
           setSelectedTags((current) =>
@@ -548,6 +554,7 @@ export function BranchesSidebar({
           scope={scope}
         />
       </DockedTree>
+      <BranchCard handle={branchCard} />
       <RefEditingStatus editing={editing} />
       <StashDropConfirmation commands={stashCommands} />
     </nav>

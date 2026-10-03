@@ -118,6 +118,33 @@ export function PullRequestLink({
   );
 }
 
+export function PullRequestList({
+  pullRequests,
+}: {
+  readonly pullRequests: readonly PullRequest[];
+}) {
+  return pullRequests.map((pullRequest) => (
+    <div
+      className="flex h-6 min-w-0 items-center gap-2.5 text-[.85rem]"
+      key={pullRequest.number}
+    >
+      <PullRequestStateIcon pullRequest={pullRequest} />
+      <button
+        aria-label={`Open ${describePullRequest(pullRequest)}`}
+        className="shrink-0 rounded-sm text-muted-foreground tabular-nums underline-offset-2 outline-none hover:text-foreground hover:underline"
+        onClick={() => openPullRequest(pullRequest)}
+        tabIndex={-1}
+        type="button"
+      >
+        {reference(pullRequest)}
+      </button>
+      <span className="min-w-0 flex-1 truncate text-foreground/85">
+        {pullRequest.title}
+      </span>
+    </div>
+  ));
+}
+
 export function describePullRequest(pullRequest: PullRequest) {
   return `${terms[pullRequest.kind].name} ${reference(pullRequest)}, ${pullRequest.state.toLowerCase()}`;
 }
