@@ -16,6 +16,7 @@ import {
   environmentAuthorizationFeature,
 } from "#server/features/environment-authorization/environment-authorization.ts";
 import { environmentFilesystemFeature } from "#server/features/environment-filesystem/environment-filesystem.ts";
+import { gitIdentityFeature } from "#server/features/git-identity/git-identity.ts";
 import { pullRequestsFeature } from "#server/features/pull-requests/pull-requests.ts";
 import {
   createRepositoryCatalog,
@@ -180,6 +181,7 @@ export function environmentFeatures(dependencies: EnvironmentDependencies) {
       repositoryReflogFeature(dependencies),
       yield* repositoryRefsFeature(dependencies),
       repositoryStashesFeature(dependencies),
+      gitIdentityFeature(dependencies),
       sourceControlFeature({
         events: dependencies.events,
         sourceControl,

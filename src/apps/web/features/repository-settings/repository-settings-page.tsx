@@ -7,8 +7,8 @@ import {
   SettingsSection,
 } from "#web/components/ui/settings-layout.tsx";
 import { writeClipboardText } from "#web/features/clipboard/write-clipboard-text.ts";
+import { RepositoryIdentityRow } from "#web/features/git-identity/git-identity.tsx";
 import { useErrorToast } from "#web/features/notifications/notifications.tsx";
-import { localEnvironment } from "#web/features/project-navigation/local-environment.ts";
 import { forgetRepositoryRefs } from "#web/features/refs/repository-refs.ts";
 import { RepositoryFetchSettings } from "#web/features/remote-sync/fetch-settings.tsx";
 import {
@@ -124,7 +124,8 @@ function RepositoryHistorySettings({
   const queryClient = useQueryClient();
   return (
     <>
-      <SettingsSection title={`Fetch · ${localEnvironment.name}`}>
+      <SettingsSection title="Git">
+        <RepositoryIdentityRow repositoryId={repositoryId} />
         <RepositoryFetchSettings
           repositoryId={repositoryId}
           canConfigure={canConfigure}

@@ -1,9 +1,11 @@
+import { useState } from "react";
 import { describe, expect, it, vi } from "vite-plus/test";
 import { page } from "vite-plus/test/browser";
 import type { DesktopUpdates } from "#contracts/desktop-updates/desktop-updates.contract.ts";
 import { desktopUpdates } from "#tests-support/fixtures.ts";
 import { render } from "#tests-support/render.tsx";
 import { SettingsPanel } from "#web/features/settings/settings-panel.tsx";
+import type { SettingsSectionId } from "#web/features/settings/settings-sections.ts";
 
 describe("settings panel", () => {
   it("shows browser update availability and navigates settings", async () => {
@@ -83,10 +85,25 @@ async function renderSettings(
   updates?: DesktopUpdates,
 ) {
   return render(
+    <ControlledSettings closeSettings={closeSettings} updates={updates} />,
+  );
+}
+
+function ControlledSettings({
+  closeSettings,
+  updates,
+}: {
+  readonly closeSettings: () => void;
+  readonly updates: DesktopUpdates | undefined;
+}) {
+  const [section, setSection] = useState<SettingsSectionId>("general");
+  return (
     <SettingsPanel
       closeSettings={closeSettings}
       desktopUpdates={updates}
       productVersion="0.0.2-test"
-    />,
+      section={section}
+      selectSection={setSection}
+    />
   );
 }

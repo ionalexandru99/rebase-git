@@ -1,4 +1,6 @@
-import type { ReactNode, Ref } from "react";
+import { IconChevronDown } from "@tabler/icons-react";
+import { type ReactNode, type Ref, useId } from "react";
+import { Button } from "#web/components/ui/button.tsx";
 
 export function SettingsPage({
   title,
@@ -47,6 +49,13 @@ export function SettingsSection({
 
 export type SettingsStatus = "ready" | "attention";
 
+export interface SettingsRowDetails {
+  readonly label: string;
+  readonly open: boolean;
+  readonly onOpenChange: (open: boolean) => void;
+  readonly content: ReactNode;
+}
+
 export function SettingsRow({
   title,
   icon,
@@ -69,9 +78,10 @@ export function SettingsRow({
   readonly descriptionId?: string;
   readonly liveDescription?: boolean;
   readonly dim?: boolean;
-  readonly details?: ReactNode;
+  readonly details?: SettingsRowDetails;
   readonly children?: ReactNode;
 }) {
+  const detailsId = useId();
   return (
     <div className={`space-y-4 px-3 py-3 sm:px-4 ${dim ? "opacity-80" : ""}`}>
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -111,13 +121,48 @@ export function SettingsRow({
             </div>
           )}
         </div>
-        {children === undefined ? null : (
+        {children === undefined && details === undefined ? null : (
           <div className="flex shrink-0 flex-wrap items-center gap-2">
+            {details === undefined ? null : (
+              <Button
+                aria-controls={detailsId}
+                aria-expanded={details.open}
+                aria-label={details.label}
+                className="text-muted-foreground aria-expanded:bg-transparent aria-expanded:text-muted-foreground"
+                onClick={() => details.onOpenChange(!details.open)}
+                size="icon-xs"
+                variant="ghost"
+              >
+                <IconChevronDown
+                  aria-hidden="true"
+                  className={`size-3.5 ${details.open ? "rotate-180" : ""}`}
+                />
+              </Button>
+            )}
             {children}
           </div>
         )}
       </div>
-      {details}
+      {details?.open ? <div id={detailsId}>{details.content}</div> : null}
+    </div>
+  );
+}
+
+export function SettingsField({
+  id,
+  label,
+  children,
+}: {
+  readonly id: string;
+  readonly label: string;
+  readonly children: ReactNode;
+}) {
+  return (
+    <div className="grid gap-1.5">
+      <label className="text-sm font-medium" htmlFor={id}>
+        {label}
+      </label>
+      {children}
     </div>
   );
 }

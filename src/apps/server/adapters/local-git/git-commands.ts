@@ -143,6 +143,12 @@ export function readGitEntryIdentity(directory: string) {
   );
 }
 
+export function isIdentityMissing(detail: string) {
+  return /Please tell me who you are|unable to auto-detect email address|empty ident name/.test(
+    detail,
+  );
+}
+
 export function isGitRejection(failure: GitFailed) {
   return failure.exitCode !== undefined;
 }

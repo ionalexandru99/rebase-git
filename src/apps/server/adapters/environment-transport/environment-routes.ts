@@ -12,9 +12,10 @@ import {
   type RepositoryRejected,
   repositoryRejected,
 } from "#contracts/git/git-failures.contract.ts";
-import type {
-  GitCommandRunner,
-  GitFailed,
+import {
+  type GitCommandRunner,
+  type GitFailed,
+  isIdentityMissing,
 } from "#server/adapters/local-git/git-commands.ts";
 import type { EnvironmentAuthorizationError } from "#server/features/environment-authorization/environment-authorization.ts";
 import { EnvironmentStorageError } from "#server/persistence/sqlite/storage-operation.ts";
@@ -127,7 +128,14 @@ export function repositoryRoutes({
   ) =>
     handle(input, git).pipe(
       Effect.catchIf(isGitFailed, (error) =>
-        Effect.fail(repositoryRejected("GitFailed", error.detail)),
+        Effect.fail(
+          isIdentityMissing(error.detail)
+            ? repositoryRejected(
+                "IdentityMissing",
+                "Add your name and email to commit.",
+              )
+            : repositoryRejected("GitFailed", error.detail),
+        ),
       ),
     );
   return {

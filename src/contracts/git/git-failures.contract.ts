@@ -3,7 +3,13 @@ import { Schema } from "effect";
 const maximumDetailLength = 2_048;
 
 export const RepositoryRejected = Schema.TaggedStruct("RepositoryRejected", {
-  reason: Schema.Literals(["Missing", "Busy", "Incompatible", "GitFailed"]),
+  reason: Schema.Literals([
+    "Missing",
+    "Busy",
+    "Incompatible",
+    "GitFailed",
+    "IdentityMissing",
+  ]),
   detail: Schema.String.check(Schema.isMaxLength(maximumDetailLength)),
 });
 export type RepositoryRejected = typeof RepositoryRejected.Type;

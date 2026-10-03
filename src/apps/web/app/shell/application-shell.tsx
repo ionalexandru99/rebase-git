@@ -76,6 +76,10 @@ function Shell({
       ),
     [navigation.projects.environments],
   );
+  const openGitIdentity = useCallback(
+    () => navigate({ type: "show-settings", section: "source-control" }),
+    [navigate],
+  );
   const openNotifiedRepository = useCallback(
     (repositoryId: string) => {
       const repository = repositories.find(({ id }) => id === repositoryId);
@@ -90,6 +94,7 @@ function Shell({
           ? navigation.projects.selectedRepositoryId
           : undefined
       }
+      openGitIdentity={openGitIdentity}
       openRepository={openNotifiedRepository}
       repositories={repositories}
     >
@@ -97,7 +102,8 @@ function Shell({
         <PanelSessions
           navigation={navigation}
           visible={
-            !navigation.settingsOpen && repositorySettingsId === undefined
+            navigation.settingsSection === undefined &&
+            repositorySettingsId === undefined
           }
         >
           <ApplicationLayout
@@ -114,7 +120,7 @@ function Shell({
                 navigation={projects}
                 openProject={() => navigate({ type: "show-open-project" })}
                 openSettings={() =>
-                  navigate({ type: "show-settings", open: true })
+                  navigate({ type: "show-settings", section: "general" })
                 }
                 openRepositorySettings={(_, { id }) =>
                   navigate({
@@ -147,15 +153,19 @@ function Shell({
               )
             }
             settings={
-              navigation.settingsOpen ? (
+              navigation.settingsSection === undefined ? undefined : (
                 <SettingsPanel
                   closeSettings={() =>
-                    navigate({ type: "show-settings", open: false })
+                    navigate({ type: "show-settings", section: undefined })
+                  }
+                  section={navigation.settingsSection}
+                  selectSection={(section) =>
+                    navigate({ type: "show-settings", section })
                   }
                   desktopUpdates={desktopUpdates}
                   productVersion={productVersion}
                 />
-              ) : undefined
+              )
             }
           >
             {projects.workspaceView === "open-project" ? (

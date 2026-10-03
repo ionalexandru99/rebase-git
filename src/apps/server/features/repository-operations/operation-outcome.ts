@@ -8,6 +8,7 @@ import type {
 import {
   type GitCommandOutput,
   type GitCommandRunner,
+  isIdentityMissing,
   runRepositoryGit,
 } from "#server/adapters/local-git/git-commands.ts";
 
@@ -39,6 +40,13 @@ export function requireGitSuccess(output: GitCommandOutput) {
     "Git rejected the action. Check the worktree and configured hooks.";
   if (/\.lock['\s:]|another git process/i.test(detail))
     return Effect.fail(repositoryRejected("Busy", detail));
+  if (isIdentityMissing(detail))
+    return Effect.fail(
+      repositoryRejected(
+        "IdentityMissing",
+        "Add your name and email to commit.",
+      ),
+    );
   if (/would be overwritten by merge/i.test(detail))
     return Effect.fail({
       ...operationError("WouldOverwrite", detail),

@@ -11,17 +11,20 @@ import {
 import { SettingsSidebar } from "#web/features/settings/settings-sidebar.tsx";
 
 export function SettingsPanel({
+  section,
+  selectSection,
   closeSettings,
   desktopUpdates,
   productVersion,
 }: {
+  readonly section: SettingsSectionId;
+  readonly selectSection: (section: SettingsSectionId) => void;
   readonly closeSettings: () => void;
   readonly desktopUpdates: DesktopUpdates | undefined;
   readonly productVersion: string;
 }): JSX.Element {
-  const [sectionId, setSectionId] = useState<SettingsSectionId>("general");
   const Content: ComponentType<SettingsSectionContext> =
-    settingsSections.find(({ id }) => id === sectionId)?.Content ??
+    settingsSections.find(({ id }) => id === section)?.Content ??
     settingsSections[0].Content;
   const [updateSnapshot, setUpdateSnapshot] = useState<DesktopUpdateSnapshot>();
   const [updateLoadError, setUpdateLoadError] = useState<string>();
@@ -71,8 +74,8 @@ export function SettingsPanel({
     <div className="flex h-full min-h-0">
       <SettingsSidebar
         closeSettings={closeSettings}
-        section={sectionId}
-        selectSection={setSectionId}
+        section={section}
+        selectSection={selectSection}
       />
       <main
         aria-label="Settings content"

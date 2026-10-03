@@ -1,5 +1,12 @@
 import { Toast } from "@base-ui/react/toast";
-import { type ReactNode, useMemo, useRef, useState } from "react";
+import {
+  createContext,
+  type ReactNode,
+  useContext,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { PersistentNotificationOutlet } from "#web/features/notifications/components/persistent-notification.tsx";
 import {
   type NoticeData,
@@ -11,6 +18,7 @@ import {
   describeFailure,
   type FailureMessages,
   type RequestFailure,
+  rejection,
   type TaggedFailure,
 } from "#web/platform/query/request-failure.ts";
 
@@ -118,14 +126,22 @@ function useActionToasts() {
   }, [add, close, repositoryId]);
 }
 
+const OpenGitIdentity = createContext<() => void>(() => {});
+
 export function useErrorToast() {
   const toasts = useActionToasts();
+  const openGitIdentity = useContext(OpenGitIdentity);
   return useMemo(() => {
-    const show = (action: ErrorAction, description?: string) =>
+    const show = (
+      action: ErrorAction,
+      description?: string,
+      button?: Notice["action"],
+    ) =>
       toasts.put(action, {
         type: "error",
         title: errorTitles[action],
         description,
+        ...(button === undefined ? {} : { action: button }),
       });
     return {
       show,
@@ -144,10 +160,13 @@ export function useErrorToast() {
           result._tag === "Unanswered"
             ? unanswered
             : describeFailure(result, messages),
+          identityMissing(result)
+            ? { label: "Open settings", run: openGitIdentity }
+            : undefined,
         );
       },
     };
-  }, [toasts]);
+  }, [toasts, openGitIdentity]);
 }
 
 export type StatusToast = ReturnType<typeof useStatusToast>;
@@ -191,25 +210,38 @@ export function NotificationsProvider({
   repositories,
   currentRepositoryId,
   openRepository,
+  openGitIdentity,
   children,
 }: {
   readonly repositories: readonly NotifiedRepository[];
   readonly currentRepositoryId: string | undefined;
   readonly openRepository: (repositoryId: string) => void;
+  readonly openGitIdentity: () => void;
   readonly children: ReactNode;
 }) {
   const [outlet, setOutlet] = useState<HTMLDivElement | null>(null);
   return (
     <Toast.Provider timeout={8_000} limit={visibleToasts}>
-      <PersistentNotificationOutlet.Provider value={outlet}>
-        {children}
-        <NotificationStack
-          currentRepositoryId={currentRepositoryId}
-          openRepository={openRepository}
-          persistentOutlet={setOutlet}
-          repositories={repositories}
-        />
-      </PersistentNotificationOutlet.Provider>
+      <OpenGitIdentity.Provider value={openGitIdentity}>
+        <PersistentNotificationOutlet.Provider value={outlet}>
+          {children}
+          <NotificationStack
+            currentRepositoryId={currentRepositoryId}
+            openRepository={openRepository}
+            persistentOutlet={setOutlet}
+            repositories={repositories}
+          />
+        </PersistentNotificationOutlet.Provider>
+      </OpenGitIdentity.Provider>
     </Toast.Provider>
+  );
+}
+
+function identityMissing(result: RequestFailure<TaggedFailure>) {
+  const failure = rejection(result);
+  return (
+    failure?._tag === "RepositoryRejected" &&
+    "reason" in failure &&
+    failure.reason === "IdentityMissing"
   );
 }
