@@ -9,7 +9,7 @@ import {
   IconStack2,
   IconTag,
 } from "@tabler/icons-react";
-import { type CSSProperties, useRef } from "react";
+import { type CSSProperties, type JSX, useRef } from "react";
 import type { PullRequest } from "#contracts/pull-requests/pull-requests.contract.ts";
 import type { BranchUpstream } from "#contracts/repository-refs/repository-refs.contract.ts";
 import { ActionMenuItems, runAction } from "#web/components/ui/action-menu.tsx";
@@ -18,6 +18,11 @@ import {
   ContextMenuContent,
   ContextMenuTrigger,
 } from "#web/components/ui/context-menu.tsx";
+import {
+  type BranchCardBranch,
+  type BranchCardHandle,
+  BranchCardTrigger,
+} from "#web/features/branches-sidebar/branch-card.tsx";
 import type { BranchesSidebarFolderRow } from "#web/features/branches-sidebar/branch-tree.ts";
 import type {
   BranchesSidebarRefRow,
@@ -117,6 +122,7 @@ export function SectionRow({
 export function RefRow({
   actions,
   active,
+  card,
   selected,
   onActivate,
   onToggleHistory,
@@ -127,6 +133,7 @@ export function RefRow({
 }: {
   readonly actions: readonly RefAction[];
   readonly active: boolean;
+  readonly card: BranchCardHandle | undefined;
   readonly selected: boolean;
   readonly onActivate: (mode: TagSelectionMode) => void;
   readonly onToggleHistory: () => void;
@@ -143,7 +150,9 @@ export function RefRow({
       }}
     >
       <ContextMenuTrigger
-        render={
+        render={withCard(
+          card,
+          { row, pullRequests },
           <div
             className={`group absolute top-0 left-0 flex w-full cursor-default items-center rounded-md text-[.85rem] outline-none select-none hover:bg-sidebar-accent/75 hover:text-sidebar-accent-foreground ${row.current ? "font-medium text-sidebar-accent-foreground" : "text-sidebar-foreground"} ${active || selected ? "bg-sidebar-accent" : ""}`}
             style={style}
@@ -195,8 +204,8 @@ export function RefRow({
               row={row}
               selected={selectedInHistory}
             />
-          </div>
-        }
+          </div>,
+        )}
       />
       <ContextMenuContent
         className="w-max min-w-64 max-w-md"
@@ -210,6 +219,18 @@ export function RefRow({
         />
       </ContextMenuContent>
     </ContextMenu>
+  );
+}
+
+function withCard(
+  card: BranchCardHandle | undefined,
+  payload: BranchCardBranch,
+  row: JSX.Element,
+): JSX.Element {
+  return card === undefined ? (
+    row
+  ) : (
+    <BranchCardTrigger handle={card} payload={payload} render={row} />
   );
 }
 
