@@ -116,6 +116,12 @@ function useActionToasts() {
         const id = idFor(action);
         const button = notice.action;
         const previous = shown.current.find((toast) => toast.id === id);
+        const percent =
+          notice.type === "success" &&
+          previous?.type === "loading" &&
+          previous.data?.percent !== undefined
+            ? 100
+            : notice.percent;
         if (
           previous !== undefined &&
           previous.type !== "loading" &&
@@ -140,9 +146,7 @@ function useActionToasts() {
                 },
           data: {
             repositoryId,
-            ...(notice.percent === undefined
-              ? {}
-              : { percent: notice.percent }),
+            ...(percent === undefined ? {} : { percent }),
             ...(notice.choices === undefined
               ? {}
               : { choices: notice.choices }),
