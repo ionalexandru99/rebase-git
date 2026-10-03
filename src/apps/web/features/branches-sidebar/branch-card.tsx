@@ -48,7 +48,7 @@ export function BranchCard({
           <PreviewCard.Portal>
             <PreviewCard.Positioner
               align="start"
-              className="isolate z-100 transition-[top,left,right,bottom,transform] duration-150 ease-out data-instant:transition-none motion-reduce:transition-none"
+              className="isolate z-100 transition-[top,left,right,bottom,transform] duration-150 ease-out motion-reduce:transition-none"
               side="right"
               sideOffset={16}
             >
