@@ -51,7 +51,11 @@ export function BranchCard({
               side="right"
               sideOffset={16}
             >
-              <PreviewCard.Popup className="w-[23rem] max-w-(--available-width) rounded-lg border border-border bg-popover px-3.5 py-3 text-popover-foreground shadow-[0_.75rem_2.5rem_rgb(0_0_0/45%)] outline-none">
+              <PreviewCard.Popup
+                aria-label={payload.row.name}
+                role="group"
+                className="w-[23rem] max-w-(--available-width) rounded-lg border border-border bg-popover px-3.5 py-3 text-popover-foreground shadow-[0_.75rem_2.5rem_rgb(0_0_0/45%)] outline-none"
+              >
                 <BranchCardBody
                   branch={payload}
                   remoteBranches={remoteBranches}

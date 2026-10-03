@@ -35,16 +35,17 @@ describe("branch card", () => {
         name: /^feature\/topic, linked worktree/,
       }),
     );
-    const older = screen.getByRole("button", {
+    const card = screen.getByRole("group", { name: "feature/topic" });
+    const older = card.getByRole("button", {
       name: "Open pull request #11, merged",
     });
     await expect.element(older).toBeVisible();
     await expect
-      .element(screen.getByText("feature/topic", { exact: true }))
+      .element(card.getByText("feature/topic", { exact: true }))
       .toBeVisible();
-    await expect.element(screen.getByText("Worktree topic")).toBeVisible();
+    await expect.element(card.getByText("Worktree topic")).toBeVisible();
     await expect
-      .element(screen.getByText("Pull request 12", { exact: true }))
+      .element(card.getByText("Pull request 12", { exact: true }))
       .toBeVisible();
     await older.click();
 
@@ -62,7 +63,7 @@ describe("branch card", () => {
     await expect.element(screen.getByText("Never pushed")).toBeVisible();
     await userEvent.hover(screen.getByRole("treeitem", { name: "shared" }));
     await expect
-      .element(screen.getByText("shared", { exact: true }).last())
+      .element(screen.getByRole("group", { name: "shared" }))
       .toBeVisible();
     await expect
       .element(screen.getByText("Never pushed"))
