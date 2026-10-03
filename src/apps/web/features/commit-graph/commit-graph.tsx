@@ -336,6 +336,9 @@ export function CommitGraph({
                     aria-rowcount={total + 1}
                     className="absolute inset-0 block h-full w-full overflow-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden focus-visible:outline-2 focus-visible:outline-primary/70 focus-visible:outline-offset-[-2px]"
                     onKeyDown={handleKeyDown}
+                    onMouseDown={(event) => {
+                      if (event.shiftKey) event.preventDefault();
+                    }}
                     onClick={handleRowClick}
                     onContextMenu={handleRowContextMenu}
                     onDoubleClick={handleRowDoubleClick}

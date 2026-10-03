@@ -379,6 +379,7 @@ describe("commit graph navigation", () => {
     await userEvent.keyboard("{/Shift}");
     for (const index of [1, 2, 3, 4])
       await expect.element(row(index)).toHaveAttribute("aria-selected", "true");
+    expect(document.getSelection()?.toString()).toBe("");
     await userEvent.keyboard("{Control>}{ArrowDown}{/Control}");
     await expect
       .element(grid)
