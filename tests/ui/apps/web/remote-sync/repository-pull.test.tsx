@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vite-plus/test";
 import { page } from "vite-plus/test/browser";
 import {
+  type BranchPulled,
   type PullFailure,
   type RepositoryFetchStatus,
   RepositoryPullApi,
@@ -19,6 +20,7 @@ import {
 } from "#tests-support/fake-requests.ts";
 import {
   commitId,
+  conflictedRebase,
   fetchStatus,
   repositoryId,
   repositoryRefs,
@@ -27,6 +29,7 @@ import {
   worktree,
 } from "#tests-support/fixtures.ts";
 import { render } from "#tests-support/render.tsx";
+import { useOperation } from "#web/features/operation-recovery/hooks/use-operation.ts";
 import { RemoteSync } from "#web/features/remote-sync/remote-sync.tsx";
 import { RepositoryScopeProvider } from "#web/platform/query/repository-scope.tsx";
 
@@ -79,7 +82,7 @@ describe("repository pull", () => {
       respond(RepositoryPullApi.pull, async (command) => {
         pulled(command);
         await finished.promise;
-        return { outcome: "FastForwarded" as const };
+        return pulledCleanly;
       }),
     );
     await render(
@@ -125,7 +128,7 @@ describe("repository pull", () => {
 
   it("shows the fetch and then the pull progress in one toast that turns into the result", async () => {
     const fetched = Promise.withResolvers<RepositoryFetchStatus>();
-    const pulled = Promise.withResolvers<{ outcome: "FastForwarded" }>();
+    const pulled = Promise.withResolvers<typeof pulledCleanly>();
     const requests = fakeRequests(
       idleOperation,
       respond(RepositoryRefsApi.read, async () => refs(1)),
@@ -154,31 +157,123 @@ describe("repository pull", () => {
     await expect
       .element(page.getByRole("progressbar", { name: "Pulling" }))
       .toHaveAttribute("aria-valuenow", "30");
-    pulled.resolve({ outcome: "FastForwarded" });
+    pulled.resolve(pulledCleanly);
 
-    await expect.element(page.getByText("Pulled main")).toBeVisible();
+    await expect
+      .element(page.getByText("Pulled", { exact: true }))
+      .toBeVisible();
     await expect.element(page.getByRole("progressbar")).not.toBeInTheDocument();
+  });
+
+  it("asks how to pull a diverged branch and pulls again with the choice from the menu", async () => {
+    const upstreamCommit = "b".repeat(40);
+    const requested = vi.fn();
+    const merged = Promise.withResolvers<BranchPulled>();
+    const requests = fakeRequests(
+      idleOperation,
+      respond(RepositoryRefsApi.read, async () => refs(1)),
+      respond(RepositoryPullApi.fetchStatus, async () => status),
+      respond(RepositoryPullApi.fetch, async () => status),
+      respond(RepositoryPullApi.pull, async (command) => {
+        requested(command);
+        if (command.strategy === undefined)
+          throw rejected({
+            _tag: "PullDiverged" as const,
+            upstream: "origin/main",
+            upstreamCommit,
+          });
+        return merged.promise;
+      }),
+    );
+    await render(
+      <RepositoryScopeProvider scope={repositoryScope({ repositoryId })}>
+        <RemoteSync>{(actions) => actions}</RemoteSync>
+      </RepositoryScopeProvider>,
+      { environment: { requests } },
+    );
+
+    await page.getByRole("button", { name: "Pull 1 incoming commit" }).click();
+    await expect.element(page.getByText("Branch has diverged")).toBeVisible();
+    await expect
+      .element(page.getByRole("button", { name: "Rebase" }))
+      .toBeVisible();
+    await page.getByRole("button", { name: "More choices" }).click();
+    await page.getByRole("menuitem", { name: "Merge" }).click();
+
+    await expect
+      .poll(() => requested)
+      .toHaveBeenLastCalledWith({
+        repositoryId,
+        worktreePath: "/repo",
+        branch: "main",
+        strategy: { kind: "merge", upstream: upstreamCommit },
+      });
+    await expect
+      .element(page.getByRole("progressbar", { name: "Merging" }))
+      .toBeVisible();
+    merged.resolve({ outcome: "Merged", stashKept: false });
+    await expect.element(page.getByText("Pulled and merged")).toBeVisible();
+    await expect
+      .element(page.getByText("Branch has diverged"))
+      .not.toBeInTheDocument();
+  });
+
+  it("says a copy of local changes is in Stashes when they conflict with the pull", async () => {
+    await fixture({ pulled: { outcome: "FastForwarded", stashKept: true } });
+    await page.getByRole("button", { name: "Pull" }).click();
+    await expect
+      .element(page.getByText("Pulled, but your changes conflict"))
+      .toBeVisible();
+    await expect
+      .element(page.getByText("A copy is saved in Stashes."))
+      .toBeVisible();
+  });
+
+  it("hands a pull that stopped on conflicts over to the operation and closes its toast", async () => {
+    const f = await fixture({
+      pulled: {
+        outcome: "Stopped",
+        worktreePath: "/repo",
+        operation: conflictedRebase(),
+      },
+    });
+    await f.pull();
+    await expect.element(page.getByText("Operation conflicts")).toBeVisible();
+    await expect.element(page.getByText("Pulling")).not.toBeInTheDocument();
+    await expect.element(page.getByRole("progressbar")).not.toBeInTheDocument();
+  });
+
+  it("points to the other worktree when the pull stopped on conflicts there", async () => {
+    const f = await fixture({
+      pulled: {
+        outcome: "Stopped",
+        worktreePath: "/linked",
+        operation: conflictedRebase(),
+      },
+    });
+    await f.pull();
+    await expect.element(page.getByText("Couldn't pull")).toBeVisible();
+    await expect
+      .element(page.getByText("Resolve the conflicts in the other worktree."))
+      .toBeVisible();
   });
 
   it.each<[PullFailure, string]>([
     [
-      { _tag: "PullDiverged", upstream: "origin/main" },
-      "main has diverged from origin/main",
-    ],
-    [
       { _tag: "PullWouldOverwrite", paths: ["src/app.ts"] },
-      "Local changes to src/app.ts block the pull",
+      "Untracked src/app.ts is in the way.",
     ],
     [
       { _tag: "PullWouldOverwrite", paths: ["src/app.ts", "README.md"] },
-      "Local changes block the pull",
+      "Untracked files are in the way.",
     ],
-    [{ _tag: "UpstreamMissing" }, "main has no upstream"],
+    [{ _tag: "UpstreamMissing" }, "No upstream branch."],
     [
       { _tag: "UpstreamMissing", upstream: "origin/main" },
-      "origin/main was deleted",
+      "The remote branch was deleted.",
     ],
-    [{ _tag: "PullUncertain" }, "Pull may not have finished"],
+    [{ _tag: "UpstreamMoved" }, "The remote branch moved."],
+    [{ _tag: "BranchMissing" }, "The branch no longer exists."],
   ])("explains a rejected pull: %j", async (failure, message) => {
     const f = await fixture({ failure });
     await f.pull();
@@ -186,12 +281,19 @@ describe("repository pull", () => {
   });
 });
 
+const pulledCleanly = {
+  outcome: "FastForwarded" as const,
+  stashKept: false,
+};
+
 async function fixture({
   fetchFails = false,
   failure,
+  pulled = pulledCleanly,
 }: {
   readonly fetchFails?: boolean;
   readonly failure?: PullFailure;
+  readonly pulled?: BranchPulled;
 } = {}) {
   const fetch = vi.fn(async () => {
     if (fetchFails)
@@ -210,12 +312,13 @@ async function fixture({
     respond(RepositoryPullApi.pull, async (command) => {
       requested(command);
       if (failure !== undefined) throw rejected(failure);
-      return { outcome: "FastForwarded" as const };
+      return pulled;
     }),
   );
   await render(
     <RepositoryScopeProvider scope={repositoryScope({ repositoryId })}>
       <RemoteSync>{(actions) => actions}</RemoteSync>
+      <OperationProbe />
     </RepositoryScopeProvider>,
     { environment: { requests } },
   );
@@ -238,4 +341,12 @@ function refs(behind: number) {
     ],
     worktrees: [worktree("/repo", "main")],
   });
+}
+
+function OperationProbe() {
+  const operation = useOperation(
+    { repositoryId, worktreePath: "/repo" },
+    false,
+  );
+  return <p>Operation {operation.data?.phase}</p>;
 }

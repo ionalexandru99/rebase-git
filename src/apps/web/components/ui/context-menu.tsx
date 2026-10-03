@@ -22,7 +22,7 @@ function ContextMenuContent({
   return (
     <ContextMenuPrimitive.Portal>
       <ContextMenuPrimitive.Positioner
-        className="isolate z-50 outline-none"
+        className="isolate z-110 outline-none"
         {...(submenu ? { side: "right" as const, sideOffset: 4 } : {})}
       >
         <ContextMenuPrimitive.Popup

@@ -47,15 +47,10 @@ export function requireGitSuccess(output: GitCommandOutput) {
         "Add your name and email to commit.",
       ),
     );
-  if (/would be overwritten by merge/i.test(detail))
+  if (/would be overwritten by (?:merge|checkout)/i.test(detail))
     return Effect.fail({
       ...operationError("WouldOverwrite", detail),
-      paths: detail
-        .split("\n")
-        .filter((line) => line.startsWith("\t"))
-        .map((line) => line.trim())
-        .filter((path) => path.length > 0)
-        .slice(0, 100),
+      paths: overwrittenPaths(detail),
     });
   return Effect.fail(
     operationError(
@@ -65,6 +60,15 @@ export function requireGitSuccess(output: GitCommandOutput) {
       detail,
     ),
   );
+}
+
+export function overwrittenPaths(detail: string) {
+  return detail
+    .split("\n")
+    .filter((line) => line.startsWith("\t"))
+    .map((line) => line.trim())
+    .filter((path) => path.length > 0)
+    .slice(0, 100);
 }
 
 export function uncertain() {

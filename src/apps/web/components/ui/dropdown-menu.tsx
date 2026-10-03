@@ -32,7 +32,7 @@ function DropdownMenuContent({
         align={align}
         alignOffset={alignOffset}
         anchor={anchor}
-        className="isolate z-50"
+        className="isolate z-110"
         side={side}
         sideOffset={sideOffset}
       >

@@ -47,7 +47,7 @@ export function SettingsSelect<Value extends string>({
         <Select.Positioner
           align="end"
           alignItemWithTrigger={false}
-          className="z-50 outline-none"
+          className="z-110 outline-none"
           sideOffset={4}
         >
           <Select.Popup className="w-[var(--anchor-width)] overflow-hidden rounded-md border border-border bg-popover p-1 text-popover-foreground shadow-lg outline-none">

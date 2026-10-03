@@ -13,7 +13,10 @@ import {
   type BranchesSidebarRefRow,
   buildBranchesSidebarRows,
 } from "#web/features/branches-sidebar/branches-sidebar-state.ts";
-import { refActions } from "#web/features/refs/ref-actions.ts";
+import {
+  type RefActionHandlers,
+  refActions,
+} from "#web/features/refs/ref-actions.ts";
 
 describe("ref actions", () => {
   it("offers no checkout of the current branch and explains why it cannot be deleted", () => {
@@ -96,6 +99,22 @@ describe("ref actions", () => {
     });
   });
 
+  it("fast-forwards a branch that is not checked out unless it has diverged", () => {
+    expect(pullAction("main", { ahead: 1 })).toMatchObject({
+      label: "Pull",
+      enabled: true,
+    });
+    expect(pullAction("feature", { ahead: 0 })).toMatchObject({
+      label: "Fast-forward",
+      enabled: true,
+    });
+    expect(pullAction("feature", { ahead: 1 })).toMatchObject({
+      label: "Fast-forward",
+      enabled: false,
+      reason: "Diverged",
+    });
+  });
+
   it("disables every write without repository write access", () => {
     expect(reasons("feature", false)).toEqual({
       checkout: undefined,
@@ -135,20 +154,48 @@ function reasons(
         row,
         repository,
         { activeWorktreePath: mainPath, writable },
-        {
-          checkout: () => undefined,
-          pull: undefined,
-          pushTags: { pushing: false, run: () => undefined },
-          editing: {
-            draft: () => undefined,
-            startRename: () => undefined,
-            deletion: { request: () => undefined },
-          },
-        },
+        handlers,
       ),
     ).map((action) => [action.id, action.reason]),
   );
 }
+
+function pullAction(name: string, { ahead }: { readonly ahead: number }) {
+  const tracked = upstream(`origin/${name}`, { ahead, behind: 1 });
+  const repository = repositoryRefs({
+    branches: [
+      {
+        name,
+        target: commitId,
+        upstream: tracked,
+        ...(name === "main" ? { worktreePath: mainPath } : {}),
+      },
+    ],
+    worktrees: mainAndTopicWorktrees(),
+  });
+  return refActions(
+    {
+      id: name,
+      name,
+      target: { _tag: "LocalBranch", name },
+      upstream: tracked,
+    },
+    repository,
+    { activeWorktreePath: mainPath, writable: true },
+    { ...handlers, pull: { pulling: false, run: () => undefined } },
+  ).find((action) => action.id === "pull");
+}
+
+const handlers: RefActionHandlers = {
+  checkout: () => undefined,
+  pull: undefined,
+  pushTags: { pushing: false, run: () => undefined },
+  editing: {
+    draft: () => undefined,
+    startRename: () => undefined,
+    deletion: { request: () => undefined },
+  },
+};
 
 function refs() {
   return repositoryRefs({

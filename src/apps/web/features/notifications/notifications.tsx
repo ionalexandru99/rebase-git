@@ -9,6 +9,7 @@ import {
 } from "react";
 import { PersistentNotificationOutlet } from "#web/features/notifications/components/persistent-notification.tsx";
 import {
+  type NoticeChoice,
   type NoticeData,
   NotificationStack,
   type NotifiedRepository,
@@ -93,6 +94,7 @@ type Notice = {
   readonly description?: string | undefined;
   readonly percent?: number | undefined;
   readonly action?: { readonly label: string; readonly run: () => void };
+  readonly choices?: NoticeData["choices"];
 };
 
 type ProgressOptions = {
@@ -112,10 +114,16 @@ function useActionToasts() {
         const id = idFor(action);
         const button = notice.action;
         const previous = shown.current.find((toast) => toast.id === id);
-        if (previous !== undefined && previous.type !== "loading") close(id);
+        if (
+          previous !== undefined &&
+          previous.type !== "loading" &&
+          previous.data?.choices === undefined
+        )
+          close(id);
         add({
           id,
           type: notice.type,
+          timeout: notice.choices === undefined ? undefined : 0,
           title: notice.title,
           description: notice.description ?? "",
           actionProps:
@@ -128,10 +136,15 @@ function useActionToasts() {
                     button.run();
                   },
                 },
-          data:
-            notice.percent === undefined
-              ? { repositoryId }
-              : { repositoryId, percent: notice.percent },
+          data: {
+            repositoryId,
+            ...(notice.percent === undefined
+              ? {}
+              : { percent: notice.percent }),
+            ...(notice.choices === undefined
+              ? {}
+              : { choices: notice.choices }),
+          },
         });
       },
       advance: (action: ErrorAction, percent: number) =>
@@ -214,6 +227,13 @@ export function useStatusToast() {
             ? {}
             : { action: { label: "Undo", run: undo } }),
         }),
+      warning: (action: ErrorAction, title: string, description: string) =>
+        toasts.put(action, { type: "error", title, description }),
+      choose: (
+        action: ErrorAction,
+        title: string,
+        choices: readonly [NoticeChoice, ...NoticeChoice[]],
+      ) => toasts.put(action, { type: "error", title, choices }),
       close: toasts.close,
     }),
     [toasts],

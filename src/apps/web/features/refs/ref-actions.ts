@@ -184,12 +184,12 @@ export function refActions(
     row.upstream === undefined
       ? []
       : [
-          {
-            id: "pull",
-            label: "Pull",
-            enabled: !pull.pulling,
-            run: () => pull.run(target.name),
-          } satisfies RefAction,
+          pullAction(
+            target.name,
+            localBranch(target, refs)?.worktreePath !== undefined,
+            row.upstream,
+            pull,
+          ),
         ]),
     ...(showReflog === undefined || target._tag !== "LocalBranch"
       ? []
@@ -330,6 +330,22 @@ export function refActions(
           ]),
     ]),
   ];
+}
+
+function pullAction(
+  branch: string,
+  checkedOut: boolean,
+  { ahead, behind }: BranchUpstream,
+  pull: NonNullable<RefActionHandlers["pull"]>,
+): RefAction {
+  const blocked = !checkedOut && ahead > 0 && behind > 0;
+  return {
+    id: "pull",
+    label: checkedOut ? "Pull" : "Fast-forward",
+    enabled: !pull.pulling && !blocked,
+    ...(blocked ? { reason: "Diverged" } : {}),
+    run: () => pull.run(branch),
+  };
 }
 
 function deleteMenu(choices: readonly RefAction[]): readonly RefAction[] {

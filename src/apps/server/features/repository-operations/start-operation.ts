@@ -1,12 +1,15 @@
 import { Effect } from "effect";
 import type {
   MergeMode,
+  OperationStarted,
+  RepositoryOperation,
   StartMerge,
   StartOperation,
   StartRebase,
   StartRevert,
 } from "#contracts/repository-operations/repository-operations.contract.ts";
 import {
+  type GitCommandOutput,
   type GitCommandRunner,
   runRepositoryGit,
   runRepositoryGitOutput,
@@ -30,9 +33,17 @@ export function startOperation(
   const { operation } = command;
   switch (operation._tag) {
     case "Merge":
-      return startMerge(git, coordination, command, operation);
+      return mergeSource(git, coordination, command, operation, false).pipe(
+        Effect.map(({ started }) => started),
+      );
     case "Rebase":
-      return startRebase(git, coordination, command, operation);
+      return rebaseOnto(git, coordination, command, operation, true).pipe(
+        Effect.flatMap(({ started, autostashConflict }) =>
+          autostashConflict === undefined
+            ? Effect.succeed(started)
+            : operationFailure("GitRejected", autostashConflict),
+        ),
+      );
     case "Revert":
       return revertCommits(git, coordination, command, operation);
     case "CherryPick":
@@ -47,11 +58,31 @@ const mergeArguments: Readonly<Record<MergeMode, readonly string[]>> = {
   squash: ["--squash"],
 };
 
-function startMerge(
+type Expected = Pick<StartOperation, "worktreePath" | "expectedHead">;
+
+export interface Integrated {
+  readonly started: OperationStarted;
+  readonly autostashConflict: string | undefined;
+}
+
+function integrated(
+  outcome: OperationStarted["outcome"],
+  operation: RepositoryOperation,
+  output?: GitCommandOutput,
+): Integrated {
+  const text = output === undefined ? "" : `${output.stderr}${output.stdout}`;
+  return {
+    started: started(outcome, operation),
+    autostashConflict: /resulted in conflicts/.test(text) ? text : undefined,
+  };
+}
+
+export function mergeSource(
   git: GitCommandRunner,
   coordination: RepositoryCoordination,
-  { worktreePath: directory, expectedHead }: StartOperation,
+  { worktreePath: directory, expectedHead }: Expected,
   { source, mode }: StartMerge,
+  autostash: boolean,
 ) {
   const revision = source.ref ?? source.commit;
   return Effect.gen(function* () {
@@ -74,7 +105,7 @@ function startMerge(
         `${revision} has no history in common with the current branch.`,
       );
     if (base.trim() === source.commit)
-      return started("UpToDate", yield* coordination.operation(directory));
+      return integrated("UpToDate", yield* coordination.operation(directory));
     if (mode === "ff-only" && base.trim() !== head)
       return yield* operationFailure(
         "NotFastForward",
@@ -85,7 +116,7 @@ function startMerge(
         directory,
         arguments: [
           "merge",
-          "--no-autostash",
+          autostash ? "--autostash" : "--no-autostash",
           "--no-stat",
           ...mergeArguments[mode],
           "--end-of-options",
@@ -95,26 +126,28 @@ function startMerge(
       })
       .pipe(Effect.mapError(uncertain), Effect.uninterruptible);
     const state = yield* coordination.operation(directory);
-    if (state.phase === "conflicts") return started("Stopped", state);
+    if (state.phase === "conflicts") return integrated("Stopped", state);
     yield* requireGitSuccess(output);
-    if (mode === "squash") return started("Staged", state);
+    if (mode === "squash") return integrated("Staged", state, output);
     const merged = yield* readCommit(git, directory, "HEAD");
-    return started(
+    return integrated(
       merged === head
         ? "UpToDate"
         : merged === source.commit
           ? "FastForwarded"
           : "Committed",
       state,
+      output,
     );
   });
 }
 
-function startRebase(
+export function rebaseOnto(
   git: GitCommandRunner,
   coordination: RepositoryCoordination,
-  { worktreePath: directory, expectedHead }: StartOperation,
+  { worktreePath: directory, expectedHead }: Expected,
   { onto, stash, plan }: StartRebase,
+  keepMerges: boolean,
 ) {
   const revision = onto.ref ?? onto.commit;
   return Effect.gen(function* () {
@@ -129,17 +162,19 @@ function startRebase(
           ["status", "--porcelain=v1", "-z", "--untracked-files=no"],
           { globalArguments: ["--no-optional-locks"] },
         ),
-        runRepositoryGit(
-          git,
-          directory,
-          [
-            "rev-list",
-            "--merges",
-            "--max-count=1",
-            `${onto.commit}..${expectedHead}`,
-          ],
-          { exitCodes: [0, 128] },
-        ),
+        keepMerges && plan === undefined
+          ? runRepositoryGit(
+              git,
+              directory,
+              [
+                "rev-list",
+                "--merges",
+                "--max-count=1",
+                `${onto.commit}..${expectedHead}`,
+              ],
+              { exitCodes: [0, 128] },
+            )
+          : Effect.succeed(""),
       ],
       { concurrency: "unbounded" },
     );
@@ -172,9 +207,7 @@ function startRebase(
         arguments: [
           "rebase",
           ...(todo === undefined ? [] : ["--interactive", "--empty=drop"]),
-          merges.length > 0 && todo === undefined
-            ? "--rebase-merges"
-            : "--no-rebase-merges",
+          merges.length > 0 ? "--rebase-merges" : "--no-rebase-merges",
           stash ? "--autostash" : "--no-autostash",
           "--end-of-options",
           revision,
@@ -183,21 +216,17 @@ function startRebase(
       })
       .pipe(Effect.mapError(uncertain), Effect.uninterruptible);
     const state = yield* coordination.operation(directory);
-    if (state.kind === "rebase") return started("Stopped", state);
+    if (state.kind === "rebase") return integrated("Stopped", state);
     yield* requireGitSuccess(output);
-    if (/resulted in conflicts/.test(`${output.stdout}\n${output.stderr}`))
-      return yield* operationFailure(
-        "GitRejected",
-        `${output.stderr}${output.stdout}`,
-      );
     const rebased = yield* readCommit(git, directory, "HEAD");
-    return started(
+    return integrated(
       rebased === head
         ? "UpToDate"
         : rebased === onto.commit
           ? "FastForwarded"
           : "Rebased",
       state,
+      output,
     );
   });
 }

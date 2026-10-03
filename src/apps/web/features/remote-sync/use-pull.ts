@@ -1,8 +1,11 @@
 import { skipToken } from "@tanstack/react-query";
 import { useCallback } from "react";
 import type { RouteFailure } from "#contracts/environment-connection/environment-route.contract.ts";
+import { RepositoryOperationsApi } from "#contracts/repository-operations/repository-operations.contract.ts";
 import {
+  type DivergedPull,
   type FetchFailed,
+  type PullBranch,
   RepositoryPullApi,
 } from "#contracts/repository-pull/repository-pull.contract.ts";
 import {
@@ -11,8 +14,11 @@ import {
 } from "#web/features/notifications/notifications.tsx";
 import { useEnvironmentQuery } from "#web/platform/query/environment-query.ts";
 import { useRepositoryScope } from "#web/platform/query/repository-scope.tsx";
-import type { FailureMessages } from "#web/platform/query/request-failure.ts";
-import { useCommand } from "#web/platform/query/use-command.ts";
+import {
+  type FailureMessages,
+  rejection,
+} from "#web/platform/query/request-failure.ts";
+import { answer, useCommand } from "#web/platform/query/use-command.ts";
 
 const fetchProblems: Record<FetchFailed["reason"], string> = {
   GitUnavailable: "Git could not start on the server.",
@@ -73,31 +79,73 @@ export function usePull() {
   const errorToast = useErrorToast();
   const statusToast = useStatusToast();
   const command = useCommand(RepositoryPullApi.pull, {
-    before: async () => {
+    before: async ({ strategy }) => {
       const fetched = await fetch.execute();
-      if (fetched) statusToast.progress("pull", "Pulling", { percent: 0 });
+      if (fetched)
+        statusToast.progress(
+          "pull",
+          strategy === undefined ? "Pulling" : integrationSteps[strategy.kind],
+          { percent: 0 },
+        );
       return fetched;
     },
     progress: (percent) => statusToast.advance("pull", percent),
+    answers: (value, input) =>
+      value.outcome === "Stopped" && value.worktreePath === input.worktreePath
+        ? [
+            answer(
+              RepositoryOperationsApi.read,
+              {
+                repositoryId: input.repositoryId,
+                worktreePath: input.worktreePath,
+              },
+              value.operation,
+            ),
+          ]
+        : [],
   });
   const pulling = command.running;
   const { run, canRun } = command;
+  const worktreePath = scope?.worktreePath;
 
   const pull = useCallback(
-    async (branch: string) => {
+    async function pullBranch(branch: string, strategy?: PullChoice) {
       if (!canRun || pulling) return;
       statusToast.progress("pull", "Fetching", { percent: 0 });
-      const result = await run({ branch });
-      if (result._tag === "Ok")
-        statusToast.success(
+      const result = await run({
+        branch,
+        ...(strategy === undefined ? {} : { strategy }),
+      });
+      const failure = result._tag === "Ok" ? undefined : rejection(result);
+      if (failure?._tag === "PullDiverged") {
+        const choice = (kind: PullChoice["kind"], label: string) => ({
+          label,
+          run: () =>
+            void pullBranch(branch, { kind, upstream: failure.upstreamCommit }),
+        });
+        statusToast.choose("pull", "Branch has diverged", [
+          choice("rebase", "Rebase"),
+          choice("merge", "Merge"),
+        ]);
+      } else if (result._tag !== "Ok")
+        errorToast.failure("pull", result, pullFailureMessages);
+      else if (result.value.outcome === "Stopped") {
+        if (result.value.worktreePath === worktreePath)
+          statusToast.close("pull");
+        else
+          errorToast.show(
+            "pull",
+            "Resolve the conflicts in the other worktree.",
+          );
+      } else if (result.value.stashKept)
+        statusToast.warning(
           "pull",
-          result.value.outcome === "UpToDate"
-            ? `${branch} is already up to date`
-            : `Pulled ${branch}`,
+          "Pulled, but your changes conflict",
+          "A copy is saved in Stashes.",
         );
-      else errorToast.failure("pull", result, pullFailureMessages(branch));
+      else statusToast.success("pull", pulledTitles[result.value.outcome]);
     },
-    [canRun, pulling, run, errorToast, statusToast],
+    [canRun, pulling, run, worktreePath, errorToast, statusToast],
   );
 
   return {
@@ -112,20 +160,32 @@ export function usePull() {
 
 export type Pull = ReturnType<typeof usePull>;
 
-function pullFailureMessages(
-  branch: string,
-): FailureMessages<RouteFailure<typeof RepositoryPullApi.pull>> {
-  return {
-    PullDiverged: ({ upstream }) => `${branch} has diverged from ${upstream}.`,
-    PullWouldOverwrite: ({ paths }) =>
-      paths.length === 1
-        ? `Local changes to ${paths[0]} block the pull.`
-        : "Local changes block the pull.",
-    UpstreamMissing: ({ upstream }) =>
-      upstream === undefined
-        ? `${branch} has no upstream.`
-        : `${upstream} was deleted.`,
-    PullUncertain: () => "Pull may not have finished.",
-    BranchMissing: () => `${branch} no longer exists.`,
-  };
-}
+type PullChoice = NonNullable<PullBranch["strategy"]>;
+
+const integrationSteps: Record<DivergedPull, string> = {
+  rebase: "Rebasing",
+  merge: "Merging",
+};
+
+const pulledTitles = {
+  UpToDate: "Already up to date",
+  FastForwarded: "Pulled",
+  Rebased: "Pulled and rebased",
+  Merged: "Pulled and merged",
+} as const;
+
+const pullFailureMessages: FailureMessages<
+  RouteFailure<typeof RepositoryPullApi.pull>
+> = {
+  PullWouldOverwrite: ({ paths }) =>
+    paths.length === 1
+      ? `Untracked ${paths[0]} is in the way.`
+      : "Untracked files are in the way.",
+  UpstreamMissing: ({ upstream }) =>
+    upstream === undefined
+      ? "No upstream branch."
+      : "The remote branch was deleted.",
+  UpstreamMoved: () => "The remote branch moved.",
+  PullUncertain: () => "Pull may not have finished.",
+  BranchMissing: () => "The branch no longer exists.",
+};
