@@ -10,6 +10,7 @@ import {
   buildBranchesSidebarRows,
   defaultExpandedSections,
   dockItems,
+  selectRefRows,
   stepRow,
   toggleSection,
 } from "#web/features/branches-sidebar/branches-sidebar-state.ts";
@@ -184,6 +185,35 @@ describe("branches sidebar state", () => {
         "remote",
       ).map((row) => row.id),
     ).toEqual(["section:remote:origin", "ref:remote:origin:feature"]);
+  });
+
+  it("selects local branches or tags by Ctrl and Shift without mixing the two", () => {
+    const rows = buildBranchesSidebarRows(
+      branchScenarioRefs(),
+      mainPath,
+      new Set(["branches", "remote:origin", "tags"]),
+      "",
+    );
+    const main = "ref:branches:main";
+    const feature = "ref:branches:feature";
+    const tag = rows.find(
+      (row) => row.kind === "ref" && row.target._tag === "Tag",
+    )?.id;
+    const remote = rows.find(
+      (row) => row.kind === "ref" && row.target._tag === "RemoteBranch",
+    )?.id;
+    if (tag === undefined || remote === undefined)
+      throw new Error("Missing rows");
+
+    const range = selectRefRows(rows, new Set(), main, feature, "range");
+    expect([...range]).toEqual([main, "ref:branches:topic", feature]);
+    expect([...selectRefRows(rows, range, feature, tag, "toggle")]).toEqual([
+      tag,
+    ]);
+    expect([
+      ...selectRefRows(rows, new Set(), main, feature, "toggle"),
+    ]).toEqual([main, feature]);
+    expect(selectRefRows(rows, range, feature, remote, "toggle").size).toBe(0);
   });
 
   it("steps through rows without wrapping and toggles sections", () => {

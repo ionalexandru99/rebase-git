@@ -96,7 +96,7 @@ export type BranchesSidebarItem =
       readonly row: BranchesSidebarRefRow;
     };
 
-export type TagSelectionMode = "replace" | "toggle" | "range" | "keep";
+export type RefSelectionMode = "replace" | "toggle" | "range" | "keep";
 
 const kindSections: Record<RefKind, string> = {
   branch: localBranchesSectionId,
@@ -326,24 +326,28 @@ export function estimateItemHeight(item: BranchesSidebarItem | undefined) {
   return 32;
 }
 
-export function selectTagRows(
+export function selectRefRows(
   rows: readonly BranchesSidebarRow[],
   selected: ReadonlySet<string>,
   anchorId: string | undefined,
   rowId: string,
-  mode: TagSelectionMode,
+  mode: RefSelectionMode,
 ): ReadonlySet<string> {
-  const isTag = (id: string | undefined) =>
-    rows.some(
-      (row) => row.id === id && row.kind === "ref" && row.target._tag === "Tag",
-    );
-  if (!isTag(rowId) || mode === "replace") return new Set();
+  const kinds = new Map(
+    rows.flatMap((row) => {
+      const kind = selectableKind(row);
+      return kind === undefined ? [] : [[row.id, kind] as const];
+    }),
+  );
+  const kind = kinds.get(rowId);
+  const sameKind = (id: string | undefined): id is string =>
+    id !== undefined && kinds.get(id) === kind;
+  if (kind === undefined || mode === "replace") return new Set();
   if (mode === "keep") return selected.has(rowId) ? selected : new Set();
   if (mode === "toggle") {
+    const kept = [...selected].filter(sameKind);
     const next = new Set(
-      selected.size === 0 && isTag(anchorId) && anchorId !== undefined
-        ? [anchorId]
-        : selected,
+      kept.length === 0 && sameKind(anchorId) ? [anchorId] : kept,
     );
     if (next.has(rowId)) next.delete(rowId);
     else next.add(rowId);
@@ -351,13 +355,19 @@ export function selectTagRows(
   }
   const from = rows.findIndex((row) => row.id === anchorId);
   const to = rows.findIndex((row) => row.id === rowId);
-  if (from < 0 || !isTag(anchorId)) return new Set([rowId]);
+  if (from < 0 || !sameKind(anchorId)) return new Set([rowId]);
   return new Set(
     rows
       .slice(Math.min(from, to), Math.max(from, to) + 1)
-      .filter((row) => isTag(row.id))
+      .filter((row) => selectableKind(row) === kind)
       .map((row) => row.id),
   );
+}
+
+function selectableKind(row: BranchesSidebarRow) {
+  if (row.kind !== "ref" || row.target._tag === "RemoteBranch")
+    return undefined;
+  return row.target._tag;
 }
 
 export function refRowId(sectionId: string, name: string) {

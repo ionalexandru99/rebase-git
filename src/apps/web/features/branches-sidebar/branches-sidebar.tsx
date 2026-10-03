@@ -42,7 +42,7 @@ import {
   refRowId,
   refSectionId,
   scopeShowing,
-  selectTagRows,
+  selectRefRows,
   stashesSectionId,
   toggleSection,
 } from "#web/features/branches-sidebar/branches-sidebar-state.ts";
@@ -63,6 +63,7 @@ import type { RebaseActions } from "#web/features/rebase/rebase-actions.ts";
 import {
   type RefActionRow,
   refActions,
+  selectedBranchActions,
   selectedTagActions,
   useRefIntent,
 } from "#web/features/refs/ref-actions.ts";
@@ -97,7 +98,7 @@ import { useRepositoryScope } from "#web/platform/query/repository-scope.tsx";
 const noSelectedRefs: ReadonlySet<string> = new Set();
 const noPullRequests: readonly PullRequest[] = [];
 const noRemoteBranches: readonly RemoteBranch[] = [];
-const noSelectedTags: ReadonlySet<string> = new Set();
+const noSelectedRows: ReadonlySet<string> = new Set();
 
 export function BranchesSidebar({
   merge,
@@ -131,7 +132,7 @@ export function BranchesSidebar({
   const stashes = useStashes();
   const stashCommands = useStashCommands();
   const stashDraft = useStashDraft();
-  const [selectedTags, setSelectedTags] = useState(noSelectedTags);
+  const [selectedRows, setSelectedRows] = useState(noSelectedRows);
   const [query, setQuery] = useState("");
   const filterQuery = useDeferredValue(query);
   const [scope, setScope] = useState<BranchesSidebarScope>("all");
@@ -239,6 +240,15 @@ export function BranchesSidebar({
       );
   }, [activeRowId, rows]);
 
+  useEffect(() => {
+    setSelectedRows((current) => {
+      if (current.size === 0) return current;
+      const shown = new Set(rows.map((row) => row.id));
+      const kept = [...current].filter((id) => shown.has(id));
+      return kept.length === current.size ? current : new Set(kept);
+    });
+  }, [rows]);
+
   const rowsRef = useRef(rows);
   rowsRef.current = rows;
   useRefIntent((intent) => {
@@ -295,22 +305,34 @@ export function BranchesSidebar({
           },
         );
 
+  const selection = rows.filter(
+    (row): row is BranchesSidebarRefRow =>
+      row.kind === "ref" && selectedRows.has(row.id),
+  );
+  const selectedNames = selection.map(({ name }) => name);
+  const selectionActions =
+    refs === undefined || selection.length < 2
+      ? undefined
+      : selection[0]?.target._tag === "Tag"
+        ? selectedTagActions(
+            selectedNames,
+            refs,
+            { writable: editing.writable },
+            tagPush,
+          )
+        : selectedBranchActions(
+            selectedNames,
+            refs,
+            { writable: editing.writable },
+            editing,
+          );
   const actionsFor = (row: BranchesSidebarRefRow) =>
-    refs !== undefined && selectedTags.size > 1 && selectedTags.has(row.id)
-      ? selectedTagActions(
-          rows.flatMap((candidate) =>
-            selectedTags.has(candidate.id) && candidate.kind === "ref"
-              ? [candidate.name]
-              : [],
-          ),
-          refs,
-          { writable: editing.writable },
-          tagPush,
-        )
+    selectionActions !== undefined && selectedRows.has(row.id)
+      ? selectionActions
       : refActionsFor(row);
 
   const moveActive = (rowId: string | undefined) => {
-    setSelectedTags(noSelectedTags);
+    setSelectedRows(noSelectedRows);
     setActiveRowId(rowId);
   };
 
@@ -372,9 +394,9 @@ export function BranchesSidebar({
       event.preventDefault();
       return;
     }
-    if (event.key === "Escape" && selectedTags.size > 0) {
+    if (event.key === "Escape" && selectedRows.size > 0) {
       event.preventDefault();
-      setSelectedTags(noSelectedTags);
+      setSelectedRows(noSelectedRows);
       return;
     }
     const handled = treeKeyAction(event.key, {
@@ -502,10 +524,17 @@ export function BranchesSidebar({
         card={row.target._tag === "LocalBranch" ? branchCard : undefined}
         key={row.id}
         onActivate={(mode) => {
-          setSelectedTags((current) =>
-            selectTagRows(rows, current, activeRowId, row.id, mode),
+          const next = selectRefRows(
+            rows,
+            selectedRows,
+            activeRowId,
+            row.id,
+            mode,
           );
-          setActiveRowId(row.id);
+          setSelectedRows(next);
+          setActiveRowId(
+            next.size === 0 || next.has(row.id) ? row.id : [...next].at(-1),
+          );
           merge?.inspect(row.target);
           rebase?.inspect(row.target);
         }}
@@ -516,7 +545,7 @@ export function BranchesSidebar({
             : noPullRequests
         }
         row={row}
-        selected={selectedTags.has(row.id)}
+        selected={selectedRows.has(row.id)}
         selectedInHistory={selectedHistoryRefKeys.has(
           historyRefKey(row.target),
         )}

@@ -27,7 +27,7 @@ import type { BranchesSidebarFolderRow } from "#web/features/branches-sidebar/br
 import type {
   BranchesSidebarRefRow,
   BranchesSidebarSectionRow,
-  TagSelectionMode,
+  RefSelectionMode,
 } from "#web/features/branches-sidebar/branches-sidebar-state.ts";
 import {
   describePullRequest,
@@ -135,7 +135,7 @@ export function RefRow({
   readonly active: boolean;
   readonly card: BranchCardHandle | undefined;
   readonly selected: boolean;
-  readonly onActivate: (mode: TagSelectionMode) => void;
+  readonly onActivate: (mode: RefSelectionMode) => void;
   readonly onToggleHistory: () => void;
   readonly pullRequests: readonly PullRequest[];
   readonly row: BranchesSidebarRefRow;

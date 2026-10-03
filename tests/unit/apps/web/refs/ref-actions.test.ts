@@ -8,7 +8,7 @@ import {
   topicPath,
   upstream,
 } from "#tests-support/fixtures.ts";
-import { everyAction } from "#web/components/ui/action-menu.tsx";
+import { everyAction, runAction } from "#web/components/ui/action-menu.tsx";
 import {
   type BranchesSidebarRefRow,
   buildBranchesSidebarRows,
@@ -16,7 +16,9 @@ import {
 import {
   type RefActionHandlers,
   refActions,
+  selectedBranchActions,
 } from "#web/features/refs/ref-actions.ts";
+import type { RefDeletion } from "#web/features/refs/ref-deletion.ts";
 
 describe("ref actions", () => {
   it("offers no checkout of the current branch and explains why it cannot be deleted", () => {
@@ -97,6 +99,43 @@ describe("ref actions", () => {
     expect(reasons("v1.0", true, [])).toMatchObject({
       "pushTag:": "No remotes",
     });
+  });
+
+  it("deletes every selected branch locally, on its remote, or both in one request", () => {
+    const requested: RefDeletion[] = [];
+    const selection = (names: readonly string[]) =>
+      everyAction(
+        selectedBranchActions(
+          names,
+          refs(),
+          { writable: true },
+          {
+            ...handlers.editing,
+            deletion: { request: (deletion) => requested.push(deletion) },
+          },
+        ),
+      );
+    const actions = selection(["feature", "release"]);
+    for (const id of ["deleteLocal", "deleteOn:origin", "deleteBoth"])
+      runAction(actions.find((action) => action.id === id));
+
+    const feature = { local: { name: "feature" } };
+    const release = { name: "release", target: commitId };
+    expect(requested).toMatchObject([
+      { branches: [feature, { local: release }] },
+      { branches: [{ remote: { ...release, remote: "origin" } }] },
+      {
+        branches: [
+          feature,
+          { local: release, remote: { ...release, remote: "origin" } },
+        ],
+      },
+    ]);
+    expect(
+      Object.fromEntries(
+        selection(["feature", "main"]).map(({ id, reason }) => [id, reason]),
+      ),
+    ).toEqual({ deleteLocal: "Checked out" });
   });
 
   it("fast-forwards a branch that is not checked out unless it has diverged", () => {
