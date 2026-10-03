@@ -292,7 +292,7 @@ export function fakeBitbucket(
       const { pathname, searchParams } = new URL(url);
       if (pathname === "/2.0/user")
         return answer({ username: "octo", display_name: "Octo" }, userStatus);
-      const statuses = /\/pullrequests\/(\d+)\/statuses$/.exec(pathname);
+      const statuses = /\/commit\/head-(\d+)\/statuses$/.exec(pathname);
       if (statuses !== null)
         return answer({
           values: (
@@ -300,7 +300,10 @@ export function fakeBitbucket(
           ).map((state) => ({ state })),
         });
       const fullName = pathname.split("/").slice(3, 5).join("/");
-      const branch = /"(.*)"/.exec(searchParams.get("q") ?? "")?.[1] ?? "";
+      const branch =
+        /source\.branch\.name = "(.*)"/.exec(
+          searchParams.get("q") ?? "",
+        )?.[1] ?? "";
       return answer({
         values: (bySourceBranch[branch] ?? []).map((node) => ({
           id: node.id,
@@ -311,6 +314,7 @@ export function fakeBitbucket(
             repository: {
               full_name: node.fork === true ? "fork/rebase" : fullName,
             },
+            commit: { hash: `head-${node.id}` },
           },
         })),
       });

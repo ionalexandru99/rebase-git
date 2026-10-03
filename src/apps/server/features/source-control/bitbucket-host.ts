@@ -17,6 +17,7 @@ import type {
 } from "#server/features/source-control/git-host.ts";
 import type { EnvironmentContext } from "#server/persistence/environment-context.ts";
 import { bitbucketTokenTable } from "#server/persistence/environment-state.schema.ts";
+import { EnvironmentStorageError } from "#server/persistence/sqlite/storage-operation.ts";
 
 export interface BitbucketResponse {
   readonly status: number;
@@ -130,21 +131,31 @@ export function createBitbucket(
     save: (request: SaveBitbucketToken) =>
       verify(client, request).pipe(
         Effect.flatMap((account) =>
-          context.write("Could not save the Bitbucket token", (database) => {
-            const row = {
-              singleton: 1,
-              token: request.token,
-              email: request._tag === "ApiToken" ? request.email : null,
-              account,
-            };
-            return database
-              .insert(bitbucketTokenTable)
-              .values(row)
-              .onConflictDoUpdate({
-                target: bitbucketTokenTable.singleton,
-                set: row,
-              });
-          }),
+          context
+            .write("Could not save the Bitbucket token", (database) => {
+              const row = {
+                singleton: 1,
+                token: request.token,
+                email: request._tag === "ApiToken" ? request.email : null,
+                account,
+              };
+              return database
+                .insert(bitbucketTokenTable)
+                .values(row)
+                .onConflictDoUpdate({
+                  target: bitbucketTokenTable.singleton,
+                  set: row,
+                });
+            })
+            .pipe(
+              Effect.mapError(
+                () =>
+                  new EnvironmentStorageError({
+                    cause: undefined,
+                    message: "Could not save the Bitbucket token",
+                  }),
+              ),
+            ),
         ),
         Effect.asVoid,
       ),
@@ -221,8 +232,11 @@ function listPullRequests(
       Effect.mapError(() => unavailable),
     );
   const checks = (node: PullRequestNode) =>
-    node.state === "OPEN"
-      ? read(statusesUrl(repository, node), decodeStatuses).pipe(
+    node.state === "OPEN" && node.source.commit?.hash !== undefined
+      ? read(
+          statusesUrl(repository, node.source.commit.hash),
+          decodeStatuses,
+        ).pipe(
           Effect.map(({ values }) => checksState(values)),
           Effect.orElseSucceed(() => undefined),
         )
@@ -279,19 +293,23 @@ function pullRequestsUrl(
   { head }: TrackedBranch,
 ) {
   const query = new URLSearchParams({
-    q: `source.branch.name = "${head.replaceAll("\\", "\\\\").replaceAll('"', '\\"')}"`,
+    q: `source.repository.full_name = ${bbqlString(`${repository.workspace}/${repository.slug}`.toLowerCase())} AND source.branch.name = ${bbqlString(head)}`,
     sort: "-updated_on",
     pagelen: String(pullRequestsPerBranch),
     fields:
-      "values.id,values.title,values.state,values.draft,values.source.repository.full_name",
+      "values.id,values.title,values.state,values.draft,values.source.repository.full_name,values.source.commit.hash",
   });
   for (const state of ["OPEN", "MERGED", "DECLINED", "SUPERSEDED"])
     query.append("state", state);
   return `${api}/repositories/${repositoryPath(repository)}/pullrequests?${query}`;
 }
 
-function statusesUrl(repository: BitbucketRepository, node: PullRequestNode) {
-  return `${api}/repositories/${repositoryPath(repository)}/pullrequests/${node.id}/statuses?${new URLSearchParams(
+function bbqlString(value: string) {
+  return `"${value.replaceAll("\\", "\\\\").replaceAll('"', '\\"')}"`;
+}
+
+function statusesUrl(repository: BitbucketRepository, hash: string) {
+  return `${api}/repositories/${repositoryPath(repository)}/commit/${encodeURIComponent(hash)}/statuses?${new URLSearchParams(
     { pagelen: "50", fields: "values.state" },
   )}`;
 }
@@ -314,6 +332,9 @@ const PullRequestNode = Schema.Struct({
   source: Schema.Struct({
     repository: Schema.optionalKey(
       Schema.NullOr(Schema.Struct({ full_name: Schema.String })),
+    ),
+    commit: Schema.optionalKey(
+      Schema.NullOr(Schema.Struct({ hash: Schema.String })),
     ),
   }),
 });
