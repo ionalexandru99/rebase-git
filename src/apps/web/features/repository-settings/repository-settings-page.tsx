@@ -1,12 +1,14 @@
 import { useQueryClient } from "@tanstack/react-query";
-import { useEffect, useId, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { RepositoryCatalogApi } from "#contracts/repository-catalog/repository-catalog.contract.ts";
 import {
+  SettingsPage,
   SettingsRow,
   SettingsSection,
 } from "#web/components/ui/settings-layout.tsx";
 import { writeClipboardText } from "#web/features/clipboard/write-clipboard-text.ts";
 import { useErrorToast } from "#web/features/notifications/notifications.tsx";
+import { localEnvironment } from "#web/features/project-navigation/local-environment.ts";
 import { forgetRepositoryRefs } from "#web/features/refs/repository-refs.ts";
 import { RepositoryFetchSettings } from "#web/features/remote-sync/fetch-settings.tsx";
 import {
@@ -66,21 +68,14 @@ export function RepositorySettingsPage({
           <span className="text-muted-foreground"> / Settings</span>
         </span>
       </header>
-      <div className="mx-auto max-w-4xl px-4 pt-8 pb-16 sm:px-8">
-        <h1
-          ref={heading}
-          tabIndex={-1}
-          className="text-xl font-semibold tracking-tight outline-none"
-        >
-          Repository settings
-        </h1>
+      <SettingsPage title="Repository settings" headingRef={heading}>
         {identity === undefined ? null : (
-          <SettingsSection title="Graph">
+          <SettingsSection title="Graph · This client">
             <RepositoryOrderSettings identity={identity} />
           </SettingsSection>
         )}
         {history === undefined || identity === undefined ? (
-          <p role="status" className="mt-8 text-sm text-muted-foreground">
+          <p role="status" className="text-sm text-muted-foreground">
             {environmentId === undefined
               ? "Reconnect to load repository settings."
               : "Loading repository settings…"}
@@ -108,7 +103,7 @@ export function RepositorySettingsPage({
             }}
           />
         </SettingsSection>
-      </div>
+      </SettingsPage>
     </main>
   );
 }
@@ -129,13 +124,13 @@ function RepositoryHistorySettings({
   const queryClient = useQueryClient();
   return (
     <>
-      <SettingsSection title="Fetch">
+      <SettingsSection title={`Fetch · ${localEnvironment.name}`}>
         <RepositoryFetchSettings
           repositoryId={repositoryId}
           canConfigure={canConfigure}
         />
       </SettingsSection>
-      <SettingsSection title="History storage">
+      <SettingsSection title="History storage · This browser">
         <RepositoryCacheSettings
           history={history}
           identity={identity}
@@ -158,22 +153,16 @@ function RepositoryOrderSettings({
 }: {
   readonly identity: RepositoryHistoryIdentity;
 }) {
-  const descriptionId = useId();
   const order = useRepositoryHistoryOrder(
     identity.environmentId,
     identity.repositoryId,
   );
   const errorToast = useErrorToast();
   return (
-    <SettingsRow
-      title="History ordering"
-      description="Saved for this repository in this client."
-      descriptionId={descriptionId}
-    >
+    <SettingsRow title="History ordering">
       <select
         aria-label="History ordering"
-        aria-describedby={descriptionId}
-        className="h-8 rounded-md border border-input bg-background px-3 text-sm"
+        className="h-8 rounded-md border border-input bg-input/30 px-3 text-sm"
         value={order}
         onChange={(event) => {
           try {

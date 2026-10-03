@@ -51,52 +51,67 @@ export function RepositoryFetchSettings({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string>();
   const errorToast = useErrorToast();
-  const save = (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    if (disabled || saving) return;
-    const interval = Number(seconds);
-    if (
-      mode === "Interval" &&
-      (!Number.isInteger(interval) || interval < 1 || interval > 86_400)
-    ) {
-      setError("Enter a whole number from 1 to 86,400.");
-      return;
-    }
-    const next: RepositoryFetchSetting =
-      mode === "Interval"
-        ? { _tag: "Interval", seconds: interval }
-        : { _tag: mode };
+  const apply = (next: RepositoryFetchSetting) => {
     setSaving(true);
     setError(undefined);
     void configure
       .run({ repositoryId, setting: next })
       .then((result) => {
         if (result._tag === "Ok") setDraft(undefined);
-        else errorToast.failure("saveFetchSettings", result);
+        else {
+          if (next._tag !== "Interval") setDraft(undefined);
+          errorToast.failure("saveFetchSettings", result);
+        }
       })
       .finally(() => setSaving(false));
+  };
+  const save = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (disabled || saving) return;
+    const interval = Number(seconds);
+    if (!Number.isInteger(interval) || interval < 1 || interval > 86_400) {
+      setError("Enter a whole number from 1 to 86,400.");
+      return;
+    }
+    apply({ _tag: "Interval", seconds: interval });
   };
   return (
     <form onSubmit={save}>
       <fieldset className="m-0 border-0 p-0" disabled={disabled || saving}>
         <SettingsRow
           title="Automatic fetch"
-          description="Shared by clients connected to this repository."
-          descriptionId={`${id}-scope`}
+          description={
+            <>
+              <span id={`${id}-scope`}>
+                Shared by clients connected to this repository.
+              </span>
+              {error === undefined ? null : (
+                <span
+                  className="block text-destructive"
+                  id={`${id}-error`}
+                  role="alert"
+                >
+                  {error}
+                </span>
+              )}
+              {disabled && disabledReason !== undefined ? (
+                <span className="block">{disabledReason}</span>
+              ) : null}
+            </>
+          }
         >
           <select
             aria-label="Automatic fetch"
             aria-describedby={`${id}-scope`}
-            className="h-8 rounded-md border border-input bg-background px-3 text-sm"
+            className="h-8 rounded-md border border-input bg-input/30 px-3 text-sm"
             value={mode}
             onChange={(event) => {
               const mode = event.currentTarget.value;
-              if (
-                mode === "Inherit" ||
-                mode === "Disabled" ||
-                mode === "Interval"
-              )
+              if (mode === "Interval") setDraft({ mode, seconds });
+              else if (mode === "Inherit" || mode === "Disabled") {
                 setDraft({ mode, seconds });
+                apply({ _tag: mode });
+              }
             }}
           >
             <option value="Inherit">
@@ -105,51 +120,32 @@ export function RepositoryFetchSettings({
             <option value="Disabled">Off</option>
             <option value="Interval">Custom interval</option>
           </select>
+          {mode === "Interval" ? (
+            <>
+              <Input
+                aria-label="Interval in seconds"
+                aria-describedby={
+                  error === undefined ? undefined : `${id}-error`
+                }
+                aria-invalid={error !== undefined}
+                className="w-24"
+                max={86_400}
+                min={1}
+                onChange={(event) =>
+                  setDraft({ mode, seconds: event.target.value })
+                }
+                required
+                step={1}
+                type="number"
+                value={seconds}
+              />
+              <Button size="sm" type="submit" variant="outline">
+                {saving ? "Saving…" : "Save"}
+              </Button>
+            </>
+          ) : null}
         </SettingsRow>
-        {mode === "Interval" ? (
-          <SettingsRow title="Interval in seconds">
-            <Input
-              aria-label="Interval in seconds"
-              aria-describedby={error === undefined ? undefined : `${id}-error`}
-              aria-invalid={error !== undefined}
-              className="w-32"
-              max={86_400}
-              min={1}
-              onChange={(event) =>
-                setDraft({ mode, seconds: event.target.value })
-              }
-              required
-              step={1}
-              type="number"
-              value={seconds}
-            />
-          </SettingsRow>
-        ) : null}
       </fieldset>
-      {error === undefined ? null : (
-        <p
-          className="mt-3 mb-0 text-xs text-destructive"
-          id={`${id}-error`}
-          role="alert"
-        >
-          {error}
-        </p>
-      )}
-      {disabled && disabledReason !== undefined ? (
-        <p className="mt-3 mb-0 text-xs text-muted-foreground">
-          {disabledReason}
-        </p>
-      ) : null}
-      <div className="mt-2 flex justify-end px-4">
-        <Button
-          disabled={disabled || saving}
-          size="sm"
-          type="submit"
-          variant="outline"
-        >
-          {saving ? "Saving…" : "Save"}
-        </Button>
-      </div>
     </form>
   );
 }

@@ -8,7 +8,11 @@ import {
   releaseChannels as releaseChannelValues,
 } from "#contracts/desktop-updates/desktop-updates.contract.ts";
 import { Button } from "#web/components/ui/button.tsx";
-import { SettingsRow as SettingRow } from "#web/components/ui/settings-layout.tsx";
+import {
+  SettingsPage,
+  SettingsRow,
+  SettingsSection,
+} from "#web/components/ui/settings-layout.tsx";
 import { Switch } from "#web/components/ui/switch.tsx";
 import {
   type ErrorAction,
@@ -87,15 +91,53 @@ export function GeneralSettings({
   };
 
   return (
-    <div className="mx-auto w-full max-w-4xl px-4 pt-10 pb-16 sm:px-8 sm:pt-12">
-      <h1 className="text-xl font-semibold tracking-tight">General</h1>
-      <div className="mt-6 space-y-1">
-        <SettingRow title="Version">
-          <span className="shrink-0 text-sm text-muted-foreground">
-            {productVersion}
-          </span>
-        </SettingRow>
-        <SettingRow
+    <SettingsPage title="General">
+      <SettingsSection title="Updates · Desktop app">
+        <SettingsRow
+          description={updateDescription(
+            snapshot,
+            desktopAvailable,
+            desktopReady,
+            updateLoadError,
+          )}
+          descriptionId="updates-description"
+          liveDescription
+          title="Version"
+          value={productVersion}
+        >
+          <Button
+            aria-describedby="updates-description"
+            disabled={!canCheck}
+            onClick={() => {
+              if (desktopUpdates !== undefined) {
+                void runAction(
+                  () => desktopUpdates.checkForUpdates(),
+                  "checkUpdates",
+                );
+              }
+            }}
+            size="sm"
+            variant="outline"
+          >
+            {checkButtonLabel(snapshot)}
+          </Button>
+          <Button
+            aria-describedby="updates-description"
+            disabled={!canInstall}
+            onClick={() => {
+              if (desktopUpdates !== undefined) {
+                void runAction(
+                  () => desktopUpdates.installUpdate(),
+                  "installUpdate",
+                );
+              }
+            }}
+            size="sm"
+          >
+            Update now
+          </Button>
+        </SettingsRow>
+        <SettingsRow
           description={
             desktopReady ? "Stable follows full releases." : undefined
           }
@@ -150,8 +192,8 @@ export function GeneralSettings({
               </Select.Positioner>
             </Select.Portal>
           </Select.Root>
-        </SettingRow>
-        <SettingRow
+        </SettingsRow>
+        <SettingsRow
           description={
             desktopReady
               ? "Check the selected channel when Rebase starts."
@@ -173,54 +215,9 @@ export function GeneralSettings({
               }
             }}
           />
-        </SettingRow>
-        <SettingRow
-          description={updateDescription(
-            snapshot,
-            desktopAvailable,
-            desktopReady,
-            updateLoadError,
-          )}
-          descriptionId="updates-description"
-          liveDescription
-          title="Updates"
-        >
-          <div className="flex flex-wrap items-center gap-2 md:shrink-0">
-            <Button
-              aria-describedby="updates-description"
-              disabled={!canCheck}
-              onClick={() => {
-                if (desktopUpdates !== undefined) {
-                  void runAction(
-                    () => desktopUpdates.checkForUpdates(),
-                    "checkUpdates",
-                  );
-                }
-              }}
-              size="sm"
-              variant="outline"
-            >
-              {checkButtonLabel(snapshot)}
-            </Button>
-            <Button
-              aria-describedby="updates-description"
-              disabled={!canInstall}
-              onClick={() => {
-                if (desktopUpdates !== undefined) {
-                  void runAction(
-                    () => desktopUpdates.installUpdate(),
-                    "installUpdate",
-                  );
-                }
-              }}
-              size="sm"
-            >
-              Update now
-            </Button>
-          </div>
-        </SettingRow>
-      </div>
-    </div>
+        </SettingsRow>
+      </SettingsSection>
+    </SettingsPage>
   );
 }
 

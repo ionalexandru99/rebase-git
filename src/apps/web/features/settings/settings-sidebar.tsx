@@ -52,7 +52,7 @@ export function SettingsSidebar({
           return (
             <button
               aria-current={selected ? "page" : undefined}
-              className="flex h-10 w-full items-center gap-3 rounded-lg px-3 text-left text-sm text-muted-foreground outline-none hover:bg-sidebar-accent hover:text-sidebar-accent-foreground aria-current-page:bg-sidebar-accent aria-current-page:text-sidebar-accent-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring/40"
+              className="flex h-10 w-full items-center gap-3 rounded-lg px-3 text-left text-sm text-muted-foreground outline-none hover:bg-sidebar-accent hover:text-sidebar-accent-foreground aria-[current=page]:bg-sidebar-accent aria-[current=page]:text-sidebar-accent-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring/40"
               key={item.id}
               onClick={() => selectSection(item.id)}
               type="button"

@@ -54,9 +54,7 @@ export function RepositoryDetailsSettings({
     <>
       <SettingsRow
         title="Checkout path"
-        description={
-          <span className="break-all font-mono text-xs">{path}</span>
-        }
+        description={<span className="break-all font-mono">{path}</span>}
       >
         <Button
           size="sm"
@@ -81,7 +79,7 @@ export function RepositoryDetailsSettings({
         title="Remove from Rebase"
         description={
           canRemove
-            ? undefined
+            ? "The repository and its files stay on disk."
             : "Connect with repository catalog access to remove this repository."
         }
       >
@@ -96,7 +94,10 @@ export function RepositoryDetailsSettings({
         </Button>
       </SettingsRow>
       {message === undefined ? null : (
-        <p role="status" className="text-sm text-muted-foreground">
+        <p
+          role="status"
+          className="px-3 py-3 text-xs text-muted-foreground sm:px-4"
+        >
           {message}
         </p>
       )}

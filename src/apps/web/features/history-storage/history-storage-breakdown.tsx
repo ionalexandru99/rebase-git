@@ -1,8 +1,17 @@
-import { IconTrash } from "@tabler/icons-react";
+import { IconDatabase, IconTrash } from "@tabler/icons-react";
+import type { ReactNode } from "react";
 import type { RepositoryCatalogEntry } from "#contracts/repository-catalog/repository-catalog.contract.ts";
 import { Button } from "#web/components/ui/button.tsx";
+import {
+  SettingsRow,
+  SettingsSection,
+} from "#web/components/ui/settings-layout.tsx";
 import { formatCacheSize } from "#web/features/history-storage/format-cache-size.ts";
 import { formatLastOpened } from "#web/features/open-project/open-project-state.ts";
+import {
+  RepositoryBadge,
+  repositoryColors,
+} from "#web/features/repository-catalog/repository-badge.tsx";
 import { useRepositoryCatalog } from "#web/features/repository-catalog/use-repository-catalog.ts";
 import type {
   HistoryCache,
@@ -10,19 +19,12 @@ import type {
 } from "#web/features/repository-history/history-worker-protocol.ts";
 import { useEnvironment } from "#web/platform/query/environment-context.tsx";
 
-const repositoryColors = [
-  "bg-primary",
-  "bg-sky-400",
-  "bg-violet-400",
-  "bg-green-400",
-] as const;
-
 interface StoredHistory {
   readonly cache: HistoryCache;
+  readonly repository: RepositoryCatalogEntry | undefined;
   readonly name: string;
   readonly detail: string;
   readonly label: string;
-  readonly color: string;
 }
 
 interface Catalog {
@@ -34,10 +36,12 @@ export function HistoryStorageBreakdown({
   storage,
   pending,
   onClear,
+  clearAll,
 }: {
   readonly storage: HistoryStorage;
   readonly pending: boolean;
   readonly onClear: (cache: HistoryCache) => void;
+  readonly clearAll?: ReactNode;
 }) {
   const { environmentId } = useEnvironment();
   const catalog = useRepositoryCatalog();
@@ -49,108 +53,94 @@ export function HistoryStorageBreakdown({
   return (
     <>
       {storage.usageBytes === undefined ? null : (
-        <div>
-          <div className="flex items-baseline justify-between gap-3">
-            <p>
-              <span className="text-xl font-semibold tabular-nums">
-                {formatCacheSize(storage.usageBytes)}
-              </span>{" "}
-              <span className="text-sm text-muted-foreground">used</span>
-            </p>
-            {storage.quotaBytes === undefined ? null : (
-              <p className="text-sm text-muted-foreground">
-                {formatCacheSize(
-                  Math.max(0, storage.quotaBytes - storage.usageBytes),
-                )}{" "}
-                available in this browser
-              </p>
+        <SettingsSection title="Usage · This browser">
+          <div className="space-y-2.5 px-3 py-3 sm:px-4">
+            <div className="flex items-baseline justify-between gap-3 text-xs text-muted-foreground/80">
+              <span>
+                <span className="text-sm font-medium text-foreground tabular-nums">
+                  {formatCacheSize(storage.usageBytes)}
+                </span>{" "}
+                used
+              </span>
+              {storage.quotaBytes === undefined ? null : (
+                <span>
+                  {formatCacheSize(
+                    Math.max(0, storage.quotaBytes - storage.usageBytes),
+                  )}{" "}
+                  available
+                </span>
+              )}
+            </div>
+            {commitCount === 0 ? null : (
+              <div
+                aria-hidden="true"
+                className="flex h-1.5 w-full gap-0.5 overflow-hidden rounded-full bg-muted"
+              >
+                {histories
+                  .filter(({ cache }) => cache.commitCount > 0)
+                  .map(({ cache, repository }) => (
+                    <span
+                      className="h-full bg-muted-foreground"
+                      key={cacheKey(cache)}
+                      style={{
+                        width: `${(cache.commitCount / commitCount) * 100}%`,
+                        ...(repository === undefined
+                          ? {}
+                          : {
+                              backgroundColor:
+                                repositoryColors[repository.color],
+                            }),
+                      }}
+                    />
+                  ))}
+              </div>
             )}
           </div>
-          {commitCount === 0 ? null : (
-            <div
-              aria-hidden="true"
-              className="mt-3 flex h-2 w-full gap-0.5 overflow-hidden rounded-full bg-muted"
-            >
-              {histories
-                .filter(({ cache }) => cache.commitCount > 0)
-                .map(({ cache, color }) => (
-                  <span
-                    key={cacheKey(cache)}
-                    className={`h-full ${color}`}
-                    style={{
-                      width: `${(cache.commitCount / commitCount) * 100}%`,
-                    }}
-                  />
-                ))}
-            </div>
-          )}
-        </div>
+        </SettingsSection>
       )}
-      <div className="overflow-auto rounded-md border border-border">
-        <table className="w-full text-left text-sm">
-          <caption className="sr-only">Stored repository history</caption>
-          <thead className="bg-popover text-xs text-muted-foreground">
-            <tr>
-              <th className="px-3 py-2 font-medium">Repository</th>
-              <th className="px-3 py-2 text-right font-medium">Commits</th>
-              <th className="px-3 py-2 font-medium">Last opened</th>
-              <th className="px-3 py-2 text-right font-medium">Size</th>
-              <th className="w-9">
-                <span className="sr-only">Actions</span>
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {histories.map(({ cache, name, detail, label, color }) => (
-              <tr className="border-t border-border" key={cacheKey(cache)}>
-                <td className="px-3 py-3">
-                  <div className="flex items-center gap-2.5">
-                    <span
-                      aria-hidden="true"
-                      className={`size-2 shrink-0 rounded-full ${color}`}
-                    />
-                    <div className="min-w-0">
-                      <div className="truncate font-medium">{name}</div>
-                      <div className="mt-0.5 truncate text-muted-foreground">
-                        {detail}
-                      </div>
-                    </div>
-                  </div>
-                </td>
-                <td className="px-3 py-3 text-right text-muted-foreground tabular-nums">
-                  {cache.commitCount.toLocaleString()}
-                </td>
-                <td className="whitespace-nowrap px-3 py-3 text-muted-foreground">
-                  {cache.open
-                    ? "Open now"
-                    : formatLastOpened(
-                        new Date(cache.lastOpenedAt).toISOString(),
-                      )}
-                </td>
-                <td className="whitespace-nowrap px-3 py-3 text-right tabular-nums">
-                  {formatCacheSize(cache.estimatedBytes)}
-                </td>
-                <td className="px-2 py-3">
-                  <Button
-                    size="icon-sm"
-                    variant="ghost"
-                    aria-label={label}
-                    disabled={pending}
-                    onClick={() => onClear(cache)}
-                  >
-                    <IconTrash />
-                  </Button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+      <SettingsSection action={clearAll} title="Repositories">
+        {histories.map(({ cache, repository, name, detail, label }) => (
+          <SettingsRow
+            description={`${detail} · ${cache.commitCount.toLocaleString()} commits · ${
+              cache.open
+                ? "Open now"
+                : `Last opened ${formatLastOpened(new Date(cache.lastOpenedAt).toISOString())}`
+            }`}
+            icon={
+              repository === undefined ? (
+                <IconDatabase
+                  aria-hidden="true"
+                  className="size-4.5 text-muted-foreground"
+                />
+              ) : (
+                <RepositoryBadge
+                  className="size-5 rounded-[5px] text-[.5625rem]"
+                  color={repository.color}
+                  name={repository.name}
+                />
+              )
+            }
+            key={cacheKey(cache)}
+            title={name}
+            value={formatCacheSize(cache.estimatedBytes)}
+          >
+            <Button
+              aria-label={label}
+              disabled={pending}
+              onClick={() => onClear(cache)}
+              size="icon-xs"
+              variant="ghost"
+            >
+              <IconTrash aria-hidden="true" className="size-4" />
+            </Button>
+          </SettingsRow>
+        ))}
         {histories.length === 0 && (
-          <p className="p-3 text-sm text-muted-foreground">
+          <p className="px-3 py-3 text-xs text-muted-foreground sm:px-4">
             No history stored yet.
           </p>
         )}
-      </div>
+      </SettingsSection>
     </>
   );
 }
@@ -160,7 +150,6 @@ function storedHistories(
   catalog: Catalog,
   environmentId: string | undefined,
 ): readonly StoredHistory[] {
-  let colors = 0;
   return caches
     .filter((cache) => cache.open || cache.commitCount > 0)
     .toSorted((left, right) => right.commitCount - left.commitCount)
@@ -176,18 +165,17 @@ function storedHistories(
         const unnamed = unnamedHistory(cache, catalog, environmentId);
         return {
           cache,
+          repository,
           ...unnamed,
           label: `Clear history for ${unnamed.name.toLowerCase()} with ${cache.commitCount.toLocaleString()} commits`,
-          color: "bg-muted-foreground",
         };
       }
-      const color = repositoryColors[colors++ % repositoryColors.length];
       return {
         cache,
+        repository,
         name: repository.name,
         detail: repository.path,
         label: `Clear history for ${repository.name}`,
-        color: color ?? "bg-primary",
       };
     });
 }

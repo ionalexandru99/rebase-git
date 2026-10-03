@@ -76,19 +76,27 @@ describe("history storage breakdown", () => {
   it("names stored repositories by their history key, largest first, and hides empty closed caches", async () => {
     await renderBreakdown();
 
-    await expect.element(page.getByText("/code/rebase-git")).toBeVisible();
     await expect
-      .element(page.getByText("2.0 MB available in this browser"))
+      .element(page.getByText("/code/rebase-git · 82,401 commits · Open now"))
       .toBeVisible();
-    const rows = page.getByRole("row").elements().slice(1);
-    expect(rows.map((row) => row.textContent)).toEqual([
-      expect.stringMatching(/^rebase-git.*82,401Open now/),
-      expect.stringMatching(/^api-server.*12,904/),
-      expect.stringMatching(
-        /^Removed repositoryNo longer in your projects1,230/,
-      ),
-      expect.stringMatching(/^Unknown repositoryFrom another environment40/),
+    await expect.element(page.getByText("2.0 MB available")).toBeVisible();
+    expect(
+      page
+        .getByRole("heading", { level: 3 })
+        .elements()
+        .map((heading) => heading.textContent),
+    ).toEqual([
+      "rebase-git",
+      "api-server",
+      "Removed repository",
+      "Unknown repository",
     ]);
+    await expect
+      .element(page.getByText(/^No longer in your projects · 1,230 commits/))
+      .toBeVisible();
+    await expect
+      .element(page.getByText(/^From another environment · 40 commits/))
+      .toBeVisible();
   });
 
   it("clears one repository's history", async () => {

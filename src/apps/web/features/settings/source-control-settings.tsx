@@ -16,6 +16,11 @@ import {
   SourceControlApi,
 } from "#contracts/source-control/source-control.contract.ts";
 import { Button } from "#web/components/ui/button.tsx";
+import {
+  SettingsPage,
+  SettingsRow,
+  SettingsSection,
+} from "#web/components/ui/settings-layout.tsx";
 import { Switch } from "#web/components/ui/switch.tsx";
 import { useErrorToast } from "#web/features/notifications/notifications.tsx";
 import { localEnvironment } from "#web/features/project-navigation/local-environment.ts";
@@ -97,8 +102,6 @@ const hostDescriptors: Record<GitHostKind, HostDescriptor> = {
   },
 };
 
-type Dot = "ready" | "attention" | "none";
-
 export function SourceControlSettings() {
   const discovery = useEnvironmentQuery(SourceControlApi.discover, undefined, {
     changes: "none",
@@ -117,9 +120,8 @@ export function SourceControlSettings() {
   );
 
   return (
-    <div className="mx-auto w-full max-w-4xl space-y-8 px-4 pt-10 pb-16 sm:px-8 sm:pt-12">
-      <h1 className="text-xl font-semibold tracking-tight">Source control</h1>
-      <Section
+    <SettingsPage title="Source control">
+      <SettingsSection
         action={rescan}
         title={`Version Control · ${localEnvironment.name}`}
       >
@@ -128,8 +130,8 @@ export function SourceControlSettings() {
         ) : (
           <GitRow git={discovery.data.git} />
         )}
-      </Section>
-      <Section title="Source Control Providers">
+      </SettingsSection>
+      <SettingsSection title="Source Control Providers">
         {discovery.data === undefined ? (
           <Checking failed={discovery.isError} />
         ) : (
@@ -137,28 +139,30 @@ export function SourceControlSettings() {
             <HostRow host={host} key={host.kind} />
           ))
         )}
-      </Section>
-    </div>
+      </SettingsSection>
+    </SettingsPage>
   );
 }
 
+const gitIcon = (
+  <IconBrandGit aria-hidden="true" className="size-4.5 text-[#f05032]" />
+);
+
 function GitRow({ git }: { readonly git: GitStatus }) {
   return git._tag === "Available" ? (
-    <Row
-      dot="ready"
-      icon={IconBrandGit}
-      iconColor="text-[#f05032]"
-      label="Git"
-      summary="Available"
-      version={git.version}
+    <SettingsRow
+      description="Available"
+      icon={gitIcon}
+      status="ready"
+      title="Git"
+      value={git.version}
     />
   ) : (
-    <Row
-      dot="attention"
-      icon={IconBrandGit}
-      iconColor="text-[#f05032]"
-      label="Git"
-      summary="Not available on this server: Install Git from https://git-scm.com/downloads or with your package manager."
+    <SettingsRow
+      description="Not available on this server: Install Git from https://git-scm.com/downloads or with your package manager."
+      icon={gitIcon}
+      status="attention"
+      title="Git"
     />
   );
 }
@@ -167,19 +171,20 @@ function HostRow({ host }: { readonly host: GitHostStatus }) {
   const descriptor = hostDescriptors[host.kind];
   const errorToast = useErrorToast();
   const setEnabled = useCommand(SourceControlApi.setHostEnabled);
-  const common = {
-    icon: descriptor.icon,
-    iconColor: descriptor.color,
-    label: descriptor.label,
-  };
+  const icon = (
+    <descriptor.icon
+      aria-hidden="true"
+      className={`size-4.5 ${descriptor.color}`}
+    />
+  );
   if (host._tag === "ComingSoon")
     return (
-      <Row
-        {...common}
+      <SettingsRow
         badge="Coming Soon"
+        description={`Support for ${descriptor.label} is coming soon.`}
         dim
-        dot="none"
-        summary={`Support for ${descriptor.label} is coming soon.`}
+        icon={icon}
+        title={descriptor.label}
       />
     );
   const signedIn = host._tag === "SignedIn";
@@ -187,25 +192,10 @@ function HostRow({ host }: { readonly host: GitHostStatus }) {
     ? (setEnabled.input?.enabled ?? host.enabled)
     : host.enabled;
   return (
-    <Row
-      {...common}
+    <SettingsRow
       {...(host._tag === "SignedOut" ? { badge: "Not authenticated" } : {})}
-      {...(host._tag === "Missing" ? {} : { version: host.version })}
-      action={
-        <Switch
-          aria-label={`Use ${descriptor.label}`}
-          checked={signedIn && enabled}
-          disabled={!signedIn || setEnabled.running}
-          onCheckedChange={async (checked) =>
-            errorToast.failure(
-              "saveSourceControl",
-              await setEnabled.run({ kind: host.kind, enabled: checked }),
-            )
-          }
-        />
-      }
-      dot={signedIn ? "ready" : "attention"}
-      summary={
+      {...(host._tag === "Missing" ? {} : { value: host.version })}
+      description={
         host._tag === "SignedIn" ? (
           <>
             Authenticated as{" "}
@@ -222,88 +212,22 @@ function HostRow({ host }: { readonly host: GitHostStatus }) {
           <>Not available on this server: {descriptor.install}</>
         )
       }
-    />
-  );
-}
-
-function Section({
-  title,
-  action,
-  children,
-}: {
-  readonly title: string;
-  readonly action?: ReactNode;
-  readonly children: ReactNode;
-}) {
-  return (
-    <section aria-label={title} className="space-y-2.5">
-      <div className="flex min-h-7 items-center justify-between gap-4 px-3 sm:px-4">
-        <h2 className="text-sm font-normal text-foreground/70">{title}</h2>
-        {action}
-      </div>
-      <div className="rounded-xl border border-border/60 bg-card/40 [&>*+*]:border-t [&>*+*]:border-border/50">
-        {children}
-      </div>
-    </section>
-  );
-}
-
-function Row({
-  icon: Icon,
-  iconColor,
-  dot,
-  label,
-  version,
-  badge,
-  summary,
-  action,
-  dim = false,
-}: {
-  readonly icon: TablerIcon;
-  readonly iconColor: string;
-  readonly dot: Dot;
-  readonly label: string;
-  readonly version?: string;
-  readonly badge?: string;
-  readonly summary: ReactNode;
-  readonly action?: ReactNode;
-  readonly dim?: boolean;
-}) {
-  return (
-    <div
-      className={`flex flex-col gap-3 px-3 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-4 ${dim ? "opacity-80" : ""}`}
+      icon={icon}
+      status={signedIn ? "ready" : "attention"}
+      title={descriptor.label}
     >
-      <div className="min-w-0 flex-1 space-y-1">
-        <div className="flex min-w-0 flex-wrap items-center gap-2">
-          <span className="relative inline-flex size-5 shrink-0 items-center justify-center">
-            <Icon aria-hidden="true" className={`size-4.5 ${iconColor}`} />
-            {dot === "none" ? null : (
-              <span
-                aria-hidden="true"
-                className={`pointer-events-none absolute -top-0.5 -left-0.5 size-2 rounded-full ring-2 ring-repository ${dot === "ready" ? "bg-status-available" : "bg-status-connecting"}`}
-              />
-            )}
-          </span>
-          <span className="truncate text-sm font-medium text-foreground">
-            {label}
-          </span>
-          {version === undefined ? null : (
-            <code className="text-xs text-muted-foreground">{version}</code>
-          )}
-          {badge === undefined ? null : (
-            <span className="inline-flex h-4 items-center rounded-[.25rem] bg-status-connecting/15 px-1 text-[.625rem] leading-none font-medium text-status-connecting">
-              {badge}
-            </span>
-          )}
-        </div>
-        <p className="text-xs leading-normal text-muted-foreground/80">
-          {summary}
-        </p>
-      </div>
-      {action === undefined ? null : (
-        <div className="flex shrink-0 items-center gap-2">{action}</div>
-      )}
-    </div>
+      <Switch
+        aria-label={`Use ${descriptor.label}`}
+        checked={signedIn && enabled}
+        disabled={!signedIn || setEnabled.running}
+        onCheckedChange={async (checked) =>
+          errorToast.failure(
+            "saveSourceControl",
+            await setEnabled.run({ kind: host.kind, enabled: checked }),
+          )
+        }
+      />
+    </SettingsRow>
   );
 }
 

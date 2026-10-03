@@ -10,6 +10,7 @@ import {
   AlertDialogTitle,
 } from "#web/components/ui/alert-dialog.tsx";
 import { Button } from "#web/components/ui/button.tsx";
+import { SettingsPage } from "#web/components/ui/settings-layout.tsx";
 import { HistoryStorageBreakdown } from "#web/features/history-storage/history-storage-breakdown.tsx";
 import { useErrorToast } from "#web/features/notifications/notifications.tsx";
 import {
@@ -70,12 +71,8 @@ export function HistoryStorageSettings() {
     return () => operation.current?.abort();
   }, [run]);
   return (
-    <div className="mx-auto w-full max-w-4xl px-4 pt-10 pb-16 sm:px-8 sm:pt-12">
-      <h1 className="text-xl font-semibold tracking-tight">History storage</h1>
-      <p className="mt-1 text-sm text-muted-foreground">
-        Commit history kept in this browser so the graph opens instantly.
-      </p>
-      <div className="mt-8 space-y-4" aria-busy={pending}>
+    <SettingsPage title="History storage">
+      <div className="space-y-8" aria-busy={pending}>
         {storage === undefined ? null : (
           <HistoryStorageBreakdown
             storage={storage}
@@ -85,6 +82,17 @@ export function HistoryStorageSettings() {
                 _tag: "ClearCache",
                 cache: { environmentId, repositoryId },
               })
+            }
+            clearAll={
+              <Button
+                className="text-destructive"
+                size="xs"
+                variant="ghost"
+                disabled={pending || storage.caches.length === 0}
+                onClick={() => setConfirming(true)}
+              >
+                Clear all history
+              </Button>
             }
           />
         )}
@@ -98,16 +106,6 @@ export function HistoryStorageSettings() {
             {error}
           </p>
         )}
-        <Button
-          size="sm"
-          variant="destructive"
-          disabled={
-            pending || storage === undefined || storage.caches.length === 0
-          }
-          onClick={() => setConfirming(true)}
-        >
-          Clear all history
-        </Button>
       </div>
       <AlertDialog open={confirming} onOpenChange={setConfirming}>
         <AlertDialogContent>
@@ -124,7 +122,7 @@ export function HistoryStorageSettings() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </div>
+    </SettingsPage>
   );
 }
 
