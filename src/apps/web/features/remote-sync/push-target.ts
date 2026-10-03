@@ -149,9 +149,9 @@ function describePushRejection(
   const name = destinationName(destination);
   switch (reason) {
     case "NonFastForward":
-      return `Rejected: ${name} has commits you don't have. Fetch first.`;
+      return `${name} has commits you don't have. Fetch first.`;
     case "LeaseRejected":
-      return `Rejected: ${name} moved since your last fetch. Fetch and review.`;
+      return `${name} moved since your last fetch. Fetch and review.`;
     case "HookDeclined":
       return gitMessage(detail, `${name} rejected the push.`);
     case "Authentication":

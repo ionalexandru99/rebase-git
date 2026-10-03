@@ -96,6 +96,6 @@ export const historyCacheActions: Record<
   },
   rebuild: {
     label: "Rebuild cache",
-    description: "Download this repository’s history again.",
+    description: "Download this repository's history again.",
   },
 };

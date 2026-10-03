@@ -429,7 +429,7 @@ describe("history search controls", () => {
       .toBeDisabled();
     rejectNavigation?.(new Error("Not found"));
     await expect
-      .element(page.getByText("Couldn’t open the search result"))
+      .element(page.getByText("Couldn't open the search result"))
       .toBeVisible();
     await page.getByRole("button", { name: "Clear history search" }).click();
     await expect.element(page.getByRole("searchbox")).toHaveValue("");

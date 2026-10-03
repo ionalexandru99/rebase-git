@@ -21,7 +21,7 @@ describe("repository details settings", () => {
     await page.getByRole("button", { name: "Copy path" }).click();
 
     await expect
-      .element(page.getByText("Couldn’t copy the path"))
+      .element(page.getByText("Couldn't copy the path"))
       .toBeVisible();
     await expect
       .element(page.getByRole("button", { name: "Copy path" }))
