@@ -1,4 +1,5 @@
-import { Effect } from "effect";
+import { Effect, Schema } from "effect";
+import { SettledDay } from "#contracts/branch-settling/branch-settling.contract.ts";
 import type { GitCommandRunner } from "#server/adapters/local-git/git-commands.ts";
 import {
   branchRef,
@@ -14,6 +15,7 @@ import type { HostedPullRequest } from "#server/features/source-control/git-host
 import type { RepositoryAccess } from "#server/repository/repository-access.ts";
 
 const dayMilliseconds = 86_400_000;
+const isSettledDay = Schema.is(SettledDay);
 
 export function settledLongEnough(
   settled: string,
@@ -22,6 +24,7 @@ export function settledLongEnough(
 ) {
   return (
     days > 0 &&
+    isSettledDay(settled) &&
     (Date.parse(today) - Date.parse(settled)) / dayMilliseconds >= days
   );
 }
@@ -39,7 +42,7 @@ export function deleteSettledBranches(
       const target = refs.get(branchRef(name));
       return target === undefined ? [] : [{ local: { name, target } }];
     });
-    if (settled.length === 0) return 0;
+    if (settled.length === 0) return false;
     const unmerged = new Set(
       (yield* unmergedBranches(git, directory, settled, refs)).map(
         ({ branch }) => branch.local?.name,
@@ -63,13 +66,13 @@ export function deleteSettledBranches(
         Effect.catch(() => Effect.succeed(false)),
       );
     });
-    if (deletable.length === 0) return 0;
+    if (deletable.length === 0) return false;
     yield* deleteBranches(git, access, {
       branches: deletable,
       force: true,
       worktreePath: directory,
     });
-    return deletable.length;
+    return true;
   });
 }
 

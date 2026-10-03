@@ -166,20 +166,21 @@ export function settleBranchesAfterFetch({
       if (merged.length > 0)
         yield* writeSettlements(git, coordination, directory, merged, today);
       const deleted =
-        expired.size === 0
-          ? 0
-          : yield* coordination.run(
+        expired.size > 0 &&
+        (yield* coordination
+          .run(
+            directory,
+            settlePolicy,
+            deleteSettledBranches(
+              git,
+              access,
               directory,
-              settlePolicy,
-              deleteSettledBranches(
-                git,
-                access,
-                directory,
-                [...expired],
-                pullRequests,
-              ),
-            );
-      if (merged.length > 0 || deleted > 0)
+              [...expired],
+              pullRequests,
+            ),
+          )
+          .pipe(Effect.catch(() => Effect.succeed(true))));
+      if (merged.length > 0 || deleted)
         events.publishChanged(repositoryIds, "Refs");
     }).pipe(
       Effect.catchCause((cause) =>
