@@ -96,20 +96,28 @@ async function fixture(
 describe("working changes through Git", () => {
   it.skipIf(process.platform === "win32")(
     "lists an unreadable untracked file without a line count",
-    async () => {
+    async (context) => {
       const f = await fixture();
       const locked = join(f.directory, "locked.txt");
       await writeFile(locked, "secret\n");
       await chmod(locked, 0o000);
-      expect((await f.read()).unstaged).toEqual([
-        {
-          path: "locked.txt",
-          previousPath: null,
-          status: "?",
-          lines: null,
-        },
-      ]);
-      await chmod(locked, 0o644);
+      try {
+        const readable = await readFile(locked).then(
+          () => true,
+          () => false,
+        );
+        if (readable) context.skip();
+        expect((await f.read()).unstaged).toEqual([
+          {
+            path: "locked.txt",
+            previousPath: null,
+            status: "?",
+            lines: null,
+          },
+        ]);
+      } finally {
+        await chmod(locked, 0o644);
+      }
     },
   );
   it("counts the lines each changed file adds and removes", async () => {
