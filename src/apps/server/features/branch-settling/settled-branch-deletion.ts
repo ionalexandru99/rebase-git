@@ -126,6 +126,12 @@ function deleteSettledGroup(
       if (unmerged.has(local.name) || busy.has(local.name)) continue;
       const holder = worktreeHolding(worktrees, local.name);
       if (holder?.missing) continue;
+      if (
+        holder !== undefined &&
+        (yield* readRefTargets(git, directory)).get(branchRef(local.name)) !==
+          local.target
+      )
+        continue;
       const removed =
         holder === undefined ||
         (yield* removeWorktree(git, {
