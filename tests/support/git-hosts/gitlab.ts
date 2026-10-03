@@ -16,9 +16,11 @@ export function fakeGitLab(
   {
     version = "glab 1.120.0 (78790114c)",
     accounts = { "gitlab.com": "tanuki" },
+    visible = true,
   }: {
     readonly version?: string | null;
     readonly accounts?: Readonly<Record<string, string>>;
+    readonly visible?: boolean;
   } = {},
 ) {
   const requests: Readonly<Record<string, string>>[] = [];
@@ -60,7 +62,9 @@ export function fakeGitLab(
             },
           ]),
       );
-      return Effect.succeed(JSON.stringify({ data: { project } }));
+      return Effect.succeed(
+        JSON.stringify({ data: { project: visible ? project : null } }),
+      );
     },
   };
   return { gitlab, requests };

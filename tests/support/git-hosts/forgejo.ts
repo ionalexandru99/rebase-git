@@ -57,9 +57,12 @@ export function fakeForgejo(
           }),
         );
       }
+      const query = new URLSearchParams(rest.split("?")[1]);
+      const limit = Number(query.get("limit") ?? nodes.length);
+      const start = (Number(query.get("page") ?? 1) - 1) * limit;
       return Effect.succeed(
         JSON.stringify(
-          nodes.map((node) => ({
+          nodes.slice(start, start + limit).map((node) => ({
             number: node.number,
             html_url: `${server}/${owner}/${name}/pulls/${node.number}`,
             title: `Pull request ${node.number}`,

@@ -10,6 +10,7 @@ import {
   type HostedPullRequest,
   hostCommandOutput,
   hostGet,
+  pageAnswer,
   pullRequest,
   signedInTool,
   singleAccount,
@@ -146,6 +147,10 @@ function listPullRequests(
                 ),
               ),
             { concurrency: "unbounded" },
+          ).pipe(
+            Effect.map((found) =>
+              pageAnswer(value.length, pullRequestsPerBranch, found),
+            ),
           ),
         ),
       ),

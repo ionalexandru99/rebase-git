@@ -86,13 +86,20 @@ export function listPullRequests(
     const byHead = yield* repository.pullRequests([
       ...new Set(branches.map(({ head }) => head)),
     ]);
-    return branches.map(({ branch, head }) => ({
-      branch,
-      pullRequests: (byHead.get(head) ?? [])
-        .filter(({ url }) => isPullRequestLink(url, host.kind))
-        .sort((left, right) => openFirst(left) - openFirst(right))
-        .slice(0, pullRequestsPerBranch),
-    }));
+    return branches.flatMap(({ branch, head }) => {
+      const answer = byHead.get(head);
+      return answer === undefined
+        ? []
+        : [
+            {
+              branch,
+              pullRequests: answer
+                .filter(({ url }) => isPullRequestLink(url, host.kind))
+                .sort((left, right) => openFirst(left) - openFirst(right))
+                .slice(0, pullRequestsPerBranch),
+            },
+          ];
+    });
   });
 }
 

@@ -10,6 +10,7 @@ import {
   type HostedPullRequest,
   hostCommandOutput,
   inBatches,
+  pageAnswer,
   pullRequest,
   runHostCommand,
   signedInTool,
@@ -107,13 +108,17 @@ export function createGitLabHost(cli: GitLabCli): GitHost {
                       })
                       .pipe(
                         Effect.flatMap(decodeResponse),
-                        Effect.map(({ data }) =>
-                          batch.map((_, index) =>
-                            mergeRequests(
-                              data.project?.[`b${index}`]?.nodes ?? [],
-                              project,
-                            ),
-                          ),
+                        Effect.flatMap(({ data: { project: answers } }) =>
+                          answers === null
+                            ? Effect.fail(unavailable)
+                            : Effect.succeed(
+                                batch.map((_, index) =>
+                                  headAnswer(
+                                    answers[`b${index}`]?.nodes,
+                                    project,
+                                  ),
+                                ),
+                              ),
                         ),
                       ),
                   ),
@@ -187,6 +192,19 @@ const decodeResponse = (output: string) =>
       }),
     ),
   )(output).pipe(Effect.mapError(() => unavailable));
+
+function headAnswer(
+  nodes: readonly MergeRequestNode[] | undefined,
+  project: GitLabProject,
+) {
+  return nodes === undefined
+    ? undefined
+    : pageAnswer(
+        nodes.length,
+        mergeRequestsPerBranch,
+        mergeRequests(nodes, project),
+      );
+}
 
 function mergeRequests(
   nodes: readonly MergeRequestNode[],
