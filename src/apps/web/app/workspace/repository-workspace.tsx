@@ -202,12 +202,8 @@ function Workspace({
                             <CurrentPullRequest pullRequests={pullRequests} />
                           </>
                         }
-                        toolbarActions={
-                          <>
-                            {syncActions}
-                            <WorkspacePanel.Toggle />
-                          </>
-                        }
+                        toolbarActions={syncActions}
+                        toolbarInset={!panel.state.open}
                         hostedRepository={refs?.hostedRepository}
                         remoteProviders={refs?.remoteProviders}
                         historyIdentity={{
@@ -259,6 +255,7 @@ function Workspace({
           </CommitInspectionBridge>
         )}
       </RemoteSync>
+      <WorkspacePanel.Controls />
     </>
   );
 }

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
-import { page } from "vite-plus/test/browser";
+import { page, userEvent } from "vite-plus/test/browser";
 import {
   type RepositoryRejected,
   repositoryRejected,
@@ -195,6 +195,12 @@ async function fixture(
 
 afterEach(() => saveDiffPreferences(defaultDiffPreferences));
 
+async function stageAll() {
+  page.getByRole("button", { name: "Collapse unstaged" }).element().focus();
+  await userEvent.keyboard("{Shift>}{F10}{/Shift}");
+  await page.getByRole("menuitem", { name: "Stage all" }).click();
+}
+
 describe("working changes", () => {
   it("shows a staged rename on one row and its source in the diff", async () => {
     const renamed = "src/ui/Button.tsx";
@@ -220,6 +226,7 @@ describe("working changes", () => {
       exact: true,
     });
     await expect.element(row).toHaveTextContent("Button.tsx← legacy/");
+    await expect.element(row).toHaveAccessibleDescription("Renamed");
     const next = page.getByRole("button", {
       name: "Staged src/ui/Card.tsx",
       exact: true,
@@ -233,9 +240,9 @@ describe("working changes", () => {
       .element(page.getByText(`${source} → ${renamed}`))
       .toBeVisible();
     await expect.element(page.getByText("Content unchanged.")).toBeVisible();
-    await page.getByRole("button", { name: "List", exact: true }).click();
-    await expect.element(row).toHaveTextContent("src/{legacy → ui}/Button.tsx");
-    await page.getByRole("button", { name: "Tree", exact: true }).click();
+    await page.getByRole("radio", { name: "List view" }).click();
+    await expect.element(row).toHaveTextContent("Button.tsx← legacy/ · src/ui");
+    await page.getByRole("radio", { name: "Tree view" }).click();
   });
   it("says when too many files changed to match renames", async () => {
     await fixture([], { renamesLimited: true });
@@ -380,10 +387,10 @@ describe("working changes", () => {
         ).size;
       })
       .toBeGreaterThan(1);
-    await page.getByRole("button", { name: "Split", exact: true }).click();
+    await page.getByRole("radio", { name: "Split" }).click();
     await expect
-      .element(page.getByRole("button", { name: "Split", exact: true }))
-      .toHaveAttribute("aria-pressed", "true");
+      .element(page.getByRole("radio", { name: "Split" }))
+      .toBeChecked();
     await expect
       .poll(() => {
         const root = document.querySelector("diffs-container")?.shadowRoot;
@@ -497,7 +504,7 @@ describe("working changes", () => {
     await expect.element(page.getByRole("alertdialog")).toBeVisible();
     expect(f.mutations).toHaveLength(0);
     await page.getByRole("button", { name: "Cancel", exact: true }).click();
-    await page.getByRole("button", { name: "Stage all", exact: true }).click();
+    await stageAll();
     await page
       .getByRole("textbox", { name: "Commit subject" })
       .fill("Keep the draft");
@@ -525,7 +532,7 @@ describe("working changes", () => {
   it("offers the identity settings when Git does not know who is committing", async () => {
     const openGitIdentity = vi.fn();
     const f = await fixture([], { openGitIdentity });
-    await page.getByRole("button", { name: "Stage all", exact: true }).click();
+    await stageAll();
     await page
       .getByRole("textbox", { name: "Commit subject" })
       .fill("First commit");

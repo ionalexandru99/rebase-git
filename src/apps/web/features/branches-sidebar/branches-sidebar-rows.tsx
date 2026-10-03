@@ -35,6 +35,7 @@ import {
   PullRequestLink,
 } from "#web/features/pull-requests/pull-requests.tsx";
 import type { RefAction } from "#web/features/refs/ref-actions.ts";
+import { compactCount } from "#web/lib/compact-count.ts";
 
 export function rowElementId(rowId: string): string {
   return `branches-row-${rowId}`;
@@ -298,10 +299,4 @@ function SyncCounts({ upstream }: { readonly upstream: BranchUpstream }) {
       ) : null}
     </span>
   );
-}
-
-function compactCount(count: number) {
-  if (count < 1_000) return String(count);
-  const thousands = count / 1_000;
-  return `${thousands < 10 ? Math.floor(thousands * 10) / 10 : Math.floor(thousands)}k`;
 }

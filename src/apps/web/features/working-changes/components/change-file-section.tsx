@@ -1,8 +1,8 @@
 import {
-  IconArrowDown,
-  IconArrowUp,
-  IconChevronsDown,
-  IconChevronsUp,
+  IconCircleCheck,
+  IconMinus,
+  IconPencil,
+  IconPlus,
   IconTrash,
 } from "@tabler/icons-react";
 import { useRef, useState } from "react";
@@ -16,16 +16,31 @@ import { useStashMenu } from "#web/features/stashes/stashes.ts";
 import {
   FileListSection,
   RowLead,
+  type SectionLook,
 } from "#web/features/working-changes/components/file-list-section.tsx";
 import type {
   ChangeAction,
   WorkingChangesView,
 } from "#web/features/working-changes/hooks/use-working-changes-view.ts";
+import { compactCount } from "#web/lib/compact-count.ts";
+import { cn } from "#web/lib/utils.ts";
 
 export type ChangeFileSectionView = Pick<
   WorkingChangesView,
   "changes" | "preferences" | "selection" | "select" | "busy" | "loading"
 >;
+
+const looks: Record<ChangeSection, SectionLook> = {
+  unstaged: { Icon: IconPencil, className: "text-amber-300" },
+  staged: { Icon: IconCircleCheck, className: "text-emerald-300" },
+};
+
+const statusTones: Partial<Record<ChangedFile["status"], string>> = {
+  A: "text-emerald-300",
+  "?": "text-emerald-300",
+  D: "text-rose-300 line-through decoration-rose-300/60",
+  R: "text-sky-300",
+};
 
 const statusLabels: Record<Exclude<ChangedFile["status"], "U">, string> = {
   A: "Added",
@@ -60,8 +75,7 @@ export function ChangeFileSection({
   const label = section === "unstaged" ? "Unstaged" : "Staged";
   const action = section === "unstaged" ? "stage" : "unstage";
   const actionLabel = section === "unstaged" ? "Stage" : "Unstage";
-  const Arrow = section === "unstaged" ? IconArrowDown : IconArrowUp;
-  const AllArrow = section === "unstaged" ? IconChevronsDown : IconChevronsUp;
+  const ActionIcon = section === "unstaged" ? IconPlus : IconMinus;
   const stashMenu = useStashMenu();
   const rowActions = (paths: readonly string[]): readonly Action[] => {
     const files = { _tag: "Files", paths } as const;
@@ -97,6 +111,8 @@ export function ChangeFileSection({
     <FileListSection
       name={`${label} files`}
       title={label}
+      look={looks[section]}
+      grow={section === "unstaged"}
       files={files}
       tree={preferences.tree}
       filter={filter}
@@ -111,17 +127,14 @@ export function ChangeFileSection({
         checked.has(row.key) ||
         (selection?.section === section && selection.path === row.key)
       }
-      action={
-        <Button
-          variant="ghost"
-          size="icon-xs"
-          aria-label={`${actionLabel} all`}
-          disabled={disabled || files.length === 0}
-          onClick={() => act(action, section, { _tag: "All" })}
-        >
-          <AllArrow />
-        </Button>
-      }
+      headerMenu={[
+        {
+          id: `${action}-all`,
+          label: `${actionLabel} all`,
+          enabled: !disabled && files.length > 0,
+          run: () => act(action, section, { _tag: "All" }),
+        },
+      ]}
       notice={
         section === "staged" && changes?.renamesLimited ? (
           <p
@@ -165,14 +178,21 @@ export function ChangeFileSection({
       {(row, { rows, index, collapsed, toggle }) => {
         const isFolder = row.file === undefined;
         const previousPath = row.file?.previousPath ?? null;
+        const status = row.file?.status;
+        const tone = status === undefined ? undefined : statusTones[status];
         return (
           <>
             <button
               type="button"
-              className="flex min-w-0 flex-1 items-center gap-1.5 text-left text-xs"
+              className="flex h-full min-w-0 flex-1 items-center gap-2 text-left outline-none"
               aria-label={`${isFolder ? "Folder" : label} ${row.key}${previousPath ? ` renamed from ${previousPath}` : ""}`}
               aria-expanded={isFolder ? !collapsed.has(row.key) : undefined}
               aria-pressed={row.paths.every((path) => checked.has(path))}
+              aria-describedby={
+                status !== undefined && status !== "U"
+                  ? statusId(section, row.key)
+                  : undefined
+              }
               onContextMenu={() => {
                 if (row.paths.every((path) => checked.has(path))) return;
                 anchor.current = row.key;
@@ -215,49 +235,77 @@ export function ChangeFileSection({
               }}
             >
               <RowLead row={row} collapsed={collapsed} />
-              <span className="truncate">
-                {previousPath && !preferences.tree
-                  ? compactRename(previousPath, row.key)
-                  : row.name}
-              </span>
-              {previousPath && preferences.tree ? (
-                <span className="min-w-0 shrink-[100] truncate text-[11px] text-muted-foreground">
-                  ← {renameHint(previousPath, row.key)}
+              {isFolder ? (
+                <span className="min-w-0 truncate text-[.81rem]">
+                  {row.name}/
+                </span>
+              ) : preferences.tree ? (
+                <>
+                  <span className={cn("min-w-0 truncate", tone)}>
+                    {row.name}
+                  </span>
+                  {previousPath ? (
+                    <span className="min-w-0 shrink-[100] truncate text-[11px] text-muted-foreground">
+                      ← {renameHint(previousPath, row.key)}
+                    </span>
+                  ) : null}
+                </>
+              ) : (
+                <span className="flex min-w-0 flex-col leading-tight">
+                  <span className={cn("truncate", tone)}>
+                    {fileName(row.key)}
+                  </span>
+                  <span
+                    className="truncate text-[11px] text-muted-foreground"
+                    style={{ direction: "rtl", textAlign: "left" }}
+                  >
+                    <bdi>
+                      {previousPath
+                        ? `← ${renameHint(previousPath, row.key)} · `
+                        : ""}
+                      {folderOf(row.key)}
+                    </bdi>
+                  </span>
+                </span>
+              )}
+              {status !== undefined && status !== "U" ? (
+                <span id={statusId(section, row.key)} className="sr-only">
+                  {statusLabels[status]}
                 </span>
               ) : null}
             </button>
-            {row.file && row.file.status !== "U" ? (
-              <span
-                role="img"
-                className="shrink-0 text-[10px] text-muted-foreground"
-                aria-label={statusLabels[row.file.status]}
-              >
-                {row.file.status === "?" ? "A" : row.file.status}
+            {row.file ? (
+              <span className="relative flex shrink-0 items-center justify-end">
+                <LineCounts lines={row.file.lines} />
+                <span className="absolute right-0 flex items-center opacity-0 group-has-[:focus-visible]:opacity-100 group-hover:opacity-100">
+                  <Button
+                    variant="ghost"
+                    size="icon-xs"
+                    aria-label={`Discard ${label.toLowerCase()} ${row.key}`}
+                    disabled={disabled}
+                    onClick={() =>
+                      act("discard", section, {
+                        _tag: "Files",
+                        paths: row.paths,
+                      })
+                    }
+                  >
+                    <IconTrash />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon-xs"
+                    aria-label={`${actionLabel} ${row.key}`}
+                    disabled={disabled}
+                    onClick={() =>
+                      act(action, section, { _tag: "Files", paths: row.paths })
+                    }
+                  >
+                    <ActionIcon />
+                  </Button>
+                </span>
               </span>
             ) : null}
-            <Button
-              variant="ghost"
-              size="icon-xs"
-              aria-label={`${actionLabel} ${row.key}`}
-              disabled={disabled}
-              onClick={() =>
-                act(action, section, { _tag: "Files", paths: row.paths })
-              }
-            >
-              <Arrow />
-            </Button>
-            <Button
-              variant="ghost"
-              size="icon-xs"
-              aria-label={`Discard ${label.toLowerCase()} ${row.key}`}
-              className="opacity-0 focus:opacity-100 group-hover:opacity-100 group-focus-within:opacity-100"
-              disabled={disabled}
-              onClick={() =>
-                act("discard", section, { _tag: "Files", paths: row.paths })
-              }
-            >
-              <IconTrash />
-            </Button>
           </>
         );
       }}
@@ -265,20 +313,36 @@ export function ChangeFileSection({
   );
 }
 
+function LineCounts({ lines }: { readonly lines: ChangedFile["lines"] }) {
+  return (
+    <span className="flex min-w-14 justify-end gap-1 pr-1 font-mono text-[11px] tabular-nums transition-opacity group-has-[:focus-visible]:opacity-0 group-hover:opacity-0">
+      {lines && lines.added > 0 ? (
+        <span className="text-emerald-400">+{compactCount(lines.added)}</span>
+      ) : null}
+      {lines && lines.removed > 0 ? (
+        <span className="text-rose-400">−{compactCount(lines.removed)}</span>
+      ) : null}
+    </span>
+  );
+}
+
+function statusId(section: ChangeSection, path: string) {
+  return `change-status-${section}-${encodeURIComponent(path)}`;
+}
+
+function fileName(path: string) {
+  return path.slice(path.lastIndexOf("/") + 1);
+}
+
+function folderOf(path: string) {
+  return path.slice(0, Math.max(0, path.lastIndexOf("/")));
+}
+
 export function renameHint(previousPath: string, path: string) {
   const { prefix, before, suffix } = renameParts(previousPath, path);
   if (suffix.length === 0) return before.join("/");
   const folder = before.length > 0 ? before : prefix.slice(-1);
   return `${folder.join("/")}/`;
-}
-
-export function compactRename(previousPath: string, path: string) {
-  const { prefix, before, after, suffix } = renameParts(previousPath, path);
-  return [
-    ...prefix,
-    `{${before.join("/")} → ${after.join("/")}}`,
-    ...suffix,
-  ].join("/");
 }
 
 function renameParts(previousPath: string, path: string) {

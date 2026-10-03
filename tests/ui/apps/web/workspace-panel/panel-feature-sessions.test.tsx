@@ -112,7 +112,7 @@ async function fixture(linkedWorktree = false) {
         >
           <WorkspacePanel.Group>
             <ResizablePanel id="graph" minSize="20%">
-              <WorkspacePanel.Toggle />
+              <WorkspacePanel.Controls />
               <Inspect />
             </ResizablePanel>
             <WorkspacePanel.Pane />

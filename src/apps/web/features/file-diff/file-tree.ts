@@ -34,22 +34,41 @@ export function changeTreeRows<File extends { readonly path: string }>(
       folderPaths.set(key, paths);
     }
   }
+  const children = new Map<string, Set<string>>();
+  for (const file of visible) {
+    const parts = file.path.split("/");
+    parts.forEach((part, depth) => {
+      const parent = parts.slice(0, depth).join("/");
+      const entries = children.get(parent) ?? new Set<string>();
+      entries.add(depth < parts.length - 1 ? `${part}/` : part);
+      children.set(parent, entries);
+    });
+  }
+  const joined = (key: string) => {
+    const entries = children.get(key);
+    return entries?.size === 1 && [...entries][0]?.endsWith("/") === true;
+  };
   for (const file of [...visible].sort((a, b) =>
     a.path.localeCompare(b.path),
   )) {
     const parts = file.path.split("/");
     let hidden = false;
+    let start = 0;
+    let shown = 0;
     for (let depth = 0; depth < parts.length - 1; depth++) {
       const key = parts.slice(0, depth + 1).join("/");
+      if (joined(key)) continue;
       if (!folders.has(key)) {
         folders.add(key);
         rows.push({
           key: `${key}/`,
-          name: parts[depth] ?? key,
-          depth,
+          name: parts.slice(start, depth + 1).join("/"),
+          depth: shown,
           paths: folderPaths.get(key) ?? [],
         });
       }
+      start = depth + 1;
+      shown++;
       if (collapsed.has(`${key}/`)) {
         hidden = true;
         break;
@@ -59,7 +78,7 @@ export function changeTreeRows<File extends { readonly path: string }>(
       rows.push({
         key: file.path,
         name: parts.at(-1) ?? file.path,
-        depth: parts.length - 1,
+        depth: shown,
         paths: [file.path],
         file,
       });

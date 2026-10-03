@@ -83,3 +83,29 @@ export function worktreeIdentities(
     { concurrency: 16 },
   );
 }
+
+export function worktreeLineCounts(
+  directory: string,
+  paths: readonly string[],
+) {
+  return Effect.all(
+    paths.map((path) =>
+      changeIo(async () => {
+        const target = join(directory, path);
+        const info = await lstat(target).catch(() => null);
+        if (!info?.isFile() || info.size > previewByteLimit) return null;
+        const content = await readFile(target).catch(() => null);
+        if (content === null || content.includes(0)) return null;
+        let added = content.length > 0 && content.at(-1) !== 10 ? 1 : 0;
+        for (
+          let index = content.indexOf(10);
+          index >= 0;
+          index = content.indexOf(10, index + 1)
+        )
+          added++;
+        return { added, removed: 0 };
+      }),
+    ),
+    { concurrency: 16 },
+  );
+}

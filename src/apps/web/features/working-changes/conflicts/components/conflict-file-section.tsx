@@ -1,4 +1,4 @@
-import { IconArrowDown } from "@tabler/icons-react";
+import { IconAlertTriangle, IconArrowDown } from "@tabler/icons-react";
 import type {
   ConflictFile,
   ConflictSides,
@@ -34,7 +34,8 @@ export function ConflictFileSection({
     <FileListSection
       name="Conflicted files"
       title="Conflicts"
-      countClassName="text-status-connecting"
+      look={{ Icon: IconAlertTriangle, className: "text-rose-300" }}
+      grow
       files={conflicts.rows}
       tree={view.preferences.tree}
       filter={filter}
@@ -46,13 +47,13 @@ export function ConflictFileSection({
           return (
             <button
               type="button"
-              className="flex min-w-0 flex-1 items-center gap-1.5 text-left text-xs"
+              className="flex h-full min-w-0 flex-1 items-center gap-2 text-left outline-none"
               aria-label={`Folder ${row.key}`}
               aria-expanded={!collapsed.has(row.key)}
               onClick={() => toggle(row.key)}
             >
               <RowLead row={row} collapsed={collapsed} />
-              <span className="truncate">{row.name}</span>
+              <span className="truncate text-[.81rem]">{row.name}/</span>
             </button>
           );
         const { path, file } = conflict;
@@ -60,7 +61,7 @@ export function ConflictFileSection({
           <>
             <button
               type="button"
-              className="flex min-w-20 flex-1 items-center gap-1.5 text-left text-xs"
+              className="flex h-full min-w-20 flex-1 items-center gap-2 text-left outline-none"
               aria-label={`Conflict ${path}`}
               aria-pressed={chosen(path)}
               onClick={() => view.select({ section: "conflicts", path })}

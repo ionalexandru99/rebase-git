@@ -85,6 +85,7 @@ export function CommitGraph({
   remoteProviders,
   titleActions,
   toolbarActions,
+  toolbarInset = false,
   merge,
   rebase,
   reset,
@@ -104,6 +105,7 @@ export function CommitGraph({
     | undefined;
   readonly titleActions?: ReactNode;
   readonly toolbarActions?: ReactNode;
+  readonly toolbarInset?: boolean;
   readonly ref?: Ref<CommitGraphHandle>;
   readonly historyIdentity?:
     | { readonly environmentId: string; readonly repositoryId: string }
@@ -261,7 +263,7 @@ export function CommitGraph({
       aria-label="Commit graph"
       className="flex h-full min-h-0 flex-col bg-repository"
     >
-      <CommitGraphToolbar.Frame>
+      <CommitGraphToolbar.Frame inset={toolbarInset}>
         <CommitGraphToolbar.Title repositoryName={repositoryName}>
           {titleActions}
         </CommitGraphToolbar.Title>
@@ -501,9 +503,17 @@ function eventTargetMatches(event: SyntheticEvent, selector: string) {
   );
 }
 
-function Frame({ children }: { readonly children: ReactNode }) {
+function Frame({
+  inset,
+  children,
+}: {
+  readonly inset: boolean;
+  readonly children: ReactNode;
+}) {
   return (
-    <header className="flex min-h-12 shrink-0 flex-wrap items-center gap-2 border-border/60 border-b px-3 py-2">
+    <header
+      className={`flex min-h-12 shrink-0 flex-wrap items-center gap-2 border-border/60 border-b py-2 pl-3 ${inset ? "pr-12" : "pr-3"}`}
+    >
       {children}
     </header>
   );

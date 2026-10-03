@@ -195,7 +195,7 @@ describe("conflicts in the Diffs tab", () => {
   it("lists each conflicted file once and keeps them out of bulk staging", async () => {
     const f = await fixture();
     const section = page.getByRole("region", { name: "Conflicted files" });
-    await expect.element(section).toHaveTextContent("Conflicts 3");
+    await expect.element(section).toHaveTextContent("Conflicts (3)");
     await expect.element(section).toHaveTextContent("1 open");
     await expect.element(section).toHaveTextContent("deleted in main");
     await expect.element(section).toHaveTextContent("binary");
@@ -209,9 +209,12 @@ describe("conflicts in the Diffs tab", () => {
     }
     await expect
       .element(page.getByRole("button", { name: "Collapse staged" }))
-      .toHaveTextContent("Staged 0");
+      .toHaveTextContent("Staged (0)");
 
-    await page.getByRole("button", { name: "Stage all", exact: true }).click();
+    await page
+      .getByRole("button", { name: "Collapse unstaged" })
+      .click({ button: "right" });
+    await page.getByRole("menuitem", { name: "Stage all" }).click();
 
     await expect.poll(() => f.mutations.length).toBe(1);
     expect(f.mutations[0]).toMatchObject({

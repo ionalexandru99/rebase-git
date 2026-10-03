@@ -1,14 +1,14 @@
 import {
+  type Icon,
   IconChevronDown,
-  IconChevronRight,
   IconFolder,
+  IconFolderOpen,
 } from "@tabler/icons-react";
-import { type ReactNode, useState } from "react";
+import { type KeyboardEvent, type ReactNode, useState } from "react";
 import {
   type Action,
   ActionMenuItems,
 } from "#web/components/ui/action-menu.tsx";
-import { Button } from "#web/components/ui/button.tsx";
 import {
   ContextMenu,
   ContextMenuContent,
@@ -26,14 +26,20 @@ interface FileRowContext<File extends { readonly path: string }> {
   readonly toggle: (key: string) => void;
 }
 
+export interface SectionLook {
+  readonly Icon: Icon;
+  readonly className: string;
+}
+
 export function FileListSection<File extends { readonly path: string }>({
   name,
   title,
-  countClassName = "text-muted-foreground",
+  look,
   files,
   tree,
   filter,
-  action,
+  grow,
+  headerMenu,
   notice,
   footer,
   chosen,
@@ -42,11 +48,12 @@ export function FileListSection<File extends { readonly path: string }>({
 }: {
   readonly name: string;
   readonly title: string;
-  readonly countClassName?: string;
+  readonly look: SectionLook;
   readonly files: readonly File[];
   readonly tree: boolean;
   readonly filter: string;
-  readonly action?: ReactNode;
+  readonly grow: boolean;
+  readonly headerMenu?: readonly Action[];
   readonly notice?: ReactNode;
   readonly footer?: (open: boolean) => ReactNode;
   readonly chosen: (row: ChangeTreeRow<File>) => boolean;
@@ -59,31 +66,62 @@ export function FileListSection<File extends { readonly path: string }>({
   const [open, setOpen] = useState(true);
   const { rows, collapsed, scrollRef, virtualizer, toggle } = useFileRows(
     files,
-    { tree, filter, open },
+    {
+      tree,
+      filter,
+      open,
+      rowHeight: (row) => (tree || row.file === undefined ? 32 : 44),
+    },
+  );
+  const filled = grow && open && files.length > 0;
+  const header = (
+    <button
+      type="button"
+      aria-label={`${open ? "Collapse" : "Expand"} ${title.toLowerCase()}`}
+      aria-expanded={open}
+      onClick={() => setOpen(!open)}
+      onKeyDown={headerMenu === undefined ? undefined : openMenu}
+      className={cn(
+        "relative flex h-8 w-full cursor-default items-center gap-2 rounded-md px-1.5 text-left text-[.8rem] outline-none select-none hover:bg-sidebar-accent/50 focus-visible:ring-1 focus-visible:ring-sidebar-ring",
+        look.className,
+      )}
+    >
+      <look.Icon aria-hidden="true" className="size-3.5 shrink-0" />
+      <span className="min-w-0 truncate">
+        {title} ({files.length})
+      </span>
+      <span
+        aria-hidden="true"
+        className="h-px min-w-3 flex-1 bg-current opacity-25"
+      />
+      <IconChevronDown
+        aria-hidden="true"
+        className={`size-3.5 shrink-0 transition-transform duration-150 ease-out motion-reduce:transition-none ${open ? "rotate-180" : ""}`}
+      />
+    </button>
   );
   return (
     <section
       aria-label={name}
-      className={`flex min-h-0 flex-col border-border border-t ${open && files.length ? "flex-1" : "shrink-0"}`}
+      className={cn("flex min-h-0 flex-col", filled ? "flex-1" : "shrink")}
     >
-      <div className="flex h-9 shrink-0 items-center gap-1 bg-muted px-2">
-        <Button
-          variant="ghost"
-          size="xs"
-          className="min-w-0 flex-1 justify-start gap-2"
-          aria-label={`${open ? "Collapse" : "Expand"} ${title.toLowerCase()}`}
-          aria-expanded={open}
-          onClick={() => setOpen(!open)}
-        >
-          {open ? <IconChevronDown /> : <IconChevronRight />}
-          <span>
-            {title} <span className={countClassName}>{files.length}</span>
-          </span>
-        </Button>
-        {action}
+      <div className="mx-1 shrink-0">
+        {headerMenu === undefined ? (
+          header
+        ) : (
+          <ContextMenu>
+            <ContextMenuTrigger render={header} />
+            <ContextMenuContent className="w-max min-w-40">
+              <ActionMenuItems actions={headerMenu} />
+            </ContextMenuContent>
+          </ContextMenu>
+        )}
       </div>
       {open ? notice : null}
-      <div ref={scrollRef} className="min-h-0 flex-1 overflow-auto">
+      <div
+        ref={scrollRef}
+        className={cn("min-h-0 overflow-auto px-1", filled && "flex-1")}
+      >
         <div
           style={{ height: virtualizer.getTotalSize(), position: "relative" }}
         >
@@ -94,14 +132,16 @@ export function FileListSection<File extends { readonly path: string }>({
               <div
                 key={row.key}
                 className={cn(
-                  "group absolute inset-x-0 flex h-8 items-center gap-1 rounded-md pr-1",
+                  "group absolute inset-x-0 flex items-center gap-2 rounded-md pr-1 text-[.85rem] select-none has-[:focus-visible]:ring-1 has-[:focus-visible]:ring-sidebar-ring has-[:focus-visible]:ring-inset",
                   chosen(row)
                     ? "bg-sidebar-accent text-sidebar-accent-foreground"
-                    : "hover:bg-sidebar-accent/75",
+                    : "text-sidebar-foreground hover:bg-sidebar-accent/75 hover:text-sidebar-accent-foreground",
                 )}
                 style={{
+                  height: item.size,
                   transform: `translateY(${item.start}px)`,
-                  paddingLeft: 6 + row.depth * 12,
+                  paddingLeft:
+                    (row.file === undefined ? 6 : 10) + row.depth * 18,
                 }}
               >
                 {children(row, {
@@ -133,6 +173,20 @@ export function FileListSection<File extends { readonly path: string }>({
   );
 }
 
+function openMenu(event: KeyboardEvent<HTMLElement>) {
+  if (event.key !== "ContextMenu" && !(event.key === "F10" && event.shiftKey))
+    return;
+  event.preventDefault();
+  const bounds = event.currentTarget.getBoundingClientRect();
+  event.currentTarget.dispatchEvent(
+    new globalThis.MouseEvent("contextmenu", {
+      bubbles: true,
+      clientX: bounds.left + 32,
+      clientY: bounds.bottom,
+    }),
+  );
+}
+
 export function RowLead<File extends { readonly path: string }>({
   row,
   collapsed,
@@ -140,21 +194,16 @@ export function RowLead<File extends { readonly path: string }>({
   readonly row: ChangeTreeRow<File>;
   readonly collapsed: ReadonlySet<string>;
 }) {
-  if (row.file !== undefined)
-    return (
-      <>
-        <span className="size-3 shrink-0" />
-        <ChangeFileIcon path={row.key} />
-      </>
-    );
+  if (row.file !== undefined) return <ChangeFileIcon path={row.key} />;
+  const closed = collapsed.has(row.key);
+  const Folder = closed ? IconFolder : IconFolderOpen;
   return (
     <>
-      {collapsed.has(row.key) ? (
-        <IconChevronRight className="size-3 shrink-0 text-muted-foreground" />
-      ) : (
-        <IconChevronDown className="size-3 shrink-0 text-muted-foreground" />
-      )}
-      <IconFolder className="size-3.5 shrink-0 text-muted-foreground" />
+      <IconChevronDown
+        aria-hidden="true"
+        className={`size-3.5 shrink-0 transition-transform duration-150 ease-out motion-reduce:transition-none ${closed ? "-rotate-90" : ""}`}
+      />
+      <Folder aria-hidden="true" className="size-3.5 shrink-0" />
     </>
   );
 }

@@ -125,7 +125,7 @@ async function fixture(
                       ]}
                       onOpenDetails={inspection.open}
                       onActiveCommitChange={inspection.select}
-                      toolbarActions={<WorkspacePanel.Toggle />}
+                      toolbarActions={<WorkspacePanel.Controls />}
                     />
                   </RepositoryScopeProvider>
                 )}
@@ -227,9 +227,13 @@ describe("commit inspection", () => {
         .querySelector("diffs-container")?.shadowRoot?.textContent;
     await expect.poll(content).toContain("new");
     await expect.poll(content).not.toContain("retained heading");
-    await screen.getByRole("button", { name: "Show unchanged lines" }).click();
+    const unchanged = screen.getByRole("button", {
+      name: "Show unchanged lines",
+    });
+    await unchanged.click();
+    await expect.element(unchanged).toHaveAttribute("aria-pressed", "true");
     await expect.poll(content).toContain("retained heading");
-    await screen.getByRole("button", { name: "Hide unchanged lines" }).click();
+    await unchanged.click();
     await expect.poll(content).not.toContain("retained heading");
     await screen.getByRole("button", { name: /second.bin/ }).click();
     await expect.poll(content).toContain("added content");
