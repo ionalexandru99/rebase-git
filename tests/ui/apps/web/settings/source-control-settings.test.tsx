@@ -135,6 +135,12 @@ describe("source control settings", () => {
     await expect.element(bitbucket).toBeDisabled();
 
     await page.getByRole("tab", { name: "API token" }).click();
+    await page.getByRole("button", { name: "three read scopes" }).hover();
+    await expect
+      .element(page.getByRole("list", { name: "Required scopes" }))
+      .toHaveTextContent(
+        "read:repository:bitbucketread:pullrequest:bitbucketread:user:bitbucket",
+      );
     await page
       .getByLabelText("Atlassian account email")
       .fill(" octo@example.com ");

@@ -6,6 +6,11 @@ import {
 import { Button } from "#web/components/ui/button.tsx";
 import { Input } from "#web/components/ui/input.tsx";
 import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "#web/components/ui/popover.tsx";
+import {
   Tabs,
   TabsContent,
   TabsList,
@@ -19,17 +24,40 @@ type Method = BitbucketToken["_tag"];
 
 const methods: Record<
   Method,
-  { readonly label: string; readonly description: string }
+  { readonly label: string; readonly description: ReactNode }
 > = {
   AccessToken: {
     label: "Access token",
-    description:
-      "Scoped to one repository, project or workspace. Create it in that item's Bitbucket settings with read access to repositories and pull requests.",
+    description: (
+      <>
+        Scoped to one repository, project or workspace. Create it in that item's
+        Bitbucket settings with{" "}
+        <Scopes
+          label="read access"
+          scopes={["Repositories: Read", "Pull requests: Read"]}
+        />
+        .
+      </>
+    ),
   },
   ApiToken: {
     label: "API token",
-    description:
-      "Uses your Atlassian account, so it reaches every repository you can. Create it at https://id.atlassian.com/manage-profile/security/api-tokens with the read:repository:bitbucket, read:pullrequest:bitbucket and read:user:bitbucket scopes.",
+    description: (
+      <>
+        Uses your Atlassian account, so it reaches every repository you can.
+        Create it at https://id.atlassian.com/manage-profile/security/api-tokens
+        with{" "}
+        <Scopes
+          label="three read scopes"
+          scopes={[
+            "read:repository:bitbucket",
+            "read:pullrequest:bitbucket",
+            "read:user:bitbucket",
+          ]}
+        />
+        .
+      </>
+    ),
   },
 };
 
@@ -168,6 +196,45 @@ export function BitbucketTokenForm({
         </div>
       </div>
     </form>
+  );
+}
+
+function Scopes({
+  label,
+  scopes,
+}: {
+  readonly label: string;
+  readonly scopes: readonly string[];
+}) {
+  return (
+    <Popover>
+      <PopoverTrigger
+        delay={150}
+        openOnHover
+        render={
+          <button
+            className="cursor-help text-foreground/90 underline decoration-muted-foreground/70 decoration-dotted underline-offset-[3px] outline-none focus-visible:rounded-sm focus-visible:ring-2 focus-visible:ring-ring/30"
+            type="button"
+          />
+        }
+      >
+        {label}
+      </PopoverTrigger>
+      <PopoverContent
+        align="start"
+        className="w-auto px-2.5 py-2"
+        side="top"
+        sideOffset={4}
+      >
+        <ul aria-label="Required scopes" className="space-y-0.5">
+          {scopes.map((scope) => (
+            <li className="font-mono text-[.7rem] leading-5" key={scope}>
+              {scope}
+            </li>
+          ))}
+        </ul>
+      </PopoverContent>
+    </Popover>
   );
 }
 
