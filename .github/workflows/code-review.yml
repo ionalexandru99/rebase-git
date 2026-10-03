@@ -20,12 +20,12 @@ jobs:
       github.event.pull_request.head.repo.full_name == github.repository &&
       github.actor != 'dependabot[bot]'
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 45
     permissions:
       contents: read
       pull-requests: read
     outputs:
-      result: ${{ steps.codex.outputs.final-message }}
+      result: ${{ steps.sol.outputs.final-message || steps.astra.outputs.final-message }}
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
@@ -51,58 +51,81 @@ jobs:
             gh api --paginate "repos/$REPOSITORY/pulls/$PR_NUMBER/comments" \
               --jq '.[] | '"$trusted"' | "\(.path):\(.line // .original_line) [\(.user.login)] \(.body)\n"'
           } > "$RUNNER_TEMP/earlier-review.txt"
-      - name: Review changes
-        id: codex
+      - name: Write review instructions
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          cat > "$RUNNER_TEMP/review-prompt.md" <<EOF
+          Review only the changes introduced by this pull request, including every commit in
+          $BASE_SHA...$HEAD_SHA.
+
+          Read and follow the repository's AGENTS.md. Look for actionable defects in correctness,
+          security, performance, cross-platform behavior, accessibility, and test coverage. Verify
+          findings against the surrounding code and tests. Do not report style preferences or
+          pre-existing problems. Use the available repository tools when they help validate a finding.
+
+          Earlier reviews and review comments on this pull request, with the author's replies, are in
+          $RUNNER_TEMP/earlier-review.txt. Do not repeat a finding that was already raised there.
+
+          Set verdict to "approve" only when there are no actionable findings and the change is ready
+          to merge. Otherwise set it to "comment". Keep the summary concise. Each finding names the
+          file path, a line added or changed by this pull request in the new version of that file, and
+          explains the user-visible risk.
+          EOF
+          cat > "$RUNNER_TEMP/review-schema.json" <<'EOF'
+          {
+            "type": "object",
+            "properties": {
+              "verdict": {
+                "type": "string",
+                "enum": ["approve", "comment"]
+              },
+              "summary": {
+                "type": "string"
+              },
+              "findings": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "path": { "type": "string" },
+                    "line": { "type": "integer" },
+                    "body": { "type": "string" }
+                  },
+                  "required": ["path", "line", "body"],
+                  "additionalProperties": false
+                }
+              }
+            },
+            "required": ["verdict", "summary", "findings"],
+            "additionalProperties": false
+          }
+          EOF
+      - name: Review changes with gpt-6.1-sol
+        id: sol
+        continue-on-error: true
+        timeout-minutes: 20
         uses: openai/codex-action@86365089eb2b84e0a8fb0717b304f8bdcb13b20e # v1.12
         with:
           openai-api-key: ${{ secrets.OPENAI_API_KEY }}
           model: gpt-6.1-sol
           effort: high
           permission-profile: ":read-only"
-          prompt: |
-            Review only the changes introduced by this pull request, including every commit in
-            ${{ github.event.pull_request.base.sha }}...${{ github.event.pull_request.head.sha }}.
-
-            Read and follow the repository's AGENTS.md. Look for actionable defects in correctness,
-            security, performance, cross-platform behavior, accessibility, and test coverage. Verify
-            findings against the surrounding code and tests. Do not report style preferences or
-            pre-existing problems. Use the available repository tools when they help validate a finding.
-
-            Earlier reviews and review comments on this pull request, with the author's replies, are in
-            ${{ runner.temp }}/earlier-review.txt. Do not repeat a finding that was already raised there.
-
-            Set verdict to "approve" only when there are no actionable findings and the change is ready
-            to merge. Otherwise set it to "comment". Keep the summary concise. Each finding names the
-            file path, a line added or changed by this pull request in the new version of that file, and
-            explains the user-visible risk.
-          output-schema: |
-            {
-              "type": "object",
-              "properties": {
-                "verdict": {
-                  "type": "string",
-                  "enum": ["approve", "comment"]
-                },
-                "summary": {
-                  "type": "string"
-                },
-                "findings": {
-                  "type": "array",
-                  "items": {
-                    "type": "object",
-                    "properties": {
-                      "path": { "type": "string" },
-                      "line": { "type": "integer" },
-                      "body": { "type": "string" }
-                    },
-                    "required": ["path", "line", "body"],
-                    "additionalProperties": false
-                  }
-                }
-              },
-              "required": ["verdict", "summary", "findings"],
-              "additionalProperties": false
-            }
+          prompt-file: ${{ runner.temp }}/review-prompt.md
+          output-schema-file: ${{ runner.temp }}/review-schema.json
+      - name: Review changes with gpt-6-astra
+        id: astra
+        if: steps.sol.outcome != 'success'
+        timeout-minutes: 20
+        uses: openai/codex-action@86365089eb2b84e0a8fb0717b304f8bdcb13b20e # v1.12
+        with:
+          openai-api-key: ${{ secrets.OPENAI_API_KEY }}
+          model: gpt-6-astra
+          effort: high
+          permission-profile: ":read-only"
+          prompt-file: ${{ runner.temp }}/review-prompt.md
+          output-schema-file: ${{ runner.temp }}/review-schema.json
 
   publish:
     name: Publish review
