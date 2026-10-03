@@ -1,0 +1,117 @@
+name: Code review
+
+on:
+  pull_request:
+    types:
+      - opened
+      - reopened
+      - synchronize
+      - ready_for_review
+
+concurrency:
+  group: code-review-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  review:
+    name: Review pull request
+    if: github.event.pull_request.draft == false
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    outputs:
+      result: ${{ steps.codex.outputs.final-message }}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          ref: refs/pull/${{ github.event.pull_request.number }}/merge
+          persist-credentials: false
+      - name: Fetch pull request refs
+        env:
+          BASE_REF: ${{ github.event.pull_request.base.ref }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: git fetch --no-tags origin "$BASE_REF" "+refs/pull/$PR_NUMBER/head"
+      - name: Review changes
+        id: codex
+        uses: openai/codex-action@86365089eb2b84e0a8fb0717b304f8bdcb13b20e # v1.12
+        with:
+          openai-api-key: ${{ secrets.OPENAI_API_KEY }}
+          permission-profile: ":read-only"
+          prompt: |
+            Review only the changes introduced by this pull request, including every commit in
+            ${{ github.event.pull_request.base.sha }}...${{ github.event.pull_request.head.sha }}.
+
+            Read and follow the repository's AGENTS.md. Look for actionable defects in correctness,
+            security, performance, cross-platform behavior, accessibility, and test coverage. Verify
+            findings against the surrounding code and tests. Do not report style preferences or
+            pre-existing problems. Use the available repository tools when they help validate a finding.
+
+            Set verdict to "approve" only when there are no actionable findings and the change is ready
+            to merge. Otherwise set it to "comment". Keep the summary concise. Each finding must name the
+            affected file and exact line or range and explain the user-visible risk.
+          output-schema: |
+            {
+              "type": "object",
+              "properties": {
+                "verdict": {
+                  "type": "string",
+                  "enum": ["approve", "comment"]
+                },
+                "summary": {
+                  "type": "string"
+                },
+                "findings": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              },
+              "required": ["verdict", "summary", "findings"],
+              "additionalProperties": false
+            }
+
+  publish:
+    name: Publish review
+    needs: review
+    if: needs.review.outputs.result != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    permissions:
+      pull-requests: write
+    steps:
+      - name: Submit review
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          REPOSITORY: ${{ github.repository }}
+          REVIEW_RESULT: ${{ needs.review.outputs.result }}
+        run: |
+          node <<'EOF'
+          const result = JSON.parse(process.env.REVIEW_RESULT)
+          const findings = result.findings.length === 0
+            ? ""
+            : `\n\n${result.findings.map((finding) => `- ${finding}`).join("\n")}`
+          const response = await fetch(
+            `https://api.github.com/repos/${process.env.REPOSITORY}/pulls/${process.env.PR_NUMBER}/reviews`,
+            {
+              method: "POST",
+              headers: {
+                Accept: "application/vnd.github+json",
+                Authorization: `Bearer ${process.env.GITHUB_TOKEN}`,
+                "X-GitHub-Api-Version": "2022-11-28",
+              },
+              body: JSON.stringify({
+                body: `${result.summary}${findings}`,
+                commit_id: process.env.HEAD_SHA,
+                event: result.verdict === "approve" ? "APPROVE" : "COMMENT",
+              }),
+            },
+          )
+
+          if (!response.ok) {
+            throw new Error(`GitHub returned ${response.status}: ${await response.text()}`)
+          }
+          EOF
