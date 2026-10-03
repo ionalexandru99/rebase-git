@@ -1,6 +1,7 @@
 "use client";
 
 import { Menu } from "@base-ui/react/menu";
+import { IconCheck } from "@tabler/icons-react";
 import type { ComponentProps } from "react";
 import { cn } from "#web/lib/utils.ts";
 
@@ -64,6 +65,33 @@ function DropdownMenuItem({ className, ...props }: Menu.Item.Props) {
   );
 }
 
+function DropdownMenuRadioGroup(props: Menu.RadioGroup.Props) {
+  return <Menu.RadioGroup data-slot="dropdown-menu-radio-group" {...props} />;
+}
+
+function DropdownMenuRadioItem({
+  children,
+  className,
+  ...props
+}: Menu.RadioItem.Props) {
+  return (
+    <Menu.RadioItem
+      className={cn(
+        "flex h-8 cursor-default items-center gap-2 rounded-[.35rem] px-2 text-[.85rem] text-foreground/80 outline-none select-none data-highlighted:bg-accent data-highlighted:text-foreground",
+        className,
+      )}
+      closeOnClick
+      data-slot="dropdown-menu-radio-item"
+      {...props}
+    >
+      <span className="min-w-0 flex-1 truncate">{children}</span>
+      <Menu.RadioItemIndicator>
+        <IconCheck aria-hidden="true" className="size-3.5 text-foreground" />
+      </Menu.RadioItemIndicator>
+    </Menu.RadioItem>
+  );
+}
+
 function DropdownMenuSeparator({
   className,
   ...props
@@ -81,6 +109,8 @@ export {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 };

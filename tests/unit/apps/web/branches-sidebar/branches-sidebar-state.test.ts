@@ -6,8 +6,10 @@ import {
   topicPath,
 } from "#tests-support/fixtures.ts";
 import {
+  branchesSidebarItems,
   buildBranchesSidebarRows,
   defaultExpandedSections,
+  dockItems,
   stepRow,
   toggleSection,
 } from "#web/features/branches-sidebar/branches-sidebar-state.ts";
@@ -38,11 +40,60 @@ describe("branches sidebar state", () => {
       current: false,
       checkout: { kind: "worktree", path: topicPath },
     });
+    expect(rows[0]).toMatchObject({ count: 3, scope: "local" });
     expect(rows[4]).toMatchObject({
+      count: 2,
       expanded: false,
+      scope: "remote",
       title: "origin",
     });
-    expect(rows[6]).toMatchObject({ expanded: false, title: "Tags" });
+    expect(rows[6]).toMatchObject({
+      count: 1,
+      expanded: false,
+      scope: "tags",
+      title: "Tags",
+    });
+  });
+
+  it("keeps Local on top and docks the other sections with their drafts", () => {
+    const rows = buildBranchesSidebarRows(
+      branchScenarioRefs(),
+      mainPath,
+      defaultExpandedSections,
+      "",
+    );
+    const ids = (items: ReturnType<typeof dockItems>["top"]) =>
+      items.map((item) => item.id);
+
+    const branchDraft = dockItems(branchesSidebarItems(rows, "branches"));
+    expect(ids(branchDraft.top)).toEqual([
+      "section:branches",
+      "ref-draft",
+      "ref:branches:main",
+      "ref:branches:topic",
+      "ref:branches:feature",
+    ]);
+    expect(ids(branchDraft.docked)).toEqual([
+      "section:remote:origin",
+      "section:remote:upstream",
+      "section:tags",
+    ]);
+
+    const tagDraft = dockItems(branchesSidebarItems(rows, "tags"));
+    expect(ids(tagDraft.top)).toHaveLength(4);
+    expect(ids(tagDraft.docked).slice(-2)).toEqual([
+      "section:tags",
+      "ref-draft",
+    ]);
+
+    const remotes = buildBranchesSidebarRows(
+      branchScenarioRefs(),
+      mainPath,
+      defaultExpandedSections,
+      "",
+      "remote",
+    );
+    expect(dockItems(branchesSidebarItems(remotes, undefined)).top).toEqual([]);
   });
 
   it("keeps the active branch ahead of branches in other worktrees", () => {

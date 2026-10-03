@@ -1,6 +1,4 @@
 import {
-  IconArrowDown,
-  IconArrowUp,
   IconChevronDown,
   IconCloud,
   IconEye,
@@ -21,24 +19,27 @@ import {
   ContextMenuTrigger,
 } from "#web/components/ui/context-menu.tsx";
 import type { BranchesSidebarFolderRow } from "#web/features/branches-sidebar/branch-tree.ts";
-import {
-  type BranchesSidebarRefRow,
-  type BranchesSidebarSectionRow,
-  localBranchesSectionId,
-  stashesSectionId,
-  type TagSelectionMode,
-  tagsSectionId,
+import type {
+  BranchesSidebarRefRow,
+  BranchesSidebarSectionRow,
+  TagSelectionMode,
 } from "#web/features/branches-sidebar/branches-sidebar-state.ts";
 import {
   describePullRequest,
-  PullRequestChecksIcon,
-  PullRequestStateIcon,
+  PullRequestLink,
 } from "#web/features/pull-requests/pull-requests.tsx";
 import type { RefAction } from "#web/features/refs/ref-actions.ts";
 
 export function rowElementId(rowId: string): string {
   return `branches-row-${rowId}`;
 }
+
+const sectionLooks = {
+  local: { Icon: IconGitBranch, className: "text-indigo-300" },
+  remote: { Icon: IconCloud, className: "text-sky-400" },
+  tags: { Icon: IconTag, className: "text-amber-300" },
+  stashes: { Icon: IconStack2, className: "text-violet-300" },
+} as const;
 
 export function SectionRow({
   active,
@@ -54,17 +55,8 @@ export function SectionRow({
   readonly style: CSSProperties;
 }) {
   const folder = row.kind === "folder";
-  const Icon = folder
-    ? row.expanded
-      ? IconFolderOpen
-      : IconFolder
-    : row.sectionId === localBranchesSectionId
-      ? IconGitBranch
-      : row.sectionId === tagsSectionId
-        ? IconTag
-        : row.sectionId === stashesSectionId
-          ? IconStack2
-          : IconCloud;
+  const look = folder ? undefined : sectionLooks[row.scope];
+  const Icon = look?.Icon ?? (row.expanded ? IconFolderOpen : IconFolder);
   return (
     <button
       aria-expanded={row.expanded}
@@ -78,26 +70,48 @@ export function SectionRow({
       aria-level={row.level}
       aria-posinset={row.position}
       aria-setsize={row.setSize}
-      className={`absolute top-0 left-0 flex w-full cursor-default items-center gap-1.5 rounded-md text-left text-sidebar-foreground outline-none select-none hover:text-sidebar-accent-foreground ${folder ? "text-[.81rem]" : "text-[.72rem] font-semibold tracking-wide uppercase"} ${!folder && row.separator ? "pt-3 before:absolute before:inset-x-0 before:top-0 before:border-t before:border-sidebar-border" : ""} ${active ? "bg-sidebar-accent/75" : ""}`}
+      className={`absolute top-0 left-0 flex w-full cursor-default items-center rounded-md text-left outline-none select-none ${folder ? "gap-1.5 text-[.81rem] text-sidebar-foreground hover:text-sidebar-accent-foreground" : `gap-2 px-1.5 text-[.8rem] hover:bg-sidebar-accent/50 ${look?.className ?? ""}`} ${active ? "bg-sidebar-accent/75" : ""}`}
       id={rowElementId(row.id)}
       onClick={() => {
         onActivate();
         onToggle();
       }}
       role="treeitem"
-      style={{ ...style, paddingLeft: 6 + Math.max(0, row.level - 2) * 18 }}
+      style={
+        folder
+          ? { ...style, paddingLeft: 6 + Math.max(0, row.level - 2) * 18 }
+          : style
+      }
       tabIndex={-1}
       type="button"
     >
-      <TreeGuides level={row.level} />
-      <IconChevronDown
-        aria-hidden="true"
-        className={`size-3.5 shrink-0 ${row.expanded ? "" : "-rotate-90"}`}
-      />
-      <Icon aria-hidden="true" className="size-3.5 shrink-0" />
-      <span className="min-w-0 truncate">
-        {folder ? `${row.label}/` : row.title}
-      </span>
+      {folder ? (
+        <>
+          <TreeGuides level={row.level} />
+          <IconChevronDown
+            aria-hidden="true"
+            className={`size-3.5 shrink-0 ${row.expanded ? "" : "-rotate-90"}`}
+          />
+          <Icon aria-hidden="true" className="size-3.5 shrink-0" />
+          <span className="min-w-0 truncate">{row.label}/</span>
+        </>
+      ) : (
+        <>
+          <Icon aria-hidden="true" className="size-3.5 shrink-0" />
+          <span className="min-w-0 truncate first-letter:uppercase">
+            {row.title} ({row.count}
+            {row.truncated ? "+" : ""})
+          </span>
+          <span
+            aria-hidden="true"
+            className="h-px min-w-3 flex-1 bg-current opacity-25"
+          />
+          <IconChevronDown
+            aria-hidden="true"
+            className={`size-3.5 shrink-0 ${row.expanded ? "rotate-180" : ""}`}
+          />
+        </>
+      )}
     </button>
   );
 }
@@ -108,7 +122,7 @@ export function RefRow({
   selected,
   onActivate,
   onToggleHistory,
-  pullRequest,
+  pullRequests,
   row,
   selectedInHistory,
   style,
@@ -118,7 +132,7 @@ export function RefRow({
   readonly selected: boolean;
   readonly onActivate: (mode: TagSelectionMode) => void;
   readonly onToggleHistory: () => void;
-  readonly pullRequest: PullRequest | undefined;
+  readonly pullRequests: readonly PullRequest[];
   readonly row: BranchesSidebarRefRow;
   readonly selectedInHistory: boolean;
   readonly style: CSSProperties;
@@ -141,10 +155,10 @@ export function RefRow({
               aria-level={row.level}
               aria-posinset={row.position}
               aria-setsize={row.setSize}
-              aria-label={refRowLabel(row, pullRequest)}
+              aria-label={refRowLabel(row, pullRequests)}
               aria-current={row.current ? "true" : undefined}
               aria-selected={active || selected}
-              className="relative flex h-full min-w-0 flex-1 items-center gap-2 rounded-md pr-8 text-left outline-none"
+              className="relative flex h-full min-w-0 flex-1 items-center gap-2 rounded-md pr-1.5 text-left outline-none"
               style={{ paddingLeft: 10 + (row.level - 2) * 18 }}
               id={rowElementId(row.id)}
               onClick={(event) => {
@@ -164,37 +178,19 @@ export function RefRow({
               tabIndex={-1}
               type="button"
             >
-              <RefIcon pullRequest={pullRequest} row={row} />
+              {row.current ? (
+                <span
+                  aria-hidden="true"
+                  className="absolute size-1.5 rounded-full bg-primary"
+                  style={{ left: 1 + (row.level - 2) * 18 }}
+                />
+              ) : null}
               <span className="min-w-0 truncate">{row.label}</span>
               {row.upstream === undefined ? null : (
-                <UpstreamIndicator upstream={row.upstream} />
-              )}
-              {pullRequest === undefined ? null : (
-                <PullRequestChecksIcon
-                  className="ml-auto"
-                  pullRequest={pullRequest}
-                />
-              )}
-              {row.checkout?.kind !== "worktree" ? null : (
-                <svg
-                  aria-label="Linked worktree"
-                  role="img"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="1.65"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  className={`absolute right-2 size-3.5 text-muted-foreground opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 ${active ? "group-focus/tree:opacity-100" : ""}`}
-                >
-                  <path d="M10 19H3V5h6l2 3h10v3" />
-                  <circle cx="15" cy="14" r="1.5" />
-                  <circle cx="21" cy="17" r="1.5" />
-                  <circle cx="15" cy="21" r="1.5" />
-                  <path d="M15 15.5v4M15 18h3a3 3 0 0 0 2-1" />
-                </svg>
+                <SyncCounts upstream={row.upstream} />
               )}
             </button>
+            <PullRequestLink pullRequests={pullRequests} />
             <HistorySelectionButton
               active={active}
               onToggle={onToggleHistory}
@@ -262,77 +258,50 @@ function HistorySelectionButton({
   );
 }
 
-function RefIcon({
-  pullRequest,
-  row,
-}: {
-  readonly pullRequest: PullRequest | undefined;
-  readonly row: BranchesSidebarRefRow;
-}) {
-  if (row.current)
-    return (
-      <span
-        aria-hidden="true"
-        className="flex size-3.5 shrink-0 items-center justify-center"
-      >
-        <span className="size-1.5 rounded-full bg-primary" />
-      </span>
-    );
-  if (pullRequest !== undefined)
-    return <PullRequestStateIcon pullRequest={pullRequest} />;
-  const Icon = row.target._tag === "Tag" ? IconTag : IconGitBranch;
-  return (
-    <Icon
-      aria-hidden="true"
-      className="size-3.5 shrink-0 text-muted-foreground"
-    />
-  );
-}
-
 function refRowLabel(
   row: BranchesSidebarRefRow,
-  pullRequest: PullRequest | undefined,
+  pullRequests: readonly PullRequest[],
 ): string {
+  const [newest] = pullRequests;
   return [
     row.name,
     ...(row.current ? ["current branch"] : []),
     ...(row.checkout?.kind === "worktree" ? ["linked worktree"] : []),
-    ...(pullRequest === undefined ? [] : [describePullRequest(pullRequest)]),
+    ...(row.upstream?.gone ? ["remote branch deleted"] : []),
+    ...(newest === undefined ? [] : [describePullRequest(newest)]),
+    ...(pullRequests.length > 1 ? [`${pullRequests.length - 1} more`] : []),
   ].join(", ");
 }
 
-function UpstreamIndicator({
-  upstream,
-}: {
-  readonly upstream: BranchUpstream;
-}) {
-  if (upstream.gone)
-    return (
-      <span className="shrink-0 text-xs text-status-unavailable">gone</span>
-    );
-  if (upstream.ahead === 0 && upstream.behind === 0) return null;
+function SyncCounts({ upstream }: { readonly upstream: BranchUpstream }) {
+  if (upstream.gone || (upstream.ahead === 0 && upstream.behind === 0))
+    return null;
   return (
-    <span className="flex shrink-0 items-center gap-1 text-xs font-normal tabular-nums">
+    <span className="ml-auto flex shrink-0 items-center gap-1 text-[.78rem] font-normal tabular-nums">
       {upstream.ahead > 0 ? (
         <span
-          role="img"
-          className="inline-flex items-center text-status-available"
           aria-label={`${upstream.ahead} commits to push`}
+          className="text-status-available"
+          role="img"
         >
-          <IconArrowUp aria-hidden="true" className="size-3" />
-          {upstream.ahead}
+          {compactCount(upstream.ahead)}↑
         </span>
       ) : null}
       {upstream.behind > 0 ? (
         <span
-          role="img"
-          className="inline-flex items-center text-status-unavailable"
           aria-label={`${upstream.behind} commits to pull`}
+          className="text-status-unavailable"
+          role="img"
         >
-          <IconArrowDown aria-hidden="true" className="size-3" />
-          {upstream.behind}
+          {compactCount(upstream.behind)}↓
         </span>
       ) : null}
     </span>
   );
+}
+
+function compactCount(count: number) {
+  if (count < 1_000) return String(count);
+  const thousands = count / 1_000;
+  return `${thousands < 10 ? Math.floor(thousands * 10) / 10 : Math.floor(thousands)}k`;
 }

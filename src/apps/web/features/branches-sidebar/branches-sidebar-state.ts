@@ -23,6 +23,7 @@ export type BranchesSidebarScope =
   | "remote"
   | "tags"
   | "stashes";
+export type BranchesSidebarSectionScope = Exclude<BranchesSidebarScope, "all">;
 export type BranchesSidebarView = "linear" | "tree";
 
 export interface BranchesSidebarTreeOptions {
@@ -31,13 +32,14 @@ export interface BranchesSidebarTreeOptions {
 }
 
 export interface BranchesSidebarSectionRow extends RowHierarchy {
+  readonly count: number;
   readonly expanded: boolean;
   readonly id: string;
   readonly kind: "section";
+  readonly scope: BranchesSidebarSectionScope;
   readonly sectionId: string;
   readonly title: string;
   readonly truncated: boolean;
-  readonly separator: boolean;
 }
 
 export interface BranchesSidebarRefRow extends RowHierarchy {
@@ -205,7 +207,6 @@ export function buildBranchesSidebarRows(
             section.truncated) &&
           (section.scope !== "stashes" || sectionSize(section) > 0)),
     );
-  let previousExpanded = false;
   return visibleSections.flatMap((section, index): BranchesSidebarRow[] => {
     const expanded =
       filtering ||
@@ -215,15 +216,15 @@ export function buildBranchesSidebarRows(
       level: 1,
       position: index + 1,
       setSize: visibleSections.length,
-      separator: previousExpanded,
+      count: sectionSize(section),
       expanded,
       id: `section:${section.sectionId}`,
       kind: "section",
+      scope: section.scope,
       sectionId: section.sectionId,
       title: section.title,
       truncated: section.truncated,
     };
-    previousExpanded = expanded;
     if (!expanded) return [header];
     if (section.stashes !== undefined)
       return [
@@ -299,11 +300,26 @@ export function branchesSidebarItems(
   return items;
 }
 
+export function dockItems(items: readonly BranchesSidebarItem[]): {
+  readonly top: readonly BranchesSidebarItem[];
+  readonly docked: readonly BranchesSidebarItem[];
+} {
+  const start = items.findIndex(
+    (item) =>
+      item.kind === "row" &&
+      item.row.kind === "section" &&
+      item.row.sectionId !== localBranchesSectionId,
+  );
+  return start < 0
+    ? { top: items, docked: [] }
+    : { top: items.slice(0, start), docked: items.slice(start) };
+}
+
 export function estimateItemHeight(item: BranchesSidebarItem | undefined) {
   if (item?.kind === "draft") return 40;
   if (item?.kind === "stash-draft") return 52;
   if (item?.kind === "details") return 56;
-  return item?.row.kind === "section" && item.row.separator ? 44 : 32;
+  return 32;
 }
 
 export function selectTagRows(
@@ -459,7 +475,7 @@ interface SectionDraft {
   >[];
   readonly stashes?: readonly RepositoryStash[];
   readonly sectionId: string;
-  readonly scope: Exclude<BranchesSidebarScope, "all">;
+  readonly scope: BranchesSidebarSectionScope;
   readonly title: string;
   readonly truncated: boolean;
 }

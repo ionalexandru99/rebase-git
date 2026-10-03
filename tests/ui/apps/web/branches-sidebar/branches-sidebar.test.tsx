@@ -39,32 +39,61 @@ import {
 describe("branches sidebar", () => {
   beforeEach(() => localStorage.removeItem("rebase:branches-view:v1"));
 
-  it("reveals linked worktree icons on hover and keyboard focus", async () => {
-    const { screen } = await renderSidebar();
+  it("docks the other sections below Local and moves through both with the keyboard", async () => {
+    const current = refs();
+    const numbered = (prefix: string, count: number) =>
+      Array.from({ length: count }, (_, index) => ({
+        name: `${prefix}-${String(index).padStart(2, "0")}`,
+      }));
+    const { screen } = await renderSidebar({
+      refs: {
+        ...current,
+        branches: [...current.branches, ...numbered("local", 40)],
+        remoteBranches: numbered("remote", 30).map((branch) => ({
+          ...branch,
+          remote: "origin",
+        })),
+      },
+    });
     const tree = screen.getByRole("tree", { name: "Branches" });
-    const main = tree.getByRole("treeitem", { name: "main, current branch" });
-    const topic = tree.getByRole("treeitem", {
+    const local = tree.getByRole("treeitem", { name: "Local", exact: true });
+    const origin = tree.getByRole("treeitem", { name: "origin", exact: true });
+    const tags = tree.getByRole("treeitem", { name: "Tags", exact: true });
+    const bounds = (element: { element: () => Element }) =>
+      element.element().getBoundingClientRect();
+    await expect.element(tags).toBeVisible();
+    expect(bounds(tree).bottom - bounds(tags).bottom).toBeLessThan(12);
+
+    await origin.click();
+    await expect.element(origin).toHaveAttribute("aria-expanded", "true");
+    const height = bounds(tree).height;
+    expect(bounds(origin).top - bounds(tree).top).toBeGreaterThan(
+      height * 0.35,
+    );
+    expect(bounds(local).top - bounds(tree).top).toBeLessThan(4);
+
+    tree.element().focus();
+    await userEvent.keyboard("{End}");
+    await expect
+      .element(tree)
+      .toHaveAttribute("aria-activedescendant", tags.element().id);
+    await expect.element(tags).toBeVisible();
+    await userEvent.keyboard("{ArrowUp}".repeat(31));
+    await expect
+      .element(tree)
+      .toHaveAttribute("aria-activedescendant", origin.element().id);
+    await userEvent.keyboard("{ArrowUp}");
+    const lastLocal = tree.getByRole("treeitem", {
       name: "topic, linked worktree",
     });
-    const marker = topic.getByRole("img", { name: "Linked worktree" });
-    await expect.element(main).toHaveAttribute("aria-current", "true");
+    await expect.element(lastLocal).toBeVisible();
     await expect
-      .element(main.getByRole("img", { name: "Linked worktree" }))
-      .not.toBeInTheDocument();
-    await expect.element(marker).toHaveStyle({ opacity: "0" });
-    await topic.hover();
-    await expect.element(marker).toHaveStyle({ opacity: "1" });
-    await main.click();
-    tree.element().focus();
+      .element(tree)
+      .toHaveAttribute("aria-activedescendant", lastLocal.element().id);
     await userEvent.keyboard("{ArrowDown}");
-    await screen.getByRole("heading", { name: "Branches" }).hover();
-    await expect.element(topic).toHaveAttribute("aria-selected", "true");
-    await expect.element(marker).toHaveStyle({ opacity: "1" });
-    await screen.getByRole("textbox", { name: "Filter branches" }).click();
-    await expect.element(marker).toHaveStyle({ opacity: "0" });
     await expect
-      .element(tree.getByRole("treeitem", { name: "origin" }))
-      .toHaveAttribute("aria-expanded", "false");
+      .element(tree)
+      .toHaveAttribute("aria-activedescendant", origin.element().id);
   });
 
   it("switches views with arrow keys and remembers the choice after remounting", async () => {
@@ -122,46 +151,48 @@ describe("branches sidebar", () => {
     await expect.element(api).toHaveAttribute("aria-expanded", "true");
   });
 
-  it("keeps inline sync counts and the worktree marker stable as counts change", async () => {
+  it("right-aligns compact sync counts and keeps exact counts in their labels", async () => {
     const current = refs();
-    const withSync = (ahead: number, behind: number): RepositoryRefs => ({
+    const withUpstream = (
+      sync: Parameters<typeof upstream>[1],
+    ): RepositoryRefs => ({
       ...current,
       branches: current.branches.map((branch) =>
-        branch.name === "topic"
-          ? {
-              ...branch,
-              upstream: upstream("origin/topic", { ahead, behind }),
-            }
+        branch.name === "feature"
+          ? { ...branch, upstream: upstream("origin/feature", sync) }
           : branch,
       ),
     });
     const { screen, publish } = await renderSidebar({
-      refs: withSync(0, 2),
+      refs: withUpstream({ ahead: 2, behind: 79 }),
     });
-    const topic = screen.getByRole("treeitem", {
-      name: "topic, linked worktree",
-    });
-    await topic.hover();
-    const marker = topic.getByRole("img", { name: "Linked worktree" });
-    const x = marker.element().getBoundingClientRect().x;
-    const name = topic
-      .getByText("topic", { exact: true })
-      .element()
-      .getBoundingClientRect();
-    const pull = topic.getByRole("img", { name: "2 commits to pull" });
-    expect(
-      pull.element().getBoundingClientRect().left - name.right,
-    ).toBeLessThan(12);
-    publish(withSync(99, 111));
+    const feature = screen.getByRole("treeitem", { name: "feature" });
     await expect
-      .element(topic.getByRole("img", { name: "111 commits to pull" }))
-      .toBeVisible();
-    expect(marker.element().getBoundingClientRect().x).toBe(x);
+      .element(feature.getByRole("img", { name: "2 commits to push" }))
+      .toHaveTextContent("2↑");
+    const pull = feature.getByRole("img", { name: "79 commits to pull" });
+    await expect.element(pull).toHaveTextContent("79↓");
     expect(
-      getComputedStyle(
-        topic.getByRole("img", { name: "111 commits to pull" }).element(),
-      ).fontFamily,
-    ).toBe(getComputedStyle(topic.element()).fontFamily);
+      feature.element().getBoundingClientRect().right -
+        pull.element().getBoundingClientRect().right,
+    ).toBeLessThan(8);
+
+    publish(withUpstream({ ahead: 12_400, behind: 1_240 }));
+    await expect
+      .element(feature.getByRole("img", { name: "1240 commits to pull" }))
+      .toHaveTextContent("1.2k↓");
+    await expect
+      .element(feature.getByRole("img", { name: "12400 commits to push" }))
+      .toHaveTextContent("12k↑");
+
+    publish(withUpstream({ gone: true }));
+    await expect
+      .element(
+        screen.getByRole("treeitem", {
+          name: "feature, remote branch deleted",
+        }),
+      )
+      .toHaveTextContent(/^feature$/);
   });
 
   it("keeps a single click as focus and checks out on double click", async () => {
@@ -294,12 +325,11 @@ describe("branches sidebar", () => {
     await expect.element(filter).toHaveFocus();
     await expect.element(clear).not.toBeInTheDocument();
 
-    const tags = screen.getByRole("radio", { name: "Tags" });
-    await screen
-      .getByRole("radiogroup", { name: "Branch scope" })
-      .getByText("Tags", { exact: true })
-      .click();
-    await expect.element(tags).toBeChecked();
+    await screen.getByRole("button", { name: "Branch scope, All" }).click();
+    await screen.getByRole("menuitemradio", { name: "Tags" }).click();
+    await expect
+      .element(screen.getByRole("button", { name: "Branch scope, Tags" }))
+      .toHaveTextContent("Tags");
     await expect
       .element(screen.getByRole("treeitem", { name: "v1.0.0" }))
       .toBeVisible();

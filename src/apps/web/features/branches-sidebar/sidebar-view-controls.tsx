@@ -1,5 +1,20 @@
-import { IconList, IconListTree } from "@tabler/icons-react";
-import { type JSX, useId, useState } from "react";
+import {
+  IconChevronDown,
+  IconList,
+  IconListTree,
+  IconSearch,
+  IconX,
+} from "@tabler/icons-react";
+import { type JSX, type KeyboardEvent, useId, useRef, useState } from "react";
+import { Button } from "#web/components/ui/button.tsx";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuTrigger,
+} from "#web/components/ui/dropdown-menu.tsx";
+import { Input } from "#web/components/ui/input.tsx";
 import type {
   BranchesSidebarScope,
   BranchesSidebarView,
@@ -70,35 +85,77 @@ export function BranchesSidebarViewSelector({
   );
 }
 
-export function BranchesSidebarScopeFilter({
-  onChange,
+export function BranchesSidebarFilter({
+  onKeyDown,
+  onQueryChange,
+  onScopeChange,
+  query,
   scope,
 }: {
-  readonly onChange: (scope: BranchesSidebarScope) => void;
+  readonly onKeyDown: (event: KeyboardEvent<HTMLInputElement>) => void;
+  readonly onQueryChange: (query: string) => void;
+  readonly onScopeChange: (scope: BranchesSidebarScope) => void;
+  readonly query: string;
   readonly scope: BranchesSidebarScope;
 }): JSX.Element {
-  const name = useId();
+  const inputRef = useRef<HTMLInputElement>(null);
+  const scopeLabel =
+    scopeOptions.find((option) => option.value === scope)?.label ?? "All";
   return (
-    <div
-      aria-label="Branch scope"
-      className="mx-3 mt-2 mb-1.5 grid grid-cols-[.6fr_.85fr_1.1fr_.75fr_1.15fr] gap-0.5 rounded-md border border-sidebar-border/50 bg-muted/30 p-0.5"
-      role="radiogroup"
-    >
-      {scopeOptions.map((option) => (
-        <label className="min-w-0 cursor-default" key={option.value}>
-          <input
-            checked={scope === option.value}
-            className="peer sr-only"
-            name={name}
-            onChange={() => onChange(option.value)}
-            type="radio"
-            value={option.value}
-          />
-          <span className="flex h-6 min-w-0 items-center justify-center rounded-sm px-1 text-[.68rem] text-muted-foreground select-none peer-checked:bg-sidebar-accent peer-checked:text-sidebar-accent-foreground peer-focus-visible:ring-2 peer-focus-visible:ring-sidebar-ring/50">
-            {option.label}
-          </span>
-        </label>
-      ))}
+    <div className="relative mx-3 mt-3 mb-2">
+      <IconSearch
+        aria-hidden="true"
+        className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground"
+      />
+      <Input
+        aria-label="Filter branches"
+        className={`pl-9 ${query === "" ? "pr-20" : "pr-26"}`}
+        onChange={(event) => onQueryChange(event.target.value)}
+        onKeyDown={onKeyDown}
+        placeholder="Filter branches"
+        ref={inputRef}
+        value={query}
+      />
+      <div className="absolute inset-y-0 right-1 flex items-center gap-0.5">
+        {query === "" ? null : (
+          <Button
+            aria-label="Clear filter"
+            className="text-muted-foreground"
+            onClick={() => {
+              onQueryChange("");
+              inputRef.current?.focus();
+            }}
+            size="icon-xs"
+            type="button"
+            variant="ghost"
+          >
+            <IconX aria-hidden="true" />
+          </Button>
+        )}
+        <DropdownMenu>
+          <DropdownMenuTrigger
+            aria-label={`Branch scope, ${scopeLabel}`}
+            className="inline-flex h-6 items-center gap-0.5 rounded-sm px-1.5 text-xs text-muted-foreground outline-none hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/30 data-popup-open:bg-accent data-popup-open:text-foreground"
+          >
+            {scopeLabel}
+            <IconChevronDown aria-hidden="true" className="size-3" />
+          </DropdownMenuTrigger>
+          <DropdownMenuContent className="w-36">
+            <DropdownMenuRadioGroup
+              onValueChange={(value: BranchesSidebarScope) =>
+                onScopeChange(value)
+              }
+              value={scope}
+            >
+              {scopeOptions.map((option) => (
+                <DropdownMenuRadioItem key={option.value} value={option.value}>
+                  {option.label}
+                </DropdownMenuRadioItem>
+              ))}
+            </DropdownMenuRadioGroup>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
     </div>
   );
 }

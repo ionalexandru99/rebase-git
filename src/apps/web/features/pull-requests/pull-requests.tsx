@@ -69,7 +69,7 @@ export function CurrentPullRequest({
   if (pullRequest === undefined) return null;
   return (
     <ToolbarButton
-      aria-label={`Open ${describePullRequest(pullRequest)}`}
+      aria-label={`Open ${describePullRequest(pullRequest)}${checksLabel(pullRequest)}`}
       onClick={() => openPullRequest(pullRequest)}
     >
       <PullRequestStateIcon pullRequest={pullRequest} />
@@ -90,27 +90,52 @@ export function PullRequestStateIcon({
   );
 }
 
-export function PullRequestChecksIcon({
-  className = "",
-  pullRequest,
+export function PullRequestLink({
+  pullRequests,
 }: {
-  readonly className?: string;
-  readonly pullRequest: PullRequest;
+  readonly pullRequests: readonly PullRequest[];
 }) {
-  const checks = visibleChecks(pullRequest);
-  if (checks === undefined) return null;
-  const { Icon, className: color } = checksIcons[checks];
+  const [newest] = pullRequests;
+  if (newest === undefined) return null;
   return (
-    <Icon
-      aria-hidden="true"
-      className={`size-3 shrink-0 ${color} ${className}`}
-    />
+    <span className="flex shrink-0 items-center gap-1 text-[.78rem] tabular-nums">
+      <button
+        aria-label={`Open ${describePullRequest(newest)}`}
+        className={`inline-flex items-center gap-1 rounded-sm underline-offset-2 outline-none hover:underline ${stateIcons[newest.state].className}`}
+        onClick={() => openPullRequest(newest)}
+        tabIndex={-1}
+        type="button"
+      >
+        <PullRequestStateIcon pullRequest={newest} />
+        {newest.number}
+      </button>
+      {pullRequests.length > 1 ? (
+        <span aria-hidden="true" className="text-muted-foreground">
+          +{pullRequests.length - 1}
+        </span>
+      ) : null}
+    </span>
   );
 }
 
 export function describePullRequest(pullRequest: PullRequest) {
+  return `${terms[pullRequest.kind].name} ${reference(pullRequest)}, ${pullRequest.state.toLowerCase()}`;
+}
+
+function PullRequestChecksIcon({
+  pullRequest,
+}: {
+  readonly pullRequest: PullRequest;
+}) {
   const checks = visibleChecks(pullRequest);
-  return `${terms[pullRequest.kind].name} ${reference(pullRequest)}, ${pullRequest.state.toLowerCase()}${checks === undefined ? "" : `, checks ${checks.toLowerCase()}`}`;
+  if (checks === undefined) return null;
+  const { Icon, className } = checksIcons[checks];
+  return <Icon aria-hidden="true" className={`size-3 shrink-0 ${className}`} />;
+}
+
+function checksLabel(pullRequest: PullRequest) {
+  const checks = visibleChecks(pullRequest);
+  return checks === undefined ? "" : `, checks ${checks.toLowerCase()}`;
 }
 
 function visibleChecks(pullRequest: PullRequest) {

@@ -149,8 +149,5 @@ describe("branch prefix tree", () => {
     expect(rows.find((row) => row.id === "ref:tags:release/v1")).toMatchObject({
       target: { _tag: "Tag", name: "release/v1" },
     });
-    expect(
-      rows.filter((row) => row.kind === "section").map((row) => row.separator),
-    ).toEqual([false, true, true]);
   });
 });

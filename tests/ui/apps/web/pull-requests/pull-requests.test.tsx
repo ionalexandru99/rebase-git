@@ -35,7 +35,7 @@ describe("branch pull requests", () => {
     await expect
       .element(
         screen.getByRole("treeitem", {
-          name: "feature, pull request #9, open, checks failing",
+          name: "feature, pull request #9, open",
         }),
       )
       .toBeVisible();
@@ -50,6 +50,27 @@ describe("branch pull requests", () => {
       "_blank",
       "noopener,noreferrer",
     );
+  });
+
+  it("opens a branch's newest pull request from its number without selecting the row", async () => {
+    const opened = vi.spyOn(window, "open").mockReturnValue(null);
+    const screen = await renderPullRequests();
+    const topic = screen.getByRole("treeitem", {
+      name: "topic, linked worktree, pull request #12, draft, 1 more",
+    });
+    const number = screen.getByRole("button", {
+      name: "Open pull request #12, draft",
+    });
+
+    await expect.element(number).toHaveTextContent("12");
+    await number.click();
+
+    expect(opened).toHaveBeenCalledWith(
+      "https://github.com/octo/rebase/pull/12",
+      "_blank",
+      "noopener,noreferrer",
+    );
+    await expect.element(topic).toHaveAttribute("aria-selected", "false");
   });
 
   it("lists every pull request of a branch in its menu", async () => {
