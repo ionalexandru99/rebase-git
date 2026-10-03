@@ -53,12 +53,19 @@ describe("branches sidebar", () => {
           ...branch,
           remote: "origin",
         })),
+        truncated: { ...current.truncated, tags: true },
       },
     });
     const tree = screen.getByRole("tree", { name: "Branches" });
-    const local = tree.getByRole("treeitem", { name: "Local", exact: true });
-    const origin = tree.getByRole("treeitem", { name: "origin", exact: true });
-    const tags = tree.getByRole("treeitem", { name: "Tags", exact: true });
+    const local = tree.getByRole("treeitem", {
+      name: "Local (43)",
+      exact: true,
+    });
+    const origin = tree.getByRole("treeitem", {
+      name: "origin (30)",
+      exact: true,
+    });
+    const tags = tree.getByRole("treeitem", { name: "Tags (1+)", exact: true });
     const bounds = (element: { element: () => Element }) =>
       element.element().getBoundingClientRect();
     await expect.element(tags).toBeVisible();

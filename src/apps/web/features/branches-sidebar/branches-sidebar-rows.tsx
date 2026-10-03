@@ -63,9 +63,7 @@ export function SectionRow({
       aria-label={
         folder
           ? row.path
-          : row.truncated
-            ? `${row.title}, partial list`
-            : row.title
+          : `${row.title} (${row.count}${row.truncated ? "+" : ""})`
       }
       aria-level={row.level}
       aria-posinset={row.position}
