@@ -74,7 +74,10 @@ export function readChanges(git: GitCommandRunner, scope: ChangesScope) {
     const untracked = records.flatMap(({ xy, path }) =>
       xy === "??" ? [path] : [],
     );
-    const untrackedLines = yield* worktreeLineCounts(directory, untracked);
+    const untrackedLines = yield* worktreeLineCounts(
+      directory,
+      untracked.slice(0, countedUntrackedLimit),
+    );
     const counted = new Map([
       ...lineCounts(unstagedLines),
       ...untracked.map(
@@ -185,6 +188,7 @@ function comparisonBase(
   });
 }
 const renameLimit = 1000;
+const countedUntrackedLimit = 1000;
 
 function stagedFiles(output: string) {
   const fields = output.split("\0");
@@ -216,8 +220,13 @@ function lineCounts(output: string) {
   const fields = output.split("\0");
   const counts = new Map<string, ChangedFile["lines"]>();
   for (let i = 0; i < fields.length; ) {
-    const [added = "", removed = "", path] = (fields[i++] ?? "").split("\t");
-    if (path === undefined) continue;
+    const record = fields[i++] ?? "";
+    const first = record.indexOf("\t");
+    const second = record.indexOf("\t", first + 1);
+    if (first < 0 || second < 0) continue;
+    const added = record.slice(0, first);
+    const removed = record.slice(first + 1, second);
+    const path = record.slice(second + 1);
     let target: string | undefined = path;
     if (path === "") {
       target = fields[i + 1];

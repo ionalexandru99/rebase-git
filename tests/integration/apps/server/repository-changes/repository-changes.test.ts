@@ -120,6 +120,25 @@ describe("working changes through Git", () => {
       }
     },
   );
+  it.skipIf(process.platform === "win32")(
+    "counts the lines of a file whose name contains a tab",
+    async () => {
+      const f = await fixture();
+      await writeFile(join(f.directory, "tab\tname.txt"), "one\n");
+      await f.git("add", ".");
+      await f.git("commit", "-m", "Tab name");
+      await writeFile(join(f.directory, "tab\tname.txt"), "one\ntwo\n");
+      await f.git("add", ".");
+      expect((await f.read()).staged).toEqual([
+        {
+          path: "tab\tname.txt",
+          previousPath: null,
+          status: "M",
+          lines: { added: 1, removed: 0 },
+        },
+      ]);
+    },
+  );
   it("counts the lines each changed file adds and removes", async () => {
     const f = await fixture();
     await writeFile(join(f.directory, "file.txt"), "one\nTWO\nthree\nfour\n");

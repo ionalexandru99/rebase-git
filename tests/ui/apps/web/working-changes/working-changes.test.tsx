@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
-import { page } from "vite-plus/test/browser";
+import { page, userEvent } from "vite-plus/test/browser";
 import {
   type RepositoryRejected,
   repositoryRejected,
@@ -196,9 +196,8 @@ async function fixture(
 afterEach(() => saveDiffPreferences(defaultDiffPreferences));
 
 async function stageAll() {
-  await page
-    .getByRole("button", { name: "Collapse unstaged" })
-    .click({ button: "right" });
+  page.getByRole("button", { name: "Collapse unstaged" }).element().focus();
+  await userEvent.keyboard("{Shift>}{F10}{/Shift}");
   await page.getByRole("menuitem", { name: "Stage all" }).click();
 }
 

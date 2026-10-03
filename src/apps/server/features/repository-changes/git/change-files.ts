@@ -97,7 +97,12 @@ export function worktreeLineCounts(
         const content = await readFile(target).catch(() => null);
         if (content === null || content.includes(0)) return null;
         let added = content.length > 0 && content.at(-1) !== 10 ? 1 : 0;
-        for (const byte of content) if (byte === 10) added++;
+        for (
+          let index = content.indexOf(10);
+          index >= 0;
+          index = content.indexOf(10, index + 1)
+        )
+          added++;
         return { added, removed: 0 };
       }),
     ),

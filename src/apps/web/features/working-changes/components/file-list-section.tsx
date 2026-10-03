@@ -4,7 +4,7 @@ import {
   IconFolder,
   IconFolderOpen,
 } from "@tabler/icons-react";
-import { type ReactNode, useState } from "react";
+import { type KeyboardEvent, type ReactNode, useState } from "react";
 import {
   type Action,
   ActionMenuItems,
@@ -80,6 +80,7 @@ export function FileListSection<File extends { readonly path: string }>({
       aria-label={`${open ? "Collapse" : "Expand"} ${title.toLowerCase()}`}
       aria-expanded={open}
       onClick={() => setOpen(!open)}
+      onKeyDown={headerMenu === undefined ? undefined : openMenu}
       className={cn(
         "relative flex h-8 w-full cursor-default items-center gap-2 rounded-md px-1.5 text-left text-[.8rem] outline-none select-none hover:bg-sidebar-accent/50 focus-visible:ring-1 focus-visible:ring-sidebar-ring",
         look.className,
@@ -131,7 +132,7 @@ export function FileListSection<File extends { readonly path: string }>({
               <div
                 key={row.key}
                 className={cn(
-                  "group absolute inset-x-0 flex items-center gap-2 rounded-md pr-1 text-[.85rem] select-none",
+                  "group absolute inset-x-0 flex items-center gap-2 rounded-md pr-1 text-[.85rem] select-none has-[:focus-visible]:ring-1 has-[:focus-visible]:ring-sidebar-ring has-[:focus-visible]:ring-inset",
                   chosen(row)
                     ? "bg-sidebar-accent text-sidebar-accent-foreground"
                     : "text-sidebar-foreground hover:bg-sidebar-accent/75 hover:text-sidebar-accent-foreground",
@@ -169,6 +170,20 @@ export function FileListSection<File extends { readonly path: string }>({
       </div>
       {footer?.(open)}
     </section>
+  );
+}
+
+function openMenu(event: KeyboardEvent<HTMLElement>) {
+  if (event.key !== "ContextMenu" && !(event.key === "F10" && event.shiftKey))
+    return;
+  event.preventDefault();
+  const bounds = event.currentTarget.getBoundingClientRect();
+  event.currentTarget.dispatchEvent(
+    new globalThis.MouseEvent("contextmenu", {
+      bubbles: true,
+      clientX: bounds.left + 32,
+      clientY: bounds.bottom,
+    }),
   );
 }
 

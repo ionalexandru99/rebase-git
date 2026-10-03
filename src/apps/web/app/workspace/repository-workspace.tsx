@@ -148,7 +148,6 @@ function Workspace({
   const resolved = historyScope.resolvedScope;
   return (
     <>
-      <WorkspacePanel.Controls />
       <OperationRecoveryNotice key={worktreePath} repositoryName={name} />
       <ResetConfirmation reset={reset} />
       <DropConfirmation drop={drop} />
@@ -203,12 +202,8 @@ function Workspace({
                             <CurrentPullRequest pullRequests={pullRequests} />
                           </>
                         }
-                        toolbarActions={
-                          <>
-                            {syncActions}
-                            <WorkspacePanel.ControlsSpace />
-                          </>
-                        }
+                        toolbarActions={syncActions}
+                        toolbarInset={!panel.state.open}
                         hostedRepository={refs?.hostedRepository}
                         remoteProviders={refs?.remoteProviders}
                         historyIdentity={{
@@ -260,6 +255,7 @@ function Workspace({
           </CommitInspectionBridge>
         )}
       </RemoteSync>
+      <WorkspacePanel.Controls />
     </>
   );
 }

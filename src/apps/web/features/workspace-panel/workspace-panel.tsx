@@ -114,13 +114,6 @@ function Controls() {
   );
 }
 
-function ControlsSpace() {
-  const { state } = useWorkspacePanel();
-  return state.open ? null : (
-    <span aria-hidden="true" className="w-8 shrink-0" />
-  );
-}
-
 function Main({
   children,
 }: {
@@ -178,7 +171,6 @@ export const WorkspacePanel = {
   Provider: WorkspacePanelProvider,
   Group,
   Controls,
-  ControlsSpace,
   Pane,
   Main,
 };
