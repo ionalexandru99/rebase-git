@@ -409,6 +409,97 @@ describe("repository branches", () => {
       git(fixture.repositoryPath, "branch", "--list", "merged"),
     ).resolves.toBe("");
   });
+
+  it("deletes remote branches that are already gone from the remote along with the rest", async () => {
+    const fixture = await createFixture();
+    await git(
+      fixture.repositoryPath,
+      "push",
+      "-q",
+      "-u",
+      "origin",
+      "merged",
+      "main:kept",
+    );
+    await git(join(fixture.root, "origin.git"), "branch", "-D", "merged");
+    const merged = await git(fixture.repositoryPath, "rev-parse", "merged");
+    const main = await git(fixture.repositoryPath, "rev-parse", "main");
+    const selection = [
+      {
+        local: { name: "merged", target: merged },
+        remote: { name: "merged", remote: "origin", target: merged },
+      },
+      { remote: { name: "kept", remote: "origin", target: main } },
+    ];
+
+    await expect(
+      withBranches(fixture, ({ branches, repositoryId }) =>
+        branches.delete({
+          branches: selection,
+          force: true,
+          repositoryId,
+          worktreePath: fixture.repositoryPath,
+        }),
+      ),
+    ).resolves.toEqual({ deleted: selection, unmerged: [] });
+    await expect(
+      git(
+        fixture.repositoryPath,
+        "branch",
+        "--all",
+        "--list",
+        "*merged",
+        "*kept",
+      ),
+    ).resolves.toBe("");
+    await expect(
+      git(fixture.repositoryPath, "ls-remote", "--heads", "origin", "kept"),
+    ).resolves.toBe("");
+  });
+
+  it("keeps a remote branch that one of several push URLs refused to delete", async () => {
+    const fixture = await createFixture();
+    const mirror = join(fixture.root, "mirror.git");
+    await mkdir(mirror);
+    await git(mirror, "init", "-q", "--bare", "-b", "main");
+    await git(
+      fixture.repositoryPath,
+      "remote",
+      "set-url",
+      "--add",
+      "--push",
+      "origin",
+      mirror,
+    );
+    await git(
+      fixture.repositoryPath,
+      "remote",
+      "set-url",
+      "--add",
+      "--push",
+      "origin",
+      join(fixture.root, "origin.git"),
+    );
+    await git(fixture.repositoryPath, "push", "-q", "origin", "main:shared");
+    await git(mirror, "update-ref", "refs/heads/shared", "shared~1");
+    const main = await git(fixture.repositoryPath, "rev-parse", "main");
+
+    await expect(
+      withBranches(fixture, ({ branches, repositoryId }) =>
+        branches.delete({
+          branches: [
+            { remote: { name: "shared", remote: "origin", target: main } },
+          ],
+          force: true,
+          repositoryId,
+          worktreePath: fixture.repositoryPath,
+        }),
+      ),
+    ).rejects.toMatchObject({ _tag: "BranchMoved", name: "origin/shared" });
+    await expect(git(mirror, "branch", "--list", "shared")).resolves.not.toBe(
+      "",
+    );
+  });
 });
 
 async function withBranches<Value, Failure>(
