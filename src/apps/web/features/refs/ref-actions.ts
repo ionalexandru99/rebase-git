@@ -22,7 +22,7 @@ import type { ResetActionId } from "#web/features/reset/reset-actions.tsx";
 import {
   requestWorktreeDraft,
   worktreeName,
-} from "#web/features/worktrees/worktrees.ts";
+} from "#web/features/worktrees/worktree-draft.ts";
 
 export type RefIntent =
   | { readonly _tag: "DraftRef"; readonly kind: RefKind; readonly oid: string }

@@ -6,12 +6,14 @@ import { afterEach, describe, expect, it } from "vite-plus/test";
 import { createLocalGitCommandRunner } from "#server/adapters/local-git/git-commands.ts";
 import {
   createWorktree,
-  readWorktreeFolder,
   readWorktreeStatus,
   removeWorktree,
-  setWorktreeFolder,
   unlockWorktree,
 } from "#server/features/repository-worktrees/repository-worktrees.ts";
+import {
+  readWorktreeFolder,
+  setWorktreeFolder,
+} from "#server/features/repository-worktrees/worktree-folder.ts";
 import { readWorktrees } from "#server/repository/repository-access.ts";
 import { createRepository, git } from "#tests-support/git.ts";
 import { removeTemporaryDirectory } from "#tests-support/temporary-directory.ts";
@@ -76,7 +78,7 @@ describe("repository worktrees", () => {
     expect(await git(main, "branch", "--list", "other")).toBe("");
   });
 
-  it("counts uncommitted changes and deletes them only after the user saw them", async () => {
+  it("counts uncommitted changes and deletes them only after the user saw them, never commits on no branch", async () => {
     const { root, main } = await fixture();
     const topic = join(root, "topic");
     await git(main, "worktree", "add", "-b", "topic", topic);
@@ -100,26 +102,33 @@ describe("repository worktrees", () => {
 
     await expect(access(topic)).rejects.toThrow();
     expect(await git(main, "branch", "--list", "topic")).toBe("topic");
+    const spike = join(root, "spike");
+    await git(main, "worktree", "add", "--detach", spike);
+    await git(spike, "commit", "--allow-empty", "-m", "on no branch");
+    await expect(
+      fail(removeWorktree(runner, { ...target, target: spike, changes: 0 })),
+    ).resolves.toEqual({ _tag: "WorktreeRejected", reason: "Unsaved" });
   });
 
-  it("respects a lock, prunes a worktree whose folder is gone, and keeps the folder setting in Git", async () => {
+  it("keeps a locked worktree on an unplugged drive, prunes it once unlocked, and keeps the folder setting in Git", async () => {
     const { root, main } = await fixture();
     const usb = join(root, "usb");
     await git(main, "worktree", "add", "-b", "usb", usb);
     await git(main, "worktree", "lock", "--reason", "on the drive", usb);
     const target = { repositoryId, worktreePath: main, target: usb };
 
+    await removeTemporaryDirectory(usb);
+
+    expect(await run(readWorktreeStatus(runner, main))).toEqual({
+      worktrees: [{ path: main, changes: 0 }],
+    });
     await expect(
       fail(removeWorktree(runner, { ...target, changes: 0 })),
     ).resolves.toEqual({ _tag: "WorktreeRejected", reason: "Locked" });
     await run(unlockWorktree(runner, target));
-    await removeTemporaryDirectory(usb);
     expect((await run(readWorktrees(runner, main)))[1]).toMatchObject({
       missing: true,
     });
-    expect((await run(readWorktrees(runner, main)))[1]).not.toHaveProperty(
-      "locked",
-    );
     await run(removeWorktree(runner, { ...target, changes: 0 }));
 
     expect(await run(readWorktrees(runner, main))).toHaveLength(1);

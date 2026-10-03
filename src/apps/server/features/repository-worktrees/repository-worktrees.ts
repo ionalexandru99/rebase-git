@@ -1,15 +1,12 @@
 import { readdir, realpath } from "node:fs/promises";
-import { basename, dirname, isAbsolute, join, sep } from "node:path";
+import { isAbsolute } from "node:path";
 import { Effect } from "effect";
-import type { RepositoryWorktree } from "#contracts/repository-refs/repository-refs.contract.ts";
 import {
   type CreateWorktree,
   type RemoveWorktree,
   type RepositoryWorktreeStatus,
   RepositoryWorktreesApi,
-  type SetWorktreeFolder,
   type WorktreeChanged,
-  type WorktreeFolder,
   type WorktreeRejected,
   type WorktreeTarget,
 } from "#contracts/repository-worktrees/repository-worktrees.contract.ts";
@@ -21,7 +18,6 @@ import {
 import {
   type GitCommandRunner,
   type GitFailed,
-  readGitCommonDirectory,
   runRepositoryGit,
 } from "#server/adapters/local-git/git-commands.ts";
 import { branchWriteFailed } from "#server/features/repository-refs/git/branches/branch-failures.ts";
@@ -33,12 +29,15 @@ import {
 } from "#server/features/repository-refs/git/branches/branch-git.ts";
 import { refCommand } from "#server/features/repository-refs/git/ref-git.ts";
 import {
+  readWorktreeFolder,
+  setWorktreeFolder,
+} from "#server/features/repository-worktrees/worktree-folder.ts";
+import {
   canonicalizeWorktrees,
   readWorktrees,
 } from "#server/repository/repository-access.ts";
 import type { RepositoryWritePolicy } from "#server/repository/repository-coordination.ts";
 
-const folderKey = "rebase.worktreeFolder";
 const worktreeCommand = { ...refCommand, timeoutMilliseconds: 300_000 };
 
 const worktreePolicy: RepositoryWritePolicy = {
@@ -94,23 +93,6 @@ export function readWorktreeStatus(git: GitCommandRunner, directory: string) {
   );
 }
 
-export function readWorktreeFolder(git: GitCommandRunner, directory: string) {
-  return Effect.gen(function* () {
-    const configured = yield* readConfiguredFolder(git, directory);
-    return {
-      folder:
-        configured ??
-        (yield* defaultWorktreeFolder(
-          git,
-          directory,
-          yield* listWorktrees(git, directory),
-        )),
-      configured: configured !== undefined,
-      separator: sep === "\\" ? "\\" : "/",
-    } satisfies WorktreeFolder;
-  });
-}
-
 export function createWorktree(git: GitCommandRunner, command: CreateWorktree) {
   const { start, worktreePath: directory } = command;
   return Effect.gen(function* () {
@@ -129,24 +111,41 @@ export function createWorktree(git: GitCommandRunner, command: CreateWorktree) {
         start.name,
       ]);
     } else {
-      yield* requireValidBranchName(git, directory, start.name);
-      if (start.track !== undefined)
-        yield* requireRemoteBranch(git, directory, start.track);
-      yield* addWorktree(git, directory, start.name, [
-        "-b",
-        start.name,
-        command.path,
-        start.startPoint,
-      ]);
-      if (start.track !== undefined)
-        yield* runRepositoryGit(
-          git,
-          directory,
-          setUpstreamArguments(start.name, start.track),
-          refCommand,
-        ).pipe(
-          Effect.mapError((error) => branchWriteFailed(error, start.name)),
-        );
+      const { name, startPoint, track } = start;
+      yield* requireValidBranchName(git, directory, name);
+      if (track !== undefined)
+        yield* requireRemoteBranch(git, directory, track);
+      yield* runRepositoryGit(
+        git,
+        directory,
+        ["branch", "--no-track", name, startPoint],
+        refCommand,
+      ).pipe(
+        Effect.mapError((error) =>
+          /not a valid object name/i.test(error.detail)
+            ? { _tag: "RefMissing" as const, name: startPoint }
+            : branchWriteFailed(error, name),
+        ),
+      );
+      yield* Effect.gen(function* () {
+        if (track !== undefined)
+          yield* runRepositoryGit(
+            git,
+            directory,
+            setUpstreamArguments(name, track),
+            refCommand,
+          ).pipe(Effect.mapError((error) => branchWriteFailed(error, name)));
+        yield* addWorktree(git, directory, name, [command.path, name]);
+      }).pipe(
+        Effect.onError(() =>
+          runRepositoryGit(
+            git,
+            directory,
+            ["branch", "-D", name],
+            refCommand,
+          ).pipe(Effect.ignore),
+        ),
+      );
     }
     const worktreePath = yield* Effect.promise(() =>
       realpath(command.path).catch(() => command.path),
@@ -159,6 +158,15 @@ export function removeWorktree(git: GitCommandRunner, command: RemoveWorktree) {
   return Effect.gen(function* () {
     const worktree = yield* findRemovable(git, command);
     if (worktree === undefined) return {};
+    if (
+      worktree.head.branch === undefined &&
+      (yield* commitsOnNoBranch(
+        git,
+        command.worktreePath,
+        worktree.head.commit,
+      ))
+    )
+      return yield* Effect.fail(rejected("Unsaved"));
     const changes =
       worktree.missing === true ? 0 : yield* countChanges(git, worktree.path);
     if (changes > 0 && changes !== command.changes)
@@ -190,26 +198,6 @@ export function unlockWorktree(git: GitCommandRunner, command: WorktreeTarget) {
       command.worktreePath,
       ["worktree", "unlock", worktree.path],
       refCommand,
-    );
-    return {};
-  });
-}
-
-export function setWorktreeFolder(
-  git: GitCommandRunner,
-  command: SetWorktreeFolder,
-) {
-  const { folder, worktreePath: directory } = command;
-  return Effect.gen(function* () {
-    if (folder !== null && !isAbsolute(folder))
-      return yield* Effect.fail(rejected("NotAbsolute"));
-    yield* runRepositoryGit(
-      git,
-      directory,
-      folder === null
-        ? ["config", "--local", "--unset-all", folderKey]
-        : ["config", "--local", folderKey, folder],
-      { exitCodes: [0, 5] },
     );
     return {};
   });
@@ -280,6 +268,27 @@ function listWorktrees(git: GitCommandRunner, directory: string) {
   );
 }
 
+function commitsOnNoBranch(
+  git: GitCommandRunner,
+  directory: string,
+  commit: string,
+) {
+  return runRepositoryGit(
+    git,
+    directory,
+    [
+      "rev-list",
+      "--max-count=1",
+      commit,
+      "--not",
+      "--branches",
+      "--tags",
+      "--remotes",
+    ],
+    refCommand,
+  ).pipe(Effect.map((output) => output.trim().length > 0));
+}
+
 function countChanges(git: GitCommandRunner, directory: string) {
   return runRepositoryGit(git, directory, [
     "status",
@@ -290,37 +299,6 @@ function countChanges(git: GitCommandRunner, directory: string) {
   ]).pipe(
     Effect.map(
       (output) => output.split("\0").filter((entry) => entry.length > 0).length,
-    ),
-  );
-}
-
-function readConfiguredFolder(git: GitCommandRunner, directory: string) {
-  return runRepositoryGit(
-    git,
-    directory,
-    ["config", "--local", "--get", folderKey],
-    { exitCodes: [0, 1] },
-  ).pipe(
-    Effect.map((output) => {
-      const folder = output.trim();
-      return isAbsolute(folder) ? folder : undefined;
-    }),
-  );
-}
-
-function defaultWorktreeFolder(
-  git: GitCommandRunner,
-  directory: string,
-  worktrees: readonly RepositoryWorktree[],
-) {
-  const main = worktrees.find((worktree) => worktree.main);
-  return (
-    main === undefined
-      ? readGitCommonDirectory(git, directory)
-      : Effect.succeed(main.path)
-  ).pipe(
-    Effect.map((root) =>
-      join(dirname(root), `${basename(root).replace(/\.git$/, "")}.worktrees`),
     ),
   );
 }

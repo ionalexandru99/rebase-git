@@ -1,5 +1,5 @@
 import { skipToken } from "@tanstack/react-query";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import type { RouteFailure } from "#contracts/environment-connection/environment-route.contract.ts";
 import type {
   RepositoryRefs,
@@ -8,7 +8,6 @@ import type {
 import {
   type RepositoryWorktreeStatus,
   RepositoryWorktreesApi,
-  type WorktreeFolder,
   type WorktreeRejected,
   type WorktreeStart,
 } from "#contracts/repository-worktrees/repository-worktrees.contract.ts";
@@ -17,12 +16,9 @@ import {
   useErrorToast,
   useStatusToast,
 } from "#web/features/notifications/notifications.tsx";
-import {
-  refFailureMessages,
-  refNameProblem,
-  type StartPoint,
-} from "#web/features/refs/ref-kinds.ts";
+import { refFailureMessages } from "#web/features/refs/ref-kinds.ts";
 import { useScopedRepositoryRefs } from "#web/features/refs/repository-refs.ts";
+import { worktreeName } from "#web/features/worktrees/worktree-draft.ts";
 import { useEnvironmentQuery } from "#web/platform/query/environment-query.ts";
 import { useRepositoryScope } from "#web/platform/query/repository-scope.tsx";
 import {
@@ -32,11 +28,6 @@ import {
 } from "#web/platform/query/request-failure.ts";
 import { useCommand } from "#web/platform/query/use-command.ts";
 
-export interface WorktreeDraft {
-  readonly name: string;
-  readonly start: StartPoint | undefined;
-}
-
 export interface WorktreeRow {
   readonly worktree: RepositoryWorktree;
   readonly name: string;
@@ -45,52 +36,10 @@ export interface WorktreeRow {
   readonly active: boolean;
 }
 
-export type WorktreePlan =
-  | { readonly _tag: "Invalid"; readonly message: string | undefined }
-  | { readonly _tag: "Switch"; readonly path: string; readonly name: string }
-  | { readonly _tag: "Create"; readonly start: WorktreeStart };
-
 type WorktreeFailure =
   | RouteFailure<typeof RepositoryWorktreesApi.create>
   | RouteFailure<typeof RepositoryWorktreesApi.remove>
   | RouteFailure<typeof RepositoryWorktreesApi.setFolder>;
-
-const draftListeners = new Set<(draft: WorktreeDraft) => void>();
-
-export function requestWorktreeDraft(draft: WorktreeDraft) {
-  for (const listener of draftListeners) listener(draft);
-}
-
-export function useWorktreeDraftRequest(
-  handle: (draft: WorktreeDraft) => void,
-) {
-  const latest = useRef(handle);
-  latest.current = handle;
-  useEffect(() => {
-    const listener = (draft: WorktreeDraft) => latest.current(draft);
-    draftListeners.add(listener);
-    return () => {
-      draftListeners.delete(listener);
-    };
-  }, []);
-}
-
-export function worktreeName(path: string) {
-  return (
-    path
-      .split(/[\\/]/)
-      .filter((part) => part.length > 0)
-      .at(-1) ?? path
-  );
-}
-
-export function worktreeFolderPath(
-  { folder, separator }: WorktreeFolder,
-  branch: string,
-) {
-  const parent = folder.replace(/[\\/]+$/, "");
-  return `${parent}${separator}${branch.replaceAll("/", "-")}`;
-}
 
 export function worktreeRows(
   refs: RepositoryRefs,
@@ -109,34 +58,6 @@ export function worktreeRows(
       ?.changes,
     active: worktree.path === activePath,
   }));
-}
-
-export function planWorktree(
-  refs: RepositoryRefs,
-  name: string,
-  start: StartPoint | undefined,
-): WorktreePlan {
-  const branch = refs.branches.find((candidate) => candidate.name === name);
-  if (branch?.worktreePath !== undefined)
-    return {
-      _tag: "Switch",
-      path: branch.worktreePath,
-      name: worktreeName(branch.worktreePath),
-    };
-  if (branch !== undefined)
-    return { _tag: "Create", start: { _tag: "Branch", name } };
-  const message = refNameProblem("branch", name, refs.branches);
-  if (message !== undefined || start === undefined)
-    return { _tag: "Invalid", message };
-  return {
-    _tag: "Create",
-    start: {
-      _tag: "NewBranch",
-      name,
-      startPoint: start.oid,
-      ...(start.track === undefined ? {} : { track: start.track }),
-    },
-  };
 }
 
 function useWorktreeQueries(enabled: boolean) {
@@ -263,6 +184,8 @@ function rejectionMessage(reason: WorktreeRejected["reason"]) {
       return "The main worktree can't be removed.";
     case "Current":
       return "Switch to another worktree first.";
+    case "Unsaved":
+      return "Its commits aren't on any branch. Create a branch first.";
   }
 }
 

@@ -79,6 +79,7 @@ export const WorktreeRejected = Schema.TaggedStruct("WorktreeRejected", {
     "Locked",
     "Main",
     "Current",
+    "Unsaved",
   ]),
 });
 export type WorktreeRejected = typeof WorktreeRejected.Type;

@@ -66,7 +66,10 @@ export function WorktreeList({
       },
     });
   const activate = (key: string) => {
-    if (key === newWorktreeId) return onCreate();
+    if (key === newWorktreeId) {
+      if (worktrees.writable) onCreate();
+      return;
+    }
     const row = rows.find(({ worktree }) => worktree.path === key);
     if (row !== undefined) switchTo(row);
   };

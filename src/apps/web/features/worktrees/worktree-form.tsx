@@ -11,9 +11,9 @@ import type { StartPoint } from "#web/features/refs/ref-kinds.ts";
 import {
   planWorktree,
   type WorktreeDraft,
-  type Worktrees,
   worktreeFolderPath,
-} from "#web/features/worktrees/worktrees.ts";
+} from "#web/features/worktrees/worktree-draft.ts";
+import type { Worktrees } from "#web/features/worktrees/worktrees.ts";
 
 export function WorktreeForm({
   worktrees,

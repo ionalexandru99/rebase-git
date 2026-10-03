@@ -1,4 +1,5 @@
 import { realpath } from "node:fs";
+import { resolve } from "node:path";
 import { promisify } from "node:util";
 import { Effect } from "effect";
 import {
@@ -103,10 +104,12 @@ export function canonicalizeWorktrees(
 ) {
   return Effect.all(
     worktrees.map((worktree) =>
-      Effect.promise(async () => ({
-        ...worktree,
-        path: await realpathNative(worktree.path).catch(() => worktree.path),
-      })),
+      Effect.promise(() =>
+        realpathNative(worktree.path).then(
+          (path) => ({ ...worktree, path }),
+          () => ({ ...worktree, path: resolve(worktree.path), missing: true }),
+        ),
+      ),
     ),
     { concurrency: "unbounded" },
   );
