@@ -10,12 +10,11 @@ import {
   branchSettings,
   readSettlingConfig,
   settledToday,
-  settlePolicy,
   writeSettlements,
 } from "#server/features/branch-settling/branch-settling.ts";
 import {
   deleteSettledBranches,
-  heldBranches,
+  operationBranches,
   type SettledCandidate,
   settledLongEnough,
 } from "#server/features/branch-settling/settled-branch-deletion.ts";
@@ -54,9 +53,8 @@ export function settleBranchesAfterFetch({
       const main = (yield* readWorktrees(git, directory)).find(
         (worktree) => worktree.main,
       );
-      const kept = new Set(
-        main === undefined ? [] : yield* heldBranches(git, main),
-      );
+      const kept = yield* operationBranches(git, directory);
+      if (main?.head.branch !== undefined) kept.add(main.head.branch);
       const today = settledToday();
       const expired = new Set(
         [...marked].flatMap(([branch, settled]) =>
@@ -81,26 +79,33 @@ export function settleBranchesAfterFetch({
               defaults.get(remote) !== head),
         )).map(({ branch, pullRequests }) => [branch, pullRequests] as const),
       );
+      const locals = yield* readLocalBranches(git, directory);
       const tips = yield* mergedTips(
         git,
         directory,
+        locals,
         new Map([...pullRequests].filter(([, found]) => isMerged(found))),
       );
       const merged = [...tips.keys()].filter((branch) => !marked.has(branch));
       if (merged.length > 0)
         yield* writeSettlements(git, coordination, directory, merged, today);
       const candidates = [...expired].flatMap((name) =>
-        deletionCandidate(name, pullRequests.get(name) ?? [], tips.get(name)),
+        deletionCandidate(
+          name,
+          pullRequests.get(name),
+          locals.get(name),
+          tips.get(name),
+        ),
       );
       const deleted =
         candidates.length > 0 &&
-        (yield* coordination
-          .run(
-            directory,
-            settlePolicy,
-            deleteSettledBranches(git, access, directory, candidates),
-          )
-          .pipe(Effect.catch(() => Effect.succeed(true))));
+        (yield* deleteSettledBranches(
+          git,
+          access,
+          coordination,
+          directory,
+          candidates,
+        ));
       if (merged.length > 0 || deleted)
         events.publishChanged(repositoryIds, "Refs");
     }).pipe(
@@ -114,9 +119,11 @@ export function settleBranchesAfterFetch({
 
 function deletionCandidate(
   name: string,
-  pullRequests: readonly HostedPullRequest[],
+  pullRequests: readonly HostedPullRequest[] | undefined,
+  head: LocalBranchHead | undefined,
   tip: string | undefined,
 ): SettledCandidate[] {
+  if (pullRequests === undefined) return head?.upstream ? [] : [{ name }];
   if (pullRequests.some(({ state }) => state === "Open" || state === "Draft"))
     return [];
   if (tip !== undefined) return [{ name, mergedTip: tip }];
@@ -126,15 +133,14 @@ function deletionCandidate(
 function mergedTips(
   git: GitCommandRunner,
   directory: string,
+  locals: ReadonlyMap<string, LocalBranchHead>,
   branches: ReadonlyMap<string, readonly HostedPullRequest[]>,
 ) {
   return Effect.gen(function* () {
-    if (branches.size === 0) return new Map<string, string>();
-    const tips = yield* readBranchTips(git, directory);
     const merged = yield* Effect.forEach(
       [...branches],
       ([name, pullRequests]) => {
-        const tip = tips.get(name);
+        const tip = locals.get(name)?.tip;
         const heads = mergedHeads(pullRequests);
         if (tip === undefined || heads.length === 0) return Effect.succeed([]);
         if (heads.some((head) => tip.startsWith(head)))
@@ -176,17 +182,35 @@ function isMerged(pullRequests: readonly PullRequest[]) {
   );
 }
 
-function readBranchTips(git: GitCommandRunner, directory: string) {
+interface LocalBranchHead {
+  readonly tip: string;
+  readonly upstream: boolean;
+}
+
+function readLocalBranches(git: GitCommandRunner, directory: string) {
   return runRepositoryGit(
     git,
     directory,
     [
       "for-each-ref",
-      "--format=%(refname:lstrip=2)%00%(objectname)",
+      "--format=%(refname:lstrip=2)%00%(objectname)%00%(upstream)",
       "refs/heads",
     ],
     { maxOutputBytes: 16 * 1_048_576 },
-  ).pipe(Effect.map((output) => new Map(nulPairs(output))));
+  ).pipe(
+    Effect.map(
+      (output) =>
+        new Map(
+          output
+            .split("\n")
+            .filter((line) => line.length > 0)
+            .map((line): [string, LocalBranchHead] => {
+              const [name = "", tip = "", upstream = ""] = line.split("\0");
+              return [name, { tip, upstream: upstream !== "" }];
+            }),
+        ),
+    ),
+  );
 }
 
 function readRemoteDefaultBranches(git: GitCommandRunner, directory: string) {

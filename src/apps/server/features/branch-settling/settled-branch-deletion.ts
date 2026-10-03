@@ -1,12 +1,15 @@
-import { readFile } from "node:fs/promises";
-import { resolve } from "node:path";
-import { Effect, Schema } from "effect";
+import { readdir, readFile } from "node:fs/promises";
+import { join } from "node:path";
+import { Array as Arrays, Effect, Schema } from "effect";
 import { SettledDay } from "#contracts/branch-settling/branch-settling.contract.ts";
-import type { RepositoryWorktree } from "#contracts/repository-refs/repository-refs.contract.ts";
 import {
   type GitCommandRunner,
-  runRepositoryGit,
+  readGitCommonDirectory,
 } from "#server/adapters/local-git/git-commands.ts";
+import {
+  settledPerLock,
+  settlePolicy,
+} from "#server/features/branch-settling/branch-settling.ts";
 import {
   branchRef,
   worktreeHolding,
@@ -18,6 +21,7 @@ import {
 } from "#server/features/repository-refs/git/branches/delete-branches.ts";
 import { removeWorktree } from "#server/features/repository-worktrees/repository-worktrees.ts";
 import type { RepositoryAccess } from "#server/repository/repository-access.ts";
+import type { RepositoryCoordination } from "#server/repository/repository-coordination.ts";
 
 const dayMilliseconds = 86_400_000;
 const isSettledDay = Schema.is(SettledDay);
@@ -44,36 +48,52 @@ export function settledLongEnough(
   );
 }
 
-export function heldBranches(
-  git: GitCommandRunner,
-  worktree: RepositoryWorktree,
-) {
-  if (worktree.head.branch !== undefined)
-    return Effect.succeed([worktree.head.branch]);
-  if (worktree.missing) return Effect.succeed([]);
-  return runRepositoryGit(git, worktree.path, [
-    "rev-parse",
-    ...operationBranchFiles.flatMap((file) => ["--git-path", file]),
-  ]).pipe(
-    Effect.map((output) => output.split("\n").filter((line) => line !== "")),
-    Effect.flatMap((paths) =>
-      Effect.promise(() =>
-        Promise.all(
-          paths.map((path) =>
-            readFile(resolve(worktree.path, path), "utf8").catch(() => ""),
+export function operationBranches(git: GitCommandRunner, directory: string) {
+  return readGitCommonDirectory(git, directory).pipe(
+    Effect.flatMap((common) =>
+      Effect.promise(async () => {
+        const linked = await readdir(join(common, "worktrees")).catch(
+          (): string[] => [],
+        );
+        const contents = await Promise.all(
+          [
+            common,
+            ...linked.map((id) => join(common, "worktrees", id)),
+          ].flatMap((gitDirectory) =>
+            operationBranchFiles.map((file) =>
+              readFile(join(gitDirectory, file), "utf8").catch(() => ""),
+            ),
           ),
-        ),
-      ),
-    ),
-    Effect.map((contents) =>
-      contents
-        .map((content) => content.trim().replace(/^refs\/heads\//, ""))
-        .filter((branch) => branch !== ""),
+        );
+        return new Set(
+          contents
+            .map((content) => content.trim().replace(/^refs\/heads\//, ""))
+            .filter((branch) => branch !== ""),
+        );
+      }),
     ),
   );
 }
 
 export function deleteSettledBranches(
+  git: GitCommandRunner,
+  access: RepositoryAccess,
+  coordination: RepositoryCoordination,
+  directory: string,
+  candidates: readonly SettledCandidate[],
+) {
+  return Effect.forEach(Arrays.chunksOf(candidates, settledPerLock), (group) =>
+    coordination
+      .run(
+        directory,
+        settlePolicy,
+        deleteSettledGroup(git, access, directory, group),
+      )
+      .pipe(Effect.catch(() => Effect.succeed(true))),
+  ).pipe(Effect.map((deleted) => deleted.includes(true)));
+}
+
+function deleteSettledGroup(
   git: GitCommandRunner,
   access: RepositoryAccess,
   directory: string,
@@ -100,12 +120,7 @@ export function deleteSettledBranches(
           ),
     );
     const worktrees = yield* access.worktrees(directory);
-    const busy = new Set(
-      (yield* Effect.forEach(
-        worktrees.filter((worktree) => worktree.head.branch === undefined),
-        (worktree) => heldBranches(git, worktree),
-      )).flat(),
-    );
+    const busy = yield* operationBranches(git, directory);
     let deleted = false;
     for (const { local } of settled) {
       if (unmerged.has(local.name) || busy.has(local.name)) continue;

@@ -21,7 +21,7 @@ import type {
 } from "#server/repository/repository-coordination.ts";
 
 const autoSettleKey = "rebase.autoSettle";
-const settledPerLock = 20;
+export const settledPerLock = 20;
 const deleteSettledAfterKey = "rebase.deleteSettledAfter";
 
 export const settlePolicy: RepositoryWritePolicy = {
