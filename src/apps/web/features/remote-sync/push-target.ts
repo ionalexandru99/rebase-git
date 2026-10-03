@@ -124,14 +124,14 @@ export function forcePushRequest(review: ForcePushReview): PushRequest {
   };
 }
 
-type PushSummary = Pick<PushBranch, "destination" | "mode">;
+type PushSummary = Pick<PushBranch, "mode">;
 
-export function describeProgress({ destination, mode }: PushSummary) {
-  return `${mode._tag === "ForceWithLease" ? "Force pushing" : "Pushing"} to ${destinationName(destination)}`;
+export function describeProgress({ mode }: PushSummary) {
+  return mode._tag === "ForceWithLease" ? "Force pushing" : "Pushing";
 }
 
-export function describePushed({ destination, mode }: PushSummary) {
-  return `${mode._tag === "ForceWithLease" ? "Force pushed" : "Pushed"} to ${destinationName(destination)}`;
+export function describePushed({ mode }: PushSummary) {
+  return mode._tag === "ForceWithLease" ? "Force pushed" : "Pushed";
 }
 
 export function pushFailureMessages(

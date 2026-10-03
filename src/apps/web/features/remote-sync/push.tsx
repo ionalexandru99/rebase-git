@@ -36,9 +36,11 @@ import { useCommand } from "#web/platform/query/use-command.ts";
 export type Push = ReturnType<typeof usePush>;
 
 export function usePush() {
-  const command = useCommand(RepositoryPushApi.push);
   const errorToast = useErrorToast();
   const statusToast = useStatusToast();
+  const command = useCommand(RepositoryPushApi.push, {
+    progress: (percent) => statusToast.advance("push", percent),
+  });
   const [review, setReview] = useState<ForcePushReview | null>(null);
   const worktreePath = useRepositoryScope()?.worktreePath;
   useEffect(() => {
@@ -49,7 +51,10 @@ export function usePush() {
   const pushBranch = (request: PushRequest) => {
     if (!command.canRun || command.running) return;
     setReview(null);
-    statusToast.progress("push", describeProgress(request), command.cancel);
+    statusToast.progress("push", describeProgress(request), {
+      cancel: command.cancel,
+      percent: 0,
+    });
     void command.run(request).then((result) => {
       if (result._tag === "Ok")
         statusToast.success("push", describePushed(request));

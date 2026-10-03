@@ -182,7 +182,7 @@ function runPush(
   return git
     .run({
       directory,
-      arguments: ["push", "--porcelain", ...args],
+      arguments: ["push", "--porcelain", "--progress", ...args],
       timeoutMilliseconds: pushTimeoutMilliseconds,
     })
     .pipe(

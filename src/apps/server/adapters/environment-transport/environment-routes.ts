@@ -17,6 +17,7 @@ import {
   type GitFailed,
   isIdentityMissing,
 } from "#server/adapters/local-git/git-commands.ts";
+import type { CommandProgress } from "#server/features/command-progress/command-progress.ts";
 import type { EnvironmentAuthorizationError } from "#server/features/environment-authorization/environment-authorization.ts";
 import { EnvironmentStorageError } from "#server/persistence/sqlite/storage-operation.ts";
 import type { RepositoryAccess } from "#server/repository/repository-access.ts";
@@ -92,6 +93,7 @@ export interface RepositoryDependencies {
   readonly access: RepositoryAccess;
   readonly coordination: RepositoryCoordination;
   readonly git: GitCommandRunner;
+  readonly progress: CommandProgress;
 }
 
 interface WorktreeScope {
@@ -121,12 +123,14 @@ export function repositoryRoutes({
   access,
   coordination,
   git,
+  progress,
 }: RepositoryDependencies) {
   const handled = <Input, Success, Failure>(
     handle: RepositoryHandle<Input, Success, Failure>,
     input: Input,
+    runner = git,
   ) =>
-    handle(input, git).pipe(
+    handle(input, runner).pipe(
       Effect.catchIf(isGitFailed, (error) =>
         Effect.fail(
           isIdentityMissing(error.detail)
@@ -161,11 +165,28 @@ export function repositoryRoutes({
               coordination.run(
                 input.worktreePath,
                 typeof policy === "function" ? policy(input) : policy,
-                handled(handle, input),
+                handled(
+                  handle,
+                  input,
+                  reportingProgress(
+                    git,
+                    progress.reporter([input.repositoryId], definition._tag),
+                  ),
+                ),
               ),
             ),
           ),
       ),
+  };
+}
+
+function reportingProgress(
+  git: GitCommandRunner,
+  report: (output: string) => void,
+): GitCommandRunner {
+  return {
+    run: (command) => git.run({ ...command, progress: report }),
+    stream: git.stream,
   };
 }
 

@@ -80,6 +80,25 @@ describe("repository fetch controls", () => {
     expect(f.fetch).toHaveBeenCalledTimes(2);
   });
 
+  it("shows the toolbar fetch progress in a toast that turns into the result", async () => {
+    const f = await fixture(fresh);
+    const finished = Promise.withResolvers<RepositoryFetchStatus>();
+    f.fetch.mockImplementationOnce((progress) => {
+      progress?.(40);
+      return finished.promise;
+    });
+    await page.getByRole("button", { name: "Fetch", exact: true }).click();
+    await expect
+      .element(page.getByRole("progressbar", { name: "Fetching changes" }))
+      .toHaveAttribute("aria-valuenow", "40");
+    finished.resolve(fresh);
+
+    await expect
+      .element(page.getByText("Fetched", { exact: true }))
+      .toBeVisible();
+    await expect.element(page.getByRole("progressbar")).not.toBeInTheDocument();
+  });
+
   it("disables duplicate fetches and shows background fetch failures", async () => {
     const f = await fixture(fresh);
     const finished = Promise.withResolvers<RepositoryFetchStatus>();
@@ -180,7 +199,11 @@ async function fixture(
   }: { readonly connected?: boolean; readonly canConfigure?: boolean } = {},
 ) {
   let status = initial;
-  const fetch = vi.fn(async (): Promise<RepositoryFetchStatus> => status);
+  const fetch = vi.fn(
+    async (
+      _progress?: (percent: number) => void,
+    ): Promise<RepositoryFetchStatus> => status,
+  );
   const configure = vi.fn(
     async (setting: RepositoryFetchSetting): Promise<RepositoryFetchStatus> => {
       status = { ...status, setting };
@@ -208,8 +231,8 @@ async function fixture(
             throw unanswered;
           }),
           respond(RepositoryPullApi.fetchStatus, async () => status),
-          respond(RepositoryPullApi.fetch, async () => {
-            const result = await fetch();
+          respond(RepositoryPullApi.fetch, async (_input, { progress }) => {
+            const result = await fetch(progress);
             if (result.failure !== undefined)
               throw rejected<FetchFailed>(result.failure);
             return result;

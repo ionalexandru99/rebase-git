@@ -61,6 +61,7 @@ type AnswerValue<Read extends EnvironmentRoute> =
 export interface CommandOptions<Route extends EnvironmentRoute> {
   readonly target?: CommandTarget | undefined;
   readonly before?: () => Promise<boolean>;
+  readonly progress?: (percent: number) => void;
   readonly answers?: (
     value: RouteSuccess<Route>,
     input: RouteInput<Route>,
@@ -91,7 +92,12 @@ export function answer<Read extends EnvironmentRoute>(
 
 export function useCommand<Route extends EnvironmentRoute>(
   route: Route,
-  { target: explicitTarget, before, answers }: CommandOptions<Route> = {},
+  {
+    target: explicitTarget,
+    before,
+    progress,
+    answers,
+  }: CommandOptions<Route> = {},
 ) {
   const scope = useRepositoryScope();
   const environment = useEnvironment();
@@ -111,7 +117,13 @@ export function useCommand<Route extends EnvironmentRoute>(
     mutationFn: async (input) => {
       const ready = await prepare(before);
       if (ready !== undefined) return ready;
-      const result = await request(environment.requests, route, input, running);
+      const result = await request(
+        environment.requests,
+        route,
+        input,
+        running,
+        progress,
+      );
       await settle(queryClient, environment.environmentId, input, result, {
         repositoryId: scoped ? inputRepositoryId(input) : null,
         answers,
@@ -203,11 +215,15 @@ async function request<Route extends EnvironmentRoute>(
   route: Route,
   input: RouteInput<Route>,
   running: RefObject<AbortController | undefined>,
+  progress: ((percent: number) => void) | undefined,
 ): Promise<CommandResult<Route>> {
   const controller = new AbortController();
   running.current = controller;
   try {
-    const value = await requests(route, input, { signal: controller.signal });
+    const value = await requests(route, input, {
+      signal: controller.signal,
+      ...(progress === undefined ? {} : { progress }),
+    });
     return controller.signal.aborted
       ? { _tag: "Cancelled" }
       : { _tag: "Ok", value };

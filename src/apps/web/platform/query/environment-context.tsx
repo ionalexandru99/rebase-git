@@ -29,8 +29,13 @@ export interface EnvironmentStatus {
 export type EnvironmentRequests = <Route extends EnvironmentRoute>(
   route: Route,
   input: RouteInput<Route>,
-  options?: { readonly signal?: AbortSignal },
+  options?: RequestOptions,
 ) => Promise<RouteSuccess<Route>>;
+
+export interface RequestOptions {
+  readonly signal?: AbortSignal;
+  readonly progress?: (percent: number) => void;
+}
 
 export interface Environment {
   readonly environmentId: string | undefined;

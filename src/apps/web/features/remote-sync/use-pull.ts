@@ -21,7 +21,7 @@ const fetchProblems: Record<FetchFailed["reason"], string> = {
   Failed: "Git could not fetch from the remote.",
 };
 
-export function useFetch() {
+export function useFetch(toast: "fetch" | "pull" = "fetch") {
   const scope = useRepositoryScope();
   const repositoryId = scope?.repositoryId;
   const status = useEnvironmentQuery(
@@ -29,9 +29,11 @@ export function useFetch() {
     repositoryId === undefined ? skipToken : { repositoryId },
     { changes: "refs" },
   );
-  const command = useCommand(RepositoryPullApi.fetch);
   const errorToast = useErrorToast();
   const statusToast = useStatusToast();
+  const command = useCommand(RepositoryPullApi.fetch, {
+    progress: (percent) => statusToast.advance(toast, percent),
+  });
   const { run } = command;
   const execute = useCallback(
     () =>
@@ -46,9 +48,9 @@ export function useFetch() {
     [repositoryId, run, errorToast],
   );
   const fetchNow = () => {
-    statusToast.progress("fetch", "Fetching changes");
+    statusToast.progress(toast, "Fetching changes", { percent: 0 });
     void execute().then((fetched) => {
-      if (fetched) statusToast.close("fetch");
+      if (fetched) statusToast.success(toast, "Fetched");
     });
   };
   return {
@@ -67,17 +69,24 @@ export type Fetch = ReturnType<typeof useFetch>;
 
 export function usePull() {
   const scope = useRepositoryScope();
-  const fetch = useFetch();
-  const command = useCommand(RepositoryPullApi.pull, { before: fetch.execute });
+  const fetch = useFetch("pull");
   const errorToast = useErrorToast();
   const statusToast = useStatusToast();
+  const command = useCommand(RepositoryPullApi.pull, {
+    before: async () => {
+      const fetched = await fetch.execute();
+      if (fetched) statusToast.progress("pull", "Pulling", { percent: 0 });
+      return fetched;
+    },
+    progress: (percent) => statusToast.advance("pull", percent),
+  });
   const pulling = command.running;
   const { run, canRun } = command;
 
   const pull = useCallback(
     async (branch: string) => {
       if (!canRun || pulling) return;
-      statusToast.progress("pull", `Pulling ${branch}`);
+      statusToast.progress("pull", "Fetching", { percent: 0 });
       const result = await run({ branch });
       if (result._tag === "Ok")
         statusToast.success(

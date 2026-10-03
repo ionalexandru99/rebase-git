@@ -5,12 +5,11 @@ import type {
 } from "#contracts/environment-connection/environment-route.contract.ts";
 import { RepositoryOperationsApi } from "#contracts/repository-operations/repository-operations.contract.ts";
 import { repositoryOperation } from "#tests-support/fixtures.ts";
-import type { EnvironmentRequests } from "#web/platform/query/environment-context.tsx";
+import type {
+  EnvironmentRequests,
+  RequestOptions,
+} from "#web/platform/query/environment-context.tsx";
 import type { RequestFailure } from "#web/platform/query/request-failure.ts";
-
-interface RequestOptions {
-  readonly signal?: AbortSignal;
-}
 
 export interface FakeRoute<Route extends EnvironmentRoute = EnvironmentRoute> {
   readonly route: Route;
