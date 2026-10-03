@@ -1,24 +1,20 @@
-import { IconSearch, IconX } from "@tabler/icons-react";
-import { useVirtualizer } from "@tanstack/react-virtual";
 import {
   type JSX,
   type KeyboardEvent,
   useCallback,
   useDeferredValue,
   useEffect,
-  useLayoutEffect,
   useMemo,
   useRef,
   useState,
 } from "react";
+import type { PullRequest } from "#contracts/pull-requests/pull-requests.contract.ts";
 import type { RepositoryRefTarget } from "#contracts/repository-refs/repository-refs.contract.ts";
 import {
   everyAction,
   keyAction,
   runAction,
 } from "#web/components/ui/action-menu.tsx";
-import { Button } from "#web/components/ui/button.tsx";
-import { Input } from "#web/components/ui/input.tsx";
 import { treeKeyAction } from "#web/features/branches-sidebar/branches-sidebar-keyboard.ts";
 import {
   RefRow,
@@ -27,6 +23,7 @@ import {
 } from "#web/features/branches-sidebar/branches-sidebar-rows.tsx";
 import {
   type BranchesSidebarExpandableRow,
+  type BranchesSidebarItem,
   type BranchesSidebarRefRow,
   type BranchesSidebarRow,
   type BranchesSidebarScope,
@@ -34,7 +31,6 @@ import {
   buildBranchesSidebarRows,
   currentRefRowId,
   defaultExpandedSections,
-  estimateItemHeight,
   refFolderIds,
   refRowId,
   refSectionId,
@@ -43,9 +39,13 @@ import {
   stashesSectionId,
   toggleSection,
 } from "#web/features/branches-sidebar/branches-sidebar-state.ts";
+import {
+  DockedTree,
+  type ItemPlacement,
+} from "#web/features/branches-sidebar/docked-tree.tsx";
 import { SidebarStatus } from "#web/features/branches-sidebar/sidebar-status.tsx";
 import {
-  BranchesSidebarScopeFilter,
+  BranchesSidebarFilter,
   BranchesSidebarViewSelector,
   useBranchesSidebarView,
 } from "#web/features/branches-sidebar/sidebar-view-controls.tsx";
@@ -87,8 +87,8 @@ import {
 } from "#web/features/stashes/stashes.ts";
 import { useRepositoryScope } from "#web/platform/query/repository-scope.tsx";
 
-const overscanRows = 12;
 const noSelectedRefs: ReadonlySet<string> = new Set();
+const noPullRequests: readonly PullRequest[] = [];
 const noSelectedTags: ReadonlySet<string> = new Set();
 
 export function BranchesSidebar({
@@ -136,7 +136,6 @@ export function BranchesSidebar({
   >(() => new Map());
   const [activeRowId, setActiveRowId] = useState<string>();
   const treeRef = useRef<HTMLDivElement>(null);
-  const filterRef = useRef<HTMLInputElement>(null);
   const refs = repositoryRefs.refs;
   const onSelectRef = activation.select;
   const folderRepositoryRef = useRef(refs?.repositoryId);
@@ -195,8 +194,13 @@ export function BranchesSidebar({
   const draftSectionId =
     edit?.kind === "create" ? refSectionId(edit.ref) : undefined;
   useEffect(() => {
-    if (draftSectionId !== undefined)
-      setScope((current) => scopeShowing(current, draftSectionId));
+    if (draftSectionId === undefined) return;
+    setScope((current) => scopeShowing(current, draftSectionId));
+    setExpandedSections((current) =>
+      current.has(draftSectionId)
+        ? current
+        : toggleSection(current, draftSectionId),
+    );
   }, [draftSectionId]);
   useEffect(() => {
     if (stashDraft.selection !== undefined)
@@ -216,28 +220,6 @@ export function BranchesSidebar({
       ),
     [rows, draftSectionId, detailsRowId, stashDraft.selection],
   );
-  const getItemKey = useCallback(
-    (index: number) => items[index]?.id ?? index,
-    [items],
-  );
-  const virtualizer = useVirtualizer({
-    count: items.length,
-    estimateSize: (index) => estimateItemHeight(items[index]),
-    getItemKey,
-    getScrollElement: () => treeRef.current,
-    overscan: overscanRows,
-  });
-  useLayoutEffect(() => {
-    if (items.length > 0) virtualizer.measure();
-  }, [items, virtualizer]);
-
-  const draftIndex = items.findIndex(
-    (item) => item.kind === "draft" || item.kind === "stash-draft",
-  );
-  useEffect(() => {
-    if (draftIndex >= 0) virtualizer.scrollToIndex(draftIndex);
-  }, [draftIndex, virtualizer]);
-
   const activeIndexRef = useRef(-1);
   useEffect(() => {
     const index = rows.findIndex((row) => row.id === activeRowId);
@@ -247,12 +229,6 @@ export function BranchesSidebar({
         rows[Math.min(activeIndexRef.current, rows.length - 1)]?.id,
       );
   }, [activeRowId, rows]);
-
-  useEffect(() => {
-    if (activeRowId === undefined) return;
-    const index = items.findIndex((item) => item.id === activeRowId);
-    if (index >= 0) virtualizer.scrollToIndex(index, { align: "auto" });
-  }, [activeRowId, items, virtualizer]);
 
   const rowsRef = useRef(rows);
   rowsRef.current = rows;
@@ -406,11 +382,6 @@ export function BranchesSidebar({
     if (handled) event.preventDefault();
   };
 
-  const clearFilter = () => {
-    setQuery("");
-    filterRef.current?.focus();
-  };
-
   const handleFilterKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
     if (event.key === "ArrowDown") {
       event.preventDefault();
@@ -430,9 +401,118 @@ export function BranchesSidebar({
     }
     if (event.key === "Escape") {
       event.preventDefault();
-      if (query.length > 0) clearFilter();
+      if (query.length > 0) setQuery("");
       else treeRef.current?.focus();
     }
+  };
+
+  const renderItem = (
+    item: BranchesSidebarItem,
+    { index, measure, position, size }: ItemPlacement,
+  ) => {
+    const measured = (children: JSX.Element) => (
+      <div
+        className="absolute top-0 left-0 w-full"
+        data-index={index}
+        key={item.id}
+        ref={measure}
+        style={position}
+      >
+        {children}
+      </div>
+    );
+    if (item.kind === "stash-draft")
+      return stashDraft.selection === undefined
+        ? null
+        : measured(
+            <StashNameField
+              commands={stashCommands}
+              initialName={`WIP on ${
+                (refs === undefined
+                  ? undefined
+                  : activeHead(refs, activeWorktreePath)?.branch) ??
+                "(no branch)"
+              }`}
+              onDone={() => {
+                stashDraft.cancel();
+                focusTree();
+              }}
+              selection={stashDraft.selection}
+            />,
+          );
+    if (
+      item.kind === "draft" ||
+      (edit?.kind === "rename" && edit.rowId === item.id)
+    )
+      return measured(
+        <RefEditField
+          editing={editing}
+          level={item.kind === "row" ? item.row.level : 2}
+          refs={refs}
+        />,
+      );
+    if (item.kind === "details") {
+      const tag = refs?.tags.find(({ name }) => name === item.row.name);
+      return tag === undefined
+        ? null
+        : measured(<TagDetails level={item.row.level} tag={tag} />);
+    }
+    if (item.kind !== "row") return null;
+    const row = item.row;
+    const style = { ...position, height: size };
+    if (row.kind === "stash")
+      return (
+        <StashRow
+          actions={stashCommands.actionsFor(row.stash)}
+          active={row.id === activeRowId}
+          elementId={rowElementId(row.id)}
+          key={row.id}
+          onActivate={() => setActiveRowId(row.id)}
+          onOpen={() => onOpenStash(row.stash.oid)}
+          position={row.position}
+          setSize={row.setSize}
+          stash={row.stash}
+          style={style}
+        />
+      );
+    if (row.kind !== "ref")
+      return (
+        <SectionRow
+          active={row.id === activeRowId}
+          key={row.id}
+          onActivate={() => setActiveRowId(row.id)}
+          onToggle={() => activateRow(row)}
+          row={row}
+          style={style}
+        />
+      );
+    return (
+      <RefRow
+        actions={actionsFor(row)}
+        active={row.id === activeRowId}
+        key={row.id}
+        onActivate={(mode) => {
+          setSelectedTags((current) =>
+            selectTagRows(rows, current, activeRowId, row.id, mode),
+          );
+          setActiveRowId(row.id);
+          merge?.inspect(row.target);
+          rebase?.inspect(row.target);
+        }}
+        onToggleHistory={() => onToggleHistoryRef(row.target)}
+        pullRequests={
+          row.target._tag === "LocalBranch" && pullRequests !== undefined
+            ? pullRequests.forBranch(row.name)
+            : noPullRequests
+        }
+        row={row}
+        selected={selectedTags.has(row.id)}
+        selectedInHistory={selectedHistoryRefKeys.has(
+          historyRefKey(row.target),
+        )}
+        style={style}
+      />
+    );
   };
 
   return (
@@ -446,178 +526,28 @@ export function BranchesSidebar({
         </h2>
         <BranchesSidebarViewSelector view={view} onChange={setView} />
       </div>
-      <div className="relative mx-3 mt-3">
-        <IconSearch
-          aria-hidden="true"
-          className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground"
-        />
-        <Input
-          aria-label="Filter branches"
-          className="pr-9 pl-9"
-          onChange={(event) => setQuery(event.target.value)}
-          onKeyDown={handleFilterKeyDown}
-          placeholder="Filter branches"
-          ref={filterRef}
-          value={query}
-        />
-        {query === "" ? null : (
-          <Button
-            aria-label="Clear filter"
-            className="absolute inset-y-0 right-1 my-auto text-muted-foreground"
-            onClick={clearFilter}
-            size="icon-xs"
-            type="button"
-            variant="ghost"
-          >
-            <IconX aria-hidden="true" />
-          </Button>
-        )}
-      </div>
-      <BranchesSidebarScopeFilter onChange={setScope} scope={scope} />
-      <div
-        aria-activedescendant={
-          activeRowId === undefined ? undefined : rowElementId(activeRowId)
-        }
-        aria-busy={activation.checkingOut}
-        aria-label="Branches"
-        aria-multiselectable="true"
-        className={`group/tree min-h-0 flex-1 overflow-x-hidden overflow-y-auto [scrollbar-width:none] px-2 pb-2 outline-none [&::-webkit-scrollbar]:hidden focus-visible:ring-2 focus-visible:ring-sidebar-ring/40 ${activation.checkingOut ? "cursor-progress opacity-70" : ""}`}
+      <BranchesSidebarFilter
+        onKeyDown={handleFilterKeyDown}
+        onQueryChange={setQuery}
+        onScopeChange={setScope}
+        query={query}
+        scope={scope}
+      />
+      <DockedTree
+        activeRowId={activeRowId}
+        busy={activation.checkingOut}
+        items={items}
         onKeyDown={handleTreeKeyDown}
-        ref={treeRef}
-        role="tree"
-        tabIndex={0}
+        renderItem={renderItem}
+        treeRef={treeRef}
       >
-        <div
-          className="relative w-full"
-          style={{ height: virtualizer.getTotalSize() }}
-        >
-          {virtualizer.getVirtualItems().map((virtualItem) => {
-            const item = items[virtualItem.index];
-            if (item === undefined) return null;
-            const position = {
-              transform: `translateY(${virtualItem.start}px)`,
-            };
-            if (item.kind === "stash-draft")
-              return stashDraft.selection === undefined ? null : (
-                <div
-                  className="absolute top-0 left-0 w-full"
-                  data-index={virtualItem.index}
-                  key={item.id}
-                  ref={virtualizer.measureElement}
-                  style={position}
-                >
-                  <StashNameField
-                    commands={stashCommands}
-                    initialName={`WIP on ${
-                      (refs === undefined
-                        ? undefined
-                        : activeHead(refs, activeWorktreePath)?.branch) ??
-                      "(no branch)"
-                    }`}
-                    onDone={() => {
-                      stashDraft.cancel();
-                      focusTree();
-                    }}
-                    selection={stashDraft.selection}
-                  />
-                </div>
-              );
-            const editsRow =
-              item.kind === "draft" ||
-              (edit?.kind === "rename" && edit.rowId === item.id);
-            if (editsRow)
-              return (
-                <div
-                  className="absolute top-0 left-0 w-full"
-                  data-index={virtualItem.index}
-                  key={item.id}
-                  ref={virtualizer.measureElement}
-                  style={position}
-                >
-                  <RefEditField
-                    editing={editing}
-                    level={item.kind === "row" ? item.row.level : 2}
-                    refs={refs}
-                  />
-                </div>
-              );
-            if (item.kind === "details") {
-              const tag = refs?.tags.find(({ name }) => name === item.row.name);
-              return tag === undefined ? null : (
-                <div
-                  className="absolute top-0 left-0 w-full"
-                  data-index={virtualItem.index}
-                  key={item.id}
-                  ref={virtualizer.measureElement}
-                  style={position}
-                >
-                  <TagDetails level={item.row.level} tag={tag} />
-                </div>
-              );
-            }
-            if (item.kind !== "row") return null;
-            const row = item.row;
-            const style = { ...position, height: virtualItem.size };
-            if (row.kind === "stash")
-              return (
-                <StashRow
-                  actions={stashCommands.actionsFor(row.stash)}
-                  active={row.id === activeRowId}
-                  elementId={rowElementId(row.id)}
-                  key={row.id}
-                  onActivate={() => setActiveRowId(row.id)}
-                  onOpen={() => onOpenStash(row.stash.oid)}
-                  position={row.position}
-                  setSize={row.setSize}
-                  stash={row.stash}
-                  style={style}
-                />
-              );
-            return row.kind !== "ref" ? (
-              <SectionRow
-                active={row.id === activeRowId}
-                key={row.id}
-                onActivate={() => setActiveRowId(row.id)}
-                onToggle={() => activateRow(row)}
-                row={row}
-                style={style}
-              />
-            ) : (
-              <RefRow
-                actions={actionsFor(row)}
-                active={row.id === activeRowId}
-                key={row.id}
-                onActivate={(mode) => {
-                  setSelectedTags((current) =>
-                    selectTagRows(rows, current, activeRowId, row.id, mode),
-                  );
-                  setActiveRowId(row.id);
-                  merge?.inspect(row.target);
-                  rebase?.inspect(row.target);
-                }}
-                onToggleHistory={() => onToggleHistoryRef(row.target)}
-                pullRequest={
-                  row.target._tag === "LocalBranch"
-                    ? pullRequests?.forBranch(row.name)[0]
-                    : undefined
-                }
-                row={row}
-                selected={selectedTags.has(row.id)}
-                selectedInHistory={selectedHistoryRefKeys.has(
-                  historyRefKey(row.target),
-                )}
-                style={style}
-              />
-            );
-          })}
-        </div>
         <SidebarStatus
           query={query}
           repositoryRefs={repositoryRefs}
           rows={rows}
           scope={scope}
         />
-      </div>
+      </DockedTree>
       <RefEditingStatus editing={editing} />
       <StashDropConfirmation commands={stashCommands} />
     </nav>
