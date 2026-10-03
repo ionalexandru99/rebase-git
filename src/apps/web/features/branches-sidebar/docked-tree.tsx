@@ -1,8 +1,4 @@
-import {
-  useVirtualizer,
-  type VirtualItem,
-  type Virtualizer,
-} from "@tanstack/react-virtual";
+import { useVirtualizer, type Virtualizer } from "@tanstack/react-virtual";
 import {
   type JSX,
   type KeyboardEvent,
@@ -23,10 +19,14 @@ import {
 
 type RenderItem = (item: BranchesSidebarItem) => ReactNode;
 
+interface MountedRow {
+  readonly node: HTMLElement;
+  readonly start: number;
+}
+
 interface RegionLayout {
   readonly items: readonly BranchesSidebarItem[];
-  readonly measurements: readonly VirtualItem[];
-  readonly nodes: ReadonlyMap<string, HTMLElement>;
+  readonly rows: ReadonlyMap<string, MountedRow>;
 }
 
 const overscanRows = 12;
@@ -121,9 +121,6 @@ function VirtualRegion({
     paddingEnd: padding,
     paddingStart: padding,
   });
-  useLayoutEffect(() => {
-    if (items.length > 0) virtualizer.measure();
-  }, [items, virtualizer]);
   useRowMotion(listRef, items, virtualizer);
 
   const draftIndex = items.findIndex(
@@ -177,11 +174,7 @@ function useRowMotion(
     const list = listRef.current;
     if (list === null) return;
     const before = previous.current;
-    const after = {
-      items,
-      measurements: virtualizer.measurementsCache,
-      nodes: mountedRows(list, items),
-    };
+    const after = { items, rows: mountedRows(list, items, virtualizer) };
     previous.current = after;
     if (
       before !== undefined &&
@@ -195,14 +188,22 @@ function useRowMotion(
 function mountedRows(
   list: HTMLElement,
   items: readonly BranchesSidebarItem[],
-): Map<string, HTMLElement> {
+  virtualizer: Virtualizer<HTMLDivElement, Element>,
+): Map<string, MountedRow> {
+  const nodes = new Map(
+    Array.from(list.children).flatMap((node) =>
+      node instanceof HTMLElement && node.dataset.index !== undefined
+        ? [[Number(node.dataset.index), node]]
+        : [],
+    ),
+  );
   return new Map(
-    Array.from(list.children).flatMap((node) => {
-      const item =
-        node instanceof HTMLElement
-          ? items[Number(node.dataset.index)]
-          : undefined;
-      return item === undefined ? [] : [[item.id, node as HTMLElement]];
+    virtualizer.getVirtualItems().flatMap(({ index, start }) => {
+      const id = items[index]?.id;
+      const node = nodes.get(index);
+      return id === undefined || node === undefined
+        ? []
+        : [[id, { node, start }]];
     }),
   );
 }
@@ -212,29 +213,36 @@ function animateRows(
   before: RegionLayout,
   after: RegionLayout,
 ) {
-  const starts = new Map(
-    before.measurements.map(({ key, start }) => [key, start]),
-  );
-  const remaining = new Set(after.items.map(({ id }) => id));
-  const exiting = [...before.nodes].filter(([id]) => !remaining.has(id));
-  const entering = [...after.nodes].filter(([id]) => !starts.has(id));
+  const removed = [...before.rows].filter(([id]) => !after.rows.has(id));
+  const remaining = removed.length === 0 ? undefined : itemIds(after.items);
+  const exiting = removed.filter(([id]) => !remaining?.has(id));
+  const added = [...after.rows].filter(([id]) => !before.rows.has(id));
+  const known = added.length === 0 ? undefined : itemIds(before.items);
+  const entering = added.filter(([id]) => !known?.has(id));
   if (exiting.length + entering.length > maxFadedRows) return;
-  for (const [, node] of exiting) fadeOut(list, node);
-  for (const [, node] of entering)
-    node.animate([{ opacity: 0 }, { opacity: 1 }], motionTiming);
-  for (const [id, node] of after.nodes) {
-    const from =
-      node.getAnimations().length > 0 ? visualTop(node) : starts.get(id);
-    const to = after.measurements[Number(node.dataset.index)]?.start;
-    if (from === undefined || to === undefined || from === to) continue;
-    node.animate(
-      [
-        { transform: `translateY(${from}px)` },
-        { transform: `translateY(${to}px)` },
-      ],
-      motionTiming,
-    );
+  for (const [, { node }] of exiting) fadeOut(list, node);
+  let riding = 0;
+  for (const [id, { node, start }] of after.rows) {
+    const previous = before.rows.get(id);
+    if (previous === undefined && !known?.has(id)) {
+      node.animate([{ opacity: 0 }, { opacity: 1 }], motionTiming);
+      continue;
+    }
+    const offset =
+      previous === undefined
+        ? riding
+        : previous.start - start + remainingTravel(node);
+    riding = offset;
+    if (offset !== 0)
+      node.animate(
+        [{ translate: `0 ${offset}px` }, { translate: "0 0" }],
+        motionTiming,
+      );
   }
+}
+
+function itemIds(items: readonly BranchesSidebarItem[]): Set<string> {
+  return new Set(items.map(({ id }) => id));
 }
 
 function fadeOut(list: HTMLElement, node: HTMLElement) {
@@ -255,6 +263,8 @@ function fadeOut(list: HTMLElement, node: HTMLElement) {
     .addEventListener("finish", () => copy.remove(), { once: true });
 }
 
-function visualTop(node: HTMLElement): number {
-  return new DOMMatrixReadOnly(getComputedStyle(node).transform).m42;
+function remainingTravel(node: HTMLElement): number {
+  if (node.getAnimations().length === 0) return 0;
+  const [, y = "0"] = getComputedStyle(node).translate.split(" ");
+  return Number.parseFloat(y);
 }
