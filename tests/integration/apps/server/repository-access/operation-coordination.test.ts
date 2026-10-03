@@ -163,16 +163,16 @@ it("splits the commit at a rebase edit stop with a reset and plain commits", asy
       expectedHead: head,
     }),
   );
-  expect(
-    (await f.readOperation()).actions.find((a) => a.action === "continue"),
-  ).toEqual({
+  const continueAction = async () =>
+    (await f.readOperation()).actions.find((a) => a.action === "continue");
+  const blocked = {
     action: "continue",
     enabled: false,
     reason: "Commit or amend your changes before continuing the rebase.",
-  });
-
+  };
   const changes = { ...f.scope, amend: false };
   for (const part of ["a", "b"]) {
+    expect(await continueAction()).toEqual(blocked);
     const written = await Effect.runPromise(
       f.changes.mutate({
         ...changes,

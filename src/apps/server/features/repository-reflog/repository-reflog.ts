@@ -25,7 +25,6 @@ import {
 import { readRefTarget } from "#server/features/repository-refs/git/ref-git.ts";
 import {
   atRebaseEditStop,
-  type RepositoryCoordination,
   type RepositoryWritePolicy,
 } from "#server/repository/repository-coordination.ts";
 
@@ -47,7 +46,7 @@ export function repositoryReflogFeature(
     routes: [
       query(RepositoryReflogApi.read, (input, git) => readReflog(git, input)),
       command(RepositoryReflogApi.reset, resetPolicy, (input, git) =>
-        resetToCommit(git, dependencies.coordination, input),
+        resetToCommit(git, input),
       ),
     ],
   };
@@ -140,11 +139,7 @@ function readOrphaned(
   );
 }
 
-function resetToCommit(
-  git: GitCommandRunner,
-  coordination: RepositoryCoordination,
-  command: ResetToCommit,
-) {
+function resetToCommit(git: GitCommandRunner, command: ResetToCommit) {
   const { worktreePath, target, mode, expectedHead, discard } = command;
   return Effect.gen(function* () {
     const head = yield* readRefTarget(git, worktreePath, "HEAD");
@@ -165,19 +160,10 @@ function resetToCommit(
       });
     if (mode === "hard")
       yield* requireDiscardConfirmed(git, worktreePath, commit, discard);
-    const keepNewFilesListed =
-      mode === "mixed" &&
-      (yield* coordination.operation(worktreePath)).phase === "edit";
     yield* runRepositoryGit(
       git,
       worktreePath,
-      [
-        "reset",
-        `--${mode}`,
-        ...(keepNewFilesListed ? ["--intent-to-add"] : []),
-        "--quiet",
-        commit,
-      ],
+      ["reset", `--${mode}`, "--quiet", commit],
       { timeoutMilliseconds: 120_000 },
     );
     return { head: commit };

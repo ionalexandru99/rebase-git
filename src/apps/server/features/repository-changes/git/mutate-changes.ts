@@ -158,13 +158,6 @@ function discardFiles<E>(
         git,
         index,
         directory,
-        ["rm", "--cached", "--ignore-unmatch", "--quiet"],
-        [...created],
-      );
-      yield* pathspecGit(
-        git,
-        index,
-        directory,
         ["restore", "--worktree"],
         paths.filter((path) => !created.has(path)),
       );

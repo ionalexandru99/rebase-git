@@ -81,10 +81,13 @@ export function readRepositoryOperation(
       candidate === "squash" && unresolvedPaths.length === 0
         ? "idle"
         : candidate;
+    const stopped = metadata["rebase-merge/amend"]?.trim() ?? null;
     const edit =
-      kind === "rebase" &&
-      metadata["rebase-merge/amend"] !== null &&
-      unresolvedPaths.length === 0;
+      kind === "rebase" && stopped !== null && unresolvedPaths.length === 0;
+    const leftovers =
+      edit && worktree.head !== stopped
+        ? yield* newFilesLeftOut(git, worktreePath, stopped)
+        : [];
     const empty =
       unresolvedPaths.length === 0 &&
       (metadata.CHERRY_PICK_HEAD ?? metadata.REVERT_HEAD) !== null &&
@@ -97,6 +100,7 @@ export function readRepositoryOperation(
           unresolvedPaths.length,
           edit,
           worktree.status,
+          leftovers.length,
         );
     const steps = kind === "rebase" ? rebaseSteps(metadata) : null;
     const progress =
@@ -112,7 +116,7 @@ export function readRepositoryOperation(
       unresolvedPaths,
       lock,
       revision: createHash("sha256")
-        .update(JSON.stringify({ values, stamps, lock, worktree }))
+        .update(JSON.stringify({ values, stamps, lock, worktree, leftovers }))
         .digest("hex"),
       branch: branchName(
         metadata["rebase-merge/head-name"] ??
@@ -229,6 +233,32 @@ function parseWorktreeStatus(output: string) {
   };
 }
 
+function newFilesLeftOut(
+  git: GitCommandRunner,
+  worktreePath: string,
+  commit: string,
+) {
+  return Effect.gen(function* () {
+    const added = (yield* inspect(git, worktreePath, [
+      "diff",
+      "--name-only",
+      "--no-renames",
+      "--diff-filter=A",
+      "-z",
+      "HEAD",
+      commit,
+    ]))
+      .split("\0")
+      .filter(Boolean);
+    const stamps = yield* Effect.forEach(
+      added,
+      (path) => operationFileStamp(worktreePath, path),
+      { concurrency: 16 },
+    );
+    return added.filter((_, index) => stamps[index] !== null);
+  });
+}
+
 function inspect(
   git: GitCommandRunner,
   worktreePath: string,
@@ -271,12 +301,13 @@ function blockedReason(
   unresolved: number,
   edit: boolean,
   status: string,
+  leftovers: number,
 ) {
   const locked = lockedReason(lock);
   if (locked !== null) return locked;
   if (unresolved)
     return `Resolve and stage ${unresolved} ${unresolved === 1 ? "file" : "files"} to continue.`;
-  if (edit && status.length > 0)
+  if (edit && (status.length > 0 || leftovers > 0))
     return "Commit or amend your changes before continuing the rebase.";
   const unstaged = status
     .split("\0")

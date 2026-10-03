@@ -162,16 +162,6 @@ describe("working changes through Git", () => {
       expect((await f.read()).unstaged).toEqual([]);
     },
   );
-  it("discards a new file that a mixed reset left intent-to-add", async () => {
-    const f = await fixture();
-    await writeFile(join(f.directory, "new.txt"), "new\n");
-    await f.git("add", "--intent-to-add", "new.txt");
-    await f.mutate("discard", "unstaged", {
-      _tag: "Files",
-      paths: ["new.txt"],
-    });
-    expect(await f.read()).toMatchObject({ unstaged: [], staged: [] });
-  });
   it("applies selected lines to filenames with spaces, quotes and Unicode", async () => {
     const f = await fixture();
     const path =

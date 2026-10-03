@@ -109,23 +109,6 @@ describe("repository reflog", () => {
     });
   });
 
-  it("leaves the new files a mixed reset brings back untracked outside a rebase", async () => {
-    const path = await temporaryRepository();
-    const first = await commitFile(path, "one\n");
-    await writeFile(join(path, "new.txt"), "new\n");
-    await git(path, "add", "new.txt");
-    await git(path, "commit", "-m", "new file");
-    const reflog = await reflogClient(path);
-
-    await reflog.reset({
-      target: first,
-      mode: "mixed",
-      expectedHead: await git(path, "rev-parse", "HEAD"),
-    });
-
-    expect(await git(path, "status", "--porcelain")).toBe("?? new.txt");
-  });
-
   it("refuses a stale head and a reset during a rebase", async () => {
     const path = await temporaryRepository();
     const first = await commitFile(path, "one\n");
