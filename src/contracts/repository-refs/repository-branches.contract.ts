@@ -47,25 +47,27 @@ const DeletedRemoteBranch = Schema.Struct({
   target: ObjectId,
 });
 
-export const DeleteRepositoryBranch = Schema.Struct({
-  ...BranchScope,
-  force: Schema.Boolean,
+export const BranchDeletion = Schema.Struct({
   local: Schema.optional(DeletedLocalBranch),
   remote: Schema.optional(DeletedRemoteBranch),
 });
-export type DeleteRepositoryBranch = typeof DeleteRepositoryBranch.Type;
+export type BranchDeletion = typeof BranchDeletion.Type;
+
+export const DeleteRepositoryBranches = Schema.Struct({
+  ...BranchScope,
+  branches: Schema.Array(BranchDeletion).check(
+    Schema.isMinLength(1),
+    Schema.isMaxLength(1_000),
+  ),
+  force: Schema.Boolean,
+});
+export type DeleteRepositoryBranches = typeof DeleteRepositoryBranches.Type;
 
 export const RepositoryBranchRenamed = Schema.Struct({
   branch: LocalBranch,
   previousName: RefName,
 });
 export type RepositoryBranchRenamed = typeof RepositoryBranchRenamed.Type;
-
-export const RepositoryBranchDeleted = Schema.Struct({
-  local: Schema.optional(DeletedLocalBranch),
-  remote: Schema.optional(DeletedRemoteBranch),
-});
-export type RepositoryBranchDeleted = typeof RepositoryBranchDeleted.Type;
 
 export const BranchCommitSummary = Schema.Struct({
   oid: ObjectId,
@@ -82,12 +84,18 @@ export const BranchExists = Schema.TaggedStruct("BranchExists", {
 export const BranchMoved = Schema.TaggedStruct("BranchMoved", {
   name: RefName,
 });
-export const BranchNotMerged = Schema.TaggedStruct("BranchNotMerged", {
+export const UnmergedBranch = Schema.Struct({
+  branch: BranchDeletion,
   commits: Schema.Array(BranchCommitSummary).check(Schema.isMaxLength(20)),
   count: Schema.Natural,
-  name: RefName,
 });
-export type BranchNotMerged = typeof BranchNotMerged.Type;
+export type UnmergedBranch = typeof UnmergedBranch.Type;
+
+export const RepositoryBranchesDeleted = Schema.Struct({
+  deleted: Schema.Array(BranchDeletion).check(Schema.isMaxLength(1_000)),
+  unmerged: Schema.Array(UnmergedBranch).check(Schema.isMaxLength(1_000)),
+});
+export type RepositoryBranchesDeleted = typeof RepositoryBranchesDeleted.Type;
 
 export const RepositoryBranchesOperationFailure = Schema.Union([
   RefMissing,
@@ -95,7 +103,6 @@ export const RepositoryBranchesOperationFailure = Schema.Union([
   InvalidBranchName,
   BranchExists,
   BranchMoved,
-  BranchNotMerged,
 ]);
 export type RepositoryBranchesOperationFailure =
   typeof RepositoryBranchesOperationFailure.Type;
@@ -107,8 +114,8 @@ export const RepositoryBranchesApi = {
     failure: RepositoryBranchesOperationFailure,
   }),
   delete: repositoryCommand("repositories/branches/delete", {
-    request: DeleteRepositoryBranch,
-    success: RepositoryBranchDeleted,
+    request: DeleteRepositoryBranches,
+    success: RepositoryBranchesDeleted,
     failure: RepositoryBranchesOperationFailure,
   }),
   rename: repositoryCommand("repositories/branches/rename", {

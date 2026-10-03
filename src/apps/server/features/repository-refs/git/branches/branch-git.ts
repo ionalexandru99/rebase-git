@@ -50,29 +50,6 @@ export function readBranchTarget(
   return readRefTarget(git, directory, `${branchRef(name)}^{commit}`);
 }
 
-export function requireBranchTarget(
-  git: GitCommandRunner,
-  directory: string,
-  name: string,
-  expectedTarget: string,
-) {
-  return readBranchTarget(git, directory, name).pipe(
-    Effect.flatMap((target) => {
-      if (target === undefined)
-        return Effect.fail<RepositoryBranchesOperationFailure>({
-          _tag: "RefMissing",
-          name,
-        });
-      if (target !== expectedTarget)
-        return Effect.fail<RepositoryBranchesOperationFailure>({
-          _tag: "BranchMoved",
-          name,
-        });
-      return Effect.succeed(target);
-    }),
-  );
-}
-
 export function worktreeHolding(
   worktrees: readonly RepositoryWorktree[],
   name: string,

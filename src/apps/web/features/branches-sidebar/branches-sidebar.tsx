@@ -42,7 +42,7 @@ import {
   refRowId,
   refSectionId,
   scopeShowing,
-  selectTagRows,
+  selectRefRows,
   stashesSectionId,
   toggleSection,
 } from "#web/features/branches-sidebar/branches-sidebar-state.ts";
@@ -63,6 +63,7 @@ import type { RebaseActions } from "#web/features/rebase/rebase-actions.ts";
 import {
   type RefActionRow,
   refActions,
+  selectedBranchActions,
   selectedTagActions,
   useRefIntent,
 } from "#web/features/refs/ref-actions.ts";
@@ -97,7 +98,7 @@ import { useRepositoryScope } from "#web/platform/query/repository-scope.tsx";
 const noSelectedRefs: ReadonlySet<string> = new Set();
 const noPullRequests: readonly PullRequest[] = [];
 const noRemoteBranches: readonly RemoteBranch[] = [];
-const noSelectedTags: ReadonlySet<string> = new Set();
+const noSelectedRows: ReadonlySet<string> = new Set();
 
 export function BranchesSidebar({
   merge,
@@ -131,7 +132,7 @@ export function BranchesSidebar({
   const stashes = useStashes();
   const stashCommands = useStashCommands();
   const stashDraft = useStashDraft();
-  const [selectedTags, setSelectedTags] = useState(noSelectedTags);
+  const [selectedRows, setSelectedRows] = useState(noSelectedRows);
   const [query, setQuery] = useState("");
   const filterQuery = useDeferredValue(query);
   const [scope, setScope] = useState<BranchesSidebarScope>("all");
@@ -295,22 +296,26 @@ export function BranchesSidebar({
           },
         );
 
-  const actionsFor = (row: BranchesSidebarRefRow) =>
-    refs !== undefined && selectedTags.size > 1 && selectedTags.has(row.id)
-      ? selectedTagActions(
-          rows.flatMap((candidate) =>
-            selectedTags.has(candidate.id) && candidate.kind === "ref"
-              ? [candidate.name]
-              : [],
-          ),
-          refs,
-          { writable: editing.writable },
-          tagPush,
-        )
-      : refActionsFor(row);
+  const actionsFor = (row: BranchesSidebarRefRow) => {
+    if (
+      refs === undefined ||
+      selectedRows.size < 2 ||
+      !selectedRows.has(row.id)
+    )
+      return refActionsFor(row);
+    const names = rows.flatMap((candidate) =>
+      selectedRows.has(candidate.id) && candidate.kind === "ref"
+        ? [candidate.name]
+        : [],
+    );
+    const access = { writable: editing.writable };
+    return row.target._tag === "Tag"
+      ? selectedTagActions(names, refs, access, tagPush)
+      : selectedBranchActions(names, refs, access, editing);
+  };
 
   const moveActive = (rowId: string | undefined) => {
-    setSelectedTags(noSelectedTags);
+    setSelectedRows(noSelectedRows);
     setActiveRowId(rowId);
   };
 
@@ -372,9 +377,9 @@ export function BranchesSidebar({
       event.preventDefault();
       return;
     }
-    if (event.key === "Escape" && selectedTags.size > 0) {
+    if (event.key === "Escape" && selectedRows.size > 0) {
       event.preventDefault();
-      setSelectedTags(noSelectedTags);
+      setSelectedRows(noSelectedRows);
       return;
     }
     const handled = treeKeyAction(event.key, {
@@ -502,8 +507,8 @@ export function BranchesSidebar({
         card={row.target._tag === "LocalBranch" ? branchCard : undefined}
         key={row.id}
         onActivate={(mode) => {
-          setSelectedTags((current) =>
-            selectTagRows(rows, current, activeRowId, row.id, mode),
+          setSelectedRows((current) =>
+            selectRefRows(rows, current, activeRowId, row.id, mode),
           );
           setActiveRowId(row.id);
           merge?.inspect(row.target);
@@ -516,7 +521,7 @@ export function BranchesSidebar({
             : noPullRequests
         }
         row={row}
-        selected={selectedTags.has(row.id)}
+        selected={selectedRows.has(row.id)}
         selectedInHistory={selectedHistoryRefKeys.has(
           historyRefKey(row.target),
         )}

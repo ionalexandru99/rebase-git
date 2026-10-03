@@ -102,8 +102,6 @@ export function refFailureMessages(
     InvalidBranchName: ({ name }) => `${name} is not a valid branch name.`,
     BranchExists: ({ name }) => `${name} already exists.`,
     BranchMoved: ({ name }) => `${name} changed since it was shown.`,
-    BranchNotMerged: ({ count, name }) =>
-      `${count} commits exist only on ${name}.`,
     TagRejected: ({ reason }) => tagRejection(name, reason),
   };
 }

@@ -10,9 +10,10 @@ import type {
 import { type Action, submenu } from "#web/components/ui/action-menu.tsx";
 import type { RebaseActionId } from "#web/features/rebase/rebase-actions.ts";
 import type {
+  BranchTarget,
   RefDeletion,
-  RefEditing,
-} from "#web/features/refs/ref-editing.ts";
+} from "#web/features/refs/ref-deletion.ts";
+import type { RefEditing } from "#web/features/refs/ref-editing.ts";
 import {
   commitStartPoint,
   type RefKind,
@@ -160,7 +161,7 @@ export function refActions(
           label: `On ${remote.remote}`,
           reason: readOnly,
         },
-        branch && { kind: "branch", remote: branch },
+        branch && { kind: "branch", branches: [{ remote: branch }] },
       ),
     ];
   };
@@ -296,9 +297,6 @@ export function refActions(
     readOnly ??
     elsewhere ??
     (branch.worktreePath === undefined ? undefined : "Checked out");
-  const counterpart = trackedRemoteBranch(branch, refs);
-  const local = targeted(branch);
-  const remote = targeted(counterpart);
   return [
     ...common,
     action({
@@ -309,27 +307,108 @@ export function refActions(
       keys: ["F2"],
       run: () => editing.startRename(branch, row.id),
     }),
-    ...deleteMenu([
-      remove(
-        {
-          id: "deleteLocal",
-          label: "Local",
-          reason: checkedOut,
-          keys: deleteKeys,
-        },
-        local && { kind: "branch", local },
-      ),
-      ...deleteOnRemote(counterpart),
-      ...(counterpart === undefined
-        ? []
-        : [
-            remove(
-              { id: "deleteBoth", label: "Both", reason: checkedOut },
-              local && remote && { kind: "branch", local, remote },
-            ),
-          ]),
-    ]),
+    ...branchDeleteMenu([branch], refs, { checkedOut, readOnly }, editing),
   ];
+}
+
+export function selectedBranchActions(
+  names: readonly string[],
+  refs: RepositoryRefs,
+  { writable }: Pick<RefActionAccess, "writable">,
+  editing: RefActionHandlers["editing"],
+): readonly RefAction[] {
+  const readOnly = writable ? undefined : "Read only";
+  const branches = refs.branches.filter(({ name }) => names.includes(name));
+  const checkedOut =
+    readOnly ??
+    (branches.some(({ worktreePath }) => worktreePath !== undefined)
+      ? "Checked out"
+      : undefined);
+  return branchDeleteMenu(branches, refs, { checkedOut, readOnly }, editing);
+}
+
+function branchDeleteMenu(
+  branches: readonly LocalBranch[],
+  refs: RepositoryRefs,
+  {
+    checkedOut,
+    readOnly,
+  }: {
+    readonly checkedOut: string | undefined;
+    readonly readOnly: string | undefined;
+  },
+  editing: RefActionHandlers["editing"],
+): readonly RefAction[] {
+  const pairs = branches.map((branch) => ({
+    branch,
+    counterpart: trackedRemoteBranch(branch, refs),
+  }));
+  const remotes = [
+    ...new Set(pairs.flatMap(({ counterpart }) => counterpart?.remote ?? [])),
+  ];
+  const deletion = (
+    targets: readonly (BranchTarget | undefined)[],
+  ): RefDeletion | undefined =>
+    targets.length === 0 || targets.some((target) => target === undefined)
+      ? undefined
+      : { kind: "branch", branches: targets.filter(isDefined) };
+  const remove = (
+    fields: Omit<ActionFields, "group" | "run">,
+    chosen: RefDeletion | undefined,
+  ) =>
+    action({
+      ...fields,
+      group: "delete",
+      run: () => {
+        if (chosen !== undefined) editing.deletion.request(chosen);
+      },
+    });
+  const both = (branch: LocalBranch, counterpart: RemoteBranch | undefined) => {
+    const local = targeted(branch);
+    const remote = targeted(counterpart);
+    if (local === undefined || (counterpart !== undefined && !remote))
+      return undefined;
+    return remote === undefined ? { local } : { local, remote };
+  };
+  return deleteMenu([
+    remove(
+      {
+        id: "deleteLocal",
+        label: "Local",
+        reason: checkedOut,
+        keys: deleteKeys,
+      },
+      deletion(
+        pairs.map(({ branch }) => {
+          const local = targeted(branch);
+          return local && { local };
+        }),
+      ),
+    ),
+    ...remotes.map((remote) =>
+      remove(
+        { id: `deleteOn:${remote}`, label: `On ${remote}`, reason: readOnly },
+        deletion(
+          pairs
+            .filter(({ counterpart }) => counterpart?.remote === remote)
+            .map(({ counterpart }) => {
+              const target = targeted(counterpart);
+              return target && { remote: target };
+            }),
+        ),
+      ),
+    ),
+    ...(remotes.length === 1
+      ? [
+          remove(
+            { id: "deleteBoth", label: "Both", reason: checkedOut },
+            deletion(
+              pairs.map(({ branch, counterpart }) => both(branch, counterpart)),
+            ),
+          ),
+        ]
+      : []),
+  ]);
 }
 
 function pullAction(
@@ -537,4 +616,8 @@ function trackedRemoteBranch(
     ({ name, remote }) =>
       name === branch.name && `${remote}/${name}` === branch.upstream?.name,
   );
+}
+
+function isDefined<Value>(value: Value | undefined): value is Value {
+  return value !== undefined;
 }

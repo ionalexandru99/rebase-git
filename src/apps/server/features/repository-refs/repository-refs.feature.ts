@@ -29,7 +29,7 @@ import {
   requireValidBranchName,
   setUpstreamArguments,
 } from "#server/features/repository-refs/git/branches/branch-git.ts";
-import { deleteBranch } from "#server/features/repository-refs/git/branches/delete-branch.ts";
+import { deleteBranches } from "#server/features/repository-refs/git/branches/delete-branches.ts";
 import { renameBranch } from "#server/features/repository-refs/git/branches/rename-branch.ts";
 import { checkoutRepositoryRef } from "#server/features/repository-refs/git/checkout-repository-ref.ts";
 import { readRepositoryRefs } from "#server/features/repository-refs/git/read-repository-refs.ts";
@@ -106,7 +106,7 @@ export function repositoryRefsFeature(
           renameBranch(git, access, input),
         ),
         command(branches.delete, branchPolicy, (input, git) =>
-          deleteBranch(git, access, input),
+          deleteBranches(git, access, input),
         ),
         command(RepositoryTagsApi.create, tagPolicy, (input, git) =>
           createTag(git, input),

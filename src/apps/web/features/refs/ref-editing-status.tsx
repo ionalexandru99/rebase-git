@@ -1,10 +1,11 @@
-import type { BranchNotMerged } from "#contracts/repository-refs/repository-branches.contract.ts";
-import { Confirmation } from "#web/components/ui/confirmation.tsx";
-import { PersistentNotification } from "#web/features/notifications/components/persistent-notification.tsx";
+import type { UnmergedBranch } from "#contracts/repository-refs/repository-branches.contract.ts";
 import {
-  deletionTitle,
-  type RefEditing,
-} from "#web/features/refs/ref-editing.ts";
+  Confirmation,
+  ConfirmationList,
+} from "#web/components/ui/confirmation.tsx";
+import { PersistentNotification } from "#web/features/notifications/components/persistent-notification.tsx";
+import { branchLabel, deletionTitle } from "#web/features/refs/ref-deletion.ts";
+import type { RefEditing } from "#web/features/refs/ref-editing.ts";
 
 const listedCommits = 3;
 
@@ -21,30 +22,50 @@ export function RefEditingStatus({
         action="Delete"
         busy={pending.busy}
         className="px-3 py-2"
-        key={pending.failure === undefined ? "confirm" : "unmerged"}
+        key={pending.unmerged === undefined ? "confirm" : "unmerged"}
         onCancel={editing.deletion.cancel}
         onConfirm={editing.deletion.confirm}
         title={deletionTitle(pending.deletion)}
       >
-        {pending.failure === undefined ? undefined : (
-          <UnmergedCommits failure={pending.failure} />
+        {pending.unmerged === undefined ? undefined : (
+          <UnmergedBranches unmerged={pending.unmerged} />
         )}
       </Confirmation>
     </PersistentNotification>
   );
 }
 
-function UnmergedCommits({ failure }: { readonly failure: BranchNotMerged }) {
-  const hidden = failure.count - Math.min(failure.count, listedCommits);
+function UnmergedBranches({
+  unmerged,
+}: {
+  readonly unmerged: readonly UnmergedBranch[];
+}) {
+  const [only] = unmerged;
+  if (unmerged.length === 1 && only !== undefined)
+    return <UnmergedCommits branch={only} />;
   return (
     <>
       <p className="text-muted-foreground">
-        {failure.count === 1
+        These branches have commits that exist nowhere else.
+      </p>
+      <ConfirmationList
+        items={unmerged.map(({ branch }) => branchLabel(branch))}
+      />
+    </>
+  );
+}
+
+function UnmergedCommits({ branch }: { readonly branch: UnmergedBranch }) {
+  const hidden = branch.count - Math.min(branch.count, listedCommits);
+  return (
+    <>
+      <p className="text-muted-foreground">
+        {branch.count === 1
           ? "1 commit exists only on this branch."
-          : `${failure.count} commits exist only on this branch.`}
+          : `${branch.count} commits exist only on this branch.`}
       </p>
       <ul className="mt-1.5 flex flex-col gap-0.5">
-        {failure.commits.slice(0, listedCommits).map((commit) => (
+        {branch.commits.slice(0, listedCommits).map((commit) => (
           <li className="flex min-w-0 gap-2" key={commit.oid}>
             <span className="shrink-0 font-mono text-muted-foreground">
               {commit.oid.slice(0, 7)}
