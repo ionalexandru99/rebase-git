@@ -106,12 +106,12 @@ export function useWorktrees(open: boolean) {
   const removeNow = useCallback(
     async (row: WorktreeRow, changes: number) => {
       setConfirming(undefined);
-      if (row.active && anchor !== undefined) scope?.switchWorktree(anchor);
       const missing = row.worktree.missing === true;
       if (!missing)
         statusToast.progress("removeWorktree", `Removing “${row.name}”`);
       const result = await remove.run({ target: row.worktree.path, changes });
       if (result._tag === "Ok") {
+        if (row.active && anchor !== undefined) scope?.switchWorktree(anchor);
         if (!missing)
           statusToast.success("removeWorktree", `Removed “${row.name}”`);
         return;

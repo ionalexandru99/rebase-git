@@ -107,7 +107,11 @@ export function canonicalizeWorktrees(
       Effect.promise(() =>
         realpathNative(worktree.path).then(
           (path) => ({ ...worktree, path }),
-          () => ({ ...worktree, path: resolve(worktree.path), missing: true }),
+          (error: NodeJS.ErrnoException) => ({
+            ...worktree,
+            path: resolve(worktree.path),
+            ...(error.code === "ENOENT" ? { missing: true } : {}),
+          }),
         ),
       ),
     ),
