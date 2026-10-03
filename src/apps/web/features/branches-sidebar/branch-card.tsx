@@ -2,6 +2,7 @@ import { PreviewCard } from "@base-ui/react/preview-card";
 import { IconCloud, IconCloudOff } from "@tabler/icons-react";
 import type { ReactNode } from "react";
 import type { PullRequest } from "#contracts/pull-requests/pull-requests.contract.ts";
+import type { RemoteBranch } from "#contracts/repository-refs/repository-refs.contract.ts";
 import type { BranchesSidebarRefRow } from "#web/features/branches-sidebar/branches-sidebar-state.ts";
 import { PullRequestList } from "#web/features/pull-requests/pull-requests.tsx";
 import { worktreeName } from "#web/features/worktrees/worktree-draft.ts";
@@ -32,7 +33,13 @@ export function BranchCardTrigger(
   );
 }
 
-export function BranchCard({ handle }: { readonly handle: BranchCardHandle }) {
+export function BranchCard({
+  handle,
+  remoteBranches,
+}: {
+  readonly handle: BranchCardHandle;
+  readonly remoteBranches: readonly RemoteBranch[];
+}) {
   return (
     <PreviewCard.Root handle={handle}>
       {({ payload }) =>
@@ -45,7 +52,10 @@ export function BranchCard({ handle }: { readonly handle: BranchCardHandle }) {
               sideOffset={16}
             >
               <PreviewCard.Popup className="w-[23rem] max-w-(--available-width) rounded-lg border border-border bg-popover px-3.5 py-3 text-popover-foreground shadow-[0_.75rem_2.5rem_rgb(0_0_0/45%)] outline-none">
-                <BranchCardBody branch={payload} />
+                <BranchCardBody
+                  branch={payload}
+                  remoteBranches={remoteBranches}
+                />
               </PreviewCard.Popup>
             </PreviewCard.Positioner>
           </PreviewCard.Portal>
@@ -55,7 +65,13 @@ export function BranchCard({ handle }: { readonly handle: BranchCardHandle }) {
   );
 }
 
-function BranchCardBody({ branch }: { readonly branch: BranchCardBranch }) {
+function BranchCardBody({
+  branch,
+  remoteBranches,
+}: {
+  readonly branch: BranchCardBranch;
+  readonly remoteBranches: readonly RemoteBranch[];
+}) {
   const { row, pullRequests } = branch;
   return (
     <>
@@ -67,11 +83,11 @@ function BranchCardBody({ branch }: { readonly branch: BranchCardBranch }) {
           Worktree {worktreeName(row.checkout.path)}
         </CardLine>
       ) : null}
-      {row.upstream === undefined ? (
+      {neverPushed(row, remoteBranches) ? (
         <CardLine icon={<IconCloud className="size-3.5" />}>
           Never pushed
         </CardLine>
-      ) : row.upstream.gone ? (
+      ) : row.upstream?.gone ? (
         <CardLine icon={<IconCloudOff className="size-3.5" />}>
           Remote branch deleted
         </CardLine>
@@ -83,6 +99,16 @@ function BranchCardBody({ branch }: { readonly branch: BranchCardBranch }) {
         </>
       ) : null}
     </>
+  );
+}
+
+function neverPushed(
+  row: BranchesSidebarRefRow,
+  remoteBranches: readonly RemoteBranch[],
+): boolean {
+  return (
+    row.upstream === undefined &&
+    !remoteBranches.some((remote) => remote.name === row.name)
   );
 }
 

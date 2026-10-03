@@ -60,6 +60,13 @@ describe("branch card", () => {
 
     await userEvent.hover(screen.getByRole("treeitem", { name: "draft" }));
     await expect.element(screen.getByText("Never pushed")).toBeVisible();
+    await userEvent.hover(screen.getByRole("treeitem", { name: "shared" }));
+    await expect
+      .element(screen.getByText("shared", { exact: true }).last())
+      .toBeVisible();
+    await expect
+      .element(screen.getByText("Never pushed"))
+      .not.toBeInTheDocument();
     await userEvent.hover(
       screen.getByRole("treeitem", { name: "old, remote branch deleted" }),
     );
@@ -101,6 +108,7 @@ function renderCard() {
                   worktreePath: mainPath,
                 },
                 { name: "draft" },
+                { name: "shared" },
                 {
                   name: "old",
                   upstream: upstream("origin/old", { gone: true }),
@@ -111,6 +119,7 @@ function renderCard() {
                   worktreePath: topicPath,
                 },
               ],
+              remoteBranches: [{ name: "shared", remote: "upstream" }],
               worktrees: mainAndTopicWorktrees(),
             }),
           ),

@@ -9,7 +9,10 @@ import {
   useState,
 } from "react";
 import type { PullRequest } from "#contracts/pull-requests/pull-requests.contract.ts";
-import type { RepositoryRefTarget } from "#contracts/repository-refs/repository-refs.contract.ts";
+import type {
+  RemoteBranch,
+  RepositoryRefTarget,
+} from "#contracts/repository-refs/repository-refs.contract.ts";
 import {
   everyAction,
   keyAction,
@@ -93,6 +96,7 @@ import { useRepositoryScope } from "#web/platform/query/repository-scope.tsx";
 
 const noSelectedRefs: ReadonlySet<string> = new Set();
 const noPullRequests: readonly PullRequest[] = [];
+const noRemoteBranches: readonly RemoteBranch[] = [];
 const noSelectedTags: ReadonlySet<string> = new Set();
 
 export function BranchesSidebar({
@@ -554,7 +558,10 @@ export function BranchesSidebar({
           scope={scope}
         />
       </DockedTree>
-      <BranchCard handle={branchCard} />
+      <BranchCard
+        handle={branchCard}
+        remoteBranches={refs?.remoteBranches ?? noRemoteBranches}
+      />
       <RefEditingStatus editing={editing} />
       <StashDropConfirmation commands={stashCommands} />
     </nav>
