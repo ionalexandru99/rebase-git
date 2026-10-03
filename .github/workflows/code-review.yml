@@ -36,16 +36,21 @@ jobs:
           BASE_REF: ${{ github.event.pull_request.base.ref }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
         run: git fetch --no-tags origin "$BASE_REF" "+refs/pull/$PR_NUMBER/head"
-      - name: Collect earlier review comments
+      - name: Collect earlier reviews
         env:
+          AUTHOR: ${{ github.event.pull_request.user.login }}
           GH_TOKEN: ${{ github.token }}
           OWNER: ${{ github.repository_owner }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
           REPOSITORY: ${{ github.repository }}
         run: |
-          gh api --paginate "repos/$REPOSITORY/pulls/$PR_NUMBER/comments" \
-            --jq '.[] | select(.user.login == env.OWNER or .user.login == "github-actions[bot]" or .user.login == "coderabbitai[bot]") | "\(.path):\(.line // .original_line) [\(.user.login)] \(.body)\n"' \
-            > "$RUNNER_TEMP/earlier-review.txt"
+          trusted='select(.user.login == env.OWNER or .user.login == env.AUTHOR or .user.login == "github-actions[bot]" or .user.login == "coderabbitai[bot]")'
+          {
+            gh api --paginate "repos/$REPOSITORY/pulls/$PR_NUMBER/reviews" \
+              --jq '.[] | '"$trusted"' | select(.body != "") | "[\(.user.login)] \(.body)\n"'
+            gh api --paginate "repos/$REPOSITORY/pulls/$PR_NUMBER/comments" \
+              --jq '.[] | '"$trusted"' | "\(.path):\(.line // .original_line) [\(.user.login)] \(.body)\n"'
+          } > "$RUNNER_TEMP/earlier-review.txt"
       - name: Review changes
         id: codex
         uses: openai/codex-action@86365089eb2b84e0a8fb0717b304f8bdcb13b20e # v1.12
@@ -63,7 +68,7 @@ jobs:
             findings against the surrounding code and tests. Do not report style preferences or
             pre-existing problems. Use the available repository tools when they help validate a finding.
 
-            Earlier review comments on this pull request and the author's replies are in
+            Earlier reviews and review comments on this pull request, with the author's replies, are in
             ${{ runner.temp }}/earlier-review.txt. Do not repeat a finding that was already raised there.
 
             Set verdict to "approve" only when there are no actionable findings and the change is ready
