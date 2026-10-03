@@ -33,6 +33,7 @@ const ownerOnlyAuthorizationMigration = generatedMigrations[6];
 const repositoryColorMigration = generatedMigrations[7];
 const gitHostEnabledMigration = generatedMigrations[8];
 const bitbucketTokenMigration = generatedMigrations[9];
+const pullStrategySettingsMigration = generatedMigrations[10];
 
 if (
   createEnvironmentMigration === undefined ||
@@ -44,9 +45,10 @@ if (
   ownerOnlyAuthorizationMigration === undefined ||
   repositoryColorMigration === undefined ||
   gitHostEnabledMigration === undefined ||
-  bitbucketTokenMigration === undefined
+  bitbucketTokenMigration === undefined ||
+  pullStrategySettingsMigration === undefined
 ) {
-  throw new Error("Expected ten generated Environment state migrations.");
+  throw new Error("Expected eleven generated Environment state migrations.");
 }
 
 afterEach(async () => {
@@ -168,6 +170,11 @@ describe("Environment state", () => {
         checksum_length: 64,
         name: bitbucketTokenMigration.name,
         version: 10,
+      },
+      {
+        checksum_length: 64,
+        name: pullStrategySettingsMigration.name,
+        version: 11,
       },
     ]);
     database.close();
@@ -294,16 +301,17 @@ describe("Environment state", () => {
       generatedMigrationEntry(repositoryColorMigration, 8),
       generatedMigrationEntry(gitHostEnabledMigration, 9),
       generatedMigrationEntry(bitbucketTokenMigration, 10),
+      generatedMigrationEntry(pullStrategySettingsMigration, 11),
       {
         checksum: "future",
-        createdAt: bitbucketTokenMigration.folderMillis + 1,
+        createdAt: pullStrategySettingsMigration.folderMillis + 1,
         name: "future",
-        version: 11,
+        version: 12,
       },
     ]);
 
     await expect(openState(newerPaths)).rejects.toThrow(
-      "The state database is at version 11, but this Rebase build supports version 10.",
+      "The state database is at version 12, but this Rebase build supports version 11.",
     );
   });
 
@@ -330,7 +338,7 @@ describe("Environment state", () => {
       database
         .prepare("SELECT max(id) AS version FROM __drizzle_migrations")
         .get(),
-    ).toEqual({ version: 10 });
+    ).toEqual({ version: 11 });
     database.close();
   });
 

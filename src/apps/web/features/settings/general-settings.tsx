@@ -1,5 +1,3 @@
-import { Select } from "@base-ui/react/select";
-import { IconChevronDown } from "@tabler/icons-react";
 import { type JSX, useState } from "react";
 import {
   type DesktopUpdateSnapshot,
@@ -13,6 +11,7 @@ import {
   SettingsRow,
   SettingsSection,
 } from "#web/components/ui/settings-layout.tsx";
+import { SettingsSelect } from "#web/components/ui/settings-select.tsx";
 import { Switch } from "#web/components/ui/switch.tsx";
 import {
   type ErrorAction,
@@ -144,54 +143,20 @@ export function GeneralSettings({
           descriptionId="release-channel-description"
           title="Release channel"
         >
-          <Select.Root
+          <SettingsSelect
+            describedBy="release-channel-description"
             disabled={!desktopReady || settingsPending || channelLocked}
-            items={releaseChannels}
+            label="Release channel"
             onValueChange={(value) => {
-              if (value !== null && desktopUpdates !== undefined) {
+              if (desktopUpdates !== undefined) {
                 void changeSetting(() =>
                   desktopUpdates.selectReleaseChannel(value),
                 );
               }
             }}
+            options={releaseChannels}
             value={snapshot.settings.releaseChannel}
-          >
-            <Select.Trigger
-              aria-describedby="release-channel-description"
-              aria-label="Release channel"
-              className="flex h-8 w-40 shrink-0 items-center justify-between rounded-md border border-input bg-input/30 px-3 text-sm text-foreground outline-none hover:bg-accent data-disabled:cursor-not-allowed data-disabled:opacity-45 data-pressed:bg-accent focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30"
-            >
-              <Select.Value />
-              <Select.Icon>
-                <IconChevronDown
-                  aria-hidden="true"
-                  className="size-4 text-muted-foreground"
-                />
-              </Select.Icon>
-            </Select.Trigger>
-            <Select.Portal>
-              <Select.Positioner
-                align="end"
-                alignItemWithTrigger={false}
-                className="z-50 outline-none"
-                sideOffset={4}
-              >
-                <Select.Popup className="w-[var(--anchor-width)] overflow-hidden rounded-md border border-border bg-popover p-1 text-popover-foreground shadow-lg outline-none">
-                  <Select.List>
-                    {releaseChannels.map((channel) => (
-                      <Select.Item
-                        className="flex h-8 cursor-default items-center rounded-sm px-2 text-sm outline-none select-none data-highlighted:bg-accent data-highlighted:text-accent-foreground"
-                        key={channel.value}
-                        value={channel.value}
-                      >
-                        <Select.ItemText>{channel.label}</Select.ItemText>
-                      </Select.Item>
-                    ))}
-                  </Select.List>
-                </Select.Popup>
-              </Select.Positioner>
-            </Select.Portal>
-          </Select.Root>
+          />
         </SettingsRow>
         <SettingsRow
           description={

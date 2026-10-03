@@ -2,6 +2,7 @@ import { Schema } from "effect";
 import {
   repositoryCommand,
   repositoryQuery,
+  route,
 } from "#contracts/environment-connection/environment-route.contract.ts";
 import {
   RepositoryId,
@@ -70,6 +71,15 @@ export const RepositoryFetchStatus = Schema.Struct({
 });
 export type RepositoryFetchStatus = typeof RepositoryFetchStatus.Type;
 
+export const PullStrategy = Schema.Literals(["ask", "rebase", "merge"]);
+export type PullStrategy = typeof PullStrategy.Type;
+
+export const RepositoryPullStrategy = Schema.Struct({
+  repository: Schema.NullOr(PullStrategy),
+  server: PullStrategy,
+});
+export type RepositoryPullStrategy = typeof RepositoryPullStrategy.Type;
+
 const RepositoryTarget = Schema.Struct({ repositoryId: RepositoryId });
 
 export const RepositoryPullApi = {
@@ -94,4 +104,25 @@ export const RepositoryPullApi = {
     success: BranchPulled,
     failure: PullFailure,
   }),
+  readPullStrategy: route("pull-strategy/read", {
+    success: PullStrategy,
+  }),
+  savePullStrategy: route("pull-strategy/save", {
+    request: Schema.Struct({ strategy: PullStrategy }),
+    success: PullStrategy,
+  }),
+  readRepositoryPullStrategy: repositoryQuery("repositories/pull-strategy", {
+    request: RepositoryTarget,
+    success: RepositoryPullStrategy,
+  }),
+  saveRepositoryPullStrategy: repositoryCommand(
+    "repositories/save-pull-strategy",
+    {
+      request: Schema.Struct({
+        repositoryId: RepositoryId,
+        strategy: Schema.NullOr(PullStrategy),
+      }),
+      success: RepositoryPullStrategy,
+    },
+  ),
 };

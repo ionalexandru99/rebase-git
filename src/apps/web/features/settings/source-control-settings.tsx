@@ -26,6 +26,7 @@ import {
 import { Switch } from "#web/components/ui/switch.tsx";
 import { ServerIdentityRow } from "#web/features/git-identity/git-identity.tsx";
 import { useErrorToast } from "#web/features/notifications/notifications.tsx";
+import { ServerPullStrategyRow } from "#web/features/remote-sync/pull-strategy.tsx";
 import { BitbucketTokenForm } from "#web/features/settings/bitbucket-token-form.tsx";
 import { useEnvironmentQuery } from "#web/platform/query/environment-query.ts";
 import { useCommand } from "#web/platform/query/use-command.ts";
@@ -143,6 +144,7 @@ export function SourceControlSettings() {
         ) : (
           <GitRow git={discovery.data.git} />
         )}
+        <ServerPullStrategyRow />
       </SettingsSection>
       <SettingsSection title="Source Control Providers">
         {discovery.data === undefined ? (

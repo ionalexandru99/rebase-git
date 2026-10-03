@@ -7,6 +7,7 @@ import {
   text,
 } from "drizzle-orm/sqlite-core";
 import { RepositoryColor } from "#contracts/repository-catalog/repository-catalog.contract.ts";
+import { PullStrategy } from "#contracts/repository-pull/repository-pull.contract.ts";
 
 export const environmentTable = sqliteTable(
   "environment",
@@ -86,3 +87,23 @@ export const bitbucketTokenTable = sqliteTable(
     check("bitbucket_token_singleton_check", sql`${token.singleton} = 1`),
   ],
 );
+
+export const serverSettingTable = sqliteTable(
+  "server_setting",
+  {
+    pullStrategy: text("pull_strategy", { enum: PullStrategy.literals })
+      .notNull()
+      .default("ask"),
+    singleton: integer("singleton").primaryKey(),
+  },
+  (setting) => [
+    check("server_setting_singleton_check", sql`${setting.singleton} = 1`),
+  ],
+);
+
+export const repositorySettingTable = sqliteTable("repository_setting", {
+  pullStrategy: text("pull_strategy", {
+    enum: PullStrategy.literals,
+  }).notNull(),
+  repositoryId: text("repository_id").primaryKey(),
+});

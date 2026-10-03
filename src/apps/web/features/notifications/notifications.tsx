@@ -65,6 +65,7 @@ const errorTitles = {
   removeRepository: "Couldn't remove the repository",
   saveHistoryOrder: "Couldn't save the history order",
   saveFetchSettings: "Couldn't save automatic fetch",
+  savePullStrategy: "Couldn't save the pull setting",
   saveDiffSettings: "Couldn't save the diff settings",
   clearCache: "Couldn't clear the cache",
   rebuildCache: "Couldn't rebuild the cache",
