@@ -1,7 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
 import { page } from "vite-plus/test/browser";
 import type { RepositoryChangeKind } from "#contracts/environment-connection/environment-rpc.contract.ts";
-import { RepositoryChangesApi } from "#contracts/repository-changes/repository-changes.contract.ts";
+import {
+  type CommitChanges,
+  RepositoryChangesApi,
+} from "#contracts/repository-changes/repository-changes.contract.ts";
 import {
   type RepositoryOperation,
   RepositoryOperationsApi,
@@ -21,12 +24,21 @@ import {
 import { render, testChanges } from "#tests-support/render.tsx";
 import { OperationRecoveryNotice } from "#web/features/operation-recovery/components/operation-recovery-toast.tsx";
 import { WorkingChanges } from "#web/features/working-changes/working-changes.tsx";
+import { PanelFeatureContext } from "#web/features/workspace-panel/api.ts";
 import { WorkspacePanel } from "#web/features/workspace-panel/workspace-panel.tsx";
 import { RepositoryScopeProvider } from "#web/platform/query/repository-scope.tsx";
 
 const path = "src/app.ts";
 const scope = repositoryScope({ repositoryId: crypto.randomUUID() });
 const panelKey = "operation-header";
+const panelFeature = {
+  scope: { ...scope, environmentId: "local" },
+  environment: undefined,
+  active: true,
+  input: undefined,
+  expanded: false,
+  expand: () => undefined,
+};
 
 function conflicted(): RepositoryOperation {
   return conflictedRebase({ unresolvedPaths: [path] });
@@ -54,18 +66,26 @@ function showPanel(open: boolean) {
 async function fixture() {
   let operation = conflicted();
   const environmentChanges = testChanges();
+  let staged: string[] = [];
   const execute = vi.fn(
     (_command: { readonly revision: string }): RepositoryOperation => operation,
   );
+  const commit = vi.fn((_command: CommitChanges) => undefined);
   const changes = () =>
     repositoryChanges({
       revision: operation.revision,
       unstaged: operation.unresolvedPaths.map((file) => changedFile(file, "U")),
+      staged: staged.map((file) => changedFile(file, "A")),
     });
   const requests = fakeRequests(
     respond(RepositoryOperationsApi.read, () => operation),
     respond(RepositoryOperationsApi.execute, (command) => execute(command)),
     respond(RepositoryChangesApi.read, () => changes()),
+    respond(RepositoryChangesApi.commit, (command) => {
+      commit(command);
+      staged = [];
+      return { changes: changes(), diff: null };
+    }),
   );
   await render(
     <RepositoryScopeProvider scope={scope}>
@@ -75,15 +95,17 @@ async function fixture() {
           className="dark text-foreground"
           style={{ width: 1100, height: 700 }}
         >
-          <WorkingChanges
-            target={{
-              repositoryId: scope.repositoryId,
-              worktreePath: scope.worktreePath,
-              draftKey: JSON.stringify([crypto.randomUUID()]),
-              active: true,
-            }}
-            writable
-          />
+          <PanelFeatureContext.Provider value={panelFeature}>
+            <WorkingChanges
+              target={{
+                repositoryId: scope.repositoryId,
+                worktreePath: scope.worktreePath,
+                draftKey: JSON.stringify([crypto.randomUUID()]),
+                active: true,
+              }}
+              writable
+            />
+          </PanelFeatureContext.Provider>
         </div>
       </WorkspacePanel.Provider>
     </RepositoryScopeProvider>,
@@ -91,6 +113,10 @@ async function fixture() {
   );
   return {
     execute,
+    commit,
+    stage: (files: string[]) => {
+      staged = files;
+    },
     set: (next: RepositoryOperation) => {
       operation = next;
     },
@@ -131,6 +157,24 @@ describe("operation header in the Diffs tab", () => {
     await header().getByRole("button", { name: "Continue rebase" }).click();
     expect(f.execute).toHaveBeenCalledExactlyOnceWith(
       expect.objectContaining({ action: "continue", revision: "two" }),
+    );
+  });
+
+  it("commits staged changes at a rebase edit stop but not during conflicts", async () => {
+    showPanel(true);
+    const f = await fixture();
+    f.stage(["src/part.ts"]);
+    f.change("Index");
+    await page.getByLabelText("Commit subject").fill("First part");
+    const commit = page.getByRole("button", { name: "Commit 1 file" });
+    await expect.element(commit).toBeDisabled();
+
+    f.set(editStop());
+    f.change("Index");
+    await expect.element(commit).toBeEnabled();
+    await commit.click();
+    expect(f.commit).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({ amend: false, message: "First part" }),
     );
   });
 
@@ -194,6 +238,18 @@ describe("operation header in the Diffs tab", () => {
     ]);
   });
 });
+
+function editStop(): RepositoryOperation {
+  return conflictedRebase({
+    phase: "edit",
+    revision: "edit",
+    unresolvedPaths: [],
+    actions: [
+      { action: "continue", enabled: false, reason: null },
+      { action: "abort", enabled: true, reason: null },
+    ],
+  });
+}
 
 function nothingToCommit(): RepositoryOperation {
   return repositoryOperation({

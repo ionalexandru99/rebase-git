@@ -29,6 +29,11 @@ export interface RepositoryWritePolicy {
     | { readonly allowWhen: (operation: RepositoryOperation) => boolean };
 }
 
+export const atRebaseEditStop: RepositoryWritePolicy["duringOperation"] = {
+  allowWhen: (operation) =>
+    operation.kind === "rebase" && operation.phase === "edit",
+};
+
 export interface RepositoryCoordination {
   readonly run: <A, E, R>(
     directory: string,

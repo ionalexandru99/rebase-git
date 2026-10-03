@@ -23,7 +23,10 @@ import {
   parseReflog,
 } from "#server/features/repository-reflog/reflog-entries.ts";
 import { readRefTarget } from "#server/features/repository-refs/git/ref-git.ts";
-import type { RepositoryWritePolicy } from "#server/repository/repository-coordination.ts";
+import {
+  atRebaseEditStop,
+  type RepositoryWritePolicy,
+} from "#server/repository/repository-coordination.ts";
 
 const maximumEntries = 2_000;
 const listedDiscards = 20;
@@ -32,7 +35,7 @@ const lineFormat = "%H%x1f%gd%x1f%gs%x1f%s";
 const resetPolicy: RepositoryWritePolicy = {
   name: "reset",
   locks: { refs: "wait", worktree: "wait" },
-  duringOperation: "block",
+  duringOperation: atRebaseEditStop,
 };
 
 export function repositoryReflogFeature(
@@ -160,7 +163,13 @@ function resetToCommit(git: GitCommandRunner, command: ResetToCommit) {
     yield* runRepositoryGit(
       git,
       worktreePath,
-      ["reset", `--${mode}`, "--quiet", commit],
+      [
+        "reset",
+        `--${mode}`,
+        ...(mode === "mixed" ? ["--intent-to-add"] : []),
+        "--quiet",
+        commit,
+      ],
       { timeoutMilliseconds: 120_000 },
     );
     return { head: commit };

@@ -26,13 +26,12 @@ export function CommitEditor({
   const { draft, busy, loading, amend, changes } = view;
   const recovery = useWorktreeOperation(usePanelFeature()?.scope);
   const operation = recovery?.operation;
-  const amendAllowed =
-    operation?.kind === "rebase" && operation.phase === "edit";
+  const editStop = operation?.kind === "rebase" && operation.phase === "edit";
   const blocked =
     recovery !== null &&
     (recovery.checking ||
       recovery.busy ||
-      (operation?.kind !== "idle" && !(amendAllowed && amend)));
+      (operation?.kind !== "idle" && !editStop));
   const disabled = !writable || busy || loading;
   const count = changes?.staged.length ?? 0;
   return (
@@ -40,11 +39,6 @@ export function CommitEditor({
       className="flex h-full min-h-0 flex-col gap-2 overflow-y-auto border-border border-t bg-background p-3"
       aria-label="Commit editor"
     >
-      {blocked && amendAllowed ? (
-        <p className="text-xs text-muted-foreground">
-          Enable Amend to edit this rebase commit.
-        </p>
-      ) : null}
       <Input
         aria-label="Commit subject"
         placeholder="Commit message"
@@ -75,9 +69,7 @@ export function CommitEditor({
             disabled={
               amend
                 ? !writable || busy
-                : disabled ||
-                  changes?.head == null ||
-                  (blocked && !amendAllowed)
+                : disabled || changes?.head == null || blocked
             }
             onChange={(event) => view.toggleAmend(event.target.checked)}
           />

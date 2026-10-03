@@ -107,6 +107,20 @@ describe("reset actions", () => {
     });
   });
 
+  it("resets at a rebase edit stop so the stopped commit can be split", async () => {
+    const reset = resetFixture(
+      conflictedRebase({ phase: "edit", unresolvedPaths: [] }),
+    );
+    const screen = await renderReset(reset);
+    await openReset(screen, /^Parent,/);
+    await screen
+      .getByRole("menuitem", { name: "Keep changes unstaged" })
+      .click();
+    await expect
+      .poll(() => reset.calls.at(-1))
+      .toMatchObject({ target: parent, mode: "mixed", expectedHead: main });
+  });
+
   it("explains why the branch cannot move and reports a moved head", async () => {
     const rebasing = await renderReset(resetFixture(conflictedRebase()));
     await rebasing

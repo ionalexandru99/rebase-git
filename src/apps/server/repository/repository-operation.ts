@@ -277,7 +277,7 @@ function blockedReason(
   if (unresolved)
     return `Resolve and stage ${unresolved} ${unresolved === 1 ? "file" : "files"} to continue.`;
   if (edit && status.length > 0)
-    return "Amend your changes before continuing the rebase.";
+    return "Commit or amend your changes before continuing the rebase.";
   const unstaged = status
     .split("\0")
     .some((line) => line.length > 2 && line[1] !== " " && line[1] !== "?");
