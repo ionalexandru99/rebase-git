@@ -2,7 +2,7 @@ import type { JSX } from "react";
 import type { RepositoryColor } from "#contracts/repository-catalog/repository-catalog.contract.ts";
 import { cn } from "#web/lib/utils.ts";
 
-const repositoryColors: Record<RepositoryColor, string> = {
+export const repositoryColors: Record<RepositoryColor, string> = {
   amber: "#F59E0B",
   blue: "#4C9AFF",
   cyan: "#06B6D4",

@@ -28,16 +28,19 @@ export function RepositoryCacheSettings(
   );
   return (
     <>
-      <SettingsRow title="Cached history" description="Stored in this client.">
-        <span className="text-sm text-muted-foreground">
-          {current === undefined
+      <SettingsRow
+        title="Cached history"
+        description={
+          current === undefined
             ? cache.diagnostics === undefined
               ? "Reading storage…"
               : "No cached history"
-            : `${formatCacheSize(current.estimatedBytes)} · ${current.commitCount.toLocaleString()} commits`}
-        </span>
-      </SettingsRow>
-      <SettingsRow title="Repair or clear history">
+            : `${current.commitCount.toLocaleString()} commits`
+        }
+        {...(current === undefined
+          ? {}
+          : { value: formatCacheSize(current.estimatedBytes) })}
+      >
         <Button
           size="sm"
           variant="outline"
@@ -57,7 +60,7 @@ export function RepositoryCacheSettings(
         </Button>
       </SettingsRow>
       {cache.exhausted || cache.storageUnavailable ? (
-        <p role="alert" className="text-sm text-destructive">
+        <p role="alert" className="px-3 py-3 text-xs text-destructive sm:px-4">
           {cache.exhausted
             ? "Browser storage is full."
             : "Browser storage is unavailable."}{" "}
@@ -65,25 +68,34 @@ export function RepositoryCacheSettings(
         </p>
       ) : null}
       {cache.snapshot.failure !== undefined && !cache.storageUnavailable ? (
-        <p role="alert" className="text-sm text-destructive">
+        <p role="alert" className="px-3 py-3 text-xs text-destructive sm:px-4">
           {cache.snapshot.failure._tag === "Offline"
             ? "Reconnect to finish history synchronization."
             : "History synchronization failed. Rebuild the cache to retry."}
         </p>
       ) : null}
       {cache.pending ? (
-        <p role="status" className="text-sm text-muted-foreground">
+        <p
+          role="status"
+          className="px-3 py-3 text-xs text-muted-foreground sm:px-4"
+        >
           Updating history storage…
         </p>
       ) : null}
       {cache.snapshot.synchronization === "syncing" ? (
-        <p role="status" className="text-sm text-muted-foreground">
+        <p
+          role="status"
+          className="px-3 py-3 text-xs text-muted-foreground sm:px-4"
+        >
           Synchronizing history · {cache.snapshot.commitCount.toLocaleString()}{" "}
           commits stored
         </p>
       ) : null}
       {cache.error === undefined ? null : (
-        <div role="alert" className="text-sm text-destructive">
+        <div
+          role="alert"
+          className="px-3 py-3 text-xs text-destructive sm:px-4"
+        >
           {cache.error}
           <Button
             size="sm"

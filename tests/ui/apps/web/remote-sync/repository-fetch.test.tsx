@@ -105,25 +105,22 @@ describe("repository fetch controls", () => {
     await expect.element(page.getByRole("status")).not.toBeInTheDocument();
   });
 
-  it("saves custom, disabled, and inherited intervals", async () => {
+  it("saves custom intervals with Save and other choices as soon as they change", async () => {
     const f = await fixture(fresh);
     const mode = page.getByRole("combobox", { name: "Automatic fetch" });
-    const save = page.getByRole("button", { name: "Save", exact: true });
     await mode.selectOptions("Interval");
     await page
       .getByRole("spinbutton", { name: "Interval in seconds" })
       .fill("120");
-    await save.click();
+    await page.getByRole("button", { name: "Save", exact: true }).click();
     await expect
       .poll(() => f.configure)
       .toHaveBeenLastCalledWith({ _tag: "Interval", seconds: 120 });
     await mode.selectOptions("Disabled");
-    await save.click();
     await expect
       .poll(() => f.configure)
       .toHaveBeenLastCalledWith({ _tag: "Disabled" });
     await mode.selectOptions("Inherit");
-    await save.click();
     await expect
       .poll(() => f.configure)
       .toHaveBeenLastCalledWith({ _tag: "Inherit" });
@@ -145,6 +142,7 @@ describe("repository fetch controls", () => {
     await expect
       .element(page.getByRole("spinbutton", { name: "Interval in seconds" }))
       .toHaveValue(90);
+    await page.getByRole("button", { name: "Dismiss notification" }).click();
     await page.getByRole("button", { name: "Save", exact: true }).click();
     await expect.poll(() => f.configure).toHaveBeenCalledTimes(2);
   });
@@ -169,9 +167,6 @@ describe("repository fetch controls", () => {
     const f = await fixture(fresh, { canConfigure: false });
     await expect
       .element(page.getByRole("combobox", { name: "Automatic fetch" }))
-      .toBeDisabled();
-    await expect
-      .element(page.getByRole("button", { name: "Save", exact: true }))
       .toBeDisabled();
     expect(f.configure).not.toHaveBeenCalled();
   });
