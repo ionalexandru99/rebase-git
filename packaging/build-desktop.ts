@@ -51,7 +51,7 @@ await Promise.all([
         "src/apps/desktop/platform/environment/environment-process.ts",
       main: "src/apps/desktop/main.ts",
     },
-    external: ["drizzle-orm", "drizzle-orm/*", "effect", "electron", "ws"],
+    external: ["electron"],
     format: "esm",
     minifySyntax: true,
     outdir: outputDirectory,

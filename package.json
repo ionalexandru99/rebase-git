@@ -65,16 +65,10 @@
     "typecheck": "tsc -p . && tsc -p src/apps/web && tsc -p tests",
     "validate": "pnpm check && pnpm typecheck && pnpm test:unit && pnpm exec install-electron && pnpm build:desktop-package && pnpm test:integration:prepared && pnpm validate:browser && pnpm test:e2e:prepared && pnpm test:release-smoke:prepared",
     "validate:browser": "pnpm test:integration:browser && pnpm test:ui",
-    "validate:integration": "pnpm build:desktop-package && pnpm test:integration:prepared",
     "validate:quality": "pnpm check && pnpm typecheck && pnpm test:unit && pnpm build",
     "validate:release": "pnpm exec install-electron && pnpm build:desktop-package && pnpm package:desktop && pnpm test:release-smoke:built",
     "prepack": "pnpm build:package",
     "check:architecture": "vp lint --tsconfig tests/tsconfig.json ."
-  },
-  "dependencies": {
-    "drizzle-orm": "1.0.0-rc.5-5935859",
-    "effect": "4.0.0-rc.118",
-    "ws": "8.22.0"
   },
   "devDependencies": {
     "@base-ui/react": "1.8.0",
@@ -102,6 +96,8 @@
     "cross-env": "10.1.0",
     "diff": "9.0.0",
     "drizzle-kit": "1.0.0-rc.5-5935859",
+    "drizzle-orm": "1.0.0-rc.5-5935859",
+    "effect": "4.0.0-rc.118",
     "electron": "43.7.6",
     "electron-builder": "26.17.0",
     "electron-updater": "6.8.9",
@@ -120,6 +116,7 @@
     "vite-plus": "catalog:",
     "vitest": "catalog:",
     "vitest-browser-react": "2.3.0",
-    "wait-on": "9.5.1"
+    "wait-on": "9.5.1",
+    "ws": "8.22.0"
   }
 }

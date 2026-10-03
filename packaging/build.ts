@@ -37,13 +37,15 @@ await Promise.all([
 
 await Promise.all([
   build({
+    banner: {
+      js: 'import { createRequire as createNodeRequire } from "node:module"; const require = createNodeRequire(import.meta.url);',
+    },
     bundle: true,
     conditions: ["node", "import"],
     define: {
       REBASE_PRODUCT_VERSION: JSON.stringify(packageMetadata.version),
     },
     entryPoints: ["src/apps/server/cli.ts"],
-    external: ["drizzle-orm", "drizzle-orm/*", "effect", "ws"],
     format: "esm",
     minifySyntax: true,
     outfile: `${outputDirectory}/runtime.js`,
