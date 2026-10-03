@@ -20,7 +20,7 @@ type PullRequestNode = {
 const day = expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/);
 
 describe("branch settling", () => {
-  it("settles branches whose merged pull request holds their tip after a fetch, except the main checkout, the remote default branch and branches kept active", async () => {
+  it("settles branches whose pull request merged after a fetch, even when they moved on since, except the main checkout, the remote default branch and branches kept active", async () => {
     const byHead: Record<string, PullRequestNode[]> = {};
     const { github, requests } = fakeGitHub(byHead);
     const f = await settlingFixture(github);
@@ -64,7 +64,7 @@ describe("branch settling", () => {
 
     await f.fetch();
 
-    await expect.poll(f.settled).toEqual({ topic: day });
+    await expect.poll(f.settled).toEqual({ reused: day, topic: day });
     expect(requests).toEqual([
       {
         owner: "Octo",
