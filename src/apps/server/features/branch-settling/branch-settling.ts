@@ -2,6 +2,7 @@ import { Array as Arrays, Cause, Effect } from "effect";
 import {
   type BranchSettings,
   BranchSettlingApi,
+  defaultDeleteSettledAfter,
 } from "#contracts/branch-settling/branch-settling.contract.ts";
 import type { PullRequest } from "#contracts/pull-requests/pull-requests.contract.ts";
 import type { EnvironmentEventPublisher } from "#server/adapters/environment-transport/environment-event-publisher.ts";
@@ -15,13 +16,20 @@ import {
   runRepositoryGit,
   runRepositoryGitOutput,
 } from "#server/adapters/local-git/git-commands.ts";
+import {
+  deleteSettledBranches,
+  settledLongEnough,
+} from "#server/features/branch-settling/settled-branch-deletion.ts";
 import { listPullRequests } from "#server/features/pull-requests/pull-requests.ts";
 import type { AfterFetch } from "#server/features/repository-pull/repository-fetch.ts";
 import { branchRef } from "#server/features/repository-refs/git/branches/branch-git.ts";
 import { branchSettlements } from "#server/features/repository-refs/git/read-repository-refs.ts";
 import type { HostedPullRequest } from "#server/features/source-control/git-host.ts";
 import type { SourceControl } from "#server/features/source-control/source-control.ts";
-import { readWorktrees } from "#server/repository/repository-access.ts";
+import {
+  type RepositoryAccess,
+  readWorktrees,
+} from "#server/repository/repository-access.ts";
 import type {
   RepositoryCoordination,
   RepositoryWritePolicy,
@@ -31,6 +39,7 @@ const autoSettleKey = "rebase.autoSettle";
 const settledPerLock = 20;
 const ancestryChecks = 8;
 const commitPrefix = /^[0-9a-f]{7,64}$/;
+const deleteSettledAfterKey = "rebase.deleteSettledAfter";
 
 const settlePolicy: RepositoryWritePolicy = {
   name: "settle",
@@ -76,13 +85,20 @@ export function branchSettlingFeature(
       command(
         BranchSettlingApi.saveSettings,
         settlePolicy,
-        ({ autoSettle, repositoryId, worktreePath }, git) =>
-          runRepositoryGit(git, worktreePath, [
-            "config",
-            "--local",
-            autoSettleKey,
-            String(autoSettle),
-          ]).pipe(
+        ({ autoSettle, deleteSettledAfter, repositoryId, worktreePath }, git) =>
+          Effect.forEach(
+            [
+              [autoSettleKey, String(autoSettle)],
+              [deleteSettledAfterKey, String(deleteSettledAfter)],
+            ],
+            (setting) =>
+              runRepositoryGit(git, worktreePath, [
+                "config",
+                "--local",
+                ...setting,
+              ]),
+            { discard: true },
+          ).pipe(
             Effect.andThen(readBranchSettings(git, worktreePath)),
             Effect.tap(() => publishRefs(repositoryId)),
           ),
@@ -91,12 +107,14 @@ export function branchSettlingFeature(
   } satisfies EnvironmentFeature;
 }
 
-export function settleMergedBranches({
+export function settleBranchesAfterFetch({
+  access,
   coordination,
   events,
   git,
   sourceControl,
 }: {
+  readonly access: RepositoryAccess;
   readonly coordination: RepositoryCoordination;
   readonly events: EnvironmentEventPublisher;
   readonly git: GitCommandRunner;
@@ -104,46 +122,65 @@ export function settleMergedBranches({
 }): AfterFetch {
   return (directory, repositoryIds) =>
     Effect.gen(function* () {
-      const config = yield* runRepositoryGit(
-        git,
-        directory,
-        [
-          "config",
-          "--local",
-          "--get-regexp",
-          "^(rebase\\.autosettle|branch\\..*\\.rebasesettled)$",
-        ],
-        { exitCodes: [0, 1], maxOutputBytes: 4 * 1_048_576 },
-      );
-      if (!isOn(lastValue(config, autoSettleKey.toLowerCase()))) return;
+      const config = yield* readSettlingConfig(git, directory);
+      const { autoSettle, deleteSettledAfter } = branchSettings(config);
       const marked = branchSettlements(config);
       const main = (yield* readWorktrees(git, directory)).find(
         (worktree) => worktree.main,
       )?.head.branch;
+      const today = settledToday();
+      const expired = new Set(
+        [...marked].flatMap(([branch, settled]) =>
+          branch !== main &&
+          settledLongEnough(settled, today, deleteSettledAfter)
+            ? [branch]
+            : [],
+        ),
+      );
+      if (!autoSettle && expired.size === 0) return;
       const defaults = yield* readRemoteDefaultBranches(git, directory);
-      const candidates = new Map(
+      const pullRequests = new Map(
         (yield* listPullRequests(
           git,
           sourceControl,
           directory,
           ({ branch, head, remote }) =>
-            branch !== main &&
-            !marked.has(branch) &&
-            defaults.get(remote) !== head,
-        )).flatMap(({ branch, pullRequests }) =>
-          isMerged(pullRequests) ? [[branch, pullRequests] as const] : [],
+            expired.has(branch) ||
+            (autoSettle &&
+              branch !== main &&
+              !marked.has(branch) &&
+              defaults.get(remote) !== head),
+        ).pipe(Effect.catch(() => Effect.succeed([])))).map(
+          ({ branch, pullRequests }) => [branch, pullRequests] as const,
         ),
       );
-      const merged = yield* mergedAtHead(git, directory, candidates);
-      if (merged.length === 0) return;
-      yield* writeSettlements(
+      const merged = yield* mergedAtHead(
         git,
-        coordination,
         directory,
-        merged,
-        settledToday(),
+        new Map(
+          [...pullRequests].filter(
+            ([branch, found]) => !marked.has(branch) && isMerged(found),
+          ),
+        ),
       );
-      events.publishChanged(repositoryIds, "Refs");
+      if (merged.length > 0)
+        yield* writeSettlements(git, coordination, directory, merged, today);
+      const deleted =
+        expired.size === 0
+          ? 0
+          : yield* coordination.run(
+              directory,
+              settlePolicy,
+              deleteSettledBranches(
+                git,
+                access,
+                directory,
+                [...expired],
+                pullRequests,
+              ),
+            );
+      if (merged.length > 0 || deleted > 0)
+        events.publishChanged(repositoryIds, "Refs");
     }).pipe(
       Effect.catchCause((cause) =>
         Cause.hasInterrupts(cause)
@@ -153,14 +190,16 @@ export function settleMergedBranches({
     );
 }
 
-function readBranchSettings(git: GitCommandRunner, directory: string) {
+function readSettlingConfig(
+  git: GitCommandRunner,
+  directory: string,
+  pattern = "^(rebase\\.(autosettle|deletesettledafter)|branch\\..*\\.rebasesettled)$",
+) {
   return runRepositoryGit(
     git,
     directory,
-    ["config", "--local", "--get", autoSettleKey],
-    { exitCodes: [0, 1] },
-  ).pipe(
-    Effect.map((value): BranchSettings => ({ autoSettle: isOn(value.trim()) })),
+    ["config", "--local", "--get-regexp", pattern],
+    { exitCodes: [0, 1], maxOutputBytes: 4 * 1_048_576 },
   );
 }
 
@@ -248,6 +287,28 @@ function nulPairs(output: string) {
       const [name = "", value = ""] = line.split("\0");
       return [name, value] as const;
     });
+}
+
+function branchSettings(config: string): BranchSettings {
+  const days = lastValue(config, deleteSettledAfterKey.toLowerCase());
+  const parsed = Number(days);
+  return {
+    autoSettle: isOn(lastValue(config, autoSettleKey.toLowerCase())),
+    deleteSettledAfter:
+      days === ""
+        ? defaultDeleteSettledAfter
+        : /^\d+$/.test(days) && parsed <= 365
+          ? parsed
+          : 0,
+  };
+}
+
+function readBranchSettings(git: GitCommandRunner, directory: string) {
+  return readSettlingConfig(
+    git,
+    directory,
+    "^rebase\\.(autosettle|deletesettledafter)$",
+  ).pipe(Effect.map(branchSettings));
 }
 
 function writeSettlements(

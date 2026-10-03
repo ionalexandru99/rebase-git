@@ -1,9 +1,12 @@
+import { existsSync } from "node:fs";
+import { appendFile, writeFile } from "node:fs/promises";
+import { join } from "node:path";
 import { Effect } from "effect";
 import { describe, expect, it } from "vite-plus/test";
 import { BranchSettlingApi } from "#contracts/branch-settling/branch-settling.contract.ts";
 import { RepositoryPullApi } from "#contracts/repository-pull/repository-pull.contract.ts";
 import { RepositoryRefsApi } from "#contracts/repository-refs/repository-refs.contract.ts";
-import { git } from "#tests-support/git.ts";
+import { fastImport, git } from "#tests-support/git.ts";
 import { fakeGitHub } from "#tests-support/git-hosts/github.ts";
 import { pullRequestsFixture } from "#tests-support/git-hosts/pull-requests-fixture.ts";
 
@@ -73,6 +76,67 @@ describe("branch settling", () => {
     ]);
   });
 
+  it("deletes branches settled long enough after a fetch with their worktrees, keeping the ones that are unsafe to remove", async () => {
+    const pullRequests: Record<
+      string,
+      { number: number; state: "MERGED"; head: string }[]
+    > = {};
+    const f = await settlingFixture(fakeGitHub(pullRequests).github);
+    const commit = (branch: string) =>
+      `commit refs/heads/${branch}\ncommitter Rebase test <rebase@example.test> 1700000000 +0000\ndata ${branch.length}\n${branch}\nfrom refs/heads/main\n\n`;
+    await fastImport(
+      f.repositoryPath,
+      `${commit("squashed")}${commit("unique")}reset refs/heads/fresh\nfrom refs/heads/main\n\n`,
+    );
+    pullRequests.squashed = [
+      {
+        number: 9,
+        state: "MERGED",
+        head: await git(f.repositoryPath, "rev-parse", "squashed"),
+      },
+    ];
+    pullRequests.unique = [
+      { number: 10, state: "MERGED", head: "0123456789".repeat(4) },
+    ];
+    const settled = (branch: string, day = "2000-01-01") =>
+      `[branch "${branch}"]\n\trebaseSettled = ${day}\n\tremote = origin\n\tmerge = refs/heads/${branch}\n`;
+    await appendFile(
+      join(f.repositoryPath, ".git", "config"),
+      ["main", "topic", "mirrored", "elsewhere", "squashed", "unique"]
+        .map((branch) => settled(branch))
+        .join("") +
+        settled("fresh", new Date().toISOString().slice(0, 10)) +
+        '[remote "origin"]\n\tfetch = ^refs/heads/squashed\n\tfetch = ^refs/heads/unique\n',
+    );
+    const worktree = (branch: string) =>
+      join(f.repositoryPath, "..", `worktree-${branch}`);
+    await git(f.repositoryPath, "worktree", "add", worktree("topic"), "topic");
+    await git(
+      f.repositoryPath,
+      "worktree",
+      "add",
+      "--lock",
+      worktree("mirrored"),
+      "mirrored",
+    );
+    await git(
+      f.repositoryPath,
+      "worktree",
+      "add",
+      worktree("elsewhere"),
+      "elsewhere",
+    );
+    await writeFile(join(worktree("elsewhere"), "draft.txt"), "draft\n");
+
+    await f.fetch();
+
+    await expect
+      .poll(f.branches)
+      .toEqual(["elsewhere", "fresh", "main", "mirrored", "unique"]);
+    expect(existsSync(worktree("topic"))).toBe(false);
+    expect(existsSync(worktree("mirrored"))).toBe(true);
+  });
+
   it("stores the settling switch for every client and settles or unsettles the existing branches of a selection by hand", async () => {
     const f = await settlingFixture(fakeGitHub({}).github);
     const scope = {
@@ -82,18 +146,18 @@ describe("branch settling", () => {
 
     await expect(f.settling.settings(scope)).resolves.toEqual({
       autoSettle: true,
+      deleteSettledAfter: 3,
     });
     const changed: unknown[] = [];
     f.events.subscribe((_, repositoryIds, kind) =>
       changed.push([repositoryIds, kind]),
     );
+    const off = { autoSettle: false, deleteSettledAfter: 0 };
     await expect(
-      f.settling.saveSettings({ ...scope, autoSettle: false }),
-    ).resolves.toEqual({ autoSettle: false });
+      f.settling.saveSettings({ ...scope, ...off }),
+    ).resolves.toEqual(off);
     expect(changed).toEqual([[[f.repositoryId], "Refs"]]);
-    await expect(f.settling.settings(scope)).resolves.toEqual({
-      autoSettle: false,
-    });
+    await expect(f.settling.settings(scope)).resolves.toEqual(off);
 
     await f.settling.settle({
       ...scope,
@@ -137,6 +201,10 @@ async function settlingFixture(
         Effect.runPromise(settling.settle(input)),
     },
     fetch: () => Effect.runPromise(pull.fetch({ repositoryId })),
+    branches: async () =>
+      (await Effect.runPromise(refs.read({ repositoryId }))).branches
+        .map(({ name }) => name)
+        .sort(),
     settled: async () =>
       Object.fromEntries(
         (await Effect.runPromise(refs.read({ repositoryId }))).branches.flatMap(

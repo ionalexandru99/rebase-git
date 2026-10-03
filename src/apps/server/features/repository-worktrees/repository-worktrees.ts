@@ -154,7 +154,10 @@ export function createWorktree(git: GitCommandRunner, command: CreateWorktree) {
   });
 }
 
-export function removeWorktree(git: GitCommandRunner, command: RemoveWorktree) {
+export function removeWorktree(
+  git: GitCommandRunner,
+  command: Omit<RemoveWorktree, "repositoryId">,
+) {
   return Effect.gen(function* () {
     const worktree = yield* findRemovable(git, command);
     if (worktree === undefined) return {};
@@ -241,7 +244,10 @@ function folderIsFree(path: string) {
   );
 }
 
-function findRemovable(git: GitCommandRunner, command: WorktreeTarget) {
+function findRemovable(
+  git: GitCommandRunner,
+  command: Omit<WorktreeTarget, "repositoryId">,
+) {
   return Effect.gen(function* () {
     const worktree = yield* findTarget(git, command);
     if (worktree === undefined) return undefined;
@@ -254,7 +260,10 @@ function findRemovable(git: GitCommandRunner, command: WorktreeTarget) {
   });
 }
 
-function findTarget(git: GitCommandRunner, command: WorktreeTarget) {
+function findTarget(
+  git: GitCommandRunner,
+  command: Omit<WorktreeTarget, "repositoryId">,
+) {
   return listWorktrees(git, command.worktreePath).pipe(
     Effect.map((worktrees) =>
       worktrees.find((worktree) => worktree.path === command.target),

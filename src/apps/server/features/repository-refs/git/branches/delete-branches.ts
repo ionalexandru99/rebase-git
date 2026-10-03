@@ -51,7 +51,11 @@ interface PushPasses {
 export function deleteBranches(
   git: GitCommandRunner,
   access: RepositoryAccess,
-  { branches, force, worktreePath }: DeleteRepositoryBranches,
+  {
+    branches,
+    force,
+    worktreePath,
+  }: Omit<DeleteRepositoryBranches, "repositoryId">,
 ): Effect.Effect<
   RepositoryBranchesDeleted,
   RepositoryBranchesOperationFailure | RepositoryRejected | GitFailed
@@ -88,7 +92,7 @@ export function deleteBranches(
   });
 }
 
-function readRefTargets(git: GitCommandRunner, directory: string) {
+export function readRefTargets(git: GitCommandRunner, directory: string) {
   return runRepositoryGit(
     git,
     directory,
@@ -155,7 +159,7 @@ function targetProblem(
   return target === expected ? undefined : { _tag: "BranchMoved", name };
 }
 
-function unmergedBranches(
+export function unmergedBranches(
   git: GitCommandRunner,
   directory: string,
   branches: readonly BranchDeletion[],
