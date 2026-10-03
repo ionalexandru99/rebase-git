@@ -79,16 +79,18 @@ export function settleBranchesAfterFetch({
               defaults.get(remote) !== head),
         )).map(({ branch, pullRequests }) => [branch, pullRequests] as const),
       );
+      const merged = [...pullRequests].flatMap(([branch, found]) =>
+        isMerged(found) && !marked.has(branch) ? [branch] : [],
+      );
+      if (merged.length > 0)
+        yield* writeSettlements(git, coordination, directory, merged, today);
       const locals = yield* readLocalBranches(git, directory);
       const tips = yield* mergedTips(
         git,
         directory,
         locals,
-        new Map([...pullRequests].filter(([, found]) => isMerged(found))),
+        new Map([...pullRequests].filter(([branch]) => expired.has(branch))),
       );
-      const merged = [...tips.keys()].filter((branch) => !marked.has(branch));
-      if (merged.length > 0)
-        yield* writeSettlements(git, coordination, directory, merged, today);
       const candidates = [...expired].flatMap((name) =>
         deletionCandidate(
           name,
