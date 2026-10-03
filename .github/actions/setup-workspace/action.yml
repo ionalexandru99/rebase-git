@@ -12,6 +12,12 @@ inputs:
 runs:
   using: composite
   steps:
+    - name: Keep temporary files on the runner disk
+      if: runner.os == 'Windows'
+      shell: bash
+      run: |
+        echo "TEMP=$RUNNER_TEMP" >> "$GITHUB_ENV"
+        echo "TMP=$RUNNER_TEMP" >> "$GITHUB_ENV"
     - name: Install pnpm
       uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86
       with:

@@ -133,8 +133,8 @@ async function verifyPackageContents(packageRoot: string) {
   const packageMetadata = JSON.parse(
     await readFile(join(packageRoot, "package.json"), "utf8"),
   ) as { readonly dependencies?: Record<string, string> };
-  if (packageMetadata.dependencies?.["electron-updater"] !== undefined) {
-    throw new Error("The browser package includes the desktop updater.");
+  if (Object.keys(packageMetadata.dependencies ?? {}).length > 0) {
+    throw new Error("The package installs runtime dependencies.");
   }
 
   const executables = await Promise.all(
