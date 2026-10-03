@@ -128,7 +128,8 @@ export function buildBranchesSidebarRows(
   stashes: BranchesSidebarStashes = noStashes,
 ): readonly BranchesSidebarRow[] {
   const matches = createMatcher(query);
-  const filtering = query.trim().length > 0 || scope !== "all";
+  const searching = query.trim().length > 0;
+  const filtering = searching || scope !== "all";
   const currentBranch = activeHead(refs, activeWorktreePath)?.branch;
   const mainPath = refs.worktrees.find((worktree) => worktree.main)?.path;
   const localRefs = (branches: readonly LocalBranch[]): SectionDraft["refs"] =>
@@ -224,7 +225,8 @@ export function buildBranchesSidebarRows(
     );
   return visibleSections.flatMap((section, index): BranchesSidebarRow[] => {
     const expanded =
-      filtering ||
+      searching ||
+      section.scope === scope ||
       expandedSections.has(section.sectionId) ||
       (section.scope === "stashes" && stashes.drafting);
     const header: BranchesSidebarSectionRow = {
@@ -273,7 +275,7 @@ export function buildBranchesSidebarRows(
     return [
       header,
       ...(tree?.view === "tree"
-        ? buildBranchTree(refRows, tree.folders, query.trim().length > 0)
+        ? buildBranchTree(refRows, tree.folders, searching)
         : refRows),
     ];
   });
