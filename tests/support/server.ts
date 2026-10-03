@@ -24,6 +24,7 @@ import { environmentRpcHandlers } from "#server/adapters/environment-transport/e
 import {
   createLocalGitCommandRunner,
   type GitCommandRunner,
+  gitFailed,
 } from "#server/adapters/local-git/git-commands.ts";
 import {
   acquireEnvironment,
@@ -74,6 +75,18 @@ interface EnvironmentOverrides {
   readonly coordination?: (
     coordination: RepositoryCoordination,
   ) => RepositoryCoordination;
+}
+
+export function interruptGit(command: string, applied: boolean) {
+  return (runner: GitCommandRunner): GitCommandRunner => ({
+    ...runner,
+    run: (next) =>
+      !`${next.arguments.join(" ")} `.startsWith(`${command} `)
+        ? runner.run(next)
+        : (applied ? runner.run(next) : Effect.void).pipe(
+            Effect.andThen(Effect.fail(gitFailed("Timeout"))),
+          ),
+  });
 }
 
 export function openTestEnvironment(overrides: EnvironmentOverrides = {}) {

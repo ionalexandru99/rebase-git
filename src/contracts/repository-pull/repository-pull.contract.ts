@@ -63,7 +63,6 @@ export const PullFailure = Schema.Union([
   Schema.TaggedStruct("PullBlocked", {
     detail: Schema.String.check(Schema.isMaxLength(2_048)),
   }),
-  Schema.TaggedStruct("PullUncertain", {}),
 ]);
 export type PullFailure = typeof PullFailure.Type;
 

@@ -1,12 +1,8 @@
-import { Effect } from "effect";
-import {
-  type RepositoryRejected,
-  repositoryRejected,
-} from "#contracts/git/git-failures.contract.ts";
+import { Effect, Result } from "effect";
+import { repositoryRejected } from "#contracts/git/git-failures.contract.ts";
 import type {
   PushBranch,
   PushDestination,
-  PushRejected,
   PushTags,
   RemoteBranchUpdated,
   TagsPushed,
@@ -20,6 +16,7 @@ import {
 import {
   type GitCommandOutput,
   type GitCommandRunner,
+  type GitFailed,
   runRepositoryGit,
 } from "#server/adapters/local-git/git-commands.ts";
 import {
@@ -27,10 +24,7 @@ import {
   pushError,
   pushRefStatus,
 } from "#server/features/repository-push/git/push-failures.ts";
-import {
-  reconcileRemoteBranch,
-  uncertainPush,
-} from "#server/features/repository-push/git/reconcile-remote-branch.ts";
+import { reconcileRemoteBranch } from "#server/features/repository-push/git/reconcile-remote-branch.ts";
 
 const pushTimeoutMilliseconds = 120_000;
 
@@ -52,6 +46,7 @@ function pushRemoteBranch(git: GitCommandRunner, command: PushBranch) {
         `refs/heads/${command.branch}:${destinationRef}`,
       ],
       command.destination,
+      target,
     );
     return {
       destination: command.destination,
@@ -67,8 +62,8 @@ function pushTagsToRemote(
   const refs = tags.map((tag) => `refs/tags/${tag}`);
   return Effect.gen(function* () {
     yield* requireRemote(git, worktreePath, remote);
-    const output = yield* git
-      .run({
+    const exit = yield* Effect.result(
+      git.run({
         directory: worktreePath,
         arguments: [
           "push",
@@ -78,20 +73,13 @@ function pushTagsToRemote(
           ...refs.map((ref) => `${ref}:${ref}`),
         ],
         timeoutMilliseconds: pushTimeoutMilliseconds,
-      })
-      .pipe(
-        Effect.mapError((error) =>
-          error.reason === "Timeout"
-            ? pushError(
-                "Uncertain",
-                `The push to ${remote} did not finish. Fetch to see which tags arrived.`,
-              )
-            : repositoryRejected(
-                "GitFailed",
-                `Git could not run the push (${error.reason}).`,
-              ),
-        ),
-      );
+      }),
+    );
+    if (Result.isFailure(exit)) {
+      yield* requireRemoteTags(git, worktreePath, remote, refs, exit.failure);
+      return { remote, pushed: [...tags], upToDate: [] } satisfies TagsPushed;
+    }
+    const output = exit.success;
     const statuses = tags.map((tag, index) => ({
       tag,
       status: pushRefStatus(output.stdout, refs[index] ?? ""),
@@ -115,6 +103,44 @@ function pushTagsToRemote(
         : classifyPushFailure(output, refs[0] ?? ""),
     );
   });
+}
+
+function requireRemoteTags(
+  git: GitCommandRunner,
+  directory: string,
+  remote: string,
+  refs: readonly string[],
+  failure: GitFailed,
+) {
+  return Effect.gen(function* () {
+    const [listed, local] = yield* Effect.all([
+      runRepositoryGit(
+        git,
+        directory,
+        ["ls-remote", "--refs", remote, ...refs],
+        {
+          timeoutMilliseconds: pushTimeoutMilliseconds,
+        },
+      ),
+      runRepositoryGit(git, directory, ["rev-parse", ...refs]),
+    ]);
+    const arrived = new Map(
+      listed
+        .split("\n")
+        .map((line) => line.split("\t"))
+        .map(([oid, ref]) => [ref, oid]),
+    );
+    const sent = local.trim().split("\n");
+    if (refs.some((ref, index) => arrived.get(ref) !== sent[index]))
+      return yield* Effect.fail(processFailure(failure));
+  });
+}
+
+function processFailure(failure: GitFailed) {
+  return repositoryRejected(
+    "GitFailed",
+    `Git could not run the push (${failure.reason}).`,
+  );
 }
 
 function requireRemote(
@@ -177,6 +203,7 @@ function runPush(
   directory: string,
   args: readonly string[],
   destination: PushDestination,
+  target: string,
 ) {
   const destinationRef = `refs/heads/${destination.branch}`;
   return git
@@ -186,18 +213,17 @@ function runPush(
       timeoutMilliseconds: pushTimeoutMilliseconds,
     })
     .pipe(
-      Effect.catch(
-        (error): Effect.Effect<never, PushRejected | RepositoryRejected> =>
-          error.reason === "Timeout"
-            ? uncertainPush(git, directory, destination)
-            : Effect.fail(
-                repositoryRejected(
-                  "GitFailed",
-                  `Git could not run the push (${error.reason}).`,
-                ),
-              ),
-      ),
-      Effect.flatMap((output) => requirePushed(output, destinationRef)),
+      Effect.matchEffect({
+        onFailure: (failure) =>
+          reconcileRemoteBranch(git, directory, destination).pipe(
+            Effect.flatMap((remoteTarget) =>
+              remoteTarget === target
+                ? Effect.void
+                : Effect.fail(processFailure(failure)),
+            ),
+          ),
+        onSuccess: (output) => requirePushed(output, destinationRef),
+      }),
       Effect.onInterrupt(() =>
         reconcileRemoteBranch(git, directory, destination).pipe(Effect.ignore),
       ),

@@ -1,6 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
-import { Effect } from "effect";
+import { Effect, Result } from "effect";
 import type {
   StartCherryPick,
   StartOperation,
@@ -8,14 +8,15 @@ import type {
 import {
   type GitCommandRunner,
   runRepositoryGit,
-  runRepositoryGitOutput,
 } from "#server/adapters/local-git/git-commands.ts";
 import {
+  hasStagedChanges,
+  headMoved,
   operationFailure,
   readCommit,
-  requireGitSuccess,
+  requireLanded,
+  runChange,
   started,
-  uncertain,
 } from "#server/features/repository-operations/operation-outcome.ts";
 import type { RepositoryCoordination } from "#server/repository/repository-coordination.ts";
 
@@ -51,27 +52,30 @@ export function startCherryPick(
         "Incompatible",
         "Commit or unstage the staged changes first.",
       );
-    const output = yield* git
-      .run({
-        directory,
-        arguments: [
-          "cherry-pick",
-          ...(result === "stage" ? ["--no-commit"] : []),
-          ...(mainline === null ? [] : ["-m", String(mainline)]),
-          "--end-of-options",
-          ...commits,
-        ],
-        timeoutMilliseconds: 120_000,
-      })
-      .pipe(Effect.mapError(uncertain), Effect.uninterruptible);
+    const exit = yield* runChange(git, {
+      directory,
+      arguments: [
+        "cherry-pick",
+        ...(result === "stage" ? ["--no-commit"] : []),
+        ...(mainline === null ? [] : ["-m", String(mainline)]),
+        "--end-of-options",
+        ...commits,
+      ],
+      timeoutMilliseconds: 120_000,
+    });
     const state = yield* coordination.operation(directory);
     if (
-      output.exitCode !== 0 &&
+      Result.getOrUndefined(exit)?.exitCode !== 0 &&
       (state.kind === "cherry-pick" ||
         (result === "stage" && (yield* hasUnmergedPaths(git, directory))))
     )
       return started("Stopped", state);
-    yield* requireGitSuccess(output);
+    yield* requireLanded(
+      exit,
+      result === "stage"
+        ? hasStagedChanges(git, directory)
+        : headMoved(git, directory, expectedHead),
+    );
     return started(result === "stage" ? "Staged" : "Committed", state);
   });
 }
@@ -85,21 +89,27 @@ export function continueStagedCherryPick(
     if (sequencer === undefined) return false;
     yield* runRepositoryGit(git, directory, ["cherry-pick", "--quit"]);
     if (sequencer.remaining.length === 0) return true;
-    const output = yield* git
-      .run({
-        directory,
-        arguments: [
-          "cherry-pick",
-          "--no-commit",
-          ...(sequencer.mainline === null ? [] : ["-m", sequencer.mainline]),
-          "--end-of-options",
-          ...sequencer.remaining,
-        ],
-        timeoutMilliseconds: 120_000,
-      })
-      .pipe(Effect.mapError(uncertain));
-    if (output.exitCode !== 0 && !(yield* hasUnmergedPaths(git, directory)))
-      yield* requireGitSuccess(output);
+    const index = yield* readIndexTree(git, directory);
+    const exit = yield* runChange(git, {
+      directory,
+      arguments: [
+        "cherry-pick",
+        "--no-commit",
+        ...(sequencer.mainline === null ? [] : ["-m", sequencer.mainline]),
+        "--end-of-options",
+        ...sequencer.remaining,
+      ],
+      timeoutMilliseconds: 120_000,
+    });
+    if (
+      Result.getOrUndefined(exit)?.exitCode !== 0 &&
+      (yield* hasUnmergedPaths(git, directory))
+    )
+      return true;
+    yield* requireLanded(
+      exit,
+      readIndexTree(git, directory).pipe(Effect.map((tree) => tree !== index)),
+    );
     return true;
   });
 }
@@ -161,13 +171,10 @@ function readParentCounts(
   );
 }
 
-function hasStagedChanges(git: GitCommandRunner, directory: string) {
-  return runRepositoryGitOutput(
-    git,
-    directory,
-    ["diff", "--cached", "--quiet"],
-    { exitCodes: [0, 1] },
-  ).pipe(Effect.map(({ exitCode }) => exitCode === 1));
+function readIndexTree(git: GitCommandRunner, directory: string) {
+  return runRepositoryGit(git, directory, ["write-tree"], {
+    exitCodes: [0, 128],
+  }).pipe(Effect.map((output) => output.trim()));
 }
 
 function hasUnmergedPaths(git: GitCommandRunner, directory: string) {

@@ -7,8 +7,9 @@ import {
   RepositoryOperationsApi,
   type StartCherryPick,
 } from "#contracts/repository-operations/repository-operations.contract.ts";
+import type { GitCommandRunner } from "#server/adapters/local-git/git-commands.ts";
 import { createCherryPickRepository, git } from "#tests-support/git.ts";
-import { openTestEnvironment } from "#tests-support/server.ts";
+import { interruptGit, openTestEnvironment } from "#tests-support/server.ts";
 
 describe("Starting a cherry-pick", () => {
   it("applies the commits in the given order with the chosen merge parent", async () => {
@@ -164,6 +165,55 @@ describe("Starting a cherry-pick", () => {
     );
   });
 
+  it("reports staging Git applied before it stopped as done and staging it never ran as a Git failure", async () => {
+    const applied = await fixture(interruptGit("cherry-pick", true));
+    await expect(
+      applied.client.started({
+        commits: [applied.oids.changeC],
+        mainline: null,
+        result: "stage",
+      }),
+    ).resolves.toMatchObject({ outcome: "Staged" });
+
+    const untouched = await fixture(interruptGit("cherry-pick", false));
+    await expect(
+      untouched.client.started({
+        commits: [untouched.oids.changeC],
+        mainline: null,
+        result: "stage",
+      }),
+    ).rejects.toMatchObject({
+      _tag: "RepositoryRejected",
+      reason: "GitFailed",
+    });
+    expect(await git(untouched.directory, "status", "--porcelain")).toBe("");
+  });
+
+  it("finishes a staged selection when Git stops after staging the rest", async () => {
+    let interrupted = false;
+    const { client, oids, directory } = await fixture((runner) => ({
+      ...runner,
+      run: (command) =>
+        (interrupted
+          ? interruptGit("cherry-pick --no-commit", true)(runner)
+          : runner
+        ).run(command),
+    }));
+    await client.start({
+      commits: [oids.changeA, oids.changeC, oids.mergeSide],
+      mainline: 1,
+      result: "stage",
+    });
+    await writeFile(join(directory, "a.txt"), "a resolved\n");
+    await git(directory, "add", "a.txt");
+    interrupted = true;
+
+    expect((await client.execute("continue")).kind).toBe("idle");
+    expect(await git(directory, "diff", "--cached", "--name-only")).toBe(
+      "a.txt\nc.txt\nr.txt",
+    );
+  });
+
   it("aborts back to the starting tip", async () => {
     const { client, oids, directory } = await fixture();
     const head = await git(directory, "rev-parse", "HEAD");
@@ -178,8 +228,8 @@ describe("Starting a cherry-pick", () => {
   });
 });
 
-async function fixture() {
-  const environment = await openTestEnvironment();
+async function fixture(wrap?: (runner: GitCommandRunner) => GitCommandRunner) {
+  const environment = await openTestEnvironment({ git: wrap });
   const { directory, oids } = await createCherryPickRepository(
     environment.home,
   );

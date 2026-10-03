@@ -1,4 +1,4 @@
-import { Effect } from "effect";
+import { Effect, Result } from "effect";
 import { repositoryRejected } from "#contracts/git/git-failures.contract.ts";
 import type {
   OperationFailure,
@@ -6,10 +6,13 @@ import type {
   RepositoryOperation,
 } from "#contracts/repository-operations/repository-operations.contract.ts";
 import {
+  type GitCommand,
   type GitCommandOutput,
   type GitCommandRunner,
+  type GitFailed,
   isIdentityMissing,
   runRepositoryGit,
+  runRepositoryGitOutput,
 } from "#server/adapters/local-git/git-commands.ts";
 
 export function started(
@@ -71,11 +74,39 @@ export function overwrittenPaths(detail: string) {
     .slice(0, 100);
 }
 
-export function uncertain() {
-  return operationError(
-    "Uncertain",
-    "Git's result could not be confirmed. Refresh the worktree before trying again.",
+export type GitExit = Result.Result<GitCommandOutput, GitFailed>;
+
+export function runChange(git: GitCommandRunner, command: GitCommand) {
+  return Effect.result(git.run(command)).pipe(Effect.uninterruptible);
+}
+
+export function requireLanded<E>(
+  exit: GitExit,
+  landed: Effect.Effect<boolean, E>,
+) {
+  if (Result.isSuccess(exit)) return requireGitSuccess(exit.success);
+  return Effect.flatMap(landed, (yes) =>
+    yes ? Effect.void : Effect.fail(exit.failure),
   );
+}
+
+export function headMoved(
+  git: GitCommandRunner,
+  directory: string,
+  from: string,
+) {
+  return readCommit(git, directory, "HEAD").pipe(
+    Effect.map((head) => head !== from),
+  );
+}
+
+export function hasStagedChanges(git: GitCommandRunner, directory: string) {
+  return runRepositoryGitOutput(
+    git,
+    directory,
+    ["diff", "--cached", "--quiet"],
+    { exitCodes: [0, 1] },
+  ).pipe(Effect.map(({ exitCode }) => exitCode === 1));
 }
 
 export function operationFailure(

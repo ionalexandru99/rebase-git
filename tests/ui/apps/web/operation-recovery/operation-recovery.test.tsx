@@ -201,7 +201,7 @@ describe("operation recovery toast", () => {
       f.set(idle());
       throw rejected({
         _tag: "OperationFailed",
-        reason: "Uncertain",
+        reason: "GitRejected",
         detail: "Git stopped responding.",
       });
     });

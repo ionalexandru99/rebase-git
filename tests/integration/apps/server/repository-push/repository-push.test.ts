@@ -12,7 +12,7 @@ import {
   gitFailed,
 } from "#server/adapters/local-git/git-commands.ts";
 import { cloneRepository, createRepository, git } from "#tests-support/git.ts";
-import { openTestEnvironment } from "#tests-support/server.ts";
+import { interruptGit, openTestEnvironment } from "#tests-support/server.ts";
 
 async function fixture(wrap?: (runner: GitCommandRunner) => GitCommandRunner) {
   const environment = await openTestEnvironment({ git: wrap });
@@ -182,7 +182,7 @@ describe("pushing branches", () => {
     ).toMatchObject({ reason: "RemoteMissing" });
   });
 
-  it("reconciles the tracking branch when the push result is lost", async () => {
+  it("reports a push that reached the remote before Git stopped as pushed", async () => {
     const f = await fixture((runner) => ({
       ...runner,
       run: (command) =>
@@ -201,11 +201,22 @@ describe("pushing branches", () => {
     }));
     const pushed = await commit(f.local, "arrived");
 
-    expect(await f.failure(f.push("main"))).toMatchObject({
-      reason: "Uncertain",
-      detail: expect.stringContaining(pushed.slice(0, 8)),
+    await expect(Effect.runPromise(f.push("main"))).resolves.toMatchObject({
+      target: pushed,
     });
     expect(await f.tip(f.local, "refs/remotes/origin/main")).toBe(pushed);
+  });
+
+  it("reports a push Git never ran as a Git failure", async () => {
+    const f = await fixture(interruptGit("push", false));
+    const remote = await f.tip(f.remote, "refs/heads/main");
+    await commit(f.local, "stays local");
+
+    expect(await f.failure(f.push("main"))).toMatchObject({
+      _tag: "RepositoryRejected",
+      reason: "GitFailed",
+    });
+    expect(await f.tip(f.remote, "refs/heads/main")).toBe(remote);
   });
 
   it("reconciles the tracking branch after a cancelled push", async () => {
@@ -289,5 +300,30 @@ describe("pushing tags", () => {
       ),
     ).toMatchObject({ reason: "TagExists", detail: "v2.0" });
     expect(await git(f.remote, "tag", "--list")).toBe("v2.0");
+  });
+
+  it("reports tags that reached the remote before Git stopped as pushed and tags Git never sent as a Git failure", async () => {
+    const pushTag = async (applied: boolean) => {
+      const f = await fixture(interruptGit("push", applied));
+      await git(f.local, "tag", "-a", "v3.0", "-m", "Release 3.0");
+      const pushed = Effect.runPromise(
+        f.service.pushTags({ ...f.scope, remote: "origin", tags: ["v3.0"] }),
+      );
+      return { f, pushed };
+    };
+
+    const applied = await pushTag(true);
+    await expect(applied.pushed).resolves.toEqual({
+      remote: "origin",
+      pushed: ["v3.0"],
+      upToDate: [],
+    });
+
+    const untouched = await pushTag(false);
+    await expect(untouched.pushed).rejects.toMatchObject({
+      _tag: "RepositoryRejected",
+      reason: "GitFailed",
+    });
+    expect(await git(untouched.f.remote, "tag", "--list")).toBe("");
   });
 });

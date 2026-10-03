@@ -3,11 +3,12 @@ import { join } from "node:path";
 import { Effect } from "effect";
 import { describe, expect, it } from "vite-plus/test";
 import { RepositoryOperationsApi } from "#contracts/repository-operations/repository-operations.contract.ts";
+import type { GitCommandRunner } from "#server/adapters/local-git/git-commands.ts";
 import { createRevertRepository } from "#tests-support/git.ts";
-import { openTestEnvironment } from "#tests-support/server.ts";
+import { interruptGit, openTestEnvironment } from "#tests-support/server.ts";
 
-async function fixture() {
-  const environment = await openTestEnvironment();
+async function fixture(wrap?: (runner: GitCommandRunner) => GitCommandRunner) {
+  const environment = await openTestEnvironment({ git: wrap });
   const { directory, git } = await createRevertRepository(environment.home);
   const repositoryId = (await environment.remember(directory)).id;
   const service = environment.routes(RepositoryOperationsApi);
@@ -116,6 +117,25 @@ describe("revert commits", () => {
     ).rejects.toMatchObject({ reason: "HookFailed" });
 
     expect((await f.abort()).kind).toBe("idle");
+  });
+
+  it("reports a revert Git committed before it stopped as done and one it never ran as a Git failure", async () => {
+    const applied = await fixture(interruptGit("revert", true));
+    await expect(
+      applied.revert([await applied.oid("HEAD~4")]),
+    ).resolves.toMatchObject({ outcome: "Committed" });
+    expect(await applied.file("b.txt")).toBeNull();
+
+    const untouched = await fixture(interruptGit("revert", false));
+    const head = await untouched.oid("HEAD");
+    await expect(
+      untouched.revert([await untouched.oid("HEAD~4")], false),
+    ).rejects.toMatchObject({
+      _tag: "RepositoryRejected",
+      reason: "GitFailed",
+    });
+    expect(await untouched.oid("HEAD")).toBe(head);
+    expect(await untouched.output("status", "--porcelain")).toBe("");
   });
 
   it("rejects an already undone commit and a commit outside the branch", async () => {

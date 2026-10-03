@@ -63,7 +63,6 @@ export const PushRejectedReason = Schema.Literals([
   "HookDeclined",
   "Authentication",
   "Network",
-  "Uncertain",
 ]);
 export type PushRejectedReason = typeof PushRejectedReason.Type;
 

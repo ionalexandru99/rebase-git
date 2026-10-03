@@ -14,8 +14,8 @@ import type { GitCommandRunner } from "#server/adapters/local-git/git-commands.t
 import { continueStagedCherryPick } from "#server/features/repository-operations/cherry-pick.ts";
 import {
   operationError,
-  requireGitSuccess,
-  uncertain,
+  requireLanded,
+  runChange,
 } from "#server/features/repository-operations/operation-outcome.ts";
 import { startOperation } from "#server/features/repository-operations/start-operation.ts";
 import type { RepositoryCoordination } from "#server/repository/repository-coordination.ts";
@@ -64,31 +64,25 @@ function recoverRepositoryOperation(
       command.action === "continue" &&
       (yield* continueStagedCherryPick(git, command.worktreePath))
     )
-      return yield* coordination
-        .operation(command.worktreePath)
-        .pipe(Effect.mapError(uncertain));
-    const output = yield* git
-      .run({
-        directory: command.worktreePath,
-        arguments:
-          state.kind === "squash"
-            ? ["reset", "--merge"]
-            : [state.kind, `--${command.action}`],
-        timeoutMilliseconds: 120_000,
-      })
-      .pipe(Effect.mapError(uncertain));
-    const operation = yield* coordination
-      .operation(command.worktreePath)
-      .pipe(
-        Effect.mapError(() =>
-          operationError(
-            "Uncertain",
-            "Git finished, but its current state could not be read.",
-          ),
-        ),
-      );
-    if (command.action === "abort" || !advancedToStop(state, operation))
-      yield* requireGitSuccess(output);
+      return yield* coordination.operation(command.worktreePath);
+    const exit = yield* runChange(git, {
+      directory: command.worktreePath,
+      arguments:
+        state.kind === "squash"
+          ? ["reset", "--merge"]
+          : [state.kind, `--${command.action}`],
+      timeoutMilliseconds: 120_000,
+    });
+    const operation = yield* coordination.operation(command.worktreePath);
+    if (command.action !== "abort" && advancedToStop(state, operation))
+      return operation;
+    yield* requireLanded(
+      exit,
+      Effect.succeed(
+        operation.kind === "idle" ||
+          (command.action !== "abort" && advanced(state, operation)),
+      ),
+    );
     return operation;
   }).pipe(Effect.uninterruptible);
 }
@@ -98,8 +92,14 @@ function advancedToStop(
   current: RepositoryOperation,
 ) {
   return (
-    current.kind === previous.kind &&
     (current.phase === "conflicts" || current.phase === "empty") &&
+    advanced(previous, current)
+  );
+}
+
+function advanced(previous: RepositoryOperation, current: RepositoryOperation) {
+  return (
+    current.kind === previous.kind &&
     ((current.commit !== null && current.commit !== previous.commit) ||
       (current.progress !== null &&
         previous.progress !== null &&
