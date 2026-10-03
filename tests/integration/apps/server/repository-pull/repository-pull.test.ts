@@ -6,8 +6,9 @@ import {
   type PullBranch,
   RepositoryPullApi,
 } from "#contracts/repository-pull/repository-pull.contract.ts";
+import type { GitCommandRunner } from "#server/adapters/local-git/git-commands.ts";
 import { cloneRepository, fastImport, git } from "#tests-support/git.ts";
-import { openTestEnvironment } from "#tests-support/server.ts";
+import { interruptGit, openTestEnvironment } from "#tests-support/server.ts";
 
 describe("fast-forward pull", () => {
   it("fast-forwards the checked-out branch and keeps unrelated local edits", async () => {
@@ -68,6 +69,31 @@ describe("fast-forward pull", () => {
     expect(await git(f.repositoryPath, "rev-parse", "HEAD")).toBe(local);
     expect(await readFile(join(f.repositoryPath, "other.txt"), "utf8")).toBe(
       "untracked\n",
+    );
+  });
+
+  it("reports a fast-forward Git applied before it stopped as pulled and one it never ran as a Git failure", async () => {
+    const applied = await fixture(interruptGit("merge", true));
+    const incoming = await applied.publish("main", "other.txt", "remote");
+    await git(applied.repositoryPath, "fetch");
+    await expect(applied.pull("main")).resolves.toEqual({
+      outcome: "FastForwarded",
+      stashKept: false,
+    });
+    expect(await git(applied.repositoryPath, "rev-parse", "HEAD")).toBe(
+      incoming,
+    );
+
+    const untouched = await fixture(interruptGit("merge", false));
+    await untouched.publish("main", "other.txt", "remote");
+    await git(untouched.repositoryPath, "fetch");
+    const local = await git(untouched.repositoryPath, "rev-parse", "HEAD");
+    await expect(untouched.pull("main")).rejects.toMatchObject({
+      _tag: "RepositoryRejected",
+      reason: "GitFailed",
+    });
+    expect(await git(untouched.repositoryPath, "rev-parse", "HEAD")).toBe(
+      local,
     );
   });
 
@@ -331,8 +357,8 @@ async function divergedFixture({
   return { ...f, incoming, local };
 }
 
-async function fixture() {
-  const environment = await openTestEnvironment();
+async function fixture(wrap?: (runner: GitCommandRunner) => GitCommandRunner) {
+  const environment = await openTestEnvironment({ git: wrap });
   const root = environment.home;
   const originPath = join(root, "origin.git");
   const repositoryPath = join(root, "repository");

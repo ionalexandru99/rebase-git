@@ -18,7 +18,10 @@ import {
   runRepositoryGit,
   runRepositoryGitOutput,
 } from "#server/adapters/local-git/git-commands.ts";
-import { overwrittenPaths } from "#server/features/repository-operations/operation-outcome.ts";
+import {
+  overwrittenPaths,
+  readCommit,
+} from "#server/features/repository-operations/operation-outcome.ts";
 import {
   type Integrated,
   mergeSource,
@@ -144,8 +147,6 @@ function integrate(
 
 function integrationFailure(failure: OperationFailure): PullFailure {
   switch (failure.reason) {
-    case "Uncertain":
-      return { _tag: "PullUncertain" };
     case "WouldOverwrite":
       return { _tag: "PullWouldOverwrite", paths: failure.paths ?? [] };
     case "Stale":
@@ -253,15 +254,23 @@ function mergeFastForward(
     pullCommand,
   ).pipe(
     Effect.map(({ stderr }) => /resulted in conflicts/.test(stderr)),
-    Effect.mapError((error) => mergeFailure(error)),
+    Effect.catch(
+      (
+        error,
+      ): Effect.Effect<
+        boolean,
+        PullFailure | RepositoryRejected | GitFailed
+      > =>
+        isGitRejection(error)
+          ? Effect.fail(mergeFailure(error))
+          : requireAt(git, directory, "HEAD", upstreamTarget, error).pipe(
+              Effect.as(false),
+            ),
+    ),
   );
 }
 
 function mergeFailure(error: GitFailed): PullFailure | RepositoryRejected {
-  if (!isGitRejection(error))
-    return error.reason === "GitUnavailable"
-      ? repositoryRejected("GitFailed", error.detail)
-      : { _tag: "PullUncertain" };
   if (/would be overwritten by merge/i.test(error.detail))
     return {
       _tag: "PullWouldOverwrite",
@@ -290,9 +299,31 @@ function moveBranch(
     ],
     pullCommand,
   ).pipe(
-    Effect.mapError(
-      (error): PullFailure =>
-        isGitRejection(error) ? branchMoved() : { _tag: "PullUncertain" },
+    Effect.catch(
+      (error): Effect.Effect<void, PullFailure | GitFailed> =>
+        isGitRejection(error)
+          ? Effect.fail(branchMoved())
+          : requireAt(
+              git,
+              directory,
+              `refs/heads/${tracked.name}`,
+              upstreamTarget,
+              error,
+            ),
+    ),
+  );
+}
+
+function requireAt(
+  git: GitCommandRunner,
+  directory: string,
+  ref: string,
+  target: string,
+  failure: GitFailed,
+) {
+  return readCommit(git, directory, ref).pipe(
+    Effect.flatMap((tip) =>
+      tip === target ? Effect.void : Effect.fail(failure),
     ),
   );
 }

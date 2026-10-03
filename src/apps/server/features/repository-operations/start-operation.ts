@@ -1,4 +1,4 @@
-import { Effect } from "effect";
+import { Effect, Result } from "effect";
 import type {
   MergeMode,
   OperationStarted,
@@ -9,18 +9,21 @@ import type {
   StartRevert,
 } from "#contracts/repository-operations/repository-operations.contract.ts";
 import {
-  type GitCommandOutput,
   type GitCommandRunner,
   runRepositoryGit,
   runRepositoryGitOutput,
 } from "#server/adapters/local-git/git-commands.ts";
 import { startCherryPick } from "#server/features/repository-operations/cherry-pick.ts";
 import {
+  type GitExit,
+  hasStagedChanges,
+  headMoved,
   operationFailure,
   readCommit,
   requireGitSuccess,
+  requireLanded,
+  runChange,
   started,
-  uncertain,
 } from "#server/features/repository-operations/operation-outcome.ts";
 import { rebasePlanTodo } from "#server/features/repository-operations/rebase-plan.ts";
 import type { RepositoryCoordination } from "#server/repository/repository-coordination.ts";
@@ -68,8 +71,9 @@ export interface Integrated {
 function integrated(
   outcome: OperationStarted["outcome"],
   operation: RepositoryOperation,
-  output?: GitCommandOutput,
+  exit?: GitExit,
 ): Integrated {
+  const output = exit === undefined ? undefined : Result.getOrUndefined(exit);
   const text = output === undefined ? "" : `${output.stderr}${output.stdout}`;
   return {
     started: started(outcome, operation),
@@ -111,25 +115,26 @@ export function mergeSource(
         "NotFastForward",
         `Can't fast-forward to ${revision}.`,
       );
-    const output = yield* git
-      .run({
-        directory,
-        arguments: [
-          "merge",
-          autostash ? "--autostash" : "--no-autostash",
-          "--no-stat",
-          ...mergeArguments[mode],
-          "--end-of-options",
-          revision,
-        ],
-        timeoutMilliseconds: 120_000,
-      })
-      .pipe(Effect.mapError(uncertain), Effect.uninterruptible);
+    const exit = yield* runChange(git, {
+      directory,
+      arguments: [
+        "merge",
+        autostash ? "--autostash" : "--no-autostash",
+        "--no-stat",
+        ...mergeArguments[mode],
+        "--end-of-options",
+        revision,
+      ],
+      timeoutMilliseconds: 120_000,
+    });
     const state = yield* coordination.operation(directory);
     if (state.phase === "conflicts") return integrated("Stopped", state);
-    yield* requireGitSuccess(output);
-    if (mode === "squash") return integrated("Staged", state, output);
+    if (mode === "squash") {
+      yield* requireLanded(exit, hasStagedChanges(git, directory));
+      return integrated("Staged", state, exit);
+    }
     const merged = yield* readCommit(git, directory, "HEAD");
+    yield* requireLanded(exit, Effect.succeed(merged !== head));
     return integrated(
       merged === head
         ? "UpToDate"
@@ -137,7 +142,7 @@ export function mergeSource(
           ? "FastForwarded"
           : "Committed",
       state,
-      output,
+      exit,
     );
   });
 }
@@ -198,27 +203,25 @@ export function rebaseOnto(
             `${onto.commit}..${expectedHead}`,
             plan,
           );
-    const output = yield* git
-      .run({
-        directory,
-        ...(todo === undefined
-          ? {}
-          : { globalArguments: ["-c", "sequence.editor=cat >"], input: todo }),
-        arguments: [
-          "rebase",
-          ...(todo === undefined ? [] : ["--interactive", "--empty=drop"]),
-          merges.length > 0 ? "--rebase-merges" : "--no-rebase-merges",
-          stash ? "--autostash" : "--no-autostash",
-          "--end-of-options",
-          revision,
-        ],
-        timeoutMilliseconds: 600_000,
-      })
-      .pipe(Effect.mapError(uncertain), Effect.uninterruptible);
+    const exit = yield* runChange(git, {
+      directory,
+      ...(todo === undefined
+        ? {}
+        : { globalArguments: ["-c", "sequence.editor=cat >"], input: todo }),
+      arguments: [
+        "rebase",
+        ...(todo === undefined ? [] : ["--interactive", "--empty=drop"]),
+        merges.length > 0 ? "--rebase-merges" : "--no-rebase-merges",
+        stash ? "--autostash" : "--no-autostash",
+        "--end-of-options",
+        revision,
+      ],
+      timeoutMilliseconds: 600_000,
+    });
     const state = yield* coordination.operation(directory);
     if (state.kind === "rebase") return integrated("Stopped", state);
-    yield* requireGitSuccess(output);
     const rebased = yield* readCommit(git, directory, "HEAD");
+    yield* requireLanded(exit, Effect.succeed(rebased !== head));
     return integrated(
       rebased === head
         ? "UpToDate"
@@ -226,7 +229,7 @@ export function rebaseOnto(
           ? "FastForwarded"
           : "Rebased",
       state,
-      output,
+      exit,
     );
   });
 }
@@ -252,26 +255,30 @@ function revertCommits(
         "Incompatible",
         `${foreign.slice(0, 8)} is not in the checked-out branch.`,
       );
-    const output = yield* git
-      .run({
-        directory,
-        arguments: [
-          "revert",
-          "--no-edit",
-          "--mainline",
-          "1",
-          ...(commit ? [] : ["--no-commit"]),
-          ...commits,
-        ],
-        timeoutMilliseconds: 120_000,
-      })
-      .pipe(Effect.mapError(uncertain), Effect.uninterruptible);
+    const exit = yield* runChange(git, {
+      directory,
+      arguments: [
+        "revert",
+        "--no-edit",
+        "--mainline",
+        "1",
+        ...(commit ? [] : ["--no-commit"]),
+        ...commits,
+      ],
+      timeoutMilliseconds: 120_000,
+    });
     const state = yield* coordination.operation(directory);
+    const outcome = commit ? "Committed" : "Staged";
+    if (Result.isFailure(exit)) {
+      if (state.kind === "revert") return started("Stopped", state);
+      yield* requireLanded(exit, headMoved(git, directory, expectedHead));
+      return started(outcome, state);
+    }
+    const output = exit.success;
     const empty = /nothing to commit/i.test(
       `${output.stdout}\n${output.stderr}`,
     );
-    if (output.exitCode === 0)
-      return started(commit ? "Committed" : "Staged", state);
+    if (output.exitCode === 0) return started(outcome, state);
     if (state.kind === "revert" && (state.phase === "conflicts" || empty))
       return started("Stopped", state);
     if (empty)

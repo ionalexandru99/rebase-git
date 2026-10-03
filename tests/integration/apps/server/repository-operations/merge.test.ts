@@ -6,11 +6,12 @@ import {
   type MergeMode,
   RepositoryOperationsApi,
 } from "#contracts/repository-operations/repository-operations.contract.ts";
+import type { GitCommandRunner } from "#server/adapters/local-git/git-commands.ts";
 import { createMergeRepository } from "#tests-support/git.ts";
-import { openTestEnvironment } from "#tests-support/server.ts";
+import { interruptGit, openTestEnvironment } from "#tests-support/server.ts";
 
-async function fixture() {
-  const environment = await openTestEnvironment();
+async function fixture(wrap?: (runner: GitCommandRunner) => GitCommandRunner) {
+  const environment = await openTestEnvironment({ git: wrap });
   const { directory, git } = await createMergeRepository(environment.home);
   const repositoryId = (await environment.remember(directory)).id;
   const service = environment.routes(RepositoryOperationsApi);
@@ -149,6 +150,28 @@ describe("Starting a merge", () => {
     });
     expect(await f.status()).toBe("M file.txt");
   });
+
+  it.each([
+    ["merge", "Committed"],
+    ["squash", "Staged"],
+  ] as const)(
+    "reports a %s Git applied before it stopped as done and one it never ran as a Git failure",
+    async (mode, outcome) => {
+      const applied = await fixture(interruptGit("merge", true));
+      await expect(applied.merge("clean", mode)).resolves.toMatchObject({
+        outcome,
+      });
+
+      const untouched = await fixture(interruptGit("merge", false));
+      const main = await untouched.revParse("HEAD");
+      await expect(untouched.merge("clean", mode)).rejects.toMatchObject({
+        _tag: "RepositoryRejected",
+        reason: "GitFailed",
+      });
+      expect(await untouched.revParse("HEAD")).toBe(main);
+      expect(await untouched.status()).toBe("");
+    },
+  );
 
   it("runs the repository's own merge hooks", async () => {
     const f = await fixture();

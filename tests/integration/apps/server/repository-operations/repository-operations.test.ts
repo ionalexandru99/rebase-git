@@ -8,30 +8,21 @@ import {
   type OperationAction,
   RepositoryOperationsApi,
 } from "#contracts/repository-operations/repository-operations.contract.ts";
-import {
-  type GitCommand,
-  type GitCommandRunner,
-  gitFailed,
-} from "#server/adapters/local-git/git-commands.ts";
+import type { GitCommandRunner } from "#server/adapters/local-git/git-commands.ts";
 import { createDivergedRepository, startConflict } from "#tests-support/git.ts";
-import { openTestEnvironment } from "#tests-support/server.ts";
+import { interruptGit, openTestEnvironment } from "#tests-support/server.ts";
 
 const exec = promisify(execFile);
 afterEach(() => {
   vi.unstubAllEnvs();
 });
 
-type GitIntercept = (
-  runner: GitCommandRunner,
-  command: GitCommand,
-) => ReturnType<GitCommandRunner["run"]> | undefined;
-
 async function fixture() {
-  let intercept: GitIntercept | undefined;
+  let wrap: ((runner: GitCommandRunner) => GitCommandRunner) | undefined;
   const environment = await openTestEnvironment({
     git: (runner) => ({
       ...runner,
-      run: (command) => intercept?.(runner, command) ?? runner.run(command),
+      run: (command) => (wrap?.(runner) ?? runner).run(command),
     }),
   });
   const { directory, git } = await createDivergedRepository(environment.home);
@@ -50,8 +41,8 @@ async function fixture() {
     scope,
     read,
     execute,
-    interceptGit: (next: GitIntercept) => {
-      intercept = next;
+    interruptGit: (command: string, applied: boolean) => {
+      wrap = interruptGit(command, applied);
     },
   };
 }
@@ -213,7 +204,7 @@ describe("Git operation recovery", () => {
     );
   });
 
-  it("reports real Git locks, hook failures and uncertain process results", async () => {
+  it("reports real Git locks and hook failures", async () => {
     const f = await fixture();
     await startConflict(f.git, "merge");
     await writeFile(join(f.directory, "file.txt"), "resolved\n");
@@ -237,17 +228,21 @@ describe("Git operation recovery", () => {
       reason: "HookFailed",
     });
     expect((await f.read()).kind).toBe("merge");
-    await rm(hook);
-    f.interceptGit((runner, command) =>
-      command.arguments.includes("--continue")
-        ? runner
-            .run(command)
-            .pipe(Effect.andThen(Effect.fail(gitFailed("Timeout"))))
-        : undefined,
-    );
+  });
+
+  it("reports a continue Git finished before it stopped as done and one it never ran as a Git failure", async () => {
+    const f = await fixture();
+    await startConflict(f.git, "merge");
+    await writeFile(join(f.directory, "file.txt"), "resolved\n");
+    await f.git("add", ".");
+    f.interruptGit("merge --continue", false);
     await expect(f.execute("continue")).rejects.toMatchObject({
-      reason: "Uncertain",
+      _tag: "RepositoryRejected",
+      reason: "GitFailed",
     });
-    expect((await f.read()).kind).toBe("idle");
+    expect((await f.read()).kind).toBe("merge");
+
+    f.interruptGit("merge --continue", true);
+    expect((await f.execute("continue")).kind).toBe("idle");
   });
 });

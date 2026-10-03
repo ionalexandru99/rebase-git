@@ -160,7 +160,6 @@ export const OperationFailure = Schema.TaggedStruct("OperationFailed", {
     "Incompatible",
     "HookFailed",
     "GitRejected",
-    "Uncertain",
     "NotFastForward",
     "Unrelated",
     "WouldOverwrite",

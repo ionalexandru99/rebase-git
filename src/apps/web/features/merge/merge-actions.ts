@@ -182,8 +182,6 @@ function mergeFailureMessages(
           return `${source} has no history in common with ${branch}.`;
         case "Stale":
           return `${source} or ${branch} moved.`;
-        case "Uncertain":
-          return "The merge may not have finished. Check the graph.";
         default:
           return gitMessage(detail);
       }

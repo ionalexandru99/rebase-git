@@ -186,6 +186,5 @@ const pullFailureMessages: FailureMessages<
       ? "No upstream branch."
       : "The remote branch was deleted.",
   UpstreamMoved: () => "The remote branch moved.",
-  PullUncertain: () => "Pull may not have finished.",
   BranchMissing: () => "The branch no longer exists.",
 };
