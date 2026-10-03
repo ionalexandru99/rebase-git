@@ -227,6 +227,7 @@ describe("working changes", () => {
       exact: true,
     });
     await expect.element(row).toHaveTextContent("Button.tsx← legacy/");
+    await expect.element(row).toHaveAccessibleDescription("Renamed");
     const next = page.getByRole("button", {
       name: "Staged src/ui/Card.tsx",
       exact: true,

@@ -1,6 +1,7 @@
 import { execFile } from "node:child_process";
 import {
   access,
+  chmod,
   mkdir,
   mkdtemp,
   readdir,
@@ -93,6 +94,24 @@ async function fixture(
 }
 
 describe("working changes through Git", () => {
+  it.skipIf(process.platform === "win32")(
+    "lists an unreadable untracked file without a line count",
+    async () => {
+      const f = await fixture();
+      const locked = join(f.directory, "locked.txt");
+      await writeFile(locked, "secret\n");
+      await chmod(locked, 0o000);
+      expect((await f.read()).unstaged).toEqual([
+        {
+          path: "locked.txt",
+          previousPath: null,
+          status: "?",
+          lines: null,
+        },
+      ]);
+      await chmod(locked, 0o644);
+    },
+  );
   it("counts the lines each changed file adds and removes", async () => {
     const f = await fixture();
     await writeFile(join(f.directory, "file.txt"), "one\nTWO\nthree\nfour\n");

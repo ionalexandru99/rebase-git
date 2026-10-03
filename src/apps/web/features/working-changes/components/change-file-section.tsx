@@ -188,6 +188,11 @@ export function ChangeFileSection({
               aria-label={`${isFolder ? "Folder" : label} ${row.key}${previousPath ? ` renamed from ${previousPath}` : ""}`}
               aria-expanded={isFolder ? !collapsed.has(row.key) : undefined}
               aria-pressed={row.paths.every((path) => checked.has(path))}
+              aria-describedby={
+                status !== undefined && status !== "U"
+                  ? statusId(section, row.key)
+                  : undefined
+              }
               onContextMenu={() => {
                 if (row.paths.every((path) => checked.has(path))) return;
                 anchor.current = row.key;
@@ -264,7 +269,9 @@ export function ChangeFileSection({
                 </span>
               )}
               {status !== undefined && status !== "U" ? (
-                <span className="sr-only">{statusLabels[status]}</span>
+                <span id={statusId(section, row.key)} className="sr-only">
+                  {statusLabels[status]}
+                </span>
               ) : null}
             </button>
             {row.file ? (
@@ -317,6 +324,10 @@ function LineCounts({ lines }: { readonly lines: ChangedFile["lines"] }) {
       ) : null}
     </span>
   );
+}
+
+function statusId(section: ChangeSection, path: string) {
+  return `change-status-${section}-${encodeURIComponent(path)}`;
 }
 
 function fileName(path: string) {

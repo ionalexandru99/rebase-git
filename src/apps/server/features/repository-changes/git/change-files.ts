@@ -94,8 +94,8 @@ export function worktreeLineCounts(
         const target = join(directory, path);
         const info = await lstat(target).catch(() => null);
         if (!info?.isFile() || info.size > previewByteLimit) return null;
-        const content = await readFile(target);
-        if (content.includes(0)) return null;
+        const content = await readFile(target).catch(() => null);
+        if (content === null || content.includes(0)) return null;
         let added = content.length > 0 && content.at(-1) !== 10 ? 1 : 0;
         for (const byte of content) if (byte === 10) added++;
         return { added, removed: 0 };
