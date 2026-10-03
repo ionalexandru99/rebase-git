@@ -1,10 +1,14 @@
-import { useVirtualizer } from "@tanstack/react-virtual";
 import {
-  type CSSProperties,
+  useVirtualizer,
+  type VirtualItem,
+  type Virtualizer,
+} from "@tanstack/react-virtual";
+import {
   type JSX,
   type KeyboardEvent,
   type ReactNode,
   type Ref,
+  type RefObject,
   useEffect,
   useLayoutEffect,
   useMemo,
@@ -17,26 +21,18 @@ import {
   estimateItemHeight,
 } from "#web/features/branches-sidebar/branches-sidebar-state.ts";
 
-export interface ItemPlacement {
-  readonly index: number;
-  readonly position: CSSProperties;
-  readonly size: number;
-  readonly measure: (element: Element | null) => void;
-}
+type RenderItem = (item: BranchesSidebarItem) => ReactNode;
 
-type RenderItem = (
-  item: BranchesSidebarItem,
-  placement: ItemPlacement,
-) => ReactNode;
+interface RegionLayout {
+  readonly items: readonly BranchesSidebarItem[];
+  readonly measurements: readonly VirtualItem[];
+  readonly nodes: ReadonlyMap<string, HTMLElement>;
+}
 
 const overscanRows = 12;
 const regionPadding = 8;
-const pinnedPlacement: ItemPlacement = {
-  index: 0,
-  position: {},
-  size: 32,
-  measure: () => undefined,
-};
+const motionTiming = { duration: 150, easing: "ease-out" };
+const maxFadedRows = 40;
 
 export function DockedTree({
   activeRowId,
@@ -77,13 +73,11 @@ export function DockedTree({
           className={`flex flex-1 basis-0 flex-col ${local.length > 0 && docked.length > 0 ? "min-h-[40%]" : "min-h-8"}`}
         >
           {header === undefined ? null : (
-            <div className="relative mx-2 h-8 shrink-0">
-              {renderItem(header, pinnedPlacement)}
-            </div>
+            <div className="mx-2 shrink-0">{renderItem(header)}</div>
           )}
           <VirtualRegion
             activeRowId={activeRowId}
-            className="min-h-0 flex-1"
+            fill
             items={local}
             padding={0}
             renderItem={renderItem}
@@ -93,7 +87,7 @@ export function DockedTree({
       {docked.length === 0 ? null : (
         <VirtualRegion
           activeRowId={activeRowId}
-          className={top ? "min-h-0" : "min-h-0 flex-1"}
+          fill={!top}
           items={docked}
           padding={regionPadding}
           renderItem={renderItem}
@@ -105,18 +99,19 @@ export function DockedTree({
 
 function VirtualRegion({
   activeRowId,
-  className,
+  fill,
   items,
   padding,
   renderItem,
 }: {
   readonly activeRowId: string | undefined;
-  readonly className: string;
+  readonly fill: boolean;
   readonly items: readonly BranchesSidebarItem[];
   readonly padding: number;
   readonly renderItem: RenderItem;
 }) {
   const scrollRef = useRef<HTMLDivElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
   const virtualizer = useVirtualizer({
     count: items.length,
     estimateSize: (index) => estimateItemHeight(items[index]),
@@ -129,6 +124,7 @@ function VirtualRegion({
   useLayoutEffect(() => {
     if (items.length > 0) virtualizer.measure();
   }, [items, virtualizer]);
+  useRowMotion(listRef, items, virtualizer);
 
   const draftIndex = items.findIndex(
     (item) => item.kind === "draft" || item.kind === "stash-draft",
@@ -143,28 +139,122 @@ function VirtualRegion({
     if (index >= 0) virtualizer.scrollToIndex(index, { align: "auto" });
   }, [activeRowId, items, virtualizer]);
 
+  const height = virtualizer.getTotalSize();
   return (
     <div
-      className={`overflow-x-hidden overflow-y-auto px-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden ${className}`}
+      className={`min-h-0 overflow-x-hidden overflow-y-auto px-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden ${fill ? "flex-1" : "transition-[height] duration-150 ease-out motion-reduce:transition-none"}`}
       ref={scrollRef}
+      style={fill ? undefined : { height }}
       tabIndex={-1}
     >
-      <div
-        className="relative w-full"
-        style={{ height: virtualizer.getTotalSize() }}
-      >
+      <div className="relative w-full" ref={listRef} style={{ height }}>
         {virtualizer.getVirtualItems().map((virtualItem) => {
           const item = items[virtualItem.index];
-          return item === undefined
-            ? null
-            : renderItem(item, {
-                index: virtualItem.index,
-                position: { transform: `translateY(${virtualItem.start}px)` },
-                size: virtualItem.size,
-                measure: virtualizer.measureElement,
-              });
+          return item === undefined ? null : (
+            <div
+              className="absolute top-0 left-0 w-full bg-sidebar"
+              data-index={virtualItem.index}
+              key={item.id}
+              ref={virtualizer.measureElement}
+              style={{ transform: `translateY(${virtualItem.start}px)` }}
+            >
+              {renderItem(item)}
+            </div>
+          );
         })}
       </div>
     </div>
   );
+}
+
+function useRowMotion(
+  listRef: RefObject<HTMLDivElement | null>,
+  items: readonly BranchesSidebarItem[],
+  virtualizer: Virtualizer<HTMLDivElement, Element>,
+) {
+  const previous = useRef<RegionLayout>(undefined);
+  useLayoutEffect(() => {
+    const list = listRef.current;
+    if (list === null) return;
+    const before = previous.current;
+    const after = {
+      items,
+      measurements: virtualizer.measurementsCache,
+      nodes: mountedRows(list, items),
+    };
+    previous.current = after;
+    if (
+      before !== undefined &&
+      before.items !== items &&
+      !matchMedia("(prefers-reduced-motion: reduce)").matches
+    )
+      animateRows(list, before, after);
+  });
+}
+
+function mountedRows(
+  list: HTMLElement,
+  items: readonly BranchesSidebarItem[],
+): Map<string, HTMLElement> {
+  return new Map(
+    Array.from(list.children).flatMap((node) => {
+      const item =
+        node instanceof HTMLElement
+          ? items[Number(node.dataset.index)]
+          : undefined;
+      return item === undefined ? [] : [[item.id, node as HTMLElement]];
+    }),
+  );
+}
+
+function animateRows(
+  list: HTMLElement,
+  before: RegionLayout,
+  after: RegionLayout,
+) {
+  const starts = new Map(
+    before.measurements.map(({ key, start }) => [key, start]),
+  );
+  const remaining = new Set(after.items.map(({ id }) => id));
+  const exiting = [...before.nodes].filter(([id]) => !remaining.has(id));
+  const entering = [...after.nodes].filter(([id]) => !starts.has(id));
+  if (exiting.length + entering.length > maxFadedRows) return;
+  for (const [, node] of exiting) fadeOut(list, node);
+  for (const [, node] of entering)
+    node.animate([{ opacity: 0 }, { opacity: 1 }], motionTiming);
+  for (const [id, node] of after.nodes) {
+    const from =
+      node.getAnimations().length > 0 ? visualTop(node) : starts.get(id);
+    const to = after.measurements[Number(node.dataset.index)]?.start;
+    if (from === undefined || to === undefined || from === to) continue;
+    node.animate(
+      [
+        { transform: `translateY(${from}px)` },
+        { transform: `translateY(${to}px)` },
+      ],
+      motionTiming,
+    );
+  }
+}
+
+function fadeOut(list: HTMLElement, node: HTMLElement) {
+  const copy = node.cloneNode(true) as HTMLElement;
+  for (const element of [
+    copy,
+    ...copy.querySelectorAll("[id], [data-index]"),
+  ]) {
+    element.removeAttribute("id");
+    element.removeAttribute("data-index");
+  }
+  copy.setAttribute("aria-hidden", "true");
+  copy.inert = true;
+  copy.style.pointerEvents = "none";
+  list.prepend(copy);
+  copy
+    .animate([{ opacity: 1 }, { opacity: 0 }], motionTiming)
+    .addEventListener("finish", () => copy.remove(), { once: true });
+}
+
+function visualTop(node: HTMLElement): number {
+  return new DOMMatrixReadOnly(getComputedStyle(node).transform).m42;
 }

@@ -10,7 +10,7 @@ import {
   IconStack2,
   IconTag,
 } from "@tabler/icons-react";
-import { type CSSProperties, type JSX, useRef } from "react";
+import { type JSX, useRef } from "react";
 import type { PullRequest } from "#contracts/pull-requests/pull-requests.contract.ts";
 import type { BranchUpstream } from "#contracts/repository-refs/repository-refs.contract.ts";
 import { ActionMenuItems, runAction } from "#web/components/ui/action-menu.tsx";
@@ -53,13 +53,11 @@ export function SectionRow({
   onActivate,
   onToggle,
   row,
-  style,
 }: {
   readonly active: boolean;
   readonly onActivate: () => void;
   readonly onToggle: () => void;
   readonly row: BranchesSidebarSectionRow | BranchesSidebarFolderRow;
-  readonly style: CSSProperties;
 }) {
   const folder = row.kind === "folder";
   const look = folder ? undefined : sectionLooks[row.scope];
@@ -75,7 +73,7 @@ export function SectionRow({
       aria-level={row.level}
       aria-posinset={row.position}
       aria-setsize={row.setSize}
-      className={`absolute top-0 left-0 flex w-full cursor-default items-center rounded-md text-left outline-none select-none ${folder ? "gap-1.5 text-[.81rem] text-sidebar-foreground hover:text-sidebar-accent-foreground" : `gap-2 px-1.5 text-[.8rem] hover:bg-sidebar-accent/50 ${look?.className ?? ""}`} ${active ? "bg-sidebar-accent/75" : ""}`}
+      className={`relative flex h-8 w-full cursor-default items-center rounded-md text-left outline-none select-none ${folder ? "gap-1.5 text-[.81rem] text-sidebar-foreground hover:text-sidebar-accent-foreground" : `gap-2 px-1.5 text-[.8rem] hover:bg-sidebar-accent/50 ${look?.className ?? ""}`} ${active ? "bg-sidebar-accent/75" : ""}`}
       id={rowElementId(row.id)}
       onClick={() => {
         onActivate();
@@ -84,8 +82,8 @@ export function SectionRow({
       role="treeitem"
       style={
         folder
-          ? { ...style, paddingLeft: 6 + Math.max(0, row.level - 2) * 18 }
-          : style
+          ? { paddingLeft: 6 + Math.max(0, row.level - 2) * 18 }
+          : undefined
       }
       tabIndex={-1}
       type="button"
@@ -94,7 +92,7 @@ export function SectionRow({
         <>
           <IconChevronDown
             aria-hidden="true"
-            className={`size-3.5 shrink-0 ${row.expanded ? "" : "-rotate-90"}`}
+            className={`size-3.5 shrink-0 transition-transform duration-150 ease-out motion-reduce:transition-none ${row.expanded ? "" : "-rotate-90"}`}
           />
           <Icon aria-hidden="true" className="size-3.5 shrink-0" />
           <span className="min-w-0 truncate">{row.label}/</span>
@@ -112,7 +110,7 @@ export function SectionRow({
           />
           <IconChevronDown
             aria-hidden="true"
-            className={`size-3.5 shrink-0 ${row.expanded ? "rotate-180" : ""}`}
+            className={`size-3.5 shrink-0 transition-transform duration-150 ease-out motion-reduce:transition-none ${row.expanded ? "rotate-180" : ""}`}
           />
         </>
       )}
@@ -130,7 +128,6 @@ export function RefRow({
   pullRequests,
   row,
   selectedInHistory,
-  style,
 }: {
   readonly actions: readonly RefAction[];
   readonly active: boolean;
@@ -141,7 +138,6 @@ export function RefRow({
   readonly pullRequests: readonly PullRequest[];
   readonly row: BranchesSidebarRefRow;
   readonly selectedInHistory: boolean;
-  readonly style: CSSProperties;
 }) {
   const acted = useRef(false);
   return (
@@ -155,8 +151,7 @@ export function RefRow({
           card,
           { row, pullRequests },
           <div
-            className={`group absolute top-0 left-0 flex w-full cursor-default items-center rounded-md text-[.85rem] outline-none select-none hover:bg-sidebar-accent/75 hover:text-sidebar-accent-foreground ${row.current ? "font-medium text-sidebar-accent-foreground" : "text-sidebar-foreground"} ${active || selected ? "bg-sidebar-accent" : ""}`}
-            style={style}
+            className={`group relative flex h-8 w-full cursor-default items-center rounded-md text-[.85rem] outline-none select-none hover:bg-sidebar-accent/75 hover:text-sidebar-accent-foreground ${row.current ? "font-medium text-sidebar-accent-foreground" : "text-sidebar-foreground"} ${active || selected ? "bg-sidebar-accent" : ""}`}
           >
             <button
               aria-level={row.level}

@@ -48,14 +48,14 @@ export function BranchCard({
           <PreviewCard.Portal>
             <PreviewCard.Positioner
               align="start"
-              className="isolate z-100"
+              className="isolate z-100 transition-[top,left,right,bottom,transform] duration-150 ease-out data-instant:transition-none motion-reduce:transition-none"
               side="right"
               sideOffset={16}
             >
               <PreviewCard.Popup
                 aria-label={payload.row.name}
                 role="group"
-                className="w-[23rem] max-w-(--available-width) rounded-lg border border-border bg-popover px-3.5 py-3 text-popover-foreground shadow-[0_.75rem_2.5rem_rgb(0_0_0/45%)] outline-none"
+                className="w-[23rem] max-w-(--available-width) origin-(--transform-origin) rounded-lg border border-border bg-popover px-3.5 py-3 text-popover-foreground shadow-[0_.75rem_2.5rem_rgb(0_0_0/45%)] outline-none transition-[scale,opacity] duration-150 ease-out data-ending-style:scale-98 data-ending-style:opacity-0 data-starting-style:scale-98 data-starting-style:opacity-0 motion-reduce:transition-none"
               >
                 <BranchCardBody
                   branch={payload}

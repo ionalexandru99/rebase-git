@@ -48,10 +48,7 @@ import {
   stashesSectionId,
   toggleSection,
 } from "#web/features/branches-sidebar/branches-sidebar-state.ts";
-import {
-  DockedTree,
-  type ItemPlacement,
-} from "#web/features/branches-sidebar/docked-tree.tsx";
+import { DockedTree } from "#web/features/branches-sidebar/docked-tree.tsx";
 import { SidebarStatus } from "#web/features/branches-sidebar/sidebar-status.tsx";
 import {
   BranchesSidebarFilter,
@@ -451,60 +448,42 @@ export function BranchesSidebar({
     }
   };
 
-  const renderItem = (
-    item: BranchesSidebarItem,
-    { index, measure, position, size }: ItemPlacement,
-  ) => {
-    const measured = (children: JSX.Element) => (
-      <div
-        className="absolute top-0 left-0 w-full"
-        data-index={index}
-        key={item.id}
-        ref={measure}
-        style={position}
-      >
-        {children}
-      </div>
-    );
+  const renderItem = (item: BranchesSidebarItem) => {
     if (item.kind === "stash-draft")
-      return stashDraft.selection === undefined
-        ? null
-        : measured(
-            <StashNameField
-              commands={stashCommands}
-              initialName={`WIP on ${
-                (refs === undefined
-                  ? undefined
-                  : activeHead(refs, activeWorktreePath)?.branch) ??
-                "(no branch)"
-              }`}
-              onDone={() => {
-                stashDraft.cancel();
-                focusTree();
-              }}
-              selection={stashDraft.selection}
-            />,
-          );
+      return stashDraft.selection === undefined ? null : (
+        <StashNameField
+          commands={stashCommands}
+          initialName={`WIP on ${
+            (refs === undefined
+              ? undefined
+              : activeHead(refs, activeWorktreePath)?.branch) ?? "(no branch)"
+          }`}
+          onDone={() => {
+            stashDraft.cancel();
+            focusTree();
+          }}
+          selection={stashDraft.selection}
+        />
+      );
     if (
       item.kind === "draft" ||
       (edit?.kind === "rename" && edit.rowId === item.id)
     )
-      return measured(
+      return (
         <RefEditField
           editing={editing}
           level={item.kind === "row" ? item.row.level : 2}
           refs={refs}
-        />,
+        />
       );
     if (item.kind === "details") {
       const tag = refs?.tags.find(({ name }) => name === item.row.name);
-      return tag === undefined
-        ? null
-        : measured(<TagDetails level={item.row.level} tag={tag} />);
+      return tag === undefined ? null : (
+        <TagDetails level={item.row.level} tag={tag} />
+      );
     }
     if (item.kind !== "row") return null;
     const row = item.row;
-    const style = { ...position, height: size };
     if (row.kind === "stash")
       return (
         <StashRow
@@ -517,7 +496,6 @@ export function BranchesSidebar({
           position={row.position}
           setSize={row.setSize}
           stash={row.stash}
-          style={style}
         />
       );
     if (row.kind !== "ref")
@@ -528,7 +506,6 @@ export function BranchesSidebar({
           onActivate={() => setActiveRowId(row.id)}
           onToggle={() => activateRow(row)}
           row={row}
-          style={style}
         />
       );
     return (
@@ -563,7 +540,6 @@ export function BranchesSidebar({
         selectedInHistory={selectedHistoryRefKeys.has(
           historyRefKey(row.target),
         )}
-        style={style}
       />
     );
   };
