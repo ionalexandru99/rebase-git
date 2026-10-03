@@ -128,21 +128,19 @@ describe("branches sidebar state", () => {
       "section:remote:origin",
     ]);
     expect(rows[3]).toMatchObject({ count: 1, scope: "settled" });
-    expect(
-      buildBranchesSidebarRows(
-        refs,
-        mainPath,
-        defaultExpandedSections,
-        "",
-        "local",
-      ).map((row) => row.id),
-    ).toEqual([
+    const localRows = (expanded: ReadonlySet<string>) =>
+      buildBranchesSidebarRows(refs, mainPath, expanded, "", "local").map(
+        (row) => row.id,
+      );
+    expect(localRows(defaultExpandedSections)).toEqual([
       "section:branches",
       "ref:branches:main",
       "ref:branches:topic",
       "section:settled",
-      "ref:settled:feature",
     ]);
+    expect(
+      localRows(toggleSection(defaultExpandedSections, "settled")).slice(3),
+    ).toEqual(["section:settled", "ref:settled:feature"]);
   });
 
   it("keeps the active branch ahead of branches in other worktrees", () => {
