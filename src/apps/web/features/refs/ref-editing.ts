@@ -45,7 +45,7 @@ export function useRefEditing({
 }: {
   readonly refs: RepositoryRefs | undefined;
   readonly focusTree: () => void;
-  readonly reveal: (kind: RefKind, name: string) => void;
+  readonly reveal: (kind: RefKind, name: string, settled?: boolean) => void;
   readonly onCreated: (branch: string) => void;
   readonly onRenamed: (rename: {
     readonly name: string;
@@ -78,9 +78,9 @@ export function useRefEditing({
     return naming;
   };
 
-  const finish = (kind: RefKind, name: string) => {
+  const finish = (kind: RefKind, name: string, settled?: boolean) => {
     setEdit(undefined);
-    reveal(kind, name);
+    reveal(kind, name, settled);
   };
 
   const create = async (name: string, message?: string) => {
@@ -117,7 +117,7 @@ export function useRefEditing({
 
   const rename = async (newName: string) => {
     if (!renameBranch.canRun || edit?.kind !== "rename") return undefined;
-    const { name, target } = edit.branch;
+    const { name, settled, target } = edit.branch;
     if (newName !== name) {
       const renamed = await renameBranch.run({
         ...(target === undefined ? {} : { expectedTarget: target }),
@@ -128,7 +128,7 @@ export function useRefEditing({
         return refused("renameBranch", newName, renamed);
       onRenamed({ name, newName });
     }
-    finish("branch", newName);
+    finish("branch", newName, settled !== undefined);
     return undefined;
   };
 

@@ -75,6 +75,7 @@ export type RefAction = Action<
   | "newBranch"
   | "newWorktree"
   | "rename"
+  | "settle"
   | "delete"
   | "deleteLocal"
   | `deleteOn:${string}`
@@ -107,6 +108,9 @@ export interface RefActionHandlers {
     | { readonly pulling: boolean; readonly run: (branch: string) => void }
     | undefined;
   readonly pushTags: TagPushHandler | undefined;
+  readonly settle?:
+    | ((names: readonly string[], settled: boolean) => void)
+    | undefined;
   readonly editing: Pick<RefEditing, "draft" | "startRename"> & {
     readonly deletion: Pick<RefEditing["deletion"], "request">;
   };
@@ -130,6 +134,7 @@ export function refActions(
     pushTags,
     showReflog,
     pullRequests,
+    settle,
     editing,
   }: RefActionHandlers,
 ): readonly RefAction[] {
@@ -307,6 +312,7 @@ export function refActions(
       keys: ["F2"],
       run: () => editing.startRename(branch, row.id),
     }),
+    ...settleActions([branch], readOnly, settle),
     ...branchDeleteMenu([branch], refs, { checkedOut, readOnly }, editing),
   ];
 }
@@ -315,7 +321,7 @@ export function selectedBranchActions(
   names: readonly string[],
   refs: RepositoryRefs,
   { writable }: Pick<RefActionAccess, "writable">,
-  editing: RefActionHandlers["editing"],
+  { editing, settle }: Pick<RefActionHandlers, "editing" | "settle">,
 ): readonly RefAction[] {
   const readOnly = writable ? undefined : "Read only";
   const selected = new Set(names);
@@ -325,7 +331,33 @@ export function selectedBranchActions(
     (branches.some(({ worktreePath }) => worktreePath !== undefined)
       ? "Checked out"
       : undefined);
-  return branchDeleteMenu(branches, refs, { checkedOut, readOnly }, editing);
+  return [
+    ...settleActions(branches, readOnly, settle),
+    ...branchDeleteMenu(branches, refs, { checkedOut, readOnly }, editing),
+  ];
+}
+
+function settleActions(
+  branches: readonly LocalBranch[],
+  readOnly: string | undefined,
+  settle: RefActionHandlers["settle"],
+): readonly RefAction[] {
+  if (settle === undefined || branches.length === 0) return [];
+  const active = branches.filter((branch) => branch.settled === undefined);
+  const settled = active.length === 0;
+  return [
+    action({
+      id: "settle",
+      label: settled ? "Unsettle" : "Settle",
+      group: "delete",
+      reason: readOnly,
+      run: () =>
+        settle(
+          (settled ? branches : active).map(({ name }) => name),
+          !settled,
+        ),
+    }),
+  ];
 }
 
 function branchDeleteMenu(

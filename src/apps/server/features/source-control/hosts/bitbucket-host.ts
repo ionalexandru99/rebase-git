@@ -13,6 +13,7 @@ import { remoteLocation } from "#server/features/repository-refs/git/read-reposi
 import {
   eachHead,
   type GitHost,
+  type HostedPullRequest,
   type HostResponse,
   hostGet,
   type PullRequestsByHead,
@@ -329,7 +330,7 @@ function bitbucketPullRequest(
   repository: BitbucketRepository,
   node: PullRequestNode,
   checks: PullRequest["checks"],
-): PullRequest {
+): HostedPullRequest {
   return pullRequest(
     {
       kind: "PullRequest",
@@ -346,6 +347,7 @@ function bitbucketPullRequest(
             : "Closed",
     },
     checks,
+    node.source.commit?.hash,
   );
 }
 

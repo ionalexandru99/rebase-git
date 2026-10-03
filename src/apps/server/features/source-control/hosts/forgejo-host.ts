@@ -6,6 +6,7 @@ import type {
 import { remoteLocation } from "#server/features/repository-refs/git/read-repository-refs.ts";
 import {
   type GitHost,
+  type HostedPullRequest,
   hostCommandOutput,
   pullRequest,
   signedInTool,
@@ -285,7 +286,7 @@ const decodeStatus = Schema.decodeUnknownEffect(
 function forgejoPullRequest(
   node: PullRequestNode,
   checks: PullRequest["checks"],
-): PullRequest {
+): HostedPullRequest {
   return pullRequest(
     {
       kind: "PullRequest",
@@ -301,6 +302,7 @@ function forgejoPullRequest(
             : "Open",
     },
     checks,
+    node.head.sha,
   );
 }
 

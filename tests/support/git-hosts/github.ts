@@ -7,6 +7,7 @@ interface GitHubPullRequestNode {
   readonly isDraft?: boolean;
   readonly owner?: string;
   readonly checks?: string;
+  readonly head?: string;
 }
 
 export function fakeGitHub(
@@ -39,6 +40,7 @@ export function fakeGitHub(
                 title: `Pull request ${node.number}`,
                 state: node.state ?? "OPEN",
                 isDraft: node.isDraft ?? false,
+                ...(node.head === undefined ? {} : { headRefOid: node.head }),
                 headRepositoryOwner: { login: node.owner ?? variables.owner },
                 commits: {
                   nodes: [

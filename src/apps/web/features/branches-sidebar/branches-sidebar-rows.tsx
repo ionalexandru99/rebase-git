@@ -6,6 +6,7 @@ import {
   IconFolder,
   IconFolderOpen,
   IconGitBranch,
+  IconGitBranchDeleted,
   IconStack2,
   IconTag,
 } from "@tabler/icons-react";
@@ -41,6 +42,7 @@ export function rowElementId(rowId: string): string {
 
 const sectionLooks = {
   local: { Icon: IconGitBranch, className: "text-indigo-300" },
+  settled: { Icon: IconGitBranchDeleted, className: "text-zinc-400" },
   remote: { Icon: IconCloud, className: "text-sky-400" },
   tags: { Icon: IconTag, className: "text-amber-300" },
   stashes: { Icon: IconStack2, className: "text-violet-300" },

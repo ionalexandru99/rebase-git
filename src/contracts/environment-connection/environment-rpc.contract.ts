@@ -1,5 +1,6 @@
 import { Schema } from "effect";
 import { Rpc, type RpcClient, type RpcClientError, RpcGroup } from "effect/rpc";
+import { BranchSettlingApi } from "#contracts/branch-settling/branch-settling.contract.ts";
 import { CommandProgressRpc } from "#contracts/command-progress/command-progress.contract.ts";
 import { CommitInspectionApi } from "#contracts/commit-inspection/commit-inspection.contract.ts";
 import { EnvironmentAuthorizationApi } from "#contracts/environment-authorization/environment-authorization.contract.ts";
@@ -77,6 +78,7 @@ export const EnvironmentRpc = RpcGroup.make(
   ...Object.values(RepositoryReflogApi),
   ...Object.values(RepositoryRefsApi),
   ...Object.values(RepositoryBranchesApi),
+  ...Object.values(BranchSettlingApi),
   ...Object.values(RepositoryTagsApi),
   ...Object.values(RepositoryStashesApi),
   ...Object.values(RepositoryWorktreesApi),

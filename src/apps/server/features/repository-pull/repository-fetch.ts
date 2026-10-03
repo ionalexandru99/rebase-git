@@ -33,14 +33,21 @@ export type RepositoryFetch = Effect.Success<
   ReturnType<typeof acquireRepositoryFetch>
 >;
 
+export type AfterFetch = (
+  directory: string,
+  repositoryIds: readonly string[],
+) => Effect.Effect<void>;
+
 export function acquireRepositoryFetch({
   access,
+  afterFetch,
   coordination,
   events,
   git,
   progress,
 }: {
   readonly access: RepositoryAccess;
+  readonly afterFetch: AfterFetch;
   readonly coordination: RepositoryCoordination;
   readonly events: EnvironmentEventPublisher;
   readonly git: GitCommandRunner;
@@ -113,6 +120,10 @@ export function acquireRepositoryFetch({
               else repository.failure = failure;
               publish(repository);
               yield* schedule(repository);
+              if (failure === undefined)
+                yield* afterFetch(repository.path, [
+                  ...repository.repositoryIds,
+                ]).pipe(Effect.forkIn(scope));
             }).pipe(Semaphore.withPermit(mutex)),
           ),
           Effect.forkIn(scope),

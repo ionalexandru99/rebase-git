@@ -20,6 +20,10 @@ export async function pullRequestsFixture(
   const repositoryId = (await environment.remember(repositoryPath)).id;
   const service = environment.routes(PullRequestsApi);
   return {
+    repositoryId,
+    repositoryPath,
+    events: environment.events,
+    routes: environment.routes,
     sourceControl: environment.routes(SourceControlApi),
     list: () => Effect.runPromise(service.list({ repositoryId })),
     track: async (branch: string, remote: string, head: string) => {
