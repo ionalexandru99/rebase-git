@@ -15,7 +15,9 @@ import {
   fastForwardBranch,
   pullBlocked,
 } from "#server/features/repository-pull/fast-forward-branch.ts";
+import { createPullStrategies } from "#server/features/repository-pull/pull-strategy.ts";
 import { acquireRepositoryFetch } from "#server/features/repository-pull/repository-fetch.ts";
+import type { EnvironmentContext } from "#server/persistence/environment-context.ts";
 import {
   canonicalizeWorktrees,
   readWorktrees,
@@ -24,12 +26,18 @@ import type { RepositoryCoordination } from "#server/repository/repository-coord
 
 export function repositoryPullFeature(
   dependencies: RepositoryDependencies & {
+    readonly context: EnvironmentContext;
     readonly events: EnvironmentEventPublisher;
   },
 ) {
   return Effect.gen(function* () {
     const { command } = repositoryRoutes(dependencies);
+    const { events } = dependencies;
     const fetch = yield* acquireRepositoryFetch(dependencies);
+    const strategies = createPullStrategies(
+      dependencies.context,
+      dependencies.access,
+    );
     return {
       routes: [
         route(RepositoryPullApi.fetchStatus, (input) =>
@@ -49,6 +57,27 @@ export function repositoryPullFeature(
             duringOperation: "proceed",
           },
           pullBranch(dependencies.coordination),
+        ),
+        route(RepositoryPullApi.readPullStrategy, () => strategies.server),
+        route(RepositoryPullApi.savePullStrategy, ({ strategy }) =>
+          strategies.saveServer(strategy).pipe(
+            Effect.tap(() => Effect.sync(() => events.publishChanged())),
+            Effect.as(strategy),
+          ),
+        ),
+        route(
+          RepositoryPullApi.readRepositoryPullStrategy,
+          ({ repositoryId }) => strategies.repository(repositoryId),
+        ),
+        route(
+          RepositoryPullApi.saveRepositoryPullStrategy,
+          ({ repositoryId, strategy }) =>
+            strategies.saveRepository(repositoryId, strategy).pipe(
+              Effect.tap((repositoryIds) =>
+                Effect.sync(() => events.publishChanged(repositoryIds)),
+              ),
+              Effect.andThen(strategies.repository(repositoryId)),
+            ),
         ),
       ],
     } satisfies EnvironmentFeature;

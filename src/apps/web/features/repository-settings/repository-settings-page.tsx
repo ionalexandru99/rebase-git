@@ -11,6 +11,7 @@ import { RepositoryIdentityRow } from "#web/features/git-identity/git-identity.t
 import { useErrorToast } from "#web/features/notifications/notifications.tsx";
 import { forgetRepositoryRefs } from "#web/features/refs/repository-refs.ts";
 import { RepositoryFetchSettings } from "#web/features/remote-sync/fetch-settings.tsx";
+import { RepositoryPullStrategyRow } from "#web/features/remote-sync/pull-strategy.tsx";
 import {
   catalogWithout,
   useCatalogRepository,
@@ -139,6 +140,7 @@ function RepositoryHistorySettings({
           path={path}
           canConfigure={canConfigure}
         />
+        <RepositoryPullStrategyRow repositoryId={repositoryId} />
       </SettingsSection>
       <SettingsSection title="History storage · This browser">
         <RepositoryCacheSettings

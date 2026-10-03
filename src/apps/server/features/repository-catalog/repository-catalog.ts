@@ -3,7 +3,7 @@ import { realpath } from "node:fs";
 import { stat } from "node:fs/promises";
 import { basename, isAbsolute } from "node:path";
 import { promisify } from "node:util";
-import { and, asc, countDistinct, eq, ne, sql } from "drizzle-orm";
+import { and, asc, countDistinct, eq, ne, notExists, sql } from "drizzle-orm";
 import { Effect } from "effect";
 import { repositoryRejected } from "#contracts/git/git-failures.contract.ts";
 import {
@@ -20,7 +20,10 @@ import {
   runRepositoryGit,
 } from "#server/adapters/local-git/git-commands.ts";
 import type { EnvironmentContext } from "#server/persistence/environment-context.ts";
-import { repositoryCatalogTable } from "#server/persistence/environment-state.schema.ts";
+import {
+  repositoryCatalogTable,
+  repositorySettingTable,
+} from "#server/persistence/environment-state.schema.ts";
 
 const realpathNative = promisify(realpath.native);
 
@@ -241,11 +244,33 @@ function recordRepositoryOpened(
 function removeRepository(context: EnvironmentContext, repositoryId: string) {
   return context
     .write("Could not remove repository", async (database) => {
-      return database
+      const removed = await database
         .delete(repositoryCatalogTable)
         .where(eq(repositoryCatalogTable.id, repositoryId))
-        .returning({ repositoryId: repositoryCatalogTable.id })
+        .returning({
+          id: repositoryCatalogTable.id,
+          logicalRepositoryId: repositoryCatalogTable.logicalRepositoryId,
+        })
         .get();
+      if (removed === undefined) return undefined;
+      const logicalRepositoryId = removed.logicalRepositoryId ?? removed.id;
+      await database.delete(repositorySettingTable).where(
+        and(
+          eq(repositorySettingTable.repositoryId, logicalRepositoryId),
+          notExists(
+            database
+              .select({ id: repositoryCatalogTable.id })
+              .from(repositoryCatalogTable)
+              .where(
+                eq(
+                  sql`coalesce(${repositoryCatalogTable.logicalRepositoryId}, ${repositoryCatalogTable.id})`,
+                  logicalRepositoryId,
+                ),
+              ),
+          ),
+        ),
+      );
+      return { repositoryId: removed.id };
     })
     .pipe(
       Effect.flatMap((removed) =>
