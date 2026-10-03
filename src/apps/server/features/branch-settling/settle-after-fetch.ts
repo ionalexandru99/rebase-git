@@ -123,7 +123,7 @@ function deletionCandidate(
   head: LocalBranchHead | undefined,
   tip: string | undefined,
 ): SettledCandidate[] {
-  if (pullRequests === undefined) return head?.upstream ? [] : [{ name }];
+  if (pullRequests === undefined) return head?.pushed ? [] : [{ name }];
   if (pullRequests.some(({ state }) => state === "Open" || state === "Draft"))
     return [];
   if (tip !== undefined) return [{ name, mergedTip: tip }];
@@ -184,7 +184,7 @@ function isMerged(pullRequests: readonly PullRequest[]) {
 
 interface LocalBranchHead {
   readonly tip: string;
-  readonly upstream: boolean;
+  readonly pushed: boolean;
 }
 
 function readLocalBranches(git: GitCommandRunner, directory: string) {
@@ -193,23 +193,43 @@ function readLocalBranches(git: GitCommandRunner, directory: string) {
     directory,
     [
       "for-each-ref",
-      "--format=%(refname:lstrip=2)%00%(objectname)%00%(upstream)",
+      "--format=%(refname)%00%(objectname)%00%(upstream)",
       "refs/heads",
+      "refs/remotes",
     ],
     { maxOutputBytes: 16 * 1_048_576 },
   ).pipe(
-    Effect.map(
-      (output) =>
-        new Map(
-          output
-            .split("\n")
-            .filter((line) => line.length > 0)
-            .map((line): [string, LocalBranchHead] => {
-              const [name = "", tip = "", upstream = ""] = line.split("\0");
-              return [name, { tip, upstream: upstream !== "" }];
-            }),
+    Effect.map((output) => {
+      const refs = output
+        .split("\n")
+        .filter((line) => line.length > 0)
+        .map((line) => {
+          const [ref = "", tip = "", upstream = ""] = line.split("\0");
+          return { ref, tip, upstream };
+        });
+      const remote = remoteBranchNames(
+        refs.flatMap(({ ref }) =>
+          ref.startsWith("refs/remotes/") ? [ref] : [],
         ),
-    ),
+      );
+      return new Map(
+        refs.flatMap(({ ref, tip, upstream }): [string, LocalBranchHead][] => {
+          const name = ref.slice("refs/heads/".length);
+          return ref.startsWith("refs/heads/")
+            ? [[name, { tip, pushed: upstream !== "" || remote.has(name) }]]
+            : [];
+        }),
+      );
+    }),
+  );
+}
+
+function remoteBranchNames(refs: readonly string[]) {
+  return new Set(
+    refs.flatMap((ref) => {
+      const path = ref.split("/").slice(2);
+      return path.slice(1).map((_, index) => path.slice(index + 1).join("/"));
+    }),
   );
 }
 

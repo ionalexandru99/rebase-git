@@ -196,27 +196,27 @@ describe("branch settling", () => {
     ).resolves.toContain(moved.replaceAll("\\", "/"));
   });
 
-  it("keeps settled branches that were pushed when no Git host can list their pull requests", async () => {
+  it("keeps settled branches that were pushed, with or without an upstream, when no Git host can list their pull requests", async () => {
     const f = await settlingFixture(
       fakeGitHub({}).github,
       "git@git.example.test:Octo/rebase.git",
     );
     await fastImport(
       f.repositoryPath,
-      ["pushed", "local"]
+      ["pushed", "sent", "local"]
         .map((branch) => `reset refs/heads/${branch}\nfrom refs/heads/main\n\n`)
         .join(""),
     );
     await appendFile(
       join(f.repositoryPath, ".git", "config"),
-      `${settledConfig("pushed")}[branch "local"]\n\trebaseSettled = 2000-01-01\n`,
+      `${settledConfig("pushed")}[branch "sent"]\n\trebaseSettled = 2000-01-01\n[branch "local"]\n\trebaseSettled = 2000-01-01\n[remote "origin"]\n\tfetch = ^refs/heads/local\n`,
     );
 
     await f.fetch();
 
     await expect
       .poll(f.branches)
-      .toEqual(["elsewhere", "main", "mirrored", "pushed", "topic"]);
+      .toEqual(["elsewhere", "main", "mirrored", "pushed", "sent", "topic"]);
   });
 
   it("stores the settling switch for every client and settles or unsettles the existing branches of a selection by hand", async () => {
