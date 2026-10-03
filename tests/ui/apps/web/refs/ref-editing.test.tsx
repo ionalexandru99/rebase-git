@@ -361,6 +361,50 @@ describe("ref editing", () => {
       });
   });
 
+  it("still asks to delete unmerged branches when a remote refused part of the deletion", async () => {
+    const environment = await refsEnvironment();
+    environment.keepUnmerged("feature/spike", {
+      commits: [{ oid: spike, subject: "Try refs index" }],
+      count: 1,
+    });
+    environment.failRemotesNext({
+      _tag: "BranchMoved",
+      name: "origin/feature/merged",
+    });
+    const screen = await renderBranches(environment);
+    const tree = screen.getByRole("tree", { name: "Branches" });
+    await tree.getByRole("treeitem", { name: "feature/merged" }).click();
+    await tree
+      .getByRole("treeitem", { name: "feature/spike" })
+      .click({ modifiers: ["ControlOrMeta"] });
+    await tree
+      .getByRole("treeitem", { name: "feature/spike" })
+      .click({ button: "right" });
+    await screen.getByRole("menuitem", { name: "Delete" }).click();
+    await screen.getByRole("menuitem", { name: "Both" }).click();
+    await screen
+      .getByRole("alertdialog")
+      .getByRole("button", { name: "Delete", exact: true })
+      .click();
+
+    await expect
+      .element(
+        screen.getByText("origin/feature/merged changed since it was shown."),
+      )
+      .toBeVisible();
+    const warning = screen.getByRole("alertdialog", {
+      name: "Delete feature/spike",
+    });
+    await warning.getByRole("button", { name: "Delete", exact: true }).click();
+    await expect
+      .poll(() => environment.requested)
+      .toHaveBeenLastCalledWith("delete", {
+        ...scope,
+        branches: [{ local: { name: "feature/spike", target: spike } }],
+        force: true,
+      });
+  });
+
   it("opens the branch menu from the keyboard and shows why checked-out branches cannot change", async () => {
     const screen = await renderBranches(await refsEnvironment());
     await screen

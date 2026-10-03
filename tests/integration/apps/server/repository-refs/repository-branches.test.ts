@@ -353,7 +353,7 @@ describe("repository branches", () => {
       git(fixture.repositoryPath, "ls-remote", "--heads", "origin", "shared"),
     ).resolves.not.toBe("");
   });
-  it("deletes a remote batch atomically and reports what earlier batches deleted when a later one fails", async () => {
+  it("deletes every remote branch it can and reports exactly which ones when another one moved", async () => {
     const fixture = await createFixture();
     const origin = join(fixture.root, "origin.git");
     await git(fixture.repositoryPath, "remote", "add", "mirror", origin);
@@ -387,7 +387,10 @@ describe("repository branches", () => {
     );
 
     expect(result).toEqual({
-      deleted: [both],
+      deleted: [
+        both,
+        { remote: { name: "kept", remote: "mirror", target: main } },
+      ],
       unmerged: [],
       failure: { _tag: "BranchMoved", name: "mirror/shared" },
     });
@@ -400,8 +403,8 @@ describe("repository branches", () => {
         "merged",
         "kept",
         "shared",
-      ).then((heads) => heads.split("\n").map((line) => line.split("\t")[1])),
-    ).resolves.toEqual(["refs/heads/kept", "refs/heads/shared"]);
+      ),
+    ).resolves.toMatch(/^\S+\trefs\/heads\/shared$/);
     await expect(
       git(fixture.repositoryPath, "branch", "--list", "merged"),
     ).resolves.toBe("");

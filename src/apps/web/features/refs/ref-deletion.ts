@@ -135,16 +135,14 @@ export function useRefDeletion({
       );
     const now = deletedBranches(among(deleted), refs);
     const restorable = now === undefined ? earlier : [...earlier, ...now];
-    if (failure !== undefined) {
+    if (failure !== undefined)
       errorToast.failure(
         "deleteBranch",
         { _tag: "Rejected", failure },
         messages,
         restorable.length === 0 ? undefined : () => void undo(restorable),
       );
-      return undefined;
-    }
-    if (now !== undefined) {
+    else if (now !== undefined) {
       const [only] = restorable;
       statusToast.success(
         "deleteBranch",

@@ -1,5 +1,8 @@
 import { Array as Arrays, Effect, Result } from "effect";
-import type { RepositoryRejected } from "#contracts/git/git-failures.contract.ts";
+import {
+  type RepositoryRejected,
+  repositoryRejected,
+} from "#contracts/git/git-failures.contract.ts";
 import type {
   BranchCommitSummary,
   BranchDeletion,
@@ -10,10 +13,12 @@ import type {
 } from "#contracts/repository-refs/repository-branches.contract.ts";
 import type { RepositoryWorktree } from "#contracts/repository-refs/repository-refs.contract.ts";
 import {
+  type GitCommandOutput,
   type GitCommandRunner,
   type GitFailed,
   isGitRejection,
   runRepositoryGit,
+  runRepositoryGitOutput,
 } from "#server/adapters/local-git/git-commands.ts";
 import { branchWriteFailed } from "#server/features/repository-refs/git/branches/branch-failures.ts";
 import {
@@ -219,7 +224,9 @@ function deleteRemotes(
         pushDeletes(git, directory, remote, batch),
       );
       if (Result.isFailure(pushed)) return { deleted, failure: pushed.failure };
-      deleted.push(...batch);
+      deleted.push(...pushed.success.deleted);
+      if (pushed.success.failure !== undefined)
+        return { deleted, failure: pushed.success.failure };
     }
     return { deleted };
   });
@@ -240,12 +247,12 @@ function pushDeletes(
   remote: string,
   batch: readonly RemoteTarget[],
 ) {
-  return runRepositoryGit(
+  return runRepositoryGitOutput(
     git,
     directory,
     [
       "push",
-      "--atomic",
+      "--porcelain",
       ...batch.map(
         ({ name, target }) => `--force-with-lease=refs/heads/${name}:${target}`,
       ),
@@ -253,21 +260,45 @@ function pushDeletes(
       "--delete",
       ...batch.map(({ name }) => name),
     ],
-    pushCommand,
+    { ...pushCommand, exitCodes: [0, 1] },
   ).pipe(
-    Effect.mapError(
-      (error): RepositoryBranchesOperationFailure | RepositoryRejected => {
-        const rejected =
-          /\[rejected\].*?(\S+) \((?:stale info|fetch first)\)/.exec(
-            error.detail,
-          )?.[1];
-        const name = `${remote}/${rejected ?? batch[0]?.name ?? ""}`;
-        return isGitRejection(error) && rejected !== undefined
-          ? { _tag: "BranchMoved", name }
-          : branchWriteFailed(error, name);
-      },
+    Effect.mapError((error) =>
+      branchWriteFailed(error, `${remote}/${batch[0]?.name ?? ""}`),
     ),
+    Effect.map((output) => pushedDeletes(batch, output)),
   );
+}
+
+function pushedDeletes(
+  batch: readonly RemoteTarget[],
+  { stderr, stdout }: GitCommandOutput,
+): {
+  readonly deleted: readonly RemoteTarget[];
+  readonly failure?: RepositoryBranchesOperationFailure | RepositoryRejected;
+} {
+  const summaries = new Map(
+    stdout.split("\n").flatMap((line) => {
+      const [flag, refs, summary = ""] = line.split("\t");
+      return refs === undefined
+        ? []
+        : [[refs.slice(refs.lastIndexOf(":") + 1), { flag, summary }] as const];
+    }),
+  );
+  const outcome = (name: string) => summaries.get(branchRef(name));
+  const deleted = batch.filter(({ name }) => outcome(name)?.flag === "-");
+  const rejected = batch.find(({ name }) => outcome(name)?.flag !== "-");
+  if (rejected === undefined) return { deleted };
+  const name = remoteLabel(rejected);
+  const summary = outcome(rejected.name)?.summary;
+  return {
+    deleted,
+    failure: /\((?:stale info|fetch first)\)$/.test(summary ?? "")
+      ? { _tag: "BranchMoved", name }
+      : repositoryRejected(
+          "GitFailed",
+          summary === undefined ? stderr.trim() || name : `${name}: ${summary}`,
+        ),
+  };
 }
 
 function deleteLocals(
