@@ -235,23 +235,18 @@ function IdentityForm({
 }
 
 function IdentityText({ identity }: { readonly identity: GitIdentity }) {
+  const value = [
+    identity.name,
+    identity.email === undefined ? undefined : `<${identity.email}>`,
+  ]
+    .filter((part) => part !== undefined)
+    .join(" ");
   return (
-    <>
-      {identity.name === undefined ? null : (
-        <HiddenText
-          hideLabel={`Hide name ${identity.name}`}
-          showLabel="Show name"
-          value={identity.name}
-        />
-      )}{" "}
-      {identity.email === undefined ? null : (
-        <HiddenText
-          hideLabel={`Hide email ${identity.email}`}
-          showLabel="Show email"
-          value={`<${identity.email}>`}
-        />
-      )}
-    </>
+    <HiddenText
+      hideLabel={`Hide identity ${value}`}
+      showLabel="Show identity"
+      value={value}
+    />
   );
 }
 
