@@ -60,7 +60,7 @@ type AnswerValue<Read extends EnvironmentRoute> =
 
 export interface CommandOptions<Route extends EnvironmentRoute> {
   readonly target?: CommandTarget | undefined;
-  readonly before?: () => Promise<boolean>;
+  readonly before?: (input: RouteInput<Route>) => Promise<boolean>;
   readonly progress?: (percent: number) => void;
   readonly answers?: (
     value: RouteSuccess<Route>,
@@ -115,7 +115,7 @@ export function useCommand<Route extends EnvironmentRoute>(
   const mutation = useMutation<CommandResult<Route>, never, RouteInput<Route>>({
     mutationKey: key,
     mutationFn: async (input) => {
-      const ready = await prepare(before);
+      const ready = await prepare(before, input);
       if (ready !== undefined) return ready;
       const result = await request(
         environment.requests,
@@ -201,11 +201,12 @@ function requestHas(route: EnvironmentRoute, field: string) {
   return request.fields !== undefined && field in request.fields;
 }
 
-async function prepare(
-  before: (() => Promise<boolean>) | undefined,
+async function prepare<Input>(
+  before: ((input: Input) => Promise<boolean>) | undefined,
+  input: Input,
 ): Promise<RequestFailure<never> | undefined> {
   if (before === undefined) return undefined;
-  const ready = await before().catch(() => undefined);
+  const ready = await before(input).catch(() => undefined);
   if (ready === undefined) return { _tag: "Unanswered" };
   return ready ? undefined : { _tag: "Cancelled" };
 }

@@ -3,16 +3,28 @@ import {
   type RepositoryRejected,
   repositoryRejected,
 } from "#contracts/git/git-failures.contract.ts";
+import type { OperationFailure } from "#contracts/repository-operations/repository-operations.contract.ts";
 import type {
   BranchPulled,
+  DivergedPull,
+  PullBranch,
   PullFailure,
+  PullStrategy,
 } from "#contracts/repository-pull/repository-pull.contract.ts";
 import {
   type GitCommandRunner,
   type GitFailed,
   isGitRejection,
   runRepositoryGit,
+  runRepositoryGitOutput,
 } from "#server/adapters/local-git/git-commands.ts";
+import { overwrittenPaths } from "#server/features/repository-operations/operation-outcome.ts";
+import {
+  type Integrated,
+  mergeSource,
+  rebaseOnto,
+} from "#server/features/repository-operations/start-operation.ts";
+import type { RepositoryCoordination } from "#server/repository/repository-coordination.ts";
 
 const pullCommand = { timeoutMilliseconds: 60_000 };
 
@@ -23,34 +35,126 @@ interface TrackedBranch {
   readonly upstream: string;
 }
 
-export function fastForwardBranch(
+export interface PullTarget {
+  readonly directory: string;
+  readonly branch: string;
+  readonly checkedOut: boolean;
+  readonly strategy: PullBranch["strategy"];
+}
+
+export function pullBranch<E>(
   git: GitCommandRunner,
-  directory: string,
-  branch: string,
-  checkedOut: boolean,
-): Effect.Effect<BranchPulled, PullFailure | RepositoryRejected | GitFailed> {
+  coordination: RepositoryCoordination,
+  { directory, branch, checkedOut, strategy }: PullTarget,
+  stored: Effect.Effect<PullStrategy, E>,
+): Effect.Effect<
+  BranchPulled,
+  PullFailure | RepositoryRejected | GitFailed | E
+> {
   return Effect.gen(function* () {
     const tracked = yield* readTrackedBranch(git, directory, branch);
     const upstreamTarget = yield* resolveUpstream(git, directory, tracked);
+    if (strategy !== undefined && strategy.upstream !== upstreamTarget)
+      return yield* Effect.fail<PullFailure>({ _tag: "UpstreamMoved" });
     const { ahead, behind } = yield* countDivergence(
       git,
       directory,
       tracked.target,
       upstreamTarget,
     );
-    if (behind === 0) return { outcome: "UpToDate" } as const;
-    if (ahead > 0)
+    if (behind === 0) return { outcome: "UpToDate", stashKept: false } as const;
+    if (ahead === 0)
+      return {
+        outcome: "FastForwarded",
+        stashKept: yield* Effect.uninterruptible(
+          checkedOut
+            ? mergeFastForward(git, directory, upstreamTarget)
+            : moveBranch(git, directory, tracked, upstreamTarget).pipe(
+                Effect.as(false),
+              ),
+        ),
+      } as const;
+    if (!checkedOut)
+      return yield* Effect.fail(pullBlocked("The branch has diverged."));
+    const kind = strategy?.kind ?? (yield* stored);
+    if (kind === "ask")
       return yield* Effect.fail<PullFailure>({
         _tag: "PullDiverged",
         upstream: tracked.upstream,
+        upstreamCommit: upstreamTarget,
       });
-    yield* Effect.uninterruptible(
-      checkedOut
-        ? mergeFastForward(git, directory, tracked, upstreamTarget)
-        : moveBranch(git, directory, tracked, upstreamTarget),
+    return yield* integrate(
+      git,
+      coordination,
+      directory,
+      kind,
+      tracked,
+      upstreamTarget,
     );
-    return { outcome: "FastForwarded" } as const;
   });
+}
+
+function integrate(
+  git: GitCommandRunner,
+  coordination: RepositoryCoordination,
+  directory: string,
+  kind: DivergedPull,
+  tracked: TrackedBranch,
+  upstreamTarget: string,
+) {
+  const expected = { worktreePath: directory, expectedHead: tracked.target };
+  const upstream = { ref: tracked.upstreamRef, commit: upstreamTarget };
+  const integration: Effect.Effect<
+    Integrated,
+    OperationFailure | RepositoryRejected | GitFailed
+  > =
+    kind === "merge"
+      ? mergeSource(
+          git,
+          coordination,
+          expected,
+          { _tag: "Merge", source: upstream, mode: "merge" },
+          true,
+        )
+      : rebaseOnto(
+          git,
+          coordination,
+          expected,
+          { _tag: "Rebase", onto: upstream, stash: true },
+          false,
+        );
+  return integration.pipe(
+    Effect.map(({ started, autostashConflict }): BranchPulled => {
+      if (started.outcome === "Stopped")
+        return {
+          outcome: "Stopped",
+          worktreePath: directory,
+          operation: started.operation,
+        };
+      return {
+        outcome: kind === "merge" ? "Merged" : "Rebased",
+        stashKept: autostashConflict !== undefined,
+      };
+    }),
+    Effect.mapError((error) =>
+      error._tag === "OperationFailed" ? integrationFailure(error) : error,
+    ),
+  );
+}
+
+function integrationFailure(failure: OperationFailure): PullFailure {
+  switch (failure.reason) {
+    case "Uncertain":
+      return { _tag: "PullUncertain" };
+    case "WouldOverwrite":
+      return { _tag: "PullWouldOverwrite", paths: failure.paths ?? [] };
+    case "Stale":
+      return branchMoved();
+    case "Unrelated":
+      return pullBlocked("The remote branch has no history in common.");
+    default:
+      return pullBlocked(failure.detail);
+  }
 }
 
 function readTrackedBranch(
@@ -133,32 +237,27 @@ function countDivergence(
 function mergeFastForward(
   git: GitCommandRunner,
   directory: string,
-  tracked: TrackedBranch,
   upstreamTarget: string,
 ) {
-  return runRepositoryGit(
+  return runRepositoryGitOutput(
     git,
     directory,
     [
-      "-c",
-      "merge.autoStash=false",
       "merge",
       "--ff-only",
+      "--autostash",
       "--no-stat",
       "--progress",
       upstreamTarget,
     ],
     pullCommand,
   ).pipe(
-    Effect.asVoid,
-    Effect.mapError((error) => mergeFailure(error, tracked)),
+    Effect.map(({ stderr }) => /resulted in conflicts/.test(stderr)),
+    Effect.mapError((error) => mergeFailure(error)),
   );
 }
 
-function mergeFailure(
-  error: GitFailed,
-  tracked: TrackedBranch,
-): PullFailure | RepositoryRejected {
+function mergeFailure(error: GitFailed): PullFailure | RepositoryRejected {
   if (!isGitRejection(error))
     return error.reason === "GitUnavailable"
       ? repositoryRejected("GitFailed", error.detail)
@@ -168,18 +267,8 @@ function mergeFailure(
       _tag: "PullWouldOverwrite",
       paths: overwrittenPaths(error.detail),
     };
-  if (/not possible to fast-forward/i.test(error.detail))
-    return branchMoved(tracked);
+  if (/not possible to fast-forward/i.test(error.detail)) return branchMoved();
   return repositoryRejected("GitFailed", error.detail);
-}
-
-function overwrittenPaths(detail: string) {
-  return detail
-    .split("\n")
-    .filter((line) => line.startsWith("\t"))
-    .map((line) => line.trim())
-    .filter((path) => path.length > 0)
-    .slice(0, 100);
 }
 
 function moveBranch(
@@ -201,18 +290,15 @@ function moveBranch(
     ],
     pullCommand,
   ).pipe(
-    Effect.asVoid,
     Effect.mapError(
       (error): PullFailure =>
-        isGitRejection(error)
-          ? branchMoved(tracked)
-          : { _tag: "PullUncertain" },
+        isGitRejection(error) ? branchMoved() : { _tag: "PullUncertain" },
     ),
   );
 }
 
-function branchMoved(tracked: TrackedBranch) {
-  return pullBlocked(`${tracked.name} changed while pulling`);
+function branchMoved() {
+  return pullBlocked("The branch changed while pulling.");
 }
 
 export function pullBlocked(detail: string): PullFailure {

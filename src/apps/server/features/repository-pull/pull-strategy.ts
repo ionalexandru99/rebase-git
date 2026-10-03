@@ -12,6 +12,8 @@ import {
 } from "#server/persistence/environment-state.schema.ts";
 import type { RepositoryAccess } from "#server/repository/repository-access.ts";
 
+export type PullStrategies = ReturnType<typeof createPullStrategies>;
+
 export function createPullStrategies(
   context: EnvironmentContext,
   access: RepositoryAccess,
@@ -50,6 +52,10 @@ export function createPullStrategies(
 
   return {
     server,
+    effective: (repositoryId: string) =>
+      repository(repositoryId).pipe(
+        Effect.map(({ repository, server }) => repository ?? server),
+      ),
     saveServer: (strategy: PullStrategy) =>
       context.write("Could not save the pull setting", (database) =>
         database

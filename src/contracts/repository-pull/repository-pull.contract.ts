@@ -5,25 +5,46 @@ import {
   route,
 } from "#contracts/environment-connection/environment-route.contract.ts";
 import {
+  ObjectId,
   RepositoryId,
   RepositoryPath,
 } from "#contracts/git/git-values.contract.ts";
+import { RepositoryOperation } from "#contracts/repository-operations/repository-operations.contract.ts";
 
 const RefName = Schema.String.check(
   Schema.isMinLength(1),
   Schema.isMaxLength(1_024),
 );
 
+export const DivergedPull = Schema.Literals(["rebase", "merge"]);
+export type DivergedPull = typeof DivergedPull.Type;
+
 export const PullBranch = Schema.Struct({
   repositoryId: RepositoryId,
   worktreePath: RepositoryPath,
   branch: RefName,
+  strategy: Schema.optionalKey(
+    Schema.Struct({ kind: DivergedPull, upstream: ObjectId }),
+  ),
 });
 export type PullBranch = typeof PullBranch.Type;
 
-export const BranchPulled = Schema.Struct({
-  outcome: Schema.Literals(["UpToDate", "FastForwarded"]),
-});
+export const BranchPulled = Schema.Union([
+  Schema.Struct({
+    outcome: Schema.Literals([
+      "UpToDate",
+      "FastForwarded",
+      "Rebased",
+      "Merged",
+    ]),
+    stashKept: Schema.Boolean,
+  }),
+  Schema.Struct({
+    outcome: Schema.Literal("Stopped"),
+    worktreePath: RepositoryPath,
+    operation: RepositoryOperation,
+  }),
+]);
 export type BranchPulled = typeof BranchPulled.Type;
 
 export const PullFailure = Schema.Union([
@@ -31,7 +52,11 @@ export const PullFailure = Schema.Union([
   Schema.TaggedStruct("UpstreamMissing", {
     upstream: Schema.optional(RefName),
   }),
-  Schema.TaggedStruct("PullDiverged", { upstream: RefName }),
+  Schema.TaggedStruct("PullDiverged", {
+    upstream: RefName,
+    upstreamCommit: ObjectId,
+  }),
+  Schema.TaggedStruct("UpstreamMoved", {}),
   Schema.TaggedStruct("PullWouldOverwrite", {
     paths: Schema.Array(RepositoryPath).check(Schema.isMaxLength(100)),
   }),
@@ -71,7 +96,7 @@ export const RepositoryFetchStatus = Schema.Struct({
 });
 export type RepositoryFetchStatus = typeof RepositoryFetchStatus.Type;
 
-export const PullStrategy = Schema.Literals(["ask", "rebase", "merge"]);
+export const PullStrategy = Schema.Literals(["ask", ...DivergedPull.literals]);
 export type PullStrategy = typeof PullStrategy.Type;
 
 export const RepositoryPullStrategy = Schema.Struct({

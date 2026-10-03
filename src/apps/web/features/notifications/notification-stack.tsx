@@ -1,16 +1,24 @@
 import { Toast } from "@base-ui/react/toast";
-import {
-  IconAlertCircle,
-  IconCircleCheck,
-  IconCircleFilled,
-  IconX,
-} from "@tabler/icons-react";
+import { IconChevronDown, IconX } from "@tabler/icons-react";
 import { useEffect, useRef } from "react";
 import { Button } from "#web/components/ui/button.tsx";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "#web/components/ui/dropdown-menu.tsx";
+import { NoticeIcon } from "#web/features/notifications/components/notice-icon.tsx";
+
+export type NoticeChoice = {
+  readonly label: string;
+  readonly run: () => void;
+};
 
 export type NoticeData = {
   readonly repositoryId: string | undefined;
   readonly percent?: number;
+  readonly choices?: readonly [NoticeChoice, ...NoticeChoice[]];
 };
 
 export type NotifiedRepository = {
@@ -131,6 +139,7 @@ function Notice({
           )}
         </div>
         {toast.actionProps?.children === undefined &&
+        toast.data?.choices === undefined &&
         elsewhere === undefined ? null : (
           <div className="mt-2.5 flex justify-end gap-1.5">
             {elsewhere === undefined ? null : (
@@ -143,7 +152,11 @@ function Notice({
                 Open
               </Button>
             )}
-            <Toast.Action render={<Button size="xs" variant="outline" />} />
+            {toast.data?.choices === undefined ? (
+              <Toast.Action render={<Button size="xs" variant="outline" />} />
+            ) : (
+              <SplitChoice choices={toast.data.choices} />
+            )}
           </div>
         )}
       </Toast.Content>
@@ -151,79 +164,47 @@ function Notice({
   );
 }
 
-function NoticeIcon({
-  type,
-  percent,
-  label,
+function SplitChoice({
+  choices,
 }: {
-  readonly type: string | undefined;
-  readonly percent: number | undefined;
-  readonly label: string;
+  readonly choices: readonly [NoticeChoice, ...NoticeChoice[]];
 }) {
-  if (type === "loading" && percent !== undefined)
-    return <ProgressRing percent={percent} label={label} />;
-  if (type === "loading")
-    return (
-      <span
-        aria-hidden="true"
-        className="flex h-5 w-4 shrink-0 items-center justify-center"
-      >
-        <IconCircleFilled className="size-2 text-status-connecting" />
-      </span>
-    );
-  return type === "success" ? (
-    <IconCircleCheck
-      aria-hidden="true"
-      className="mt-0.5 size-4 shrink-0 text-status-available"
-    />
-  ) : (
-    <IconAlertCircle
-      aria-hidden="true"
-      className="mt-0.5 size-4 shrink-0 text-status-unavailable"
-    />
-  );
-}
-
-const ringRadius = 6;
-const ringLength = 2 * Math.PI * ringRadius;
-
-function ProgressRing({
-  percent,
-  label,
-}: {
-  readonly percent: number;
-  readonly label: string;
-}) {
+  const [primary] = choices;
   return (
-    <svg
-      role="progressbar"
-      aria-label={label}
-      aria-valuemin={0}
-      aria-valuemax={100}
-      aria-valuenow={percent}
-      className="mt-0.5 size-4 shrink-0 -rotate-90"
-      viewBox="0 0 16 16"
-    >
-      <circle
-        cx="8"
-        cy="8"
-        r={ringRadius}
-        fill="none"
-        strokeWidth="2"
-        className="stroke-foreground/15"
-      />
-      <circle
-        cx="8"
-        cy="8"
-        r={ringRadius}
-        fill="none"
-        strokeWidth="2"
-        strokeLinecap="round"
-        strokeDasharray={ringLength}
-        strokeDashoffset={ringLength * (1 - percent / 100)}
-        className="stroke-primary transition-[stroke-dashoffset] duration-150 motion-reduce:transition-none"
-      />
-    </svg>
+    <div className="flex">
+      <Button
+        className="rounded-r-none"
+        onClick={primary.run}
+        size="xs"
+        variant="outline"
+      >
+        {primary.label}
+      </Button>
+      <DropdownMenu>
+        <DropdownMenuTrigger
+          aria-label="More choices"
+          render={
+            <Button
+              className="rounded-l-none border-l-0 px-1"
+              size="xs"
+              variant="outline"
+            />
+          }
+        >
+          <IconChevronDown aria-hidden="true" className="size-3.5" />
+        </DropdownMenuTrigger>
+        <DropdownMenuContent
+          className="w-auto min-w-28"
+          data-base-ui-swipe-ignore
+        >
+          {choices.map((choice) => (
+            <DropdownMenuItem key={choice.label} onClick={choice.run}>
+              {choice.label}
+            </DropdownMenuItem>
+          ))}
+        </DropdownMenuContent>
+      </DropdownMenu>
+    </div>
   );
 }
 

@@ -191,7 +191,7 @@ describe("branches sidebar", () => {
     });
   });
 
-  it("pulls a tracked branch from its menu with pointer and keyboard", async () => {
+  it("fast-forwards a tracked branch that is not checked out from its menu with pointer and keyboard", async () => {
     const current = refs();
     const tracked: RepositoryRefs = {
       ...current,
@@ -221,25 +221,25 @@ describe("branches sidebar", () => {
       .element(screen.getByRole("menuitem", { name: "Checkout" }))
       .not.toBeInTheDocument();
     await expect
-      .element(screen.getByRole("menuitem", { name: "Pull" }))
+      .element(screen.getByRole("menuitem", { name: /^(Pull|Fast-forward)/ }))
       .not.toBeInTheDocument();
     await userEvent.keyboard("{Escape}");
 
     const feature = tree.getByRole("treeitem", { name: "feature" });
     await feature.click({ button: "right" });
-    await screen.getByRole("menuitem", { name: "Pull" }).click();
+    await screen.getByRole("menuitem", { name: "Fast-forward" }).click();
     await expect.poll(() => pulls.pulled).toHaveBeenLastCalledWith("feature");
 
     await feature.click({ button: "right" });
     await expect
-      .element(screen.getByRole("menuitem", { name: "Pull" }))
+      .element(screen.getByRole("menuitem", { name: "Fast-forward" }))
       .toHaveAttribute("aria-disabled", "true");
     await userEvent.keyboard("{Escape}");
     pulls.finish();
 
     tree.element().focus();
     await userEvent.keyboard("{Shift>}{F10}{/Shift}");
-    await screen.getByRole("menuitem", { name: "Pull" }).click();
+    await screen.getByRole("menuitem", { name: "Fast-forward" }).click();
     await expect.poll(() => pulls.pulled).toHaveBeenCalledTimes(2);
   });
 
@@ -420,7 +420,7 @@ function pullRequests() {
         await new Promise<void>((resolve) => {
           finish = resolve;
         });
-        return { outcome: "FastForwarded" as const };
+        return { outcome: "FastForwarded" as const, stashKept: false };
       }),
     ],
   };

@@ -12,10 +12,13 @@ import {
 } from "#server/adapters/environment-transport/environment-routes.ts";
 import type { GitCommandRunner } from "#server/adapters/local-git/git-commands.ts";
 import {
-  fastForwardBranch,
   pullBlocked,
-} from "#server/features/repository-pull/fast-forward-branch.ts";
-import { createPullStrategies } from "#server/features/repository-pull/pull-strategy.ts";
+  pullBranch,
+} from "#server/features/repository-pull/pull-branch.ts";
+import {
+  createPullStrategies,
+  type PullStrategies,
+} from "#server/features/repository-pull/pull-strategy.ts";
 import { acquireRepositoryFetch } from "#server/features/repository-pull/repository-fetch.ts";
 import type { EnvironmentContext } from "#server/persistence/environment-context.ts";
 import {
@@ -56,7 +59,7 @@ export function repositoryPullFeature(
             locks: { refs: "wait" },
             duringOperation: "proceed",
           },
-          pullBranch(dependencies.coordination),
+          pullInCheckout(dependencies.coordination, strategies),
         ),
         route(RepositoryPullApi.readPullStrategy, () => strategies.server),
         route(RepositoryPullApi.savePullStrategy, ({ strategy }) =>
@@ -84,7 +87,10 @@ export function repositoryPullFeature(
   });
 }
 
-function pullBranch(coordination: RepositoryCoordination) {
+function pullInCheckout(
+  coordination: RepositoryCoordination,
+  strategies: PullStrategies,
+) {
   return (command: PullBranch, git: GitCommandRunner) =>
     Effect.gen(function* () {
       const checkout = yield* findCheckout(git, command);
@@ -98,11 +104,22 @@ function pullBranch(coordination: RepositoryCoordination) {
         },
         requireSameCheckout(git, command, checkout).pipe(
           Effect.andThen(
-            fastForwardBranch(
+            pullBranch(
               git,
-              directory,
-              command.branch,
-              checkout !== undefined,
+              coordination,
+              {
+                directory,
+                branch: command.branch,
+                checkedOut: checkout !== undefined,
+                strategy: command.strategy,
+              },
+              strategies
+                .effective(command.repositoryId)
+                .pipe(
+                  Effect.catchTag("EnvironmentStorageError", (error) =>
+                    Effect.fail(pullBlocked(error.message)),
+                  ),
+                ),
             ),
           ),
         ),
@@ -118,7 +135,7 @@ function requireSameCheckout(
   return findCheckout(git, command).pipe(
     Effect.filterOrFail(
       (current) => current === checkout,
-      () => pullBlocked(`${command.branch} was checked out while pulling`),
+      () => pullBlocked("The branch was checked out while pulling."),
     ),
   );
 }
