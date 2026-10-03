@@ -12,11 +12,12 @@ import {
   showOpenProject,
   toggleEnvironment,
 } from "#web/features/project-navigation/project-navigation-state.ts";
+import type { SettingsSectionId } from "#web/features/settings/settings-sections.ts";
 import type { EnvironmentStatus } from "#web/platform/query/environment-context.tsx";
 
 export interface Navigation {
   readonly projects: ProjectNavigationState;
-  readonly settingsOpen: boolean;
+  readonly settingsSection: SettingsSectionId | undefined;
   readonly repositorySettingsId: string | undefined;
   readonly openProjectRequest: number;
   readonly worktreePaths: ReadonlyMap<string, string>;
@@ -36,7 +37,10 @@ export type NavigationAction =
     }
   | { readonly type: "toggle-environment"; readonly environmentId: string }
   | { readonly type: "collapse-sidebar"; readonly collapsed: boolean }
-  | { readonly type: "show-settings"; readonly open: boolean }
+  | {
+      readonly type: "show-settings";
+      readonly section: SettingsSectionId | undefined;
+    }
   | {
       readonly type: "show-repository-settings";
       readonly repositoryId: string | undefined;
@@ -117,7 +121,7 @@ export function reduceNavigation(
             ),
           };
     case "show-settings":
-      return { ...navigation, settingsOpen: action.open };
+      return { ...navigation, settingsSection: action.section };
     case "show-repository-settings":
       return { ...navigation, repositorySettingsId: action.repositoryId };
   }
@@ -168,7 +172,7 @@ export function initialNavigation(): Navigation {
       sidebarCollapsed: false,
       workspaceView: "open-project",
     },
-    settingsOpen: false,
+    settingsSection: undefined,
     repositorySettingsId: undefined,
     openProjectRequest: 0,
     worktreePaths: new Map(),

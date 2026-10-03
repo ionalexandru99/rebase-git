@@ -127,7 +127,14 @@ export function repositoryRoutes({
   ) =>
     handle(input, git).pipe(
       Effect.catchIf(isGitFailed, (error) =>
-        Effect.fail(repositoryRejected("GitFailed", error.detail)),
+        Effect.fail(
+          identityMissing.test(error.detail)
+            ? repositoryRejected(
+                "IdentityMissing",
+                "Add your name and email to commit.",
+              )
+            : repositoryRejected("GitFailed", error.detail),
+        ),
       ),
     );
   return {
@@ -160,6 +167,9 @@ export function repositoryRoutes({
       ),
   };
 }
+
+const identityMissing =
+  /Please tell me who you are|unable to auto-detect email address|empty ident name/;
 
 function isTransportError(error: unknown): error is EnvironmentTransportError {
   return (

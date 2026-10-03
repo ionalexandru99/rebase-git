@@ -3,6 +3,7 @@ import { Rpc, type RpcClient, type RpcClientError, RpcGroup } from "effect/rpc";
 import { CommitInspectionApi } from "#contracts/commit-inspection/commit-inspection.contract.ts";
 import { EnvironmentAuthorizationApi } from "#contracts/environment-authorization/environment-authorization.contract.ts";
 import { EnvironmentFilesystemApi } from "#contracts/environment-filesystem/environment-filesystem.contract.ts";
+import { GitIdentityApi } from "#contracts/git-identity/git-identity.contract.ts";
 import { PullRequestsApi } from "#contracts/pull-requests/pull-requests.contract.ts";
 import { RepositoryCatalogApi } from "#contracts/repository-catalog/repository-catalog.contract.ts";
 import { RepositoryChangesApi } from "#contracts/repository-changes/repository-changes.contract.ts";
@@ -77,6 +78,7 @@ export const EnvironmentRpc = RpcGroup.make(
   ...Object.values(RepositoryTagsApi),
   ...Object.values(RepositoryStashesApi),
   ...Object.values(SourceControlApi),
+  ...Object.values(GitIdentityApi),
 ).merge(RepositoryHistoryRpc);
 
 export type EnvironmentRpcs = RpcGroup.Rpcs<typeof EnvironmentRpc>;

@@ -49,6 +49,7 @@ export function render(
           <NotificationsProvider
             currentRepositoryId={notifications.currentRepositoryId}
             openRepository={notifications.openRepository ?? (() => {})}
+            openGitIdentity={notifications.openGitIdentity ?? (() => {})}
             repositories={notifications.repositories ?? []}
           >
             {Wrapper === undefined ? children : <Wrapper>{children}</Wrapper>}
