@@ -13,8 +13,10 @@ export function NoticeIcon({
   readonly percent: number | undefined;
   readonly label: string;
 }) {
-  if (type === "loading" && percent !== undefined)
-    return <ProgressRing percent={percent} label={label} />;
+  if ((type === "loading" || type === "success") && percent !== undefined)
+    return (
+      <ProgressRing percent={percent} done={type === "success"} label={label} />
+    );
   if (type === "loading")
     return (
       <span
@@ -37,14 +39,13 @@ export function NoticeIcon({
   );
 }
 
-const ringRadius = 6;
-const ringLength = 2 * Math.PI * ringRadius;
-
 function ProgressRing({
   percent,
+  done,
   label,
 }: {
   readonly percent: number;
+  readonly done: boolean;
   readonly label: string;
 }) {
   return (
@@ -54,27 +55,30 @@ function ProgressRing({
       aria-valuemin={0}
       aria-valuemax={100}
       aria-valuenow={percent}
-      className="mt-0.5 size-4 shrink-0 -rotate-90"
+      aria-hidden={done}
+      className="mt-0.5 size-4 shrink-0"
       viewBox="0 0 16 16"
+      fill="none"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
     >
-      <circle
-        cx="8"
-        cy="8"
-        r={ringRadius}
-        fill="none"
-        strokeWidth="2"
-        className="stroke-foreground/15"
-      />
-      <circle
-        cx="8"
-        cy="8"
-        r={ringRadius}
-        fill="none"
-        strokeWidth="2"
-        strokeLinecap="round"
-        strokeDasharray={ringLength}
-        strokeDashoffset={ringLength * (1 - percent / 100)}
-        className="stroke-primary transition-[stroke-dashoffset] duration-150 motion-reduce:transition-none"
+      <g transform="rotate(-90 8 8)">
+        <circle cx="8" cy="8" r="6" className="stroke-foreground/15" />
+        <circle
+          cx="8"
+          cy="8"
+          r="6"
+          pathLength={100}
+          strokeDasharray="100 200"
+          strokeDashoffset={done ? 0 : 100 - percent}
+          className={`transition-[stroke-dashoffset,stroke] duration-150 motion-reduce:transition-none ${done ? "stroke-status-available" : "stroke-primary"}`}
+        />
+      </g>
+      <path
+        d="M6 8l1.5 1.5l3 -3"
+        strokeWidth="1.5"
+        className={`stroke-status-available transition-opacity duration-150 motion-reduce:transition-none ${done ? "opacity-100" : "opacity-0"}`}
       />
     </svg>
   );
