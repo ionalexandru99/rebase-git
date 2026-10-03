@@ -92,7 +92,6 @@ export function SectionRow({
     >
       {folder ? (
         <>
-          <TreeGuides level={row.level} />
           <IconChevronDown
             aria-hidden="true"
             className={`size-3.5 shrink-0 ${row.expanded ? "" : "-rotate-90"}`}
@@ -159,7 +158,6 @@ export function RefRow({
             className={`group absolute top-0 left-0 flex w-full cursor-default items-center rounded-md text-[.85rem] outline-none select-none hover:bg-sidebar-accent/75 hover:text-sidebar-accent-foreground ${row.current ? "font-medium text-sidebar-accent-foreground" : "text-sidebar-foreground"} ${active || selected ? "bg-sidebar-accent" : ""}`}
             style={style}
           >
-            <TreeGuides level={row.level} />
             <button
               aria-level={row.level}
               aria-posinset={row.position}
@@ -234,20 +232,6 @@ function withCard(
   ) : (
     <BranchCardTrigger handle={card} payload={payload} render={row} />
   );
-}
-
-function TreeGuides({ level }: { readonly level: number }) {
-  return Array.from(
-    { length: Math.max(0, level - 2) },
-    (_, index) => 15 + index * 18,
-  ).map((left) => (
-    <span
-      key={left}
-      aria-hidden="true"
-      className="pointer-events-none absolute inset-y-0 border-sidebar-border border-l"
-      style={{ left }}
-    />
-  ));
 }
 
 function HistorySelectionButton({
