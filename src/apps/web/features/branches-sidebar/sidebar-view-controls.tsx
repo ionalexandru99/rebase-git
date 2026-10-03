@@ -141,12 +141,7 @@ export function BranchesSidebarFilter({
             <IconChevronDown aria-hidden="true" className="size-3" />
           </DropdownMenuTrigger>
           <DropdownMenuContent className="w-36">
-            <DropdownMenuRadioGroup
-              onValueChange={(value: BranchesSidebarScope) =>
-                onScopeChange(value)
-              }
-              value={scope}
-            >
+            <DropdownMenuRadioGroup onValueChange={onScopeChange} value={scope}>
               {scopeOptions.map((option) => (
                 <DropdownMenuRadioItem key={option.value} value={option.value}>
                   {option.label}

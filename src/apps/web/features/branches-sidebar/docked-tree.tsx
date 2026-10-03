@@ -7,6 +7,7 @@ import {
   type Ref,
   useEffect,
   useLayoutEffect,
+  useMemo,
   useRef,
 } from "react";
 import { rowElementId } from "#web/features/branches-sidebar/branches-sidebar-rows.tsx";
@@ -14,7 +15,6 @@ import {
   type BranchesSidebarItem,
   dockItems,
   estimateItemHeight,
-  localBranchesSectionId,
 } from "#web/features/branches-sidebar/branches-sidebar-state.ts";
 
 export interface ItemPlacement {
@@ -55,15 +55,8 @@ export function DockedTree({
   readonly renderItem: RenderItem;
   readonly treeRef: Ref<HTMLDivElement>;
 }): JSX.Element {
-  const { top, docked } = dockItems(items);
-  const [first] = top;
-  const header =
-    first?.kind === "row" &&
-    first.row.kind === "section" &&
-    first.row.sectionId === localBranchesSectionId
-      ? first
-      : undefined;
-  const local = header === undefined ? top : top.slice(1);
+  const { header, local, docked } = useMemo(() => dockItems(items), [items]);
+  const top = header !== undefined || local.length > 0;
   return (
     <div
       aria-activedescendant={
@@ -79,7 +72,7 @@ export function DockedTree({
       tabIndex={0}
     >
       {children}
-      {top.length === 0 ? null : (
+      {top ? (
         <div
           className={`flex flex-1 basis-0 flex-col ${local.length > 0 && docked.length > 0 ? "min-h-[40%]" : "min-h-8"}`}
         >
@@ -96,11 +89,11 @@ export function DockedTree({
             renderItem={renderItem}
           />
         </div>
-      )}
+      ) : null}
       {docked.length === 0 ? null : (
         <VirtualRegion
           activeRowId={activeRowId}
-          className={top.length === 0 ? "min-h-0 flex-1" : "min-h-0"}
+          className={top ? "min-h-0" : "min-h-0 flex-1"}
           items={docked}
           padding={regionPadding}
           renderItem={renderItem}

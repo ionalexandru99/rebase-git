@@ -79,7 +79,7 @@ export function CurrentPullRequest({
   );
 }
 
-export function PullRequestStateIcon({
+function PullRequestStateIcon({
   pullRequest,
 }: {
   readonly pullRequest: PullRequest;
@@ -98,7 +98,7 @@ export function PullRequestLink({
   const [newest] = pullRequests;
   if (newest === undefined) return null;
   return (
-    <span className="flex shrink-0 items-center gap-1 text-[.78rem] tabular-nums">
+    <span className="flex shrink-0 items-center gap-1 pr-1.5 text-[.78rem] tabular-nums">
       <button
         aria-label={`Open ${describePullRequest(newest)}`}
         className={`inline-flex items-center gap-1 rounded-sm underline-offset-2 outline-none hover:underline ${stateIcons[newest.state].className}`}

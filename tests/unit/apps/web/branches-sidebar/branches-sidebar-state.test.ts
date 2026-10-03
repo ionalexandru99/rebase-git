@@ -62,12 +62,12 @@ describe("branches sidebar state", () => {
       defaultExpandedSections,
       "",
     );
-    const ids = (items: ReturnType<typeof dockItems>["top"]) =>
+    const ids = (items: ReturnType<typeof dockItems>["local"]) =>
       items.map((item) => item.id);
 
     const branchDraft = dockItems(branchesSidebarItems(rows, "branches"));
-    expect(ids(branchDraft.top)).toEqual([
-      "section:branches",
+    expect(branchDraft.header?.id).toBe("section:branches");
+    expect(ids(branchDraft.local)).toEqual([
       "ref-draft",
       "ref:branches:main",
       "ref:branches:topic",
@@ -80,7 +80,7 @@ describe("branches sidebar state", () => {
     ]);
 
     const tagDraft = dockItems(branchesSidebarItems(rows, "tags"));
-    expect(ids(tagDraft.top)).toHaveLength(4);
+    expect(ids(tagDraft.local)).toHaveLength(3);
     expect(ids(tagDraft.docked).slice(-2)).toEqual([
       "section:tags",
       "ref-draft",
@@ -93,7 +93,10 @@ describe("branches sidebar state", () => {
       "",
       "remote",
     );
-    expect(dockItems(branchesSidebarItems(remotes, undefined)).top).toEqual([]);
+    expect(dockItems(branchesSidebarItems(remotes, undefined))).toMatchObject({
+      header: undefined,
+      local: [],
+    });
   });
 
   it("keeps the active branch ahead of branches in other worktrees", () => {

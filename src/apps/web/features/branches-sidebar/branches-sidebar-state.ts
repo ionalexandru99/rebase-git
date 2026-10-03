@@ -301,7 +301,8 @@ export function branchesSidebarItems(
 }
 
 export function dockItems(items: readonly BranchesSidebarItem[]): {
-  readonly top: readonly BranchesSidebarItem[];
+  readonly header: BranchesSidebarItem | undefined;
+  readonly local: readonly BranchesSidebarItem[];
   readonly docked: readonly BranchesSidebarItem[];
 } {
   const start = items.findIndex(
@@ -310,9 +311,12 @@ export function dockItems(items: readonly BranchesSidebarItem[]): {
       item.row.kind === "section" &&
       item.row.sectionId !== localBranchesSectionId,
   );
-  return start < 0
-    ? { top: items, docked: [] }
-    : { top: items.slice(0, start), docked: items.slice(start) };
+  const top = start < 0 ? items : items.slice(0, start);
+  const docked = start < 0 ? [] : items.slice(start);
+  const [first] = top;
+  return first?.id === `section:${localBranchesSectionId}`
+    ? { header: first, local: top.slice(1), docked }
+    : { header: undefined, local: top, docked };
 }
 
 export function estimateItemHeight(item: BranchesSidebarItem | undefined) {
