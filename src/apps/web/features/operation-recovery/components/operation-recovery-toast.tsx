@@ -63,7 +63,7 @@ export function OperationRecoveryToast({
           className={`size-2 shrink-0 ${state.completed ? "text-status-available" : "text-status-connecting"}`}
         />
         <h2
-          className="min-w-0 flex-1 text-xs font-semibold"
+          className="min-w-0 flex-1 cap-centered text-xs font-semibold"
           aria-live="polite"
           aria-atomic="true"
         >
