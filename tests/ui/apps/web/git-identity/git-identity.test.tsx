@@ -37,7 +37,7 @@ describe("Git identity", () => {
     await page.getByRole("button", { name: "Save" }).click();
 
     await expect
-      .element(page.getByRole("button", { name: "Show name" }))
+      .element(page.getByRole("button", { name: "Show identity" }))
       .toBeVisible();
     await expect
       .element(page.getByRole("textbox", { name: "Name" }))
