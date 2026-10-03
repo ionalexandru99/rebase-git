@@ -42,8 +42,7 @@ interface PushedRef {
   readonly summary: string;
 }
 
-interface PushPasses {
-  readonly gone: readonly RemoteTarget[];
+interface PushResult {
   readonly pushed: readonly PushedRef[];
   readonly stderr: string;
 }
@@ -258,30 +257,45 @@ function pushDeletes(
   remote: string,
   batch: readonly RemoteTarget[],
 ) {
-  return pushUntilSettled(git, directory, remote, batch, {
-    gone: [],
-    pushed: [],
-    stderr: "",
-  }).pipe(
-    Effect.flatMap((passes) => {
-      const outcome = pushedDeletes(batch, passes);
-      return forgetRemoteRefs(
-        git,
-        directory,
-        outcome.deleted.filter((target) => passes.gone.includes(target)),
-      ).pipe(Effect.as(outcome));
-    }),
-  );
+  return Effect.gen(function* () {
+    const leased = yield* pushDelete(
+      git,
+      directory,
+      remote,
+      batch,
+      leaseTarget,
+    );
+    const stale = batch.filter(({ name }) =>
+      isStale(rejection(leased.pushed, name)?.summary),
+    );
+    if (stale.length === 0) return pushedDeletes(batch, leased);
+    const absent = yield* pushDelete(
+      git,
+      directory,
+      remote,
+      stale,
+      leaseAbsent,
+    );
+    return pushedDeletes(batch, {
+      pushed: [
+        ...leased.pushed.filter(
+          ({ ref }) => !stale.some(({ name }) => ref === branchRef(name)),
+        ),
+        ...absent.pushed,
+      ],
+      stderr: absent.stderr,
+    });
+  });
 }
 
-function pushUntilSettled(
+function pushDelete(
   git: GitCommandRunner,
   directory: string,
   remote: string,
   pending: readonly RemoteTarget[],
-  passes: PushPasses,
+  lease: (target: RemoteTarget) => string,
 ): Effect.Effect<
-  PushPasses,
+  PushResult,
   RepositoryBranchesOperationFailure | RepositoryRejected
 > {
   return runRepositoryGitOutput(
@@ -291,33 +305,22 @@ function pushUntilSettled(
       "push",
       "--porcelain",
       ...pending.map(
-        ({ name, target }) => `--force-with-lease=refs/heads/${name}:${target}`,
+        (target) =>
+          `--force-with-lease=${branchRef(target.name)}:${lease(target)}`,
       ),
       remote,
       "--delete",
-      ...pending.map(({ name }) => name),
+      ...pending.map(({ name }) => branchRef(name)),
     ],
     { ...pushCommand, exitCodes: [0, 1] },
   ).pipe(
     Effect.mapError((error) =>
       branchWriteFailed(error, `${remote}/${pending[0]?.name ?? ""}`),
     ),
-    Effect.flatMap(({ stderr, stdout }) => {
-      const gone = pending.filter(({ name }) =>
-        stderr.includes(
-          `unable to delete '${name}': remote ref does not exist`,
-        ),
-      );
-      const next = {
-        gone: [...passes.gone, ...gone],
-        pushed: [...passes.pushed, ...pushedRefs(stdout)],
-        stderr,
-      };
-      const rest = pending.filter((target) => !gone.includes(target));
-      return gone.length === 0 || rest.length === 0
-        ? Effect.succeed(next)
-        : pushUntilSettled(git, directory, remote, rest, next);
-    }),
+    Effect.map(({ stderr, stdout }) => ({
+      pushed: pushedRefs(stdout),
+      stderr,
+    })),
   );
 }
 
@@ -332,23 +335,19 @@ function pushedRefs(stdout: string): readonly PushedRef[] {
 
 function pushedDeletes(
   batch: readonly RemoteTarget[],
-  { gone, pushed, stderr }: PushPasses,
+  { pushed, stderr }: PushResult,
 ): {
   readonly deleted: readonly RemoteTarget[];
   readonly failure?: RepositoryBranchesOperationFailure | RepositoryRejected;
 } {
-  const outcomes = (name: string) =>
-    pushed.filter(({ ref }) => ref === branchRef(name));
-  const rejection = (name: string) =>
-    outcomes(name).find(({ flag }) => flag !== "-");
-  const isDeleted = (target: RemoteTarget) =>
-    (gone.includes(target) || outcomes(target.name).length > 0) &&
-    rejection(target.name) === undefined;
+  const isDeleted = ({ name }: RemoteTarget) =>
+    pushed.some(({ ref }) => ref === branchRef(name)) &&
+    rejection(pushed, name) === undefined;
   const deleted = batch.filter(isDeleted);
   const rejected = batch.find((target) => !isDeleted(target));
   if (rejected === undefined) return { deleted };
   const name = remoteLabel(rejected);
-  const summary = rejection(rejected.name)?.summary;
+  const summary = rejection(pushed, rejected.name)?.summary;
   return {
     deleted,
     failure: /\((?:stale info|fetch first)\)$/.test(summary ?? "")
@@ -360,18 +359,22 @@ function pushedDeletes(
   };
 }
 
-function forgetRemoteRefs(
-  git: GitCommandRunner,
-  directory: string,
-  remotes: readonly RemoteTarget[],
-) {
-  if (remotes.length === 0) return Effect.void;
-  return runRepositoryGit(git, directory, ["update-ref", "--stdin"], {
-    ...refCommand,
-    input: remotes.map((remote) => `delete ${remoteRef(remote)}\n`).join(""),
-  }).pipe(
-    Effect.mapError((error) => repositoryRejected("GitFailed", error.detail)),
+function rejection(pushed: readonly PushedRef[], name: string) {
+  return pushed.find(
+    ({ flag, ref }) => ref === branchRef(name) && flag !== "-",
   );
+}
+
+function leaseTarget({ target }: RemoteTarget) {
+  return target;
+}
+
+function leaseAbsent() {
+  return "";
+}
+
+function isStale(summary: string | undefined) {
+  return summary?.endsWith("(stale info)") === true;
 }
 
 export function deleteLocals(
