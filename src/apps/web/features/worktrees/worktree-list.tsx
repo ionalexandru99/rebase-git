@@ -1,4 +1,4 @@
-import { IconCheck, IconLock, IconSearch } from "@tabler/icons-react";
+import { IconCheck, IconLock, IconPlus, IconSearch } from "@tabler/icons-react";
 import { type KeyboardEvent, type MouseEvent, useId, useState } from "react";
 import {
   ActionMenuItems,
@@ -158,9 +158,10 @@ export function WorktreeList({
                   onPrune={() => worktrees.remove(row)}
                 />
               ))}
+              <div aria-hidden="true" className="mx-1 my-0.5 h-px bg-border" />
               <button
                 aria-selected={highlighted === newWorktreeId}
-                className={`mt-0.5 flex h-8 cursor-default items-center rounded-[.35rem] border-t border-border px-2 text-left text-[.85rem] text-foreground/80 outline-none disabled:opacity-45 ${highlighted === newWorktreeId ? "bg-accent text-foreground" : ""}`}
+                className={`flex h-8 cursor-default items-center gap-2 rounded-[.35rem] px-2 text-left text-[.85rem] outline-none disabled:opacity-45 ${highlighted === newWorktreeId ? "bg-accent text-foreground" : "text-foreground/80"}`}
                 data-worktree={newWorktreeId}
                 disabled={!worktrees.writable}
                 id={elementId(newWorktreeId)}
@@ -169,6 +170,7 @@ export function WorktreeList({
                 tabIndex={-1}
                 type="button"
               >
+                <IconPlus aria-hidden="true" className="size-3.5 shrink-0" />
                 New worktree…
               </button>
             </div>
