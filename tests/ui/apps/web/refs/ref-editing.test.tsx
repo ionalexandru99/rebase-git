@@ -318,6 +318,23 @@ describe("ref editing", () => {
       names: ["feature/spike"],
       settled: false,
     });
+
+    await screen
+      .getByRole("radio", { name: "Tree view" })
+      .click({ force: true });
+    await tree
+      .getByRole("treeitem", { name: "feature", exact: true })
+      .last()
+      .click();
+    await tree.getByRole("treeitem", { name: "feature/done" }).click();
+    await userEvent.keyboard("{F2}");
+    await userEvent.keyboard("{Control>}a{/Control}archive/done{Enter}");
+    const renamed = tree.getByRole("treeitem", { name: "archive/done" });
+    await expect.element(renamed).toBeVisible();
+    await expect
+      .element(tree)
+      .toHaveAttribute("aria-activedescendant", renamed.element().id);
+    await expect.element(settled).toHaveTextContent("Settled (1)");
   });
 
   it("confirms before deleting a branch locally and on its remote", async () => {
@@ -671,7 +688,9 @@ async function refsEnvironment() {
       const branch = { name: command.newName, target: spike };
       branches((all) =>
         all.map((existing) =>
-          existing.name === command.name ? branch : existing,
+          existing.name === command.name
+            ? { ...existing, ...branch }
+            : existing,
         ),
       );
       return { branch, previousName: command.name };

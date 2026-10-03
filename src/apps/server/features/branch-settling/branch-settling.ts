@@ -15,6 +15,7 @@ import {
   runRepositoryGit,
 } from "#server/adapters/local-git/git-commands.ts";
 import { listPullRequests } from "#server/features/pull-requests/pull-requests.ts";
+import type { AfterFetch } from "#server/features/repository-pull/repository-fetch.ts";
 import { branchSettlements } from "#server/features/repository-refs/git/read-repository-refs.ts";
 import type { SourceControl } from "#server/features/source-control/source-control.ts";
 import { readWorktrees } from "#server/repository/repository-access.ts";
@@ -77,14 +78,16 @@ export function branchSettlingFeature(
 
 export function settleMergedBranches({
   coordination,
+  events,
   git,
   sourceControl,
 }: {
   readonly coordination: RepositoryCoordination;
+  readonly events: EnvironmentEventPublisher;
   readonly git: GitCommandRunner;
   readonly sourceControl: SourceControl;
-}) {
-  return (directory: string) =>
+}): AfterFetch {
+  return (directory, repositoryIds) =>
     Effect.gen(function* () {
       const config = yield* runRepositoryGit(
         git,
@@ -110,12 +113,13 @@ export function settleMergedBranches({
       )).flatMap(({ branch, pullRequests }) =>
         isMerged(pullRequests) ? [branch] : [],
       );
-      if (merged.length > 0)
-        yield* coordination.run(
-          directory,
-          settlePolicy,
-          writeSettlements(git, directory, merged, settledToday()),
-        );
+      if (merged.length === 0) return;
+      yield* coordination.run(
+        directory,
+        settlePolicy,
+        writeSettlements(git, directory, merged, settledToday()),
+      );
+      events.publishChanged(repositoryIds, "Refs");
     }).pipe(
       Effect.catchCause((cause) =>
         Cause.hasInterrupts(cause)
@@ -142,17 +146,27 @@ function writeSettlements(
   names: readonly string[],
   value: string,
 ) {
-  return Effect.forEach(
-    names,
-    (name) =>
-      runRepositoryGit(git, directory, [
-        "config",
-        "--local",
-        `branch.${name}.rebaseSettled`,
-        value,
-      ]),
-    { discard: true },
-  );
+  return Effect.gen(function* () {
+    const existing = new Set(
+      (yield* runRepositoryGit(
+        git,
+        directory,
+        ["for-each-ref", "--format=%(refname:lstrip=2)", "refs/heads"],
+        { maxOutputBytes: 16 * 1_048_576 },
+      )).split("\n"),
+    );
+    yield* Effect.forEach(
+      names.filter((name) => existing.has(name)),
+      (name) =>
+        runRepositoryGit(git, directory, [
+          "config",
+          "--local",
+          `branch.${name}.rebaseSettled`,
+          value,
+        ]),
+      { discard: true },
+    );
+  });
 }
 
 function isMerged(pullRequests: readonly PullRequest[]) {

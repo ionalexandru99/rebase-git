@@ -140,7 +140,7 @@ describe("ref actions", () => {
     ).toEqual({ deleteLocal: "Checked out" });
   });
 
-  it("settles the selection next to Delete and unsettles it once every branch is settled", () => {
+  it("settles the active branches of a selection next to Delete and unsettles it once every branch is settled", () => {
     const settled: [readonly string[], boolean][] = [];
     const current = refs();
     const repository = {
@@ -168,7 +168,7 @@ describe("ref actions", () => {
     runAction(selection(["release"])[0]);
     expect(selection(["release"])[0]?.label).toBe("Unsettle");
     expect(settled).toEqual([
-      [["feature", "release"], true],
+      [["feature"], true],
       [["release"], false],
     ]);
   });

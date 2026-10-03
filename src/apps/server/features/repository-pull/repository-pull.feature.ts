@@ -19,7 +19,10 @@ import {
   createPullStrategies,
   type PullStrategies,
 } from "#server/features/repository-pull/pull-strategy.ts";
-import { acquireRepositoryFetch } from "#server/features/repository-pull/repository-fetch.ts";
+import {
+  type AfterFetch,
+  acquireRepositoryFetch,
+} from "#server/features/repository-pull/repository-fetch.ts";
 import type { EnvironmentContext } from "#server/persistence/environment-context.ts";
 import {
   canonicalizeWorktrees,
@@ -29,7 +32,7 @@ import type { RepositoryCoordination } from "#server/repository/repository-coord
 
 export function repositoryPullFeature(
   dependencies: RepositoryDependencies & {
-    readonly afterFetch: (directory: string) => Effect.Effect<void>;
+    readonly afterFetch: AfterFetch;
     readonly context: EnvironmentContext;
     readonly events: EnvironmentEventPublisher;
   },

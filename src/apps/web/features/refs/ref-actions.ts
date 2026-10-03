@@ -343,7 +343,8 @@ function settleActions(
   settle: RefActionHandlers["settle"],
 ): readonly RefAction[] {
   if (settle === undefined || branches.length === 0) return [];
-  const settled = branches.every((branch) => branch.settled !== undefined);
+  const active = branches.filter((branch) => branch.settled === undefined);
+  const settled = active.length === 0;
   return [
     action({
       id: "settle",
@@ -352,7 +353,7 @@ function settleActions(
       reason: readOnly,
       run: () =>
         settle(
-          branches.map(({ name }) => name),
+          (settled ? branches : active).map(({ name }) => name),
           !settled,
         ),
     }),

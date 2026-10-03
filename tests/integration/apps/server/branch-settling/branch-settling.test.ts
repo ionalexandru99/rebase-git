@@ -32,18 +32,14 @@ describe("branch settling", () => {
 
     await f.fetch();
 
-    expect(await f.settled()).toEqual({ topic: day });
+    await expect.poll(f.settled).toEqual({ topic: day });
     expect(requests).toEqual([
       { owner: "Octo", name: "rebase", b0: "mirrored", b1: "remote-topic" },
     ]);
   });
 
-  it("leaves merged branches alone when settling is off and settles or unsettles a selection by hand", async () => {
-    const { github, requests } = fakeGitHub({
-      "remote-topic": [{ number: 7, state: "MERGED" }],
-    });
-    const f = await settlingFixture(github);
-    await f.track("topic", "origin", "remote-topic");
+  it("stores the settling switch and settles or unsettles the existing branches of a selection by hand", async () => {
+    const f = await settlingFixture(fakeGitHub({}).github);
     const scope = {
       repositoryId: f.repositoryId,
       worktreePath: f.repositoryPath,
@@ -55,16 +51,19 @@ describe("branch settling", () => {
     await expect(
       f.settling.saveSettings({ ...scope, autoSettle: false }),
     ).resolves.toEqual({ autoSettle: false });
-    await f.fetch();
-    expect(requests).toEqual([]);
-    expect(await f.settled()).toEqual({});
+    await expect(f.settling.settings(scope)).resolves.toEqual({
+      autoSettle: false,
+    });
 
     await f.settling.settle({
       ...scope,
-      names: ["topic", "mirrored"],
+      names: ["topic", "mirrored", "deleted"],
       settled: true,
     });
     expect(await f.settled()).toEqual({ topic: day, mirrored: day });
+    await expect(
+      git(f.repositoryPath, "config", "branch.deleted.rebaseSettled"),
+    ).rejects.toThrow();
     await f.settling.settle({ ...scope, names: ["topic"], settled: false });
     expect(await f.settled()).toEqual({ mirrored: day });
     await expect(

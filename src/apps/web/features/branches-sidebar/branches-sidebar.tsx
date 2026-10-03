@@ -44,6 +44,7 @@ import {
   refSectionId,
   scopeShowing,
   selectRefRows,
+  settledSectionId,
   stashesSectionId,
   toggleSection,
 } from "#web/features/branches-sidebar/branches-sidebar-state.ts";
@@ -189,19 +190,22 @@ export function BranchesSidebar({
     ],
   );
   const focusTree = useCallback(() => treeRef.current?.focus(), []);
-  const reveal = useCallback((kind: RefKind, name: string) => {
-    const sectionId = refSectionId(kind);
-    setExpandedSections((current) =>
-      current.has(sectionId) ? current : toggleSection(current, sectionId),
-    );
-    setExpandedFolders((current) => {
-      const next = new Map(current);
-      for (const id of refFolderIds(sectionId, name)) next.set(id, true);
-      return next;
-    });
-    setActiveRowId(refRowId(sectionId, name));
-    treeRef.current?.focus();
-  }, []);
+  const reveal = useCallback(
+    (kind: RefKind, name: string, settled?: boolean) => {
+      const sectionId = settled ? settledSectionId : refSectionId(kind);
+      setExpandedSections((current) =>
+        current.has(sectionId) ? current : toggleSection(current, sectionId),
+      );
+      setExpandedFolders((current) => {
+        const next = new Map(current);
+        for (const id of refFolderIds(sectionId, name)) next.set(id, true);
+        return next;
+      });
+      setActiveRowId(refRowId(sectionId, name));
+      treeRef.current?.focus();
+    },
+    [],
+  );
   const editing = useRefEditing({
     refs,
     focusTree,
