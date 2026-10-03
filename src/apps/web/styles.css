@@ -109,6 +109,13 @@
   --color-status-unavailable: var(--status-unavailable);
 }
 
+@utility cap-centered {
+  @supports (text-box: trim-both cap alphabetic) {
+    text-box: trim-both cap alphabetic;
+    padding-block: calc((1lh - 1cap) / 2);
+  }
+}
+
 @layer base {
   * {
     @apply border-border outline-ring/50;

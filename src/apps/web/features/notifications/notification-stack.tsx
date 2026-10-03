@@ -108,13 +108,16 @@ function Notice({
           />
           <div className="min-w-0 flex-1">
             <div className="flex items-baseline gap-1.5 text-sm">
-              <Toast.Title className="min-w-0 font-medium wrap-anywhere" />
+              <Toast.Title className="min-w-0 cap-centered font-medium wrap-anywhere" />
               {elsewhere === undefined ? null : (
                 <>
-                  <span aria-hidden="true" className="text-muted-foreground">
+                  <span
+                    aria-hidden="true"
+                    className="cap-centered text-muted-foreground"
+                  >
                     ·
                   </span>
-                  <span className="max-w-[40%] shrink-0 truncate text-muted-foreground">
+                  <span className="max-w-[40%] shrink-0 cap-centered truncate text-muted-foreground">
                     {elsewhere.name}
                   </span>
                 </>
