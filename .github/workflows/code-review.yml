@@ -15,15 +15,19 @@ concurrency:
 jobs:
   review:
     name: Review pull request
-    if: github.event.pull_request.draft == false
+    if: >-
+      github.event.pull_request.draft == false &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.actor != 'dependabot[bot]'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
       contents: read
+      pull-requests: read
     outputs:
       result: ${{ steps.codex.outputs.final-message }}
     steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           ref: refs/pull/${{ github.event.pull_request.number }}/merge
           persist-credentials: false
@@ -32,11 +36,23 @@ jobs:
           BASE_REF: ${{ github.event.pull_request.base.ref }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
         run: git fetch --no-tags origin "$BASE_REF" "+refs/pull/$PR_NUMBER/head"
+      - name: Collect earlier review comments
+        env:
+          GH_TOKEN: ${{ github.token }}
+          OWNER: ${{ github.repository_owner }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          gh api --paginate "repos/$REPOSITORY/pulls/$PR_NUMBER/comments" \
+            --jq '.[] | select(.user.login == env.OWNER or .user.login == "github-actions[bot]" or .user.login == "coderabbitai[bot]") | "\(.path):\(.line // .original_line) [\(.user.login)] \(.body)\n"' \
+            > "$RUNNER_TEMP/earlier-review.txt"
       - name: Review changes
         id: codex
         uses: openai/codex-action@86365089eb2b84e0a8fb0717b304f8bdcb13b20e # v1.12
         with:
           openai-api-key: ${{ secrets.OPENAI_API_KEY }}
+          model: gpt-6.1-sol
+          effort: high
           permission-profile: ":read-only"
           prompt: |
             Review only the changes introduced by this pull request, including every commit in
@@ -47,9 +63,13 @@ jobs:
             findings against the surrounding code and tests. Do not report style preferences or
             pre-existing problems. Use the available repository tools when they help validate a finding.
 
+            Earlier review comments on this pull request and the author's replies are in
+            ${{ runner.temp }}/earlier-review.txt. Do not repeat a finding that was already raised there.
+
             Set verdict to "approve" only when there are no actionable findings and the change is ready
-            to merge. Otherwise set it to "comment". Keep the summary concise. Each finding must name the
-            affected file and exact line or range and explain the user-visible risk.
+            to merge. Otherwise set it to "comment". Keep the summary concise. Each finding names the
+            file path, a line added or changed by this pull request in the new version of that file, and
+            explains the user-visible risk.
           output-schema: |
             {
               "type": "object",
@@ -64,7 +84,14 @@ jobs:
                 "findings": {
                   "type": "array",
                   "items": {
-                    "type": "string"
+                    "type": "object",
+                    "properties": {
+                      "path": { "type": "string" },
+                      "line": { "type": "integer" },
+                      "body": { "type": "string" }
+                    },
+                    "required": ["path", "line", "body"],
+                    "additionalProperties": false
                   }
                 }
               },
@@ -89,29 +116,30 @@ jobs:
           REPOSITORY: ${{ github.repository }}
           REVIEW_RESULT: ${{ needs.review.outputs.result }}
         run: |
-          node <<'EOF'
-          const result = JSON.parse(process.env.REVIEW_RESULT)
-          const findings = result.findings.length === 0
-            ? ""
-            : `\n\n${result.findings.map((finding) => `- ${finding}`).join("\n")}`
-          const response = await fetch(
-            `https://api.github.com/repos/${process.env.REPOSITORY}/pulls/${process.env.PR_NUMBER}/reviews`,
-            {
+          node --input-type=module <<'EOF'
+          const { verdict, summary, findings } = JSON.parse(process.env.REVIEW_RESULT)
+          const submit = (review) =>
+            fetch(`https://api.github.com/repos/${process.env.REPOSITORY}/pulls/${process.env.PR_NUMBER}/reviews`, {
               method: "POST",
               headers: {
                 Accept: "application/vnd.github+json",
                 Authorization: `Bearer ${process.env.GITHUB_TOKEN}`,
                 "X-GitHub-Api-Version": "2022-11-28",
               },
-              body: JSON.stringify({
-                body: `${result.summary}${findings}`,
-                commit_id: process.env.HEAD_SHA,
-                event: result.verdict === "approve" ? "APPROVE" : "COMMENT",
-              }),
-            },
-          )
+              body: JSON.stringify({ commit_id: process.env.HEAD_SHA, ...review }),
+            })
 
-          if (!response.ok) {
-            throw new Error(`GitHub returned ${response.status}: ${await response.text()}`)
+          const inline = await submit({
+            body: summary,
+            event: verdict === "approve" && findings.length === 0 ? "APPROVE" : "COMMENT",
+            comments: findings.map(({ path, line, body }) => ({ path, line, side: "RIGHT", body })),
+          })
+          if (inline.ok) process.exit(0)
+          console.log(`Inline review rejected with ${inline.status}: ${await inline.text()}`)
+
+          const listed = findings.map(({ path, line, body }) => `- \`${path}:${line}\` ${body}`)
+          const plain = await submit({ body: [summary, ...listed].join("\n\n"), event: "COMMENT" })
+          if (!plain.ok) {
+            throw new Error(`GitHub returned ${plain.status}: ${await plain.text()}`)
           }
           EOF
