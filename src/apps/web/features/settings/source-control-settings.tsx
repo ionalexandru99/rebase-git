@@ -4,12 +4,14 @@ import {
   IconBrandGit,
   IconBrandGithub,
   IconBrandGitlab,
+  IconChevronDown,
   IconGitFork,
   IconRefresh,
   type TablerIcon,
 } from "@tabler/icons-react";
-import { Fragment, type ReactNode, useState } from "react";
+import { Fragment, type ReactNode, useId, useState } from "react";
 import {
+  type BitbucketToken,
   type GitHostKind,
   type GitHostStatus,
   type GitStatus,
@@ -24,6 +26,7 @@ import {
 import { Switch } from "#web/components/ui/switch.tsx";
 import { useErrorToast } from "#web/features/notifications/notifications.tsx";
 import { localEnvironment } from "#web/features/project-navigation/local-environment.ts";
+import { BitbucketTokenForm } from "#web/features/settings/bitbucket-token-form.tsx";
 import { useEnvironmentQuery } from "#web/platform/query/environment-query.ts";
 import { useCommand } from "#web/platform/query/use-command.ts";
 
@@ -200,10 +203,33 @@ function HostRow({ host }: { readonly host: GitHostStatus }) {
         title={descriptor.label}
       />
     );
-  const signedIn = host._tag === "SignedIn";
+  const signedIn =
+    host._tag === "SignedIn" || (host._tag === "Token" && host.saved !== null);
   const enabled = setEnabled.running
     ? (setEnabled.input?.enabled ?? host.enabled)
     : host.enabled;
+  const toggle = (
+    <Switch
+      aria-label={`Use ${descriptor.label}`}
+      checked={signedIn && enabled}
+      disabled={!signedIn || setEnabled.running}
+      onCheckedChange={async (checked) =>
+        errorToast.failure(
+          "saveSourceControl",
+          await setEnabled.run({ kind: host.kind, enabled: checked }),
+        )
+      }
+    />
+  );
+  if (host._tag === "Token")
+    return (
+      <TokenRow
+        icon={icon}
+        label={descriptor.label}
+        saved={host.saved}
+        toggle={toggle}
+      />
+    );
   return (
     <SettingsRow
       {...(host._tag === "SignedOut" ? { badge: "Not authenticated" } : {})}
@@ -229,17 +255,64 @@ function HostRow({ host }: { readonly host: GitHostStatus }) {
       status={signedIn ? "ready" : "attention"}
       title={descriptor.label}
     >
-      <Switch
-        aria-label={`Use ${descriptor.label}`}
-        checked={signedIn && enabled}
-        disabled={!signedIn || setEnabled.running}
-        onCheckedChange={async (checked) =>
-          errorToast.failure(
-            "saveSourceControl",
-            await setEnabled.run({ kind: host.kind, enabled: checked }),
-          )
-        }
-      />
+      {toggle}
+    </SettingsRow>
+  );
+}
+
+function TokenRow({
+  icon,
+  label,
+  saved,
+  toggle,
+}: {
+  readonly icon: ReactNode;
+  readonly label: string;
+  readonly saved: BitbucketToken | null;
+  readonly toggle: ReactNode;
+}) {
+  const [open, setOpen] = useState(saved === null);
+  const formId = useId();
+  return (
+    <SettingsRow
+      {...(saved === null ? { badge: "Not authenticated" } : {})}
+      description={
+        saved === null ? (
+          "Save an access token or an API token to show pull requests."
+        ) : saved._tag === "AccessToken" ? (
+          "Authenticated with an access token"
+        ) : (
+          <>
+            Authenticated as{" "}
+            <HiddenAccount account={saved.account} host="bitbucket.org" />
+          </>
+        )
+      }
+      details={
+        open ? (
+          <div id={formId}>
+            <BitbucketTokenForm onSaved={() => setOpen(false)} saved={saved} />
+          </div>
+        ) : undefined
+      }
+      icon={icon}
+      status={saved === null ? "attention" : "ready"}
+      title={label}
+    >
+      <Button
+        aria-controls={formId}
+        aria-expanded={open}
+        aria-label={`${label} token`}
+        onClick={() => setOpen((current) => !current)}
+        size="icon-xs"
+        variant="ghost"
+      >
+        <IconChevronDown
+          aria-hidden="true"
+          className={`size-4 ${open ? "rotate-180" : ""}`}
+        />
+      </Button>
+      {toggle}
     </SettingsRow>
   );
 }

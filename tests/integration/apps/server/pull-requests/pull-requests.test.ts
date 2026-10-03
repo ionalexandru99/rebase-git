@@ -2,9 +2,11 @@ import { join } from "node:path";
 import { Effect } from "effect";
 import { describe, expect, it } from "vite-plus/test";
 import { PullRequestsApi } from "#contracts/pull-requests/pull-requests.contract.ts";
+import { SourceControlApi } from "#contracts/source-control/source-control.contract.ts";
 import { createRepository, git } from "#tests-support/git.ts";
 import {
   fakeAzureDevOps,
+  fakeBitbucket,
   fakeForgejo,
   fakeGitHub,
   fakeGitLab,
@@ -258,6 +260,89 @@ describe("Azure DevOps pull requests", () => {
     ]);
   });
 
+  it("finds pull requests and build checks on the Bitbucket repository with the saved token", async () => {
+    const { bitbucket, requests } = fakeBitbucket({
+      "remote-topic": [
+        { id: 7, state: "MERGED" },
+        { id: 9, draft: true, checks: ["SUCCESSFUL", "INPROGRESS"] },
+        { id: 8, fork: true },
+      ],
+      main: [{ id: 3, checks: ["FAILED"] }],
+    });
+    const f = await fixture(
+      {
+        origin: "git@bitbucket.org:acme/rebase.git",
+        other: "https://octo@bitbucket.org/acme/other.git",
+      },
+      { bitbucket },
+    );
+    await f.track("topic", "origin", "remote-topic");
+    await f.track("main", "origin", "main");
+    await f.track("elsewhere", "other", "elsewhere");
+    await Effect.runPromise(
+      f.sourceControl.saveBitbucketToken({
+        _tag: "AccessToken",
+        token: "access-token",
+      }),
+    );
+
+    const url = (id: number) =>
+      `https://bitbucket.org/acme/rebase/pull-requests/${id}`;
+    await expect(f.list()).resolves.toEqual([
+      {
+        branch: "main",
+        pullRequests: [
+          {
+            kind: "PullRequest",
+            number: 3,
+            url: url(3),
+            title: "Pull request 3",
+            state: "Open",
+            checks: "Failing",
+          },
+        ],
+      },
+      {
+        branch: "topic",
+        pullRequests: [
+          {
+            kind: "PullRequest",
+            number: 9,
+            url: url(9),
+            title: "Pull request 9",
+            state: "Draft",
+            checks: "Pending",
+          },
+          {
+            kind: "PullRequest",
+            number: 7,
+            url: url(7),
+            title: "Pull request 7",
+            state: "Merged",
+          },
+        ],
+      },
+    ]);
+    expect(new Set(requests.map(({ authorization }) => authorization))).toEqual(
+      new Set(["Bearer access-token"]),
+    );
+    expect(requests.filter(({ url }) => url.includes("acme/other"))).toEqual(
+      [],
+    );
+  });
+
+  it("asks Bitbucket nothing until a token is saved", async () => {
+    const { bitbucket, requests } = fakeBitbucket({ main: [{ id: 1 }] });
+    const f = await fixture(
+      { origin: "https://bitbucket.org/acme/rebase.git" },
+      { bitbucket },
+    );
+    await f.track("main", "origin", "main");
+
+    await expect(f.list()).resolves.toEqual([]);
+    expect(requests).toEqual([]);
+  });
+
   it("asks nothing when glab is not signed in to the remote's server", async () => {
     const gitlab = fakeGitLab({}, { accounts: {} });
     const f = await fixture(
@@ -366,6 +451,7 @@ async function fixture(
   const repositoryId = (await environment.remember(repositoryPath)).id;
   const service = environment.routes(PullRequestsApi);
   return {
+    sourceControl: environment.routes(SourceControlApi),
     list: () => Effect.runPromise(service.list({ repositoryId })),
     track: async (branch: string, remote: string, head: string) => {
       await git(repositoryPath, "config", `branch.${branch}.remote`, remote);

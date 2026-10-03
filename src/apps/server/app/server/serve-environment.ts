@@ -35,6 +35,10 @@ import {
   createAzureDevOpsHost,
 } from "#server/features/source-control/azure-devops-host.ts";
 import {
+  createBitbucket,
+  createBitbucketClient,
+} from "#server/features/source-control/bitbucket-host.ts";
+import {
   createForgejoHost,
   createTeaCli,
 } from "#server/features/source-control/forgejo-host.ts";
@@ -129,6 +133,7 @@ export function acquireEnvironment(home: string, git: GitCommandRunner) {
       access: createRepositoryAccess(catalog, git, watcher),
       authorization: createEnvironmentAuthorization(context),
       azureDevOps: createAzureDevOpsClient(),
+      bitbucket: createBitbucketClient(),
       catalog,
       context,
       coordination: createRepositoryCoordination(git),
@@ -145,12 +150,17 @@ export function acquireEnvironment(home: string, git: GitCommandRunner) {
 
 export function environmentFeatures(dependencies: EnvironmentDependencies) {
   return Effect.gen(function* () {
+    const bitbucket = createBitbucket(
+      dependencies.context,
+      dependencies.bitbucket,
+    );
     const sourceControl = createSourceControl(
       dependencies.context,
       dependencies.git,
       [
         createGitHubHost(dependencies.github),
         createAzureDevOpsHost(dependencies.azureDevOps),
+        bitbucket.host,
         createGitLabHost(dependencies.gitlab),
         createForgejoHost(dependencies.forgejo),
       ],
@@ -170,7 +180,11 @@ export function environmentFeatures(dependencies: EnvironmentDependencies) {
       repositoryReflogFeature(dependencies),
       yield* repositoryRefsFeature(dependencies),
       repositoryStashesFeature(dependencies),
-      sourceControlFeature({ events: dependencies.events, sourceControl }),
+      sourceControlFeature({
+        events: dependencies.events,
+        sourceControl,
+        bitbucket,
+      }),
     ]);
   });
 }

@@ -14,6 +14,7 @@ import {
   route,
 } from "#server/adapters/environment-transport/environment-routes.ts";
 import type { GitCommandRunner } from "#server/adapters/local-git/git-commands.ts";
+import type { Bitbucket } from "#server/features/source-control/bitbucket-host.ts";
 import type { GitHost } from "#server/features/source-control/git-host.ts";
 import type { EnvironmentContext } from "#server/persistence/environment-context.ts";
 import { gitHostTable } from "#server/persistence/environment-state.schema.ts";
@@ -69,17 +70,24 @@ export function createSourceControl(
 export function sourceControlFeature({
   events,
   sourceControl,
+  bitbucket,
 }: {
   readonly events: EnvironmentEventPublisher;
   readonly sourceControl: SourceControl;
+  readonly bitbucket: Bitbucket;
 }) {
+  const changed = Effect.tap(() => Effect.sync(() => events.publishChanged()));
   return {
     routes: [
       route(SourceControlApi.discover, () => sourceControl.discover),
       route(SourceControlApi.setHostEnabled, ({ kind, enabled }) =>
-        sourceControl
-          .setHostEnabled(kind, enabled)
-          .pipe(Effect.tap(() => Effect.sync(() => events.publishChanged()))),
+        sourceControl.setHostEnabled(kind, enabled).pipe(changed),
+      ),
+      route(SourceControlApi.saveBitbucketToken, (token) =>
+        bitbucket.save(token).pipe(changed),
+      ),
+      route(SourceControlApi.removeBitbucketToken, () =>
+        bitbucket.remove.pipe(changed),
       ),
     ],
   } satisfies EnvironmentFeature;

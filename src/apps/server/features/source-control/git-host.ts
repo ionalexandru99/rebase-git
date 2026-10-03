@@ -3,7 +3,10 @@ import type {
   BranchPullRequests,
   PullRequestsUnavailable,
 } from "#contracts/pull-requests/pull-requests.contract.ts";
-import type { GitHostKind } from "#contracts/source-control/source-control.contract.ts";
+import type {
+  BitbucketToken,
+  GitHostKind,
+} from "#contracts/source-control/source-control.contract.ts";
 
 export interface GitHostAccount {
   readonly host: string;
@@ -17,7 +20,8 @@ export type GitHostTool =
       readonly _tag: "SignedIn";
       readonly version: string;
       readonly accounts: readonly GitHostAccount[];
-    };
+    }
+  | { readonly _tag: "Token"; readonly saved: BitbucketToken | null };
 
 export interface TrackedBranch {
   readonly branch: string;

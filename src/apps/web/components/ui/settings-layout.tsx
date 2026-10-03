@@ -57,6 +57,7 @@ export function SettingsRow({
   descriptionId,
   liveDescription = false,
   dim = false,
+  details,
   children,
 }: {
   readonly title: string;
@@ -68,53 +69,55 @@ export function SettingsRow({
   readonly descriptionId?: string;
   readonly liveDescription?: boolean;
   readonly dim?: boolean;
+  readonly details?: ReactNode;
   readonly children?: ReactNode;
 }) {
   return (
-    <div
-      className={`flex flex-col gap-3 px-3 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-4 ${dim ? "opacity-80" : ""}`}
-    >
-      <div className="min-w-0 flex-1 space-y-1">
-        <div className="flex min-w-0 flex-wrap items-center gap-2">
-          {icon === undefined ? null : (
-            <span className="relative inline-flex size-5 shrink-0 items-center justify-center">
-              {icon}
-              {status === undefined ? null : (
-                <span
-                  aria-hidden="true"
-                  className={`pointer-events-none absolute -top-0.5 -left-0.5 size-2 rounded-full ring-2 ring-repository ${status === "ready" ? "bg-status-available" : "bg-status-connecting"}`}
-                />
-              )}
-            </span>
-          )}
-          <h3 className="truncate text-sm font-medium text-foreground">
-            {title}
-          </h3>
-          {value === undefined ? null : (
-            <code className="text-xs text-muted-foreground">{value}</code>
-          )}
-          {badge === undefined ? null : (
-            <span className="inline-flex h-4 items-center rounded-[.25rem] bg-status-connecting/15 px-1 text-[.625rem] leading-none font-medium text-status-connecting">
-              {badge}
-            </span>
+    <div className={`space-y-4 px-3 py-3 sm:px-4 ${dim ? "opacity-80" : ""}`}>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="min-w-0 flex-1 space-y-1">
+          <div className="flex min-w-0 flex-wrap items-center gap-2">
+            {icon === undefined ? null : (
+              <span className="relative inline-flex size-5 shrink-0 items-center justify-center">
+                {icon}
+                {status === undefined ? null : (
+                  <span
+                    aria-hidden="true"
+                    className={`pointer-events-none absolute -top-0.5 -left-0.5 size-2 rounded-full ring-2 ring-repository ${status === "ready" ? "bg-status-available" : "bg-status-connecting"}`}
+                  />
+                )}
+              </span>
+            )}
+            <h3 className="truncate text-sm font-medium text-foreground">
+              {title}
+            </h3>
+            {value === undefined ? null : (
+              <code className="text-xs text-muted-foreground">{value}</code>
+            )}
+            {badge === undefined ? null : (
+              <span className="inline-flex h-4 items-center rounded-[.25rem] bg-status-connecting/15 px-1 text-[.625rem] leading-none font-medium text-status-connecting">
+                {badge}
+              </span>
+            )}
+          </div>
+          {description === undefined ? null : (
+            <div
+              aria-atomic={liveDescription || undefined}
+              aria-live={liveDescription ? "polite" : undefined}
+              className="text-xs leading-normal text-muted-foreground/80"
+              id={descriptionId}
+            >
+              {description}
+            </div>
           )}
         </div>
-        {description === undefined ? null : (
-          <div
-            aria-atomic={liveDescription || undefined}
-            aria-live={liveDescription ? "polite" : undefined}
-            className="text-xs leading-normal text-muted-foreground/80"
-            id={descriptionId}
-          >
-            {description}
+        {children === undefined ? null : (
+          <div className="flex shrink-0 flex-wrap items-center gap-2">
+            {children}
           </div>
         )}
       </div>
-      {children === undefined ? null : (
-        <div className="flex shrink-0 flex-wrap items-center gap-2">
-          {children}
-        </div>
-      )}
+      {details}
     </div>
   );
 }
