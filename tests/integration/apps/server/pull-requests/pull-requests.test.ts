@@ -330,7 +330,7 @@ describe("Forgejo and Gitea pull requests", () => {
   it("asks nothing when tea has no login for the remote's server", async () => {
     const forgejo = fakeForgejo({});
     const f = await fixture(
-      { origin: "https://git.example.com/team/rebase.git" },
+      { origin: "https://codeberg.org:8443/team/rebase.git" },
       { forgejo: forgejo.forgejo },
     );
     await f.track("main", "origin", "main");

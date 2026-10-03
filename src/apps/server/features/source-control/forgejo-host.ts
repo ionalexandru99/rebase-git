@@ -29,6 +29,7 @@ interface TeaLogin {
 
 interface ForgejoRepository {
   readonly host: string;
+  readonly server: string | undefined;
   readonly owner: string;
   readonly name: string;
 }
@@ -44,9 +45,12 @@ const accountsShown = 16;
 export function createTeaCli(): TeaCli {
   return {
     version: tea(["--version"]).pipe(
-      Effect.map((output) => /\d+\.\d+\.\d+/.exec(output)?.[0]),
+      Effect.map((output) => /(\d+)\.(\d+)\.\d+/.exec(output)),
       Effect.map((version) =>
-        version === undefined ? undefined : `tea ${version}`,
+        version === null ||
+        (Number(version[1]) === 0 && Number(version[2]) < 12)
+          ? undefined
+          : `tea ${version[0]}`,
       ),
       Effect.orElseSucceed(() => undefined),
     ),
@@ -83,7 +87,7 @@ export function createForgejoHost(cli: TeaCli): GitHost {
       const repository = forgejoRepository(remoteUrl);
       if (repository === undefined) return Effect.succeed(false);
       return readLogins(cli).pipe(
-        Effect.map((logins) => loginFor(logins, repository.host) !== undefined),
+        Effect.map((logins) => loginFor(logins, repository) !== undefined),
       );
     },
     tool: Effect.gen(function* () {
@@ -135,8 +139,15 @@ function readLogins(cli: TeaCli): Effect.Effect<readonly TeaLogin[]> {
   );
 }
 
-function loginFor(logins: readonly TeaLogin[], host: string) {
-  return logins.find((login) => login.host === host || login.sshHost === host);
+function loginFor(
+  logins: readonly TeaLogin[],
+  { host, server }: ForgejoRepository,
+) {
+  return logins.find((login) =>
+    server === undefined
+      ? login.host === host || login.sshHost === host
+      : login.server === server,
+  );
 }
 
 function forgejoRepository(remoteUrl: string): ForgejoRepository | undefined {
@@ -147,9 +158,18 @@ function forgejoRepository(remoteUrl: string): ForgejoRepository | undefined {
     .split("/");
   const name = parts?.at(-1);
   const owner = parts?.at(-2);
+  const url = URL.parse(remoteUrl);
   return location === undefined || location.host === "" || !owner || !name
     ? undefined
-    : { host: location.host, owner, name };
+    : {
+        host: location.host,
+        server:
+          url?.protocol === "https:" || url?.protocol === "http:"
+            ? url.host
+            : undefined,
+        owner,
+        name,
+      };
 }
 
 function fullName({ owner, name }: ForgejoRepository) {
@@ -171,14 +191,14 @@ function listPullRequests(
         fullName(candidate) === fullName(repository)
       );
     });
-    const login = loginFor(yield* readLogins(cli), repository.host);
+    const login = loginFor(yield* readLogins(cli), repository);
     if (login === undefined || tracked.length === 0) return [];
     const heads = new Set(tracked.map(({ head }) => head));
     const nodes = (yield* readPullRequests(cli, login.name, repository)).filter(
       (node) =>
         heads.has(node.head.ref) &&
         node.head.repo?.full_name.toLowerCase() === fullName(repository) &&
-        isServerLink(node.html_url, login.host),
+        isServerLink(node.html_url, login.server),
     );
     const found = yield* Effect.forEach(
       nodes,
@@ -252,9 +272,9 @@ function repositoryEndpoint({ owner, name }: ForgejoRepository) {
   return `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(name)}`;
 }
 
-function isServerLink(url: string, host: string) {
+function isServerLink(url: string, server: string) {
   const link = URL.parse(url);
-  return link?.protocol === "https:" && link.hostname.toLowerCase() === host;
+  return link?.protocol === "https:" && link.host === server;
 }
 
 const PullRequestNode = Schema.Struct({
