@@ -6,6 +6,7 @@ import { SourceControlApi } from "#contracts/source-control/source-control.contr
 import { createRepository, git } from "#tests-support/git.ts";
 import {
   fakeAzureDevOps,
+  fakeBitbucket,
   fakeForgejo,
   fakeGitHub,
   fakeGitLab,
@@ -13,7 +14,7 @@ import {
 import { openTestEnvironment } from "#tests-support/server.ts";
 
 describe("source control", () => {
-  it("reports Git, the logins of every host and the hosts that are coming soon", async () => {
+  it("reports Git, the logins of every host and the Bitbucket token", async () => {
     const f = await fixture();
 
     const { git: gitStatus, hosts } = await f.discover();
@@ -47,7 +48,7 @@ describe("source control", () => {
         version: "azure-cli 2.78.0",
         accounts: [{ host: "dev.azure.com", account: "octo@example.com" }],
       },
-      { _tag: "ComingSoon", kind: "bitbucket" },
+      { _tag: "Token", kind: "bitbucket", enabled: true, saved: null },
       {
         _tag: "SignedIn",
         kind: "forgejo",
@@ -96,11 +97,63 @@ describe("source control", () => {
       expect.objectContaining({ branch: "main" }),
     ]);
   });
+
+  it("checks an Atlassian API token with Bitbucket before saving it, and keeps an access token as given", async () => {
+    const f = await fixture();
+    const bitbucket = () =>
+      f
+        .discover()
+        .then(({ hosts }) => hosts.find(({ kind }) => kind === "bitbucket"));
+
+    await f.saveToken({
+      _tag: "ApiToken",
+      email: "octo@example.com",
+      token: "api-token",
+    });
+
+    expect(await bitbucket()).toMatchObject({
+      saved: { _tag: "ApiToken", email: "octo@example.com", account: "octo" },
+    });
+    expect(f.bitbucketRequests).toEqual([
+      {
+        url: "https://api.bitbucket.org/2.0/user",
+        authorization: `Basic ${btoa("octo@example.com:api-token")}`,
+      },
+    ]);
+
+    await f.saveToken({ _tag: "AccessToken", token: "access-token" });
+
+    expect(await bitbucket()).toMatchObject({ saved: { _tag: "AccessToken" } });
+    expect(f.bitbucketRequests).toHaveLength(1);
+
+    await f.removeToken();
+
+    expect(await bitbucket()).toMatchObject({ saved: null });
+  });
+
+  it("rejects an API token that cannot read the Atlassian account", async () => {
+    const f = await fixture({}, { userStatus: 403 });
+
+    await expect(
+      f.saveToken({ _tag: "ApiToken", email: "octo@example.com", token: "x" }),
+    ).rejects.toEqual({
+      _tag: "BitbucketTokenRejected",
+      reason: "MissingScope",
+    });
+    expect(
+      (await f.discover()).hosts.find(({ kind }) => kind === "bitbucket"),
+    ).toMatchObject({ saved: null });
+  });
 });
 
-async function fixture(tool: Parameters<typeof fakeGitHub>[1] = {}) {
+async function fixture(
+  tool: Parameters<typeof fakeGitHub>[1] = {},
+  bitbucketUser: Parameters<typeof fakeBitbucket>[1] = {},
+) {
   const { github, requests } = fakeGitHub({ main: [{ number: 1 }] }, tool);
+  const bitbucket = fakeBitbucket({}, bitbucketUser);
   const environment = await openTestEnvironment({
+    bitbucket: bitbucket.bitbucket,
     github,
     azureDevOps: fakeAzureDevOps({}).azureDevOps,
     gitlab: fakeGitLab(null, {
@@ -130,6 +183,12 @@ async function fixture(tool: Parameters<typeof fakeGitHub>[1] = {}) {
   return {
     environment,
     requests,
+    bitbucketRequests: bitbucket.requests,
+    saveToken: (
+      token: Parameters<typeof sourceControl.saveBitbucketToken>[0],
+    ) => Effect.runPromise(sourceControl.saveBitbucketToken(token)),
+    removeToken: () =>
+      Effect.runPromise(sourceControl.removeBitbucketToken(undefined)),
     discover: () => Effect.runPromise(sourceControl.discover(undefined)),
     setEnabled: (enabled: boolean) =>
       Effect.runPromise(

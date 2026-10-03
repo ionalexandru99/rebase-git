@@ -1,7 +1,14 @@
 import { describe, expect, it } from "vite-plus/test";
 import { page } from "vite-plus/test/browser";
-import { SourceControlApi } from "#contracts/source-control/source-control.contract.ts";
-import { fakeRequests, respond } from "#tests-support/fake-requests.ts";
+import {
+  type BitbucketToken,
+  SourceControlApi,
+} from "#contracts/source-control/source-control.contract.ts";
+import {
+  fakeRequests,
+  rejected,
+  respond,
+} from "#tests-support/fake-requests.ts";
 import { sourceControlDiscovery } from "#tests-support/fixtures.ts";
 import { render } from "#tests-support/render.tsx";
 import { SourceControlSettings } from "#web/features/settings/source-control-settings.tsx";
@@ -56,7 +63,7 @@ describe("source control settings", () => {
       .element(page.getByText(/on gitlab\.com, .* on git\.example\.com$/))
       .toBeVisible();
     await expect
-      .element(page.getByText("Support for Bitbucket is coming soon."))
+      .element(page.getByText("Support for Forgejo / Gitea is coming soon."))
       .toBeVisible();
     const github = page.getByRole("switch", { name: "Use GitHub" });
     await expect.element(github).toBeChecked();
@@ -90,5 +97,71 @@ describe("source control settings", () => {
     await expect
       .element(page.getByRole("switch", { name: "Use GitHub" }))
       .toBeDisabled();
+  });
+
+  it("saves an Atlassian API token from the Bitbucket row and says inline why one was refused", async () => {
+    let saved: BitbucketToken | null = null;
+    const sent: unknown[] = [];
+    await render(<SourceControlSettings />, {
+      environment: {
+        requests: fakeRequests(
+          respond(SourceControlApi.discover, async () =>
+            sourceControlDiscovery({
+              bitbucket: {
+                _tag: "Token",
+                kind: "bitbucket",
+                enabled: true,
+                saved,
+              },
+            }),
+          ),
+          respond(SourceControlApi.saveBitbucketToken, async (input) => {
+            sent.push(input);
+            if (input.token === "wrong")
+              throw rejected({
+                _tag: "BitbucketTokenRejected",
+                reason: "Invalid",
+              });
+            saved = {
+              _tag: "ApiToken",
+              email: "octo@example.com",
+              account: "octo",
+            };
+          }),
+        ),
+      },
+    });
+    const bitbucket = page.getByRole("switch", { name: "Use Bitbucket" });
+    await expect.element(bitbucket).toBeDisabled();
+
+    await page.getByRole("tab", { name: "API token" }).click();
+    await page
+      .getByLabelText("Atlassian account email")
+      .fill(" octo@example.com ");
+    await page.getByRole("textbox", { name: "API token" }).fill("wrong");
+    await page.getByRole("button", { name: "Save" }).click();
+
+    await expect
+      .element(
+        page.getByText("Bitbucket did not accept this email and API token."),
+      )
+      .toBeVisible();
+
+    await page.getByRole("textbox", { name: "API token" }).fill("api-token");
+    await page.getByRole("button", { name: "Save" }).click();
+
+    await expect
+      .element(
+        page.getByRole("button", { name: "Show account on bitbucket.org" }),
+      )
+      .toBeVisible();
+    await expect.element(bitbucket).toBeChecked();
+    await expect
+      .element(page.getByRole("textbox", { name: "API token" }))
+      .not.toBeInTheDocument();
+    expect(sent).toEqual([
+      { _tag: "ApiToken", email: "octo@example.com", token: "wrong" },
+      { _tag: "ApiToken", email: "octo@example.com", token: "api-token" },
+    ]);
   });
 });

@@ -42,7 +42,7 @@ describe("trusted IPC handler", () => {
 });
 
 describe("external links", () => {
-  it("opens only https GitHub, Azure DevOps, GitLab and Forgejo pull request links in the system browser", () => {
+  it("opens only https GitHub, Azure DevOps, Bitbucket, GitLab and Forgejo pull request links in the system browser", () => {
     expect(
       isExternalPullRequestLink("https://github.com/octo/rebase/pull/7"),
     ).toBe(true);
@@ -55,6 +55,11 @@ describe("external links", () => {
     expect(
       isExternalPullRequestLink(
         "https://dev.azure.com/acme/rebase/_git/rebase/pullrequest/7",
+      ),
+    ).toBe(true);
+    expect(
+      isExternalPullRequestLink(
+        "https://bitbucket.org/acme/rebase/pull-requests/7",
       ),
     ).toBe(true);
     expect(

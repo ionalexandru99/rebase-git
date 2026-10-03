@@ -263,19 +263,21 @@ export function sourceControlDiscovery({
     accounts: [{ host: "github.com", account: "octo" }],
   },
   gitlab = { _tag: "Missing", kind: "gitlab", enabled: true },
+  bitbucket = { _tag: "Token", kind: "bitbucket", enabled: true, saved: null },
 }: {
   readonly git?: GitStatus;
   readonly github?: GitHostStatus;
   readonly gitlab?: GitHostStatus;
+  readonly bitbucket?: GitHostStatus;
 } = {}) {
   return {
     git,
     hosts: [
       github,
       gitlab,
-      ...(["azure-devops", "bitbucket", "forgejo"] as const).map(
-        (kind) => ({ _tag: "ComingSoon", kind }) as const,
-      ),
+      { _tag: "ComingSoon", kind: "azure-devops" } as const,
+      bitbucket,
+      { _tag: "ComingSoon", kind: "forgejo" } as const,
     ],
   };
 }

@@ -1,0 +1,378 @@
+{
+  "version": "7",
+  "dialect": "sqlite",
+  "id": "5e302be2-3eef-47de-a90d-82639a8192f3",
+  "prevIds": ["9fb0b31b-ac70-4151-bfe4-ff87283b88bf"],
+  "ddl": [
+    {
+      "name": "authorization_metadata",
+      "entityType": "tables"
+    },
+    {
+      "name": "bitbucket_token",
+      "entityType": "tables"
+    },
+    {
+      "name": "environment",
+      "entityType": "tables"
+    },
+    {
+      "name": "git_host",
+      "entityType": "tables"
+    },
+    {
+      "name": "repository_catalog",
+      "entityType": "tables"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "created_at",
+      "entityType": "columns",
+      "table": "authorization_metadata"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "id",
+      "entityType": "columns",
+      "table": "authorization_metadata"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "label",
+      "entityType": "columns",
+      "table": "authorization_metadata"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "last_seen_at",
+      "entityType": "columns",
+      "table": "authorization_metadata"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "revoked_at",
+      "entityType": "columns",
+      "table": "authorization_metadata"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "account",
+      "entityType": "columns",
+      "table": "bitbucket_token"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "email",
+      "entityType": "columns",
+      "table": "bitbucket_token"
+    },
+    {
+      "type": "integer",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "singleton",
+      "entityType": "columns",
+      "table": "bitbucket_token"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "token",
+      "entityType": "columns",
+      "table": "bitbucket_token"
+    },
+    {
+      "type": "integer",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "automatic_port",
+      "entityType": "columns",
+      "table": "environment"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "id",
+      "entityType": "columns",
+      "table": "environment"
+    },
+    {
+      "type": "integer",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "singleton",
+      "entityType": "columns",
+      "table": "environment"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "enabled",
+      "entityType": "columns",
+      "table": "git_host"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "kind",
+      "entityType": "columns",
+      "table": "git_host"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "added_at",
+      "entityType": "columns",
+      "table": "repository_catalog"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "'blue'",
+      "generated": null,
+      "name": "color",
+      "entityType": "columns",
+      "table": "repository_catalog"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "git_common_directory",
+      "entityType": "columns",
+      "table": "repository_catalog"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "id",
+      "entityType": "columns",
+      "table": "repository_catalog"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "last_opened_at",
+      "entityType": "columns",
+      "table": "repository_catalog"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "logical_repository_id",
+      "entityType": "columns",
+      "table": "repository_catalog"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "name",
+      "entityType": "columns",
+      "table": "repository_catalog"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "path",
+      "entityType": "columns",
+      "table": "repository_catalog"
+    },
+    {
+      "columns": ["id"],
+      "nameExplicit": false,
+      "name": "authorization_metadata_pk",
+      "table": "authorization_metadata",
+      "entityType": "pks"
+    },
+    {
+      "columns": ["singleton"],
+      "nameExplicit": false,
+      "name": "bitbucket_token_pk",
+      "table": "bitbucket_token",
+      "entityType": "pks"
+    },
+    {
+      "columns": ["singleton"],
+      "nameExplicit": false,
+      "name": "environment_pk",
+      "table": "environment",
+      "entityType": "pks"
+    },
+    {
+      "columns": ["kind"],
+      "nameExplicit": false,
+      "name": "git_host_pk",
+      "table": "git_host",
+      "entityType": "pks"
+    },
+    {
+      "columns": ["id"],
+      "nameExplicit": false,
+      "name": "repository_catalog_pk",
+      "table": "repository_catalog",
+      "entityType": "pks"
+    },
+    {
+      "columns": [
+        {
+          "value": "\"last_opened_at\" DESC",
+          "isExpression": true
+        },
+        {
+          "value": "\"id\" DESC",
+          "isExpression": true
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "repository_catalog_last_opened_at",
+      "entityType": "indexes",
+      "table": "repository_catalog"
+    },
+    {
+      "columns": [
+        {
+          "value": "logical_repository_id",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "repository_catalog_logical_repository_id",
+      "entityType": "indexes",
+      "table": "repository_catalog"
+    },
+    {
+      "columns": [
+        {
+          "value": "name",
+          "isExpression": false
+        },
+        {
+          "value": "path",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "repository_catalog_name",
+      "entityType": "indexes",
+      "table": "repository_catalog"
+    },
+    {
+      "columns": ["id"],
+      "nameExplicit": false,
+      "name": "environment_id_unique",
+      "entityType": "uniques",
+      "table": "environment"
+    },
+    {
+      "columns": ["path"],
+      "nameExplicit": false,
+      "name": "repository_catalog_path_unique",
+      "entityType": "uniques",
+      "table": "repository_catalog"
+    },
+    {
+      "value": "\"singleton\" = 1",
+      "name": "bitbucket_token_singleton_check",
+      "entityType": "checks",
+      "table": "bitbucket_token"
+    },
+    {
+      "value": "\"automatic_port\" BETWEEN 1 AND 65535",
+      "name": "environment_automatic_port_check",
+      "entityType": "checks",
+      "table": "environment"
+    },
+    {
+      "value": "\"singleton\" = 1",
+      "name": "environment_singleton_check",
+      "entityType": "checks",
+      "table": "environment"
+    },
+    {
+      "value": "length(\"name\") BETWEEN 1 AND 255",
+      "name": "repository_catalog_name_check",
+      "entityType": "checks",
+      "table": "repository_catalog"
+    },
+    {
+      "value": "length(\"path\") BETWEEN 1 AND 4096",
+      "name": "repository_catalog_path_check",
+      "entityType": "checks",
+      "table": "repository_catalog"
+    }
+  ],
+  "renames": []
+}

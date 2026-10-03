@@ -1,0 +1,191 @@
+import { type FormEvent, type ReactNode, useId, useState } from "react";
+import {
+  type BitbucketToken,
+  SourceControlApi,
+} from "#contracts/source-control/source-control.contract.ts";
+import { Button } from "#web/components/ui/button.tsx";
+import { Input } from "#web/components/ui/input.tsx";
+import {
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from "#web/components/ui/tabs.tsx";
+import { useErrorToast } from "#web/features/notifications/notifications.tsx";
+import { describeFailure } from "#web/platform/query/request-failure.ts";
+import { useCommand } from "#web/platform/query/use-command.ts";
+
+type Method = BitbucketToken["_tag"];
+
+const methods: Record<
+  Method,
+  { readonly label: string; readonly description: string }
+> = {
+  AccessToken: {
+    label: "Access token",
+    description:
+      "Scoped to one repository, project or workspace. Create it in that item's Bitbucket settings with read access to repositories and pull requests.",
+  },
+  ApiToken: {
+    label: "API token",
+    description:
+      "Uses your Atlassian account, so it reaches every repository you can. Create it at https://id.atlassian.com/manage-profile/security/api-tokens with the read:repository:bitbucket, read:pullrequest:bitbucket and read:user:bitbucket scopes.",
+  },
+};
+
+const tokenFailures = {
+  BitbucketTokenRejected: ({ reason }: { readonly reason: string }) =>
+    reason === "Invalid"
+      ? "Bitbucket did not accept this email and API token."
+      : reason === "MissingScope"
+        ? "This API token needs the read:user:bitbucket scope."
+        : "Could not reach Bitbucket to check this token. Try again.",
+};
+
+export function BitbucketTokenForm({
+  saved,
+  onSaved,
+}: {
+  readonly saved: BitbucketToken | null;
+  readonly onSaved: () => void;
+}) {
+  const id = useId();
+  const errorToast = useErrorToast();
+  const save = useCommand(SourceControlApi.saveBitbucketToken);
+  const remove = useCommand(SourceControlApi.removeBitbucketToken);
+  const [method, setMethod] = useState<Method>(saved?._tag ?? "AccessToken");
+  const [token, setToken] = useState("");
+  const [email, setEmail] = useState(
+    saved?._tag === "ApiToken" ? saved.email : "",
+  );
+  const busy = save.running || remove.running;
+  const request =
+    method === "AccessToken"
+      ? { _tag: method, token: token.trim() }
+      : { _tag: method, email: email.trim(), token: token.trim() };
+  const ready =
+    request.token !== "" && (request._tag === "AccessToken" || request.email);
+  const edit = (change: () => void) => {
+    change();
+    save.reset();
+  };
+
+  const submit = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!ready || busy) return;
+    const result = await save.run(request);
+    if (result._tag !== "Ok") return;
+    setToken("");
+    onSaved();
+  };
+
+  const tokenField = (label: string) => (
+    <Field id={`${id}-token`} label={label}>
+      <Input
+        autoComplete="off"
+        id={`${id}-token`}
+        onChange={(event) => edit(() => setToken(event.target.value))}
+        placeholder={
+          saved?._tag === method
+            ? "Saved. Enter a new token to replace it"
+            : "Not set"
+        }
+        type="password"
+        value={token}
+      />
+    </Field>
+  );
+
+  return (
+    <form className="grid gap-4" onSubmit={submit}>
+      <Tabs
+        className="gap-3"
+        onValueChange={(value: Method) => edit(() => setMethod(value))}
+        value={method}
+      >
+        <TabsList
+          aria-label="Bitbucket token kind"
+          className="w-fit rounded-lg bg-muted/50 p-0.5"
+        >
+          {(Object.keys(methods) as Method[]).map((kind) => (
+            <TabsTrigger
+              className="h-7 rounded-md px-3 text-sm data-active:bg-background"
+              key={kind}
+              value={kind}
+            >
+              {methods[kind].label}
+            </TabsTrigger>
+          ))}
+        </TabsList>
+        <p className="max-w-2xl text-xs leading-relaxed text-muted-foreground">
+          {methods[method].description}
+        </p>
+        <TabsContent className="grid gap-4" value="AccessToken">
+          {tokenField("Access token")}
+        </TabsContent>
+        <TabsContent className="grid gap-4" value="ApiToken">
+          <Field id={`${id}-email`} label="Atlassian account email">
+            <Input
+              autoComplete="off"
+              id={`${id}-email`}
+              onChange={(event) => edit(() => setEmail(event.target.value))}
+              placeholder="you@example.com"
+              type="email"
+              value={email}
+            />
+          </Field>
+          {tokenField("API token")}
+        </TabsContent>
+      </Tabs>
+      <div className="flex items-center justify-between gap-3">
+        <p aria-live="polite" className="text-xs text-muted-foreground">
+          {save.failure !== undefined ? (
+            <span className="text-destructive">
+              {describeFailure(save.failure, tokenFailures)}
+            </span>
+          ) : saved !== null && saved._tag !== method ? (
+            `Saving replaces your ${methods[saved._tag].label.toLowerCase()}.`
+          ) : null}
+        </p>
+        <div className="flex shrink-0 gap-2">
+          {saved === null ? null : (
+            <Button
+              disabled={busy}
+              onClick={async () => {
+                save.reset();
+                errorToast.failure("saveSourceControl", await remove.run());
+              }}
+              size="xs"
+              type="button"
+              variant="outline"
+            >
+              Remove
+            </Button>
+          )}
+          <Button disabled={!ready || busy} size="xs" type="submit">
+            Save
+          </Button>
+        </div>
+      </div>
+    </form>
+  );
+}
+
+function Field({
+  id,
+  label,
+  children,
+}: {
+  readonly id: string;
+  readonly label: string;
+  readonly children: ReactNode;
+}) {
+  return (
+    <div className="grid gap-1.5">
+      <label className="text-sm font-medium" htmlFor={id}>
+        {label}
+      </label>
+      {children}
+    </div>
+  );
+}

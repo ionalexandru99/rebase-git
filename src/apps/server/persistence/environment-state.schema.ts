@@ -73,3 +73,16 @@ export const gitHostTable = sqliteTable("git_host", {
   enabled: integer("enabled", { mode: "boolean" }).notNull(),
   kind: text("kind").primaryKey(),
 });
+
+export const bitbucketTokenTable = sqliteTable(
+  "bitbucket_token",
+  {
+    account: text("account"),
+    email: text("email"),
+    singleton: integer("singleton").primaryKey(),
+    token: text("token").notNull(),
+  },
+  (token) => [
+    check("bitbucket_token_singleton_check", sql`${token.singleton} = 1`),
+  ],
+);

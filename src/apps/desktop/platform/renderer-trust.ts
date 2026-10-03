@@ -21,7 +21,11 @@ export function isTrustedRendererLocation(
   );
 }
 
-const pullRequestHosts = new Set(["github.com", "dev.azure.com"]);
+const pullRequestHosts = new Set([
+  "github.com",
+  "dev.azure.com",
+  "bitbucket.org",
+]);
 
 export function isExternalPullRequestLink(target: string) {
   const targetUrl = URL.parse(target);
