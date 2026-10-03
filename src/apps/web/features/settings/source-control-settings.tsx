@@ -4,12 +4,11 @@ import {
   IconBrandGit,
   IconBrandGithub,
   IconBrandGitlab,
-  IconChevronDown,
   IconGitFork,
   IconRefresh,
   type TablerIcon,
 } from "@tabler/icons-react";
-import { Fragment, type ReactNode, useId, useState } from "react";
+import { Fragment, type ReactNode, useState } from "react";
 import {
   type BitbucketToken,
   type GitHostKind,
@@ -18,14 +17,15 @@ import {
   SourceControlApi,
 } from "#contracts/source-control/source-control.contract.ts";
 import { Button } from "#web/components/ui/button.tsx";
+import { HiddenText } from "#web/components/ui/hidden-text.tsx";
 import {
   SettingsPage,
   SettingsRow,
   SettingsSection,
 } from "#web/components/ui/settings-layout.tsx";
 import { Switch } from "#web/components/ui/switch.tsx";
+import { ServerIdentityRow } from "#web/features/git-identity/git-identity.tsx";
 import { useErrorToast } from "#web/features/notifications/notifications.tsx";
-import { localEnvironment } from "#web/features/project-navigation/local-environment.ts";
 import { BitbucketTokenForm } from "#web/features/settings/bitbucket-token-form.tsx";
 import { useEnvironmentQuery } from "#web/platform/query/environment-query.ts";
 import { useCommand } from "#web/platform/query/use-command.ts";
@@ -137,10 +137,7 @@ export function SourceControlSettings() {
 
   return (
     <SettingsPage title="Source control">
-      <SettingsSection
-        action={rescan}
-        title={`Version Control · ${localEnvironment.name}`}
-      >
+      <SettingsSection action={rescan} title="Version Control">
         {discovery.data === undefined ? (
           <Checking failed={discovery.isError} />
         ) : (
@@ -166,13 +163,7 @@ const gitIcon = (
 
 function GitRow({ git }: { readonly git: GitStatus }) {
   return git._tag === "Available" ? (
-    <SettingsRow
-      description="Available"
-      icon={gitIcon}
-      status="ready"
-      title="Git"
-      value={git.version}
-    />
+    <ServerIdentityRow icon={gitIcon} version={git.version} />
   ) : (
     <SettingsRow
       description="Not available on this server: Install Git from https://git-scm.com/downloads or with your package manager."
@@ -241,7 +232,12 @@ function HostRow({ host }: { readonly host: GitHostStatus }) {
             {host.accounts.map(({ host: server, account }, index) => (
               <Fragment key={`${account}@${server}`}>
                 {index === 0 ? null : ", "}
-                <HiddenAccount account={account} host={server} /> on {server}
+                <HiddenText
+                  hideLabel={`Hide account ${account} on ${server}`}
+                  showLabel={`Show account on ${server}`}
+                  value={account}
+                />{" "}
+                on {server}
               </Fragment>
             ))}
           </>
@@ -272,7 +268,6 @@ function TokenRow({
   readonly toggle: ReactNode;
 }) {
   const [open, setOpen] = useState(saved === null);
-  const formId = useId();
   return (
     <SettingsRow
       {...(saved === null ? { badge: "Not authenticated" } : {})}
@@ -284,34 +279,26 @@ function TokenRow({
         ) : (
           <>
             Authenticated as{" "}
-            <HiddenAccount account={saved.account} host="bitbucket.org" />
+            <HiddenText
+              hideLabel={`Hide account ${saved.account} on bitbucket.org`}
+              showLabel="Show account on bitbucket.org"
+              value={saved.account}
+            />
           </>
         )
       }
-      details={
-        open ? (
-          <div id={formId}>
-            <BitbucketTokenForm onSaved={() => setOpen(false)} saved={saved} />
-          </div>
-        ) : undefined
-      }
+      details={{
+        label: `${label} token`,
+        open,
+        onOpenChange: setOpen,
+        content: (
+          <BitbucketTokenForm onSaved={() => setOpen(false)} saved={saved} />
+        ),
+      }}
       icon={icon}
       status={saved === null ? "attention" : "ready"}
       title={label}
     >
-      <Button
-        aria-controls={formId}
-        aria-expanded={open}
-        aria-label={`${label} token`}
-        onClick={() => setOpen((current) => !current)}
-        size="icon-xs"
-        variant="ghost"
-      >
-        <IconChevronDown
-          aria-hidden="true"
-          className={`size-4 ${open ? "rotate-180" : ""}`}
-        />
-      </Button>
       {toggle}
     </SettingsRow>
   );
@@ -323,38 +310,6 @@ function Checking({ failed }: { readonly failed: boolean }) {
       {failed ? "Could not scan this server." : "Scanning this server…"}
     </p>
   );
-}
-
-function HiddenAccount({
-  account,
-  host,
-}: {
-  readonly account: string;
-  readonly host: string;
-}) {
-  const [shown, setShown] = useState(false);
-  return (
-    <button
-      aria-label={
-        shown ? `Hide account ${account} on ${host}` : `Show account on ${host}`
-      }
-      aria-pressed={shown}
-      className={`cursor-pointer rounded-sm font-mono text-[.625rem] hover:text-foreground ${shown ? "text-foreground/90" : "blur-xs select-none"}`}
-      onClick={() => setShown((current) => !current)}
-      type="button"
-    >
-      {shown ? account : scrambled(account)}
-    </button>
-  );
-}
-
-function scrambled(value: string) {
-  const letters = "abcdefghjkmnpqrstuvwxyz23456789";
-  return Array.from(value, (character, index) =>
-    "@.-_".includes(character)
-      ? character
-      : letters[(character.charCodeAt(0) * 7 + index * 13) % letters.length],
-  ).join("");
 }
 
 function Code({ children }: { readonly children: ReactNode }) {

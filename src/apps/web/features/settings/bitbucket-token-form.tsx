@@ -10,6 +10,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "#web/components/ui/popover.tsx";
+import { SettingsField } from "#web/components/ui/settings-layout.tsx";
 import {
   Tabs,
   TabsContent,
@@ -108,7 +109,7 @@ export function BitbucketTokenForm({
   };
 
   const tokenField = (label: string) => (
-    <Field id={`${id}-token`} label={label}>
+    <SettingsField id={`${id}-token`} label={label}>
       <Input
         autoComplete="off"
         id={`${id}-token`}
@@ -121,7 +122,7 @@ export function BitbucketTokenForm({
         type="password"
         value={token}
       />
-    </Field>
+    </SettingsField>
   );
 
   return (
@@ -152,7 +153,7 @@ export function BitbucketTokenForm({
           {tokenField("Access token")}
         </TabsContent>
         <TabsContent className="grid gap-4" value="ApiToken">
-          <Field id={`${id}-email`} label="Atlassian account email">
+          <SettingsField id={`${id}-email`} label="Atlassian account email">
             <Input
               autoComplete="off"
               id={`${id}-email`}
@@ -161,7 +162,7 @@ export function BitbucketTokenForm({
               type="email"
               value={email}
             />
-          </Field>
+          </SettingsField>
           {tokenField("API token")}
         </TabsContent>
       </Tabs>
@@ -235,24 +236,5 @@ function Scopes({
         </ul>
       </PopoverContent>
     </Popover>
-  );
-}
-
-function Field({
-  id,
-  label,
-  children,
-}: {
-  readonly id: string;
-  readonly label: string;
-  readonly children: ReactNode;
-}) {
-  return (
-    <div className="grid gap-1.5">
-      <label className="text-sm font-medium" htmlFor={id}>
-        {label}
-      </label>
-      {children}
-    </div>
   );
 }
