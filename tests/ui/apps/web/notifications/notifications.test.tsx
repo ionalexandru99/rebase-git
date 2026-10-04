@@ -81,6 +81,37 @@ describe("notifications", () => {
     ).toHaveLength(1);
   });
 
+  it("fills the progress ring before the title moves on", async () => {
+    await render(<Pull />);
+    await page.getByRole("button", { name: "Start" }).click();
+    await page.getByRole("button", { name: "Advance" }).click();
+    await expect
+      .element(page.getByRole("progressbar", { name: "Fetching" }))
+      .toHaveAttribute("aria-valuenow", "40");
+    const ringWhenPulled = Promise.withResolvers<number>();
+    const observer = new MutationObserver(() => {
+      if (document.querySelector("h2")?.textContent !== "Pulled") return;
+      const arc = document.querySelector("svg g circle:nth-of-type(2)");
+      if (arc !== null)
+        ringWhenPulled.resolve(
+          parseFloat(getComputedStyle(arc).strokeDashoffset),
+        );
+    });
+    observer.observe(document.body, {
+      childList: true,
+      characterData: true,
+      subtree: true,
+    });
+
+    await page.getByRole("button", { name: "Finish" }).click();
+
+    await expect
+      .element(page.getByText("Pulled", { exact: true }))
+      .toBeVisible();
+    observer.disconnect();
+    expect(await ringWhenPulled.promise).toBe(0);
+  });
+
   it("brings a repeated action to the front of the stack", async () => {
     await render(<Steps />);
     const next = page.getByRole("button", { name: "Next step" });
@@ -160,6 +191,13 @@ describe("notifications", () => {
 
     await page.getByRole("button", { name: "Fail" }).click();
     await expect.element(page.getByText("api-server")).toBeVisible();
+    expect(
+      page
+        .getByRole("region", { name: "Notifications" })
+        .getByRole("button")
+        .elements()
+        .map((button) => button.getAttribute("aria-label")),
+    ).toEqual(["Dismiss notification", "Open api-server"]);
     await page.getByRole("button", { name: "Open api-server" }).click();
 
     expect(openRepository).toHaveBeenCalledWith("api");
@@ -250,6 +288,29 @@ function Push() {
       <button
         type="button"
         onClick={() => statusToast.success("push", "Pushed to origin/main")}
+      >
+        Finish
+      </button>
+    </>
+  );
+}
+
+function Pull() {
+  const statusToast = useStatusToast();
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => statusToast.progress("pull", "Fetching", { percent: 0 })}
+      >
+        Start
+      </button>
+      <button type="button" onClick={() => statusToast.advance("pull", 40)}>
+        Advance
+      </button>
+      <button
+        type="button"
+        onClick={() => statusToast.success("pull", "Pulled")}
       >
         Finish
       </button>
