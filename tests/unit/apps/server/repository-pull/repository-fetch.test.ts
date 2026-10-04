@@ -120,8 +120,8 @@ function withFetch(
     stream: () => Stream.empty,
     run: (command) => {
       if (command.arguments[0] === "fetch") return git.fetch(command);
-      const value = command.arguments[3];
-      if (command.arguments[2] !== "--get" && value !== undefined)
+      const [, , key, value] = command.arguments;
+      if (key === "rebase.autoFetchIntervalSeconds" && value !== undefined)
         git.configured.push(value);
       return Effect.succeed(output(options.setting ?? "inherit"));
     },
