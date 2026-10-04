@@ -33,6 +33,7 @@ export const CommitGraphRow = memo(function CommitGraphRow({
   merge,
   busy,
   mark,
+  reserve = 0,
 }: {
   readonly commit: RepositoryCommit;
   readonly labels: readonly RepositoryHistoryRefTarget[];
@@ -45,6 +46,7 @@ export const CommitGraphRow = memo(function CommitGraphRow({
   readonly merge: "collapsed" | "expanded" | undefined;
   readonly busy: boolean;
   readonly mark?: "moving" | "base" | undefined;
+  readonly reserve?: number;
 }) {
   const graph = useMemo(
     () =>
@@ -75,7 +77,7 @@ export const CommitGraphRow = memo(function CommitGraphRow({
       data-oid={commit.oid}
       id={commitRowId(commit.oid)}
       style={{
-        gridTemplateColumns: `${lane === undefined ? 28 : commitGraphGutterWidth([lane])}px minmax(0, 1fr) ${graphMetadataColumns}`,
+        gridTemplateColumns: `${Math.max(reserve, lane === undefined ? 28 : commitGraphGutterWidth([lane]))}px minmax(0, 1fr) ${graphMetadataColumns}`,
         height: graphRowHeight,
         top: start,
         ...(selected ? selectedRowStyle : {}),

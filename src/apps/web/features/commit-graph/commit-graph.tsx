@@ -42,11 +42,19 @@ import {
   graphRefLabels,
 } from "#web/features/commit-graph/components/commit-ref-labels.tsx";
 import { HistoryScopeStrip } from "#web/features/commit-graph/components/history-scope-strip.tsx";
+import {
+  UncommittedChangesLine,
+  UncommittedChangesRow,
+  uncommittedLink,
+  useUncommittedChanges,
+} from "#web/features/commit-graph/components/uncommitted-changes-row.tsx";
 import { useCommitGraphView } from "#web/features/commit-graph/hooks/use-commit-graph-view.ts";
 import { useGraphColors } from "#web/features/commit-graph/layout/graph-colors.ts";
 import {
   commitGraphGutterWidth,
+  graphHeaderHeight,
   graphMetadataColumns,
+  graphRowHeight,
 } from "#web/features/commit-graph/layout/graph-geometry.ts";
 import type {
   HistoryScope,
@@ -92,6 +100,7 @@ export function CommitGraph({
   cherryPick,
   drop,
   onOpenDetails,
+  onOpenChanges,
   onActiveCommitChange,
 }: {
   readonly merge?: MergeActions | undefined;
@@ -100,6 +109,7 @@ export function CommitGraph({
   readonly cherryPick?: CherryPick | undefined;
   readonly drop?: DropCommits | undefined;
   readonly onOpenDetails?: ((oid: string) => void) | undefined;
+  readonly onOpenChanges?: (() => void) | undefined;
   readonly onActiveCommitChange?:
     | ((oid: string | undefined) => void)
     | undefined;
@@ -164,6 +174,15 @@ export function CommitGraph({
     [laneRows],
   );
   useImperativeHandle(ref, () => ({ navigateToOid, focusSelection }));
+  const uncommitted = useUncommittedChanges();
+  const head = uncommitted?.head;
+  const link = useMemo(
+    () =>
+      head === undefined ? undefined : uncommittedLink(laneRows, start, head),
+    [laneRows, start, head],
+  );
+  const headerRows = uncommitted === undefined ? 1 : 2;
+  const headerHeight = graphHeaderHeight + (headerRows - 1) * graphRowHeight;
 
   const [previewing, setPreviewing] = useState(false);
   const commands = useCommitActions({
@@ -293,6 +312,7 @@ export function CommitGraph({
           <CommitGraphVirtualWindow
             ref={viewportRef}
             scrollRef={scrollRef}
+            headerHeight={headerHeight}
             total={total}
             start={start}
             oids={oids}
@@ -333,7 +353,7 @@ export function CommitGraph({
                     aria-label="Commit history"
                     aria-multiselectable="true"
                     aria-colcount={5}
-                    aria-rowcount={total + 1}
+                    aria-rowcount={total + headerRows}
                     className="absolute inset-0 block h-full w-full overflow-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden focus-visible:outline-2 focus-visible:outline-primary/70 focus-visible:outline-offset-[-2px]"
                     onKeyDown={handleKeyDown}
                     onMouseDown={(event) => {
@@ -363,8 +383,11 @@ export function CommitGraph({
                     tabIndex={0}
                   >
                     <thead
-                      className="sticky top-0 z-20 block h-7 bg-repository"
-                      style={{ minWidth: gutterWidth + 560 }}
+                      className="sticky top-0 z-20 block bg-repository"
+                      style={{
+                        height: headerHeight,
+                        minWidth: gutterWidth + 560,
+                      }}
                     >
                       <tr
                         className="grid h-7 items-center border-border/60 border-b text-left text-[.85rem] font-normal text-muted-foreground"
@@ -385,6 +408,13 @@ export function CommitGraph({
                           Date
                         </th>
                       </tr>
+                      {uncommitted === undefined ? null : (
+                        <UncommittedChangesRow
+                          changes={uncommitted}
+                          link={link}
+                          onOpen={onOpenChanges}
+                        />
+                      )}
                     </thead>
                     <tbody
                       className="relative block"
@@ -400,6 +430,9 @@ export function CommitGraph({
                         scrollRef={scrollRef}
                         viewportWidth={viewport.width}
                       />
+                      {link === undefined ? null : (
+                        <UncommittedChangesLine link={link} />
+                      )}
                       <tr
                         inert
                         className="block"
@@ -418,7 +451,7 @@ export function CommitGraph({
                               labelsByOid.get(commit.oid) ?? emptyRefLabels
                             }
                             lane={row.lane}
-                            rowIndex={start + virtualRow.index + 2}
+                            rowIndex={start + virtualRow.index + headerRows + 1}
                             start={virtualRow.start}
                             selected={navigation.selected.has(commit.oid)}
                             order={commands.preview.indexOf(commit.oid) + 1}
@@ -430,6 +463,12 @@ export function CommitGraph({
                               merge !== undefined &&
                               merge !== shownMerges.get(commit.oid) &&
                               failure === undefined
+                            }
+                            reserve={
+                              link !== undefined &&
+                              start + virtualRow.index < link.index
+                                ? link.x + 12
+                                : 0
                             }
                             mark={
                               moving.has(commit.oid)
@@ -460,7 +499,7 @@ export function CommitGraph({
                 {!loading && failure === undefined && total === 0 ? (
                   <div
                     aria-label="Empty commit history"
-                    className="absolute inset-0 grid place-items-center text-[.85rem] text-muted-foreground"
+                    className="pointer-events-none absolute inset-0 grid place-items-center text-[.85rem] text-muted-foreground"
                     role="status"
                   >
                     {(roots?.length ?? 0) > 0
