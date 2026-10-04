@@ -70,6 +70,7 @@ const errorTitles = {
   saveFetchSettings: "Couldn't save automatic fetch",
   saveBranchSettings: "Couldn't save the branch settings",
   savePullStrategy: "Couldn't save the pull setting",
+  saveFetchPrune: "Couldn't save the branch removal setting",
   saveCloneFolder: "Couldn't save the clone folder",
   saveDiffSettings: "Couldn't save the diff settings",
   clearCache: "Couldn't clear the cache",

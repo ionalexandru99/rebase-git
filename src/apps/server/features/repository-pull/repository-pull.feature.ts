@@ -11,6 +11,7 @@ import {
   route,
 } from "#server/adapters/environment-transport/environment-routes.ts";
 import type { GitCommandRunner } from "#server/adapters/local-git/git-commands.ts";
+import { createFetchPrunes } from "#server/features/repository-pull/fetch-prune.ts";
 import {
   pullBlocked,
   pullBranch,
@@ -45,6 +46,7 @@ export function repositoryPullFeature(
       dependencies.context,
       dependencies.access,
     );
+    const prunes = createFetchPrunes(dependencies.git, dependencies.access);
     return {
       routes: [
         route(RepositoryPullApi.fetchStatus, (input) =>
@@ -55,6 +57,26 @@ export function repositoryPullFeature(
         ),
         route(RepositoryPullApi.configureFetch, (input) =>
           fetch.configure(input.repositoryId, input.setting),
+        ),
+        route(RepositoryPullApi.readFetchPrune, () => prunes.server),
+        route(RepositoryPullApi.saveFetchPrune, ({ prune }) =>
+          prunes
+            .saveServer(prune)
+            .pipe(Effect.tap(() => Effect.sync(() => events.publishChanged()))),
+        ),
+        route(RepositoryPullApi.readRepositoryFetchPrune, ({ repositoryId }) =>
+          prunes.repository(repositoryId),
+        ),
+        route(
+          RepositoryPullApi.saveRepositoryFetchPrune,
+          ({ repositoryId, prune }) =>
+            prunes
+              .saveRepository(repositoryId, prune)
+              .pipe(
+                Effect.tap(() =>
+                  Effect.sync(() => events.publishChanged([repositoryId])),
+                ),
+              ),
         ),
         command(
           RepositoryPullApi.pull,

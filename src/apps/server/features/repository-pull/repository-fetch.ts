@@ -13,6 +13,7 @@ import {
   runRepositoryGit,
 } from "#server/adapters/local-git/git-commands.ts";
 import type { CommandProgress } from "#server/features/command-progress/command-progress.ts";
+import { fetchPruneArgument } from "#server/features/repository-pull/fetch-prune.ts";
 import type { RepositoryAccess } from "#server/repository/repository-access.ts";
 import type { RepositoryCoordination } from "#server/repository/repository-coordination.ts";
 
@@ -212,10 +213,14 @@ function runFetch(
         locks: { refs: "ifAvailable" },
         duringOperation: "proceed",
       },
-      runRepositoryGit(git, path, ["fetch", "--progress"], {
-        timeoutMilliseconds: 120_000,
-        progress: report,
-      }),
+      fetchPruneArgument(git, path).pipe(
+        Effect.flatMap((prune) =>
+          runRepositoryGit(git, path, ["fetch", prune, "--progress"], {
+            timeoutMilliseconds: 120_000,
+            progress: report,
+          }),
+        ),
+      ),
     )
     .pipe(
       Effect.as<FetchFailed | undefined>(undefined),
