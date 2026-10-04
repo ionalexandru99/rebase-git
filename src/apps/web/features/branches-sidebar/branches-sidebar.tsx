@@ -20,6 +20,7 @@ import {
   runAction,
 } from "#web/components/ui/action-menu.tsx";
 import { IconSwitch } from "#web/components/ui/icon-switch.tsx";
+import { ScrollTopButton } from "#web/components/ui/scroll-top-button.tsx";
 import {
   BranchCard,
   createBranchCardHandle,
@@ -554,6 +555,7 @@ export function BranchesSidebar({
         <h2 className="min-w-0 flex-1 truncate text-base font-semibold">
           Branches
         </h2>
+        <ScrollTopButton className="mr-1" region={treeRef} />
         <IconSwitch
           label="Branch view"
           options={branchViewOptions}

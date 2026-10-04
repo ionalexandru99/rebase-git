@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { FileListToolbar } from "#web/features/file-diff/components/file-list-toolbar.tsx";
 import {
   ChangeFileSection,
@@ -28,16 +28,19 @@ export function ChangeFileTree({
 }) {
   const { preferences } = view;
   const [filter, setFilter] = useState("");
+  const list = useRef<HTMLElement>(null);
   return (
     <section
       className="flex h-full min-h-0 flex-col bg-sidebar"
       aria-label="Changed files"
+      ref={list}
     >
       <FileListToolbar
         filter={filter}
         onFilter={setFilter}
         tree={preferences.tree}
         onTree={(tree) => view.choosePreferences({ ...preferences, tree })}
+        region={list}
       />
       <div className="flex min-h-0 flex-1 flex-col gap-1 pb-1">
         <div className="flex min-h-[40%] flex-1 basis-0 flex-col">
