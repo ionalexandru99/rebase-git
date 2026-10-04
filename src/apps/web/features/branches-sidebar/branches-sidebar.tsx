@@ -84,6 +84,7 @@ import {
 import { TagDetails } from "#web/features/refs/tag-details.tsx";
 import { useTagPush } from "#web/features/refs/tag-push.tsx";
 import { usePull } from "#web/features/remote-sync/use-pull.ts";
+import type { RepositoryHistory } from "#web/features/repository-history/repository-history.ts";
 import type { ResetActions } from "#web/features/reset/reset-actions.tsx";
 import {
   StashDropConfirmation,
@@ -104,6 +105,7 @@ const noRemoteBranches: readonly RemoteBranch[] = [];
 const noSelectedRows: ReadonlySet<string> = new Set();
 
 export function BranchesSidebar({
+  history,
   merge,
   pullRequests,
   rebase,
@@ -114,6 +116,7 @@ export function BranchesSidebar({
   onOpenStash = () => undefined,
   selectedHistoryRefKeys = noSelectedRefs,
 }: {
+  readonly history?: Pick<RepositoryHistory, "ask"> | undefined;
   readonly merge?: MergeActions | undefined;
   readonly pullRequests?: PullRequests | undefined;
   readonly rebase?: RebaseActions | undefined;
@@ -579,6 +582,7 @@ export function BranchesSidebar({
       </DockedTree>
       <BranchCard
         handle={branchCard}
+        history={history}
         remoteBranches={refs?.remoteBranches ?? noRemoteBranches}
       />
       <RefEditingStatus editing={editing} />

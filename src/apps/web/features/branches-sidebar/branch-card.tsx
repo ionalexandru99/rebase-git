@@ -1,10 +1,18 @@
 import { PreviewCard } from "@base-ui/react/preview-card";
-import { IconCloud, IconCloudOff } from "@tabler/icons-react";
-import type { ReactNode } from "react";
+import {
+  IconCloud,
+  IconCloudOff,
+  IconGitBranchDeleted,
+} from "@tabler/icons-react";
+import { type ReactNode, useEffect, useState } from "react";
 import type { PullRequest } from "#contracts/pull-requests/pull-requests.contract.ts";
+import type { RepositoryCommit } from "#contracts/repository-history/repository-history.contract.ts";
 import type { RemoteBranch } from "#contracts/repository-refs/repository-refs.contract.ts";
+import { AuthorAvatar } from "#web/features/author-avatars/author-avatar.tsx";
 import type { BranchesSidebarRefRow } from "#web/features/branches-sidebar/branches-sidebar-state.ts";
 import { PullRequestList } from "#web/features/pull-requests/pull-requests.tsx";
+import type { RepositoryHistory } from "#web/features/repository-history/repository-history.ts";
+import { ageLabel } from "#web/features/stashes/stash-sidebar.tsx";
 import { worktreeName } from "#web/features/worktrees/worktree-draft.ts";
 
 export interface BranchCardBranch {
@@ -36,9 +44,11 @@ export function BranchCardTrigger(
 
 export function BranchCard({
   handle,
+  history,
   remoteBranches,
 }: {
   readonly handle: BranchCardHandle;
+  readonly history: Pick<RepositoryHistory, "ask"> | undefined;
   readonly remoteBranches: readonly RemoteBranch[];
 }) {
   return (
@@ -59,6 +69,7 @@ export function BranchCard({
               >
                 <BranchCardBody
                   branch={payload}
+                  history={history}
                   remoteBranches={remoteBranches}
                 />
               </PreviewCard.Popup>
@@ -72,17 +83,39 @@ export function BranchCard({
 
 function BranchCardBody({
   branch,
+  history,
   remoteBranches,
 }: {
   readonly branch: BranchCardBranch;
+  readonly history: Pick<RepositoryHistory, "ask"> | undefined;
   readonly remoteBranches: readonly RemoteBranch[];
 }) {
   const { row, pullRequests } = branch;
+  const commit = useTipCommit(history, row.tip);
   return (
     <>
       <p className="text-[.9rem] font-medium wrap-anywhere not-last:mb-1.5">
         {row.name}
       </p>
+      {commit === undefined ? null : (
+        <>
+          <p className="mb-2 line-clamp-2 text-[.85rem] text-foreground/85">
+            {commit.subject}
+          </p>
+          <div className="flex h-6 min-w-0 items-center gap-2 text-[.8rem] text-muted-foreground">
+            <AuthorAvatar commit={commit} />
+            <span className="min-w-0 truncate">
+              {commit.author.name} ·{" "}
+              {ageLabel(commit.committer.timestampSeconds)}
+            </span>
+          </div>
+        </>
+      )}
+      {row.settled === undefined ? null : (
+        <CardLine icon={<IconGitBranchDeleted className="size-3.5" />}>
+          {settledLabel(row.settled)}
+        </CardLine>
+      )}
       {row.checkout?.kind === "worktree" ? (
         <CardLine icon={<WorktreeGlyph />}>
           Worktree {worktreeName(row.checkout.path)}
@@ -105,6 +138,35 @@ function BranchCardBody({
       ) : null}
     </>
   );
+}
+
+function useTipCommit(
+  history: Pick<RepositoryHistory, "ask"> | undefined,
+  tip: string | undefined,
+) {
+  const [commit, setCommit] = useState<RepositoryCommit>();
+  useEffect(() => {
+    if (history === undefined || tip === undefined) return;
+    const controller = new AbortController();
+    history
+      .ask({ _tag: "Commits", oids: [tip] }, controller.signal)
+      .then(([found]) => setCommit(found))
+      .catch(() => undefined);
+    return () => controller.abort();
+  }, [history, tip]);
+  return commit?.oid === tip ? commit : undefined;
+}
+
+function settledLabel(day: string, now = new Date()) {
+  const [year = 0, month = 1, date = 1] = day.split("-").map(Number);
+  const days = Math.round(
+    (Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()) -
+      Date.UTC(year, month - 1, date)) /
+      86_400_000,
+  );
+  if (days <= 0) return "Settled today";
+  if (days === 1) return "Settled yesterday";
+  return `Settled ${days} days ago`;
 }
 
 function neverPushed(

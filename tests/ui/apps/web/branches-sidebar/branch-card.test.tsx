@@ -17,6 +17,11 @@ import {
   topicPath,
   upstream,
 } from "#tests-support/fixtures.ts";
+import {
+  fakeRepositoryHistory,
+  historyCommit,
+  historyOid,
+} from "#tests-support/history.ts";
 import { render } from "#tests-support/render.tsx";
 import { BranchesSidebar } from "#web/features/branches-sidebar/branches-sidebar.tsx";
 import { usePullRequests } from "#web/features/pull-requests/pull-requests.tsx";
@@ -56,6 +61,26 @@ describe("branch card", () => {
     );
   });
 
+  it("shows the last commit of a branch and when it settled", async () => {
+    const screen = await renderCard();
+
+    await userEvent.hover(
+      screen.getByRole("treeitem", { name: /^main, current branch/ }),
+    );
+    const main = screen.getByRole("group", { name: "main" });
+    await expect.element(main.getByText("Ship the branch card")).toBeVisible();
+    await expect.element(main.getByText(/^Alex I\. · /)).toBeVisible();
+    await screen.getByRole("treeitem", { name: /^Settled/ }).click();
+    await userEvent.hover(screen.getByRole("treeitem", { name: /^done/ }));
+    await expect
+      .element(
+        screen
+          .getByRole("group", { name: "done" })
+          .getByText("Settled 2 days ago"),
+      )
+      .toBeVisible();
+  });
+
   it("says when a branch was never pushed or its remote branch was deleted", async () => {
     const screen = await renderCard();
 
@@ -80,11 +105,25 @@ describe("branch card", () => {
   });
 });
 
+const mainTip = historyOid(1);
+const history = fakeRepositoryHistory({
+  commits: [
+    historyCommit(mainTip, [], Date.now() / 1_000, "Ship the branch card"),
+  ],
+});
+
+function daysAgo(days: number) {
+  const date = new Date(Date.now() - days * 86_400_000);
+  return [date.getFullYear(), date.getMonth() + 1, date.getDate()]
+    .map((part) => String(part).padStart(2, "0"))
+    .join("-");
+}
+
 function CardHarness() {
   const pullRequests = usePullRequests();
   return (
     <div style={{ height: 480, width: 320 }}>
-      <BranchesSidebar pullRequests={pullRequests} />
+      <BranchesSidebar history={history} pullRequests={pullRequests} />
     </div>
   );
 }
@@ -105,10 +144,16 @@ function renderCard() {
               branches: [
                 {
                   name: "main",
+                  target: mainTip,
                   upstream: upstream("origin/main"),
                   worktreePath: mainPath,
                 },
                 { name: "draft" },
+                {
+                  name: "done",
+                  settled: daysAgo(2),
+                  upstream: upstream("origin/done"),
+                },
                 { name: "shared" },
                 {
                   name: "old",
