@@ -88,6 +88,28 @@ describe("commit graph navigation", () => {
     await expect.element(parent).toHaveAttribute("aria-selected", "true");
   });
 
+  it("jumps to the parent each arrow belongs to when a merge has two far parents", async () => {
+    const reader = historyReader({
+      commits: [
+        historyCommit("merge", [historyOid(100), historyOid(110)], 1),
+        ...history(120),
+      ],
+      status: "ready",
+    });
+    const screen = await renderGraph(reader, [
+      { name: "main", oid: historyOid(0), type: "branch" },
+      { name: "merge", oid: "merge", type: "branch" },
+    ]);
+    const grid = screen.getByRole("grid");
+    const arrows = screen.getByRole("button", { name: /^Go to parent / });
+    await expect.element(arrows.first()).toBeVisible();
+
+    await arrows.first().click();
+    await expect
+      .element(grid.getByRole("row", { name: /^Commit 100,/ }))
+      .toHaveAttribute("aria-selected", "true");
+  });
+
   it("does not offer to expand a merge whose side is already revealed", async () => {
     const commits = mergeHistory().map((commit, index) =>
       index === 1

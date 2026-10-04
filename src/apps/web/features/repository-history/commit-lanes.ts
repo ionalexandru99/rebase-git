@@ -208,7 +208,12 @@ export function appendCommitLanes(
           parent,
           far
             ? nearestSlot(lanes, nodeLane.slot, lanesBefore)
-            : availableSlot(lanes),
+            : availableSlot([
+                ...lanes,
+                ...lanesBefore.filter(
+                  (ending) => ending.far?.direction === "down",
+                ),
+              ]),
           {
             color:
               existing?.color ?? seeds.get(parent)?.color ?? nextLaneId % 8,
@@ -267,8 +272,10 @@ function withFarEnd(
 ): CommitLane {
   const parent = current.expectedOid;
   if (commit.farParents?.includes(parent) !== true) return current;
-  if (!farEdges.some((edge) => edge.parent === parent))
-    farEdges.push({ parent, color: current.color, remote: current.remote });
+  const look = { parent, color: current.color, remote: current.remote };
+  const index = farEdges.findIndex((edge) => edge.parent === parent);
+  if (index < 0) farEdges.push(look);
+  else farEdges[index] = look;
   return {
     ...current,
     far: { direction: "down", from: commit.oid, to: parent },

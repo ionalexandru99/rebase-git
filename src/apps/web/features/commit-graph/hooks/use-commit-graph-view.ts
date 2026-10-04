@@ -125,19 +125,17 @@ export function useCommitGraphView({
       ),
     [windowRows],
   );
-  const farEdgeEnds = useMemo(
-    () =>
-      new Map(
-        windowRows.flatMap(({ lane }) =>
-          [...lane.lanesBefore, ...lane.lanesAfter].flatMap(({ far }) =>
-            far === undefined
-              ? []
-              : [[`${far.from}\0${far.direction}`, far.to] as const],
-          ),
-        ),
-      ),
-    [windowRows],
-  );
+  const farEdgeEnds = useMemo(() => {
+    const ends = new Map<string, string>();
+    for (const { lane } of windowRows)
+      for (const { far } of [...lane.lanesBefore, ...lane.lanesAfter]) {
+        const key =
+          far === undefined ? undefined : `${far.from}\0${far.direction}`;
+        if (key !== undefined && far !== undefined && !ends.has(key))
+          ends.set(key, far.to);
+      }
+    return ends;
+  }, [windowRows]);
   const resident = useMemo(
     () => ({
       oidAt: (index: number) =>
@@ -291,7 +289,6 @@ export function useCommitGraphView({
     activeCommitOid,
     beginNavigation,
     toggleMerge,
-    followFarEdge,
     navigateToOid,
     focusSelection,
     onRange,

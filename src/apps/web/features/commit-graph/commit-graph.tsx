@@ -151,7 +151,6 @@ export function CommitGraph({
     activeCommitOid,
     beginNavigation,
     toggleMerge,
-    followFarEdge,
     navigateToOid,
     focusSelection,
     onRange,
@@ -231,15 +230,12 @@ export function CommitGraph({
     navigation.onKeyDown(event);
   };
   const handleRowClick = (event: MouseEvent<HTMLElement>) => {
-    const farEdge =
+    const farEdgeTarget =
       event.target instanceof Element
-        ? event.target.closest<HTMLElement>("[data-far-from]")?.dataset
+        ? event.target.closest<HTMLElement>("[data-far-to]")?.dataset.farTo
         : undefined;
-    if (farEdge?.farFrom !== undefined) {
-      followFarEdge(
-        farEdge.farFrom,
-        farEdge.farDirection === "up" ? "up" : "down",
-      );
+    if (farEdgeTarget !== undefined) {
+      void navigateToOid(farEdgeTarget).catch(() => undefined);
       return;
     }
     const oid = eventCommitOid(event);

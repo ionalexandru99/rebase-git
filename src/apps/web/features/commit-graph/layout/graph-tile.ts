@@ -34,6 +34,7 @@ function graphTilePaths(
       if (lane.id === row.nodeLaneId && !row.nodeHasIncomingLane) continue;
       const x = graphLaneX(lane.slot) - left;
       if (lane.far?.direction === "down") {
+        if (x < -4 || x > width + 4) continue;
         drawFarArrow(
           laneStroke(strokes, graphLaneColor(lane.color), lane.remote),
           x,
@@ -78,14 +79,17 @@ function graphTilePaths(
       );
     }
     for (const lane of row.lanesAfter) {
+      const x = graphLaneX(lane.slot) - left;
       if (
         lane.far?.direction !== "up" ||
+        x < -4 ||
+        x > width + 4 ||
         row.lanesBefore.some((before) => before.id === lane.id)
       )
         continue;
       drawFarArrow(
         laneStroke(strokes, graphLaneColor(lane.color), lane.remote),
-        graphLaneX(lane.slot) - left,
+        x,
         bottom,
         center - 2,
       );

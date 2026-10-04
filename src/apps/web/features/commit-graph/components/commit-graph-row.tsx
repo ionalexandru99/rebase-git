@@ -66,11 +66,10 @@ export const CommitGraphRow = memo(function CommitGraphRow({
         )}
         {farEdges.map(({ end, slot }) => (
           <button
-            key={`${end.from}\0${end.direction}`}
+            key={`${end.from}\0${end.direction}\0${end.to}`}
             aria-label={`Go to ${end.direction === "down" ? "parent" : "child"} ${end.to.slice(0, 8)}`}
             className="absolute z-[3] h-[13px] w-4"
-            data-far-direction={end.direction}
-            data-far-from={end.from}
+            data-far-to={end.to}
             onPointerDown={(event) => event.preventDefault()}
             style={{
               left: graphLaneX(slot) - 8,

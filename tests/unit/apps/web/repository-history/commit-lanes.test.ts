@@ -155,6 +155,32 @@ describe("commit lanes", () => {
     ).toBe(4);
   });
 
+  it("keeps a down stub's slot free for the row it ends in", () => {
+    const { rows } = appendCommitLanes(createCommitLaneCheckpoint(), [
+      { oid: "c", parents: ["far"], farParents: ["far"] },
+      { oid: "m", parents: ["n", "q"] },
+    ]);
+    const down = rows[1]?.lanesBefore.find((lane) => lane.far !== undefined);
+
+    expect(rows[1]?.lanesAfter.map((lane) => lane.slot)).not.toContain(
+      down?.slot,
+    );
+  });
+
+  it("colours an up stub like the line of the child it links to", () => {
+    const { rows } = appendCommitLanes(createCommitLaneCheckpoint(), [
+      { oid: "a", parents: ["main", "p"], farParents: ["p"] },
+      { oid: "main", parents: ["b"] },
+      { oid: "b", parents: ["base", "p"], farParents: ["p"] },
+      { oid: "base", parents: ["p"], farArrival: { parent: "p", child: "b" } },
+    ]);
+    const down = rows[3]?.lanesBefore.find((lane) => lane.far !== undefined);
+    const up = rows[3]?.lanesAfter.find((lane) => lane.far?.direction === "up");
+
+    expect(down?.far?.from).toBe("b");
+    expect(up?.color).toBe(down?.color);
+  });
+
   it("serializes checkpoints across octopus merges", () => {
     const result = appendCommitLanes(createCommitLaneCheckpoint(), [
       { oid: a, parents: [b, c, d] },
