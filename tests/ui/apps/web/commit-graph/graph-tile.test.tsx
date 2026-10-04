@@ -123,6 +123,32 @@ describe("graph tile endpoints", () => {
     expect(context.getImageData(16, 39, 1, 1).data[3]).toBe(255);
   });
 
+  it("ends a far edge with a down arrow and starts it again with an up arrow", () => {
+    const plan = appendCommitLanes(createCommitLaneCheckpoint(), [
+      { oid: "merge", parents: ["main", "side"], farParents: ["side"] },
+      {
+        oid: "main",
+        parents: ["base"],
+        farArrival: { parent: "side", child: "merge" },
+      },
+      { oid: "side", parents: ["base"] },
+    ]);
+    const canvas = document.createElement("canvas");
+    const context = canvas.getContext("2d");
+    if (context === null) throw new Error("Missing canvas context");
+    const alpha = (x: number, y: number) =>
+      context.getImageData(x, y, 1, 1).data[3];
+
+    drawGraphTile(canvas, plan.rows, 0, 64, 1);
+
+    expect(alpha(32, 30)).toBeGreaterThan(0);
+    expect(alpha(29, 38)).toBeGreaterThan(0);
+    expect(alpha(32, 47)).toBe(0);
+    expect(alpha(48, 47)).toBeGreaterThan(0);
+    expect(alpha(45, 40)).toBeGreaterThan(0);
+    expect(alpha(48, 31)).toBe(0);
+  });
+
   it("starts new tips at their circles and preserves incoming rails across pages", () => {
     const first = appendCommitLanes(createCommitLaneCheckpoint(), [
       { oid: "tip", parents: ["parent"] },

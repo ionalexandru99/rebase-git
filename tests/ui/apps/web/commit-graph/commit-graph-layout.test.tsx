@@ -45,16 +45,16 @@ describe("commit graph layout", () => {
   });
 
   it("keeps wide merge rails and buttons beneath the fixed metadata", async () => {
-    const commits = history(193).map((commit, index) => ({
+    const commits = history(151).map((commit, index) => ({
       ...commit,
-      parents: (index < 64
-        ? [index + 64, index + 128]
-        : index < 192
-          ? [192]
+      parents: (index < 50
+        ? [index + 50, index + 100]
+        : index < 150
+          ? [150]
           : []
       ).map((parent) => parent.toString(16).padStart(40, "0")),
     }));
-    const roots = commits.slice(0, 64).map((commit, index) => ({
+    const roots = commits.slice(0, 50).map((commit, index) => ({
       name: `branch-${index}`,
       oid: commit.oid,
       type: "branch" as const,
@@ -70,7 +70,7 @@ describe("commit graph layout", () => {
     for (const [index, label] of [
       [40, /^Author /],
       [46, /^Commit SHA /],
-      [52, /^Commit date /],
+      [49, /^Commit date /],
     ] as const) {
       const row = screen.getByRole("row", {
         name: new RegExp(`^Commit ${index},`),

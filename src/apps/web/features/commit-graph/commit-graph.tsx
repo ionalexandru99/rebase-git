@@ -230,6 +230,14 @@ export function CommitGraph({
     navigation.onKeyDown(event);
   };
   const handleRowClick = (event: MouseEvent<HTMLElement>) => {
+    const farEdgeTarget =
+      event.target instanceof Element
+        ? event.target.closest<HTMLElement>("[data-far-to]")?.dataset.farTo
+        : undefined;
+    if (farEdgeTarget !== undefined) {
+      void navigateToOid(farEdgeTarget).catch(() => undefined);
+      return;
+    }
     const oid = eventCommitOid(event);
     if (oid === undefined) return;
     if (eventTargetMatches(event, "[data-merge-toggle]")) {

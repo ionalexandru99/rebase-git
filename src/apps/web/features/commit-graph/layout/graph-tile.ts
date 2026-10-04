@@ -33,6 +33,16 @@ function graphTilePaths(
     for (const lane of row.lanesBefore) {
       if (lane.id === row.nodeLaneId && !row.nodeHasIncomingLane) continue;
       const x = graphLaneX(lane.slot) - left;
+      if (lane.far?.direction === "down") {
+        if (x < -4 || x > width + 4) continue;
+        drawFarArrow(
+          laneStroke(strokes, graphLaneColor(lane.color), lane.remote),
+          x,
+          top,
+          center + 2,
+        );
+        continue;
+      }
       const joinsNode =
         lane.id !== row.nodeLaneId && !survivingLanes.has(lane.id);
       const targetX = joinsNode ? nodeX : x;
@@ -66,6 +76,22 @@ function graphTilePaths(
         center,
         parentX,
         bottom,
+      );
+    }
+    for (const lane of row.lanesAfter) {
+      const x = graphLaneX(lane.slot) - left;
+      if (
+        lane.far?.direction !== "up" ||
+        x < -4 ||
+        x > width + 4 ||
+        row.lanesBefore.some((before) => before.id === lane.id)
+      )
+        continue;
+      drawFarArrow(
+        laneStroke(strokes, graphLaneColor(lane.color), lane.remote),
+        x,
+        bottom,
+        center - 2,
       );
     }
     if (nodeX < -4 || nodeX > width + 4) continue;
@@ -117,6 +143,15 @@ function drawLane(
     const middle = (fromY + toY) / 2;
     path.bezierCurveTo(fromX, middle, toX, middle, toX, toY);
   }
+}
+
+function drawFarArrow(path: Path2D, x: number, fromY: number, tipY: number) {
+  const wing = tipY > fromY ? -3.5 : 3.5;
+  path.moveTo(x, fromY);
+  path.lineTo(x, tipY);
+  path.moveTo(x - 3.5, tipY + wing);
+  path.lineTo(x, tipY);
+  path.lineTo(x + 3.5, tipY + wing);
 }
 
 export function drawGraphTile(

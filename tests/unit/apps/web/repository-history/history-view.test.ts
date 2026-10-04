@@ -149,30 +149,57 @@ describe("history view", () => {
     ]);
   });
 
-  it("draws lanes that pass through from above after jumping to a far row", () => {
-    const main = linearHistory(600);
-    const commits = [commit("feature", [historyOid(590)], 1), ...main];
+  it("cuts edges longer than 50 rows into linked stubs, also after jumping to a far row", () => {
     const scope = historyScope([
       { name: "main", oid: historyOid(0), type: "branch" },
       { name: "feature", oid: "feature", type: "branch" },
     ]);
-    const fromTop = new HistoryView(historyGraph(commits), scope, []).rows(
-      0,
-      600,
-    );
-    const jumped = new HistoryView(historyGraph(commits), scope, []).rows(
-      500,
-      520,
-    );
-    expect(jumped.map(({ oid }) => oid)).toEqual(
-      fromTop.slice(500, 520).map(({ oid }) => oid),
-    );
-    expect(jumped.map(({ lane }) => lane)).toEqual(
-      fromTop.slice(500, 520).map(({ lane }) => lane),
-    );
-    expect(jumped.every(({ lane }) => lane.lanesBefore.length === 2)).toBe(
-      true,
-    );
+    const graph = (parent: number) =>
+      historyGraph([
+        commit("feature", [historyOid(parent)], 1),
+        ...linearHistory(600),
+      ]);
+    const fromTop = new HistoryView(graph(590), scope, []).rows(0, 600);
+    const jumped = new HistoryView(graph(590), scope, []).rows(580, 600);
+    const far = (lanes: readonly { readonly far?: unknown }[] | undefined) =>
+      lanes?.flatMap((lane) => (lane.far === undefined ? [] : [lane.far]));
+
+    expect(jumped).toEqual(fromTop.slice(580, 600));
+    expect(far(fromTop[1]?.lane.lanesBefore)).toEqual([
+      { direction: "down", from: "feature", to: historyOid(590) },
+    ]);
+    expect(far(fromTop[590]?.lane.lanesAfter)).toEqual([
+      { direction: "up", from: historyOid(590), to: "feature" },
+    ]);
+    expect(
+      fromTop.slice(2, 590).every(({ lane }) => lane.lanesBefore.length === 1),
+    ).toBe(true);
+    expect(
+      new HistoryView(graph(49), scope, [])
+        .rows(0, 600)
+        .every(({ lane }) => far(lane.lanesAfter)?.length === 0),
+    ).toBe(true);
+  });
+
+  it("cuts a first parent that arrives far below after the rows above were read", () => {
+    const graph = historyGraph([
+      commit("topic", ["late"]),
+      ...linearHistory(300),
+    ]);
+    const scope = historyScope([historyOid(0), "topic"]);
+    const first = new HistoryView(graph, scope, []);
+    first.rows(0, first.total);
+
+    graph.add(commit("late", []), 1_000);
+    const next = new HistoryView(graph, scope, [], first);
+    const fresh = new HistoryView(graph, scope, []);
+
+    expect(next.rows(0, next.total)).toEqual(fresh.rows(0, fresh.total));
+    expect(
+      fresh
+        .rows(1, 2)[0]
+        ?.lane.lanesBefore.some((lane) => lane.far?.direction === "down"),
+    ).toBe(true);
   });
 
   it("continues lanes exactly when older commits arrive after a deep read", () => {

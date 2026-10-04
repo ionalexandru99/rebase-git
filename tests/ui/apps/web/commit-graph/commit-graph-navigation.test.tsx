@@ -13,6 +13,7 @@ import {
   mergeHistory,
   renderGraph,
 } from "#tests-support/commit-graph-fixture.tsx";
+import { historyCommit } from "#tests-support/history.ts";
 import { waitForObservation } from "#tests-support/observation.ts";
 import { render } from "#tests-support/render.tsx";
 import type { CommitGraphHandle } from "#web/features/commit-graph/commit-graph.tsx";
@@ -57,6 +58,56 @@ describe("commit graph navigation", () => {
       expect(row.top).toBeGreaterThanOrEqual(bounds.top + 28);
       expect(row.bottom).toBeLessThanOrEqual(bounds.bottom);
     });
+  });
+
+  it("jumps between the ends of a far edge by its arrows and by Alt+Arrow", async () => {
+    const reader = historyReader({
+      commits: [
+        historyCommit("feature", [historyOid(100)], 1),
+        ...history(120),
+      ],
+      status: "ready",
+    });
+    const screen = await renderGraph(reader, [
+      { name: "main", oid: historyOid(0), type: "branch" },
+      { name: "feature", oid: "feature", type: "branch" },
+    ]);
+    const grid = screen.getByRole("grid");
+    const parent = grid.getByRole("row", { name: /^Commit 100,/ });
+    const child = grid.getByRole("row", { name: /^Commit feature,/ });
+
+    await screen
+      .getByRole("button", {
+        name: `Go to parent ${historyOid(100).slice(0, 8)}`,
+      })
+      .click();
+    await expect.element(parent).toHaveAttribute("aria-selected", "true");
+    await userEvent.keyboard("{Alt>}{ArrowUp}{/Alt}");
+    await expect.element(child).toHaveAttribute("aria-selected", "true");
+    await userEvent.keyboard("{Alt>}{ArrowDown}{/Alt}");
+    await expect.element(parent).toHaveAttribute("aria-selected", "true");
+  });
+
+  it("jumps to the parent each arrow belongs to when a merge has two far parents", async () => {
+    const reader = historyReader({
+      commits: [
+        historyCommit("merge", [historyOid(100), historyOid(110)], 1),
+        ...history(120),
+      ],
+      status: "ready",
+    });
+    const screen = await renderGraph(reader, [
+      { name: "main", oid: historyOid(0), type: "branch" },
+      { name: "merge", oid: "merge", type: "branch" },
+    ]);
+    const grid = screen.getByRole("grid");
+    const arrows = screen.getByRole("button", { name: /^Go to parent / });
+    await expect.element(arrows.first()).toBeVisible();
+
+    await arrows.first().click();
+    await expect
+      .element(grid.getByRole("row", { name: /^Commit 100,/ }))
+      .toHaveAttribute("aria-selected", "true");
   });
 
   it("does not offer to expand a merge whose side is already revealed", async () => {

@@ -15,6 +15,7 @@ import {
 } from "#web/features/commit-graph/hooks/use-commit-graph-selection.ts";
 import { useGraphRows } from "#web/features/commit-graph/hooks/use-graph-rows.ts";
 import type { HistorySelection } from "#web/features/commit-graph/scope/history-scope.ts";
+import type { FarEdgeEnd } from "#web/features/repository-history/commit-lanes.ts";
 import { useRepositoryHistoryOrder } from "#web/features/repository-history/history-order.ts";
 import type { HistoryScopeQuery } from "#web/features/repository-history/history-view.ts";
 import {
@@ -124,6 +125,17 @@ export function useCommitGraphView({
       ),
     [windowRows],
   );
+  const farEdgeEnds = useMemo(() => {
+    const ends = new Map<string, string>();
+    for (const { lane } of windowRows)
+      for (const { far } of [...lane.lanesBefore, ...lane.lanesAfter]) {
+        const key =
+          far === undefined ? undefined : `${far.from}\0${far.direction}`;
+        if (key !== undefined && far !== undefined && !ends.has(key))
+          ends.set(key, far.to);
+      }
+    return ends;
+  }, [windowRows]);
   const resident = useMemo(
     () => ({
       oidAt: (index: number) =>
@@ -166,6 +178,13 @@ export function useCommitGraphView({
     scrollRef.current?.focus();
   };
 
+  const followFarEdge = (oid: string, direction: FarEdgeEnd["direction"]) => {
+    const target = farEdgeEnds.get(`${oid}\0${direction}`);
+    if (target === undefined) return false;
+    void navigateToOid(target).catch(() => undefined);
+    return true;
+  };
+
   const navigation = useCommitGraphSelection({
     history,
     scope: current?.scope,
@@ -176,6 +195,7 @@ export function useCommitGraphView({
     pageSize,
     merges,
     toggleMerge,
+    followFarEdge,
     scrollToIndex: (index) => viewportRef.current?.scrollToIndex(index),
     onSelectionIntent: () => beginNavigation(),
     onActiveCommitChange,

@@ -11,6 +11,7 @@ import {
 import {
   commitGraphGutterWidth,
   commitGraphNodePosition,
+  graphLaneX,
   graphMetadataColumns,
   graphRowHeight,
 } from "#web/features/commit-graph/layout/graph-geometry.ts";
@@ -48,19 +49,39 @@ export const CommitGraphRow = memo(function CommitGraphRow({
   readonly mark?: "moving" | "base" | undefined;
   readonly reserve?: number;
 }) {
-  const graph = useMemo(
-    () =>
-      lane === undefined || merge === undefined ? undefined : (
-        <CommitGraphMergeControl
-          subject={commit.subject}
-          state={merge}
-          position={commitGraphNodePosition(lane)}
-          remote={lane.nodeRemote}
-          color={graphNodeColor(lane)}
-        />
-      ),
-    [commit.subject, lane, merge],
-  );
+  const graph = useMemo(() => {
+    if (lane === undefined) return undefined;
+    const farEdges = farEdgeButtons(lane);
+    if (merge === undefined && farEdges.length === 0) return undefined;
+    return (
+      <>
+        {merge === undefined ? null : (
+          <CommitGraphMergeControl
+            subject={commit.subject}
+            state={merge}
+            position={commitGraphNodePosition(lane)}
+            remote={lane.nodeRemote}
+            color={graphNodeColor(lane)}
+          />
+        )}
+        {farEdges.map(({ end, slot }) => (
+          <button
+            key={`${end.from}\0${end.direction}\0${end.to}`}
+            aria-label={`Go to ${end.direction === "down" ? "parent" : "child"} ${end.to.slice(0, 8)}`}
+            className="absolute z-[3] h-[13px] w-4"
+            data-far-to={end.to}
+            onPointerDown={(event) => event.preventDefault()}
+            style={{
+              left: graphLaneX(slot) - 8,
+              top: end.direction === "down" ? 0 : graphRowHeight / 2,
+            }}
+            tabIndex={-1}
+            type="button"
+          />
+        ))}
+      </>
+    );
+  }, [commit.subject, lane, merge]);
   return (
     <tr
       aria-label={commitAriaLabel(commit, labels)}
@@ -93,6 +114,17 @@ export const CommitGraphRow = memo(function CommitGraphRow({
     </tr>
   );
 });
+
+function farEdgeButtons(lane: CommitLaneRow) {
+  return [
+    ...lane.lanesBefore.filter(({ far }) => far?.direction === "down"),
+    ...lane.lanesAfter.filter(
+      ({ far, id }) =>
+        far?.direction === "up" &&
+        !lane.lanesBefore.some((before) => before.id === id),
+    ),
+  ].flatMap(({ far, slot }) => (far === undefined ? [] : [{ end: far, slot }]));
+}
 
 export function commitRowId(oid: string) {
   return `commit-${oid}`;

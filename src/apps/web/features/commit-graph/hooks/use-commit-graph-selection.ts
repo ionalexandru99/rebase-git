@@ -7,6 +7,7 @@ import {
   useRef,
   useState,
 } from "react";
+import type { FarEdgeEnd } from "#web/features/repository-history/commit-lanes.ts";
 import type { HistoryScopeQuery } from "#web/features/repository-history/history-view.ts";
 import type { RepositoryHistory } from "#web/features/repository-history/repository-history.ts";
 
@@ -44,6 +45,7 @@ export function useCommitGraphSelection({
   pageSize,
   merges,
   toggleMerge,
+  followFarEdge,
   scrollToIndex,
   onSelectionIntent,
   onActiveCommitChange,
@@ -56,6 +58,10 @@ export function useCommitGraphSelection({
   readonly pageSize: number;
   readonly merges: ReadonlyMap<string, "collapsed" | "expanded">;
   readonly toggleMerge: (oid: string, expand: boolean) => void;
+  readonly followFarEdge: (
+    oid: string,
+    direction: FarEdgeEnd["direction"],
+  ) => boolean;
   readonly scrollToIndex: (index: number) => void;
   readonly onSelectionIntent?: () => void;
   readonly onActiveCommitChange?:
@@ -165,6 +171,15 @@ export function useCommitGraphSelection({
     ) {
       event.preventDefault();
       toggleMerge(activeOid, event.key === "ArrowRight");
+      return;
+    }
+    if (
+      event.altKey &&
+      (event.key === "ArrowDown" || event.key === "ArrowUp") &&
+      activeOid !== undefined &&
+      followFarEdge(activeOid, event.key === "ArrowDown" ? "down" : "up")
+    ) {
+      event.preventDefault();
       return;
     }
     const modifier = event.metaKey || event.ctrlKey;

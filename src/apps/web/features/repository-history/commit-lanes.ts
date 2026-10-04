@@ -5,6 +5,14 @@ export const laneColorCount = 8;
 export interface CommitTopology {
   readonly oid: string;
   readonly parents: readonly string[];
+  readonly farParents?: readonly string[];
+  readonly farArrival?: { readonly parent: string; readonly child: string };
+}
+
+export interface FarEdgeEnd {
+  readonly direction: "down" | "up";
+  readonly from: string;
+  readonly to: string;
 }
 
 export interface CommitLanePosition {
@@ -13,6 +21,7 @@ export interface CommitLanePosition {
   readonly color: number;
   readonly incomingColor?: number;
   readonly remote: boolean;
+  readonly far?: FarEdgeEnd;
 }
 
 export interface CommitLaneSeed {
@@ -26,9 +35,16 @@ export interface CommitLane extends CommitLanePosition {
   readonly branchDepth: number;
 }
 
+interface FarEdgeLook {
+  readonly parent: string;
+  readonly color: number;
+  readonly remote: boolean;
+}
+
 export interface CommitLaneCheckpoint {
   readonly lanes: readonly CommitLane[];
   readonly nextLaneId: number;
+  readonly farEdges: readonly FarEdgeLook[];
 }
 
 export interface CommitLaneRow {
@@ -93,7 +109,7 @@ export function graphLaneSeeds(
 }
 
 export function createCommitLaneCheckpoint(): CommitLaneCheckpoint {
-  return { lanes: [], nextLaneId: 0 };
+  return { lanes: [], nextLaneId: 0, farEdges: [] };
 }
 
 export function appendCommitLanes(
@@ -103,6 +119,7 @@ export function appendCommitLanes(
   localHistory?: { readonly has: (oid: string) => boolean },
 ) {
   const lanes = checkpoint.lanes.map((lane) => ({ ...lane }));
+  const farEdges = [...checkpoint.farEdges];
   let nextLaneId = checkpoint.nextLaneId;
   const rows: CommitLaneRow[] = [];
 
@@ -137,13 +154,20 @@ export function appendCommitLanes(
     const lanesBefore = [...lanes];
     for (let index = lanes.length - 1; index >= 0; index -= 1) {
       const incoming = lanes[index];
-      if (incoming?.expectedOid === commit.oid && incoming.id !== nodeLane.id)
+      if (
+        (incoming?.expectedOid === commit.oid && incoming.id !== nodeLane.id) ||
+        incoming?.far?.direction === "down"
+      )
         lanes.splice(index, 1);
     }
     const nodeLaneId = nodeLane.id;
     nodeIndex = lanes.findIndex((lane) => lane.id === nodeLaneId);
-    if (nodeLane.incomingColor !== undefined) {
-      const { incomingColor: _incomingColor, ...continuation } = nodeLane;
+    if (nodeLane.incomingColor !== undefined || nodeLane.far !== undefined) {
+      const {
+        incomingColor: _incomingColor,
+        far: _far,
+        ...continuation
+      } = nodeLane;
       nodeLane = continuation;
       lanes[nodeIndex] = nodeLane;
     }
@@ -166,7 +190,11 @@ export function appendCommitLanes(
       if (firstParent === undefined) {
         throw new Error("Missing first parent");
       }
-      lanes[nodeIndex] = { ...nodeLane, expectedOid: firstParent };
+      lanes[nodeIndex] = withFarEnd(
+        { ...nodeLane, expectedOid: firstParent },
+        commit,
+        farEdges,
+      );
       parentLaneIds.push(nodeLane.id);
 
       let insertIndex = Math.min(nodeIndex + 1, lanes.length);
@@ -174,10 +202,18 @@ export function appendCommitLanes(
         const existing = lanes.find(
           (current) => current.expectedOid === parent,
         );
+        const far = commit.farParents?.includes(parent) === true;
         const created = lane(
           nextLaneId,
           parent,
-          availableSlot(lanes),
+          far
+            ? nearestSlot(lanes, nodeLane.slot, lanesBefore)
+            : availableSlot([
+                ...lanes,
+                ...lanesBefore.filter(
+                  (ending) => ending.far?.direction === "down",
+                ),
+              ]),
           {
             color:
               existing?.color ?? seeds.get(parent)?.color ?? nextLaneId % 8,
@@ -186,10 +222,31 @@ export function appendCommitLanes(
           nodeLane.branchDepth + 1,
         );
         nextLaneId += 1;
-        lanes.splice(insertIndex, 0, created);
+        lanes.splice(insertIndex, 0, withFarEnd(created, commit, farEdges));
         insertIndex += 1;
         parentLaneIds.push(created.id);
       }
+    }
+
+    if (commit.farArrival !== undefined) {
+      const { parent, child } = commit.farArrival;
+      const look = farEdges.findIndex((edge) => edge.parent === parent);
+      const joined = lanes.find((current) => current.expectedOid === parent);
+      const occupied = [...lanes, ...lanesBefore];
+      lanes.push({
+        ...lane(
+          nextLaneId,
+          parent,
+          joined === undefined
+            ? availableSlot(occupied)
+            : nearestSlot(lanes, joined.slot, lanesBefore),
+          farEdges[look] ?? seeds.get(parent),
+          joined === undefined ? 0 : joined.branchDepth + 1,
+        ),
+        far: { direction: "up", from: parent, to: child },
+      });
+      nextLaneId += 1;
+      if (look >= 0) farEdges.splice(look, 1);
     }
 
     rows.push({
@@ -203,8 +260,25 @@ export function appendCommitLanes(
     });
   }
   return {
-    checkpoint: { lanes, nextLaneId } satisfies CommitLaneCheckpoint,
+    checkpoint: { lanes, nextLaneId, farEdges } satisfies CommitLaneCheckpoint,
     rows,
+  };
+}
+
+function withFarEnd(
+  current: CommitLane,
+  commit: CommitTopology,
+  farEdges: FarEdgeLook[],
+): CommitLane {
+  const parent = current.expectedOid;
+  if (commit.farParents?.includes(parent) !== true) return current;
+  const look = { parent, color: current.color, remote: current.remote };
+  const index = farEdges.findIndex((edge) => edge.parent === parent);
+  if (index < 0) farEdges.push(look);
+  else farEdges[index] = look;
+  return {
+    ...current,
+    far: { direction: "down", from: commit.oid, to: parent },
   };
 }
 
@@ -240,7 +314,20 @@ function lane(
   };
 }
 
-function availableSlot(lanes: readonly CommitLane[]) {
+function nearestSlot(
+  lanes: readonly CommitLanePosition[],
+  origin: number,
+  ending: readonly CommitLanePosition[],
+) {
+  const occupied = new Set([...lanes, ...ending].map((lane) => lane.slot));
+  for (let distance = 1; ; distance += 1) {
+    if (!occupied.has(origin + distance)) return origin + distance;
+    if (origin - distance >= 0 && !occupied.has(origin - distance))
+      return origin - distance;
+  }
+}
+
+function availableSlot(lanes: readonly CommitLanePosition[]) {
   const occupied = new Set(lanes.map((lane) => lane.slot));
   let slot = 0;
   while (occupied.has(slot)) slot += 1;
