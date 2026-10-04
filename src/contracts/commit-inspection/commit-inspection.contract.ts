@@ -8,7 +8,10 @@ import {
   RepositoryId,
   RepositoryPath,
 } from "#contracts/git/git-values.contract.ts";
-import { ChangesFailure } from "#contracts/repository-changes/repository-changes.contract.ts";
+import {
+  ChangedLines,
+  ChangesFailure,
+} from "#contracts/repository-changes/repository-changes.contract.ts";
 import { ChangeDiff } from "#contracts/repository-comparison/repository-comparison.contract.ts";
 
 const Fingerprint = Schema.String.check(Schema.isMaxLength(128));
@@ -36,6 +39,7 @@ export const CommitFile = Schema.Struct({
   path: RepositoryPath,
   previousPath: Schema.NullOr(RepositoryPath),
   status: Schema.Literals(["A", "M", "D", "R", "T"]),
+  lines: ChangedLines,
 });
 export type CommitFile = typeof CommitFile.Type;
 export const CommitInspection = Schema.Struct({

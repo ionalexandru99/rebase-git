@@ -240,9 +240,7 @@ it("retains an inspected commit and file while another tab and another project a
   const f = await fixture();
   await openDiffs();
   await page.getByRole("button", { name: "Inspect commit" }).click();
-  await page
-    .getByRole("button", { name: "second.bin Modified", exact: true })
-    .click();
+  await page.getByRole("button", { name: "second.bin", exact: true }).click();
   await expect
     .poll(() => f.diffs.at(-1))
     .toBe(`${CommitInspectionApi.inspectDiff._tag}:second.bin`);
@@ -254,9 +252,7 @@ it("retains an inspected commit and file while another tab and another project a
   await f.show(f.projectA);
   await page.getByRole("button", { name: "Show side panel" }).click();
   await expect
-    .element(
-      page.getByRole("button", { name: "second.bin Modified", exact: true }),
-    )
+    .element(page.getByRole("button", { name: "second.bin", exact: true }))
     .toHaveAttribute("aria-pressed", "true");
   expect(f.inspections).toHaveLength(count);
 });
@@ -312,9 +308,7 @@ it("keeps linked-worktree catalog projects independent when their other owner cl
 it("pauses retained sessions while a different environment is current", async () => {
   const f = await fixture();
   await page.getByRole("button", { name: "Inspect commit" }).click();
-  await page
-    .getByRole("button", { name: "second.bin Modified", exact: true })
-    .click();
+  await page.getByRole("button", { name: "second.bin", exact: true }).click();
   await expect
     .poll(() => f.diffs.at(-1))
     .toBe(`${CommitInspectionApi.inspectDiff._tag}:second.bin`);
@@ -325,9 +319,7 @@ it("pauses retained sessions while a different environment is current", async ()
     .toBeVisible();
   await f.showEnvironment("environment");
   await expect
-    .element(
-      page.getByRole("button", { name: "second.bin Modified", exact: true }),
-    )
+    .element(page.getByRole("button", { name: "second.bin", exact: true }))
     .toHaveAttribute("aria-pressed", "true");
   expect(f.requestCount()).toBe(requests);
 });

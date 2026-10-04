@@ -28,6 +28,7 @@ import {
   restoreFiles,
 } from "#server/features/commit-inspection/restore-files.ts";
 import { buildChangeDiff } from "#server/repository/comparison/build-change-diff.ts";
+import { lineCounts } from "#server/repository/comparison/line-counts.ts";
 import {
   type GitBlob,
   readBlobs,
@@ -192,49 +193,70 @@ export function readCommitFiles(
   command: InspectCommit,
   parentOid: string | null,
 ) {
-  return runRepositoryGit(
-    git,
-    command.worktreePath,
-    [
-      "diff-tree",
+  return Effect.gen(function* () {
+    const compared = [
       "--root",
       "--no-commit-id",
       "-r",
       "-z",
-      "--name-status",
       "--no-ext-diff",
       "--no-textconv",
       "-M",
       ...(parentOid === null ? [] : [parentOid]),
       command.oid,
       "--",
-    ],
-    { ...originalObjects, maxOutputBytes: 16_000_000 },
-  ).pipe(
-    Effect.map((output) => {
-      const fields = output.split("\0");
-      const files: CommitFile[] = [];
-      for (let i = 0; i < fields.length - 1; ) {
-        const status = fields[i++]?.[0];
-        const first = fields[i++];
-        const name = status === "R" ? fields[i++] : first;
-        if (name === undefined) continue;
-        if (
-          status === "A" ||
-          status === "M" ||
-          status === "D" ||
-          status === "T" ||
-          status === "R"
-        )
-          files.push({
-            path: name,
-            previousPath: status === "R" ? (first ?? null) : null,
-            status,
-          });
-      }
-      return files;
-    }),
-  );
+    ];
+    const output = yield* runRepositoryGit(
+      git,
+      command.worktreePath,
+      ["diff-tree", "--name-status", ...compared],
+      { ...originalObjects, maxOutputBytes: 16_000_000 },
+    );
+    const files = commitFiles(output);
+    const counted =
+      files.length > countedFilesLimit
+        ? new Map()
+        : lineCounts(
+            yield* runRepositoryGit(
+              git,
+              command.worktreePath,
+              ["diff-tree", "--numstat", ...compared],
+              originalObjects,
+            ),
+          );
+    return files.map(
+      (file): CommitFile => ({
+        ...file,
+        lines: counted.get(file.path) ?? null,
+      }),
+    );
+  });
+}
+
+const countedFilesLimit = 1000;
+
+function commitFiles(output: string) {
+  const fields = output.split("\0");
+  const files: Omit<CommitFile, "lines">[] = [];
+  for (let i = 0; i < fields.length - 1; ) {
+    const status = fields[i++]?.[0];
+    const first = fields[i++];
+    const name = status === "R" ? fields[i++] : first;
+    if (name === undefined) continue;
+    if (
+      status === "A" ||
+      status === "M" ||
+      status === "D" ||
+      status === "T" ||
+      status === "R"
+    )
+      files.push({
+        path: name,
+        previousPath: status === "R" ? (first ?? null) : null,
+        status,
+      });
+  }
+  return files;
 }
 
 export function commitInspectionFeature(

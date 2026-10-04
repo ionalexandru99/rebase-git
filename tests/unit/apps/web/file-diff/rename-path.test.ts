@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vite-plus/test";
-import { renameHint } from "#web/features/working-changes/components/change-file-section.tsx";
+import { renameHint } from "#web/features/file-diff/components/file-row-name.tsx";
 
 describe("rename paths", () => {
   it.each([

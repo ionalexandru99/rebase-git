@@ -77,22 +77,10 @@ export function readStashContents(git: GitCommandRunner, target: StashTarget) {
     const added =
       untracked === null
         ? []
-        : (yield* runRepositoryGit(
-            git,
-            target.worktreePath,
-            ["ls-tree", "-r", "-z", "--name-only", untracked],
-            { maxOutputBytes: 16_000_000 },
-          ))
-            .split("\0")
-            .filter((path) => path.length > 0);
+        : yield* readCommitFiles(git, { ...target, oid: untracked }, null);
     const files = [
       ...tracked.map((file) => ({ ...file, untracked: false })),
-      ...added.map((path) => ({
-        path,
-        previousPath: null,
-        status: "A" as const,
-        untracked: true,
-      })),
+      ...added.map((file) => ({ ...file, untracked: true })),
     ];
     return {
       base,

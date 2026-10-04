@@ -18,6 +18,7 @@ import {
   worktreeLineCounts,
 } from "#server/features/repository-changes/git/change-files.ts";
 import { fingerprint } from "#server/repository/comparison/fingerprint.ts";
+import { lineCounts } from "#server/repository/comparison/line-counts.ts";
 
 export function readChanges(git: GitCommandRunner, scope: ChangesScope) {
   return Effect.gen(function* () {
@@ -214,33 +215,6 @@ function stagedFiles(output: string) {
 
 function conflicted(xy: string) {
   return xy.includes("U") || xy === "AA" || xy === "DD";
-}
-
-function lineCounts(output: string) {
-  const fields = output.split("\0");
-  const counts = new Map<string, ChangedFile["lines"]>();
-  for (let i = 0; i < fields.length; ) {
-    const record = fields[i++] ?? "";
-    const first = record.indexOf("\t");
-    const second = record.indexOf("\t", first + 1);
-    if (first < 0 || second < 0) continue;
-    const added = record.slice(0, first);
-    const removed = record.slice(first + 1, second);
-    const path = record.slice(second + 1);
-    let target: string | undefined = path;
-    if (path === "") {
-      target = fields[i + 1];
-      i += 2;
-    }
-    if (target)
-      counts.set(
-        target,
-        added === "-"
-          ? null
-          : { added: Number(added), removed: Number(removed) },
-      );
-  }
-  return counts;
 }
 
 function fileStatus(status: string | undefined): ChangedFile["status"] {

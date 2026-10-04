@@ -18,13 +18,15 @@ export const ChangesScope = Schema.Struct({
   amend: Schema.Boolean,
 });
 export type ChangesScope = typeof ChangesScope.Type;
+export const ChangedLines = Schema.NullOr(
+  Schema.Struct({ added: Schema.Number, removed: Schema.Number }),
+);
+export type ChangedLines = typeof ChangedLines.Type;
 export const ChangedFile = Schema.Struct({
   path: RepositoryPath,
   previousPath: Schema.NullOr(RepositoryPath),
   status: Schema.Literals(["A", "M", "D", "R", "T", "U", "?"]),
-  lines: Schema.NullOr(
-    Schema.Struct({ added: Schema.Number, removed: Schema.Number }),
-  ),
+  lines: ChangedLines,
 });
 export type ChangedFile = typeof ChangedFile.Type;
 export const RepositoryChanges = Schema.Struct({

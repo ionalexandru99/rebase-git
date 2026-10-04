@@ -431,6 +431,25 @@ describe("restoring files from a commit", () => {
       .not.toBeInTheDocument();
   });
 
+  it("previews and restores the row right-clicked beside its name", async () => {
+    const { screen, grid, previews, restores } = await fixture();
+    await grid.getByRole("row", { name: /^Commit 0,/ }).dblClick();
+    const second = screen.getByRole("button", { name: /second.bin/ });
+    await expect.element(second).toBeVisible();
+    const row = second.element().parentElement as HTMLElement;
+    await userEvent.click(row, {
+      button: "right",
+      position: { x: row.clientWidth - 6, y: row.clientHeight / 2 },
+    });
+    await screen.getByRole("menuitem", { name: "Restore" }).click();
+    await screen.getByRole("menuitem", { name: "Before this commit" }).hover();
+    await expect.poll(() => previews.at(-1)?.path).toBe("src/second.bin");
+    await screen.getByRole("menuitem", { name: "Before this commit" }).click();
+    await expect.poll(() => restores).toHaveLength(1);
+    expect(restores[0]?.paths).toEqual(["src/second.bin", "old.bin"]);
+    await expect.element(second).toHaveAttribute("aria-pressed", "true");
+  });
+
   it("restores exactly the highlighted rows after deselecting the open file", async () => {
     const { screen, grid, restores } = await fixture();
     await grid.getByRole("row", { name: /^Commit 0,/ }).dblClick();

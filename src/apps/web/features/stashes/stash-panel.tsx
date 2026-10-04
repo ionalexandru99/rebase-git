@@ -14,8 +14,6 @@ import { usePanelFeature } from "#web/features/workspace-panel/api.ts";
 import { useEnvironmentQuery } from "#web/platform/query/environment-query.ts";
 import { describeFailure } from "#web/platform/query/request-failure.ts";
 
-const noActions = () => [];
-
 const CommitDiff = lazy(
   () => import("#web/features/commit-inspection/components/commit-diff.tsx"),
 );
@@ -47,10 +45,7 @@ export function StashPanel() {
       </p>
     );
   return (
-    <section
-      aria-label="Stash"
-      className="@container flex h-full min-h-0 flex-col"
-    >
+    <section aria-label="Stash" className="flex h-full min-h-0 flex-col">
       <header className="shrink-0 border-border border-b px-4 py-3 text-xs">
         <h2 className="break-words text-base font-medium">{stash.name}</h2>
         <p className="mt-2 flex flex-wrap gap-x-3 text-muted-foreground">
@@ -115,7 +110,13 @@ function StashFiles({
       <p className="p-4 text-sm text-muted-foreground">No file changes.</p>
     );
   return (
-    <div className="grid min-h-0 flex-1 grid-cols-1 grid-rows-[minmax(0,1fr)_minmax(7rem,30%)] @[28rem]:grid-cols-[minmax(0,1fr)_12.5rem] @[28rem]:grid-rows-1">
+    <CommitFiles
+      files={contents.files}
+      path={selected}
+      select={setSelected}
+      preferences={preferences}
+      choosePreferences={choosePreferences}
+    >
       <Suspense
         fallback={
           <p className="p-4 text-sm text-muted-foreground">
@@ -138,13 +139,6 @@ function StashFiles({
           choosePreferences={choosePreferences}
         />
       </Suspense>
-      <CommitFiles
-        files={contents.files}
-        path={selected}
-        select={setSelected}
-        actionsFor={noActions}
-        onMenuClose={() => undefined}
-      />
-    </div>
+    </CommitFiles>
   );
 }
