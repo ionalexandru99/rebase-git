@@ -1,0 +1,12 @@
+inheritance: true
+reviews:
+  pre_merge_checks:
+    custom_checks:
+      - name: "Migrations only add"
+        mode: "error"
+        instructions: |
+          Applies only when the pull request adds or changes files under src/apps/server/persistence/migrations; otherwise pass.
+          Users can switch from Nightly back to Stable, so an older build must still run on a database that a newer build migrated.
+          Pass when every new migration only creates tables or indexes, or adds columns that are nullable or have a default.
+          Fail when a migration drops or renames a table or column, adds a NOT NULL column without a default, tightens a constraint on existing data, or edits a migration that already exists on main.
+          Name the migration file and statement that fails.

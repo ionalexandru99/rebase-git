@@ -42,6 +42,29 @@ describe("desktop application updater", () => {
     expect(updater.checkForUpdates).toHaveBeenCalledOnce();
   });
 
+  it("moves back to stable releases from 0.0.5 on", async () => {
+    const updater = createTestUpdater();
+    const applicationUpdater = createApplicationUpdater(updater, {
+      packaged: true,
+      saveSettings: () => Promise.resolve(),
+      settings: {
+        checkAutomatically: false,
+        releaseChannel: "nightly",
+      },
+    });
+
+    await applicationUpdater.selectReleaseChannel("stable");
+
+    expect(updater.allowDowngrade).toBe(true);
+    expect(await updater.isUpdateSupported({ version: "0.0.4" })).toBe(false);
+    expect(await updater.isUpdateSupported({ version: "0.0.5" })).toBe(true);
+    expect(
+      await updater.isUpdateSupported({
+        version: "0.0.5-nightly.20261005.147",
+      }),
+    ).toBe(true);
+  });
+
   it("publishes download state and installs a ready update", async () => {
     const updater = createTestUpdater();
     const applicationUpdater = createApplicationUpdater(updater, {
@@ -228,6 +251,9 @@ function createTestUpdater() {
       allowDowngrade = true;
     },
     checkForUpdates: vi.fn((): Promise<unknown> => Promise.resolve()),
+    isUpdateSupported: (_info: {
+      readonly version: string;
+    }): boolean | Promise<boolean> => true,
     emit(event: string, value?: unknown) {
       for (const listener of listeners.get(event) ?? []) listener(value);
     },

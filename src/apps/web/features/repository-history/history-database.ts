@@ -348,8 +348,17 @@ function openDatabase(closed: () => void) {
       database.onclose = closed;
       resolve(database);
     };
-    request.onerror = () =>
+    request.onerror = () => {
+      if (request.error?.name === "VersionError") {
+        resolve(
+          requestResult(globalThis.indexedDB.deleteDatabase(databaseName)).then(
+            () => openDatabase(closed),
+          ),
+        );
+        return;
+      }
       reject(new HistoryStorageUnavailable(request.error));
+    };
     request.onblocked = () => {
       blocked = true;
       reject(new HistoryStorageUnavailable(new Error("IndexedDB is blocked")));

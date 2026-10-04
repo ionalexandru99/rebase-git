@@ -295,32 +295,19 @@ describe("Environment state", () => {
     );
   });
 
-  it("rejects newer migration versions", async () => {
-    const newerPaths = await createTemporaryPaths();
-    await seedMigrationHistory(newerPaths.stateDatabase, [
-      generatedMigrationEntry(createEnvironmentMigration, 1),
-      generatedMigrationEntry(createActivityMigration, 2),
-      generatedMigrationEntry(createAuthorizationCapabilitiesMigration, 3),
-      generatedMigrationEntry(createRepositoryCatalogMigration, 4),
-      generatedMigrationEntry(addLogicalRepositoryIdentityMigration, 5),
-      generatedMigrationEntry(removeDormantActivityMigration, 6),
-      generatedMigrationEntry(ownerOnlyAuthorizationMigration, 7),
-      generatedMigrationEntry(repositoryColorMigration, 8),
-      generatedMigrationEntry(gitHostEnabledMigration, 9),
-      generatedMigrationEntry(bitbucketTokenMigration, 10),
-      generatedMigrationEntry(pullStrategySettingsMigration, 11),
-      generatedMigrationEntry(cloneFolderMigration, 12),
-      {
-        checksum: "future",
-        createdAt: cloneFolderMigration.folderMillis + 1,
-        name: "future",
-        version: 13,
-      },
-    ]);
+  it("opens a database that a newer build migrated", async () => {
+    const paths = await createTemporaryPaths();
+    await openState(paths);
+    const database = new DatabaseSync(paths.stateDatabase);
+    recordMigration(database, {
+      checksum: "future",
+      createdAt: Date.now(),
+      name: "future",
+      version: generatedMigrations.length + 1,
+    });
+    database.close();
 
-    await expect(openState(newerPaths)).rejects.toThrow(
-      "The state database is at version 13, but this Rebase build supports version 12.",
-    );
+    await expect(openState(paths)).resolves.toBeUndefined();
   });
 
   it("recovers from an interrupted migration transaction", async () => {

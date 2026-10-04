@@ -20,14 +20,14 @@ export function migrateEnvironmentState(
   const localMigrations = readMigrationFiles({ migrationsFolder });
   const appliedMigrations = readAppliedMigrations(database.$client);
   validateMigrationHistory(localMigrations, appliedMigrations);
-  if (appliedMigrations.length === localMigrations.length) return;
+  if (appliedMigrations.length >= localMigrations.length) return;
 
   try {
     migrate(database, { migrationsFolder, migrationsTable });
   } catch (error) {
     const migrationsAfterFailure = readAppliedMigrations(database.$client);
     validateMigrationHistory(localMigrations, migrationsAfterFailure);
-    if (migrationsAfterFailure.length !== localMigrations.length) throw error;
+    if (migrationsAfterFailure.length < localMigrations.length) throw error;
   }
 }
 
@@ -47,13 +47,9 @@ function validateMigrationHistory(
   localMigrations: readonly MigrationMeta[],
   appliedMigrations: readonly AppliedMigration[],
 ) {
-  for (const [index, applied] of appliedMigrations.entries()) {
-    const expected = localMigrations[index];
-    if (expected === undefined) {
-      throw new Error(
-        `The state database is at version ${applied.id}, but this Rebase build supports version ${localMigrations.length}.`,
-      );
-    }
+  for (const [index, expected] of localMigrations.entries()) {
+    const applied = appliedMigrations[index];
+    if (applied === undefined) return;
     if (applied.id !== index + 1 || applied.name !== expected.name) {
       throw new Error(
         `Migration ${applied.id} "${applied.name}" does not match the expected migration "${expected.name}".`,
