@@ -49,11 +49,12 @@ const methods: Record<
         Create it at https://id.atlassian.com/manage-profile/security/api-tokens
         with{" "}
         <Scopes
-          label="three read scopes"
+          label="four read scopes"
           scopes={[
             "read:repository:bitbucket",
             "read:pullrequest:bitbucket",
             "read:user:bitbucket",
+            "read:workspace:bitbucket",
           ]}
         />
         .

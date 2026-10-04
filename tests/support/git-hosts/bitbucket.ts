@@ -1,5 +1,5 @@
 import { Effect } from "effect";
-import type { BitbucketClient } from "#server/features/source-control/hosts/bitbucket-host.ts";
+import type { BitbucketClient } from "#server/features/source-control/hosts/bitbucket-client.ts";
 
 interface BitbucketPullRequestNode {
   readonly id: number;
@@ -9,11 +9,25 @@ interface BitbucketPullRequestNode {
   readonly checks?: readonly string[];
 }
 
+interface BitbucketRepository {
+  readonly name: string;
+  readonly private?: boolean;
+  readonly updatedOn?: string;
+}
+
 export function fakeBitbucket(
   bySourceBranch: Readonly<
     Record<string, readonly BitbucketPullRequestNode[]>
   > = {},
-  { userStatus = 200 }: { readonly userStatus?: number } = {},
+  {
+    userStatus = 200,
+    workspacesStatus = 200,
+    repositories = [],
+  }: {
+    readonly userStatus?: number;
+    readonly workspacesStatus?: number;
+    readonly repositories?: readonly BitbucketRepository[];
+  } = {},
 ) {
   const requests: { readonly url: string; readonly authorization: string }[] =
     [];
@@ -26,6 +40,49 @@ export function fakeBitbucket(
       const { pathname, searchParams } = new URL(url);
       if (pathname === "/2.0/user")
         return answer({ username: "octo", display_name: "Octo" }, userStatus);
+      if (pathname === "/2.0/user/workspaces")
+        return answer(
+          {
+            values: [
+              ...new Set(repositories.map(({ name }) => name.split("/")[0])),
+            ].map((slug) => ({ workspace: { slug } })),
+          },
+          workspacesStatus,
+        );
+      const workspace = /^\/2\.0\/repositories\/([^/]+)$/.exec(pathname)?.[1];
+      if (workspace !== undefined) {
+        const pagelen = Number(searchParams.get("pagelen"));
+        const page = Number(searchParams.get("page") ?? 1);
+        const all = repositories.filter(({ name }) =>
+          name.startsWith(`${workspace}/`),
+        );
+        const next = new URL(url);
+        next.searchParams.set("page", String(page + 1));
+        return answer({
+          ...(all.length > page * pagelen ? { next: next.href } : {}),
+          values: all
+            .slice((page - 1) * pagelen, page * pagelen)
+            .map((repository) => ({
+              full_name: repository.name,
+              is_private: repository.private ?? false,
+              description: "",
+              updated_on:
+                repository.updatedOn ?? "2026-10-01T10:00:00.123456+00:00",
+              links: {
+                clone: [
+                  {
+                    name: "https",
+                    href: `https://octo@bitbucket.org/${repository.name}.git`,
+                  },
+                  {
+                    name: "ssh",
+                    href: `git@bitbucket.org:${repository.name}.git`,
+                  },
+                ],
+              },
+            })),
+        });
+      }
       const statuses = /\/commit\/head-(\d+)\/statuses$/.exec(pathname);
       if (statuses !== null)
         return answer({
