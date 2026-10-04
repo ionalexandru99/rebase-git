@@ -39,7 +39,7 @@ import {
 describe("branches sidebar", () => {
   beforeEach(() => localStorage.removeItem("rebase:branches-view:v1"));
 
-  it("docks the other sections below Local and moves through both with the keyboard", async () => {
+  it("scrolls every section in one list with their headers pinned and moves through them with the keyboard", async () => {
     const current = refs();
     const numbered = (prefix: string, count: number) =>
       Array.from({ length: count }, (_, index) => ({
@@ -68,16 +68,21 @@ describe("branches sidebar", () => {
     const tags = tree.getByRole("treeitem", { name: "Tags (1+)", exact: true });
     const bounds = (element: { element: () => Element }) =>
       element.element().getBoundingClientRect();
+    const fromTop = (element: { element: () => Element }) =>
+      bounds(element).top - bounds(tree).top;
+    const fromBottom = (element: { element: () => Element }) =>
+      bounds(tree).bottom - bounds(element).bottom;
     await expect.element(tags).toBeVisible();
-    expect(bounds(tree).bottom - bounds(tags).bottom).toBeLessThan(12);
+    expect(fromBottom(tags)).toBeGreaterThanOrEqual(0);
+    expect(fromBottom(tags)).toBeLessThan(12);
+    expect(fromTop(local)).toBeGreaterThanOrEqual(0);
+    expect(fromTop(local)).toBeLessThan(4);
 
     await origin.click();
     await expect.element(origin).toHaveAttribute("aria-expanded", "true");
-    const height = bounds(tree).height;
-    expect(bounds(origin).top - bounds(tree).top).toBeGreaterThan(
-      height * 0.35,
-    );
-    expect(bounds(local).top - bounds(tree).top).toBeLessThan(4);
+    await expect.poll(() => Math.abs(fromTop(origin))).toBeLessThan(4);
+    expect(fromBottom(tags)).toBeGreaterThanOrEqual(0);
+    expect(fromBottom(tags)).toBeLessThan(12);
 
     tree.element().focus();
     await userEvent.keyboard("{End}");

@@ -6,10 +6,11 @@ import {
   topicPath,
 } from "#tests-support/fixtures.ts";
 import {
+  type BranchesSidebarItem,
   branchesSidebarItems,
   buildBranchesSidebarRows,
   defaultExpandedSections,
-  dockItems,
+  firstDockedIndex,
   selectRefRows,
   stepRow,
   toggleSection,
@@ -56,33 +57,22 @@ describe("branches sidebar state", () => {
     });
   });
 
-  it("keeps Local on top and docks the other sections with their drafts", () => {
+  it("docks every section after Local, with drafts staying in their own section", () => {
     const rows = buildBranchesSidebarRows(
       branchScenarioRefs(),
       mainPath,
       defaultExpandedSections,
       "",
     );
-    const ids = (items: ReturnType<typeof dockItems>["local"]) =>
-      items.map((item) => item.id);
+    const docked = (items: readonly BranchesSidebarItem[]) =>
+      items.slice(firstDockedIndex(items)).map((item) => item.id);
 
-    const branchDraft = dockItems(branchesSidebarItems(rows, "branches"));
-    expect(branchDraft.header?.id).toBe("section:branches");
-    expect(ids(branchDraft.local)).toEqual([
-      "ref-draft",
-      "ref:branches:main",
-      "ref:branches:topic",
-      "ref:branches:feature",
-    ]);
-    expect(ids(branchDraft.docked)).toEqual([
+    expect(docked(branchesSidebarItems(rows, "branches"))).toEqual([
       "section:remote:origin",
       "section:remote:upstream",
       "section:tags",
     ]);
-
-    const tagDraft = dockItems(branchesSidebarItems(rows, "tags"));
-    expect(ids(tagDraft.local)).toHaveLength(3);
-    expect(ids(tagDraft.docked).slice(-2)).toEqual([
+    expect(docked(branchesSidebarItems(rows, "tags")).slice(-2)).toEqual([
       "section:tags",
       "ref-draft",
     ]);
@@ -94,10 +84,7 @@ describe("branches sidebar state", () => {
       "",
       "remote",
     );
-    expect(dockItems(branchesSidebarItems(remotes, undefined))).toMatchObject({
-      header: undefined,
-      local: [],
-    });
+    expect(firstDockedIndex(branchesSidebarItems(remotes, undefined))).toBe(0);
   });
 
   it("moves settled branches out of Local into a Settled section docked above the remotes", () => {
@@ -117,12 +104,14 @@ describe("branches sidebar state", () => {
       "",
     );
 
-    const { local, docked } = dockItems(branchesSidebarItems(rows, undefined));
-    expect(local.map((item) => item.id)).toEqual([
+    const items = branchesSidebarItems(rows, undefined);
+    const dock = firstDockedIndex(items);
+    expect(items.slice(0, dock).map((item) => item.id)).toEqual([
+      "section:branches",
       "ref:branches:main",
       "ref:branches:topic",
     ]);
-    expect(docked.map((item) => item.id).slice(0, 3)).toEqual([
+    expect(items.slice(dock, dock + 3).map((item) => item.id)).toEqual([
       "section:settled",
       "ref:settled:feature",
       "section:remote:origin",

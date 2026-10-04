@@ -317,23 +317,23 @@ export function branchesSidebarItems(
   return items;
 }
 
-export function dockItems(items: readonly BranchesSidebarItem[]): {
-  readonly header: BranchesSidebarItem | undefined;
-  readonly local: readonly BranchesSidebarItem[];
-  readonly docked: readonly BranchesSidebarItem[];
-} {
-  const start = items.findIndex(
+export type BranchesSidebarSectionItem = {
+  readonly id: string;
+  readonly kind: "row";
+  readonly row: BranchesSidebarSectionRow;
+};
+
+export function isSectionItem(
+  item: BranchesSidebarItem | undefined,
+): item is BranchesSidebarSectionItem {
+  return item?.kind === "row" && item.row.kind === "section";
+}
+
+export function firstDockedIndex(items: readonly BranchesSidebarItem[]) {
+  return items.findIndex(
     (item) =>
-      item.kind === "row" &&
-      item.row.kind === "section" &&
-      item.row.sectionId !== localBranchesSectionId,
+      isSectionItem(item) && item.row.sectionId !== localBranchesSectionId,
   );
-  const top = start < 0 ? items : items.slice(0, start);
-  const docked = start < 0 ? [] : items.slice(start);
-  const [first] = top;
-  return first?.id === `section:${localBranchesSectionId}`
-    ? { header: first, local: top.slice(1), docked }
-    : { header: undefined, local: top, docked };
 }
 
 export function estimateItemHeight(item: BranchesSidebarItem | undefined) {
