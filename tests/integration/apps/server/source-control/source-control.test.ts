@@ -62,11 +62,13 @@ describe("source control", () => {
 
   it("lists GitHub repositories to clone over the configured protocol, without the ones already open", async () => {
     const f = await fixture({
-      protocol: "ssh",
-      repositories: [
-        { name: "octo/rebase" },
-        { name: "octo/storefront", private: true },
-      ],
+      github: {
+        protocol: "ssh",
+        repositories: [
+          { name: "octo/rebase" },
+          { name: "octo/storefront", private: true },
+        ],
+      },
     });
 
     const hosts = await f.cloneable();
@@ -74,6 +76,7 @@ describe("source control", () => {
     expect(hosts).toEqual([
       {
         kind: "github",
+        host: "github.com",
         account: "octo",
         repositories: [
           {
@@ -87,9 +90,61 @@ describe("source control", () => {
     ]);
   });
 
+  it("lists GitLab repositories for every signed-in server over its own protocol, skipping paths too long to show", async () => {
+    const f = await fixture({
+      github: { account: null },
+      gitlab: {
+        accounts: {
+          "gitlab.com": "tanuki",
+          "git.example.com": "tanuki",
+          "broken.example.com": "tanuki",
+        },
+        protocols: { "git.example.com": "https" },
+        repositories: {
+          "gitlab.com": [
+            { name: "group/sub/rebase", private: true },
+            { name: `group/${"deep/".repeat(60)}project` },
+          ],
+          "git.example.com": [{ name: "team/storefront" }],
+        },
+      },
+    });
+
+    const hosts = await f.cloneable();
+
+    expect(hosts).toEqual([
+      {
+        kind: "gitlab",
+        host: "gitlab.com",
+        account: "tanuki",
+        repositories: [
+          {
+            name: "group/sub/rebase",
+            url: "git@gitlab.com:group/sub/rebase.git",
+            private: true,
+            updatedAt: "2026-10-01T10:00:00.000Z",
+          },
+        ],
+      },
+      {
+        kind: "gitlab",
+        host: "git.example.com",
+        account: "tanuki",
+        repositories: [
+          {
+            name: "team/storefront",
+            url: "https://git.example.com/team/storefront.git",
+            private: false,
+            updatedAt: "2026-10-01T10:00:00.000Z",
+          },
+        ],
+      },
+    ]);
+  });
+
   it("reports a missing or signed out GitHub CLI", async () => {
-    const missing = await fixture({ version: null });
-    const signedOut = await fixture({ account: null });
+    const missing = await fixture({ github: { version: null } });
+    const signedOut = await fixture({ github: { account: null } });
 
     expect((await missing.discover()).hosts[0]).toEqual({
       _tag: "Missing",
@@ -157,7 +212,7 @@ describe("source control", () => {
   });
 
   it("rejects an API token that cannot read the Atlassian account", async () => {
-    const f = await fixture({}, { userStatus: 403 });
+    const f = await fixture({ bitbucket: { userStatus: 403 } });
 
     await expect(
       f.saveToken({ _tag: "ApiToken", email: "octo@example.com", token: "x" }),
@@ -171,20 +226,28 @@ describe("source control", () => {
   });
 });
 
-async function fixture(
-  tool: Parameters<typeof fakeGitHub>[1] = {},
-  bitbucketUser: Parameters<typeof fakeBitbucket>[1] = {},
-) {
-  const { github, requests } = fakeGitHub({ main: [{ number: 1 }] }, tool);
+async function fixture({
+  github: githubTool = {},
+  bitbucket: bitbucketUser = {},
+  gitlab = {
+    accounts: { "gitlab.com": "tanuki", "git.example.com": "tanuki" },
+  },
+}: {
+  readonly github?: Parameters<typeof fakeGitHub>[1];
+  readonly bitbucket?: Parameters<typeof fakeBitbucket>[1];
+  readonly gitlab?: Parameters<typeof fakeGitLab>[1];
+} = {}) {
+  const { github, requests } = fakeGitHub(
+    { main: [{ number: 1 }] },
+    githubTool,
+  );
   const bitbucket = fakeBitbucket({}, bitbucketUser);
   const environment = await openTestEnvironment({
     gitHosts: {
       bitbucket: bitbucket.bitbucket,
       github,
       azureDevOps: fakeAzureDevOps({}).azureDevOps,
-      gitlab: fakeGitLab(null, {
-        accounts: { "gitlab.com": "tanuki", "git.example.com": "tanuki" },
-      }).gitlab,
+      gitlab: fakeGitLab(null, gitlab).gitlab,
       forgejo: fakeForgejo(null, {
         logins: [
           { url: "https://codeberg.org", user: "forge" },

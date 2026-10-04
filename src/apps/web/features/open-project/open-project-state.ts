@@ -171,9 +171,15 @@ export function cloneGroups(
 ): readonly CloneGroup[] {
   const normalizedQuery = query.trim().toLocaleLowerCase();
   return hosts.map((host) => ({
-    id: `host:${host.kind}:${host.account}`,
+    id: `host:${host.kind}:${host.host}:${host.account}`,
     kind: host.kind,
-    account: host.account,
+    account:
+      hosts.filter(
+        ({ kind, repositories }) =>
+          kind === host.kind && repositories.length > 0,
+      ).length > 1
+        ? `${host.account} on ${host.host}`
+        : host.account,
     sources: host.repositories
       .filter(
         (repository) =>
@@ -190,7 +196,7 @@ export function cloneGroups(
           : sourcesShownForQuery,
       )
       .map((repository) => ({
-        key: `clone:${host.kind}:${host.account}:${repository.name}`,
+        key: `clone:${host.kind}:${host.host}:${host.account}:${repository.name}`,
         name: repository.name.split("/").at(-1) ?? repository.name,
         label: repository.name,
         url: repository.url,

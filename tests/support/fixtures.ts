@@ -18,8 +18,10 @@ import type {
 } from "#contracts/repository-refs/repository-refs.contract.ts";
 import type { RepositoryStash } from "#contracts/repository-stashes/repository-stashes.contract.ts";
 import type {
+  GitHostKind,
   GitHostStatus,
   GitStatus,
+  HostRepositories,
 } from "#contracts/source-control/source-control.contract.ts";
 import type {
   AuthorAvatarStore,
@@ -353,5 +355,31 @@ export function memoryAvatarStore(
     saved,
     load: async () => new Map(Object.entries(stored)),
     save: (_provider, email, avatar) => saved.set(email, avatar),
+  };
+}
+
+export function hostRepositories({
+  kind = "github",
+  host = "github.com",
+  account = "alex",
+  repositories,
+}: {
+  readonly kind?: GitHostKind;
+  readonly host?: string;
+  readonly account?: string;
+  readonly repositories: readonly {
+    readonly name: string;
+    readonly private?: boolean;
+  }[];
+}): HostRepositories {
+  return {
+    kind,
+    host,
+    account,
+    repositories: repositories.map(({ name, private: hidden = false }) => ({
+      name,
+      url: `git@${host}:${name}.git`,
+      private: hidden,
+    })),
   };
 }

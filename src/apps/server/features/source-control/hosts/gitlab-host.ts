@@ -3,8 +3,11 @@ import type {
   PullRequest,
   PullRequestsUnavailable,
 } from "#contracts/pull-requests/pull-requests.contract.ts";
+import type { HostRepositories } from "#contracts/source-control/source-control.contract.ts";
 import { remoteLocation } from "#server/features/repository-refs/git/read-repository-refs.ts";
 import {
+  cloneableRepository,
+  decodeHostJson,
   type GitHost,
   type GitHostAccount,
   type HostedPullRequest,
@@ -12,6 +15,8 @@ import {
   inBatches,
   pageAnswer,
   pullRequest,
+  readRepositoryPages,
+  repositoriesPerPage,
   runHostCommand,
   signedInTool,
   unavailable,
@@ -20,6 +25,11 @@ import {
 export interface GitLabCli {
   readonly version: Effect.Effect<string | undefined>;
   readonly authStatus: (hostname?: string) => Effect.Effect<string>;
+  readonly protocol: (hostname: string) => Effect.Effect<string | undefined>;
+  readonly repositories: (
+    hostname: string,
+    page: number,
+  ) => Effect.Effect<string, PullRequestsUnavailable>;
   readonly graphql: (
     hostname: string,
     query: string,
@@ -59,6 +69,23 @@ export function createGitLabCli(): GitLabCli {
         : glab(["auth", "status", "--hostname", hostname]).pipe(
             Effect.map(({ output }) => output),
           ),
+    protocol: (hostname) =>
+      glab(["config", "get", "git_protocol", "--host", hostname]).pipe(
+        Effect.map(({ succeeded, stdout }) =>
+          succeeded ? stdout.trim() || undefined : undefined,
+        ),
+      ),
+    repositories: (hostname, page) =>
+      hostCommandOutput(
+        "glab",
+        [
+          "api",
+          "--hostname",
+          hostname,
+          `projects?membership=true&order_by=last_activity_at&sort=desc&per_page=${repositoriesPerPage}&page=${page}`,
+        ],
+        { env },
+      ),
     graphql: (hostname, query, variables) =>
       hostCommandOutput(
         "glab",
@@ -87,6 +114,19 @@ export function createGitLabHost(cli: GitLabCli): GitHost {
       cli.authStatus().pipe(Effect.map(signedInAccounts)),
     ),
     repositoryId: (remoteUrl) => gitlabProject(remoteUrl)?.id,
+    cloneable: cli.authStatus().pipe(
+      Effect.flatMap((output) =>
+        Effect.forEach(
+          signedInAccounts(output),
+          (account) =>
+            accountRepositories(cli, account).pipe(
+              Effect.orElseSucceed(() => []),
+            ),
+          { concurrency: "unbounded" },
+        ),
+      ),
+      Effect.map((lists) => lists.flat()),
+    ),
     repository: (remoteUrl) => {
       const project = gitlabProject(remoteUrl);
       if (project === undefined) return Effect.succeed(undefined);
@@ -129,6 +169,47 @@ export function createGitLabHost(cli: GitLabCli): GitHost {
     },
   };
 }
+
+function accountRepositories(
+  cli: GitLabCli,
+  { host, account }: GitHostAccount,
+): Effect.Effect<readonly HostRepositories[], PullRequestsUnavailable> {
+  return Effect.gen(function* () {
+    const ssh = (yield* cli.protocol(host)) !== "https";
+    const projects = yield* readRepositoryPages((page) =>
+      cli.repositories(host, page).pipe(Effect.flatMap(decodeProjectPage)),
+    );
+    return [
+      {
+        kind: "gitlab" as const,
+        host,
+        account,
+        repositories: projects.map((project) =>
+          cloneableRepository({
+            name: project.path_with_namespace,
+            url: ssh ? project.ssh_url_to_repo : project.http_url_to_repo,
+            private: project.visibility !== "public",
+            description: project.description,
+            updatedAt: project.last_activity_at,
+          }),
+        ),
+      },
+    ];
+  });
+}
+
+const decodeProjectPage = decodeHostJson(
+  Schema.Array(
+    Schema.Struct({
+      path_with_namespace: Schema.String,
+      visibility: Schema.String,
+      description: Schema.NullOr(Schema.String),
+      last_activity_at: Schema.NullOr(Schema.String),
+      ssh_url_to_repo: Schema.String,
+      http_url_to_repo: Schema.String,
+    }),
+  ),
+);
 
 function signedInAccounts(output: string): readonly GitHostAccount[] {
   return Array.from(
