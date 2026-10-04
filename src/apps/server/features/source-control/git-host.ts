@@ -48,7 +48,7 @@ export interface GitHost {
   readonly repository: (
     remoteUrl: string,
   ) => Effect.Effect<HostedRepository | undefined>;
-  readonly cloneable?: Effect.Effect<HostRepositories | undefined>;
+  readonly cloneable?: Effect.Effect<readonly HostRepositories[]>;
 }
 
 interface HostCommandResult {

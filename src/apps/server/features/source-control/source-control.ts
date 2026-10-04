@@ -109,20 +109,17 @@ export function createSourceControl(
       const lists = yield* Effect.forEach(
         enabled,
         (host) =>
-          (host.cloneable ?? Effect.succeed(undefined)).pipe(
-            Effect.map((list) => {
-              if (list === undefined) return [];
+          (host.cloneable ?? Effect.succeed([])).pipe(
+            Effect.map((lists) => {
               const cloned = new Set(
                 remotes.map((url) => host.repositoryId(url) ?? url),
               );
-              return [
-                {
-                  ...list,
-                  repositories: list.repositories.filter(
-                    ({ url }) => !cloned.has(host.repositoryId(url) ?? url),
-                  ),
-                },
-              ];
+              return lists.map((list) => ({
+                ...list,
+                repositories: list.repositories.filter(
+                  ({ url }) => !cloned.has(host.repositoryId(url) ?? url),
+                ),
+              }));
             }),
           ),
         { concurrency: "unbounded" },

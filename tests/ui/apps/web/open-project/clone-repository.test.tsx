@@ -122,6 +122,7 @@ async function renderScreen(
           respond(SourceControlApi.cloneable, () => [
             {
               kind: "github" as const,
+              host: "github.com",
               account: "alex",
               repositories: [
                 {

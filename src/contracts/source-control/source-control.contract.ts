@@ -80,6 +80,7 @@ export type CloneableRepository = typeof CloneableRepository.Type;
 
 export const HostRepositories = Schema.Struct({
   kind: GitHostKind,
+  host: HostText,
   account: HostText,
   repositories: Schema.Array(CloneableRepository).check(
     Schema.isMaxLength(1_000),
@@ -95,7 +96,7 @@ export const SourceControlApi = {
     }),
   }),
   cloneable: route("source-control/cloneable", {
-    success: Schema.Array(HostRepositories).check(Schema.isMaxLength(16)),
+    success: Schema.Array(HostRepositories).check(Schema.isMaxLength(64)),
   }),
   setHostEnabled: route("source-control/set-host-enabled", {
     request: Schema.Struct({ kind: GitHostKind, enabled: Schema.Boolean }),

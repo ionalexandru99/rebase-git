@@ -74,6 +74,7 @@ describe("source control", () => {
     expect(hosts).toEqual([
       {
         kind: "github",
+        host: "github.com",
         account: "octo",
         repositories: [
           {

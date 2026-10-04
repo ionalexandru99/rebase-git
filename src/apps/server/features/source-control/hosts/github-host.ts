@@ -93,25 +93,28 @@ export function createGitHubHost(cli: GitHubCli): GitHost {
     repositoryId: (remoteUrl) => githubRepository(remoteUrl)?.id,
     cloneable: Effect.gen(function* () {
       const account = yield* cli.account;
-      if (account === undefined) return undefined;
+      if (account === undefined) return [];
       const ssh = (yield* cli.protocol) === "ssh";
       const repositories = yield* readRepositoryPages(cli, 1);
-      return {
-        kind: "github" as const,
-        account,
-        repositories: repositories.map((repository) => ({
-          name: repository.full_name,
-          url: ssh ? repository.ssh_url : repository.clone_url,
-          private: repository.private,
-          ...(repository.description === null
-            ? {}
-            : { description: repository.description.slice(0, 1_024) }),
-          ...(repository.pushed_at === null
-            ? {}
-            : { updatedAt: new Date(repository.pushed_at).toISOString() }),
-        })),
-      };
-    }).pipe(Effect.orElseSucceed(() => undefined)),
+      return [
+        {
+          kind: "github" as const,
+          host: "github.com",
+          account,
+          repositories: repositories.map((repository) => ({
+            name: repository.full_name,
+            url: ssh ? repository.ssh_url : repository.clone_url,
+            private: repository.private,
+            ...(repository.description === null
+              ? {}
+              : { description: repository.description.slice(0, 1_024) }),
+            ...(repository.pushed_at === null
+              ? {}
+              : { updatedAt: new Date(repository.pushed_at).toISOString() }),
+          })),
+        },
+      ];
+    }).pipe(Effect.orElseSucceed(() => [])),
     repository: (remoteUrl) => {
       const repository = githubRepository(remoteUrl);
       return Effect.succeed(
