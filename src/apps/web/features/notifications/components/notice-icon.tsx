@@ -70,17 +70,23 @@ function ProgressRing({
   const motion = useRef<RingMotion>({ from: 0, to: 0, at: 0 });
   const target = done ? 100 : percent;
   useLayoutEffect(() => {
+    const element = arc.current;
+    if (element === null) return;
     const now = performance.now();
     const from = position(motion.current, now);
     const still = matchMedia("(prefers-reduced-motion: reduce)").matches;
-    const ms = still ? 0 : (Math.abs(target - from) / 100) * fullTurnMs;
     motion.current = { from: still ? target : from, to: target, at: now };
-    arc.current?.style.setProperty(
-      "transition",
-      still ? "none" : `stroke-dashoffset ${ms}ms linear, stroke 150ms`,
+    const animation = element.animate(
+      [{ strokeDashoffset: 100 - from }, { strokeDashoffset: 100 - target }],
+      {
+        duration: still ? 0 : (Math.abs(target - from) / 100) * fullTurnMs,
+        easing: "linear",
+        fill: "forwards",
+      },
     );
-    arc.current?.style.setProperty("stroke-dashoffset", `${100 - target}`);
-    if (ms === 0 && target === 100) onFilled?.();
+    if (target === 100 && onFilled !== undefined)
+      animation.finished.then(onFilled, () => {});
+    return () => animation.cancel();
   }, [target, onFilled]);
   return (
     <svg
@@ -106,14 +112,7 @@ function ProgressRing({
           r="6"
           pathLength={100}
           strokeDasharray="100 200"
-          onTransitionEnd={(event) => {
-            if (
-              event.propertyName === "stroke-dashoffset" &&
-              position(motion.current, performance.now()) === 100
-            )
-              onFilled?.();
-          }}
-          className={done ? "stroke-status-available" : "stroke-primary"}
+          className={`transition-[stroke] duration-150 motion-reduce:transition-none ${done ? "stroke-status-available" : "stroke-primary"}`}
         />
       </g>
       <path

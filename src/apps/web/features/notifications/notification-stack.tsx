@@ -161,10 +161,10 @@ function Notice({
                 Open
               </Button>
             )}
-            {notice.data?.choices === undefined ? (
-              <Button size="xs" variant="outline" {...notice.actionProps} />
-            ) : (
+            {notice.data?.choices !== undefined ? (
               <SplitChoice choices={notice.data.choices} />
+            ) : notice.actionProps?.children === undefined ? null : (
+              <Button size="xs" variant="outline" {...notice.actionProps} />
             )}
           </div>
         )}

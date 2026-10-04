@@ -191,6 +191,13 @@ describe("notifications", () => {
 
     await page.getByRole("button", { name: "Fail" }).click();
     await expect.element(page.getByText("api-server")).toBeVisible();
+    expect(
+      page
+        .getByRole("region", { name: "Notifications" })
+        .getByRole("button")
+        .elements()
+        .map((button) => button.getAttribute("aria-label")),
+    ).toEqual(["Dismiss notification", "Open api-server"]);
     await page.getByRole("button", { name: "Open api-server" }).click();
 
     expect(openRepository).toHaveBeenCalledWith("api");
