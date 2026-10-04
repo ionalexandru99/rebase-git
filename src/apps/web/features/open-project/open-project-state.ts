@@ -155,6 +155,7 @@ export interface CloneGroup {
   readonly id: string;
   readonly kind: GitHostKind;
   readonly account: string;
+  readonly server?: string;
   readonly sources: readonly CloneSource[];
 }
 
@@ -173,13 +174,12 @@ export function cloneGroups(
   return hosts.map((host) => ({
     id: `host:${host.kind}:${host.host}:${host.account}`,
     kind: host.kind,
-    account:
-      hosts.filter(
-        ({ kind, repositories }) =>
-          kind === host.kind && repositories.length > 0,
-      ).length > 1
-        ? `${host.account} on ${host.host}`
-        : host.account,
+    account: host.account,
+    ...(hosts.filter(
+      ({ kind, repositories }) => kind === host.kind && repositories.length > 0,
+    ).length > 1
+      ? { server: host.host }
+      : {}),
     sources: host.repositories
       .filter(
         (repository) =>

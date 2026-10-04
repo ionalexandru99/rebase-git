@@ -1,4 +1,5 @@
 import { Effect } from "effect";
+import { bitbucketApiTokenScopes } from "#contracts/source-control/source-control.contract.ts";
 import type { BitbucketClient } from "#server/features/source-control/hosts/bitbucket-client.ts";
 
 interface BitbucketPullRequestNode {
@@ -23,8 +24,10 @@ export function fakeBitbucket(
     userStatus = 200,
     workspacesStatus = 200,
     repositories = [],
+    scopes = bitbucketApiTokenScopes,
   }: {
     readonly userStatus?: number;
+    readonly scopes?: readonly string[];
     readonly workspacesStatus?: number;
     readonly repositories?: readonly BitbucketRepository[];
   } = {},
@@ -39,7 +42,11 @@ export function fakeBitbucket(
       requests.push({ url, authorization });
       const { pathname, searchParams } = new URL(url);
       if (pathname === "/2.0/user")
-        return answer({ username: "octo", display_name: "Octo" }, userStatus);
+        return Effect.succeed({
+          status: userStatus,
+          body: JSON.stringify({ username: "octo", display_name: "Octo" }),
+          scopes,
+        });
       if (pathname === "/2.0/user/workspaces")
         return answer(
           {

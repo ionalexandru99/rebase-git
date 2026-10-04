@@ -4,8 +4,10 @@ export function HiddenText({
   value,
   showLabel,
   hideLabel,
+  className = "font-mono text-[.625rem]",
 }: {
   readonly value: string;
+  readonly className?: string;
   readonly showLabel: string;
   readonly hideLabel: string;
 }) {
@@ -14,7 +16,7 @@ export function HiddenText({
     <button
       aria-label={shown ? hideLabel : showLabel}
       aria-pressed={shown}
-      className={`cursor-pointer rounded-sm font-mono text-[.625rem] hover:text-foreground ${shown ? "text-foreground/90" : "blur-xs select-none"}`}
+      className={`cursor-pointer rounded-sm hover:text-foreground ${className} ${shown ? "text-foreground/90" : "blur-xs select-none"}`}
       onClick={() => setShown((current) => !current)}
       type="button"
     >

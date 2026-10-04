@@ -99,7 +99,7 @@ describe("cloning from the open project screen", () => {
     expect(requested[0]?.path).toBe("/home/alex/code/legacy");
   });
 
-  it("names the server of each GitLab account and collapses them apart", async () => {
+  it("hides each GitLab account, names its server and collapses them apart", async () => {
     await renderScreen(respond(
       RepositoryCatalogApi.clone,
       () => new Promise(() => {}),
@@ -118,9 +118,17 @@ describe("cloning from the open project screen", () => {
       }),
     ]);
 
+    expect(page.getByText("tanuki").elements()).toHaveLength(0);
+    await page
+      .getByRole("button", { name: "Show GitLab account on gitlab.com" })
+      .click();
     await expect
-      .element(page.getByText("· tanuki on gitlab.com"))
-      .toBeVisible();
+      .element(
+        page.getByRole("button", {
+          name: "Hide GitLab account tanuki on gitlab.com",
+        }),
+      )
+      .toHaveTextContent("tanuki");
     await page
       .getByRole("button", {
         name: "Collapse GitLab tanuki on git.example.com",

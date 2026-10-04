@@ -61,6 +61,7 @@ interface HostCommandResult {
 export interface HostResponse {
   readonly status: number;
   readonly body: string;
+  readonly scopes?: readonly string[];
 }
 
 export const unavailable: PullRequestsUnavailable = {
@@ -167,7 +168,14 @@ export function hostGet(
         redirect: "error",
         signal: AbortSignal.any([signal, AbortSignal.timeout(30_000)]),
       });
-      return { status: response.status, body: await response.text() };
+      const scopes = response.headers.get("x-oauth-scopes");
+      return {
+        status: response.status,
+        body: await response.text(),
+        ...(scopes === null
+          ? {}
+          : { scopes: scopes.split(",").map((scope) => scope.trim()) }),
+      };
     },
     catch: () => unavailable,
   });

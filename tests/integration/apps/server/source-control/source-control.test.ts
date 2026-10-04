@@ -347,7 +347,11 @@ describe("source control", () => {
   });
 
   it("checks an Atlassian API token with Bitbucket before saving it, and keeps an access token as given", async () => {
-    const f = await fixture();
+    const f = await fixture({
+      bitbucket: {
+        scopes: ["read:repository:bitbucket", "read:user:bitbucket"],
+      },
+    });
     const bitbucket = () =>
       f
         .discover()
@@ -360,12 +364,21 @@ describe("source control", () => {
     });
 
     expect(await bitbucket()).toMatchObject({
-      saved: { _tag: "ApiToken", email: "octo@example.com", account: "octo" },
+      saved: {
+        _tag: "ApiToken",
+        email: "octo@example.com",
+        account: "octo",
+        missingScopes: [
+          "read:pullrequest:bitbucket",
+          "read:workspace:bitbucket",
+        ],
+      },
     });
     expect(f.bitbucketRequests).toEqual(
       [
         "https://api.bitbucket.org/2.0/user",
         "https://api.bitbucket.org/2.0/user/workspaces?pagelen=1&fields=values.workspace.slug",
+        "https://api.bitbucket.org/2.0/user",
       ].map((url) => ({
         url,
         authorization: `Basic ${btoa("octo@example.com:api-token")}`,
@@ -375,7 +388,7 @@ describe("source control", () => {
     await f.saveToken({ _tag: "AccessToken", token: "access-token" });
 
     expect(await bitbucket()).toMatchObject({ saved: { _tag: "AccessToken" } });
-    expect(f.bitbucketRequests).toHaveLength(2);
+    expect(f.bitbucketRequests).toHaveLength(3);
 
     await f.removeToken();
 

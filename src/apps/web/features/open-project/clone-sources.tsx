@@ -12,6 +12,7 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "#web/components/ui/collapsible.tsx";
+import { HiddenText } from "#web/components/ui/hidden-text.tsx";
 import { CloneLine } from "#web/features/open-project/clone-line.tsx";
 import {
   type CloneGroup,
@@ -41,13 +42,14 @@ export function HostRepositoriesGroup({
 }): JSX.Element | null {
   if (group.sources.length === 0) return null;
   const { icon: HostIcon, label } = hostDescriptors[group.kind];
+  const where = group.server === undefined ? "" : ` on ${group.server}`;
   return (
     <Collapsible onOpenChange={onOpenChange} open={open}>
       <GroupHeading
         icon={<HostIcon aria-hidden="true" className="size-4.5 shrink-0" />}
         toggle={
           <CollapsibleTrigger
-            aria-label={`${open ? "Collapse" : "Expand"} ${label} ${group.account}`}
+            aria-label={`${open ? "Collapse" : "Expand"} ${label} ${group.account}${where}`}
             className="grid size-7 place-items-center rounded-[.4rem] outline-none hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/30"
           >
             <IconChevronDown
@@ -60,7 +62,14 @@ export function HostRepositoriesGroup({
         {label}
         <span className="font-normal text-muted-foreground">
           {" "}
-          · {group.account}
+          ·{" "}
+          <HiddenText
+            className="text-[.83rem]"
+            hideLabel={`Hide ${label} account ${group.account}${where}`}
+            showLabel={`Show ${label} account${where}`}
+            value={group.account}
+          />
+          {where}
         </span>
       </GroupHeading>
       <CollapsibleContent>
