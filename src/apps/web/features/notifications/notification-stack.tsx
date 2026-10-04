@@ -1,6 +1,6 @@
 import { Toast } from "@base-ui/react/toast";
 import { IconChevronDown, IconX } from "@tabler/icons-react";
-import { useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "#web/components/ui/button.tsx";
 import {
   DropdownMenu,
@@ -97,18 +97,22 @@ function Notice({
   readonly elsewhere: NotifiedRepository | undefined;
   readonly openRepository: (repositoryId: string) => void;
 }) {
+  const { notice, filled } = usePacedNotice(toast);
   return (
     <Toast.Root toast={toast} swipeDirection="right" className={noticeClass}>
       <Toast.Content className="overflow-hidden px-3 py-2.5 transition-opacity duration-200 data-behind:opacity-0 data-expanded:opacity-100">
         <div className="flex items-start gap-3">
           <NoticeIcon
-            type={toast.type}
-            percent={toast.data?.percent}
-            label={String(toast.title)}
+            type={notice.type}
+            percent={filled === undefined ? notice.data?.percent : 100}
+            label={String(notice.title)}
+            onFilled={filled}
           />
           <div className="min-w-0 flex-1">
             <div className="flex items-baseline gap-1.5 text-sm">
-              <Toast.Title className="min-w-0 cap-centered font-medium wrap-anywhere" />
+              <Toast.Title className="min-w-0 cap-centered font-medium wrap-anywhere">
+                {notice.title}
+              </Toast.Title>
               {elsewhere === undefined ? null : (
                 <>
                   <span
@@ -123,9 +127,11 @@ function Notice({
                 </>
               )}
             </div>
-            <Toast.Description className="mt-1 max-h-[min(240px,40vh)] overflow-y-auto whitespace-pre-line wrap-anywhere text-sm text-muted-foreground" />
+            <Toast.Description className="mt-1 max-h-[min(240px,40vh)] overflow-y-auto whitespace-pre-line wrap-anywhere text-sm text-muted-foreground">
+              {notice.description}
+            </Toast.Description>
           </div>
-          {toast.type === "loading" ? null : (
+          {notice.type === "loading" ? null : (
             <Toast.Close
               aria-hidden={false}
               aria-label="Dismiss notification"
@@ -141,8 +147,8 @@ function Notice({
             </Toast.Close>
           )}
         </div>
-        {toast.actionProps?.children === undefined &&
-        toast.data?.choices === undefined &&
+        {notice.actionProps?.children === undefined &&
+        notice.data?.choices === undefined &&
         elsewhere === undefined ? null : (
           <div className="mt-2.5 flex justify-end gap-1.5">
             {elsewhere === undefined ? null : (
@@ -155,15 +161,34 @@ function Notice({
                 Open
               </Button>
             )}
-            {toast.data?.choices === undefined ? (
-              <Toast.Action render={<Button size="xs" variant="outline" />} />
+            {notice.data?.choices === undefined ? (
+              <Button size="xs" variant="outline" {...notice.actionProps} />
             ) : (
-              <SplitChoice choices={toast.data.choices} />
+              <SplitChoice choices={notice.data.choices} />
             )}
           </div>
         )}
       </Toast.Content>
     </Toast.Root>
+  );
+}
+
+function usePacedNotice(toast: NoticeObject) {
+  const [shown, setShown] = useState(toast);
+  const holding = shown !== toast && finishesRing(shown, toast);
+  if (!holding && shown !== toast) setShown(toast);
+  const filled = useCallback(() => setShown(toast), [toast]);
+  return holding
+    ? { notice: shown, filled }
+    : { notice: toast, filled: undefined };
+}
+
+function finishesRing(shown: NoticeObject, next: NoticeObject) {
+  return (
+    shown.type === "loading" &&
+    shown.data?.percent !== undefined &&
+    next.data?.percent !== undefined &&
+    (shown.title !== next.title || shown.type !== next.type)
   );
 }
 
