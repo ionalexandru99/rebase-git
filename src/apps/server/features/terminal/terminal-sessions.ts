@@ -3,6 +3,7 @@ import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { Effect, Queue, Stream } from "effect";
 import type {
+  CloseTerminal,
   OpenTerminal,
   Terminal,
   TerminalOutput,
@@ -109,9 +110,14 @@ export function createTerminalSessions(
       ignoreClosed(() => sessions.get(id)?.process.write(data)),
     resize: (id: string, cols: number, rows: number) =>
       ignoreClosed(() => sessions.get(id)?.process.resize(cols, rows)),
-    close: (id: string) => {
+    close: ({ id, repositoryId, worktreePath }: CloseTerminal) => {
       const session = sessions.get(id);
-      if (session === undefined) return;
+      if (
+        session === undefined ||
+        session.repositoryId !== repositoryId ||
+        session.worktreePath !== worktreePath
+      )
+        return;
       finish(session);
       ignoreClosed(session.process.kill);
     },

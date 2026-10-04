@@ -39,7 +39,7 @@ describe("terminal sessions", () => {
     const first = await open(main);
     await open(main);
     await open(topic);
-    terminals.close(first.id);
+    terminals.close({ ...main, id: first.id });
     const reopened = await open(main);
 
     expect(terminals.list(main).terminals.map(({ number }) => number)).toEqual([
@@ -50,6 +50,16 @@ describe("terminal sessions", () => {
     );
     expect(reopened.number).toBe(1);
     expect(changed).toHaveLength(5);
+  });
+
+  it("keeps a terminal when the close names another worktree", async () => {
+    const { terminals, open, processes } = sessions();
+    const terminal = await open(main);
+
+    terminals.close({ ...topic, id: terminal.id });
+
+    expect(terminals.list(main).terminals).toEqual([terminal]);
+    expect(processes[0]?.killed).toBe(false);
   });
 
   it("resumes output from the last offset the client rendered", async () => {
@@ -99,7 +109,7 @@ describe("terminal sessions", () => {
 
     terminals.write(id, "ls\r");
     terminals.resize(id, 120, 40);
-    terminals.close(id);
+    terminals.close({ ...main, id });
     terminals.write(id, "ignored");
 
     expect(processes[0]).toMatchObject({

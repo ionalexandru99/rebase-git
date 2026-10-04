@@ -28,9 +28,9 @@ export function terminalFeature({
           .requireWorktree(input)
           .pipe(Effect.andThen(terminals.open(input))),
       ),
-      route(TerminalsApi.close, ({ id }) =>
+      route(TerminalsApi.close, (input) =>
         Effect.sync(() => {
-          terminals.close(id);
+          terminals.close(input);
           return {};
         }),
       ),
