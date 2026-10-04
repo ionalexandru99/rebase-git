@@ -36,6 +36,9 @@ let desktopApplication: DesktopApplication | undefined;
 const desktopIconPath = fileURLToPath(
   new URL("./assets/icon.png", import.meta.url),
 );
+const dockIconPath = fileURLToPath(
+  new URL("./assets/icon-mac.png", import.meta.url),
+);
 
 app.on("activate", () => {
   void desktopApplication?.activate().catch(reportStartupFailure);
@@ -60,7 +63,7 @@ void start().catch(reportStartupFailure);
 
 async function start() {
   await app.whenReady();
-  app.dock?.setIcon(desktopIconPath);
+  app.dock?.setIcon(dockIconPath);
   const updateSettings = createApplicationUpdateSettingsStore(
     join(app.getPath("userData"), "update-settings.json"),
   );
