@@ -91,6 +91,7 @@ export function HorizontalScrollButton({
     <button
       type="button"
       aria-label={label}
+      tabIndex={-1}
       className={`absolute inset-y-0 z-[3] w-5 text-muted-foreground ${direction === -1 ? "left-0" : "right-0"} ${background}`}
       onClick={(event) => {
         event.stopPropagation();
