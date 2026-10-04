@@ -1,3 +1,4 @@
+import { lt } from "semver";
 import type {
   DesktopUpdateSettings,
   DesktopUpdateSnapshot,
@@ -13,6 +14,8 @@ export type DesktopUpdaterEvent =
   | "update-downloaded"
   | "error";
 
+const oldestDowngradeVersion = "0.0.5";
+
 export interface DesktopAutoUpdater {
   allowDowngrade: boolean;
   allowPrerelease: boolean;
@@ -20,6 +23,9 @@ export interface DesktopAutoUpdater {
   autoInstallOnAppQuit: boolean;
   channel: string | null;
   checkForUpdates(): Promise<unknown>;
+  isUpdateSupported(info: {
+    readonly version: string;
+  }): boolean | Promise<boolean>;
   on(event: DesktopUpdaterEvent, listener: (value?: unknown) => void): unknown;
   quitAndInstall(): void;
 }
@@ -54,6 +60,9 @@ export function createApplicationUpdater(
 
   updater.autoDownload = true;
   updater.autoInstallOnAppQuit = false;
+  const supportsUpdate = updater.isUpdateSupported;
+  updater.isUpdateSupported = (info) =>
+    !lt(info.version, oldestDowngradeVersion) && supportsUpdate(info);
   configureReleaseChannel(updater, snapshot.settings.releaseChannel);
 
   const publish = (next: DesktopUpdateSnapshot) => {
@@ -203,7 +212,7 @@ function configureReleaseChannel(
   channel: ReleaseChannel,
 ) {
   updater.channel = channel === "stable" ? "latest" : "nightly";
-  updater.allowDowngrade = false;
+  updater.allowDowngrade = channel === "stable";
   updater.allowPrerelease = channel === "nightly";
 }
 
