@@ -68,17 +68,21 @@ describe("branches sidebar", () => {
     const tags = tree.getByRole("treeitem", { name: "Tags (1+)", exact: true });
     const bounds = (element: { element: () => Element }) =>
       element.element().getBoundingClientRect();
+    const fromTop = (element: { element: () => Element }) =>
+      bounds(element).top - bounds(tree).top;
+    const fromBottom = (element: { element: () => Element }) =>
+      bounds(tree).bottom - bounds(element).bottom;
     await expect.element(tags).toBeVisible();
-    expect(bounds(tree).bottom - bounds(tags).bottom).toBeLessThan(12);
-
-    expect(bounds(local).top - bounds(tree).top).toBeLessThan(4);
+    expect(fromBottom(tags)).toBeGreaterThanOrEqual(0);
+    expect(fromBottom(tags)).toBeLessThan(12);
+    expect(fromTop(local)).toBeGreaterThanOrEqual(0);
+    expect(fromTop(local)).toBeLessThan(4);
 
     await origin.click();
     await expect.element(origin).toHaveAttribute("aria-expanded", "true");
-    await expect
-      .poll(() => bounds(origin).top - bounds(tree).top)
-      .toBeLessThan(4);
-    expect(bounds(tree).bottom - bounds(tags).bottom).toBeLessThan(12);
+    await expect.poll(() => Math.abs(fromTop(origin))).toBeLessThan(4);
+    expect(fromBottom(tags)).toBeGreaterThanOrEqual(0);
+    expect(fromBottom(tags)).toBeLessThan(12);
 
     tree.element().focus();
     await userEvent.keyboard("{End}");
