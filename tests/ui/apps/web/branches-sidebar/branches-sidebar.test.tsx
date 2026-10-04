@@ -39,7 +39,7 @@ import {
 describe("branches sidebar", () => {
   beforeEach(() => localStorage.removeItem("rebase:branches-view:v1"));
 
-  it("docks the other sections below Local and moves through both with the keyboard", async () => {
+  it("scrolls every section in one list with their headers pinned and moves through them with the keyboard", async () => {
     const current = refs();
     const numbered = (prefix: string, count: number) =>
       Array.from({ length: count }, (_, index) => ({
@@ -71,13 +71,14 @@ describe("branches sidebar", () => {
     await expect.element(tags).toBeVisible();
     expect(bounds(tree).bottom - bounds(tags).bottom).toBeLessThan(12);
 
+    expect(bounds(local).top - bounds(tree).top).toBeLessThan(4);
+
     await origin.click();
     await expect.element(origin).toHaveAttribute("aria-expanded", "true");
-    const height = bounds(tree).height;
-    expect(bounds(origin).top - bounds(tree).top).toBeGreaterThan(
-      height * 0.35,
-    );
-    expect(bounds(local).top - bounds(tree).top).toBeLessThan(4);
+    await expect
+      .poll(() => bounds(origin).top - bounds(tree).top)
+      .toBeLessThan(4);
+    expect(bounds(tree).bottom - bounds(tags).bottom).toBeLessThan(12);
 
     tree.element().focus();
     await userEvent.keyboard("{End}");
