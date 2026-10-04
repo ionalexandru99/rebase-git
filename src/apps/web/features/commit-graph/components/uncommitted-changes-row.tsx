@@ -7,6 +7,7 @@ import {
 } from "#web/features/commit-graph/layout/graph-geometry.ts";
 import type { CommitLaneRow } from "#web/features/repository-history/commit-lanes.ts";
 import { changeSectionLooks } from "#web/features/working-changes/components/change-file-section.tsx";
+import { splitConflicts } from "#web/features/working-changes/conflicts/hooks/use-conflicts.ts";
 import { useWorkingChanges } from "#web/features/working-changes/hooks/use-working-changes.ts";
 import { useRepositoryScope } from "#web/platform/query/repository-scope.tsx";
 
@@ -27,24 +28,26 @@ const nodeGap = 2;
 
 export function useUncommittedChanges(): UncommittedChanges | undefined {
   const scope = useRepositoryScope();
-  const changes = useWorkingChanges(
+  const read = useWorkingChanges(
     {
       repositoryId: scope?.repositoryId ?? "",
       worktreePath: scope?.worktreePath ?? "",
       amend: false,
     },
     scope !== undefined,
-  ).data;
+  );
+  const { changes, conflicted } = splitConflicts(read.data);
   if (
     scope === undefined ||
+    read.isPlaceholderData ||
     changes === undefined ||
-    changes.unstaged.length + changes.staged.length === 0
+    changes.unstaged.length + changes.staged.length + conflicted.length === 0
   )
     return undefined;
   return {
     head: changes.head,
-    unstaged: new Set(changes.unstaged.map(({ path }) => path)).size,
-    staged: new Set(changes.staged.map(({ path }) => path)).size,
+    unstaged: changes.unstaged.length,
+    staged: changes.staged.length,
   };
 }
 
@@ -84,47 +87,44 @@ export function UncommittedChangesRow({
   const center = graphRowHeight / 2;
   return (
     <tr
-      aria-rowindex={2}
-      className="grid w-full items-center border-border/60 border-b bg-repository text-[.85rem] text-muted-foreground hover:bg-[color-mix(in_oklab,var(--accent)_85%,var(--repository))]"
-      style={{
-        gridTemplateColumns: `${x + 12}px minmax(0, 1fr)`,
-        height: graphRowHeight,
-      }}
+      className="block border-border/60 border-b bg-repository"
+      style={{ height: graphRowHeight }}
     >
-      <td role="gridcell" tabIndex={-1} className="relative h-full">
-        <svg aria-hidden="true" className="absolute inset-0 size-full">
-          {link === undefined ? null : (
-            <line
-              x1={x}
-              x2={x}
-              y1={center + nodeRadius + nodeGap / 2}
-              y2={graphRowHeight}
-              stroke={color}
-              strokeDasharray="3 2.5"
-              strokeWidth="2"
-            />
-          )}
-          <circle
-            cx={x}
-            cy={center}
-            r={nodeRadius}
-            fill="var(--repository)"
-            stroke={color}
-            strokeDasharray="2.6 1.8"
-            strokeWidth="1.5"
-          />
-        </svg>
-      </td>
-      <td role="gridcell" tabIndex={-1} className="h-full min-w-0">
+      <td role="gridcell" tabIndex={-1} colSpan={5} className="block h-full">
         <button
           type="button"
           aria-label={uncommittedLabel(changes)}
           onClick={onOpen}
-          className="flex size-full items-center gap-2.5 pl-1 text-left outline-none focus-visible:ring-2 focus-visible:ring-primary/70 focus-visible:ring-inset"
+          className="grid size-full items-center text-left text-[.85rem] text-muted-foreground outline-none hover:bg-[color-mix(in_oklab,var(--accent)_85%,var(--repository))] focus-visible:ring-2 focus-visible:ring-primary/70 focus-visible:ring-inset"
+          style={{ gridTemplateColumns: `${x + 12}px minmax(0, 1fr)` }}
         >
-          <span className="italic">Uncommitted changes</span>
-          <SectionCount section="unstaged" count={changes.unstaged} />
-          <SectionCount section="staged" count={changes.staged} />
+          <svg aria-hidden="true" className="size-full">
+            {link === undefined ? null : (
+              <line
+                x1={x}
+                x2={x}
+                y1={center + nodeRadius + nodeGap / 2}
+                y2={graphRowHeight}
+                stroke={color}
+                strokeDasharray="3 2.5"
+                strokeWidth="2"
+              />
+            )}
+            <circle
+              cx={x}
+              cy={center}
+              r={nodeRadius}
+              fill="var(--repository)"
+              stroke={color}
+              strokeDasharray="2.6 1.8"
+              strokeWidth="1.5"
+            />
+          </svg>
+          <span className="flex min-w-0 items-center gap-2.5 pl-1">
+            <span className="italic">Uncommitted changes</span>
+            <SectionCount section="unstaged" count={changes.unstaged} />
+            <SectionCount section="staged" count={changes.staged} />
+          </span>
         </button>
       </td>
     </tr>
