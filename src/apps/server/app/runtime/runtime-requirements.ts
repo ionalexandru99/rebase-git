@@ -53,7 +53,7 @@ function readGitVersion() {
     execFile(
       "git",
       ["--version"],
-      { encoding: "utf8", signal, timeout: 5_000 },
+      { encoding: "utf8", signal, timeout: 30_000 },
       (error, stdout) => {
         if (!error) {
           resume(captureRequirement(() => parseGitVersion(stdout)));
