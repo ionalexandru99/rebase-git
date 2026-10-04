@@ -173,10 +173,11 @@ function savedToken(
   if (current._tag === "AccessToken")
     return Effect.succeed({ _tag: "AccessToken" });
   return client.get(`${bitbucketApi}/user`, current.authorization).pipe(
-    Effect.map(({ scopes }) =>
-      scopes === undefined
-        ? []
-        : bitbucketApiTokenScopes.filter((scope) => !scopes.includes(scope)),
+    Effect.timeout("5 seconds"),
+    Effect.map(({ scopes = [] }) =>
+      scopes.some((scope) => scope.endsWith(":bitbucket"))
+        ? bitbucketApiTokenScopes.filter((scope) => !scopes.includes(scope))
+        : [],
     ),
     Effect.orElseSucceed(() => []),
     Effect.map((missingScopes) => ({

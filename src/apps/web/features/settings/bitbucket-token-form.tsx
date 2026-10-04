@@ -40,7 +40,6 @@ const methods: Record<
         Bitbucket settings with{" "}
         <Scopes
           label="read access"
-          missing={[]}
           scopes={["Repositories: Read", "Pull requests: Read"]}
         />
         .
@@ -151,9 +150,7 @@ export function BitbucketTokenForm({
         </TabsList>
         <p className="max-w-2xl text-xs leading-relaxed text-muted-foreground">
           {methods[method].description(
-            saved?._tag === method && saved._tag === "ApiToken"
-              ? saved.missingScopes
-              : [],
+            saved?._tag === "ApiToken" ? saved.missingScopes : [],
           )}
         </p>
         <TabsContent className="grid gap-4" value="AccessToken">
@@ -210,11 +207,11 @@ export function BitbucketTokenForm({
 function Scopes({
   label,
   scopes,
-  missing,
+  missing = [],
 }: {
   readonly label: string;
   readonly scopes: readonly string[];
-  readonly missing: readonly string[];
+  readonly missing?: readonly string[];
 }) {
   return (
     <Popover>
@@ -237,22 +234,21 @@ function Scopes({
         sideOffset={4}
       >
         <ul aria-label="Required scopes" className="space-y-0.5">
-          {scopes.map((scope) =>
-            missing.includes(scope) ? (
+          {scopes.map((scope) => {
+            const isMissing = missing.includes(scope);
+            return (
               <li
-                aria-label={`${scope} missing`}
-                className="flex items-center gap-1.5 font-mono text-[.7rem] leading-5 text-status-connecting"
+                aria-label={isMissing ? `${scope} missing` : undefined}
+                className={`flex items-center gap-1.5 font-mono text-[.7rem] leading-5 ${isMissing ? "text-status-connecting" : ""}`}
                 key={scope}
               >
                 {scope}
-                <IconAlertTriangle aria-hidden="true" className="size-3" />
+                {isMissing ? (
+                  <IconAlertTriangle aria-hidden="true" className="size-3" />
+                ) : null}
               </li>
-            ) : (
-              <li className="font-mono text-[.7rem] leading-5" key={scope}>
-                {scope}
-              </li>
-            ),
-          )}
+            );
+          })}
         </ul>
       </PopoverContent>
     </Popover>

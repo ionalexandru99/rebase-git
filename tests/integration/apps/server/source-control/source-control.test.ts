@@ -347,11 +347,7 @@ describe("source control", () => {
   });
 
   it("checks an Atlassian API token with Bitbucket before saving it, and keeps an access token as given", async () => {
-    const f = await fixture({
-      bitbucket: {
-        scopes: ["read:repository:bitbucket", "read:user:bitbucket"],
-      },
-    });
+    const f = await fixture();
     const bitbucket = () =>
       f
         .discover()
@@ -364,15 +360,7 @@ describe("source control", () => {
     });
 
     expect(await bitbucket()).toMatchObject({
-      saved: {
-        _tag: "ApiToken",
-        email: "octo@example.com",
-        account: "octo",
-        missingScopes: [
-          "read:pullrequest:bitbucket",
-          "read:workspace:bitbucket",
-        ],
-      },
+      saved: { _tag: "ApiToken", email: "octo@example.com", account: "octo" },
     });
     expect(f.bitbucketRequests).toEqual(
       [
@@ -394,6 +382,32 @@ describe("source control", () => {
 
     expect(await bitbucket()).toMatchObject({ saved: null });
   });
+
+  it.each([
+    {
+      scopes: ["read:user:bitbucket", "read:workspace:bitbucket"],
+      missingScopes: [
+        "read:repository:bitbucket",
+        "read:pullrequest:bitbucket",
+      ],
+    },
+    { scopes: ["account", "repository"], missingScopes: [] },
+  ])(
+    "reports the Bitbucket scopes a saved API token lacks (%o)",
+    async ({ scopes, missingScopes }) => {
+      const f = await fixture({ bitbucket: { scopes } });
+
+      await f.saveToken({
+        _tag: "ApiToken",
+        email: "octo@example.com",
+        token: "api-token",
+      });
+
+      expect(
+        (await f.discover()).hosts.find(({ kind }) => kind === "bitbucket"),
+      ).toMatchObject({ saved: { missingScopes } });
+    },
+  );
 
   it.each([{ userStatus: 403 }, { workspacesStatus: 403 }])(
     "rejects an API token that cannot read the Atlassian account or its workspaces (%o)",

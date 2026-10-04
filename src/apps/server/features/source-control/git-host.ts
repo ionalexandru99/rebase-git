@@ -174,7 +174,12 @@ export function hostGet(
         body: await response.text(),
         ...(scopes === null
           ? {}
-          : { scopes: scopes.split(",").map((scope) => scope.trim()) }),
+          : {
+              scopes: scopes
+                .split(",")
+                .map((scope) => scope.trim())
+                .filter(Boolean),
+            }),
       };
     },
     catch: () => unavailable,
