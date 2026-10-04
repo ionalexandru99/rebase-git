@@ -17,6 +17,10 @@ import {
   worktreeIdentities,
   worktreeLineCounts,
 } from "#server/features/repository-changes/git/change-files.ts";
+import {
+  changedFiles,
+  lineCounts,
+} from "#server/repository/comparison/changed-files.ts";
 import { fingerprint } from "#server/repository/comparison/fingerprint.ts";
 
 export function readChanges(git: GitCommandRunner, scope: ChangesScope) {
@@ -191,56 +195,16 @@ const renameLimit = 1000;
 const countedUntrackedLimit = 1000;
 
 function stagedFiles(output: string) {
-  const fields = output.split("\0");
-  const files: Omit<ChangedFile, "lines">[] = [];
-  let i = 0;
-  while (fields[i]?.startsWith(":")) {
-    const status = fields[i++]?.split(" ").at(-1) ?? "";
-    const first = fields[i++];
-    const renamed = status.startsWith("R");
-    const path = renamed ? fields[i++] : first;
-    if (path)
-      files.push({
-        path,
-        previousPath: renamed ? (first ?? null) : null,
-        status: renamed ? "R" : fileStatus(status),
-      });
-  }
-  const counted = lineCounts(fields.slice(i).join("\0"));
-  return files.map(
-    (file): ChangedFile => ({ ...file, lines: counted.get(file.path) ?? null }),
+  return changedFiles(output).map(
+    (file): ChangedFile => ({
+      ...file,
+      status: file.status === "R" ? "R" : fileStatus(file.status),
+    }),
   );
 }
 
 function conflicted(xy: string) {
   return xy.includes("U") || xy === "AA" || xy === "DD";
-}
-
-function lineCounts(output: string) {
-  const fields = output.split("\0");
-  const counts = new Map<string, ChangedFile["lines"]>();
-  for (let i = 0; i < fields.length; ) {
-    const record = fields[i++] ?? "";
-    const first = record.indexOf("\t");
-    const second = record.indexOf("\t", first + 1);
-    if (first < 0 || second < 0) continue;
-    const added = record.slice(0, first);
-    const removed = record.slice(first + 1, second);
-    const path = record.slice(second + 1);
-    let target: string | undefined = path;
-    if (path === "") {
-      target = fields[i + 1];
-      i += 2;
-    }
-    if (target)
-      counts.set(
-        target,
-        added === "-"
-          ? null
-          : { added: Number(added), removed: Number(removed) },
-      );
-  }
-  return counts;
 }
 
 function fileStatus(status: string | undefined): ChangedFile["status"] {

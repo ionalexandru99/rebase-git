@@ -14,9 +14,9 @@ import {
   ContextMenuContent,
   ContextMenuTrigger,
 } from "#web/components/ui/context-menu.tsx";
+import { ChangeFileIcon } from "#web/features/file-diff/components/change-file-icon.tsx";
 import type { ChangeTreeRow } from "#web/features/file-diff/file-tree.ts";
 import { useFileRows } from "#web/features/file-diff/hooks/use-file-rows.ts";
-import { ChangeFileIcon } from "#web/features/working-changes/components/change-file-icon.tsx";
 import { cn } from "#web/lib/utils.ts";
 
 interface FileRowContext<File extends { readonly path: string }> {
@@ -44,6 +44,7 @@ export function FileListSection<File extends { readonly path: string }>({
   footer,
   chosen,
   menu,
+  onMenuClose,
   children,
 }: {
   readonly name: string;
@@ -57,7 +58,8 @@ export function FileListSection<File extends { readonly path: string }>({
   readonly notice?: ReactNode;
   readonly footer?: (open: boolean) => ReactNode;
   readonly chosen: (row: ChangeTreeRow<File>) => boolean;
-  readonly menu?: (row: ChangeTreeRow<File>) => readonly Action[];
+  readonly menu?: ((row: ChangeTreeRow<File>) => readonly Action[]) | undefined;
+  readonly onMenuClose?: (() => void) | undefined;
   readonly children: (
     row: ChangeTreeRow<File>,
     context: FileRowContext<File>,
@@ -155,7 +157,12 @@ export function FileListSection<File extends { readonly path: string }>({
             return menu === undefined ? (
               element
             ) : (
-              <ContextMenu key={row.key}>
+              <ContextMenu
+                key={row.key}
+                onOpenChange={(open) => {
+                  if (!open) onMenuClose?.();
+                }}
+              >
                 <ContextMenuTrigger render={element} />
                 <ContextMenuContent className="w-max min-w-48 max-w-md">
                   <ActionMenuItems actions={menu(row)} />
@@ -173,7 +180,7 @@ export function FileListSection<File extends { readonly path: string }>({
   );
 }
 
-function openMenu(event: KeyboardEvent<HTMLElement>) {
+export function openMenu(event: KeyboardEvent<HTMLElement>) {
   if (event.key !== "ContextMenu" && !(event.key === "F10" && event.shiftKey))
     return;
   event.preventDefault();

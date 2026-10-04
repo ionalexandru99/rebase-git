@@ -8,7 +8,7 @@ import { Confirmation } from "#web/components/ui/confirmation.tsx";
 import {
   FileListSection,
   RowLead,
-} from "#web/features/working-changes/components/file-list-section.tsx";
+} from "#web/features/file-diff/components/file-list-section.tsx";
 import type { WorkingChangesView } from "#web/features/working-changes/hooks/use-working-changes-view.ts";
 
 export type ConflictFileSectionView = Pick<

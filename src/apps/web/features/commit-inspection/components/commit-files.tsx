@@ -1,68 +1,61 @@
-import {
-  IconChevronDown,
-  IconChevronRight,
-  IconFolder,
-} from "@tabler/icons-react";
-import {
-  type KeyboardEvent,
-  type MouseEvent,
-  type ReactElement,
-  useRef,
-  useState,
-} from "react";
+import { IconFileDiff } from "@tabler/icons-react";
+import { type MouseEvent, type ReactNode, useRef, useState } from "react";
 import type { CommitFile } from "#contracts/commit-inspection/commit-inspection.contract.ts";
+import type { Action } from "#web/components/ui/action-menu.tsx";
 import {
-  type Action,
-  ActionMenuItems,
-} from "#web/components/ui/action-menu.tsx";
+  ResizableHandle,
+  ResizablePanel,
+  ResizablePanelGroup,
+} from "#web/components/ui/resizable.tsx";
+import type { DiffPreferences } from "#web/domain/file-diff/diff-preferences.contract.ts";
 import {
-  ContextMenu,
-  ContextMenuContent,
-  ContextMenuTrigger,
-} from "#web/components/ui/context-menu.tsx";
+  FileListSection,
+  openMenu,
+  RowLead,
+} from "#web/features/file-diff/components/file-list-section.tsx";
+import { FileListToolbar } from "#web/features/file-diff/components/file-list-toolbar.tsx";
+import {
+  FileRowName,
+  LineCounts,
+} from "#web/features/file-diff/components/file-row-name.tsx";
 import type { ChangeTreeRow } from "#web/features/file-diff/file-tree.ts";
-import { useFileRows } from "#web/features/file-diff/hooks/use-file-rows.ts";
-
-const statusLabels: Record<CommitFile["status"], string> = {
-  A: "Added",
-  M: "Modified",
-  D: "Deleted",
-  R: "Renamed",
-  T: "Type changed",
-};
 
 export function CommitFiles({
   files,
   path,
   select,
+  preferences,
+  choosePreferences,
   actionsFor,
   onMenuClose,
+  children,
 }: {
   readonly files: readonly CommitFile[];
   readonly path: string | null;
   readonly select: (path: string) => void;
-  readonly actionsFor: (
-    paths: readonly string[],
-    anchor: string,
-  ) => readonly Action[];
-  readonly onMenuClose: () => void;
+  readonly preferences: DiffPreferences;
+  readonly choosePreferences: (preferences: DiffPreferences) => void;
+  readonly actionsFor?:
+    | ((paths: readonly string[], anchor: string) => readonly Action[])
+    | undefined;
+  readonly onMenuClose?: (() => void) | undefined;
+  readonly children: ReactNode;
 }) {
-  const { rows, collapsed, scrollRef, virtualizer, toggle } = useFileRows(
-    files,
-    { rowHeight: (row) => (row.file?.previousPath ? 52 : 32) },
-  );
+  const [filter, setFilter] = useState("");
   const [checked, setChecked] = useState<ReadonlySet<string>>(new Set());
   const anchor = useRef<string | null>(null);
   const selected: ReadonlySet<string> =
     path !== null && checked.has(path)
       ? checked
       : new Set(path === null ? [] : [path]);
-  const actions = path === null ? [] : actionsFor([...selected], path);
+  const tree = preferences.tree;
 
   const click = (
     event: MouseEvent<HTMLButtonElement>,
     row: ChangeTreeRow<CommitFile>,
+    rows: readonly ChangeTreeRow<CommitFile>[],
     index: number,
+    toggle: (key: string) => void,
   ) => {
     if (event.metaKey || event.ctrlKey || event.shiftKey) {
       const start = rows.findIndex(
@@ -96,15 +89,15 @@ export function CommitFiles({
     select(row.file.path);
   };
 
+  const menuPaths = (row: ChangeTreeRow<CommitFile>) =>
+    row.paths.every((entry) => selected.has(entry)) ? [...selected] : row.paths;
+
   const pick = (
     event: MouseEvent<HTMLElement>,
     row: ChangeTreeRow<CommitFile>,
   ) => {
     const target = row.file?.path ?? row.paths[0];
-    if (target === undefined) {
-      event.stopPropagation();
-      return;
-    }
+    if (target === undefined || actionsFor === undefined) return;
     if (!row.paths.every((entry) => selected.has(entry))) {
       anchor.current = row.key;
       setChecked(new Set(row.paths));
@@ -113,116 +106,71 @@ export function CommitFiles({
     select(target);
   };
 
-  const openMenu = (event: KeyboardEvent<HTMLElement>) => {
-    if (event.key !== "ContextMenu" && !(event.key === "F10" && event.shiftKey))
-      return;
-    event.preventDefault();
-    const row = event.currentTarget;
-    const bounds = row.getBoundingClientRect();
-    row.dispatchEvent(
-      new globalThis.MouseEvent("contextmenu", {
-        bubbles: true,
-        clientX: bounds.left + 32,
-        clientY: bounds.bottom,
-      }),
-    );
-  };
-
-  const list: ReactElement = (
-    <div style={{ height: virtualizer.getTotalSize(), position: "relative" }}>
-      {virtualizer.getVirtualItems().map((item) => {
-        const row = rows[item.index];
-        if (!row) return null;
-        const file = row.file;
-        return (
-          <button
-            type="button"
-            aria-pressed={
-              file !== undefined ? selected.has(file.path) : undefined
-            }
-            aria-expanded={
-              file === undefined ? !collapsed.has(row.key) : undefined
-            }
-            aria-label={
-              file
-                ? `${file.path} ${statusLabels[file.status]}${file.previousPath ? ` from ${file.previousPath}` : ""}`
-                : row.key
-            }
-            key={row.key}
-            className="absolute inset-x-0 cursor-default py-1.5 pr-3 text-left text-xs aria-pressed:bg-primary/15 focus-visible:ring-1 focus-visible:ring-primary/40 focus-visible:ring-inset"
-            style={{
-              top: item.start,
-              height: item.size,
-              paddingLeft: 10 + row.depth * 12,
-            }}
-            onClick={(event) => click(event, row, item.index)}
-            onContextMenu={(event) => pick(event, row)}
-            onKeyDown={openMenu}
-          >
-            <div className="flex items-center gap-1.5">
-              {file ? null : (
-                <>
-                  {collapsed.has(row.key) ? (
-                    <IconChevronRight className="size-3 shrink-0" />
-                  ) : (
-                    <IconChevronDown className="size-3 shrink-0" />
-                  )}
-                  <IconFolder className="size-3 shrink-0 text-muted-foreground" />
-                </>
-              )}
-              <span className="min-w-0 flex-1 truncate font-mono">
-                {row.name}
-              </span>
-              {file ? (
-                <span
-                  aria-hidden="true"
-                  className={
-                    file.status === "A"
-                      ? "text-green-400"
-                      : file.status === "D"
-                        ? "text-red-400"
-                        : "text-muted-foreground"
-                  }
-                >
-                  {file.status}
-                </span>
-              ) : null}
-            </div>
-            {file?.previousPath ? (
-              <div className="mt-1 truncate text-muted-foreground">
-                from {file.previousPath}
-              </div>
-            ) : null}
-          </button>
-        );
-      })}
-    </div>
-  );
-
   return (
-    <section
-      className="flex min-h-0 flex-col border-border border-l"
-      aria-label="Changed files"
-    >
-      <div className="flex shrink-0 items-center justify-between border-border border-b p-3 text-xs">
-        Changed files{" "}
-        <span className="text-muted-foreground">{files.length}</span>
-      </div>
-      <div
-        ref={scrollRef}
-        className="min-h-0 flex-1 overflow-auto outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-primary"
+    <ResizablePanelGroup orientation="horizontal" className="min-h-0 flex-1">
+      <ResizablePanel id="commit-diff" defaultSize="70%" minSize="12rem">
+        {children}
+      </ResizablePanel>
+      <ResizableHandle aria-label="Resize changed-file tree" />
+      <ResizablePanel
+        id="commit-files"
+        defaultSize="21rem"
+        groupResizeBehavior="preserve-pixel-size"
+        minSize="12.5rem"
+        maxSize="26rem"
       >
-        <ContextMenu
-          onOpenChange={(open) => {
-            if (!open) onMenuClose();
-          }}
-        >
-          <ContextMenuTrigger render={list} />
-          <ContextMenuContent className="w-auto min-w-48">
-            <ActionMenuItems actions={actions} />
-          </ContextMenuContent>
-        </ContextMenu>
-      </div>
-    </section>
+        <div className="flex h-full min-h-0 flex-col border-border border-l bg-sidebar pb-1">
+          <FileListToolbar
+            filter={filter}
+            onFilter={setFilter}
+            tree={tree}
+            onTree={(next) => choosePreferences({ ...preferences, tree: next })}
+          />
+          <FileListSection
+            name="Changed files"
+            title="Changed files"
+            look={{ Icon: IconFileDiff, className: "text-sidebar-foreground" }}
+            grow
+            files={files}
+            tree={tree}
+            filter={filter}
+            chosen={(row) => row.file !== undefined && selected.has(row.key)}
+            menu={
+              actionsFor &&
+              ((row) => actionsFor(menuPaths(row), path ?? row.key))
+            }
+            onMenuClose={onMenuClose}
+          >
+            {(row, { rows, index, collapsed, toggle }) => {
+              const file = row.file;
+              const statusId = `commit-status-${encodeURIComponent(row.key)}`;
+              return (
+                <>
+                  <button
+                    type="button"
+                    className="flex h-full min-w-0 flex-1 cursor-default items-center gap-2 text-left outline-none"
+                    aria-label={
+                      file
+                        ? `${file.path}${file.previousPath ? ` renamed from ${file.previousPath}` : ""}`
+                        : `Folder ${row.key}`
+                    }
+                    aria-pressed={file ? selected.has(file.path) : undefined}
+                    aria-expanded={file ? undefined : !collapsed.has(row.key)}
+                    aria-describedby={file ? statusId : undefined}
+                    onClick={(event) => click(event, row, rows, index, toggle)}
+                    onContextMenu={(event) => pick(event, row)}
+                    onKeyDown={openMenu}
+                  >
+                    <RowLead row={row} collapsed={collapsed} />
+                    <FileRowName row={row} tree={tree} statusId={statusId} />
+                  </button>
+                  {file ? <LineCounts lines={file.lines} /> : null}
+                </>
+              );
+            }}
+          </FileListSection>
+        </div>
+      </ResizablePanel>
+    </ResizablePanelGroup>
   );
 }

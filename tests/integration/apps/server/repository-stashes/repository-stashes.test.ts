@@ -71,7 +71,13 @@ describe("repository stashes", () => {
       }),
     );
     expect(contents.files).toEqual([
-      { path: "notes.md", previousPath: null, status: "A", untracked: true },
+      {
+        path: "notes.md",
+        previousPath: null,
+        status: "A",
+        lines: { added: 1, removed: 0 },
+        untracked: true,
+      },
     ]);
   });
 

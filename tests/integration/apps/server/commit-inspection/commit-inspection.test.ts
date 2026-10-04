@@ -65,7 +65,12 @@ describe("historical commit inspection", () => {
     expect(details.parents).toEqual([]);
     expect(details.parentOid).toBeNull();
     expect(details.files).toEqual([
-      { path: "old.txt", previousPath: null, status: "A" },
+      {
+        path: "old.txt",
+        previousPath: null,
+        status: "A",
+        lines: { added: 3, removed: 0 },
+      },
     ]);
     const diff = await Effect.runPromise(
       f.service.inspectDiff({ ...f.scope, path: "old.txt" }),
@@ -95,6 +100,7 @@ describe("historical commit inspection", () => {
       path,
       previousPath: "old.txt",
       status: "R",
+      lines: { added: 1, removed: 0 },
     });
     const diff = await Effect.runPromise(
       f.service.inspectDiff({ ...scope, path, previousPath: "old.txt" }),

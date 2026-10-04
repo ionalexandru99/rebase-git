@@ -59,7 +59,7 @@ export function CommitInspection({
     <section
       aria-label="Commit details"
       aria-busy={inspection.isLoading}
-      className="@container flex h-full min-h-0 flex-col"
+      className="flex h-full min-h-0 flex-col"
     >
       {!connected ? (
         <p role="status" className="p-3 text-sm text-muted-foreground">
@@ -87,7 +87,16 @@ export function CommitInspection({
               No file changes.
             </p>
           ) : (
-            <div className="grid min-h-0 flex-1 grid-cols-1 grid-rows-[minmax(0,1fr)_minmax(7rem,30%)] @[28rem]:grid-cols-[minmax(0,1fr)_12.5rem] @[28rem]:grid-rows-1">
+            <CommitFiles
+              key={details.oid}
+              files={details.files}
+              path={path}
+              select={select}
+              preferences={preferences}
+              choosePreferences={choosePreferences}
+              actionsFor={restore.actionsFor}
+              onMenuClose={restore.endPreview}
+            >
               <Suspense
                 fallback={
                   <p className="p-4 text-sm text-muted-foreground">
@@ -111,15 +120,7 @@ export function CommitInspection({
                   choosePreferences={choosePreferences}
                 />
               </Suspense>
-              <CommitFiles
-                key={details.oid}
-                files={details.files}
-                path={path}
-                select={select}
-                actionsFor={restore.actionsFor}
-                onMenuClose={restore.endPreview}
-              />
-            </div>
+            </CommitFiles>
           )}
         </>
       ) : !error ? (
