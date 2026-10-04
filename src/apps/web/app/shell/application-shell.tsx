@@ -28,7 +28,10 @@ import { useRepositoryHistory } from "#web/features/repository-history/repositor
 import { RepositorySettingsPage } from "#web/features/repository-settings/repository-settings-page.tsx";
 import { SettingsPanel } from "#web/features/settings/settings-panel.tsx";
 import { WorkspacePanel } from "#web/features/workspace-panel/workspace-panel.tsx";
-import { unavailableRequests } from "#web/platform/environment/environment-connection.ts";
+import {
+  unavailableRequests,
+  unavailableSubscriptions,
+} from "#web/platform/environment/environment-connection.ts";
 import {
   EnvironmentProvider,
   useEnvironment,
@@ -283,6 +286,7 @@ function SessionEnvironmentProvider({
   const environmentId = useRetainedEnvironmentId(state);
   const connected = state._tag === "Connected";
   const requests = connected ? state.requests : unavailableRequests;
+  const subscribe = connected ? state.subscribe : unavailableSubscriptions;
   const readable = connected;
   const writable = connected;
   const status = useMemo(() => environmentSessionPresentation(state), [state]);
@@ -290,12 +294,13 @@ function SessionEnvironmentProvider({
     () => ({
       environmentId,
       requests,
+      subscribe,
       connected,
       readable,
       writable,
       status,
     }),
-    [environmentId, requests, connected, readable, writable, status],
+    [environmentId, requests, subscribe, connected, readable, writable, status],
   );
   return (
     <EnvironmentProvider environment={environment}>

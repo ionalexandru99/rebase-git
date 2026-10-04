@@ -76,7 +76,7 @@ function Group({ children }: { readonly children: ReactNode }) {
   );
 }
 
-function Controls() {
+function Controls({ children }: { readonly children?: ReactNode }) {
   const panel = useWorkspacePanel();
   const { open, expanded } = panel.state;
   return (
@@ -96,6 +96,7 @@ function Controls() {
           )}
         </Button>
       ) : null}
+      {children}
       <Button
         aria-label={open ? "Hide side panel" : "Show side panel"}
         aria-expanded={open}

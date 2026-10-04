@@ -74,6 +74,28 @@ packagedTest(
   },
 );
 
+test("loads the terminal from the packaged application", async () => {
+  const resources =
+    process.platform === "darwin"
+      ? resolve(packagedExecutable(), "..", "..", "Resources")
+      : resolve(packagedExecutable(), "..", "resources");
+  const { stdout } = await execFileAsync(
+    packagedExecutable(),
+    [
+      "-e",
+      [
+        `const load = require("node:module").createRequire(${JSON.stringify(join(resources, "app.asar", "package.json"))});`,
+        'const shell = process.platform === "win32" ? process.env.ComSpec : "/bin/sh";',
+        'const terminal = load("@lydell/node-pty").spawn(shell, [], { cols: 80, rows: 24 });',
+        'terminal.onExit(() => { console.log("terminal exited"); process.exit(0); });',
+        'terminal.write("exit\\r");',
+      ].join("\n"),
+    ],
+    { env: { ...process.env, ELECTRON_RUN_AS_NODE: "1" } },
+  );
+  expect(stdout).toContain("terminal exited");
+});
+
 async function createTestEnvironment(testHome: string) {
   const environment = Object.fromEntries(
     Object.entries(process.env).filter(

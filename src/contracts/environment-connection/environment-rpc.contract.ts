@@ -21,6 +21,7 @@ import { RepositoryTagsApi } from "#contracts/repository-refs/repository-tags.co
 import { RepositoryStashesApi } from "#contracts/repository-stashes/repository-stashes.contract.ts";
 import { RepositoryWorktreesApi } from "#contracts/repository-worktrees/repository-worktrees.contract.ts";
 import { SourceControlApi } from "#contracts/source-control/source-control.contract.ts";
+import { TerminalsApi } from "#contracts/terminal/terminal.contract.ts";
 
 export const environmentProtocol = 5;
 export const environmentMaxMessageBytes = 64 * 1_048_576;
@@ -45,7 +46,12 @@ export const ProtocolMismatch = Schema.TaggedStruct("ProtocolMismatch", {
 });
 export type ProtocolMismatch = typeof ProtocolMismatch.Type;
 
-export const RepositoryChangeKind = Schema.Literals(["Refs", "Index", "Fetch"]);
+export const RepositoryChangeKind = Schema.Literals([
+  "Refs",
+  "Index",
+  "Fetch",
+  "Terminals",
+]);
 export type RepositoryChangeKind = typeof RepositoryChangeKind.Type;
 
 export const EnvironmentChanged = Schema.TaggedStruct("EnvironmentChanged", {
@@ -84,6 +90,7 @@ export const EnvironmentRpc = RpcGroup.make(
   ...Object.values(RepositoryWorktreesApi),
   ...Object.values(SourceControlApi),
   ...Object.values(GitIdentityApi),
+  ...Object.values(TerminalsApi),
 ).merge(RepositoryHistoryRpc, CommandProgressRpc);
 
 export type EnvironmentRpcs = RpcGroup.Rpcs<typeof EnvironmentRpc>;

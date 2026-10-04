@@ -44,6 +44,8 @@ import {
   createSourceControl,
   sourceControlFeature,
 } from "#server/features/source-control/source-control.ts";
+import { terminalFeature } from "#server/features/terminal/terminal.ts";
+import { acquireTerminalSessions } from "#server/features/terminal/terminal-sessions.ts";
 import {
   acquireEnvironmentContext,
   type EnvironmentContext,
@@ -118,17 +120,21 @@ export function acquireEnvironment(home: string, git: GitCommandRunner) {
     const paths = environmentPaths(join(home, ".rebase"));
     const context = yield* acquireEnvironmentContext(paths);
     const catalog = createRepositoryCatalog(context, git);
+    const events = createEnvironmentEventPublisher();
     return {
       access: createRepositoryAccess(catalog, git),
       authorization: createEnvironmentAuthorization(context),
       catalog,
       context,
       coordination: createRepositoryCoordination(git),
-      events: createEnvironmentEventPublisher(),
+      events,
       git,
       gitHosts: createGitHostClients(),
       paths,
       progress: createCommandProgress(),
+      terminals: yield* acquireTerminalSessions((repositoryId) =>
+        events.publishChanged([repositoryId], "Terminals"),
+      ),
       watcher: createLocalRepositoryWatcher(),
     };
   });
@@ -170,6 +176,7 @@ export function environmentFeatures(dependencies: EnvironmentDependencies) {
       repositoryWorktreesFeature(dependencies),
       gitIdentityFeature(dependencies),
       sourceControlFeature({ events: dependencies.events, sourceControl }),
+      terminalFeature(dependencies),
     ]);
   });
 }

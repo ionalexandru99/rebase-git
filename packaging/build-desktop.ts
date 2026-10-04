@@ -51,7 +51,7 @@ await Promise.all([
         "src/apps/desktop/platform/environment/environment-process.ts",
       main: "src/apps/desktop/main.ts",
     },
-    external: ["electron"],
+    external: ["electron", "@lydell/node-pty"],
     format: "esm",
     minifySyntax: true,
     outdir: outputDirectory,

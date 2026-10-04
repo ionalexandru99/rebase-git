@@ -7,6 +7,7 @@ import { RepositoryOperationsApi } from "#contracts/repository-operations/reposi
 import { repositoryOperation } from "#tests-support/fixtures.ts";
 import type {
   EnvironmentRequests,
+  EnvironmentSubscriptions,
   RequestOptions,
 } from "#web/platform/query/environment-context.tsx";
 import type { RequestFailure } from "#web/platform/query/request-failure.ts";
@@ -49,6 +50,10 @@ export function fakeRequests(
     return fake.respond(input, options);
   };
 }
+
+export const noSubscriptions: EnvironmentSubscriptions = async (route) => {
+  throw new Error(`Unexpected subscription to ${route._tag}`);
+};
 
 function handles<Route extends EnvironmentRoute>(
   fake: FakeRoute,

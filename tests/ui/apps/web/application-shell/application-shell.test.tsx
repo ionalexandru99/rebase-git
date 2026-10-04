@@ -13,6 +13,7 @@ import { RepositoryRefsApi } from "#contracts/repository-refs/repository-refs.co
 import {
   fakeRequests,
   idleOperation,
+  noSubscriptions,
   rejected,
   respond,
   unanswered,
@@ -412,6 +413,7 @@ async function connectedSession(
     _tag: "Connected",
     environmentId,
     requests,
+    subscribe: noSubscriptions,
   };
   await storeHistory(environmentId, repositoryId, [commit], [root]);
   const session: LocalEnvironmentSession = {

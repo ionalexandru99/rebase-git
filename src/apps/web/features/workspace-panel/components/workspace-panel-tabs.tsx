@@ -52,7 +52,7 @@ export function WorkspacePanelTabs({
       }}
       className="flex h-full min-h-0 flex-col bg-background text-foreground"
     >
-      <div className="flex h-12 shrink-0 items-center gap-1 border-border border-b pr-20 pl-2">
+      <div className="flex h-12 shrink-0 items-center gap-1 border-border border-b pr-26 pl-2">
         <div className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto py-1">
           {tabs.length > 0 ? (
             <>

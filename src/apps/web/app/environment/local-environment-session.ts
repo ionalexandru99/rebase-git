@@ -14,9 +14,13 @@ import {
   type EnvironmentCredential,
   EnvironmentProtocolMismatch,
   environmentRequests,
+  environmentSubscriptions,
   reconnectDelay,
 } from "#web/platform/environment/environment-connection.ts";
-import type { EnvironmentRequests } from "#web/platform/query/environment-context.tsx";
+import type {
+  EnvironmentRequests,
+  EnvironmentSubscriptions,
+} from "#web/platform/query/environment-context.tsx";
 import type { EnvironmentInvalidation } from "#web/platform/query/environment-invalidation.ts";
 import { createStore, type ReadableStore } from "#web/platform/store/store.ts";
 
@@ -28,6 +32,7 @@ export type LocalEnvironmentSessionState =
       readonly _tag: "Connected";
       readonly environmentId: string;
       readonly requests: EnvironmentRequests;
+      readonly subscribe: EnvironmentSubscriptions;
     }
   | {
       readonly _tag: "Reconnecting";
@@ -165,6 +170,7 @@ function maintainConnection(
                     _tag: "Connected",
                     environmentId: active.environmentId,
                     requests: environmentRequests(active.rpc),
+                    subscribe: environmentSubscriptions(active.rpc),
                   }),
                 ),
               ),

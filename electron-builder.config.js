@@ -17,6 +17,7 @@ export default {
   extraMetadata: {
     main: "main.js",
   },
+  npmRebuild: false,
   artifactName: `\${productName}-\${version}-\${os}-\${arch}.\${ext}`,
   mac: {
     category: "public.app-category.developer-tools",

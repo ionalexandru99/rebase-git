@@ -47,6 +47,7 @@ try {
 
   const packageRoot = join(installRoot, "node_modules", "rebase-git");
   await verifyPackageContents(packageRoot);
+  await verifyTerminal(packageRoot);
   await verifyVersionCommands(installRoot, packageRoot);
   const serverEnvironment = {
     ...process.env,
@@ -133,8 +134,11 @@ async function verifyPackageContents(packageRoot: string) {
   const packageMetadata = JSON.parse(
     await readFile(join(packageRoot, "package.json"), "utf8"),
   ) as { readonly dependencies?: Record<string, string> };
-  if (Object.keys(packageMetadata.dependencies ?? {}).length > 0) {
-    throw new Error("The package installs runtime dependencies.");
+  const dependencies = Object.keys(packageMetadata.dependencies ?? {});
+  if (dependencies.join() !== "@lydell/node-pty") {
+    throw new Error(
+      `The package installs runtime dependencies other than the terminal: ${dependencies.join(", ")}`,
+    );
   }
 
   const executables = await Promise.all(
@@ -156,6 +160,22 @@ async function verifyPackageContents(packageRoot: string) {
   ) {
     throw new Error("The executable contains the source workspace path.");
   }
+}
+
+async function verifyTerminal(packageRoot: string) {
+  await run(
+    process.execPath,
+    [
+      "-e",
+      [
+        'const shell = process.platform === "win32" ? process.env.ComSpec : "/bin/sh";',
+        'const terminal = require("@lydell/node-pty").spawn(shell, [], { cols: 80, rows: 24 });',
+        "terminal.onExit(() => process.exit(0));",
+        'terminal.write("exit\\r");',
+      ].join("\n"),
+    ],
+    packageRoot,
+  );
 }
 
 async function verifyVersionCommands(installRoot: string, packageRoot: string) {

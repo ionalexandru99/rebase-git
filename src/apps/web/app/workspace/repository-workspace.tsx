@@ -29,6 +29,11 @@ import {
   ResetConfirmation,
   useResetActions,
 } from "#web/features/reset/reset-actions.tsx";
+import {
+  TerminalSplit,
+  TerminalToggle,
+} from "#web/features/terminal/terminal-panel.tsx";
+import { useTerminals } from "#web/features/terminal/use-terminals.ts";
 import { WorkspacePanel } from "#web/features/workspace-panel/workspace-panel.tsx";
 import {
   rebasePanel,
@@ -102,6 +107,7 @@ function Workspace({
   });
   const merge = useMergeActions(history);
   const panel = useWorkspacePanel();
+  const terminals = useTerminals(environmentId, scope);
   const openRebasePlan = useCallback(
     (input: RebasePlanTarget) => {
       panel.execute({ type: "input", kind: "rebase", input });
@@ -182,46 +188,48 @@ function Workspace({
                 />
                 <WorkspacePanel.Main>
                   {() => (
-                    <main
-                      aria-label="Repository workspace"
-                      className="h-full rounded-none bg-repository"
-                    >
-                      <CommitGraph
-                        merge={merge}
-                        rebase={rebase}
-                        reset={reset}
-                        cherryPick={cherryPick}
-                        drop={drop}
-                        ref={inspection.graphRef}
-                        onOpenDetails={inspection.open}
-                        onOpenChanges={() =>
-                          panel.execute({ type: "open", kind: "changes" })
-                        }
-                        onActiveCommitChange={inspection.select}
-                        titleActions={
-                          <>
-                            <WorktreeSwitcher />
-                            <CurrentPullRequest pullRequests={pullRequests} />
-                          </>
-                        }
-                        toolbarActions={syncActions}
-                        toolbarInset={!panel.state.open}
-                        hostedRepository={refs?.hostedRepository}
-                        remoteProviders={refs?.remoteProviders}
-                        historyIdentity={{
-                          environmentId,
-                          repositoryId: scope.logicalRepositoryId,
-                        }}
-                        onRemoveHistoryRef={historyScope.toggleRef}
-                        onRevealHistoryRef={historyScope.toggleRef}
-                        onResetHistoryScope={historyScope.reset}
-                        history={history}
-                        repositoryName={name}
-                        roots={resolved?.roots}
-                        scope={resolved?.scope ?? automaticHistoryScope}
-                        selections={resolved?.selections ?? []}
-                      />
-                    </main>
+                    <TerminalSplit terminals={terminals}>
+                      <main
+                        aria-label="Repository workspace"
+                        className="h-full rounded-none bg-repository"
+                      >
+                        <CommitGraph
+                          merge={merge}
+                          rebase={rebase}
+                          reset={reset}
+                          cherryPick={cherryPick}
+                          drop={drop}
+                          ref={inspection.graphRef}
+                          onOpenDetails={inspection.open}
+                          onOpenChanges={() =>
+                            panel.execute({ type: "open", kind: "changes" })
+                          }
+                          onActiveCommitChange={inspection.select}
+                          titleActions={
+                            <>
+                              <WorktreeSwitcher />
+                              <CurrentPullRequest pullRequests={pullRequests} />
+                            </>
+                          }
+                          toolbarActions={syncActions}
+                          toolbarInset={!panel.state.open}
+                          hostedRepository={refs?.hostedRepository}
+                          remoteProviders={refs?.remoteProviders}
+                          historyIdentity={{
+                            environmentId,
+                            repositoryId: scope.logicalRepositoryId,
+                          }}
+                          onRemoveHistoryRef={historyScope.toggleRef}
+                          onRevealHistoryRef={historyScope.toggleRef}
+                          onResetHistoryScope={historyScope.reset}
+                          history={history}
+                          repositoryName={name}
+                          roots={resolved?.roots}
+                          scope={resolved?.scope ?? automaticHistoryScope}
+                          selections={resolved?.selections ?? []}
+                        />
+                      </main>
+                    </TerminalSplit>
                   )}
                 </WorkspacePanel.Main>
                 <WorkspacePanel.Pane
@@ -254,7 +262,9 @@ function Workspace({
           </CommitInspectionBridge>
         )}
       </RemoteSync>
-      <WorkspacePanel.Controls />
+      <WorkspacePanel.Controls>
+        <TerminalToggle terminals={terminals} />
+      </WorkspacePanel.Controls>
     </>
   );
 }

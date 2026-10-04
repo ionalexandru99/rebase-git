@@ -45,6 +45,8 @@ export function invalidatedByChange(
   kind?: RepositoryChangeKind,
 ) {
   if (meta === undefined || meta.changes === "none") return false;
+  if ((kind === "Terminals") !== (meta.changes === "terminals"))
+    return kind === undefined && repositoryIds === undefined;
   if (kind === "Index" && meta.changes !== "index") return false;
   return (
     repositoryIds === undefined ||
