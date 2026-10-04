@@ -88,7 +88,6 @@ export function CommitInspection({
             </p>
           ) : (
             <CommitFiles
-              key={details.oid}
               files={details.files}
               path={path}
               select={select}

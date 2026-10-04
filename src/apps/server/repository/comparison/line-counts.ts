@@ -1,35 +1,5 @@
 import type { ChangedLines } from "#contracts/repository-changes/repository-changes.contract.ts";
 
-export interface ChangedFileRecord {
-  readonly path: string;
-  readonly previousPath: string | null;
-  readonly status: string;
-  readonly lines: ChangedLines;
-}
-
-export function changedFiles(output: string): readonly ChangedFileRecord[] {
-  const fields = output.split("\0");
-  const files: Omit<ChangedFileRecord, "lines">[] = [];
-  let i = 0;
-  while (fields[i]?.startsWith(":")) {
-    const status = fields[i++]?.split(" ").at(-1)?.[0] ?? "";
-    const first = fields[i++];
-    const renamed = status === "R";
-    const path = renamed ? fields[i++] : first;
-    if (path)
-      files.push({
-        path,
-        previousPath: renamed ? (first ?? null) : null,
-        status,
-      });
-  }
-  const counted = lineCounts(fields.slice(i).join("\0"));
-  return files.map((file) => ({
-    ...file,
-    lines: counted.get(file.path) ?? null,
-  }));
-}
-
 export function lineCounts(output: string) {
   const fields = output.split("\0");
   const counts = new Map<string, ChangedLines>();

@@ -42,7 +42,13 @@ export function CommitFiles({
   readonly children: ReactNode;
 }) {
   const [filter, setFilter] = useState("");
-  const [checked, setChecked] = useState<ReadonlySet<string>>(new Set());
+  const [marked, setMarked] = useState<{
+    readonly files: readonly CommitFile[];
+    readonly paths: ReadonlySet<string>;
+  }>({ files, paths: new Set() });
+  const checked = marked.files === files ? marked.paths : new Set<string>();
+  const setChecked = (paths: ReadonlySet<string>) =>
+    setMarked({ files, paths });
   const anchor = useRef<string | null>(null);
   const selected: ReadonlySet<string> =
     path !== null && checked.has(path)
@@ -92,17 +98,13 @@ export function CommitFiles({
   const menuPaths = (row: ChangeTreeRow<CommitFile>) =>
     row.paths.every((entry) => selected.has(entry)) ? [...selected] : row.paths;
 
-  const pick = (
-    event: MouseEvent<HTMLElement>,
-    row: ChangeTreeRow<CommitFile>,
-  ) => {
-    const target = row.file?.path ?? row.paths[0];
+  const pick = (row: ChangeTreeRow<CommitFile>) => {
+    const target = menuTarget(row);
     if (target === undefined || actionsFor === undefined) return;
     if (!row.paths.every((entry) => selected.has(entry))) {
       anchor.current = row.key;
       setChecked(new Set(row.paths));
     }
-    if (actionsFor(row.paths, target).length === 0) event.stopPropagation();
     select(target);
   };
 
@@ -137,9 +139,15 @@ export function CommitFiles({
             chosen={(row) => row.file !== undefined && selected.has(row.key)}
             menu={
               actionsFor &&
-              ((row) => actionsFor(menuPaths(row), path ?? row.key))
+              ((row) => {
+                const target = menuTarget(row);
+                return target === undefined
+                  ? []
+                  : actionsFor(menuPaths(row), target);
+              })
             }
             onMenuClose={onMenuClose}
+            onMenuOpen={pick}
           >
             {(row, { rows, index, collapsed, toggle }) => {
               const file = row.file;
@@ -158,7 +166,6 @@ export function CommitFiles({
                     aria-expanded={file ? undefined : !collapsed.has(row.key)}
                     aria-describedby={file ? statusId : undefined}
                     onClick={(event) => click(event, row, rows, index, toggle)}
-                    onContextMenu={(event) => pick(event, row)}
                     onKeyDown={openMenu}
                   >
                     <RowLead row={row} collapsed={collapsed} />
@@ -173,4 +180,8 @@ export function CommitFiles({
       </ResizablePanel>
     </ResizablePanelGroup>
   );
+}
+
+function menuTarget(row: ChangeTreeRow<CommitFile>) {
+  return row.file?.path ?? row.paths[0];
 }

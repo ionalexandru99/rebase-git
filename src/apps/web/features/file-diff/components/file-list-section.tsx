@@ -45,6 +45,7 @@ export function FileListSection<File extends { readonly path: string }>({
   chosen,
   menu,
   onMenuClose,
+  onMenuOpen,
   children,
 }: {
   readonly name: string;
@@ -60,6 +61,7 @@ export function FileListSection<File extends { readonly path: string }>({
   readonly chosen: (row: ChangeTreeRow<File>) => boolean;
   readonly menu?: ((row: ChangeTreeRow<File>) => readonly Action[]) | undefined;
   readonly onMenuClose?: (() => void) | undefined;
+  readonly onMenuOpen?: ((row: ChangeTreeRow<File>) => void) | undefined;
   readonly children: (
     row: ChangeTreeRow<File>,
     context: FileRowContext<File>,
@@ -154,18 +156,20 @@ export function FileListSection<File extends { readonly path: string }>({
                 })}
               </div>
             );
-            return menu === undefined ? (
+            const actions = menu?.(row) ?? [];
+            return actions.length === 0 ? (
               element
             ) : (
               <ContextMenu
                 key={row.key}
                 onOpenChange={(open) => {
-                  if (!open) onMenuClose?.();
+                  if (open) onMenuOpen?.(row);
+                  else onMenuClose?.();
                 }}
               >
                 <ContextMenuTrigger render={element} />
                 <ContextMenuContent className="w-max min-w-48 max-w-md">
-                  <ActionMenuItems actions={menu(row)} />
+                  <ActionMenuItems actions={actions} />
                 </ContextMenuContent>
               </ContextMenu>
             );
