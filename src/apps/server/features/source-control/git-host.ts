@@ -1,11 +1,12 @@
 import { execFile } from "node:child_process";
-import { Effect } from "effect";
+import { Effect, Schema } from "effect";
 import type {
   PullRequest,
   PullRequestsUnavailable,
 } from "#contracts/pull-requests/pull-requests.contract.ts";
 import type {
   BitbucketToken,
+  CloneableRepository,
   GitHostKind,
   HostRepositories,
 } from "#contracts/source-control/source-control.contract.ts";
@@ -67,6 +68,8 @@ export const unavailable: PullRequestsUnavailable = {
 };
 
 const accountsShown = 16;
+export const repositoriesPerPage = 100;
+const repositoriesListed = 1_000;
 
 export function repositoryFor(hosts: readonly GitHost[], remoteUrl: string) {
   return Effect.gen(function* () {
@@ -168,6 +171,51 @@ export function hostGet(
     },
     catch: () => unavailable,
   });
+}
+
+export function readRepositoryPages<A>(
+  readPage: (
+    page: number,
+  ) => Effect.Effect<readonly A[], PullRequestsUnavailable>,
+  pageSize = repositoriesPerPage,
+  page = 1,
+): Effect.Effect<readonly A[], PullRequestsUnavailable> {
+  return readPage(page).pipe(
+    Effect.flatMap((repositories) =>
+      repositories.length < pageSize || page * pageSize >= repositoriesListed
+        ? Effect.succeed(repositories)
+        : readRepositoryPages(readPage, pageSize, page + 1).pipe(
+            Effect.map((next) => [...repositories, ...next]),
+          ),
+    ),
+  );
+}
+
+export function decodeHostJson<A>(schema: Schema.Codec<A, unknown>) {
+  const decode = Schema.decodeUnknownEffect(Schema.fromJsonString(schema));
+  return (output: string): Effect.Effect<A, PullRequestsUnavailable> =>
+    decode(output).pipe(Effect.mapError(() => unavailable));
+}
+
+export function cloneableRepository(fields: {
+  readonly name: string;
+  readonly url: string;
+  readonly private: boolean;
+  readonly description: string | null | undefined;
+  readonly updatedAt: string | null | undefined;
+}): CloneableRepository {
+  const updatedAt = Date.parse(fields.updatedAt ?? "");
+  return {
+    name: fields.name,
+    url: fields.url,
+    private: fields.private,
+    ...(fields.description
+      ? { description: fields.description.slice(0, 1_024) }
+      : {}),
+    ...(Number.isNaN(updatedAt)
+      ? {}
+      : { updatedAt: new Date(updatedAt).toISOString() }),
+  };
 }
 
 export function pullRequest(

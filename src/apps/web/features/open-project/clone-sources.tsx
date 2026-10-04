@@ -47,7 +47,7 @@ export function HostRepositoriesGroup({
         icon={<HostIcon aria-hidden="true" className="size-4.5 shrink-0" />}
         toggle={
           <CollapsibleTrigger
-            aria-label={`${open ? "Collapse" : "Expand"} ${label}`}
+            aria-label={`${open ? "Collapse" : "Expand"} ${label} ${group.account}`}
             className="grid size-7 place-items-center rounded-[.4rem] outline-none hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/30"
           >
             <IconChevronDown

@@ -4,13 +4,16 @@ import {
   type CloneRepository,
   RepositoryCatalogApi,
 } from "#contracts/repository-catalog/repository-catalog.contract.ts";
-import { SourceControlApi } from "#contracts/source-control/source-control.contract.ts";
+import {
+  type HostRepositories,
+  SourceControlApi,
+} from "#contracts/source-control/source-control.contract.ts";
 import {
   fakeRequests,
   rejected,
   respond,
 } from "#tests-support/fake-requests.ts";
-import { catalogEntry } from "#tests-support/fixtures.ts";
+import { catalogEntry, hostRepositories } from "#tests-support/fixtures.ts";
 import { render } from "#tests-support/render.tsx";
 import { OpenProjectScreen } from "#web/features/open-project/open-project-screen.tsx";
 
@@ -95,6 +98,42 @@ describe("cloning from the open project screen", () => {
     expect(page.getByText(/secret/).elements()).toHaveLength(0);
     expect(requested[0]?.path).toBe("/home/alex/code/legacy");
   });
+
+  it("names the server of each GitLab account and collapses them apart", async () => {
+    await renderScreen(respond(
+      RepositoryCatalogApi.clone,
+      () => new Promise(() => {}),
+    ), () => {}, [
+      hostRepositories({
+        kind: "gitlab",
+        host: "gitlab.com",
+        account: "tanuki",
+        repositories: [{ name: "group/rebase" }],
+      }),
+      hostRepositories({
+        kind: "gitlab",
+        host: "git.example.com",
+        account: "tanuki",
+        repositories: [{ name: "team/storefront" }],
+      }),
+    ]);
+
+    await expect
+      .element(page.getByText("· tanuki on gitlab.com"))
+      .toBeVisible();
+    await page
+      .getByRole("button", {
+        name: "Collapse GitLab tanuki on git.example.com",
+      })
+      .click();
+
+    await expect
+      .element(page.getByRole("option", { name: /group\/rebase/ }))
+      .toBeVisible();
+    expect(
+      page.getByRole("option", { name: /team\/storefront/ }).elements(),
+    ).toHaveLength(0);
+  });
 });
 
 function search() {
@@ -104,6 +143,14 @@ function search() {
 async function renderScreen(
   clone: ReturnType<typeof respond<typeof RepositoryCatalogApi.clone>>,
   onRepositoryRemembered: (repository: unknown) => void = () => {},
+  hosts: readonly HostRepositories[] = [
+    hostRepositories({
+      repositories: [
+        { name: "acme/checkout-service", private: true },
+        { name: "alex/dotfiles" },
+      ],
+    }),
+  ],
 ) {
   return render(
     <OpenProjectScreen
@@ -119,25 +166,7 @@ async function renderScreen(
             cloneFolder: "/home/alex/code",
             initialBranch: "main",
           })),
-          respond(SourceControlApi.cloneable, () => [
-            {
-              kind: "github" as const,
-              host: "github.com",
-              account: "alex",
-              repositories: [
-                {
-                  name: "acme/checkout-service",
-                  url: "git@github.com:acme/checkout-service.git",
-                  private: true,
-                },
-                {
-                  name: "alex/dotfiles",
-                  url: "git@github.com:alex/dotfiles.git",
-                  private: false,
-                },
-              ],
-            },
-          ]),
+          respond(SourceControlApi.cloneable, () => hosts),
           clone,
         ),
       },

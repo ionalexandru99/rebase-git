@@ -9,6 +9,11 @@ interface GitLabMergeRequestNode {
   readonly pipeline?: string;
 }
 
+interface GitLabRepository {
+  readonly name: string;
+  readonly private?: boolean;
+}
+
 export function fakeGitLab(
   bySourceBranch: Readonly<
     Record<string, readonly GitLabMergeRequestNode[]>
@@ -17,10 +22,16 @@ export function fakeGitLab(
     version = "glab 1.120.0 (78790114c)",
     accounts = { "gitlab.com": "tanuki" },
     visible = true,
+    protocols = {},
+    repositories = {},
   }: {
     readonly version?: string | null;
     readonly accounts?: Readonly<Record<string, string>>;
     readonly visible?: boolean;
+    readonly protocols?: Readonly<Record<string, "ssh" | "https">>;
+    readonly repositories?: Readonly<
+      Record<string, readonly GitLabRepository[]>
+    >;
   } = {},
 ) {
   const requests: Readonly<Record<string, string>>[] = [];
@@ -36,6 +47,24 @@ export function fakeGitLab(
           ? Object.keys(accounts).map(statusOf).join("\n")
           : statusOf(hostname),
       ),
+    protocol: (hostname) => Effect.succeed(protocols[hostname] ?? "ssh"),
+    repositories: (hostname, page) => {
+      const listed = repositories[hostname];
+      if (listed === undefined)
+        return Effect.fail({ _tag: "PullRequestsUnavailable" });
+      return Effect.succeed(
+        JSON.stringify(
+          listed.slice((page - 1) * 100, page * 100).map((repository) => ({
+            path_with_namespace: repository.name,
+            visibility: repository.private ? "private" : "public",
+            description: null,
+            last_activity_at: "2026-10-01T10:00:00.000Z",
+            ssh_url_to_repo: `git@${hostname}:${repository.name}.git`,
+            http_url_to_repo: `https://${hostname}/${repository.name}.git`,
+          })),
+        ),
+      );
+    },
     graphql: (hostname, _query, variables) => {
       requests.push({ hostname, ...variables });
       if (bySourceBranch === null)

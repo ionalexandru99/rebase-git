@@ -174,7 +174,10 @@ export function cloneGroups(
     id: `host:${host.kind}:${host.host}:${host.account}`,
     kind: host.kind,
     account:
-      hosts.filter(({ kind }) => kind === host.kind).length > 1
+      hosts.filter(
+        ({ kind, repositories }) =>
+          kind === host.kind && repositories.length > 0,
+      ).length > 1
         ? `${host.account} on ${host.host}`
         : host.account,
     sources: host.repositories

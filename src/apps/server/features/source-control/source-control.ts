@@ -2,8 +2,9 @@ import { readFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { eq, isNotNull } from "drizzle-orm";
-import { Effect } from "effect";
+import { Effect, Schema } from "effect";
 import {
+  CloneableRepository,
   type GitHostKind,
   GitHostKind as GitHostKinds,
   type GitHostStatus,
@@ -49,6 +50,8 @@ import {
 } from "#server/persistence/environment-state.schema.ts";
 
 export type SourceControl = ReturnType<typeof createSourceControl>;
+
+const isCloneableRepository = Schema.is(CloneableRepository);
 
 export interface GitHostClients {
   readonly azureDevOps: AzureDevOpsClient;
@@ -117,7 +120,11 @@ export function createSourceControl(
               return lists.map((list) => ({
                 ...list,
                 repositories: list.repositories.filter(
-                  ({ url }) => !cloned.has(host.repositoryId(url) ?? url),
+                  (repository) =>
+                    isCloneableRepository(repository) &&
+                    !cloned.has(
+                      host.repositoryId(repository.url) ?? repository.url,
+                    ),
                 ),
               }));
             }),

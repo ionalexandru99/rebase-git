@@ -5,12 +5,16 @@ import type {
 } from "#contracts/pull-requests/pull-requests.contract.ts";
 import { hostedRepositoryFromUrl } from "#server/features/repository-refs/git/read-repository-refs.ts";
 import {
+  cloneableRepository,
+  decodeHostJson,
   type GitHost,
   type HostedPullRequest,
   hostCommandOutput,
   inBatches,
   pageAnswer,
   pullRequest,
+  readRepositoryPages,
+  repositoriesPerPage,
   runHostCommand,
   signedInTool,
   singleAccount,
@@ -31,8 +35,6 @@ export interface GitHubCli {
 }
 
 const branchesPerRequest = 50;
-const repositoriesPerPage = 100;
-const repositoryPages = 10;
 const pullRequestsPerBranch = 10;
 const env = { GH_PROMPT_DISABLED: "1" };
 
@@ -95,23 +97,23 @@ export function createGitHubHost(cli: GitHubCli): GitHost {
       const account = yield* cli.account;
       if (account === undefined) return [];
       const ssh = (yield* cli.protocol) === "ssh";
-      const repositories = yield* readRepositoryPages(cli, 1);
+      const repositories = yield* readRepositoryPages((page) =>
+        cli.repositories(page).pipe(Effect.flatMap(decodeRepositoryPage)),
+      );
       return [
         {
           kind: "github" as const,
           host: "github.com",
           account,
-          repositories: repositories.map((repository) => ({
-            name: repository.full_name,
-            url: ssh ? repository.ssh_url : repository.clone_url,
-            private: repository.private,
-            ...(repository.description === null
-              ? {}
-              : { description: repository.description.slice(0, 1_024) }),
-            ...(repository.pushed_at === null
-              ? {}
-              : { updatedAt: new Date(repository.pushed_at).toISOString() }),
-          })),
+          repositories: repositories.map((repository) =>
+            cloneableRepository({
+              name: repository.full_name,
+              url: ssh ? repository.ssh_url : repository.clone_url,
+              private: repository.private,
+              description: repository.description,
+              updatedAt: repository.pushed_at,
+            }),
+          ),
         },
       ];
     }).pipe(Effect.orElseSucceed(() => [])),
@@ -152,7 +154,7 @@ export function createGitHubHost(cli: GitHubCli): GitHost {
   };
 }
 
-const RepositoryPage = Schema.fromJsonString(
+const decodeRepositoryPage = decodeHostJson(
   Schema.Array(
     Schema.Struct({
       full_name: Schema.String,
@@ -164,27 +166,6 @@ const RepositoryPage = Schema.fromJsonString(
     }),
   ),
 );
-type RepositoryPage = typeof RepositoryPage.Type;
-
-function readRepositoryPages(
-  cli: GitHubCli,
-  page: number,
-): Effect.Effect<RepositoryPage, PullRequestsUnavailable> {
-  return cli.repositories(page).pipe(
-    Effect.flatMap((output) =>
-      Schema.decodeUnknownEffect(RepositoryPage)(output).pipe(
-        Effect.mapError(() => unavailable),
-      ),
-    ),
-    Effect.flatMap((repositories) =>
-      repositories.length < repositoriesPerPage || page >= repositoryPages
-        ? Effect.succeed(repositories)
-        : readRepositoryPages(cli, page + 1).pipe(
-            Effect.map((next) => [...repositories, ...next]),
-          ),
-    ),
-  );
-}
 
 function githubRepository(remoteUrl: string) {
   const repository = hostedRepositoryFromUrl(remoteUrl);
