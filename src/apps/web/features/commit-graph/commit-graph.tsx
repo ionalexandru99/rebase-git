@@ -16,8 +16,6 @@ import type { RepositoryRefs } from "#contracts/repository-refs/repository-refs.
 import { type Action, runAction } from "#web/components/ui/action-menu.tsx";
 import { Button } from "#web/components/ui/button.tsx";
 import { ScrollTopButton } from "#web/components/ui/scroll-top-button.tsx";
-import { AuthorAvatars } from "#web/features/author-avatars/author-avatar.tsx";
-import type { HostedRepository } from "#web/features/author-avatars/author-avatar-providers.ts";
 import type { CherryPick } from "#web/features/cherry-pick/cherry-pick-menu.tsx";
 import {
   CommitActionMenu,
@@ -89,7 +87,6 @@ export function CommitGraph({
   roots,
   scope,
   selections,
-  hostedRepository,
   remoteProviders,
   titleActions,
   toolbarActions,
@@ -129,7 +126,6 @@ export function CommitGraph({
   readonly scope?: HistoryScope;
   readonly selections?: readonly HistorySelection[];
   readonly remoteProviders?: RepositoryRefs["remoteProviders"];
-  readonly hostedRepository?: HostedRepository | undefined;
 }): JSX.Element {
   const [menuOid, setMenuOid] = useState<string>();
   const connected = useRepositoryScope()?.connected;
@@ -316,209 +312,199 @@ export function CommitGraph({
             selections={selections}
           />
         )}
-        <AuthorAvatars repository={hostedRepository}>
-          <CommitGraphVirtualWindow
-            ref={viewportRef}
-            scrollRef={scrollRef}
-            headerHeight={headerHeight}
-            total={total}
-            start={start}
-            oids={oids}
-            activeIndex={
-              activeCommitOid === undefined
-                ? undefined
-                : navigation.selection.activeIndex
-            }
-            onRange={onRange}
-            onPageSize={setPageSize}
-          >
-            {({ viewport, totalHeight, flowStart, virtualRows }) => (
-              <div className="relative min-h-0 flex-1">
-                <CommitActionMenu
-                  actions={
-                    menuOid === undefined
+        <CommitGraphVirtualWindow
+          ref={viewportRef}
+          scrollRef={scrollRef}
+          headerHeight={headerHeight}
+          total={total}
+          start={start}
+          oids={oids}
+          activeIndex={
+            activeCommitOid === undefined
+              ? undefined
+              : navigation.selection.activeIndex
+          }
+          onRange={onRange}
+          onPageSize={setPageSize}
+        >
+          {({ viewport, totalHeight, flowStart, virtualRows }) => (
+            <div className="relative min-h-0 flex-1">
+              <CommitActionMenu
+                actions={
+                  menuOid === undefined
+                    ? undefined
+                    : commands.actionsFor(
+                        menuOid,
+                        navigation.selected.has(menuOid)
+                          ? [...navigation.selected]
+                          : [menuOid],
+                      )
+                }
+                tabIndex={0}
+                restoreFocus={() => {
+                  setPreviewing(false);
+                  scrollRef.current?.focus();
+                }}
+              >
+                <table
+                  aria-activedescendant={
+                    activeCommitOid === undefined
                       ? undefined
-                      : commands.actionsFor(
-                          menuOid,
-                          navigation.selected.has(menuOid)
-                            ? [...navigation.selected]
-                            : [menuOid],
-                        )
+                      : commitRowId(activeCommitOid)
+                  }
+                  aria-busy={loading}
+                  aria-label="Commit history"
+                  aria-multiselectable="true"
+                  aria-colcount={5}
+                  aria-rowcount={total + headerRows}
+                  className="absolute inset-0 block h-full w-full overflow-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden focus-visible:outline-2 focus-visible:outline-primary/70 focus-visible:outline-offset-[-2px]"
+                  onKeyDown={handleKeyDown}
+                  onMouseDown={(event) => {
+                    if (event.shiftKey) event.preventDefault();
+                  }}
+                  onClick={handleRowClick}
+                  onContextMenu={handleRowContextMenu}
+                  onDoubleClick={handleRowDoubleClick}
+                  onContextMenuCapture={(event) => {
+                    if (
+                      !(event.target instanceof Element) ||
+                      event.target.closest("tr[aria-rowindex]") === null
+                    ) {
+                      event.preventDefault();
+                      event.stopPropagation();
+                    }
+                  }}
+                  ref={scrollRef}
+                  role="grid"
+                  style={
+                    {
+                      contain: "layout paint",
+                      overflowAnchor: "none",
+                      "--graph-row-background": "var(--repository)",
+                    } as CSSProperties
                   }
                   tabIndex={0}
-                  restoreFocus={() => {
-                    setPreviewing(false);
-                    scrollRef.current?.focus();
-                  }}
                 >
-                  <table
-                    aria-activedescendant={
-                      activeCommitOid === undefined
-                        ? undefined
-                        : commitRowId(activeCommitOid)
-                    }
-                    aria-busy={loading}
-                    aria-label="Commit history"
-                    aria-multiselectable="true"
-                    aria-colcount={5}
-                    aria-rowcount={total + headerRows}
-                    className="absolute inset-0 block h-full w-full overflow-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden focus-visible:outline-2 focus-visible:outline-primary/70 focus-visible:outline-offset-[-2px]"
-                    onKeyDown={handleKeyDown}
-                    onMouseDown={(event) => {
-                      if (event.shiftKey) event.preventDefault();
+                  <thead
+                    className="sticky top-0 z-20 block bg-repository"
+                    style={{
+                      height: headerHeight,
+                      minWidth: gutterWidth + 560,
                     }}
-                    onClick={handleRowClick}
-                    onContextMenu={handleRowContextMenu}
-                    onDoubleClick={handleRowDoubleClick}
-                    onContextMenuCapture={(event) => {
-                      if (
-                        !(event.target instanceof Element) ||
-                        event.target.closest("tr[aria-rowindex]") === null
-                      ) {
-                        event.preventDefault();
-                        event.stopPropagation();
-                      }
-                    }}
-                    ref={scrollRef}
-                    role="grid"
-                    style={
-                      {
-                        contain: "layout paint",
-                        overflowAnchor: "none",
-                        "--graph-row-background": "var(--repository)",
-                      } as CSSProperties
-                    }
-                    tabIndex={0}
                   >
-                    <thead
-                      className="sticky top-0 z-20 block bg-repository"
+                    <tr
+                      className="grid h-7 items-center border-border/60 border-b text-left text-[.85rem] font-normal text-muted-foreground"
                       style={{
-                        height: headerHeight,
-                        minWidth: gutterWidth + 560,
+                        gridTemplateColumns: `minmax(0, 1fr) ${graphMetadataColumns}`,
                       }}
                     >
-                      <tr
-                        className="grid h-7 items-center border-border/60 border-b text-left text-[.85rem] font-normal text-muted-foreground"
-                        style={{
-                          gridTemplateColumns: `minmax(0, 1fr) ${graphMetadataColumns}`,
-                        }}
-                      >
-                        <th colSpan={2} className="pl-3 font-normal">
-                          Graph / Commit
-                        </th>
-                        <th className="sticky right-[190px] h-full bg-repository pl-3 font-normal leading-7">
-                          Author
-                        </th>
-                        <th className="sticky right-28 h-full bg-repository font-normal leading-7">
-                          SHA
-                        </th>
-                        <th className="sticky right-0 h-full bg-repository font-normal leading-7">
-                          Date
-                        </th>
-                      </tr>
-                      {uncommitted === undefined ? null : (
-                        <UncommittedChangesRow
-                          changes={uncommitted}
-                          link={link}
-                          onOpen={onOpenChanges}
+                      <th colSpan={2} className="pl-3 font-normal">
+                        Graph / Commit
+                      </th>
+                      <th className="sticky right-[190px] h-full bg-repository pl-3 font-normal leading-7">
+                        Author
+                      </th>
+                      <th className="sticky right-28 h-full bg-repository font-normal leading-7">
+                        SHA
+                      </th>
+                      <th className="sticky right-0 h-full bg-repository font-normal leading-7">
+                        Date
+                      </th>
+                    </tr>
+                    {uncommitted === undefined ? null : (
+                      <UncommittedChangesRow
+                        changes={uncommitted}
+                        link={link}
+                        onOpen={onOpenChanges}
+                      />
+                    )}
+                  </thead>
+                  <tbody
+                    className="relative block"
+                    style={{
+                      height: totalHeight,
+                      minWidth: gutterWidth + 560,
+                    }}
+                  >
+                    <CommitGraphCanvas
+                      laneRows={laneRows}
+                      offset={start}
+                      virtualRows={virtualRows}
+                      scrollRef={scrollRef}
+                      viewportWidth={viewport.width}
+                    />
+                    {link === undefined ? null : (
+                      <UncommittedChangesLine link={link} />
+                    )}
+                    <tr inert className="block" style={{ height: flowStart }} />
+                    {virtualRows.map((virtualRow) => {
+                      const row = windowRows[virtualRow.index];
+                      if (row === undefined) return null;
+                      const { commit } = row;
+                      const merge = merges.get(commit.oid);
+                      return (
+                        <CommitGraphRow
+                          key={virtualRow.key}
+                          commit={commit}
+                          labels={labelsByOid.get(commit.oid) ?? emptyRefLabels}
+                          lane={row.lane}
+                          rowIndex={start + virtualRow.index + headerRows + 1}
+                          start={virtualRow.start}
+                          selected={navigation.selected.has(commit.oid)}
+                          order={commands.preview.indexOf(commit.oid) + 1}
+                          active={navigation.selection.activeOid === commit.oid}
+                          merge={merge}
+                          busy={
+                            merge !== undefined &&
+                            merge !== shownMerges.get(commit.oid) &&
+                            failure === undefined
+                          }
+                          reserve={
+                            link !== undefined &&
+                            start + virtualRow.index < link.index
+                              ? link.x + 12
+                              : 0
+                          }
+                          mark={
+                            moving.has(commit.oid)
+                              ? "moving"
+                              : previewing && commit.oid === menuOid
+                                ? "base"
+                                : undefined
+                          }
                         />
-                      )}
-                    </thead>
-                    <tbody
-                      className="relative block"
-                      style={{
-                        height: totalHeight,
-                        minWidth: gutterWidth + 560,
-                      }}
-                    >
-                      <CommitGraphCanvas
-                        laneRows={laneRows}
-                        offset={start}
-                        virtualRows={virtualRows}
-                        scrollRef={scrollRef}
-                        viewportWidth={viewport.width}
-                      />
-                      {link === undefined ? null : (
-                        <UncommittedChangesLine link={link} />
-                      )}
-                      <tr
-                        inert
-                        className="block"
-                        style={{ height: flowStart }}
-                      />
-                      {virtualRows.map((virtualRow) => {
-                        const row = windowRows[virtualRow.index];
-                        if (row === undefined) return null;
-                        const { commit } = row;
-                        const merge = merges.get(commit.oid);
-                        return (
-                          <CommitGraphRow
-                            key={virtualRow.key}
-                            commit={commit}
-                            labels={
-                              labelsByOid.get(commit.oid) ?? emptyRefLabels
-                            }
-                            lane={row.lane}
-                            rowIndex={start + virtualRow.index + headerRows + 1}
-                            start={virtualRow.start}
-                            selected={navigation.selected.has(commit.oid)}
-                            order={commands.preview.indexOf(commit.oid) + 1}
-                            active={
-                              navigation.selection.activeOid === commit.oid
-                            }
-                            merge={merge}
-                            busy={
-                              merge !== undefined &&
-                              merge !== shownMerges.get(commit.oid) &&
-                              failure === undefined
-                            }
-                            reserve={
-                              link !== undefined &&
-                              start + virtualRow.index < link.index
-                                ? link.x + 12
-                                : 0
-                            }
-                            mark={
-                              moving.has(commit.oid)
-                                ? "moving"
-                                : previewing && commit.oid === menuOid
-                                  ? "base"
-                                  : undefined
-                            }
-                          />
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </CommitActionMenu>
-                <ScrollTopButton
-                  className="absolute top-0.5 right-1 z-30"
-                  region={scrollRef}
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </CommitActionMenu>
+              <ScrollTopButton
+                className="absolute top-0.5 right-1 z-30"
+                region={scrollRef}
+              />
+              {loading && windowRows.length === 0 && failure === undefined ? (
+                <CommitGraphLoading />
+              ) : null}
+              {failure !== undefined && windowRows.length === 0 ? (
+                <CommitGraphFailure
+                  error={describeHistoryFailure(failure)}
+                  retry={retry}
                 />
-                {loading && windowRows.length === 0 && failure === undefined ? (
-                  <CommitGraphLoading />
-                ) : null}
-                {failure !== undefined && windowRows.length === 0 ? (
-                  <CommitGraphFailure
-                    error={describeHistoryFailure(failure)}
-                    retry={retry}
-                  />
-                ) : null}
-                {!loading && failure === undefined && total === 0 ? (
-                  <div
-                    aria-label="Empty commit history"
-                    className="pointer-events-none absolute inset-0 grid place-items-center text-[.85rem] text-muted-foreground"
-                    role="status"
-                  >
-                    {(roots?.length ?? 0) > 0
-                      ? "No cached commits in this history scope."
-                      : "This repository has no commits yet."}
-                  </div>
-                ) : null}
-              </div>
-            )}
-          </CommitGraphVirtualWindow>
-        </AuthorAvatars>
+              ) : null}
+              {!loading && failure === undefined && total === 0 ? (
+                <div
+                  aria-label="Empty commit history"
+                  className="pointer-events-none absolute inset-0 grid place-items-center text-[.85rem] text-muted-foreground"
+                  role="status"
+                >
+                  {(roots?.length ?? 0) > 0
+                    ? "No cached commits in this history scope."
+                    : "This repository has no commits yet."}
+                </div>
+              ) : null}
+            </div>
+          )}
+        </CommitGraphVirtualWindow>
       </GraphRefAppearance>
       {failure !== undefined && windowRows.length > 0 ? (
         <CommitGraphPageRetry

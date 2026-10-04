@@ -1,3 +1,4 @@
+import type { SettledDay } from "#contracts/branch-settling/branch-settling.contract.ts";
 import type {
   BranchUpstream,
   LocalBranch,
@@ -56,6 +57,8 @@ export interface BranchesSidebarRefRow extends RowHierarchy {
   readonly sectionId: string;
   readonly target: RepositoryRefTarget;
   readonly upstream?: BranchUpstream;
+  readonly tip?: string;
+  readonly settled?: SettledDay;
   readonly checkout?: {
     readonly kind: "repository" | "worktree";
     readonly path: string;
@@ -145,6 +148,8 @@ export function buildBranchesSidebarRows(
         name: branch.name,
         target: { _tag: "LocalBranch", name: branch.name },
         ...(branch.upstream === undefined ? {} : { upstream: branch.upstream }),
+        ...(branch.target === undefined ? {} : { tip: branch.target }),
+        ...(branch.settled === undefined ? {} : { settled: branch.settled }),
         ...(branch.worktreePath === undefined
           ? {}
           : {

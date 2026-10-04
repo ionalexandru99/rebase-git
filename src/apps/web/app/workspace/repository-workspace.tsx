@@ -4,6 +4,7 @@ import {
   ResizableHandle,
   ResizablePanel,
 } from "#web/components/ui/resizable.tsx";
+import { AuthorAvatars } from "#web/features/author-avatars/author-avatar.tsx";
 import { BranchesSidebar } from "#web/features/branches-sidebar/branches-sidebar.tsx";
 import { useCherryPick } from "#web/features/cherry-pick/cherry-pick-menu.tsx";
 import { CommitGraph } from "#web/features/commit-graph/commit-graph.tsx";
@@ -160,104 +161,108 @@ function Workspace({
         {(syncActions) => (
           <CommitInspectionBridge connected={scope.connected}>
             {(inspection) => (
-              <WorkspacePanel.Group>
-                <ResizablePanel
-                  defaultSize="16.5rem"
-                  groupResizeBehavior="preserve-pixel-size"
-                  id="branches"
-                  maxSize="26rem"
-                  minSize="12rem"
-                >
-                  <BranchesSidebar
-                    merge={merge}
-                    pullRequests={pullRequests}
-                    rebase={rebase}
-                    reset={reset}
-                    onBranchRenamed={historyScope.renameBranch}
-                    onShowReflog={showReflog}
-                    onOpenStash={openStash}
-                    onToggleHistoryRef={historyScope.toggleRef}
-                    selectedHistoryRefKeys={
-                      resolved?.selectedRefKeys ?? noRefKeys
-                    }
+              <AuthorAvatars repository={refs?.hostedRepository}>
+                <WorkspacePanel.Group>
+                  <ResizablePanel
+                    defaultSize="16.5rem"
+                    groupResizeBehavior="preserve-pixel-size"
+                    id="branches"
+                    maxSize="26rem"
+                    minSize="12rem"
+                  >
+                    <BranchesSidebar
+                      history={history}
+                      merge={merge}
+                      pullRequests={pullRequests}
+                      rebase={rebase}
+                      reset={reset}
+                      onBranchRenamed={historyScope.renameBranch}
+                      onShowReflog={showReflog}
+                      onOpenStash={openStash}
+                      onToggleHistoryRef={historyScope.toggleRef}
+                      selectedHistoryRefKeys={
+                        resolved?.selectedRefKeys ?? noRefKeys
+                      }
+                    />
+                  </ResizablePanel>
+                  <ResizableHandle
+                    aria-label="Resize branches sidebar"
+                    className="z-10 bg-transparent after:w-2 focus-visible:ring-primary/40"
                   />
-                </ResizablePanel>
-                <ResizableHandle
-                  aria-label="Resize branches sidebar"
-                  className="z-10 bg-transparent after:w-2 focus-visible:ring-primary/40"
-                />
-                <WorkspacePanel.Main>
-                  {() => (
-                    <TerminalSplit terminals={terminals}>
-                      <main
-                        aria-label="Repository workspace"
-                        className="h-full rounded-none bg-repository"
-                      >
-                        <CommitGraph
-                          merge={merge}
-                          rebase={rebase}
-                          reset={reset}
-                          cherryPick={cherryPick}
-                          drop={drop}
-                          ref={inspection.graphRef}
-                          onOpenDetails={inspection.open}
-                          onOpenChanges={() =>
-                            panel.execute({ type: "open", kind: "changes" })
-                          }
-                          onActiveCommitChange={inspection.select}
-                          titleActions={
-                            <>
-                              <WorktreeSwitcher />
-                              <CurrentPullRequest pullRequests={pullRequests} />
-                            </>
-                          }
-                          toolbarActions={syncActions}
-                          toolbarInset={!panel.state.open}
-                          hostedRepository={refs?.hostedRepository}
-                          remoteProviders={refs?.remoteProviders}
-                          historyIdentity={{
-                            environmentId,
-                            repositoryId: scope.logicalRepositoryId,
-                          }}
-                          onRemoveHistoryRef={historyScope.toggleRef}
-                          onRevealHistoryRef={historyScope.toggleRef}
-                          onResetHistoryScope={historyScope.reset}
-                          history={history}
-                          repositoryName={name}
-                          roots={resolved?.roots}
-                          scope={resolved?.scope ?? automaticHistoryScope}
-                          selections={resolved?.selections ?? []}
-                        />
-                      </main>
-                    </TerminalSplit>
-                  )}
-                </WorkspacePanel.Main>
-                <WorkspacePanel.Pane
-                  contents={{
-                    reflog: (
-                      <Suspense fallback={null}>
-                        <reflogPanel.Content
-                          reset={reset}
-                          onOpenDetails={inspection.open}
-                          onShowInGraph={async (oid) => {
-                            await inspection.graphRef.current?.navigateToOid(
-                              oid,
-                            );
-                          }}
-                        />
-                      </Suspense>
-                    ),
-                    rebase: (
-                      <Suspense fallback={null}>
-                        <rebasePanel.Content
-                          history={history}
-                          onClose={closeRebasePlan}
-                        />
-                      </Suspense>
-                    ),
-                  }}
-                />
-              </WorkspacePanel.Group>
+                  <WorkspacePanel.Main>
+                    {() => (
+                      <TerminalSplit terminals={terminals}>
+                        <main
+                          aria-label="Repository workspace"
+                          className="h-full rounded-none bg-repository"
+                        >
+                          <CommitGraph
+                            merge={merge}
+                            rebase={rebase}
+                            reset={reset}
+                            cherryPick={cherryPick}
+                            drop={drop}
+                            ref={inspection.graphRef}
+                            onOpenDetails={inspection.open}
+                            onOpenChanges={() =>
+                              panel.execute({ type: "open", kind: "changes" })
+                            }
+                            onActiveCommitChange={inspection.select}
+                            titleActions={
+                              <>
+                                <WorktreeSwitcher />
+                                <CurrentPullRequest
+                                  pullRequests={pullRequests}
+                                />
+                              </>
+                            }
+                            toolbarActions={syncActions}
+                            toolbarInset={!panel.state.open}
+                            remoteProviders={refs?.remoteProviders}
+                            historyIdentity={{
+                              environmentId,
+                              repositoryId: scope.logicalRepositoryId,
+                            }}
+                            onRemoveHistoryRef={historyScope.toggleRef}
+                            onRevealHistoryRef={historyScope.toggleRef}
+                            onResetHistoryScope={historyScope.reset}
+                            history={history}
+                            repositoryName={name}
+                            roots={resolved?.roots}
+                            scope={resolved?.scope ?? automaticHistoryScope}
+                            selections={resolved?.selections ?? []}
+                          />
+                        </main>
+                      </TerminalSplit>
+                    )}
+                  </WorkspacePanel.Main>
+                  <WorkspacePanel.Pane
+                    contents={{
+                      reflog: (
+                        <Suspense fallback={null}>
+                          <reflogPanel.Content
+                            reset={reset}
+                            onOpenDetails={inspection.open}
+                            onShowInGraph={async (oid) => {
+                              await inspection.graphRef.current?.navigateToOid(
+                                oid,
+                              );
+                            }}
+                          />
+                        </Suspense>
+                      ),
+                      rebase: (
+                        <Suspense fallback={null}>
+                          <rebasePanel.Content
+                            history={history}
+                            onClose={closeRebasePlan}
+                          />
+                        </Suspense>
+                      ),
+                    }}
+                  />
+                </WorkspacePanel.Group>
+              </AuthorAvatars>
             )}
           </CommitInspectionBridge>
         )}
