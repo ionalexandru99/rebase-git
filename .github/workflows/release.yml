@@ -272,10 +272,6 @@ jobs:
             runner: macos-latest
             platform: mac
             arch: arm64
-          - name: macOS x64
-            runner: macos-15-intel
-            platform: mac
-            arch: x64
           - name: Linux x64
             runner: ubuntu-latest
             platform: linux
@@ -498,12 +494,7 @@ jobs:
         shell: bash
         run: |
           mkdir desktop-release
-          mac_manifest=$(basename "$(find desktop-artifacts/desktop-mac-arm64 -name '*-mac.yml')")
-          yq eval-all ". as \$item ireduce ({}; . *+ \$item) | .files |= unique_by(.url)" \
-            "desktop-artifacts/desktop-mac-arm64/$mac_manifest" \
-            "desktop-artifacts/desktop-mac-x64/$mac_manifest" \
-            > "desktop-release/$mac_manifest"
-          find desktop-artifacts -type f ! -name '*-mac.yml' -exec mv {} desktop-release/ \;
+          find desktop-artifacts -type f -exec mv {} desktop-release/ \;
 
       - id: draft
         name: Stage draft release

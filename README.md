@@ -16,7 +16,7 @@ Install Git 2.35 or newer, then download Rebase from the
 
 | System | Download | Install |
 | --- | --- | --- |
-| macOS | `.dmg`, `arm64` for Apple silicon or `x64` for Intel | Open the disk image and drag Rebase into Applications. |
+| macOS (Apple silicon) | `.dmg` | Open the disk image and drag Rebase into Applications. |
 | Windows | `.exe` | Run the installer. |
 | Linux | `.AppImage` | Allow the file to run as a program in its properties, then open it. |
 | Debian / Ubuntu | `.deb` | Open the package with your software installer. |
