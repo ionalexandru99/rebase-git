@@ -142,6 +142,55 @@ describe("source control", () => {
     ]);
   });
 
+  it("lists Forgejo repositories for every tea login, over SSH where tea clones with a key", async () => {
+    const f = await fixture({
+      forgejo: {
+        logins: [
+          {
+            url: "https://codeberg.org",
+            user: "forge",
+            sshKey: "/home/forge/.ssh/id_ed25519",
+          },
+          { url: "https://git.example.com:3000", user: "forge" },
+        ],
+        repositories: [{ name: "team/site", description: "Our website" }],
+      },
+    });
+
+    const hosts = await f.cloneable();
+
+    expect(hosts.filter(({ kind }) => kind === "forgejo")).toEqual([
+      {
+        kind: "forgejo",
+        host: "codeberg.org",
+        account: "forge",
+        repositories: [
+          {
+            name: "team/site",
+            url: "git@codeberg.org:team/site.git",
+            private: false,
+            description: "Our website",
+            updatedAt: "2026-10-01T10:00:00.000Z",
+          },
+        ],
+      },
+      {
+        kind: "forgejo",
+        host: "git.example.com:3000",
+        account: "forge",
+        repositories: [
+          {
+            name: "team/site",
+            url: "https://git.example.com:3000/team/site.git",
+            private: false,
+            description: "Our website",
+            updatedAt: "2026-10-01T10:00:00.000Z",
+          },
+        ],
+      },
+    ]);
+  });
+
   it("reports a missing or signed out GitHub CLI", async () => {
     const missing = await fixture({ github: { version: null } });
     const signedOut = await fixture({ github: { account: null } });
@@ -232,10 +281,12 @@ async function fixture({
   gitlab = {
     accounts: { "gitlab.com": "tanuki", "git.example.com": "tanuki" },
   },
+  forgejo = {},
 }: {
   readonly github?: Parameters<typeof fakeGitHub>[1];
   readonly bitbucket?: Parameters<typeof fakeBitbucket>[1];
   readonly gitlab?: Parameters<typeof fakeGitLab>[1];
+  readonly forgejo?: Parameters<typeof fakeForgejo>[1];
 } = {}) {
   const { github, requests } = fakeGitHub(
     { main: [{ number: 1 }] },
@@ -253,6 +304,7 @@ async function fixture({
           { url: "https://codeberg.org", user: "forge" },
           { url: "https://git.example.com", user: "forge" },
         ],
+        ...forgejo,
       }).forgejo,
     },
   });

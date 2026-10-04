@@ -12,17 +12,21 @@ import {
   signedInTool,
   unavailable,
 } from "#server/features/source-control/git-host.ts";
+import { forgejoCloneable } from "#server/features/source-control/hosts/forgejo-repositories.ts";
 
 export interface TeaCli {
   readonly version: Effect.Effect<string | undefined>;
   readonly logins: Effect.Effect<string>;
+  readonly login: (
+    name: string,
+  ) => Effect.Effect<string, PullRequestsUnavailable>;
   readonly api: (
     login: string,
     endpoint: string,
   ) => Effect.Effect<string, PullRequestsUnavailable>;
 }
 
-interface TeaLogin {
+export interface TeaLogin {
   readonly name: string;
   readonly server: string;
   readonly host: string;
@@ -58,6 +62,7 @@ export function createTeaCli(): TeaCli {
     logins: tea(["logins", "list", "--output", "json"]).pipe(
       Effect.orElseSucceed(() => "[]"),
     ),
+    login: (name) => tea(["logins", name]),
     api: (login, endpoint) => tea(["api", "--login", login, endpoint]),
   };
 }
@@ -74,6 +79,9 @@ export function createForgejoHost(cli: TeaCli): GitHost {
       ),
     ),
     repositoryId: (remoteUrl) => forgejoRepository(remoteUrl)?.id,
+    cloneable: readLogins(cli).pipe(
+      Effect.flatMap((logins) => forgejoCloneable(cli, logins)),
+    ),
     repository: (remoteUrl) => {
       const repository = forgejoRepository(remoteUrl);
       if (repository === undefined) return Effect.succeed(undefined);
