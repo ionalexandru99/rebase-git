@@ -1,5 +1,5 @@
 import { Schema } from "effect";
-import { Rpc } from "effect/rpc";
+import { Rpc, type RpcSchema } from "effect/rpc";
 import { RepositoryRejected } from "#contracts/git/git-failures.contract.ts";
 
 export interface EnvironmentRoute extends Rpc.Any {
@@ -14,6 +14,13 @@ export type RouteSuccess<Route extends EnvironmentRoute> =
   Route["successSchema"]["Type"];
 export type RouteFailure<Route extends EnvironmentRoute> =
   Route["errorSchema"]["Type"];
+
+export interface EnvironmentStreamRoute extends EnvironmentRoute {
+  readonly successSchema: RpcSchema.Stream<Schema.Top, Schema.Top>;
+}
+
+export type StreamValue<Route extends EnvironmentStreamRoute> =
+  Route["successSchema"]["success"]["Type"];
 
 interface RouteDefinition<
   Request extends Schema.Top,

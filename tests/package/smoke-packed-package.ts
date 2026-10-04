@@ -9,6 +9,7 @@ import {
   rm,
   stat,
 } from "node:fs/promises";
+import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
 import process from "node:process";
@@ -47,6 +48,7 @@ try {
 
   const packageRoot = join(installRoot, "node_modules", "rebase-git");
   await verifyPackageContents(packageRoot);
+  await verifyTerminal(packageRoot);
   await verifyVersionCommands(installRoot, packageRoot);
   const serverEnvironment = {
     ...process.env,
@@ -133,8 +135,11 @@ async function verifyPackageContents(packageRoot: string) {
   const packageMetadata = JSON.parse(
     await readFile(join(packageRoot, "package.json"), "utf8"),
   ) as { readonly dependencies?: Record<string, string> };
-  if (Object.keys(packageMetadata.dependencies ?? {}).length > 0) {
-    throw new Error("The package installs runtime dependencies.");
+  const dependencies = Object.keys(packageMetadata.dependencies ?? {});
+  if (dependencies.join() !== "@lydell/node-pty") {
+    throw new Error(
+      `The package installs runtime dependencies other than the terminal: ${dependencies.join(", ")}`,
+    );
   }
 
   const executables = await Promise.all(
@@ -156,6 +161,21 @@ async function verifyPackageContents(packageRoot: string) {
   ) {
     throw new Error("The executable contains the source workspace path.");
   }
+}
+
+async function verifyTerminal(packageRoot: string) {
+  const { spawn: spawnTerminal } = createRequire(
+    join(packageRoot, "package.json"),
+  )("@lydell/node-pty") as typeof import("@lydell/node-pty");
+  const shell =
+    process.platform === "win32"
+      ? (process.env.ComSpec ?? "cmd.exe")
+      : "/bin/sh";
+  const terminal = spawnTerminal(shell, [], { cols: 80, rows: 24 });
+  await new Promise<void>((resolveExit) => {
+    terminal.onExit(() => resolveExit());
+    terminal.write("exit\r");
+  });
 }
 
 async function verifyVersionCommands(installRoot: string, packageRoot: string) {

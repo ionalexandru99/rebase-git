@@ -17,6 +17,9 @@ const offlineEnvironment: Environment = {
   requests: async () => {
     throw new Error("Performance fixtures do not reach an environment.");
   },
+  subscribe: async () => {
+    throw new Error("Performance fixtures do not reach an environment.");
+  },
   connected: false,
   readable: false,
   writable: false,

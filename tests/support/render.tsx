@@ -6,7 +6,11 @@ import {
   type RenderOptions,
   render as renderComponent,
 } from "vitest-browser-react";
-import { fakeRequests, idleOperation } from "#tests-support/fake-requests.ts";
+import {
+  fakeRequests,
+  idleOperation,
+  noSubscriptions,
+} from "#tests-support/fake-requests.ts";
 import { NotificationsProvider } from "#web/features/notifications/notifications.tsx";
 import {
   type Environment,
@@ -66,6 +70,7 @@ export function testEnvironment(
   return {
     environmentId: "00000000-0000-4000-8000-000000000100",
     requests: fakeRequests(idleOperation),
+    subscribe: noSubscriptions,
     connected: true,
     readable: true,
     writable: true,

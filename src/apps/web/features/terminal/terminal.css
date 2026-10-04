@@ -1,0 +1,7 @@
+@font-face {
+  font-family: "Symbols Nerd Font Mono";
+  src: url("./symbols-nerd-font-mono.woff2") format("woff2");
+  font-display: block;
+  unicode-range:
+    U+23FB-23FE, U+2665, U+26A1, U+2B58, U+E000-F8FF, U+F0000-FFFFD;
+}

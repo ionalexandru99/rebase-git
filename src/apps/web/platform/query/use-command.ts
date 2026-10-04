@@ -14,6 +14,7 @@ import type {
   RouteInput,
   RouteSuccess,
 } from "#contracts/environment-connection/environment-route.contract.ts";
+import type { RepositoryChangeKind } from "#contracts/environment-connection/environment-rpc.contract.ts";
 import {
   type EnvironmentRequests,
   useEnvironment,
@@ -60,6 +61,7 @@ type AnswerValue<Read extends EnvironmentRoute> =
 
 export interface CommandOptions<Route extends EnvironmentRoute> {
   readonly target?: CommandTarget | undefined;
+  readonly changes?: RepositoryChangeKind;
   readonly before?: (input: RouteInput<Route>) => Promise<boolean>;
   readonly progress?: (percent: number) => void;
   readonly answers?: (
@@ -94,6 +96,7 @@ export function useCommand<Route extends EnvironmentRoute>(
   route: Route,
   {
     target: explicitTarget,
+    changes,
     before,
     progress,
     answers,
@@ -126,6 +129,7 @@ export function useCommand<Route extends EnvironmentRoute>(
       );
       await settle(queryClient, environment.environmentId, input, result, {
         repositoryId: scoped ? inputRepositoryId(input) : null,
+        changes,
         answers,
       });
       return result;
@@ -244,9 +248,11 @@ async function settle<Route extends EnvironmentRoute>(
   result: CommandResult<Route>,
   {
     repositoryId,
+    changes,
     answers,
   }: {
     readonly repositoryId: string | null;
+    readonly changes: RepositoryChangeKind | undefined;
     readonly answers: CommandOptions<Route>["answers"];
   },
 ) {
@@ -261,7 +267,7 @@ async function settle<Route extends EnvironmentRoute>(
       : new Set<string>();
   const waits = result._tag === "Ok" && answered.size === 0;
   const stale = (query: Query) =>
-    !answered.has(query.queryHash) && readsFrom(query, repositoryId);
+    !answered.has(query.queryHash) && readsFrom(query, repositoryId, changes);
   void queryClient.invalidateQueries(
     { predicate: (query) => stale(query) && query.meta?.changes === "index" },
     { cancelRefetch: false },
@@ -319,10 +325,14 @@ function dropOtherVersions(
   });
 }
 
-function readsFrom(query: Query, repositoryId: string | null) {
+function readsFrom(
+  query: Query,
+  repositoryId: string | null,
+  changes: RepositoryChangeKind | undefined,
+) {
   return repositoryId === null
     ? query.meta?.repositoryId === null
-    : invalidatedByChange(query.meta, [repositoryId]);
+    : invalidatedByChange(query.meta, [repositoryId], changes);
 }
 
 function lastOk<Route extends EnvironmentRoute>(

@@ -553,7 +553,7 @@ function Frame({
 }) {
   return (
     <header
-      className={`flex min-h-12 shrink-0 flex-wrap items-center gap-2 border-border/60 border-b py-2 pl-3 ${inset ? "pr-12" : "pr-3"}`}
+      className={`flex min-h-12 shrink-0 flex-wrap items-center gap-2 border-border/60 border-b py-2 pl-3 ${inset ? "pr-20" : "pr-3"}`}
     >
       {children}
     </header>

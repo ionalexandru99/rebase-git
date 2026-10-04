@@ -1,8 +1,10 @@
 import { createContext, type ReactNode, useContext } from "react";
 import type {
   EnvironmentRoute,
+  EnvironmentStreamRoute,
   RouteInput,
   RouteSuccess,
+  StreamValue,
 } from "#contracts/environment-connection/environment-route.contract.ts";
 
 export type EnvironmentAvailability =
@@ -32,6 +34,13 @@ export type EnvironmentRequests = <Route extends EnvironmentRoute>(
   options?: RequestOptions,
 ) => Promise<RouteSuccess<Route>>;
 
+export type EnvironmentSubscriptions = <Route extends EnvironmentStreamRoute>(
+  route: Route,
+  input: RouteInput<Route>,
+  accept: (value: StreamValue<Route>) => void,
+  signal: AbortSignal,
+) => Promise<void>;
+
 export interface RequestOptions {
   readonly signal?: AbortSignal;
   readonly progress?: (percent: number) => void;
@@ -40,6 +49,7 @@ export interface RequestOptions {
 export interface Environment {
   readonly environmentId: string | undefined;
   readonly requests: EnvironmentRequests;
+  readonly subscribe: EnvironmentSubscriptions;
   readonly connected: boolean;
   readonly readable: boolean;
   readonly writable: boolean;

@@ -46,6 +46,7 @@ await Promise.all([
       REBASE_PRODUCT_VERSION: JSON.stringify(packageMetadata.version),
     },
     entryPoints: ["src/apps/server/cli.ts"],
+    external: ["@lydell/node-pty"],
     format: "esm",
     minifySyntax: true,
     outfile: `${outputDirectory}/runtime.js`,

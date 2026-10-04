@@ -32,7 +32,10 @@ import type {
   RepositoryHistoryUpdate,
   SynchronizeRepositoryHistory,
 } from "#contracts/repository-history/repository-history.contract.ts";
-import type { EnvironmentRequests } from "#web/platform/query/environment-context.tsx";
+import type {
+  EnvironmentRequests,
+  EnvironmentSubscriptions,
+} from "#web/platform/query/environment-context.tsx";
 import type { EnvironmentInvalidation } from "#web/platform/query/environment-invalidation.ts";
 import { inputRepositoryId } from "#web/platform/query/environment-query.ts";
 import type { RequestFailure } from "#web/platform/query/request-failure.ts";
@@ -130,6 +133,31 @@ export function environmentRequests(
   };
 }
 
+export function environmentSubscriptions(
+  rpc: EnvironmentRpcClient,
+): EnvironmentSubscriptions {
+  const procedures = rpc as unknown as Record<
+    string,
+    (
+      input: unknown,
+      options: { readonly streamBufferSize: number },
+    ) => Stream.Stream<unknown, unknown>
+  >;
+  return async (route, input, accept, signal) => {
+    const call = procedures[route._tag];
+    if (call === undefined) throw unanswered;
+    const exit = await Effect.runPromiseExit(
+      call(input, { streamBufferSize: 1 }).pipe(
+        Stream.runForEach((value) =>
+          Effect.sync(() => accept(value as Parameters<typeof accept>[0])),
+        ),
+      ),
+      { signal },
+    );
+    if (Exit.isFailure(exit)) throw requestFailure(exit.cause);
+  };
+}
+
 function watchProgress(
   rpc: EnvironmentRpcClient,
   repositoryId: string,
@@ -198,6 +226,10 @@ export async function openEnvironmentSocket(
 const unanswered: RequestFailure<never> = { _tag: "Unanswered" };
 
 export const unavailableRequests: EnvironmentRequests = async () => {
+  throw unanswered;
+};
+
+export const unavailableSubscriptions: EnvironmentSubscriptions = async () => {
   throw unanswered;
 };
 
