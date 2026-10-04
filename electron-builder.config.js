@@ -20,7 +20,7 @@ export default {
   artifactName: `\${productName}-\${version}-\${os}-\${arch}.\${ext}`,
   mac: {
     category: "public.app-category.developer-tools",
-    icon: "src/apps/desktop/assets/icon.png",
+    icon: "src/apps/desktop/assets/icon-mac.png",
     target: ["dmg", "zip"],
     hardenedRuntime: true,
     notarize: Boolean(process.env.APPLE_TEAM_ID),
