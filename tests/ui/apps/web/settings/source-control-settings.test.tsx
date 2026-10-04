@@ -126,6 +126,7 @@ describe("source control settings", () => {
               _tag: "ApiToken",
               email: "octo@example.com",
               account: "octo",
+              missingScopes: ["read:workspace:bitbucket"],
             };
           }),
         ),
@@ -165,6 +166,12 @@ describe("source control settings", () => {
     await expect
       .element(page.getByRole("textbox", { name: "API token" }))
       .not.toBeInTheDocument();
+    await expect.element(page.getByText("Missing scopes")).toBeVisible();
+    await page.getByRole("button", { name: "Bitbucket token" }).click();
+    await page.getByRole("button", { name: "four read scopes" }).hover();
+    await expect
+      .element(page.getByRole("listitem", { name: /missing$/ }))
+      .toHaveTextContent("read:workspace:bitbucket");
     expect(sent).toEqual([
       { _tag: "ApiToken", email: "octo@example.com", token: "wrong" },
       { _tag: "ApiToken", email: "octo@example.com", token: "api-token" },

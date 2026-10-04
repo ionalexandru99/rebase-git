@@ -274,9 +274,15 @@ function TokenRow({
   readonly toggle: ReactNode;
 }) {
   const [open, setOpen] = useState(saved === null);
+  const missingScopes =
+    saved?._tag === "ApiToken" && saved.missingScopes.length > 0;
   return (
     <SettingsRow
-      {...(saved === null ? { badge: "Not authenticated" } : {})}
+      {...(saved === null
+        ? { badge: "Not authenticated" }
+        : missingScopes
+          ? { badge: "Missing scopes" }
+          : {})}
       description={
         saved === null ? (
           "Save an access token or an API token to show pull requests."
@@ -302,7 +308,7 @@ function TokenRow({
         ),
       }}
       icon={icon}
-      status={saved === null ? "attention" : "ready"}
+      status={saved === null || missingScopes ? "attention" : "ready"}
       title={label}
     >
       {toggle}

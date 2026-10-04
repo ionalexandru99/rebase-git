@@ -1,10 +1,11 @@
 import { Effect, Schema } from "effect";
 import type { RouteInput } from "#contracts/environment-connection/environment-route.contract.ts";
 import type { PullRequest } from "#contracts/pull-requests/pull-requests.contract.ts";
-import type {
-  BitbucketToken,
-  BitbucketTokenRejected,
-  SourceControlApi,
+import {
+  type BitbucketToken,
+  type BitbucketTokenRejected,
+  bitbucketApiTokenScopes,
+  type SourceControlApi,
 } from "#contracts/source-control/source-control.contract.ts";
 import { remoteLocation } from "#server/features/repository-refs/git/read-repository-refs.ts";
 import {
@@ -40,10 +41,14 @@ interface BitbucketRepository {
   readonly slug: string;
 }
 
-interface SavedToken {
-  readonly authorization: string;
-  readonly token: BitbucketToken;
-}
+type SavedToken =
+  | { readonly _tag: "AccessToken"; readonly authorization: string }
+  | {
+      readonly _tag: "ApiToken";
+      readonly authorization: string;
+      readonly email: string;
+      readonly account: string;
+    };
 
 const pullRequestsPerBranch = 10;
 const branchesAtOnce = 8;
@@ -61,17 +66,12 @@ export function createBitbucket(
         row === undefined
           ? undefined
           : row.email === null
-            ? {
-                authorization: bearer(row.token),
-                token: { _tag: "AccessToken" },
-              }
+            ? { _tag: "AccessToken", authorization: bearer(row.token) }
             : {
+                _tag: "ApiToken",
                 authorization: basic(row.email, row.token),
-                token: {
-                  _tag: "ApiToken",
-                  email: row.email,
-                  account: row.account ?? row.email,
-                },
+                email: row.email,
+                account: row.account ?? row.email,
               },
       ),
     );
@@ -79,22 +79,24 @@ export function createBitbucket(
   const host: GitHost = {
     kind: "bitbucket",
     tool: saved.pipe(
-      Effect.map((current) => ({
-        _tag: "Token" as const,
-        saved: current?.token ?? null,
-      })),
+      Effect.flatMap((current) =>
+        current === undefined
+          ? Effect.succeed(null)
+          : savedToken(client, current),
+      ),
+      Effect.map((token) => ({ _tag: "Token" as const, saved: token })),
       Effect.orDie,
     ),
     repositoryId: (remoteUrl) => bitbucketRepository(remoteUrl)?.id,
     cloneable: Effect.gen(function* () {
       const current = yield* saved;
-      if (current?.token._tag !== "ApiToken") return [];
+      if (current?._tag !== "ApiToken") return [];
       const repositories = yield* listCloneable(client, current.authorization);
       return [
         {
           kind: "bitbucket" as const,
           host: "bitbucket.org",
-          account: current.token.account,
+          account: current.account,
           repositories,
         },
       ];
@@ -162,6 +164,29 @@ export function createBitbucket(
       )
       .pipe(Effect.asVoid),
   };
+}
+
+function savedToken(
+  client: BitbucketClient,
+  current: SavedToken,
+): Effect.Effect<BitbucketToken> {
+  if (current._tag === "AccessToken")
+    return Effect.succeed({ _tag: "AccessToken" });
+  return client.get(`${bitbucketApi}/user`, current.authorization).pipe(
+    Effect.timeout("5 seconds"),
+    Effect.map(({ scopes = [] }) =>
+      scopes.some((scope) => scope.endsWith(":bitbucket"))
+        ? bitbucketApiTokenScopes.filter((scope) => !scopes.includes(scope))
+        : [],
+    ),
+    Effect.orElseSucceed(() => []),
+    Effect.map((missingScopes) => ({
+      _tag: "ApiToken",
+      email: current.email,
+      account: current.account,
+      missingScopes,
+    })),
+  );
 }
 
 function verify(

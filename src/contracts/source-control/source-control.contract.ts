@@ -16,9 +16,20 @@ const ToolVersion = Schema.String.check(Schema.isMaxLength(256));
 const HostText = Schema.String.check(Schema.isMaxLength(256));
 const HostAccount = Schema.Struct({ host: HostText, account: HostText });
 
+export const bitbucketApiTokenScopes = [
+  "read:repository:bitbucket",
+  "read:pullrequest:bitbucket",
+  "read:user:bitbucket",
+  "read:workspace:bitbucket",
+] as const;
+
 export const BitbucketToken = Schema.Union([
   Schema.TaggedStruct("AccessToken", {}),
-  Schema.TaggedStruct("ApiToken", { email: HostText, account: HostText }),
+  Schema.TaggedStruct("ApiToken", {
+    email: HostText,
+    account: HostText,
+    missingScopes: Schema.Array(Schema.Literals(bitbucketApiTokenScopes)),
+  }),
 ]);
 export type BitbucketToken = typeof BitbucketToken.Type;
 

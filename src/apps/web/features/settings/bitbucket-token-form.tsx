@@ -1,6 +1,8 @@
+import { IconAlertTriangle } from "@tabler/icons-react";
 import { type FormEvent, type ReactNode, useId, useState } from "react";
 import {
   type BitbucketToken,
+  bitbucketApiTokenScopes,
   SourceControlApi,
 } from "#contracts/source-control/source-control.contract.ts";
 import { Button } from "#web/components/ui/button.tsx";
@@ -25,11 +27,14 @@ type Method = BitbucketToken["_tag"];
 
 const methods: Record<
   Method,
-  { readonly label: string; readonly description: ReactNode }
+  {
+    readonly label: string;
+    readonly description: (missing: readonly string[]) => ReactNode;
+  }
 > = {
   AccessToken: {
     label: "Access token",
-    description: (
+    description: () => (
       <>
         Scoped to one repository, project or workspace. Create it in that item's
         Bitbucket settings with{" "}
@@ -43,19 +48,15 @@ const methods: Record<
   },
   ApiToken: {
     label: "API token",
-    description: (
+    description: (missing) => (
       <>
         Uses your Atlassian account, so it reaches every repository you can.
         Create it at https://id.atlassian.com/manage-profile/security/api-tokens
         with{" "}
         <Scopes
           label="four read scopes"
-          scopes={[
-            "read:repository:bitbucket",
-            "read:pullrequest:bitbucket",
-            "read:user:bitbucket",
-            "read:workspace:bitbucket",
-          ]}
+          missing={missing}
+          scopes={bitbucketApiTokenScopes}
         />
         .
       </>
@@ -68,7 +69,7 @@ const tokenFailures = {
     reason === "Invalid"
       ? "Bitbucket did not accept this email and API token."
       : reason === "MissingScope"
-        ? "This API token needs the read:user:bitbucket scope."
+        ? "This API token is missing one of the four read scopes."
         : "Could not reach Bitbucket to check this token. Try again.",
 };
 
@@ -148,7 +149,9 @@ export function BitbucketTokenForm({
           ))}
         </TabsList>
         <p className="max-w-2xl text-xs leading-relaxed text-muted-foreground">
-          {methods[method].description}
+          {methods[method].description(
+            saved?._tag === "ApiToken" ? saved.missingScopes : [],
+          )}
         </p>
         <TabsContent className="grid gap-4" value="AccessToken">
           {tokenField("Access token")}
@@ -204,9 +207,11 @@ export function BitbucketTokenForm({
 function Scopes({
   label,
   scopes,
+  missing = [],
 }: {
   readonly label: string;
   readonly scopes: readonly string[];
+  readonly missing?: readonly string[];
 }) {
   return (
     <Popover>
@@ -215,7 +220,7 @@ function Scopes({
         openOnHover
         render={
           <button
-            className="cursor-help text-foreground/90 underline decoration-muted-foreground/70 decoration-dotted underline-offset-[3px] outline-none focus-visible:rounded-sm focus-visible:ring-2 focus-visible:ring-ring/30"
+            className={`cursor-help underline decoration-muted-foreground/70 decoration-dotted underline-offset-[3px] outline-none focus-visible:rounded-sm focus-visible:ring-2 focus-visible:ring-ring/30 ${missing.length > 0 ? "text-status-connecting" : "text-foreground/90"}`}
             type="button"
           />
         }
@@ -229,11 +234,21 @@ function Scopes({
         sideOffset={4}
       >
         <ul aria-label="Required scopes" className="space-y-0.5">
-          {scopes.map((scope) => (
-            <li className="font-mono text-[.7rem] leading-5" key={scope}>
-              {scope}
-            </li>
-          ))}
+          {scopes.map((scope) => {
+            const isMissing = missing.includes(scope);
+            return (
+              <li
+                aria-label={isMissing ? `${scope} missing` : undefined}
+                className={`flex items-center gap-1.5 font-mono text-[.7rem] leading-5 ${isMissing ? "text-status-connecting" : ""}`}
+                key={scope}
+              >
+                {scope}
+                {isMissing ? (
+                  <IconAlertTriangle aria-hidden="true" className="size-3" />
+                ) : null}
+              </li>
+            );
+          })}
         </ul>
       </PopoverContent>
     </Popover>
