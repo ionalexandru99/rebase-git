@@ -9,9 +9,15 @@ import {
   terminalWriteLimit,
 } from "#contracts/terminal/terminal.contract.ts";
 import { useEnvironment } from "#web/platform/query/environment-context.tsx";
+import { createStore } from "#web/platform/store/store.ts";
+import { useStore } from "#web/platform/store/use-store.ts";
 
 const fontFamily =
   '"JetBrains Mono", "SF Mono", SFMono-Regular, Menlo, Consolas, "DejaVu Sans Mono", "Liberation Mono", "Symbols Nerd Font Mono", monospace';
+
+const defaultFontSize = 12;
+const fontSizeKey = "rebase:terminal-font-size:v1";
+const fontSizeStore = createStore(readFontSize());
 
 interface Surface {
   readonly xterm: Terminal;
@@ -27,6 +33,41 @@ export function isTerminalShortcut(event: KeyboardEvent) {
   );
 }
 
+function zoomStep(event: KeyboardEvent) {
+  if (!(event.ctrlKey || event.metaKey) || event.altKey) return undefined;
+  if (event.key === "=" || event.key === "+") return 1;
+  if (event.key === "-") return -1;
+  if (event.key === "0") return 0;
+  return undefined;
+}
+
+function zoom(event: KeyboardEvent) {
+  const step = zoomStep(event);
+  if (step === undefined) return false;
+  event.preventDefault();
+  if (event.type !== "keydown") return true;
+  const size =
+    step === 0
+      ? defaultFontSize
+      : Math.min(32, Math.max(6, fontSizeStore.getSnapshot() + step));
+  fontSizeStore.set(size);
+  try {
+    localStorage.setItem(fontSizeKey, String(size));
+  } catch {}
+  return true;
+}
+
+function readFontSize() {
+  try {
+    const size = Number(localStorage.getItem(fontSizeKey));
+    return Number.isInteger(size) && size >= 6 && size <= 32
+      ? size
+      : defaultFontSize;
+  } catch {
+    return defaultFontSize;
+  }
+}
+
 export function TerminalView({
   id,
   visible,
@@ -40,6 +81,7 @@ export function TerminalView({
   const host = useRef<HTMLDivElement>(null);
   const offset = useRef(0);
   const [surface, setSurface] = useState<Surface>();
+  const fontSize = useStore(fontSizeStore);
 
   useEffect(() => {
     const element = host.current;
@@ -48,7 +90,7 @@ export function TerminalView({
     const color = (name: string) => style.getPropertyValue(name).trim();
     const xterm = new Terminal({
       fontFamily,
-      fontSize: 12,
+      fontSize: fontSizeStore.getSnapshot(),
       lineHeight: 1.25,
       cursorBlink: false,
       scrollback: 5_000,
@@ -61,7 +103,9 @@ export function TerminalView({
     });
     const fit = new FitAddon();
     xterm.loadAddon(fit);
-    xterm.attachCustomKeyEventHandler((event) => !isTerminalShortcut(event));
+    xterm.attachCustomKeyEventHandler(
+      (event) => !isTerminalShortcut(event) && !zoom(event),
+    );
     xterm.open(element);
     setSurface({ xterm, fit });
     return () => xterm.dispose();
@@ -96,6 +140,7 @@ export function TerminalView({
   useEffect(() => {
     const element = host.current;
     if (surface === undefined || element === null || !visible) return;
+    surface.xterm.options.fontSize = fontSize;
     const resize = sendLatest((size: TerminalSize) =>
       requests(TerminalsApi.resize, { id, ...size }),
     );
@@ -110,7 +155,7 @@ export function TerminalView({
     });
     observer.observe(element);
     return () => observer.disconnect();
-  }, [surface, visible, requests, id]);
+  }, [surface, visible, fontSize, requests, id]);
 
   useEffect(() => {
     if (surface !== undefined && visible && focus > 0) surface.xterm.focus();
