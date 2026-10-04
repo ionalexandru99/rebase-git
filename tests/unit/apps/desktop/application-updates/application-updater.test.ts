@@ -58,6 +58,11 @@ describe("desktop application updater", () => {
     expect(updater.allowDowngrade).toBe(true);
     expect(await updater.isUpdateSupported({ version: "0.0.4" })).toBe(false);
     expect(await updater.isUpdateSupported({ version: "0.0.5" })).toBe(true);
+    expect(
+      await updater.isUpdateSupported({
+        version: "0.0.5-nightly.20261005.147",
+      }),
+    ).toBe(true);
   });
 
   it("publishes download state and installs a ready update", async () => {

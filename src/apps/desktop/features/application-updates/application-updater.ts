@@ -14,7 +14,7 @@ export type DesktopUpdaterEvent =
   | "update-downloaded"
   | "error";
 
-const oldestDowngradeVersion = "0.0.5";
+const oldestDowngradeVersion = "0.0.5-0";
 
 export interface DesktopAutoUpdater {
   allowDowngrade: boolean;
