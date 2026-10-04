@@ -21,8 +21,8 @@ import type { GitHost } from "#server/features/source-control/git-host.ts";
 import {
   type AzureDevOpsClient,
   createAzureDevOpsClient,
-  createAzureDevOpsHost,
-} from "#server/features/source-control/hosts/azure-devops-host.ts";
+} from "#server/features/source-control/hosts/azure-devops-client.ts";
+import { createAzureDevOpsHost } from "#server/features/source-control/hosts/azure-devops-host.ts";
 import {
   type BitbucketClient,
   createBitbucket,

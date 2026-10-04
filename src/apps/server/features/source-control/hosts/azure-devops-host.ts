@@ -1,31 +1,20 @@
 import { Effect, Schema } from "effect";
-import type {
-  PullRequest,
-  PullRequestsUnavailable,
-} from "#contracts/pull-requests/pull-requests.contract.ts";
+import type { PullRequest } from "#contracts/pull-requests/pull-requests.contract.ts";
 import { remoteLocation } from "#server/features/repository-refs/git/read-repository-refs.ts";
 import {
   eachHead,
   type GitHost,
   type HostedPullRequest,
-  hostCommandOutput,
-  hostGet,
   pageAnswer,
   pullRequest,
   signedInTool,
   singleAccount,
-  unavailable,
 } from "#server/features/source-control/git-host.ts";
-
-export interface AzureDevOpsClient {
-  readonly version: Effect.Effect<string | undefined>;
-  readonly account: Effect.Effect<string | undefined>;
-  readonly accessToken: Effect.Effect<string, PullRequestsUnavailable>;
-  readonly get: (
-    url: string,
-    accessToken: string,
-  ) => Effect.Effect<string, PullRequestsUnavailable>;
-}
+import {
+  type AzureDevOpsClient,
+  reader,
+} from "#server/features/source-control/hosts/azure-devops-client.ts";
+import { cloneableRepositories } from "#server/features/source-control/hosts/azure-devops-repositories.ts";
 
 interface AzureRepository {
   readonly id: string;
@@ -34,64 +23,12 @@ interface AzureRepository {
   readonly name: string;
 }
 
-const azureDevOpsResource = "499b84ac-1321-427f-aa17-267ca6975798";
 const pullRequestsPerBranch = 10;
 const branchesAtOnce = 8;
 const checkPolicyTypes = new Set([
   "0609b952-1397-4640-95ec-e00a01b2c241",
   "cbdc66da-9728-4af8-aada-9a5a32e4a226",
 ]);
-
-export function createAzureDevOpsClient(): AzureDevOpsClient {
-  const az = (args: readonly string[]) =>
-    hostCommandOutput("az", args, { shim: true });
-  return {
-    version: az(["version", "--output", "json"]).pipe(
-      Effect.flatMap(
-        Schema.decodeUnknownEffect(
-          Schema.fromJsonString(Schema.Struct({ "azure-cli": Schema.String })),
-        ),
-      ),
-      Effect.map((version) => `azure-cli ${version["azure-cli"]}`),
-      Effect.orElseSucceed(() => undefined),
-    ),
-    account: az([
-      "account",
-      "show",
-      "--query",
-      "user.name",
-      "--output",
-      "tsv",
-    ]).pipe(
-      Effect.map((output) => output.trim() || undefined),
-      Effect.orElseSucceed(() => undefined),
-    ),
-    accessToken: az([
-      "account",
-      "get-access-token",
-      "--resource",
-      azureDevOpsResource,
-      "--query",
-      "accessToken",
-      "--output",
-      "tsv",
-    ]).pipe(
-      Effect.map((output) => output.trim()),
-      Effect.filterOrFail(
-        (token) => token !== "",
-        () => unavailable,
-      ),
-    ),
-    get: (url, accessToken) =>
-      hostGet(url, { authorization: `Bearer ${accessToken}` }).pipe(
-        Effect.flatMap(({ status, body }) =>
-          status >= 200 && status < 300
-            ? Effect.succeed(body)
-            : Effect.fail(unavailable),
-        ),
-      ),
-  };
-}
 
 export function createAzureDevOpsHost(client: AzureDevOpsClient): GitHost {
   return {
@@ -101,6 +38,7 @@ export function createAzureDevOpsHost(client: AzureDevOpsClient): GitHost {
       singleAccount("dev.azure.com", client.account),
     ),
     repositoryId: (remoteUrl) => azureRepository(remoteUrl)?.id,
+    cloneable: cloneableRepositories(client),
     repository: (remoteUrl) => {
       const repository = azureRepository(remoteUrl);
       return Effect.succeed(
@@ -119,15 +57,7 @@ function listPullRequests(
   heads: readonly string[],
 ) {
   return Effect.gen(function* () {
-    const accessToken = yield* client.accessToken;
-    const read = <A>(
-      url: string,
-      decode: (output: string) => Effect.Effect<A, unknown>,
-    ) =>
-      client.get(url, accessToken).pipe(
-        Effect.flatMap(decode),
-        Effect.mapError(() => unavailable),
-      );
+    const read = reader(client, yield* client.accessToken);
     const checks = (node: PullRequestNode) =>
       node.status === "active"
         ? read(evaluationsUrl(repository, node), decodeEvaluations).pipe(

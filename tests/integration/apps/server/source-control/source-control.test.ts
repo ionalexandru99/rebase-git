@@ -191,6 +191,42 @@ describe("source control", () => {
     ]);
   });
 
+  it("lists Azure DevOps repositories to clone from every organization over SSH, skipping disabled ones", async () => {
+    const f = await fixture({
+      azureDevOps: {
+        organizations: {
+          acme: [
+            { project: "Rebase App", name: "rebase" },
+            { project: "Rebase App", name: "archive", disabled: true },
+          ],
+          octo: [
+            { project: "Tools", name: "scripts", public: true, ssh: false },
+          ],
+        },
+      },
+    });
+
+    const hosts = await f.cloneable();
+
+    expect(hosts.find(({ kind }) => kind === "azure-devops")).toEqual({
+      kind: "azure-devops",
+      host: "dev.azure.com",
+      account: "octo@example.com",
+      repositories: [
+        {
+          name: "acme/Rebase App/rebase",
+          url: "git@ssh.dev.azure.com:v3/acme/Rebase%20App/rebase",
+          private: true,
+        },
+        {
+          name: "octo/Tools/scripts",
+          url: "https://octo@dev.azure.com/octo/Tools/_git/scripts",
+          private: false,
+        },
+      ],
+    });
+  });
+
   it("reports a missing or signed out GitHub CLI", async () => {
     const missing = await fixture({ github: { version: null } });
     const signedOut = await fixture({ github: { account: null } });
@@ -282,11 +318,13 @@ async function fixture({
     accounts: { "gitlab.com": "tanuki", "git.example.com": "tanuki" },
   },
   forgejo = {},
+  azureDevOps,
 }: {
   readonly github?: Parameters<typeof fakeGitHub>[1];
   readonly bitbucket?: Parameters<typeof fakeBitbucket>[1];
   readonly gitlab?: Parameters<typeof fakeGitLab>[1];
   readonly forgejo?: Parameters<typeof fakeForgejo>[1];
+  readonly azureDevOps?: Parameters<typeof fakeAzureDevOps>[1];
 } = {}) {
   const { github, requests } = fakeGitHub(
     { main: [{ number: 1 }] },
@@ -297,7 +335,10 @@ async function fixture({
     gitHosts: {
       bitbucket: bitbucket.bitbucket,
       github,
-      azureDevOps: fakeAzureDevOps({}).azureDevOps,
+      azureDevOps: fakeAzureDevOps(
+        azureDevOps === undefined ? null : {},
+        azureDevOps,
+      ).azureDevOps,
       gitlab: fakeGitLab(null, gitlab).gitlab,
       forgejo: fakeForgejo(null, {
         logins: [
