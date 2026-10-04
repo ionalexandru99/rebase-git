@@ -1,5 +1,6 @@
 import { Effect } from "effect";
 import {
+  type ChangesMutated,
   type ChangesScope,
   type ChangesWritten,
   type CommitChanges,
@@ -8,6 +9,7 @@ import {
   type ReadChangeDiff,
   type RepositoryChanges,
   RepositoryChangesApi,
+  type UndoDiscard,
   type ViewedChange,
 } from "#contracts/repository-changes/repository-changes.contract.ts";
 import type { EnvironmentFeature } from "#server/adapters/environment-transport/environment-routes.ts";
@@ -24,7 +26,11 @@ import {
   worktreeIdentities,
 } from "#server/features/repository-changes/git/change-files.ts";
 import { withChangeIndex } from "#server/features/repository-changes/git/change-index.ts";
-import { mutateChanges } from "#server/features/repository-changes/git/mutate-changes.ts";
+import {
+  restoreDiscarded,
+  snapshotChanges,
+} from "#server/features/repository-changes/git/discard-snapshot.ts";
+import { planChanges } from "#server/features/repository-changes/git/mutate-changes.ts";
 import { readChangeDiff } from "#server/features/repository-changes/git/read-change-diff.ts";
 import { readChanges } from "#server/features/repository-changes/git/read-changes.ts";
 import { atRebaseEditStop } from "#server/repository/repository-coordination.ts";
@@ -54,20 +60,42 @@ export function mutateRepositoryChanges(
   command: MutateChanges,
   git: GitCommandRunner,
 ) {
+  const directory = command.worktreePath;
   return Effect.gen(function* () {
-    yield* withChangeIndex(git, command.worktreePath, (indexFile) =>
+    const discarded = yield* withChangeIndex(git, directory, (indexFile) =>
       Effect.gen(function* () {
         const current = yield* verifyChanges(git, command);
-        const unchanged = verifyChangedFiles(
-          command.worktreePath,
-          current.files,
+        const unchanged = verifyChangedFiles(directory, current.files);
+        const { touched, apply } = yield* planChanges(
+          git,
+          { indexFile },
+          command,
+          current,
+          unchanged,
         );
-        yield* mutateChanges(git, { indexFile }, command, current, unchanged);
-        if (command.action !== "discard") yield* unchanged;
+        if (command.action !== "discard")
+          return yield* apply.pipe(Effect.andThen(unchanged), Effect.as(null));
+        const capture = snapshotChanges(git, directory, indexFile, {
+          paths: touched,
+          conflicted: conflictedPaths(current.snapshot),
+        });
+        const before = yield* capture;
+        yield* apply;
+        return { before, after: yield* capture };
       }),
     );
-    return yield* readWritten(git, command, command.viewed);
+    const written = yield* readWritten(git, command, command.viewed);
+    return { ...written, discarded } satisfies ChangesMutated;
   });
+}
+
+export function undoRepositoryDiscard(
+  command: UndoDiscard,
+  git: GitCommandRunner,
+) {
+  return withChangeIndex(git, command.worktreePath, (indexFile) =>
+    restoreDiscarded(git, command.worktreePath, indexFile, command.discarded),
+  ).pipe(Effect.andThen(() => readWritten(git, command, command.viewed)));
 }
 
 export function commitRepositoryChanges(
@@ -155,6 +183,16 @@ function readWritten(
   });
 }
 
+function conflictedPaths(snapshot: RepositoryChanges) {
+  return [
+    ...new Set(
+      [...snapshot.unstaged, ...snapshot.staged]
+        .filter((file) => file.status === "U")
+        .map((file) => file.path),
+    ),
+  ];
+}
+
 function previousPathOf(snapshot: RepositoryChanges, viewed: ViewedChange) {
   return (
     snapshot[viewed.section].find((file) => file.path === viewed.path)
@@ -220,6 +258,15 @@ export function repositoryChangesFeature(
               : { allowWhen: (operation) => operation.kind !== "unknown" },
         }),
         mutateRepositoryChanges,
+      ),
+      command(
+        api.undoDiscard,
+        () => ({
+          name: "undo the discard",
+          locks: { worktree: "wait" },
+          duringOperation: "block",
+        }),
+        undoRepositoryDiscard,
       ),
       command(
         api.commit,

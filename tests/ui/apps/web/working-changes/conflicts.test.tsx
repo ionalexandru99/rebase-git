@@ -130,7 +130,7 @@ async function fixture() {
     respond(RepositoryChangesApi.read, () => changes()),
     respond(RepositoryChangesApi.mutate, (command) => {
       mutations.push(command);
-      return { changes: changes(), diff: null };
+      return { changes: changes(), diff: null, discarded: null };
     }),
     respond(RepositoryConflictsApi.list, () => list()),
     respond(RepositoryConflictsApi.document, ({ path }) => document(path)),

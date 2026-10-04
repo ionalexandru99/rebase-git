@@ -11,6 +11,7 @@ import {
   type MutateChanges,
   type RepositoryChanges,
   RepositoryChangesApi,
+  type UndoDiscard,
 } from "#contracts/repository-changes/repository-changes.contract.ts";
 import type { ChangeDiff } from "#contracts/repository-comparison/repository-comparison.contract.ts";
 import {
@@ -22,6 +23,7 @@ import {
 import {
   changeDiff,
   changedFile,
+  discardedChanges,
   repositoryChanges,
 } from "#tests-support/fixtures.ts";
 import { render, testChanges } from "#tests-support/render.tsx";
@@ -75,6 +77,7 @@ async function fixture(
   let diffs = initialDiffs;
   const mutations: MutateChanges[] = [];
   const commits: CommitChanges[] = [];
+  const undos: UndoDiscard[] = [];
   let commitFailure: ChangesFailure | RepositoryRejected | undefined;
   let rejectAmendReads = false;
   let diffsRejected = rejectDiffs;
@@ -115,7 +118,15 @@ async function fixture(
           snapshot[command.viewed.section].length > 0
             ? (afterWrite ?? diff)
             : null,
+        discarded:
+          command.action === "discard"
+            ? discardedChanges(String(mutations.length))
+            : null,
       };
+    }),
+    respond(RepositoryChangesApi.undoDiscard, (command) => {
+      undos.push(command);
+      return { changes: snapshot, diff: null };
     }),
     respond(RepositoryChangesApi.commit, async (command) => {
       commits.push(command);
@@ -155,6 +166,7 @@ async function fixture(
     queryClient,
     mutations,
     commits,
+    undos,
     reads: () => reads,
     diffReads: () => diffReads,
     emitChange: () => {
@@ -475,9 +487,6 @@ describe("working changes", () => {
     await page
       .getByRole("button", { name: "Discard hunk", exact: true })
       .click();
-    await expect.element(page.getByRole("alertdialog")).toBeVisible();
-    expect(f.mutations).toHaveLength(0);
-    await page.getByRole("button", { name: "Discard", exact: true }).click();
     await expect.poll(() => f.mutations.length).toBe(1);
     expect(f.mutations[0]).toMatchObject({
       action: "discard",
@@ -496,14 +505,37 @@ describe("working changes", () => {
       .element(page.getByRole("button", { name: "Stage hunk", exact: true }))
       .toBeEnabled();
   });
-  it("confirms discard and retains the commit draft on failure", async () => {
+  it("discards without asking and undoes one discard per Ctrl+Z outside text fields", async () => {
     const f = await fixture();
-    await page
-      .getByRole("button", { name: `Discard unstaged ${path}`, exact: true })
-      .click();
-    await expect.element(page.getByRole("alertdialog")).toBeVisible();
-    expect(f.mutations).toHaveLength(0);
-    await page.getByRole("button", { name: "Cancel", exact: true }).click();
+    const discard = page.getByRole("button", {
+      name: `Discard unstaged ${path}`,
+      exact: true,
+    });
+    await discard.click();
+    await expect.poll(() => f.mutations.length).toBe(1);
+    await discard.click();
+    await expect
+      .element(page.getByRole("status"))
+      .toHaveTextContent("Discarded read-status.ts, Ctrl+Z to undo");
+
+    await page.getByRole("textbox", { name: "Commit subject" }).click();
+    await userEvent.keyboard("{Control>}z{/Control}");
+    expect(page.getByRole("status").query()).not.toBeNull();
+    (document.activeElement as HTMLElement).blur();
+    await userEvent.keyboard("{Control>}z{/Control}");
+    await expect
+      .poll(() => f.undos.map(({ discarded }) => discarded))
+      .toEqual([discardedChanges("2")]);
+    await expect.element(page.getByRole("status")).toBeVisible();
+    await userEvent.keyboard("{Control>}z{/Control}");
+
+    await expect
+      .poll(() => f.undos.map(({ discarded }) => discarded))
+      .toEqual([discardedChanges("2"), discardedChanges("1")]);
+    await expect.element(page.getByRole("status")).not.toBeInTheDocument();
+  });
+  it("retains the commit draft on failure", async () => {
+    const f = await fixture();
     await stageAll();
     await page
       .getByRole("textbox", { name: "Commit subject" })
@@ -570,7 +602,6 @@ describe("working changes", () => {
     await page
       .getByRole("button", { name: `Discard unstaged ${path}`, exact: true })
       .click();
-    await page.getByRole("button", { name: "Discard", exact: true }).click();
     await expect.poll(() => f.mutations.length).toBe(1);
     await expect
       .element(page.getByRole("button", { name: "Stage entire file" }))
@@ -584,7 +615,6 @@ describe("working changes", () => {
       await page
         .getByRole("button", { name: `Discard unstaged ${path}`, exact: true })
         .click();
-      await page.getByRole("button", { name: "Discard", exact: true }).click();
       await expect.poll(() => f.mutations.length).toBe(write);
       await expect
         .element(page.getByRole("button", { name: "Stage entire file" }))

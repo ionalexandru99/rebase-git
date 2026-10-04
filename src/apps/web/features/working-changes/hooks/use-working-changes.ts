@@ -102,7 +102,16 @@ export function useChangeActions(target: CommandTarget) {
     answers: (written, input) =>
       changesAnswers({ ...input, amend: false }, written),
   });
-  return { mutate, commit, busy: mutate.running || commit.running };
+  const undoDiscard = useCommand(RepositoryChangesApi.undoDiscard, {
+    target,
+    answers: (written, input) => changesAnswers(input, written),
+  });
+  return {
+    mutate,
+    commit,
+    undoDiscard,
+    busy: mutate.running || commit.running || undoDiscard.running,
+  };
 }
 
 function changesAnswers(scope: WrittenScope, written: ChangesWritten) {

@@ -101,7 +101,7 @@ export function LineCounts({
   );
 }
 
-function fileName(path: string) {
+export function fileName(path: string) {
   return path.slice(path.lastIndexOf("/") + 1);
 }
 

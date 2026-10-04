@@ -100,7 +100,7 @@ export function ChangeFileSection({
       ),
       {
         id: "discard",
-        label: "Discard…",
+        label: "Discard",
         enabled: !disabled,
         group: "delete",
         run: () => act("discard", section, files),

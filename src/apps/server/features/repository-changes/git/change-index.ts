@@ -69,7 +69,7 @@ export function withChangeIndex<A, E>(
   );
 }
 
-async function copyIndex(index: string, temporary: string) {
+export async function copyIndex(index: string, temporary: string) {
   const { atime, mtime } = await stat(index);
   await copyFile(index, temporary);
   await utimes(temporary, atime, mtime);

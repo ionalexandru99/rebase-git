@@ -6,6 +6,7 @@ import {
   mkdtemp,
   readdir,
   readFile,
+  rm,
   utimes,
   writeFile,
 } from "node:fs/promises";
@@ -16,6 +17,7 @@ import { Effect } from "effect";
 import { describe, expect, it } from "vite-plus/test";
 import {
   type ChangeSelection,
+  type ChangesMutated,
   type ChangesScope,
   type MutateChanges,
   RepositoryChangesApi,
@@ -90,7 +92,11 @@ async function fixture(
         selection,
       }),
     );
-  return { directory, git, service, scope, read, diff, mutate };
+  const undo = ({ discarded }: ChangesMutated) => {
+    if (discarded === null) throw new Error("Nothing was discarded.");
+    return Effect.runPromise(service.undoDiscard({ ...scope, discarded }));
+  };
+  return { directory, git, service, scope, read, diff, mutate, undo };
 }
 
 describe("working changes through Git", () => {
@@ -368,6 +374,78 @@ describe("working changes through Git", () => {
     expect(await readFile(join(f.directory, "file.txt"), "utf8")).toBe(
       before.replace("line 23\n", "UNSTAGED\n"),
     );
+  });
+  it("undoes staged, unstaged and untracked discards", async () => {
+    const f = await fixture();
+    const file = join(f.directory, "file.txt");
+    const created = join(f.directory, "new.bin");
+    const lines = Array.from({ length: 25 }, (_, i) => `line ${i}\n`).join("");
+    const staged = lines.replace("line 1\n", "STAGED\n");
+    const edited = staged.replace("line 23\n", "UNSTAGED\n");
+    await writeFile(file, lines);
+    await f.git("commit", "-am", "Long file");
+    await writeFile(file, staged);
+    await f.git("add", "file.txt");
+    await writeFile(file, edited);
+    await writeFile(created, Buffer.from([0, 255, 1]));
+    const before = await f.read();
+
+    const first = await f.mutate("discard", "staged");
+    await f.undo(first);
+    const second = await f.mutate("discard", "unstaged");
+    await expect(access(created)).rejects.toThrow();
+    const undone = await f.undo(second);
+
+    expect(undone.changes).toMatchObject({
+      staged: before.staged,
+      unstaged: before.unstaged,
+    });
+    expect(await readFile(file, "utf8")).toBe(edited);
+    expect(await readFile(created)).toEqual(Buffer.from([0, 255, 1]));
+  });
+  it("undoes a discard byte for byte when Git converts line endings", async () => {
+    const f = await fixture();
+    await f.git("config", "core.autocrlf", "true");
+    await f.git("config", "core.safecrlf", "true");
+    const edited = "one\nTWO\nthree\n";
+    const mixed = "lf\ncrlf\r\n";
+    await writeFile(join(f.directory, "file.txt"), edited);
+    await writeFile(join(f.directory, "mixed.txt"), mixed);
+
+    await f.undo(await f.mutate("discard", "unstaged"));
+
+    expect(await readFile(join(f.directory, "file.txt"), "utf8")).toBe(edited);
+    expect(await readFile(join(f.directory, "mixed.txt"), "utf8")).toBe(mixed);
+  });
+  it("discards a deleted file whose folder was replaced by a file", async () => {
+    const f = await fixture();
+    await mkdir(join(f.directory, "folder"));
+    await writeFile(join(f.directory, "folder", "file.txt"), "tracked\n");
+    await f.git("add", ".");
+    await f.git("commit", "-m", "Folder");
+    await rm(join(f.directory, "folder"), { recursive: true });
+    await writeFile(join(f.directory, "folder"), "file now\n");
+
+    await f.mutate("discard", "unstaged", {
+      _tag: "Files",
+      paths: ["folder/file.txt"],
+    });
+
+    expect(
+      await readFile(join(f.directory, "folder", "file.txt"), "utf8"),
+    ).toBe("tracked\n");
+  });
+  it("refuses to undo a discard over later edits", async () => {
+    const f = await fixture();
+    const file = join(f.directory, "file.txt");
+    await writeFile(file, "one\nDISCARDED\nthree\n");
+    const discard = await f.mutate("discard", "unstaged");
+    await writeFile(file, "one\nLATER\nthree\n");
+
+    await expect(f.undo(discard)).rejects.toMatchObject({
+      reason: "Conflict",
+    });
+    expect(await readFile(file, "utf8")).toBe("one\nLATER\nthree\n");
   });
   it("rejects overlapping staged discard without changing either version", async () => {
     const f = await fixture();

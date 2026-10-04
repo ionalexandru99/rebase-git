@@ -14,7 +14,7 @@ import {
 import { safeChangePath } from "#server/features/repository-changes/git/change-files.ts";
 import { readChangeDiff } from "#server/features/repository-changes/git/read-change-diff.ts";
 
-export function mutateChanges<E>(
+export function planChanges<E>(
   git: GitCommandRunner,
   index: GitCommandOptions,
   command: MutateChanges,
@@ -40,7 +40,7 @@ export function mutateChanges<E>(
         : selection._tag === "Files"
           ? [...new Set(selection.paths)]
           : [selection.path];
-    if (paths.length === 0) return;
+    if (paths.length === 0) return { touched: [], apply: Effect.void };
     for (const path of paths) {
       const file = files.find((file) => file.path === path);
       if (file === undefined)
@@ -60,6 +60,30 @@ export function mutateChanges<E>(
       yield* safeChangePath(command.worktreePath, path);
     }
     const sources = renameSources(files, paths);
+    return {
+      touched: [...paths, ...sources],
+      apply: applyMutation(
+        git,
+        index,
+        command,
+        { snapshot, base },
+        { paths, sources },
+        verify,
+      ),
+    };
+  });
+}
+
+function applyMutation<E>(
+  git: GitCommandRunner,
+  index: GitCommandOptions,
+  command: MutateChanges,
+  { snapshot, base }: { snapshot: RepositoryChanges; base: string },
+  { paths, sources }: { paths: readonly string[]; sources: readonly string[] },
+  verify: Effect.Effect<void, E>,
+) {
+  return Effect.gen(function* () {
+    const selection = command.selection;
     if (selection._tag === "Lines") {
       const diff = yield* readChangeDiff(
         git,
