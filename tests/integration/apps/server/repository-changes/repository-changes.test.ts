@@ -6,6 +6,7 @@ import {
   mkdtemp,
   readdir,
   readFile,
+  rm,
   utimes,
   writeFile,
 } from "node:fs/promises";
@@ -415,6 +416,24 @@ describe("working changes through Git", () => {
 
     expect(await readFile(join(f.directory, "file.txt"), "utf8")).toBe(edited);
     expect(await readFile(join(f.directory, "mixed.txt"), "utf8")).toBe(mixed);
+  });
+  it("discards a deleted file whose folder was replaced by a file", async () => {
+    const f = await fixture();
+    await mkdir(join(f.directory, "folder"));
+    await writeFile(join(f.directory, "folder", "file.txt"), "tracked\n");
+    await f.git("add", ".");
+    await f.git("commit", "-m", "Folder");
+    await rm(join(f.directory, "folder"), { recursive: true });
+    await writeFile(join(f.directory, "folder"), "file now\n");
+
+    await f.mutate("discard", "unstaged", {
+      _tag: "Files",
+      paths: ["folder/file.txt"],
+    });
+
+    expect(
+      await readFile(join(f.directory, "folder", "file.txt"), "utf8"),
+    ).toBe("tracked\n");
   });
   it("refuses to undo a discard over later edits", async () => {
     const f = await fixture();

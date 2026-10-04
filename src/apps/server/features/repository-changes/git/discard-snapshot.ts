@@ -126,8 +126,13 @@ export function restoreDiscarded(
         ["apply", "--cached", "--whitespace=nowarn"],
         { indexFile, input: staged },
       ).pipe(Effect.mapError(changedSinceDiscard));
-    for (const { path, to } of changed)
-      yield* writeEntry(git, directory, path, to);
+    const contents = yield* Effect.forEach(changed, ({ to }) =>
+      to === null ? Effect.succeed(null) : readBlob(git, directory, to.oid),
+    );
+    yield* changeIo(async () => {
+      for (const [index, { path, to }] of changed.entries())
+        await writeEntry(join(directory, path), to, contents[index] ?? null);
+    });
   });
 }
 
@@ -141,7 +146,8 @@ function readWorktree(
       Promise.all(
         paths.map((path) =>
           lstat(join(directory, path)).catch((error) => {
-            if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
+            const { code } = error as NodeJS.ErrnoException;
+            if (code === "ENOENT" || code === "ENOTDIR") return null;
             throw error;
           }),
         ),
@@ -220,37 +226,26 @@ function changedEntries(
   );
 }
 
-function writeEntry(
-  git: GitCommandRunner,
-  directory: string,
-  path: string,
+function readBlob(git: GitCommandRunner, directory: string, oid: string) {
+  return runRepositoryGit(git, directory, ["cat-file", "blob", oid], {
+    outputEncoding: "base64",
+    maxOutputBytes: blobBytesLimit,
+  }).pipe(Effect.map((output) => Buffer.from(output, "base64")));
+}
+
+async function writeEntry(
+  target: string,
   entry: TreeEntry | null,
+  bytes: Buffer | null,
 ) {
-  return Effect.gen(function* () {
-    const target = join(directory, path);
-    const bytes =
-      entry === null
-        ? null
-        : Buffer.from(
-            yield* runRepositoryGit(
-              git,
-              directory,
-              ["cat-file", "blob", entry.oid],
-              { outputEncoding: "base64", maxOutputBytes: blobBytesLimit },
-            ),
-            "base64",
-          );
-    yield* changeIo(async () => {
-      await rm(target, { force: true });
-      if (entry === null || bytes === null) return;
-      await mkdir(dirname(target), { recursive: true });
-      if (entry.mode === "120000") await symlink(bytes.toString(), target);
-      else
-        await writeFile(target, bytes, {
-          mode: entry.mode === "100755" ? 0o755 : 0o644,
-        });
+  await rm(target, { force: true });
+  if (entry === null || bytes === null) return;
+  await mkdir(dirname(target), { recursive: true });
+  if (entry.mode === "120000") await symlink(bytes.toString(), target);
+  else
+    await writeFile(target, bytes, {
+      mode: entry.mode === "100755" ? 0o755 : 0o644,
     });
-  });
 }
 
 function same(current: WorktreeEntry | undefined, expected: TreeEntry | null) {
