@@ -121,11 +121,13 @@ describe("terminal panel", () => {
     const columns = () => server.sizes.at(-1)?.cols ?? 0;
     const initial = columns();
 
-    await userEvent.keyboard("{Control>}=={/Control}");
+    await userEvent.keyboard("{Control>}={/Control}");
     await expect.poll(columns).toBeLessThan(initial);
     const zoomedIn = columns();
     await userEvent.keyboard("{Control>}-{/Control}");
-    await expect.poll(columns).toBeGreaterThan(zoomedIn);
+    await expect.poll(columns).toBe(initial);
+    await userEvent.keyboard("{Control>}={/Control}");
+    await expect.poll(columns).toBe(zoomedIn);
     await userEvent.keyboard("{Control>}0{/Control}");
     await expect.poll(columns).toBe(initial);
 
