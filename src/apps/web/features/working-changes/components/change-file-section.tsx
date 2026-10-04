@@ -34,6 +34,23 @@ export const changeSectionLooks: Record<ChangeSection, SectionLook> = {
   staged: { Icon: IconCircleCheck, className: "text-emerald-300" },
 };
 
+export function ChangeCount({
+  section,
+  count,
+}: {
+  readonly section: ChangeSection;
+  readonly count: number;
+}) {
+  if (count === 0) return null;
+  const { Icon, className } = changeSectionLooks[section];
+  return (
+    <span className={`flex items-center gap-0.5 tabular-nums ${className}`}>
+      <Icon aria-hidden="true" className="size-3.5" />
+      {count}
+    </span>
+  );
+}
+
 export function ChangeFileSection({
   view,
   section,

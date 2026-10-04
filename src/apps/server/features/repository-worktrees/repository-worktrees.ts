@@ -20,6 +20,7 @@ import {
   type GitFailed,
   runRepositoryGit,
 } from "#server/adapters/local-git/git-commands.ts";
+import { conflicted } from "#server/features/repository-changes/git/read-changes.ts";
 import { branchWriteFailed } from "#server/features/repository-refs/git/branches/branch-failures.ts";
 import {
   readBranchTarget,
@@ -83,7 +84,7 @@ export function readWorktreeStatus(git: GitCommandRunner, directory: string) {
           .filter((worktree) => worktree.missing !== true)
           .map((worktree) =>
             countChanges(git, worktree.path).pipe(
-              Effect.map((changes) => ({ path: worktree.path, changes })),
+              Effect.map((counts) => ({ path: worktree.path, ...counts })),
             ),
           ),
         { concurrency: 4 },
@@ -170,8 +171,11 @@ export function removeWorktree(
       ))
     )
       return yield* Effect.fail(rejected("Unsaved"));
-    const changes =
-      worktree.missing === true ? 0 : yield* countChanges(git, worktree.path);
+    const { unstaged, staged } =
+      worktree.missing === true
+        ? { unstaged: 0, staged: 0 }
+        : yield* countChanges(git, worktree.path);
+    const changes = unstaged + staged;
     if (changes > 0 && changes !== command.changes)
       return yield* Effect.fail<WorktreeChanged>({
         _tag: "WorktreeChanged",
@@ -306,9 +310,18 @@ function countChanges(git: GitCommandRunner, directory: string) {
     "--no-renames",
     "--untracked-files=normal",
   ]).pipe(
-    Effect.map(
-      (output) => output.split("\0").filter((entry) => entry.length > 0).length,
-    ),
+    Effect.map((output) => {
+      const codes = output
+        .split("\0")
+        .filter((entry) => entry.length > 0)
+        .map((entry) => entry.slice(0, 2));
+      return {
+        unstaged: codes.filter((xy) => xy[1] !== " ").length,
+        staged: codes.filter(
+          (xy) => xy[0] !== " " && xy[0] !== "?" && !conflicted(xy),
+        ).length,
+      };
+    }),
   );
 }
 

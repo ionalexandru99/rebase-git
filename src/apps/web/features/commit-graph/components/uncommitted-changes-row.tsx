@@ -1,4 +1,3 @@
-import type { ChangeSection } from "#contracts/repository-changes/repository-changes.contract.ts";
 import { graphNodeColor } from "#web/features/commit-graph/layout/graph-colors.ts";
 import {
   commitGraphNodePosition,
@@ -6,7 +5,7 @@ import {
   graphRowHeight,
 } from "#web/features/commit-graph/layout/graph-geometry.ts";
 import type { CommitLaneRow } from "#web/features/repository-history/commit-lanes.ts";
-import { changeSectionLooks } from "#web/features/working-changes/components/change-file-section.tsx";
+import { ChangeCount } from "#web/features/working-changes/components/change-file-section.tsx";
 import { splitConflicts } from "#web/features/working-changes/conflicts/hooks/use-conflicts.ts";
 import { useWorkingChanges } from "#web/features/working-changes/hooks/use-working-changes.ts";
 import { useRepositoryScope } from "#web/platform/query/repository-scope.tsx";
@@ -122,8 +121,8 @@ export function UncommittedChangesRow({
           </svg>
           <span className="flex min-w-0 items-center gap-2.5 pl-1">
             <span className="italic">Uncommitted changes</span>
-            <SectionCount section="unstaged" count={changes.unstaged} />
-            <SectionCount section="staged" count={changes.staged} />
+            <ChangeCount section="unstaged" count={changes.unstaged} />
+            <ChangeCount section="staged" count={changes.staged} />
           </span>
         </button>
       </td>
@@ -150,23 +149,6 @@ export function UncommittedChangesLine({
         backgroundImage: `repeating-linear-gradient(${link.color} 0 3px, transparent 3px 5.5px)`,
       }}
     />
-  );
-}
-
-function SectionCount({
-  section,
-  count,
-}: {
-  readonly section: ChangeSection;
-  readonly count: number;
-}) {
-  if (count === 0) return null;
-  const { Icon, className } = changeSectionLooks[section];
-  return (
-    <span className={`flex items-center gap-0.5 tabular-nums ${className}`}>
-      <Icon aria-hidden="true" className="size-3.5" />
-      {count}
-    </span>
   );
 }
 

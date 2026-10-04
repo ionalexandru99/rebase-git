@@ -32,7 +32,8 @@ export interface WorktreeRow {
   readonly worktree: RepositoryWorktree;
   readonly name: string;
   readonly detail: string;
-  readonly changes: number | undefined;
+  readonly unstaged: number;
+  readonly staged: number;
   readonly active: boolean;
 }
 
@@ -46,18 +47,21 @@ export function worktreeRows(
   activePath: string,
   status: RepositoryWorktreeStatus | undefined,
 ): readonly WorktreeRow[] {
-  return refs.worktrees.map((worktree) => ({
-    worktree,
-    name: worktreeName(worktree.path),
-    detail:
-      worktree.missing === true
-        ? "Folder missing"
-        : (worktree.head.branch ??
-          `Detached at ${worktree.head.commit.slice(0, 7)}`),
-    changes: status?.worktrees.find(({ path }) => path === worktree.path)
-      ?.changes,
-    active: worktree.path === activePath,
-  }));
+  return refs.worktrees.map((worktree) => {
+    const counts = status?.worktrees.find(({ path }) => path === worktree.path);
+    return {
+      worktree,
+      name: worktreeName(worktree.path),
+      detail:
+        worktree.missing === true
+          ? "Folder missing"
+          : (worktree.head.branch ??
+            `Detached at ${worktree.head.commit.slice(0, 7)}`),
+      unstaged: counts?.unstaged ?? 0,
+      staged: counts?.staged ?? 0,
+      active: worktree.path === activePath,
+    };
+  });
 }
 
 function useWorktreeQueries(enabled: boolean) {
@@ -102,7 +106,10 @@ export function useWorktrees(open: boolean) {
   const unlock = useCommand(RepositoryWorktreesApi.unlock, { target });
   const errorToast = useErrorToast();
   const statusToast = useStatusToast();
-  const [confirming, setConfirming] = useState<WorktreeRow>();
+  const [confirming, setConfirming] = useState<{
+    readonly row: WorktreeRow;
+    readonly changes: number;
+  }>();
   const removeNow = useCallback(
     async (row: WorktreeRow, changes: number) => {
       setConfirming(undefined);
@@ -119,7 +126,7 @@ export function useWorktrees(open: boolean) {
       const changed = rejection(result);
       if (changed?._tag === "WorktreeChanged") {
         statusToast.close("removeWorktree");
-        setConfirming({ ...row, changes: changed.changes });
+        setConfirming({ row, changes: changed.changes });
         return;
       }
       errorToast.failure("removeWorktree", result, worktreeFailureMessages);
@@ -146,7 +153,8 @@ export function useWorktrees(open: boolean) {
       });
     },
     remove: (row: WorktreeRow) => {
-      if ((row.changes ?? 0) > 0) setConfirming(row);
+      const changes = row.unstaged + row.staged;
+      if (changes > 0) setConfirming({ row, changes });
       else void removeNow(row, 0);
     },
     unlock: async (row: WorktreeRow) =>
@@ -156,11 +164,11 @@ export function useWorktrees(open: boolean) {
       ),
     switchTo: (row: WorktreeRow) => scope?.switchWorktree(row.worktree.path),
     confirmation: {
-      row: confirming,
+      row: confirming?.row,
       busy: remove.running,
       confirm: () => {
         if (confirming !== undefined)
-          void removeNow(confirming, confirming.changes ?? 0);
+          void removeNow(confirming.row, confirming.changes);
       },
       cancel: () => setConfirming(undefined),
     },

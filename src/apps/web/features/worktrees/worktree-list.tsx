@@ -14,6 +14,7 @@ import {
 import { Input } from "#web/components/ui/input.tsx";
 import { writeClipboardText } from "#web/features/clipboard/write-clipboard-text.ts";
 import { useErrorToast } from "#web/features/notifications/notifications.tsx";
+import { ChangeCount } from "#web/features/working-changes/components/change-file-section.tsx";
 import {
   type WorktreeRow,
   type Worktrees,
@@ -211,7 +212,8 @@ function WorktreeOption({
           row.name,
           row.detail,
           ...(worktree.locked === undefined ? [] : ["locked"]),
-          ...(row.changes ? [`${row.changes} uncommitted changes`] : []),
+          ...(row.unstaged === 0 ? [] : [`${row.unstaged} unstaged`]),
+          ...(row.staged === 0 ? [] : [`${row.staged} staged`]),
         ].join(", ")}
         aria-selected={highlighted}
         className={`flex h-10 min-w-0 flex-1 cursor-default items-center gap-2 rounded-[.35rem] px-2 text-left outline-none ${highlighted ? "bg-accent text-foreground" : "text-foreground/80"} ${missing ? "pr-16" : ""}`}
@@ -241,11 +243,10 @@ function WorktreeOption({
             className="size-3.5 shrink-0 text-muted-foreground"
           />
         )}
-        {row.changes ? (
-          <span className="shrink-0 text-[.7rem] text-muted-foreground tabular-nums">
-            {row.changes}
-          </span>
-        ) : null}
+        <span className="flex shrink-0 items-center gap-2 text-[.75rem]">
+          <ChangeCount section="unstaged" count={row.unstaged} />
+          <ChangeCount section="staged" count={row.staged} />
+        </span>
       </button>
       {missing && worktree.locked === undefined ? (
         <Button

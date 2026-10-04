@@ -213,7 +213,7 @@ function stagedFiles(output: string) {
   );
 }
 
-function conflicted(xy: string) {
+export function conflicted(xy: string) {
   return xy.includes("U") || xy === "AA" || xy === "DD";
 }
 
