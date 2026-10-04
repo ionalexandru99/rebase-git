@@ -6,9 +6,10 @@ import {
   IconLayoutRows,
   IconTextWrap,
 } from "@tabler/icons-react";
-import type { ReactNode } from "react";
+import type { ReactNode, RefObject } from "react";
 import { Button } from "#web/components/ui/button.tsx";
 import { IconSwitch, IconToggles } from "#web/components/ui/icon-switch.tsx";
+import { ScrollTopButton } from "#web/components/ui/scroll-top-button.tsx";
 import type { DiffPreferences } from "#web/domain/file-diff/diff-preferences.contract.ts";
 
 const layoutOptions = [
@@ -24,6 +25,7 @@ export function DiffDisplayControls({
   onPreferences,
   previous,
   next,
+  region,
 }: {
   readonly expanded: boolean;
   readonly onExpand?: ((expanded: boolean) => void) | undefined;
@@ -32,6 +34,7 @@ export function DiffDisplayControls({
   readonly onPreferences: (preferences: DiffPreferences) => void;
   readonly previous?: (() => void) | undefined;
   readonly next?: (() => void) | undefined;
+  readonly region: RefObject<HTMLElement | null>;
 }) {
   return (
     <fieldset
@@ -68,6 +71,7 @@ export function DiffDisplayControls({
       />
       <div className="ml-auto flex">
         {children}
+        <ScrollTopButton region={region} />
         <Button
           size="icon-xs"
           variant="ghost"

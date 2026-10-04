@@ -1,5 +1,5 @@
 import { skipToken } from "@tanstack/react-query";
-import { useEffect, useState } from "react";
+import { type RefObject, useEffect, useRef, useState } from "react";
 import {
   isReflogRef,
   type ReflogRef,
@@ -11,6 +11,7 @@ import type {
 } from "#contracts/repository-refs/repository-refs.contract.ts";
 import { type Action, submenu } from "#web/components/ui/action-menu.tsx";
 import { Button } from "#web/components/ui/button.tsx";
+import { ScrollTopButton } from "#web/components/ui/scroll-top-button.tsx";
 import { writeClipboardText } from "#web/features/clipboard/write-clipboard-text.ts";
 import {
   type ErrorAction,
@@ -69,6 +70,7 @@ export function ReflogPanel({
     { changes: "refs", enabled: feature?.active !== false },
   );
   const errorToast = useErrorToast();
+  const region = useRef<HTMLElement>(null);
 
   const showInGraph = (oid: string) => {
     if (onShowInGraph === undefined) return;
@@ -92,10 +94,15 @@ export function ReflogPanel({
     });
 
   return (
-    <section aria-label="Reflog" className="flex h-full min-h-0 flex-col">
+    <section
+      aria-label="Reflog"
+      className="flex h-full min-h-0 flex-col"
+      ref={region}
+    >
       <ReflogScopes
         current={current}
         onChange={setRef}
+        region={region}
         requested={requested}
         selected={ref}
       />
@@ -115,11 +122,13 @@ function ReflogScopes({
   requested,
   selected,
   onChange,
+  region,
 }: {
   readonly current: Head | undefined;
   readonly requested: ReflogRef;
   readonly selected: ReflogRef;
   readonly onChange: (ref: ReflogRef) => void;
+  readonly region: RefObject<HTMLElement | null>;
 }) {
   const options = [
     head,
@@ -154,6 +163,7 @@ function ReflogScopes({
           </Button>
         ))}
       </div>
+      <ScrollTopButton className="ml-auto" region={region} />
     </div>
   );
 }

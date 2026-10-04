@@ -15,6 +15,7 @@ import type { RepositoryHistoryRefTarget } from "#contracts/repository-history/r
 import type { RepositoryRefs } from "#contracts/repository-refs/repository-refs.contract.ts";
 import { type Action, runAction } from "#web/components/ui/action-menu.tsx";
 import { Button } from "#web/components/ui/button.tsx";
+import { ScrollTopButton } from "#web/components/ui/scroll-top-button.tsx";
 import { AuthorAvatars } from "#web/features/author-avatars/author-avatar.tsx";
 import type { HostedRepository } from "#web/features/author-avatars/author-avatar-providers.ts";
 import type { CherryPick } from "#web/features/cherry-pick/cherry-pick-menu.tsx";
@@ -446,6 +447,10 @@ export function CommitGraph({
                     </tbody>
                   </table>
                 </CommitActionMenu>
+                <ScrollTopButton
+                  className="absolute top-0.5 right-1 z-30"
+                  region={scrollRef}
+                />
                 {loading && windowRows.length === 0 && failure === undefined ? (
                   <CommitGraphLoading />
                 ) : null}

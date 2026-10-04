@@ -63,6 +63,7 @@ export default function ChangeDiffViewer({
     current === null ? null : (hunks[current]?.range ?? null),
   );
   const container = useRef<HTMLElement | null>(null);
+  const region = useRef<HTMLElement>(null);
   const pendingReveal = useRef(selected);
   const reveal = (range: SelectedLineRange) => {
     pendingReveal.current = revealRange(container.current, range)
@@ -110,6 +111,7 @@ export default function ChangeDiffViewer({
     <section
       className="flex h-full min-h-0 min-w-0 flex-col bg-background"
       aria-label="File diff"
+      ref={region}
     >
       <DiffDisplayControls
         expanded={expandContext}
@@ -124,6 +126,7 @@ export default function ChangeDiffViewer({
         next={
           next ? () => view.select({ section, path: next.path }) : undefined
         }
+        region={region}
       >
         {hunks.length > 0 && !empty ? (
           <fieldset aria-label="Hunks" className="mr-1 flex items-center">

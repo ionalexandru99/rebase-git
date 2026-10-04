@@ -50,6 +50,7 @@ export function CommitFiles({
   const setChecked = (paths: ReadonlySet<string>) =>
     setMarked({ files, paths });
   const anchor = useRef<string | null>(null);
+  const list = useRef<HTMLDivElement>(null);
   const selected: ReadonlySet<string> =
     path !== null && checked.has(path)
       ? checked
@@ -121,12 +122,16 @@ export function CommitFiles({
         minSize="12.5rem"
         maxSize="26rem"
       >
-        <div className="flex h-full min-h-0 flex-col border-border border-l bg-sidebar pb-1">
+        <div
+          className="flex h-full min-h-0 flex-col border-border border-l bg-sidebar pb-1"
+          ref={list}
+        >
           <FileListToolbar
             filter={filter}
             onFilter={setFilter}
             tree={tree}
             onTree={(next) => choosePreferences({ ...preferences, tree: next })}
+            region={list}
           />
           <FileListSection
             name="Changed files"

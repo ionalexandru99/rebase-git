@@ -1,6 +1,8 @@
 import { IconList, IconListTree, IconSearch } from "@tabler/icons-react";
+import type { RefObject } from "react";
 import { IconSwitch } from "#web/components/ui/icon-switch.tsx";
 import { Input } from "#web/components/ui/input.tsx";
+import { ScrollTopButton } from "#web/components/ui/scroll-top-button.tsx";
 
 const viewOptions = [
   { value: "list", label: "List view", Icon: IconList },
@@ -12,11 +14,13 @@ export function FileListToolbar({
   onFilter,
   tree,
   onTree,
+  region,
 }: {
   readonly filter: string;
   readonly onFilter: (filter: string) => void;
   readonly tree: boolean;
   readonly onTree: (tree: boolean) => void;
+  readonly region: RefObject<HTMLElement | null>;
 }) {
   return (
     <div className="flex shrink-0 items-center gap-2 p-2">
@@ -33,6 +37,7 @@ export function FileListToolbar({
           onChange={(event) => onFilter(event.target.value)}
         />
       </div>
+      <ScrollTopButton region={region} />
       <IconSwitch
         label="File view"
         options={viewOptions}

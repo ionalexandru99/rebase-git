@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import type { CommitFile } from "#contracts/commit-inspection/commit-inspection.contract.ts";
 import type { ChangeDiff } from "#contracts/repository-comparison/repository-comparison.contract.ts";
 import { Button } from "#web/components/ui/button.tsx";
@@ -32,6 +32,7 @@ export default function CommitDiff({
   readonly preview: boolean;
 }) {
   const [expanded, setExpanded] = useState(false);
+  const region = useRef<HTMLElement>(null);
   const index = files.findIndex((file) => file.path === path);
   const previous = files[index - 1];
   const next = files[index + 1];
@@ -47,6 +48,7 @@ export default function CommitDiff({
       className="flex min-h-0 min-w-0 flex-col"
       aria-label="Commit file diff"
       aria-busy={diff.loading}
+      ref={region}
     >
       <DiffDisplayControls
         expanded={expanded}
@@ -55,6 +57,7 @@ export default function CommitDiff({
         onPreferences={choosePreferences}
         previous={previous ? () => select(previous.path) : undefined}
         next={next ? () => select(next.path) : undefined}
+        region={region}
       />
       {preview ? (
         <p className="shrink-0 border-border border-b px-3 py-1.5 text-xs text-muted-foreground">
