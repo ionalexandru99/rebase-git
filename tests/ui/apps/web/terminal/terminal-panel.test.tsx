@@ -114,6 +114,24 @@ describe("terminal panel", () => {
       .toHaveFocus();
   });
 
+  it("zooms only the terminal text with Ctrl+=, Ctrl+- and Ctrl+0", async () => {
+    const { screen, server } = await renderTerminals();
+    await screen.getByRole("button", { name: "Show terminal" }).click();
+    await expect.poll(() => server.sizes.length).toBeGreaterThan(0);
+    const columns = () => server.sizes.at(-1)?.cols ?? 0;
+    const initial = columns();
+
+    await userEvent.keyboard("{Control>}=={/Control}");
+    await expect.poll(columns).toBeLessThan(initial);
+    const zoomedIn = columns();
+    await userEvent.keyboard("{Control>}-{/Control}");
+    await expect.poll(columns).toBeGreaterThan(zoomedIn);
+    await userEvent.keyboard("{Control>}0{/Control}");
+    await expect.poll(columns).toBe(initial);
+
+    expect(server.writes).toEqual([]);
+  });
+
   it("hides the panel when the last shell exits", async () => {
     const { screen, server, changes } = await renderTerminals();
 

@@ -1,5 +1,6 @@
 import {
   type AttachTerminal,
+  type ResizeTerminal,
   type Terminal,
   type TerminalOutput,
   TerminalsApi,
@@ -44,6 +45,7 @@ export function fakeTerminalServer() {
     { end: number; accept: Set<(output: TerminalOutput) => void> }
   >();
   const writes: WriteTerminal[] = [];
+  const sizes: ResizeTerminal[] = [];
   let gate = Promise.resolve();
   let opened = 0;
   const stream = (id: string) => {
@@ -99,10 +101,14 @@ export function fakeTerminalServer() {
         await gate;
         return {};
       }),
-      respond(TerminalsApi.resize, () => ({})),
+      respond(TerminalsApi.resize, (input) => {
+        sizes.push(input);
+        return {};
+      }),
     ],
     subscribe,
     writes,
+    sizes,
     terminals,
     attached: (id: string) => stream(id).accept.size > 0,
     emit: (id: string, data: string) => {
