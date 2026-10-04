@@ -227,6 +227,89 @@ describe("source control", () => {
     });
   });
 
+  it("lists the repositories of every Bitbucket workspace an API token reaches over SSH, newest first", async () => {
+    const f = await fixture({
+      bitbucket: {
+        repositories: [
+          {
+            name: "acme/storefront",
+            updatedOn: "2026-09-01T08:00:00.000000+00:00",
+          },
+          {
+            name: "octo/notes",
+            private: true,
+            updatedOn: "2026-10-02T09:30:00.654321+00:00",
+          },
+        ],
+      },
+    });
+    const bitbucket = () =>
+      f
+        .cloneable()
+        .then((hosts) => hosts.filter(({ kind }) => kind === "bitbucket"));
+    await f.saveToken({
+      _tag: "ApiToken",
+      email: "octo@example.com",
+      token: "api-token",
+    });
+
+    expect(await bitbucket()).toEqual([
+      {
+        kind: "bitbucket",
+        host: "bitbucket.org",
+        account: "octo",
+        repositories: [
+          {
+            name: "octo/notes",
+            url: "git@bitbucket.org:octo/notes.git",
+            private: true,
+            updatedAt: "2026-10-02T09:30:00.654Z",
+          },
+          {
+            name: "acme/storefront",
+            url: "git@bitbucket.org:acme/storefront.git",
+            private: false,
+            updatedAt: "2026-09-01T08:00:00.000Z",
+          },
+        ],
+      },
+    ]);
+
+    await f.saveToken({ _tag: "AccessToken", token: "access-token" });
+
+    expect(await bitbucket()).toEqual([]);
+  });
+
+  it("reads at most ten repository pages across all Bitbucket workspaces", async () => {
+    const f = await fixture({
+      bitbucket: {
+        repositories: [
+          { name: "octo/notes" },
+          ...Array.from({ length: 1_200 }, (_, index) => ({
+            name: `acme/repository-${index}`,
+          })),
+        ],
+      },
+    });
+    await f.saveToken({
+      _tag: "ApiToken",
+      email: "octo@example.com",
+      token: "api-token",
+    });
+
+    const hosts = await f.cloneable();
+    const repositories =
+      hosts.find(({ kind }) => kind === "bitbucket")?.repositories ?? [];
+
+    expect(repositories).toHaveLength(901);
+    expect(repositories.map(({ name }) => name)).toContain("octo/notes");
+    expect(
+      f.bitbucketRequests.filter(({ url }) =>
+        url.includes("/2.0/repositories/"),
+      ),
+    ).toHaveLength(10);
+  });
+
   it("reports a missing or signed out GitHub CLI", async () => {
     const missing = await fixture({ github: { version: null } });
     const signedOut = await fixture({ github: { account: null } });
@@ -279,36 +362,46 @@ describe("source control", () => {
     expect(await bitbucket()).toMatchObject({
       saved: { _tag: "ApiToken", email: "octo@example.com", account: "octo" },
     });
-    expect(f.bitbucketRequests).toEqual([
-      {
-        url: "https://api.bitbucket.org/2.0/user",
+    expect(f.bitbucketRequests).toEqual(
+      [
+        "https://api.bitbucket.org/2.0/user",
+        "https://api.bitbucket.org/2.0/user/workspaces?pagelen=1&fields=values.workspace.slug",
+      ].map((url) => ({
+        url,
         authorization: `Basic ${btoa("octo@example.com:api-token")}`,
-      },
-    ]);
+      })),
+    );
 
     await f.saveToken({ _tag: "AccessToken", token: "access-token" });
 
     expect(await bitbucket()).toMatchObject({ saved: { _tag: "AccessToken" } });
-    expect(f.bitbucketRequests).toHaveLength(1);
+    expect(f.bitbucketRequests).toHaveLength(2);
 
     await f.removeToken();
 
     expect(await bitbucket()).toMatchObject({ saved: null });
   });
 
-  it("rejects an API token that cannot read the Atlassian account", async () => {
-    const f = await fixture({ bitbucket: { userStatus: 403 } });
+  it.each([{ userStatus: 403 }, { workspacesStatus: 403 }])(
+    "rejects an API token that cannot read the Atlassian account or its workspaces (%o)",
+    async (statuses) => {
+      const f = await fixture({ bitbucket: statuses });
 
-    await expect(
-      f.saveToken({ _tag: "ApiToken", email: "octo@example.com", token: "x" }),
-    ).rejects.toEqual({
-      _tag: "BitbucketTokenRejected",
-      reason: "MissingScope",
-    });
-    expect(
-      (await f.discover()).hosts.find(({ kind }) => kind === "bitbucket"),
-    ).toMatchObject({ saved: null });
-  });
+      await expect(
+        f.saveToken({
+          _tag: "ApiToken",
+          email: "octo@example.com",
+          token: "x",
+        }),
+      ).rejects.toEqual({
+        _tag: "BitbucketTokenRejected",
+        reason: "MissingScope",
+      });
+      expect(
+        (await f.discover()).hosts.find(({ kind }) => kind === "bitbucket"),
+      ).toMatchObject({ saved: null });
+    },
+  );
 });
 
 async function fixture({

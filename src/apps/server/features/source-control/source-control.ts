@@ -25,9 +25,9 @@ import {
 import { createAzureDevOpsHost } from "#server/features/source-control/hosts/azure-devops-host.ts";
 import {
   type BitbucketClient,
-  createBitbucket,
   createBitbucketClient,
-} from "#server/features/source-control/hosts/bitbucket-host.ts";
+} from "#server/features/source-control/hosts/bitbucket-client.ts";
+import { createBitbucket } from "#server/features/source-control/hosts/bitbucket-host.ts";
 import {
   createForgejoHost,
   createTeaCli,

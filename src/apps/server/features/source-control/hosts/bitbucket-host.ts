@@ -1,9 +1,6 @@
 import { Effect, Schema } from "effect";
 import type { RouteInput } from "#contracts/environment-connection/environment-route.contract.ts";
-import type {
-  PullRequest,
-  PullRequestsUnavailable,
-} from "#contracts/pull-requests/pull-requests.contract.ts";
+import type { PullRequest } from "#contracts/pull-requests/pull-requests.contract.ts";
 import type {
   BitbucketToken,
   BitbucketTokenRejected,
@@ -14,22 +11,22 @@ import {
   eachHead,
   type GitHost,
   type HostedPullRequest,
-  type HostResponse,
-  hostGet,
   type PullRequestsByHead,
   pullRequest,
   unavailable,
 } from "#server/features/source-control/git-host.ts";
+import {
+  type BitbucketClient,
+  bitbucketApi,
+  readJson,
+} from "#server/features/source-control/hosts/bitbucket-client.ts";
+import {
+  listCloneable,
+  workspacesUrl,
+} from "#server/features/source-control/hosts/bitbucket-repositories.ts";
 import type { EnvironmentContext } from "#server/persistence/environment-context.ts";
 import { bitbucketTokenTable } from "#server/persistence/environment-state.schema.ts";
 import { EnvironmentStorageError } from "#server/persistence/sqlite/storage-operation.ts";
-
-export interface BitbucketClient {
-  readonly get: (
-    url: string,
-    authorization: string,
-  ) => Effect.Effect<HostResponse, PullRequestsUnavailable>;
-}
 
 export type Bitbucket = ReturnType<typeof createBitbucket>;
 
@@ -48,13 +45,8 @@ interface SavedToken {
   readonly token: BitbucketToken;
 }
 
-const api = "https://api.bitbucket.org/2.0";
 const pullRequestsPerBranch = 10;
 const branchesAtOnce = 8;
-
-export function createBitbucketClient(): BitbucketClient {
-  return { get: (url, authorization) => hostGet(url, { authorization }) };
-}
 
 export function createBitbucket(
   context: EnvironmentContext,
@@ -94,6 +86,19 @@ export function createBitbucket(
       Effect.orDie,
     ),
     repositoryId: (remoteUrl) => bitbucketRepository(remoteUrl)?.id,
+    cloneable: Effect.gen(function* () {
+      const current = yield* saved;
+      if (current?.token._tag !== "ApiToken") return [];
+      const repositories = yield* listCloneable(client, current.authorization);
+      return [
+        {
+          kind: "bitbucket" as const,
+          host: "bitbucket.org",
+          account: current.token.account,
+          repositories,
+        },
+      ];
+    }).pipe(Effect.orElseSucceed(() => [])),
     repository: (remoteUrl) => {
       const repository = bitbucketRepository(remoteUrl);
       return Effect.succeed(
@@ -169,23 +174,26 @@ function verify(
       _tag: "BitbucketTokenRejected",
       reason,
     });
-  return client.get(`${api}/user`, basic(request.email, request.token)).pipe(
-    Effect.catch(() => rejected("Unreachable")),
-    Effect.flatMap(({ status, body }) => {
-      if (status === 401) return rejected("Invalid");
-      if (status === 403) return rejected("MissingScope");
-      if (status !== 200) return rejected("Unreachable");
-      return decodeUser(body).pipe(
-        Effect.map(
-          (user) =>
-            user.username ??
-            user.nickname ??
-            user.display_name ??
-            request.email,
-        ),
-        Effect.catch(() => rejected("Unreachable")),
-      );
-    }),
+  const authorization = basic(request.email, request.token);
+  const check = (url: string) =>
+    client.get(url, authorization).pipe(
+      Effect.catch(() => rejected("Unreachable")),
+      Effect.flatMap(({ status, body }) => {
+        if (status === 401) return rejected("Invalid");
+        if (status === 403) return rejected("MissingScope");
+        if (status !== 200) return rejected("Unreachable");
+        return Effect.succeed(body);
+      }),
+    );
+  return check(`${bitbucketApi}/user`).pipe(
+    Effect.flatMap((body) =>
+      decodeUser(body).pipe(Effect.catch(() => rejected("Unreachable"))),
+    ),
+    Effect.tap(() => check(workspacesUrl(1))),
+    Effect.map(
+      (user) =>
+        user.username ?? user.nickname ?? user.display_name ?? request.email,
+    ),
   );
 }
 
@@ -206,13 +214,7 @@ function listPullRequests(
   const read = <A>(
     url: string,
     decode: (body: string) => Effect.Effect<A, unknown>,
-  ) =>
-    client.get(url, authorization).pipe(
-      Effect.flatMap(({ status, body }) =>
-        status === 200 ? decode(body) : Effect.fail(unavailable),
-      ),
-      Effect.mapError(() => unavailable),
-    );
+  ) => readJson(client, authorization, url, decode);
   const checks = (node: PullRequestNode) =>
     node.state === "OPEN" && node.source.commit?.hash !== undefined
       ? read(
@@ -273,7 +275,7 @@ function pullRequestsUrl(repository: BitbucketRepository, head: string) {
   });
   for (const state of ["OPEN", "MERGED", "DECLINED", "SUPERSEDED"])
     query.append("state", state);
-  return `${api}/repositories/${repositoryPath(repository)}/pullrequests?${query}`;
+  return `${bitbucketApi}/repositories/${repositoryPath(repository)}/pullrequests?${query}`;
 }
 
 function bbqlString(value: string) {
@@ -281,7 +283,7 @@ function bbqlString(value: string) {
 }
 
 function statusesUrl(repository: BitbucketRepository, hash: string) {
-  return `${api}/repositories/${repositoryPath(repository)}/commit/${encodeURIComponent(hash)}/statuses?${new URLSearchParams(
+  return `${bitbucketApi}/repositories/${repositoryPath(repository)}/commit/${encodeURIComponent(hash)}/statuses?${new URLSearchParams(
     { pagelen: "50", fields: "values.state" },
   )}`;
 }
