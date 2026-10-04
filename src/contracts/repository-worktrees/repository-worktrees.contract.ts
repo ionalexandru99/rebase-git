@@ -21,7 +21,8 @@ const WorktreeScope = Schema.Struct({
 
 export const WorktreeChanges = Schema.Struct({
   path: RepositoryPath,
-  changes: Schema.Natural,
+  unstaged: Schema.Natural,
+  staged: Schema.Natural,
 });
 export type WorktreeChanges = typeof WorktreeChanges.Type;
 

@@ -83,22 +83,24 @@ describe("repository worktrees", () => {
     const topic = join(root, "topic");
     await git(main, "worktree", "add", "-b", "topic", topic);
     await writeFile(join(topic, "notes.md"), "draft\n");
+    await writeFile(join(topic, "plan.md"), "steps\n");
+    await git(topic, "add", "plan.md");
     const target = { repositoryId, worktreePath: main, target: topic };
 
     expect(await run(readWorktreeStatus(runner, main))).toEqual({
       worktrees: [
-        { path: main, changes: 0 },
-        { path: topic, changes: 1 },
+        { path: main, unstaged: 0, staged: 0 },
+        { path: topic, unstaged: 1, staged: 1 },
       ],
     });
     await expect(
       fail(removeWorktree(runner, { ...target, changes: 0 })),
-    ).resolves.toEqual({ _tag: "WorktreeChanged", changes: 1 });
+    ).resolves.toEqual({ _tag: "WorktreeChanged", changes: 2 });
     await expect(
       fail(removeWorktree(runner, { ...target, target: main, changes: 0 })),
     ).resolves.toEqual({ _tag: "WorktreeRejected", reason: "Main" });
 
-    await run(removeWorktree(runner, { ...target, changes: 1 }));
+    await run(removeWorktree(runner, { ...target, changes: 2 }));
 
     await expect(access(topic)).rejects.toThrow();
     expect(await git(main, "branch", "--list", "topic")).toBe("topic");
@@ -120,7 +122,7 @@ describe("repository worktrees", () => {
     await removeTemporaryDirectory(usb);
 
     expect(await run(readWorktreeStatus(runner, main))).toEqual({
-      worktrees: [{ path: main, changes: 0 }],
+      worktrees: [{ path: main, unstaged: 0, staged: 0 }],
     });
     await expect(
       fail(removeWorktree(runner, { ...target, changes: 0 })),

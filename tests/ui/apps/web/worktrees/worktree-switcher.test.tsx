@@ -123,9 +123,9 @@ async function renderSwitcher() {
     ),
     respond(RepositoryWorktreesApi.status, async () => ({
       worktrees: [
-        { path: mainPath, changes: 0 },
-        { path: topicPath, changes: 2 },
-        { path: fixPath, changes: 0 },
+        { path: mainPath, unstaged: 0, staged: 0 },
+        { path: topicPath, unstaged: 1, staged: 1 },
+        { path: fixPath, unstaged: 0, staged: 0 },
       ],
     })),
     respond(RepositoryWorktreesApi.folder, async () => ({
