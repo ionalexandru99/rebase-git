@@ -76,7 +76,7 @@ function readPrune(
   return runRepositoryGit(
     git,
     directory,
-    ["config", ...scope, "--type=bool", "--get", key],
+    ["config", ...scope, "--includes", "--type=bool", "--get", key],
     {
       exitCodes: [0, 1],
     },
