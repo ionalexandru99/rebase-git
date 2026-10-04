@@ -76,7 +76,7 @@ describe("branch settling", () => {
     ]);
   });
 
-  it("deletes branches settled long enough after a fetch with their worktrees, keeping the ones that are unsafe to remove", async () => {
+  it("deletes branches settled long enough after a fetch with their worktrees, including moved ones, keeping the ones that are unsafe to remove", async () => {
     const pullRequests: Record<
       string,
       { number: number; state: "MERGED"; head: string }[]
@@ -86,7 +86,7 @@ describe("branch settling", () => {
       `commit refs/heads/${branch}\ncommitter Rebase test <rebase@example.test> 1700000000 +0000\ndata ${branch.length}\n${branch}\nfrom refs/heads/main\n\n`;
     await fastImport(
       f.repositoryPath,
-      `${commit("squashed")}${commit("unique")}reset refs/heads/fresh\nfrom refs/heads/main\n\n`,
+      `${commit("squashed")}${commit("unique")}reset refs/heads/fresh\nfrom refs/heads/main\n\nreset refs/heads/moved\nfrom refs/heads/main\n\n`,
     );
     pullRequests.squashed = [
       {
@@ -100,7 +100,7 @@ describe("branch settling", () => {
     ];
     await appendFile(
       join(f.repositoryPath, ".git", "config"),
-      ["main", "topic", "mirrored", "elsewhere", "squashed", "unique"]
+      ["main", "topic", "moved", "mirrored", "elsewhere", "squashed", "unique"]
         .map((branch) => settledConfig(branch))
         .join("") +
         settledConfig("fresh", new Date().toISOString().slice(0, 10)) +
@@ -108,6 +108,8 @@ describe("branch settling", () => {
     );
     const worktree = (branch: string) => worktreePath(f, branch);
     await git(f.repositoryPath, "worktree", "add", worktree("topic"), "topic");
+    await git(f.repositoryPath, "worktree", "add", worktree("moved"), "moved");
+    await rename(worktree("moved"), `${worktree("moved")}-elsewhere`);
     await git(
       f.repositoryPath,
       "worktree",
@@ -132,23 +134,19 @@ describe("branch settling", () => {
       .toEqual(["elsewhere", "fresh", "main", "mirrored", "unique"]);
     expect(existsSync(worktree("topic"))).toBe(false);
     expect(existsSync(worktree("mirrored"))).toBe(true);
+    await expect(
+      git(f.repositoryPath, "worktree", "list", "--porcelain"),
+    ).resolves.not.toContain(worktree("moved").replaceAll("\\", "/"));
   });
 
-  it("keeps settled branches that are being rebased or bisected, sit in a moved worktree or were used again", async () => {
+  it("keeps settled branches that are being rebased or bisected or were used again", async () => {
     const pullRequests: Record<
       string,
       { number: number; state?: "MERGED"; head?: string }[]
     > = {};
     const f = await settlingFixture(fakeGitHub(pullRequests).github);
     const main = await git(f.repositoryPath, "rev-parse", "main");
-    const branches = [
-      "rebasing",
-      "bisecting",
-      "moved",
-      "reopened",
-      "reused",
-      "done",
-    ];
+    const branches = ["rebasing", "bisecting", "reopened", "reused", "done"];
     await fastImport(
       f.repositoryPath,
       `${branches.map((branch) => `reset refs/heads/${branch}\nfrom refs/heads/main\n\n`).join("")}commit refs/heads/reused\ncommitter Rebase test <rebase@example.test> 1700000000 +0000\ndata 5\nagain\nfrom refs/heads/main\n\n`,
@@ -172,9 +170,6 @@ describe("branch settling", () => {
       "bisecting\n",
     );
     await rename(bisecting, `${bisecting}-elsewhere`);
-    const moved = worktreePath(f, "moved");
-    await git(f.repositoryPath, "worktree", "add", moved, "moved");
-    await rename(moved, `${moved}-elsewhere`);
 
     await f.fetch();
 
@@ -185,15 +180,11 @@ describe("branch settling", () => {
         "elsewhere",
         "main",
         "mirrored",
-        "moved",
         "rebasing",
         "reopened",
         "reused",
         "topic",
       ]);
-    await expect(
-      git(f.repositoryPath, "worktree", "list", "--porcelain"),
-    ).resolves.toContain(moved.replaceAll("\\", "/"));
   });
 
   it("keeps settled branches that were pushed, with or without an upstream, when no Git host can list their pull requests", async () => {
