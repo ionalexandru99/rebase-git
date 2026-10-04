@@ -29,7 +29,7 @@ export type ChangeFileSectionView = Pick<
   "changes" | "preferences" | "selection" | "select" | "busy" | "loading"
 >;
 
-const looks: Record<ChangeSection, SectionLook> = {
+export const changeSectionLooks: Record<ChangeSection, SectionLook> = {
   unstaged: { Icon: IconPencil, className: "text-amber-300" },
   staged: { Icon: IconCircleCheck, className: "text-emerald-300" },
 };
@@ -94,7 +94,7 @@ export function ChangeFileSection({
     <FileListSection
       name={`${label} files`}
       title={label}
-      look={looks[section]}
+      look={changeSectionLooks[section]}
       grow={section === "unstaged"}
       files={files}
       tree={preferences.tree}

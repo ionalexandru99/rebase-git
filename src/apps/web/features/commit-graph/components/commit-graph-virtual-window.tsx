@@ -10,10 +10,7 @@ import {
   useEffect,
   useImperativeHandle,
 } from "react";
-import {
-  graphHeaderHeight,
-  graphRowHeight as rowHeight,
-} from "#web/features/commit-graph/layout/graph-geometry.ts";
+import { graphRowHeight as rowHeight } from "#web/features/commit-graph/layout/graph-geometry.ts";
 
 const overscanRows = 6;
 const emptyViewport = { width: 0, height: 0 };
@@ -31,6 +28,7 @@ export interface CommitGraphViewportHandle {
 export function CommitGraphVirtualWindow({
   ref,
   scrollRef,
+  headerHeight,
   total,
   start,
   oids,
@@ -41,6 +39,7 @@ export function CommitGraphVirtualWindow({
 }: {
   readonly ref: Ref<CommitGraphViewportHandle>;
   readonly scrollRef: RefObject<HTMLTableElement | null>;
+  readonly headerHeight: number;
   readonly total: number;
   readonly start: number;
   readonly oids: readonly string[];
@@ -57,8 +56,8 @@ export function CommitGraphVirtualWindow({
   const virtualizer = useVirtualizer({
     count: total,
     estimateSize: () => rowHeight,
-    paddingStart: graphHeaderHeight,
-    scrollPaddingStart: graphHeaderHeight,
+    paddingStart: headerHeight,
+    scrollPaddingStart: headerHeight,
     getScrollElement: () => scrollRef.current,
     observeElementRect: (instance, callback) => {
       const element = instance.scrollElement;
@@ -94,26 +93,23 @@ export function CommitGraphVirtualWindow({
     (items.find(
       (item) =>
         item.index !== detached && oids[item.index - start] !== undefined,
-    )?.start ?? graphHeaderHeight) - graphHeaderHeight;
+    )?.start ?? headerHeight) - headerHeight;
   const virtualRows = items.map((item) => ({
     index: item.index - start,
     key: oids[item.index - start] ?? `row-${item.index}`,
-    start: item.index === detached ? item.start - graphHeaderHeight : undefined,
+    start: item.index === detached ? item.start - headerHeight : undefined,
   }));
   const first = Math.floor((virtualizer.scrollOffset ?? 0) / rowHeight);
   const last =
     first +
-    Math.max(0, Math.ceil((viewport.height - graphHeaderHeight) / rowHeight));
+    Math.max(0, Math.ceil((viewport.height - headerHeight) / rowHeight));
   useEffect(() => onRange(first, last), [onRange, first, last]);
   useEffect(
     () =>
       onPageSize(
-        Math.max(
-          1,
-          Math.floor((viewport.height - graphHeaderHeight) / rowHeight),
-        ),
+        Math.max(1, Math.floor((viewport.height - headerHeight) / rowHeight)),
       ),
-    [onPageSize, viewport.height],
+    [onPageSize, viewport.height, headerHeight],
   );
   useImperativeHandle(ref, () => ({
     scrollToIndex: (index) =>
@@ -121,7 +117,7 @@ export function CommitGraphVirtualWindow({
   }));
   return children({
     viewport,
-    totalHeight: Math.max(0, virtualizer.getTotalSize() - graphHeaderHeight),
+    totalHeight: Math.max(0, virtualizer.getTotalSize() - headerHeight),
     flowStart,
     virtualRows,
   });

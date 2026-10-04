@@ -194,6 +194,9 @@ function Workspace({
                         drop={drop}
                         ref={inspection.graphRef}
                         onOpenDetails={inspection.open}
+                        onOpenChanges={() =>
+                          panel.execute({ type: "open", kind: "changes" })
+                        }
                         onActiveCommitChange={inspection.select}
                         titleActions={
                           <>
