@@ -71,7 +71,7 @@ export function loginShellPath(
         "-ilc",
         `printf '${loginShellPathMarker}%s${loginShellPathMarker}' "$PATH"`,
       ],
-      { encoding: "utf8", timeout: 5_000 },
+      { encoding: "utf8", killSignal: "SIGKILL", timeout: 5_000 },
       (_error, stdout) => {
         const [, shellPath] = stdout.split(loginShellPathMarker);
         const entries = [shellPath, inheritedPath].flatMap(
