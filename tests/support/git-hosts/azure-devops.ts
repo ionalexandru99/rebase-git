@@ -1,5 +1,5 @@
 import { Effect } from "effect";
-import type { AzureDevOpsClient } from "#server/features/source-control/hosts/azure-devops-host.ts";
+import type { AzureDevOpsClient } from "#server/features/source-control/hosts/azure-devops-client.ts";
 
 interface AzureDevOpsPullRequestNode {
   readonly id: number;
@@ -9,13 +9,53 @@ interface AzureDevOpsPullRequestNode {
   readonly checks?: readonly string[];
 }
 
+interface AzureDevOpsRepository {
+  readonly project: string;
+  readonly name: string;
+  readonly public?: boolean;
+  readonly disabled?: boolean;
+  readonly ssh?: boolean;
+}
+
 export function fakeAzureDevOps(
   byHead: Readonly<
     Record<string, readonly AzureDevOpsPullRequestNode[]>
   > | null,
+  {
+    organizations = {},
+  }: {
+    readonly organizations?: Readonly<
+      Record<string, readonly AzureDevOpsRepository[]>
+    >;
+  } = {},
 ) {
   const requests: string[] = [];
   const nodes = Object.values(byHead ?? {}).flat();
+  const listing = (url: URL): unknown => {
+    if (url.pathname === "/_apis/profile/profiles/me")
+      return { id: "member-id", displayName: "Octo" };
+    if (url.pathname === "/_apis/accounts")
+      return listOf(
+        Object.keys(organizations).map((accountName) => ({
+          accountId: `${accountName}-id`,
+          accountUri: `https://vssps.dev.azure.com/${accountName}/`,
+          accountName,
+        })),
+      );
+    const organization = /^\/([^/]+)\/_apis\/git\/repositories$/.exec(
+      url.pathname,
+    )?.[1];
+    const repositories =
+      organization === undefined ? undefined : organizations[organization];
+    return (
+      repositories &&
+      listOf(
+        repositories.map((repository) =>
+          azureRepository(organization ?? "", repository),
+        ),
+      )
+    );
+  };
   const azureDevOps: AzureDevOpsClient = {
     version: Effect.succeed("azure-cli 2.78.0"),
     account: Effect.succeed("octo@example.com"),
@@ -25,6 +65,8 @@ export function fakeAzureDevOps(
         : Effect.succeed("token"),
     get: (url) => {
       requests.push(url);
+      const listed = listing(new URL(url));
+      if (listed !== undefined) return Effect.succeed(JSON.stringify(listed));
       const query = new URL(url).searchParams;
       const source = query.get("searchCriteria.sourceRefName");
       const value =
@@ -54,4 +96,33 @@ export function fakeAzureDevOps(
     },
   };
   return { azureDevOps, requests };
+}
+
+function listOf(value: readonly unknown[]) {
+  return { count: value.length, value };
+}
+
+function azureRepository(
+  organization: string,
+  repository: AzureDevOpsRepository,
+) {
+  const project = encodeURIComponent(repository.project);
+  const name = encodeURIComponent(repository.name);
+  return {
+    id: `${repository.name}-id`,
+    name: repository.name,
+    project: {
+      id: `${repository.project}-id`,
+      name: repository.project,
+      state: "wellFormed",
+      visibility: repository.public === true ? "public" : "private",
+    },
+    remoteUrl: `https://${organization}@dev.azure.com/${organization}/${project}/_git/${name}`,
+    ...(repository.ssh === false
+      ? {}
+      : {
+          sshUrl: `git@ssh.dev.azure.com:v3/${organization}/${project}/${name}`,
+        }),
+    isDisabled: repository.disabled ?? false,
+  };
 }
