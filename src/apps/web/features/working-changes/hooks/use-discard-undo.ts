@@ -19,15 +19,30 @@ export function useDiscardUndo(
 ) {
   const [discards, setDiscards] = useState<readonly Discard[]>([]);
   const latest = useRef(discards);
+  const restoring = useRef<Discard[]>([]);
   const keep = (next: readonly Discard[]) => {
     latest.current = next;
     setDiscards(next);
   };
-  const undo = async () => {
-    const taken = latest.current;
-    keep([]);
-    for (const { discarded } of taken.toReversed())
-      if (!(await restore(discarded))) return;
+  const drain = async () => {
+    for (
+      let next = restoring.current[0];
+      next !== undefined;
+      next = restoring.current[0]
+    ) {
+      if (await restore(next.discarded)) restoring.current.shift();
+      else {
+        keep([...latest.current, ...restoring.current.slice(1).toReversed()]);
+        restoring.current = [];
+      }
+    }
+  };
+  const undo = () => {
+    const newest = latest.current.at(-1);
+    if (newest === undefined) return;
+    keep(latest.current.slice(0, -1));
+    restoring.current.push(newest);
+    if (restoring.current.length === 1) void drain();
   };
   useUndoKey(active && discards.length > 0, undo);
   return {

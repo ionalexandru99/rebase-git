@@ -402,6 +402,20 @@ describe("working changes through Git", () => {
     expect(await readFile(file, "utf8")).toBe(edited);
     expect(await readFile(created)).toEqual(Buffer.from([0, 255, 1]));
   });
+  it("undoes a discard byte for byte when Git converts line endings", async () => {
+    const f = await fixture();
+    await f.git("config", "core.autocrlf", "true");
+    await f.git("config", "core.safecrlf", "true");
+    const edited = "one\nTWO\nthree\n";
+    const mixed = "lf\ncrlf\r\n";
+    await writeFile(join(f.directory, "file.txt"), edited);
+    await writeFile(join(f.directory, "mixed.txt"), mixed);
+
+    await f.undo(await f.mutate("discard", "unstaged"));
+
+    expect(await readFile(join(f.directory, "file.txt"), "utf8")).toBe(edited);
+    expect(await readFile(join(f.directory, "mixed.txt"), "utf8")).toBe(mixed);
+  });
   it("refuses to undo a discard over later edits", async () => {
     const f = await fixture();
     const file = join(f.directory, "file.txt");

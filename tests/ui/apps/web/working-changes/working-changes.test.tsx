@@ -505,7 +505,7 @@ describe("working changes", () => {
       .element(page.getByRole("button", { name: "Stage hunk", exact: true }))
       .toBeEnabled();
   });
-  it("discards without asking and undoes the discards in a row with Ctrl+Z outside text fields", async () => {
+  it("discards without asking and undoes one discard per Ctrl+Z outside text fields", async () => {
     const f = await fixture();
     const discard = page.getByRole("button", {
       name: `Discard unstaged ${path}`,
@@ -522,6 +522,11 @@ describe("working changes", () => {
     await userEvent.keyboard("{Control>}z{/Control}");
     expect(page.getByRole("status").query()).not.toBeNull();
     (document.activeElement as HTMLElement).blur();
+    await userEvent.keyboard("{Control>}z{/Control}");
+    await expect
+      .poll(() => f.undos.map(({ discarded }) => discarded))
+      .toEqual([discardedChanges("2")]);
+    await expect.element(page.getByRole("status")).toBeVisible();
     await userEvent.keyboard("{Control>}z{/Control}");
 
     await expect
