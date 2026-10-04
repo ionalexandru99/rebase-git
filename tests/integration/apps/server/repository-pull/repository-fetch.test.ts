@@ -8,15 +8,12 @@ import { openTestEnvironment } from "#tests-support/server.ts";
 const committer = "committer Rebase test <rebase@example.test> 0 +0000\n";
 
 describe("repository fetch with real Git", () => {
-  it("fetches the default remote, respects prune settings and recovers after a failure", async () => {
+  it("fetches the default remote, prunes deleted branches and recovers after a failure", async () => {
     const f = await fixture();
     await git(f.remote, "branch", "temporary", "main");
     await expect(f.fetch()).resolves.toMatchObject({ fetching: false });
     await git(f.local, "rev-parse", "refs/remotes/origin/temporary");
     await git(f.remote, "branch", "-D", "temporary");
-    await f.fetch();
-    await git(f.local, "rev-parse", "refs/remotes/origin/temporary");
-    await git(f.local, "config", "fetch.prune", "true");
     await f.fetch();
     await expect(
       git(f.local, "show-ref", "--verify", "refs/remotes/origin/temporary"),
@@ -33,6 +30,32 @@ describe("repository fetch with real Git", () => {
     await git(f.local, "remote", "set-url", "origin", f.remote);
     const recovered = await f.fetch();
     expect(recovered).not.toHaveProperty("failure");
+  });
+
+  it("keeps deleted remote branches when the repository turns pruning off", async () => {
+    const f = await fixture();
+    await git(f.remote, "branch", "temporary", "main");
+    await f.fetch();
+    await git(f.remote, "branch", "-D", "temporary");
+
+    await expect(f.savePrune(false)).resolves.toMatchObject({
+      repository: false,
+    });
+    await f.fetch();
+
+    await git(f.local, "rev-parse", "refs/remotes/origin/temporary");
+  });
+
+  it("keeps deleted remote branches when the remote turns pruning off", async () => {
+    const f = await fixture();
+    await git(f.remote, "branch", "temporary", "main");
+    await f.fetch();
+    await git(f.remote, "branch", "-D", "temporary");
+    await git(f.local, "config", "remote.origin.prune", "false");
+
+    await f.fetch();
+
+    await git(f.local, "rev-parse", "refs/remotes/origin/temporary");
   });
 
   it("persists the interval in the repository config", async () => {
@@ -73,6 +96,10 @@ async function fixture() {
     local,
     fetch: () => Effect.runPromise(routes.fetch({ repositoryId })),
     status: () => Effect.runPromise(routes.fetchStatus({ repositoryId })),
+    savePrune: (prune: boolean | null) =>
+      Effect.runPromise(
+        routes.saveRepositoryFetchPrune({ repositoryId, prune }),
+      ),
     configure: (
       setting: Parameters<typeof routes.configureFetch>[0]["setting"],
     ) => Effect.runPromise(routes.configureFetch({ repositoryId, setting })),

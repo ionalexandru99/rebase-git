@@ -95,6 +95,17 @@ export const RepositoryFetchStatus = Schema.Struct({
 });
 export type RepositoryFetchStatus = typeof RepositoryFetchStatus.Type;
 
+export const FetchPrune = Schema.Struct({
+  repository: Schema.NullOr(Schema.Boolean),
+  server: Schema.Boolean,
+});
+export type FetchPrune = typeof FetchPrune.Type;
+
+export const FetchPruneFailed = Schema.TaggedStruct("FetchPruneFailed", {
+  detail: Schema.String.check(Schema.isMaxLength(2_048)),
+});
+export type FetchPruneFailed = typeof FetchPruneFailed.Type;
+
 export const PullStrategy = Schema.Literals(["ask", ...DivergedPull.literals]);
 export type PullStrategy = typeof PullStrategy.Type;
 
@@ -122,6 +133,26 @@ export const RepositoryPullApi = {
       setting: RepositoryFetchSetting,
     }),
     success: RepositoryFetchStatus,
+  }),
+  readFetchPrune: route("fetch-prune/read", {
+    success: Schema.Boolean,
+    failure: FetchPruneFailed,
+  }),
+  saveFetchPrune: route("fetch-prune/save", {
+    request: Schema.Struct({ prune: Schema.Boolean }),
+    success: Schema.Boolean,
+    failure: FetchPruneFailed,
+  }),
+  readRepositoryFetchPrune: repositoryQuery("repositories/fetch-prune", {
+    request: RepositoryTarget,
+    success: FetchPrune,
+  }),
+  saveRepositoryFetchPrune: repositoryCommand("repositories/save-fetch-prune", {
+    request: Schema.Struct({
+      repositoryId: RepositoryId,
+      prune: Schema.NullOr(Schema.Boolean),
+    }),
+    success: FetchPrune,
   }),
   pull: repositoryCommand("repositories/pull", {
     request: PullBranch,

@@ -11,6 +11,7 @@ import { writeClipboardText } from "#web/features/clipboard/write-clipboard-text
 import { RepositoryIdentityRow } from "#web/features/git-identity/git-identity.tsx";
 import { useErrorToast } from "#web/features/notifications/notifications.tsx";
 import { forgetRepositoryRefs } from "#web/features/refs/repository-refs.ts";
+import { RepositoryFetchPruneRow } from "#web/features/remote-sync/fetch-prune.tsx";
 import { RepositoryFetchSettings } from "#web/features/remote-sync/fetch-settings.tsx";
 import { RepositoryPullStrategyRow } from "#web/features/remote-sync/pull-strategy.tsx";
 import {
@@ -136,6 +137,7 @@ function RepositoryHistorySettings({
           repositoryId={repositoryId}
           canConfigure={canConfigure}
         />
+        <RepositoryFetchPruneRow repositoryId={repositoryId} />
         <WorktreeFolderSettings
           repositoryId={repositoryId}
           path={path}

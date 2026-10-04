@@ -26,6 +26,7 @@ import {
 import { Switch } from "#web/components/ui/switch.tsx";
 import { ServerIdentityRow } from "#web/features/git-identity/git-identity.tsx";
 import { useErrorToast } from "#web/features/notifications/notifications.tsx";
+import { ServerFetchPruneRow } from "#web/features/remote-sync/fetch-prune.tsx";
 import { ServerPullStrategyRow } from "#web/features/remote-sync/pull-strategy.tsx";
 import { CloneFolderRow } from "#web/features/repository-catalog/clone-folder-row.tsx";
 import { BitbucketTokenForm } from "#web/features/settings/bitbucket-token-form.tsx";
@@ -146,6 +147,7 @@ export function SourceControlSettings() {
           <GitRow git={discovery.data.git} />
         )}
         <ServerPullStrategyRow />
+        <ServerFetchPruneRow />
       </SettingsSection>
       <SettingsSection title="Defaults">
         <CloneFolderRow />
