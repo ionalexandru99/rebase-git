@@ -100,6 +100,61 @@ describe("commit lanes", () => {
     );
   });
 
+  it("cuts a far parent into a down stub below the child and an up stub above the parent", () => {
+    const { rows } = appendCommitLanes(createCommitLaneCheckpoint(), [
+      { oid: "merge", parents: ["main", "side"], farParents: ["side"] },
+      {
+        oid: "main",
+        parents: ["base"],
+        farArrival: { parent: "side", child: "merge" },
+      },
+      { oid: "side", parents: ["base"] },
+      { oid: "base", parents: [] },
+    ]);
+    const down = rows[1]?.lanesBefore.find((lane) => lane.far !== undefined);
+    const up = rows[1]?.lanesAfter.find((lane) => lane.far !== undefined);
+
+    expect(down?.far).toEqual({ direction: "down", from: "merge", to: "side" });
+    expect(rows[1]?.lanesAfter.map((lane) => lane.id)).not.toContain(down?.id);
+    expect(up?.far).toEqual({ direction: "up", from: "side", to: "merge" });
+    expect(up?.color).toBe(down?.color);
+    expect(up?.slot).not.toBe(down?.slot);
+    expect(rows[2]?.nodeLaneId).toBe(up?.id);
+    expect(rows[2]?.lanesAfter.every((lane) => lane.far === undefined)).toBe(
+      true,
+    );
+  });
+
+  it("ends a far first parent one row below its commit on the commit's own lane", () => {
+    const { rows } = appendCommitLanes(createCommitLaneCheckpoint(), [
+      { oid: "tip", parents: ["base"], farParents: ["base"] },
+      { oid: "other", parents: [] },
+    ]);
+
+    expect(rows[1]?.lanesBefore).toContainEqual(
+      expect.objectContaining({
+        id: rows[0]?.nodeLaneId,
+        far: { direction: "down", from: "tip", to: "base" },
+      }),
+    );
+    expect(rows[1]?.lanesAfter).toEqual([]);
+  });
+
+  it("puts a far stub in the free slot nearest its commit", () => {
+    const { rows } = appendCommitLanes(createCommitLaneCheckpoint(), [
+      { oid: "a", parents: ["root"] },
+      { oid: "b", parents: ["x"] },
+      { oid: "c", parents: ["y"] },
+      { oid: "d", parents: ["z"] },
+      { oid: "root", parents: [] },
+      { oid: "z", parents: ["near", "far"], farParents: ["far"] },
+    ]);
+
+    expect(
+      rows[5]?.lanesAfter.find((lane) => lane.far !== undefined)?.slot,
+    ).toBe(4);
+  });
+
   it("serializes checkpoints across octopus merges", () => {
     const result = appendCommitLanes(createCommitLaneCheckpoint(), [
       { oid: a, parents: [b, c, d] },

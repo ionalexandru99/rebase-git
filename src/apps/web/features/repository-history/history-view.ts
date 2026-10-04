@@ -4,6 +4,7 @@ import {
   type CommitLaneCheckpoint,
   type CommitLaneRow,
   type CommitLaneSeed,
+  type CommitTopology,
   createCommitLaneCheckpoint,
   graphLaneSeeds,
 } from "#web/features/repository-history/commit-lanes.ts";
@@ -32,11 +33,13 @@ export interface HistoryViewRow {
 }
 
 const checkpointRows = 256;
+const farEdgeRows = 50;
 
 export class HistoryView {
   readonly total: number;
   private readonly order: Int32Array;
   private readonly rowOf: Int32Array;
+  private readonly farChild: Int32Array;
   private readonly allowed: ReadonlySet<string>;
   private readonly local: Uint8Array | undefined;
   private readonly seeds: ReadonlyMap<string, CommitLaneSeed>;
@@ -68,6 +71,17 @@ export class HistoryView {
     this.rowOf = new Int32Array(graph.size).fill(-1);
     this.order.forEach((id, row) => {
       this.rowOf[id] = row;
+    });
+    this.farChild = new Int32Array(this.total).fill(-1);
+    this.order.forEach((id, row) => {
+      for (const parent of graph.parentIds(id)) {
+        const parentRow = this.rowOf[parent] ?? -1;
+        if (parentRow - row > farEdgeRows)
+          this.farChild[parentRow] = Math.max(
+            this.farChild[parentRow] ?? -1,
+            row,
+          );
+      }
     });
     const localRoots = resolved.filter(
       (id, index): id is number =>
@@ -154,32 +168,55 @@ export class HistoryView {
       )
         return false;
       const parents = this.graph.parentIds(id);
-      for (let slot = 1; slot < parents.length; slot += 1) {
-        const parent = parents[slot] ?? -1;
+      for (const [slot, parent] of parents.entries()) {
+        if (this.isFar(row, parent) !== previous.isFar(row, parent))
+          return false;
         if (
+          slot > 0 &&
           (this.rowOf[parent] ?? -1) >= 0 !==
-          (previous.rowOf[parent] ?? -1) >= 0
+            (previous.rowOf[parent] ?? -1) >= 0
         )
           return false;
       }
     }
-    return true;
+    const child = this.farChild[rows] ?? -1;
+    return (
+      child === (previous.farChild[rows] ?? -1) &&
+      (child < 0 || this.order[rows] === previous.order[rows])
+    );
   }
 
-  private topology(start: number, end: number) {
-    return Array.from(this.order.subarray(start, end), (id) => {
+  private isFar(row: number, parent: number) {
+    return (this.rowOf[parent] ?? -1) - row > farEdgeRows;
+  }
+
+  private topology(start: number, end: number): CommitTopology[] {
+    return Array.from(this.order.subarray(start, end), (id, offset) => {
+      const row = start + offset;
       const oid = this.graph.oid(id);
       const parentIds = this.graph.parentIds(id);
+      const parentOids = this.graph.parentOids(id);
+      const farParents = parentOids.filter((_, slot) =>
+        this.isFar(row, parentIds[slot] ?? -1),
+      );
+      const child = this.farChild[row + 1] ?? -1;
       return {
         oid,
-        parents: this.graph
-          .parentOids(id)
-          .filter(
-            (parent, slot) =>
-              slot === 0 ||
-              (this.rowOf[parentIds[slot] ?? -1] ?? -1) >= 0 ||
-              this.allowed.has(`${oid}\0${parent}`),
-          ),
+        parents: parentOids.filter(
+          (parent, slot) =>
+            slot === 0 ||
+            (this.rowOf[parentIds[slot] ?? -1] ?? -1) >= 0 ||
+            this.allowed.has(`${oid}\0${parent}`),
+        ),
+        ...(farParents.length === 0 ? {} : { farParents }),
+        ...(child < 0
+          ? {}
+          : {
+              farArrival: {
+                parent: this.graph.oid(this.order[row + 1] ?? -1),
+                child: this.graph.oid(this.order[child] ?? -1),
+              },
+            }),
       };
     });
   }
