@@ -21,6 +21,7 @@ import {
   commitMessage,
   useCommitDraft,
 } from "#web/features/working-changes/hooks/use-commit-draft.ts";
+import { useDiscardUndo } from "#web/features/working-changes/hooks/use-discard-undo.ts";
 import {
   type Amend,
   amendOff,
@@ -48,7 +49,6 @@ export type ChangeAction = (
   action: MutateChanges["action"],
   section: ChangeSection,
   selection: ChangeSelection,
-  revision?: string,
 ) => void;
 
 export function useWorkingChangesView({
@@ -93,18 +93,27 @@ export function useWorkingChangesView({
   const loading =
     changes === undefined || (amend.on && amend.head === undefined);
   const busy = actions.busy || conflicts.busy;
+  const discardUndo = useDiscardUndo(async (discarded) => {
+    const result = await actions.undoDiscard.run({
+      amend: scope.amend,
+      ...viewing(selection),
+      discarded,
+    });
+    errorToast.failure("undoDiscard", result);
+    return result._tag === "Ok";
+  }, active);
   const begin = (): RepositoryChanges | undefined => {
     if (changes === undefined || busy || loading) return undefined;
     return changes;
   };
 
-  const act: ChangeAction = async (action, section, selected, revision) => {
+  const act: ChangeAction = async (action, section, selected) => {
     const current = begin();
     if (current === undefined) return;
     const result = await actions.mutate.run({
       amend: scope.amend,
       ...viewing(selection),
-      revision: revision ?? current.revision,
+      revision: current.revision,
       action,
       section,
       selection:
@@ -112,7 +121,14 @@ export function useWorkingChangesView({
           ? listedOnly(current, section, selected)
           : selected,
     });
-    errorToast.failure(action, result);
+    if (result._tag !== "Ok") return errorToast.failure(action, result);
+    const { discarded } = result.value;
+    if (discarded === null) return discardUndo.clear();
+    discardUndo.add({
+      discarded,
+      paths: selectedPaths(current, section, selected),
+      lines: selected._tag === "Lines",
+    });
   };
 
   const commit = async () => {
@@ -126,6 +142,7 @@ export function useWorkingChangesView({
       message: commitMessage(draft.draft),
     });
     if (result._tag !== "Ok") return errorToast.failure("commit", result);
+    discardUndo.clear();
     draft.clear(
       amended ? [draftKey, amendDraftKey(draftKey, current.head)] : [draftKey],
     );
@@ -150,6 +167,7 @@ export function useWorkingChangesView({
     editDraft: (next: CommitDraft) => draft.edit(next),
     busy,
     loading,
+    discardNotice: discardUndo.notice,
     error:
       conflicts.problem ??
       (read.isError ? describeFailure(read.error) : null) ??
@@ -189,4 +207,14 @@ function listedOnly(
   return selection._tag === "All"
     ? { _tag: "Files", paths: changes[section].map((file) => file.path) }
     : selection;
+}
+
+function selectedPaths(
+  changes: RepositoryChanges,
+  section: ChangeSection,
+  selection: ChangeSelection,
+) {
+  if (selection._tag === "All")
+    return changes[section].map((file) => file.path);
+  return selection._tag === "Files" ? selection.paths : [selection.path];
 }

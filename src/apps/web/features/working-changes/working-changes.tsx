@@ -1,10 +1,5 @@
 import { lazy, Suspense, useState } from "react";
-import type {
-  ChangeSection,
-  ChangeSelection,
-} from "#contracts/repository-changes/repository-changes.contract.ts";
 import { Button } from "#web/components/ui/button.tsx";
-import { Confirmation } from "#web/components/ui/confirmation.tsx";
 import {
   ResizableHandle,
   ResizablePanel,
@@ -16,17 +11,10 @@ import { ChangeFileTree } from "#web/features/working-changes/components/change-
 import { CommitEditor } from "#web/features/working-changes/components/commit-editor.tsx";
 import { ConflictViewer } from "#web/features/working-changes/conflicts/components/conflict-viewer.tsx";
 import {
-  type ChangeAction,
   useWorkingChangesView,
   type WorkingChangesTarget,
 } from "#web/features/working-changes/hooks/use-working-changes-view.ts";
 import { usePanelFeature } from "#web/features/workspace-panel/api.ts";
-
-interface DiscardRequest {
-  readonly section: ChangeSection;
-  readonly selection: ChangeSelection;
-  readonly revision: string;
-}
 
 const ChangeDiffViewer = lazy(
   () =>
@@ -41,17 +29,11 @@ export function WorkingChanges({
   readonly writable: boolean;
 }) {
   const view = useWorkingChangesView(target);
-  const [discard, setDiscard] = useState<DiscardRequest | null>(null);
   const [hunk, setHunk] = useState<{
     readonly file: string;
     readonly index: number;
   } | null>(null);
   const file = `${view.selection?.section}:${view.selection?.path}`;
-  const act: ChangeAction = (action, section, selection) => {
-    if (action === "discard" && view.changes !== undefined)
-      setDiscard({ section, selection, revision: view.changes.revision });
-    else view.act(action, section, selection);
-  };
   return (
     <section
       className="flex h-full min-h-0 flex-col"
@@ -59,26 +41,6 @@ export function WorkingChanges({
       aria-busy={view.busy}
     >
       <OperationHeader scope={target} />
-      {discard === null ? null : (
-        <Confirmation
-          title={`Discard ${discard.section} changes?`}
-          action="Discard"
-          disabled={view.busy || view.loading}
-          onCancel={() => setDiscard(null)}
-          onConfirm={() => {
-            setDiscard(null);
-            view.act(
-              "discard",
-              discard.section,
-              discard.selection,
-              discard.revision,
-            );
-          }}
-          className="shrink-0 border-border border-b p-3"
-        >
-          {describeDiscard(discard.selection)} This cannot be undone.
-        </Confirmation>
-      )}
       {view.error ? (
         <div
           role="alert"
@@ -118,7 +80,7 @@ export function WorkingChanges({
                 key={`${file}:${view.diff?.revision}`}
                 view={view}
                 writable={writable}
-                act={act}
+                act={view.act}
                 hunk={hunk?.file === file ? hunk.index : null}
                 onHunk={(index) =>
                   setHunk(index === null ? null : { file, index })
@@ -140,7 +102,7 @@ export function WorkingChanges({
             className="border-border border-l"
           >
             <ResizablePanel id="change-files" minSize="10rem">
-              <ChangeFileTree view={view} writable={writable} act={act} />
+              <ChangeFileTree view={view} writable={writable} act={view.act} />
             </ResizablePanel>
             <ResizableHandle aria-label="Resize commit editor" />
             <ResizablePanel
@@ -156,14 +118,6 @@ export function WorkingChanges({
       </ResizablePanelGroup>
     </section>
   );
-}
-
-function describeDiscard(selection: ChangeSelection) {
-  if (selection._tag === "Lines")
-    return `${selection.lines.length} selected lines in ${selection.path}.`;
-  if (selection._tag === "Files")
-    return `${selection.paths.length} selected ${selection.paths.length === 1 ? "file" : "files"}.`;
-  return "Includes files hidden by the filter.";
 }
 
 export function WorkingChangesPanel() {

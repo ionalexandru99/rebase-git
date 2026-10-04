@@ -4,6 +4,7 @@ import type { PullRequest } from "#contracts/pull-requests/pull-requests.contrac
 import type { RepositoryCatalogEntry } from "#contracts/repository-catalog/repository-catalog.contract.ts";
 import type {
   ChangedFile,
+  DiscardedChanges,
   RepositoryChanges,
 } from "#contracts/repository-changes/repository-changes.contract.ts";
 import type { ChangeDiff } from "#contracts/repository-comparison/repository-comparison.contract.ts";
@@ -176,6 +177,13 @@ export function repositoryChanges(
     staged: [],
     renamesLimited: false,
     ...changes,
+  };
+}
+
+export function discardedChanges(after = "d"): DiscardedChanges {
+  return {
+    before: { index: "b".repeat(40), worktree: "c".repeat(40) },
+    after: { index: "b".repeat(40), worktree: after.repeat(40) },
   };
 }
 

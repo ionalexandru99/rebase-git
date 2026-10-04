@@ -79,6 +79,24 @@ export const MutateChanges = Schema.Struct({
   viewed: Schema.optionalKey(ViewedChange),
 });
 export type MutateChanges = typeof MutateChanges.Type;
+const Tree = Schema.String.check(Schema.isPattern(/^[0-9a-f]{40,64}$/));
+const ChangesSnapshot = Schema.Struct({ index: Tree, worktree: Tree });
+export const DiscardedChanges = Schema.Struct({
+  before: ChangesSnapshot,
+  after: ChangesSnapshot,
+});
+export type DiscardedChanges = typeof DiscardedChanges.Type;
+export const ChangesMutated = Schema.Struct({
+  ...ChangesWritten.fields,
+  discarded: Schema.NullOr(DiscardedChanges),
+});
+export type ChangesMutated = typeof ChangesMutated.Type;
+export const UndoDiscard = Schema.Struct({
+  ...ChangesScope.fields,
+  discarded: DiscardedChanges,
+  viewed: Schema.optionalKey(ViewedChange),
+});
+export type UndoDiscard = typeof UndoDiscard.Type;
 export const CommitChanges = Schema.Struct({
   ...ChangesScope.fields,
   revision: Revision,
@@ -115,6 +133,11 @@ export const RepositoryChangesApi = {
   }),
   mutate: repositoryCommand("repositories/changes/mutate", {
     request: MutateChanges,
+    success: ChangesMutated,
+    failure: ChangesFailure,
+  }),
+  undoDiscard: repositoryCommand("repositories/changes/undo-discard", {
+    request: UndoDiscard,
     success: ChangesWritten,
     failure: ChangesFailure,
   }),

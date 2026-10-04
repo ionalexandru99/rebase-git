@@ -15,7 +15,9 @@ import type {
 
 type FileTreeView = ChangeFileSectionView &
   ConflictFileSectionView &
-  Pick<WorkingChangesView, "choosePreferences">;
+  Pick<WorkingChangesView, "choosePreferences" | "discardNotice">;
+
+const undoKeys = navigator.platform.startsWith("Mac") ? "⌘Z" : "Ctrl+Z";
 
 export function ChangeFileTree({
   view,
@@ -67,6 +69,22 @@ export function ChangeFileTree({
           />
         </div>
       </div>
+      {view.discardNotice === null ? null : (
+        <p
+          role="status"
+          className="mx-2 mb-2 shrink-0 rounded-md border border-border bg-muted/40 px-2 py-1.5 text-xs text-muted-foreground"
+        >
+          {view.discardNotice.title},{" "}
+          <button
+            type="button"
+            aria-keyshortcuts="Control+Z Meta+Z"
+            className="rounded-sm font-medium text-foreground underline-offset-2 outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring/30"
+            onClick={view.discardNotice.undo}
+          >
+            {undoKeys} to undo
+          </button>
+        </p>
+      )}
     </section>
   );
 }
