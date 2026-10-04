@@ -46,6 +46,18 @@ describe("repository fetch with real Git", () => {
     await git(f.local, "rev-parse", "refs/remotes/origin/temporary");
   });
 
+  it("keeps deleted remote branches when the remote turns pruning off", async () => {
+    const f = await fixture();
+    await git(f.remote, "branch", "temporary", "main");
+    await f.fetch();
+    await git(f.remote, "branch", "-D", "temporary");
+    await git(f.local, "config", "remote.origin.prune", "false");
+
+    await f.fetch();
+
+    await git(f.local, "rev-parse", "refs/remotes/origin/temporary");
+  });
+
   it("persists the interval in the repository config", async () => {
     const f = await fixture();
 

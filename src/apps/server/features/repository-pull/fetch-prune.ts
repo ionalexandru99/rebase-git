@@ -60,10 +60,10 @@ export function createFetchPrunes(
   };
 }
 
-export function fetchPruneArgument(git: GitCommandRunner, path: string) {
+export function defaultPruneArguments(git: GitCommandRunner, path: string) {
   return readPrune(git, path, []).pipe(
     Effect.map((prune) =>
-      (prune ?? pruneByDefault) ? "--prune" : "--no-prune",
+      prune === null ? ["-c", `${key}=${pruneByDefault}`] : [],
     ),
   );
 }
