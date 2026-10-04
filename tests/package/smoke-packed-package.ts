@@ -9,7 +9,6 @@ import {
   rm,
   stat,
 } from "node:fs/promises";
-import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
 import process from "node:process";
@@ -164,18 +163,19 @@ async function verifyPackageContents(packageRoot: string) {
 }
 
 async function verifyTerminal(packageRoot: string) {
-  const { spawn: spawnTerminal } = createRequire(
-    join(packageRoot, "package.json"),
-  )("@lydell/node-pty") as typeof import("@lydell/node-pty");
-  const shell =
-    process.platform === "win32"
-      ? (process.env.ComSpec ?? "cmd.exe")
-      : "/bin/sh";
-  const terminal = spawnTerminal(shell, [], { cols: 80, rows: 24 });
-  await new Promise<void>((resolveExit) => {
-    terminal.onExit(() => resolveExit());
-    terminal.write("exit\r");
-  });
+  await run(
+    process.execPath,
+    [
+      "-e",
+      [
+        'const shell = process.platform === "win32" ? process.env.ComSpec : "/bin/sh";',
+        'const terminal = require("@lydell/node-pty").spawn(shell, [], { cols: 80, rows: 24 });',
+        "terminal.onExit(() => process.exit(0));",
+        'terminal.write("exit\\r");',
+      ].join("\n"),
+    ],
+    packageRoot,
+  );
 }
 
 async function verifyVersionCommands(installRoot: string, packageRoot: string) {
