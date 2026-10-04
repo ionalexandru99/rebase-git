@@ -12,20 +12,29 @@ export async function notarizeDmg({
 
   const dmgPaths = artifactPaths.filter((path) => path.endsWith(".dmg"));
   for (const path of dmgPaths) {
-    await execute("xcrun", [
-      "notarytool",
-      "submit",
-      path,
-      "--wait",
-      "--apple-id",
-      process.env.APPLE_ID ?? "",
-      "--password",
-      process.env.APPLE_APP_SPECIFIC_PASSWORD ?? "",
-      "--team-id",
-      process.env.APPLE_TEAM_ID,
-    ]);
+    await submit(path).catch((error: unknown) => {
+      console.warn(
+        `Notarization upload failed, retrying once: ${String(error)}`,
+      );
+      return submit(path);
+    });
     await execute("xcrun", ["stapler", "staple", path]);
   }
 
   return [];
+}
+
+function submit(path: string) {
+  return execute("xcrun", [
+    "notarytool",
+    "submit",
+    path,
+    "--wait",
+    "--apple-id",
+    process.env.APPLE_ID ?? "",
+    "--password",
+    process.env.APPLE_APP_SPECIFIC_PASSWORD ?? "",
+    "--team-id",
+    process.env.APPLE_TEAM_ID ?? "",
+  ]);
 }
