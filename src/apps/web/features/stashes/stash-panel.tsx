@@ -8,9 +8,9 @@ import {
 import { CommitFiles } from "#web/features/commit-inspection/components/commit-files.tsx";
 import { DiffWorkerPool } from "#web/features/file-diff/components/diff-worker-pool.tsx";
 import { useDiffPreferences } from "#web/features/file-diff/hooks/use-diff-preferences.ts";
-import { ageLabel } from "#web/features/stashes/stash-sidebar.tsx";
 import { isStashInput, useStashes } from "#web/features/stashes/stashes.ts";
 import { usePanelFeature } from "#web/features/workspace-panel/api.ts";
+import { ageLabel } from "#web/lib/age-label.ts";
 import { useEnvironmentQuery } from "#web/platform/query/environment-query.ts";
 import { describeFailure } from "#web/platform/query/request-failure.ts";
 

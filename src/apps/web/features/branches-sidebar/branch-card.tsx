@@ -12,8 +12,8 @@ import { AuthorAvatar } from "#web/features/author-avatars/author-avatar.tsx";
 import type { BranchesSidebarRefRow } from "#web/features/branches-sidebar/branches-sidebar-state.ts";
 import { PullRequestList } from "#web/features/pull-requests/pull-requests.tsx";
 import type { RepositoryHistory } from "#web/features/repository-history/repository-history.ts";
-import { ageLabel } from "#web/features/stashes/stash-sidebar.tsx";
 import { worktreeName } from "#web/features/worktrees/worktree-draft.ts";
+import { ageLabel } from "#web/lib/age-label.ts";
 
 export interface BranchCardBranch {
   readonly row: BranchesSidebarRefRow;

@@ -64,13 +64,13 @@ describe("branch card", () => {
   it("shows the last commit of a branch and when it settled", async () => {
     const screen = await renderCard();
 
+    await screen.getByRole("treeitem", { name: /^Settled/ }).click();
     await userEvent.hover(
       screen.getByRole("treeitem", { name: /^main, current branch/ }),
     );
     const main = screen.getByRole("group", { name: "main" });
     await expect.element(main.getByText("Ship the branch card")).toBeVisible();
     await expect.element(main.getByText(/^Alex I\. · /)).toBeVisible();
-    await screen.getByRole("treeitem", { name: /^Settled/ }).click();
     await userEvent.hover(screen.getByRole("treeitem", { name: /^done/ }));
     await expect
       .element(
@@ -113,7 +113,12 @@ const history = fakeRepositoryHistory({
 });
 
 function daysAgo(days: number) {
-  const date = new Date(Date.now() - days * 86_400_000);
+  const today = new Date();
+  const date = new Date(
+    today.getFullYear(),
+    today.getMonth(),
+    today.getDate() - days,
+  );
   return [date.getFullYear(), date.getMonth() + 1, date.getDate()]
     .map((part) => String(part).padStart(2, "0"))
     .join("-");
