@@ -1,3 +1,4 @@
+import { execFile } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { type UtilityProcess, utilityProcess } from "electron";
 import type { EnvironmentServer } from "#server/app/server/start-environment-server.ts";
@@ -18,12 +19,14 @@ const environmentProcessPath = fileURLToPath(
   new URL("./environment-process.js", import.meta.url),
 );
 const stopGraceMilliseconds = 5_000;
+const loginShellPathMarker = "__REBASE_LOGIN_SHELL_PATH__";
 
-export function startManagedEnvironmentServer(
+export async function startManagedEnvironmentServer(
   onUnexpectedExit: (error: Error) => void,
 ): Promise<ManagedEnvironmentServer> {
   const child = utilityProcess.fork(environmentProcessPath, [], {
     serviceName: "Rebase environment",
+    env: await environmentVariables(),
   });
   const exited = new Promise<number>((resolve) => child.once("exit", resolve));
 
@@ -43,6 +46,42 @@ export function startManagedEnvironmentServer(
         ),
       ),
     );
+  });
+}
+
+async function environmentVariables(): Promise<NodeJS.ProcessEnv> {
+  if (process.platform !== "darwin") return process.env;
+  return {
+    ...process.env,
+    PATH: await loginShellPath(
+      process.env.SHELL ?? "/bin/zsh",
+      process.env.PATH,
+    ),
+  };
+}
+
+export function loginShellPath(
+  shell: string,
+  inheritedPath: string | undefined,
+): Promise<string | undefined> {
+  return new Promise((resolve) => {
+    const probe = execFile(
+      shell,
+      [
+        "-ilc",
+        `printf '${loginShellPathMarker}%s${loginShellPathMarker}' "$PATH"`,
+      ],
+      { encoding: "utf8", timeout: 5_000 },
+      (_error, stdout) => {
+        const [, shellPath] = stdout.split(loginShellPathMarker);
+        const entries = [shellPath, inheritedPath].flatMap(
+          (path) => path?.split(":") ?? [],
+        );
+        const path = [...new Set(entries.filter(Boolean))].join(":");
+        resolve(path || undefined);
+      },
+    );
+    probe.stdin?.end();
   });
 }
 
