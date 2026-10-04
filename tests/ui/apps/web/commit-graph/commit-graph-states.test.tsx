@@ -142,14 +142,12 @@ describe("commit graph states", () => {
       ],
     });
     const remove = vi.fn();
-    const add = vi.fn();
     const reset = vi.fn();
     const selection = { _tag: "LocalBranch", name: "main" } as const;
     const screen = await render(
       <div style={{ height: 520, width: 900 }}>
         <CommitGraphFixture
           onRemoveHistoryRef={remove}
-          onAddHistoryRef={add}
           onResetHistoryScope={reset}
           reader={reader}
           repositoryName="rebase-test"
@@ -182,15 +180,12 @@ describe("commit graph states", () => {
     const pill = copyPill.element().parentElement;
     if (pill === null) throw new Error("Missing pill");
     const bounds = pill.getBoundingClientRect();
-    const addRef = screen.getByRole("button", { name: "+ Add ref" });
-    const addBounds = addRef.element().getBoundingClientRect();
     await copyPill.hover();
     expect(getComputedStyle(removePill.element()).opacity).toBe("1");
     expect(
       removePill.element().getBoundingClientRect().right,
     ).toBeLessThanOrEqual(pill.getBoundingClientRect().right);
     expect(pill.getBoundingClientRect().width).toBe(bounds.width);
-    expect(addRef.element().getBoundingClientRect().left).toBe(addBounds.left);
     await removePill.hover();
     expect(pill.getBoundingClientRect().width).toBe(bounds.width);
     expect(getComputedStyle(removePill.element()).opacity).toBe("1");
@@ -203,8 +198,6 @@ describe("commit graph states", () => {
     expect(getComputedStyle(removePill.element()).opacity).toBe("1");
     await userEvent.keyboard("{Enter}");
     expect(remove).toHaveBeenCalledWith(selection);
-    await screen.getByRole("button", { name: "+ Add ref" }).click();
-    expect(add).toHaveBeenCalledOnce();
     await screen.getByRole("button", { name: "Reset filters" }).click();
     expect(reset).toHaveBeenCalledOnce();
   });

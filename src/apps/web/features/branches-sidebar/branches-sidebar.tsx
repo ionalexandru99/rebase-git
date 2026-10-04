@@ -268,27 +268,19 @@ export function BranchesSidebar({
       editing.draft(intent.kind, commitStartPoint(intent.oid));
       return;
     }
-    if (intent._tag === "RunRefAction") {
-      const key = historyRefKey(intent.target);
-      const row = rowsRef.current.find(
-        (candidate) =>
-          candidate.kind === "ref" && historyRefKey(candidate.target) === key,
-      );
-      runAction(
-        everyAction(
-          refActionsFor(
-            row?.kind === "ref"
-              ? row
-              : { id: key, name: intent.target.name, target: intent.target },
-          ),
-        ).find((action) => action.id === intent.id),
-      );
-      return;
-    }
-    treeRef.current?.focus();
-    setActiveRowId(
-      (current) =>
-        current ?? currentRefRowId(rowsRef.current) ?? rowsRef.current[0]?.id,
+    const key = historyRefKey(intent.target);
+    const row = rowsRef.current.find(
+      (candidate) =>
+        candidate.kind === "ref" && historyRefKey(candidate.target) === key,
+    );
+    runAction(
+      everyAction(
+        refActionsFor(
+          row?.kind === "ref"
+            ? row
+            : { id: key, name: intent.target.name, target: intent.target },
+        ),
+      ).find((action) => action.id === intent.id),
     );
   });
 

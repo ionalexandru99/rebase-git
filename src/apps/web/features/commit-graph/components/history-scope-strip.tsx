@@ -7,14 +7,12 @@ import type {
 
 export function HistoryScopeStrip({
   onRemove,
-  onAdd,
   onReset,
   roots,
   scope,
   selections,
 }: {
   readonly onRemove: ((target: HistorySelection) => void) | undefined;
-  readonly onAdd?: (() => void) | undefined;
   readonly onReset?: (() => void) | undefined;
   readonly roots: readonly RepositoryHistoryRefTarget[];
   readonly scope: HistoryScope;
@@ -52,15 +50,6 @@ export function HistoryScopeStrip({
       {selections.length === 0 && detachedHead === undefined ? (
         <span className="text-[.85rem] text-muted-foreground">No refs</span>
       ) : null}
-      {onAdd === undefined ? null : (
-        <button
-          type="button"
-          onClick={onAdd}
-          className="h-6 rounded-sm px-2 text-[.85rem] text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:outline-2 focus-visible:outline-primary"
-        >
-          + Add ref
-        </button>
-      )}
       {scope._tag !== "Custom" || onReset === undefined ? null : (
         <button
           type="button"

@@ -30,7 +30,6 @@ import {
 import { render, testChanges } from "#tests-support/render.tsx";
 import { BranchesSidebar } from "#web/features/branches-sidebar/branches-sidebar.tsx";
 import { historyRefKey } from "#web/features/commit-graph/scope/history-scope.ts";
-import { requestRefIntent } from "#web/features/refs/ref-actions.ts";
 import {
   type RepositoryScope,
   RepositoryScopeProvider,
@@ -363,7 +362,8 @@ describe("branches sidebar", () => {
       name: "main, current branch",
     });
     await expect.element(main).toBeVisible();
-    requestRefIntent({ _tag: "FocusRefs" });
+    await screen.getByRole("textbox", { name: "Filter branches" }).click();
+    await userEvent.keyboard("{ArrowDown}");
 
     await expect.element(tree).toHaveFocus();
     await expect.element(main).toBeVisible();

@@ -75,7 +75,6 @@ export function CommitGraph({
   historyIdentity,
   onRemoveHistoryRef,
   onRevealHistoryRef,
-  onAddHistoryRef,
   onResetHistoryScope,
   history,
   repositoryName,
@@ -111,7 +110,6 @@ export function CommitGraph({
   readonly historyIdentity?:
     | { readonly environmentId: string; readonly repositoryId: string }
     | undefined;
-  readonly onAddHistoryRef?: () => void;
   readonly onResetHistoryScope?: (() => void) | undefined;
   readonly onRemoveHistoryRef?: (target: HistorySelection) => void;
   readonly onRevealHistoryRef?: (target: HistorySelection) => void;
@@ -285,7 +283,6 @@ export function CommitGraph({
         {scope === undefined || selections === undefined ? null : (
           <HistoryScopeStrip
             onRemove={onRemoveHistoryRef}
-            onAdd={onAddHistoryRef}
             onReset={onResetHistoryScope}
             roots={roots ?? []}
             scope={scope}
