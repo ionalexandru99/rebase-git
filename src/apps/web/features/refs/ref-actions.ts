@@ -27,7 +27,6 @@ import {
 
 export type RefIntent =
   | { readonly _tag: "DraftRef"; readonly kind: RefKind; readonly oid: string }
-  | { readonly _tag: "FocusRefs" }
   | {
       readonly _tag: "RunRefAction";
       readonly target: RepositoryRefTarget;

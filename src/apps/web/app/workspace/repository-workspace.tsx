@@ -21,7 +21,6 @@ import {
 } from "#web/features/rebase/drop-commits.tsx";
 import { useRebaseActions } from "#web/features/rebase/rebase-actions.ts";
 import type { RebasePlanTarget } from "#web/features/rebase/rebase-plan.ts";
-import { requestRefIntent } from "#web/features/refs/ref-actions.ts";
 import { useScopedRepositoryRefs } from "#web/features/refs/repository-refs.ts";
 import { RemoteSync } from "#web/features/remote-sync/remote-sync.tsx";
 import { useCatalogRepository } from "#web/features/repository-catalog/use-repository-catalog.ts";
@@ -212,9 +211,6 @@ function Workspace({
                         }}
                         onRemoveHistoryRef={historyScope.toggleRef}
                         onRevealHistoryRef={historyScope.toggleRef}
-                        onAddHistoryRef={() =>
-                          requestRefIntent({ _tag: "FocusRefs" })
-                        }
                         onResetHistoryScope={historyScope.reset}
                         history={history}
                         repositoryName={name}
