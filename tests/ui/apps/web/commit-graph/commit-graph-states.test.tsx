@@ -202,6 +202,55 @@ describe("commit graph states", () => {
     expect(reset).toHaveBeenCalledOnce();
   });
 
+  it("keeps many filters on one line that scrolls sideways", async () => {
+    const commits = history(3);
+    const reader = historyReader({ commits, status: "ready" });
+    const selections = Array.from(
+      { length: 40 },
+      (_, index) =>
+        ({ _tag: "LocalBranch", name: `feature/branch-${index}` }) as const,
+    );
+    const screen = await render(
+      <div style={{ height: 520, width: 900 }}>
+        <CommitGraphFixture
+          onResetHistoryScope={vi.fn()}
+          reader={reader}
+          repositoryName="rebase-test"
+          roots={[{ name: "main", oid: commits[0]?.oid ?? "", type: "branch" }]}
+          scope={{ _tag: "Custom", selections }}
+          selections={selections}
+        />
+      </div>,
+    );
+    const strip = screen.getByRole("group", { name: "Custom history scope" });
+    const filters = strip.getByRole("region", { name: "Filters" });
+    const last = strip
+      .getByRole("button", { name: "Copy feature/branch-39", exact: true })
+      .element();
+    const reset = screen.getByRole("button", { name: "Reset filters" });
+    await expect.element(reset).toBeVisible();
+
+    expect(strip.element().getBoundingClientRect().height).toBeLessThanOrEqual(
+      37,
+    );
+    expect(last.getBoundingClientRect().left).toBeGreaterThan(
+      filters.element().getBoundingClientRect().right,
+    );
+
+    filters.element().focus();
+    await userEvent.keyboard("{End}");
+    await expect
+      .poll(() => last.getBoundingClientRect().right)
+      .toBeLessThanOrEqual(filters.element().getBoundingClientRect().right);
+    expect(reset.element().getBoundingClientRect().left).toBeGreaterThanOrEqual(
+      filters.element().getBoundingClientRect().right,
+    );
+    await strip.getByRole("button", { name: "Scroll filters left" }).click();
+    await expect
+      .poll(() => last.getBoundingClientRect().left)
+      .toBeGreaterThan(filters.element().getBoundingClientRect().right);
+  });
+
   it("renders 100 connected commits with bounded semantic rows and selection", async () => {
     const commits = history(100);
     const reader = historyReader({ commits, status: "ready" });
