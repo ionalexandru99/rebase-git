@@ -58,7 +58,14 @@ export type LinkPullRequest = typeof LinkPullRequest.Type;
 export const PullRequestsApi = {
   list: repositoryQuery("repositories/pull-requests", {
     request: Schema.Struct({ repositoryId: RepositoryId }),
-    success: Schema.Array(BranchPullRequests).check(Schema.isMaxLength(10_000)),
+    success: Schema.NullOr(
+      Schema.Struct({
+        kind: PullRequestKind,
+        branches: Schema.Array(BranchPullRequests).check(
+          Schema.isMaxLength(10_000),
+        ),
+      }),
+    ),
     failure: PullRequestsUnavailable,
   }),
   find: repositoryQuery("repositories/pull-requests/find", {

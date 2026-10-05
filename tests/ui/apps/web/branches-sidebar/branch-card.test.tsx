@@ -254,15 +254,18 @@ function renderCard(links: LinkPullRequest[] = []) {
             links.push(input);
             return {};
           }),
-          respond(PullRequestsApi.list, async () => [
-            {
-              branch: "feature/topic",
-              pullRequests: [
-                pullRequest(12),
-                pullRequest(11, { state: "Merged" }),
-              ],
-            },
-          ]),
+          respond(PullRequestsApi.list, async () => ({
+            kind: "PullRequest" as const,
+            branches: [
+              {
+                branch: "feature/topic",
+                pullRequests: [
+                  pullRequest(12),
+                  pullRequest(11, { state: "Merged" }),
+                ],
+              },
+            ],
+          })),
         ),
       },
     },

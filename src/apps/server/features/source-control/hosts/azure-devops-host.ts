@@ -52,6 +52,11 @@ export function createAzureDevOpsHost(client: AzureDevOpsClient): GitHost {
                 pullRequestUrl(repository, number),
                 decodePullRequest,
               );
+              if (
+                node.repository.name.toLowerCase() !==
+                repository.name.toLowerCase()
+              )
+                return undefined;
               return azurePullRequest(
                 repository,
                 node,
@@ -211,6 +216,7 @@ const PullRequestNode = Schema.Struct({
     Schema.NullOr(Schema.Struct({ commitId: Schema.String })),
   ),
   repository: Schema.Struct({
+    name: Schema.String,
     project: Schema.Struct({ id: Schema.String }),
   }),
 });

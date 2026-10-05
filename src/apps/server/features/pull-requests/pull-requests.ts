@@ -3,8 +3,10 @@ import { repositoryRejected } from "#contracts/git/git-failures.contract.ts";
 import {
   isPullRequestLink,
   type PullRequest,
+  type PullRequestKind,
   PullRequestsApi,
 } from "#contracts/pull-requests/pull-requests.contract.ts";
+import type { GitHostKind } from "#contracts/source-control/source-control.contract.ts";
 import type { EnvironmentEventPublisher } from "#server/adapters/environment-transport/environment-event-publisher.ts";
 import {
   type EnvironmentFeature,
@@ -49,8 +51,15 @@ export function pullRequestsFeature(
           Effect.flatMap((repository) =>
             listPullRequests(git, sourceControl, repository.path),
           ),
-          Effect.map((branches) =>
-            branches.filter(({ pullRequests }) => pullRequests.length > 0),
+          Effect.map((found) =>
+            found === undefined
+              ? null
+              : {
+                  kind: found.kind,
+                  branches: found.branches.filter(
+                    ({ pullRequests }) => pullRequests.length > 0,
+                  ),
+                },
           ),
           Effect.catchTag("GitFailed", (failure) =>
             Effect.fail(repositoryRejected("GitFailed", failure.detail)),
@@ -67,10 +76,7 @@ export function pullRequestsFeature(
               ? Effect.fail(unavailable)
               : found.repository.pullRequest(number).pipe(
                   Effect.map((pullRequest) => ({
-                    kind:
-                      found.host.kind === "gitlab"
-                        ? ("MergeRequest" as const)
-                        : ("PullRequest" as const),
+                    kind: pullRequestKind(found.host.kind),
                     pullRequest:
                       pullRequest !== undefined &&
                       isPullRequestLink(pullRequest.url, found.host.kind)
@@ -144,7 +150,7 @@ export function listPullRequests(
 ) {
   return Effect.gen(function* () {
     const found = yield* hostedRepository(git, sourceControl, directory);
-    if (found === undefined) return [];
+    if (found === undefined) return undefined;
     const { host, repository, urls } = found;
     const branches = (yield* readLocalBranches(git, directory)).filter(wanted);
     const links = yield* readLinks(git, directory);
@@ -178,7 +184,7 @@ export function listPullRequests(
           : [[pullRequest.number, pullRequest] as const],
       ),
     );
-    return branches.flatMap(({ branch }) => {
+    const listed = branches.flatMap(({ branch }) => {
       const head = heads.get(branch);
       const matched = head === undefined ? undefined : byHead.get(head);
       const link = links.get(branch);
@@ -203,7 +209,12 @@ export function listPullRequests(
         },
       ];
     });
+    return { kind: pullRequestKind(host.kind), branches: listed };
   });
+}
+
+function pullRequestKind(kind: GitHostKind): PullRequestKind {
+  return kind === "gitlab" ? "MergeRequest" : "PullRequest";
 }
 
 function hostedRepository(

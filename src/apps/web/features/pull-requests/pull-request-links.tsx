@@ -6,6 +6,7 @@ import {
   isSamePullRequestLink,
   type LinkPullRequest,
   type PullRequest,
+  type PullRequestKind,
   PullRequestsApi,
   pullRequestNumber,
 } from "#contracts/pull-requests/pull-requests.contract.ts";
@@ -35,7 +36,16 @@ export function usePullRequestLinking(): SetPullRequestLinked {
         PullRequestsApi.list,
         { repositoryId: input.repositoryId },
         (current) =>
-          relinked(current ?? [], input, changing.current.get(input.number)),
+          current == null
+            ? null
+            : {
+                ...current,
+                branches: relinked(
+                  current.branches,
+                  input,
+                  changing.current.get(input.number),
+                ),
+              },
       ),
     ],
   });
@@ -55,10 +65,12 @@ export function usePullRequestLinking(): SetPullRequestLinked {
 
 export function LinkPullRequestField({
   branch,
+  kind,
   onLinked,
   setLinked,
 }: {
   readonly branch: string;
+  readonly kind: PullRequestKind;
   readonly onLinked: () => void;
   readonly setLinked: SetPullRequestLinked;
 }) {
@@ -96,7 +108,7 @@ export function LinkPullRequestField({
         <Input
           aria-describedby={problem === undefined ? undefined : problemId}
           aria-invalid={problem === undefined ? undefined : true}
-          aria-label="Pull request number or link"
+          aria-label={`${pullRequestTerms[kind].title} number or link`}
           autoFocus
           className="h-7 sm:h-6.5"
           onChange={(event) => setReference(event.target.value)}

@@ -1,7 +1,9 @@
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import { userEvent } from "vite-plus/test/browser";
-import type { RouteSuccess } from "#contracts/environment-connection/environment-route.contract.ts";
-import { PullRequestsApi } from "#contracts/pull-requests/pull-requests.contract.ts";
+import {
+  type BranchPullRequests,
+  PullRequestsApi,
+} from "#contracts/pull-requests/pull-requests.contract.ts";
 import { RepositoryRefsApi } from "#contracts/repository-refs/repository-refs.contract.ts";
 import {
   fakeRequests,
@@ -128,7 +130,7 @@ function PullRequestsHarness() {
 }
 
 function renderPullRequests(
-  branches: RouteSuccess<typeof PullRequestsApi.list> = [
+  branches: readonly BranchPullRequests[] = [
     {
       branch: "main",
       pullRequests: [pullRequest(7, { checks: "Passing" })],
@@ -166,7 +168,10 @@ function renderPullRequests(
               worktrees: mainAndTopicWorktrees(),
             }),
           ),
-          respond(PullRequestsApi.list, async () => branches),
+          respond(PullRequestsApi.list, async () => ({
+            kind: "PullRequest" as const,
+            branches,
+          })),
         ),
       },
     },

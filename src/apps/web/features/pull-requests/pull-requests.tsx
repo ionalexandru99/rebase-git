@@ -11,6 +11,7 @@ import {
 import { skipToken } from "@tanstack/react-query";
 import {
   type PullRequest,
+  type PullRequestKind,
   PullRequestsApi,
 } from "#contracts/pull-requests/pull-requests.contract.ts";
 import type { RepositoryRefTarget } from "#contracts/repository-refs/repository-refs.contract.ts";
@@ -25,6 +26,7 @@ import { useEnvironmentQuery } from "#web/platform/query/environment-query.ts";
 import { useRepositoryScope } from "#web/platform/query/repository-scope.tsx";
 
 export interface PullRequests {
+  readonly kind: PullRequestKind;
   readonly forBranch: (branch: string) => readonly PullRequest[];
   readonly actionsFor: (
     target: RepositoryRefTarget,
@@ -42,18 +44,19 @@ export function usePullRequests(): PullRequests {
     { changes: "refs", refetchOnWindowFocus: "always" },
   );
   const byBranch = new Map(
-    data?.map(({ branch, pullRequests }) => [branch, pullRequests]),
+    data?.branches.map(({ branch, pullRequests }) => [branch, pullRequests]),
   );
   const forBranch = (branch: string) => byBranch.get(branch) ?? none;
-  const kind = data?.[0]?.pullRequests[0]?.kind ?? "PullRequest";
+  const kind = data?.kind ?? "PullRequest";
   return {
+    kind,
     forBranch,
     actionsFor: (target, link) => {
       if (target._tag !== "LocalBranch") return [];
       const open = pullRequestAction(forBranch(target.name));
       return [
         ...(open === undefined ? [] : [open]),
-        ...(link === undefined || data === undefined
+        ...(link === undefined || data == null
           ? []
           : [
               {
@@ -234,8 +237,18 @@ function openPullRequest(pullRequest: PullRequest) {
 }
 
 export const pullRequestTerms = {
-  PullRequest: { name: "pull request", plural: "Pull requests", sigil: "#" },
-  MergeRequest: { name: "merge request", plural: "Merge requests", sigil: "!" },
+  PullRequest: {
+    name: "pull request",
+    title: "Pull request",
+    plural: "Pull requests",
+    sigil: "#",
+  },
+  MergeRequest: {
+    name: "merge request",
+    title: "Merge request",
+    plural: "Merge requests",
+    sigil: "!",
+  },
 } as const;
 
 const stateIcons = {

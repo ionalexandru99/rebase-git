@@ -56,7 +56,7 @@ describe("GitHub pull requests", () => {
     );
     await f.track("main", "origin", "main");
 
-    await expect(f.list()).resolves.toEqual([]);
+    await expect(f.listed()).resolves.toBeNull();
     expect(requests).toEqual([]);
   });
 

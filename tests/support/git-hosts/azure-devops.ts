@@ -73,7 +73,14 @@ export function fakeAzureDevOps(
         status: node.status ?? "active",
         isDraft: node.isDraft ?? false,
         ...(node.fork === true ? { forkSource: {} } : {}),
-        repository: { project: { id: "project-id" } },
+        repository: {
+          name: decodeURIComponent(
+            /\/_apis\/git\/repositories\/([^/]+)\//.exec(
+              new URL(url).pathname,
+            )?.[1] ?? "",
+          ),
+          project: { id: "project-id" },
+        },
       });
       const wanted = /\/pullrequests\/(\d+)$/.exec(new URL(url).pathname)?.[1];
       if (wanted !== undefined) {

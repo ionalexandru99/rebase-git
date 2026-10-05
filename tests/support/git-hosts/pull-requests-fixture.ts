@@ -25,7 +25,9 @@ export async function pullRequestsFixture(
     events: environment.events,
     routes: environment.routes,
     sourceControl: environment.routes(SourceControlApi),
-    list: () => Effect.runPromise(service.list({ repositoryId })),
+    listed: () => Effect.runPromise(service.list({ repositoryId })),
+    list: async () =>
+      (await Effect.runPromise(service.list({ repositoryId })))?.branches ?? [],
     find: (number: number) =>
       Effect.runPromise(service.find({ repositoryId, number })),
     link: (branch: string, number: number, linked = true) =>

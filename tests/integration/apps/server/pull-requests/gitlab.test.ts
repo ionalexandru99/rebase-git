@@ -86,5 +86,9 @@ describe("GitLab merge requests", () => {
       kind: "MergeRequest",
       pullRequest: null,
     });
+    await expect(f.listed()).resolves.toEqual({
+      kind: "MergeRequest",
+      branches: [],
+    });
   });
 });

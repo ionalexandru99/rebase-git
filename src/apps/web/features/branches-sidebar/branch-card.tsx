@@ -5,7 +5,10 @@ import {
   IconGitBranchDeleted,
 } from "@tabler/icons-react";
 import { type ReactNode, useEffect, useState } from "react";
-import type { PullRequest } from "#contracts/pull-requests/pull-requests.contract.ts";
+import type {
+  PullRequest,
+  PullRequestKind,
+} from "#contracts/pull-requests/pull-requests.contract.ts";
 import type { RepositoryCommit } from "#contracts/repository-history/repository-history.contract.ts";
 import type { RemoteBranch } from "#contracts/repository-refs/repository-refs.contract.ts";
 import { AuthorAvatar } from "#web/features/author-avatars/author-avatar.tsx";
@@ -98,6 +101,7 @@ export function BranchCard({
               >
                 <BranchCardBody
                   history={history}
+                  kind={pullRequests?.kind ?? "PullRequest"}
                   linking={linking === payload.row.name}
                   onLinked={() => handle.close()}
                   pullRequests={
@@ -117,6 +121,7 @@ export function BranchCard({
 
 function BranchCardBody({
   history,
+  kind,
   linking,
   onLinked,
   pullRequests,
@@ -124,6 +129,7 @@ function BranchCardBody({
   row,
 }: {
   readonly history: Pick<RepositoryHistory, "ask"> | undefined;
+  readonly kind: PullRequestKind;
   readonly linking: boolean;
   readonly onLinked: () => void;
   readonly pullRequests: readonly PullRequest[];
@@ -186,6 +192,7 @@ function BranchCardBody({
           <div className="my-2 h-px bg-border" />
           <LinkPullRequestField
             branch={row.name}
+            kind={kind}
             onLinked={onLinked}
             setLinked={setLinked}
           />

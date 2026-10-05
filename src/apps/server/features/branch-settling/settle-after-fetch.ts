@@ -74,7 +74,9 @@ export function settleBranchesAfterFetch({
             !isDefault &&
             (expired.has(branch) ||
               (autoSettle && !kept.has(branch) && !marked.has(branch))),
-        )).map(({ branch, pullRequests }) => [branch, pullRequests] as const),
+        ))?.branches.map(
+          ({ branch, pullRequests }) => [branch, pullRequests] as const,
+        ) ?? [],
       );
       const merged = [...pullRequests].flatMap(([branch, found]) =>
         isMerged(found) && !marked.has(branch) ? [branch] : [],
