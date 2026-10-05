@@ -30,6 +30,8 @@ const errorTitles = {
   renameBranch: "Couldn't rename the branch",
   deleteBranch: "Couldn't delete the branch",
   settleBranches: "Couldn't update the settled branches",
+  linkPullRequest: "Couldn't link the pull request",
+  unlinkPullRequest: "Couldn't unlink the pull request",
   deleteTag: "Couldn't delete the tag",
   restoreBranch: "Couldn't restore the branch",
   pushTags: "Couldn't push tags",

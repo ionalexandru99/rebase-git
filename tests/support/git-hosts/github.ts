@@ -49,38 +49,48 @@ export function fakeGitHub(
             })),
         ),
       ),
-    graphql: (_query, variables) => {
+    graphql: (query, variables) => {
       requests.push(variables);
       if (byHead === null)
         return Effect.fail({ _tag: "PullRequestsUnavailable" });
+      const asNode = (node: GitHubPullRequestNode) => ({
+        number: node.number,
+        url: `https://github.com/${variables.owner}/${variables.name}/pull/${node.number}`,
+        title: `Pull request ${node.number}`,
+        state: node.state ?? "OPEN",
+        isDraft: node.isDraft ?? false,
+        ...(node.head === undefined ? {} : { headRefOid: node.head }),
+        headRepositoryOwner: { login: node.owner ?? variables.owner },
+        commits: {
+          nodes: [
+            {
+              commit: {
+                statusCheckRollup:
+                  node.checks === undefined ? null : { state: node.checks },
+              },
+            },
+          ],
+        },
+      });
+      const wanted = /pullRequest\(number: (\d+)\)/.exec(query)?.[1];
+      if (wanted !== undefined) {
+        const node = Object.values(byHead)
+          .flat()
+          .find(({ number }) => String(number) === wanted);
+        return node === undefined
+          ? Effect.fail({ _tag: "PullRequestsUnavailable" })
+          : Effect.succeed(
+              JSON.stringify({
+                data: { repository: { pullRequest: asNode(node) } },
+              }),
+            );
+      }
       const repository = Object.fromEntries(
         Object.entries(variables)
           .filter(([alias]) => /^b\d+$/.test(alias))
           .map(([alias, head]) => [
             alias,
-            {
-              nodes: (byHead[head] ?? []).map((node) => ({
-                number: node.number,
-                url: `https://github.com/${variables.owner}/${variables.name}/pull/${node.number}`,
-                title: `Pull request ${node.number}`,
-                state: node.state ?? "OPEN",
-                isDraft: node.isDraft ?? false,
-                ...(node.head === undefined ? {} : { headRefOid: node.head }),
-                headRepositoryOwner: { login: node.owner ?? variables.owner },
-                commits: {
-                  nodes: [
-                    {
-                      commit: {
-                        statusCheckRollup:
-                          node.checks === undefined
-                            ? null
-                            : { state: node.checks },
-                      },
-                    },
-                  ],
-                },
-              })),
-            },
+            { nodes: (byHead[head] ?? []).map(asNode) },
           ]),
       );
       return Effect.succeed(JSON.stringify({ data: { repository } }));

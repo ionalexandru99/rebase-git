@@ -91,28 +91,32 @@ export function fakeForgejo(
           }),
         );
       }
+      const asNode = (node: (typeof nodes)[number]) => ({
+        number: node.number,
+        html_url: `${server}/${owner}/${name}/pulls/${node.number}`,
+        title: `Pull request ${node.number}`,
+        state:
+          node.state === "open" || node.state === undefined ? "open" : "closed",
+        merged: node.state === "merged",
+        draft: node.draft ?? false,
+        head: {
+          ref: node.head,
+          sha: String(node.number),
+          repo: { full_name: node.repository ?? `${owner}/${name}` },
+        },
+      });
+      const wanted = /^pulls\/(\d+)$/.exec(rest)?.[1];
+      if (wanted !== undefined) {
+        const node = nodes.find(({ number }) => String(number) === wanted);
+        return node === undefined
+          ? Effect.fail({ _tag: "PullRequestsUnavailable" })
+          : Effect.succeed(JSON.stringify(asNode(node)));
+      }
       const query = new URLSearchParams(rest.split("?")[1]);
       const limit = Number(query.get("limit") ?? nodes.length);
       const start = (Number(query.get("page") ?? 1) - 1) * limit;
       return Effect.succeed(
-        JSON.stringify(
-          nodes.slice(start, start + limit).map((node) => ({
-            number: node.number,
-            html_url: `${server}/${owner}/${name}/pulls/${node.number}`,
-            title: `Pull request ${node.number}`,
-            state:
-              node.state === "open" || node.state === undefined
-                ? "open"
-                : "closed",
-            merged: node.state === "merged",
-            draft: node.draft ?? false,
-            head: {
-              ref: node.head,
-              sha: String(node.number),
-              repo: { full_name: node.repository ?? `${owner}/${name}` },
-            },
-          })),
-        ),
+        JSON.stringify(nodes.slice(start, start + limit).map(asNode)),
       );
     },
   };

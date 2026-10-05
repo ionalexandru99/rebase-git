@@ -5,6 +5,7 @@ import {
   IconGitPullRequestClosed,
   IconGitPullRequestDraft,
   IconPointFilled,
+  IconUnlink,
   IconX,
 } from "@tabler/icons-react";
 import { skipToken } from "@tanstack/react-query";
@@ -25,7 +26,10 @@ import { useRepositoryScope } from "#web/platform/query/repository-scope.tsx";
 
 export interface PullRequests {
   readonly forBranch: (branch: string) => readonly PullRequest[];
-  readonly actionFor: (target: RepositoryRefTarget) => RefAction | undefined;
+  readonly actionsFor: (
+    target: RepositoryRefTarget,
+    link?: () => void,
+  ) => readonly RefAction[];
 }
 
 const none: readonly PullRequest[] = [];
@@ -41,12 +45,27 @@ export function usePullRequests(): PullRequests {
     data?.map(({ branch, pullRequests }) => [branch, pullRequests]),
   );
   const forBranch = (branch: string) => byBranch.get(branch) ?? none;
+  const kind = data?.[0]?.pullRequests[0]?.kind ?? "PullRequest";
   return {
     forBranch,
-    actionFor: (target) =>
-      target._tag === "LocalBranch"
-        ? pullRequestAction(forBranch(target.name))
-        : undefined,
+    actionsFor: (target, link) => {
+      if (target._tag !== "LocalBranch") return [];
+      const open = pullRequestAction(forBranch(target.name));
+      return [
+        ...(open === undefined ? [] : [open]),
+        ...(link === undefined || data === undefined
+          ? []
+          : [
+              {
+                id: "linkPullRequest" as const,
+                label: `Link ${pullRequestTerms[kind].name}…`,
+                enabled: true,
+                takesFocus: true,
+                run: link,
+              },
+            ]),
+      ];
+    },
   };
 }
 
@@ -70,13 +89,13 @@ export function CurrentPullRequest({
       onClick={() => openPullRequest(pullRequest)}
     >
       <PullRequestStateIcon pullRequest={pullRequest} />
-      <span className="tabular-nums">{reference(pullRequest)}</span>
+      <span className="tabular-nums">{pullRequestReference(pullRequest)}</span>
       <PullRequestChecksIcon pullRequest={pullRequest} />
     </ToolbarButton>
   );
 }
 
-function PullRequestStateIcon({
+export function PullRequestStateIcon({
   pullRequest,
 }: {
   readonly pullRequest: PullRequest;
@@ -116,34 +135,47 @@ export function PullRequestLink({
 }
 
 export function PullRequestList({
+  focusable,
+  onUnlink,
   pullRequests,
 }: {
+  readonly focusable: boolean;
+  readonly onUnlink: (pullRequest: PullRequest) => void;
   readonly pullRequests: readonly PullRequest[];
 }) {
   return pullRequests.map((pullRequest) => (
     <div
-      className="flex h-6 min-w-0 items-center gap-2.5 text-[.85rem]"
+      className="group/pr flex h-6 min-w-0 items-center gap-2.5 text-[.85rem]"
       key={pullRequest.number}
     >
       <PullRequestStateIcon pullRequest={pullRequest} />
       <button
         aria-label={`Open ${describePullRequest(pullRequest)}`}
-        className="shrink-0 rounded-sm text-muted-foreground tabular-nums underline-offset-2 outline-none hover:text-foreground hover:underline"
+        className="shrink-0 rounded-sm text-muted-foreground tabular-nums underline-offset-2 outline-none hover:text-foreground hover:underline focus-visible:text-foreground focus-visible:underline"
         onClick={() => openPullRequest(pullRequest)}
-        tabIndex={-1}
+        tabIndex={focusable ? 0 : -1}
         type="button"
       >
-        {reference(pullRequest)}
+        {pullRequestReference(pullRequest)}
       </button>
       <span className="min-w-0 flex-1 truncate text-foreground/85">
         {pullRequest.title}
       </span>
+      <button
+        aria-label={`Unlink ${pullRequestTerms[pullRequest.kind].name} ${pullRequestReference(pullRequest)}`}
+        className="grid size-5 shrink-0 place-items-center rounded-sm text-muted-foreground opacity-0 outline-none group-hover/pr:opacity-100 hover:bg-accent hover:text-foreground focus-visible:opacity-100 focus-visible:ring-1 focus-visible:ring-ring"
+        onClick={() => onUnlink(pullRequest)}
+        tabIndex={focusable ? 0 : -1}
+        type="button"
+      >
+        <IconUnlink aria-hidden="true" className="size-3.5" />
+      </button>
     </div>
   ));
 }
 
 export function describePullRequest(pullRequest: PullRequest) {
-  return `${terms[pullRequest.kind].name} ${reference(pullRequest)}, ${pullRequest.state.toLowerCase()}`;
+  return `${pullRequestTerms[pullRequest.kind].name} ${pullRequestReference(pullRequest)}, ${pullRequest.state.toLowerCase()}`;
 }
 
 function PullRequestChecksIcon({
@@ -176,16 +208,16 @@ function pullRequestAction(
   if (pullRequests.length === 1)
     return {
       id: "openPullRequest",
-      label: `Open ${terms[only.kind].name}`,
+      label: `Open ${pullRequestTerms[only.kind].name}`,
       enabled: true,
       run: () => openPullRequest(only),
     };
   return submenu(
-    { id: "pullRequests", label: terms[only.kind].plural },
+    { id: "pullRequests", label: pullRequestTerms[only.kind].plural },
     pullRequests.map((pullRequest) => ({
       id: `openPullRequest:${pullRequest.number}`,
       label: pullRequest.title,
-      detail: reference(pullRequest),
+      detail: pullRequestReference(pullRequest),
       icon: <PullRequestStateIcon pullRequest={pullRequest} />,
       enabled: true,
       run: () => openPullRequest(pullRequest),
@@ -193,15 +225,15 @@ function pullRequestAction(
   );
 }
 
-function reference(pullRequest: PullRequest) {
-  return `${terms[pullRequest.kind].sigil}${pullRequest.number}`;
+export function pullRequestReference(pullRequest: PullRequest) {
+  return `${pullRequestTerms[pullRequest.kind].sigil}${pullRequest.number}`;
 }
 
 function openPullRequest(pullRequest: PullRequest) {
   window.open(pullRequest.url, "_blank", "noopener,noreferrer");
 }
 
-const terms = {
+export const pullRequestTerms = {
   PullRequest: { name: "pull request", plural: "Pull requests", sigil: "#" },
   MergeRequest: { name: "merge request", plural: "Merge requests", sigil: "!" },
 } as const;

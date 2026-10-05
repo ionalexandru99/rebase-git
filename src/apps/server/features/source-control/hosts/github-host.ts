@@ -148,6 +148,21 @@ export function createGitHubHost(cli: GitHubCli): GitHost {
                   ),
                 ),
             ),
+          pullRequest: (number) =>
+            cli
+              .graphql(pullRequestQuery(number), {
+                owner: repository.owner,
+                name: repository.name,
+              })
+              .pipe(
+                Effect.flatMap(decodePullRequestResponse),
+                Effect.map(({ data: { repository: answer } }) =>
+                  answer === null || answer.pullRequest === null
+                    ? undefined
+                    : githubPullRequest(answer.pullRequest),
+                ),
+                Effect.orElseSucceed(() => undefined),
+              ),
         },
       );
     },
@@ -185,12 +200,23 @@ function pullRequestsQuery(branches: number) {
 ${indexes.map((index) => `    b${index}: pullRequests(headRefName: $b${index}, first: ${pullRequestsPerBranch}, orderBy: {field: CREATED_AT, direction: DESC}) { nodes { ...pullRequest } }`).join("\n")}
   }
 }
-fragment pullRequest on PullRequest {
+${pullRequestFragment}`;
+}
+
+function pullRequestQuery(number: number) {
+  return `query($owner: String!, $name: String!) {
+  repository(owner: $owner, name: $name) {
+    pullRequest(number: ${number}) { ...pullRequest }
+  }
+}
+${pullRequestFragment}`;
+}
+
+const pullRequestFragment = `fragment pullRequest on PullRequest {
   number url title state isDraft headRefOid
   headRepositoryOwner { login }
   commits(last: 1) { nodes { commit { statusCheckRollup { state } } } }
 }`;
-}
 
 const PullRequestNode = Schema.Struct({
   number: Schema.Int,
@@ -230,6 +256,16 @@ const decodeResponse = (output: string) =>
     ),
   )(output).pipe(Effect.mapError(() => unavailable));
 
+const decodePullRequestResponse = decodeHostJson(
+  Schema.Struct({
+    data: Schema.Struct({
+      repository: Schema.NullOr(
+        Schema.Struct({ pullRequest: Schema.NullOr(PullRequestNode) }),
+      ),
+    }),
+  }),
+);
+
 function headAnswer(
   nodes: readonly PullRequestNode[] | undefined,
   owner: string,
@@ -252,26 +288,28 @@ function pullRequests(
       (node) =>
         node.headRepositoryOwner?.login.toLowerCase() === owner.toLowerCase(),
     )
-    .map((node) =>
-      pullRequest(
-        {
-          kind: "PullRequest",
-          number: node.number,
-          url: node.url,
-          title: node.title,
-          state:
-            node.state === "OPEN"
-              ? node.isDraft
-                ? "Draft"
-                : "Open"
-              : node.state === "MERGED"
-                ? "Merged"
-                : "Closed",
-        },
-        checksState(node.commits.nodes[0]?.commit.statusCheckRollup?.state),
-        node.headRefOid,
-      ),
-    );
+    .map(githubPullRequest);
+}
+
+function githubPullRequest(node: PullRequestNode): HostedPullRequest {
+  return pullRequest(
+    {
+      kind: "PullRequest",
+      number: node.number,
+      url: node.url,
+      title: node.title,
+      state:
+        node.state === "OPEN"
+          ? node.isDraft
+            ? "Draft"
+            : "Open"
+          : node.state === "MERGED"
+            ? "Merged"
+            : "Closed",
+    },
+    checksState(node.commits.nodes[0]?.commit.statusCheckRollup?.state),
+    node.headRefOid,
+  );
 }
 
 function checksState(state: string | undefined): PullRequest["checks"] {

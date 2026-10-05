@@ -20,9 +20,9 @@ import {
   ContextMenuTrigger,
 } from "#web/components/ui/context-menu.tsx";
 import {
-  type BranchCardBranch,
   type BranchCardHandle,
   BranchCardTrigger,
+  branchCardTriggerId,
 } from "#web/features/branches-sidebar/branch-card.tsx";
 import type { BranchesSidebarFolderRow } from "#web/features/branches-sidebar/branch-tree.ts";
 import type {
@@ -159,7 +159,7 @@ export function RefRow({
       <ContextMenuTrigger
         render={withCard(
           card,
-          { row, pullRequests },
+          row,
           <div
             className={`group relative flex h-8 w-full cursor-default items-center rounded-md text-[.85rem] outline-none select-none hover:bg-sidebar-accent/75 hover:text-sidebar-accent-foreground ${row.current ? "font-medium text-sidebar-accent-foreground" : "text-sidebar-foreground"} ${active || selected ? "bg-sidebar-accent" : ""}`}
           >
@@ -219,7 +219,8 @@ export function RefRow({
         <ActionMenuItems
           actions={actions}
           onRun={(action) => {
-            acted.current = action.group !== undefined;
+            acted.current =
+              action.group !== undefined || action.takesFocus === true;
           }}
         />
       </ContextMenuContent>
@@ -229,13 +230,18 @@ export function RefRow({
 
 function withCard(
   card: BranchCardHandle | undefined,
-  payload: BranchCardBranch,
+  ref: BranchesSidebarRefRow,
   row: JSX.Element,
 ): JSX.Element {
   return card === undefined ? (
     row
   ) : (
-    <BranchCardTrigger handle={card} payload={payload} render={row} />
+    <BranchCardTrigger
+      handle={card}
+      id={branchCardTriggerId(ref.id)}
+      payload={{ row: ref }}
+      render={row}
+    />
   );
 }
 

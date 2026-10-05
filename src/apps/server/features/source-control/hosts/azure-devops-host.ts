@@ -45,6 +45,19 @@ export function createAzureDevOpsHost(client: AzureDevOpsClient): GitHost {
         repository && {
           id: repository.id,
           pullRequests: (heads) => listPullRequests(client, repository, heads),
+          pullRequest: (number) =>
+            Effect.gen(function* () {
+              const read = reader(client, yield* client.accessToken);
+              const node = yield* read(
+                pullRequestUrl(repository, number),
+                decodePullRequest,
+              );
+              return azurePullRequest(
+                repository,
+                node,
+                yield* checksOf(read, repository, node),
+              );
+            }).pipe(Effect.orElseSucceed(() => undefined)),
         },
       );
     },
@@ -58,20 +71,13 @@ function listPullRequests(
 ) {
   return Effect.gen(function* () {
     const read = reader(client, yield* client.accessToken);
-    const checks = (node: PullRequestNode) =>
-      node.status === "active"
-        ? read(evaluationsUrl(repository, node), decodeEvaluations).pipe(
-            Effect.map(({ value }) => checksState(value)),
-            Effect.orElseSucceed(() => undefined),
-          )
-        : Effect.succeed(undefined);
     return yield* eachHead(heads, branchesAtOnce, (head) =>
       read(pullRequestsUrl(repository, head), decodePullRequestList).pipe(
         Effect.flatMap(({ value }) =>
           Effect.forEach(
             value.filter((node) => node.forkSource === undefined),
             (node) =>
-              checks(node).pipe(
+              checksOf(read, repository, node).pipe(
                 Effect.map((state) =>
                   azurePullRequest(repository, node, state),
                 ),
@@ -86,6 +92,19 @@ function listPullRequests(
       ),
     );
   });
+}
+
+function checksOf(
+  read: ReturnType<typeof reader>,
+  repository: AzureRepository,
+  node: PullRequestNode,
+) {
+  return node.status === "active"
+    ? read(evaluationsUrl(repository, node), decodeEvaluations).pipe(
+        Effect.map(({ value }) => checksState(value)),
+        Effect.orElseSucceed(() => undefined),
+      )
+    : Effect.succeed(undefined);
 }
 
 function azureRepository(remoteUrl: string): AzureRepository | undefined {
@@ -167,6 +186,12 @@ function pullRequestsUrl(repository: AzureRepository, head: string) {
   )}`;
 }
 
+function pullRequestUrl(repository: AzureRepository, number: number) {
+  return `${projectUrl(repository)}/_apis/git/repositories/${encodeURIComponent(repository.name)}/pullrequests/${number}?${new URLSearchParams(
+    { "api-version": "7.1" },
+  )}`;
+}
+
 function evaluationsUrl(repository: AzureRepository, node: PullRequestNode) {
   return `${projectUrl(repository)}/_apis/policy/evaluations?${new URLSearchParams(
     {
@@ -195,6 +220,10 @@ const decodePullRequestList = Schema.decodeUnknownEffect(
   Schema.fromJsonString(
     Schema.Struct({ value: Schema.Array(PullRequestNode) }),
   ),
+);
+
+const decodePullRequest = Schema.decodeUnknownEffect(
+  Schema.fromJsonString(PullRequestNode),
 );
 
 const Evaluation = Schema.Struct({

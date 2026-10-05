@@ -120,6 +120,20 @@ export function createBitbucket(
                     ),
               ),
             ),
+          pullRequest: (number) =>
+            saved.pipe(
+              Effect.flatMap((current) =>
+                current === undefined
+                  ? Effect.succeed(undefined)
+                  : readPullRequest(
+                      client,
+                      current.authorization,
+                      repository,
+                      number,
+                    ),
+              ),
+              Effect.orElseSucceed(() => undefined),
+            ),
         },
       );
     },
@@ -236,38 +250,66 @@ function listPullRequests(
   repository: BitbucketRepository,
   heads: readonly string[],
 ) {
-  const read = <A>(
-    url: string,
-    decode: (body: string) => Effect.Effect<A, unknown>,
-  ) => readJson(client, authorization, url, decode);
-  const checks = (node: PullRequestNode) =>
-    node.state === "OPEN" && node.source.commit?.hash !== undefined
-      ? read(
-          statusesUrl(repository, node.source.commit.hash),
-          decodeStatuses,
-        ).pipe(
-          Effect.map(({ values }) => checksState(values)),
-          Effect.orElseSucceed(() => undefined),
-        )
-      : Effect.succeed(undefined);
   return eachHead(heads, branchesAtOnce, (head) =>
-    read(pullRequestsUrl(repository, head), decodePullRequests).pipe(
+    readJson(
+      client,
+      authorization,
+      pullRequestsUrl(repository, head),
+      decodePullRequests,
+    ).pipe(
       Effect.flatMap(({ values }) =>
         Effect.forEach(
           values.filter(
             (node) =>
               node.source.repository?.full_name.toLowerCase() === repository.id,
           ),
-          (node) =>
-            checks(node).pipe(
-              Effect.map((state) =>
-                bitbucketPullRequest(repository, node, state),
-              ),
-            ),
+          (node) => withChecks(client, authorization, repository, node),
           { concurrency: "unbounded" },
         ),
       ),
     ),
+  );
+}
+
+function readPullRequest(
+  client: BitbucketClient,
+  authorization: string,
+  repository: BitbucketRepository,
+  number: number,
+) {
+  return readJson(
+    client,
+    authorization,
+    pullRequestUrl(repository, number),
+    decodePullRequest,
+  ).pipe(
+    Effect.flatMap((node) =>
+      withChecks(client, authorization, repository, node),
+    ),
+  );
+}
+
+function withChecks(
+  client: BitbucketClient,
+  authorization: string,
+  repository: BitbucketRepository,
+  node: PullRequestNode,
+) {
+  const hash = node.source.commit?.hash;
+  return (
+    node.state === "OPEN" && hash !== undefined
+      ? readJson(
+          client,
+          authorization,
+          statusesUrl(repository, hash),
+          decodeStatuses,
+        ).pipe(
+          Effect.map(({ values }) => checksState(values)),
+          Effect.orElseSucceed(() => undefined),
+        )
+      : Effect.succeed(undefined)
+  ).pipe(
+    Effect.map((checks) => bitbucketPullRequest(repository, node, checks)),
   );
 }
 
@@ -286,6 +328,15 @@ function bitbucketRepository(
     : undefined;
 }
 
+const pullRequestFields = [
+  "id",
+  "title",
+  "state",
+  "draft",
+  "source.repository.full_name",
+  "source.commit.hash",
+];
+
 function repositoryPath({ workspace, slug }: BitbucketRepository) {
   return `${encodeURIComponent(workspace)}/${encodeURIComponent(slug)}`;
 }
@@ -295,12 +346,17 @@ function pullRequestsUrl(repository: BitbucketRepository, head: string) {
     q: `source.branch.name = ${bbqlString(head)}`,
     sort: "-updated_on",
     pagelen: String(pullRequestsPerBranch),
-    fields:
-      "values.id,values.title,values.state,values.draft,values.source.repository.full_name,values.source.commit.hash",
+    fields: pullRequestFields.map((field) => `values.${field}`).join(","),
   });
   for (const state of ["OPEN", "MERGED", "DECLINED", "SUPERSEDED"])
     query.append("state", state);
   return `${bitbucketApi}/repositories/${repositoryPath(repository)}/pullrequests?${query}`;
+}
+
+function pullRequestUrl(repository: BitbucketRepository, number: number) {
+  return `${bitbucketApi}/repositories/${repositoryPath(repository)}/pullrequests/${number}?${new URLSearchParams(
+    { fields: pullRequestFields.join(",") },
+  )}`;
 }
 
 function bbqlString(value: string) {
@@ -343,6 +399,10 @@ const decodePullRequests = Schema.decodeUnknownEffect(
   Schema.fromJsonString(
     Schema.Struct({ values: Schema.Array(PullRequestNode) }),
   ),
+);
+
+const decodePullRequest = Schema.decodeUnknownEffect(
+  Schema.fromJsonString(PullRequestNode),
 );
 
 const decodeStatuses = Schema.decodeUnknownEffect(

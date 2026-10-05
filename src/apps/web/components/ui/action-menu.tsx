@@ -17,6 +17,7 @@ export interface Action<Id extends string = string> {
   readonly icon?: ReactNode;
   readonly keys?: readonly string[];
   readonly group?: "operation" | "edit" | "delete";
+  readonly takesFocus?: boolean;
   readonly onHighlight?: (highlighted: boolean) => void;
   readonly submenu?: {
     readonly actions: readonly Action<Id>[];

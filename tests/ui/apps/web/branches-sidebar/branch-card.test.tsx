@@ -1,6 +1,9 @@
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import { userEvent } from "vite-plus/test/browser";
-import { PullRequestsApi } from "#contracts/pull-requests/pull-requests.contract.ts";
+import {
+  type LinkPullRequest,
+  PullRequestsApi,
+} from "#contracts/pull-requests/pull-requests.contract.ts";
 import { RepositoryRefsApi } from "#contracts/repository-refs/repository-refs.contract.ts";
 import {
   fakeRequests,
@@ -59,6 +62,75 @@ describe("branch card", () => {
       "_blank",
       "noopener,noreferrer",
     );
+  });
+
+  it("unlinks a pull request from the card at once", async () => {
+    const links: LinkPullRequest[] = [];
+    const screen = await renderCard(links);
+
+    await screen.getByRole("treeitem", { name: "feature" }).click();
+    await userEvent.hover(
+      screen.getByRole("treeitem", {
+        name: /^feature\/topic, linked worktree/,
+      }),
+    );
+    const card = screen.getByRole("group", { name: "feature/topic" });
+    const unlink = card.getByRole("button", {
+      name: "Unlink pull request #11",
+    });
+    await userEvent.hover(unlink);
+    await unlink.click();
+
+    await expect
+      .element(card.getByText("Pull request 11", { exact: true }))
+      .not.toBeInTheDocument();
+    await expect
+      .element(card.getByText("Pull request 12", { exact: true }))
+      .toBeVisible();
+    expect(links).toEqual([
+      expect.objectContaining({
+        branch: "feature/topic",
+        number: 11,
+        linked: false,
+      }),
+    ]);
+  });
+
+  it("links a pull request by number from the branch menu in a pinned card", async () => {
+    const links: LinkPullRequest[] = [];
+    const screen = await renderCard(links);
+
+    await screen
+      .getByRole("treeitem", { name: "draft" })
+      .click({ button: "right" });
+    await screen.getByRole("menuitem", { name: "Link pull request…" }).click();
+    const field = screen.getByRole("textbox", {
+      name: "Pull request number or link",
+    });
+    await expect.element(field).toHaveFocus();
+    await userEvent.keyboard("99");
+    await expect.element(screen.getByText("No pull request #99")).toBeVisible();
+    await userEvent.hover(screen.getByRole("treeitem", { name: "shared" }));
+    await expect
+      .element(screen.getByRole("group", { name: "draft" }))
+      .toBeVisible();
+    await field.fill("#21");
+    await expect
+      .element(screen.getByText("Pull request 21", { exact: true }))
+      .toBeVisible();
+    await userEvent.keyboard("{Enter}");
+
+    await expect
+      .element(screen.getByRole("group", { name: "draft" }))
+      .not.toBeInTheDocument();
+    await expect
+      .element(
+        screen.getByRole("treeitem", { name: /^draft, pull request #21/ }),
+      )
+      .toBeVisible();
+    expect(links).toEqual([
+      expect.objectContaining({ branch: "draft", number: 21, linked: true }),
+    ]);
   });
 
   it("shows the last commit of a branch and when it settled", async () => {
@@ -133,7 +205,7 @@ function CardHarness() {
   );
 }
 
-function renderCard() {
+function renderCard(links: LinkPullRequest[] = []) {
   return render(
     <RepositoryScopeProvider
       scope={repositoryScope({ repositoryId, worktreePath: mainPath })}
@@ -174,6 +246,14 @@ function renderCard() {
               worktrees: mainAndTopicWorktrees(),
             }),
           ),
+          respond(PullRequestsApi.find, async ({ number }) => ({
+            kind: "PullRequest" as const,
+            pullRequest: number === 21 ? pullRequest(21) : null,
+          })),
+          respond(PullRequestsApi.link, async (input) => {
+            links.push(input);
+            return {};
+          }),
           respond(PullRequestsApi.list, async () => [
             {
               branch: "feature/topic",

@@ -132,4 +132,26 @@ describe("Azure DevOps pull requests", () => {
       _tag: "PullRequestsUnavailable",
     });
   });
+
+  it("finds a pull request by number", async () => {
+    const { azureDevOps } = fakeAzureDevOps({
+      elsewhere: [{ id: 12, checks: ["approved"] }],
+    });
+    const f = await pullRequestsFixture(
+      { origin: "https://dev.azure.com/acme/App/_git/rebase" },
+      { azureDevOps },
+    );
+
+    await expect(f.find(12)).resolves.toEqual({
+      kind: "PullRequest",
+      pullRequest: {
+        kind: "PullRequest",
+        number: 12,
+        url: "https://dev.azure.com/acme/App/_git/rebase/pullrequest/12",
+        title: "Pull request 12",
+        state: "Open",
+        checks: "Passing",
+      },
+    });
+  });
 });

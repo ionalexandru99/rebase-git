@@ -26,6 +26,18 @@ export async function pullRequestsFixture(
     routes: environment.routes,
     sourceControl: environment.routes(SourceControlApi),
     list: () => Effect.runPromise(service.list({ repositoryId })),
+    find: (number: number) =>
+      Effect.runPromise(service.find({ repositoryId, number })),
+    link: (branch: string, number: number, linked = true) =>
+      Effect.runPromise(
+        service.link({
+          repositoryId,
+          worktreePath: repositoryPath,
+          branch,
+          number,
+          linked,
+        }),
+      ),
     track: async (branch: string, remote: string, head: string) => {
       await git(repositoryPath, "config", `branch.${branch}.remote`, remote);
       await git(

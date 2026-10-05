@@ -67,6 +67,21 @@ export function fakeAzureDevOps(
       requests.push(url);
       const listed = listing(new URL(url));
       if (listed !== undefined) return Effect.succeed(JSON.stringify(listed));
+      const asNode = (node: AzureDevOpsPullRequestNode) => ({
+        pullRequestId: node.id,
+        title: `Pull request ${node.id}`,
+        status: node.status ?? "active",
+        isDraft: node.isDraft ?? false,
+        ...(node.fork === true ? { forkSource: {} } : {}),
+        repository: { project: { id: "project-id" } },
+      });
+      const wanted = /\/pullrequests\/(\d+)$/.exec(new URL(url).pathname)?.[1];
+      if (wanted !== undefined) {
+        const node = nodes.find(({ id }) => String(id) === wanted);
+        return node === undefined
+          ? Effect.fail({ _tag: "PullRequestsUnavailable" })
+          : Effect.succeed(JSON.stringify(asNode(node)));
+      }
       const query = new URL(url).searchParams;
       const source = query.get("searchCriteria.sourceRefName");
       const value =
@@ -82,16 +97,7 @@ export function fakeAzureDevOps(
                 type: { id: "0609b952-1397-4640-95ec-e00a01b2c241" },
               },
             }))
-          : (byHead?.[source.slice("refs/heads/".length)] ?? []).map(
-              (node) => ({
-                pullRequestId: node.id,
-                title: `Pull request ${node.id}`,
-                status: node.status ?? "active",
-                isDraft: node.isDraft ?? false,
-                ...(node.fork === true ? { forkSource: {} } : {}),
-                repository: { project: { id: "project-id" } },
-              }),
-            );
+          : (byHead?.[source.slice("refs/heads/".length)] ?? []).map(asNode);
       return Effect.succeed(JSON.stringify({ value }));
     },
   };

@@ -22,6 +22,7 @@ import { IconSwitch } from "#web/components/ui/icon-switch.tsx";
 import { ScrollTopButton } from "#web/components/ui/scroll-top-button.tsx";
 import {
   BranchCard,
+  branchCardTriggerId,
   createBranchCardHandle,
 } from "#web/features/branches-sidebar/branch-card.tsx";
 import { treeKeyAction } from "#web/features/branches-sidebar/branches-sidebar-keyboard.ts";
@@ -156,6 +157,7 @@ export function BranchesSidebar({
   >(() => new Map());
   const [activeRowId, setActiveRowId] = useState<string>();
   const [branchCard] = useState(createBranchCardHandle);
+  const [linking, setLinking] = useState<string>();
   const treeRef = useRef<HTMLDivElement>(null);
   const refs = repositoryRefs.refs;
   const onSelectRef = activation.select;
@@ -273,7 +275,14 @@ export function BranchesSidebar({
             rebase: rebase?.actionFor,
             reset: reset?.actionFor,
             showReflog: onShowReflog,
-            pullRequests: pullRequests?.actionFor,
+            pullRequests:
+              pullRequests === undefined
+                ? undefined
+                : (target) =>
+                    pullRequests.actionsFor(target, () => {
+                      setLinking(row.name);
+                      branchCard.open(branchCardTriggerId(row.id));
+                    }),
             pull: pull.allowed
               ? {
                   pulling: pull.pulling,
@@ -577,6 +586,12 @@ export function BranchesSidebar({
       <BranchCard
         handle={branchCard}
         history={history}
+        linking={linking}
+        onLinkingEnd={() => {
+          setLinking(undefined);
+          focusTree();
+        }}
+        pullRequests={pullRequests}
         remoteBranches={refs?.remoteBranches ?? noRemoteBranches}
       />
       <RefEditingStatus editing={editing} />

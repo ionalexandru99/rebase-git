@@ -62,4 +62,29 @@ describe("GitLab merge requests", () => {
     await expect(f.list()).resolves.toEqual([]);
     expect(gitlab.requests).toEqual([]);
   });
+
+  it("finds a merge request by number", async () => {
+    const { gitlab } = fakeGitLab({
+      elsewhere: [{ iid: 12, state: "merged" }],
+    });
+    const f = await pullRequestsFixture(
+      { origin: "git@gitlab.com:group/rebase.git" },
+      { gitlab },
+    );
+
+    await expect(f.find(12)).resolves.toEqual({
+      kind: "MergeRequest",
+      pullRequest: {
+        kind: "MergeRequest",
+        number: 12,
+        url: "https://gitlab.com/group/rebase/-/merge_requests/12",
+        title: "Merge request 12",
+        state: "Merged",
+      },
+    });
+    await expect(f.find(13)).resolves.toEqual({
+      kind: "MergeRequest",
+      pullRequest: null,
+    });
+  });
 });

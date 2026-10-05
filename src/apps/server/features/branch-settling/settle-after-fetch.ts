@@ -65,18 +65,15 @@ export function settleBranchesAfterFetch({
         ),
       );
       if (!autoSettle && expired.size === 0) return;
-      const defaults = yield* readRemoteDefaultBranches(git, directory);
       const pullRequests = new Map(
         (yield* listPullRequests(
           git,
           sourceControl,
           directory,
-          ({ branch, head, remote }) =>
-            expired.has(branch) ||
-            (autoSettle &&
-              !kept.has(branch) &&
-              !marked.has(branch) &&
-              defaults.get(remote) !== head),
+          ({ branch, default: isDefault }) =>
+            !isDefault &&
+            (expired.has(branch) ||
+              (autoSettle && !kept.has(branch) && !marked.has(branch))),
         )).map(({ branch, pullRequests }) => [branch, pullRequests] as const),
       );
       const merged = [...pullRequests].flatMap(([branch, found]) =>
@@ -233,34 +230,4 @@ function remoteBranchNames(refs: readonly string[]) {
       return path.slice(1).map((_, index) => path.slice(index + 1).join("/"));
     }),
   );
-}
-
-function readRemoteDefaultBranches(git: GitCommandRunner, directory: string) {
-  return runRepositoryGit(git, directory, [
-    "for-each-ref",
-    "--format=%(refname:lstrip=2)%00%(symref:lstrip=2)",
-    "refs/remotes/**/HEAD",
-  ]).pipe(
-    Effect.map(
-      (output) =>
-        new Map(
-          nulPairs(output).flatMap(([name, target]) => {
-            const remote = name.slice(0, -"/HEAD".length);
-            return name.endsWith("/HEAD") && target.startsWith(`${remote}/`)
-              ? [[remote, target.slice(remote.length + 1)] as const]
-              : [];
-          }),
-        ),
-    ),
-  );
-}
-
-function nulPairs(output: string) {
-  return output
-    .split("\n")
-    .filter((line) => line.length > 0)
-    .map((line) => {
-      const [name = "", value = ""] = line.split("\0");
-      return [name, value] as const;
-    });
 }
