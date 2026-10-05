@@ -2,6 +2,7 @@ import { IconFile, IconFolder, IconFolderPlus } from "@tabler/icons-react";
 import { type JSX, useEffect, useRef } from "react";
 import type { EnvironmentDirectoryEntry } from "#contracts/environment-filesystem/environment-filesystem.contract.ts";
 import { modifiedDateLabel } from "#web/features/repository-folder-picker/repository-folder-picker-state.ts";
+import { useNow } from "#web/lib/age-label.ts";
 import { cn } from "#web/lib/utils.ts";
 
 export function RepositoryDirectoryList({
@@ -31,6 +32,7 @@ export function RepositoryDirectoryList({
   readonly selectedPath: string | undefined;
   readonly truncated: boolean;
 }): JSX.Element {
+  const now = useNow();
   const directories = entries.filter((entry) => entry.type === "directory");
   const newFolderRef = useRef<HTMLInputElement>(null);
   const naming = newFolder !== undefined;
@@ -142,7 +144,7 @@ export function RepositoryDirectoryList({
                   <EntryName entry={entry} />
                   <EntryMetadata>{entry.kind}</EntryMetadata>
                   <EntryMetadata className="max-[600px]:hidden">
-                    {modifiedDateLabel(entry.modifiedAt)}
+                    {modifiedDateLabel(entry.modifiedAt, now)}
                   </EntryMetadata>
                 </button>
               ) : (
@@ -150,7 +152,7 @@ export function RepositoryDirectoryList({
                   <EntryName entry={entry} />
                   <EntryMetadata>{entry.kind}</EntryMetadata>
                   <EntryMetadata className="max-[600px]:hidden">
-                    {modifiedDateLabel(entry.modifiedAt)}
+                    {modifiedDateLabel(entry.modifiedAt, now)}
                   </EntryMetadata>
                 </div>
               ),

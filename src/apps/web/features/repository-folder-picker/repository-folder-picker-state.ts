@@ -34,9 +34,10 @@ export function filterDirectoryEntries(
 
 export function modifiedDateLabel(
   modifiedAt: string | undefined,
-  now = new Date(),
+  nowMilliseconds: number,
 ) {
   if (modifiedAt === undefined) return "—";
+  const now = new Date(nowMilliseconds);
   const modified = new Date(modifiedAt);
   if (modified.toDateString() === now.toDateString()) return "Today";
   const yesterday = new Date(now);

@@ -17,6 +17,7 @@ import type {
   HistoryCache,
   HistoryStorage,
 } from "#web/features/repository-history/history-worker-protocol.ts";
+import { useNow } from "#web/lib/age-label.ts";
 import { useEnvironment } from "#web/platform/query/environment-context.tsx";
 
 interface StoredHistory {
@@ -43,6 +44,7 @@ export function HistoryStorageBreakdown({
   readonly onClear: (cache: HistoryCache) => void;
   readonly clearAll?: ReactNode;
 }) {
+  const now = useNow();
   const { environmentId } = useEnvironment();
   const catalog = useRepositoryCatalog();
   const histories = storedHistories(storage.caches, catalog, environmentId);
@@ -104,7 +106,7 @@ export function HistoryStorageBreakdown({
             description={`${detail} · ${cache.commitCount.toLocaleString()} commits · ${
               cache.open
                 ? "Open now"
-                : `Last opened ${formatLastOpened(new Date(cache.lastOpenedAt).toISOString())}`
+                : `Last opened ${formatLastOpened(new Date(cache.lastOpenedAt).toISOString(), now)}`
             }`}
             icon={
               repository === undefined ? (

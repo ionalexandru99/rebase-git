@@ -8,7 +8,6 @@ import {
   IconX,
 } from "@tabler/icons-react";
 import { skipToken } from "@tanstack/react-query";
-import { useMemo } from "react";
 import {
   type PullRequest,
   PullRequestsApi,
@@ -38,19 +37,17 @@ export function usePullRequests(): PullRequests {
     repositoryId === undefined ? skipToken : { repositoryId },
     { changes: "refs", refetchOnWindowFocus: "always" },
   );
-  return useMemo(() => {
-    const byBranch = new Map(
-      data?.map(({ branch, pullRequests }) => [branch, pullRequests]),
-    );
-    const forBranch = (branch: string) => byBranch.get(branch) ?? none;
-    return {
-      forBranch,
-      actionFor: (target) =>
-        target._tag === "LocalBranch"
-          ? pullRequestAction(forBranch(target.name))
-          : undefined,
-    };
-  }, [data]);
+  const byBranch = new Map(
+    data?.map(({ branch, pullRequests }) => [branch, pullRequests]),
+  );
+  const forBranch = (branch: string) => byBranch.get(branch) ?? none;
+  return {
+    forBranch,
+    actionFor: (target) =>
+      target._tag === "LocalBranch"
+        ? pullRequestAction(forBranch(target.name))
+        : undefined,
+  };
 }
 
 export function CurrentPullRequest({

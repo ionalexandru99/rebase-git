@@ -28,10 +28,10 @@ export function CopyPill({
       aria-label={`Copy ${value}`}
       onClick={async (event) => {
         event.stopPropagation();
-        const wide = event.currentTarget.offsetWidth >= 60;
+        const copied = event.currentTarget.offsetWidth >= 60 ? "✓ Copied" : "✓";
         try {
           await writeClipboardText(value);
-          setFeedback(wide ? "✓ Copied" : "✓");
+          setFeedback(copied);
         } catch {
           errorToast.show("copy");
         }

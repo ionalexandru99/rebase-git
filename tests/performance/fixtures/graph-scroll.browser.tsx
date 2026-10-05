@@ -1,11 +1,15 @@
 import { QueryClientProvider } from "@tanstack/react-query";
-import { createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import type {
   RepositoryCommit,
   RepositoryHistoryRefTarget,
 } from "#contracts/repository-history/repository-history.contract.ts";
 import { CommitGraph } from "#web/features/commit-graph/commit-graph.tsx";
+import {
+  commitGraphNodePosition,
+  graphRowHeight,
+} from "#web/features/commit-graph/layout/graph-geometry.ts";
+import { NotificationsProvider } from "#web/features/notifications/notifications.tsx";
 import { HistoryGraph } from "#web/features/repository-history/history-graph.ts";
 import {
   type HistoryScopeQuery,
@@ -39,9 +43,11 @@ const offlineEnvironment: Environment = {
 };
 
 let root: Root | undefined;
+let shownView: HistoryView | undefined;
 
 export function mountGraph(laneCount: number) {
   root?.unmount();
+  shownView = undefined;
   const container = document.createElement("div");
   container.style.cssText =
     "height:100vh;width:100vw;background:var(--repository)";
@@ -98,6 +104,7 @@ export function mountGraph(laneCount: number) {
     switch (query._tag) {
       case "Rows": {
         const scoped = view(query.scope);
+        shownView = scoped;
         return {
           total: scoped.total,
           start: query.start,
@@ -136,20 +143,23 @@ export function mountGraph(laneCount: number) {
   };
   root = createRoot(container);
   root.render(
-    createElement(
-      QueryClientProvider,
-      { client: createEnvironmentQueryClient() },
-      createElement(
-        EnvironmentProvider,
-        { environment: offlineEnvironment },
-        createElement(CommitGraph, {
-          history,
-          roots,
-          repositoryName: "100,000 commits",
-          scope: { _tag: "Automatic" },
-        }),
-      ),
-    ),
+    <QueryClientProvider client={createEnvironmentQueryClient()}>
+      <EnvironmentProvider environment={offlineEnvironment}>
+        <NotificationsProvider
+          repositories={[]}
+          currentRepositoryId={undefined}
+          openRepository={() => {}}
+          openGitIdentity={() => {}}
+        >
+          <CommitGraph
+            history={history}
+            roots={roots}
+            repositoryName="100,000 commits"
+            scope={{ _tag: "Automatic" }}
+          />
+        </NotificationsProvider>
+      </EnvironmentProvider>
+    </QueryClientProvider>,
   );
 }
 
@@ -193,7 +203,12 @@ export async function measureGraphScroll(laneCount: number) {
       );
       if (row === undefined) throw new Error("Missing visible row");
       const index = Number(row.getAttribute("aria-rowindex")) - 2;
-      const node = { x: 16 + (index % laneCount) * 16, y: index * 26 + 13 };
+      const lane = shownView?.rows(index, index + 1)[0]?.lane;
+      if (lane === undefined) throw new Error("Missing visible lane");
+      const node = {
+        x: commitGraphNodePosition(lane),
+        y: index * graphRowHeight + graphRowHeight / 2,
+      };
       const canvas = canvases.find((candidate) => {
         const tile = candidate.closest("tr");
         return (

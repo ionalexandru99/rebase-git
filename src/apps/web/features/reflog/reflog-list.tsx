@@ -12,6 +12,7 @@ import {
   ContextMenuContent,
   ContextMenuTrigger,
 } from "#web/components/ui/context-menu.tsx";
+import { useNow } from "#web/lib/age-label.ts";
 
 export interface ReflogRow {
   readonly id: string;
@@ -145,6 +146,7 @@ function ReflogRows({
   readonly status: "pending" | "error" | "success";
   readonly onToggle: (row: ReflogRow, open: boolean) => void;
 }) {
+  const now = useNow();
   if (rows.length === 0)
     return (
       <div className="px-4 py-6 text-muted-foreground">
@@ -155,11 +157,9 @@ function ReflogRows({
         )}
       </div>
     );
-  let day: string | undefined;
-  return rows.map((row) => {
-    const rowDay = row.nested ? day : dayLabel(row.recordedAt);
-    const heading = rowDay !== day ? rowDay : undefined;
-    day = rowDay;
+  const headings = dayHeadings(rows, now);
+  return rows.map((row, index) => {
+    const heading = headings[index];
     return (
       <div key={row.id}>
         {heading === undefined ? null : (
@@ -300,9 +300,9 @@ export function short(oid: string | null) {
   return oid === null ? "unknown" : oid.slice(0, 7);
 }
 
-function dayLabel(seconds: number) {
+function dayLabel(seconds: number, now: number) {
   const date = new Date(seconds * 1_000);
-  const today = new Date();
+  const today = new Date(now);
   if (date.toDateString() === today.toDateString()) return "Today";
   return date.toLocaleDateString(undefined, {
     weekday: "short",
@@ -316,5 +316,15 @@ function timeLabel(seconds: number) {
   return new Date(seconds * 1_000).toLocaleTimeString(undefined, {
     hour: "2-digit",
     minute: "2-digit",
+  });
+}
+
+function dayHeadings(rows: readonly ReflogRow[], now: number) {
+  let day: string | undefined;
+  return rows.map((row) => {
+    const rowDay = row.nested ? day : dayLabel(row.recordedAt, now);
+    const heading = rowDay !== day ? rowDay : undefined;
+    day = rowDay;
+    return heading;
   });
 }

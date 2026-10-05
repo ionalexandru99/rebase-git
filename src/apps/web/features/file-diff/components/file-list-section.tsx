@@ -68,7 +68,7 @@ export function FileListSection<File extends { readonly path: string }>({
   ) => ReactNode;
 }) {
   const [open, setOpen] = useState(true);
-  const { rows, collapsed, scrollRef, virtualizer, toggle } = useFileRows(
+  const { rows, collapsed, scrollRef, items, totalSize, toggle } = useFileRows(
     files,
     {
       tree,
@@ -126,10 +126,8 @@ export function FileListSection<File extends { readonly path: string }>({
         ref={scrollRef}
         className={cn("min-h-0 overflow-auto px-1", filled && "flex-1")}
       >
-        <div
-          style={{ height: virtualizer.getTotalSize(), position: "relative" }}
-        >
-          {virtualizer.getVirtualItems().map((item) => {
+        <div style={{ height: totalSize, position: "relative" }}>
+          {items.map((item) => {
             const row = rows[item.index];
             if (!row) return null;
             const element = (

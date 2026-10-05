@@ -46,9 +46,8 @@ export function RepositoryDetailsSettings({
       setMessage(success);
     } catch {
       errorToast.show(failure);
-    } finally {
-      setPending(false);
     }
+    setPending(false);
   };
   return (
     <>

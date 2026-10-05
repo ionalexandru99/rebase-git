@@ -48,6 +48,7 @@ export function useHistoryCacheManagement({
   async function manage(action: HistoryCacheAction) {
     setConfirmation(undefined);
     setPending(true);
+    const failure = action === "clear" ? "clearCache" : "rebuildCache";
     try {
       await history.ask({ _tag: "Storage", action });
       await refresh();
@@ -60,10 +61,9 @@ export function useHistoryCacheManagement({
         );
       }
     } catch {
-      errorToast.show(action === "clear" ? "clearCache" : "rebuildCache");
-    } finally {
-      setPending(false);
+      errorToast.show(failure);
     }
+    setPending(false);
   }
 
   const exhausted =

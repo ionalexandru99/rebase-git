@@ -3,6 +3,7 @@ import type { ComponentProps } from "react";
 import { createRoot } from "react-dom/client";
 import type { RepositoryCommit } from "#contracts/repository-history/repository-history.contract.ts";
 import { CommitGraph } from "#web/features/commit-graph/commit-graph.tsx";
+import { NotificationsProvider } from "#web/features/notifications/notifications.tsx";
 import { HistoryGraph } from "#web/features/repository-history/history-graph.ts";
 import { HistoryView } from "#web/features/repository-history/history-view.ts";
 import type { RepositoryHistory } from "#web/features/repository-history/repository-history.ts";
@@ -144,7 +145,14 @@ function StorageGraph(props: ComponentProps<typeof CommitGraph>) {
   return (
     <QueryClientProvider client={queryClient}>
       <EnvironmentProvider environment={offlineEnvironment}>
-        <CommitGraph {...props} />
+        <NotificationsProvider
+          repositories={[]}
+          currentRepositoryId={undefined}
+          openRepository={() => {}}
+          openGitIdentity={() => {}}
+        >
+          <CommitGraph {...props} />
+        </NotificationsProvider>
       </EnvironmentProvider>
     </QueryClientProvider>
   );

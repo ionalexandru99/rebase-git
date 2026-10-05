@@ -9,7 +9,7 @@ import {
   IconTag,
   IconX,
 } from "@tabler/icons-react";
-import { createContext, type ReactNode, useContext, useMemo } from "react";
+import { createContext, type ReactNode, useContext } from "react";
 import type { RepositoryHistoryRefTarget } from "#contracts/repository-history/repository-history.contract.ts";
 import type { RepositoryRefs } from "#contracts/repository-refs/repository-refs.contract.ts";
 import { CopyPill } from "#web/features/clipboard/components/copy-pill.tsx";
@@ -39,15 +39,12 @@ export function GraphRefAppearance({
   readonly remoteProviders: RepositoryRefs["remoteProviders"];
   readonly children: ReactNode;
 }) {
-  const value = useMemo(
-    () => ({
-      colors,
-      providers: new Map(
-        remoteProviders?.map((item) => [item.remote, item.provider]),
-      ),
-    }),
-    [colors, remoteProviders],
-  );
+  const value = {
+    colors,
+    providers: new Map(
+      remoteProviders?.map((item) => [item.remote, item.provider]),
+    ),
+  };
   return <Appearance value={value}>{children}</Appearance>;
 }
 

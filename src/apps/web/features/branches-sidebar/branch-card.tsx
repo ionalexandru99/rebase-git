@@ -13,7 +13,7 @@ import type { BranchesSidebarRefRow } from "#web/features/branches-sidebar/branc
 import { PullRequestList } from "#web/features/pull-requests/pull-requests.tsx";
 import type { RepositoryHistory } from "#web/features/repository-history/repository-history.ts";
 import { worktreeName } from "#web/features/worktrees/worktree-draft.ts";
-import { ageLabel } from "#web/lib/age-label.ts";
+import { ageLabel, useNow } from "#web/lib/age-label.ts";
 
 export interface BranchCardBranch {
   readonly row: BranchesSidebarRefRow;
@@ -90,6 +90,7 @@ function BranchCardBody({
   readonly history: Pick<RepositoryHistory, "ask"> | undefined;
   readonly remoteBranches: readonly RemoteBranch[];
 }) {
+  const now = useNow();
   const { row, pullRequests } = branch;
   const commit = useTipCommit(history, row.tip);
   return (
@@ -106,14 +107,14 @@ function BranchCardBody({
             <AuthorAvatar commit={commit} />
             <span className="min-w-0 truncate">
               {commit.author.name} ·{" "}
-              {ageLabel(commit.committer.timestampSeconds)}
+              {ageLabel(commit.committer.timestampSeconds, now)}
             </span>
           </div>
         </>
       )}
       {row.settled === undefined ? null : (
         <CardLine icon={<IconGitBranchDeleted className="size-3.5" />}>
-          {settledLabel(row.settled)}
+          {settledLabel(row.settled, now)}
         </CardLine>
       )}
       {row.checkout?.kind === "worktree" ? (
@@ -157,10 +158,11 @@ function useTipCommit(
   return commit?.oid === tip ? commit : undefined;
 }
 
-function settledLabel(day: string, now = new Date()) {
+function settledLabel(day: string, now: number) {
+  const today = new Date(now);
   const [year = 0, month = 1, date = 1] = day.split("-").map(Number);
   const days = Math.round(
-    (Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()) -
+    (Date.UTC(today.getFullYear(), today.getMonth(), today.getDate()) -
       Date.UTC(year, month - 1, date)) /
       86_400_000,
   );

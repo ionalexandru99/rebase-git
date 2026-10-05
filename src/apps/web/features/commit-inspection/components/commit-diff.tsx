@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import type { CommitFile } from "#contracts/commit-inspection/commit-inspection.contract.ts";
 import type { ChangeDiff } from "#contracts/repository-comparison/repository-comparison.contract.ts";
 import { Button } from "#web/components/ui/button.tsx";
@@ -39,9 +39,9 @@ export default function CommitDiff({
   const file = files[index];
   const value = diff.value ?? null;
   const previousPath = preview ? null : (file?.previousPath ?? null);
-  const { metadata, hasHiddenContext } = useMemo(
-    () => createChangeDiffModel(value, previousPath),
-    [value, previousPath],
+  const { metadata, hasHiddenContext } = createChangeDiffModel(
+    value,
+    previousPath,
   );
   return (
     <section

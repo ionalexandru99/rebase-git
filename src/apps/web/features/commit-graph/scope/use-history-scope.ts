@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 import {
   automaticHistoryScope,
   type HistoryScope,
@@ -21,61 +21,52 @@ export function useHistoryScope(
   const [historyScope, setHistoryScope] = useState<HistoryScope>(() =>
     loadHistoryScope(environmentId, logicalRepositoryId),
   );
-  const resolvedScope = useMemo(
-    () =>
-      refs === undefined
-        ? undefined
-        : resolveHistoryScope(historyScope, refs, activeWorktreePath, {
-            removeMissingSelections: !refsRestored,
-          }),
-    [activeWorktreePath, historyScope, refs, refsRestored],
-  );
-  const canReset = useMemo(() => {
-    if (refs === undefined || resolvedScope === undefined) return false;
-    const automatic = resolveHistoryScope(
-      automaticHistoryScope,
-      refs,
-      activeWorktreePath,
-    );
-    return !historyScopesEqual(
+  const resolvedScope =
+    refs === undefined
+      ? undefined
+      : resolveHistoryScope(historyScope, refs, activeWorktreePath, {
+          removeMissingSelections: !refsRestored,
+        });
+  const canReset =
+    refs !== undefined &&
+    resolvedScope !== undefined &&
+    !historyScopesEqual(
       { _tag: "Custom", selections: resolvedScope.selections },
-      { _tag: "Custom", selections: automatic.selections },
-    );
-  }, [activeWorktreePath, refs, resolvedScope]);
-  const change = useCallback(
-    (next: HistoryScope) => {
-      setHistoryScope(next);
-      saveHistoryScope(environmentId, logicalRepositoryId, next);
-    },
-    [environmentId, logicalRepositoryId],
-  );
-  const historyScopeRef = useRef(historyScope);
-  historyScopeRef.current = historyScope;
-  const renameBranch = useCallback(
-    (branch: { readonly name: string; readonly newName: string }) =>
-      change(
-        renameHistoryBranch(
-          historyScopeRef.current,
-          branch.name,
-          branch.newName,
-        ),
-      ),
-    [change],
-  );
-  const toggleRef = useCallback(
-    (target: HistorySelection) => {
-      if (refs === undefined) return;
-      change(
-        resolveHistoryScope(
-          toggleHistoryRef(historyScope, target, refs, activeWorktreePath),
+      {
+        _tag: "Custom",
+        selections: resolveHistoryScope(
+          automaticHistoryScope,
           refs,
           activeWorktreePath,
-        ).scope,
-      );
-    },
-    [activeWorktreePath, change, historyScope, refs],
-  );
-  const reset = useCallback(() => change(automaticHistoryScope), [change]);
+        ).selections,
+      },
+    );
+  const change = (next: HistoryScope) => {
+    setHistoryScope(next);
+    saveHistoryScope(environmentId, logicalRepositoryId, next);
+  };
+  const historyScopeRef = useRef(historyScope);
+  useLayoutEffect(() => {
+    historyScopeRef.current = historyScope;
+  });
+  const renameBranch = (branch: {
+    readonly name: string;
+    readonly newName: string;
+  }) =>
+    change(
+      renameHistoryBranch(historyScopeRef.current, branch.name, branch.newName),
+    );
+  const toggleRef = (target: HistorySelection) => {
+    if (refs === undefined) return;
+    change(
+      resolveHistoryScope(
+        toggleHistoryRef(historyScope, target, refs, activeWorktreePath),
+        refs,
+        activeWorktreePath,
+      ).scope,
+    );
+  };
+  const reset = () => change(automaticHistoryScope);
   return {
     renameBranch,
     resolvedScope,

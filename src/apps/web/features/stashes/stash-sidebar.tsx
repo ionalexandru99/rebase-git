@@ -16,7 +16,7 @@ import type {
   StashCommands,
   StashSelection,
 } from "#web/features/stashes/stashes.ts";
-import { ageLabel } from "#web/lib/age-label.ts";
+import { ageLabel, useNow } from "#web/lib/age-label.ts";
 
 export function StashRow({
   stash,
@@ -37,6 +37,7 @@ export function StashRow({
   readonly onActivate: () => void;
   readonly onOpen: () => void;
 }) {
+  const now = useNow();
   return (
     <ContextMenu>
       <ContextMenuTrigger
@@ -72,7 +73,7 @@ export function StashRow({
                 </span>
               ) : null}
               <span className="ml-auto shrink-0 text-xs text-muted-foreground">
-                {ageLabel(stash.recordedAt)}
+                {ageLabel(stash.recordedAt, now)}
               </span>
             </button>
           </div>

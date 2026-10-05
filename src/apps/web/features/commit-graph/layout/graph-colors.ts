@@ -1,4 +1,4 @@
-import { useLayoutEffect, useMemo, useRef } from "react";
+import { useLayoutEffect } from "react";
 import type { RepositoryHistoryRefTarget } from "#contracts/repository-history/repository-history.contract.ts";
 import {
   type CommitLaneRow,
@@ -51,31 +51,23 @@ export function graphColors(
   };
 }
 
+const shownRefColors = new WeakMap<
+  RepositoryHistory,
+  ReadonlyMap<string, string>
+>();
+
 export function useGraphColors(
   reader: RepositoryHistory | undefined,
   rows: readonly CommitLaneRow[],
   refs: readonly RepositoryHistoryRefTarget[],
 ) {
-  const previous = useRef<
-    | {
-        reader: RepositoryHistory | undefined;
-        refs: ReadonlyMap<string, string>;
-      }
-    | undefined
-  >(undefined);
-  const colors = useMemo(
-    () =>
-      graphColors(
-        rows,
-        refs,
-        previous.current?.reader === reader
-          ? previous.current?.refs
-          : undefined,
-      ),
-    [reader, rows, refs],
+  const colors = graphColors(
+    rows,
+    refs,
+    reader === undefined ? undefined : shownRefColors.get(reader),
   );
   useLayoutEffect(() => {
-    previous.current = { reader, refs: colors.refs };
+    if (reader !== undefined) shownRefColors.set(reader, colors.refs);
   }, [reader, colors.refs]);
   return colors;
 }

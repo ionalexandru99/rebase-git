@@ -83,8 +83,9 @@ export function keyboardRepositoryItems(
 
 export function formatLastOpened(
   lastOpenedAt: string,
-  now: Date = new Date(),
+  nowMilliseconds: number,
 ): string {
+  const now = new Date(nowMilliseconds);
   const openedAt = new Date(lastOpenedAt);
   const elapsedMilliseconds = Math.max(0, now.getTime() - openedAt.getTime());
   const elapsedHours = Math.floor(elapsedMilliseconds / 3_600_000);

@@ -5,6 +5,7 @@ import {
   type CSSProperties,
   type KeyboardEvent,
   useEffect,
+  useEffectEvent,
   useRef,
   useState,
 } from "react";
@@ -201,8 +202,7 @@ function ExcerptBlocks({
   const pool = useWorkerPool();
   const theme = useTheme();
   const container = useRef<HTMLDivElement>(null);
-  const resolve = useRef(onResolve);
-  resolve.current = onResolve;
+  const resolve = useEffectEvent(onResolve);
 
   useEffect(() => {
     const element = container.current;
@@ -218,7 +218,7 @@ function ExcerptBlocks({
         maxContextLines: Number.POSITIVE_INFINITY,
         onMergeConflictAction: ({ resolution, conflict }) => {
           const { edit, undo } = resolutionEdit(excerpt, conflict, resolution);
-          void resolve.current(revision, edit, undo);
+          void resolve(revision, edit, undo);
         },
       },
       pool,

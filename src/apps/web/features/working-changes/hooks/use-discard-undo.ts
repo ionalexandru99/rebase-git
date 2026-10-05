@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useEffectEvent, useRef, useState } from "react";
 import type { DiscardedChanges } from "#contracts/repository-changes/repository-changes.contract.ts";
 import { fileName } from "#web/features/file-diff/components/file-row-name.tsx";
 
@@ -56,8 +56,7 @@ export function useDiscardUndo(
 }
 
 function useUndoKey(enabled: boolean, undo: () => void) {
-  const handler = useRef(undo);
-  handler.current = undo;
+  const onUndo = useEffectEvent(undo);
   useEffect(() => {
     if (!enabled) return;
     const onKeyDown = (event: KeyboardEvent) => {
@@ -71,7 +70,7 @@ function useUndoKey(enabled: boolean, undo: () => void) {
       )
         return;
       event.preventDefault();
-      handler.current();
+      onUndo();
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);

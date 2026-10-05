@@ -21,6 +21,7 @@ import {
 } from "#web/features/open-project/open-project-state.ts";
 import { openProjectItemId } from "#web/features/open-project/repository-row.tsx";
 import { hostDescriptors } from "#web/features/settings/source-control-settings.tsx";
+import { useNow } from "#web/lib/age-label.ts";
 
 interface CloneSourceActions {
   readonly activeKey: string | undefined;
@@ -135,6 +136,7 @@ function CloneSourceRow({
   readonly icon: TablerIcon;
   readonly source: CloneSource;
 }) {
+  const now = useNow();
   const active = activeKey === source.key;
   const expanded = expandedKey === source.key;
   const SourceIcon = source.private ? IconLock : icon;
@@ -173,7 +175,7 @@ function CloneSourceRow({
         <span className="text-[.68rem] text-muted-foreground">
           {source.updatedAt === undefined
             ? null
-            : formatLastOpened(source.updatedAt)}
+            : formatLastOpened(source.updatedAt, now)}
         </span>
       </button>
       {expanded ? (

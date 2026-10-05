@@ -3,7 +3,7 @@ import {
   createContext,
   type ReactNode,
   useContext,
-  useMemo,
+  useLayoutEffect,
   useRef,
   useState,
 } from "react";
@@ -111,57 +111,55 @@ type ProgressOptions = {
 function useActionToasts() {
   const { add, close, update, toasts } = Toast.useToastManager<NoticeData>();
   const shown = useRef(toasts);
-  shown.current = toasts;
+  useLayoutEffect(() => {
+    shown.current = toasts;
+  });
   const repositoryId = useRepositoryScope()?.repositoryId;
-  return useMemo(() => {
-    const idFor = (action: ErrorAction) => `${repositoryId ?? ""}/${action}`;
-    return {
-      put: (action: ErrorAction, notice: Notice) => {
-        const id = idFor(action);
-        const button = notice.action;
-        const previous = shown.current.find((toast) => toast.id === id);
-        const percent =
-          notice.type === "success" &&
-          previous?.type === "loading" &&
-          previous.data?.percent !== undefined
-            ? 100
-            : notice.percent;
-        if (
-          previous !== undefined &&
-          previous.type !== "loading" &&
-          previous.data?.choices === undefined
-        )
-          close(id);
-        add({
-          id,
-          type: notice.type,
-          timeout: notice.choices === undefined ? undefined : 0,
-          title: notice.title,
-          description: notice.description ?? "",
-          actionProps:
-            button === undefined
-              ? {}
-              : {
-                  children: button.label,
-                  onClick: () => {
-                    close(id);
-                    button.run();
-                  },
+  const idFor = (action: ErrorAction) => `${repositoryId ?? ""}/${action}`;
+  return {
+    put: (action: ErrorAction, notice: Notice) => {
+      const id = idFor(action);
+      const button = notice.action;
+      const previous = shown.current.find((toast) => toast.id === id);
+      const percent =
+        notice.type === "success" &&
+        previous?.type === "loading" &&
+        previous.data?.percent !== undefined
+          ? 100
+          : notice.percent;
+      if (
+        previous !== undefined &&
+        previous.type !== "loading" &&
+        previous.data?.choices === undefined
+      )
+        close(id);
+      add({
+        id,
+        type: notice.type,
+        timeout: notice.choices === undefined ? undefined : 0,
+        title: notice.title,
+        description: notice.description ?? "",
+        actionProps:
+          button === undefined
+            ? {}
+            : {
+                children: button.label,
+                onClick: () => {
+                  close(id);
+                  button.run();
                 },
-          data: {
-            repositoryId,
-            ...(percent === undefined ? {} : { percent }),
-            ...(notice.choices === undefined
-              ? {}
-              : { choices: notice.choices }),
-          },
-        });
-      },
-      advance: (action: ErrorAction, percent: number) =>
-        update(idFor(action), { data: { repositoryId, percent } }),
-      close: (action: ErrorAction) => close(idFor(action)),
-    };
-  }, [add, close, update, repositoryId]);
+              },
+        data: {
+          repositoryId,
+          ...(percent === undefined ? {} : { percent }),
+          ...(notice.choices === undefined ? {} : { choices: notice.choices }),
+        },
+      });
+    },
+    advance: (action: ErrorAction, percent: number) =>
+      update(idFor(action), { data: { repositoryId, percent } }),
+    close: (action: ErrorAction) => close(idFor(action)),
+  };
 }
 
 const OpenGitIdentity = createContext<() => void>(() => {});
@@ -169,88 +167,81 @@ const OpenGitIdentity = createContext<() => void>(() => {});
 export function useErrorToast() {
   const toasts = useActionToasts();
   const openGitIdentity = useContext(OpenGitIdentity);
-  return useMemo(() => {
-    const show = (
+  const show = (
+    action: ErrorAction,
+    description?: string,
+    button?: Notice["action"],
+  ) =>
+    toasts.put(action, {
+      type: "error",
+      title: errorTitles[action],
+      description,
+      ...(button === undefined ? {} : { action: button }),
+    });
+  return {
+    show,
+    failure: <Failure extends TaggedFailure>(
       action: ErrorAction,
-      description?: string,
-      button?: Notice["action"],
-    ) =>
-      toasts.put(action, {
-        type: "error",
-        title: errorTitles[action],
-        description,
-        ...(button === undefined ? {} : { action: button }),
-      });
-    return {
-      show,
-      failure: <Failure extends TaggedFailure>(
-        action: ErrorAction,
-        result: { readonly _tag: "Ok" } | RequestFailure<Failure>,
-        messages?: FailureMessages<Failure>,
-        undo?: () => void,
-      ) => {
-        if (result._tag === "Ok") return;
-        if (result._tag === "Cancelled") {
-          toasts.close(action);
-          return;
-        }
-        show(
-          action,
-          result._tag === "Unanswered"
-            ? unanswered
-            : describeFailure(result, messages),
-          identityMissing(result)
-            ? { label: "Open settings", run: openGitIdentity }
-            : undo === undefined
-              ? undefined
-              : { label: "Undo", run: undo },
-        );
-      },
-    };
-  }, [toasts, openGitIdentity]);
+      result: { readonly _tag: "Ok" } | RequestFailure<Failure>,
+      messages?: FailureMessages<Failure>,
+      undo?: () => void,
+    ) => {
+      if (result._tag === "Ok") return;
+      if (result._tag === "Cancelled") {
+        toasts.close(action);
+        return;
+      }
+      show(
+        action,
+        result._tag === "Unanswered"
+          ? unanswered
+          : describeFailure(result, messages),
+        identityMissing(result)
+          ? { label: "Open settings", run: openGitIdentity }
+          : undo === undefined
+            ? undefined
+            : { label: "Undo", run: undo },
+      );
+    },
+  };
 }
 
 export type StatusToast = ReturnType<typeof useStatusToast>;
 
 export function useStatusToast() {
   const toasts = useActionToasts();
-  return useMemo(
-    () => ({
-      progress: (
-        action: ErrorAction,
-        title: string,
-        { cancel, percent }: ProgressOptions = {},
-      ) => {
-        askToNotifyFromTheBackground();
-        toasts.put(action, {
-          type: "loading",
-          title,
-          percent,
-          ...(cancel === undefined
-            ? {}
-            : { action: { label: "Cancel", run: cancel } }),
-        });
-      },
-      advance: toasts.advance,
-      success: (action: ErrorAction, title: string, undo?: () => void) =>
-        toasts.put(action, {
-          type: "success",
-          title,
-          ...(undo === undefined
-            ? {}
-            : { action: { label: "Undo", run: undo } }),
-        }),
-      warning: (action: ErrorAction, title: string, description: string) =>
-        toasts.put(action, { type: "error", title, description }),
-      choose: (
-        action: ErrorAction,
-        title: string,
-        choices: readonly [NoticeChoice, ...NoticeChoice[]],
-      ) => toasts.put(action, { type: "error", title, choices }),
-      close: toasts.close,
-    }),
-    [toasts],
-  );
+  return {
+    progress: (
+      action: ErrorAction,
+      title: string,
+      { cancel, percent }: ProgressOptions = {},
+    ) => {
+      askToNotifyFromTheBackground();
+      toasts.put(action, {
+        type: "loading",
+        title,
+        percent,
+        ...(cancel === undefined
+          ? {}
+          : { action: { label: "Cancel", run: cancel } }),
+      });
+    },
+    advance: toasts.advance,
+    success: (action: ErrorAction, title: string, undo?: () => void) =>
+      toasts.put(action, {
+        type: "success",
+        title,
+        ...(undo === undefined ? {} : { action: { label: "Undo", run: undo } }),
+      }),
+    warning: (action: ErrorAction, title: string, description: string) =>
+      toasts.put(action, { type: "error", title, description }),
+    choose: (
+      action: ErrorAction,
+      title: string,
+      choices: readonly [NoticeChoice, ...NoticeChoice[]],
+    ) => toasts.put(action, { type: "error", title, choices }),
+    close: toasts.close,
+  };
 }
 
 function askToNotifyFromTheBackground() {

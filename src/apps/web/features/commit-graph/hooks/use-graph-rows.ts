@@ -3,7 +3,6 @@ import {
   useCallback,
   useEffect,
   useLayoutEffect,
-  useMemo,
   useRef,
   useState,
 } from "react";
@@ -57,10 +56,7 @@ export function useGraphRows({
   readonly scrollRef: RefObject<HTMLElement | null>;
   readonly activeOid: RefObject<string | undefined>;
 }) {
-  const key = useMemo(
-    () => (scope === undefined ? undefined : JSON.stringify(scope)),
-    [scope],
-  );
+  const key = scope === undefined ? undefined : JSON.stringify(scope);
   const [answer, setAnswer] = useState<GraphRowsAnswer>();
   const [failure, setFailure] = useState<HistoryFailure>();
   const wanted = useRef<WantedRows | undefined>(undefined);
@@ -142,11 +138,11 @@ export function useGraphRows({
     if (answer === shown.current) request();
   }, [history, scope, key, revision, first, last, answer, request]);
 
-  const retry = useCallback(() => {
+  const retry = () => {
     failed.current = false;
     setFailure(undefined);
     request();
-  }, [request]);
+  };
 
   const shifted = useRef(0);
   useLayoutEffect(() => {

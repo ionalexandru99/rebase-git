@@ -1,5 +1,5 @@
 import { IconFileDiff } from "@tabler/icons-react";
-import { Fragment, useEffect, useRef } from "react";
+import { Fragment, useEffect, useEffectEvent } from "react";
 import type {
   ConflictFile,
   ConflictScope,
@@ -106,11 +106,10 @@ export function ConflictViewer({
 
 function useExpandedWhile(active: boolean) {
   const panel = usePanelFeature();
-  const expanded = useRef(panel?.expanded === true);
-  expanded.current = panel?.expanded === true;
+  const expanded = useEffectEvent(() => panel?.expanded === true);
   const expand = panel?.expand;
   useEffect(() => {
-    if (!active || expand === undefined || expanded.current) return;
+    if (!active || expand === undefined || expanded()) return;
     expand(true);
     return () => expand(false);
   }, [active, expand]);

@@ -23,7 +23,7 @@ describe("repository folder picker state", () => {
   });
 
   it("uses compact modified-date labels", () => {
-    const now = new Date(2026, 7, 25, 12);
+    const now = new Date(2026, 7, 25, 12).getTime();
     const today = new Date(2026, 7, 25, 8).toISOString();
     const yesterday = new Date(2026, 7, 24, 8).toISOString();
     expect(modifiedDateLabel(today, now)).toBe("Today");

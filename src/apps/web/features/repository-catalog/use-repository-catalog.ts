@@ -1,5 +1,4 @@
 import { useQueryClient } from "@tanstack/react-query";
-import { useCallback } from "react";
 import {
   type RepositoryCatalog,
   RepositoryCatalogApi,
@@ -45,13 +44,10 @@ export function useRepositoryCatalog() {
     refetchOnMount: false,
     select: sortCatalog,
   });
-  const findRepository = useCallback(
-    (repositoryId: string) =>
-      queryClient
-        .getQueryData<RepositoryCatalog>(repositoryCatalogKey(environmentId))
-        ?.repositories.find(({ id }) => id === repositoryId),
-    [environmentId, queryClient],
-  );
+  const findRepository = (repositoryId: string) =>
+    queryClient
+      .getQueryData<RepositoryCatalog>(repositoryCatalogKey(environmentId))
+      ?.repositories.find(({ id }) => id === repositoryId);
   return {
     repositories: catalog.data?.repositories ?? noRepositories,
     loaded: catalog.data !== undefined,

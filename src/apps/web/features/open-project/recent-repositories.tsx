@@ -7,6 +7,7 @@ import {
 import { openProjectItemId } from "#web/features/open-project/repository-row.tsx";
 import { RepositoryBadge } from "#web/features/repository-catalog/repository-badge.tsx";
 import { RepositorySettingsButton } from "#web/features/repository-settings/components/repository-settings-button.tsx";
+import { useNow } from "#web/lib/age-label.ts";
 
 export function RecentRepositories({
   activeKey,
@@ -21,6 +22,7 @@ export function RecentRepositories({
   readonly onOpenSettings: (repository: OpenProjectRepository) => void;
   readonly onOpen: (repository: OpenProjectRepository) => void;
 }): JSX.Element | null {
+  const now = useNow();
   if (items.length === 0) return null;
 
   return (
@@ -64,7 +66,7 @@ export function RecentRepositories({
               </span>
               <span className="text-right text-[.68rem] text-muted-foreground">
                 <span className="block">
-                  {formatLastOpened(item.repository.lastOpenedAt ?? "")}
+                  {formatLastOpened(item.repository.lastOpenedAt ?? "", now)}
                 </span>
               </span>
             </button>

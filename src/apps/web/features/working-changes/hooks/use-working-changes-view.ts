@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react";
+import { useState } from "react";
 import type {
   ChangeSection,
   ChangeSelection,
@@ -61,12 +61,9 @@ export function useWorkingChangesView({
   const errorToast = useErrorToast();
   const scope: ChangesScope = { repositoryId, worktreePath, amend: amend.on };
   const read = useWorkingChanges(scope, active);
-  const shown = useMemo(() => splitConflicts(read.data), [read.data]);
+  const shown = splitConflicts(read.data);
   const changes = read.isPlaceholderData ? undefined : shown.changes;
-  const headMoved = useCallback(
-    () => errorToast.show("commit", headMovedMessage),
-    [errorToast],
-  );
+  const headMoved = () => errorToast.show("commit", headMovedMessage);
   const [selection, select] = useChangeSelection(
     shown.changes,
     shown.conflicted,

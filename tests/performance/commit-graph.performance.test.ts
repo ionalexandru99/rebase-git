@@ -100,7 +100,7 @@ async function measureCommitGraph(
     await page.getByRole("button", { name: "Browse files" }).click();
     const picker = page.getByRole("dialog", { name: "Choose repository" });
     await picker
-      .getByRole("button", { name: /^rebase-performance Folder/ })
+      .getByRole("button", { name: /^rebase-performance Repository/ })
       .click();
     await page.evaluate(() => window.__startGraphMeasurement());
     await page

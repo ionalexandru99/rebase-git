@@ -1,4 +1,10 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
 import type { RepositoryCommit } from "#contracts/repository-history/repository-history.contract.ts";
 import { useErrorToast } from "#web/features/notifications/notifications.tsx";
 import type { HistorySearchPage } from "#web/features/repository-history/history-worker-protocol.ts";
@@ -42,7 +48,9 @@ export function useHistorySearch(
   const running = useRef<AbortController | undefined>(undefined);
   const selectedOid = useRef<string | undefined>(undefined);
   const navigate = useRef(onNavigate);
-  navigate.current = onNavigate;
+  useLayoutEffect(() => {
+    navigate.current = onNavigate;
+  });
   const publish = useCallback((next: HistorySearchState) => {
     latest.current = next;
     setState(next);

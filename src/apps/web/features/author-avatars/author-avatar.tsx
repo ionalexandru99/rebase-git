@@ -1,7 +1,6 @@
 import {
   createContext,
   type ReactNode,
-  useCallback,
   useContext,
   useEffect,
   useState,
@@ -59,19 +58,12 @@ export function AuthorAvatar({
   const model = useContext(AvatarContext);
   const oid = commit.oid;
   const email = commit.author.email;
-  const subscribe = useCallback(
-    (listener: () => void) =>
-      model?.subscribe({ oid, author: { email } }, listener) ?? (() => {}),
-    [model, oid, email],
-  );
-  const get = useCallback(() => model?.get(email), [model, email]);
+  const subscribe = (listener: () => void) =>
+    model?.subscribe({ oid, author: { email } }, listener) ?? (() => {});
+  const get = () => model?.get(email);
   const url = useSyncExternalStore(subscribe, get);
   const [failed, setFailed] = useState<string>();
-  const names = commit.author.name.trim().split(/\s+/).filter(Boolean);
-  const initials =
-    [names[0]?.[0], names.length > 1 ? names.at(-1)?.[0] : undefined]
-      .join("")
-      .toUpperCase() || "?";
+  const initials = initialsOf(commit.author.name);
   return (
     <span
       aria-hidden="true"
@@ -93,4 +85,13 @@ export function AuthorAvatar({
       )}
     </span>
   );
+}
+
+function initialsOf(name: string) {
+  const names = name.trim().split(/\s+/).filter(Boolean);
+  const initials = [
+    names[0]?.[0],
+    names.length > 1 ? names.at(-1)?.[0] : undefined,
+  ].join("");
+  return initials.toUpperCase() || "?";
 }

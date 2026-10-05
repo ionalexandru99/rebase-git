@@ -7,12 +7,9 @@ import {
   createContext,
   type ReactNode,
   Suspense,
-  useCallback,
   useContext,
   useEffect,
   useLayoutEffect,
-  useMemo,
-  useRef,
   useState,
 } from "react";
 import { PanelFeatureContext } from "#web/features/workspace-panel/api.ts";
@@ -89,11 +86,8 @@ function ProjectViews({
   const active = useStore(session.store, (panel) => panel.active);
   const inputs = useStore(session.store, (panel) => panel.inputs);
   const expanded = useStore(session.store, (panel) => panel.expanded === true);
-  const expand = useCallback(
-    (next: boolean) =>
-      session.store.dispatch({ type: "expand", expanded: next }),
-    [session.store],
-  );
+  const expand = (next: boolean) =>
+    session.store.dispatch({ type: "expand", expanded: next });
   const view = useStore(session);
   return tabs.map((kind) => (
     <RetainedPanelView key={kind} target={view.targets[kind]}>
@@ -134,10 +128,7 @@ function PanelFeatureScope({
   readonly expand: (expanded: boolean) => void;
   readonly children: ReactNode;
 }) {
-  const value = useMemo(
-    () => ({ scope, environment, active, input, expanded, expand }),
-    [scope, environment, active, input, expanded, expand],
-  );
+  const value = { scope, environment, active, input, expanded, expand };
   return (
     <PanelFeatureContext.Provider value={value}>
       {children}
@@ -149,24 +140,14 @@ function useProjectEnvironment(
   scope: WorkspacePanelScope | undefined,
   environment: WorkspacePanelEnvironment | undefined,
 ) {
-  const retained = useRef<WorkspacePanelEnvironment | undefined>(undefined);
-  return useMemo(() => {
-    if (scope === undefined) {
-      return environment;
-    }
-    if (environment?.environmentId === scope.environmentId) {
-      retained.current = environment;
-      return environment;
-    }
-    return retained.current
-      ? {
-          ...retained.current,
-          connected: false,
-          writable: false,
-          visible: false,
-        }
-      : undefined;
-  }, [scope, environment]);
+  const current =
+    scope !== undefined && environment?.environmentId === scope.environmentId;
+  const [retained, setRetained] = useState(current ? environment : undefined);
+  if (current && environment !== retained) setRetained(environment);
+  if (scope === undefined || current) return environment;
+  return retained
+    ? { ...retained, connected: false, writable: false, visible: false }
+    : undefined;
 }
 
 function PanelContent({ kind }: { readonly kind: WorkspacePanelKind }) {
@@ -187,10 +168,7 @@ export function usePanelSession(
   if (!collection) {
     throw new Error("Workspace panel sessions require an owner.");
   }
-  const session = useMemo(
-    () => collection.acquire(key, scope, previousScopeKey),
-    [collection, key, scope, previousScopeKey],
-  );
+  const session = collection.acquire(key, scope, previousScopeKey);
   useEffect(() => collection.attach(session), [collection, session]);
   return session;
 }

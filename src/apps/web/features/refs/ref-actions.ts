@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useEffectEvent } from "react";
 import type { MergeMode } from "#contracts/repository-operations/repository-operations.contract.ts";
 import type {
   BranchUpstream,
@@ -42,10 +42,8 @@ export function requestRefIntent(intent: RefIntent) {
 }
 
 export function useRefIntent(handle: RefIntentListener) {
-  const latest = useRef(handle);
-  latest.current = handle;
+  const listener = useEffectEvent(handle);
   useEffect(() => {
-    const listener: RefIntentListener = (intent) => latest.current(intent);
     intentListeners.add(listener);
     return () => {
       intentListeners.delete(listener);

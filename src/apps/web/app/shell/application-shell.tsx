@@ -1,4 +1,4 @@
-import { type JSX, type ReactNode, useCallback, useMemo, useRef } from "react";
+import { type JSX, type ReactNode, useMemo, useState } from "react";
 import type { RepositoryFilesystemHost } from "#contracts/desktop-host/desktop-host.contract.ts";
 import type { DesktopUpdates } from "#contracts/desktop-updates/desktop-updates.contract.ts";
 import { RepositoryCatalogApi } from "#contracts/repository-catalog/repository-catalog.contract.ts";
@@ -79,17 +79,12 @@ function Shell({
       ),
     [navigation.projects.environments],
   );
-  const openGitIdentity = useCallback(
-    () => navigate({ type: "show-settings", section: "source-control" }),
-    [navigate],
-  );
-  const openNotifiedRepository = useCallback(
-    (repositoryId: string) => {
-      const repository = repositories.find(({ id }) => id === repositoryId);
-      if (repository !== undefined) openRepository(repository);
-    },
-    [repositories, openRepository],
-  );
+  const openGitIdentity = () =>
+    navigate({ type: "show-settings", section: "source-control" });
+  const openNotifiedRepository = (repositoryId: string) => {
+    const repository = repositories.find(({ id }) => id === repositoryId);
+    if (repository !== undefined) openRepository(repository);
+  };
   return (
     <NotificationsProvider
       currentRepositoryId={
@@ -196,19 +191,13 @@ function useRepositoryOpening(navigate: Navigate) {
     answers: catalogWith,
   });
   const available = status.availability === "available";
-  const showRepository = useCallback(
-    (repository: ProjectNavigationRepository) =>
-      navigate({ type: "open-repository", repository }),
-    [navigate],
-  );
-  const openRepository = useCallback(
-    (repository: ProjectNavigationRepository) => {
-      if (!available) return;
-      showRepository(repository);
-      void recordOpened({ repositoryId: repository.id });
-    },
-    [available, recordOpened, showRepository],
-  );
+  const showRepository = (repository: ProjectNavigationRepository) =>
+    navigate({ type: "open-repository", repository });
+  const openRepository = (repository: ProjectNavigationRepository) => {
+    if (!available) return;
+    showRepository(repository);
+    void recordOpened({ repositoryId: repository.id });
+  };
   return { openRepository, showRepository };
 }
 
@@ -253,17 +242,10 @@ function PanelSessions({
   readonly children: ReactNode;
 }) {
   const { environmentId, connected, writable } = useEnvironment();
-  const environment = useMemo(
-    () => ({ environmentId, connected, writable, visible }),
-    [environmentId, connected, writable, visible],
-  );
+  const environment = { environmentId, connected, writable, visible };
   const { environments } = navigation.projects;
-  const repositoryIds = useMemo(
-    () =>
-      environments.flatMap(({ repositories }) =>
-        repositories.map(({ id }) => id),
-      ),
-    [environments],
+  const repositoryIds = environments.flatMap(({ repositories }) =>
+    repositories.map(({ id }) => id),
   );
   return (
     <WorkspacePanel.Sessions
@@ -289,19 +271,16 @@ function SessionEnvironmentProvider({
   const subscribe = connected ? state.subscribe : unavailableSubscriptions;
   const readable = connected;
   const writable = connected;
-  const status = useMemo(() => environmentSessionPresentation(state), [state]);
-  const environment = useMemo(
-    () => ({
-      environmentId,
-      requests,
-      subscribe,
-      connected,
-      readable,
-      writable,
-      status,
-    }),
-    [environmentId, requests, subscribe, connected, readable, writable, status],
-  );
+  const status = environmentSessionPresentation(state);
+  const environment = {
+    environmentId,
+    requests,
+    subscribe,
+    connected,
+    readable,
+    writable,
+    status,
+  };
   return (
     <EnvironmentProvider environment={environment}>
       {children}
@@ -310,9 +289,13 @@ function SessionEnvironmentProvider({
 }
 
 function useRetainedEnvironmentId(state: LocalEnvironmentSessionState) {
-  const lastConnected = useRef<string | undefined>(undefined);
-  if (state._tag === "Connected") lastConnected.current = state.environmentId;
+  const connected =
+    state._tag === "Connected" ? state.environmentId : undefined;
+  const [lastConnected, setLastConnected] = useState(connected);
+  if (connected !== undefined && connected !== lastConnected)
+    setLastConnected(connected);
+  const retained = connected ?? lastConnected;
   return state._tag === "Reconnecting"
-    ? (state.environmentId ?? lastConnected.current)
-    : lastConnected.current;
+    ? (state.environmentId ?? retained)
+    : retained;
 }

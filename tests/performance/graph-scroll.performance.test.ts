@@ -18,8 +18,8 @@ for (const deviceScaleFactor of [1, 2]) {
             path: test.info().outputPath(`graph-${laneCount}-lanes.png`),
           });
           const result = await page.evaluate(async (laneCount) => {
-            const path = "/tests/performance/fixtures/graph-scroll.browser.ts";
-            const fixture: typeof import("#tests-performance/fixtures/graph-scroll.browser.ts") =
+            const path = "/tests/performance/fixtures/graph-scroll.browser.tsx";
+            const fixture: typeof import("#tests-performance/fixtures/graph-scroll.browser.tsx") =
               await import(path);
             return fixture.measureGraphScroll(laneCount);
           }, laneCount);
@@ -63,8 +63,8 @@ test("keeps style and layout work small while scrolling fast", async ({
     const frames = 240;
     const before = await renderingSeconds();
     await page.evaluate(async (frames) => {
-      const path = "/tests/performance/fixtures/graph-scroll.browser.ts";
-      const fixture: typeof import("#tests-performance/fixtures/graph-scroll.browser.ts") =
+      const path = "/tests/performance/fixtures/graph-scroll.browser.tsx";
+      const fixture: typeof import("#tests-performance/fixtures/graph-scroll.browser.tsx") =
         await import(path);
       await fixture.scrollGraph(400, frames);
     }, frames);
@@ -85,8 +85,8 @@ test("moves the keyboard selection through loaded rows", async ({ page }) => {
   await withGraphFixture(page, async () => {
     await mountGraph(page, 32);
     const result = await page.evaluate(async () => {
-      const path = "/tests/performance/fixtures/graph-scroll.browser.ts";
-      const fixture: typeof import("#tests-performance/fixtures/graph-scroll.browser.ts") =
+      const path = "/tests/performance/fixtures/graph-scroll.browser.tsx";
+      const fixture: typeof import("#tests-performance/fixtures/graph-scroll.browser.tsx") =
         await import(path);
       return fixture.measureKeyboardNavigation(150);
     });
@@ -103,6 +103,9 @@ async function withGraphFixture(page: Page, measure: () => Promise<void>) {
   const server = await createServer({
     configFile: resolve("src/apps/web/vite.config.ts"),
     root: resolve("."),
+    optimizeDeps: {
+      entries: ["tests/performance/fixtures/graph-scroll.browser.tsx"],
+    },
     server: { host: "127.0.0.1", port: 0, hmr: false },
     plugins: [
       {
@@ -137,8 +140,8 @@ async function withGraphFixture(page: Page, measure: () => Promise<void>) {
 
 async function mountGraph(page: Page, laneCount: number) {
   await page.evaluate(async (laneCount) => {
-    const path = "/tests/performance/fixtures/graph-scroll.browser.ts";
-    const fixture: typeof import("#tests-performance/fixtures/graph-scroll.browser.ts") =
+    const path = "/tests/performance/fixtures/graph-scroll.browser.tsx";
+    const fixture: typeof import("#tests-performance/fixtures/graph-scroll.browser.tsx") =
       await import(path);
     fixture.mountGraph(laneCount);
   }, laneCount);

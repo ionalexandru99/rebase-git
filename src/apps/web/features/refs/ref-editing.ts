@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useState } from "react";
 import { RepositoryBranchesApi } from "#contracts/repository-refs/repository-branches.contract.ts";
 import type {
   LocalBranch,
@@ -60,10 +60,10 @@ export function useRefEditing({
   const errorToast = useErrorToast();
   const [edit, setEdit] = useState<RefEdit>();
 
-  const cancel = useCallback(() => {
+  const cancel = () => {
     setEdit(undefined);
     focusTree();
-  }, [focusTree]);
+  };
 
   const begin = (next: RefEdit) => setEdit(next);
 

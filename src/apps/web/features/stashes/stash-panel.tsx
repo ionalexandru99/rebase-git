@@ -10,7 +10,7 @@ import { DiffWorkerPool } from "#web/features/file-diff/components/diff-worker-p
 import { useDiffPreferences } from "#web/features/file-diff/hooks/use-diff-preferences.ts";
 import { isStashInput, useStashes } from "#web/features/stashes/stashes.ts";
 import { usePanelFeature } from "#web/features/workspace-panel/api.ts";
-import { ageLabel } from "#web/lib/age-label.ts";
+import { ageLabel, useNow } from "#web/lib/age-label.ts";
 import { useEnvironmentQuery } from "#web/platform/query/environment-query.ts";
 import { describeFailure } from "#web/platform/query/request-failure.ts";
 
@@ -19,6 +19,7 @@ const CommitDiff = lazy(
 );
 
 export function StashPanel() {
+  const now = useNow();
   const feature = usePanelFeature();
   const scope = feature?.scope;
   const oid = isStashInput(feature?.input) ? feature.input.oid : undefined;
@@ -52,7 +53,7 @@ export function StashPanel() {
           {stash.branch === null ? null : (
             <span className="font-mono text-[11px]">{stash.branch}</span>
           )}
-          <span>{ageLabel(stash.recordedAt)}</span>
+          <span>{ageLabel(stash.recordedAt, now)}</span>
         </p>
       </header>
       {contents.isError ? (

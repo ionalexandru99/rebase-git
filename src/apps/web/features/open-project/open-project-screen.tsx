@@ -6,7 +6,6 @@ import {
 import {
   type JSX,
   type KeyboardEvent,
-  useCallback,
   useEffect,
   useRef,
   useState,
@@ -85,14 +84,10 @@ export function OpenProjectScreen({
       ?.scrollIntoView({ block: "nearest" });
   }, [activeKey]);
 
-  const openRepository = useCallback(
-    (repository: OpenProjectRepository) => onOpenRepository(repository),
-    [onOpenRepository],
-  );
-  const openSettings = useCallback(
-    (repository: OpenProjectRepository) => onOpenSettings(repository.id),
-    [onOpenSettings],
-  );
+  const openRepository = (repository: OpenProjectRepository) =>
+    onOpenRepository(repository);
+  const openSettings = (repository: OpenProjectRepository) =>
+    onOpenSettings(repository.id);
   const onBrowse = () => {
     if (browseAvailable) setFolderPickerOpen(true);
   };

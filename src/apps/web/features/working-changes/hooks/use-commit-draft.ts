@@ -5,7 +5,7 @@ import {
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   type CommitDraft,
   emptyCommitDraft,
@@ -47,24 +47,18 @@ export function useCommitDraft(key: string | undefined, message?: string) {
     [],
   );
   const saving = useDebouncedSave(save);
-  const edit = useCallback(
-    (draft: CommitDraft) => {
-      if (key === undefined) return;
-      queryClient.setQueryData(commitDraftKey(key), draft);
-      saving.schedule(key, draft);
-    },
-    [key, queryClient, saving],
-  );
-  const clear = useCallback(
-    (keys: readonly string[]) => {
-      saving.cancel();
-      for (const cleared of keys) {
-        queryClient.setQueryData(commitDraftKey(cleared), emptyCommitDraft);
-        void save(cleared, emptyCommitDraft);
-      }
-    },
-    [queryClient, save, saving],
-  );
+  const edit = (draft: CommitDraft) => {
+    if (key === undefined) return;
+    queryClient.setQueryData(commitDraftKey(key), draft);
+    saving.schedule(key, draft);
+  };
+  const clear = (keys: readonly string[]) => {
+    saving.cancel();
+    for (const cleared of keys) {
+      queryClient.setQueryData(commitDraftKey(cleared), emptyCommitDraft);
+      void save(cleared, emptyCommitDraft);
+    }
+  };
   const retry = () => {
     if (unavailable && key !== undefined) void stored.refetch();
   };
@@ -121,21 +115,18 @@ function useDebouncedSave(
     pending.current = undefined;
     if (next !== undefined) void save(next.key, next.draft);
   }, [save]);
-  const schedule = useCallback(
-    (key: string, draft: CommitDraft) => {
-      if (pending.current !== undefined && pending.current.key !== key) flush();
-      clearTimeout(timer.current);
-      pending.current = { key, draft };
-      timer.current = setTimeout(flush, saveDelayMilliseconds);
-    },
-    [flush],
-  );
-  const cancel = useCallback(() => {
+  const schedule = (key: string, draft: CommitDraft) => {
+    if (pending.current !== undefined && pending.current.key !== key) flush();
+    clearTimeout(timer.current);
+    pending.current = { key, draft };
+    timer.current = setTimeout(flush, saveDelayMilliseconds);
+  };
+  const cancel = () => {
     clearTimeout(timer.current);
     pending.current = undefined;
-  }, []);
+  };
   useEffect(() => flush, [flush]);
-  return useMemo(() => ({ schedule, cancel }), [schedule, cancel]);
+  return { schedule, cancel };
 }
 
 export function commitMessage({ subject, description }: CommitDraft) {

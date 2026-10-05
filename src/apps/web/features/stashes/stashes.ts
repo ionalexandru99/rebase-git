@@ -1,5 +1,5 @@
 import { skipToken } from "@tanstack/react-query";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import type { RouteFailure } from "#contracts/environment-connection/environment-route.contract.ts";
 import type { ChangeSection } from "#contracts/repository-changes/repository-changes.contract.ts";
 import {
@@ -61,16 +61,13 @@ function requestStashDraft(selection: StashSelection) {
 
 export function useStashDraft() {
   const [selection, setSelection] = useState<StashSelection>();
-  const latest = useRef(setSelection);
-  latest.current = setSelection;
   useEffect(() => {
-    const listener = (next: StashSelection) => latest.current(next);
-    draftListeners.add(listener);
+    draftListeners.add(setSelection);
     return () => {
-      draftListeners.delete(listener);
+      draftListeners.delete(setSelection);
     };
   }, []);
-  const cancel = useCallback(() => setSelection(undefined), []);
+  const cancel = () => setSelection(undefined);
   return { selection, cancel };
 }
 
