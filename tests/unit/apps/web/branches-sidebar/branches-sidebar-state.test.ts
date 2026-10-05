@@ -267,7 +267,7 @@ describe("branches sidebar state", () => {
     ).toBe(false);
   });
 
-  it("lists stashes after tags, filters them by name, and keeps the section while one is named", () => {
+  it("lists stashes collapsed after tags, filters them by name, and keeps the section while one is named", () => {
     const reflog = repositoryStash({ oid: "1".repeat(40), name: "Reflog" });
     const wip = repositoryStash({ oid: "2".repeat(40), name: "WIP on main" });
     const ids = (
@@ -286,7 +286,8 @@ describe("branches sidebar state", () => {
         { list, drafting },
       ).map((row) => row.id);
 
-    expect(ids("", "all").slice(-3)).toEqual([
+    expect(ids("", "all").slice(-1)).toEqual(["section:stashes"]);
+    expect(ids("", "stashes")).toEqual([
       "section:stashes",
       `stash:${reflog.oid}`,
       `stash:${wip.oid}`,
