@@ -98,12 +98,14 @@ export function fakeBitbucket(
           ).map((state) => ({ state })),
         });
       const fullName = pathname.split("/").slice(3, 5).join("/");
-      const branch =
-        /source\.branch\.name = "(.*)"/.exec(
-          searchParams.get("q") ?? "",
-        )?.[1] ?? "";
+      const query = searchParams.get("q") ?? "";
+      const branch = /source\.branch\.name = "(.*)"/.exec(query)?.[1] ?? "";
+      const source = /source\.repository\.full_name = "([^"]*)"/.exec(query);
       return answer({
-        values: (bySourceBranch[branch] ?? []).map((node) => ({
+        values: (source !== null && source[1] !== fullName
+          ? []
+          : (bySourceBranch[branch] ?? [])
+        ).map((node) => ({
           id: node.id,
           title: `Pull request ${node.id}`,
           state: node.state ?? "OPEN",

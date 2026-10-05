@@ -292,7 +292,7 @@ function repositoryPath({ workspace, slug }: BitbucketRepository) {
 
 function pullRequestsUrl(repository: BitbucketRepository, head: string) {
   const query = new URLSearchParams({
-    q: `source.repository.full_name = ${bbqlString(repository.id)} AND source.branch.name = ${bbqlString(head)}`,
+    q: `source.branch.name = ${bbqlString(head)}`,
     sort: "-updated_on",
     pagelen: String(pullRequestsPerBranch),
     fields:

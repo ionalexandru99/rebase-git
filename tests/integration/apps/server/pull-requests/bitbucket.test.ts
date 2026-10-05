@@ -15,7 +15,7 @@ describe("Bitbucket pull requests", () => {
     });
     const f = await pullRequestsFixture(
       {
-        origin: "git@bitbucket.org:acme/rebase.git",
+        origin: "git@bitbucket.org:Acme/rebase.git",
         other: "https://octo@bitbucket.org/acme/other.git",
       },
       { bitbucket },
@@ -31,7 +31,7 @@ describe("Bitbucket pull requests", () => {
     );
 
     const url = (id: number) =>
-      `https://bitbucket.org/acme/rebase/pull-requests/${id}`;
+      `https://bitbucket.org/Acme/rebase/pull-requests/${id}`;
     await expect(f.list()).resolves.toEqual([
       {
         branch: "main",
