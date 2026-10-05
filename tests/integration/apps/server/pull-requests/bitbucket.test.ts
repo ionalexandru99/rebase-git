@@ -86,4 +86,36 @@ describe("Bitbucket pull requests", () => {
     await expect(f.list()).resolves.toEqual([]);
     expect(requests).toEqual([]);
   });
+
+  it("finds a pull request by number", async () => {
+    const { bitbucket } = fakeBitbucket({
+      elsewhere: [{ id: 12, checks: ["SUCCESSFUL"] }],
+    });
+    const f = await pullRequestsFixture(
+      { origin: "git@bitbucket.org:acme/rebase.git" },
+      { bitbucket },
+    );
+    await Effect.runPromise(
+      f.sourceControl.saveBitbucketToken({
+        _tag: "AccessToken",
+        token: "access-token",
+      }),
+    );
+
+    await expect(f.find(12)).resolves.toEqual({
+      kind: "PullRequest",
+      pullRequest: {
+        kind: "PullRequest",
+        number: 12,
+        url: "https://bitbucket.org/acme/rebase/pull-requests/12",
+        title: "Pull request 12",
+        state: "Open",
+        checks: "Passing",
+      },
+    });
+    await expect(f.find(13)).resolves.toEqual({
+      kind: "PullRequest",
+      pullRequest: null,
+    });
+  });
 });

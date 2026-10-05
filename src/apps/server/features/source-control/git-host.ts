@@ -40,6 +40,9 @@ export interface HostedRepository {
   readonly pullRequests: (
     heads: readonly string[],
   ) => Effect.Effect<PullRequestsByHead, PullRequestsUnavailable>;
+  readonly pullRequest: (
+    number: number,
+  ) => Effect.Effect<HostedPullRequest | undefined>;
 }
 
 export interface GitHost {

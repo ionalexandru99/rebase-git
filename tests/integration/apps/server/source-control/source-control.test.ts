@@ -334,16 +334,17 @@ describe("source control", () => {
 
     await f.setEnabled(false);
 
-    await expect(f.pullRequests()).resolves.toEqual([]);
+    await expect(f.pullRequests()).resolves.toBeNull();
     expect(f.requests).toEqual([]);
     expect((await f.discover()).hosts[0]).toMatchObject({ enabled: false });
     expect(changes).toHaveLength(1);
 
     await f.setEnabled(true);
 
-    await expect(f.pullRequests()).resolves.toEqual([
-      expect.objectContaining({ branch: "main" }),
-    ]);
+    await expect(f.pullRequests()).resolves.toEqual({
+      kind: "PullRequest",
+      branches: [expect.objectContaining({ branch: "main" })],
+    });
   });
 
   it("checks an Atlassian API token with Bitbucket before saving it, and keeps an access token as given", async () => {

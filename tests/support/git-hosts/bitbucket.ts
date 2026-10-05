@@ -98,6 +98,25 @@ export function fakeBitbucket(
           ).map((state) => ({ state })),
         });
       const fullName = pathname.split("/").slice(3, 5).join("/");
+      const asNode = (node: BitbucketPullRequestNode) => ({
+        id: node.id,
+        title: `Pull request ${node.id}`,
+        state: node.state ?? "OPEN",
+        draft: node.draft ?? false,
+        source: {
+          repository: {
+            full_name: node.fork === true ? "fork/rebase" : fullName,
+          },
+          commit: { hash: `head-${node.id}` },
+        },
+      });
+      const wanted = /\/pullrequests\/(\d+)$/.exec(pathname)?.[1];
+      if (wanted !== undefined) {
+        const node = nodes.find(({ id }) => String(id) === wanted);
+        return node === undefined
+          ? answer({ type: "error" }, 404)
+          : answer(asNode(node));
+      }
       const query = searchParams.get("q") ?? "";
       const branch = /source\.branch\.name = "(.*)"/.exec(query)?.[1] ?? "";
       const source = /source\.repository\.full_name = "([^"]*)"/.exec(query);
@@ -105,18 +124,7 @@ export function fakeBitbucket(
         values: (source !== null && source[1] !== fullName
           ? []
           : (bySourceBranch[branch] ?? [])
-        ).map((node) => ({
-          id: node.id,
-          title: `Pull request ${node.id}`,
-          state: node.state ?? "OPEN",
-          draft: node.draft ?? false,
-          source: {
-            repository: {
-              full_name: node.fork === true ? "fork/rebase" : fullName,
-            },
-            commit: { hash: `head-${node.id}` },
-          },
-        })),
+        ).map(asNode),
       });
     },
   };

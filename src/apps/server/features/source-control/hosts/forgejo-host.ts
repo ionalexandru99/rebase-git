@@ -93,6 +93,8 @@ export function createForgejoHost(cli: TeaCli): GitHost {
               id: repository.id,
               pullRequests: (heads: readonly string[]) =>
                 listPullRequests(cli, login, repository, heads),
+              pullRequest: (number: number) =>
+                readPullRequest(cli, login, repository, number),
             }
           );
         }),
@@ -212,6 +214,27 @@ function listPullRequests(
   });
 }
 
+function readPullRequest(
+  cli: TeaCli,
+  login: TeaLogin,
+  repository: ForgejoRepository,
+  number: number,
+) {
+  return cli
+    .api(login.name, `${repositoryEndpoint(repository)}/pulls/${number}`)
+    .pipe(
+      Effect.flatMap(decodePullRequest),
+      Effect.flatMap((node) =>
+        isServerLink(node.html_url, login.server)
+          ? checksOf(cli, login.name, repository, node).pipe(
+              Effect.map((checks) => forgejoPullRequest(node, checks)),
+            )
+          : Effect.succeed(undefined),
+      ),
+      Effect.orElseSucceed(() => undefined),
+    );
+}
+
 function readPullRequests(
   cli: TeaCli,
   login: string,
@@ -292,6 +315,10 @@ type PullRequestNode = typeof PullRequestNode.Type;
 
 const decodePullRequests = Schema.decodeUnknownEffect(
   Schema.fromJsonString(Schema.Array(PullRequestNode)),
+);
+
+const decodePullRequest = Schema.decodeUnknownEffect(
+  Schema.fromJsonString(PullRequestNode),
 );
 
 const decodeStatus = Schema.decodeUnknownEffect(

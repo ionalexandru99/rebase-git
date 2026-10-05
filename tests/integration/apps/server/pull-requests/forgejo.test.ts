@@ -81,4 +81,25 @@ describe("Forgejo and Gitea pull requests", () => {
       _tag: "PullRequestsUnavailable",
     });
   });
+
+  it("finds a pull request by number", async () => {
+    const { forgejo } = fakeForgejo({
+      elsewhere: [{ number: 12, state: "merged" }],
+    });
+    const f = await pullRequestsFixture(
+      { origin: "https://codeberg.org/team/rebase.git" },
+      { forgejo },
+    );
+
+    await expect(f.find(12)).resolves.toEqual({
+      kind: "PullRequest",
+      pullRequest: {
+        kind: "PullRequest",
+        number: 12,
+        url: "https://codeberg.org/team/rebase/pulls/12",
+        title: "Pull request 12",
+        state: "Merged",
+      },
+    });
+  });
 });

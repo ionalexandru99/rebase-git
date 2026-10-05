@@ -65,30 +65,42 @@ export function fakeGitLab(
         ),
       );
     },
-    graphql: (hostname, _query, variables) => {
+    graphql: (hostname, query, variables) => {
       requests.push({ hostname, ...variables });
       if (bySourceBranch === null)
         return Effect.fail({ _tag: "PullRequestsUnavailable" });
       const fullPath = variables.fullPath ?? "";
+      const asNode = (node: GitLabMergeRequestNode) => ({
+        iid: String(node.iid),
+        webUrl: `https://${hostname}/${fullPath}/-/merge_requests/${node.iid}`,
+        title: `Merge request ${node.iid}`,
+        state: node.state ?? "opened",
+        draft: node.draft ?? false,
+        sourceProject: { fullPath: node.project ?? fullPath },
+        headPipeline:
+          node.pipeline === undefined ? null : { status: node.pipeline },
+      });
+      const wanted = /mergeRequest\(iid: "(\d+)"\)/.exec(query)?.[1];
+      if (wanted !== undefined) {
+        const node = Object.values(bySourceBranch)
+          .flat()
+          .find(({ iid }) => String(iid) === wanted);
+        return Effect.succeed(
+          JSON.stringify({
+            data: {
+              project: {
+                mergeRequest: node === undefined ? null : asNode(node),
+              },
+            },
+          }),
+        );
+      }
       const project = Object.fromEntries(
         Object.entries(variables)
           .filter(([alias]) => /^b\d+$/.test(alias))
           .map(([alias, sourceBranch]) => [
             alias,
-            {
-              nodes: (bySourceBranch[sourceBranch] ?? []).map((node) => ({
-                iid: String(node.iid),
-                webUrl: `https://${hostname}/${fullPath}/-/merge_requests/${node.iid}`,
-                title: `Merge request ${node.iid}`,
-                state: node.state ?? "opened",
-                draft: node.draft ?? false,
-                sourceProject: { fullPath: node.project ?? fullPath },
-                headPipeline:
-                  node.pipeline === undefined
-                    ? null
-                    : { status: node.pipeline },
-              })),
-            },
+            { nodes: (bySourceBranch[sourceBranch] ?? []).map(asNode) },
           ]),
       );
       return Effect.succeed(

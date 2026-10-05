@@ -5,20 +5,31 @@ import {
   IconGitBranchDeleted,
 } from "@tabler/icons-react";
 import { type ReactNode, useEffect, useState } from "react";
-import type { PullRequest } from "#contracts/pull-requests/pull-requests.contract.ts";
+import type {
+  PullRequest,
+  PullRequestKind,
+} from "#contracts/pull-requests/pull-requests.contract.ts";
 import type { RepositoryCommit } from "#contracts/repository-history/repository-history.contract.ts";
 import type { RemoteBranch } from "#contracts/repository-refs/repository-refs.contract.ts";
 import { AuthorAvatar } from "#web/features/author-avatars/author-avatar.tsx";
 import type { BranchesSidebarRefRow } from "#web/features/branches-sidebar/branches-sidebar-state.ts";
-import { PullRequestList } from "#web/features/pull-requests/pull-requests.tsx";
+import {
+  LinkPullRequestField,
+  usePullRequestLinking,
+} from "#web/features/pull-requests/pull-request-links.tsx";
+import {
+  PullRequestList,
+  type PullRequests,
+} from "#web/features/pull-requests/pull-requests.tsx";
 import type { RepositoryHistory } from "#web/features/repository-history/repository-history.ts";
 import { worktreeName } from "#web/features/worktrees/worktree-draft.ts";
 import { ageLabel, useNow } from "#web/lib/age-label.ts";
 
 export interface BranchCardBranch {
   readonly row: BranchesSidebarRefRow;
-  readonly pullRequests: readonly PullRequest[];
 }
+
+const noPullRequests: readonly PullRequest[] = [];
 
 export type BranchCardHandle = PreviewCard.Handle<BranchCardBranch>;
 
@@ -42,17 +53,38 @@ export function BranchCardTrigger(
   );
 }
 
+export function branchCardTriggerId(rowId: string) {
+  return `branch-card-${rowId}`;
+}
+
 export function BranchCard({
   handle,
   history,
+  linking,
+  onLinkingEnd,
+  pullRequests,
   remoteBranches,
 }: {
   readonly handle: BranchCardHandle;
   readonly history: Pick<RepositoryHistory, "ask"> | undefined;
+  readonly linking: string | undefined;
+  readonly onLinkingEnd: () => void;
+  readonly pullRequests: PullRequests | undefined;
   readonly remoteBranches: readonly RemoteBranch[];
 }) {
   return (
-    <PreviewCard.Root handle={handle}>
+    <PreviewCard.Root
+      handle={handle}
+      onOpenChange={(open, details) => {
+        if (linking === undefined) return;
+        if (
+          details.reason === "trigger-hover" ||
+          details.reason === "trigger-focus"
+        )
+          details.cancel();
+        else if (!open) onLinkingEnd();
+      }}
+    >
       {({ payload }) =>
         payload === undefined ? null : (
           <PreviewCard.Portal>
@@ -68,9 +100,15 @@ export function BranchCard({
                 className="w-[23rem] max-w-(--available-width) origin-(--transform-origin) rounded-lg border border-border bg-popover px-3.5 py-3 text-popover-foreground shadow-[0_.75rem_2.5rem_rgb(0_0_0/14%)] dark:shadow-[0_.75rem_2.5rem_rgb(0_0_0/45%)] outline-none transition-[scale,opacity] duration-150 ease-out data-ending-style:scale-98 data-ending-style:opacity-0 data-starting-style:scale-98 data-starting-style:opacity-0 motion-reduce:transition-none"
               >
                 <BranchCardBody
-                  branch={payload}
                   history={history}
+                  kind={pullRequests?.kind ?? "PullRequest"}
+                  linking={linking === payload.row.name}
+                  onLinked={() => handle.close()}
+                  pullRequests={
+                    pullRequests?.forBranch(payload.row.name) ?? noPullRequests
+                  }
                   remoteBranches={remoteBranches}
+                  row={payload.row}
                 />
               </PreviewCard.Popup>
             </PreviewCard.Positioner>
@@ -82,16 +120,24 @@ export function BranchCard({
 }
 
 function BranchCardBody({
-  branch,
   history,
+  kind,
+  linking,
+  onLinked,
+  pullRequests,
   remoteBranches,
+  row,
 }: {
-  readonly branch: BranchCardBranch;
   readonly history: Pick<RepositoryHistory, "ask"> | undefined;
+  readonly kind: PullRequestKind;
+  readonly linking: boolean;
+  readonly onLinked: () => void;
+  readonly pullRequests: readonly PullRequest[];
   readonly remoteBranches: readonly RemoteBranch[];
+  readonly row: BranchesSidebarRefRow;
 }) {
   const now = useNow();
-  const { row, pullRequests } = branch;
+  const setLinked = usePullRequestLinking();
   const commit = useTipCommit(history, row.tip);
   return (
     <>
@@ -134,7 +180,22 @@ function BranchCardBody({
       {pullRequests.length > 0 ? (
         <>
           <div className="my-2 h-px bg-border" />
-          <PullRequestList pullRequests={pullRequests} />
+          <PullRequestList
+            focusable={linking}
+            onUnlink={(pullRequest) => setLinked(row.name, pullRequest, false)}
+            pullRequests={pullRequests}
+          />
+        </>
+      ) : null}
+      {linking ? (
+        <>
+          <div className="my-2 h-px bg-border" />
+          <LinkPullRequestField
+            branch={row.name}
+            kind={kind}
+            onLinked={onLinked}
+            setLinked={setLinked}
+          />
         </>
       ) : null}
     </>

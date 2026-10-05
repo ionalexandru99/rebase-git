@@ -162,6 +162,22 @@ export function createGitLabHost(cli: GitLabCli): GitHost {
                         ),
                       ),
                   ),
+                pullRequest: (number: number) =>
+                  cli
+                    .graphql(project.host, mergeRequestQuery(number), {
+                      fullPath: project.path,
+                    })
+                    .pipe(
+                      Effect.flatMap(decodeMergeRequestResponse),
+                      Effect.map(({ data: { project: answer } }) =>
+                        answer === null ||
+                        answer.mergeRequest === null ||
+                        !isProjectLink(answer.mergeRequest.webUrl, project.host)
+                          ? undefined
+                          : gitlabMergeRequest(answer.mergeRequest),
+                      ),
+                      Effect.orElseSucceed(() => undefined),
+                    ),
               }
             : undefined,
         ),
@@ -240,12 +256,23 @@ function mergeRequestsQuery(branches: number) {
 ${indexes.map((index) => `    b${index}: mergeRequests(sourceBranches: [$b${index}], first: ${mergeRequestsPerBranch}, sort: CREATED_DESC) { nodes { ...mergeRequest } }`).join("\n")}
   }
 }
-fragment mergeRequest on MergeRequest {
+${mergeRequestFragment}`;
+}
+
+function mergeRequestQuery(number: number) {
+  return `query($fullPath: ID!) {
+  project(fullPath: $fullPath) {
+    mergeRequest(iid: "${number}") { ...mergeRequest }
+  }
+}
+${mergeRequestFragment}`;
+}
+
+const mergeRequestFragment = `fragment mergeRequest on MergeRequest {
   iid webUrl title state draft diffHeadSha
   sourceProject { fullPath }
   headPipeline { status }
 }`;
-}
 
 const MergeRequestNode = Schema.Struct({
   iid: Schema.String,
@@ -274,6 +301,16 @@ const decodeResponse = (output: string) =>
     ),
   )(output).pipe(Effect.mapError(() => unavailable));
 
+const decodeMergeRequestResponse = decodeHostJson(
+  Schema.Struct({
+    data: Schema.Struct({
+      project: Schema.NullOr(
+        Schema.Struct({ mergeRequest: Schema.NullOr(MergeRequestNode) }),
+      ),
+    }),
+  }),
+);
+
 function headAnswer(
   nodes: readonly MergeRequestNode[] | undefined,
   project: GitLabProject,
@@ -298,26 +335,28 @@ function mergeRequests(
           project.path.toLowerCase() &&
         isProjectLink(node.webUrl, project.host),
     )
-    .map((node) =>
-      pullRequest(
-        {
-          kind: "MergeRequest",
-          number: Number(node.iid),
-          url: node.webUrl,
-          title: node.title,
-          state:
-            node.state === "merged"
-              ? "Merged"
-              : node.state === "closed"
-                ? "Closed"
-                : node.draft
-                  ? "Draft"
-                  : "Open",
-        },
-        pipelineState(node.headPipeline?.status),
-        node.diffHeadSha,
-      ),
-    );
+    .map(gitlabMergeRequest);
+}
+
+function gitlabMergeRequest(node: MergeRequestNode): HostedPullRequest {
+  return pullRequest(
+    {
+      kind: "MergeRequest",
+      number: Number(node.iid),
+      url: node.webUrl,
+      title: node.title,
+      state:
+        node.state === "merged"
+          ? "Merged"
+          : node.state === "closed"
+            ? "Closed"
+            : node.draft
+              ? "Draft"
+              : "Open",
+    },
+    pipelineState(node.headPipeline?.status),
+    node.diffHeadSha,
+  );
 }
 
 function isProjectLink(url: string, host: string) {
