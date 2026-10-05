@@ -212,7 +212,10 @@ const terms = {
 const stateIcons = {
   Open: { Icon: IconGitPullRequest, className: "text-status-available" },
   Draft: { Icon: IconGitPullRequestDraft, className: "text-muted-foreground" },
-  Merged: { Icon: IconGitMerge, className: "text-violet-400" },
+  Merged: {
+    Icon: IconGitMerge,
+    className: "text-violet-600 dark:text-violet-400",
+  },
   Closed: {
     Icon: IconGitPullRequestClosed,
     className: "text-status-unavailable",

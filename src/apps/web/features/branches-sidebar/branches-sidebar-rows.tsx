@@ -42,11 +42,20 @@ export function rowElementId(rowId: string): string {
 }
 
 const sectionLooks = {
-  local: { Icon: IconGitBranch, className: "text-indigo-300" },
-  settled: { Icon: IconGitBranchDeleted, className: "text-zinc-400" },
-  remote: { Icon: IconCloud, className: "text-sky-400" },
-  tags: { Icon: IconTag, className: "text-amber-300" },
-  stashes: { Icon: IconStack2, className: "text-violet-300" },
+  local: {
+    Icon: IconGitBranch,
+    className: "text-indigo-600 dark:text-indigo-300",
+  },
+  settled: {
+    Icon: IconGitBranchDeleted,
+    className: "text-zinc-500 dark:text-zinc-400",
+  },
+  remote: { Icon: IconCloud, className: "text-sky-600 dark:text-sky-400" },
+  tags: { Icon: IconTag, className: "text-amber-700 dark:text-amber-300" },
+  stashes: {
+    Icon: IconStack2,
+    className: "text-violet-600 dark:text-violet-300",
+  },
 } as const;
 
 export function SectionRow({

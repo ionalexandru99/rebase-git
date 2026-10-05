@@ -34,7 +34,10 @@ export function ConflictFileSection({
     <FileListSection
       name="Conflicted files"
       title="Conflicts"
-      look={{ Icon: IconAlertTriangle, className: "text-rose-300" }}
+      look={{
+        Icon: IconAlertTriangle,
+        className: "text-rose-600 dark:text-rose-300",
+      }}
       grow
       files={conflicts.rows}
       tree={view.preferences.tree}

@@ -82,7 +82,7 @@ export function CommitRefPill({
   const { colors } = useGraphRefAppearance();
   const color =
     label.type === "tag"
-      ? "#A8B4C8"
+      ? "var(--tag-label)"
       : (colors.get(label.name) ??
         graphLaneColor(
           graphBranchColorIndex(graphRefName({ ...label, oid: "" })),
@@ -97,7 +97,7 @@ export function CommitRefPill({
     <span
       className="group/ref relative inline-flex shrink-0 items-center rounded-[5px] border font-sans text-[.85rem] leading-none"
       style={{
-        color: local ? "#0e141c" : color,
+        color: local ? "var(--lane-foreground)" : color,
         borderColor: local
           ? color
           : `color-mix(in srgb, ${color} 24%, var(--repository))`,

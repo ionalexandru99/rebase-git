@@ -25,10 +25,10 @@ const planActions: readonly (readonly [PlanAction, string, string])[] = [
 
 export const actionColors: Readonly<Record<PlanAction, string>> = {
   pick: "text-muted-foreground",
-  reword: "text-sky-400",
+  reword: "text-sky-600 dark:text-sky-400",
   edit: "text-status-connecting",
-  squash: "text-violet-400",
-  fixup: "text-violet-400",
+  squash: "text-violet-600 dark:text-violet-400",
+  fixup: "text-violet-600 dark:text-violet-400",
   drop: "text-destructive",
 };
 
@@ -159,7 +159,8 @@ export function PlanList({
               className={cn(
                 "min-w-0 flex-1 truncate",
                 row.action === "drop" && "text-muted-foreground line-through",
-                subjects[row.commit] !== undefined && "text-sky-300",
+                subjects[row.commit] !== undefined &&
+                  "text-sky-600 dark:text-sky-300",
               )}
             >
               {subjects[row.commit] ?? row.subject}

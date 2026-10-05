@@ -30,8 +30,14 @@ export type ChangeFileSectionView = Pick<
 >;
 
 export const changeSectionLooks: Record<ChangeSection, SectionLook> = {
-  unstaged: { Icon: IconPencil, className: "text-amber-300" },
-  staged: { Icon: IconCircleCheck, className: "text-emerald-300" },
+  unstaged: {
+    Icon: IconPencil,
+    className: "text-amber-700 dark:text-amber-300",
+  },
+  staged: {
+    Icon: IconCircleCheck,
+    className: "text-emerald-600 dark:text-emerald-300",
+  },
 };
 
 export function ChangeCount({

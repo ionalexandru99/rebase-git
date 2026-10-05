@@ -1,6 +1,6 @@
 import {
-  graphLaneColor,
-  graphNodeColor,
+  graphCanvasLaneColors,
+  graphNodeColorIndex,
   graphRemoteOpacity,
 } from "#web/features/commit-graph/layout/graph-colors.ts";
 import {
@@ -12,7 +12,7 @@ import type { CommitLaneRow } from "#web/features/repository-history/commit-lane
 
 interface LaneStroke {
   readonly path: Path2D;
-  readonly color: string;
+  readonly color: number;
   readonly opacity: number;
 }
 
@@ -23,7 +23,7 @@ function graphTilePaths(
 ) {
   const strokes = new Map<string, LaneStroke>();
   const centers = new Path2D();
-  const dots = new Map<string, Path2D>();
+  const dots = new Map<number, Path2D>();
   for (const [index, row] of rows.entries()) {
     const top = index * graphRowHeight;
     const center = top + graphRowHeight / 2;
@@ -36,7 +36,7 @@ function graphTilePaths(
       if (lane.far?.direction === "down") {
         if (x < -4 || x > width + 4) continue;
         drawFarArrow(
-          laneStroke(strokes, graphLaneColor(lane.color), lane.remote),
+          laneStroke(strokes, lane.color, lane.remote),
           x,
           top,
           center + 2,
@@ -49,11 +49,7 @@ function graphTilePaths(
       if (Math.max(x, targetX) < -4 || Math.min(x, targetX) > width + 4)
         continue;
       drawLane(
-        laneStroke(
-          strokes,
-          graphLaneColor(lane.incomingColor ?? lane.color),
-          lane.remote,
-        ),
+        laneStroke(strokes, lane.incomingColor ?? lane.color, lane.remote),
         x,
         top,
         targetX,
@@ -69,7 +65,7 @@ function graphTilePaths(
       drawLane(
         laneStroke(
           strokes,
-          graphLaneColor(parent.incomingColor ?? parent.color),
+          parent.incomingColor ?? parent.color,
           row.nodeRemote,
         ),
         nodeX,
@@ -88,7 +84,7 @@ function graphTilePaths(
       )
         continue;
       drawFarArrow(
-        laneStroke(strokes, graphLaneColor(lane.color), lane.remote),
+        laneStroke(strokes, lane.color, lane.remote),
         x,
         bottom,
         center - 2,
@@ -96,14 +92,14 @@ function graphTilePaths(
     }
     if (nodeX < -4 || nodeX > width + 4) continue;
     if (!row.nodeRemote) {
-      const color = graphNodeColor(row);
+      const color = graphNodeColorIndex(row);
       const dot = dots.get(color) ?? new Path2D();
       dots.set(color, dot);
       dot.moveTo(nodeX + 4, center);
       dot.arc(nodeX, center, 4, 0, Math.PI * 2);
       continue;
     }
-    const path = laneStroke(strokes, graphNodeColor(row), true);
+    const path = laneStroke(strokes, graphNodeColorIndex(row), true);
     path.moveTo(nodeX + 3, center);
     path.arc(nodeX, center, 3, 0, Math.PI * 2);
     centers.moveTo(nodeX + 2, center);
@@ -114,7 +110,7 @@ function graphTilePaths(
 
 function laneStroke(
   strokes: Map<string, LaneStroke>,
-  color: string,
+  color: number,
   remote: boolean,
 ) {
   const key = `${color}:${remote}`;
@@ -180,8 +176,9 @@ export function drawGraphTile(
   context.lineWidth = 2;
   context.clearRect(0, 0, width, height);
   const { strokes, centers, dots } = graphTilePaths(rows, left, width);
+  const laneColor = graphCanvasLaneColors();
   for (const { path, color, opacity } of strokes.values()) {
-    context.strokeStyle = color;
+    context.strokeStyle = laneColor(color);
     context.globalAlpha = opacity;
     context.stroke(path);
   }
@@ -190,7 +187,7 @@ export function drawGraphTile(
   context.fill(centers);
   context.globalCompositeOperation = "source-over";
   for (const [color, dot] of dots) {
-    context.fillStyle = color;
+    context.fillStyle = laneColor(color);
     context.fill(dot);
   }
 }

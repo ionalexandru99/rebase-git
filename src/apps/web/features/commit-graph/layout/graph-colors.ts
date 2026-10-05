@@ -10,25 +10,22 @@ import type { RepositoryHistory } from "#web/features/repository-history/reposit
 
 export const graphRemoteOpacity = 0.4;
 
-const palette = [
-  "#4C9AFF",
-  "#22C55E",
-  "#B38AFF",
-  "#F97316",
-  "#84CC16",
-  "#06B6D4",
-  "#EF4444",
-  "#F59E0B",
-] as const;
-
 export function graphLaneColor(color: number) {
-  return palette[color % laneColorCount] ?? palette[0];
+  return `var(--lane-${color % laneColorCount})`;
+}
+
+export function graphNodeColorIndex(row: CommitLaneRow) {
+  return row.lanesBefore.find((lane) => lane.id === row.nodeLaneId)?.color ?? 0;
 }
 
 export function graphNodeColor(row: CommitLaneRow) {
-  return graphLaneColor(
-    row.lanesBefore.find((lane) => lane.id === row.nodeLaneId)?.color ?? 0,
-  );
+  return graphLaneColor(graphNodeColorIndex(row));
+}
+
+export function graphCanvasLaneColors() {
+  const style = getComputedStyle(document.documentElement);
+  return (color: number) =>
+    style.getPropertyValue(`--lane-${color % laneColorCount}`).trim();
 }
 
 export function graphColors(

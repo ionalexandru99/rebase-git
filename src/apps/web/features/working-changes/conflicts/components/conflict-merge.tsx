@@ -16,7 +16,11 @@ import type {
 } from "#contracts/repository-conflicts/repository-conflicts.contract.ts";
 import { Button } from "#web/components/ui/button.tsx";
 import { Confirmation } from "#web/components/ui/confirmation.tsx";
-import { diffSurfaceCSS } from "#web/features/file-diff/components/diff-content.tsx";
+import {
+  diffSurfaceCSS,
+  diffThemes,
+} from "#web/features/file-diff/components/diff-content.tsx";
+import { useTheme } from "#web/features/theme/theme.ts";
 import { WholeFileMenu } from "#web/features/working-changes/conflicts/components/whole-file-menu.tsx";
 import {
   type ConflictEdit,
@@ -195,6 +199,7 @@ function ExcerptBlocks({
   ) => Promise<void> | null | undefined;
 }) {
   const pool = useWorkerPool();
+  const theme = useTheme();
   const container = useRef<HTMLDivElement>(null);
   const resolve = useRef(onResolve);
   resolve.current = onResolve;
@@ -204,7 +209,8 @@ function ExcerptBlocks({
     if (element === null) return;
     const file = new UnresolvedFile(
       {
-        theme: "pierre-dark",
+        theme: diffThemes,
+        themeType: theme,
         unsafeCSS: diffSurfaceCSS,
         overflow: "scroll",
         disableFileHeader: true,
@@ -226,7 +232,7 @@ function ExcerptBlocks({
       containerWrapper: element,
     });
     return () => file.cleanUp();
-  }, [excerpt, path, pool, revision]);
+  }, [excerpt, path, pool, revision, theme]);
 
   return (
     <>

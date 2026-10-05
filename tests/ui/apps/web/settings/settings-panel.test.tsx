@@ -68,6 +68,27 @@ describe("settings panel", () => {
     ).toHaveLength(0);
   });
 
+  it("switches between light, dark and the system theme", async () => {
+    await renderSettings(vi.fn());
+    const theme = page.getByRole("combobox", { name: "Theme" });
+    const root = document.documentElement;
+    await expect.element(theme).toHaveTextContent("System");
+
+    await theme.click();
+    await page.getByRole("option", { name: "Dark" }).click();
+    await expect.poll(() => root.classList.contains("dark")).toBe(true);
+
+    await theme.click();
+    await page.getByRole("option", { name: "Light" }).click();
+    await expect.poll(() => root.classList.contains("dark")).toBe(false);
+
+    await theme.click();
+    await page.getByRole("option", { name: "System" }).click();
+    await expect
+      .poll(() => root.classList.contains("dark"))
+      .toBe(matchMedia("(prefers-color-scheme: dark)").matches);
+  });
+
   it("keeps settings content inside a narrow viewport", async () => {
     await page.viewport(640, 720);
     await renderSettings(vi.fn());

@@ -32,7 +32,9 @@ describe("graph branch colors", () => {
       ],
       graphLaneSeeds(refs, [], roots),
     );
-    expect(graphColors(plan.rows, refs).nodes.get("older")).toBe("#4C9AFF");
+    expect(graphColors(plan.rows, refs).nodes.get("older")).toBe(
+      "var(--lane-0)",
+    );
   });
 
   it("keeps known local ancestry vivid when its only named ref is remote", () => {
@@ -58,7 +60,7 @@ describe("graph branch colors", () => {
     ]);
     const before = graphColors(first.rows, refs);
     const after = graphColors(second.rows, refs, before.refs);
-    expect(before.refs.get("dev")).toBe("#F97316");
+    expect(before.refs.get("dev")).toBe("var(--lane-3)");
     expect(after.refs.get("dev")).toBe(before.refs.get("dev"));
     expect(after.refs.get("dev")).toBe(after.nodes.get("older"));
   });
