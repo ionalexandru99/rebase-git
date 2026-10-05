@@ -43,6 +43,7 @@ const reflog = repositoryStash({
 describe("stashes", () => {
   it("applies with the staged state and drops after confirming from the sidebar", async () => {
     const { screen, applied, dropped, opened } = await renderStashes();
+    await screen.getByRole("treeitem", { name: /^Stashes/ }).click();
     const row = screen.getByRole("treeitem", { name: /Try larger limits/ });
 
     await row.click();

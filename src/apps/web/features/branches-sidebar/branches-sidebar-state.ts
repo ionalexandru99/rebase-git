@@ -112,7 +112,6 @@ const kindSections: Record<RefKind, string> = {
 
 export const defaultExpandedSections: ReadonlySet<string> = new Set([
   localBranchesSectionId,
-  stashesSectionId,
 ]);
 
 const noStashes: BranchesSidebarStashes = { list: [], drafting: false };
