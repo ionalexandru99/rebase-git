@@ -28,26 +28,28 @@ export type SetPullRequestLinked = (
 
 export function usePullRequestLinking(): SetPullRequestLinked {
   const errorToast = useErrorToast();
-  const changed = useRef<PullRequest | undefined>(undefined);
+  const changing = useRef(new Map<number, PullRequest>());
   const command = useCommand(PullRequestsApi.link, {
     answers: (_, input) => [
       answer(
         PullRequestsApi.list,
         { repositoryId: input.repositoryId },
-        (current) => relinked(current ?? [], input, changed.current),
+        (current) =>
+          relinked(current ?? [], input, changing.current.get(input.number)),
       ),
     ],
   });
   return (branch, pullRequest, linked) => {
-    changed.current = pullRequest;
+    changing.current.set(pullRequest.number, pullRequest);
     void command
       .run({ branch, number: pullRequest.number, linked })
-      .then((result) =>
+      .then((result) => {
+        changing.current.delete(pullRequest.number);
         errorToast.failure(
           linked ? "linkPullRequest" : "unlinkPullRequest",
           result,
-        ),
-      );
+        );
+      });
   };
 }
 
