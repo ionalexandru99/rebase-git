@@ -42,5 +42,12 @@ export function useFileRows<File extends { readonly path: string }>(
       else next.add(key);
       return next;
     });
-  return { rows, collapsed, scrollRef, virtualizer, toggle };
+  return {
+    rows,
+    collapsed,
+    scrollRef,
+    items: virtualizer.getVirtualItems(),
+    totalSize: virtualizer.getTotalSize(),
+    toggle,
+  };
 }
