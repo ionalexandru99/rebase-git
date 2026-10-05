@@ -68,11 +68,11 @@ export function useRefDeletion({
   };
   const errorToast = useErrorToast();
   const statusToast = useStatusToast();
-  const [pending, showPending] = useState<PendingDeletion>();
+  const [pending, setPendingState] = useState<PendingDeletion>();
   const latestPending = useRef(pending);
   const setPending = (next: PendingDeletion | undefined) => {
     latestPending.current = next;
-    showPending(next);
+    setPendingState(next);
   };
 
   const cancel = () => {

@@ -31,7 +31,7 @@ export function ApplicationLayout({
   readonly settings: ReactNode;
   readonly children: ReactNode;
 }) {
-  const { sidebarRef, ...panel } = useSidebarPanel(onSidebarCollapsedChange);
+  const { ref: sidebarRef, panel } = useSidebarPanel(onSidebarCollapsedChange);
   const settingsOpen = settings !== undefined;
   const repositorySettingsOpen = repositorySettings !== undefined;
   return (
@@ -85,16 +85,16 @@ export function ApplicationLayout({
 }
 
 function useSidebarPanel(onCollapsedChange: (collapsed: boolean) => void) {
-  const sidebarRef = useRef<PanelImperativeHandle>(null);
-  return {
-    sidebarRef,
+  const ref = useRef<PanelImperativeHandle>(null);
+  const panel: SidebarPanel = {
     collapse: () => {
-      sidebarRef.current?.collapse();
+      ref.current?.collapse();
       onCollapsedChange(true);
     },
     expand: () => {
-      sidebarRef.current?.expand();
+      ref.current?.expand();
       onCollapsedChange(false);
     },
   };
+  return { ref, panel };
 }

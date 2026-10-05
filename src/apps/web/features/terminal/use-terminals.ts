@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { TerminalsApi } from "#contracts/terminal/terminal.contract.ts";
 import { useErrorToast } from "#web/features/notifications/notifications.tsx";
 import { useEnvironmentQuery } from "#web/platform/query/environment-query.ts";
@@ -27,7 +27,7 @@ export type Terminals = ReturnType<typeof useTerminals>;
 export function useTerminals(environmentId: string, scope: RepositoryScope) {
   const { repositoryId, worktreePath, logicalRepositoryId } = scope;
   const key = `${storagePrefix}${JSON.stringify([environmentId, logicalRepositoryId, worktreePath])}`;
-  const store = createStore(readPanelState(key));
+  const store = useMemo(() => createStore(readPanelState(key)), [key]);
   const state = useStore(store);
   const update = useCallback(
     (change: Partial<TerminalPanelState>) => {

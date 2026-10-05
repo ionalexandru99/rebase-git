@@ -5,7 +5,7 @@ import { useWorkspacePanel } from "#web/features/workspace-panel/workspace-panel
 export function useCommitInspection(connected: boolean) {
   const { state, execute, store } = useWorkspacePanel();
   const graphRef = useRef<CommitGraphHandle>(null);
-  const selection = useRef<{ readonly oid: string | undefined }>(undefined);
+  const selection = useRef<string | undefined>(undefined);
   const hadTab = useRef(false);
   useEffect(() => {
     const hasTab = state.tabs.includes("commit");
@@ -23,8 +23,8 @@ export function useCommitInspection(connected: boolean) {
         return;
       }
       const previous = selection.current;
-      selection.current = { oid };
-      if (previous === undefined || previous.oid === oid) {
+      selection.current = oid;
+      if (previous === undefined || previous === oid) {
         return;
       }
       const snapshot = store.getSnapshot();

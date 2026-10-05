@@ -1,3 +1,11 @@
+import { useSyncExternalStore } from "react";
+
+const minute = 60_000;
+
+export function useNow() {
+  return useSyncExternalStore(noChanges, currentMinute, currentMinute);
+}
+
 export function ageLabel(seconds: number, now = Date.now()) {
   const elapsed = Math.max(0, now / 1_000 - seconds);
   if (elapsed < 60) return "now";
@@ -13,4 +21,12 @@ export function ageLabel(seconds: number, now = Date.now()) {
       ? {}
       : { year: "numeric" }),
   });
+}
+
+function currentMinute() {
+  return Math.floor(Date.now() / minute) * minute;
+}
+
+function noChanges() {
+  return () => {};
 }

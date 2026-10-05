@@ -1,5 +1,5 @@
 import { IconChevronDown, IconChevronRight } from "@tabler/icons-react";
-import { type KeyboardEvent, type MouseEvent, useState } from "react";
+import { type KeyboardEvent, type MouseEvent, useMemo, useState } from "react";
 import type { ReflogEntry } from "#contracts/repository-reflog/repository-reflog.contract.ts";
 import {
   type Action,
@@ -12,6 +12,7 @@ import {
   ContextMenuContent,
   ContextMenuTrigger,
 } from "#web/components/ui/context-menu.tsx";
+import { useNow } from "#web/lib/age-label.ts";
 
 export interface ReflogRow {
   readonly id: string;
@@ -41,7 +42,10 @@ export function ReflogList({
 }) {
   const [expanded, setExpanded] = useState<ReadonlySet<string>>(new Set());
   const [activeId, setActiveId] = useState<string>();
-  const rows = entries === undefined ? [] : reflogRows(entries, expanded);
+  const rows = useMemo(
+    () => (entries === undefined ? [] : reflogRows(entries, expanded)),
+    [entries, expanded],
+  );
   const active = rows.find((row) => row.id === activeId) ?? rows[0];
 
   const toggleGroup = (row: ReflogRow, open: boolean) => {
@@ -142,6 +146,7 @@ function ReflogRows({
   readonly status: "pending" | "error" | "success";
   readonly onToggle: (row: ReflogRow, open: boolean) => void;
 }) {
+  const now = useNow();
   if (rows.length === 0)
     return (
       <div className="px-4 py-6 text-muted-foreground">
@@ -152,7 +157,7 @@ function ReflogRows({
         )}
       </div>
     );
-  const headings = dayHeadings(rows);
+  const headings = dayHeadings(rows, now);
   return rows.map((row, index) => {
     const heading = headings[index];
     return (
@@ -295,9 +300,9 @@ export function short(oid: string | null) {
   return oid === null ? "unknown" : oid.slice(0, 7);
 }
 
-function dayLabel(seconds: number) {
+function dayLabel(seconds: number, now: number) {
   const date = new Date(seconds * 1_000);
-  const today = new Date();
+  const today = new Date(now);
   if (date.toDateString() === today.toDateString()) return "Today";
   return date.toLocaleDateString(undefined, {
     weekday: "short",
@@ -314,10 +319,10 @@ function timeLabel(seconds: number) {
   });
 }
 
-function dayHeadings(rows: readonly ReflogRow[]) {
+function dayHeadings(rows: readonly ReflogRow[], now: number) {
   let day: string | undefined;
   return rows.map((row) => {
-    const rowDay = row.nested ? day : dayLabel(row.recordedAt);
+    const rowDay = row.nested ? day : dayLabel(row.recordedAt, now);
     const heading = rowDay !== day ? rowDay : undefined;
     day = rowDay;
     return heading;

@@ -102,7 +102,7 @@ describe("open project state", () => {
   });
 
   it("formats compact recent times", () => {
-    const now = new Date("2026-08-24T15:00:00");
+    const now = new Date("2026-08-24T15:00:00").getTime();
 
     expect(formatLastOpened("2026-08-24T13:00:00", now)).toBe("2h");
     expect(formatLastOpened("2026-08-23T20:00:00", now)).toBe("Yesterday");

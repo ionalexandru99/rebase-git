@@ -5,7 +5,10 @@ import type {
   RepositoryHistoryRefTarget,
 } from "#contracts/repository-history/repository-history.contract.ts";
 import { CommitGraph } from "#web/features/commit-graph/commit-graph.tsx";
-import { commitGraphNodePosition } from "#web/features/commit-graph/layout/graph-geometry.ts";
+import {
+  commitGraphNodePosition,
+  graphRowHeight,
+} from "#web/features/commit-graph/layout/graph-geometry.ts";
 import { NotificationsProvider } from "#web/features/notifications/notifications.tsx";
 import { HistoryGraph } from "#web/features/repository-history/history-graph.ts";
 import {
@@ -44,6 +47,7 @@ let shownView: HistoryView | undefined;
 
 export function mountGraph(laneCount: number) {
   root?.unmount();
+  shownView = undefined;
   const container = document.createElement("div");
   container.style.cssText =
     "height:100vh;width:100vw;background:var(--repository)";
@@ -201,7 +205,10 @@ export async function measureGraphScroll(laneCount: number) {
       const index = Number(row.getAttribute("aria-rowindex")) - 2;
       const lane = shownView?.rows(index, index + 1)[0]?.lane;
       if (lane === undefined) throw new Error("Missing visible lane");
-      const node = { x: commitGraphNodePosition(lane), y: index * 26 + 13 };
+      const node = {
+        x: commitGraphNodePosition(lane),
+        y: index * graphRowHeight + graphRowHeight / 2,
+      };
       const canvas = canvases.find((candidate) => {
         const tile = candidate.closest("tr");
         return (
