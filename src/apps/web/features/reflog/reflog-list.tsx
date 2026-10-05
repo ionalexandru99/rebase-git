@@ -224,7 +224,7 @@ function RowMarker({
   return row.orphaned ? (
     <span
       aria-label="Only the reflog reaches this commit"
-      className="size-[7px] justify-self-center rounded-full border-[1.5px] border-[#b38aff]"
+      className="size-[7px] justify-self-center rounded-full border-[1.5px] border-(--lane-2)"
       role="img"
     />
   ) : (

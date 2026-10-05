@@ -17,6 +17,12 @@ import {
   type ErrorAction,
   useErrorToast,
 } from "#web/features/notifications/notifications.tsx";
+import {
+  saveThemePreference,
+  type ThemePreference,
+  themePreferences,
+  useThemePreference,
+} from "#web/features/theme/theme.ts";
 
 const releaseChannelLabels: Record<ReleaseChannel, string> = {
   nightly: "Nightly",
@@ -24,6 +30,16 @@ const releaseChannelLabels: Record<ReleaseChannel, string> = {
 };
 const releaseChannels = releaseChannelValues.map((value) => ({
   label: releaseChannelLabels[value],
+  value,
+}));
+
+const themeLabels: Record<ThemePreference, string> = {
+  system: "System",
+  light: "Light",
+  dark: "Dark",
+};
+const themeOptions = themePreferences.map((value) => ({
+  label: themeLabels[value],
   value,
 }));
 
@@ -48,6 +64,7 @@ export function GeneralSettings({
 }): JSX.Element {
   const snapshot = updateSnapshot ?? unavailableSnapshot;
   const errorToast = useErrorToast();
+  const themePreference = useThemePreference();
   const [settingsPending, setSettingsPending] = useState(false);
   const desktopAvailable = desktopUpdates !== undefined;
   const desktopReady =
@@ -91,6 +108,16 @@ export function GeneralSettings({
 
   return (
     <SettingsPage title="General">
+      <SettingsSection title="Appearance">
+        <SettingsRow title="Theme">
+          <SettingsSelect
+            label="Theme"
+            onValueChange={saveThemePreference}
+            options={themeOptions}
+            value={themePreference}
+          />
+        </SettingsRow>
+      </SettingsSection>
       <SettingsSection title="Updates · Desktop app">
         <SettingsRow
           description={updateDescription(

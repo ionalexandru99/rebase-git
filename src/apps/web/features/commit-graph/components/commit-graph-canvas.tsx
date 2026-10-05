@@ -13,6 +13,7 @@ import {
 } from "#web/features/commit-graph/layout/graph-geometry.ts";
 import { drawGraphTile } from "#web/features/commit-graph/layout/graph-tile.ts";
 import type { CommitLaneRow } from "#web/features/repository-history/commit-lanes.ts";
+import { useTheme } from "#web/features/theme/theme.ts";
 
 const tileRows = 32;
 
@@ -29,6 +30,7 @@ export function CommitGraphCanvas({
   readonly scrollRef: RefObject<HTMLTableElement | null>;
   readonly viewportWidth: number;
 }) {
+  const theme = useTheme();
   const [left, setLeft] = useState(0);
   useLayoutEffect(() => {
     const element = scrollRef.current;
@@ -56,7 +58,7 @@ export function CommitGraphCanvas({
   );
   return [...tiles].map((tile) => (
     <GraphTile
-      key={tile}
+      key={`${theme}:${tile}`}
       tile={tile}
       offset={offset}
       laneRows={laneRows}

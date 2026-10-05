@@ -7,6 +7,7 @@ import {
 } from "#web/app/environment/browser-local-environment-session.ts";
 import { ApplicationShell } from "#web/app/shell/application-shell.tsx";
 import { connectRepositoryHistory } from "#web/features/repository-history/repository-history.ts";
+import { startTheme } from "#web/features/theme/theme.ts";
 import { createEnvironmentInvalidation } from "#web/platform/query/environment-invalidation.ts";
 import { createEnvironmentQueryClient } from "#web/platform/query/environment-query.ts";
 import { createEnvironmentQueryPersistence } from "#web/platform/query/environment-query-persistence.ts";
@@ -17,6 +18,8 @@ const rootElement = document.getElementById("root");
 if (!(rootElement instanceof HTMLElement)) {
   throw new Error('The web application requires an element with id "root".');
 }
+
+startTheme();
 
 const productVersion = import.meta.env.REBASE_PRODUCT_VERSION;
 const desktopHost = readDesktopHostBridge();

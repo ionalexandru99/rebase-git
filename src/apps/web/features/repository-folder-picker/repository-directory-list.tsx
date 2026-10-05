@@ -213,6 +213,7 @@ function rowClassName(selected: boolean) {
   return cn(
     "grid h-11 w-full grid-cols-[minmax(0,1fr)_6.5rem_5rem] items-center gap-3 rounded-lg px-3 text-left text-[.8rem] text-foreground/80 outline-none max-[600px]:grid-cols-[minmax(0,1fr)_5rem]",
     "hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring/30",
-    selected && "bg-accent shadow-[inset_0_0_0_1px_rgb(124_140_255/48%)]",
+    selected &&
+      "bg-accent shadow-[inset_0_0_0_1px_color-mix(in_srgb,var(--primary)_48%,transparent)]",
   );
 }

@@ -39,7 +39,7 @@ function DropdownMenuContent({
       >
         <Menu.Popup
           className={cn(
-            "w-50 rounded-[.55rem] border border-border bg-popover p-[.3rem] text-popover-foreground shadow-[0_.75rem_2.5rem_rgb(0_0_0/45%)] outline-none",
+            "w-50 rounded-[.55rem] border border-border bg-popover p-[.3rem] text-popover-foreground shadow-[0_.75rem_2.5rem_rgb(0_0_0/14%)] dark:shadow-[0_.75rem_2.5rem_rgb(0_0_0/45%)] outline-none",
             className,
           )}
           data-slot="dropdown-menu-content"

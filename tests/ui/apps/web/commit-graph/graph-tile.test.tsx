@@ -59,10 +59,10 @@ describe("graph tile endpoints", () => {
     drawGraphTile(canvas, [...first.rows, ...second.rows], 0, 64, 1);
     for (const y of [22, 44, 60])
       expect([...context.getImageData(16, y, 1, 1).data]).toEqual([
-        249, 115, 22, 255,
+        194, 65, 12, 255,
       ]);
     expect([...context.getImageData(16, 74, 1, 1).data]).toEqual([
-      76, 154, 255, 255,
+      37, 99, 235, 255,
     ]);
     const expected = context.getImageData(0, 52, 64, 52).data;
     drawGraphTile(canvas, second.rows, 0, 64, 1);

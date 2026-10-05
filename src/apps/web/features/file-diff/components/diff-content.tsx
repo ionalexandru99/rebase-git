@@ -5,6 +5,9 @@ import type { CSSProperties } from "react";
 import type { ChangeDiff } from "#contracts/repository-comparison/repository-comparison.contract.ts";
 import type { DiffPreferences } from "#web/domain/file-diff/diff-preferences.contract.ts";
 import type { createChangeDiffModel } from "#web/features/file-diff/diff-model.ts";
+import { useTheme } from "#web/features/theme/theme.ts";
+
+export const diffThemes = { dark: "pierre-dark", light: "pierre-light" };
 
 export const diffSurfaceCSS =
   ":host { --diffs-bg: var(--repository); background-color: var(--repository); }";
@@ -27,6 +30,7 @@ export function DiffContent({
   };
   readonly onRender?: (container: HTMLElement) => void;
 }) {
+  const theme = useTheme();
   return metadata ? (
     <div className="min-h-0 flex-1 overflow-auto">
       <FileDiff
@@ -40,7 +44,8 @@ export function DiffContent({
         fileDiff={metadata}
         selectedLines={selection?.range ?? null}
         options={{
-          theme: "pierre-dark",
+          theme: diffThemes,
+          themeType: theme,
           unsafeCSS: diffSurfaceCSS,
           diffStyle: preferences.split ? "split" : "unified",
           overflow: preferences.wrap ? "wrap" : "scroll",

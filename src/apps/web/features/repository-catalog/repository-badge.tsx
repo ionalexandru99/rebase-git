@@ -3,14 +3,14 @@ import type { RepositoryColor } from "#contracts/repository-catalog/repository-c
 import { cn } from "#web/lib/utils.ts";
 
 export const repositoryColors: Record<RepositoryColor, string> = {
-  amber: "#F59E0B",
-  blue: "#4C9AFF",
-  cyan: "#06B6D4",
-  green: "#22C55E",
-  lime: "#84CC16",
-  orange: "#F97316",
-  red: "#EF4444",
-  violet: "#B38AFF",
+  amber: "var(--lane-7)",
+  blue: "var(--lane-0)",
+  cyan: "var(--lane-5)",
+  green: "var(--lane-1)",
+  lime: "var(--lane-4)",
+  orange: "var(--lane-3)",
+  red: "var(--lane-6)",
+  violet: "var(--lane-2)",
 };
 
 export function RepositoryBadge({
@@ -22,7 +22,7 @@ export function RepositoryBadge({
   readonly color: RepositoryColor;
   readonly name: string;
 }): JSX.Element {
-  const hex = repositoryColors[color];
+  const tint = repositoryColors[color];
   return (
     <span
       className={cn(
@@ -30,8 +30,8 @@ export function RepositoryBadge({
         className,
       )}
       style={{
-        backgroundColor: `color-mix(in oklab, ${hex} 22%, transparent)`,
-        color: `color-mix(in oklab, ${hex} 80%, white)`,
+        backgroundColor: `color-mix(in oklab, ${tint} 22%, transparent)`,
+        color: `color-mix(in oklab, ${tint} 80%, var(--foreground))`,
       }}
     >
       {repositoryInitials(name)}

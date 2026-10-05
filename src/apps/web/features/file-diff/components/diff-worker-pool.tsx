@@ -4,6 +4,7 @@ import {
 } from "@pierre/diffs/react";
 import DiffWorker from "@pierre/diffs/worker/worker.js?worker";
 import type { ComponentProps, ReactNode } from "react";
+import { diffThemes } from "#web/features/file-diff/components/diff-content.tsx";
 
 const poolOptions: WorkerPoolOptions = {
   workerFactory: () => new DiffWorker(),
@@ -14,7 +15,7 @@ const poolOptions: WorkerPoolOptions = {
 const highlighterOptions: ComponentProps<
   typeof WorkerPoolContextProvider
 >["highlighterOptions"] = {
-  theme: "pierre-dark",
+  theme: diffThemes,
   langs: ["typescript", "tsx", "csharp", "json"],
   tokenizeMaxLineLength: 5000,
 };

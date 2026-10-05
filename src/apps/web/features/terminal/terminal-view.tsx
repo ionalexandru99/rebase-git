@@ -8,6 +8,7 @@ import {
   TerminalsApi,
   terminalWriteLimit,
 } from "#contracts/terminal/terminal.contract.ts";
+import { onThemeChange } from "#web/features/theme/theme.ts";
 import { useEnvironment } from "#web/platform/query/environment-context.tsx";
 import { createStore } from "#web/platform/store/store.ts";
 import { useStore } from "#web/platform/store/use-store.ts";
@@ -57,6 +58,17 @@ function zoom(event: KeyboardEvent) {
   return true;
 }
 
+function terminalColors(element: HTMLElement) {
+  const style = getComputedStyle(element);
+  const color = (name: string) => style.getPropertyValue(name).trim();
+  return {
+    background: color("--repository"),
+    foreground: color("--foreground"),
+    cursor: color("--foreground"),
+    selectionBackground: color("--accent"),
+  };
+}
+
 function readFontSize() {
   try {
     const size = Number(localStorage.getItem(fontSizeKey));
@@ -86,20 +98,16 @@ export function TerminalView({
   useEffect(() => {
     const element = host.current;
     if (element === null) return;
-    const style = getComputedStyle(element);
-    const color = (name: string) => style.getPropertyValue(name).trim();
     const xterm = new Terminal({
       fontFamily,
       fontSize: fontSizeStore.getSnapshot(),
       lineHeight: 1.25,
       cursorBlink: false,
       scrollback: 5_000,
-      theme: {
-        background: color("--repository"),
-        foreground: color("--foreground"),
-        cursor: color("--foreground"),
-        selectionBackground: color("--accent"),
-      },
+      theme: terminalColors(element),
+    });
+    const stopTheme = onThemeChange(() => {
+      xterm.options.theme = terminalColors(element);
     });
     const fit = new FitAddon();
     xterm.loadAddon(fit);
@@ -108,7 +116,10 @@ export function TerminalView({
     );
     xterm.open(element);
     setSurface({ xterm, fit });
-    return () => xterm.dispose();
+    return () => {
+      stopTheme();
+      xterm.dispose();
+    };
   }, []);
 
   useEffect(() => {
