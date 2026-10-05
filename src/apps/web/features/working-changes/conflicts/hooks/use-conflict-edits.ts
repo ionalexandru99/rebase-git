@@ -32,15 +32,15 @@ export function useConflictEdits(input: ConflictPath, reload: () => void) {
   const errorToast = useErrorToast();
   const busy = useRef(false);
   const run = async (revision: string, change: ConflictEdit) => {
-    try {
-      const result = await edit.run({ path: input.path, revision, ...change });
-      if (result._tag === "Ok") return true;
-      if (conflictReason(result) === "Stale") reload();
-      else errorToast.failure("resolveConflict", result);
-      return false;
-    } finally {
-      busy.current = false;
-    }
+    const result = await edit
+      .run({ path: input.path, revision, ...change })
+      .finally(() => {
+        busy.current = false;
+      });
+    if (result._tag === "Ok") return true;
+    if (conflictReason(result) === "Stale") reload();
+    else errorToast.failure("resolveConflict", result);
+    return false;
   };
   return {
     running: edit.running,

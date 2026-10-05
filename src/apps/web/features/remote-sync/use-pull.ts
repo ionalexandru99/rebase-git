@@ -1,5 +1,4 @@
 import { skipToken } from "@tanstack/react-query";
-import { useCallback } from "react";
 import type { RouteFailure } from "#contracts/environment-connection/environment-route.contract.ts";
 import { RepositoryOperationsApi } from "#contracts/repository-operations/repository-operations.contract.ts";
 import {
@@ -41,18 +40,15 @@ export function useFetch(toast: "fetch" | "pull" = "fetch") {
     progress: (percent) => statusToast.advance(toast, percent),
   });
   const { run } = command;
-  const execute = useCallback(
-    () =>
-      repositoryId === undefined
-        ? Promise.resolve(false)
-        : run({ repositoryId }).then((result) => {
-            errorToast.failure("fetch", result, {
-              FetchFailed: ({ reason }) => fetchProblems[reason],
-            });
-            return result._tag === "Ok";
-          }),
-    [repositoryId, run, errorToast],
-  );
+  const execute = () =>
+    repositoryId === undefined
+      ? Promise.resolve(false)
+      : run({ repositoryId }).then((result) => {
+          errorToast.failure("fetch", result, {
+            FetchFailed: ({ reason }) => fetchProblems[reason],
+          });
+          return result._tag === "Ok";
+        });
   const fetchNow = () => {
     statusToast.progress(toast, "Fetching changes", { percent: 0 });
     void execute().then((fetched) => {
@@ -108,45 +104,38 @@ export function usePull() {
   const { run, canRun } = command;
   const worktreePath = scope?.worktreePath;
 
-  const pull = useCallback(
-    async function pullBranch(branch: string, strategy?: PullChoice) {
-      if (!canRun || pulling) return;
-      statusToast.progress("pull", "Fetching", { percent: 0 });
-      const result = await run({
-        branch,
-        ...(strategy === undefined ? {} : { strategy }),
+  const pull = async (branch: string, strategy?: PullChoice) => {
+    if (!canRun || pulling) return;
+    statusToast.progress("pull", "Fetching", { percent: 0 });
+    const result = await run({
+      branch,
+      ...(strategy === undefined ? {} : { strategy }),
+    });
+    const failure = result._tag === "Ok" ? undefined : rejection(result);
+    if (failure?._tag === "PullDiverged") {
+      const choice = (kind: PullChoice["kind"], label: string) => ({
+        label,
+        run: () =>
+          void pull(branch, { kind, upstream: failure.upstreamCommit }),
       });
-      const failure = result._tag === "Ok" ? undefined : rejection(result);
-      if (failure?._tag === "PullDiverged") {
-        const choice = (kind: PullChoice["kind"], label: string) => ({
-          label,
-          run: () =>
-            void pullBranch(branch, { kind, upstream: failure.upstreamCommit }),
-        });
-        statusToast.choose("pull", "Branch has diverged", [
-          choice("rebase", "Rebase"),
-          choice("merge", "Merge"),
-        ]);
-      } else if (result._tag !== "Ok")
-        errorToast.failure("pull", result, pullFailureMessages);
-      else if (result.value.outcome === "Stopped") {
-        if (result.value.worktreePath === worktreePath)
-          statusToast.close("pull");
-        else
-          errorToast.show(
-            "pull",
-            "Resolve the conflicts in the other worktree.",
-          );
-      } else if (result.value.stashKept)
-        statusToast.warning(
-          "pull",
-          "Pulled, but your changes conflict",
-          "A copy is saved in Stashes.",
-        );
-      else statusToast.success("pull", pulledTitles[result.value.outcome]);
-    },
-    [canRun, pulling, run, worktreePath, errorToast, statusToast],
-  );
+      statusToast.choose("pull", "Branch has diverged", [
+        choice("rebase", "Rebase"),
+        choice("merge", "Merge"),
+      ]);
+    } else if (result._tag !== "Ok")
+      errorToast.failure("pull", result, pullFailureMessages);
+    else if (result.value.outcome === "Stopped") {
+      if (result.value.worktreePath === worktreePath) statusToast.close("pull");
+      else
+        errorToast.show("pull", "Resolve the conflicts in the other worktree.");
+    } else if (result.value.stashKept)
+      statusToast.warning(
+        "pull",
+        "Pulled, but your changes conflict",
+        "A copy is saved in Stashes.",
+      );
+    else statusToast.success("pull", pulledTitles[result.value.outcome]);
+  };
 
   return {
     available: scope !== undefined,

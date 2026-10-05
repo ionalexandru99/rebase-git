@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { describe, expect, it, vi } from "vite-plus/test";
 import { userEvent } from "vite-plus/test/browser";
 import {
@@ -27,11 +28,23 @@ import {
   repositoryScope,
 } from "#tests-support/fixtures.ts";
 import { render } from "#tests-support/render.tsx";
-import { CommitInspectionBridge } from "#web/app/workspace/commit-inspection-bridge.tsx";
+import { useCommitInspection } from "#web/app/workspace/use-commit-inspection.ts";
 import { ResizablePanel } from "#web/components/ui/resizable.tsx";
 import { CommitInspection } from "#web/features/commit-inspection/commit-inspection.tsx";
 import { WorkspacePanel } from "#web/features/workspace-panel/workspace-panel.tsx";
 import { RepositoryScopeProvider } from "#web/platform/query/repository-scope.tsx";
+
+function Inspection({
+  connected,
+  children,
+}: {
+  readonly connected: boolean;
+  readonly children: (
+    inspection: ReturnType<typeof useCommitInspection>,
+  ) => ReactNode;
+}) {
+  return children(useCommitInspection(connected));
+}
 
 interface InspectionClient {
   readonly inspect: (command: InspectCommit) => Details | Promise<Details>;
@@ -107,7 +120,7 @@ async function fixture(
   const tree = (connected = true) => (
     <div className="dark text-foreground" style={{ width: 1200, height: 650 }}>
       <WorkspacePanel.Provider scopeKey={scopeKey}>
-        <CommitInspectionBridge connected={connected}>
+        <Inspection connected={connected}>
           {(inspection) => (
             <WorkspacePanel.Group>
               <ResizablePanel id="branches" defaultSize="15%" minSize="10%">
@@ -152,7 +165,7 @@ async function fixture(
               />
             </WorkspacePanel.Group>
           )}
-        </CommitInspectionBridge>
+        </Inspection>
       </WorkspacePanel.Provider>
     </div>
   );

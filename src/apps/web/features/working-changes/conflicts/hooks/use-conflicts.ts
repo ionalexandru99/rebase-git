@@ -1,5 +1,5 @@
 import { skipToken } from "@tanstack/react-query";
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import type { RepositoryRejected } from "#contracts/git/git-failures.contract.ts";
 import type {
   ChangedFile,
@@ -155,10 +155,7 @@ export function useConflicts(
   active: boolean,
 ) {
   const list = useConflictList(conflicted.length > 0 ? scope : null, active);
-  const rows = useMemo(
-    () => conflictRows(conflicted, list.data),
-    [conflicted, list.data],
-  );
+  const rows = conflictRows(conflicted, list.data);
   const document = useConflictDocument(
     selected !== null && conflicted.includes(selected)
       ? { ...scope, path: selected }

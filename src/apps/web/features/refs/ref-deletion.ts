@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import {
   type BranchDeletion,
   type BranchUpstreamTarget,
@@ -68,14 +68,17 @@ export function useRefDeletion({
   };
   const errorToast = useErrorToast();
   const statusToast = useStatusToast();
-  const [pending, setPending] = useState<PendingDeletion>();
+  const [pending, showPending] = useState<PendingDeletion>();
   const latestPending = useRef(pending);
-  latestPending.current = pending;
+  const setPending = (next: PendingDeletion | undefined) => {
+    latestPending.current = next;
+    showPending(next);
+  };
 
-  const cancel = useCallback(() => {
+  const cancel = () => {
     setPending(undefined);
     focusTree();
-  }, [focusTree]);
+  };
 
   const remove = async (
     deletion: RefDeletion,

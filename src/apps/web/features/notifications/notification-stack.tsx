@@ -1,6 +1,6 @@
 import { Toast } from "@base-ui/react/toast";
 import { IconChevronDown, IconX } from "@tabler/icons-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Button } from "#web/components/ui/button.tsx";
 import {
   DropdownMenu,
@@ -177,7 +177,7 @@ function usePacedNotice(toast: NoticeObject) {
   const [shown, setShown] = useState(toast);
   const holding = shown !== toast && finishesRing(shown, toast);
   if (!holding && shown !== toast) setShown(toast);
-  const filled = useCallback(() => setShown(toast), [toast]);
+  const filled = () => setShown(toast);
   return holding
     ? { notice: shown, filled }
     : { notice: toast, filled: undefined };

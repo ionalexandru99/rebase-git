@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   type DiffPreferences,
   defaultDiffPreferences,
@@ -25,18 +25,15 @@ export function useDiffPreferences() {
       current = false;
     };
   }, []);
-  const choose = useCallback(
-    (next: DiffPreferences) => {
-      chosen.current = true;
-      setPreferences(next);
-      saveDiffPreferences(next).catch(() =>
-        errorToast.show(
-          "saveDiffSettings",
-          "The setting applies until you reload Rebase.",
-        ),
-      );
-    },
-    [errorToast],
-  );
+  const choose = (next: DiffPreferences) => {
+    chosen.current = true;
+    setPreferences(next);
+    saveDiffPreferences(next).catch(() =>
+      errorToast.show(
+        "saveDiffSettings",
+        "The setting applies until you reload Rebase.",
+      ),
+    );
+  };
   return [preferences, choose] as const;
 }

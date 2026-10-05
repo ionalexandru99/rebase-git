@@ -136,12 +136,12 @@ function WorkspacePanelTab({ kind }: { readonly kind: WorkspacePanelKind }) {
 }
 
 function WorkspacePanelEmptyState() {
-  const panel = useWorkspacePanel();
+  const { emptyStateRef, execute } = useWorkspacePanel();
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-6 py-8">
       <div className="my-auto w-full max-w-100 self-center">
         <h2
-          ref={panel.emptyStateRef}
+          ref={emptyStateRef}
           tabIndex={-1}
           className="mb-4 text-center text-sm font-medium outline-none"
         >
@@ -153,7 +153,7 @@ function WorkspacePanelEmptyState() {
               key={kind}
               variant="ghost"
               className="h-auto min-h-20 min-w-0 flex-col items-start justify-center gap-2.5 whitespace-normal border-border bg-card px-3 py-3 text-left hover:border-foreground/20 sm:h-auto"
-              onClick={() => panel.execute({ type: "open", kind })}
+              onClick={() => execute({ type: "open", kind })}
             >
               <span className="flex items-center gap-2 text-xs font-normal">
                 <definition.icon aria-hidden="true" className="size-3.5" />

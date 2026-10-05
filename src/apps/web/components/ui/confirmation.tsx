@@ -80,14 +80,15 @@ export function Confirmation({
 
 export function ConfirmationList({
   items,
-  total = items.length,
+  total,
   className,
 }: {
   readonly items: readonly string[];
   readonly total?: number;
   readonly className?: string;
 }) {
-  const hidden = total - Math.min(total, listedItems);
+  const count = total ?? items.length;
+  const hidden = count - Math.min(count, listedItems);
   return (
     <>
       <ul className="mt-1.5 flex flex-col gap-0.5">

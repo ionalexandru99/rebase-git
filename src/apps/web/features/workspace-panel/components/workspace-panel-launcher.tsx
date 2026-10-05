@@ -11,17 +11,15 @@ import { launchablePanels } from "#web/features/workspace-panel/workspace-panel-
 import { useWorkspacePanel } from "#web/features/workspace-panel/workspace-panel-provider.tsx";
 
 export function WorkspacePanelLauncher() {
-  const panel = useWorkspacePanel();
+  const { launcherOpen, setLauncherOpen, launcherRef, execute } =
+    useWorkspacePanel();
   const openedTab = useRef(false);
   return (
-    <DropdownMenu
-      open={panel.launcherOpen}
-      onOpenChange={panel.setLauncherOpen}
-    >
+    <DropdownMenu open={launcherOpen} onOpenChange={setLauncherOpen}>
       <DropdownMenuTrigger
         render={
           <Button
-            ref={panel.launcherRef}
+            ref={launcherRef}
             aria-label="Open tab"
             variant="ghost"
             size="icon-xs"
@@ -34,13 +32,13 @@ export function WorkspacePanelLauncher() {
       <DropdownMenuContent
         align="start"
         finalFocus={() => {
-          if (!openedTab.current) return panel.launcherRef.current;
+          if (!openedTab.current) return launcherRef.current;
           openedTab.current = false;
           return (
-            panel.launcherRef.current
+            launcherRef.current
               ?.closest("[data-workspace-panel-tabs]")
               ?.querySelector<HTMLElement>('[aria-selected="true"]') ??
-            panel.launcherRef.current
+            launcherRef.current
           );
         }}
       >
@@ -49,8 +47,8 @@ export function WorkspacePanelLauncher() {
             key={kind}
             onClick={() => {
               openedTab.current = true;
-              panel.setLauncherOpen(false);
-              panel.execute({ type: "open", kind });
+              setLauncherOpen(false);
+              execute({ type: "open", kind });
             }}
           >
             <definition.icon aria-hidden="true" />

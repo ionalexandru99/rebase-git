@@ -1,5 +1,5 @@
 import { IconChevronDown, IconChevronRight } from "@tabler/icons-react";
-import { type KeyboardEvent, type MouseEvent, useMemo, useState } from "react";
+import { type KeyboardEvent, type MouseEvent, useState } from "react";
 import type { ReflogEntry } from "#contracts/repository-reflog/repository-reflog.contract.ts";
 import {
   type Action,
@@ -41,10 +41,7 @@ export function ReflogList({
 }) {
   const [expanded, setExpanded] = useState<ReadonlySet<string>>(new Set());
   const [activeId, setActiveId] = useState<string>();
-  const rows = useMemo(
-    () => (entries === undefined ? [] : reflogRows(entries, expanded)),
-    [entries, expanded],
-  );
+  const rows = entries === undefined ? [] : reflogRows(entries, expanded);
   const active = rows.find((row) => row.id === activeId) ?? rows[0];
 
   const toggleGroup = (row: ReflogRow, open: boolean) => {
@@ -155,11 +152,9 @@ function ReflogRows({
         )}
       </div>
     );
-  let day: string | undefined;
-  return rows.map((row) => {
-    const rowDay = row.nested ? day : dayLabel(row.recordedAt);
-    const heading = rowDay !== day ? rowDay : undefined;
-    day = rowDay;
+  const headings = dayHeadings(rows);
+  return rows.map((row, index) => {
+    const heading = headings[index];
     return (
       <div key={row.id}>
         {heading === undefined ? null : (
@@ -316,5 +311,15 @@ function timeLabel(seconds: number) {
   return new Date(seconds * 1_000).toLocaleTimeString(undefined, {
     hour: "2-digit",
     minute: "2-digit",
+  });
+}
+
+function dayHeadings(rows: readonly ReflogRow[]) {
+  let day: string | undefined;
+  return rows.map((row) => {
+    const rowDay = row.nested ? day : dayLabel(row.recordedAt);
+    const heading = rowDay !== day ? rowDay : undefined;
+    day = rowDay;
+    return heading;
   });
 }

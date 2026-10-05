@@ -1,5 +1,5 @@
 import { skipToken } from "@tanstack/react-query";
-import { useCallback, useMemo, useState } from "react";
+import { useState } from "react";
 import type { RouteFailure } from "#contracts/environment-connection/environment-route.contract.ts";
 import type {
   RepositoryRefs,
@@ -90,10 +90,7 @@ export function useWorktrees(open: boolean) {
   const { refs } = useScopedRepositoryRefs();
   const { status, folder } = useWorktreeQueries(open);
   const activePath = scope?.worktreePath ?? "";
-  const rows = useMemo(
-    () => (refs === undefined ? [] : worktreeRows(refs, activePath, status)),
-    [refs, activePath, status],
-  );
+  const rows = refs === undefined ? [] : worktreeRows(refs, activePath, status);
   const anchor = rows.find(
     ({ worktree }) => worktree.main && worktree.missing !== true,
   )?.worktree.path;
@@ -110,29 +107,26 @@ export function useWorktrees(open: boolean) {
     readonly row: WorktreeRow;
     readonly changes: number;
   }>();
-  const removeNow = useCallback(
-    async (row: WorktreeRow, changes: number) => {
-      setConfirming(undefined);
-      const missing = row.worktree.missing === true;
+  const removeNow = async (row: WorktreeRow, changes: number) => {
+    setConfirming(undefined);
+    const missing = row.worktree.missing === true;
+    if (!missing)
+      statusToast.progress("removeWorktree", `Removing “${row.name}”`);
+    const result = await remove.run({ target: row.worktree.path, changes });
+    if (result._tag === "Ok") {
+      if (row.active && anchor !== undefined) scope?.switchWorktree(anchor);
       if (!missing)
-        statusToast.progress("removeWorktree", `Removing “${row.name}”`);
-      const result = await remove.run({ target: row.worktree.path, changes });
-      if (result._tag === "Ok") {
-        if (row.active && anchor !== undefined) scope?.switchWorktree(anchor);
-        if (!missing)
-          statusToast.success("removeWorktree", `Removed “${row.name}”`);
-        return;
-      }
-      const changed = rejection(result);
-      if (changed?._tag === "WorktreeChanged") {
-        statusToast.close("removeWorktree");
-        setConfirming({ row, changes: changed.changes });
-        return;
-      }
-      errorToast.failure("removeWorktree", result, worktreeFailureMessages);
-    },
-    [anchor, scope, remove.run, statusToast, errorToast],
-  );
+        statusToast.success("removeWorktree", `Removed “${row.name}”`);
+      return;
+    }
+    const changed = rejection(result);
+    if (changed?._tag === "WorktreeChanged") {
+      statusToast.close("removeWorktree");
+      setConfirming({ row, changes: changed.changes });
+      return;
+    }
+    errorToast.failure("removeWorktree", result, worktreeFailureMessages);
+  };
   return {
     refs,
     rows,

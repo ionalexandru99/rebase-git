@@ -1,7 +1,8 @@
 import {
   type RefObject,
-  useCallback,
   useEffect,
+  useEffectEvent,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -18,6 +19,7 @@ import type { HistorySelection } from "#web/features/commit-graph/scope/history-
 import type { FarEdgeEnd } from "#web/features/repository-history/commit-lanes.ts";
 import { useRepositoryHistoryOrder } from "#web/features/repository-history/history-order.ts";
 import type { HistoryScopeQuery } from "#web/features/repository-history/history-view.ts";
+import type { HistoryRow } from "#web/features/repository-history/history-worker-protocol.ts";
 import {
   emptyHistorySnapshot,
   type RepositoryHistory,
@@ -26,6 +28,7 @@ import { createStore } from "#web/platform/store/store.ts";
 import { useStore } from "#web/platform/store/use-store.ts";
 
 const emptyHistory = createStore(emptyHistorySnapshot);
+const noRows: readonly HistoryRow[] = [];
 
 export function useCommitGraphView({
   history,
@@ -62,19 +65,16 @@ export function useCommitGraphView({
     readonly oid: string;
     readonly mode: CommitGraphSelectionMode;
   }>();
-  const scopeQuery = useMemo<HistoryScopeQuery | undefined>(
-    () =>
-      roots === undefined
-        ? undefined
-        : {
-            roots,
-            order,
-            expanded: [...expanded].flatMap(([childOid, parents]) =>
-              parents.map((parentOid) => ({ childOid, parentOid })),
-            ),
-          },
-    [roots, order, expanded],
-  );
+  const scopeQuery: HistoryScopeQuery | undefined =
+    roots === undefined
+      ? undefined
+      : {
+          roots,
+          order,
+          expanded: [...expanded].flatMap(([childOid, parents]) =>
+            parents.map((parentOid) => ({ childOid, parentOid })),
+          ),
+        };
   const activeOid = useRef<string | undefined>(undefined);
   const rows = useGraphRows({
     history,
@@ -88,69 +88,44 @@ export function useCommitGraphView({
   const answer = rows.answer;
   const current = rows.loading ? undefined : answer;
   const start = answer?.start ?? 0;
-  const windowRows = answer?.rows ?? [];
+  const windowRows = answer?.rows ?? noRows;
   const total = answer?.total ?? 0;
-  const laneRows = useMemo(
-    () => windowRows.map((row) => row.lane),
-    [windowRows],
-  );
+  const laneRows = windowRows.map((row) => row.lane);
   const oids = useMemo(
     () => windowRows.map((row) => row.commit.oid),
     [windowRows],
   );
-  const merges = useMemo(
-    () =>
-      new Map(
-        windowRows.flatMap((row) =>
-          row.merge === undefined
-            ? []
-            : [
-                [
-                  row.commit.oid,
-                  expanded.has(row.commit.oid)
-                    ? ("expanded" as const)
-                    : ("collapsed" as const),
-                ] as const,
-              ],
-        ),
-      ),
-    [windowRows, expanded],
+  const merges = new Map(
+    windowRows.flatMap((row) =>
+      row.merge === undefined
+        ? []
+        : [
+            [
+              row.commit.oid,
+              expanded.has(row.commit.oid)
+                ? ("expanded" as const)
+                : ("collapsed" as const),
+            ] as const,
+          ],
+    ),
   );
-  const shownMerges = useMemo(
-    () =>
-      new Map(
-        windowRows.flatMap((row) =>
-          row.merge === undefined ? [] : [[row.commit.oid, row.merge] as const],
-        ),
-      ),
-    [windowRows],
+  const shownMerges = new Map(
+    windowRows.flatMap((row) =>
+      row.merge === undefined ? [] : [[row.commit.oid, row.merge] as const],
+    ),
   );
-  const farEdgeEnds = useMemo(() => {
-    const ends = new Map<string, string>();
-    for (const { lane } of windowRows)
-      for (const { far } of [...lane.lanesBefore, ...lane.lanesAfter]) {
-        const key =
-          far === undefined ? undefined : `${far.from}\0${far.direction}`;
-        if (key !== undefined && far !== undefined && !ends.has(key))
-          ends.set(key, far.to);
-      }
-    return ends;
-  }, [windowRows]);
-  const resident = useMemo(
-    () => ({
-      oidAt: (index: number) =>
-        current?.rows[index - current.start]?.commit.oid,
-      indexOf: (oid: string) => {
-        const found =
-          current?.rows.findIndex((row) => row.commit.oid === oid) ?? -1;
-        return found < 0 || current === undefined
-          ? undefined
-          : current.start + found;
-      },
-      oids: () => current?.rows.map((row) => row.commit.oid) ?? [],
-    }),
-    [current],
-  );
+  const farEdgeEnds = farEdgeEndsOf(windowRows);
+  const resident = {
+    oidAt: (index: number) => current?.rows[index - current.start]?.commit.oid,
+    indexOf: (oid: string) => {
+      const found =
+        current?.rows.findIndex((row) => row.commit.oid === oid) ?? -1;
+      return found < 0 || current === undefined
+        ? undefined
+        : current.start + found;
+    },
+    oids: () => current?.rows.map((row) => row.commit.oid) ?? [],
+  };
   const navigationIntent = useRef(0);
   const beginNavigation = () => {
     navigationIntent.current += 1;
@@ -200,7 +175,15 @@ export function useCommitGraphView({
     onSelectionIntent: () => beginNavigation(),
     onActiveCommitChange,
   });
-  activeOid.current = navigation.selection.activeOid;
+  useLayoutEffect(() => {
+    activeOid.current = navigation.selection.activeOid;
+  });
+  const selectLocated = useEffectEvent(
+    (oid: string, index: number, mode: CommitGraphSelectionMode) => {
+      navigation.select(oid, index, mode);
+      viewportRef.current?.scrollToIndex(index);
+    },
+  );
 
   useEffect(() => {
     if (pending === undefined || history === undefined || current === undefined)
@@ -213,18 +196,11 @@ export function useCommitGraphView({
           if (index === undefined || intent !== navigationIntent.current)
             return;
           setPending(undefined);
-          navigation.select(pending.oid, index, pending.mode);
-          viewportRef.current?.scrollToIndex(index);
+          selectLocated(pending.oid, index, pending.mode);
         },
         () => undefined,
       );
-  }, [
-    pending,
-    history,
-    current,
-    navigation.select,
-    viewportRef.current?.scrollToIndex,
-  ]);
+  }, [pending, history, current]);
 
   const navigateToOid = async (oid: string, signal?: AbortSignal) => {
     signal?.throwIfAborted();
@@ -264,15 +240,12 @@ export function useCommitGraphView({
     oids.includes(navigation.selection.activeOid)
       ? navigation.selection.activeOid
       : undefined;
-  const onRange = useCallback(
-    (first: number, last: number) =>
-      setRange((previous) =>
-        previous.first === first && previous.last === last
-          ? previous
-          : { first, last },
-      ),
-    [],
-  );
+  const onRange = (first: number, last: number) =>
+    setRange((previous) =>
+      previous.first === first && previous.last === last
+        ? previous
+        : { first, last },
+    );
   return {
     snapshot,
     rows,
@@ -294,4 +267,16 @@ export function useCommitGraphView({
     onRange,
     setPageSize,
   };
+}
+
+function farEdgeEndsOf(rows: readonly HistoryRow[]) {
+  const ends = new Map<string, string>();
+  for (const { lane } of rows)
+    for (const { far } of [...lane.lanesBefore, ...lane.lanesAfter]) {
+      const key =
+        far === undefined ? undefined : `${far.from}\0${far.direction}`;
+      if (key !== undefined && far !== undefined && !ends.has(key))
+        ends.set(key, far.to);
+    }
+  return ends;
 }

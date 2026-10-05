@@ -80,6 +80,10 @@ function readFontSize() {
   }
 }
 
+function applyFontSize(xterm: Terminal, fontSize: number) {
+  xterm.options.fontSize = fontSize;
+}
+
 export function TerminalView({
   id,
   visible,
@@ -151,7 +155,7 @@ export function TerminalView({
   useEffect(() => {
     const element = host.current;
     if (surface === undefined || element === null || !visible) return;
-    surface.xterm.options.fontSize = fontSize;
+    applyFontSize(surface.xterm, fontSize);
     const resize = sendLatest((size: TerminalSize) =>
       requests(TerminalsApi.resize, { id, ...size }),
     );

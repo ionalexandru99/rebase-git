@@ -1,9 +1,9 @@
 import {
   type KeyboardEvent,
   type MouseEvent,
-  useCallback,
   useEffect,
-  useMemo,
+  useEffectEvent,
+  useLayoutEffect,
   useRef,
   useState,
 } from "react";
@@ -72,41 +72,39 @@ export function useCommitGraphSelection({
   const current = useRef(selection);
   const intent = useRef(0);
   const activeChanged = useRef(onActiveCommitChange);
-  activeChanged.current = onActiveCommitChange;
-  const update = useCallback((next: CommitGraphSelection) => {
+  useLayoutEffect(() => {
+    activeChanged.current = onActiveCommitChange;
+  });
+  const update = (next: CommitGraphSelection) => {
     const previous = current.current.activeOid;
     current.current = next;
     setSelection(next);
     if (next.activeOid !== previous) activeChanged.current?.(next.activeOid);
-  }, []);
-  const oidsBetween = useCallback(
-    async (from: number, to: number) => {
-      const oids: string[] = [];
-      for (let index = from; index <= to; index += 1) {
-        const oid = resident.oidAt(index);
-        if (oid === undefined) break;
-        oids.push(oid);
-      }
-      if (oids.length === to - from + 1) return oids;
-      if (history === undefined || scope === undefined) return undefined;
-      return history.ask({ _tag: "Oids", scope, start: from, end: to + 1 });
-    },
-    [history, resident, scope],
-  );
+  };
+  const oidsBetween = async (from: number, to: number) => {
+    const oids: string[] = [];
+    for (let index = from; index <= to; index += 1) {
+      const oid = resident.oidAt(index);
+      if (oid === undefined) break;
+      oids.push(oid);
+    }
+    if (oids.length === to - from + 1) return oids;
+    if (history === undefined || scope === undefined) return undefined;
+    return history.ask({ _tag: "Oids", scope, start: from, end: to + 1 });
+  };
 
-  const latest = useRef({ history, scope, total, oidsBetween });
-  latest.current = { history, scope, total, oidsBetween };
-  useEffect(() => {
-    if (version === undefined) return;
+  const reconcileSelection = useEffectEvent(() => {
     const request = ++intent.current;
-    const { history, scope, total, oidsBetween } = latest.current;
     void reconcile(history, scope, current.current, total, oidsBetween).then(
       (next) => {
         if (next !== undefined && request === intent.current) update(next);
       },
       () => undefined,
     );
-  }, [version, update]);
+  });
+  useEffect(() => {
+    if (version !== undefined) reconcileSelection();
+  }, [version]);
 
   const select = (
     oid: string,
@@ -240,10 +238,7 @@ export function useCommitGraphSelection({
     );
   };
 
-  const selected = useMemo(
-    () => new Set(selection.selectedOids),
-    [selection.selectedOids],
-  );
+  const selected = new Set(selection.selectedOids);
   return {
     selection,
     selected,

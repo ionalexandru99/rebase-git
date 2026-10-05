@@ -90,9 +90,8 @@ export function GeneralSettings({
       await action();
     } catch {
       errorToast.show("saveUpdateSettings");
-    } finally {
-      setSettingsPending(false);
     }
+    setSettingsPending(false);
   };
 
   const runAction = async (

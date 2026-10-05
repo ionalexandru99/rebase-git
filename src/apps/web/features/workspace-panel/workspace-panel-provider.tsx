@@ -1,7 +1,6 @@
 import {
   createContext,
   type ReactNode,
-  useCallback,
   useContext,
   useRef,
   useState,
@@ -37,25 +36,19 @@ function usePanelController(
     open: boolean;
   }>();
   const launcherOpen = launcher?.store === store && launcher.open;
-  const setLauncherOpen = useCallback(
-    (open: boolean) => setLauncher({ store, open }),
-    [store],
-  );
+  const setLauncherOpen = (open: boolean) => setLauncher({ store, open });
   const [focusRequest, setFocusRequest] = useState(0);
   const launcherRef = useRef<HTMLButtonElement>(null);
   const emptyStateRef = useRef<HTMLHeadingElement>(null);
-  const execute = useCallback(
-    (action: WorkspacePanelAction) => {
-      store.dispatch(action);
-      if (
-        action.type !== "resize" &&
-        action.type !== "expand" &&
-        action.type !== "input"
-      )
-        setFocusRequest((request) => request + 1);
-    },
-    [store],
-  );
+  const execute = (action: WorkspacePanelAction) => {
+    store.dispatch(action);
+    if (
+      action.type !== "resize" &&
+      action.type !== "expand" &&
+      action.type !== "input"
+    )
+      setFocusRequest((request) => request + 1);
+  };
   return {
     session,
     panelId: `side-panel:${sessionKey}`,

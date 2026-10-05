@@ -7,7 +7,6 @@ import {
   type Ref,
   type SyntheticEvent,
   useImperativeHandle,
-  useMemo,
   useRef,
   useState,
 } from "react";
@@ -161,22 +160,17 @@ export function CommitGraph({
     onActiveCommitChange,
   });
   const colors = useGraphColors(history, laneRows, snapshot.refTargets);
-  const labelsByOid = useMemo(
-    () => graphRefLabels(snapshot.refTargets, laneRows, roots ?? []),
-    [snapshot.refTargets, laneRows, roots],
+  const labelsByOid = graphRefLabels(
+    snapshot.refTargets,
+    laneRows,
+    roots ?? [],
   );
-  const gutterWidth = useMemo(
-    () => commitGraphGutterWidth(laneRows),
-    [laneRows],
-  );
+  const gutterWidth = commitGraphGutterWidth(laneRows);
   useImperativeHandle(ref, () => ({ navigateToOid, focusSelection }));
   const uncommitted = useUncommittedChanges();
   const head = uncommitted?.head;
-  const link = useMemo(
-    () =>
-      head === undefined ? undefined : uncommittedLink(laneRows, start, head),
-    [laneRows, start, head],
-  );
+  const link =
+    head === undefined ? undefined : uncommittedLink(laneRows, start, head);
   const headerRows = uncommitted === undefined ? 1 : 2;
   const headerHeight = graphHeaderHeight + (headerRows - 1) * graphRowHeight;
 

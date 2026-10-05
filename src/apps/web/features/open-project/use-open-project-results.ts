@@ -1,5 +1,4 @@
 import { IconDeviceLaptop } from "@tabler/icons-react";
-import { useMemo } from "react";
 import { SourceControlApi } from "#contracts/source-control/source-control.contract.ts";
 import type { OpenProjectEnvironment } from "#web/features/open-project/open-project-model.ts";
 import {
@@ -7,7 +6,6 @@ import {
   cloneGroups,
   filterOpenProjectEnvironments,
   keyboardRepositoryItems,
-  type OpenProjectKeyboardItem,
   recentRepositoryItems,
   urlSource,
 } from "#web/features/open-project/open-project-state.ts";
@@ -28,37 +26,28 @@ export function useOpenProjectResults(
     changes: "none",
     refetchOnWindowFocus: false,
   });
-  const groups = useMemo(
-    () => cloneGroups(hosts.data ?? noHosts, query),
-    [hosts.data, query],
+  const groups = cloneGroups(hosts.data ?? noHosts, query);
+  const pastedUrl = urlSource(query);
+  const filteredEnvironments = filterOpenProjectEnvironments(
+    environments,
+    query,
   );
-  const pastedUrl = useMemo(() => urlSource(query), [query]);
-  const filteredEnvironments = useMemo(
-    () => filterOpenProjectEnvironments(environments, query),
-    [environments, query],
+  const recentItems = recentRepositoryItems(filteredEnvironments);
+  const catalogItems = catalogRepositoryItems(
+    filteredEnvironments,
+    expandedEnvironmentIds,
   );
-  const recentItems = useMemo(
-    () => recentRepositoryItems(filteredEnvironments),
-    [filteredEnvironments],
-  );
-  const catalogItems = useMemo(
-    () => catalogRepositoryItems(filteredEnvironments, expandedEnvironmentIds),
-    [expandedEnvironmentIds, filteredEnvironments],
-  );
-  const keyboardItems = useMemo(
-    (): readonly OpenProjectKeyboardItem[] => [
-      ...(pastedUrl === undefined
-        ? []
-        : [{ key: pastedUrl.key, source: pastedUrl }]),
-      ...keyboardRepositoryItems(recentItems, catalogItems),
-      ...groups
-        .filter(({ id }) => !collapsedGroupIds.has(id))
-        .flatMap(({ sources }) =>
-          sources.map((source) => ({ key: source.key, source })),
-        ),
-    ],
-    [catalogItems, collapsedGroupIds, groups, pastedUrl, recentItems],
-  );
+  const keyboardItems = [
+    ...(pastedUrl === undefined
+      ? []
+      : [{ key: pastedUrl.key, source: pastedUrl }]),
+    ...keyboardRepositoryItems(recentItems, catalogItems),
+    ...groups
+      .filter(({ id }) => !collapsedGroupIds.has(id))
+      .flatMap(({ sources }) =>
+        sources.map((source) => ({ key: source.key, source })),
+      ),
+  ];
   const hasRepositories = environments.some(
     (environment) => environment.repositories.length > 0,
   );
@@ -84,28 +73,24 @@ export function useOpenProjectResults(
 function useOpenProjectEnvironments(): readonly OpenProjectEnvironment[] {
   const { repositories } = useRepositoryCatalog();
   const { availability, connectionState, status } = useEnvironment().status;
-  return useMemo(
-    () =>
-      connectionState === "PairingRequired"
-        ? []
-        : [
-            {
-              availability,
-              icon: IconDeviceLaptop,
-              iconColor: "var(--primary)",
-              id: localEnvironment.id,
-              name: localEnvironment.name,
-              repositories: repositories.map((repository) => ({
-                color: repository.color,
-                environmentId: localEnvironment.id,
-                id: repository.id,
-                lastOpenedAt: repository.lastOpenedAt,
-                name: repository.name,
-                path: repository.path,
-              })),
-              status,
-            },
-          ],
-    [availability, connectionState, repositories, status],
-  );
+  return connectionState === "PairingRequired"
+    ? []
+    : [
+        {
+          availability,
+          icon: IconDeviceLaptop,
+          iconColor: "var(--primary)",
+          id: localEnvironment.id,
+          name: localEnvironment.name,
+          repositories: repositories.map((repository) => ({
+            color: repository.color,
+            environmentId: localEnvironment.id,
+            id: repository.id,
+            lastOpenedAt: repository.lastOpenedAt,
+            name: repository.name,
+            path: repository.path,
+          })),
+          status,
+        },
+      ];
 }

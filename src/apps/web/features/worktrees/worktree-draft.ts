@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useEffectEvent } from "react";
 import type { RepositoryRefs } from "#contracts/repository-refs/repository-refs.contract.ts";
 import type {
   WorktreeFolder,
@@ -28,10 +28,8 @@ export function requestWorktreeDraft(draft: WorktreeDraft) {
 export function useWorktreeDraftRequest(
   handle: (draft: WorktreeDraft) => void,
 ) {
-  const latest = useRef(handle);
-  latest.current = handle;
+  const listener = useEffectEvent(handle);
   useEffect(() => {
-    const listener = (draft: WorktreeDraft) => latest.current(draft);
     draftListeners.add(listener);
     return () => {
       draftListeners.delete(listener);

@@ -1,11 +1,4 @@
-import {
-  memo,
-  type RefObject,
-  useLayoutEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import { memo, type RefObject, useLayoutEffect, useRef, useState } from "react";
 import type { GraphVirtualRow } from "#web/features/commit-graph/components/commit-graph-virtual-window.tsx";
 import {
   commitGraphGutterWidth,
@@ -44,10 +37,7 @@ export function CommitGraphCanvas({
   const tiles = new Set(
     virtualRows.map((row) => Math.floor((row.index + offset) / tileRows)),
   );
-  const graphWidth = useMemo(
-    () => commitGraphGutterWidth(laneRows),
-    [laneRows],
-  );
+  const graphWidth = commitGraphGutterWidth(laneRows);
   const maximumWidth = Math.min(graphWidth, viewportWidth + 768);
   const maximumRatio = Math.min(
     2,
@@ -88,14 +78,9 @@ const GraphTile = memo(function GraphTile({
   const [ratio, setRatio] = useState(() => window.devicePixelRatio || 1);
   const start = Math.max(0, tile * tileRows - offset);
   const end = Math.min(laneRows.length, (tile + 1) * tileRows - offset);
-  const rows = useMemo(
-    () => laneRows.slice(start, end),
-    [laneRows, start, end],
-  );
-  const width = Math.max(
-    0,
-    Math.min(commitGraphGutterWidth(rows) - left, maximumWidth),
-  );
+  const rows = laneRows.slice(start, end);
+  const gutterWidth = commitGraphGutterWidth(rows);
+  const width = Math.max(0, Math.min(gutterWidth - left, maximumWidth));
   const height = rows.length * graphRowHeight;
   useLayoutEffect(() => {
     const query = window.matchMedia(`(resolution: ${ratio}dppx)`);

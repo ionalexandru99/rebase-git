@@ -1,5 +1,5 @@
 import { useQueryClient } from "@tanstack/react-query";
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useRef } from "react";
 import { RepositoryCatalogApi } from "#contracts/repository-catalog/repository-catalog.contract.ts";
 import {
   SettingsPage,
@@ -49,13 +49,10 @@ export function RepositorySettingsPage({
   const errorToast = useErrorToast();
   const logicalRepositoryId = repository?.logicalRepositoryId ?? repositoryId;
   const heading = useRef<HTMLHeadingElement>(null);
-  const identity = useMemo(
-    () =>
-      environmentId === undefined
-        ? undefined
-        : { environmentId, repositoryId: logicalRepositoryId },
-    [environmentId, logicalRepositoryId],
-  );
+  const identity =
+    environmentId === undefined
+      ? undefined
+      : { environmentId, repositoryId: logicalRepositoryId };
   useEffect(() => {
     heading.current?.focus();
   }, []);
@@ -185,13 +182,12 @@ function RepositoryOrderSettings({
         className="h-8 rounded-md border border-input bg-input/30 px-3 text-sm"
         value={order}
         onChange={(event) => {
+          const next =
+            event.currentTarget.value === "chronological"
+              ? "chronological"
+              : "topological";
           try {
-            saveRepositoryHistoryOrder(
-              identity,
-              event.currentTarget.value === "chronological"
-                ? "chronological"
-                : "topological",
-            );
+            saveRepositoryHistoryOrder(identity, next);
           } catch {
             errorToast.show("saveHistoryOrder");
           }

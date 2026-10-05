@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { TerminalsApi } from "#contracts/terminal/terminal.contract.ts";
 import { useErrorToast } from "#web/features/notifications/notifications.tsx";
 import { useEnvironmentQuery } from "#web/platform/query/environment-query.ts";
@@ -27,7 +27,7 @@ export type Terminals = ReturnType<typeof useTerminals>;
 export function useTerminals(environmentId: string, scope: RepositoryScope) {
   const { repositoryId, worktreePath, logicalRepositoryId } = scope;
   const key = `${storagePrefix}${JSON.stringify([environmentId, logicalRepositoryId, worktreePath])}`;
-  const store = useMemo(() => createStore(readPanelState(key)), [key]);
+  const store = createStore(readPanelState(key));
   const state = useStore(store);
   const update = useCallback(
     (change: Partial<TerminalPanelState>) => {
@@ -37,10 +37,7 @@ export function useTerminals(environmentId: string, scope: RepositoryScope) {
     },
     [key, store],
   );
-  const worktree = useMemo(
-    () => ({ repositoryId, worktreePath }),
-    [repositoryId, worktreePath],
-  );
+  const worktree = { repositoryId, worktreePath };
   const list = useEnvironmentQuery(TerminalsApi.list, worktree, {
     changes: "terminals",
   });
@@ -57,7 +54,7 @@ export function useTerminals(environmentId: string, scope: RepositoryScope) {
     if (state.open && empty && !opening.running) update({ open: false });
   }, [state.open, empty, opening.running, update]);
 
-  const create = useCallback(async () => {
+  const create = async () => {
     const result = await opening.run({ cols: 80, rows: 24 });
     if (result._tag !== "Ok") {
       errorToast.failure("openTerminal", result, {
@@ -67,7 +64,7 @@ export function useTerminals(environmentId: string, scope: RepositoryScope) {
     }
     update({ open: true, active: result.value.id });
     setFocus((count) => count + 1);
-  }, [opening.run, errorToast, update]);
+  };
 
   return {
     worktreePath,

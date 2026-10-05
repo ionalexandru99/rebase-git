@@ -7,7 +7,7 @@ import {
   IconTerminal,
   IconX,
 } from "@tabler/icons-react";
-import { type ReactNode, useEffect, useRef } from "react";
+import { type ReactNode, useEffect, useEffectEvent, useRef } from "react";
 import { usePanelRef } from "react-resizable-panels";
 import { Button } from "#web/components/ui/button.tsx";
 import {
@@ -221,25 +221,20 @@ export function TerminalToggle({
   readonly terminals: Terminals;
 }) {
   const button = useRef<HTMLButtonElement>(null);
-  const latest = useRef(terminals);
-  latest.current = terminals;
   const { toggle, open } = terminals;
+  const onShortcut = useEffectEvent((event: KeyboardEvent) => {
+    if (!isTerminalShortcut(event)) return;
+    event.preventDefault();
+    if (event.shiftKey) {
+      void terminals.create();
+      return;
+    }
+    if (open && document.activeElement?.closest("[data-terminal-pane]"))
+      button.current?.focus();
+    toggle();
+  });
   useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (!isTerminalShortcut(event)) return;
-      event.preventDefault();
-      const current = latest.current;
-      if (event.shiftKey) {
-        void current.create();
-        return;
-      }
-      if (
-        current.open &&
-        document.activeElement?.closest("[data-terminal-pane]")
-      )
-        button.current?.focus();
-      current.toggle();
-    };
+    const onKeyDown = (event: KeyboardEvent) => onShortcut(event);
     window.addEventListener("keydown", onKeyDown, true);
     return () => window.removeEventListener("keydown", onKeyDown, true);
   }, []);

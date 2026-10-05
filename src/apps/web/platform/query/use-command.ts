@@ -7,7 +7,7 @@ import {
   useMutationState,
   useQueryClient,
 } from "@tanstack/react-query";
-import { type RefObject, useCallback, useRef } from "react";
+import { type RefObject, useRef } from "react";
 import type {
   EnvironmentRoute,
   RouteFailure,
@@ -145,23 +145,20 @@ export function useCommand<Route extends EnvironmentRoute>(
     }),
   });
   const { mutateAsync, reset } = mutation;
-  const run = useCallback(
-    (input: CommandInput<Route>) => {
-      if (scoped && target === undefined)
-        throw new Error(`${route._tag} needs a repository target.`);
-      return mutateAsync(
-        (target === undefined
-          ? input
-          : {
-              ...(input as object),
-              repositoryId: target.repositoryId,
-              worktreePath: target.worktreePath,
-            }) as RouteInput<Route>,
-      );
-    },
-    [mutateAsync, route._tag, scoped, target],
-  );
-  const cancel = useCallback(() => running.current?.abort(), []);
+  const run = (input: CommandInput<Route>) => {
+    if (scoped && target === undefined)
+      throw new Error(`${route._tag} needs a repository target.`);
+    return mutateAsync(
+      (target === undefined
+        ? input
+        : {
+            ...(input as object),
+            repositoryId: target.repositoryId,
+            worktreePath: target.worktreePath,
+          }) as RouteInput<Route>,
+    );
+  };
+  const cancel = () => running.current?.abort();
   const result = mutation.data;
   const observed = scoped && target === undefined ? [] : runs;
   return {

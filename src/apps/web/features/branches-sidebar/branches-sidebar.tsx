@@ -1,7 +1,6 @@
 import {
   type JSX,
   type KeyboardEvent,
-  useCallback,
   useDeferredValue,
   useEffect,
   useMemo,
@@ -191,23 +190,20 @@ export function BranchesSidebar({
       view,
     ],
   );
-  const focusTree = useCallback(() => treeRef.current?.focus(), []);
-  const reveal = useCallback(
-    (kind: RefKind, name: string, settled?: boolean) => {
-      const sectionId = settled ? settledSectionId : refSectionId(kind);
-      setExpandedSections((current) =>
-        current.has(sectionId) ? current : toggleSection(current, sectionId),
-      );
-      setExpandedFolders((current) => {
-        const next = new Map(current);
-        for (const id of refFolderIds(sectionId, name)) next.set(id, true);
-        return next;
-      });
-      setActiveRowId(refRowId(sectionId, name));
-      treeRef.current?.focus();
-    },
-    [],
-  );
+  const focusTree = () => treeRef.current?.focus();
+  const reveal = (kind: RefKind, name: string, settled?: boolean) => {
+    const sectionId = settled ? settledSectionId : refSectionId(kind);
+    setExpandedSections((current) =>
+      current.has(sectionId) ? current : toggleSection(current, sectionId),
+    );
+    setExpandedFolders((current) => {
+      const next = new Map(current);
+      for (const id of refFolderIds(sectionId, name)) next.set(id, true);
+      return next;
+    });
+    setActiveRowId(refRowId(sectionId, name));
+    treeRef.current?.focus();
+  };
   const editing = useRefEditing({
     refs,
     focusTree,
@@ -264,29 +260,6 @@ export function BranchesSidebar({
     });
   }, [rows]);
 
-  const rowsRef = useRef(rows);
-  rowsRef.current = rows;
-  useRefIntent((intent) => {
-    if (intent._tag === "DraftRef") {
-      editing.draft(intent.kind, commitStartPoint(intent.oid));
-      return;
-    }
-    const key = historyRefKey(intent.target);
-    const row = rowsRef.current.find(
-      (candidate) =>
-        candidate.kind === "ref" && historyRefKey(candidate.target) === key,
-    );
-    runAction(
-      everyAction(
-        refActionsFor(
-          row?.kind === "ref"
-            ? row
-            : { id: key, name: intent.target.name, target: intent.target },
-        ),
-      ).find((action) => action.id === intent.id),
-    );
-  });
-
   const refActionsFor = (row: RefActionRow) =>
     refs === undefined
       ? []
@@ -312,6 +285,27 @@ export function BranchesSidebar({
             editing,
           },
         );
+
+  useRefIntent((intent) => {
+    if (intent._tag === "DraftRef") {
+      editing.draft(intent.kind, commitStartPoint(intent.oid));
+      return;
+    }
+    const key = historyRefKey(intent.target);
+    const row = rows.find(
+      (candidate) =>
+        candidate.kind === "ref" && historyRefKey(candidate.target) === key,
+    );
+    runAction(
+      everyAction(
+        refActionsFor(
+          row?.kind === "ref"
+            ? row
+            : { id: key, name: intent.target.name, target: intent.target },
+        ),
+      ).find((action) => action.id === intent.id),
+    );
+  });
 
   const selection = rows.filter(
     (row): row is BranchesSidebarRefRow =>

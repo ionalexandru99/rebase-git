@@ -1,4 +1,4 @@
-import { type ReactNode, useCallback, useMemo } from "react";
+import type { ReactNode } from "react";
 import type { RepositoryCatalogEntry } from "#contracts/repository-catalog/repository-catalog.contract.ts";
 import {
   type Navigate,
@@ -37,40 +37,26 @@ export function RepositorySelectionProvider({
       : resolveActiveWorktreePath(refs, preferredWorktreePath);
   const repositoryId = repository?.id;
   const logicalRepositoryId = repository?.logicalRepositoryId ?? repositoryId;
-  const switchWorktree = useCallback(
-    (path: string) => {
-      if (selectedRepositoryId !== undefined)
-        navigate({
-          type: "switch-worktree",
-          repositoryId: selectedRepositoryId,
-          worktreePath: path,
-        });
-    },
-    [navigate, selectedRepositoryId],
-  );
-  const scope = useMemo(
-    () =>
-      repositoryId === undefined || logicalRepositoryId === undefined
-        ? undefined
-        : {
-            repositoryId,
-            logicalRepositoryId,
-            worktreePath,
-            connected,
-            readable,
-            writable,
-            switchWorktree,
-          },
-    [
-      repositoryId,
-      logicalRepositoryId,
-      worktreePath,
-      connected,
-      readable,
-      writable,
-      switchWorktree,
-    ],
-  );
+  const switchWorktree = (path: string) => {
+    if (selectedRepositoryId !== undefined)
+      navigate({
+        type: "switch-worktree",
+        repositoryId: selectedRepositoryId,
+        worktreePath: path,
+      });
+  };
+  const scope =
+    repositoryId === undefined || logicalRepositoryId === undefined
+      ? undefined
+      : {
+          repositoryId,
+          logicalRepositoryId,
+          worktreePath,
+          connected,
+          readable,
+          writable,
+          switchWorktree,
+        };
   return (
     <RepositoryScopeProvider scope={scope}>{children}</RepositoryScopeProvider>
   );

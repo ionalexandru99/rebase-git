@@ -1,4 +1,4 @@
-import { useCallback, useSyncExternalStore } from "react";
+import { useSyncExternalStore } from "react";
 import type { HistoryOrder } from "#web/features/repository-history/history-graph.ts";
 
 export interface RepositoryHistoryIdentity {
@@ -60,23 +60,17 @@ export function useRepositoryHistoryOrder(
   environmentId: string | undefined,
   repositoryId: string | undefined,
 ) {
-  const subscribe = useCallback(
-    (notify: () => void) => {
-      if (environmentId === undefined || repositoryId === undefined)
-        return () => {};
-      return subscribeRepositoryHistoryOrder(
-        { environmentId, repositoryId },
-        notify,
-      );
-    },
-    [environmentId, repositoryId],
-  );
-  const getSnapshot = useCallback(
-    () =>
-      environmentId === undefined || repositoryId === undefined
-        ? ("topological" as const)
-        : readRepositoryHistoryOrder({ environmentId, repositoryId }),
-    [environmentId, repositoryId],
-  );
+  const subscribe = (notify: () => void) => {
+    if (environmentId === undefined || repositoryId === undefined)
+      return () => {};
+    return subscribeRepositoryHistoryOrder(
+      { environmentId, repositoryId },
+      notify,
+    );
+  };
+  const getSnapshot = () =>
+    environmentId === undefined || repositoryId === undefined
+      ? ("topological" as const)
+      : readRepositoryHistoryOrder({ environmentId, repositoryId });
   return useSyncExternalStore(subscribe, getSnapshot);
 }

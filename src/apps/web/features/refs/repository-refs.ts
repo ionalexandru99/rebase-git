@@ -1,5 +1,5 @@
 import { type Query, type QueryClient, skipToken } from "@tanstack/react-query";
-import { useCallback, useRef } from "react";
+import { useRef } from "react";
 import {
   type RepositoryRefs,
   RepositoryRefsApi,
@@ -41,7 +41,7 @@ export function useRepositoryRefs(
     { changes: "refs", persist: true, gcTime: Number.POSITIVE_INFINITY },
   );
   const { refetch } = query;
-  const retry = useCallback(() => void refetch(), [refetch]);
+  const retry = () => void refetch();
   return {
     refs: query.data,
     restored: query.data !== undefined && query.dataUpdatedAt === 0,
@@ -93,36 +93,33 @@ export function useRefActivation({
   const errorToast = useErrorToast();
   const { run } = checkout;
   const checkingOut = useRef(false);
-  const select = useCallback(
-    (target: RepositoryRefTarget) => {
-      if (
-        scope === undefined ||
-        refs === undefined ||
-        restored ||
-        checkingOut.current
-      )
-        return;
-      const activation = resolveRefActivation(refs, scope.worktreePath, target);
-      if (activation._tag === "SwitchWorktree")
-        scope.switchWorktree(activation.worktreePath);
-      else if (activation._tag === "Checkout") {
-        checkingOut.current = true;
-        void run({ target: activation.target })
-          .then((result) =>
-            errorToast.failure("checkout", result, {
-              CheckoutRejected: ({ reason }) =>
-                reason === "StashFailed"
-                  ? "Local changes could not be stashed."
-                  : "Local changes would be overwritten.",
-            }),
-          )
-          .finally(() => {
-            checkingOut.current = false;
-          });
-      }
-    },
-    [run, refs, restored, scope, errorToast],
-  );
+  const select = (target: RepositoryRefTarget) => {
+    if (
+      scope === undefined ||
+      refs === undefined ||
+      restored ||
+      checkingOut.current
+    )
+      return;
+    const activation = resolveRefActivation(refs, scope.worktreePath, target);
+    if (activation._tag === "SwitchWorktree")
+      scope.switchWorktree(activation.worktreePath);
+    else if (activation._tag === "Checkout") {
+      checkingOut.current = true;
+      void run({ target: activation.target })
+        .then((result) =>
+          errorToast.failure("checkout", result, {
+            CheckoutRejected: ({ reason }) =>
+              reason === "StashFailed"
+                ? "Local changes could not be stashed."
+                : "Local changes would be overwritten.",
+          }),
+        )
+        .finally(() => {
+          checkingOut.current = false;
+        });
+    }
+  };
   return { select, checkingOut: checkout.running };
 }
 

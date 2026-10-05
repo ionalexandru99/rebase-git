@@ -45,9 +45,9 @@ export default function ChangeDiffViewer({
   const previous = files[index - 1];
   const next = files[index + 1];
   const previousPath = file?.previousPath ?? null;
-  const { metadata, hasHiddenContext } = useMemo(
-    () => createChangeDiffModel(diff, previousPath),
-    [diff, previousPath],
+  const { metadata, hasHiddenContext } = createChangeDiffModel(
+    diff,
+    previousPath,
   );
   const hunks = useMemo(
     () =>
