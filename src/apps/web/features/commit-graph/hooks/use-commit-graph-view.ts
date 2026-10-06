@@ -202,7 +202,11 @@ export function useCommitGraphView({
       );
   }, [pending, history, current]);
 
-  const navigateToOid = async (oid: string, signal?: AbortSignal) => {
+  const navigateToOid = async (
+    oid: string,
+    signal?: AbortSignal,
+    follow = false,
+  ) => {
     signal?.throwIfAborted();
     const intent = beginNavigation();
     if (history === undefined || scopeQuery === undefined)
@@ -216,6 +220,7 @@ export function useCommitGraphView({
     if (target === undefined)
       throw new Error("This commit is outside the selected history.");
     const root = target.root;
+    if (follow && root !== undefined) return;
     const selection = root === undefined ? undefined : historyLabelTarget(root);
     if (selection !== undefined) onRevealHistoryRef?.(selection);
     if (target.expanded.length > 0)
@@ -228,7 +233,7 @@ export function useCommitGraphView({
         return next;
       });
     setPending({ oid, mode: "replace" });
-    scrollRef.current?.focus();
+    if (!follow) scrollRef.current?.focus();
   };
   const focusSelection = () => {
     if (navigation.selection.activeOid !== undefined)

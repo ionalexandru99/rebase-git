@@ -37,6 +37,7 @@ import {
 import { useTerminals } from "#web/features/terminal/use-terminals.ts";
 import { WorkspacePanel } from "#web/features/workspace-panel/workspace-panel.tsx";
 import {
+  fileHistoryPanel,
   rebasePanel,
   reflogPanel,
 } from "#web/features/workspace-panel/workspace-panel-definitions.ts";
@@ -140,7 +141,7 @@ function Workspace({
     });
     store.dispatch({ type: "open", kind: "stash" });
   };
-  const closeRebasePlan = () => execute({ type: "close", kind: "rebase" });
+  const closeRebasePlan = () => execute({ type: "close", tab: "rebase" });
   const resolved = historyScope.resolvedScope;
   const {
     graphRef,
@@ -229,6 +230,16 @@ function Workspace({
               </WorkspacePanel.Main>
               <WorkspacePanel.Pane
                 contents={{
+                  history: (
+                    <Suspense fallback={null}>
+                      <fileHistoryPanel.Content
+                        onOpenDetails={openDetails}
+                        onSelectCommit={(oid) =>
+                          graphRef.current?.followOid(oid)
+                        }
+                      />
+                    </Suspense>
+                  ),
                   reflog: (
                     <Suspense fallback={null}>
                       <reflogPanel.Content

@@ -8,6 +8,7 @@ import {
   ResizablePanelGroup,
 } from "#web/components/ui/resizable.tsx";
 import type { DiffPreferences } from "#web/domain/file-diff/diff-preferences.contract.ts";
+import type { DiffSteps } from "#web/features/commit-inspection/components/commit-diff.tsx";
 import {
   FileListSection,
   openMenu,
@@ -189,4 +190,18 @@ export function CommitFiles({
 
 function menuTarget(row: ChangeTreeRow<CommitFile>) {
   return row.file?.path ?? row.paths[0];
+}
+
+export function fileSteps(
+  files: readonly CommitFile[],
+  path: string | null,
+  select: (path: string) => void,
+): DiffSteps {
+  const index = files.findIndex((file) => file.path === path);
+  const previous = files[index - 1];
+  const next = index < 0 ? undefined : files[index + 1];
+  return {
+    previous: previous ? () => select(previous.path) : undefined,
+    next: next ? () => select(next.path) : undefined,
+  };
 }

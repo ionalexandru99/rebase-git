@@ -5,6 +5,7 @@ import { CommandProgressRpc } from "#contracts/command-progress/command-progress
 import { CommitInspectionApi } from "#contracts/commit-inspection/commit-inspection.contract.ts";
 import { EnvironmentAuthorizationApi } from "#contracts/environment-authorization/environment-authorization.contract.ts";
 import { EnvironmentFilesystemApi } from "#contracts/environment-filesystem/environment-filesystem.contract.ts";
+import { FileHistoryApi } from "#contracts/file-history/file-history.contract.ts";
 import { GitIdentityApi } from "#contracts/git-identity/git-identity.contract.ts";
 import { PullRequestsApi } from "#contracts/pull-requests/pull-requests.contract.ts";
 import { RepositoryCatalogApi } from "#contracts/repository-catalog/repository-catalog.contract.ts";
@@ -75,6 +76,7 @@ export const EnvironmentRpc = RpcGroup.make(
   ...Object.values(EnvironmentFilesystemApi),
   ...Object.values(RepositoryCatalogApi),
   ...Object.values(CommitInspectionApi),
+  ...Object.values(FileHistoryApi),
   ...Object.values(RepositoryChangesApi),
   ...Object.values(RepositoryConflictsApi),
   ...Object.values(RepositoryOperationsApi),

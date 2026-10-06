@@ -38,6 +38,7 @@ const panelFeature = {
   input: undefined,
   expanded: false,
   expand: () => undefined,
+  dispatch: () => undefined,
 };
 
 function conflicted(): RepositoryOperation {

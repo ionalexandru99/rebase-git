@@ -22,6 +22,7 @@ import {
   environmentAuthorizationFeature,
 } from "#server/features/environment-authorization/environment-authorization.ts";
 import { environmentFilesystemFeature } from "#server/features/environment-filesystem/environment-filesystem.ts";
+import { fileHistoryFeature } from "#server/features/file-history/file-history.ts";
 import { gitIdentityFeature } from "#server/features/git-identity/git-identity.ts";
 import { pullRequestsFeature } from "#server/features/pull-requests/pull-requests.ts";
 import { createRepositoryCreation } from "#server/features/repository-catalog/create-repository.ts";
@@ -155,6 +156,7 @@ export function environmentFeatures(dependencies: EnvironmentDependencies) {
         createRepositoryCreation(dependencies),
       ),
       commitInspectionFeature(dependencies),
+      fileHistoryFeature(dependencies),
       repositoryChangesFeature(dependencies),
       repositoryConflictsFeature(dependencies),
       repositoryHistoryFeature(dependencies),

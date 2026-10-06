@@ -1,5 +1,6 @@
 import type { CommitInspection } from "#contracts/commit-inspection/commit-inspection.contract.ts";
 import type { DesktopUpdates } from "#contracts/desktop-updates/desktop-updates.contract.ts";
+import type { FileHistoryEntry } from "#contracts/file-history/file-history.contract.ts";
 import type { PullRequest } from "#contracts/pull-requests/pull-requests.contract.ts";
 import type { RepositoryCatalogEntry } from "#contracts/repository-catalog/repository-catalog.contract.ts";
 import type {
@@ -306,6 +307,23 @@ export function repositoryScope(
     writable: true,
     switchWorktree: () => undefined,
     ...scope,
+  };
+}
+
+export function fileHistoryEntry(
+  entry: Partial<FileHistoryEntry> = {},
+): FileHistoryEntry {
+  return {
+    oid: commitId,
+    parentOid: "b".repeat(40),
+    subject: "Change the file",
+    author: "Alex",
+    authoredAt: 1_790_000_000,
+    path: "src/app.ts",
+    previousPath: null,
+    status: "M",
+    lines: { added: 1, removed: 1 },
+    ...entry,
   };
 }
 

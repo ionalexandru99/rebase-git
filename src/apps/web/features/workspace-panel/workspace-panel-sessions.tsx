@@ -23,10 +23,15 @@ import {
   workspacePanelDefinitions,
 } from "#web/features/workspace-panel/workspace-panel-definitions.ts";
 import type {
+  WorkspacePanelAction,
+  WorkspacePanelTab,
+} from "#web/features/workspace-panel/workspace-panel-model.ts";
+import type {
   PanelViewTarget,
   WorkspacePanelEnvironment,
   WorkspacePanelScope,
 } from "#web/features/workspace-panel/workspace-panel-session.ts";
+import { tabKind } from "#web/features/workspace-panel/workspace-panel-state.ts";
 import { useStore } from "#web/platform/store/use-store.ts";
 
 const SessionsContext = createContext<
@@ -89,8 +94,8 @@ function ProjectViews({
   const expand = (next: boolean) =>
     session.store.dispatch({ type: "expand", expanded: next });
   const view = useStore(session);
-  return tabs.map((kind) => (
-    <RetainedPanelView key={kind} target={view.targets[kind]}>
+  return tabs.map((tab) => (
+    <RetainedPanelView key={tab} target={view.targets[tab]}>
       <PanelFeatureScope
         scope={session.scope}
         environment={environment}
@@ -98,14 +103,15 @@ function ProjectViews({
           environment?.visible !== false &&
           view.mounted &&
           open &&
-          active === kind
+          active === tab
         }
-        input={inputs?.[kind]}
+        input={inputs?.[tab]}
         expanded={expanded}
         expand={expand}
+        dispatch={session.store.dispatch}
       >
-        {view.contents[kind] ??
-          (session.scope ? <PanelContent kind={kind} /> : null)}
+        {view.contents[tab] ??
+          (session.scope ? <PanelContent kind={tabKind(tab)} /> : null)}
       </PanelFeatureScope>
     </RetainedPanelView>
   ));
@@ -118,6 +124,7 @@ function PanelFeatureScope({
   input,
   expanded,
   expand,
+  dispatch,
   children,
 }: {
   readonly scope: WorkspacePanelScope | undefined;
@@ -126,9 +133,18 @@ function PanelFeatureScope({
   readonly input: unknown;
   readonly expanded: boolean;
   readonly expand: (expanded: boolean) => void;
+  readonly dispatch: (action: WorkspacePanelAction) => void;
   readonly children: ReactNode;
 }) {
-  const value = { scope, environment, active, input, expanded, expand };
+  const value = {
+    scope,
+    environment,
+    active,
+    input,
+    expanded,
+    expand,
+    dispatch,
+  };
   return (
     <PanelFeatureContext.Provider value={value}>
       {children}
@@ -179,30 +195,34 @@ export function usePanelSessionOwner() {
 
 export function PanelSessionTarget({
   session,
-  kind,
+  tab,
   children,
 }: {
   readonly session: PanelSession;
-  readonly kind: WorkspacePanelKind;
+  readonly tab: WorkspacePanelTab;
   readonly children: ReactNode;
 }) {
   const [target, setTarget] = useState<HTMLDivElement | null>(null);
+  useLayoutEffect(() => {
+    session.update({
+      contents: { ...session.getSnapshot().contents, [tab]: children },
+    });
+  }, [session, tab, children]);
   useLayoutEffect(() => {
     if (!target) {
       return;
     }
     const attachment = createPanelViewTarget(target);
     session.update({
-      targets: { ...session.getSnapshot().targets, [kind]: attachment },
-      contents: { ...session.getSnapshot().contents, [kind]: children },
+      targets: { ...session.getSnapshot().targets, [tab]: attachment },
     });
     return () => {
       attachment.detach();
       const targets = { ...session.getSnapshot().targets };
-      delete targets[kind];
+      delete targets[tab];
       session.update({ targets });
     };
-  }, [session, kind, target, children]);
+  }, [session, tab, target]);
   return <div ref={setTarget} className="h-full min-h-0" />;
 }
 

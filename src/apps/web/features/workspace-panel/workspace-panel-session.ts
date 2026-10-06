@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import type { WorkspacePanelKind } from "#web/features/workspace-panel/workspace-panel-definitions.ts";
+import type { WorkspacePanelTab } from "#web/features/workspace-panel/workspace-panel-model.ts";
 
 export interface WorkspacePanelScope {
   readonly environmentId: string;
@@ -17,8 +17,8 @@ export interface WorkspacePanelEnvironment {
 
 export interface PanelViewState {
   readonly mounted: boolean;
-  readonly targets: Partial<Record<WorkspacePanelKind, PanelViewTarget>>;
-  readonly contents: Partial<Record<WorkspacePanelKind, ReactNode>>;
+  readonly targets: Partial<Record<WorkspacePanelTab, PanelViewTarget>>;
+  readonly contents: Partial<Record<WorkspacePanelTab, ReactNode>>;
 }
 
 export interface PanelViewTarget {

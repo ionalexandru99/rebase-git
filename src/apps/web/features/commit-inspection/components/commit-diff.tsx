@@ -14,18 +14,21 @@ export interface CommitDiffRead {
   readonly retry: () => void;
 }
 
+export interface DiffSteps {
+  readonly previous: (() => void) | undefined;
+  readonly next: (() => void) | undefined;
+}
+
 export default function CommitDiff({
-  files,
-  path,
-  select,
+  file,
+  steps,
   diff,
   preferences,
   choosePreferences,
   preview,
 }: {
-  readonly files: readonly CommitFile[];
-  readonly path: string | null;
-  readonly select: (path: string) => void;
+  readonly file: CommitFile | undefined;
+  readonly steps: DiffSteps;
   readonly diff: CommitDiffRead;
   readonly preferences: DiffPreferences;
   readonly choosePreferences: (preferences: DiffPreferences) => void;
@@ -33,10 +36,6 @@ export default function CommitDiff({
 }) {
   const [expanded, setExpanded] = useState(false);
   const region = useRef<HTMLElement>(null);
-  const index = files.findIndex((file) => file.path === path);
-  const previous = files[index - 1];
-  const next = files[index + 1];
-  const file = files[index];
   const value = diff.value ?? null;
   const previousPath = preview ? null : (file?.previousPath ?? null);
   const { metadata, hasHiddenContext } = createChangeDiffModel(
@@ -55,8 +54,8 @@ export default function CommitDiff({
         onExpand={hasHiddenContext ? setExpanded : undefined}
         preferences={preferences}
         onPreferences={choosePreferences}
-        previous={previous ? () => select(previous.path) : undefined}
-        next={next ? () => select(next.path) : undefined}
+        previous={steps.previous}
+        next={steps.next}
         region={region}
       />
       {preview ? (
