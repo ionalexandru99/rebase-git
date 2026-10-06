@@ -5,8 +5,9 @@ import type {
 } from "#web/features/workspace-panel/workspace-panel-model.ts";
 import {
   initialWorkspacePanelState,
-  isWorkspacePanelKind,
+  isPanelTab,
   reduceWorkspacePanel,
+  tabKind,
 } from "#web/features/workspace-panel/workspace-panel-state.ts";
 import { createStore } from "#web/platform/store/store.ts";
 
@@ -63,25 +64,33 @@ function readPanelState(
       return initialWorkspacePanelState;
     if (!("tabs" in saved) || !Array.isArray(saved.tabs))
       return initialWorkspacePanelState;
-    const tabs = [...new Set(saved.tabs.filter(isWorkspacePanelKind))];
+    const storedInputs = "inputs" in saved ? saved.inputs : undefined;
+    const savedInput = (tab: string): unknown =>
+      typeof storedInputs === "object" && storedInputs !== null
+        ? Reflect.get(storedInputs, tab)
+        : undefined;
+    const tabs = [
+      ...new Set(
+        saved.tabs.filter(
+          (tab: unknown): tab is string =>
+            typeof tab === "string" && isPanelTab(tab, savedInput(tab)),
+        ),
+      ),
+    ];
     const active =
       "active" in saved &&
-      isWorkspacePanelKind(saved.active) &&
+      typeof saved.active === "string" &&
       tabs.includes(saved.active)
         ? saved.active
         : (tabs[0] ?? null);
-    const storedInputs = "inputs" in saved ? saved.inputs : undefined;
-    const inputs =
-      typeof storedInputs === "object" && storedInputs !== null
-        ? Object.fromEntries(
-            tabs.flatMap((kind) => {
-              const input: unknown = Reflect.get(storedInputs, kind);
-              return workspacePanelDefinitions[kind].acceptsInput?.(input)
-                ? [[kind, input]]
-                : [];
-            }),
-          )
-        : {};
+    const inputs = Object.fromEntries(
+      tabs.flatMap((tab) => {
+        const input = savedInput(tab);
+        return workspacePanelDefinitions[tabKind(tab)].acceptsInput?.(input)
+          ? [[tab, input]]
+          : [];
+      }),
+    );
     return {
       tabs,
       inputs,

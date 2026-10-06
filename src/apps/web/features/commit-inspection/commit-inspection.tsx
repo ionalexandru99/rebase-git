@@ -7,7 +7,10 @@ import {
   type InspectCommitDiff,
 } from "#contracts/commit-inspection/commit-inspection.contract.ts";
 import { Button } from "#web/components/ui/button.tsx";
-import { CommitFiles } from "#web/features/commit-inspection/components/commit-files.tsx";
+import {
+  CommitFiles,
+  fileSteps,
+} from "#web/features/commit-inspection/components/commit-files.tsx";
 import { CommitMetadata } from "#web/features/commit-inspection/components/commit-metadata.tsx";
 import {
   RestoreConfirmation,
@@ -16,6 +19,7 @@ import {
 } from "#web/features/commit-inspection/restore-files.tsx";
 import { DiffWorkerPool } from "#web/features/file-diff/components/diff-worker-pool.tsx";
 import { useDiffPreferences } from "#web/features/file-diff/hooks/use-diff-preferences.ts";
+import { useFileHistoryAction } from "#web/features/file-history/file-history.ts";
 import { usePanelFeature } from "#web/features/workspace-panel/api.ts";
 import { useEnvironmentQuery } from "#web/platform/query/environment-query.ts";
 import { describeFailure } from "#web/platform/query/request-failure.ts";
@@ -46,6 +50,7 @@ export function CommitInspection({
   const [selected, setSelected] = useState<SelectedFile>();
   const path = details === undefined ? null : selectedPath(details, selected);
   const restore = useRestoreFiles(scope, details, connected && writable);
+  const fileHistory = useFileHistoryAction();
   const preview = useRestorePreview(scope, details, restore.preview, active);
   const diff = useCommitDiff(scope, details, path, active);
   const shown = restore.preview === undefined ? diff : preview;
@@ -93,7 +98,10 @@ export function CommitInspection({
               select={select}
               preferences={preferences}
               choosePreferences={choosePreferences}
-              actionsFor={restore.actionsFor}
+              actionsFor={(paths, anchor) => [
+                ...restore.actionsFor(paths, anchor),
+                ...fileHistory(paths),
+              ]}
               onMenuClose={restore.endPreview}
             >
               <Suspense
@@ -105,9 +113,8 @@ export function CommitInspection({
               >
                 <CommitDiff
                   key={`${details.oid}:${details.parentOid}`}
-                  files={details.files}
-                  path={path}
-                  select={select}
+                  file={details.files.find((file) => file.path === path)}
+                  steps={fileSteps(details.files, path, select)}
                   diff={{
                     value: shown.data,
                     loading: shown.isLoading,

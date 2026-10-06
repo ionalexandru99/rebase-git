@@ -18,6 +18,7 @@ import {
   FileRowName,
   LineCounts,
 } from "#web/features/file-diff/components/file-row-name.tsx";
+import { useFileHistoryAction } from "#web/features/file-history/file-history.ts";
 import { useStashMenu } from "#web/features/stashes/stashes.ts";
 import type {
   ChangeAction,
@@ -83,6 +84,7 @@ export function ChangeFileSection({
   const actionLabel = section === "unstaged" ? "Stage" : "Unstage";
   const ActionIcon = section === "unstaged" ? IconPlus : IconMinus;
   const stashMenu = useStashMenu();
+  const fileHistory = useFileHistoryAction();
   const rowActions = (paths: readonly string[]): readonly Action[] => {
     const files = { _tag: "Files", paths } as const;
     const stashable =
@@ -103,6 +105,14 @@ export function ChangeFileSection({
         stashable && !disabled
           ? { revision: changes.revision, section, paths }
           : undefined,
+      ),
+      ...fileHistory(
+        paths.filter((path) =>
+          changes?.[section].some(
+            (file) =>
+              file.path === path && file.status !== "?" && file.status !== "A",
+          ),
+        ),
       ),
       {
         id: "discard",

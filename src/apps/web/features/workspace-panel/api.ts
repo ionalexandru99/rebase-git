@@ -1,4 +1,5 @@
 import { createContext, useContext } from "react";
+import type { WorkspacePanelAction } from "#web/features/workspace-panel/workspace-panel-model.ts";
 import type {
   WorkspacePanelEnvironment,
   WorkspacePanelScope,
@@ -12,6 +13,7 @@ export const PanelFeatureContext = createContext<
       readonly input: unknown;
       readonly expanded: boolean;
       readonly expand: (expanded: boolean) => void;
+      readonly dispatch: (action: WorkspacePanelAction) => void;
     }
   | undefined
 >(undefined);

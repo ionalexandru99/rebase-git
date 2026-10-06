@@ -71,6 +71,7 @@ import { useRepositoryScope } from "#web/platform/query/repository-scope.tsx";
 export interface CommitGraphHandle {
   readonly focusSelection: () => void;
   readonly navigateToOid: (oid: string) => Promise<void>;
+  readonly followOid: (oid: string) => void;
 }
 
 const emptyRefLabels: readonly RepositoryHistoryRefTarget[] = [];
@@ -166,7 +167,12 @@ export function CommitGraph({
     roots ?? [],
   );
   const gutterWidth = commitGraphGutterWidth(laneRows);
-  useImperativeHandle(ref, () => ({ navigateToOid, focusSelection }));
+  useImperativeHandle(ref, () => ({
+    navigateToOid,
+    followOid: (oid) =>
+      void navigateToOid(oid, undefined, true).catch(() => undefined),
+    focusSelection,
+  }));
   const uncommitted = useUncommittedChanges();
   const head = uncommitted?.head;
   const link =

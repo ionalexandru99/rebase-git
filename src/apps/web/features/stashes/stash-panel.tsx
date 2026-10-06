@@ -5,9 +5,13 @@ import {
   RepositoryStashesApi,
   type StashContents,
 } from "#contracts/repository-stashes/repository-stashes.contract.ts";
-import { CommitFiles } from "#web/features/commit-inspection/components/commit-files.tsx";
+import {
+  CommitFiles,
+  fileSteps,
+} from "#web/features/commit-inspection/components/commit-files.tsx";
 import { DiffWorkerPool } from "#web/features/file-diff/components/diff-worker-pool.tsx";
 import { useDiffPreferences } from "#web/features/file-diff/hooks/use-diff-preferences.ts";
+import { useFileHistoryAction } from "#web/features/file-history/file-history.ts";
 import { isStashInput, useStashes } from "#web/features/stashes/stashes.ts";
 import { usePanelFeature } from "#web/features/workspace-panel/api.ts";
 import { ageLabel, useNow } from "#web/lib/age-label.ts";
@@ -87,6 +91,7 @@ function StashFiles({
 }) {
   const scope = usePanelFeature()?.scope;
   const [selected, setSelected] = useState(contents.files[0]?.path ?? null);
+  const fileHistory = useFileHistoryAction();
   const [preferences, choosePreferences] = useDiffPreferences();
   const file = contents.files.find((candidate) => candidate.path === selected);
   const diff = useEnvironmentQuery(
@@ -115,6 +120,7 @@ function StashFiles({
       files={contents.files}
       path={selected}
       select={setSelected}
+      actionsFor={fileHistory}
       preferences={preferences}
       choosePreferences={choosePreferences}
     >
@@ -126,9 +132,8 @@ function StashFiles({
         }
       >
         <CommitDiff
-          files={contents.files}
-          path={selected}
-          select={setSelected}
+          file={contents.files.find((file) => file.path === selected)}
+          steps={fileSteps(contents.files, selected, setSelected)}
           diff={{
             value: diff.data,
             loading: diff.isLoading,

@@ -53,9 +53,14 @@ const sources: readonly {
 ];
 const listedOverwrites = 3;
 
+export type RestoreSubject = Pick<
+  CommitInspection,
+  "oid" | "parentOid" | "files"
+>;
+
 export function useRestoreFiles(
   target: CommandTarget,
-  details: CommitInspection | undefined,
+  details: RestoreSubject | undefined,
   writable: boolean,
 ): RestoreActions {
   const command = useCommand(CommitInspectionApi.restore, { target });
