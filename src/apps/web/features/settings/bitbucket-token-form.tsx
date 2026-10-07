@@ -220,7 +220,7 @@ function Scopes({
         openOnHover
         render={
           <button
-            className={`cursor-help underline decoration-muted-foreground/70 decoration-dotted underline-offset-[3px] outline-none focus-visible:rounded-control focus-visible:ring-2 focus-visible:ring-ring/30 ${missing.length > 0 ? "text-status-connecting" : "text-foreground/90"}`}
+            className={`cursor-help underline decoration-muted-foreground/70 decoration-dotted underline-offset-[3px] outline-none focus-visible:rounded-control focus-visible:ring-2 focus-visible:ring-ring/30 ${missing.length > 0 ? "text-warning" : "text-foreground/90"}`}
             type="button"
           />
         }
@@ -239,7 +239,7 @@ function Scopes({
             return (
               <li
                 aria-label={isMissing ? `${scope} missing` : undefined}
-                className={`flex items-center gap-1.5 font-mono text-meta leading-5 ${isMissing ? "text-status-connecting" : ""}`}
+                className={`flex items-center gap-1.5 font-mono text-meta leading-5 ${isMissing ? "text-warning" : ""}`}
                 key={scope}
               >
                 {scope}

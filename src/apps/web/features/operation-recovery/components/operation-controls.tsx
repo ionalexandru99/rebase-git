@@ -158,7 +158,7 @@ export function OperationHeader({ scope }: { readonly scope: OperationScope }) {
       <OperationControls {...recovery} className="min-h-11 px-3 py-1.5">
         <IconCircleFilled
           aria-hidden="true"
-          className="size-2 shrink-0 text-status-connecting"
+          className="size-2 shrink-0 text-warning"
         />
         <h2
           className="text-meta font-semibold"

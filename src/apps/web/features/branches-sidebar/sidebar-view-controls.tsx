@@ -68,7 +68,7 @@ export function BranchesSidebarFilter({
   const scopeLabel =
     scopeOptions.find((option) => option.value === scope)?.label ?? "All";
   return (
-    <div className="flex h-8.5 min-w-0 flex-1 items-center gap-0.5 overflow-hidden rounded-control border border-input bg-input/20 pr-1 pl-3 transition-colors has-[input:focus-visible]:border-ring has-[input:focus-visible]:ring-2 has-[input:focus-visible]:ring-ring/30 sm:h-7.5 dark:bg-input/30">
+    <div className="flex h-8.5 min-w-0 flex-1 items-center gap-0.5 overflow-hidden rounded-control border border-input bg-field pr-1 pl-3 transition-colors has-[input:focus-visible]:border-ring has-[input:focus-visible]:ring-2 has-[input:focus-visible]:ring-ring/30 sm:h-7.5">
       <IconSearch
         aria-hidden="true"
         className="pointer-events-none size-4 shrink-0 text-muted-foreground"

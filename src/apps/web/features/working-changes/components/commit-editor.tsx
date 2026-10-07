@@ -53,7 +53,7 @@ export function CommitEditor({
       <textarea
         aria-label="Commit description"
         placeholder="Description"
-        className="min-h-12 w-full flex-1 resize-none rounded-control border border-input bg-input/20 px-[calc(--spacing(3)-1px)] py-1.5 text-control text-foreground outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30 dark:bg-input/30"
+        className="min-h-12 w-full flex-1 resize-none rounded-control border border-input bg-field px-[calc(--spacing(3)-1px)] py-1.5 text-control text-foreground outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30"
         value={draft.description}
         disabled={loading || busy}
         maxLength={28000}
@@ -65,7 +65,7 @@ export function CommitEditor({
         <span className="relative grid size-4 shrink-0 place-items-center">
           <input
             type="checkbox"
-            className="peer size-4 appearance-none rounded-control border border-input bg-input/20 outline-none checked:border-primary checked:bg-primary focus-visible:ring-2 focus-visible:ring-ring/30 dark:bg-input/30 dark:checked:bg-primary"
+            className="peer size-4 appearance-none rounded-control border border-input bg-field outline-none checked:border-primary checked:bg-primary focus-visible:ring-2 focus-visible:ring-ring/30"
             checked={amend}
             disabled={
               amend

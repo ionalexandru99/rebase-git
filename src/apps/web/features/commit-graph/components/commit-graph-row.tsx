@@ -18,8 +18,7 @@ import {
 import type { CommitLaneRow } from "#web/features/repository-history/commit-lanes.ts";
 
 const selectedRowStyle = {
-  "--graph-row-background":
-    "color-mix(in oklab, var(--primary) 18%, var(--repository))",
+  "--graph-row-background": "var(--selected)",
 } as CSSProperties;
 
 export const CommitGraphRow = memo(function CommitGraphRow({
@@ -60,7 +59,7 @@ export const CommitGraphRow = memo(function CommitGraphRow({
       className={`${start === undefined ? "relative" : "absolute left-0"} grid w-full cursor-default items-center bg-[var(--graph-row-background)] text-body text-foreground ${
         selected
           ? "after:pointer-events-none after:absolute after:inset-0 after:z-[5] after:shadow-[inset_2px_0_0_var(--primary)]"
-          : "hover:[--graph-row-background:color-mix(in_oklab,var(--accent)_45%,var(--repository))] data-[active=true]:[--graph-row-background:color-mix(in_oklab,var(--accent)_85%,var(--repository))] data-[active=true]:after:pointer-events-none data-[active=true]:after:absolute data-[active=true]:after:inset-0 data-[active=true]:after:z-[5] data-[active=true]:after:shadow-[inset_2px_0_0_var(--muted-foreground)]"
+          : "hover:[--graph-row-background:var(--hover)] data-[active=true]:[--graph-row-background:var(--cursor)] data-[active=true]:after:pointer-events-none data-[active=true]:after:absolute data-[active=true]:after:inset-0 data-[active=true]:after:z-[5] data-[active=true]:after:shadow-[inset_2px_0_0_var(--muted-foreground)]"
       } ${lane?.nodeRemote ? "[&>td:nth-child(2)]:text-muted-foreground" : ""} ${mark === undefined ? "" : `before:pointer-events-none before:absolute before:inset-0 before:z-[5] before:border-primary ${mark === "base" ? "before:border" : "before:border-l-[3px]"}`}`}
       data-active={active ? "true" : undefined}
       data-oid={commit.oid}

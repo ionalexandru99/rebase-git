@@ -171,7 +171,7 @@ function ExpandedProjectsSidebar({
             className={
               environmentStatus.availability === "available"
                 ? "sr-only"
-                : `block truncate px-2.5 py-2 text-body ${environmentStatus.availability === "unavailable" ? "text-status-unavailable" : "text-muted-foreground"}`
+                : `block truncate px-2.5 py-2 text-body ${environmentStatus.availability === "unavailable" ? "text-destructive" : "text-muted-foreground"}`
             }
             role="status"
           >
@@ -247,7 +247,7 @@ function CollapsedProjectsSidebar({
       <button
         type="button"
         aria-label="Expand Projects sidebar"
-        className={`mx-auto mt-1 grid size-10 shrink-0 place-items-center rounded-control outline-none hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring/40 ${environmentStatus.availability === "unavailable" ? "text-status-unavailable" : "text-muted-foreground"}`}
+        className={`mx-auto mt-1 grid size-10 shrink-0 place-items-center rounded-control outline-none hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring/40 ${environmentStatus.availability === "unavailable" ? "text-destructive" : "text-muted-foreground"}`}
         onClick={expand}
       >
         <IconLayoutSidebarLeftExpand aria-hidden="true" className="size-5" />

@@ -157,7 +157,7 @@ export function OpenProjectScreen({
         {environmentStatus.detail === undefined ? null : (
           <p
             role="status"
-            className={`mt-4 text-body ${environmentStatus.availability === "unavailable" ? "text-status-unavailable" : "text-muted-foreground"}`}
+            className={`mt-4 text-body ${environmentStatus.availability === "unavailable" ? "text-destructive" : "text-muted-foreground"}`}
           >
             {environmentStatus.detail}
           </p>

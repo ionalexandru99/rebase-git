@@ -175,7 +175,7 @@ export function PlanEditor({
           />
           <textarea
             aria-label="Message body"
-            className="h-24 w-full resize-none rounded-control border border-input bg-input/20 p-2 text-control text-foreground outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30"
+            className="h-24 w-full resize-none rounded-control border border-input bg-field p-2 text-control text-foreground outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30"
             value={messageBody.join("\n").replace(/^\n/, "")}
             disabled={message === undefined}
             maxLength={28000}

@@ -171,7 +171,7 @@ function FileHistory({
     <section aria-label="File history" className="flex h-full min-h-0 flex-col">
       <header className="shrink-0 border-border border-b px-4 pt-3 pb-3">
         <h2
-          className={`truncate font-semibold text-heading ${latest?.status === "D" ? "text-rose-600 line-through dark:text-rose-400" : ""}`}
+          className={`truncate font-semibold text-heading ${latest?.status === "D" ? "text-destructive line-through" : ""}`}
         >
           {name}
         </h2>

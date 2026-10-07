@@ -44,17 +44,17 @@ export function rowElementId(rowId: string): string {
 const sectionLooks = {
   local: {
     Icon: IconGitBranch,
-    className: "text-indigo-600 dark:text-indigo-300",
+    className: "text-primary",
   },
   settled: {
     Icon: IconGitBranchDeleted,
-    className: "text-zinc-500 dark:text-zinc-400",
+    className: "text-muted-foreground",
   },
-  remote: { Icon: IconCloud, className: "text-sky-600 dark:text-sky-400" },
-  tags: { Icon: IconTag, className: "text-amber-700 dark:text-amber-300" },
+  remote: { Icon: IconCloud, className: "text-info" },
+  tags: { Icon: IconTag, className: "text-warning" },
   stashes: {
     Icon: IconStack2,
-    className: "text-violet-600 dark:text-violet-300",
+    className: "text-special",
   },
 } as const;
 
@@ -297,7 +297,7 @@ function SyncCounts({ upstream }: { readonly upstream: BranchUpstream }) {
       {upstream.ahead > 0 ? (
         <span
           aria-label={`${upstream.ahead} commits to push`}
-          className="text-status-available"
+          className="text-success"
           role="img"
         >
           {compactCount(upstream.ahead)}↑
@@ -306,7 +306,7 @@ function SyncCounts({ upstream }: { readonly upstream: BranchUpstream }) {
       {upstream.behind > 0 ? (
         <span
           aria-label={`${upstream.behind} commits to pull`}
-          className="text-status-unavailable"
+          className="text-destructive"
           role="img"
         >
           {compactCount(upstream.behind)}↓

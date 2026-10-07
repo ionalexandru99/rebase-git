@@ -130,7 +130,7 @@ function ComparisonBody({
       {moved.length === 0 ? null : (
         <div
           role="status"
-          className="flex shrink-0 items-center gap-2 border-border border-b bg-amber-500/10 px-3 py-1.5 text-amber-800 text-meta dark:text-amber-200"
+          className="flex shrink-0 items-center gap-2 border-border border-b bg-warning-surface px-3 py-1.5 text-warning text-meta"
         >
           <span className="min-w-0 flex-1 truncate">
             {moved.join(" and ")} moved

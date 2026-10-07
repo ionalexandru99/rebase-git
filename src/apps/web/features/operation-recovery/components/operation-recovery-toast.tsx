@@ -60,7 +60,7 @@ export function OperationRecoveryToast({
       <div className="flex items-center gap-2 px-3 py-2">
         <IconCircleFilled
           aria-hidden="true"
-          className={`size-2 shrink-0 ${state.completed ? "text-status-available" : "text-status-connecting"}`}
+          className={`size-2 shrink-0 ${state.completed ? "text-success" : "text-warning"}`}
         />
         <h2
           className="min-w-0 flex-1 cap-centered text-meta font-semibold"
