@@ -2,7 +2,7 @@ import { readFile } from "node:fs/promises";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { isAbsolute, relative, resolve } from "node:path";
 import { Effect } from "effect";
-import { formatHostAddress } from "#server/adapters/environment-transport/environment-request-authorization.ts";
+import { expectedRequestOrigin } from "#server/adapters/environment-transport/environment-request-authorization.ts";
 
 const contentTypes: Readonly<Record<string, string>> = {
   ".css": "text/css; charset=utf-8",
@@ -35,7 +35,7 @@ export function respondWithBrowserAsset(
         browserAssetHeaders(
           asset.extension,
           asset.cache,
-          formatHostAddress(request.socket.localAddress ?? "127.0.0.1"),
+          expectedRequestOrigin(request).replace("http://", "ws://"),
         ),
       );
       response.end(request.method === "HEAD" ? undefined : content);
@@ -95,11 +95,11 @@ export function browserAssetPath(pathname: string) {
 function browserAssetHeaders(
   extension: string,
   cache: boolean,
-  webSocketHost: string,
+  webSocketOrigin: string,
 ) {
   return {
     "cache-control": cache ? "public, max-age=31536000, immutable" : "no-store",
-    "content-security-policy": `default-src 'self'; base-uri 'none'; connect-src 'self' ws://${webSocketHost}:* https://api.github.com https://api.bitbucket.org https://codeberg.org https://gitlab.com https://gravatar.com; form-action 'none'; frame-ancestors 'none'; img-src 'self' data: https://avatars.githubusercontent.com https://avatar-management--avatars.us-west-2.prod.public.atl-paas.net https://codeberg.org https://gitlab.com https://gravatar.com; object-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'`,
+    "content-security-policy": `default-src 'self'; base-uri 'none'; connect-src 'self' ${webSocketOrigin} https://api.github.com https://api.bitbucket.org https://codeberg.org https://gitlab.com https://gravatar.com; form-action 'none'; frame-ancestors 'none'; img-src 'self' data: https://avatars.githubusercontent.com https://avatar-management--avatars.us-west-2.prod.public.atl-paas.net https://codeberg.org https://gitlab.com https://gravatar.com; object-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'`,
     "content-type": contentTypes[extension] ?? "application/octet-stream",
     "x-content-type-options": "nosniff",
   };

@@ -87,10 +87,15 @@ function serve(options: EnvironmentServerOptions) {
       );
       if (server === undefined) return;
 
+      const origin =
+        options.host === undefined
+          ? `http://localhost:${server.port}`
+          : server.origin;
+      const pairingUrl = server.pairingUrl.replace(server.origin, origin);
       yield* Effect.sync(() => {
-        process.stdout.write(`Listening URL: ${server.origin}\n`);
-        process.stdout.write(`Pairing URL: ${server.pairingUrl}\n`);
-        openDefaultBrowser(server.pairingUrl);
+        process.stdout.write(`Listening URL: ${origin}\n`);
+        process.stdout.write(`Pairing URL: ${pairingUrl}\n`);
+        openDefaultBrowser(pairingUrl);
       });
       yield* Deferred.await(shutdown);
     }),

@@ -222,7 +222,7 @@ async function verifyServer(child: RunningProcess, home: string) {
 
   try {
     const origin = await waitForListeningUrl(child, () => stdout);
-    if (new URL(origin).hostname !== "127.0.0.1") {
+    if (new URL(origin).hostname !== "localhost") {
       throw new Error(`The package listened outside loopback: ${origin}`);
     }
 
