@@ -8,7 +8,7 @@ import { render } from "#tests-support/render.tsx";
 import { OpenProjectScreen } from "#web/features/open-project/open-project-screen.tsx";
 
 describe("projects on the open project screen", () => {
-  it("lists each project once and shows ten until asked for all", async () => {
+  it("shows ten projects until asked for all", async () => {
     await render(
       <OpenProjectScreen
         onOpenRepository={() => {}}
@@ -45,6 +45,9 @@ describe("projects on the open project screen", () => {
     await page.getByRole("button", { name: "Show all 12 projects" }).click();
 
     await expect.element(projects.nth(11)).toHaveTextContent("project-11");
+    await expect
+      .element(page.getByRole("searchbox", { name: "Search repositories" }))
+      .toHaveFocus();
     expect(
       page.getByRole("button", { name: /^Show all/ }).elements(),
     ).toHaveLength(0);

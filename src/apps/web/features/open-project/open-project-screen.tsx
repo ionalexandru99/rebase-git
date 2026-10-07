@@ -179,7 +179,10 @@ export function OpenProjectScreen({
               onActivate={setActiveKey}
               onOpen={openRepository}
               onOpenSettings={openSettings}
-              onShowAll={() => setShowAllProjects(true)}
+              onShowAll={() => {
+                setShowAllProjects(true);
+                inputRef.current?.focus();
+              }}
             />
             {hasCloneSources ? (
               <section aria-labelledby="open-project-clone-heading">

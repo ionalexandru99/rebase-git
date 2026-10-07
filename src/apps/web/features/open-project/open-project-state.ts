@@ -14,7 +14,6 @@ const repositoryNameCollator = new Intl.Collator(undefined, {
 
 export interface OpenProjectRepositoryItem {
   readonly disabled: boolean;
-  readonly environment: OpenProjectEnvironment;
   readonly key: string;
   readonly repository: OpenProjectRepository;
 }
@@ -34,7 +33,6 @@ export function projectItems(
         )
         .map((repository) => ({
           disabled: environment.availability !== "available",
-          environment,
           key: `project:${environment.id}:${repository.id}`,
           repository,
         })),
@@ -180,7 +178,8 @@ function minorityVisibility({ repositories }: HostRepositories) {
   ).length;
   const publicCount = repositories.length - privateCount;
   if (privateCount === 0 || publicCount === 0) return undefined;
-  return privateCount <= publicCount;
+  if (privateCount === publicCount) return undefined;
+  return privateCount < publicCount;
 }
 
 export function urlSource(query: string): CloneSource | undefined {

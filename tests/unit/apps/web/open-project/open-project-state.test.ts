@@ -76,8 +76,8 @@ describe("open project state", () => {
     ]);
   });
 
-  it("tags no visibility when every repository shares it", () => {
-    const [group] = cloneGroups(
+  it("tags no visibility when there is no minority", () => {
+    const groups = cloneGroups(
       [
         hostRepositories({
           repositories: [
@@ -85,14 +85,22 @@ describe("open project state", () => {
             { name: "acme/web", private: true },
           ],
         }),
+        hostRepositories({
+          host: "github.example.com",
+          repositories: [
+            { name: "acme/api", private: true },
+            { name: "acme/web" },
+          ],
+        }),
       ],
       "",
     );
 
-    expect(group?.sources.map(({ visibility }) => visibility)).toEqual([
-      undefined,
-      undefined,
-    ]);
+    expect(
+      groups.flatMap(({ sources }) =>
+        sources.map(({ visibility }) => visibility),
+      ),
+    ).toEqual([undefined, undefined, undefined, undefined]);
   });
 
   it("formats compact recent times", () => {

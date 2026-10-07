@@ -68,7 +68,7 @@ export function CloneLine({
 
   if (clone.running)
     return (
-      <div className="ml-[2.575rem] flex items-center gap-3 pb-3">
+      <div className="flex items-center gap-3 pb-3">
         <div className="min-w-0 flex-1">
           <div className="mb-1.5 flex items-baseline justify-between gap-3 text-[.72rem]">
             <span className="min-w-0 truncate text-foreground/85">
@@ -107,7 +107,7 @@ export function CloneLine({
     );
 
   return (
-    <div className="ml-[2.575rem] pb-3">
+    <div className="pb-3">
       <form
         className="flex items-center gap-2"
         onSubmit={(event) => {
