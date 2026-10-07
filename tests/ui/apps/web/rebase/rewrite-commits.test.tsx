@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vite-plus/test";
 import { userEvent } from "vite-plus/test/browser";
+import { CommitInspectionApi } from "#contracts/commit-inspection/commit-inspection.contract.ts";
 import { RepositoryChangesApi } from "#contracts/repository-changes/repository-changes.contract.ts";
 import {
   type RepositoryOperation,
@@ -13,6 +14,7 @@ import {
 import { CommitGraphFixture } from "#tests-support/commit-graph-fixture.tsx";
 import { fakeRequests, respond } from "#tests-support/fake-requests.ts";
 import {
+  commitInspection,
   conflictedRebase,
   mainPath,
   repositoryChanges,
@@ -30,8 +32,8 @@ import {
 import { render } from "#tests-support/render.tsx";
 import {
   DropConfirmation,
-  useDropCommits,
-} from "#web/features/rebase/drop-commits.tsx";
+  useRewriteCommits,
+} from "#web/features/rebase/rewrite-commits.tsx";
 import { RepositoryScopeProvider } from "#web/platform/query/repository-scope.tsx";
 
 const typo = historyOid(4);
@@ -44,8 +46,13 @@ const commits = [
   commit(debug, [base], 2, "Debug logging"),
   commit(base, [], 1, "Base"),
 ];
+const messages: Readonly<Record<string, string>> = {
+  [retry]: "Add retry\n\nRetries twice.\n",
+  [debug]: "Debug logging\n",
+  [typo]: "Fix typo\n",
+};
 
-describe("drop commits from the graph", () => {
+describe("drop and squash commits from the graph", () => {
   it("drops commits that are not next to each other after listing them", async () => {
     const f = await renderDrop();
     await f.row("Fix typo").click();
@@ -83,7 +90,7 @@ describe("drop commits from the graph", () => {
     await expect
       .element(f.screen.getByRole("menuitem", { name: "Drop commit" }))
       .toBeVisible();
-    await userEvent.keyboard("{ArrowDown}{ArrowDown}");
+    await userEvent.keyboard("{ArrowDown}{ArrowDown}{ArrowDown}");
     await expect
       .element(f.screen.getByRole("menuitem", { name: "Drop commit" }))
       .toHaveFocus();
@@ -97,6 +104,60 @@ describe("drop commits from the graph", () => {
     await userEvent.keyboard("{Escape}");
     await expect.element(confirmation).not.toBeInTheDocument();
     expect(f.started).toEqual([]);
+  });
+
+  it("squashes a commit into its parent without asking, keeping both messages", async () => {
+    const f = await renderDrop();
+    await f.row("Add retry").click({ button: "right" });
+
+    await f.screen
+      .getByRole("menuitem", { name: "Squash into parent" })
+      .click();
+
+    await expect.poll(() => f.started).toHaveLength(1);
+    expect(f.started[0]).toMatchObject({
+      expectedHead: typo,
+      operation: {
+        _tag: "Rebase",
+        onto: { ref: null, commit: base },
+        plan: [
+          {
+            commit: debug,
+            action: "pick",
+            message: "Debug logging\n\nAdd retry\n\nRetries twice.",
+          },
+          { commit: retry, action: "squash", message: null },
+          { commit: typo, action: "pick", message: null },
+        ],
+      },
+    });
+  });
+
+  it("squashes selected commits into the oldest of them", async () => {
+    const f = await renderDrop();
+    await f.row("Fix typo").click();
+    await userEvent.keyboard("{Shift>}");
+    await f.row("Add retry").click();
+    await userEvent.keyboard("{/Shift}");
+    await f.row("Fix typo").click({ button: "right" });
+
+    await f.screen.getByRole("menuitem", { name: "Squash 2 commits" }).click();
+
+    await expect.poll(() => f.started).toHaveLength(1);
+    expect(f.started[0]).toMatchObject({
+      operation: {
+        _tag: "Rebase",
+        onto: { ref: null, commit: debug },
+        plan: [
+          {
+            commit: retry,
+            action: "pick",
+            message: "Add retry\n\nRetries twice.\n\nFix typo",
+          },
+          { commit: typo, action: "squash", message: null },
+        ],
+      },
+    });
   });
 
   it.each([
@@ -147,6 +208,9 @@ async function renderDrop({
             }),
           ),
           respond(RepositoryChangesApi.read, async () => repositoryChanges()),
+          respond(CommitInspectionApi.inspect, async ({ oid }) =>
+            commitInspection({ oid, message: messages[oid] ?? "Commit" }),
+          ),
           respond(RepositoryOperationsApi.start, async (input) => {
             started.push(input);
             return {
@@ -170,16 +234,16 @@ async function renderDrop({
 }
 
 function DropGraph({ history }: { readonly history: FakeRepositoryHistory }) {
-  const drop = useDropCommits(history);
+  const rewrite = useRewriteCommits(history);
   return (
     <>
       <CommitGraphFixture
         reader={history}
-        drop={drop}
+        rewrite={rewrite}
         repositoryName="rebase-test"
         roots={[{ name: "topic", oid: typo, type: "branch" }]}
       />
-      <DropConfirmation drop={drop} />
+      <DropConfirmation drop={rewrite} />
     </>
   );
 }

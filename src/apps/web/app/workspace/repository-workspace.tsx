@@ -17,12 +17,12 @@ import {
   CurrentPullRequest,
   usePullRequests,
 } from "#web/features/pull-requests/pull-requests.tsx";
-import {
-  DropConfirmation,
-  useDropCommits,
-} from "#web/features/rebase/drop-commits.tsx";
 import { useRebaseActions } from "#web/features/rebase/rebase-actions.ts";
 import type { RebasePlanTarget } from "#web/features/rebase/rebase-plan.ts";
+import {
+  DropConfirmation,
+  useRewriteCommits,
+} from "#web/features/rebase/rewrite-commits.tsx";
 import { useScopedRepositoryRefs } from "#web/features/refs/repository-refs.ts";
 import { RemoteSync } from "#web/features/remote-sync/remote-sync.tsx";
 import { useCatalogRepository } from "#web/features/repository-catalog/use-repository-catalog.ts";
@@ -120,7 +120,7 @@ function Workspace({
   };
   const rebase = useRebaseActions(history, openRebasePlan);
   const cherryPick = useCherryPick(history);
-  const drop = useDropCommits(history);
+  const rewrite = useRewriteCommits(history);
   const reset = useResetActions();
   const pullRequests = usePullRequests();
   const name = useCatalogRepository(scope.repositoryId)?.name ?? "Repository";
@@ -157,7 +157,7 @@ function Workspace({
     <>
       <OperationRecoveryNotice key={worktreePath} repositoryName={name} />
       <ResetConfirmation reset={reset} />
-      <DropConfirmation drop={drop} />
+      <DropConfirmation drop={rewrite} />
       <RemoteSync>
         {(syncActions) => (
           <AuthorAvatars repository={refs?.hostedRepository}>
@@ -202,7 +202,7 @@ function Workspace({
                         reset={reset}
                         compare={compare}
                         cherryPick={cherryPick}
-                        drop={drop}
+                        rewrite={rewrite}
                         ref={graphRef}
                         onOpenDetails={openDetails}
                         onOpenChanges={() =>

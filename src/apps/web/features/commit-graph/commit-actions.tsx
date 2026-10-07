@@ -21,8 +21,8 @@ import {
 } from "#web/features/notifications/notifications.tsx";
 import { useOperation } from "#web/features/operation-recovery/hooks/use-operation.ts";
 import { operationKindLabel } from "#web/features/operation-recovery/operation-messages.ts";
-import type { DropCommits } from "#web/features/rebase/drop-commits.tsx";
 import type { RebaseActions } from "#web/features/rebase/rebase-actions.ts";
+import type { RewriteCommits } from "#web/features/rebase/rewrite-commits.tsx";
 import { createRefActions } from "#web/features/refs/ref-actions.ts";
 import {
   activeHead,
@@ -48,7 +48,7 @@ interface CommitActionHandlers {
   readonly merge: Action | undefined;
   readonly rebase: Action | undefined;
   readonly revert: Action | undefined;
-  readonly drop: Action | undefined;
+  readonly rewrite: readonly Action[];
   readonly reset: Action | undefined;
   readonly create: readonly Action[];
   readonly readCommit: (oid: string) => Promise<RepositoryCommit | undefined>;
@@ -62,7 +62,7 @@ export function useCommitActions({
   cherryPick,
   merge,
   rebase,
-  drop,
+  rewrite,
   reset,
   compare,
   onOpenDetails,
@@ -72,7 +72,7 @@ export function useCommitActions({
   readonly cherryPick?: Pick<CherryPick, "action"> | undefined;
   readonly merge?: MergeActions | undefined;
   readonly rebase?: Pick<RebaseActions, "actionFor"> | undefined;
-  readonly drop?: Pick<DropCommits, "action"> | undefined;
+  readonly rewrite?: Pick<RewriteCommits, "actions"> | undefined;
   readonly reset?: Pick<ResetActions, "actionFor"> | undefined;
   readonly compare?: CompareActions | undefined;
   readonly onOpenDetails?: ((oid: string) => void) | undefined;
@@ -99,7 +99,7 @@ export function useCommitActions({
       merge: merge?.actionFor(oid),
       rebase: rebase?.actionFor(oid),
       revert: revert.actionFor(selected),
-      drop: drop?.action(),
+      rewrite: rewrite?.actions() ?? [],
       reset: reset?.actionFor(oid),
       create: createRefActions(oid, access),
       readCommit: async (commit) =>
@@ -224,7 +224,7 @@ function commitActions(
     merge,
     rebase,
     revert,
-    drop,
+    rewrite,
     reset,
     create,
     readCommit,
@@ -261,7 +261,7 @@ function commitActions(
           },
         ]),
     ...(compare === undefined ? [] : [compare]),
-    ...[cherryPick, merge, rebase, revert, drop, reset].filter(
+    ...[cherryPick, merge, rebase, revert, ...rewrite, reset].filter(
       (action) => action !== undefined,
     ),
     ...create,
