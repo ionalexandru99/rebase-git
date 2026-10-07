@@ -1,9 +1,5 @@
 import { type JSX, Suspense } from "react";
 import { useCommitInspection } from "#web/app/workspace/use-commit-inspection.ts";
-import {
-  ResizableHandle,
-  ResizablePanel,
-} from "#web/components/ui/resizable.tsx";
 import { AuthorAvatars } from "#web/features/author-avatars/author-avatar.tsx";
 import { BranchesSidebar } from "#web/features/branches-sidebar/branches-sidebar.tsx";
 import { useCherryPick } from "#web/features/cherry-pick/cherry-pick-menu.tsx";
@@ -162,13 +158,7 @@ function Workspace({
         {(syncActions) => (
           <AuthorAvatars repository={refs?.hostedRepository}>
             <WorkspacePanel.Group>
-              <ResizablePanel
-                defaultSize="16.5rem"
-                groupResizeBehavior="preserve-pixel-size"
-                id="branches"
-                maxSize="26rem"
-                minSize="12rem"
-              >
+              <WorkspacePanel.Sidebar>
                 <BranchesSidebar
                   history={history}
                   merge={merge}
@@ -184,11 +174,7 @@ function Workspace({
                     resolved?.selectedRefKeys ?? noRefKeys
                   }
                 />
-              </ResizablePanel>
-              <ResizableHandle
-                aria-label="Resize branches sidebar"
-                className="z-10 bg-transparent after:w-2 focus-visible:ring-primary/40"
-              />
+              </WorkspacePanel.Sidebar>
               <WorkspacePanel.Main>
                 {() => (
                   <TerminalSplit terminals={terminals}>

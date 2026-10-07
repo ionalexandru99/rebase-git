@@ -18,7 +18,6 @@ import {
 } from "#tests-support/fixtures.ts";
 import { historyOid } from "#tests-support/history.ts";
 import { render } from "#tests-support/render.tsx";
-import { ResizablePanel } from "#web/components/ui/resizable.tsx";
 import { CommitInspection } from "#web/features/commit-inspection/commit-inspection.tsx";
 import { FileHistoryPanel } from "#web/features/file-history/file-history-panel.tsx";
 import { WorkspacePanel } from "#web/features/workspace-panel/workspace-panel.tsx";
@@ -78,9 +77,7 @@ async function fixture() {
     <div className="dark text-foreground" style={{ width: 1200, height: 650 }}>
       <WorkspacePanel.Provider scopeKey={scopeKey}>
         <WorkspacePanel.Group>
-          <ResizablePanel id="graph" defaultSize="30%">
-            Graph
-          </ResizablePanel>
+          <WorkspacePanel.Sidebar />
           <WorkspacePanel.Main>{() => null}</WorkspacePanel.Main>
           <WorkspacePanel.Pane
             contents={{

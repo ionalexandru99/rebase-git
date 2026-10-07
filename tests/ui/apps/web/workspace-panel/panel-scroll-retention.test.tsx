@@ -1,7 +1,6 @@
 import { expect, it } from "vite-plus/test";
 import { page } from "vite-plus/test/browser";
 import { render } from "vitest-browser-react";
-import { ResizablePanel } from "#web/components/ui/resizable.tsx";
 import { WorkspacePanel } from "#web/features/workspace-panel/workspace-panel.tsx";
 
 it("retains nested scroll coordinates when detached views are shown again", async () => {
@@ -13,7 +12,6 @@ it("retains nested scroll coordinates when detached views are shown again", asyn
         tabs: ["changes"],
         active: "changes",
         open: true,
-        width: 55,
       }),
     );
   }
@@ -30,10 +28,10 @@ it("retains nested scroll coordinates when detached views are shown again", asyn
             worktreePath: `/repo/${project}`,
           }}
         >
+          <WorkspacePanel.Controls />
           <WorkspacePanel.Group>
-            <ResizablePanel id="graph" minSize="20%">
-              <WorkspacePanel.Controls />
-            </ResizablePanel>
+            <WorkspacePanel.Sidebar />
+            <WorkspacePanel.Main>{() => null}</WorkspacePanel.Main>
             <WorkspacePanel.Pane
               contents={{
                 changes: (

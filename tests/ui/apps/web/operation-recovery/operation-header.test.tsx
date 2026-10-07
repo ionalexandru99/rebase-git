@@ -60,7 +60,7 @@ function ready(): RepositoryOperation {
 function showPanel(open: boolean) {
   localStorage.setItem(
     `rebase:workspace-panel:v1:${panelKey}`,
-    JSON.stringify({ tabs: ["changes"], active: "changes", open, width: 40 }),
+    JSON.stringify({ tabs: ["changes"], active: "changes", open }),
   );
 }
 

@@ -26,12 +26,17 @@ export type WorkspacePanelDefinition = {
 
 export type WorkspacePanelTab = string;
 
+export interface WorkspaceWidths {
+  readonly sidebar: number;
+  readonly panel: number;
+}
+
 export interface WorkspacePanelState {
   readonly inputs?: Partial<Record<WorkspacePanelTab, unknown>>;
   readonly tabs: readonly WorkspacePanelTab[];
   readonly active: WorkspacePanelTab | null;
   readonly open: boolean;
-  readonly width: number;
+  readonly widths: WorkspaceWidths;
   readonly expanded?: boolean;
 }
 
@@ -42,7 +47,7 @@ export type WorkspacePanelAction =
   | { readonly type: "select"; readonly tab: WorkspacePanelTab }
   | { readonly type: "close"; readonly tab: WorkspacePanelTab }
   | { readonly type: "visibility"; readonly open: boolean }
-  | { readonly type: "resize"; readonly width: number }
+  | { readonly type: "resize"; readonly widths: WorkspaceWidths }
   | { readonly type: "expand"; readonly expanded: boolean };
 
 export interface WorkspacePanelStore

@@ -346,7 +346,7 @@ async function renderShell() {
 
 async function renderRepositoryWorkspace() {
   return render(
-    <div style={{ height: 720, width: 900 }}>
+    <div style={{ height: 720, width: 1280 }}>
       <RepositoryScopeProvider scope={repositoryScope()}>
         <RepositoryWorkspace />
       </RepositoryScopeProvider>
