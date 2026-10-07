@@ -78,7 +78,7 @@ function FolderFile({
       (records) => {
         if (records.some((record) => record.isIntersecting)) setNear(true);
       },
-      { rootMargin: "100% 0px" },
+      { rootMargin: "25% 0px" },
     );
     observer.observe(node);
     return () => observer.disconnect();
@@ -94,7 +94,10 @@ function FolderFile({
       className="border-border border-b"
     >
       {diff.data === undefined ? (
-        <div className="flex h-9 items-center gap-2 px-3 text-body text-muted-foreground">
+        <div
+          className="flex items-start gap-2 px-3 pt-2.5 text-body text-muted-foreground"
+          style={{ height: estimatedHeight(file) }}
+        >
           <ChangeFileIcon path={file.path} />
           <span className="min-w-0 truncate">{file.path}</span>
           <LineCounts lines={file.lines} className="ml-auto" />
@@ -109,4 +112,8 @@ function FolderFile({
       )}
     </article>
   );
+}
+
+function estimatedHeight({ lines }: ChangedFile) {
+  return 36 + 20 * (lines === null ? 4 : lines.added + lines.removed + 6);
 }

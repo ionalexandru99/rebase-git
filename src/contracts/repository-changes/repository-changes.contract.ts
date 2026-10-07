@@ -108,7 +108,6 @@ export const CommitChanges = Schema.Struct({
 });
 export type CommitChanges = typeof CommitChanges.Type;
 export const maximumIgnoredPaths = 1000;
-export const listedTrackedPaths = 20;
 export const IgnoreTarget = Schema.Literals(["repository", "local"]);
 export type IgnoreTarget = typeof IgnoreTarget.Type;
 export const IgnorePaths = Schema.Struct({
@@ -123,12 +122,14 @@ export const IgnorePaths = Schema.Struct({
 });
 export type IgnorePaths = typeof IgnorePaths.Type;
 export const IgnoreTracked = Schema.TaggedStruct("IgnoreTracked", {
-  paths: Schema.Array(RepositoryPath).check(
-    Schema.isMaxLength(listedTrackedPaths),
-  ),
+  path: RepositoryPath,
   count: Schema.Number,
 });
 export type IgnoreTracked = typeof IgnoreTracked.Type;
+
+export function ignoreTracked(path: string, count: number): IgnoreTracked {
+  return { _tag: "IgnoreTracked", path, count };
+}
 export const ChangesFailure = Schema.TaggedStruct("ChangesFailed", {
   reason: Schema.Literals(["Stale", "Conflict", "Unsupported"]),
   detail: Schema.String.check(Schema.isMaxLength(2048)),

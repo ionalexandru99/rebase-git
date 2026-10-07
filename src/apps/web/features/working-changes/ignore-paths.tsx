@@ -70,7 +70,7 @@ export function IgnoreConfirmation({
 }) {
   const { pending } = ignore;
   if (pending === undefined) return null;
-  const { paths, count } = pending.failure;
+  const { path, count } = pending.failure;
   return (
     <PersistentNotification>
       <Confirmation
@@ -81,7 +81,7 @@ export function IgnoreConfirmation({
         onConfirm={ignore.confirm}
         title={
           count === 1
-            ? `Ignore and untrack ${paths[0]}?`
+            ? `Ignore and untrack ${path}?`
             : `Ignore and untrack ${count} files?`
         }
       />

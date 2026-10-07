@@ -9,6 +9,7 @@ import {
   type CommitChanges,
   changesFailed,
   type IgnorePaths,
+  ignoreTracked,
   type MutateChanges,
   type RepositoryChanges,
   RepositoryChangesApi,
@@ -141,8 +142,7 @@ async function fixture(
     }),
     respond(RepositoryChangesApi.ignore, (command) => {
       ignores.push(command);
-      if (!command.untrack)
-        throw rejected({ _tag: "IgnoreTracked", paths: [path], count: 1 });
+      if (!command.untrack) throw rejected(ignoreTracked(path, 1));
       return { changes: snapshot, diff: null };
     }),
     respond(RepositoryChangesApi.commit, async (command) => {

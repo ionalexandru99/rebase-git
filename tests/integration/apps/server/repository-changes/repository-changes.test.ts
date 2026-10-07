@@ -20,6 +20,7 @@ import {
   type ChangesMutated,
   type ChangesScope,
   type IgnorePaths,
+  ignoreTracked,
   type MutateChanges,
   RepositoryChangesApi,
 } from "#contracts/repository-changes/repository-changes.contract.ts";
@@ -822,14 +823,11 @@ describe("ignoring paths through Git", () => {
     const linked = join(f.directory, "..", "linked");
     await f.git("worktree", "add", "--detach", linked);
     await writeFile(join(linked, "local.log"), "log\n");
-    const service = f.service;
-    const repositoryId = f.scope.repositoryId;
 
     const written = await Effect.runPromise(
-      service.ignore({
-        repositoryId,
+      f.service.ignore({
+        ...f.scope,
         worktreePath: linked,
-        amend: false,
         target: "local",
         paths: ["local.log"],
         untrack: false,
@@ -846,11 +844,9 @@ describe("ignoring paths through Git", () => {
     const f = await fixture();
     await writeFile(join(f.directory, "file.txt"), "local edit\n");
 
-    await expect(f.ignore(["file.txt"])).rejects.toMatchObject({
-      _tag: "IgnoreTracked",
-      paths: ["file.txt"],
-      count: 1,
-    });
+    await expect(f.ignore(["file.txt"])).rejects.toMatchObject(
+      ignoreTracked("file.txt", 1),
+    );
     await expect(access(join(f.directory, ".gitignore"))).rejects.toThrow();
 
     const written = await f.ignore(["file.txt"], "repository", true);

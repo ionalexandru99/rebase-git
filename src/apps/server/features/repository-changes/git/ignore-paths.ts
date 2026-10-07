@@ -5,8 +5,7 @@ import {
   changesFailed,
   type IgnorePaths,
   type IgnoreTarget,
-  type IgnoreTracked,
-  listedTrackedPaths,
+  ignoreTracked,
 } from "#contracts/repository-changes/repository-changes.contract.ts";
 import {
   type GitCommandOptions,
@@ -36,12 +35,9 @@ export function ignorePaths(
       );
     yield* Effect.forEach(paths, (path) => safeChangePath(directory, path));
     const tracked = yield* trackedFiles(git, index, directory, pathspecs);
-    if (tracked.length > 0 && !command.untrack)
-      return yield* Effect.fail<IgnoreTracked>({
-        _tag: "IgnoreTracked",
-        paths: tracked.slice(0, listedTrackedPaths),
-        count: tracked.length,
-      });
+    const [first] = tracked;
+    if (first !== undefined && !command.untrack)
+      return yield* Effect.fail(ignoreTracked(first, tracked.length));
     const file = yield* ruleFile(git, directory, command.target);
     yield* Effect.uninterruptible(
       Effect.gen(function* () {
