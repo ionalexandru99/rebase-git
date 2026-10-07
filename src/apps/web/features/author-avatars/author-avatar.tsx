@@ -67,7 +67,7 @@ export function AuthorAvatar({
   return (
     <span
       aria-hidden="true"
-      className="grid size-[18px] shrink-0 place-items-center overflow-hidden rounded-full bg-accent text-[8px]"
+      className="grid size-5 shrink-0 place-items-center overflow-hidden rounded-full bg-accent text-[11px] font-semibold text-foreground"
     >
       {url === undefined || url === failed ? (
         initials
@@ -75,8 +75,8 @@ export function AuthorAvatar({
         <img
           alt=""
           src={url}
-          width={18}
-          height={18}
+          width={20}
+          height={20}
           loading="lazy"
           decoding="async"
           referrerPolicy="no-referrer"
