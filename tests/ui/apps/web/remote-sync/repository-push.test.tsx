@@ -177,7 +177,7 @@ describe("repository push", () => {
 
     await expect
       .element(page.getByRole("button", { name: "Push spike" }))
-      .toHaveTextContent("Push");
+      .toBeEnabled();
     await expect.element(progress).not.toBeInTheDocument();
     await expect
       .element(page.getByText("The request was cancelled."))
