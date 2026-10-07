@@ -8,7 +8,7 @@ import { SettingsPanel } from "#web/features/settings/settings-panel.tsx";
 import type { SettingsSectionId } from "#web/features/settings/settings-sections.ts";
 
 describe("settings panel", () => {
-  it("shows browser update availability and navigates settings", async () => {
+  it("shows only the version in the browser and navigates settings", async () => {
     const closeSettings = vi.fn();
     await renderSettings(closeSettings);
 
@@ -19,12 +19,13 @@ describe("settings panel", () => {
     await expect
       .element(page.getByRole("heading", { level: 3, name: "Version" }))
       .toBeVisible();
-    await expect
-      .element(page.getByRole("combobox", { name: "Release channel" }))
-      .toBeDisabled();
+    await expect.element(page.getByText("0.0.2-test")).toBeVisible();
     await expect
       .element(page.getByRole("button", { name: "Check for updates" }))
-      .toHaveAccessibleDescription("Updates are managed by the desktop app.");
+      .not.toBeInTheDocument();
+    await expect
+      .element(page.getByRole("combobox", { name: "Release channel" }))
+      .not.toBeInTheDocument();
 
     const search = settings.getByRole("textbox", { name: "Search settings" });
     await search.fill("history");
@@ -59,6 +60,9 @@ describe("settings panel", () => {
     );
 
     await page.getByRole("button", { name: "Check for updates" }).click();
+    expect(
+      page.getByRole("button", { name: "Update now" }).elements(),
+    ).toHaveLength(0);
 
     await expect
       .element(page.getByText("Couldn't check for updates"))
@@ -66,6 +70,22 @@ describe("settings panel", () => {
     expect(
       page.getByText("net::ERR_INTERNET_DISCONNECTED").elements(),
     ).toHaveLength(0);
+  });
+
+  it("offers Update now once an update is ready", async () => {
+    await renderSettings(
+      vi.fn(),
+      desktopUpdates({
+        getSnapshot: async () => ({
+          settings: { checkAutomatically: true, releaseChannel: "stable" },
+          status: { _tag: "Ready", version: "0.0.3" },
+        }),
+      }),
+    );
+
+    await expect
+      .element(page.getByRole("button", { name: "Update now" }))
+      .toHaveAccessibleDescription("Version 0.0.3 is ready to install.");
   });
 
   it("switches between light, dark and the system theme", async () => {

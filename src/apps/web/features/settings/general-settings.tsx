@@ -66,9 +66,8 @@ export function GeneralSettings({
   const errorToast = useErrorToast();
   const themePreference = useThemePreference();
   const [settingsPending, setSettingsPending] = useState(false);
-  const desktopAvailable = desktopUpdates !== undefined;
   const desktopReady =
-    desktopAvailable &&
+    desktopUpdates !== undefined &&
     updateSnapshot !== undefined &&
     updateLoadError === undefined;
   const checking =
@@ -117,96 +116,81 @@ export function GeneralSettings({
           />
         </SettingsRow>
       </SettingsSection>
-      <SettingsSection title="Updates · Desktop app">
+      <SettingsSection title="Rebase">
         <SettingsRow
-          description={updateDescription(
-            snapshot,
-            desktopAvailable,
-            desktopReady,
-            updateLoadError,
-          )}
+          description={
+            desktopUpdates === undefined
+              ? undefined
+              : updateDescription(snapshot, desktopReady, updateLoadError)
+          }
           descriptionId="updates-description"
           liveDescription
           title="Version"
           value={productVersion}
         >
-          <Button
-            aria-describedby="updates-description"
-            disabled={!canCheck}
-            onClick={() => {
-              if (desktopUpdates !== undefined) {
-                void runAction(
-                  () => desktopUpdates.checkForUpdates(),
-                  "checkUpdates",
-                );
-              }
-            }}
-            size="sm"
-            variant="outline"
-          >
-            {checkButtonLabel(snapshot)}
-          </Button>
-          <Button
-            aria-describedby="updates-description"
-            disabled={!canInstall}
-            onClick={() => {
-              if (desktopUpdates !== undefined) {
-                void runAction(
-                  () => desktopUpdates.installUpdate(),
-                  "installUpdate",
-                );
-              }
-            }}
-            size="sm"
-          >
-            Update now
-          </Button>
+          {desktopUpdates === undefined ? undefined : (
+            <>
+              <Button
+                aria-describedby="updates-description"
+                disabled={!canCheck}
+                onClick={() => {
+                  void runAction(
+                    () => desktopUpdates.checkForUpdates(),
+                    "checkUpdates",
+                  );
+                }}
+                size="sm"
+                variant="outline"
+              >
+                {checkButtonLabel(snapshot)}
+              </Button>
+              {snapshot.status._tag === "Ready" ? (
+                <Button
+                  aria-describedby="updates-description"
+                  disabled={!canInstall}
+                  onClick={() => {
+                    void runAction(
+                      () => desktopUpdates.installUpdate(),
+                      "installUpdate",
+                    );
+                  }}
+                  size="sm"
+                >
+                  Update now
+                </Button>
+              ) : null}
+            </>
+          )}
         </SettingsRow>
-        <SettingsRow
-          description={
-            desktopReady ? "Stable follows full releases." : undefined
-          }
-          descriptionId="release-channel-description"
-          title="Release channel"
-        >
-          <SettingsSelect
-            describedBy="release-channel-description"
-            disabled={!desktopReady || settingsPending || channelLocked}
-            label="Release channel"
-            onValueChange={(value) => {
-              if (desktopUpdates !== undefined) {
-                void changeSetting(() =>
-                  desktopUpdates.selectReleaseChannel(value),
-                );
-              }
-            }}
-            options={releaseChannels}
-            value={snapshot.settings.releaseChannel}
-          />
-        </SettingsRow>
-        <SettingsRow
-          description={
-            desktopReady
-              ? "Check the selected channel when Rebase starts."
-              : undefined
-          }
-          descriptionId="automatic-update-description"
-          title="Check automatically"
-        >
-          <Switch
-            aria-describedby="automatic-update-description"
-            aria-label="Check automatically"
-            checked={snapshot.settings.checkAutomatically}
-            disabled={!desktopReady || settingsPending}
-            onCheckedChange={(checked) => {
-              if (desktopUpdates !== undefined) {
-                void changeSetting(() =>
-                  desktopUpdates.setCheckAutomatically(checked),
-                );
-              }
-            }}
-          />
-        </SettingsRow>
+        {desktopUpdates === undefined ? null : (
+          <>
+            <SettingsRow title="Release channel">
+              <SettingsSelect
+                disabled={!desktopReady || settingsPending || channelLocked}
+                label="Release channel"
+                onValueChange={(value) => {
+                  void changeSetting(() =>
+                    desktopUpdates.selectReleaseChannel(value),
+                  );
+                }}
+                options={releaseChannels}
+                value={snapshot.settings.releaseChannel}
+              />
+            </SettingsRow>
+            <SettingsRow title="Check automatically">
+              <Switch
+                aria-label="Check automatically"
+                checked={snapshot.settings.checkAutomatically}
+                disabled={!desktopReady || settingsPending}
+                onCheckedChange={(checked) => {
+                  void changeSetting(() =>
+                    desktopUpdates.setCheckAutomatically(checked),
+                  );
+                }}
+              />
+            </SettingsRow>
+          </>
+        )}
       </SettingsSection>
     </SettingsPage>
   );
@@ -229,11 +213,9 @@ function checkButtonLabel(snapshot: DesktopUpdateSnapshot) {
 
 function updateDescription(
   snapshot: DesktopUpdateSnapshot,
-  desktopAvailable: boolean,
   desktopReady: boolean,
   loadError: string | undefined,
 ) {
-  if (!desktopAvailable) return "Updates are managed by the desktop app.";
   if (loadError !== undefined) return loadError;
   if (!desktopReady) return "";
 
