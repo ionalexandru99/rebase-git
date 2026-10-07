@@ -187,7 +187,7 @@ async function openDiffs() {
     .getByRole("button", { name: "Diffs Review and commit working changes" })
     .click();
   await expect
-    .element(page.getByRole("button", { name: "Stage entire file" }))
+    .element(page.getByRole("button", { name: "Stage first.bin", exact: true }))
     .toBeEnabled();
 }
 
@@ -200,9 +200,9 @@ it("retains actual working-change selection, filter, draft and amend state acros
   await page
     .getByRole("textbox", { name: "Filter changed files" })
     .fill("second");
-  await page.getByRole("checkbox", { name: "Amend", exact: true }).click();
+  await page.getByRole("checkbox", { name: "Amend last commit" }).click();
   await expect
-    .element(page.getByRole("checkbox", { name: "Amend", exact: true }))
+    .element(page.getByRole("checkbox", { name: "Amend last commit" }))
     .toBeChecked();
   await page
     .getByRole("textbox", { name: "Commit subject" })
@@ -221,17 +221,16 @@ it("retains actual working-change selection, filter, draft and amend state acros
     .element(page.getByRole("textbox", { name: "Filter changed files" }))
     .toHaveValue("second");
   await expect
-    .element(page.getByRole("checkbox", { name: "Amend", exact: true }))
+    .element(page.getByRole("checkbox", { name: "Amend last commit" }))
     .toBeChecked();
   await expect
     .element(page.getByRole("textbox", { name: "Commit subject" }))
     .toHaveValue("Retain my amendment");
   await expect
-    .element(page.getByRole("button", { name: "Previous file", exact: true }))
-    .toBeEnabled();
-  await expect
-    .element(page.getByRole("button", { name: "Next file", exact: true }))
-    .toBeDisabled();
+    .element(
+      page.getByRole("button", { name: "Unstaged second.bin", exact: true }),
+    )
+    .toHaveAttribute("aria-pressed", "true");
 });
 
 it("retains an inspected commit and file while another tab and another project are active", async () => {
@@ -299,8 +298,10 @@ it("keeps linked-worktree catalog projects independent when their other owner cl
   await page.getByRole("button", { name: "Show side panel" }).click();
   await expect.poll(() => f.reads.at(-1)).toBe(f.projectB);
   await expect
-    .element(page.getByRole("button", { name: "Previous file", exact: true }))
-    .toBeEnabled();
+    .element(
+      page.getByRole("button", { name: "Unstaged second.bin", exact: true }),
+    )
+    .toHaveAttribute("aria-pressed", "true");
 });
 
 it("pauses retained sessions while a different environment is current", async () => {

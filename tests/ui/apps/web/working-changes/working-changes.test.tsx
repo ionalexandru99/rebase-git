@@ -159,7 +159,7 @@ async function fixture(
   );
   if (!rejectDiffs)
     await expect
-      .element(page.getByRole("button", { name: "Stage entire file" }))
+      .element(page.getByRole("button", { name: `Stage ${path}`, exact: true }))
       .toBeEnabled();
   return {
     view,
@@ -320,7 +320,7 @@ describe("working changes", () => {
   it("restores the normal draft and reloads the amend message when HEAD changes", async () => {
     const f = await fixture();
     const subject = page.getByRole("textbox", { name: "Commit subject" });
-    const amend = page.getByRole("checkbox", { name: "Amend", exact: true });
+    const amend = page.getByRole("checkbox", { name: "Amend last commit" });
     await subject.fill("New commit draft");
     await amend.click();
     await expect.element(subject).toHaveValue("Old commit message");
@@ -427,7 +427,9 @@ describe("working changes", () => {
   });
   it("stages a file and retains the unstaged file empty state", async () => {
     const f = await fixture();
-    await page.getByRole("button", { name: "Stage entire file" }).click();
+    await page
+      .getByRole("button", { name: `Stage ${path}`, exact: true })
+      .click();
     await expect.poll(() => f.mutations.length).toBe(1);
     expect(f.mutations[0]?.selection).toMatchObject({
       _tag: "Files",
@@ -469,20 +471,14 @@ describe("working changes", () => {
       afterWrite: textDiff("one-hunk", oneHunk, firstHunk),
     });
     const next = page.getByRole("button", { name: "Next hunk" });
-    await expect
-      .element(page.getByText("2 hunks", { exact: true }))
-      .toBeVisible();
+    await expect.element(page.getByText("–/2", { exact: true })).toBeVisible();
     await next.click();
-    await expect
-      .element(page.getByText("Hunk 1/2", { exact: true }))
-      .toBeVisible();
+    await expect.element(page.getByText("1/2", { exact: true })).toBeVisible();
     await expect
       .element(page.getByText("2 lines selected", { exact: true }))
       .toBeVisible();
     await next.click();
-    await expect
-      .element(page.getByText("Hunk 2/2", { exact: true }))
-      .toBeVisible();
+    await expect.element(page.getByText("2/2", { exact: true })).toBeVisible();
     await expect.element(next).toBeDisabled();
     await page
       .getByRole("button", { name: "Discard hunk", exact: true })
@@ -498,9 +494,7 @@ describe("working changes", () => {
         lines: ["-11", "+11"],
       },
     });
-    await expect
-      .element(page.getByText("Hunk 1/1", { exact: true }))
-      .toBeVisible();
+    await expect.element(page.getByText("1/1", { exact: true })).toBeVisible();
     await expect
       .element(page.getByRole("button", { name: "Stage hunk", exact: true }))
       .toBeEnabled();
@@ -589,11 +583,13 @@ describe("working changes", () => {
     const f = await fixture();
     f.rejectMutationsAsStale();
     const reads = f.reads();
-    await page.getByRole("button", { name: "Stage entire file" }).click();
+    await page
+      .getByRole("button", { name: `Stage ${path}`, exact: true })
+      .click();
     await expect.element(page.getByText("The changes moved on.")).toBeVisible();
     expect(f.reads()).toBeGreaterThan(reads);
     await expect
-      .element(page.getByRole("button", { name: "Stage entire file" }))
+      .element(page.getByRole("button", { name: `Stage ${path}`, exact: true }))
       .toBeEnabled();
   });
   it("shows the viewed diff returned by a write without reading it again", async () => {
@@ -604,7 +600,7 @@ describe("working changes", () => {
       .click();
     await expect.poll(() => f.mutations.length).toBe(1);
     await expect
-      .element(page.getByRole("button", { name: "Stage entire file" }))
+      .element(page.getByRole("button", { name: `Stage ${path}`, exact: true }))
       .toBeEnabled();
     expect(f.mutations[0]?.viewed).toEqual({ section: "unstaged", path });
     expect(f.diffReads()).toBe(diffReads);
@@ -617,7 +613,9 @@ describe("working changes", () => {
         .click();
       await expect.poll(() => f.mutations.length).toBe(write);
       await expect
-        .element(page.getByRole("button", { name: "Stage entire file" }))
+        .element(
+          page.getByRole("button", { name: `Stage ${path}`, exact: true }),
+        )
         .toBeEnabled();
     }
     const cachedDiffs = f.queryClient.getQueryCache().findAll({
@@ -635,9 +633,9 @@ describe("working changes", () => {
     f.acceptDiffs();
     await page.getByRole("button", { name: "Refresh", exact: true }).click();
     await expect
-      .element(page.getByRole("button", { name: "Stage entire file" }))
+      .element(page.getByRole("button", { name: `Stage ${path}`, exact: true }))
       .toBeEnabled();
-    expect(f.diffReads()).toBeGreaterThan(diffReads);
+    await expect.poll(f.diffReads).toBeGreaterThan(diffReads);
     await expect.element(page.getByRole("alert")).not.toBeInTheDocument();
   });
   it("amends without reporting its own HEAD move as an outside change", async () => {
@@ -645,7 +643,7 @@ describe("working changes", () => {
       staged: [changedFile("src/other.ts")],
     });
     const subject = page.getByRole("textbox", { name: "Commit subject" });
-    await page.getByRole("checkbox", { name: "Amend", exact: true }).click();
+    await page.getByRole("checkbox", { name: "Amend last commit" }).click();
     await expect.element(subject).toHaveValue("Old commit message");
     const release = f.holdWrites();
     await page
@@ -658,14 +656,14 @@ describe("working changes", () => {
     await expect.poll(() => f.queryClient.isFetching()).toBe(0);
     release();
     await expect
-      .element(page.getByRole("checkbox", { name: "Amend", exact: true }))
+      .element(page.getByRole("checkbox", { name: "Amend last commit" }))
       .not.toBeChecked();
     await expect.element(page.getByRole("alert")).not.toBeInTheDocument();
   });
   it("lets Amend be turned off after the amend read fails", async () => {
     const f = await fixture();
     f.rejectAmendReads();
-    const amend = page.getByRole("checkbox", { name: "Amend", exact: true });
+    const amend = page.getByRole("checkbox", { name: "Amend last commit" });
     await amend.click();
     await expect
       .element(page.getByRole("alert"))
@@ -675,7 +673,7 @@ describe("working changes", () => {
     await expect.element(amend).not.toBeChecked();
     await expect.element(page.getByRole("alert")).not.toBeInTheDocument();
     await expect
-      .element(page.getByRole("button", { name: "Stage entire file" }))
+      .element(page.getByRole("button", { name: `Stage ${path}`, exact: true }))
       .toBeEnabled();
   });
   it("locks every write while one is running", async () => {
@@ -686,7 +684,10 @@ describe("working changes", () => {
       .getByRole("textbox", { name: "Commit subject" })
       .fill("Ready to commit");
     const release = f.holdWrites();
-    const stage = page.getByRole("button", { name: "Stage entire file" });
+    const stage = page.getByRole("button", {
+      name: `Stage ${path}`,
+      exact: true,
+    });
     await stage.click();
     await expect.element(stage).toBeDisabled();
     await expect

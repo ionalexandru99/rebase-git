@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { describe, expect, it, vi } from "vite-plus/test";
-import { userEvent } from "vite-plus/test/browser";
+import { page, userEvent } from "vite-plus/test/browser";
 import {
   CommitInspectionApi,
   type CommitInspection as Details,
@@ -237,19 +237,24 @@ describe("commit inspection", () => {
         .querySelector("diffs-container")?.shadowRoot?.textContent;
     await expect.poll(content).toContain("new");
     await expect.poll(content).not.toContain("retained heading");
-    const unchanged = screen.getByRole("button", {
+    const viewOptions = screen.getByRole("button", { name: "View options" });
+    const unchanged = page.getByRole("menuitemcheckbox", {
       name: "Show unchanged lines",
     });
+    await viewOptions.click();
     await unchanged.click();
-    await expect.element(unchanged).toHaveAttribute("aria-pressed", "true");
+    await expect.element(unchanged).toHaveAttribute("aria-checked", "true");
     await expect.poll(content).toContain("retained heading");
     await unchanged.click();
     await expect.poll(content).not.toContain("retained heading");
+    await userEvent.keyboard("{Escape}");
     await screen.getByRole("button", { name: /second.bin/ }).click();
     await expect.poll(content).toContain("added content");
+    await viewOptions.click();
     await expect
-      .element(screen.getByRole("button", { name: "Show unchanged lines" }))
-      .not.toBeInTheDocument();
+      .element(page.getByRole("menuitemcheckbox", { name: "Word wrap" }))
+      .toBeVisible();
+    await expect.element(unchanged).not.toBeInTheDocument();
   });
 
   it("opens from a double click, follows selection, and closes with focus restored", async () => {

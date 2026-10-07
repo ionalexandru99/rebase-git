@@ -62,6 +62,28 @@ function DropdownMenuItem({ className, ...props }: Menu.Item.Props) {
   );
 }
 
+function DropdownMenuCheckboxItem({
+  children,
+  className,
+  ...props
+}: Menu.CheckboxItem.Props) {
+  return (
+    <Menu.CheckboxItem
+      className={cn(
+        "flex h-8 cursor-default items-center gap-2 rounded-control px-2 text-xs text-foreground/80 outline-none select-none data-disabled:pointer-events-none data-disabled:opacity-40 data-highlighted:bg-accent data-highlighted:text-foreground [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0",
+        className,
+      )}
+      data-slot="dropdown-menu-checkbox-item"
+      {...props}
+    >
+      {children}
+      <Menu.CheckboxItemIndicator className="ml-auto">
+        <IconCheck aria-hidden="true" className="size-3.5 text-foreground" />
+      </Menu.CheckboxItemIndicator>
+    </Menu.CheckboxItem>
+  );
+}
+
 function DropdownMenuRadioGroup(props: Menu.RadioGroup.Props) {
   return <Menu.RadioGroup data-slot="dropdown-menu-radio-group" {...props} />;
 }
@@ -104,6 +126,7 @@ function DropdownMenuSeparator({
 
 export {
   DropdownMenu,
+  DropdownMenuCheckboxItem,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuRadioGroup,

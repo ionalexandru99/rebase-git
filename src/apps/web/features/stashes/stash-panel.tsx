@@ -5,10 +5,7 @@ import {
   RepositoryStashesApi,
   type StashContents,
 } from "#contracts/repository-stashes/repository-stashes.contract.ts";
-import {
-  CommitFiles,
-  fileSteps,
-} from "#web/features/commit-inspection/components/commit-files.tsx";
+import { CommitFiles } from "#web/features/commit-inspection/components/commit-files.tsx";
 import { DiffWorkerPool } from "#web/features/file-diff/components/diff-worker-pool.tsx";
 import { useDiffPreferences } from "#web/features/file-diff/hooks/use-diff-preferences.ts";
 import { useFileHistoryAction } from "#web/features/file-history/file-history.ts";
@@ -133,7 +130,6 @@ function StashFiles({
       >
         <CommitDiff
           file={contents.files.find((file) => file.path === selected)}
-          steps={fileSteps(contents.files, selected, setSelected)}
           diff={{
             value: diff.data,
             loading: diff.isLoading,

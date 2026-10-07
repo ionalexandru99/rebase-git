@@ -129,9 +129,6 @@ function FileHistory({
     setSelectedOid(next.oid);
     onSelectCommit?.(next.oid);
   };
-  const index = entry === undefined ? -1 : entries.indexOf(entry);
-  const newer = entries[index - 1];
-  const older = entries[index + 1];
   const complete = history.data?.complete ?? true;
   const loadMore = () => {
     if (!complete && !history.isFetching)
@@ -228,10 +225,6 @@ function FileHistory({
               <CommitDiff
                 key={entry.oid}
                 file={commitFile(entry)}
-                steps={{
-                  previous: newer ? () => select(newer) : undefined,
-                  next: older ? () => select(older) : undefined,
-                }}
                 diff={{
                   value: diff.data,
                   loading: diff.isLoading,

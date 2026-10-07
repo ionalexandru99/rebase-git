@@ -1,3 +1,4 @@
+import { IconCheck } from "@tabler/icons-react";
 import { Button } from "#web/components/ui/button.tsx";
 import { Input } from "#web/components/ui/input.tsx";
 import { useWorktreeOperation } from "#web/features/operation-recovery/hooks/use-operation-status.ts";
@@ -52,7 +53,7 @@ export function CommitEditor({
       <textarea
         aria-label="Commit description"
         placeholder="Description"
-        className="min-h-16 w-full flex-1 resize-none rounded-control border border-input bg-input/20 p-2 text-control text-foreground outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30"
+        className="min-h-12 w-full flex-1 resize-none rounded-control border border-input bg-input/20 px-[calc(--spacing(3)-1px)] py-1.5 text-control text-foreground outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30 dark:bg-input/30"
         value={draft.description}
         disabled={loading || busy}
         maxLength={28000}
@@ -60,11 +61,11 @@ export function CommitEditor({
           view.editDraft({ ...draft, description: event.target.value })
         }
       />
-      <div className="mt-auto flex flex-wrap items-center justify-between gap-2">
-        <label className="flex items-center gap-2 text-meta">
+      <label className="flex items-center gap-2 py-1 text-control text-muted-foreground has-disabled:opacity-50">
+        <span className="relative grid size-4 shrink-0 place-items-center">
           <input
             type="checkbox"
-            className="accent-primary"
+            className="peer size-4 appearance-none rounded-control border border-input bg-input/20 outline-none checked:border-primary checked:bg-primary focus-visible:ring-2 focus-visible:ring-ring/30 dark:bg-input/30 dark:checked:bg-primary"
             checked={amend}
             disabled={
               amend
@@ -73,25 +74,30 @@ export function CommitEditor({
             }
             onChange={(event) => view.toggleAmend(event.target.checked)}
           />
-          Amend
-        </label>
-        <Button
-          size="sm"
-          disabled={
-            disabled ||
-            blocked ||
-            !draft.subject.trim() ||
-            (!amend && count === 0)
-          }
-          onClick={view.commit}
-        >
-          {busy
-            ? "Working…"
-            : amend
-              ? "Amend commit"
-              : `Commit ${count} ${count === 1 ? "file" : "files"}`}
-        </Button>
-      </div>
+          <IconCheck
+            aria-hidden="true"
+            className="pointer-events-none absolute size-3 text-primary-foreground opacity-0 peer-checked:opacity-100"
+            stroke={3}
+          />
+        </span>
+        Amend last commit
+      </label>
+      <Button
+        className="w-full shrink-0 disabled:bg-muted disabled:text-muted-foreground disabled:opacity-100"
+        disabled={
+          disabled ||
+          blocked ||
+          !draft.subject.trim() ||
+          (!amend && count === 0)
+        }
+        onClick={view.commit}
+      >
+        {busy
+          ? "Working…"
+          : amend
+            ? "Amend commit"
+            : `Commit ${count} ${count === 1 ? "file" : "files"}`}
+      </Button>
     </section>
   );
 }

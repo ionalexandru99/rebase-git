@@ -42,8 +42,6 @@ export default function ChangeDiffViewer({
   const files = changes?.[section] ?? [];
   const index = files.findIndex((file) => file.path === selection?.path);
   const file = files[index];
-  const previous = files[index - 1];
-  const next = files[index + 1];
   const previousPath = file?.previousPath ?? null;
   const { metadata, hasHiddenContext } = createChangeDiffModel(
     diff,
@@ -118,18 +116,10 @@ export default function ChangeDiffViewer({
         onExpand={!empty && hasHiddenContext ? setExpandContext : undefined}
         preferences={view.preferences}
         onPreferences={view.choosePreferences}
-        previous={
-          previous
-            ? () => view.select({ section, path: previous.path })
-            : undefined
-        }
-        next={
-          next ? () => view.select({ section, path: next.path }) : undefined
-        }
         region={region}
       >
         {hunks.length > 0 && !empty ? (
-          <fieldset aria-label="Hunks" className="mr-1 flex items-center">
+          <fieldset aria-label="Hunks" className="flex items-center">
             <Button
               size="icon-xs"
               variant="ghost"
@@ -141,10 +131,15 @@ export default function ChangeDiffViewer({
             >
               <IconChevronUp />
             </Button>
-            <span className="px-1 text-meta tabular-nums text-muted-foreground">
-              {current === null
-                ? `${hunks.length} ${hunks.length === 1 ? "hunk" : "hunks"}`
-                : `Hunk ${current + 1}/${hunks.length}`}
+            <span className="min-w-[4ch] px-0.5 text-center text-meta tabular-nums whitespace-nowrap text-muted-foreground">
+              <span aria-hidden="true">
+                {`${current === null ? "–" : current + 1}/${hunks.length}`}
+              </span>
+              <span className="sr-only">
+                {current === null
+                  ? `${hunks.length} ${hunks.length === 1 ? "hunk" : "hunks"}`
+                  : `Hunk ${current + 1} of ${hunks.length}`}
+              </span>
             </span>
             <Button
               size="icon-xs"
@@ -156,19 +151,6 @@ export default function ChangeDiffViewer({
               <IconChevronDown />
             </Button>
           </fieldset>
-        ) : null}
-        {diff && !empty ? (
-          <Button
-            size="xs"
-            variant="ghost"
-            disabled={disabled}
-            aria-label={`${label} entire file`}
-            onClick={() =>
-              act(action, section, { _tag: "Files", paths: [diff.path] })
-            }
-          >
-            {label} file
-          </Button>
         ) : null}
       </DiffDisplayControls>
       {lines.length > 0 ? (
