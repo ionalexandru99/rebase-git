@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vite-plus/test";
+import { userEvent } from "vite-plus/test/browser";
 import {
   type ReadChangeDiff,
   RepositoryChangesApi,
@@ -118,6 +119,17 @@ describe("worktree files", () => {
       .element(screen.getByText("export const line1 = 1;"))
       .toBeInTheDocument();
     expect(read).toHaveBeenLastCalledWith("src/app.ts");
+  });
+
+  it("expands a folder with the keyboard and loads its children", async () => {
+    const { listed, row } = await fixture();
+
+    await expect.element(row("src/")).toBeInTheDocument();
+    (row("src/").element() as HTMLElement).focus();
+    await userEvent.keyboard("{ArrowRight}");
+
+    await expect.element(row("src/new.ts")).toBeInTheDocument();
+    expect(listed.mock.calls.map(([folder]) => folder)).toEqual(["", "src"]);
   });
 
   it("opens a text match at its line and shows a changed file's diff from the menu", async () => {

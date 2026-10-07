@@ -265,7 +265,7 @@ function SourceFile({
         0,
         filePadding + (target - 1) * lineHeight - root.clientHeight / 3,
       );
-      if (root.scrollHeight - root.clientHeight < top) return;
+      if (root.scrollHeight < filePadding + target * lineHeight) return;
       virtualizer.scrollTo({ top });
       pending.current = undefined;
     };

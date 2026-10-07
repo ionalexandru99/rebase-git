@@ -72,7 +72,7 @@ export function useWorkingChangesView({
   const [selection, select] = useChangeSelection(
     shown.changes,
     shown.conflicted,
-    requested,
+    changes === undefined ? undefined : requested,
   );
   const diff = useChangeDiff(scope, viewedChange(selection), changes, active);
   const conflicts = useConflicts(
