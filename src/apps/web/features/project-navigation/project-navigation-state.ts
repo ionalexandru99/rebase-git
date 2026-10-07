@@ -40,16 +40,6 @@ export function setEnvironmentAvailability(
   }));
 }
 
-export function toggleEnvironment(
-  state: ProjectNavigationState,
-  environmentId: string,
-): ProjectNavigationState {
-  return updateEnvironment(state, environmentId, (environment) => ({
-    ...environment,
-    expanded: !environment.expanded,
-  }));
-}
-
 export function setProjectSidebarCollapsed(
   state: ProjectNavigationState,
   sidebarCollapsed: boolean,

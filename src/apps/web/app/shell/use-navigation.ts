@@ -10,7 +10,6 @@ import {
   setEnvironmentAvailability,
   setProjectSidebarCollapsed,
   showOpenProject,
-  toggleEnvironment,
 } from "#web/features/project-navigation/project-navigation-state.ts";
 import type { SettingsSectionId } from "#web/features/settings/settings-sections.ts";
 import type { EnvironmentStatus } from "#web/platform/query/environment-context.tsx";
@@ -35,7 +34,6 @@ export type NavigationAction =
       readonly repositoryId: string;
       readonly worktreePath: string;
     }
-  | { readonly type: "toggle-environment"; readonly environmentId: string }
   | { readonly type: "collapse-sidebar"; readonly collapsed: boolean }
   | {
       readonly type: "show-settings";
@@ -105,11 +103,6 @@ export function reduceNavigation(
           action.worktreePath,
         ),
       };
-    case "toggle-environment":
-      return {
-        ...navigation,
-        projects: toggleEnvironment(navigation.projects, action.environmentId),
-      };
     case "collapse-sidebar":
       return navigation.projects.sidebarCollapsed === action.collapsed
         ? navigation
@@ -162,9 +155,7 @@ export function initialNavigation(): Navigation {
       environments: [
         {
           availability: "connecting",
-          expanded: true,
           id: localEnvironment.id,
-          name: localEnvironment.name,
           repositories: [],
         },
       ],

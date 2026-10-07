@@ -68,14 +68,14 @@ export function BranchesSidebarFilter({
   const scopeLabel =
     scopeOptions.find((option) => option.value === scope)?.label ?? "All";
   return (
-    <div className="relative mx-3 mt-3 mb-2">
+    <div className="relative min-w-0 flex-1">
       <IconSearch
         aria-hidden="true"
         className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground"
       />
       <Input
         aria-label="Filter branches"
-        className={`pl-9 ${query === "" ? "pr-20" : "pr-26"}`}
+        className={`pl-8 ${query === "" ? "pr-12" : "pr-20"}`}
         onChange={(event) => onQueryChange(event.target.value)}
         onKeyDown={onKeyDown}
         placeholder="Filter branches"

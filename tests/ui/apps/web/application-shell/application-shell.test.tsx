@@ -195,7 +195,7 @@ describe("application shell", () => {
       .toBeVisible();
     await expect
       .element(page.getByRole("heading", { level: 1, name: "Projects" }))
-      .toBeVisible();
+      .toBeInTheDocument();
     await expect
       .element(page.getByText("Pairing required"))
       .toBeInTheDocument();

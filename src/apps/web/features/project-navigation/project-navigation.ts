@@ -9,9 +9,7 @@ export interface ProjectNavigationRepository {
 
 export interface ProjectNavigationEnvironment {
   readonly availability: EnvironmentAvailability;
-  readonly expanded: boolean;
   readonly id: string;
-  readonly name: string;
   readonly repositories: readonly ProjectNavigationRepository[];
 }
 
