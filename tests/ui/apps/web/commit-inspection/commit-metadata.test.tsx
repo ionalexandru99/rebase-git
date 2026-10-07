@@ -43,22 +43,26 @@ describe("commit metadata", () => {
       .toHaveTextContent(`Copied ${details.oid}`);
   });
 
-  it("expands a long message, collapses it, and resets for another commit", async () => {
+  it("shows the first paragraph until expanded, collapses it, and resets for another commit", async () => {
     const info = { ...details, message: `Refresh history\n\n${body}` };
     const screen = await render(
       <div style={{ width: 400 }}>
         <CommitMetadata key={info.oid} details={info} />
       </div>,
     );
-    const more = screen.getByRole("button", { name: "Show more", exact: true });
+    const more = screen.getByRole("button", { name: "More", exact: true });
     await expect.element(more).toHaveAttribute("aria-expanded", "false");
-    const message = screen.getByText(body, { exact: true }).element();
-    expect(message.clientHeight).toBeLessThan(message.scrollHeight);
+    await expect
+      .element(screen.getByText("First paragraph.", { exact: true }))
+      .toBeVisible();
+    await expect
+      .element(screen.getByText("Second paragraph", { exact: false }))
+      .not.toBeInTheDocument();
     await more.click();
     await expect
-      .element(screen.getByRole("button", { name: "Show less", exact: true }))
+      .element(screen.getByRole("button", { name: "Less", exact: true }))
       .toHaveAttribute("aria-expanded", "true");
-    expect(message.clientHeight).toBe(message.scrollHeight);
+    await expect.element(screen.getByText(body, { exact: true })).toBeVisible();
     await userEvent.keyboard("{Enter}");
     await expect.element(more).toHaveAttribute("aria-expanded", "false");
     await more.click();
@@ -68,11 +72,11 @@ describe("commit metadata", () => {
       </div>,
     );
     await expect
-      .element(screen.getByRole("button", { name: "Show more", exact: true }))
+      .element(screen.getByRole("button", { name: "More", exact: true }))
       .toHaveAttribute("aria-expanded", "false");
   });
 
-  it("offers expansion only when the message exceeds two lines at the current width", async () => {
+  it("offers expansion only when the title or message is clipped at the current width", async () => {
     const info = {
       ...details,
       message:
@@ -89,7 +93,7 @@ describe("commit metadata", () => {
       )
       .toBeVisible();
     await expect
-      .element(screen.getByRole("button", { name: "Show more", exact: true }))
+      .element(screen.getByRole("button", { name: "More", exact: true }))
       .not.toBeInTheDocument();
     await screen.rerender(
       <div style={{ width: 210 }}>
@@ -97,7 +101,7 @@ describe("commit metadata", () => {
       </div>,
     );
     await expect
-      .element(screen.getByRole("button", { name: "Show more", exact: true }))
+      .element(screen.getByRole("button", { name: "More", exact: true }))
       .toBeVisible();
     await screen.rerender(
       <div style={{ width: 800 }}>
@@ -105,7 +109,75 @@ describe("commit metadata", () => {
       </div>,
     );
     await expect
-      .element(screen.getByRole("button", { name: "Show more", exact: true }))
+      .element(screen.getByRole("button", { name: "More", exact: true }))
       .not.toBeInTheDocument();
+  });
+
+  it("joins hard-wrapped lines and keeps Markdown blocks on their own lines", async () => {
+    const screen = await render(
+      <div style={{ width: 400 }}>
+        <CommitMetadata
+          details={{
+            ...details,
+            message: [
+              "Refresh history",
+              "",
+              "The cache went stale",
+              "after a fetch reported in",
+              "#123.",
+              "",
+              "    at refresh (cache.ts:1)",
+              "    at fetch (fetch.ts:2)",
+              "",
+              "## Changes",
+              "- Refresh on fetch",
+              "- Keep the",
+              "selection",
+              "| Before | After |",
+              "Table note",
+              "```",
+              "first",
+              "",
+              "second",
+              "third",
+              "```",
+              "",
+              "Fixes: #123",
+              "Co-authored-by: Jamie <jamie@example.test>",
+            ].join("\n"),
+          }}
+        />
+      </div>,
+    );
+    await screen.getByRole("button", { name: "More", exact: true }).click();
+    await expect
+      .poll(
+        () =>
+          screen.getByText("The cache went stale", { exact: false }).element()
+            .textContent,
+      )
+      .toBe(
+        [
+          "The cache went stale after a fetch reported in #123.",
+          "",
+          "    at refresh (cache.ts:1)",
+          "    at fetch (fetch.ts:2)",
+          "",
+          "## Changes",
+          "- Refresh on fetch",
+          "- Keep the selection",
+          "| Before | After |",
+          "Table note",
+          "```",
+          "first",
+          "",
+          "second",
+          "third",
+          "```",
+          "",
+          "Fixes: #123",
+          "Co-authored-by: Jamie <jamie@example.test>",
+        ].join("\n"),
+      );
   });
 });
