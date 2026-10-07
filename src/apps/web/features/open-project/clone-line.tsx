@@ -124,7 +124,7 @@ export function CloneLine({
         <Input
           aria-invalid={failure !== undefined}
           autoFocus
-          className="h-8 min-w-0 flex-1 bg-white/[.03] font-mono text-control sm:h-8"
+          className="h-8 min-w-0 flex-1 font-mono text-control sm:h-8"
           id={cloneDestinationId(source.key)}
           onChange={(event) => setPath(event.target.value)}
           onKeyDown={(event) => {

@@ -49,7 +49,7 @@ export function OpenProjectToolbar({
             aria-label="Search repositories"
             autoComplete="off"
             autoFocus
-            className="h-8 bg-white/[.04] pl-9 sm:h-8"
+            className="h-8 pl-9 sm:h-8"
             onChange={(event) => onChange(event.target.value)}
             onKeyDown={onKeyDown}
             placeholder="Search, or paste a Git URL"

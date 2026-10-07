@@ -65,7 +65,7 @@ export function CommitEditor({
         <span className="relative grid size-4 shrink-0 place-items-center">
           <input
             type="checkbox"
-            className="peer size-4 appearance-none rounded-control border border-input bg-field outline-none checked:border-primary checked:bg-primary focus-visible:ring-2 focus-visible:ring-ring/30 dark:checked:bg-primary"
+            className="peer size-4 appearance-none rounded-control border border-input bg-field outline-none checked:border-primary checked:bg-primary focus-visible:ring-2 focus-visible:ring-ring/30"
             checked={amend}
             disabled={
               amend

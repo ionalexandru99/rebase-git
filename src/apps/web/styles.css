@@ -48,15 +48,11 @@
   --sidebar-ring: #2a54bf;
   --selected: #cedaf2;
   --success: #065f46;
-  --success-surface: #d1fae5;
   --destructive: #a61b1b;
-  --destructive-surface: #fee2e2;
   --warning: #903e0b;
   --warning-surface: #fef3c7;
   --info: #075985;
-  --info-surface: #e0f2fe;
   --special: #6b25d7;
-  --special-surface: #ede9fe;
   --lane-0: #2563eb;
   --lane-1: #15803d;
   --lane-2: #7c3aed;
@@ -104,15 +100,11 @@
   --sidebar-ring: #7c8cff;
   --selected: #222538;
   --success: #34d399;
-  --success-surface: #1c2b28;
   --destructive: #ef7a78;
-  --destructive-surface: #2f2023;
   --warning: #fcd34d;
   --warning-surface: #302b22;
   --info: #38bdf8;
-  --info-surface: #1b2833;
   --special: #c4b5fd;
-  --special-surface: #292734;
   --lane-0: #4c9aff;
   --lane-1: #22c55e;
   --lane-2: #b38aff;
@@ -185,17 +177,11 @@
   --color-sidebar-ring: var(--sidebar-ring);
   --color-field: var(--field);
   --color-hover: var(--hover);
-  --color-cursor: var(--cursor);
-  --color-selected: var(--selected);
   --color-success: var(--success);
-  --color-success-surface: var(--success-surface);
-  --color-destructive-surface: var(--destructive-surface);
   --color-warning: var(--warning);
   --color-warning-surface: var(--warning-surface);
   --color-info: var(--info);
-  --color-info-surface: var(--info-surface);
   --color-special: var(--special);
-  --color-special-surface: var(--special-surface);
 }
 
 @utility elevation-menu {
@@ -205,6 +191,7 @@
   color: var(--popover-foreground);
   box-shadow: var(--elevation-menu);
   --accent: var(--popover-accent);
+  --border: var(--popover-accent);
 }
 
 @utility elevation-dialog {
@@ -213,6 +200,7 @@
   background-color: var(--dialog);
   color: var(--popover-foreground);
   box-shadow: var(--elevation-dialog);
+  --border: var(--popover-accent);
 }
 
 @utility cap-centered {
