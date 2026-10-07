@@ -210,6 +210,11 @@ describe("conflicts in the Diffs tab", () => {
     await expect
       .element(page.getByRole("button", { name: "Collapse staged" }))
       .toHaveTextContent("Staged (0)");
+    await expect
+      .element(
+        page.getByRole("button", { name: "Commit 0 files", exact: true }),
+      )
+      .toBeDisabled();
 
     await page
       .getByRole("button", { name: "Collapse unstaged" })

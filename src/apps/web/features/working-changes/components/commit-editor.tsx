@@ -15,6 +15,7 @@ type CommitEditorView = Pick<
   | "busy"
   | "loading"
   | "commit"
+  | "conflicts"
 >;
 
 export function CommitEditor({
@@ -34,7 +35,13 @@ export function CommitEditor({
       recovery.busy ||
       (operation?.kind !== "idle" && !editStop));
   const disabled = !writable || busy || loading;
-  const count = changes?.staged.length ?? 0;
+  const staged = changes?.staged.length ?? 0;
+  const all = staged === 0;
+  const count = all
+    ? view.conflicts.rows.length > 0
+      ? 0
+      : (changes?.unstaged.length ?? 0)
+    : staged;
   return (
     <section
       className="flex h-full min-h-0 flex-col gap-2 overflow-y-auto border-border border-t bg-background p-3"
@@ -96,7 +103,7 @@ export function CommitEditor({
           ? "Working…"
           : amend
             ? "Amend commit"
-            : `Commit ${count} ${count === 1 ? "file" : "files"}`}
+            : `Commit ${all && count > 1 ? "all " : ""}${count} ${count === 1 ? "file" : "files"}`}
       </Button>
     </section>
   );

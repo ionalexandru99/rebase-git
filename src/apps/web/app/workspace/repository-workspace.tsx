@@ -32,6 +32,7 @@ import {
   TerminalToggle,
 } from "#web/features/terminal/terminal-panel.tsx";
 import { useTerminals } from "#web/features/terminal/use-terminals.ts";
+import { useUncommittedChanges } from "#web/features/working-changes/hooks/use-working-changes.ts";
 import { WorkspacePanel } from "#web/features/workspace-panel/workspace-panel.tsx";
 import {
   comparePanel,
@@ -102,6 +103,7 @@ function Workspace({
   readonly scope: RepositoryScope;
 }) {
   const { worktreePath } = scope;
+  const uncommitted = useUncommittedChanges();
   const history = useRepositoryHistory({
     environmentId,
     repositoryId: scope.repositoryId,
@@ -263,7 +265,7 @@ function Workspace({
           </AuthorAvatars>
         )}
       </RemoteSync>
-      <WorkspacePanel.Controls>
+      <WorkspacePanel.Controls uncommitted={uncommitted !== undefined}>
         <TerminalToggle terminals={terminals} />
       </WorkspacePanel.Controls>
     </>

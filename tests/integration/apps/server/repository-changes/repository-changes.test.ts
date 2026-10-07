@@ -475,6 +475,48 @@ describe("working changes through Git", () => {
     expect((await f.diff("staged")).before).toBe("latest\n");
     expect((await f.diff("staged")).after).toBe("one\ntwo\nthree\n");
   });
+  it("commits every change, untracked files included, when nothing is staged", async () => {
+    const f = await fixture();
+    await writeFile(join(f.directory, "file.txt"), "edited\n");
+    await writeFile(join(f.directory, "new.txt"), "new\n");
+    const state = await f.read();
+    await Effect.runPromise(
+      f.service.commit({
+        ...f.scope,
+        revision: state.revision,
+        message: "Everything",
+      }),
+    );
+    expect((await f.git("show", "HEAD:file.txt")).stdout).toBe("edited\n");
+    expect((await f.git("show", "HEAD:new.txt")).stdout).toBe("new\n");
+    const after = await f.read();
+    expect([...after.unstaged, ...after.staged]).toEqual([]);
+  });
+  it("refuses to commit everything when a file changes while it is staged", async () => {
+    let changed = false;
+    const f = await fixture(true, async (command) => {
+      if (!changed && command.arguments.includes("add")) {
+        changed = true;
+        await writeFile(join(command.directory, "file.txt"), "external edit\n");
+      }
+    });
+    await writeFile(join(f.directory, "file.txt"), "reviewed edit\n");
+    const state = await f.read();
+    await expect(
+      Effect.runPromise(
+        f.service.commit({
+          ...f.scope,
+          revision: state.revision,
+          message: "Everything",
+        }),
+      ),
+    ).rejects.toMatchObject({ reason: "Stale" });
+    expect(changed).toBe(true);
+    expect((await f.git("log", "-1", "--format=%s")).stdout.trim()).toBe(
+      "Initial",
+    );
+    expect((await f.git("show", ":file.txt")).stdout).toBe("one\ntwo\nthree\n");
+  });
   it("allows message-only amend and retains files left unstaged", async () => {
     const f = await fixture();
     await writeFile(join(f.directory, "file.txt"), "working\n");

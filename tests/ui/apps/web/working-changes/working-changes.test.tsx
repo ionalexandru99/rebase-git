@@ -534,6 +534,19 @@ describe("working changes", () => {
       .toEqual([discardedChanges("2"), discardedChanges("1")]);
     await expect.element(page.getByRole("status")).not.toBeInTheDocument();
   });
+  it("commits every change when nothing is staged", async () => {
+    const f = await fixture(["src/other.ts"]);
+    await page
+      .getByRole("textbox", { name: "Commit subject" })
+      .fill("Everything");
+    await page
+      .getByRole("button", { name: "Commit all 2 files", exact: true })
+      .click();
+    await expect
+      .element(page.getByRole("textbox", { name: "Commit subject" }))
+      .toHaveValue("");
+    expect(f.commits).toHaveLength(1);
+  });
   it("retains the commit draft on failure", async () => {
     const f = await fixture();
     await stageAll();

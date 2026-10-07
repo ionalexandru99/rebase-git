@@ -40,6 +40,32 @@ describe("workspace panel", () => {
     await expect.element(page.getByTestId("graph")).toBeVisible();
   });
 
+  it("marks the closed panel toggle while there are uncommitted changes", async () => {
+    await render(
+      <div className="dark" style={{ width: 1200, height: 600 }}>
+        <WorkspacePanel.Provider scopeKey="uncommitted">
+          <WorkspacePanel.Controls uncommitted />
+          <WorkspacePanel.Group>
+            <WorkspacePanel.Sidebar />
+            <WorkspacePanel.Main>{() => null}</WorkspacePanel.Main>
+            <WorkspacePanel.Pane />
+          </WorkspacePanel.Group>
+        </WorkspacePanel.Provider>
+      </div>,
+    );
+    await page
+      .getByRole("button", {
+        name: "Show side panel, uncommitted changes",
+        exact: true,
+      })
+      .click();
+    await expect
+      .element(
+        page.getByRole("button", { name: "Hide side panel", exact: true }),
+      )
+      .toBeVisible();
+  });
+
   it("keeps the panel toggle in one place and hides the panel while it is expanded", async () => {
     await render(
       <div className="dark" style={{ width: 1200, height: 600 }}>

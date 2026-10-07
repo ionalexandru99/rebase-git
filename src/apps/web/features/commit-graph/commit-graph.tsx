@@ -43,7 +43,6 @@ import {
   UncommittedChangesLine,
   UncommittedChangesRow,
   uncommittedLink,
-  useUncommittedChanges,
 } from "#web/features/commit-graph/components/uncommitted-changes-row.tsx";
 import { useCommitGraphView } from "#web/features/commit-graph/hooks/use-commit-graph-view.ts";
 import { useGraphColors } from "#web/features/commit-graph/layout/graph-colors.ts";
@@ -72,6 +71,7 @@ import {
   type RepositoryHistory,
 } from "#web/features/repository-history/repository-history.ts";
 import type { ResetActions } from "#web/features/reset/reset-actions.tsx";
+import { useUncommittedChanges } from "#web/features/working-changes/hooks/use-working-changes.ts";
 import { useRepositoryScope } from "#web/platform/query/repository-scope.tsx";
 
 export interface CommitGraphHandle {
