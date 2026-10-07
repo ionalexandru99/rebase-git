@@ -251,6 +251,32 @@ describe("commit graph states", () => {
       .toBeGreaterThan(filters.element().getBoundingClientRect().right);
   });
 
+  it("tells the keyboard cursor apart from the hovered row", async () => {
+    const screen = await renderGraph(
+      historyReader({ commits: history(8), status: "ready" }),
+    );
+    const row = (index: number) =>
+      screen.getByRole("row", { name: new RegExp(`^Commit ${index},`) });
+    await row(1).click();
+    await userEvent.keyboard("{Control>}{ArrowDown}{/Control}");
+    await expect.element(row(2)).toHaveAttribute("data-active", "true");
+    await row(4).hover();
+    const look = (index: number) => {
+      const style = getComputedStyle(row(index).element());
+      return {
+        background: style.backgroundColor,
+        rail: getComputedStyle(row(index).element(), "::after").boxShadow,
+      };
+    };
+    const cursor = look(2);
+    const hovered = look(4);
+    const plain = look(6);
+    expect(cursor.background).not.toBe(hovered.background);
+    expect(hovered.background).not.toBe(plain.background);
+    expect(cursor.rail).not.toBe("none");
+    expect(hovered.rail).toBe("none");
+  });
+
   it("renders 100 connected commits with bounded semantic rows and selection", async () => {
     const commits = history(100);
     const reader = historyReader({ commits, status: "ready" });

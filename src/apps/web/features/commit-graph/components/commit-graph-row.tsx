@@ -57,10 +57,10 @@ export const CommitGraphRow = memo(function CommitGraphRow({
       aria-expanded={merge === undefined ? undefined : merge === "expanded"}
       aria-busy={busy ? true : undefined}
       aria-selected={selected}
-      className={`${start === undefined ? "relative" : "absolute left-0"} grid w-full cursor-default items-center bg-[var(--graph-row-background)] text-[.85rem] data-[active=true]:[--graph-row-background:color-mix(in_oklab,var(--accent)_85%,var(--repository))] ${
+      className={`${start === undefined ? "relative" : "absolute left-0"} grid w-full cursor-default items-center bg-[var(--graph-row-background)] text-[.85rem] text-foreground ${
         selected
-          ? "text-foreground after:pointer-events-none after:absolute after:inset-0 after:z-[5] after:shadow-[inset_2px_0_0_var(--primary)]"
-          : "text-foreground hover:[--graph-row-background:color-mix(in_oklab,var(--accent)_85%,var(--repository))]"
+          ? "after:pointer-events-none after:absolute after:inset-0 after:z-[5] after:shadow-[inset_2px_0_0_var(--primary)]"
+          : "hover:[--graph-row-background:color-mix(in_oklab,var(--accent)_45%,var(--repository))] data-[active=true]:[--graph-row-background:color-mix(in_oklab,var(--accent)_85%,var(--repository))] data-[active=true]:after:pointer-events-none data-[active=true]:after:absolute data-[active=true]:after:inset-0 data-[active=true]:after:z-[5] data-[active=true]:after:shadow-[inset_2px_0_0_var(--muted-foreground)]"
       } ${lane?.nodeRemote ? "[&>td:not(:first-child)>*]:opacity-50" : ""} ${mark === undefined ? "" : `before:pointer-events-none before:absolute before:inset-0 before:z-[5] before:border-primary ${mark === "base" ? "before:border" : "before:border-l-[3px]"}`}`}
       data-active={active ? "true" : undefined}
       data-oid={commit.oid}

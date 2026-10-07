@@ -94,7 +94,7 @@ export function UncommittedChangesRow({
           type="button"
           aria-label={uncommittedLabel(changes)}
           onClick={onOpen}
-          className="grid size-full items-center text-left text-[.85rem] text-muted-foreground outline-none hover:bg-[color-mix(in_oklab,var(--accent)_85%,var(--repository))] focus-visible:ring-2 focus-visible:ring-primary/70 focus-visible:ring-inset"
+          className="grid size-full items-center text-left text-[.85rem] text-muted-foreground outline-none hover:bg-[color-mix(in_oklab,var(--accent)_45%,var(--repository))] focus-visible:ring-2 focus-visible:ring-primary/70 focus-visible:ring-inset"
           style={{ gridTemplateColumns: `${x + 12}px minmax(0, 1fr)` }}
         >
           <svg aria-hidden="true" className="size-full">
@@ -120,7 +120,9 @@ export function UncommittedChangesRow({
             />
           </svg>
           <span className="flex min-w-0 items-center gap-2.5 pl-1">
-            <span className="italic">Uncommitted changes</span>
+            <span className="rounded-[5px] border border-muted-foreground/70 border-dashed px-1.5 py-0.5 text-foreground leading-none">
+              Uncommitted changes
+            </span>
             <ChangeCount section="unstaged" count={changes.unstaged} />
             <ChangeCount section="staged" count={changes.staged} />
           </span>
