@@ -33,10 +33,7 @@ function PopoverContent({
         sideOffset={sideOffset}
       >
         <PopoverPrimitive.Popup
-          className={cn(
-            "w-80 rounded-[.55rem] border border-border bg-popover p-4 text-popover-foreground shadow-[0_.75rem_2.5rem_rgb(0_0_0/14%)] dark:shadow-[0_.75rem_2.5rem_rgb(0_0_0/55%)] outline-none",
-            className,
-          )}
+          className={cn("w-80 elevation-menu p-4 outline-none", className)}
           data-slot="popover-content"
           {...props}
         />

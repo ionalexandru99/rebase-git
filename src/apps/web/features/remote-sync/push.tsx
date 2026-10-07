@@ -109,7 +109,7 @@ export function PushButton({
   const canPush = !tracked || upstream.ahead > 0;
   const canForcePush = tracked && upstream.remoteOid !== undefined;
   return (
-    <div className="flex h-7 items-center rounded-md border border-border">
+    <div className="flex h-7 items-center rounded-control border border-border">
       <ToolbarButton
         aria-label={pushLabel(target)}
         className="h-full rounded-r-none border-0"

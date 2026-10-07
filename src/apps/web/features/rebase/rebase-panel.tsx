@@ -99,7 +99,7 @@ function RebaseProgress({ steps }: { readonly steps: readonly RebaseStep[] }) {
             className={cn(
               "flex h-7 items-center gap-2 px-3 whitespace-nowrap",
               state === "current" && "bg-status-connecting/10",
-              (state === "pending" || state === "dropped") && "opacity-50",
+              (state === "pending" || state === "dropped") && "opacity-60",
               folds(step.action) && "pl-8",
             )}
           >

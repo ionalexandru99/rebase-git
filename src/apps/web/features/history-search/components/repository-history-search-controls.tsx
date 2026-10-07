@@ -92,7 +92,7 @@ export function RepositoryHistorySearchControls({
           <button
             type="button"
             aria-label="Clear history search"
-            className="absolute inset-y-0 right-0 grid w-7 place-items-center rounded-r-md text-muted-foreground outline-none hover:text-foreground focus-visible:ring-1 focus-visible:ring-primary"
+            className="absolute inset-y-0 right-0 grid w-7 place-items-center rounded-r-control text-muted-foreground outline-none hover:text-foreground focus-visible:ring-1 focus-visible:ring-primary"
             onClick={() => {
               search.setText("");
               open();
@@ -120,7 +120,7 @@ export function RepositoryHistorySearchControls({
             >
               <Popover.Popup
                 aria-label="History search results"
-                className="w-[min(36rem,calc(100vw-1rem))] rounded-md border border-border bg-popover text-popover-foreground shadow-xl outline-none"
+                className="w-[min(36rem,calc(100vw-1rem))] elevation-menu outline-none"
                 finalFocus={input}
                 id={resultsId}
                 initialFocus={false}

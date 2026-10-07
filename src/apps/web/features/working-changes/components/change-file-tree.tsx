@@ -72,13 +72,13 @@ export function ChangeFileTree({
       {view.discardNotice === null ? null : (
         <p
           role="status"
-          className="mx-2 mb-2 shrink-0 rounded-md border border-border bg-muted/40 px-2 py-1.5 text-xs text-muted-foreground"
+          className="mx-2 mb-2 shrink-0 rounded-control border border-border bg-muted/40 px-2 py-1.5 text-xs text-muted-foreground"
         >
           {view.discardNotice.title},{" "}
           <button
             type="button"
             aria-keyshortcuts="Control+Z Meta+Z"
-            className="rounded-sm font-medium text-foreground underline-offset-2 outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring/30"
+            className="rounded-control font-medium text-foreground underline-offset-2 outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring/30"
             onClick={view.discardNotice.undo}
           >
             {undoKeys} to undo

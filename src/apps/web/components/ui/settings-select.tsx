@@ -30,7 +30,7 @@ export function SettingsSelect<Value extends string>({
     >
       <Select.Trigger
         aria-label={label}
-        className="flex h-8 w-40 shrink-0 items-center justify-between rounded-md border border-input bg-input/30 px-3 text-sm text-foreground outline-none hover:bg-accent data-disabled:cursor-not-allowed data-disabled:opacity-45 data-pressed:bg-accent focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30"
+        className="flex h-8 w-40 shrink-0 items-center justify-between rounded-control border border-input bg-input/30 px-3 text-sm text-foreground outline-none hover:bg-accent data-disabled:cursor-not-allowed data-disabled:opacity-40 data-pressed:bg-accent focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30"
       >
         <Select.Value />
         <Select.Icon>
@@ -47,11 +47,11 @@ export function SettingsSelect<Value extends string>({
           className="z-110 outline-none"
           sideOffset={4}
         >
-          <Select.Popup className="w-[var(--anchor-width)] overflow-hidden rounded-md border border-border bg-popover p-1 text-popover-foreground shadow-lg outline-none">
+          <Select.Popup className="w-[var(--anchor-width)] overflow-hidden elevation-menu p-1 outline-none">
             <Select.List>
               {options.map((option) => (
                 <Select.Item
-                  className="flex h-8 cursor-default items-center rounded-sm px-2 text-sm outline-none select-none data-highlighted:bg-accent data-highlighted:text-accent-foreground"
+                  className="flex h-8 cursor-default items-center rounded-control px-2 text-sm outline-none select-none data-highlighted:bg-accent data-highlighted:text-accent-foreground"
                   key={option.value}
                   value={option.value}
                 >

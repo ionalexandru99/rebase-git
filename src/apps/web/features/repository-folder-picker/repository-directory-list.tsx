@@ -157,7 +157,7 @@ export function RepositoryDirectoryList({
               <input
                 aria-label="New folder name"
                 ref={newFolderRef}
-                className="h-7 w-64 min-w-0 rounded-md border border-ring bg-transparent px-2 text-[13px] text-foreground outline-none"
+                className="h-7 w-64 min-w-0 rounded-control border border-ring bg-transparent px-2 text-[13px] text-foreground outline-none"
                 onChange={(event) => onNameNewFolder(event.target.value)}
                 onKeyDown={(event) => {
                   if (event.key === "Enter") {
@@ -263,7 +263,7 @@ function DirectoryMessage({ children }: { readonly children: ReactNode }) {
 
 function rowClassName(selected: boolean) {
   return cn(
-    "relative flex h-9 w-full items-center gap-2.5 rounded-md px-3 text-left text-[13px] text-foreground outline-none",
+    "relative flex h-9 w-full items-center gap-2.5 rounded-control px-3 text-left text-[13px] text-foreground outline-none",
     "hover:bg-foreground/[.05] focus-visible:ring-2 focus-visible:ring-ring/30",
     selected &&
       "bg-primary/12 font-medium before:absolute before:inset-y-1.5 before:left-0 before:w-0.5 before:rounded-full before:bg-primary hover:bg-primary/12",

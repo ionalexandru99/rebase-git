@@ -83,7 +83,7 @@ export function SectionRow({
       aria-level={row.level}
       aria-posinset={row.position}
       aria-setsize={row.setSize}
-      className={`relative flex h-8 w-full cursor-default items-center rounded-md text-left outline-none select-none ${folder ? "gap-1.5 text-[.81rem] text-sidebar-foreground hover:text-sidebar-accent-foreground" : `gap-2 px-1.5 text-[.8rem] hover:bg-sidebar-accent/50 ${look?.className ?? ""}`} ${active ? "bg-sidebar-accent/75" : ""}`}
+      className={`relative flex h-8 w-full cursor-default items-center rounded-control text-left outline-none select-none ${folder ? "gap-1.5 text-[.81rem] text-sidebar-foreground hover:text-sidebar-accent-foreground" : `gap-2 px-1.5 text-[.8rem] hover:bg-sidebar-accent/50 ${look?.className ?? ""}`} ${active ? "bg-sidebar-accent/75" : ""}`}
       id={rowElementId(row.id)}
       onClick={() => {
         onActivate();
@@ -116,7 +116,7 @@ export function SectionRow({
           </span>
           <span
             aria-hidden="true"
-            className="h-px min-w-3 flex-1 bg-current opacity-25"
+            className="h-px min-w-3 flex-1 bg-current opacity-40"
           />
           <IconChevronDown
             aria-hidden="true"
@@ -161,7 +161,7 @@ export function RefRow({
           card,
           row,
           <div
-            className={`group relative flex h-8 w-full cursor-default items-center rounded-md text-[.85rem] outline-none select-none hover:bg-sidebar-accent/75 hover:text-sidebar-accent-foreground ${row.current ? "font-medium text-sidebar-accent-foreground" : "text-sidebar-foreground"} ${active || selected ? "bg-sidebar-accent" : ""}`}
+            className={`group relative flex h-8 w-full cursor-default items-center rounded-control text-[.85rem] outline-none select-none hover:bg-sidebar-accent/75 hover:text-sidebar-accent-foreground ${row.current ? "font-medium text-sidebar-accent-foreground" : "text-sidebar-foreground"} ${active || selected ? "bg-sidebar-accent" : ""}`}
           >
             <button
               aria-level={row.level}
@@ -170,7 +170,7 @@ export function RefRow({
               aria-label={refRowLabel(row, pullRequests)}
               aria-current={row.current ? "true" : undefined}
               aria-selected={active || selected}
-              className="relative flex h-full min-w-0 flex-1 items-center gap-2 rounded-md pr-1.5 text-left outline-none"
+              className="relative flex h-full min-w-0 flex-1 items-center gap-2 rounded-control pr-1.5 text-left outline-none"
               style={{ paddingLeft: 10 + (row.level - 2) * 18 }}
               id={rowElementId(row.id)}
               onClick={(event) => {
@@ -260,7 +260,7 @@ function HistorySelectionButton({
   return (
     <button
       aria-label={`${selected ? "Remove" : "Add"} ${row.name} ${selected ? "from" : "to"} history`}
-      className={`grid size-6 shrink-0 place-items-center rounded-sm text-muted-foreground outline-none hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-1 focus-visible:ring-sidebar-ring ${selected ? "opacity-100" : `opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 ${active ? "group-focus/tree:opacity-100" : ""}`}`}
+      className={`grid size-6 shrink-0 place-items-center rounded-control text-muted-foreground outline-none hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-1 focus-visible:ring-sidebar-ring ${selected ? "opacity-100" : `opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 ${active ? "group-focus/tree:opacity-100" : ""}`}`}
       onClick={(event) => {
         event.stopPropagation();
         onToggle();

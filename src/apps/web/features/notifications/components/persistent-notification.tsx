@@ -16,7 +16,7 @@ export function PersistentNotification({
     : createPortal(
         <div
           data-notification
-          className="pointer-events-auto rounded-lg border border-border bg-popover text-popover-foreground shadow-lg empty:hidden"
+          className="pointer-events-auto elevation-menu empty:hidden"
         >
           {children}
         </div>,

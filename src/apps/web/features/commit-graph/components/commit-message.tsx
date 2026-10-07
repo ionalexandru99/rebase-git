@@ -40,7 +40,7 @@ export function CommitMessage({
             className="flex h-full w-max items-center gap-2 whitespace-nowrap pr-6"
           >
             {order > 0 ? (
-              <span className="grid h-4 min-w-4 shrink-0 place-items-center rounded-sm bg-primary/25 px-1 font-mono text-[10px] font-semibold">
+              <span className="grid h-4 min-w-4 shrink-0 place-items-center rounded-control bg-primary/25 px-1 font-mono text-[10px] font-semibold">
                 {order}
               </span>
             ) : null}

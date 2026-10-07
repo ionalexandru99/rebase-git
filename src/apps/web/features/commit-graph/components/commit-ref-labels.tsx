@@ -86,7 +86,7 @@ export function CommitRefPill({
         <button
           type="button"
           aria-label={`Remove ${label.name} from history`}
-          className="pointer-events-none absolute inset-y-0 right-0 grid w-4 place-items-center rounded-r-[4px] opacity-0 outline-none focus-visible:ring-1 focus-visible:ring-primary group-focus-within/ref:pointer-events-auto group-focus-within/ref:opacity-100 group-hover/ref:pointer-events-auto group-hover/ref:opacity-100 [@media(hover:none)]:pointer-events-auto [@media(hover:none)]:opacity-100"
+          className="pointer-events-none absolute inset-y-0 right-0 grid w-4 place-items-center rounded-r-control opacity-0 outline-none focus-visible:ring-1 focus-visible:ring-primary group-focus-within/ref:pointer-events-auto group-focus-within/ref:opacity-100 group-hover/ref:pointer-events-auto group-hover/ref:opacity-100 [@media(hover:none)]:pointer-events-auto [@media(hover:none)]:opacity-100"
           style={{ background: "inherit" }}
           onClick={onRemove}
         >
@@ -118,9 +118,9 @@ export function RefPillLabel({
 }
 
 const refPillClassName =
-  "group/ref relative inline-flex shrink-0 items-center rounded-[5px] border font-sans text-[.85rem] leading-none";
+  "group/ref relative inline-flex shrink-0 items-center rounded-control border font-sans text-[.85rem] leading-none";
 const refPillContentClassName =
-  "rounded-[4px] px-1.5 py-0.5 outline-none focus-visible:ring-1 focus-visible:ring-primary";
+  "rounded-control px-1.5 py-0.5 outline-none focus-visible:ring-1 focus-visible:ring-primary";
 
 function useRefPillFace(
   label: Pick<RepositoryHistoryRefTarget, "name" | "type">,

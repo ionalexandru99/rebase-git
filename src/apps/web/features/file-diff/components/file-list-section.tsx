@@ -86,7 +86,7 @@ export function FileListSection<File extends { readonly path: string }>({
       onClick={() => setOpen(!open)}
       onKeyDown={headerMenu === undefined ? undefined : openMenu}
       className={cn(
-        "relative flex h-8 w-full cursor-default items-center gap-2 rounded-md px-1.5 text-left text-[.8rem] outline-none select-none hover:bg-sidebar-accent/50 focus-visible:ring-1 focus-visible:ring-sidebar-ring",
+        "relative flex h-8 w-full cursor-default items-center gap-2 rounded-control px-1.5 text-left text-[.8rem] outline-none select-none hover:bg-sidebar-accent/50 focus-visible:ring-1 focus-visible:ring-sidebar-ring",
         look.className,
       )}
     >
@@ -96,7 +96,7 @@ export function FileListSection<File extends { readonly path: string }>({
       </span>
       <span
         aria-hidden="true"
-        className="h-px min-w-3 flex-1 bg-current opacity-25"
+        className="h-px min-w-3 flex-1 bg-current opacity-40"
       />
       <IconChevronDown
         aria-hidden="true"
@@ -134,7 +134,7 @@ export function FileListSection<File extends { readonly path: string }>({
               <div
                 key={row.key}
                 className={cn(
-                  "group absolute inset-x-0 flex items-center gap-2 rounded-md pr-1 text-[.85rem] select-none has-[:focus-visible]:ring-1 has-[:focus-visible]:ring-sidebar-ring has-[:focus-visible]:ring-inset",
+                  "group absolute inset-x-0 flex items-center gap-2 rounded-control pr-1 text-[.85rem] select-none has-[:focus-visible]:ring-1 has-[:focus-visible]:ring-sidebar-ring has-[:focus-visible]:ring-inset",
                   chosen(row)
                     ? "bg-sidebar-accent text-sidebar-accent-foreground"
                     : "text-sidebar-foreground hover:bg-sidebar-accent/75 hover:text-sidebar-accent-foreground",

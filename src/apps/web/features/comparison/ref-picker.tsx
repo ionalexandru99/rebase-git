@@ -45,7 +45,7 @@ export function RefPicker({
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger
         aria-label={`${label} ${sideName(side)}`}
-        className="inline-flex min-w-0 rounded-md outline-none hover:opacity-80 focus-visible:ring-2 focus-visible:ring-ring/30"
+        className="inline-flex min-w-0 rounded-control outline-none hover:opacity-80 focus-visible:ring-2 focus-visible:ring-ring/30"
       >
         <RefPillLabel label={sideLabel(side)} />
       </PopoverTrigger>
@@ -144,7 +144,7 @@ function RefOptions({
           <button
             key={option.key}
             aria-selected={option === highlighted}
-            className={`flex h-8 shrink-0 cursor-default items-center gap-2 rounded-[.35rem] px-2 text-left text-[.85rem] outline-none ${option === highlighted ? "bg-accent text-foreground" : "text-foreground/80"}`}
+            className={`flex h-8 shrink-0 cursor-default items-center gap-2 rounded-control px-2 text-left text-[.85rem] outline-none ${option === highlighted ? "bg-accent text-foreground" : "text-foreground/80"}`}
             id={elementId(option)}
             onClick={() => onPick(option.side)}
             onPointerMove={() => setHighlightedKey(option.key)}

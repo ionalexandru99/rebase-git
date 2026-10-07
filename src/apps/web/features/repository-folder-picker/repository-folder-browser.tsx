@@ -77,7 +77,7 @@ export function RepositoryFolderBrowser({
         </DialogDescription>
         <DialogClose
           aria-label="Close"
-          className="grid size-8 place-items-center rounded-md text-muted-foreground outline-none hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/30"
+          className="grid size-8 place-items-center rounded-control text-muted-foreground outline-none hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/30"
         >
           <IconX aria-hidden="true" className="size-4" />
         </DialogClose>
@@ -109,7 +109,7 @@ export function RepositoryFolderBrowser({
                 aria-current={
                   breadcrumb.path === directory.path ? "page" : undefined
                 }
-                className="rounded-sm px-1.5 py-1 outline-none hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/30 aria-[current=page]:font-medium aria-[current=page]:text-foreground aria-[current=page]:hover:bg-transparent"
+                className="rounded-control px-1.5 py-1 outline-none hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/30 aria-[current=page]:font-medium aria-[current=page]:text-foreground aria-[current=page]:hover:bg-transparent"
                 disabled={breadcrumb.path === directory.path || loading}
                 onClick={() => navigate(breadcrumb.path)}
                 type="button"
@@ -188,7 +188,7 @@ export function RepositoryFolderBrowser({
             />
           </div>
         ) : null}
-        <DialogClose className="inline-flex h-8 items-center justify-center rounded-md border border-border px-3 text-xs font-medium text-foreground outline-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring/30 max-[540px]:hidden">
+        <DialogClose className="inline-flex h-8 items-center justify-center rounded-control border border-border px-3 text-xs shadow-raised font-medium text-foreground outline-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring/30 max-[540px]:hidden">
           Cancel
         </DialogClose>
         <Button

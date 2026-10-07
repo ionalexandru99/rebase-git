@@ -43,7 +43,7 @@ export function StashRow({
       <ContextMenuTrigger
         render={
           <div
-            className={`flex h-8 w-full cursor-default items-center rounded-md text-[.85rem] text-sidebar-foreground outline-none select-none hover:bg-sidebar-accent/75 hover:text-sidebar-accent-foreground ${active ? "bg-sidebar-accent" : ""}`}
+            className={`flex h-8 w-full cursor-default items-center rounded-control text-[.85rem] text-sidebar-foreground outline-none select-none hover:bg-sidebar-accent/75 hover:text-sidebar-accent-foreground ${active ? "bg-sidebar-accent" : ""}`}
           >
             <button
               aria-label={stashLabel(stash)}
@@ -51,7 +51,7 @@ export function StashRow({
               aria-posinset={position}
               aria-selected={active}
               aria-setsize={setSize}
-              className="flex h-full min-w-0 flex-1 items-center gap-2 rounded-md pr-2 pl-[1.6rem] text-left outline-none"
+              className="flex h-full min-w-0 flex-1 items-center gap-2 rounded-control pr-2 pl-[1.6rem] text-left outline-none"
               id={elementId}
               onClick={() => {
                 onActivate();
@@ -68,7 +68,7 @@ export function StashRow({
                 {stash.name}
               </span>
               {stash.auto ? (
-                <span className="shrink-0 rounded-sm bg-muted px-1 text-[.65rem] text-muted-foreground">
+                <span className="shrink-0 rounded-control bg-muted px-1 text-[.65rem] text-muted-foreground">
                   auto
                 </span>
               ) : null}

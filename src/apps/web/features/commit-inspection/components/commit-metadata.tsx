@@ -74,7 +74,7 @@ export function CommitMetadata({
         </time>
         <CopyPill
           value={details.oid}
-          className="rounded-sm font-mono hover:text-foreground focus-visible:outline-1 focus-visible:outline-primary"
+          className="rounded-control font-mono hover:text-foreground focus-visible:outline-1 focus-visible:outline-primary"
         >
           {details.oid.slice(0, 8)}
         </CopyPill>

@@ -45,7 +45,7 @@ export function HostRepositoriesGroup({
         toggle={
           <CollapsibleTrigger
             aria-label={`${open ? "Collapse" : "Expand"} ${label} ${group.account}${where}`}
-            className="grid size-7 place-items-center rounded-[.4rem] outline-none hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/30"
+            className="grid size-7 place-items-center rounded-control outline-none hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/30"
           >
             <IconChevronDown
               aria-hidden="true"
@@ -129,7 +129,7 @@ function CloneSourceRow({
   const slash = source.label.lastIndexOf("/");
   return (
     <div
-      className="ml-8 rounded-md pr-9.5 pl-2.5 hover:bg-accent data-[active=true]:bg-accent"
+      className="ml-8 rounded-control pr-9.5 pl-2.5 hover:bg-accent data-[active=true]:bg-accent"
       data-active={active || expanded}
     >
       <button
@@ -150,7 +150,7 @@ function CloneSourceRow({
             {source.label.slice(slash + 1)}
           </strong>
           {source.visibility === undefined ? null : (
-            <span className="shrink-0 self-center rounded-sm border border-border px-1.5 text-[.68rem] leading-[1.125rem] text-muted-foreground">
+            <span className="shrink-0 self-center rounded-control border border-border px-1.5 text-[.68rem] leading-[1.125rem] text-muted-foreground">
               {source.visibility}
             </span>
           )}

@@ -64,13 +64,13 @@ export function ComparisonCommits({
           aria-label={`${open ? "Collapse" : "Expand"} commits`}
           aria-expanded={open}
           onClick={() => setOpen(!open)}
-          className="relative flex h-8 w-full cursor-default items-center gap-2 rounded-md px-1.5 text-left text-[.8rem] text-sidebar-foreground outline-none select-none hover:bg-sidebar-accent/50 focus-visible:ring-1 focus-visible:ring-sidebar-ring"
+          className="relative flex h-8 w-full cursor-default items-center gap-2 rounded-control px-1.5 text-left text-[.8rem] text-sidebar-foreground outline-none select-none hover:bg-sidebar-accent/50 focus-visible:ring-1 focus-visible:ring-sidebar-ring"
         >
           <IconGitCommit aria-hidden="true" className="size-3.5 shrink-0" />
           <span className="min-w-0 truncate">Commits ({count})</span>
           <span
             aria-hidden="true"
-            className="h-px min-w-3 flex-1 bg-current opacity-25"
+            className="h-px min-w-3 flex-1 bg-current opacity-40"
           />
           <IconChevronDown
             aria-hidden="true"
@@ -89,10 +89,10 @@ export function ComparisonCommits({
                 onKeyDown={(event) => keyDown(event, index)}
                 className={`flex h-8 w-full cursor-default items-center gap-2 px-2.5 text-left text-[.85rem] text-sidebar-foreground outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring focus-visible:ring-inset ${
                   run === undefined
-                    ? "rounded-md hover:bg-sidebar-accent/75"
+                    ? "rounded-control hover:bg-sidebar-accent/75"
                     : picked(index)
                       ? "border-primary border-l-2 pl-2"
-                      : "rounded-md opacity-40 hover:opacity-100"
+                      : "rounded-control opacity-40 hover:opacity-100"
                 }`}
               >
                 <span className="min-w-0 flex-1 truncate">

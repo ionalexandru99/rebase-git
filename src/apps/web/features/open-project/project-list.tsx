@@ -35,7 +35,7 @@ export function ProjectList({
       </OpenProjectSectionHeading>
       {items.map((item) => (
         <div
-          className="group grid h-11 min-w-0 grid-cols-[minmax(0,1fr)_1.75rem] items-center rounded-md px-2.5 hover:bg-accent has-[[aria-expanded=true]]:bg-accent data-[active=true]:bg-accent data-[available=false]:opacity-42"
+          className="group grid h-11 min-w-0 grid-cols-[minmax(0,1fr)_1.75rem] items-center rounded-control px-2.5 hover:bg-accent has-[[aria-expanded=true]]:bg-accent data-[active=true]:bg-accent data-[available=false]:opacity-40"
           data-active={activeKey === item.key}
           data-available={!item.disabled}
           key={item.key}
@@ -52,7 +52,7 @@ export function ProjectList({
             type="button"
           >
             <RepositoryBadge
-              className="size-7.5 rounded-[.45rem] text-[.67rem]"
+              className="size-7.5 rounded-control text-[.67rem]"
               color={item.repository.color}
               name={item.repository.name}
             />
@@ -78,7 +78,7 @@ export function ProjectList({
       ))}
       {hiddenCount === 0 ? null : (
         <button
-          className="h-8 rounded-sm px-2.5 text-xs font-medium text-primary outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring/30"
+          className="h-8 rounded-control px-2.5 text-xs font-medium text-primary outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring/30"
           onClick={onShowAll}
           type="button"
         >

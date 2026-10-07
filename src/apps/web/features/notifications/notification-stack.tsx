@@ -33,7 +33,7 @@ const noticeClass = [
   "[--offset-y:calc(var(--toast-offset-y)+var(--toast-index)*var(--gap)+var(--toast-swipe-movement-y))]",
   "[--stacked-y:calc(var(--toast-swipe-movement-y)+var(--toast-index)*var(--peek)+var(--shrink)*var(--height))]",
   "[--slide-out:calc(var(--toast-swipe-movement-x)+100%+1rem)]",
-  "pointer-events-auto absolute top-0 right-0 z-[calc(1000-var(--toast-index))] h-(--height) w-full origin-top select-none rounded-lg border border-border bg-popover text-popover-foreground shadow-lg outline-none",
+  "pointer-events-auto absolute top-0 right-0 z-[calc(1000-var(--toast-index))] h-(--height) w-full origin-top select-none elevation-menu outline-none",
   "after:absolute after:top-full after:left-0 after:h-[calc(var(--gap)+1px)] after:w-full after:content-['']",
   "[transform:translateX(var(--toast-swipe-movement-x))_translateY(var(--stacked-y))_scale(var(--scale))]",
   "data-expanded:h-(--toast-height) data-expanded:[transform:translateX(var(--toast-swipe-movement-x))_translateY(var(--offset-y))]",

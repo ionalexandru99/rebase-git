@@ -26,10 +26,7 @@ function ContextMenuContent({
         {...(submenu ? { side: "right" as const, sideOffset: 4 } : {})}
       >
         <ContextMenuPrimitive.Popup
-          className={cn(
-            "w-50 rounded-[.55rem] border border-border bg-popover p-[.3rem] text-popover-foreground shadow-[0_.75rem_2.5rem_rgb(0_0_0/14%)] dark:shadow-[0_.75rem_2.5rem_rgb(0_0_0/45%)] outline-none",
-            className,
-          )}
+          className={cn("w-50 elevation-menu p-1 outline-none", className)}
           data-slot="context-menu-content"
           {...props}
         >
@@ -47,7 +44,7 @@ function ContextMenuItem({
   return (
     <ContextMenuPrimitive.Item
       className={cn(
-        "flex h-8 cursor-default items-center gap-2 rounded-[.35rem] px-2 text-[.85rem] text-foreground/80 outline-none select-none data-disabled:pointer-events-none data-disabled:opacity-45 data-highlighted:bg-accent data-highlighted:text-foreground",
+        "flex h-8 cursor-default items-center gap-2 rounded-control px-2 text-[.85rem] text-foreground/80 outline-none select-none data-disabled:pointer-events-none data-disabled:opacity-40 data-highlighted:bg-accent data-highlighted:text-foreground",
         className,
       )}
       data-slot="context-menu-item"
@@ -63,7 +60,7 @@ function ContextMenuSubmenuTrigger({
   return (
     <ContextMenuPrimitive.SubmenuTrigger
       className={cn(
-        "flex h-8 cursor-default items-center gap-2 rounded-[.35rem] px-2 text-[.85rem] text-foreground/80 outline-none select-none data-disabled:pointer-events-none data-disabled:opacity-45 data-highlighted:bg-accent data-highlighted:text-foreground data-popup-open:bg-accent data-popup-open:text-foreground",
+        "flex h-8 cursor-default items-center gap-2 rounded-control px-2 text-[.85rem] text-foreground/80 outline-none select-none data-disabled:pointer-events-none data-disabled:opacity-40 data-highlighted:bg-accent data-highlighted:text-foreground data-popup-open:bg-accent data-popup-open:text-foreground",
         className,
       )}
       data-slot="context-menu-submenu-trigger"

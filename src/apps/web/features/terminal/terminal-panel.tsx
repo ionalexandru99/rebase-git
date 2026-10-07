@@ -187,7 +187,7 @@ function TerminalTab({
         value={id}
         aria-label={label}
         onClick={onSelect}
-        className="size-7 rounded-md font-mono hover:bg-accent/60 hover:text-foreground data-active:bg-accent"
+        className="size-7 rounded-control font-mono hover:bg-accent/60 hover:text-foreground data-active:bg-accent"
       >
         {number}
       </TabsTrigger>
@@ -197,7 +197,7 @@ function TerminalTab({
       <TabsTrigger
         value={id}
         onClick={onSelect}
-        className="h-7 flex-1 justify-start rounded-md pr-7 pl-2 text-sm hover:bg-accent/60 hover:text-foreground data-active:bg-accent"
+        className="h-7 flex-1 justify-start rounded-control pr-7 pl-2 text-sm hover:bg-accent/60 hover:text-foreground data-active:bg-accent"
       >
         <IconTerminal aria-hidden="true" className="size-3.5" />
         {label}
