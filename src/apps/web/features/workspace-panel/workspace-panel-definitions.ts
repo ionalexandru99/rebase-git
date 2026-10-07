@@ -1,4 +1,5 @@
 import {
+  IconArrowsLeftRight,
   IconFileDiff,
   IconFileTime,
   IconGitCommit,
@@ -9,6 +10,10 @@ import {
 import { lazy } from "react";
 import { isObjectId } from "#contracts/git/git-values.contract.ts";
 import { isReflogRef } from "#contracts/repository-reflog/repository-reflog.contract.ts";
+import {
+  compareTab,
+  isCompareInput,
+} from "#web/features/comparison/comparison.ts";
 import {
   fileHistoryTab,
   isFileHistoryInput,
@@ -91,9 +96,23 @@ export const fileHistoryPanel = {
   launchable: false,
 } satisfies WorkspacePanelDefinition;
 
+export const comparePanel = {
+  acceptsInput: isCompareInput,
+  instance: compareTab,
+  Content: lazy(() =>
+    import("#web/features/comparison/comparison-panel.tsx").then((module) => ({
+      default: module.ComparisonPanel,
+    })),
+  ),
+  label: "Compare",
+  icon: IconArrowsLeftRight,
+  launchable: false,
+} satisfies WorkspacePanelDefinition;
+
 const definitions = {
   commit: commitInspectionPanel,
   history: fileHistoryPanel,
+  compare: comparePanel,
   changes: workingChangesPanel,
   reflog: reflogPanel,
   rebase: rebasePanel,
@@ -136,6 +155,14 @@ export type WorkspacePanelOpenAction =
         readonly input: PanelInput<Kind>;
       };
     }[InstanceKind];
+export type WorkspacePanelReplaceAction = {
+  [Kind in InstanceKind]: {
+    readonly type: "replace";
+    readonly kind: Kind;
+    readonly previous: PanelInput<Kind>;
+    readonly input: PanelInput<Kind>;
+  };
+}[InstanceKind];
 export const workspacePanelDefinitions: Readonly<
   Record<WorkspacePanelKind, WorkspacePanelDefinition>
 > = definitions;

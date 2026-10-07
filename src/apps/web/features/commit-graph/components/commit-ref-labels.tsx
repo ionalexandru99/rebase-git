@@ -76,45 +76,11 @@ export function CommitRefPill({
   readonly label: Pick<RepositoryHistoryRefTarget, "name" | "type">;
   readonly onRemove?: (() => void) | undefined;
 }) {
-  const { colors } = useGraphRefAppearance();
-  const color =
-    label.type === "tag"
-      ? "var(--tag-label)"
-      : (colors.get(label.name) ??
-        graphLaneColor(
-          graphBranchColorIndex(graphRefName({ ...label, oid: "" })),
-        ));
-  const local = label.type === "branch";
-  const separator =
-    label.type === "remote-branch" ? label.name.indexOf("/") : -1;
-  const remote = separator > 0 ? label.name.slice(0, separator) : undefined;
-  const name =
-    remote === undefined ? label.name : label.name.slice(separator + 1);
+  const face = useRefPillFace(label);
   const pill = (
-    <span
-      className="group/ref relative inline-flex shrink-0 items-center rounded-[5px] border font-sans text-[.85rem] leading-none"
-      style={{
-        color: local ? "var(--lane-foreground)" : color,
-        borderColor: local
-          ? color
-          : `color-mix(in srgb, ${color} 24%, var(--repository))`,
-        background: local
-          ? color
-          : `color-mix(in srgb, ${color} 17%, var(--repository))`,
-      }}
-    >
-      <CopyPill
-        value={name}
-        className="rounded-[4px] px-1.5 py-0.5 outline-none focus-visible:ring-1 focus-visible:ring-primary"
-      >
-        {remote === undefined ? null : <GitProviderIcon remote={remote} />}
-        {label.type === "tag" ? (
-          <IconTag aria-hidden="true" className="size-3" />
-        ) : null}
-        {label.type === "commit" ? (
-          <IconGitCommit aria-hidden="true" className="size-3" />
-        ) : null}
-        {name}
+    <span className={refPillClassName} style={face.style}>
+      <CopyPill value={face.name} className={refPillContentClassName}>
+        {face.content}
       </CopyPill>
       {onRemove === undefined ? null : (
         <button
@@ -134,6 +100,69 @@ export function CommitRefPill({
   ) : (
     pill
   );
+}
+
+export function RefPillLabel({
+  label,
+}: {
+  readonly label: Pick<RepositoryHistoryRefTarget, "name" | "type">;
+}) {
+  const face = useRefPillFace(label);
+  return (
+    <span className={refPillClassName} style={face.style}>
+      <span className={`inline-flex items-center ${refPillContentClassName}`}>
+        {face.content}
+      </span>
+    </span>
+  );
+}
+
+const refPillClassName =
+  "group/ref relative inline-flex shrink-0 items-center rounded-[5px] border font-sans text-[.85rem] leading-none";
+const refPillContentClassName =
+  "rounded-[4px] px-1.5 py-0.5 outline-none focus-visible:ring-1 focus-visible:ring-primary";
+
+function useRefPillFace(
+  label: Pick<RepositoryHistoryRefTarget, "name" | "type">,
+) {
+  const { colors } = useGraphRefAppearance();
+  const color =
+    label.type === "tag"
+      ? "var(--tag-label)"
+      : (colors.get(label.name) ??
+        graphLaneColor(
+          graphBranchColorIndex(graphRefName({ ...label, oid: "" })),
+        ));
+  const local = label.type === "branch";
+  const separator =
+    label.type === "remote-branch" ? label.name.indexOf("/") : -1;
+  const remote = separator > 0 ? label.name.slice(0, separator) : undefined;
+  const name =
+    remote === undefined ? label.name : label.name.slice(separator + 1);
+  return {
+    name,
+    style: {
+      color: local ? "var(--lane-foreground)" : color,
+      borderColor: local
+        ? color
+        : `color-mix(in srgb, ${color} 24%, var(--repository))`,
+      background: local
+        ? color
+        : `color-mix(in srgb, ${color} 17%, var(--repository))`,
+    },
+    content: (
+      <>
+        {remote === undefined ? null : <GitProviderIcon remote={remote} />}
+        {label.type === "tag" ? (
+          <IconTag aria-hidden="true" className="size-3" />
+        ) : null}
+        {label.type === "commit" ? (
+          <IconGitCommit aria-hidden="true" className="size-3" />
+        ) : null}
+        {name}
+      </>
+    ),
+  };
 }
 
 export function historyLabelTarget(

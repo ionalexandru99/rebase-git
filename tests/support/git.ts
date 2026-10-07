@@ -93,6 +93,34 @@ export async function createDivergedRepository(parent = tmpdir()) {
   return { directory, git };
 }
 
+export async function createComparisonRepository(parent = tmpdir()) {
+  const directory = await realpath(
+    await mkdtemp(join(parent, "rebase compare ")),
+  );
+  await createRepository(directory, { commits: [] });
+  await fastImport(
+    directory,
+    commit("refs/heads/main", "base", null, files({ "shared.txt": "base\n" })) +
+      "reset refs/tags/v1\nfrom :1\n\n" +
+      commit(
+        "refs/heads/main",
+        "main only",
+        ":1",
+        files({ "main.txt": "main\n" }),
+      ) +
+      commit("refs/heads/feature", "add a", ":1", files({ "a.txt": "a\n" }), {
+        mark: ":3",
+      }) +
+      commit(
+        "refs/heads/feature",
+        "change shared",
+        ":3",
+        files({ "shared.txt": "feature\n" }),
+      ),
+  );
+  return directory;
+}
+
 export async function createMergeRepository(parent = tmpdir()) {
   const { directory, git } = await createDivergedRepository(parent);
   await fastImport(

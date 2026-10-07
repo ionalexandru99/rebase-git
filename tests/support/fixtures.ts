@@ -8,6 +8,7 @@ import type {
   DiscardedChanges,
   RepositoryChanges,
 } from "#contracts/repository-changes/repository-changes.contract.ts";
+import type { Comparison } from "#contracts/repository-comparison/compare-revisions.contract.ts";
 import type { ChangeDiff } from "#contracts/repository-comparison/repository-comparison.contract.ts";
 import type { ConflictDocument } from "#contracts/repository-conflicts/repository-conflicts.contract.ts";
 import type { RepositoryOperation } from "#contracts/repository-operations/repository-operations.contract.ts";
@@ -324,6 +325,19 @@ export function fileHistoryEntry(
     status: "M",
     lines: { added: 1, removed: 1 },
     ...entry,
+  };
+}
+
+export function comparison(value: Partial<Comparison> = {}): Comparison {
+  return {
+    from: "b".repeat(40),
+    to: commitId,
+    base: "c".repeat(40),
+    files: [],
+    truncated: false,
+    commits: [],
+    commitsComplete: true,
+    ...value,
   };
 }
 

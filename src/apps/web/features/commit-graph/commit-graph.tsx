@@ -57,6 +57,7 @@ import type {
   HistoryScope,
   HistorySelection,
 } from "#web/features/commit-graph/scope/history-scope.ts";
+import type { CompareActions } from "#web/features/comparison/comparison.ts";
 import { RepositoryHistorySearchControls } from "#web/features/history-search/components/repository-history-search-controls.tsx";
 import type { MergeActions } from "#web/features/merge/merge-actions.ts";
 import type { DropCommits } from "#web/features/rebase/drop-commits.tsx";
@@ -94,6 +95,7 @@ export function CommitGraph({
   merge,
   rebase,
   reset,
+  compare,
   cherryPick,
   drop,
   onOpenDetails,
@@ -103,6 +105,7 @@ export function CommitGraph({
   readonly merge?: MergeActions | undefined;
   readonly rebase?: RebaseActions | undefined;
   readonly reset?: ResetActions | undefined;
+  readonly compare?: CompareActions | undefined;
   readonly cherryPick?: CherryPick | undefined;
   readonly drop?: DropCommits | undefined;
   readonly onOpenDetails?: ((oid: string) => void) | undefined;
@@ -191,6 +194,7 @@ export function CommitGraph({
     },
     drop,
     reset,
+    compare,
     onOpenDetails,
   });
   const moving = new Set(

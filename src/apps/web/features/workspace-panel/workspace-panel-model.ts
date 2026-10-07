@@ -3,6 +3,7 @@ import type { ComponentType } from "react";
 import type {
   WorkspacePanelInputAction,
   WorkspacePanelOpenAction,
+  WorkspacePanelReplaceAction,
 } from "#web/features/workspace-panel/workspace-panel-definitions.ts";
 import type { ReadableStore } from "#web/platform/store/store.ts";
 
@@ -37,6 +38,7 @@ export interface WorkspacePanelState {
 export type WorkspacePanelAction =
   | WorkspacePanelInputAction
   | WorkspacePanelOpenAction
+  | WorkspacePanelReplaceAction
   | { readonly type: "select"; readonly tab: WorkspacePanelTab }
   | { readonly type: "close"; readonly tab: WorkspacePanelTab }
   | { readonly type: "visibility"; readonly open: boolean }

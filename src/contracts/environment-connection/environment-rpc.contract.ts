@@ -10,6 +10,7 @@ import { GitIdentityApi } from "#contracts/git-identity/git-identity.contract.ts
 import { PullRequestsApi } from "#contracts/pull-requests/pull-requests.contract.ts";
 import { RepositoryCatalogApi } from "#contracts/repository-catalog/repository-catalog.contract.ts";
 import { RepositoryChangesApi } from "#contracts/repository-changes/repository-changes.contract.ts";
+import { CompareApi } from "#contracts/repository-comparison/compare-revisions.contract.ts";
 import { RepositoryConflictsApi } from "#contracts/repository-conflicts/repository-conflicts.contract.ts";
 import { RepositoryHistoryRpc } from "#contracts/repository-history/repository-history.contract.ts";
 import { RepositoryOperationsApi } from "#contracts/repository-operations/repository-operations.contract.ts";
@@ -77,6 +78,7 @@ export const EnvironmentRpc = RpcGroup.make(
   ...Object.values(RepositoryCatalogApi),
   ...Object.values(CommitInspectionApi),
   ...Object.values(FileHistoryApi),
+  ...Object.values(CompareApi),
   ...Object.values(RepositoryChangesApi),
   ...Object.values(RepositoryConflictsApi),
   ...Object.values(RepositoryOperationsApi),
