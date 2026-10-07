@@ -32,6 +32,7 @@ import {
   useWorkingChanges,
 } from "#web/features/working-changes/hooks/use-working-changes.ts";
 import { useIgnorePaths } from "#web/features/working-changes/ignore-paths.tsx";
+import type { ShowChangeInput } from "#web/features/working-changes/show-change.ts";
 import type { CommitDraft } from "#web/persistence/working-changes/working-changes-store.ts";
 import { describeFailure } from "#web/platform/query/request-failure.ts";
 
@@ -45,6 +46,7 @@ export interface WorkingChangesTarget {
   readonly worktreePath: string;
   readonly draftKey: string;
   readonly active: boolean;
+  readonly requested?: ShowChangeInput | undefined;
 }
 
 export type ChangeAction = (
@@ -58,6 +60,7 @@ export function useWorkingChangesView({
   worktreePath,
   draftKey,
   active,
+  requested,
 }: WorkingChangesTarget) {
   const [amend, setAmend] = useState<Amend>(amendOff);
   const errorToast = useErrorToast();
@@ -69,6 +72,7 @@ export function useWorkingChangesView({
   const [selection, select] = useChangeSelection(
     shown.changes,
     shown.conflicted,
+    changes === undefined ? undefined : requested,
   );
   const diff = useChangeDiff(scope, viewedChange(selection), changes, active);
   const conflicts = useConflicts(

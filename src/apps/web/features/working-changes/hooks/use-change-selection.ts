@@ -4,6 +4,7 @@ import type {
   RepositoryChanges,
   ViewedChange,
 } from "#contracts/repository-changes/repository-changes.contract.ts";
+import type { ShowChangeInput } from "#web/features/working-changes/show-change.ts";
 
 export interface ConflictSelection {
   readonly section: "conflicts";
@@ -34,8 +35,22 @@ export function inFolder(folder: string, path: string) {
 export function useChangeSelection(
   changes: RepositoryChanges | undefined,
   conflicted: readonly string[],
+  requested: ShowChangeInput | undefined,
 ) {
   const [selection, setSelection] = useState<SelectedChange | null>(null);
+  const [shownRequest, setShownRequest] = useState<ShowChangeInput>();
+  if (
+    requested !== undefined &&
+    requested !== shownRequest &&
+    changes !== undefined
+  ) {
+    setShownRequest(requested);
+    const located = locate(changes, conflicted, requested.path);
+    if (located !== null) {
+      setSelection(located);
+      return [located, setSelection] as const;
+    }
+  }
   const shown =
     selection === null
       ? changes === undefined
@@ -58,6 +73,19 @@ function firstChange(
     path: file.path,
     section: changes.unstaged.length > 0 ? "unstaged" : "staged",
   };
+}
+
+function locate(
+  changes: RepositoryChanges,
+  conflicted: readonly string[],
+  path: string,
+): SelectedChange | null {
+  if (conflicted.includes(path)) return { section: "conflicts", path };
+  if (changes.unstaged.some((file) => file.path === path))
+    return { section: "unstaged", path };
+  if (changes.staged.some((file) => file.path === path))
+    return { section: "staged", path };
+  return null;
 }
 
 function settled(

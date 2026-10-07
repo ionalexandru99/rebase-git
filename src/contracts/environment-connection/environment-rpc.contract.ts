@@ -25,6 +25,7 @@ import { RepositoryStashesApi } from "#contracts/repository-stashes/repository-s
 import { RepositoryWorktreesApi } from "#contracts/repository-worktrees/repository-worktrees.contract.ts";
 import { SourceControlApi } from "#contracts/source-control/source-control.contract.ts";
 import { TerminalsApi } from "#contracts/terminal/terminal.contract.ts";
+import { WorktreeFilesApi } from "#contracts/worktree-files/worktree-files.contract.ts";
 
 export const environmentProtocol = 5;
 export const environmentMaxMessageBytes = 64 * 1_048_576;
@@ -80,6 +81,7 @@ export const EnvironmentRpc = RpcGroup.make(
   ...Object.values(CommitInspectionApi),
   ...Object.values(FileHistoryApi),
   ...Object.values(HistorySearchApi),
+  ...Object.values(WorktreeFilesApi),
   ...Object.values(CompareApi),
   ...Object.values(RepositoryChangesApi),
   ...Object.values(RepositoryConflictsApi),
