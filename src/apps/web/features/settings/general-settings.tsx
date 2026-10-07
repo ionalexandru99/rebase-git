@@ -80,8 +80,7 @@ export function GeneralSettings({
     (snapshot.status._tag === "Idle" ||
       snapshot.status._tag === "UpToDate" ||
       snapshot.status._tag === "Error");
-  const canInstall =
-    desktopReady && !settingsPending && snapshot.status._tag === "Ready";
+  const canInstall = desktopReady && !settingsPending;
 
   const changeSetting = async (action: () => Promise<void>) => {
     setSettingsPending(true);

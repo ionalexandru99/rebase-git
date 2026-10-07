@@ -1,7 +1,10 @@
 import { useState } from "react";
 import { describe, expect, it, vi } from "vite-plus/test";
 import { page } from "vite-plus/test/browser";
-import type { DesktopUpdates } from "#contracts/desktop-updates/desktop-updates.contract.ts";
+import type {
+  DesktopUpdateSnapshot,
+  DesktopUpdates,
+} from "#contracts/desktop-updates/desktop-updates.contract.ts";
 import { desktopUpdates } from "#tests-support/fixtures.ts";
 import { render } from "#tests-support/render.tsx";
 import { SettingsPanel } from "#web/features/settings/settings-panel.tsx";
@@ -60,9 +63,6 @@ describe("settings panel", () => {
     );
 
     await page.getByRole("button", { name: "Check for updates" }).click();
-    expect(
-      page.getByRole("button", { name: "Update now" }).elements(),
-    ).toHaveLength(0);
 
     await expect
       .element(page.getByText("Couldn't check for updates"))
@@ -72,16 +72,28 @@ describe("settings panel", () => {
     ).toHaveLength(0);
   });
 
-  it("offers Update now once an update is ready", async () => {
+  it("offers Update now only once an update is ready", async () => {
+    let publish: (snapshot: DesktopUpdateSnapshot) => void = () => {};
     await renderSettings(
       vi.fn(),
       desktopUpdates({
-        getSnapshot: async () => ({
-          settings: { checkAutomatically: true, releaseChannel: "stable" },
-          status: { _tag: "Ready", version: "0.0.3" },
-        }),
+        subscribe: (listener) => {
+          publish = listener;
+          return () => {};
+        },
       }),
     );
+    await expect
+      .element(page.getByRole("button", { name: "Check for updates" }))
+      .toBeEnabled();
+    expect(
+      page.getByRole("button", { name: "Update now" }).elements(),
+    ).toHaveLength(0);
+
+    publish({
+      settings: { checkAutomatically: true, releaseChannel: "stable" },
+      status: { _tag: "Ready", version: "0.0.3" },
+    });
 
     await expect
       .element(page.getByRole("button", { name: "Update now" }))
