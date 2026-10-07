@@ -120,7 +120,7 @@ export function UncommittedChangesRow({
             />
           </svg>
           <span className="flex min-w-0 items-center gap-2.5 pl-1">
-            <span className="rounded-[5px] border border-muted-foreground/70 border-dashed px-1.5 py-0.5 text-foreground leading-none">
+            <span className="rounded-control border border-muted-foreground/70 border-dashed px-1.5 py-0.5 text-foreground leading-none">
               Uncommitted changes
             </span>
             <ChangeCount section="unstaged" count={changes.unstaged} />
