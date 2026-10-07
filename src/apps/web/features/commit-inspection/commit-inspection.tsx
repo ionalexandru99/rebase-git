@@ -67,12 +67,12 @@ export function CommitInspection({
       className="flex h-full min-h-0 flex-col"
     >
       {!connected ? (
-        <p role="status" className="p-3 text-sm text-muted-foreground">
+        <p role="status" className="p-3 text-body text-muted-foreground">
           Reconnect to inspect commits.
         </p>
       ) : null}
       {error ? (
-        <div role="alert" className="p-3 text-sm">
+        <div role="alert" className="p-3 text-body">
           {error}{" "}
           <Button size="xs" variant="ghost" onClick={retry}>
             Retry
@@ -83,12 +83,12 @@ export function CommitInspection({
         <>
           <CommitMetadata key={details.oid} details={details} />
           {details.truncated ? (
-            <p role="status" className="p-3 text-xs text-muted-foreground">
+            <p role="status" className="p-3 text-meta text-muted-foreground">
               The changed-file list is too large to show in full.
             </p>
           ) : null}
           {details.files.length === 0 ? (
-            <p className="p-4 text-sm text-muted-foreground">
+            <p className="p-4 text-body text-muted-foreground">
               No file changes.
             </p>
           ) : (
@@ -106,7 +106,7 @@ export function CommitInspection({
             >
               <Suspense
                 fallback={
-                  <p className="p-4 text-sm text-muted-foreground">
+                  <p className="p-4 text-body text-muted-foreground">
                     Loading diff viewer…
                   </p>
                 }
@@ -130,7 +130,7 @@ export function CommitInspection({
           )}
         </>
       ) : !error ? (
-        <p role="status" className="p-4 text-sm text-muted-foreground">
+        <p role="status" className="p-4 text-body text-muted-foreground">
           {inspection.isLoading
             ? "Loading commit…"
             : "Select a commit in the graph."}
@@ -159,7 +159,7 @@ export function CommitInspectionPanel() {
   const environment = feature?.environment;
   if (scope === undefined || environment === undefined) {
     return (
-      <p className="p-4 text-sm text-muted-foreground">
+      <p className="p-4 text-body text-muted-foreground">
         Reconnect to inspect commits.
       </p>
     );

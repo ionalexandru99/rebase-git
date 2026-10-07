@@ -59,7 +59,7 @@ export function HostRepositoriesGroup({
           {" "}
           ·{" "}
           <HiddenText
-            className="text-[.83rem]"
+            className="text-body"
             hideLabel={`Hide ${label} account ${group.account}${where}`}
             showLabel={`Show ${label} account${where}`}
             value={group.account}
@@ -106,7 +106,7 @@ function GroupHeading({
     <div className="grid h-9 min-w-0 grid-cols-[1.75rem_1.125rem_minmax(0,1fr)] items-center gap-[.45rem] px-1 text-muted-foreground">
       {toggle}
       {icon}
-      <strong className="truncate text-[.83rem] font-medium text-foreground">
+      <strong className="truncate text-body font-medium text-foreground">
         {children}
       </strong>
     </div>
@@ -143,24 +143,24 @@ function CloneSourceRow({
         type="button"
       >
         <span className="flex min-w-0 items-baseline gap-[.65rem]">
-          <strong className="shrink-0 truncate text-[.8rem] font-medium text-foreground">
+          <strong className="shrink-0 truncate text-body font-medium text-foreground">
             <span className="font-normal text-muted-foreground">
               {source.label.slice(0, slash + 1)}
             </span>
             {source.label.slice(slash + 1)}
           </strong>
           {source.visibility === undefined ? null : (
-            <span className="shrink-0 self-center rounded-control border border-border px-1.5 text-[.68rem] leading-[1.125rem] text-muted-foreground">
+            <span className="shrink-0 self-center rounded-control border border-border px-1.5 text-badge leading-[1.125rem] text-muted-foreground">
               {source.visibility}
             </span>
           )}
           {source.description === undefined ? null : (
-            <span className="min-w-0 truncate text-[.72rem] text-muted-foreground">
+            <span className="min-w-0 truncate text-meta text-muted-foreground">
               {source.description}
             </span>
           )}
         </span>
-        <span className="text-[.68rem] text-muted-foreground">
+        <span className="text-meta text-muted-foreground">
           {source.updatedAt === undefined
             ? null
             : formatLastOpened(source.updatedAt, now)}

@@ -155,7 +155,7 @@ export function ChangeFileSection({
         section === "staged" && changes?.renamesLimited ? (
           <p
             role="status"
-            className="shrink-0 px-3 py-1.5 text-xs text-muted-foreground"
+            className="shrink-0 px-3 py-1.5 text-meta text-muted-foreground"
           >
             Renames not detected: too many changed files.
           </p>
@@ -164,7 +164,7 @@ export function ChangeFileSection({
       footer={(open) =>
         open && selected.length > 1 ? (
           <div className="flex shrink-0 flex-wrap items-center gap-1 border-border border-t p-1.5">
-            <span className="mr-auto text-xs text-muted-foreground">
+            <span className="mr-auto text-meta text-muted-foreground">
               {selected.length} selected
             </span>
             <Button

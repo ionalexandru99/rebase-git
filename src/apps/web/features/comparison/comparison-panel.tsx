@@ -57,7 +57,7 @@ export function ComparisonPanel({
   return (
     <DiffWorkerPool>
       <section aria-label="Comparison" className="flex h-full min-h-0 flex-col">
-        <header className="flex shrink-0 items-center gap-3 border-border border-b px-3 py-2 text-xs">
+        <header className="flex shrink-0 items-center gap-3 border-border border-b px-3 py-2 text-meta">
           <RefPicker
             label="Compare from"
             side={input.from}
@@ -110,7 +110,7 @@ function ComparisonBody({
   const { refs } = useScopedRepositoryRefs();
   if (comparison.isError)
     return (
-      <div role="alert" className="p-3 text-sm">
+      <div role="alert" className="p-3 text-body">
         {describeFailure(comparison.error)}{" "}
         <Button
           size="xs"
@@ -123,7 +123,7 @@ function ComparisonBody({
     );
   if (comparison.data === undefined)
     return (
-      <p role="status" className="p-4 text-sm text-muted-foreground">
+      <p role="status" className="p-4 text-body text-muted-foreground">
         Loading comparison…
       </p>
     );
@@ -133,7 +133,7 @@ function ComparisonBody({
       {moved.length === 0 ? null : (
         <div
           role="status"
-          className="flex shrink-0 items-center gap-2 border-border border-b bg-amber-500/10 px-3 py-1.5 text-amber-800 text-xs dark:text-amber-200"
+          className="flex shrink-0 items-center gap-2 border-border border-b bg-amber-500/10 px-3 py-1.5 text-amber-800 text-meta dark:text-amber-200"
         >
           <span className="min-w-0 flex-1 truncate">
             {moved.join(" and ")} moved
@@ -206,7 +206,7 @@ function ComparisonFiles({
   return (
     <>
       {shown.truncated ? (
-        <p role="status" className="p-3 text-xs text-muted-foreground">
+        <p role="status" className="p-3 text-meta text-muted-foreground">
           The changed-file list is too large to show in full.
         </p>
       ) : null}
@@ -226,11 +226,11 @@ function ComparisonFiles({
         }
       >
         {file === undefined ? (
-          <p className="p-4 text-sm text-muted-foreground">No changes.</p>
+          <p className="p-4 text-body text-muted-foreground">No changes.</p>
         ) : (
           <Suspense
             fallback={
-              <p className="p-4 text-sm text-muted-foreground">
+              <p className="p-4 text-body text-muted-foreground">
                 Loading diff viewer…
               </p>
             }

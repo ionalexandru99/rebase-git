@@ -35,7 +35,7 @@ export function TagDetails({
   return (
     <section
       aria-label={`${tag.name} details`}
-      className="mr-1.5 mb-1.5 border-sidebar-border border-l py-1 pl-2.5 text-[.72rem] leading-snug text-muted-foreground"
+      className="mr-1.5 mb-1.5 border-sidebar-border border-l py-1 pl-2.5 text-meta leading-snug text-muted-foreground"
       style={{ marginLeft: 16 + (level - 2) * 18 }}
     >
       {tag.object === undefined ? (
@@ -66,7 +66,7 @@ export function TagDetails({
               {describeFailure(annotation.error)}
             </p>
           ) : null}
-          <p className="font-mono text-[.68rem]">
+          <p className="font-mono text-meta">
             tag {tag.object.slice(0, 7)} → commit {tag.target?.slice(0, 7)}
           </p>
         </>

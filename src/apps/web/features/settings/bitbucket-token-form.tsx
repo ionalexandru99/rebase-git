@@ -140,7 +140,7 @@ export function BitbucketTokenForm({
         >
           {(Object.keys(methods) as Method[]).map((kind) => (
             <TabsTrigger
-              className="h-7 rounded-control px-3 text-sm data-active:bg-background"
+              className="h-7 rounded-control px-3 text-control data-active:bg-background"
               key={kind}
               value={kind}
             >
@@ -148,7 +148,7 @@ export function BitbucketTokenForm({
             </TabsTrigger>
           ))}
         </TabsList>
-        <p className="max-w-2xl text-xs leading-relaxed text-muted-foreground">
+        <p className="max-w-2xl text-meta leading-relaxed text-muted-foreground">
           {methods[method].description(
             saved?._tag === "ApiToken" ? saved.missingScopes : [],
           )}
@@ -171,7 +171,7 @@ export function BitbucketTokenForm({
         </TabsContent>
       </Tabs>
       <div className="flex items-center justify-between gap-3">
-        <p aria-live="polite" className="text-xs text-muted-foreground">
+        <p aria-live="polite" className="text-meta text-muted-foreground">
           {save.failure !== undefined ? (
             <span className="text-destructive">
               {describeFailure(save.failure, tokenFailures)}
@@ -239,7 +239,7 @@ function Scopes({
             return (
               <li
                 aria-label={isMissing ? `${scope} missing` : undefined}
-                className={`flex items-center gap-1.5 font-mono text-[.7rem] leading-5 ${isMissing ? "text-status-connecting" : ""}`}
+                className={`flex items-center gap-1.5 font-mono text-meta leading-5 ${isMissing ? "text-status-connecting" : ""}`}
                 key={scope}
               >
                 {scope}

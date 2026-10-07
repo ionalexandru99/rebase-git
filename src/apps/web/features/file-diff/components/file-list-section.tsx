@@ -86,7 +86,7 @@ export function FileListSection<File extends { readonly path: string }>({
       onClick={() => setOpen(!open)}
       onKeyDown={headerMenu === undefined ? undefined : openMenu}
       className={cn(
-        "relative flex h-8 w-full cursor-default items-center gap-2 rounded-control px-1.5 text-left text-[.8rem] outline-none select-none hover:bg-sidebar-accent/50 focus-visible:ring-1 focus-visible:ring-sidebar-ring",
+        "relative flex h-8 w-full cursor-default items-center gap-2 rounded-control px-1.5 text-left text-body outline-none select-none hover:bg-sidebar-accent/50 focus-visible:ring-1 focus-visible:ring-sidebar-ring",
         look.className,
       )}
     >
@@ -134,7 +134,7 @@ export function FileListSection<File extends { readonly path: string }>({
               <div
                 key={row.key}
                 className={cn(
-                  "group absolute inset-x-0 flex items-center gap-2 rounded-control pr-1 text-[.85rem] select-none has-[:focus-visible]:ring-1 has-[:focus-visible]:ring-sidebar-ring has-[:focus-visible]:ring-inset",
+                  "group absolute inset-x-0 flex items-center gap-2 rounded-control pr-1 text-body select-none has-[:focus-visible]:ring-1 has-[:focus-visible]:ring-sidebar-ring has-[:focus-visible]:ring-inset",
                   chosen(row)
                     ? "bg-sidebar-accent text-sidebar-accent-foreground"
                     : "text-sidebar-foreground hover:bg-sidebar-accent/75 hover:text-sidebar-accent-foreground",
@@ -174,7 +174,9 @@ export function FileListSection<File extends { readonly path: string }>({
           })}
         </div>
         {open && files.length > 0 && rows.length === 0 ? (
-          <p className="p-3 text-xs text-muted-foreground">No matching files</p>
+          <p className="p-3 text-meta text-muted-foreground">
+            No matching files
+          </p>
         ) : null}
       </div>
       {footer?.(open)}

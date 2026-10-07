@@ -19,7 +19,7 @@ export function SidebarStatus({
 }): JSX.Element | null {
   if (repositoryRefs.error !== null) {
     return (
-      <div className="px-2 py-3 text-xs text-status-unavailable" role="alert">
+      <div className="px-2 py-3 text-meta text-status-unavailable" role="alert">
         <p>{repositoryRefs.error}</p>
         <Button
           className="mt-2"
@@ -34,7 +34,7 @@ export function SidebarStatus({
   }
   if (repositoryRefs.refs === undefined) {
     return (
-      <p className="px-2 py-3 text-xs text-muted-foreground" role="status">
+      <p className="px-2 py-3 text-meta text-muted-foreground" role="status">
         {repositoryRefs.loading
           ? "Loading branches…"
           : "No repository selected."}
@@ -43,7 +43,7 @@ export function SidebarStatus({
   }
   if (rows.length === 0) {
     return (
-      <p className="px-2 py-3 text-xs text-muted-foreground" role="status">
+      <p className="px-2 py-3 text-meta text-muted-foreground" role="status">
         {describeEmptyBranchesSidebar(scope, query)}
       </p>
     );

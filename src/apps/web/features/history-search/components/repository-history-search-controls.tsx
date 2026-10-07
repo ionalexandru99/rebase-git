@@ -74,7 +74,7 @@ export function RepositoryHistorySearchControls({
           aria-busy={busy}
           aria-haspopup="dialog"
           aria-label="Search history"
-          className="h-7 pr-7 pl-7 text-[.85rem] md:text-[.85rem]"
+          className="h-7 pr-7 pl-7 text-control"
           maxLength={256}
           onKeyDown={onKeyDown}
           onChange={(event) => {
@@ -140,15 +140,15 @@ export function RepositoryHistorySearchControls({
                   search.text.trim() !== "" &&
                   search.cursor === undefined &&
                   search.commits.length === 0 ? (
-                    <p className="px-2 py-3 text-[.85rem] text-muted-foreground">
+                    <p className="px-2 py-3 text-body text-muted-foreground">
                       No matches.
                     </p>
                   ) : null}
                   {search.error === undefined ? null : (
-                    <div className="px-2 py-2 text-[.85rem]">
+                    <div className="px-2 py-2 text-body">
                       <p role="alert">{search.error}</p>
                       <Button
-                        className="mt-1 text-[.85rem] sm:text-[.85rem]"
+                        className="mt-1 text-control"
                         onClick={search.retry}
                         size="xs"
                         variant="ghost"
@@ -159,7 +159,7 @@ export function RepositoryHistorySearchControls({
                   )}
                 </div>
                 {offline || !complete ? (
-                  <div className="border-border border-t px-3 py-2 text-[.85rem] text-muted-foreground">
+                  <div className="border-border border-t px-3 py-2 text-body text-muted-foreground">
                     {[
                       offline ? "Offline" : undefined,
                       !complete ? "Partial results" : undefined,

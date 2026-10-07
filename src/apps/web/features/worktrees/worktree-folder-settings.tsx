@@ -102,7 +102,7 @@ function FolderForm({
         />
       </SettingsField>
       <div className="flex items-center justify-between gap-3">
-        <p aria-live="polite" className="text-xs text-destructive">
+        <p aria-live="polite" className="text-meta text-destructive">
           {error}
         </p>
         <div className="flex shrink-0 gap-2">

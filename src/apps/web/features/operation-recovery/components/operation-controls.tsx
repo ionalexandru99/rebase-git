@@ -73,7 +73,7 @@ export function OperationControls({
       ) : (
         <>
           {confirmation !== null ? (
-            <p className="px-3 pb-2 text-xs text-muted-foreground">
+            <p className="px-3 pb-2 text-meta text-muted-foreground">
               Git state changed. Review the available actions.
             </p>
           ) : null}
@@ -120,7 +120,7 @@ export function OperationControls({
       {state.error !== null ? (
         <p
           role="alert"
-          className="px-3 pb-2 whitespace-pre-wrap break-words text-xs text-destructive"
+          className="px-3 pb-2 whitespace-pre-wrap break-words text-meta text-destructive"
         >
           {state.error}
         </p>
@@ -161,13 +161,13 @@ export function OperationHeader({ scope }: { readonly scope: OperationScope }) {
           className="size-2 shrink-0 text-status-connecting"
         />
         <h2
-          className="text-xs font-semibold"
+          className="text-meta font-semibold"
           aria-live="polite"
           aria-atomic="true"
         >
           {operationHeading(state)}
         </h2>
-        <span className="min-w-0 flex-1 truncate font-mono text-[10px] text-muted-foreground">
+        <span className="min-w-0 flex-1 truncate font-mono text-badge text-muted-foreground">
           {meta}
         </span>
       </OperationControls>

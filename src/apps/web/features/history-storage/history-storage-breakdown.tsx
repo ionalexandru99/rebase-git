@@ -57,9 +57,9 @@ export function HistoryStorageBreakdown({
       {storage.usageBytes === undefined ? null : (
         <SettingsSection title="Usage · This browser">
           <div className="space-y-2.5 px-3 py-3 sm:px-4">
-            <div className="flex items-baseline justify-between gap-3 text-xs text-muted-foreground/80">
+            <div className="flex items-baseline justify-between gap-3 text-meta text-muted-foreground/80">
               <span>
-                <span className="text-sm font-medium text-foreground tabular-nums">
+                <span className="text-control font-medium text-foreground tabular-nums">
                   {formatCacheSize(storage.usageBytes)}
                 </span>{" "}
                 used
@@ -116,7 +116,7 @@ export function HistoryStorageBreakdown({
                 />
               ) : (
                 <RepositoryBadge
-                  className="size-5 rounded-control text-[.5625rem]"
+                  className="size-5 rounded-control text-badge"
                   color={repository.color}
                   name={repository.name}
                 />
@@ -138,7 +138,7 @@ export function HistoryStorageBreakdown({
           </SettingsRow>
         ))}
         {histories.length === 0 && (
-          <p className="px-3 py-3 text-xs text-muted-foreground sm:px-4">
+          <p className="px-3 py-3 text-meta text-muted-foreground sm:px-4">
             No history stored yet.
           </p>
         )}

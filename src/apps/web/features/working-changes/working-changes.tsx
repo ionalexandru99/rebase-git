@@ -44,7 +44,7 @@ export function WorkingChanges({
       {view.error ? (
         <div
           role="alert"
-          className="flex shrink-0 items-center gap-2 border-destructive/30 border-b bg-destructive/10 px-3 py-2 text-xs"
+          className="flex shrink-0 items-center gap-2 border-destructive/30 border-b bg-destructive/10 px-3 py-2 text-meta"
         >
           <span className="flex-1">{view.error}</span>
           <Button
@@ -71,7 +71,7 @@ export function WorkingChanges({
           ) : (
             <Suspense
               fallback={
-                <p className="p-4 text-xs text-muted-foreground">
+                <p className="p-4 text-meta text-muted-foreground">
                   Loading diff viewer…
                 </p>
               }
@@ -151,7 +151,7 @@ export function WorkingChangesPanel() {
 
 function Disconnected() {
   return (
-    <div className="flex h-full items-center justify-center p-6 text-sm text-muted-foreground">
+    <div className="flex h-full items-center justify-center p-6 text-body text-muted-foreground">
       Connect to the repository to review changes.
     </div>
   );

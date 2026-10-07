@@ -53,7 +53,7 @@ function DropdownMenuItem({ className, ...props }: Menu.Item.Props) {
   return (
     <Menu.Item
       className={cn(
-        "flex h-8 cursor-default items-center gap-2 rounded-control px-2 text-xs text-foreground/80 outline-none select-none data-disabled:pointer-events-none data-disabled:opacity-40 data-highlighted:bg-accent data-highlighted:text-foreground [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0",
+        "flex h-8 cursor-default items-center gap-2 rounded-control px-2 text-body text-foreground/80 outline-none select-none data-disabled:pointer-events-none data-disabled:opacity-40 data-highlighted:bg-accent data-highlighted:text-foreground [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0",
         className,
       )}
       data-slot="dropdown-menu-item"
@@ -74,7 +74,7 @@ function DropdownMenuRadioItem({
   return (
     <Menu.RadioItem
       className={cn(
-        "flex h-8 cursor-default items-center gap-2 rounded-control px-2 text-[.85rem] text-foreground/80 outline-none select-none data-highlighted:bg-accent data-highlighted:text-foreground",
+        "flex h-8 cursor-default items-center gap-2 rounded-control px-2 text-body text-foreground/80 outline-none select-none data-highlighted:bg-accent data-highlighted:text-foreground",
         className,
       )}
       closeOnClick

@@ -23,11 +23,11 @@ export function OpenProjectToolbar({
   return (
     <>
       <div className="mb-6 flex items-center justify-between gap-3">
-        <h1 className="text-xl leading-tight font-semibold tracking-[-.018em]">
+        <h1 className="text-title leading-tight font-semibold tracking-[-.018em]">
           Open project
         </h1>
         <Button
-          className="h-8 gap-[.45rem] px-3 text-[.8rem] font-medium sm:h-8"
+          className="h-8 gap-[.45rem] px-3 text-control font-medium sm:h-8"
           disabled={!browseAvailable}
           onClick={onBrowse}
           type="button"

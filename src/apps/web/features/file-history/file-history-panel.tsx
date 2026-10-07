@@ -174,15 +174,15 @@ function FileHistory({
     <section aria-label="File history" className="flex h-full min-h-0 flex-col">
       <header className="shrink-0 border-border border-b px-4 pt-3 pb-3">
         <h2
-          className={`truncate font-semibold text-[1.05rem] ${latest?.status === "D" ? "text-rose-600 line-through dark:text-rose-400" : ""}`}
+          className={`truncate font-semibold text-heading ${latest?.status === "D" ? "text-rose-600 line-through dark:text-rose-400" : ""}`}
         >
           {name}
         </h2>
-        <p className="truncate text-[.8rem] text-muted-foreground">
+        <p className="truncate text-body text-muted-foreground">
           {path.slice(0, path.length - name.length)}
         </p>
         {branch === undefined || history.data === undefined ? null : (
-          <div className="mt-2 flex items-center gap-2 text-[.8rem] text-muted-foreground">
+          <div className="mt-2 flex items-center gap-2 text-body text-muted-foreground">
             <span>
               {entries.length === 0
                 ? "No commits on"
@@ -198,7 +198,7 @@ function FileHistory({
         )}
       </header>
       {history.isError ? (
-        <div role="alert" className="p-3 text-sm">
+        <div role="alert" className="p-3 text-body">
           {describeFailure(history.error)}{" "}
           <Button
             size="xs"
@@ -209,7 +209,7 @@ function FileHistory({
           </Button>
         </div>
       ) : history.data === undefined ? (
-        <p role="status" className="p-4 text-sm text-muted-foreground">
+        <p role="status" className="p-4 text-body text-muted-foreground">
           Loading history…
         </p>
       ) : entry === undefined ? null : (
@@ -220,7 +220,7 @@ function FileHistory({
           <ResizablePanel id="history-diff" defaultSize="70%" minSize="12rem">
             <Suspense
               fallback={
-                <p className="p-4 text-sm text-muted-foreground">
+                <p className="p-4 text-body text-muted-foreground">
                   Loading diff viewer…
                 </p>
               }

@@ -103,7 +103,7 @@ export function RepositoryFetchSettings({
           <select
             aria-label="Automatic fetch"
             aria-describedby={`${id}-scope`}
-            className="h-8 rounded-control border border-input bg-input/30 px-3 text-sm"
+            className="h-8 rounded-control border border-input bg-input/30 px-3 text-control"
             value={mode}
             onChange={(event) => {
               const mode = event.currentTarget.value;

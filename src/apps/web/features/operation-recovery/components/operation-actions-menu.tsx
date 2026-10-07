@@ -49,7 +49,7 @@ export function OperationActionsMenu({
                   chosen.current = true;
                   choose(action);
                 }}
-                className={`rounded-control px-2 py-2 text-xs outline-none data-highlighted:bg-accent data-disabled:opacity-40 ${action === "abort" ? "text-destructive" : ""}`}
+                className={`rounded-control px-2 py-2 text-body outline-none data-highlighted:bg-accent data-disabled:opacity-40 ${action === "abort" ? "text-destructive" : ""}`}
               >
                 {action === "skip"
                   ? operation.kind === "am"

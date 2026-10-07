@@ -133,7 +133,7 @@ function ExpandedProjectsSidebar({
   return (
     <>
       <div className="flex h-11 shrink-0 items-center px-4 text-sidebar-accent-foreground">
-        <h1 className="min-w-0 flex-1 truncate text-base font-semibold">
+        <h1 className="min-w-0 flex-1 truncate text-heading font-semibold">
           Projects
         </h1>
         <Button
@@ -199,14 +199,14 @@ function ExpandedProjectsSidebar({
                   aria-hidden="true"
                   className="size-4.5 shrink-0 text-muted-foreground"
                 />
-                <span className="min-w-0 flex-1 truncate text-sm text-sidebar-foreground">
+                <span className="min-w-0 flex-1 truncate text-body text-sidebar-foreground">
                   {environment.name}
                 </span>
                 <span
                   className={
                     environmentStatus.availability === "available"
                       ? "sr-only"
-                      : `shrink-0 truncate text-sm ${environmentStatus.availability === "unavailable" ? "text-status-unavailable" : "text-muted-foreground"}`
+                      : `shrink-0 truncate text-body ${environmentStatus.availability === "unavailable" ? "text-status-unavailable" : "text-muted-foreground"}`
                   }
                   role="status"
                 >
@@ -228,7 +228,7 @@ function ExpandedProjectsSidebar({
                             : undefined
                         }
                         aria-label={`Open ${repository.name}`}
-                        className="grid h-full min-w-0 grid-cols-[1.875rem_minmax(0,1fr)] items-center gap-2.5 text-left text-base outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring/40 disabled:pointer-events-none disabled:opacity-40"
+                        className="grid h-full min-w-0 grid-cols-[1.875rem_minmax(0,1fr)] items-center gap-2.5 text-left text-body outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring/40 disabled:pointer-events-none disabled:opacity-40"
                         disabled={repository.disabled}
                         onClick={() =>
                           selectRepository(environment.id, repository)
@@ -236,7 +236,7 @@ function ExpandedProjectsSidebar({
                         type="button"
                       >
                         <RepositoryBadge
-                          className="size-7.5 rounded-control text-sm"
+                          className="size-7.5 rounded-control text-meta"
                           color={repository.color}
                           name={repository.name}
                         />
@@ -361,7 +361,7 @@ function CollapsedProjectsSidebar({
                         type="button"
                       >
                         <RepositoryBadge
-                          className="size-10 rounded-control text-sm"
+                          className="size-10 rounded-control text-control"
                           color={repository.color}
                           name={repository.name}
                         />

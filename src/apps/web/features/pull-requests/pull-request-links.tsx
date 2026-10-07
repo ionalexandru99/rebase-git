@@ -123,7 +123,7 @@ export function LinkPullRequestField({
         />
       </div>
       {found === undefined ? null : (
-        <div className="mt-1.5 flex h-6 min-w-0 items-center gap-2.5 pl-6 text-[.85rem]">
+        <div className="mt-1.5 flex h-6 min-w-0 items-center gap-2.5 pl-6 text-body">
           <PullRequestStateIcon pullRequest={found} />
           <span className="shrink-0 text-muted-foreground tabular-nums">
             {pullRequestReference(found)}
@@ -131,16 +131,13 @@ export function LinkPullRequestField({
           <span className="min-w-0 flex-1 truncate text-foreground/85">
             {found.title}
           </span>
-          <kbd className="shrink-0 font-sans text-[.7rem] text-muted-foreground">
+          <kbd className="shrink-0 font-sans text-badge text-muted-foreground">
             Enter
           </kbd>
         </div>
       )}
       {problem === undefined ? null : (
-        <p
-          className="mt-1.5 pl-6 text-[.85rem] text-destructive"
-          id={problemId}
-        >
+        <p className="mt-1.5 pl-6 text-body text-destructive" id={problemId}>
           {problem}
         </p>
       )}

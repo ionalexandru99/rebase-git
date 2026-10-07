@@ -52,7 +52,7 @@ export function RebasePanel({
   return (
     <section
       aria-label="Interactive rebase"
-      className="flex h-full min-h-0 flex-col bg-background text-[.85rem]"
+      className="flex h-full min-h-0 flex-col bg-background text-body"
     >
       <OperationHeader scope={scope} />
       {running ? (
@@ -106,7 +106,7 @@ function RebaseProgress({ steps }: { readonly steps: readonly RebaseStep[] }) {
             <StepIcon state={state} />
             <span
               className={cn(
-                "w-12 shrink-0 font-mono text-[11px]",
+                "w-12 shrink-0 font-mono text-badge",
                 actionColors[step.action],
               )}
             >
@@ -120,7 +120,7 @@ function RebaseProgress({ steps }: { readonly steps: readonly RebaseStep[] }) {
             >
               {step.subject || step.commit.slice(0, 8)}
             </span>
-            <span className="font-mono text-[11px] text-muted-foreground">
+            <span className="font-mono text-badge text-muted-foreground">
               {step.commit.slice(0, 8)}
             </span>
           </li>

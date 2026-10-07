@@ -66,7 +66,7 @@ export function ConflictViewer({
       {conflicts.documentProblem ? (
         <p
           role="alert"
-          className="shrink-0 border-border border-b px-3 py-2 text-xs text-destructive"
+          className="shrink-0 border-border border-b px-3 py-2 text-meta text-destructive"
         >
           {conflicts.documentProblem}
         </p>
@@ -75,7 +75,7 @@ export function ConflictViewer({
       (conflicts.wholeFileOnly || conflicts.documentProblem !== null) ? (
         <div className="flex flex-1 flex-col items-center justify-center gap-3 p-4 text-center text-muted-foreground">
           <IconFileDiff className="size-8" />
-          <dl className="grid grid-cols-[auto_auto] gap-x-4 gap-y-1 text-xs">
+          <dl className="grid grid-cols-[auto_auto] gap-x-4 gap-y-1 text-meta">
             {sides.map((side) => {
               const stage = file.stages.find(
                 (candidate) => candidate.side === side,
@@ -96,7 +96,7 @@ export function ConflictViewer({
           </dl>
         </div>
       ) : conflicts.documentProblem !== null ? null : (
-        <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
+        <div className="flex flex-1 items-center justify-center text-control text-muted-foreground">
           Loading conflict…
         </div>
       )}

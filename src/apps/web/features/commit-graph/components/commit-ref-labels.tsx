@@ -118,7 +118,7 @@ export function RefPillLabel({
 }
 
 const refPillClassName =
-  "group/ref relative inline-flex shrink-0 items-center rounded-control border font-sans text-[.85rem] leading-none";
+  "group/ref relative inline-flex shrink-0 items-center rounded-control border font-sans text-body leading-none";
 const refPillContentClassName =
   "rounded-control px-1.5 py-0.5 outline-none focus-visible:ring-1 focus-visible:ring-primary";
 

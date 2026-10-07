@@ -40,7 +40,7 @@ export function FileRowName<File extends NamedFile>({
   readonly statusId: string;
 }) {
   if (row.file === undefined)
-    return <span className="min-w-0 truncate text-[.81rem]">{row.name}/</span>;
+    return <span className="min-w-0 truncate text-body">{row.name}/</span>;
   const { previousPath, status } = row.file;
   const tone = status === "U" ? undefined : statusTones[status];
   return (
@@ -49,7 +49,7 @@ export function FileRowName<File extends NamedFile>({
         <>
           <span className={cn("min-w-0 truncate", tone)}>{row.name}</span>
           {previousPath ? (
-            <span className="min-w-0 shrink-[100] truncate text-[11px] text-muted-foreground">
+            <span className="min-w-0 shrink-[100] truncate text-meta text-muted-foreground">
               ← {renameHint(previousPath, row.key)}
             </span>
           ) : null}
@@ -58,7 +58,7 @@ export function FileRowName<File extends NamedFile>({
         <span className="flex min-w-0 flex-col leading-tight">
           <span className={cn("truncate", tone)}>{fileName(row.key)}</span>
           <span
-            className="truncate text-[11px] text-muted-foreground"
+            className="truncate text-meta text-muted-foreground"
             style={{ direction: "rtl", textAlign: "left" }}
           >
             <bdi>
@@ -87,7 +87,7 @@ export function LineCounts({
   return (
     <span
       className={cn(
-        "flex min-w-14 justify-end gap-1 pr-1 font-mono text-[11px] tabular-nums",
+        "flex min-w-14 justify-end gap-1 pr-1 font-mono text-badge tabular-nums",
         className,
       )}
     >

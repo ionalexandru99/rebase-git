@@ -43,7 +43,7 @@ export function StashRow({
       <ContextMenuTrigger
         render={
           <div
-            className={`flex h-8 w-full cursor-default items-center rounded-control text-[.85rem] text-sidebar-foreground outline-none select-none hover:bg-sidebar-accent/75 hover:text-sidebar-accent-foreground ${active ? "bg-sidebar-accent" : ""}`}
+            className={`flex h-8 w-full cursor-default items-center rounded-control text-body text-sidebar-foreground outline-none select-none hover:bg-sidebar-accent/75 hover:text-sidebar-accent-foreground ${active ? "bg-sidebar-accent" : ""}`}
           >
             <button
               aria-label={stashLabel(stash)}
@@ -68,11 +68,11 @@ export function StashRow({
                 {stash.name}
               </span>
               {stash.auto ? (
-                <span className="shrink-0 rounded-control bg-muted px-1 text-[.65rem] text-muted-foreground">
+                <span className="shrink-0 rounded-control bg-muted px-1 text-badge text-muted-foreground">
                   auto
                 </span>
               ) : null}
-              <span className="ml-auto shrink-0 text-xs text-muted-foreground">
+              <span className="ml-auto shrink-0 text-meta text-muted-foreground">
                 {ageLabel(stash.recordedAt, now)}
               </span>
             </button>
@@ -133,7 +133,7 @@ export function StashNameField({
       <Input
         aria-label="Stash name"
         autoComplete="off"
-        className="h-7 text-[.85rem] sm:h-7 sm:text-[.85rem]"
+        className="h-7 text-control sm:h-7"
         onChange={(event) => setName(event.target.value)}
         onKeyDown={(event) => {
           if (event.key !== "Enter") return;
@@ -145,7 +145,7 @@ export function StashNameField({
         spellCheck={false}
         value={name}
       />
-      <p className="px-1 text-[.72rem] text-muted-foreground">
+      <p className="px-1 text-meta text-muted-foreground">
         {count} {selection.section} {count === 1 ? "file" : "files"}
       </p>
     </fieldset>

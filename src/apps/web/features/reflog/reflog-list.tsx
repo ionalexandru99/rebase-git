@@ -102,7 +102,7 @@ export function ReflogList({
               active === undefined ? undefined : rowElementId(active.id)
             }
             aria-label="Reflog entries"
-            className="min-h-0 flex-1 overflow-y-auto py-1 text-[.8rem] outline-none"
+            className="min-h-0 flex-1 overflow-y-auto py-1 text-body outline-none"
             onClick={selectRow}
             onContextMenuCapture={selectRow}
             onDoubleClick={() => {
@@ -119,7 +119,7 @@ export function ReflogList({
               status={status}
             />
             {truncated ? (
-              <p className="px-3 pt-2 text-[.7rem] text-muted-foreground">
+              <p className="px-3 pt-2 text-meta text-muted-foreground">
                 Showing the newest 2,000 entries.
               </p>
             ) : null}
@@ -165,7 +165,7 @@ function ReflogRows({
         {heading === undefined ? null : (
           <p
             aria-hidden="true"
-            className="px-3 pt-2.5 pb-1 text-[.68rem] font-semibold tracking-wide text-muted-foreground uppercase"
+            className="px-3 pt-2.5 pb-1 text-badge font-semibold tracking-wide text-muted-foreground uppercase"
           >
             {heading}
           </p>
@@ -181,14 +181,14 @@ function ReflogRows({
           tabIndex={-1}
         >
           <RowMarker onToggle={onToggle} row={row} />
-          <span className="font-mono text-[.7rem] text-muted-foreground">
+          <span className="font-mono text-meta text-muted-foreground">
             {row.action}
           </span>
           <span className="truncate">{row.description}</span>
-          <span className="text-right font-mono text-[.72rem] text-muted-foreground">
+          <span className="text-right font-mono text-meta text-muted-foreground">
             {row.range}
           </span>
-          <span className="text-right text-[.72rem] text-muted-foreground">
+          <span className="text-right text-meta text-muted-foreground">
             {row.nested ? "" : timeLabel(row.recordedAt)}
           </span>
         </div>

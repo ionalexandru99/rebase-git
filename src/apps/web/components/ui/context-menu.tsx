@@ -44,7 +44,7 @@ function ContextMenuItem({
   return (
     <ContextMenuPrimitive.Item
       className={cn(
-        "flex h-8 cursor-default items-center gap-2 rounded-control px-2 text-[.85rem] text-foreground/80 outline-none select-none data-disabled:pointer-events-none data-disabled:opacity-40 data-highlighted:bg-accent data-highlighted:text-foreground",
+        "flex h-8 cursor-default items-center gap-2 rounded-control px-2 text-body text-foreground/80 outline-none select-none data-disabled:pointer-events-none data-disabled:opacity-40 data-highlighted:bg-accent data-highlighted:text-foreground",
         className,
       )}
       data-slot="context-menu-item"
@@ -60,7 +60,7 @@ function ContextMenuSubmenuTrigger({
   return (
     <ContextMenuPrimitive.SubmenuTrigger
       className={cn(
-        "flex h-8 cursor-default items-center gap-2 rounded-control px-2 text-[.85rem] text-foreground/80 outline-none select-none data-disabled:pointer-events-none data-disabled:opacity-40 data-highlighted:bg-accent data-highlighted:text-foreground data-popup-open:bg-accent data-popup-open:text-foreground",
+        "flex h-8 cursor-default items-center gap-2 rounded-control px-2 text-body text-foreground/80 outline-none select-none data-disabled:pointer-events-none data-disabled:opacity-40 data-highlighted:bg-accent data-highlighted:text-foreground data-popup-open:bg-accent data-popup-open:text-foreground",
         className,
       )}
       data-slot="context-menu-submenu-trigger"
