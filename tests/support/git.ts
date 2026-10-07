@@ -121,6 +121,41 @@ export async function createComparisonRepository(parent = tmpdir()) {
   return directory;
 }
 
+export async function createCodeSearchRepository(parent = tmpdir()) {
+  const directory = await realpath(
+    await mkdtemp(join(parent, "rebase code search ")),
+  );
+  await createRepository(directory, { commits: [] });
+  await fastImport(
+    directory,
+    commit(
+      "refs/heads/main",
+      "add needle",
+      null,
+      files({ "src/search.ts": "const needle = 1;\n" }),
+    ) +
+      commit(
+        "refs/heads/main",
+        "add other line",
+        undefined,
+        files({ "src/search.ts": "const needle = 1;\nconst other = 2;\n" }),
+      ) +
+      commit(
+        "refs/heads/main",
+        "change needle line",
+        undefined,
+        files({ "src/search.ts": "const needle = 3;\nconst other = 2;\n" }),
+      ) +
+      commit(
+        "refs/heads/main",
+        "document needle",
+        undefined,
+        files({ "docs/needle notes.md": "call needle(value)\n" }),
+      ),
+  );
+  return directory;
+}
+
 export async function createMergeRepository(parent = tmpdir()) {
   const { directory, git } = await createDivergedRepository(parent);
   await fastImport(

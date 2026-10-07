@@ -1,5 +1,9 @@
 import { useEffect, useRef } from "react";
 import type { CommitGraphHandle } from "#web/features/commit-graph/commit-graph.tsx";
+import {
+  type CodeMatchTarget,
+  commitInputOid,
+} from "#web/features/commit-inspection/commit-input.ts";
 import { useWorkspacePanel } from "#web/features/workspace-panel/workspace-panel-provider.tsx";
 
 export function useCommitInspection(connected: boolean) {
@@ -18,6 +22,10 @@ export function useCommitInspection(connected: boolean) {
       execute({ type: "input", kind: "commit", input: oid });
       execute({ type: "open", kind: "commit" });
     },
+    openMatch: (oid: string, match: CodeMatchTarget) => {
+      store.dispatch({ type: "input", kind: "commit", input: { oid, match } });
+      store.dispatch({ type: "open", kind: "commit" });
+    },
     select: (oid: string | undefined) => {
       if (oid === undefined) {
         return;
@@ -28,7 +36,12 @@ export function useCommitInspection(connected: boolean) {
         return;
       }
       const snapshot = store.getSnapshot();
-      if (snapshot.open && snapshot.tabs.includes("commit") && connected)
+      if (
+        snapshot.open &&
+        snapshot.tabs.includes("commit") &&
+        connected &&
+        commitInputOid(snapshot.inputs?.commit) !== oid
+      )
         store.dispatch({ type: "input", kind: "commit", input: oid });
     },
   };

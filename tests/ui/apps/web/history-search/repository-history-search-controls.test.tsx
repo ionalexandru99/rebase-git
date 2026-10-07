@@ -1,7 +1,9 @@
 import { act, StrictMode } from "react";
 import { describe, expect, it, vi } from "vite-plus/test";
 import { page, userEvent } from "vite-plus/test/browser";
+import type { CodeSearchUpdate } from "#contracts/history-search/history-search.contract.ts";
 import type { RepositoryCommit } from "#contracts/repository-history/repository-history.contract.ts";
+import { repositoryScope } from "#tests-support/fixtures.ts";
 import { render } from "#tests-support/render.tsx";
 import { RepositoryHistorySearchControls } from "#web/features/history-search/components/repository-history-search-controls.tsx";
 import type {
@@ -9,6 +11,8 @@ import type {
   HistorySnapshot,
 } from "#web/features/repository-history/history-worker-protocol.ts";
 import type { RepositoryHistory } from "#web/features/repository-history/repository-history.ts";
+import type { EnvironmentSubscriptions } from "#web/platform/query/environment-context.tsx";
+import { RepositoryScopeProvider } from "#web/platform/query/repository-scope.tsx";
 import { createStore } from "#web/platform/store/store.ts";
 
 type Search = (
@@ -27,6 +31,8 @@ const snapshot: HistorySnapshot = {
   commitCount: 100,
   refTargets: [],
 };
+const noCode = { roots: [], open: async () => {} };
+
 describe("history search controls", () => {
   it("loads further matches by scrolling without opening a commit", async () => {
     const reader = searchable(
@@ -44,6 +50,7 @@ describe("history search controls", () => {
         history={reader}
         snapshot={snapshot}
         onNavigate={onNavigate}
+        code={noCode}
       />,
     );
     const input = page.getByRole("searchbox");
@@ -84,6 +91,7 @@ describe("history search controls", () => {
         history={reader}
         snapshot={snapshot}
         onNavigate={onNavigate}
+        code={noCode}
       />,
     );
     await page.getByRole("searchbox").fill("history");
@@ -97,6 +105,7 @@ describe("history search controls", () => {
         history={reader}
         snapshot={{ ...snapshot, revision: 2 }}
         onNavigate={onNavigate}
+        code={noCode}
       />,
     );
 
@@ -121,6 +130,7 @@ describe("history search controls", () => {
           history={first}
           snapshot={snapshot}
           onNavigate={onNavigate}
+          code={noCode}
         />
       </StrictMode>,
     );
@@ -132,6 +142,7 @@ describe("history search controls", () => {
           history={second}
           snapshot={snapshot}
           onNavigate={onNavigate}
+          code={noCode}
         />
       </StrictMode>,
     );
@@ -158,6 +169,7 @@ describe("history search controls", () => {
         history={reader}
         snapshot={snapshot}
         onNavigate={vi.fn()}
+        code={noCode}
         offline
       />,
     );
@@ -199,6 +211,7 @@ describe("history search controls", () => {
         history={reader}
         snapshot={snapshot}
         onNavigate={onNavigate}
+        code={noCode}
       />,
     );
     const input = page.getByRole("searchbox");
@@ -264,6 +277,7 @@ describe("history search controls", () => {
         history={reader}
         snapshot={snapshot}
         onNavigate={onNavigate}
+        code={noCode}
       />,
     );
     await page.getByRole("searchbox").fill("old");
@@ -290,6 +304,7 @@ describe("history search controls", () => {
         history={reader}
         snapshot={{ ...snapshot, revision: 2 }}
         onNavigate={onNavigate}
+        code={noCode}
       />,
     );
     await expect.poll(() => reader.search).toHaveBeenCalledTimes(3);
@@ -305,6 +320,7 @@ describe("history search controls", () => {
         history={reader}
         snapshot={snapshot}
         onNavigate={onNavigate}
+        code={noCode}
       />,
     );
     await page.getByRole("searchbox").fill("history");
@@ -317,6 +333,7 @@ describe("history search controls", () => {
         history={reader}
         snapshot={{ ...snapshot, revision: 2 }}
         onNavigate={onNavigate}
+        code={noCode}
       />,
     );
     await expect
@@ -341,6 +358,7 @@ describe("history search controls", () => {
           history={reader}
           snapshot={snapshot}
           onNavigate={onNavigate}
+          code={noCode}
         />,
       );
       await page.getByRole("searchbox").fill("history");
@@ -366,6 +384,7 @@ describe("history search controls", () => {
           history={reader}
           snapshot={{ ...snapshot, revision: 2 }}
           onNavigate={onNavigate}
+          code={noCode}
         />,
       );
       await expect.poll(() => reader.search).toHaveBeenCalledTimes(5);
@@ -392,6 +411,82 @@ describe("history search controls", () => {
     },
   );
 
+  it("searches changed lines in the filtered history, stops, and opens a match with its files", async () => {
+    const reader = searchable(vi.fn<Search>());
+    const { runs, subscribe } = codeSearches();
+    const onNavigate = vi.fn(async () => {});
+    const open = vi.fn(async () => {});
+    const scope = repositoryScope();
+    await render(
+      <RepositoryScopeProvider scope={scope}>
+        <RepositoryHistorySearchControls
+          history={reader}
+          snapshot={snapshot}
+          onNavigate={onNavigate}
+          code={{ roots: [commit(0).oid], open }}
+        />
+      </RepositoryScopeProvider>,
+      { environment: { subscribe } },
+    );
+
+    await page.getByRole("button", { name: "Search mode, Commits" }).click();
+    await page.getByRole("menuitemradio", { name: "Code" }).click();
+    await expect
+      .element(page.getByRole("searchbox", { name: "Search code" }))
+      .toHaveFocus();
+    await userEvent.keyboard("needle");
+    await expect
+      .element(page.getByRole("searchbox", { name: "Search code" }))
+      .toHaveValue("needle");
+    await page.getByRole("textbox", { name: "Path" }).fill("src");
+
+    await expect
+      .poll(() => runs.at(-1)?.input)
+      .toEqual({
+        repositoryId: scope.repositoryId,
+        worktreePath: scope.worktreePath,
+        text: "needle",
+        roots: [commit(0).oid],
+        path: "src",
+      });
+    const latest = runs.at(-1);
+    expect(runs.slice(0, -1).every((run) => run.signal.aborted)).toBe(true);
+    act(() => {
+      latest?.accept({
+        _tag: "CodeMatches",
+        matches: [
+          { oid: commit(1).oid, paths: ["src/a.ts", "src/b.ts"] },
+          { oid: commit(2).oid, paths: ["src/c.ts"] },
+        ],
+      });
+      latest?.accept({ _tag: "CodeSearchProgress", percent: 40 });
+    });
+    await expect
+      .element(page.getByRole("button", { name: /Repair shallow history 1/ }))
+      .toHaveTextContent("a.ts, b.ts");
+    await expect
+      .element(page.getByRole("progressbar", { name: "Code search progress" }))
+      .toHaveAttribute("value", "40");
+
+    await page.getByRole("button", { name: "Stop" }).click();
+    expect(latest?.signal.aborted).toBe(true);
+    await expect.element(page.getByRole("progressbar")).not.toBeInTheDocument();
+    await userEvent.type(
+      page.getByRole("searchbox", { name: "Search code" }),
+      "{Enter}",
+    );
+
+    await expect
+      .poll(() => open)
+      .toHaveBeenCalledWith(
+        commit(1).oid,
+        { text: "needle", paths: ["src/a.ts", "src/b.ts"] },
+        expect.any(AbortSignal),
+      );
+    expect(onNavigate).not.toHaveBeenCalled();
+    await expect.element(page.getByText("1/2")).toBeVisible();
+  });
+
   it("keeps pending navigation disabled and reports failures with a retry", async () => {
     let rejectNavigation: ((error: Error) => void) | undefined;
     const reader = searchable(
@@ -411,6 +506,7 @@ describe("history search controls", () => {
         history={reader}
         snapshot={snapshot}
         onNavigate={onNavigate}
+        code={noCode}
       />,
     );
     await page.getByRole("searchbox").fill("history");
@@ -439,6 +535,25 @@ describe("history search controls", () => {
   });
 });
 
+interface CodeSearchRun {
+  readonly input: unknown;
+  readonly accept: (update: CodeSearchUpdate) => void;
+  readonly signal: AbortSignal;
+}
+
+function codeSearches() {
+  const runs: CodeSearchRun[] = [];
+  const subscribe: EnvironmentSubscriptions = (_route, input, accept, signal) =>
+    new Promise(() => {
+      runs.push({
+        input,
+        accept: accept as (update: CodeSearchUpdate) => void,
+        signal,
+      });
+    });
+  return { runs, subscribe };
+}
+
 function result(commits: readonly RepositoryCommit[]): HistorySearchPage {
   return { commits, complete: true, commitCount: 100 };
 }
@@ -457,7 +572,11 @@ function searchable<Searching extends Search>(search: Searching) {
             },
             signal,
           )
-        : Promise.reject(new Error("Unexpected history query")),
+        : query._tag === "Commits"
+          ? Promise.resolve(
+              query.oids.map((oid) => commit(Number.parseInt(oid, 16))),
+            )
+          : Promise.reject(new Error("Unexpected history query")),
     synchronize: () => {},
     close: () => {},
   } as RepositoryHistory & { readonly search: Searching };

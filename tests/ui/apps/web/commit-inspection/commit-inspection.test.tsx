@@ -309,6 +309,40 @@ describe("commit inspection", () => {
     await expect.element(grid).toHaveFocus();
   });
 
+  it("narrows a code search match to its files until all files are shown", async () => {
+    const { screen, client } = await fixture(
+      {},
+      {
+        tabs: ["commit"],
+        active: "commit",
+        open: true,
+        inputs: {
+          commit: {
+            oid: historyOid(0),
+            match: { text: "needle", paths: ["src/second.bin"] },
+          },
+        },
+      },
+    );
+    const files = screen.getByRole("region", { name: "Changed files" });
+
+    await expect
+      .element(files.getByRole("button", { name: /second.bin/ }))
+      .toBeVisible();
+    await expect
+      .element(files.getByRole("button", { name: /first.bin/ }))
+      .not.toBeInTheDocument();
+    await expect
+      .poll(() => client.diff)
+      .toHaveBeenLastCalledWith(
+        expect.objectContaining({ path: "src/second.bin" }),
+      );
+    await screen.getByRole("button", { name: "Show all files" }).click();
+    await expect
+      .element(files.getByRole("button", { name: /first.bin/ }))
+      .toBeVisible();
+  });
+
   it("reads a renamed file's diff from its previous path", async () => {
     const { screen, grid, client } = await fixture();
     await grid.getByRole("row", { name: /^Commit 0,/ }).dblClick();

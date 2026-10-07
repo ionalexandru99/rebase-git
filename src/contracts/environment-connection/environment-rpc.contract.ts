@@ -7,6 +7,7 @@ import { EnvironmentAuthorizationApi } from "#contracts/environment-authorizatio
 import { EnvironmentFilesystemApi } from "#contracts/environment-filesystem/environment-filesystem.contract.ts";
 import { FileHistoryApi } from "#contracts/file-history/file-history.contract.ts";
 import { GitIdentityApi } from "#contracts/git-identity/git-identity.contract.ts";
+import { HistorySearchApi } from "#contracts/history-search/history-search.contract.ts";
 import { PullRequestsApi } from "#contracts/pull-requests/pull-requests.contract.ts";
 import { RepositoryCatalogApi } from "#contracts/repository-catalog/repository-catalog.contract.ts";
 import { RepositoryChangesApi } from "#contracts/repository-changes/repository-changes.contract.ts";
@@ -78,6 +79,7 @@ export const EnvironmentRpc = RpcGroup.make(
   ...Object.values(RepositoryCatalogApi),
   ...Object.values(CommitInspectionApi),
   ...Object.values(FileHistoryApi),
+  ...Object.values(HistorySearchApi),
   ...Object.values(CompareApi),
   ...Object.values(RepositoryChangesApi),
   ...Object.values(RepositoryConflictsApi),

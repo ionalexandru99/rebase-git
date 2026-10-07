@@ -5,34 +5,65 @@ import {
   useRef,
   useState,
 } from "react";
+import { flushSync } from "react-dom";
+import type { RepositoryRejected } from "#contracts/git/git-failures.contract.ts";
+import { HistorySearchApi } from "#contracts/history-search/history-search.contract.ts";
 import type { RepositoryCommit } from "#contracts/repository-history/repository-history.contract.ts";
+import type { CodeMatchTarget } from "#web/features/commit-inspection/commit-input.ts";
 import { useErrorToast } from "#web/features/notifications/notifications.tsx";
 import type { HistorySearchPage } from "#web/features/repository-history/history-worker-protocol.ts";
 import type { RepositoryHistory } from "#web/features/repository-history/repository-history.ts";
+import { useEnvironment } from "#web/platform/query/environment-context.tsx";
+import { useRepositoryScope } from "#web/platform/query/repository-scope.tsx";
+import {
+  describeFailure,
+  requestFailure,
+} from "#web/platform/query/request-failure.ts";
 
 const pageSize = 20;
 const restoredPages = 5;
 const searchFailed = "Could not search cached history.";
 
+export type SearchMode = "Commits" | "Code";
+
+export interface CodeSearchScope {
+  readonly roots: readonly string[];
+  readonly open: (
+    oid: string,
+    match: CodeMatchTarget,
+    signal: AbortSignal,
+  ) => Promise<void>;
+}
+
 interface HistorySearchState {
+  readonly mode: SearchMode;
   readonly text: string;
+  readonly path: string;
   readonly commits: readonly RepositoryCommit[];
+  readonly files: ReadonlyMap<string, readonly string[]>;
   readonly cursor: string | undefined;
   readonly complete: boolean;
   readonly loading: boolean;
   readonly navigating: boolean;
   readonly selected: number;
+  readonly progress: number | undefined;
   readonly error: string | undefined;
 }
 
+const noFiles: ReadonlyMap<string, readonly string[]> = new Map();
+
 const emptySearch: HistorySearchState = {
+  mode: "Commits",
   text: "",
+  path: "",
   commits: [],
+  files: noFiles,
   cursor: undefined,
   complete: false,
   loading: false,
   navigating: false,
   selected: -1,
+  progress: undefined,
   error: undefined,
 };
 
@@ -40,16 +71,21 @@ export function useHistorySearch(
   history: RepositoryHistory,
   revision: number,
   onNavigate: (oid: string, signal: AbortSignal) => Promise<void>,
+  code: CodeSearchScope,
 ) {
   const [state, setState] = useState(emptySearch);
   const errorToast = useErrorToast();
+  const { subscribe } = useEnvironment();
+  const repository = useRepositoryScope();
   const navigating = state.navigating;
   const latest = useRef(state);
   const running = useRef<AbortController | undefined>(undefined);
   const selectedOid = useRef<string | undefined>(undefined);
   const navigate = useRef(onNavigate);
+  const scope = useRef({ code, repository, subscribe });
   useLayoutEffect(() => {
     navigate.current = onNavigate;
+    scope.current = { code, repository, subscribe };
   });
   const publish = useCallback((next: HistorySearchState) => {
     latest.current = next;
@@ -62,12 +98,86 @@ export function useHistorySearch(
     return controller.signal;
   }, []);
 
+  const searchCode = useCallback(
+    (signal: AbortSignal) => {
+      const { text, path } = latest.current;
+      const { code, repository, subscribe } = scope.current;
+      if (repository === undefined || code.roots.length === 0) {
+        publish({ ...latest.current, loading: false, progress: undefined });
+        return;
+      }
+      let order = Promise.resolve();
+      const show = (next: Partial<HistorySearchState>) => {
+        if (!signal.aborted)
+          flushSync(() => publish({ ...latest.current, ...next }));
+      };
+      const enqueue = (step: () => Promise<void> | void) => {
+        order = order.then(() => {
+          if (!signal.aborted) return step();
+        });
+      };
+      void subscribe(
+        HistorySearchApi.code,
+        {
+          repositoryId: repository.repositoryId,
+          worktreePath: repository.worktreePath,
+          text,
+          roots: code.roots,
+          ...(path.trim() === "" ? {} : { path: path.trim() }),
+        },
+        (update) => {
+          if (update._tag === "CodeSearchProgress")
+            enqueue(() => show({ progress: update.percent }));
+          else
+            enqueue(async () => {
+              const commits = await history.ask(
+                {
+                  _tag: "Commits",
+                  oids: update.matches.map((match) => match.oid),
+                },
+                signal,
+              );
+              const files = new Map(latest.current.files);
+              for (const match of update.matches)
+                files.set(match.oid, match.paths);
+              show({ commits: [...latest.current.commits, ...commits], files });
+            });
+        },
+        signal,
+      )
+        .then(() => order)
+        .then(
+          () => show({ loading: false, complete: true, progress: undefined }),
+          (error: unknown) =>
+            show({
+              loading: false,
+              progress: undefined,
+              error: describeFailure(requestFailure<RepositoryRejected>(error)),
+            }),
+        );
+    },
+    [history, publish],
+  );
+
   const search = useCallback(
-    (text: string, keepResults = false) => {
+    (keepResults = false) => {
       const signal = begin();
+      const { mode, text, path } = latest.current;
+      const searching = text.trim() !== "";
       if (!keepResults)
-        publish({ ...emptySearch, text, loading: text.trim() !== "" });
-      if (text.trim() === "") return;
+        publish({
+          ...emptySearch,
+          mode,
+          text,
+          path,
+          loading: searching,
+          progress: searching && mode === "Code" ? 0 : undefined,
+        });
+      if (!searching) return;
+      if (mode === "Code") {
+        searchCode(signal);
+        return;
+      }
       void restoreResults(history, text, selectedOid.current, signal).then(
         (page) => {
           if (signal.aborted) return;
@@ -90,7 +200,7 @@ export function useHistorySearch(
         },
       );
     },
-    [begin, history, publish],
+    [begin, history, publish, searchCode],
   );
 
   const searched = useRef({ history, revision });
@@ -99,9 +209,9 @@ export function useHistorySearch(
     const switched = previous.history !== history;
     if (!switched && (navigating || previous.revision === revision)) return;
     searched.current = { history, revision };
-    const { text } = latest.current;
-    if (switched) search(text);
-    else if (text.trim() !== "") search(text, true);
+    if (switched) search();
+    else if (latest.current.mode === "Commits" && latest.current.text !== "")
+      search(true);
   }, [history, revision, navigating, search]);
   useEffect(() => () => running.current?.abort(), []);
 
@@ -121,8 +231,12 @@ export function useHistorySearch(
 
   const open = (index: number) => {
     const current = latest.current;
-    if (current.loading || current.navigating) return;
-    const signal = begin();
+    if (current.navigating || (current.mode === "Commits" && current.loading))
+      return;
+    const signal =
+      current.mode === "Code" && running.current !== undefined
+        ? running.current.signal
+        : begin();
     publish({ ...current, navigating: true, error: undefined });
     void (async () => {
       if (index >= latest.current.commits.length) await loadPage(signal);
@@ -130,29 +244,59 @@ export function useHistorySearch(
       if (commit === undefined) return;
       selectedOid.current = commit.oid;
       publish({ ...latest.current, selected: index });
-      await navigate.current(commit.oid, signal);
+      const paths = latest.current.files.get(commit.oid);
+      if (latest.current.mode === "Code" && paths !== undefined)
+        await scope.current.code.open(
+          commit.oid,
+          { text: latest.current.text, paths },
+          signal,
+        );
+      else await navigate.current(commit.oid, signal);
     })().then(
       () => {
-        if (!signal.aborted)
-          publish({ ...latest.current, loading: false, navigating: false });
+        if (!signal.aborted) settle();
       },
       () => {
         if (signal.aborted) return;
-        publish({ ...latest.current, loading: false, navigating: false });
+        settle();
         errorToast.show("openSearchResult");
       },
     );
+  };
+
+  const settle = () => {
+    const current = latest.current;
+    publish({
+      ...current,
+      navigating: false,
+      loading: current.mode === "Code" && current.loading,
+    });
+  };
+
+  const restart = (next: Partial<HistorySearchState>) => {
+    selectedOid.current = undefined;
+    publish({ ...latest.current, ...next });
+    search();
   };
 
   return {
     ...state,
     setText: (value: string) => {
       const text = value.slice(0, 256);
-      if (text === latest.current.text) return;
-      selectedOid.current = undefined;
-      search(text);
+      if (text !== latest.current.text) restart({ text });
     },
-    retry: () => search(latest.current.text),
+    setMode: (mode: SearchMode) => {
+      if (mode !== latest.current.mode) restart({ mode });
+    },
+    setPath: (path: string) => {
+      if (path !== latest.current.path) restart({ path });
+    },
+    stop: () => {
+      running.current?.abort();
+      running.current = undefined;
+      publish({ ...latest.current, loading: false, progress: undefined });
+    },
+    retry: () => search(),
     loadMore: () => {
       const current = latest.current;
       if (

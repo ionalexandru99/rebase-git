@@ -149,6 +149,7 @@ function Workspace({
   const {
     graphRef,
     open: openDetails,
+    openMatch: openCodeMatch,
     select: selectCommit,
   } = useCommitInspection(scope.connected);
   return (
@@ -193,6 +194,7 @@ function Workspace({
                         rewrite={rewrite}
                         ref={graphRef}
                         onOpenDetails={openDetails}
+                        onOpenCodeMatch={openCodeMatch}
                         onOpenChanges={() =>
                           execute({ type: "open", kind: "changes" })
                         }
