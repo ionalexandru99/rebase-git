@@ -116,7 +116,7 @@ export function HistoryStorageBreakdown({
                 />
               ) : (
                 <RepositoryBadge
-                  className="size-5 rounded-control text-badge"
+                  className="size-6 rounded-control text-badge"
                   color={repository.color}
                   name={repository.name}
                 />
