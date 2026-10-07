@@ -553,11 +553,16 @@ export function BranchesSidebar({
       aria-label="Branches"
       className="flex h-full min-h-0 flex-col overflow-hidden border-sidebar-border/50 border-r bg-sidebar text-sidebar-foreground"
     >
-      <div className="flex h-11 shrink-0 items-center px-4 text-sidebar-accent-foreground">
-        <h2 className="min-w-0 flex-1 truncate text-heading font-semibold">
-          Branches
-        </h2>
-        <ScrollTopButton className="mr-1" region={treeRef} />
+      <div className="flex h-12 shrink-0 items-center gap-2 px-3">
+        <h2 className="sr-only">Branches</h2>
+        <BranchesSidebarFilter
+          onKeyDown={handleFilterKeyDown}
+          onQueryChange={setQuery}
+          onScopeChange={setScope}
+          query={query}
+          scope={scope}
+        />
+        <ScrollTopButton className="[&.invisible]:hidden" region={treeRef} />
         <IconSwitch
           label="Branch view"
           options={branchViewOptions}
@@ -565,13 +570,6 @@ export function BranchesSidebar({
           onChange={setView}
         />
       </div>
-      <BranchesSidebarFilter
-        onKeyDown={handleFilterKeyDown}
-        onQueryChange={setQuery}
-        onScopeChange={setScope}
-        query={query}
-        scope={scope}
-      />
       <DockedTree
         activeRowId={activeRowId}
         busy={activation.checkingOut}

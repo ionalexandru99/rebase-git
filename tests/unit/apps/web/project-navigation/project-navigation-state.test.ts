@@ -8,7 +8,6 @@ import {
   setEnvironmentAvailability,
   setProjectSidebarCollapsed,
   showOpenProject,
-  toggleEnvironment,
 } from "#web/features/project-navigation/project-navigation-state.ts";
 
 describe("project navigation state", () => {
@@ -30,17 +29,6 @@ describe("project navigation state", () => {
     ]);
   });
 
-  it("collapses one Environment without losing its repositories", () => {
-    const state = navigationState();
-
-    const collapsed = toggleEnvironment(state, "office");
-
-    expect(collapsed.environments[0]).toMatchObject({
-      expanded: false,
-      repositories: [{ id: "payments" }, { id: "worker" }],
-    });
-  });
-
   it("filters repositories by name without changing the navigation state", () => {
     const state = navigationState();
     const environment = state.environments[0] ?? unreachable();
@@ -52,7 +40,7 @@ describe("project navigation state", () => {
     expect(environment.repositories).toHaveLength(2);
   });
 
-  it("collapses the Projects sidebar without changing Environment expansion or selection", () => {
+  it("collapses the Projects sidebar without changing the selection", () => {
     const state = navigationState();
 
     const collapsed = setProjectSidebarCollapsed(state, true);
@@ -61,7 +49,6 @@ describe("project navigation state", () => {
       selectedRepositoryId: "payments",
       sidebarCollapsed: true,
       workspaceView: "repository",
-      environments: [{ expanded: true }],
     });
   });
 
@@ -162,9 +149,7 @@ function navigationState(): ProjectNavigationState {
     environments: [
       {
         availability: "available",
-        expanded: true,
         id: "office",
-        name: "Office PC",
         repositories: [
           { color: "blue", id: "payments", name: "payments" },
           { color: "blue", id: "worker", name: "worker" },

@@ -195,10 +195,8 @@ describe("application shell", () => {
       .toBeVisible();
     await expect
       .element(page.getByRole("heading", { level: 1, name: "Projects" }))
-      .toBeVisible();
-    await expect
-      .element(page.getByText("Pairing required"))
       .toBeInTheDocument();
+    await expect.element(page.getByText("Pairing required")).toBeVisible();
     await expect
       .element(
         page.getByText(
@@ -247,7 +245,7 @@ describe("application shell", () => {
       name: "Search repositories",
     });
     const projectFilter = page.getByRole("textbox", {
-      name: "Filter open projects",
+      name: "Filter projects",
     });
     await projectFilter.fill("rebase");
     await page.getByRole("button", { name: "Open project" }).click();

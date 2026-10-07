@@ -127,9 +127,6 @@ function Shell({
                   })
                 }
                 selectRepository={(_, repository) => openRepository(repository)}
-                toggleEnvironment={(environmentId) =>
-                  navigate({ type: "toggle-environment", environmentId })
-                }
               />
             )}
             repositorySettings={
