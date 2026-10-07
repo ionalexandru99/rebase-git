@@ -1,17 +1,7 @@
-import { Menu } from "@base-ui/react/menu";
-import {
-  IconArrowDown,
-  IconArrowUp,
-  IconChevronDown,
-} from "@tabler/icons-react";
+import { IconArrowUp } from "@tabler/icons-react";
 import { useEffect, useState } from "react";
 import { RepositoryPushApi } from "#contracts/repository-push/repository-push.contract.ts";
-import { Button } from "#web/components/ui/button.tsx";
 import { Confirmation } from "#web/components/ui/confirmation.tsx";
-import {
-  DropdownMenuContent,
-  DropdownMenuItem,
-} from "#web/components/ui/dropdown-menu.tsx";
 import { ToolbarButton } from "#web/components/ui/toolbar-button.tsx";
 import { PersistentNotification } from "#web/features/notifications/components/persistent-notification.tsx";
 import {
@@ -94,72 +84,40 @@ export function usePush() {
   };
 }
 
+export function pushAvailability(
+  push: Push,
+  target: PushTarget,
+  operationBusy: boolean,
+) {
+  const upstream = target.upstream;
+  const tracked = upstream !== undefined && !upstream.gone;
+  const busy = !push.canRun || operationBusy || push.running;
+  return {
+    canPush: !busy && (!tracked || upstream.ahead > 0),
+    canForcePush: !busy && tracked && upstream.remoteOid !== undefined,
+  };
+}
+
 export function PushButton({
   push,
   target,
   operationBusy,
+  className,
 }: {
   readonly push: Push;
   readonly target: PushTarget;
   readonly operationBusy: boolean;
+  readonly className?: string;
 }) {
-  const upstream = target.upstream;
-  const tracked = upstream !== undefined && !upstream.gone;
-  const busy = !push.canRun || operationBusy || push.running;
-  const canPush = !tracked || upstream.ahead > 0;
-  const canForcePush = tracked && upstream.remoteOid !== undefined;
   return (
-    <div className="flex h-7 items-center rounded-control border border-border">
-      <ToolbarButton
-        aria-label={pushLabel(target)}
-        className="h-full rounded-r-none border-0"
-        disabled={busy || !canPush}
-        onClick={() => push.push(target)}
-      >
-        <IconArrowUp aria-hidden="true" className="size-3.5" />
-        {push.running ? "Pushing" : "Push"}
-        {tracked && upstream.ahead > 0 ? (
-          <span className="text-status-available tabular-nums">
-            {upstream.ahead}
-          </span>
-        ) : null}
-        {tracked && upstream.behind > 0 ? (
-          <span className="inline-flex items-center text-status-unavailable tabular-nums">
-            <IconArrowDown aria-hidden="true" className="size-3" />
-            {upstream.behind}
-          </span>
-        ) : null}
-      </ToolbarButton>
-      <Menu.Root>
-        <Menu.Trigger
-          aria-label="More push actions"
-          disabled={busy}
-          render={
-            <Button
-              className="h-full rounded-l-none border-0 border-border border-l px-1.5"
-              size="sm"
-              variant="ghost"
-            />
-          }
-        >
-          <IconChevronDown aria-hidden="true" className="size-3.5" />
-        </Menu.Trigger>
-        <DropdownMenuContent>
-          <DropdownMenuItem
-            disabled={!canPush}
-            onClick={() => push.push(target)}
-          >
-            Push
-          </DropdownMenuItem>
-          <DropdownMenuItem
-            disabled={!canForcePush}
-            onClick={() => push.requestForcePush(target)}
-          >
-            Force push…
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-      </Menu.Root>
-    </div>
+    <ToolbarButton
+      aria-label={push.running ? "Pushing" : pushLabel(target)}
+      className={className}
+      disabled={!pushAvailability(push, target, operationBusy).canPush}
+      onClick={() => push.push(target)}
+    >
+      <IconArrowUp aria-hidden="true" className="size-3.5" />
+    </ToolbarButton>
   );
 }
 

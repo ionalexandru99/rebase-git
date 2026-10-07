@@ -1,6 +1,6 @@
 import { act } from "react";
 import { describe, expect, it, vi } from "vite-plus/test";
-import { page } from "vite-plus/test/browser";
+import { page, userEvent } from "vite-plus/test/browser";
 import {
   type FetchFailed,
   type RepositoryFetchSetting,
@@ -63,13 +63,12 @@ describe("repository fetch controls", () => {
   it("reports a failed toolbar fetch once and clears its status after a fetch succeeds", async () => {
     const f = await fixture(fresh);
     f.fetch.mockRejectedValueOnce(unanswered);
-    const fetch = page.getByRole("button", { name: "Fetch", exact: true });
-    await fetch.click();
+    await fetchNow();
     await expect.element(page.getByText("Couldn't fetch")).toBeVisible();
     await expect
       .element(page.getByRole("status"))
       .toHaveTextContent("Fetch failed");
-    await fetch.click();
+    await fetchNow();
     await expect.element(page.getByRole("status")).not.toBeInTheDocument();
     await expect
       .element(page.getByText("Fetching changes"))
@@ -87,7 +86,7 @@ describe("repository fetch controls", () => {
       progress?.(40);
       return finished.promise;
     });
-    await page.getByRole("button", { name: "Fetch", exact: true }).click();
+    await fetchNow();
     await expect
       .element(page.getByRole("progressbar", { name: "Fetching changes" }))
       .toHaveAttribute("aria-valuenow", "40");
@@ -103,22 +102,16 @@ describe("repository fetch controls", () => {
     const f = await fixture(fresh);
     const finished = Promise.withResolvers<RepositoryFetchStatus>();
     f.fetch.mockReturnValueOnce(finished.promise);
-    await page.getByRole("button", { name: "Fetch", exact: true }).click();
-    await expect
-      .element(page.getByRole("button", { name: "Fetching", exact: true }))
-      .toBeDisabled();
+    await fetchNow();
+    await expectFetchItem(true);
     expect(f.fetch).toHaveBeenCalledOnce();
     finished.resolve(fresh);
-    await expect
-      .element(page.getByRole("button", { name: "Fetch", exact: true }))
-      .toBeEnabled();
+    await expectFetchItem(false);
     await f.publish(failed);
     await expect
       .element(page.getByRole("status"))
       .toHaveTextContent("Fetch failed");
-    await expect
-      .element(page.getByRole("button", { name: "Fetch", exact: true }))
-      .toBeEnabled();
+    await expectFetchItem(false);
     expect(page.getByText("Couldn't fetch").elements()).toHaveLength(0);
     await f.publish(fresh);
     await expect.element(page.getByRole("status")).not.toBeInTheDocument();
@@ -168,9 +161,7 @@ describe("repository fetch controls", () => {
 
   it("shows offline and disables fetching and its configuration", async () => {
     await fixture(fresh, { connected: false });
-    await expect
-      .element(page.getByRole("button", { name: "Fetch", exact: true }))
-      .toBeDisabled();
+    await expectFetchItem(true);
     await expect
       .element(page.getByRole("status"))
       .toHaveTextContent("You're offline");
@@ -190,6 +181,20 @@ describe("repository fetch controls", () => {
     expect(f.configure).not.toHaveBeenCalled();
   });
 });
+
+async function fetchNow() {
+  await page.getByRole("button", { name: "More sync actions" }).click();
+  await page.getByRole("menuitem", { name: "Fetch" }).click();
+}
+
+async function expectFetchItem(disabled: boolean) {
+  await page.getByRole("button", { name: "More sync actions" }).click();
+  const item = page.getByRole("menuitem", { name: "Fetch" });
+  if (disabled)
+    await expect.element(item).toHaveAttribute("aria-disabled", "true");
+  else await expect.element(item).not.toHaveAttribute("aria-disabled");
+  await userEvent.keyboard("{Escape}");
+}
 
 async function fixture(
   initial: RepositoryFetchStatus,
