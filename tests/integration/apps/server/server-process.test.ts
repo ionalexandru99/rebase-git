@@ -36,13 +36,13 @@ describe("rebase serve", () => {
       const processOutput = startCli([], directory);
       const origin = await processOutput.waitForListeningUrl();
 
-      expect(new URL(origin).hostname).toBe("127.0.0.1");
+      expect(new URL(origin).hostname).toBe("localhost");
 
       await verifyBrowserAssets(origin);
 
       const runtime = JSON.parse(await readFile(runtimePath, "utf8"));
       expect(runtime).toMatchObject({
-        origin,
+        origin: origin.replace("localhost", "127.0.0.1"),
         pid: processOutput.child.pid,
       });
 
@@ -145,14 +145,14 @@ describe("rebase serve", () => {
 
     const { explicit, explicitPort, origin } =
       await startCliOnAvailableExplicitPort(directory);
-    expect(origin).toBe(`http://127.0.0.1:${explicitPort}`);
+    expect(origin).toBe(`http://localhost:${explicitPort}`);
     expect(readEnvironmentState(statePath)).toEqual(firstState);
     explicit.child.kill("SIGTERM");
     await waitForExit(explicit.child);
 
     const restarted = startCli([], directory);
     await expect(restarted.waitForListeningUrl()).resolves.toBe(
-      `http://127.0.0.1:${automaticPort}`,
+      `http://localhost:${automaticPort}`,
     );
     expect(readEnvironmentState(statePath)).toEqual(firstState);
     restarted.child.kill("SIGTERM");

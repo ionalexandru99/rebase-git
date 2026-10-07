@@ -45,6 +45,15 @@ describe("Environment authorization transport", () => {
       _tag: "Answered",
       message: { exit: { _tag: "Success", value: { sequence: 0 } } },
     });
+    const localhostOrigin = origin.replace("127.0.0.1", "localhost");
+    await expect(
+      helloOverSocket(localhostOrigin, {
+        headers: { cookie, origin: localhostOrigin },
+      }),
+    ).resolves.toMatchObject({
+      _tag: "Answered",
+      message: { exit: { _tag: "Success", value: { sequence: 0 } } },
+    });
     await expect(
       helloOverSocket(origin, {
         headers: { cookie, origin: "https://attacker.example" },

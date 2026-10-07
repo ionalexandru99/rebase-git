@@ -5,11 +5,12 @@ import type { EnvironmentAccessFailure } from "#contracts/environment-authorizat
 import { environmentSubprotocol } from "#contracts/environment-connection/environment-rpc.contract.ts";
 import { EnvironmentAuthorizationError } from "#server/features/environment-authorization/environment-authorization.ts";
 
+const loopbackAddresses = ["127.0.0.1", "[::1]"];
+
 export function validateRequestHost(request: IncomingMessage) {
-  const expectedHost = listeningHost(request);
-  return expectedHost !== undefined && request.headers.host === expectedHost
-    ? Effect.void
-    : failAuthorization({ _tag: "InvalidHost" });
+  return requestHost(request) === undefined
+    ? failAuthorization({ _tag: "InvalidHost" })
+    : Effect.void;
 }
 
 export function validateRequestOrigin(
@@ -24,7 +25,7 @@ export function validateRequestOrigin(
 }
 
 export function expectedRequestOrigin(request: IncomingMessage) {
-  return `http://${listeningHost(request) ?? "127.0.0.1:0"}`;
+  return `http://${requestHost(request) ?? "127.0.0.1:0"}`;
 }
 
 export function formatHostAddress(address: string) {
@@ -90,11 +91,20 @@ function cookieName(request: IncomingMessage) {
   return `rebase_session_${request.socket.localPort}`;
 }
 
-function listeningHost(request: IncomingMessage) {
+function requestHost(request: IncomingMessage) {
+  const host = request.headers.host;
+  return host !== undefined && listeningHosts(request).includes(host)
+    ? host
+    : undefined;
+}
+
+function listeningHosts(request: IncomingMessage) {
   const { localAddress, localPort } = request.socket;
-  return localAddress === undefined || localPort === undefined
-    ? undefined
-    : `${formatHostAddress(localAddress)}:${localPort}`;
+  if (localAddress === undefined || localPort === undefined) return [];
+  const address = formatHostAddress(localAddress);
+  return loopbackAddresses.includes(address)
+    ? [`${address}:${localPort}`, `localhost:${localPort}`]
+    : [`${address}:${localPort}`];
 }
 
 function failAuthorization(failure: EnvironmentAuthorizationError["failure"]) {
