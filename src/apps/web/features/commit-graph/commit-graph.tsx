@@ -60,8 +60,8 @@ import type {
 import type { CompareActions } from "#web/features/comparison/comparison.ts";
 import { RepositoryHistorySearchControls } from "#web/features/history-search/components/repository-history-search-controls.tsx";
 import type { MergeActions } from "#web/features/merge/merge-actions.ts";
-import type { DropCommits } from "#web/features/rebase/drop-commits.tsx";
 import type { RebaseActions } from "#web/features/rebase/rebase-actions.ts";
+import type { RewriteCommits } from "#web/features/rebase/rewrite-commits.tsx";
 import {
   describeHistoryFailure,
   type RepositoryHistory,
@@ -97,7 +97,7 @@ export function CommitGraph({
   reset,
   compare,
   cherryPick,
-  drop,
+  rewrite,
   onOpenDetails,
   onOpenChanges,
   onActiveCommitChange,
@@ -107,7 +107,7 @@ export function CommitGraph({
   readonly reset?: ResetActions | undefined;
   readonly compare?: CompareActions | undefined;
   readonly cherryPick?: CherryPick | undefined;
-  readonly drop?: DropCommits | undefined;
+  readonly rewrite?: RewriteCommits | undefined;
   readonly onOpenDetails?: ((oid: string) => void) | undefined;
   readonly onOpenChanges?: (() => void) | undefined;
   readonly onActiveCommitChange?:
@@ -192,7 +192,7 @@ export function CommitGraph({
     rebase: rebase && {
       actionFor: (oid) => highlighted(rebase.actionFor(oid), setPreviewing),
     },
-    drop,
+    rewrite,
     reset,
     compare,
     onOpenDetails,
@@ -264,7 +264,7 @@ export function CommitGraph({
       ? [...navigation.selected]
       : [oid];
     cherryPick?.open(selection, scopeQuery);
-    drop?.open(selection, scopeQuery);
+    rewrite?.open(selection, scopeQuery);
     navigation.select(
       oid,
       index,

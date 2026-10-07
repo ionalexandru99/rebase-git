@@ -5,7 +5,7 @@ import {
   historyCommit,
   historyScope,
 } from "#tests-support/history.ts";
-import { dropPlan } from "#web/features/rebase/drop-commits.tsx";
+import { rewritePlan } from "#web/features/rebase/rewrite-plan.ts";
 
 const oid = (name: string) => name.padEnd(40, "0");
 const commit = (name: string, parents: readonly string[], order: number) =>
@@ -15,15 +15,22 @@ function plan(
   commits: readonly RepositoryCommit[],
   dropped: readonly string[],
   unpushed = Infinity,
+  rewrite: "drop" | "squash" = "drop",
 ) {
-  return dropPlan(
+  return rewritePlan(
     fakeRepositoryHistory({ commits }),
     historyScope(commits.map((commit) => commit.oid)),
     oid("e"),
+    rewrite,
     dropped.map(oid),
     unpushed,
   );
 }
+
+const squash = (
+  commits: readonly RepositoryCommit[],
+  ...selected: readonly string[]
+) => plan(commits, selected, Infinity, "squash");
 
 const linear = [
   commit("e", ["d"], 5),
@@ -33,12 +40,12 @@ const linear = [
   commit("a", [], 1),
 ];
 
-describe("drop plan", () => {
+describe("rewrite plan", () => {
   it("rebases onto the parent of the oldest selected commit and drops only the selection, in replay order", async () => {
     expect(await plan(linear, ["b", "d"])).toMatchObject({
       _tag: "Ready",
       onto: oid("a"),
-      dropped: [{ oid: oid("d") }, { oid: oid("b") }],
+      selected: [{ oid: oid("d") }, { oid: oid("b") }],
       pushed: false,
       steps: [
         { commit: oid("b"), action: "drop", message: null },
@@ -105,6 +112,53 @@ describe("drop plan", () => {
     expect(await plan(linear, ["a"])).toMatchObject({
       _tag: "Blocked",
       reason: "Root commit",
+    });
+  });
+
+  it("squashes into the parent by rebasing onto the grandparent", async () => {
+    expect(await squash(linear, "d")).toMatchObject({
+      _tag: "Ready",
+      onto: oid("b"),
+      steps: [
+        { commit: oid("c"), action: "pick", message: null },
+        { commit: oid("d"), action: "squash", message: null },
+        { commit: oid("e"), action: "pick", message: null },
+      ],
+    });
+  });
+
+  it("squashes several consecutive commits into the oldest of them", async () => {
+    expect(await squash(linear, "d", "c", "b")).toMatchObject({
+      _tag: "Ready",
+      onto: oid("a"),
+      steps: [
+        { commit: oid("b"), action: "pick", message: null },
+        { commit: oid("c"), action: "squash", message: null },
+        { commit: oid("d"), action: "squash", message: null },
+        { commit: oid("e"), action: "pick", message: null },
+      ],
+    });
+    expect(await squash(linear, "b", "d")).toMatchObject({
+      _tag: "Blocked",
+      reason: "Not consecutive",
+    });
+  });
+
+  it("blocks a squash into the root commit or a merge", async () => {
+    expect(await squash(linear, "b")).toMatchObject({
+      _tag: "Blocked",
+      reason: "Root commit",
+    });
+    const merged = [
+      commit("e", ["m"], 5),
+      commit("m", ["c", "s"], 4),
+      commit("s", ["a"], 3),
+      commit("c", ["a"], 2),
+      commit("a", [], 1),
+    ];
+    expect(await squash(merged, "e")).toMatchObject({
+      _tag: "Blocked",
+      reason: "Merge commit",
     });
   });
 });
