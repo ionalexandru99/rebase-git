@@ -230,7 +230,7 @@ it("retains actual working-change selection, filter, draft and amend state acros
     .element(
       page.getByRole("button", { name: "Unstaged second.bin", exact: true }),
     )
-    .toHaveAttribute("aria-pressed", "true");
+    .toHaveAttribute("aria-current", "true");
 });
 
 it("retains an inspected commit and file while another tab and another project are active", async () => {
@@ -301,7 +301,7 @@ it("keeps linked-worktree catalog projects independent when their other owner cl
     .element(
       page.getByRole("button", { name: "Unstaged second.bin", exact: true }),
     )
-    .toHaveAttribute("aria-pressed", "true");
+    .toHaveAttribute("aria-current", "true");
 });
 
 it("pauses retained sessions while a different environment is current", async () => {

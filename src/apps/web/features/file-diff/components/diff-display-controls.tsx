@@ -16,7 +16,11 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "#web/components/ui/dropdown-menu.tsx";
-import { IconSwitch, IconToggles } from "#web/components/ui/icon-switch.tsx";
+import {
+  IconSwitch,
+  type IconToggle,
+  IconToggles,
+} from "#web/components/ui/icon-switch.tsx";
 import { ScrollTopButton } from "#web/components/ui/scroll-top-button.tsx";
 import type { DiffPreferences } from "#web/domain/file-diff/diff-preferences.contract.ts";
 
@@ -25,31 +29,68 @@ const layoutOptions = [
   { value: "split", label: "Split", Icon: IconLayoutColumns },
 ] as const;
 
+type Layout = (typeof layoutOptions)[number]["value"];
+
 interface DisplayOptions {
+  readonly layout: Layout;
+  readonly chooseLayout: (layout: Layout) => void;
+  readonly toggles: readonly IconToggle[];
+}
+
+export function DiffDisplayControls({
+  expanded,
+  onExpand,
+  preferences: prefs,
+  onPreferences,
+  children,
+  region,
+}: {
   readonly expanded: boolean;
   readonly onExpand?: ((expanded: boolean) => void) | undefined;
   readonly preferences: DiffPreferences;
   readonly onPreferences: (preferences: DiffPreferences) => void;
-}
-
-export function DiffDisplayControls({
-  children,
-  region,
-  ...options
-}: DisplayOptions & {
   readonly children?: ReactNode;
   readonly region: RefObject<HTMLElement | null>;
 }) {
+  const options: DisplayOptions = {
+    layout: prefs.split ? "split" : "unified",
+    chooseLayout: (layout) =>
+      onPreferences({ ...prefs, split: layout === "split" }),
+    toggles: [
+      {
+        label: "Word wrap",
+        Icon: IconTextWrap,
+        pressed: prefs.wrap,
+        onChange: (wrap) => onPreferences({ ...prefs, wrap }),
+      },
+      ...(onExpand
+        ? [
+            {
+              label: "Show unchanged lines",
+              Icon: IconArrowAutofitHeight,
+              pressed: expanded,
+              onChange: onExpand,
+            },
+          ]
+        : []),
+    ],
+  };
   return (
     <fieldset
       className="@container flex h-11.75 shrink-0 items-center border-border border-b px-2"
       aria-label="Diff display controls"
     >
       <div className="flex w-full items-center gap-1">
-        <div className="hidden items-center gap-1 @min-[14.5rem]:flex">
-          <InlineOptions {...options} />
+        <div className="hidden items-center gap-1 @min-[16rem]:flex">
+          <IconSwitch
+            label="Diff layout"
+            options={layoutOptions}
+            value={options.layout}
+            onChange={options.chooseLayout}
+          />
+          <IconToggles toggles={options.toggles} />
         </div>
-        <div className="flex @min-[14.5rem]:hidden">
+        <div className="flex @min-[16rem]:hidden">
           <OptionsMenu {...options} />
         </div>
         <div className="ml-auto flex items-center">
@@ -61,52 +102,7 @@ export function DiffDisplayControls({
   );
 }
 
-function InlineOptions({
-  expanded,
-  onExpand,
-  preferences: prefs,
-  onPreferences,
-}: DisplayOptions) {
-  return (
-    <>
-      <IconSwitch
-        label="Diff layout"
-        options={layoutOptions}
-        value={prefs.split ? "split" : "unified"}
-        onChange={(layout) =>
-          onPreferences({ ...prefs, split: layout === "split" })
-        }
-      />
-      <IconToggles
-        toggles={[
-          {
-            label: "Word wrap",
-            Icon: IconTextWrap,
-            pressed: prefs.wrap,
-            onChange: (wrap) => onPreferences({ ...prefs, wrap }),
-          },
-          ...(onExpand
-            ? [
-                {
-                  label: "Show unchanged lines",
-                  Icon: IconArrowAutofitHeight,
-                  pressed: expanded,
-                  onChange: onExpand,
-                },
-              ]
-            : []),
-        ]}
-      />
-    </>
-  );
-}
-
-function OptionsMenu({
-  expanded,
-  onExpand,
-  preferences: prefs,
-  onPreferences,
-}: DisplayOptions) {
+function OptionsMenu({ layout, chooseLayout, toggles }: DisplayOptions) {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger
@@ -118,43 +114,29 @@ function OptionsMenu({
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" className="w-52">
         <DropdownMenuRadioGroup
-          value={prefs.split ? "split" : "unified"}
-          onValueChange={(layout) =>
-            onPreferences({ ...prefs, split: layout === "split" })
-          }
+          value={layout}
+          onValueChange={(value: Layout) => chooseLayout(value)}
         >
           {layoutOptions.map(({ value, label, Icon }) => (
-            <DropdownMenuRadioItem
-              key={value}
-              value={value}
-              className="text-xs"
-            >
+            <DropdownMenuRadioItem key={value} value={value}>
               <span className="flex items-center gap-2">
-                <Icon aria-hidden="true" className="size-4" />
+                <Icon aria-hidden="true" />
                 {label}
               </span>
             </DropdownMenuRadioItem>
           ))}
         </DropdownMenuRadioGroup>
         <DropdownMenuSeparator />
-        <DropdownMenuCheckboxItem
-          checked={prefs.wrap}
-          closeOnClick={false}
-          onCheckedChange={(wrap) => onPreferences({ ...prefs, wrap })}
-        >
-          <IconTextWrap />
-          Word wrap
-        </DropdownMenuCheckboxItem>
-        {onExpand ? (
+        {toggles.map(({ label, Icon, pressed, onChange }) => (
           <DropdownMenuCheckboxItem
-            checked={expanded}
-            closeOnClick={false}
-            onCheckedChange={onExpand}
+            key={label}
+            checked={pressed}
+            onCheckedChange={onChange}
           >
-            <IconArrowAutofitHeight />
-            Show unchanged lines
+            <Icon aria-hidden="true" />
+            {label}
           </DropdownMenuCheckboxItem>
-        ) : null}
+        ))}
       </DropdownMenuContent>
     </DropdownMenu>
   );

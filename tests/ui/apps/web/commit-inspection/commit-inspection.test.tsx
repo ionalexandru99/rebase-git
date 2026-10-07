@@ -206,7 +206,9 @@ describe("commit inspection", () => {
       .toContain("export const initial = true;");
     await expect
       .element(
-        screen.getByRole("button", { name: /Stage file|Discard lines|Amend/ }),
+        screen.getByRole("button", {
+          name: /^(Stage|Unstage|Discard) |Amend/,
+        }),
       )
       .not.toBeInTheDocument();
   });

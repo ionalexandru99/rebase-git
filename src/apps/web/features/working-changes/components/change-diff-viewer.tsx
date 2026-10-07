@@ -15,7 +15,6 @@ type DiffView = Pick<
   | "changes"
   | "diff"
   | "selection"
-  | "select"
   | "preferences"
   | "choosePreferences"
   | "busy"
@@ -40,8 +39,7 @@ export default function ChangeDiffViewer({
   const [expandContext, setExpandContext] = useState(false);
   const section = selection?.section === "staged" ? "staged" : "unstaged";
   const files = changes?.[section] ?? [];
-  const index = files.findIndex((file) => file.path === selection?.path);
-  const file = files[index];
+  const file = files.find((entry) => entry.path === selection?.path);
   const previousPath = file?.previousPath ?? null;
   const { metadata, hasHiddenContext } = createChangeDiffModel(
     diff,
