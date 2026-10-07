@@ -4,7 +4,6 @@ import { AuthorAvatars } from "#web/features/author-avatars/author-avatar.tsx";
 import { BranchesSidebar } from "#web/features/branches-sidebar/branches-sidebar.tsx";
 import { useCherryPick } from "#web/features/cherry-pick/cherry-pick-menu.tsx";
 import { CommitGraph } from "#web/features/commit-graph/commit-graph.tsx";
-import { useUncommittedChanges } from "#web/features/commit-graph/components/uncommitted-changes-row.tsx";
 import { automaticHistoryScope } from "#web/features/commit-graph/scope/history-scope.ts";
 import { useHistoryScope } from "#web/features/commit-graph/scope/use-history-scope.ts";
 import { useCompareActions } from "#web/features/comparison/comparison.ts";
@@ -33,6 +32,7 @@ import {
   TerminalToggle,
 } from "#web/features/terminal/terminal-panel.tsx";
 import { useTerminals } from "#web/features/terminal/use-terminals.ts";
+import { useUncommittedChanges } from "#web/features/working-changes/hooks/use-working-changes.ts";
 import { WorkspacePanel } from "#web/features/workspace-panel/workspace-panel.tsx";
 import {
   comparePanel,

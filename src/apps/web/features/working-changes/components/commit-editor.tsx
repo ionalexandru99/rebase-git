@@ -15,6 +15,7 @@ type CommitEditorView = Pick<
   | "busy"
   | "loading"
   | "commit"
+  | "conflicts"
 >;
 
 export function CommitEditor({
@@ -36,7 +37,11 @@ export function CommitEditor({
   const disabled = !writable || busy || loading;
   const staged = changes?.staged.length ?? 0;
   const all = staged === 0;
-  const count = all ? (changes?.unstaged.length ?? 0) : staged;
+  const count = all
+    ? view.conflicts.rows.length > 0
+      ? 0
+      : (changes?.unstaged.length ?? 0)
+    : staged;
   return (
     <section
       className="flex h-full min-h-0 flex-col gap-2 overflow-y-auto border-border border-t bg-background p-3"

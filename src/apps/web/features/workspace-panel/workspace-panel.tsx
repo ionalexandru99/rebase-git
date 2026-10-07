@@ -175,7 +175,7 @@ function Controls({
         onClick={() => panel.execute({ type: "visibility", open: !open })}
       >
         {!open && uncommitted ? (
-          <span className="absolute top-1 right-1 size-2 rounded-full bg-primary ring-2 ring-background" />
+          <span className="absolute top-1 right-1 size-2 rounded-full bg-primary ring-2 ring-repository" />
         ) : null}
         {open ? (
           <IconLayoutSidebarRightCollapse aria-hidden="true" />

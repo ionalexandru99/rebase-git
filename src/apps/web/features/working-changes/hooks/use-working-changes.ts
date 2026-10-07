@@ -8,8 +8,10 @@ import {
   RepositoryChangesApi,
   type ViewedChange,
 } from "#contracts/repository-changes/repository-changes.contract.ts";
+import { splitConflicts } from "#web/features/working-changes/conflicts/hooks/use-conflicts.ts";
 import type { SelectedChange } from "#web/features/working-changes/hooks/use-change-selection.ts";
 import { useEnvironmentQuery } from "#web/platform/query/environment-query.ts";
+import { useRepositoryScope } from "#web/platform/query/repository-scope.tsx";
 import {
   answer,
   type CommandTarget,
@@ -130,4 +132,35 @@ function changesAnswers(scope: WrittenScope, written: ChangesWritten) {
       written.changes.revision,
     ),
   ];
+}
+
+export interface UncommittedChanges {
+  readonly head: string | null;
+  readonly unstaged: number;
+  readonly staged: number;
+}
+
+export function useUncommittedChanges(): UncommittedChanges | undefined {
+  const scope = useRepositoryScope();
+  const read = useWorkingChanges(
+    {
+      repositoryId: scope?.repositoryId ?? "",
+      worktreePath: scope?.worktreePath ?? "",
+      amend: false,
+    },
+    scope !== undefined,
+  );
+  const { changes, conflicted } = splitConflicts(read.data);
+  if (
+    scope === undefined ||
+    read.isPlaceholderData ||
+    changes === undefined ||
+    changes.unstaged.length + changes.staged.length + conflicted.length === 0
+  )
+    return undefined;
+  return {
+    head: changes.head,
+    unstaged: changes.unstaged.length,
+    staged: changes.staged.length,
+  };
 }

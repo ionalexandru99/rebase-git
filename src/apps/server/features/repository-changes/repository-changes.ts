@@ -104,12 +104,10 @@ export function commitRepositoryChanges(
 ) {
   return withChangeIndex(git, command.worktreePath, (indexFile) =>
     Effect.gen(function* () {
-      const { snapshot } = yield* verifyChanges(git, command);
-      yield* requireCommittable(command, snapshot);
-      if (!command.amend && snapshot.staged.length === 0)
-        yield* runRepositoryGit(git, command.worktreePath, ["add", "--all"], {
-          indexFile,
-        });
+      const current = yield* verifyChanges(git, command);
+      yield* requireCommittable(command, current.snapshot);
+      if (!command.amend && current.snapshot.staged.length === 0)
+        yield* stageEverything(git, indexFile, command, current);
       yield* Effect.uninterruptible(
         runRepositoryGit(
           git,
@@ -132,6 +130,30 @@ export function commitRepositoryChanges(
       readWritten(git, { ...command, amend: false }, command.viewed),
     ),
   );
+}
+
+function stageEverything(
+  git: GitCommandRunner,
+  indexFile: string,
+  command: CommitChanges,
+  current: Effect.Success<ReturnType<typeof verifyChanges>>,
+) {
+  const unchanged = verifyChangedFiles(command.worktreePath, current.files);
+  return planChanges(
+    git,
+    { indexFile },
+    {
+      repositoryId: command.repositoryId,
+      worktreePath: command.worktreePath,
+      amend: false,
+      revision: command.revision,
+      action: "stage",
+      section: "unstaged",
+      selection: { _tag: "All" },
+    },
+    current,
+    unchanged,
+  ).pipe(Effect.flatMap(({ apply }) => apply.pipe(Effect.andThen(unchanged))));
 }
 
 function requireCommittable(

@@ -6,15 +6,7 @@ import {
 } from "#web/features/commit-graph/layout/graph-geometry.ts";
 import type { CommitLaneRow } from "#web/features/repository-history/commit-lanes.ts";
 import { ChangeCount } from "#web/features/working-changes/components/change-file-section.tsx";
-import { splitConflicts } from "#web/features/working-changes/conflicts/hooks/use-conflicts.ts";
-import { useWorkingChanges } from "#web/features/working-changes/hooks/use-working-changes.ts";
-import { useRepositoryScope } from "#web/platform/query/repository-scope.tsx";
-
-export interface UncommittedChanges {
-  readonly head: string | null;
-  readonly unstaged: number;
-  readonly staged: number;
-}
+import type { UncommittedChanges } from "#web/features/working-changes/hooks/use-working-changes.ts";
 
 export interface UncommittedLink {
   readonly index: number;
@@ -24,31 +16,6 @@ export interface UncommittedLink {
 
 const nodeRadius = 4.5;
 const nodeGap = 2;
-
-export function useUncommittedChanges(): UncommittedChanges | undefined {
-  const scope = useRepositoryScope();
-  const read = useWorkingChanges(
-    {
-      repositoryId: scope?.repositoryId ?? "",
-      worktreePath: scope?.worktreePath ?? "",
-      amend: false,
-    },
-    scope !== undefined,
-  );
-  const { changes, conflicted } = splitConflicts(read.data);
-  if (
-    scope === undefined ||
-    read.isPlaceholderData ||
-    changes === undefined ||
-    changes.unstaged.length + changes.staged.length + conflicted.length === 0
-  )
-    return undefined;
-  return {
-    head: changes.head,
-    unstaged: changes.unstaged.length,
-    staged: changes.staged.length,
-  };
-}
 
 export function uncommittedLink(
   lanes: readonly CommitLaneRow[],
