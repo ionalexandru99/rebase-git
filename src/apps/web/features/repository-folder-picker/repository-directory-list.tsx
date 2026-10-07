@@ -14,6 +14,7 @@ import { cn } from "#web/lib/utils.ts";
 export function RepositoryDirectoryList({
   entries,
   error,
+  filtering,
   loading,
   newFolder,
   onCancelNewFolder,
@@ -27,6 +28,7 @@ export function RepositoryDirectoryList({
 }: {
   readonly entries: readonly EnvironmentDirectoryEntry[];
   readonly error: string | undefined;
+  readonly filtering: boolean;
   readonly loading: boolean;
   readonly newFolder: string | undefined;
   readonly onCancelNewFolder: () => void;
@@ -133,6 +135,8 @@ export function RepositoryDirectoryList({
         <DirectoryMessage>Loading directory…</DirectoryMessage>
       ) : error !== undefined ? (
         <DirectoryMessage>{error}</DirectoryMessage>
+      ) : newFolder === undefined && entries.length === 0 && filtering ? (
+        <DirectoryMessage>No matching folders</DirectoryMessage>
       ) : newFolder === undefined && entries.length === 0 ? (
         <DirectoryMessage>
           <IconFolderOpen

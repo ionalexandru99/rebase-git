@@ -137,6 +137,7 @@ export function RepositoryFolderBrowser({
       <RepositoryDirectoryList
         entries={filterDirectoryEntries(directory?.entries ?? [], query)}
         error={browser.directoryError}
+        filtering={query.trim() !== ""}
         loading={loading}
         newFolder={browser.newFolder}
         onCancelNewFolder={browser.cancelNewFolder}
