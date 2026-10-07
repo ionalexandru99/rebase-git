@@ -20,6 +20,7 @@ import {
 } from "#web/features/file-diff/components/file-row-name.tsx";
 import { useFileHistoryAction } from "#web/features/file-history/file-history.ts";
 import { useStashMenu } from "#web/features/stashes/stashes.ts";
+import { viewedChange } from "#web/features/working-changes/hooks/use-change-selection.ts";
 import type {
   ChangeAction,
   WorkingChangesView,
@@ -27,7 +28,13 @@ import type {
 
 export type ChangeFileSectionView = Pick<
   WorkingChangesView,
-  "changes" | "preferences" | "selection" | "select" | "busy" | "loading"
+  | "changes"
+  | "preferences"
+  | "selection"
+  | "select"
+  | "busy"
+  | "loading"
+  | "ignore"
 >;
 
 export const changeSectionLooks: Record<ChangeSection, SectionLook> = {
@@ -85,7 +92,22 @@ export function ChangeFileSection({
   const ActionIcon = section === "unstaged" ? IconPlus : IconMinus;
   const stashMenu = useStashMenu();
   const fileHistory = useFileHistoryAction();
-  const rowActions = (paths: readonly string[]): readonly Action[] => {
+  const viewed = viewedChange(selection);
+  const viewing = (path: string) =>
+    viewed?.section === section && viewed.path === path;
+  const folder =
+    selection !== null && "folder" in selection && selection.section === section
+      ? selection.folder
+      : undefined;
+  const selectFolder = (key: string) => {
+    anchor.current = key;
+    setChecked(new Set());
+    view.select({ section, folder: key });
+  };
+  const rowActions = (
+    paths: readonly string[],
+    ignored: readonly string[],
+  ): readonly Action[] => {
     const files = { _tag: "Files", paths } as const;
     const stashable =
       changes !== undefined &&
@@ -114,6 +136,7 @@ export function ChangeFileSection({
           ),
         ),
       ),
+      view.ignore.actionFor(ignored, !disabled),
       {
         id: "discard",
         label: "Discard",
@@ -132,17 +155,17 @@ export function ChangeFileSection({
       files={files}
       tree={preferences.tree}
       filter={filter}
-      menu={(row) =>
-        rowActions(
-          row.paths.length > 0 && row.paths.every((path) => checked.has(path))
-            ? selected
-            : row.paths,
-        )
-      }
+      menu={(row) => {
+        if (row.file === undefined) return rowActions(row.paths, [row.key]);
+        const paths = row.paths.every((path) => checked.has(path))
+          ? selected
+          : row.paths;
+        return rowActions(paths, paths);
+      }}
       chosen={(row) =>
-        checked.has(row.key) ||
-        (selection?.section === section && selection.path === row.key)
+        checked.has(row.key) || viewing(row.key) || row.key === folder
       }
+      folder={folder}
       headerMenu={[
         {
           id: `${action}-all`,
@@ -202,9 +225,13 @@ export function ChangeFileSection({
               className="flex h-full min-w-0 flex-1 items-center gap-2 text-left outline-none"
               aria-label={`${isFolder ? "Folder" : label} ${row.key}${previousPath ? ` renamed from ${previousPath}` : ""}`}
               aria-expanded={isFolder ? !collapsed.has(row.key) : undefined}
-              aria-pressed={row.paths.every((path) => checked.has(path))}
+              aria-pressed={
+                isFolder
+                  ? row.key === folder
+                  : row.paths.every((path) => checked.has(path))
+              }
               aria-current={
-                selection?.section === section && selection.path === row.key
+                (isFolder ? row.key === folder : viewing(row.key))
                   ? "true"
                   : undefined
               }
@@ -214,11 +241,24 @@ export function ChangeFileSection({
                   : undefined
               }
               onContextMenu={() => {
+                if (isFolder) return selectFolder(row.key);
                 if (row.paths.every((path) => checked.has(path))) return;
                 anchor.current = row.key;
                 setChecked(new Set(row.paths));
               }}
+              onKeyDown={(event) => {
+                if (!isFolder) return;
+                const closed = collapsed.has(row.key);
+                if (
+                  (event.key === "ArrowLeft" && !closed) ||
+                  (event.key === "ArrowRight" && closed)
+                ) {
+                  event.preventDefault();
+                  toggle(row.key);
+                }
+              }}
               onClick={(event) => {
+                if (isFolder) return selectFolder(row.key);
                 if (event.metaKey || event.ctrlKey || event.shiftKey) {
                   const start = rows.findIndex(
                     (entry) => entry.key === anchor.current,
@@ -248,13 +288,15 @@ export function ChangeFileSection({
                   return;
                 }
                 anchor.current = row.key;
-                setChecked(new Set(isFolder ? [] : row.paths));
-                isFolder
-                  ? toggle(row.key)
-                  : view.select({ section, path: row.key });
+                setChecked(new Set(row.paths));
+                view.select({ section, path: row.key });
               }}
             >
-              <RowLead row={row} collapsed={collapsed} />
+              <RowLead
+                row={row}
+                collapsed={collapsed}
+                onToggle={isFolder ? () => toggle(row.key) : undefined}
+              />
               <FileRowName
                 row={row}
                 tree={preferences.tree}

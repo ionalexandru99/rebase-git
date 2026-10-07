@@ -9,7 +9,6 @@ import {
   type ViewedChange,
 } from "#contracts/repository-changes/repository-changes.contract.ts";
 import { splitConflicts } from "#web/features/working-changes/conflicts/hooks/use-conflicts.ts";
-import type { SelectedChange } from "#web/features/working-changes/hooks/use-change-selection.ts";
 import { useEnvironmentQuery } from "#web/platform/query/environment-query.ts";
 import { useRepositoryScope } from "#web/platform/query/repository-scope.tsx";
 import {
@@ -71,12 +70,10 @@ export function useAmendHead(
 
 export function useChangeDiff(
   scope: ChangesScope,
-  selection: SelectedChange | null,
+  viewed: ViewedChange | null,
   changes: RepositoryChanges | undefined,
   enabled: boolean,
 ) {
-  const viewed =
-    selection === null || selection.section === "conflicts" ? null : selection;
   const listed =
     viewed !== null &&
     changes?.[viewed.section].some((file) => file.path === viewed.path);
@@ -108,11 +105,17 @@ export function useChangeActions(target: CommandTarget) {
     target,
     answers: (written, input) => changesAnswers(input, written),
   });
+  const ignore = useCommand(RepositoryChangesApi.ignore, {
+    target,
+    answers: (written, input) => changesAnswers(input, written),
+  });
   return {
     mutate,
     commit,
     undoDiscard,
-    busy: mutate.running || commit.running || undoDiscard.running,
+    ignore,
+    busy:
+      mutate.running || commit.running || undoDiscard.running || ignore.running,
   };
 }
 

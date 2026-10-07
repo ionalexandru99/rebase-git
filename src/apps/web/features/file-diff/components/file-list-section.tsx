@@ -43,6 +43,7 @@ export function FileListSection<File extends { readonly path: string }>({
   notice,
   footer,
   chosen,
+  folder,
   menu,
   onMenuClose,
   onMenuOpen,
@@ -59,6 +60,7 @@ export function FileListSection<File extends { readonly path: string }>({
   readonly notice?: ReactNode;
   readonly footer?: (open: boolean) => ReactNode;
   readonly chosen: (row: ChangeTreeRow<File>) => boolean;
+  readonly folder?: string | undefined;
   readonly menu?: ((row: ChangeTreeRow<File>) => readonly Action[]) | undefined;
   readonly onMenuClose?: (() => void) | undefined;
   readonly onMenuOpen?: ((row: ChangeTreeRow<File>) => void) | undefined;
@@ -130,6 +132,12 @@ export function FileListSection<File extends { readonly path: string }>({
           {items.map((item) => {
             const row = rows[item.index];
             if (!row) return null;
+            const inside = (key: string | undefined) =>
+              folder !== undefined &&
+              key !== undefined &&
+              key !== folder &&
+              key.startsWith(folder);
+            const below = inside(rows[item.index + 1]?.key);
             const element = (
               <div
                 key={row.key}
@@ -138,6 +146,9 @@ export function FileListSection<File extends { readonly path: string }>({
                   chosen(row)
                     ? "bg-sidebar-accent text-sidebar-accent-foreground"
                     : "text-sidebar-foreground hover:bg-sidebar-accent/75 hover:text-sidebar-accent-foreground",
+                  inside(row.key) && "rounded-none bg-sidebar-accent/35",
+                  row.key === folder && below && "rounded-b-none",
+                  inside(row.key) && !below && "rounded-b-control",
                 )}
                 style={{
                   height: item.size,
@@ -201,9 +212,11 @@ export function openMenu(event: KeyboardEvent<HTMLElement>) {
 export function RowLead<File extends { readonly path: string }>({
   row,
   collapsed,
+  onToggle,
 }: {
   readonly row: ChangeTreeRow<File>;
   readonly collapsed: ReadonlySet<string>;
+  readonly onToggle?: (() => void) | undefined;
 }) {
   if (row.file !== undefined) return <ChangeFileIcon path={row.key} />;
   const closed = collapsed.has(row.key);
@@ -213,6 +226,14 @@ export function RowLead<File extends { readonly path: string }>({
       <IconChevronDown
         aria-hidden="true"
         className={`size-3.5 shrink-0 transition-transform duration-150 ease-out motion-reduce:transition-none ${closed ? "-rotate-90" : ""}`}
+        onClick={
+          onToggle === undefined
+            ? undefined
+            : (event) => {
+                event.stopPropagation();
+                onToggle();
+              }
+        }
       />
       <Folder aria-hidden="true" className="size-3.5 shrink-0" />
     </>

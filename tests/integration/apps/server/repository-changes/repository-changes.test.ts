@@ -19,6 +19,7 @@ import {
   type ChangeSelection,
   type ChangesMutated,
   type ChangesScope,
+  type IgnorePaths,
   type MutateChanges,
   RepositoryChangesApi,
 } from "#contracts/repository-changes/repository-changes.contract.ts";
@@ -96,7 +97,12 @@ async function fixture(
     if (discarded === null) throw new Error("Nothing was discarded.");
     return Effect.runPromise(service.undoDiscard({ ...scope, discarded }));
   };
-  return { directory, git, service, scope, read, diff, mutate, undo };
+  const ignore = (
+    paths: readonly string[],
+    target: IgnorePaths["target"] = "repository",
+    untrack = false,
+  ) => Effect.runPromise(service.ignore({ ...scope, target, paths, untrack }));
+  return { directory, git, service, scope, read, diff, mutate, undo, ignore };
 }
 
 describe("working changes through Git", () => {
@@ -783,6 +789,82 @@ describe("renamed files through Git", () => {
       );
     },
   );
+});
+
+describe("ignoring paths through Git", () => {
+  it("appends anchored rules to .gitignore without touching its other lines", async () => {
+    const f = await fixture();
+    await writeFile(join(f.directory, ".gitignore"), "# build\r\ndist/");
+    await mkdir(join(f.directory, "coverage", "nested"), { recursive: true });
+    await writeFile(
+      join(f.directory, "coverage", "nested", "lcov.info"),
+      "TN:\n",
+    );
+    await writeFile(join(f.directory, "notes [draft].txt"), "notes\n");
+    await writeFile(join(f.directory, "keep.txt"), "keep\n");
+
+    const written = await f.ignore(["coverage/", "notes [draft].txt"]);
+
+    expect(await readFile(join(f.directory, ".gitignore"), "utf8")).toBe(
+      "# build\r\ndist/\r\n/coverage/\r\n/notes \\[draft].txt\r\n",
+    );
+    expect(written.changes.unstaged.map((file) => file.path)).toEqual([
+      ".gitignore",
+      "keep.txt",
+    ]);
+    await f.ignore(["coverage/"]);
+    expect(await readFile(join(f.directory, ".gitignore"), "utf8")).toBe(
+      "# build\r\ndist/\r\n/coverage/\r\n/notes \\[draft].txt\r\n",
+    );
+  });
+  it("writes local rules to the shared exclude file of a linked worktree", async () => {
+    const f = await fixture();
+    const linked = join(f.directory, "..", "linked");
+    await f.git("worktree", "add", "--detach", linked);
+    await writeFile(join(linked, "local.log"), "log\n");
+    const service = f.service;
+    const repositoryId = f.scope.repositoryId;
+
+    const written = await Effect.runPromise(
+      service.ignore({
+        repositoryId,
+        worktreePath: linked,
+        amend: false,
+        target: "local",
+        paths: ["local.log"],
+        untrack: false,
+      }),
+    );
+
+    expect(
+      await readFile(join(f.directory, ".git", "info", "exclude"), "utf8"),
+    ).toMatch(/\n\/local\.log\n$/);
+    expect(written.changes.unstaged).toEqual([]);
+    await expect(access(join(linked, ".gitignore"))).rejects.toThrow();
+  });
+  it("asks before untracking a tracked file and keeps it on disk", async () => {
+    const f = await fixture();
+    await writeFile(join(f.directory, "file.txt"), "local edit\n");
+
+    await expect(f.ignore(["file.txt"])).rejects.toMatchObject({
+      _tag: "IgnoreTracked",
+      paths: ["file.txt"],
+      count: 1,
+    });
+    await expect(access(join(f.directory, ".gitignore"))).rejects.toThrow();
+
+    const written = await f.ignore(["file.txt"], "repository", true);
+
+    expect(written.changes.staged).toMatchObject([
+      { path: "file.txt", status: "D" },
+    ]);
+    expect(written.changes.unstaged.map((file) => file.path)).toEqual([
+      ".gitignore",
+    ]);
+    expect(await readFile(join(f.directory, "file.txt"), "utf8")).toBe(
+      "local edit\n",
+    );
+  });
 });
 
 async function caseInsensitiveFileSystem() {

@@ -15,6 +15,7 @@ import {
 import {
   type SelectedChange,
   useChangeSelection,
+  viewedChange,
 } from "#web/features/working-changes/hooks/use-change-selection.ts";
 import {
   amendDraftKey,
@@ -30,6 +31,7 @@ import {
   useChangeDiff,
   useWorkingChanges,
 } from "#web/features/working-changes/hooks/use-working-changes.ts";
+import { useIgnorePaths } from "#web/features/working-changes/ignore-paths.tsx";
 import type { CommitDraft } from "#web/persistence/working-changes/working-changes-store.ts";
 import { describeFailure } from "#web/platform/query/request-failure.ts";
 
@@ -68,7 +70,7 @@ export function useWorkingChangesView({
     shown.changes,
     shown.conflicted,
   );
-  const diff = useChangeDiff(scope, selection, changes, active);
+  const diff = useChangeDiff(scope, viewedChange(selection), changes, active);
   const conflicts = useConflicts(
     { repositoryId, worktreePath },
     shown.conflicted,
@@ -90,6 +92,10 @@ export function useWorkingChangesView({
   const loading =
     changes === undefined || (amend.on && amend.head === undefined);
   const busy = actions.busy || conflicts.busy;
+  const ignore = useIgnorePaths(actions.ignore, {
+    amend: scope.amend,
+    ...viewing(selection),
+  });
   const discardUndo = useDiscardUndo(async (discarded) => {
     const result = await actions.undoDiscard.run({
       amend: scope.amend,
@@ -178,6 +184,9 @@ export function useWorkingChangesView({
     },
     act,
     commit,
+    ignore,
+    scope,
+    active,
   };
 }
 
@@ -191,9 +200,8 @@ function currentDraftKey(draftKey: string, amend: Amend) {
 }
 
 function viewing(selection: SelectedChange | null) {
-  return selection === null || selection.section === "conflicts"
-    ? {}
-    : { viewed: selection };
+  const viewed = viewedChange(selection);
+  return viewed === null ? {} : { viewed };
 }
 
 function listedOnly(
