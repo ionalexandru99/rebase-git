@@ -1,3 +1,4 @@
+import { IconCode, IconX } from "@tabler/icons-react";
 import { skipToken } from "@tanstack/react-query";
 import { lazy, Suspense, useState } from "react";
 import {
@@ -7,6 +8,11 @@ import {
   type InspectCommitDiff,
 } from "#contracts/commit-inspection/commit-inspection.contract.ts";
 import { Button } from "#web/components/ui/button.tsx";
+import {
+  type CodeMatchTarget,
+  commitInputOid,
+  isCommitInput,
+} from "#web/features/commit-inspection/commit-input.ts";
 import { CommitFiles } from "#web/features/commit-inspection/components/commit-files.tsx";
 import { CommitMetadata } from "#web/features/commit-inspection/components/commit-metadata.tsx";
 import {
@@ -41,9 +47,13 @@ export function CommitInspection({
 }) {
   const feature = usePanelFeature();
   const active = connected && feature?.active !== false;
-  const oid = typeof feature?.input === "string" ? feature.input : undefined;
+  const input = isCommitInput(feature?.input) ? feature.input : undefined;
+  const oid = commitInputOid(input);
   const inspection = useCommitInspection(scope, oid, active);
-  const details = inspection.data;
+  const [widened, setWidened] = useState<unknown>();
+  const match =
+    typeof input === "object" && widened !== input ? input.match : undefined;
+  const details = narrowToMatch(inspection.data, match);
   const [selected, setSelected] = useState<SelectedFile>();
   const path = details === undefined ? null : selectedPath(details, selected);
   const restore = useRestoreFiles(scope, details, connected && writable);
@@ -92,6 +102,14 @@ export function CommitInspection({
             <CommitFiles
               files={details.files}
               path={path}
+              lead={
+                match === undefined ? undefined : (
+                  <MatchFilter
+                    text={match.text}
+                    onClear={() => setWidened(input)}
+                  />
+                )
+              }
               select={select}
               preferences={preferences}
               choosePreferences={choosePreferences}
@@ -134,6 +152,39 @@ export function CommitInspection({
       ) : null}
       <RestoreConfirmation restore={restore} />
     </section>
+  );
+}
+
+function narrowToMatch(
+  details: CommitDetails | undefined,
+  match: CodeMatchTarget | undefined,
+) {
+  if (details === undefined || match === undefined) return details;
+  const files = details.files.filter((file) => match.paths.includes(file.path));
+  return files.length === 0 ? details : { ...details, files };
+}
+
+function MatchFilter({
+  text,
+  onClear,
+}: {
+  readonly text: string;
+  readonly onClear: () => void;
+}) {
+  return (
+    <div className="mx-1 mt-1 flex h-7 shrink-0 items-center gap-1.5 rounded-control bg-primary/10 pr-0.5 pl-2 text-body">
+      <IconCode aria-hidden="true" className="size-3.5 shrink-0 text-primary" />
+      <span className="min-w-0 flex-1 truncate">{text}</span>
+      <Button
+        aria-label="Show all files"
+        className="shrink-0 text-muted-foreground"
+        onClick={onClear}
+        size="icon-xs"
+        variant="ghost"
+      >
+        <IconX aria-hidden="true" />
+      </Button>
+    </div>
   );
 }
 

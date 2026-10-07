@@ -61,6 +61,7 @@ import type {
   HistoryScope,
   HistorySelection,
 } from "#web/features/commit-graph/scope/history-scope.ts";
+import type { CodeMatchTarget } from "#web/features/commit-inspection/commit-input.ts";
 import type { CompareActions } from "#web/features/comparison/comparison.ts";
 import { RepositoryHistorySearchControls } from "#web/features/history-search/components/repository-history-search-controls.tsx";
 import type { MergeActions } from "#web/features/merge/merge-actions.ts";
@@ -104,6 +105,7 @@ export function CommitGraph({
   cherryPick,
   rewrite,
   onOpenDetails,
+  onOpenCodeMatch,
   onOpenChanges,
   onActiveCommitChange,
 }: {
@@ -114,6 +116,9 @@ export function CommitGraph({
   readonly cherryPick?: CherryPick | undefined;
   readonly rewrite?: RewriteCommits | undefined;
   readonly onOpenDetails?: ((oid: string) => void) | undefined;
+  readonly onOpenCodeMatch?:
+    | ((oid: string, match: CodeMatchTarget) => void)
+    | undefined;
   readonly onOpenChanges?: (() => void) | undefined;
   readonly onActiveCommitChange?:
     | ((oid: string | undefined) => void)
@@ -303,6 +308,13 @@ export function CommitGraph({
             history={history}
             snapshot={snapshot}
             onNavigate={navigateToOid}
+            code={{
+              roots: [...new Set((roots ?? []).map((root) => root.oid))],
+              open: async (oid, match, signal) => {
+                await navigateToOid(oid, signal, true);
+                onOpenCodeMatch?.(oid, match);
+              },
+            }}
             offline={connected === false}
           />
         )}

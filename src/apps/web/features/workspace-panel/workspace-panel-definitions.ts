@@ -8,8 +8,8 @@ import {
   IconStack2,
 } from "@tabler/icons-react";
 import { lazy } from "react";
-import { isObjectId } from "#contracts/git/git-values.contract.ts";
 import { isReflogRef } from "#contracts/repository-reflog/repository-reflog.contract.ts";
+import { isCommitInput } from "#web/features/commit-inspection/commit-input.ts";
 import {
   compareTab,
   isCompareInput,
@@ -60,7 +60,7 @@ export const rebasePanel = {
 } satisfies WorkspacePanelDefinition;
 
 const commitInspectionPanel = {
-  acceptsInput: isObjectId,
+  acceptsInput: isCommitInput,
   Content: lazy(() =>
     import("#web/features/commit-inspection/commit-inspection.tsx").then(
       (module) => ({ default: module.CommitInspectionPanel }),

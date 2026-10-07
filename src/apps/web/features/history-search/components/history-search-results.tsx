@@ -1,15 +1,18 @@
+import { IconFile } from "@tabler/icons-react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { useEffect, useRef } from "react";
 import type { RepositoryCommit } from "#contracts/repository-history/repository-history.contract.ts";
 
 export function HistorySearchResults({
   commits,
+  files,
   selected,
   busy,
   onNavigate,
   onLoadMore,
 }: {
   readonly commits: readonly RepositoryCommit[];
+  readonly files: ReadonlyMap<string, readonly string[]>;
   readonly selected: number;
   readonly busy: boolean;
   readonly onNavigate: (index: number) => void;
@@ -48,6 +51,7 @@ export function HistorySearchResults({
         {rows.getVirtualItems().map((row) => {
           const commit = commits[row.index];
           if (commit === undefined) return null;
+          const paths = files.get(commit.oid);
           return (
             <div
               key={row.key}
@@ -67,9 +71,21 @@ export function HistorySearchResults({
                   {commit.subject}
                 </span>
                 <span className="flex w-full flex-wrap items-start gap-x-3 text-muted-foreground">
-                  <span className="min-w-0 flex-1 whitespace-normal [overflow-wrap:anywhere]">
-                    {commit.author.name} · {commit.author.email}
-                  </span>
+                  {paths === undefined ? (
+                    <span className="min-w-0 flex-1 whitespace-normal [overflow-wrap:anywhere]">
+                      {commit.author.name} · {commit.author.email}
+                    </span>
+                  ) : (
+                    <span className="flex min-w-0 flex-1 items-center gap-1.5">
+                      <IconFile
+                        aria-hidden="true"
+                        className="size-3.5 shrink-0"
+                      />
+                      <span className="truncate">
+                        {paths.map(fileName).join(", ")}
+                      </span>
+                    </span>
+                  )}
                   <span className="shrink-0">{commit.oid.slice(0, 8)}</span>
                 </span>
               </button>
@@ -79,4 +95,8 @@ export function HistorySearchResults({
       </div>
     </section>
   );
+}
+
+function fileName(path: string) {
+  return path.slice(path.lastIndexOf("/") + 1);
 }
