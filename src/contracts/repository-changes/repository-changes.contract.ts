@@ -107,6 +107,29 @@ export const CommitChanges = Schema.Struct({
   viewed: Schema.optionalKey(ViewedChange),
 });
 export type CommitChanges = typeof CommitChanges.Type;
+export const maximumIgnoredPaths = 1000;
+export const IgnoreTarget = Schema.Literals(["repository", "local"]);
+export type IgnoreTarget = typeof IgnoreTarget.Type;
+export const IgnorePaths = Schema.Struct({
+  ...ChangesScope.fields,
+  target: IgnoreTarget,
+  paths: Schema.Array(RepositoryPath).check(
+    Schema.isMinLength(1),
+    Schema.isMaxLength(maximumIgnoredPaths),
+  ),
+  untrack: Schema.Boolean,
+  viewed: Schema.optionalKey(ViewedChange),
+});
+export type IgnorePaths = typeof IgnorePaths.Type;
+export const IgnoreTracked = Schema.TaggedStruct("IgnoreTracked", {
+  path: RepositoryPath,
+  count: Schema.Number,
+});
+export type IgnoreTracked = typeof IgnoreTracked.Type;
+
+export function ignoreTracked(path: string, count: number): IgnoreTracked {
+  return { _tag: "IgnoreTracked", path, count };
+}
 export const ChangesFailure = Schema.TaggedStruct("ChangesFailed", {
   reason: Schema.Literals(["Stale", "Conflict", "Unsupported"]),
   detail: Schema.String.check(Schema.isMaxLength(2048)),
@@ -140,6 +163,11 @@ export const RepositoryChangesApi = {
     request: UndoDiscard,
     success: ChangesWritten,
     failure: ChangesFailure,
+  }),
+  ignore: repositoryCommand("repositories/changes/ignore", {
+    request: IgnorePaths,
+    success: ChangesWritten,
+    failure: Schema.Union([ChangesFailure, IgnoreTracked]),
   }),
   commit: repositoryCommand("repositories/changes/commit", {
     request: CommitChanges,

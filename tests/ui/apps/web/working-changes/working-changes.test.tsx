@@ -8,6 +8,8 @@ import {
   type ChangesFailure,
   type CommitChanges,
   changesFailed,
+  type IgnorePaths,
+  ignoreTracked,
   type MutateChanges,
   type RepositoryChanges,
   RepositoryChangesApi,
@@ -87,6 +89,7 @@ async function fixture(
   const mutations: MutateChanges[] = [];
   const commits: CommitChanges[] = [];
   const undos: UndoDiscard[] = [];
+  const ignores: IgnorePaths[] = [];
   let commitFailure: ChangesFailure | RepositoryRejected | undefined;
   let rejectAmendReads = false;
   let diffsRejected = rejectDiffs;
@@ -137,6 +140,11 @@ async function fixture(
       undos.push(command);
       return { changes: snapshot, diff: null };
     }),
+    respond(RepositoryChangesApi.ignore, (command) => {
+      ignores.push(command);
+      if (!command.untrack) throw rejected(ignoreTracked(path, 1));
+      return { changes: snapshot, diff: null };
+    }),
     respond(RepositoryChangesApi.commit, async (command) => {
       commits.push(command);
       if (command.amend)
@@ -173,6 +181,7 @@ async function fixture(
     mutations,
     commits,
     undos,
+    ignores,
     reads: () => reads,
     diffReads: () => diffReads,
     emitChange: () => {
@@ -278,11 +287,13 @@ describe("working changes", () => {
       name: "Folder src/nested/",
       exact: true,
     });
-    await nested.click();
-    await folder.click();
+    nested.element().focus();
+    await userEvent.keyboard("{ArrowLeft}");
+    folder.element().focus();
+    await userEvent.keyboard("{ArrowLeft}");
     await expect.element(folder).toHaveAttribute("aria-expanded", "false");
     await expect.element(nested).not.toBeInTheDocument();
-    await folder.click();
+    await userEvent.keyboard("{ArrowRight}");
     await expect.element(nested).toHaveAttribute("aria-expanded", "false");
     await expect
       .element(
@@ -300,6 +311,62 @@ describe("working changes", () => {
       .element(page.getByRole("button", { name: "Collapse staged" }))
       .toHaveAttribute("aria-expanded", "true");
     expect(f.mutations).toEqual([]);
+  });
+  it("selects a folder instead of its files and shows every file under it", async () => {
+    const nestedPath = "src/nested/change.ts";
+    const f = await fixture([nestedPath, "README.md"]);
+    const folder = page.getByRole("button", {
+      name: "Folder src/",
+      exact: true,
+    });
+
+    await folder.click();
+
+    await expect.element(folder).toHaveAttribute("aria-current", "true");
+    await expect
+      .element(
+        page.getByRole("button", { name: `Unstaged ${path}`, exact: true }),
+      )
+      .toHaveAttribute("aria-pressed", "false");
+    const diff = page.getByRole("region", { name: "Diff of src/" });
+    await expect
+      .element(diff.getByRole("article", { name: path }))
+      .toBeVisible();
+    await expect
+      .element(diff.getByRole("article", { name: nestedPath }))
+      .toBeVisible();
+    await expect
+      .element(diff.getByRole("article", { name: "README.md" }))
+      .not.toBeInTheDocument();
+    await folder.click({ button: "right" });
+    await page.getByRole("menuitem", { name: "Stage", exact: true }).click();
+    await expect.poll(() => f.mutations.length).toBe(1);
+    expect(f.mutations[0]?.selection).toEqual({
+      _tag: "Files",
+      paths: [path, nestedPath],
+    });
+  });
+  it("ignores a folder and untracks its tracked files only after confirmation", async () => {
+    const f = await fixture(["src/nested/change.ts"]);
+
+    await page
+      .getByRole("button", { name: "Folder src/", exact: true })
+      .click({ button: "right" });
+    await page.getByRole("menuitem", { name: "Ignore" }).click();
+    await page.getByRole("menuitem", { name: ".gitignore" }).click();
+    const confirmation = page.getByRole("alertdialog", {
+      name: `Ignore and untrack ${path}?`,
+    });
+    await confirmation
+      .getByRole("button", { name: "Ignore and untrack" })
+      .click();
+
+    await expect.poll(() => f.ignores.length).toBe(2);
+    expect(f.ignores).toMatchObject([
+      { target: "repository", paths: ["src/"], untrack: false },
+      { target: "repository", paths: ["src/"], untrack: true },
+    ]);
+    await expect.element(confirmation).not.toBeInTheDocument();
   });
   it.each(["Control", "Meta"] as const)(
     "selects multiple file rows with %s and stages the selection",

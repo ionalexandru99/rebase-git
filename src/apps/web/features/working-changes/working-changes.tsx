@@ -10,15 +10,20 @@ import { OperationHeader } from "#web/features/operation-recovery/components/ope
 import { ChangeFileTree } from "#web/features/working-changes/components/change-file-tree.tsx";
 import { CommitEditor } from "#web/features/working-changes/components/commit-editor.tsx";
 import { ConflictViewer } from "#web/features/working-changes/conflicts/components/conflict-viewer.tsx";
+import { viewedChange } from "#web/features/working-changes/hooks/use-change-selection.ts";
 import {
   useWorkingChangesView,
   type WorkingChangesTarget,
 } from "#web/features/working-changes/hooks/use-working-changes-view.ts";
+import { IgnoreConfirmation } from "#web/features/working-changes/ignore-paths.tsx";
 import { usePanelFeature } from "#web/features/workspace-panel/api.ts";
 
 const ChangeDiffViewer = lazy(
   () =>
     import("#web/features/working-changes/components/change-diff-viewer.tsx"),
+);
+const FolderDiff = lazy(
+  () => import("#web/features/working-changes/components/folder-diff.tsx"),
 );
 
 export function WorkingChanges({
@@ -33,7 +38,9 @@ export function WorkingChanges({
     readonly file: string;
     readonly index: number;
   } | null>(null);
-  const file = `${view.selection?.section}:${view.selection?.path}`;
+  const { selection } = view;
+  const viewed = viewedChange(selection);
+  const file = `${viewed?.section}:${viewed?.path}`;
   return (
     <section
       className="flex h-full min-h-0 flex-col"
@@ -57,9 +64,10 @@ export function WorkingChanges({
           </Button>
         </div>
       ) : null}
+      <IgnoreConfirmation ignore={view.ignore} busy={view.busy} />
       <ResizablePanelGroup orientation="horizontal" className="min-h-0 flex-1">
         <ResizablePanel id="change-diff" defaultSize="70%" minSize="12rem">
-          {view.selection?.section === "conflicts" ? (
+          {selection?.section === "conflicts" ? (
             <ConflictViewer
               view={view}
               scope={{
@@ -76,16 +84,24 @@ export function WorkingChanges({
                 </p>
               }
             >
-              <ChangeDiffViewer
-                key={`${file}:${view.diff?.revision}`}
-                view={view}
-                writable={writable}
-                act={view.act}
-                hunk={hunk?.file === file ? hunk.index : null}
-                onHunk={(index) =>
-                  setHunk(index === null ? null : { file, index })
-                }
-              />
+              {selection !== null && "folder" in selection ? (
+                <FolderDiff
+                  key={`${selection.section}:${selection.folder}`}
+                  view={view}
+                  folder={selection}
+                />
+              ) : (
+                <ChangeDiffViewer
+                  key={`${file}:${view.diff?.revision}`}
+                  view={view}
+                  writable={writable}
+                  act={view.act}
+                  hunk={hunk?.file === file ? hunk.index : null}
+                  onHunk={(index) =>
+                    setHunk(index === null ? null : { file, index })
+                  }
+                />
+              )}
             </Suspense>
           )}
         </ResizablePanel>

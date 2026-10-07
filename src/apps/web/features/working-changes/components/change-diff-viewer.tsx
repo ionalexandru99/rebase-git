@@ -5,6 +5,7 @@ import { Button } from "#web/components/ui/button.tsx";
 import { DiffContent } from "#web/features/file-diff/components/diff-content.tsx";
 import { DiffDisplayControls } from "#web/features/file-diff/components/diff-display-controls.tsx";
 import { createChangeDiffModel } from "#web/features/file-diff/diff-model.ts";
+import { viewedChange } from "#web/features/working-changes/hooks/use-change-selection.ts";
 import type {
   ChangeAction,
   WorkingChangesView,
@@ -39,7 +40,9 @@ export default function ChangeDiffViewer({
   const [expandContext, setExpandContext] = useState(false);
   const section = selection?.section === "staged" ? "staged" : "unstaged";
   const files = changes?.[section] ?? [];
-  const file = files.find((entry) => entry.path === selection?.path);
+  const file = files.find(
+    (entry) => entry.path === viewedChange(selection)?.path,
+  );
   const previousPath = file?.previousPath ?? null;
   const { metadata, hasHiddenContext } = createChangeDiffModel(
     diff,

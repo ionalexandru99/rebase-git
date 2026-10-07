@@ -55,6 +55,7 @@ const errorTitles = {
   unstage: "Couldn't unstage the changes",
   discard: "Couldn't discard the changes",
   undoDiscard: "Couldn't undo the discard",
+  ignore: "Couldn't ignore the files",
   commit: "Couldn't commit",
   stash: "Couldn't stash the changes",
   applyStash: "Couldn't apply the stash",

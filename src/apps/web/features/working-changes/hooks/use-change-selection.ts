@@ -1,5 +1,6 @@
 import { useState } from "react";
 import type {
+  ChangeSection,
   RepositoryChanges,
   ViewedChange,
 } from "#contracts/repository-changes/repository-changes.contract.ts";
@@ -9,7 +10,26 @@ export interface ConflictSelection {
   readonly path: string;
 }
 
-export type SelectedChange = ViewedChange | ConflictSelection;
+export interface FolderSelection {
+  readonly section: ChangeSection;
+  readonly folder: string;
+}
+
+export type SelectedChange = ViewedChange | ConflictSelection | FolderSelection;
+
+export function viewedChange(
+  selection: SelectedChange | null,
+): ViewedChange | null {
+  return selection === null ||
+    selection.section === "conflicts" ||
+    "folder" in selection
+    ? null
+    : selection;
+}
+
+export function inFolder(folder: string, path: string) {
+  return path.startsWith(folder);
+}
 
 export function useChangeSelection(
   changes: RepositoryChanges | undefined,
@@ -46,6 +66,12 @@ function settled(
   conflicted: readonly string[],
 ): SelectedChange | null {
   if (changes === undefined) return selection;
+  if ("folder" in selection)
+    return changes[selection.section].some((file) =>
+      inFolder(selection.folder, file.path),
+    )
+      ? selection
+      : firstChange(changes, conflicted);
   const { path } = selection;
   if (selection.section !== "conflicts")
     return conflicted.includes(path)

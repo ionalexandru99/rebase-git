@@ -5,6 +5,7 @@ import {
   type ChangesWritten,
   type CommitChanges,
   changesFailed,
+  type IgnorePaths,
   type MutateChanges,
   type ReadChangeDiff,
   type RepositoryChanges,
@@ -30,6 +31,7 @@ import {
   restoreDiscarded,
   snapshotChanges,
 } from "#server/features/repository-changes/git/discard-snapshot.ts";
+import { ignorePaths } from "#server/features/repository-changes/git/ignore-paths.ts";
 import { planChanges } from "#server/features/repository-changes/git/mutate-changes.ts";
 import { readChangeDiff } from "#server/features/repository-changes/git/read-change-diff.ts";
 import { readChanges } from "#server/features/repository-changes/git/read-changes.ts";
@@ -95,6 +97,15 @@ export function undoRepositoryDiscard(
 ) {
   return withChangeIndex(git, command.worktreePath, (indexFile) =>
     restoreDiscarded(git, command.worktreePath, indexFile, command.discarded),
+  ).pipe(Effect.andThen(() => readWritten(git, command, command.viewed)));
+}
+
+export function ignoreRepositoryPaths(
+  command: IgnorePaths,
+  git: GitCommandRunner,
+) {
+  return withChangeIndex(git, command.worktreePath, (indexFile) =>
+    ignorePaths(git, { indexFile }, command),
   ).pipe(Effect.andThen(() => readWritten(git, command, command.viewed)));
 }
 
@@ -293,6 +304,17 @@ export function repositoryChangesFeature(
           duringOperation: "block",
         }),
         undoRepositoryDiscard,
+      ),
+      command(
+        api.ignore,
+        () => ({
+          name: "ignore",
+          locks: { worktree: "wait" },
+          duringOperation: {
+            allowWhen: (operation) => operation.kind !== "unknown",
+          },
+        }),
+        ignoreRepositoryPaths,
       ),
       command(
         api.commit,
