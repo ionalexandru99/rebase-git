@@ -41,7 +41,11 @@ export function ChangeFileTree({
         filter={filter}
         onFilter={setFilter}
         tree={preferences.tree}
-        onTree={(tree) => view.choosePreferences({ ...preferences, tree })}
+        onTree={(tree) => {
+          view.choosePreferences({ ...preferences, tree });
+          if (!tree && view.selection !== null && "folder" in view.selection)
+            view.select(null);
+        }}
         region={list}
       />
       <div className="flex min-h-0 flex-1 flex-col gap-1 pb-1">

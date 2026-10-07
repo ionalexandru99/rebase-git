@@ -73,6 +73,7 @@ export function useChangeDiff(
   viewed: ViewedChange | null,
   changes: RepositoryChanges | undefined,
   enabled: boolean,
+  keepPrevious = false,
 ) {
   const listed =
     viewed !== null &&
@@ -84,6 +85,7 @@ export function useChangeDiff(
       enabled,
       changes: "none",
       gcTime: 0,
+      keepPrevious,
       ...(changes === undefined ? {} : { version: changes.revision }),
     },
   );
