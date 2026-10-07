@@ -59,18 +59,18 @@ export default function CommitDiff({
         region={region}
       />
       {preview ? (
-        <p className="shrink-0 border-border border-b px-3 py-1.5 text-xs text-muted-foreground">
+        <p className="shrink-0 border-border border-b px-3 py-1.5 text-meta text-muted-foreground">
           Working tree after restore
         </p>
       ) : null}
       {file && (!metadata || value?.before === value?.after) ? (
-        <div className="shrink-0 break-all border-border border-b px-3 py-2 font-mono text-xs">
+        <div className="shrink-0 break-all border-border border-b px-3 py-2 font-mono text-meta">
           {previousPath ? `${previousPath} → ` : ""}
           {file.path}
         </div>
       ) : null}
       {diff.error ? (
-        <div role="alert" className="p-3 text-sm">
+        <div role="alert" className="p-3 text-body">
           {diff.error}{" "}
           <Button size="xs" variant="ghost" onClick={diff.retry}>
             Retry
@@ -78,13 +78,13 @@ export default function CommitDiff({
         </div>
       ) : value ? (
         preview && value.kind === "text" && value.before === value.after ? (
-          <p className="p-4 text-sm text-muted-foreground">
+          <p className="p-4 text-body text-muted-foreground">
             The working tree already has this version.
           </p>
         ) : file?.status === "R" &&
           value.kind === "text" &&
           value.before === value.after ? (
-          <p className="p-4 text-sm text-muted-foreground">
+          <p className="p-4 text-body text-muted-foreground">
             Content unchanged.
           </p>
         ) : (
@@ -96,7 +96,7 @@ export default function CommitDiff({
           />
         )
       ) : (
-        <p role="status" className="p-4 text-sm text-muted-foreground">
+        <p role="status" className="p-4 text-body text-muted-foreground">
           {diff.loading ? "Loading diff…" : "Select a file"}
         </p>
       )}

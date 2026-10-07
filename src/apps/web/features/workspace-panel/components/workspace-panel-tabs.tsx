@@ -153,7 +153,7 @@ function PanelTab({
   return (
     <div
       className={cn(
-        "group/tab flex h-6 max-w-36 shrink-0 items-center gap-1 rounded-control pl-1.5 text-xs",
+        "group/tab flex h-6 max-w-36 shrink-0 items-center gap-1 rounded-control pl-1.5 text-meta",
         active
           ? "bg-accent text-foreground"
           : "text-muted-foreground hover:bg-accent/60 hover:text-foreground",
@@ -207,7 +207,7 @@ function WorkspacePanelEmptyState() {
         <h2
           ref={emptyStateRef}
           tabIndex={-1}
-          className="mb-4 text-center text-sm font-medium outline-none"
+          className="mb-4 text-center text-control font-medium outline-none"
         >
           Open a tab
         </h2>
@@ -219,11 +219,11 @@ function WorkspacePanelEmptyState() {
               className="h-auto min-h-20 min-w-0 flex-col items-start justify-center gap-2.5 whitespace-normal border-border bg-card px-3 py-3 text-left hover:border-foreground/20 sm:h-auto"
               onClick={() => execute({ type: "open", kind })}
             >
-              <span className="flex items-center gap-2 text-xs font-normal">
+              <span className="flex items-center gap-2 text-meta font-normal">
                 <definition.icon aria-hidden="true" className="size-3.5" />
                 {definition.label}
               </span>
-              <span className="text-[10px] font-normal text-muted-foreground">
+              <span className="text-badge font-normal text-muted-foreground">
                 {definition.description}
               </span>
             </Button>

@@ -554,7 +554,7 @@ export function BranchesSidebar({
       className="flex h-full min-h-0 flex-col overflow-hidden border-sidebar-border/50 border-r bg-sidebar text-sidebar-foreground"
     >
       <div className="flex h-11 shrink-0 items-center px-4 text-sidebar-accent-foreground">
-        <h2 className="min-w-0 flex-1 truncate text-base font-semibold">
+        <h2 className="min-w-0 flex-1 truncate text-heading font-semibold">
           Branches
         </h2>
         <ScrollTopButton className="mr-1" region={treeRef} />

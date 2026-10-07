@@ -141,15 +141,15 @@ function BranchCardBody({
   const commit = useTipCommit(history, row.tip);
   return (
     <>
-      <p className="text-[.9rem] font-medium wrap-anywhere not-last:mb-1.5">
+      <p className="text-control font-medium wrap-anywhere not-last:mb-1.5">
         {row.name}
       </p>
       {commit === undefined ? null : (
         <>
-          <p className="mb-2 line-clamp-2 text-[.85rem] text-foreground/85">
+          <p className="mb-2 line-clamp-2 text-body text-foreground/85">
             {commit.subject}
           </p>
-          <div className="flex h-6 min-w-0 items-center gap-2 text-[.8rem] text-muted-foreground">
+          <div className="flex h-6 min-w-0 items-center gap-2 text-body text-muted-foreground">
             <AuthorAvatar commit={commit} />
             <span className="min-w-0 truncate">
               {commit.author.name} ·{" "}
@@ -250,7 +250,7 @@ function CardLine({
   readonly children: ReactNode;
 }) {
   return (
-    <div className="flex h-6 min-w-0 items-center gap-2.5 text-[.85rem] text-foreground/85">
+    <div className="flex h-6 min-w-0 items-center gap-2.5 text-body text-foreground/85">
       <span
         aria-hidden="true"
         className="grid size-4 shrink-0 place-items-center text-muted-foreground"

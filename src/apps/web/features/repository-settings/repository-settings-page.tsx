@@ -63,7 +63,7 @@ export function RepositorySettingsPage({
       aria-label="Repository settings"
       className="h-full overflow-y-auto bg-repository"
     >
-      <header className="flex h-12 items-center border-b border-border/60 px-6 text-xs">
+      <header className="flex h-12 items-center border-b border-border/60 px-6 text-meta">
         <span>
           {repository.name}
           <span className="text-muted-foreground"> / Settings</span>
@@ -76,7 +76,7 @@ export function RepositorySettingsPage({
           </SettingsSection>
         )}
         {history === undefined || identity === undefined ? (
-          <p role="status" className="text-sm text-muted-foreground">
+          <p role="status" className="text-body text-muted-foreground">
             {environmentId === undefined
               ? "Reconnect to load repository settings."
               : "Loading repository settings…"}
@@ -179,7 +179,7 @@ function RepositoryOrderSettings({
     <SettingsRow title="History ordering">
       <select
         aria-label="History ordering"
-        className="h-8 rounded-control border border-input bg-input/30 px-3 text-sm"
+        className="h-8 rounded-control border border-input bg-input/30 px-3 text-control"
         value={order}
         onChange={(event) => {
           const next =

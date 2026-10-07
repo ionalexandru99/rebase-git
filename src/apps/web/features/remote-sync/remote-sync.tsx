@@ -77,7 +77,7 @@ function SyncActions({
           {pull.pulling || incoming === 0 ? null : (
             <span
               aria-hidden="true"
-              className="rounded-full bg-primary/15 px-1.5 text-[.75rem] leading-[1.15rem] text-primary tabular-nums"
+              className="rounded-full bg-primary/15 px-1.5 text-badge leading-[1.15rem] text-primary tabular-nums"
             >
               {incoming}
             </span>
@@ -111,7 +111,7 @@ function FetchStatus({
 }) {
   if (fetching || (connected && !failed)) return null;
   return (
-    <span className="text-xs text-status-unavailable" role="status">
+    <span className="text-meta text-status-unavailable" role="status">
       {connected ? "Fetch failed" : "You're offline"}
     </span>
   );

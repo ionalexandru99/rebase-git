@@ -320,7 +320,7 @@ function TokenRow({
 
 function Checking({ failed }: { readonly failed: boolean }) {
   return (
-    <p className="px-3 py-3 text-xs text-muted-foreground sm:px-4">
+    <p className="px-3 py-3 text-meta text-muted-foreground sm:px-4">
       {failed ? "Could not scan this server." : "Scanning this server…"}
     </p>
   );
@@ -328,7 +328,7 @@ function Checking({ failed }: { readonly failed: boolean }) {
 
 function Code({ children }: { readonly children: ReactNode }) {
   return (
-    <code className="rounded-control bg-muted px-1 py-px text-[.625rem]">
+    <code className="rounded-control bg-muted px-1 py-px text-badge">
       {children}
     </code>
   );

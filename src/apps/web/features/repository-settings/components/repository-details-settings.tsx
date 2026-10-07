@@ -95,7 +95,7 @@ export function RepositoryDetailsSettings({
       {message === undefined ? null : (
         <p
           role="status"
-          className="px-3 py-3 text-xs text-muted-foreground sm:px-4"
+          className="px-3 py-3 text-meta text-muted-foreground sm:px-4"
         >
           {message}
         </p>

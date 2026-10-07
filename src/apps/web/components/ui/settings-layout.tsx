@@ -14,7 +14,7 @@ export function SettingsPage({
   return (
     <div className="mx-auto w-full max-w-4xl space-y-8 px-4 pt-10 pb-16 sm:px-8 sm:pt-12">
       <h1
-        className="text-xl font-semibold tracking-tight outline-none"
+        className="text-title font-semibold tracking-tight outline-none"
         ref={headingRef}
         tabIndex={headingRef === undefined ? undefined : -1}
       >
@@ -37,7 +37,7 @@ export function SettingsSection({
   return (
     <section aria-label={title} className="space-y-2.5">
       <div className="flex min-h-7 items-center justify-between gap-4 px-3 sm:px-4">
-        <h2 className="text-sm font-normal text-foreground/70">{title}</h2>
+        <h2 className="text-control font-normal text-foreground/70">{title}</h2>
         {action}
       </div>
       <div className="rounded-surface border border-border/60 bg-card/40 [&>*+*]:border-t [&>*+*]:border-border/50">
@@ -98,14 +98,14 @@ export function SettingsRow({
                 )}
               </span>
             )}
-            <h3 className="truncate text-sm font-medium text-foreground">
+            <h3 className="truncate text-control font-medium text-foreground">
               {title}
             </h3>
             {value === undefined ? null : (
-              <code className="text-xs text-muted-foreground">{value}</code>
+              <code className="text-meta text-muted-foreground">{value}</code>
             )}
             {badge === undefined ? null : (
-              <span className="inline-flex h-4 items-center rounded-control bg-status-connecting/15 px-1 text-[.625rem] leading-none font-medium text-status-connecting">
+              <span className="inline-flex h-4 items-center rounded-control bg-status-connecting/15 px-1 text-badge leading-none font-medium text-status-connecting">
                 {badge}
               </span>
             )}
@@ -114,7 +114,7 @@ export function SettingsRow({
             <div
               aria-atomic={liveDescription || undefined}
               aria-live={liveDescription ? "polite" : undefined}
-              className="text-xs leading-normal text-muted-foreground/80"
+              className="text-meta leading-normal text-muted-foreground/80"
               id={descriptionId}
             >
               {description}
@@ -159,7 +159,7 @@ export function SettingsField({
 }) {
   return (
     <div className="grid gap-1.5">
-      <label className="text-sm font-medium" htmlFor={id}>
+      <label className="text-control font-medium" htmlFor={id}>
         {label}
       </label>
       {children}

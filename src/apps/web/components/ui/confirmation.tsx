@@ -44,7 +44,7 @@ export function Confirmation({
       aria-busy={busy}
       aria-label={title}
       className={cn(
-        "flex flex-wrap items-center gap-x-2 gap-y-1.5 text-xs",
+        "flex flex-wrap items-center gap-x-2 gap-y-1.5 text-meta",
         className,
       )}
       onKeyDown={(event) => {

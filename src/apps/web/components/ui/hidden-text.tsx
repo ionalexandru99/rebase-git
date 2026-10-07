@@ -4,7 +4,7 @@ export function HiddenText({
   value,
   showLabel,
   hideLabel,
-  className = "font-mono text-[.625rem]",
+  className = "font-mono text-badge",
 }: {
   readonly value: string;
   readonly className?: string;

@@ -105,7 +105,7 @@ export function PlanEditor({
 
   if (loaded._tag !== "Ready")
     return (
-      <p className="p-3 text-xs text-muted-foreground">
+      <p className="p-3 text-meta text-muted-foreground">
         {loaded._tag === "Loading" ? "Loading commits…" : loaded.text}
       </p>
     );
@@ -175,7 +175,7 @@ export function PlanEditor({
           />
           <textarea
             aria-label="Message body"
-            className="h-24 w-full resize-none rounded-control border border-input bg-input/20 p-2 text-xs text-foreground outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30"
+            className="h-24 w-full resize-none rounded-control border border-input bg-input/20 p-2 text-control text-foreground outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30"
             value={messageBody.join("\n").replace(/^\n/, "")}
             disabled={message === undefined}
             maxLength={28000}
@@ -191,11 +191,11 @@ export function PlanEditor({
       )}
       <footer className="flex shrink-0 flex-wrap items-center gap-2 border-border border-t px-3 py-2">
         {problem === undefined ? null : (
-          <p role="alert" className="basis-full text-xs text-destructive">
+          <p role="alert" className="basis-full text-meta text-destructive">
             {problem.text}
           </p>
         )}
-        <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">
+        <span className="min-w-0 flex-1 truncate text-meta text-muted-foreground">
           {status ??
             ((changed ?? 0) > 0
               ? `Stashes ${changed} ${changed === 1 ? "file" : "files"}`

@@ -97,12 +97,12 @@ export function HistoryStorageSettings() {
           />
         )}
         {pending ? (
-          <p role="status" className="text-sm text-muted-foreground">
+          <p role="status" className="text-body text-muted-foreground">
             Updating history storage…
           </p>
         ) : null}
         {error === undefined ? null : (
-          <p role="alert" className="text-sm text-destructive">
+          <p role="alert" className="text-body text-destructive">
             {error}
           </p>
         )}

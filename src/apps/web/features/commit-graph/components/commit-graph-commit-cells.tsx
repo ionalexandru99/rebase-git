@@ -59,7 +59,7 @@ export const CommitGraphCommitCells = memo(
         <td
           role="gridcell"
           tabIndex={-1}
-          className={`${graphShaCellClassName} z-[4] flex h-full items-center bg-[var(--graph-row-background)] pr-3 font-sans text-[.85rem] text-muted-foreground`}
+          className={`${graphShaCellClassName} z-[4] flex h-full items-center bg-[var(--graph-row-background)] pr-3 font-sans text-body text-muted-foreground`}
           aria-label={`Commit SHA ${commit.oid}`}
         >
           <span>{shortOid(commit.oid)}</span>
@@ -67,7 +67,7 @@ export const CommitGraphCommitCells = memo(
         <td
           role="gridcell"
           tabIndex={-1}
-          className="sticky right-0 z-[4] flex h-full min-w-0 items-center whitespace-nowrap bg-[var(--graph-row-background)] pr-3 text-[.85rem] text-muted-foreground"
+          className="sticky right-0 z-[4] flex h-full min-w-0 items-center whitespace-nowrap bg-[var(--graph-row-background)] pr-3 text-body text-muted-foreground"
           aria-label={`Commit date ${formattedDate}`}
         >
           <time className="truncate" dateTime={date.toISOString()}>

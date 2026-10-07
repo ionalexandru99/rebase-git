@@ -36,7 +36,7 @@ import type { WorkingChangesView } from "#web/features/working-changes/hooks/use
 
 const diffsStyle = {
   "--diffs-font-family": "var(--font-mono)",
-  "--diffs-font-size": "12px",
+  "--diffs-font-size": "var(--text-meta)",
   "--diffs-line-height": "20px",
 } as CSSProperties;
 
@@ -107,7 +107,7 @@ export function ConflictMerge({
       onKeyDown={onKeyDown}
     >
       <div className="flex shrink-0 flex-wrap items-center gap-1 border-border border-b p-2">
-        <span className="px-1 text-xs whitespace-nowrap text-muted-foreground">
+        <span className="px-1 text-meta whitespace-nowrap text-muted-foreground">
           {document.file.openRegions}/
           {Math.max(total, document.file.openRegions)} open
         </span>
@@ -236,7 +236,7 @@ function ExcerptBlocks({
 
   return (
     <>
-      <p className="border-border border-b bg-muted/40 px-3 py-1 font-mono text-muted-foreground text-xs">
+      <p className="border-border border-b bg-muted/40 px-3 py-1 font-mono text-muted-foreground text-meta">
         Line {excerpt.line.toLocaleString()}
       </p>
       <div ref={container} />

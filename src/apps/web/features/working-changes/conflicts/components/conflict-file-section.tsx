@@ -56,7 +56,7 @@ export function ConflictFileSection({
               onClick={() => toggle(row.key)}
             >
               <RowLead row={row} collapsed={collapsed} />
-              <span className="truncate text-[.81rem]">{row.name}/</span>
+              <span className="truncate text-body">{row.name}/</span>
             </button>
           );
         const { path, file } = conflict;
@@ -85,7 +85,7 @@ export function ConflictFileSection({
             ) : (
               <>
                 {file ? (
-                  <span className="min-w-0 max-w-[45%] truncate text-[10px] text-muted-foreground">
+                  <span className="min-w-0 max-w-[45%] truncate text-badge text-muted-foreground">
                     {conflictLabel(file, conflicts.sides)}
                   </span>
                 ) : null}

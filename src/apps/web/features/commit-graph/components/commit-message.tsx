@@ -40,7 +40,7 @@ export function CommitMessage({
             className="flex h-full w-max items-center gap-2 whitespace-nowrap pr-6"
           >
             {order > 0 ? (
-              <span className="grid h-4 min-w-4 shrink-0 place-items-center rounded-control bg-primary/25 px-1 font-mono text-[10px] font-semibold">
+              <span className="grid h-4 min-w-4 shrink-0 place-items-center rounded-control bg-primary/25 px-1 font-mono text-badge font-semibold">
                 {order}
               </span>
             ) : null}
@@ -68,7 +68,7 @@ export function CommitMessage({
       {edges.room ? null : (
         <Popover>
           <PopoverTrigger
-            className="absolute inset-y-0 z-[3] bg-[var(--graph-row-background)] px-2 text-[.85rem] text-muted-foreground"
+            className="absolute inset-y-0 z-[3] bg-[var(--graph-row-background)] px-2 text-body text-muted-foreground"
             style={{ right: graphMetadataWidth }}
             onClick={(event) => event.stopPropagation()}
             aria-label="Show message hidden by wide graph"
@@ -79,7 +79,7 @@ export function CommitMessage({
             className="max-w-[calc(100vw-24px)]"
             aria-label="Commit message"
           >
-            <p className="mb-3 break-words text-[.85rem]">{subject}</p>
+            <p className="mb-3 break-words text-body">{subject}</p>
             <div className="overflow-x-auto">
               <CommitRefLabels labels={labels} />
             </div>

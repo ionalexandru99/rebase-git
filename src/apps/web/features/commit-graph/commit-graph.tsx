@@ -402,7 +402,7 @@ export function CommitGraph({
                     }}
                   >
                     <tr
-                      className="grid h-7 items-center border-border/60 border-b text-left text-[.85rem] font-normal text-muted-foreground"
+                      className="grid h-7 items-center border-border/60 border-b text-left text-body font-normal text-muted-foreground"
                       style={{
                         gridTemplateColumns: `minmax(0, 1fr) ${graphMetadataColumns}`,
                       }}
@@ -507,7 +507,7 @@ export function CommitGraph({
               {!loading && failure === undefined && total === 0 ? (
                 <div
                   aria-label="Empty commit history"
-                  className="pointer-events-none absolute inset-0 grid place-items-center text-[.85rem] text-muted-foreground"
+                  className="pointer-events-none absolute inset-0 grid place-items-center text-body text-muted-foreground"
                   role="status"
                 >
                   {(roots?.length ?? 0) > 0
@@ -575,7 +575,7 @@ function Title({
 }) {
   return (
     <div className="mr-auto flex min-w-0 items-center gap-2">
-      <h1 className="min-w-0 max-w-48 truncate text-[.85rem] font-semibold text-foreground">
+      <h1 className="min-w-0 max-w-48 truncate text-body font-semibold text-foreground">
         {repositoryName}
       </h1>
       {children}

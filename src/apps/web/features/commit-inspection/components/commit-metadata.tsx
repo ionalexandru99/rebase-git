@@ -49,18 +49,18 @@ export function CommitMetadata({
   return (
     <header
       id={id}
-      className="max-h-[50%] shrink-0 overflow-auto border-border border-b px-4 py-3 text-xs"
+      className="max-h-[50%] shrink-0 overflow-auto border-border border-b px-4 py-3 text-meta"
     >
       <h2
         ref={title}
-        className={`break-words text-sm font-semibold ${expanded ? "" : "line-clamp-2"}`}
+        className={`break-words text-control font-semibold ${expanded ? "" : "line-clamp-2"}`}
       >
         {subject}
       </h2>
       {body ? (
         <p
           ref={preview}
-          className={`mt-1 whitespace-pre-wrap break-words text-sm text-muted-foreground ${expanded ? "max-h-40 overflow-y-auto" : "line-clamp-2"}`}
+          className={`mt-1 whitespace-pre-wrap break-words text-body text-muted-foreground ${expanded ? "max-h-40 overflow-y-auto" : "line-clamp-2"}`}
         >
           {expanded ? body : lede}
         </p>

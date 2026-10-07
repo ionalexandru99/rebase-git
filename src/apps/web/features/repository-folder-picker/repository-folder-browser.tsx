@@ -69,7 +69,7 @@ export function RepositoryFolderBrowser({
   return (
     <>
       <header className="flex h-14 shrink-0 items-center gap-3 border-b border-border pr-3 pl-4">
-        <DialogTitle className="min-w-0 flex-1 text-base font-semibold">
+        <DialogTitle className="min-w-0 flex-1 text-heading font-semibold">
           {title}
         </DialogTitle>
         <DialogDescription className="sr-only">
@@ -96,7 +96,7 @@ export function RepositoryFolderBrowser({
         </Button>
         <nav
           aria-label="Current directory"
-          className="flex min-w-0 flex-1 items-center gap-0.5 overflow-x-auto text-xs whitespace-nowrap text-muted-foreground"
+          className="flex min-w-0 flex-1 items-center gap-0.5 overflow-x-auto text-body whitespace-nowrap text-muted-foreground"
         >
           {directory?.breadcrumbs.map((breadcrumb, index) => (
             <span className="flex items-center gap-0.5" key={breadcrumb.path}>
@@ -126,7 +126,7 @@ export function RepositoryFolderBrowser({
           />
           <Input
             aria-label="Filter current directory"
-            className="h-8 pl-8 text-xs sm:h-8 sm:text-xs"
+            className="h-8 pl-8 text-control sm:h-8"
             onChange={(event) => setQuery(event.target.value)}
             placeholder="Filter"
             value={query}
@@ -153,7 +153,7 @@ export function RepositoryFolderBrowser({
       <footer className="flex h-14 shrink-0 items-center gap-2 border-t border-border px-3">
         {purpose._tag === "Open" ? (
           <Button
-            className="text-xs sm:text-xs"
+            className="text-control"
             disabled={
               directory === undefined ||
               directory.repository ||
@@ -170,7 +170,7 @@ export function RepositoryFolderBrowser({
         ) : null}
         <p
           aria-live="polite"
-          className="min-w-0 flex-1 text-xs whitespace-pre-line text-destructive"
+          className="min-w-0 flex-1 text-meta whitespace-pre-line text-destructive"
         >
           {browser.selectionError}
         </p>
@@ -182,17 +182,17 @@ export function RepositoryFolderBrowser({
             />
             <Input
               aria-label="Initial branch"
-              className="h-8 pl-8 text-xs sm:h-8 sm:text-xs"
+              className="h-8 pl-8 text-control sm:h-8"
               onChange={(event) => browser.setBranch(event.target.value)}
               value={browser.branch}
             />
           </div>
         ) : null}
-        <DialogClose className="inline-flex h-8 items-center justify-center rounded-control border border-border px-3 text-xs shadow-raised font-medium text-foreground outline-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring/30 max-[540px]:hidden">
+        <DialogClose className="inline-flex h-8 items-center justify-center rounded-control border border-border px-3 text-control shadow-raised font-medium text-foreground outline-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring/30 max-[540px]:hidden">
           Cancel
         </DialogClose>
         <Button
-          className="h-8 max-w-64 px-3 text-xs sm:h-8 sm:text-xs"
+          className="h-8 max-w-64 px-3 text-control sm:h-8"
           disabled={
             browser.selectedPath === undefined ||
             browser.running ||

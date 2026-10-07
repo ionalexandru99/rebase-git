@@ -217,7 +217,7 @@ function CherryPickItems({
         {plan.commits.map((commit, index) => (
           <li
             key={commit.oid}
-            className="flex h-6 min-w-0 items-center gap-2 px-1 text-[.75rem]"
+            className="flex h-6 min-w-0 items-center gap-2 px-1 text-meta"
           >
             <span className="w-4 shrink-0 text-right font-mono text-muted-foreground">
               {index + 1}
@@ -270,7 +270,7 @@ function ResultItem({
       >
         <span className="flex-1">{label}</span>
         {reason === undefined ? null : (
-          <span className="text-[.7rem] text-muted-foreground">{reason}</span>
+          <span className="text-meta text-muted-foreground">{reason}</span>
         )}
       </ContextMenuItem>
     );
@@ -284,7 +284,7 @@ function ResultItem({
         />
       </ContextMenuSubmenuTrigger>
       <ContextMenuContent submenu className="w-80">
-        <p className="mb-1 truncate border-border border-b px-2 pt-1 pb-1.5 font-mono text-[.7rem] text-muted-foreground">
+        <p className="mb-1 truncate border-border border-b px-2 pt-1 pb-1.5 font-mono text-meta text-muted-foreground">
           Merge {merge.oid.slice(0, 7)} relative to
         </p>
         {merge.parents.map((parent, index) => (
@@ -328,11 +328,11 @@ function ParentItem({
   const files = inspection.data?.files;
   return (
     <ContextMenuItem onClick={onClick}>
-      <span className="shrink-0 font-mono text-[.75rem] text-muted-foreground">
+      <span className="shrink-0 font-mono text-meta text-muted-foreground">
         {parent.slice(0, 7)}
       </span>
       <span className="min-w-0 flex-1 truncate">{subject}</span>
-      <span className="shrink-0 text-[.7rem] text-muted-foreground">
+      <span className="shrink-0 text-meta text-muted-foreground">
         {files === undefined
           ? ""
           : files.length === 1

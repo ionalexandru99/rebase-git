@@ -44,7 +44,7 @@ function AlertDialogTitle({
 }: AlertDialogPrimitive.Title.Props) {
   return (
     <AlertDialogPrimitive.Title
-      className={cn("text-base font-semibold", className)}
+      className={cn("text-heading font-semibold", className)}
       data-slot="alert-dialog-title"
       {...props}
     />
@@ -57,7 +57,7 @@ function AlertDialogDescription({
 }: AlertDialogPrimitive.Description.Props) {
   return (
     <AlertDialogPrimitive.Description
-      className={cn("mt-2 text-sm text-muted-foreground", className)}
+      className={cn("mt-2 text-body text-muted-foreground", className)}
       data-slot="alert-dialog-description"
       {...props}
     />

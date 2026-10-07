@@ -72,7 +72,7 @@ function RefNameField({
         aria-invalid={message !== undefined}
         aria-label={label}
         autoComplete="off"
-        className="h-7 text-[.85rem] sm:h-7 sm:text-[.85rem]"
+        className="h-7 text-control sm:h-7"
         onChange={(event) => {
           setName(event.target.value);
           setFailure(undefined);
@@ -90,7 +90,7 @@ function RefNameField({
       {withMessage ? (
         <textarea
           aria-label="Tag message"
-          className="min-h-14 w-full min-w-0 resize-none rounded-control border border-input bg-input/20 px-[calc(--spacing(3)-1px)] py-1 text-[.8rem] leading-snug outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30 dark:bg-input/30"
+          className="min-h-14 w-full min-w-0 resize-none rounded-control border border-input bg-input/20 px-[calc(--spacing(3)-1px)] py-1 text-control leading-snug outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30 dark:bg-input/30"
           onChange={(event) => {
             setAnnotation(event.target.value);
             setFailure(undefined);
@@ -109,7 +109,7 @@ function RefNameField({
         />
       ) : null}
       {withMessage && message === undefined ? (
-        <p className="flex justify-between gap-2 px-1 text-xs leading-4 text-muted-foreground">
+        <p className="flex justify-between gap-2 px-1 text-meta leading-4 text-muted-foreground">
           <span>
             <span className="font-medium text-foreground">
               {annotation.trim().length === 0 ? "Lightweight" : "Annotated"}
@@ -121,7 +121,7 @@ function RefNameField({
       ) : null}
       {message === undefined ? null : (
         <p
-          className="px-1 text-xs leading-4 text-status-unavailable"
+          className="px-1 text-meta leading-4 text-status-unavailable"
           id={messageId}
           role="alert"
         >

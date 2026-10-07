@@ -70,10 +70,10 @@ export function CloneLine({
     return (
       <div className="flex items-center gap-3 pb-3">
         <div className="min-w-0 flex-1">
-          <div className="mb-1.5 flex items-baseline justify-between gap-3 text-[.72rem]">
+          <div className="mb-1.5 flex items-baseline justify-between gap-3 text-meta">
             <span className="min-w-0 truncate text-foreground/85">
               Cloning into{" "}
-              <span className="font-mono text-[.69rem] text-muted-foreground">
+              <span className="font-mono text-meta text-muted-foreground">
                 {destination}
               </span>
             </span>
@@ -116,7 +116,7 @@ export function CloneLine({
         }}
       >
         <label
-          className="shrink-0 text-[.72rem] text-muted-foreground"
+          className="shrink-0 text-meta text-muted-foreground"
           htmlFor={cloneDestinationId(source.key)}
         >
           Clone into
@@ -124,7 +124,7 @@ export function CloneLine({
         <Input
           aria-invalid={failure !== undefined}
           autoFocus
-          className="h-8 min-w-0 flex-1 bg-white/[.03] font-mono text-[.72rem] sm:h-8 sm:text-[.72rem]"
+          className="h-8 min-w-0 flex-1 bg-white/[.03] font-mono text-control sm:h-8"
           id={cloneDestinationId(source.key)}
           onChange={(event) => setPath(event.target.value)}
           onKeyDown={(event) => {
@@ -156,7 +156,7 @@ export function CloneLine({
       {failure === undefined ? null : (
         <p
           aria-live="polite"
-          className="mt-1.5 text-[.72rem] whitespace-pre-line text-destructive"
+          className="mt-1.5 text-meta whitespace-pre-line text-destructive"
         >
           {failure}
         </p>

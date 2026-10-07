@@ -117,7 +117,7 @@ export function PullRequestLink({
   const [newest] = pullRequests;
   if (newest === undefined) return null;
   return (
-    <span className="flex shrink-0 items-center gap-1 pr-1.5 text-[.78rem] tabular-nums">
+    <span className="flex shrink-0 items-center gap-1 pr-1.5 text-meta tabular-nums">
       <button
         aria-label={`Open ${describePullRequest(newest)}`}
         className={`inline-flex items-center gap-1 rounded-control underline-offset-2 outline-none hover:underline ${stateIcons[newest.state].className}`}
@@ -148,7 +148,7 @@ export function PullRequestList({
 }) {
   return pullRequests.map((pullRequest) => (
     <div
-      className="group/pr flex h-6 min-w-0 items-center gap-2.5 text-[.85rem]"
+      className="group/pr flex h-6 min-w-0 items-center gap-2.5 text-body"
       key={pullRequest.number}
     >
       <PullRequestStateIcon pullRequest={pullRequest} />

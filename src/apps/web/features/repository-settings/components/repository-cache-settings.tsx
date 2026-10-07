@@ -60,7 +60,10 @@ export function RepositoryCacheSettings(
         </Button>
       </SettingsRow>
       {cache.exhausted || cache.storageUnavailable ? (
-        <p role="alert" className="px-3 py-3 text-xs text-destructive sm:px-4">
+        <p
+          role="alert"
+          className="px-3 py-3 text-meta text-destructive sm:px-4"
+        >
           {cache.exhausted
             ? "Browser storage is full."
             : "Browser storage is unavailable."}{" "}
@@ -68,7 +71,10 @@ export function RepositoryCacheSettings(
         </p>
       ) : null}
       {cache.snapshot.failure !== undefined && !cache.storageUnavailable ? (
-        <p role="alert" className="px-3 py-3 text-xs text-destructive sm:px-4">
+        <p
+          role="alert"
+          className="px-3 py-3 text-meta text-destructive sm:px-4"
+        >
           {cache.snapshot.failure._tag === "Offline"
             ? "Reconnect to finish history synchronization."
             : "History synchronization failed. Rebuild the cache to retry."}
@@ -77,7 +83,7 @@ export function RepositoryCacheSettings(
       {cache.pending ? (
         <p
           role="status"
-          className="px-3 py-3 text-xs text-muted-foreground sm:px-4"
+          className="px-3 py-3 text-meta text-muted-foreground sm:px-4"
         >
           Updating history storage…
         </p>
@@ -85,7 +91,7 @@ export function RepositoryCacheSettings(
       {cache.snapshot.synchronization === "syncing" ? (
         <p
           role="status"
-          className="px-3 py-3 text-xs text-muted-foreground sm:px-4"
+          className="px-3 py-3 text-meta text-muted-foreground sm:px-4"
         >
           Synchronizing history · {cache.snapshot.commitCount.toLocaleString()}{" "}
           commits stored
@@ -94,7 +100,7 @@ export function RepositoryCacheSettings(
       {cache.error === undefined ? null : (
         <div
           role="alert"
-          className="px-3 py-3 text-xs text-destructive sm:px-4"
+          className="px-3 py-3 text-meta text-destructive sm:px-4"
         >
           {cache.error}
           <Button

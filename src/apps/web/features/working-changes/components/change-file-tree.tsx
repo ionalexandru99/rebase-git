@@ -72,7 +72,7 @@ export function ChangeFileTree({
       {view.discardNotice === null ? null : (
         <p
           role="status"
-          className="mx-2 mb-2 shrink-0 rounded-control border border-border bg-muted/40 px-2 py-1.5 text-xs text-muted-foreground"
+          className="mx-2 mb-2 shrink-0 rounded-control border border-border bg-muted/40 px-2 py-1.5 text-meta text-muted-foreground"
         >
           {view.discardNotice.title},{" "}
           <button

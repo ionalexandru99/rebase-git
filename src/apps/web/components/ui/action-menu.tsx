@@ -46,7 +46,7 @@ export function ActionMenuItems({
     );
     const hinted =
       hint === undefined ? null : (
-        <span className="shrink-0 whitespace-nowrap text-[.7rem] text-muted-foreground">
+        <span className="shrink-0 whitespace-nowrap text-meta text-muted-foreground">
           {hint}
         </span>
       );

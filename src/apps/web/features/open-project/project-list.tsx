@@ -52,19 +52,19 @@ export function ProjectList({
             type="button"
           >
             <RepositoryBadge
-              className="size-7.5 rounded-control text-[.67rem]"
+              className="size-7.5 rounded-control text-meta"
               color={item.repository.color}
               name={item.repository.name}
             />
             <span className="flex min-w-0 items-baseline gap-[.65rem] max-[650px]:block">
-              <strong className="shrink-0 truncate text-[.8rem] font-medium text-foreground">
+              <strong className="shrink-0 truncate text-body font-medium text-foreground">
                 {item.repository.name}
               </strong>
-              <span className="block min-w-0 truncate font-mono text-[.69rem] leading-[1.45] text-muted-foreground">
+              <span className="block min-w-0 truncate font-mono text-meta leading-[1.45] text-muted-foreground">
                 {item.repository.path}
               </span>
             </span>
-            <span className="text-[.68rem] text-muted-foreground">
+            <span className="text-meta text-muted-foreground">
               {item.repository.lastOpenedAt === undefined
                 ? null
                 : formatLastOpened(item.repository.lastOpenedAt, now)}
@@ -78,7 +78,7 @@ export function ProjectList({
       ))}
       {hiddenCount === 0 ? null : (
         <button
-          className="h-8 rounded-control px-2.5 text-xs font-medium text-primary outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring/30"
+          className="h-8 rounded-control px-2.5 text-body font-medium text-primary outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring/30"
           onClick={onShowAll}
           type="button"
         >
@@ -97,7 +97,7 @@ export function OpenProjectSectionHeading({
   readonly id: string;
 }): JSX.Element {
   return (
-    <h2 className="mb-2 text-xs font-medium text-muted-foreground" id={id}>
+    <h2 className="mb-2 text-meta font-medium text-muted-foreground" id={id}>
       {children}
     </h2>
   );

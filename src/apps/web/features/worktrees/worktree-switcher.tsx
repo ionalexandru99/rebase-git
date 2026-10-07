@@ -47,7 +47,7 @@ export function WorktreeSwitcher() {
       >
         <PopoverTrigger
           aria-label={`Worktree ${active.name}`}
-          className="flex h-7 min-w-0 items-center gap-1.5 rounded-control px-1.5 text-[.85rem] text-muted-foreground outline-none hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/30 aria-expanded:bg-muted aria-expanded:text-foreground"
+          className="flex h-7 min-w-0 items-center gap-1.5 rounded-control px-1.5 text-body text-muted-foreground outline-none hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/30 aria-expanded:bg-muted aria-expanded:text-foreground"
         >
           {linked ? (
             <>

@@ -43,7 +43,7 @@ export function StashPanel() {
   );
   if (oid === undefined || stash === undefined)
     return (
-      <p role="status" className="p-4 text-sm text-muted-foreground">
+      <p role="status" className="p-4 text-body text-muted-foreground">
         {oid === undefined
           ? "Select a stash in the sidebar."
           : "This stash no longer exists."}
@@ -51,27 +51,27 @@ export function StashPanel() {
     );
   return (
     <section aria-label="Stash" className="flex h-full min-h-0 flex-col">
-      <header className="shrink-0 border-border border-b px-4 py-3 text-xs">
-        <h2 className="break-words text-base font-medium">{stash.name}</h2>
+      <header className="shrink-0 border-border border-b px-4 py-3 text-meta">
+        <h2 className="break-words text-heading font-medium">{stash.name}</h2>
         <p className="mt-2 flex flex-wrap gap-x-3 text-muted-foreground">
           {stash.branch === null ? null : (
-            <span className="font-mono text-[11px]">{stash.branch}</span>
+            <span className="font-mono text-badge">{stash.branch}</span>
           )}
           <span>{ageLabel(stash.recordedAt, now)}</span>
         </p>
       </header>
       {contents.isError ? (
-        <p role="alert" className="p-3 text-sm">
+        <p role="alert" className="p-3 text-body">
           {describeFailure(contents.error)}
         </p>
       ) : contents.data === undefined ? (
-        <p role="status" className="p-4 text-sm text-muted-foreground">
+        <p role="status" className="p-4 text-body text-muted-foreground">
           Loading stash…
         </p>
       ) : (
         <DiffWorkerPool>
           {contents.data.truncated ? (
-            <p role="status" className="p-3 text-xs text-muted-foreground">
+            <p role="status" className="p-3 text-meta text-muted-foreground">
               The changed-file list is too large to show in full.
             </p>
           ) : null}
@@ -113,7 +113,7 @@ function StashFiles({
   );
   if (contents.files.length === 0)
     return (
-      <p className="p-4 text-sm text-muted-foreground">No file changes.</p>
+      <p className="p-4 text-body text-muted-foreground">No file changes.</p>
     );
   return (
     <CommitFiles
@@ -126,7 +126,7 @@ function StashFiles({
     >
       <Suspense
         fallback={
-          <p className="p-4 text-sm text-muted-foreground">
+          <p className="p-4 text-body text-muted-foreground">
             Loading diff viewer…
           </p>
         }

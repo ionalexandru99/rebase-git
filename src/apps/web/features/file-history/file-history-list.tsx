@@ -77,7 +77,7 @@ export function HistoryList({
   };
   return (
     <div className="flex h-full min-h-0 flex-col border-border border-l bg-sidebar pb-1">
-      <div className="mx-1 mt-1 flex h-8 shrink-0 items-center gap-2 px-1.5 text-[.8rem] text-sidebar-foreground">
+      <div className="mx-1 mt-1 flex h-8 shrink-0 items-center gap-2 px-1.5 text-body text-sidebar-foreground">
         <IconGitCommit aria-hidden="true" className="size-3.5 shrink-0" />
         <span className="min-w-0 truncate">
           Commits ({entries.length.toLocaleString()}
@@ -139,7 +139,7 @@ function HistoryRow({
   return (
     <div
       aria-selected={chosen}
-      className={`flex h-11 cursor-default flex-col justify-center rounded-control pr-1 pl-2.5 text-[.85rem] select-none ${
+      className={`flex h-11 cursor-default flex-col justify-center rounded-control pr-1 pl-2.5 text-body select-none ${
         chosen
           ? "bg-sidebar-accent text-sidebar-accent-foreground"
           : "text-sidebar-foreground hover:bg-sidebar-accent/75 hover:text-sidebar-accent-foreground"
@@ -150,7 +150,7 @@ function HistoryRow({
       tabIndex={-1}
     >
       <span className="truncate leading-tight">{entry.subject}</span>
-      <span className="flex min-w-0 items-center gap-1.5 text-[.72rem] leading-tight text-muted-foreground">
+      <span className="flex min-w-0 items-center gap-1.5 text-meta leading-tight text-muted-foreground">
         <span className="shrink-0">{entry.oid.slice(0, 8)}</span>
         <span className="shrink-0">{dateLabel(entry.authoredAt)}</span>
         <StatusHint entry={entry} />

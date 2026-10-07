@@ -67,7 +67,7 @@ export function AuthorAvatar({
   return (
     <span
       aria-hidden="true"
-      className="grid size-5 shrink-0 place-items-center overflow-hidden rounded-full bg-accent text-[11px] font-semibold text-foreground"
+      className="grid size-5 shrink-0 place-items-center overflow-hidden rounded-full bg-accent text-badge font-semibold text-foreground"
     >
       {url === undefined || url === failed ? (
         initials

@@ -197,7 +197,7 @@ function TerminalTab({
       <TabsTrigger
         value={id}
         onClick={onSelect}
-        className="h-7 flex-1 justify-start rounded-control pr-7 pl-2 text-sm hover:bg-accent/60 hover:text-foreground data-active:bg-accent"
+        className="h-7 flex-1 justify-start rounded-control pr-7 pl-2 text-body hover:bg-accent/60 hover:text-foreground data-active:bg-accent"
       >
         <IconTerminal aria-hidden="true" className="size-3.5" />
         {label}

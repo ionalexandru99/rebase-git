@@ -110,6 +110,22 @@
   color-scheme: dark;
 }
 
+@theme {
+  --text-*: initial;
+  --text-badge: 11px;
+  --text-badge--line-height: 16px;
+  --text-meta: 12px;
+  --text-meta--line-height: 16px;
+  --text-body: 13px;
+  --text-body--line-height: 20px;
+  --text-control: 14px;
+  --text-control--line-height: 20px;
+  --text-heading: 16px;
+  --text-heading--line-height: 24px;
+  --text-title: 20px;
+  --text-title--line-height: 28px;
+}
+
 @theme inline {
   --font-heading: var(--font-sans);
   --font-sans: "Inter Variable", sans-serif;
@@ -184,7 +200,7 @@
   }
 
   body {
-    @apply m-0 min-w-80 bg-background text-base text-foreground antialiased;
+    @apply m-0 min-w-80 bg-background text-body text-foreground antialiased;
   }
 
   body,

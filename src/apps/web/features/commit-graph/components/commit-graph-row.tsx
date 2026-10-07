@@ -57,7 +57,7 @@ export const CommitGraphRow = memo(function CommitGraphRow({
       aria-expanded={merge === undefined ? undefined : merge === "expanded"}
       aria-busy={busy ? true : undefined}
       aria-selected={selected}
-      className={`${start === undefined ? "relative" : "absolute left-0"} grid w-full cursor-default items-center bg-[var(--graph-row-background)] text-[.85rem] text-foreground ${
+      className={`${start === undefined ? "relative" : "absolute left-0"} grid w-full cursor-default items-center bg-[var(--graph-row-background)] text-body text-foreground ${
         selected
           ? "after:pointer-events-none after:absolute after:inset-0 after:z-[5] after:shadow-[inset_2px_0_0_var(--primary)]"
           : "hover:[--graph-row-background:color-mix(in_oklab,var(--accent)_45%,var(--repository))] data-[active=true]:[--graph-row-background:color-mix(in_oklab,var(--accent)_85%,var(--repository))] data-[active=true]:after:pointer-events-none data-[active=true]:after:absolute data-[active=true]:after:inset-0 data-[active=true]:after:z-[5] data-[active=true]:after:shadow-[inset_2px_0_0_var(--muted-foreground)]"

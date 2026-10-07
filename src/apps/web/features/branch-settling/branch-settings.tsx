@@ -121,7 +121,7 @@ function SettledDeletionRow({
         </>
       }
     >
-      <span className="text-sm text-muted-foreground">After</span>
+      <span className="text-control text-muted-foreground">After</span>
       <Input
         aria-describedby={invalid ? `${id}-error` : undefined}
         aria-invalid={invalid}
@@ -139,7 +139,7 @@ function SettledDeletionRow({
         type="number"
         value={shown}
       />
-      <span className="text-sm text-muted-foreground">days</span>
+      <span className="text-control text-muted-foreground">days</span>
       <Switch
         aria-describedby={`${id}-description`}
         aria-label="Delete settled branches"

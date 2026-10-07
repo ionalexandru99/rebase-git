@@ -83,7 +83,7 @@ export function SectionRow({
       aria-level={row.level}
       aria-posinset={row.position}
       aria-setsize={row.setSize}
-      className={`relative flex h-8 w-full cursor-default items-center rounded-control text-left outline-none select-none ${folder ? "gap-1.5 text-[.81rem] text-sidebar-foreground hover:text-sidebar-accent-foreground" : `gap-2 px-1.5 text-[.8rem] hover:bg-sidebar-accent/50 ${look?.className ?? ""}`} ${active ? "bg-sidebar-accent/75" : ""}`}
+      className={`relative flex h-8 w-full cursor-default items-center rounded-control text-left outline-none select-none ${folder ? "gap-1.5 text-body text-sidebar-foreground hover:text-sidebar-accent-foreground" : `gap-2 px-1.5 text-body hover:bg-sidebar-accent/50 ${look?.className ?? ""}`} ${active ? "bg-sidebar-accent/75" : ""}`}
       id={rowElementId(row.id)}
       onClick={() => {
         onActivate();
@@ -161,7 +161,7 @@ export function RefRow({
           card,
           row,
           <div
-            className={`group relative flex h-8 w-full cursor-default items-center rounded-control text-[.85rem] outline-none select-none hover:bg-sidebar-accent/75 hover:text-sidebar-accent-foreground ${row.current ? "font-medium text-sidebar-accent-foreground" : "text-sidebar-foreground"} ${active || selected ? "bg-sidebar-accent" : ""}`}
+            className={`group relative flex h-8 w-full cursor-default items-center rounded-control text-body outline-none select-none hover:bg-sidebar-accent/75 hover:text-sidebar-accent-foreground ${row.current ? "font-medium text-sidebar-accent-foreground" : "text-sidebar-foreground"} ${active || selected ? "bg-sidebar-accent" : ""}`}
           >
             <button
               aria-level={row.level}
@@ -293,7 +293,7 @@ function SyncCounts({ upstream }: { readonly upstream: BranchUpstream }) {
   if (upstream.gone || (upstream.ahead === 0 && upstream.behind === 0))
     return null;
   return (
-    <span className="ml-auto flex shrink-0 items-center gap-1 text-[.78rem] font-normal tabular-nums">
+    <span className="ml-auto flex shrink-0 items-center gap-1 text-meta font-normal tabular-nums">
       {upstream.ahead > 0 ? (
         <span
           aria-label={`${upstream.ahead} commits to push`}

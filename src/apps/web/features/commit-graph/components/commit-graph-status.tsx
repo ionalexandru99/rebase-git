@@ -39,11 +39,9 @@ export function CommitGraphFailure({
       className="absolute inset-0 flex flex-col items-center justify-center gap-3 px-6 text-center"
       role="alert"
     >
-      <p className="m-0 max-w-md text-[.85rem] text-muted-foreground">
-        {error}
-      </p>
+      <p className="m-0 max-w-md text-body text-muted-foreground">{error}</p>
       <Button
-        className="text-[.85rem] sm:text-[.85rem]"
+        className="text-control"
         onClick={retry}
         size="sm"
         variant="outline"
@@ -62,13 +60,10 @@ export function CommitGraphPageRetry({
   readonly retry: () => void;
 }) {
   return (
-    <div
-      className="flex h-9 items-center gap-3 px-3 text-[.85rem]"
-      role="alert"
-    >
+    <div className="flex h-9 items-center gap-3 px-3 text-body" role="alert">
       <span>{error}</span>
       <Button
-        className="text-[.85rem] sm:text-[.85rem]"
+        className="text-control"
         onClick={retry}
         size="xs"
         variant="outline"

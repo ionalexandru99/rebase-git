@@ -8,7 +8,7 @@ export function ToolbarButton({
 }: Omit<ComponentProps<typeof Button>, "size" | "variant">) {
   return (
     <Button
-      className={cn("h-7 gap-1.5 text-[.85rem] sm:text-[.85rem]", className)}
+      className={cn("h-7 gap-1.5 text-control", className)}
       size="sm"
       variant="ghost"
       {...props}

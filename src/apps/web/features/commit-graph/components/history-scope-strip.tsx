@@ -29,7 +29,7 @@ export function HistoryScopeStrip({
   return (
     <fieldset className="flex h-9 min-w-0 shrink-0 items-center gap-1.5 border-border/60 border-b bg-[var(--filters-background)] px-3 [--filters-background:color-mix(in_srgb,var(--muted)_20%,var(--repository))]">
       <legend className="sr-only">{scope._tag} history scope</legend>
-      <span className="mr-1 shrink-0 text-[.85rem] text-muted-foreground">
+      <span className="mr-1 shrink-0 text-body text-muted-foreground">
         Filters
       </span>
       <div className="relative h-full min-w-0 flex-1">
@@ -62,14 +62,12 @@ export function HistoryScopeStrip({
               />
             ))}
             {selections.length === 0 && detachedHead !== undefined ? (
-              <span className="inline-flex h-6 items-center rounded-control border border-border/70 bg-background/60 px-2 text-[.85rem] text-foreground">
+              <span className="inline-flex h-6 items-center rounded-control border border-border/70 bg-background/60 px-2 text-body text-foreground">
                 Detached HEAD
               </span>
             ) : null}
             {selections.length === 0 && detachedHead === undefined ? (
-              <span className="text-[.85rem] text-muted-foreground">
-                No refs
-              </span>
+              <span className="text-body text-muted-foreground">No refs</span>
             ) : null}
           </div>
         </section>
@@ -94,7 +92,7 @@ export function HistoryScopeStrip({
         <button
           type="button"
           onClick={onReset}
-          className="h-6 shrink-0 rounded-control px-2 text-[.85rem] text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:outline-2 focus-visible:outline-primary"
+          className="h-6 shrink-0 rounded-control px-2 text-body text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:outline-2 focus-visible:outline-primary"
         >
           Reset filters
         </button>

@@ -109,7 +109,7 @@ function Notice({
             onFilled={filled}
           />
           <div className="min-w-0 flex-1">
-            <div className="flex items-baseline gap-1.5 text-sm">
+            <div className="flex items-baseline gap-1.5 text-control">
               <Toast.Title className="min-w-0 cap-centered font-medium wrap-anywhere">
                 {notice.title}
               </Toast.Title>
@@ -127,7 +127,7 @@ function Notice({
                 </>
               )}
             </div>
-            <Toast.Description className="mt-1 max-h-[min(240px,40vh)] overflow-y-auto whitespace-pre-line wrap-anywhere text-sm text-muted-foreground">
+            <Toast.Description className="mt-1 max-h-[min(240px,40vh)] overflow-y-auto whitespace-pre-line wrap-anywhere text-body text-muted-foreground">
               {notice.description}
             </Toast.Description>
           </div>

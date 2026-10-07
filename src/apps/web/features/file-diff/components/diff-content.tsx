@@ -37,7 +37,7 @@ export function DiffContent({
         style={
           {
             "--diffs-font-family": "var(--font-mono)",
-            "--diffs-font-size": "12px",
+            "--diffs-font-size": "var(--text-meta)",
             "--diffs-line-height": "20px",
           } as CSSProperties
         }
@@ -68,7 +68,7 @@ export function DiffContent({
     <div className="grid min-h-0 flex-1 grid-cols-2 gap-3 overflow-auto p-3">
       {(["before", "after"] as const).map((side) => (
         <figure key={side} className="min-w-0">
-          <figcaption className="mb-2 text-xs text-muted-foreground">
+          <figcaption className="mb-2 text-meta text-muted-foreground">
             {side === "before" ? "Before" : "After"}
           </figcaption>
           {diff[side] ? (
@@ -78,7 +78,7 @@ export function DiffContent({
               className="max-w-full object-contain"
             />
           ) : (
-            <p className="text-xs text-muted-foreground">No file</p>
+            <p className="text-meta text-muted-foreground">No file</p>
           )}
         </figure>
       ))}
@@ -86,7 +86,7 @@ export function DiffContent({
   ) : (
     <div className="flex flex-1 flex-col items-center justify-center gap-3 p-4 text-center text-muted-foreground">
       <IconFileDiff className="size-8" />
-      <p className="text-sm">
+      <p className="text-body">
         {diff.kind === "conflict"
           ? "Resolve this file's merge conflict before committing."
           : diff.kind === "large"
@@ -98,7 +98,7 @@ export function DiffContent({
               : `${diff.kind === "binary" ? "Binary file" : diff.kind === "symlink" ? "Symbolic link" : "Submodule"} changed.`}
       </p>
       {diff.beforeBytes === diff.afterBytes ? null : (
-        <p className="text-xs">
+        <p className="text-meta">
           {diff.beforeBytes.toLocaleString()} →{" "}
           {diff.afterBytes.toLocaleString()} bytes
         </p>

@@ -149,7 +149,7 @@ export function PlanList({
           >
             <span
               className={cn(
-                "w-12 shrink-0 font-mono text-[11px]",
+                "w-12 shrink-0 font-mono text-badge",
                 actionColors[row.action],
               )}
             >
@@ -166,11 +166,11 @@ export function PlanList({
               {subjects[row.commit] ?? row.subject}
             </span>
             {row.merge ? (
-              <span className="font-mono text-[10px] text-muted-foreground">
+              <span className="font-mono text-badge text-muted-foreground">
                 merge
               </span>
             ) : null}
-            <span className="font-mono text-[11px] text-muted-foreground">
+            <span className="font-mono text-badge text-muted-foreground">
               {row.commit.slice(0, 8)}
             </span>
           </ContextMenuTrigger>

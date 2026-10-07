@@ -27,7 +27,7 @@ export function SettingsSidebar({
       className="flex h-full w-48 shrink-0 flex-col overflow-hidden border-sidebar-border/50 border-r bg-sidebar text-sidebar-foreground md:w-64"
     >
       <div className="flex h-11 shrink-0 items-center px-4">
-        <h1 className="text-base font-semibold text-sidebar-accent-foreground">
+        <h1 className="text-heading font-semibold text-sidebar-accent-foreground">
           Settings
         </h1>
       </div>
@@ -52,7 +52,7 @@ export function SettingsSidebar({
           return (
             <button
               aria-current={selected ? "page" : undefined}
-              className="flex h-10 w-full items-center gap-3 rounded-control px-3 text-left text-sm text-muted-foreground outline-none hover:bg-sidebar-accent hover:text-sidebar-accent-foreground aria-[current=page]:bg-sidebar-accent aria-[current=page]:text-sidebar-accent-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring/40"
+              className="flex h-10 w-full items-center gap-3 rounded-control px-3 text-left text-body text-muted-foreground outline-none hover:bg-sidebar-accent hover:text-sidebar-accent-foreground aria-[current=page]:bg-sidebar-accent aria-[current=page]:text-sidebar-accent-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring/40"
               key={item.id}
               onClick={() => selectSection(item.id)}
               type="button"
@@ -63,7 +63,7 @@ export function SettingsSidebar({
           );
         })}
         {visibleSections.length === 0 ? (
-          <p className="px-3 py-2 text-sm text-muted-foreground">
+          <p className="px-3 py-2 text-body text-muted-foreground">
             No settings found
           </p>
         ) : null}

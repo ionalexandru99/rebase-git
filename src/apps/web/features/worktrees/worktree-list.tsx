@@ -128,7 +128,7 @@ export function WorktreeList({
           aria-label="Find worktree"
           autoComplete="off"
           autoFocus
-          className="h-7 pl-7 text-[.85rem] sm:h-7 sm:text-[.85rem]"
+          className="h-7 pl-7 text-control sm:h-7"
           onChange={(event) => setQuery(event.target.value)}
           onKeyDown={handleKeyDown}
           placeholder="Find worktree"
@@ -162,7 +162,7 @@ export function WorktreeList({
               <div aria-hidden="true" className="mx-1 my-0.5 h-px bg-border" />
               <button
                 aria-selected={highlighted === newWorktreeId}
-                className={`flex h-8 cursor-default items-center gap-2 rounded-control px-2 text-left text-[.85rem] outline-none disabled:opacity-40 ${highlighted === newWorktreeId ? "bg-accent text-foreground" : "text-foreground/80"}`}
+                className={`flex h-8 cursor-default items-center gap-2 rounded-control px-2 text-left text-body outline-none disabled:opacity-40 ${highlighted === newWorktreeId ? "bg-accent text-foreground" : "text-foreground/80"}`}
                 data-worktree={newWorktreeId}
                 disabled={!worktrees.writable}
                 id={elementId(newWorktreeId)}
@@ -232,8 +232,8 @@ function WorktreeOption({
         <span
           className={`flex min-w-0 flex-1 flex-col ${missing ? "opacity-60" : ""}`}
         >
-          <span className="truncate text-[.85rem]">{row.name}</span>
-          <span className="truncate text-[.72rem] text-muted-foreground">
+          <span className="truncate text-body">{row.name}</span>
+          <span className="truncate text-meta text-muted-foreground">
             {row.detail}
           </span>
         </span>
@@ -243,7 +243,7 @@ function WorktreeOption({
             className="size-3.5 shrink-0 text-muted-foreground"
           />
         )}
-        <span className="flex shrink-0 items-center gap-2 text-[.75rem]">
+        <span className="flex shrink-0 items-center gap-2 text-meta">
           <ChangeCount section="unstaged" count={row.unstaged} />
           <ChangeCount section="staged" count={row.staged} />
         </span>

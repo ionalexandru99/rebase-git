@@ -63,7 +63,7 @@ export function OperationRecoveryToast({
           className={`size-2 shrink-0 ${state.completed ? "text-status-available" : "text-status-connecting"}`}
         />
         <h2
-          className="min-w-0 flex-1 cap-centered text-xs font-semibold"
+          className="min-w-0 flex-1 cap-centered text-meta font-semibold"
           aria-live="polite"
           aria-atomic="true"
         >
@@ -87,19 +87,19 @@ export function OperationRecoveryToast({
       </div>
       {!collapsed && (
         <>
-          <p className="px-3 pb-2 break-all font-mono text-[10px] text-muted-foreground">
+          <p className="px-3 pb-2 break-all font-mono text-badge text-muted-foreground">
             {repositoryName}
             {operation?.branch ? ` · ${operation.branch}` : ""}
           </p>
           {!state.completed && (
             <>
               {ready?.reason && (
-                <p className="px-3 pb-3 text-xs text-muted-foreground">
+                <p className="px-3 pb-3 text-meta text-muted-foreground">
                   {ready.reason}
                 </p>
               )}
               {!writable && active && state.connected && (
-                <p className="px-3 pb-3 text-xs text-muted-foreground">
+                <p className="px-3 pb-3 text-meta text-muted-foreground">
                   Repository write access is required to recover this operation.
                 </p>
               )}

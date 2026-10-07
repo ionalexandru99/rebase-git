@@ -101,7 +101,7 @@ export function BranchesSidebarFilter({
         <DropdownMenu>
           <DropdownMenuTrigger
             aria-label={`Branch scope, ${scopeLabel}`}
-            className="inline-flex h-6 items-center gap-0.5 rounded-control px-1.5 text-xs text-muted-foreground outline-none hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/30 data-popup-open:bg-accent data-popup-open:text-foreground"
+            className="inline-flex h-6 items-center gap-0.5 rounded-control px-1.5 text-meta text-muted-foreground outline-none hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/30 data-popup-open:bg-accent data-popup-open:text-foreground"
           >
             {scopeLabel}
             <IconChevronDown aria-hidden="true" className="size-3" />

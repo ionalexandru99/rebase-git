@@ -78,7 +78,7 @@ export function RepositoryDirectoryList({
 
   const row = (entry: EnvironmentDirectoryEntry) => {
     const date = (
-      <span className="text-xs font-normal text-muted-foreground tabular-nums">
+      <span className="text-meta font-normal text-muted-foreground tabular-nums">
         {modifiedDateLabel(entry.modifiedAt, now)}
       </span>
     );
@@ -157,7 +157,7 @@ export function RepositoryDirectoryList({
               <input
                 aria-label="New folder name"
                 ref={newFolderRef}
-                className="h-7 w-64 min-w-0 rounded-control border border-ring bg-transparent px-2 text-[13px] text-foreground outline-none"
+                className="h-7 w-64 min-w-0 rounded-control border border-ring bg-transparent px-2 text-control text-foreground outline-none"
                 onChange={(event) => onNameNewFolder(event.target.value)}
                 onKeyDown={(event) => {
                   if (event.key === "Enter") {
@@ -181,7 +181,7 @@ export function RepositoryDirectoryList({
         </>
       )}
       {truncated && !loading && error === undefined ? (
-        <p className="px-3 py-2 text-xs text-muted-foreground">
+        <p className="px-3 py-2 text-meta text-muted-foreground">
           Only part of this directory is shown.
         </p>
       ) : null}
@@ -209,7 +209,7 @@ function EntrySection({
   return (
     <section aria-labelledby={id} className="mb-2">
       <h3
-        className="flex h-8 items-end px-3 pb-1.5 text-[11px] font-medium tracking-[.05em] text-muted-foreground uppercase"
+        className="flex h-8 items-end px-3 pb-1.5 text-badge font-medium tracking-[.05em] text-muted-foreground uppercase"
         id={id}
       >
         {label}
@@ -255,7 +255,7 @@ function EntryName({
 
 function DirectoryMessage({ children }: { readonly children: ReactNode }) {
   return (
-    <div className="flex h-full min-h-32 flex-col items-center justify-center gap-3 px-4 text-center text-[13px] text-muted-foreground">
+    <div className="flex h-full min-h-32 flex-col items-center justify-center gap-3 px-4 text-center text-body text-muted-foreground">
       {children}
     </div>
   );
@@ -263,7 +263,7 @@ function DirectoryMessage({ children }: { readonly children: ReactNode }) {
 
 function rowClassName(selected: boolean) {
   return cn(
-    "relative flex h-9 w-full items-center gap-2.5 rounded-control px-3 text-left text-[13px] text-foreground outline-none",
+    "relative flex h-9 w-full items-center gap-2.5 rounded-control px-3 text-left text-body text-foreground outline-none",
     "hover:bg-foreground/[.05] focus-visible:ring-2 focus-visible:ring-ring/30",
     selected &&
       "bg-primary/12 font-medium before:absolute before:inset-y-1.5 before:left-0 before:w-0.5 before:rounded-full before:bg-primary hover:bg-primary/12",

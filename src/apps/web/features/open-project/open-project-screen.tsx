@@ -157,7 +157,7 @@ export function OpenProjectScreen({
         {environmentStatus.detail === undefined ? null : (
           <p
             role="status"
-            className={`mt-4 text-sm ${environmentStatus.availability === "unavailable" ? "text-status-unavailable" : "text-muted-foreground"}`}
+            className={`mt-4 text-body ${environmentStatus.availability === "unavailable" ? "text-status-unavailable" : "text-muted-foreground"}`}
           >
             {environmentStatus.detail}
           </p>
@@ -229,9 +229,7 @@ function EmptySearch() {
         className="mb-3 size-8 text-muted-foreground"
         stroke={1.25}
       />
-      <strong className="text-[.82rem] font-semibold">
-        No repositories found
-      </strong>
+      <strong className="text-body font-semibold">No repositories found</strong>
     </div>
   );
 }

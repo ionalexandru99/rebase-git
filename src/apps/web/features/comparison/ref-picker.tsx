@@ -125,7 +125,7 @@ function RefOptions({
           aria-label={label}
           autoComplete="off"
           autoFocus
-          className="h-7 pl-7 text-[.85rem] sm:h-7 sm:text-[.85rem]"
+          className="h-7 pl-7 text-control sm:h-7"
           onChange={(event) => setQuery(event.target.value)}
           onKeyDown={handleKeyDown}
           placeholder="Branch, tag or commit"
@@ -144,7 +144,7 @@ function RefOptions({
           <button
             key={option.key}
             aria-selected={option === highlighted}
-            className={`flex h-8 shrink-0 cursor-default items-center gap-2 rounded-control px-2 text-left text-[.85rem] outline-none ${option === highlighted ? "bg-accent text-foreground" : "text-foreground/80"}`}
+            className={`flex h-8 shrink-0 cursor-default items-center gap-2 rounded-control px-2 text-left text-body outline-none ${option === highlighted ? "bg-accent text-foreground" : "text-foreground/80"}`}
             id={elementId(option)}
             onClick={() => onPick(option.side)}
             onPointerMove={() => setHighlightedKey(option.key)}

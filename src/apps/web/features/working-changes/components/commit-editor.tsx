@@ -52,7 +52,7 @@ export function CommitEditor({
       <textarea
         aria-label="Commit description"
         placeholder="Description"
-        className="min-h-16 w-full flex-1 resize-none rounded-control border border-input bg-input/20 p-2 text-xs text-foreground outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30"
+        className="min-h-16 w-full flex-1 resize-none rounded-control border border-input bg-input/20 p-2 text-control text-foreground outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30"
         value={draft.description}
         disabled={loading || busy}
         maxLength={28000}
@@ -61,7 +61,7 @@ export function CommitEditor({
         }
       />
       <div className="mt-auto flex flex-wrap items-center justify-between gap-2">
-        <label className="flex items-center gap-2 text-xs">
+        <label className="flex items-center gap-2 text-meta">
           <input
             type="checkbox"
             className="accent-primary"
