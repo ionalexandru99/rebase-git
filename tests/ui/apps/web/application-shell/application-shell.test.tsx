@@ -328,7 +328,7 @@ async function chooseFolder(name: string) {
     .getByRole("button", { name: new RegExp(`^${name} Repository`) })
     .click();
   await picker
-    .getByRole("button", { name: "Open repository", exact: true })
+    .getByRole("button", { name: `Open ${name}`, exact: true })
     .click();
   return picker;
 }

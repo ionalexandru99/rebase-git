@@ -1,4 +1,3 @@
-import { IconDeviceLaptop } from "@tabler/icons-react";
 import { describe, expect, it, vi } from "vite-plus/test";
 import { page, userEvent } from "vite-plus/test/browser";
 import { EnvironmentFilesystemApi } from "#contracts/environment-filesystem/environment-filesystem.contract.ts";
@@ -11,7 +10,7 @@ import { catalogEntry } from "#tests-support/fixtures.ts";
 import { render } from "#tests-support/render.tsx";
 import { RepositoryFolderPicker } from "#web/features/repository-folder-picker/repository-folder-browser.tsx";
 
-describe("initializing a repository from the folder picker", () => {
+describe("repository folder picker", () => {
   it("initializes a selected folder that holds no repository on the default branch", async () => {
     const { initialized, opened } = await renderPicker();
     const picker = page.getByRole("dialog", { name: "Choose repository" });
@@ -20,13 +19,13 @@ describe("initializing a repository from the folder picker", () => {
       .getByRole("button", { name: /^storefront Repository/ })
       .click();
     await expect
-      .element(picker.getByRole("button", { name: "Open repository" }))
+      .element(picker.getByRole("button", { name: "Open storefront" }))
       .toBeEnabled();
     await picker.getByRole("button", { name: /^notes-app Folder/ }).click();
     await expect
       .element(picker.getByRole("textbox", { name: "Initial branch" }))
       .toHaveValue("trunk");
-    await picker.getByRole("button", { name: "Initialize repository" }).click();
+    await picker.getByRole("button", { name: "Initialize notes-app" }).click();
 
     await expect.poll(() => opened.mock.calls.length).toBe(1);
     expect(initialized).toEqual([
@@ -45,6 +44,20 @@ describe("initializing a repository from the folder picker", () => {
       .poll(() => initialized)
       .toEqual([{ path: "/home/alex/code/billing-worker", branch: "trunk" }]);
   });
+
+  it("selects nothing after entering a folder that holds no repository", async () => {
+    await renderPicker();
+    const picker = page.getByRole("dialog", { name: "Choose repository" });
+
+    await picker.getByRole("button", { name: /^notes-app Folder/ }).dblClick();
+
+    await expect
+      .element(picker.getByText("This folder is empty"))
+      .toBeVisible();
+    await expect
+      .element(picker.getByRole("button", { name: "Open repository" }))
+      .toBeDisabled();
+  });
 });
 
 async function renderPicker() {
@@ -53,14 +66,7 @@ async function renderPicker() {
   await render(
     <RepositoryFolderPicker
       environments={[
-        {
-          availability: "available",
-          icon: IconDeviceLaptop,
-          iconColor: "var(--primary)",
-          id: "local",
-          name: "Local Environment",
-          status: "Available",
-        },
+        { availability: "available", id: "local", status: "Available" },
       ]}
       onOpenChange={() => {}}
       onRepositoryOpened={opened}
@@ -69,23 +75,26 @@ async function renderPicker() {
     {
       environment: {
         requests: fakeRequests(
-          respond(EnvironmentFilesystemApi.listDirectory, () => ({
-            path: "/home/alex/code",
+          respond(EnvironmentFilesystemApi.listDirectory, ({ path }) => ({
+            path: path ?? "/home/alex/code",
             breadcrumbs: [{ name: "code", path: "/home/alex/code" }],
-            entries: [
-              {
-                kind: "Folder",
-                name: "notes-app",
-                path: "/home/alex/code/notes-app",
-                type: "directory" as const,
-              },
-              {
-                kind: "Repository",
-                name: "storefront",
-                path: "/home/alex/code/storefront",
-                type: "directory" as const,
-              },
-            ],
+            entries:
+              path === undefined
+                ? [
+                    {
+                      kind: "Folder",
+                      name: "notes-app",
+                      path: "/home/alex/code/notes-app",
+                      type: "directory" as const,
+                    },
+                    {
+                      kind: "Repository",
+                      name: "storefront",
+                      path: "/home/alex/code/storefront",
+                      type: "directory" as const,
+                    },
+                  ]
+                : [],
             repository: false,
             truncated: false,
           })),

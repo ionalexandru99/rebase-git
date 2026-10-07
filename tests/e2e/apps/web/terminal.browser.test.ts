@@ -16,12 +16,12 @@ test("runs a command in the worktree's shell and keeps its output across a reloa
   try {
     await page.goto(await server.waitForPairingUrl());
     await page.getByRole("button", { name: "Browse files" }).click();
-    await page
-      .getByRole("dialog", { name: "Choose repository" })
+    const picker = page.getByRole("dialog", { name: "Choose repository" });
+    await picker
       .getByRole("button", { name: /^rebase-test Repository/ })
       .click();
-    await page
-      .getByRole("button", { name: "Open repository", exact: true })
+    await picker
+      .getByRole("button", { name: "Open rebase-test", exact: true })
       .click();
 
     await page.getByRole("button", { name: "Show terminal" }).click();

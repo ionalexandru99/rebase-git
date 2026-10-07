@@ -1,5 +1,11 @@
-import { IconFile, IconFolder, IconFolderPlus } from "@tabler/icons-react";
-import { type JSX, useEffect, useRef } from "react";
+import {
+  IconBrandGit,
+  IconFile,
+  IconFolder,
+  IconFolderOpen,
+  IconFolderPlus,
+} from "@tabler/icons-react";
+import { type JSX, type ReactNode, useEffect, useId, useRef } from "react";
 import type { EnvironmentDirectoryEntry } from "#contracts/environment-filesystem/environment-filesystem.contract.ts";
 import { modifiedDateLabel } from "#web/features/repository-folder-picker/repository-folder-picker-state.ts";
 import { useNow } from "#web/lib/age-label.ts";
@@ -8,6 +14,7 @@ import { cn } from "#web/lib/utils.ts";
 export function RepositoryDirectoryList({
   entries,
   error,
+  filtering,
   loading,
   newFolder,
   onCancelNewFolder,
@@ -21,6 +28,7 @@ export function RepositoryDirectoryList({
 }: {
   readonly entries: readonly EnvironmentDirectoryEntry[];
   readonly error: string | undefined;
+  readonly filtering: boolean;
   readonly loading: boolean;
   readonly newFolder: string | undefined;
   readonly onCancelNewFolder: () => void;
@@ -33,7 +41,16 @@ export function RepositoryDirectoryList({
   readonly truncated: boolean;
 }): JSX.Element {
   const now = useNow();
-  const directories = entries.filter((entry) => entry.type === "directory");
+  const repositories = entries.filter(isRepository);
+  const folders = [
+    ...entries.filter(
+      (entry) => entry.type === "directory" && !isRepository(entry),
+    ),
+    ...entries.filter((entry) => entry.type === "file"),
+  ];
+  const directories = [...repositories, ...folders].filter(
+    (entry) => entry.type === "directory",
+  );
   const newFolderRef = useRef<HTMLInputElement>(null);
   const naming = newFolder !== undefined;
   useEffect(() => {
@@ -59,153 +76,186 @@ export function RepositoryDirectoryList({
     );
   };
 
+  const row = (entry: EnvironmentDirectoryEntry) => {
+    const date = (
+      <span className="text-xs font-normal text-muted-foreground tabular-nums">
+        {modifiedDateLabel(entry.modifiedAt, now)}
+      </span>
+    );
+    if (entry.type === "file") {
+      return (
+        <div
+          className={cn(rowClassName(false), "hover:bg-transparent")}
+          key={entry.path}
+        >
+          <EntryName entry={entry} selected={false} />
+          {date}
+        </div>
+      );
+    }
+    const selected = selectedPath === entry.path;
+    return (
+      <button
+        aria-pressed={selected}
+        className={rowClassName(selected)}
+        id={directoryOptionId(directories.indexOf(entry))}
+        key={entry.path}
+        onClick={() => onSelect(entry.path)}
+        onDoubleClick={() => onEnter(entry.path)}
+        onKeyDown={(event) => {
+          if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+            event.preventDefault();
+            moveSelection(event.key === "ArrowDown" ? 1 : -1);
+            return;
+          }
+          if (event.key === "ArrowLeft") {
+            event.preventDefault();
+            onParent();
+            return;
+          }
+          if (
+            event.key === "ArrowRight" ||
+            (event.key === "Enter" && !event.ctrlKey && !event.metaKey)
+          ) {
+            event.preventDefault();
+            onEnter(entry.path);
+          }
+        }}
+        type="button"
+      >
+        <EntryName entry={entry} selected={selected} />
+        {date}
+      </button>
+    );
+  };
+
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
-      <div className="grid h-[1.85rem] shrink-0 grid-cols-[minmax(0,1fr)_6.5rem_5rem] items-center gap-3 px-4 text-[.66rem] text-muted-foreground uppercase max-[600px]:grid-cols-[minmax(0,1fr)_5rem] max-[600px]:[&>*:last-child]:hidden">
-        <span>Name</span>
-        <span>Kind</span>
-        <span>Modified</span>
-      </div>
-      <div className="min-h-0 flex-1 overflow-y-auto px-[.45rem] py-[.15rem]">
-        {loading ? (
-          <DirectoryMessage>Loading directory…</DirectoryMessage>
-        ) : error !== undefined ? (
-          <DirectoryMessage>{error}</DirectoryMessage>
-        ) : newFolder === undefined && entries.length === 0 ? (
-          <DirectoryMessage>This folder is empty.</DirectoryMessage>
-        ) : (
-          <>
-            {newFolder === undefined ? null : (
-              <div className={rowClassName(true)}>
-                <span className="flex min-w-0 items-center gap-[.65rem]">
-                  <IconFolderPlus
-                    aria-hidden="true"
-                    className="size-4 shrink-0 text-foreground/65"
-                  />
-                  <input
-                    aria-label="New folder name"
-                    ref={newFolderRef}
-                    className="h-7 w-64 min-w-0 rounded-md border border-ring bg-transparent px-2 text-[.8rem] text-foreground outline-none"
-                    onChange={(event) => onNameNewFolder(event.target.value)}
-                    onKeyDown={(event) => {
-                      if (event.key === "Enter") {
-                        event.preventDefault();
-                        onSubmitNewFolder();
-                      }
-                      if (event.key === "Escape") {
-                        event.preventDefault();
-                        event.stopPropagation();
-                        onCancelNewFolder();
-                      }
-                    }}
-                    value={newFolder}
-                  />
-                </span>
-                <EntryMetadata>New folder</EntryMetadata>
-                <span />
-              </div>
-            )}
-            {entries.map((entry) =>
-              entry.type === "directory" ? (
-                <button
-                  aria-pressed={selectedPath === entry.path}
-                  className={rowClassName(selectedPath === entry.path)}
-                  id={directoryOptionId(
-                    directories.findIndex(
-                      (directory) => directory.path === entry.path,
-                    ),
-                  )}
-                  key={entry.path}
-                  onClick={() => onSelect(entry.path)}
-                  onDoubleClick={() => onEnter(entry.path)}
-                  onKeyDown={(event) => {
-                    if (event.key === "ArrowDown" || event.key === "ArrowUp") {
-                      event.preventDefault();
-                      moveSelection(event.key === "ArrowDown" ? 1 : -1);
-                      return;
-                    }
-                    if (event.key === "ArrowLeft") {
-                      event.preventDefault();
-                      onParent();
-                      return;
-                    }
-                    if (
-                      event.key === "ArrowRight" ||
-                      (event.key === "Enter" &&
-                        !event.ctrlKey &&
-                        !event.metaKey)
-                    ) {
-                      event.preventDefault();
-                      onEnter(entry.path);
-                    }
-                  }}
-                  type="button"
-                >
-                  <EntryName entry={entry} />
-                  <EntryMetadata>{entry.kind}</EntryMetadata>
-                  <EntryMetadata className="max-[600px]:hidden">
-                    {modifiedDateLabel(entry.modifiedAt, now)}
-                  </EntryMetadata>
-                </button>
-              ) : (
-                <div className={rowClassName(false)} key={entry.path}>
-                  <EntryName entry={entry} />
-                  <EntryMetadata>{entry.kind}</EntryMetadata>
-                  <EntryMetadata className="max-[600px]:hidden">
-                    {modifiedDateLabel(entry.modifiedAt, now)}
-                  </EntryMetadata>
-                </div>
-              ),
-            )}
-          </>
-        )}
-        {truncated && !loading && error === undefined ? (
-          <p className="px-3 py-2 text-[.68rem] text-muted-foreground">
-            Only part of this directory is shown.
-          </p>
-        ) : null}
-      </div>
+    <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-2">
+      {loading ? (
+        <DirectoryMessage>Loading directory…</DirectoryMessage>
+      ) : error !== undefined ? (
+        <DirectoryMessage>{error}</DirectoryMessage>
+      ) : newFolder === undefined && entries.length === 0 && filtering ? (
+        <DirectoryMessage>No matching folders</DirectoryMessage>
+      ) : newFolder === undefined && entries.length === 0 ? (
+        <DirectoryMessage>
+          <IconFolderOpen
+            aria-hidden="true"
+            className="size-6 text-muted-foreground/60"
+            stroke={1.5}
+          />
+          This folder is empty
+        </DirectoryMessage>
+      ) : (
+        <>
+          {newFolder === undefined ? null : (
+            <div className={cn(rowClassName(true), "mt-2")}>
+              <IconFolderPlus
+                aria-hidden="true"
+                className="size-4 shrink-0 text-primary"
+              />
+              <input
+                aria-label="New folder name"
+                ref={newFolderRef}
+                className="h-7 w-64 min-w-0 rounded-md border border-ring bg-transparent px-2 text-[13px] text-foreground outline-none"
+                onChange={(event) => onNameNewFolder(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") {
+                    event.preventDefault();
+                    onSubmitNewFolder();
+                  }
+                  if (event.key === "Escape") {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    onCancelNewFolder();
+                  }
+                }}
+                value={newFolder}
+              />
+            </div>
+          )}
+          <EntrySection label="Repositories">
+            {repositories.map(row)}
+          </EntrySection>
+          <EntrySection label="Folders">{folders.map(row)}</EntrySection>
+        </>
+      )}
+      {truncated && !loading && error === undefined ? (
+        <p className="px-3 py-2 text-xs text-muted-foreground">
+          Only part of this directory is shown.
+        </p>
+      ) : null}
     </div>
   );
+}
+
+function isRepository(entry: EnvironmentDirectoryEntry) {
+  return entry.type === "directory" && entry.kind === "Repository";
 }
 
 function directoryOptionId(index: number) {
   return `repository-directory-option-${index}`;
 }
 
-function EntryName({ entry }: { readonly entry: EnvironmentDirectoryEntry }) {
-  const Icon = entry.type === "directory" ? IconFolder : IconFile;
+function EntrySection({
+  children,
+  label,
+}: {
+  readonly children: readonly ReactNode[];
+  readonly label: string;
+}) {
+  const id = useId();
+  if (children.length === 0) return null;
   return (
-    <span className="flex min-w-0 items-center gap-[.65rem]">
+    <section aria-labelledby={id} className="mb-2">
+      <h3
+        className="flex h-8 items-end px-3 pb-1.5 text-[11px] font-medium tracking-[.05em] text-muted-foreground uppercase"
+        id={id}
+      >
+        {label}
+      </h3>
+      {children}
+    </section>
+  );
+}
+
+function EntryName({
+  entry,
+  selected,
+}: {
+  readonly entry: EnvironmentDirectoryEntry;
+  readonly selected: boolean;
+}) {
+  const Icon = isRepository(entry)
+    ? IconBrandGit
+    : entry.type === "directory"
+      ? IconFolder
+      : IconFile;
+  return (
+    <span className="flex min-w-0 flex-1 items-center gap-2.5">
       <Icon
         aria-hidden="true"
         className={cn(
           "size-4 shrink-0 text-muted-foreground",
-          entry.type === "directory" && "text-foreground/65",
+          selected && "text-primary",
         )}
       />
-      <span className="truncate">{entry.name}</span>
+      <span
+        className={cn(
+          "truncate",
+          entry.type === "file" && "text-muted-foreground",
+        )}
+      >
+        {entry.name}
+      </span>
+      <span className="sr-only"> {entry.kind}</span>
     </span>
   );
 }
 
-function EntryMetadata({
-  children,
-  className,
-}: {
-  readonly children: string;
-  readonly className?: string;
-}) {
+function DirectoryMessage({ children }: { readonly children: ReactNode }) {
   return (
-    <span className={cn("text-[.69rem] text-muted-foreground", className)}>
-      {children}
-    </span>
-  );
-}
-
-function DirectoryMessage({ children }: { readonly children: string }) {
-  return (
-    <div className="grid h-full min-h-32 place-items-center px-4 text-center text-xs text-muted-foreground">
+    <div className="flex h-full min-h-32 flex-col items-center justify-center gap-3 px-4 text-center text-[13px] text-muted-foreground">
       {children}
     </div>
   );
@@ -213,9 +263,9 @@ function DirectoryMessage({ children }: { readonly children: string }) {
 
 function rowClassName(selected: boolean) {
   return cn(
-    "grid h-11 w-full grid-cols-[minmax(0,1fr)_6.5rem_5rem] items-center gap-3 rounded-lg px-3 text-left text-[.8rem] text-foreground/80 outline-none max-[600px]:grid-cols-[minmax(0,1fr)_5rem]",
-    "hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring/30",
+    "relative flex h-9 w-full items-center gap-2.5 rounded-md px-3 text-left text-[13px] text-foreground outline-none",
+    "hover:bg-foreground/[.05] focus-visible:ring-2 focus-visible:ring-ring/30",
     selected &&
-      "bg-accent shadow-[inset_0_0_0_1px_color-mix(in_srgb,var(--primary)_48%,transparent)]",
+      "bg-primary/12 font-medium before:absolute before:inset-y-1.5 before:left-0 before:w-0.5 before:rounded-full before:bg-primary hover:bg-primary/12",
   );
 }
