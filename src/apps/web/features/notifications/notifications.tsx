@@ -49,6 +49,7 @@ const errorTitles = {
   copyPath: "Couldn't copy the path",
   copy: "Couldn't copy to the clipboard",
   showInGraph: "Couldn't show the commit in the graph",
+  compare: "Couldn't compare the commits",
   openSearchResult: "Couldn't open the search result",
   stage: "Couldn't stage the changes",
   unstage: "Couldn't unstage the changes",

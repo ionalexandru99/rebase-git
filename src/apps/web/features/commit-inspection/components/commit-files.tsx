@@ -29,8 +29,10 @@ export function CommitFiles({
   choosePreferences,
   actionsFor,
   onMenuClose,
+  lead,
   children,
 }: {
+  readonly lead?: ReactNode;
   readonly files: readonly CommitFile[];
   readonly path: string | null;
   readonly select: (path: string) => void;
@@ -134,6 +136,7 @@ export function CommitFiles({
             onTree={(next) => choosePreferences({ ...preferences, tree: next })}
             region={list}
           />
+          {lead}
           <FileListSection
             name="Changed files"
             title="Changed files"

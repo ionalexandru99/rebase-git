@@ -31,6 +31,7 @@ import {
   repositoryCatalogFeature,
 } from "#server/features/repository-catalog/repository-catalog.ts";
 import { repositoryChangesFeature } from "#server/features/repository-changes/repository-changes.ts";
+import { comparisonFeature } from "#server/features/repository-comparison/compare-revisions.ts";
 import { repositoryConflictsFeature } from "#server/features/repository-conflicts/repository-conflicts.ts";
 import { repositoryHistoryFeature } from "#server/features/repository-history/repository-history.feature.ts";
 import { repositoryOperationsFeature } from "#server/features/repository-operations/repository-operations.ts";
@@ -157,6 +158,7 @@ export function environmentFeatures(dependencies: EnvironmentDependencies) {
       ),
       commitInspectionFeature(dependencies),
       fileHistoryFeature(dependencies),
+      comparisonFeature(dependencies),
       repositoryChangesFeature(dependencies),
       repositoryConflictsFeature(dependencies),
       repositoryHistoryFeature(dependencies),

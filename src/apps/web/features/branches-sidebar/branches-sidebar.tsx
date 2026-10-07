@@ -58,6 +58,7 @@ import {
   useBranchesSidebarView,
 } from "#web/features/branches-sidebar/sidebar-view-controls.tsx";
 import { historyRefKey } from "#web/features/commit-graph/scope/history-scope.ts";
+import type { CompareActions } from "#web/features/comparison/comparison.ts";
 import type { MergeActions } from "#web/features/merge/merge-actions.ts";
 import { useErrorToast } from "#web/features/notifications/notifications.tsx";
 import type { PullRequests } from "#web/features/pull-requests/pull-requests.tsx";
@@ -110,6 +111,7 @@ export function BranchesSidebar({
   pullRequests,
   rebase,
   reset,
+  compare,
   onBranchRenamed = () => undefined,
   onToggleHistoryRef = () => undefined,
   onShowReflog,
@@ -121,6 +123,7 @@ export function BranchesSidebar({
   readonly pullRequests?: PullRequests | undefined;
   readonly rebase?: RebaseActions | undefined;
   readonly reset?: ResetActions | undefined;
+  readonly compare?: CompareActions | undefined;
   readonly onBranchRenamed?: (rename: {
     readonly name: string;
     readonly newName: string;
@@ -271,6 +274,7 @@ export function BranchesSidebar({
           { activeWorktreePath, writable: editing.writable },
           {
             checkout: onSelectRef,
+            compare: compare?.actionFor,
             merge: merge?.actionFor,
             rebase: rebase?.actionFor,
             reset: reset?.actionFor,

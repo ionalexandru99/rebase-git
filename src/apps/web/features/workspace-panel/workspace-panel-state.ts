@@ -94,6 +94,25 @@ function setInput(
     : { ...state, inputs: { ...state.inputs, [tab]: input } };
 }
 
+function replaceTab(
+  state: WorkspacePanelState,
+  previous: WorkspacePanelTab,
+  next: WorkspacePanelTab,
+  input: unknown,
+): WorkspacePanelState {
+  if (previous === next || !state.tabs.includes(previous)) return state;
+  if (state.tabs.includes(next))
+    return openTab(closeTab(state, previous), next);
+  const inputs = { ...state.inputs, [next]: input };
+  delete inputs[previous];
+  return {
+    ...state,
+    tabs: state.tabs.map((tab) => (tab === previous ? next : tab)),
+    inputs,
+    active: state.active === previous ? next : state.active,
+  };
+}
+
 export function reduceWorkspacePanel(
   state: WorkspacePanelState,
   action: WorkspacePanelAction,
@@ -111,6 +130,13 @@ export function reduceWorkspacePanel(
         state.tabs.includes(tab) ? state : setInput(state, tab, action.input),
         tab,
       );
+    }
+    case "replace": {
+      const previous = instanceTab(action.kind, action.previous);
+      const next = instanceTab(action.kind, action.input);
+      return previous === undefined || next === undefined
+        ? state
+        : replaceTab(state, previous, next, action.input);
     }
     case "select":
       return state.tabs.includes(action.tab)

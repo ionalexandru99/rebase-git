@@ -13,6 +13,7 @@ import {
 } from "#web/components/ui/context-menu.tsx";
 import type { CherryPick } from "#web/features/cherry-pick/cherry-pick-menu.tsx";
 import { writeClipboardText } from "#web/features/clipboard/write-clipboard-text.ts";
+import type { CompareActions } from "#web/features/comparison/comparison.ts";
 import type { MergeActions } from "#web/features/merge/merge-actions.ts";
 import {
   type ErrorToast,
@@ -42,6 +43,7 @@ interface CommitAccess {
 
 interface CommitActionHandlers {
   readonly openDetails?: ((oid: string) => void) | undefined;
+  readonly compare: Action | undefined;
   readonly cherryPick: Action | undefined;
   readonly merge: Action | undefined;
   readonly rebase: Action | undefined;
@@ -62,6 +64,7 @@ export function useCommitActions({
   rebase,
   drop,
   reset,
+  compare,
   onOpenDetails,
 }: {
   readonly history: Pick<RepositoryHistory, "ask"> | undefined;
@@ -71,6 +74,7 @@ export function useCommitActions({
   readonly rebase?: Pick<RebaseActions, "actionFor"> | undefined;
   readonly drop?: Pick<DropCommits, "action"> | undefined;
   readonly reset?: Pick<ResetActions, "actionFor"> | undefined;
+  readonly compare?: CompareActions | undefined;
   readonly onOpenDetails?: ((oid: string) => void) | undefined;
 }) {
   const scope = useRepositoryScope();
@@ -87,6 +91,10 @@ export function useCommitActions({
   ): readonly Action[] => [
     ...commitActions(oid, access, {
       openDetails: onOpenDetails,
+      compare:
+        selected.length === 2
+          ? compare?.pairFor(selected)
+          : compare?.actionFor(oid),
       cherryPick: cherryPick?.action(),
       merge: merge?.actionFor(oid),
       rebase: rebase?.actionFor(oid),
@@ -211,6 +219,7 @@ function commitActions(
   { connected, readable }: CommitAccess,
   {
     openDetails,
+    compare,
     cherryPick,
     merge,
     rebase,
@@ -251,6 +260,7 @@ function commitActions(
             run: () => openDetails(oid),
           },
         ]),
+    ...(compare === undefined ? [] : [compare]),
     ...[cherryPick, merge, rebase, revert, drop, reset].filter(
       (action) => action !== undefined,
     ),

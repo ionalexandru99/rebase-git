@@ -60,6 +60,7 @@ export interface RefActionRow {
 
 export type RefAction = Action<
   | "checkout"
+  | "compare"
   | "merge"
   | `merge.${MergeMode}`
   | RebaseActionId
@@ -89,6 +90,9 @@ export interface RefActionAccess {
 
 export interface RefActionHandlers {
   readonly checkout: (target: RepositoryRefTarget) => void;
+  readonly compare?:
+    | ((target: RepositoryRefTarget) => RefAction | undefined)
+    | undefined;
   readonly merge?:
     | ((target: RepositoryRefTarget) => RefAction | undefined)
     | undefined;
@@ -125,6 +129,7 @@ export function refActions(
   { activeWorktreePath, writable }: RefActionAccess,
   {
     checkout,
+    compare,
     merge,
     rebase,
     reset,
@@ -142,6 +147,7 @@ export function refActions(
   const mergeAction = merge?.(target);
   const rebaseAction = rebase?.(target);
   const resetAction = reset?.(target);
+  const compareAction = compare?.(target);
   const pullRequestActions = pullRequests?.(target) ?? [];
   const remove = (
     fields: Omit<ActionFields, "group" | "run">,
@@ -183,6 +189,7 @@ export function refActions(
             run: () => checkout(target),
           }),
         ]),
+    ...(compareAction === undefined ? [] : [compareAction]),
     ...(pull === undefined ||
     target._tag !== "LocalBranch" ||
     row.upstream === undefined

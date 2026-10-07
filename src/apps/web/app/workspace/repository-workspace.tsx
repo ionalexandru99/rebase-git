@@ -10,6 +10,7 @@ import { useCherryPick } from "#web/features/cherry-pick/cherry-pick-menu.tsx";
 import { CommitGraph } from "#web/features/commit-graph/commit-graph.tsx";
 import { automaticHistoryScope } from "#web/features/commit-graph/scope/history-scope.ts";
 import { useHistoryScope } from "#web/features/commit-graph/scope/use-history-scope.ts";
+import { useCompareActions } from "#web/features/comparison/comparison.ts";
 import { useMergeActions } from "#web/features/merge/merge-actions.ts";
 import { OperationRecoveryNotice } from "#web/features/operation-recovery/components/operation-recovery-toast.tsx";
 import {
@@ -37,6 +38,7 @@ import {
 import { useTerminals } from "#web/features/terminal/use-terminals.ts";
 import { WorkspacePanel } from "#web/features/workspace-panel/workspace-panel.tsx";
 import {
+  comparePanel,
   fileHistoryPanel,
   rebasePanel,
   reflogPanel,
@@ -142,6 +144,9 @@ function Workspace({
     store.dispatch({ type: "open", kind: "stash" });
   };
   const closeRebasePlan = () => execute({ type: "close", tab: "rebase" });
+  const compare = useCompareActions(history, (input) =>
+    execute({ type: "open", kind: "compare", input }),
+  );
   const resolved = historyScope.resolvedScope;
   const {
     graphRef,
@@ -170,6 +175,7 @@ function Workspace({
                   pullRequests={pullRequests}
                   rebase={rebase}
                   reset={reset}
+                  compare={compare}
                   onBranchRenamed={historyScope.renameBranch}
                   onShowReflog={showReflog}
                   onOpenStash={openStash}
@@ -194,6 +200,7 @@ function Workspace({
                         merge={merge}
                         rebase={rebase}
                         reset={reset}
+                        compare={compare}
                         cherryPick={cherryPick}
                         drop={drop}
                         ref={graphRef}
@@ -249,6 +256,11 @@ function Workspace({
                           await graphRef.current?.navigateToOid(oid);
                         }}
                       />
+                    </Suspense>
+                  ),
+                  compare: (
+                    <Suspense fallback={null}>
+                      <comparePanel.Content history={history} />
                     </Suspense>
                   ),
                   rebase: (

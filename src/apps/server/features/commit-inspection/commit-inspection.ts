@@ -44,23 +44,37 @@ function inspectCommit(git: GitCommandRunner, command: InspectCommit) {
   return Effect.gen(function* () {
     const metadata = yield* readMetadata(git, command);
     const files = yield* readCommitFiles(git, command, metadata.parentOid);
-    let bytes = Buffer.byteLength(JSON.stringify(metadata));
-    const visible = files.filter((file) => {
-      bytes += Buffer.byteLength(JSON.stringify(file));
-      return bytes < 800_000;
-    });
     return {
       ...metadata,
-      files: visible,
-      truncated: visible.length !== files.length,
+      ...fitFiles(files, Buffer.byteLength(JSON.stringify(metadata))),
     } satisfies CommitInspection;
   });
 }
 
+export function fitFiles(files: readonly CommitFile[], reservedBytes: number) {
+  let bytes = reservedBytes;
+  const visible = files.filter((file) => {
+    bytes += Buffer.byteLength(JSON.stringify(file));
+    return bytes < 800_000;
+  });
+  return { files: visible, truncated: visible.length !== files.length };
+}
+
 function inspectCommitDiff(git: GitCommandRunner, command: InspectCommitDiff) {
+  return readMetadata(git, command).pipe(
+    Effect.flatMap((metadata) =>
+      readChangeDiff(git, command, metadata.parentOid),
+    ),
+  );
+}
+
+export function readChangeDiff(
+  git: GitCommandRunner,
+  command: InspectCommitDiff,
+  parentOid: string | null,
+) {
   return Effect.gen(function* () {
-    const metadata = yield* readMetadata(git, command);
-    const change = yield* readCommitChange(git, command, metadata.parentOid);
+    const change = yield* readCommitChange(git, command, parentOid);
     if (change === undefined)
       return yield* Effect.fail(
         changesFailed(
@@ -76,7 +90,7 @@ function inspectCommitDiff(git: GitCommandRunner, command: InspectCommitDiff) {
     );
     return buildChangeDiff(
       command.path,
-      `${command.oid}:${metadata.parentOid ?? "root"}`,
+      `${command.oid}:${parentOid ?? "root"}`,
       yield* commitFile(change.before, blobs),
       yield* commitFile(change.after, blobs),
       { previousPath: change.previousPath, patch: change.patch },
