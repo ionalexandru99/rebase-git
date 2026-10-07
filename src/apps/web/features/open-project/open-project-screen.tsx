@@ -1,8 +1,4 @@
-import {
-  IconChevronRight,
-  IconFolderPlus,
-  IconSearch,
-} from "@tabler/icons-react";
+import { IconSearch } from "@tabler/icons-react";
 import {
   type JSX,
   type KeyboardEvent,
@@ -17,16 +13,15 @@ import {
 } from "#web/features/open-project/clone-sources.tsx";
 import type { OpenProjectRepository } from "#web/features/open-project/open-project-model.ts";
 import { OpenProjectToolbar } from "#web/features/open-project/open-project-toolbar.tsx";
-import { RecentRepositories } from "#web/features/open-project/recent-repositories.tsx";
-import { RepositoryEnvironmentGroup } from "#web/features/open-project/repository-environment-group.tsx";
-import { openProjectItemId } from "#web/features/open-project/repository-row.tsx";
+import {
+  OpenProjectSectionHeading,
+  openProjectItemId,
+  ProjectList,
+} from "#web/features/open-project/project-list.tsx";
 import { useOpenProjectResults } from "#web/features/open-project/use-open-project-results.ts";
-import { localEnvironment } from "#web/features/project-navigation/local-environment.ts";
 import type { ProjectNavigationRepository } from "#web/features/project-navigation/project-navigation.ts";
 import { RepositoryFolderPicker } from "#web/features/repository-folder-picker/repository-folder-browser.tsx";
 import { useEnvironment } from "#web/platform/query/environment-context.tsx";
-
-const _noHosts = [] as const;
 
 export function OpenProjectScreen({
   onOpenRepository,
@@ -42,9 +37,7 @@ export function OpenProjectScreen({
   const environmentStatus = useEnvironment().status;
   const browseAvailable = environmentStatus.availability === "available";
   const [folderPickerOpen, setFolderPickerOpen] = useState(false);
-  const [expandedEnvironmentIds, setExpandedEnvironmentIds] = useState<
-    ReadonlySet<string>
-  >(() => new Set([localEnvironment.id]));
+  const [showAllProjects, setShowAllProjects] = useState(false);
   const [collapsedGroupIds, setCollapsedGroupIds] = useState<
     ReadonlySet<string>
   >(() => new Set());
@@ -54,15 +47,13 @@ export function OpenProjectScreen({
   const inputRef = useRef<HTMLInputElement>(null);
   const {
     environments,
-    filteredEnvironments,
-    recentItems,
+    projects,
+    hiddenProjectCount,
     groups,
     pastedUrl,
     keyboardItems,
-    hasRepositories,
-    hasMatches,
     hasCloneSources,
-  } = useOpenProjectResults(query, expandedEnvironmentIds, collapsedGroupIds);
+  } = useOpenProjectResults(query, showAllProjects, collapsedGroupIds);
 
   useEffect(() => {
     inputRef.current?.focus();
@@ -105,13 +96,6 @@ export function OpenProjectScreen({
     onExpand: setExpandedKey,
     onCloned: onRepositoryRemembered,
   };
-  const setEnvironmentExpanded = (environmentId: string, open: boolean) =>
-    setExpandedEnvironmentIds((current) => {
-      const next = new Set(current);
-      if (open) next.add(environmentId);
-      else next.delete(environmentId);
-      return next;
-    });
 
   const handleSearchKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
     if (event.key === "Escape" && query.length > 0) {
@@ -159,9 +143,6 @@ export function OpenProjectScreen({
       className="h-full overflow-x-hidden overflow-y-auto bg-repository"
     >
       <div className="mx-auto w-[min(56rem,calc(100%-3rem))] pt-16 pb-20 max-[900px]:w-[calc(100%-2rem)] max-[650px]:pt-10">
-        <h1 className="mb-6 text-xl leading-tight font-semibold tracking-[-.018em]">
-          Open project
-        </h1>
         <OpenProjectToolbar
           activeDescendant={
             activeKey === undefined ? undefined : openProjectItemId(activeKey)
@@ -181,58 +162,47 @@ export function OpenProjectScreen({
             {environmentStatus.detail}
           </p>
         )}
-        {!hasRepositories ? (
-          <ColdStart browseAvailable={browseAvailable} onBrowse={onBrowse} />
-        ) : null}
-        {hasMatches || hasCloneSources ? (
+        {projects.length > 0 || pastedUrl !== undefined || hasCloneSources ? (
           <div
             aria-label="Repositories"
+            className="mt-6 space-y-8"
             id="open-project-results"
             role="listbox"
           >
             {pastedUrl === undefined ? null : (
-              <div className="mt-[1.6rem]">
-                <UrlGroup source={pastedUrl} {...cloneActions} />
-              </div>
+              <UrlGroup source={pastedUrl} {...cloneActions} />
             )}
-            {hasMatches ? (
-              <RecentRepositories
-                activeKey={activeKey}
-                items={recentItems}
-                onActivate={setActiveKey}
-                onOpen={openRepository}
-                onOpenSettings={openSettings}
-              />
+            <ProjectList
+              activeKey={activeKey}
+              hiddenCount={hiddenProjectCount}
+              items={projects}
+              onActivate={setActiveKey}
+              onOpen={openRepository}
+              onOpenSettings={openSettings}
+              onShowAll={() => setShowAllProjects(true)}
+            />
+            {hasCloneSources ? (
+              <section aria-labelledby="open-project-clone-heading">
+                <OpenProjectSectionHeading id="open-project-clone-heading">
+                  Clone
+                </OpenProjectSectionHeading>
+                <div className="space-y-[1.2rem]">
+                  {groups.map((group) => (
+                    <HostRepositoriesGroup
+                      group={group}
+                      key={group.id}
+                      onOpenChange={(open) =>
+                        setGroupCollapsed(group.id, !open)
+                      }
+                      open={!collapsedGroupIds.has(group.id)}
+                      {...cloneActions}
+                    />
+                  ))}
+                </div>
+              </section>
             ) : null}
-            <div className="mt-[2.4rem] space-y-[1.2rem]">
-              {filteredEnvironments
-                .filter((environment) => environment.repositories.length > 0)
-                .map((environment) => (
-                  <RepositoryEnvironmentGroup
-                    activeKey={activeKey}
-                    environment={environment}
-                    key={environment.id}
-                    onActivate={setActiveKey}
-                    onOpenChange={(open) =>
-                      setEnvironmentExpanded(environment.id, open)
-                    }
-                    onOpenRepository={openRepository}
-                    onOpenSettings={openSettings}
-                    open={expandedEnvironmentIds.has(environment.id)}
-                  />
-                ))}
-              {groups.map((group) => (
-                <HostRepositoriesGroup
-                  group={group}
-                  key={group.id}
-                  onOpenChange={(open) => setGroupCollapsed(group.id, !open)}
-                  open={!collapsedGroupIds.has(group.id)}
-                  {...cloneActions}
-                />
-              ))}
-            </div>
           </div>
-        ) : hasRepositories ? (
+        ) : query.trim().length > 0 ? (
           <EmptySearch />
         ) : null}
       </div>
@@ -245,36 +215,6 @@ export function OpenProjectScreen({
         open={folderPickerOpen}
       />
     </main>
-  );
-}
-
-function ColdStart({
-  browseAvailable,
-  onBrowse,
-}: {
-  readonly browseAvailable: boolean;
-  readonly onBrowse: () => void;
-}) {
-  return (
-    <button
-      className="mt-[1.35rem] grid min-h-16 w-full grid-cols-[2.25rem_minmax(0,1fr)_auto] items-center gap-3 rounded-md px-2.5 text-left outline-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring/30 disabled:pointer-events-none disabled:opacity-45"
-      disabled={!browseAvailable}
-      onClick={onBrowse}
-      type="button"
-    >
-      <span className="grid size-9 place-items-center rounded-[.45rem] bg-secondary text-secondary-foreground">
-        <IconFolderPlus aria-hidden="true" className="size-4" />
-      </span>
-      <span className="min-w-0">
-        <strong className="block truncate text-[.82rem] font-semibold">
-          Open a repository from your file system
-        </strong>
-      </span>
-      <IconChevronRight
-        aria-hidden="true"
-        className="size-4 text-muted-foreground"
-      />
-    </button>
   );
 }
 

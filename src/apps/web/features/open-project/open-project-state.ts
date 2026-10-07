@@ -19,66 +19,27 @@ export interface OpenProjectRepositoryItem {
   readonly repository: OpenProjectRepository;
 }
 
-export function filterOpenProjectEnvironments(
+export function projectItems(
   environments: readonly OpenProjectEnvironment[],
   query: string,
-): readonly OpenProjectEnvironment[] {
-  const normalizedQuery = query.trim().toLocaleLowerCase();
-
-  return environments.map((environment) => {
-    const environmentMatches = environment.name
-      .toLocaleLowerCase()
-      .includes(normalizedQuery);
-    const repositories = sortedRepositories(environment.repositories).filter(
-      (repository) =>
-        normalizedQuery.length === 0 ||
-        environmentMatches ||
-        repository.name.toLocaleLowerCase().includes(normalizedQuery) ||
-        repository.path.toLocaleLowerCase().includes(normalizedQuery),
-    );
-
-    return { ...environment, repositories };
-  });
-}
-
-export function recentRepositoryItems(
-  environments: readonly OpenProjectEnvironment[],
 ): readonly OpenProjectRepositoryItem[] {
+  const normalizedQuery = query.trim().toLocaleLowerCase();
   return environments
     .flatMap((environment) =>
-      environment.repositories.map((repository) => ({
-        disabled: environment.availability !== "available",
-        environment,
-        key: `recent:${environment.id}:${repository.id}`,
-        repository,
-      })),
-    )
-    .filter((item) => item.repository.lastOpenedAt !== undefined)
-    .sort(compareRecentRepositories)
-    .slice(0, 4);
-}
-
-export function catalogRepositoryItems(
-  environments: readonly OpenProjectEnvironment[],
-  expandedEnvironmentIds: ReadonlySet<string>,
-): readonly OpenProjectRepositoryItem[] {
-  return environments.flatMap((environment) =>
-    expandedEnvironmentIds.has(environment.id)
-      ? sortedRepositories(environment.repositories).map((repository) => ({
+      environment.repositories
+        .filter(
+          (repository) =>
+            repository.name.toLocaleLowerCase().includes(normalizedQuery) ||
+            repository.path.toLocaleLowerCase().includes(normalizedQuery),
+        )
+        .map((repository) => ({
           disabled: environment.availability !== "available",
           environment,
-          key: `catalog:${environment.id}:${repository.id}`,
+          key: `project:${environment.id}:${repository.id}`,
           repository,
-        }))
-      : [],
-  );
-}
-
-export function keyboardRepositoryItems(
-  recent: readonly OpenProjectRepositoryItem[],
-  catalog: readonly OpenProjectRepositoryItem[],
-): readonly OpenProjectRepositoryItem[] {
-  return [...recent, ...catalog].filter((item) => !item.disabled);
+        })),
+    )
+    .sort(compareRecentRepositories);
 }
 
 export function formatLastOpened(
@@ -113,14 +74,6 @@ export function formatLastOpened(
   }).format(openedAt);
 }
 
-function sortedRepositories(
-  repositories: readonly OpenProjectRepository[],
-): readonly OpenProjectRepository[] {
-  return repositories.toSorted((left, right) =>
-    repositoryNameCollator.compare(left.name, right.name),
-  );
-}
-
 function compareRecentRepositories(
   left: OpenProjectRepositoryItem,
   right: OpenProjectRepositoryItem,
@@ -147,7 +100,7 @@ export interface CloneSource {
   readonly name: string;
   readonly label: string;
   readonly url: string;
-  readonly private: boolean;
+  readonly visibility?: "Private" | "Public";
   readonly description?: string;
   readonly updatedAt?: string;
 }
@@ -172,44 +125,62 @@ export function cloneGroups(
   query: string,
 ): readonly CloneGroup[] {
   const normalizedQuery = query.trim().toLocaleLowerCase();
-  return hosts.map((host) => ({
-    id: `host:${host.kind}:${host.host}:${host.account}`,
-    kind: host.kind,
-    account: host.account,
-    ...(hosts.filter(
-      ({ kind, repositories }) => kind === host.kind && repositories.length > 0,
-    ).length > 1
-      ? { server: host.host }
-      : {}),
-    sources: host.repositories
-      .filter(
-        (repository) =>
-          normalizedQuery.length === 0 ||
-          repository.name.toLocaleLowerCase().includes(normalizedQuery) ||
-          (repository.description?.toLocaleLowerCase() ?? "").includes(
-            normalizedQuery,
-          ),
-      )
-      .slice(
-        0,
-        normalizedQuery.length === 0
-          ? sourcesShownWithoutQuery
-          : sourcesShownForQuery,
-      )
-      .map((repository) => ({
-        key: `clone:${host.kind}:${host.host}:${host.account}:${repository.name}`,
-        name: repository.name.split("/").at(-1) ?? repository.name,
-        label: repository.name,
-        url: repository.url,
-        private: repository.private,
-        ...(repository.description === undefined
-          ? {}
-          : { description: repository.description }),
-        ...(repository.updatedAt === undefined
-          ? {}
-          : { updatedAt: repository.updatedAt }),
-      })),
-  }));
+  return hosts.map((host) => {
+    const ownPrefix = `${host.account.toLocaleLowerCase()}/`;
+    const markedPrivate = minorityVisibility(host);
+    return {
+      id: `host:${host.kind}:${host.host}:${host.account}`,
+      kind: host.kind,
+      account: host.account,
+      ...(hosts.filter(
+        ({ kind, repositories }) =>
+          kind === host.kind && repositories.length > 0,
+      ).length > 1
+        ? { server: host.host }
+        : {}),
+      sources: host.repositories
+        .filter(
+          (repository) =>
+            normalizedQuery.length === 0 ||
+            repository.name.toLocaleLowerCase().includes(normalizedQuery) ||
+            (repository.description?.toLocaleLowerCase() ?? "").includes(
+              normalizedQuery,
+            ),
+        )
+        .slice(
+          0,
+          normalizedQuery.length === 0
+            ? sourcesShownWithoutQuery
+            : sourcesShownForQuery,
+        )
+        .map((repository) => ({
+          key: `clone:${host.kind}:${host.host}:${host.account}:${repository.name}`,
+          name: repository.name.split("/").at(-1) ?? repository.name,
+          label: repository.name.toLocaleLowerCase().startsWith(ownPrefix)
+            ? repository.name.slice(ownPrefix.length)
+            : repository.name,
+          url: repository.url,
+          ...(repository.private === markedPrivate
+            ? { visibility: repository.private ? "Private" : "Public" }
+            : {}),
+          ...(repository.description === undefined
+            ? {}
+            : { description: repository.description }),
+          ...(repository.updatedAt === undefined
+            ? {}
+            : { updatedAt: repository.updatedAt }),
+        })),
+    };
+  });
+}
+
+function minorityVisibility({ repositories }: HostRepositories) {
+  const privateCount = repositories.filter(
+    (repository) => repository.private,
+  ).length;
+  const publicCount = repositories.length - privateCount;
+  if (privateCount === 0 || publicCount === 0) return undefined;
+  return privateCount <= publicCount;
 }
 
 export function urlSource(query: string): CloneSource | undefined {
@@ -218,7 +189,7 @@ export function urlSource(query: string): CloneSource | undefined {
   const name = location?.split("/").at(-1);
   if (location === undefined || name === undefined || name === "")
     return undefined;
-  return { key: "clone:url", name, label: location, url, private: false };
+  return { key: "clone:url", name, label: location, url };
 }
 
 function remoteLocation(url: string) {
