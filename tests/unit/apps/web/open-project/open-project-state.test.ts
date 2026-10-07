@@ -1,104 +1,106 @@
 import { describe, expect, it } from "vite-plus/test";
+import { hostRepositories } from "#tests-support/fixtures.ts";
 import type { OpenProjectEnvironment } from "#web/features/open-project/open-project-model.ts";
 import {
-  catalogRepositoryItems,
-  filterOpenProjectEnvironments,
+  cloneGroups,
   formatLastOpened,
-  keyboardRepositoryItems,
-  recentRepositoryItems,
+  projectItems,
 } from "#web/features/open-project/open-project-state.ts";
 
 const TestEnvironmentIcon = (() =>
   null) as unknown as OpenProjectEnvironment["icon"];
 
 describe("open project state", () => {
-  it("matches repository names, paths, and Environment names", () => {
+  it("matches repository names and paths", () => {
     const environments = environmentFixtures();
 
-    expect(
-      repositoryNames(filterOpenProjectEnvironments(environments, "WORK")),
-    ).toEqual(["workbench"]);
-    expect(
-      repositoryNames(filterOpenProjectEnvironments(environments, "/srv")),
-    ).toEqual(["ci-images", "infrastructure"]);
-    expect(
-      repositoryNames(filterOpenProjectEnvironments(environments, "BUILD")),
-    ).toEqual(["ci-images", "infrastructure"]);
-  });
-
-  it("keeps Environment order and sorts repositories alphabetically without mutation", () => {
-    const environments = environmentFixtures();
-
-    const filtered = filterOpenProjectEnvironments(environments, "");
-
-    expect(filtered.map((environment) => environment.id)).toEqual([
-      "local",
-      "build",
-    ]);
-    expect(repositoryNames(filtered)).toEqual([
-      "api-experiments",
-      "rebase-git",
+    expect(projectNames(projectItems(environments, "WORK"))).toEqual([
       "workbench",
+    ]);
+    expect(projectNames(projectItems(environments, "/srv"))).toEqual([
       "ci-images",
       "infrastructure",
     ]);
-    expect(
-      environments[0]?.repositories.map((repository) => repository.name),
-    ).toEqual(["workbench", "rebase-git", "api-experiments"]);
   });
 
-  it("returns the four most recent repositories", () => {
-    const recent = recentRepositoryItems(environmentFixtures());
+  it("lists every project once, most recently opened first", () => {
+    const projects = projectItems(environmentFixtures(), "");
 
-    expect(recent.map((item) => item.repository.name)).toEqual([
+    expect(projectNames(projects)).toEqual([
       "rebase-git",
       "workbench",
       "api-experiments",
       "ci-images",
+      "infrastructure",
+      "never-opened",
     ]);
   });
 
-  it("keeps unavailable repositories visible but out of keyboard navigation", () => {
+  it("keeps projects of an unavailable Environment but disables them", () => {
     const environments = environmentFixtures().map((environment) =>
       environment.id === "build"
         ? { ...environment, availability: "unavailable" as const }
         : environment,
     );
-    const catalog = catalogRepositoryItems(
-      environments,
-      new Set(["local", "build"]),
-    );
 
-    expect(catalog).toHaveLength(5);
     expect(
-      catalog
-        .filter((item) => item.disabled)
-        .map((item) => item.repository.name),
+      projectNames(
+        projectItems(environments, "").filter((item) => item.disabled),
+      ),
     ).toEqual(["ci-images", "infrastructure"]);
-    expect(
-      keyboardRepositoryItems([], catalog).map((item) => item.repository.name),
-    ).toEqual(["api-experiments", "rebase-git", "workbench"]);
   });
 
-  it("orders keyboard items from recents into expanded Environment groups", () => {
-    const environments = filterOpenProjectEnvironments(
-      environmentFixtures(),
+  it("drops the signed-in owner and tags only the minority visibility", () => {
+    const [group] = cloneGroups(
+      [
+        hostRepositories({
+          account: "Alex",
+          repositories: [
+            { name: "alex/rebase-git" },
+            { name: "alex/notes", private: true },
+            { name: "alex/dotfiles", private: true },
+            { name: "acme/api", private: true },
+          ],
+        }),
+      ],
       "",
     );
-    const recent = recentRepositoryItems(environments);
-    const catalog = catalogRepositoryItems(environments, new Set(["local"]));
 
     expect(
-      keyboardRepositoryItems(recent, catalog).map((item) => item.key),
+      group?.sources.map(({ label, visibility }) => [label, visibility]),
     ).toEqual([
-      "recent:local:rebase",
-      "recent:local:workbench",
-      "recent:local:api",
-      "recent:build:ci",
-      "catalog:local:api",
-      "catalog:local:rebase",
-      "catalog:local:workbench",
+      ["rebase-git", "Public"],
+      ["notes", undefined],
+      ["dotfiles", undefined],
+      ["acme/api", undefined],
     ]);
+  });
+
+  it("tags no visibility when there is no minority", () => {
+    const groups = cloneGroups(
+      [
+        hostRepositories({
+          repositories: [
+            { name: "acme/api", private: true },
+            { name: "acme/web", private: true },
+          ],
+        }),
+        hostRepositories({
+          host: "github.example.com",
+          repositories: [
+            { name: "acme/api", private: true },
+            { name: "acme/web" },
+          ],
+        }),
+      ],
+      "",
+    );
+
+    expect(
+      groups.flatMap(({ sources }) =>
+        sources.map(({ visibility }) => visibility),
+      ),
+    ).toEqual([undefined, undefined, undefined, undefined]);
   });
 
   it("formats compact recent times", () => {
@@ -133,6 +135,13 @@ function environmentFixtures(): readonly OpenProjectEnvironment[] {
           lastOpenedAt: "2026-08-24T12:00:00Z",
           name: "rebase-git",
           path: "~/Code/rebase-git",
+        },
+        {
+          color: "blue",
+          environmentId: "local",
+          id: "never",
+          name: "never-opened",
+          path: "~/Code/never-opened",
         },
         {
           color: "blue",
@@ -174,10 +183,8 @@ function environmentFixtures(): readonly OpenProjectEnvironment[] {
   ];
 }
 
-function repositoryNames(
-  environments: readonly OpenProjectEnvironment[],
+function projectNames(
+  items: ReturnType<typeof projectItems>,
 ): readonly string[] {
-  return environments.flatMap((environment) =>
-    environment.repositories.map((repository) => repository.name),
-  );
+  return items.map((item) => item.repository.name);
 }
