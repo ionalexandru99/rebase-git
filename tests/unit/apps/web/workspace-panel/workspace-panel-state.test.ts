@@ -7,27 +7,20 @@ import {
 } from "#web/features/workspace-panel/workspace-panel-state.ts";
 
 describe("workspace panel state", () => {
-  it("keeps sidebar and panel widths while the window leaves the graph room", () => {
-    const widths = { sidebar: 16, panel: 36 };
-    expect(fitWorkspace({ width: 1661, rem: 16, widths, open: true })).toEqual({
-      sidebar: 256,
-      panel: 576,
-    });
-    expect(fitWorkspace({ width: 2301, rem: 16, widths, open: false })).toEqual(
-      { sidebar: 256, panel: 0 },
-    );
-  });
-
-  it("shrinks the sidebar before the panel to keep the graph readable", () => {
-    const widths = { sidebar: 16, panel: 36 };
-    expect(fitWorkspace({ width: 1181, rem: 16, widths, open: true })).toEqual({
-      sidebar: 192,
-      panel: 413,
-    });
-    expect(fitWorkspace({ width: 1021, rem: 16, widths, open: true })).toEqual({
-      sidebar: 192,
-      panel: 320,
-    });
+  it("shrinks the sidebar before the panel only when the graph needs the room", () => {
+    const fit = (width: number, open: boolean, expanded = false) =>
+      fitWorkspace({
+        width,
+        rem: 16,
+        widths: { sidebar: 16, panel: 36 },
+        open,
+        expanded,
+      });
+    expect(fit(1408, true)).toEqual({ sidebar: 256, panel: 576 });
+    expect(fit(1181, true)).toEqual({ sidebar: 192, panel: 413 });
+    expect(fit(1021, true)).toEqual({ sidebar: 192, panel: 320 });
+    expect(fit(1181, true, true)).toEqual({ sidebar: 256, panel: 576 });
+    expect(fit(832, false)).toEqual({ sidebar: 256, panel: 0 });
   });
 
   it("preserves the panel width while hiding and showing it", () => {

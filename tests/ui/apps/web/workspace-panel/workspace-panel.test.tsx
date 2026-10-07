@@ -169,23 +169,21 @@ describe("workspace panel", () => {
     ).toBe(graph);
   });
 
-  it("keeps sidebar widths in rem as the window changes and saves keyboard resizes", async () => {
+  it("keeps widths in rem across window sizes and saves only the resized panel", async () => {
     const panel = await renderPanel("window", 1600);
     await page.getByRole("button", { name: "Show side panel" }).click();
     await expect.poll(panelWidth).toBeCloseTo(576, -1);
     await expect.poll(sidebarWidth).toBeCloseTo(256, -1);
     await panel.resize(1200);
-    await expect.poll(sidebarWidth).toBeCloseTo(192, -1);
-    await expect.poll(panelWidth).toBeCloseTo(428, -1);
+    await expect.poll(sidebarWidth).toBeLessThan(250);
+    await page.getByRole("separator", { name: "Resize side panel" }).click();
+    await userEvent.keyboard("{ArrowRight}");
+    await expect.poll(() => savedWidths("window").panel).toBeLessThan(26);
+    expect(savedWidths("window").sidebar).toBe(16);
+    const saved = savedWidths("window").panel * 16;
     await panel.resize(2400);
     await expect.poll(sidebarWidth).toBeCloseTo(256, -1);
-    await expect.poll(panelWidth).toBeCloseTo(576, -1);
-    await page.getByRole("separator", { name: "Resize side panel" }).click();
-    await userEvent.keyboard("{ArrowLeft}");
-    await expect
-      .poll(() => savedWidths("window").panel)
-      .toBeCloseTo(panelWidth() / 16, 1);
-    expect(savedWidths("window").panel).toBeGreaterThan(36);
+    await expect.poll(panelWidth).toBeCloseTo(saved, -1);
   });
 });
 

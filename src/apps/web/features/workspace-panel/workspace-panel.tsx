@@ -5,7 +5,7 @@ import {
   IconLayoutSidebarRightExpand,
 } from "@tabler/icons-react";
 import { type ReactNode, useEffect, useRef } from "react";
-import { useGroupRef } from "react-resizable-panels";
+import { type Layout, useGroupRef } from "react-resizable-panels";
 import { Button } from "#web/components/ui/button.tsx";
 import {
   ResizableHandle,
@@ -21,13 +21,14 @@ import {
 import { WorkspacePanelSessions } from "#web/features/workspace-panel/workspace-panel-sessions.tsx";
 import {
   fitWorkspace,
-  workspaceWidths,
+  widthLimits,
 } from "#web/features/workspace-panel/workspace-panel-state.ts";
 
 function Group({ children }: { readonly children: ReactNode }) {
   const { store, panelId, state } = useWorkspacePanel();
   const groupRef = useGroupRef();
   const elementRef = useRef<HTMLDivElement>(null);
+  const applied = useRef<Layout>({});
   const expanded = state.open && state.expanded === true;
   useEffect(() => {
     const element = elementRef.current;
@@ -37,24 +38,24 @@ function Group({ children }: { readonly children: ReactNode }) {
       cancelAnimationFrame(frame);
       frame = requestAnimationFrame(() => {
         const width = panelsWidth(element);
-        if (width === 0) return;
+        const group = groupRef.current;
+        if (width === 0 || !group) return;
         const fit = fitWorkspace({
           width,
           rem: rootFontSize(),
           widths: state.widths,
           open: state.open,
+          expanded,
         });
         const sidebar = (fit.sidebar / width) * 100;
         const panel = (fit.panel / width) * 100;
-        groupRef.current?.setLayout(
-          !state.open
-            ? { branches: sidebar, workspace: 100 - sidebar }
-            : {
-                branches: sidebar,
-                workspace: expanded ? 0 : 100 - sidebar - panel,
-                [panelId]: expanded ? 100 - sidebar : panel,
-              },
-        );
+        applied.current = group.setLayout({
+          branches: sidebar,
+          workspace: expanded ? 0 : 100 - sidebar - panel,
+          ...(state.open
+            ? { [panelId]: expanded ? 100 - sidebar : panel }
+            : {}),
+        });
       });
     });
     observer.observe(element);
@@ -71,26 +72,25 @@ function Group({ children }: { readonly children: ReactNode }) {
       orientation="horizontal"
       onLayoutChanged={(layout, { isUserInteraction }) => {
         const element = elementRef.current;
+        const previous = applied.current;
+        applied.current = layout;
         if (!isUserInteraction || expanded || !element) return;
-        const width = panelsWidth(element);
-        const rem = rootFontSize();
-        const fit = fitWorkspace({
-          width,
-          rem,
-          widths: state.widths,
-          open: state.open,
-        });
-        const dragged = (id: string, fitted: number, saved: number) => {
+        const pixels = panelsWidth(element) / rootFontSize();
+        const total = Object.values(layout).reduce((sum, size) => sum + size);
+        const dragged = (id: string, saved: number) => {
           const size = layout[id];
-          if (size === undefined) return saved;
-          const pixels = (size / 100) * width;
-          return Math.abs(pixels - fitted) < 1 ? saved : pixels / rem;
+          const before = previous[id];
+          return size === undefined ||
+            before === undefined ||
+            Math.abs(size - before) < 0.01
+            ? saved
+            : (size / total) * pixels;
         };
         store.dispatch({
           type: "resize",
           widths: {
-            sidebar: dragged("branches", fit.sidebar, state.widths.sidebar),
-            panel: dragged(panelId, fit.panel, state.widths.panel),
+            sidebar: dragged("branches", state.widths.sidebar),
+            panel: dragged(panelId, state.widths.panel),
           },
         });
       }}
@@ -109,13 +109,11 @@ function panelsWidth(group: HTMLElement) {
 }
 
 function rootFontSize() {
-  return (
-    Number.parseFloat(getComputedStyle(document.documentElement).fontSize) || 16
-  );
+  return Number.parseFloat(getComputedStyle(document.documentElement).fontSize);
 }
 
 function Sidebar({ children }: { readonly children?: ReactNode }) {
-  const { sidebar } = workspaceWidths;
+  const { sidebar } = widthLimits;
   return (
     <>
       <ResizablePanel
@@ -184,8 +182,8 @@ function Main({
   return (
     <ResizablePanel
       id="workspace"
-      minSize={`${workspaceWidths.graph.min}rem`}
-      collapsible
+      minSize={`${widthLimits.graph.min}rem`}
+      collapsible={!visible}
       collapsedSize={0}
     >
       <div
@@ -216,9 +214,9 @@ function Pane({
       ) : null}
       <ResizablePanel
         id={panelId}
-        defaultSize={`${workspaceWidths.panel.initial}rem`}
+        defaultSize={`${widthLimits.panel.initial}rem`}
         groupResizeBehavior="preserve-pixel-size"
-        minSize={`${workspaceWidths.panel.min}rem`}
+        minSize={`${widthLimits.panel.min}rem`}
       >
         <aside
           aria-label="Side panel"

@@ -11,7 +11,7 @@ import type {
   WorkspaceWidths,
 } from "#web/features/workspace-panel/workspace-panel-model.ts";
 
-export const workspaceWidths = {
+export const widthLimits = {
   sidebar: { initial: 16, min: 12, max: 26 },
   panel: { initial: 36, min: 20, max: Number.POSITIVE_INFINITY },
   graph: { min: 36 },
@@ -22,16 +22,16 @@ export const initialWorkspacePanelState: WorkspacePanelState = {
   active: null,
   open: false,
   widths: {
-    sidebar: workspaceWidths.sidebar.initial,
-    panel: workspaceWidths.panel.initial,
+    sidebar: widthLimits.sidebar.initial,
+    panel: widthLimits.panel.initial,
   },
 };
 
 export function readWorkspaceWidths(value: unknown): WorkspaceWidths {
   const widths = typeof value === "object" && value !== null ? value : {};
   return {
-    sidebar: readWidth(Reflect.get(widths, "sidebar"), workspaceWidths.sidebar),
-    panel: readWidth(Reflect.get(widths, "panel"), workspaceWidths.panel),
+    sidebar: readWidth(Reflect.get(widths, "sidebar"), widthLimits.sidebar),
+    panel: readWidth(Reflect.get(widths, "panel"), widthLimits.panel),
   };
 }
 
@@ -49,26 +49,26 @@ export function fitWorkspace({
   rem,
   widths,
   open,
+  expanded,
 }: {
   readonly width: number;
   readonly rem: number;
   readonly widths: WorkspaceWidths;
   readonly open: boolean;
+  readonly expanded: boolean;
 }) {
   let overflow =
     widths.sidebar +
     (open ? widths.panel : 0) +
-    workspaceWidths.graph.min -
+    (expanded ? 0 : widthLimits.graph.min) -
     width / rem;
   const shrink = (size: number, min: number) => {
     const cut = Math.min(Math.max(overflow, 0), Math.max(size - min, 0));
     overflow -= cut;
     return size - cut;
   };
-  const sidebar = shrink(widths.sidebar, workspaceWidths.sidebar.min) * rem;
-  const panel = open
-    ? shrink(widths.panel, workspaceWidths.panel.min) * rem
-    : 0;
+  const sidebar = shrink(widths.sidebar, widthLimits.sidebar.min) * rem;
+  const panel = open ? shrink(widths.panel, widthLimits.panel.min) * rem : 0;
   return { sidebar, panel };
 }
 
