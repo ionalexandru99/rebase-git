@@ -24,10 +24,11 @@ const graphHistoryIdentity = {
 export async function renderGraph(
   history: FakeRepositoryHistory,
   roots = [{ name: "main", oid: "0".repeat(40), type: "branch" as const }],
+  width = 900,
 ) {
   saveRepositoryHistoryOrder(graphHistoryIdentity, "topological");
   return render(
-    <div style={{ height: 520, width: 900 }}>
+    <div style={{ height: 520, width }}>
       <CommitGraphFixture
         reader={history}
         repositoryName="rebase-test"

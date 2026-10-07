@@ -60,7 +60,7 @@ describe("commit graph layout", () => {
       type: "branch" as const,
     }));
     const reader = historyReader({ commits, status: "ready" });
-    const screen = await renderGraph(reader, roots);
+    const screen = await renderGraph(reader, roots, 860);
     const grid = screen.getByRole("grid").element();
     await expect
       .element(screen.getByRole("row", { name: /^Commit 0,/ }))
@@ -186,6 +186,36 @@ describe("commit graph layout", () => {
       .toBe(28 + 5 * 26);
   });
 
+  it.each([
+    { width: 900, subject: 570, author: 150, sha: true },
+    { width: 700, subject: 446, author: 150, sha: false },
+    { width: 446, subject: 302, author: 40, sha: false },
+  ])(
+    "gives a $width px graph a $subject px subject by dropping metadata first",
+    async ({ width, subject, author, sha }) => {
+      const screen = await renderGraph(
+        historyReader({ commits: history(3), status: "ready" }),
+        undefined,
+        width,
+      );
+      const row = screen.getByRole("row", { name: /^Commit 0,/ });
+      await expect.element(row).toBeVisible();
+      const cells = row.element().children;
+      expect(cells[1]?.getBoundingClientRect().width).toBe(subject);
+      expect(
+        row
+          .getByRole("gridcell", { name: /^Author / })
+          .element()
+          .getBoundingClientRect().width,
+      ).toBe(author);
+      expect(getComputedStyle(cells[3] as Element).display !== "none").toBe(
+        sha,
+      );
+      const grid = screen.getByRole("grid").element();
+      expect(grid.scrollWidth).toBe(grid.clientWidth);
+    },
+  );
+
   it("pins metadata over long messages and uses matching solid and tinted branch pills", async () => {
     const commits = history(4).map((commit, index) => ({
       ...commit,
@@ -225,7 +255,7 @@ describe("commit graph layout", () => {
       .getByRole("gridcell", { name: "Author Alexandru Ion" })
       .element();
     const bounds = author.getBoundingClientRect();
-    expect(bounds.width).toBe(149);
+    expect(bounds.width).toBe(150);
     expect(
       document
         .elementFromPoint(bounds.left + 3, bounds.top + 13)

@@ -49,9 +49,14 @@ import { useCommitGraphView } from "#web/features/commit-graph/hooks/use-commit-
 import { useGraphColors } from "#web/features/commit-graph/layout/graph-colors.ts";
 import {
   commitGraphGutterWidth,
+  graphAuthorCellClassName,
+  graphAuthorNameClassName,
   graphHeaderHeight,
+  graphMetadataClassName,
   graphMetadataColumns,
+  graphMinimumWidth,
   graphRowHeight,
+  graphShaCellClassName,
 } from "#web/features/commit-graph/layout/graph-geometry.ts";
 import type {
   HistoryScope,
@@ -361,7 +366,7 @@ export function CommitGraph({
                   aria-multiselectable="true"
                   aria-colcount={5}
                   aria-rowcount={total + headerRows}
-                  className="absolute inset-0 block h-full w-full overflow-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden focus-visible:outline-2 focus-visible:outline-primary/70 focus-visible:outline-offset-[-2px]"
+                  className="@container/graph absolute inset-0 block h-full w-full overflow-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden focus-visible:outline-2 focus-visible:outline-primary/70 focus-visible:outline-offset-[-2px]"
                   onKeyDown={handleKeyDown}
                   onMouseDown={(event) => {
                     if (event.shiftKey) event.preventDefault();
@@ -390,10 +395,10 @@ export function CommitGraph({
                   tabIndex={0}
                 >
                   <thead
-                    className="sticky top-0 z-20 block bg-repository"
+                    className={`sticky top-0 z-20 block bg-repository ${graphMetadataClassName}`}
                     style={{
                       height: headerHeight,
-                      minWidth: gutterWidth + 560,
+                      minWidth: graphMinimumWidth(gutterWidth),
                     }}
                   >
                     <tr
@@ -405,10 +410,14 @@ export function CommitGraph({
                       <th colSpan={2} className="pl-3 font-normal">
                         Graph / Commit
                       </th>
-                      <th className="sticky right-[190px] h-full bg-repository pl-3 font-normal leading-7">
-                        Author
+                      <th
+                        className={`${graphAuthorCellClassName} h-full bg-repository pl-3 font-normal leading-7`}
+                      >
+                        <span className={graphAuthorNameClassName}>Author</span>
                       </th>
-                      <th className="sticky right-28 h-full bg-repository font-normal leading-7">
+                      <th
+                        className={`${graphShaCellClassName} h-full bg-repository font-normal leading-7`}
+                      >
                         SHA
                       </th>
                       <th className="sticky right-0 h-full bg-repository font-normal leading-7">
@@ -424,10 +433,10 @@ export function CommitGraph({
                     )}
                   </thead>
                   <tbody
-                    className="relative block"
+                    className={`relative block ${graphMetadataClassName}`}
                     style={{
                       height: totalHeight,
-                      minWidth: gutterWidth + 560,
+                      minWidth: graphMinimumWidth(gutterWidth),
                     }}
                   >
                     <CommitGraphCanvas

@@ -5,6 +5,11 @@ import type {
 } from "#contracts/repository-history/repository-history.contract.ts";
 import { AuthorAvatar } from "#web/features/author-avatars/author-avatar.tsx";
 import { CommitMessage } from "#web/features/commit-graph/components/commit-message.tsx";
+import {
+  graphAuthorCellClassName,
+  graphAuthorNameClassName,
+  graphShaCellClassName,
+} from "#web/features/commit-graph/layout/graph-geometry.ts";
 
 export const CommitGraphCommitCells = memo(
   function CommitGraphCommitCells({
@@ -20,6 +25,9 @@ export const CommitGraphCommitCells = memo(
   }) {
     const date = new Date(commit.committer.timestampSeconds * 1_000);
     const formattedDate = dateFormatter.format(date);
+    const shownDate = (
+      date.getFullYear() === currentYear ? dayFormatter : monthFormatter
+    ).format(date);
     return (
       <>
         <td
@@ -40,16 +48,18 @@ export const CommitGraphCommitCells = memo(
         <td
           role="gridcell"
           tabIndex={-1}
-          className="sticky right-[190px] z-[4] flex h-full min-w-0 items-center gap-1.5 bg-[var(--graph-row-background)] px-3 text-muted-foreground"
+          className={`${graphAuthorCellClassName} z-[4] flex h-full min-w-0 items-center gap-1.5 bg-[var(--graph-row-background)] px-3 text-muted-foreground`}
           aria-label={`Author ${commit.author.name}`}
         >
           <AuthorAvatar commit={commit} />
-          <span className="truncate">{commit.author.name}</span>
+          <span className={`truncate ${graphAuthorNameClassName}`}>
+            {commit.author.name}
+          </span>
         </td>
         <td
           role="gridcell"
           tabIndex={-1}
-          className="sticky right-28 z-[4] flex h-full items-center bg-[var(--graph-row-background)] pr-3 font-sans text-[.85rem] text-muted-foreground"
+          className={`${graphShaCellClassName} z-[4] flex h-full items-center bg-[var(--graph-row-background)] pr-3 font-sans text-[.85rem] text-muted-foreground`}
           aria-label={`Commit SHA ${commit.oid}`}
         >
           <span>{shortOid(commit.oid)}</span>
@@ -60,7 +70,7 @@ export const CommitGraphCommitCells = memo(
           className="sticky right-0 z-[4] flex h-full items-center whitespace-nowrap bg-[var(--graph-row-background)] pr-3 text-[.85rem] text-muted-foreground"
           aria-label={`Commit date ${formattedDate}`}
         >
-          <time dateTime={date.toISOString()}>{formattedDate}</time>
+          <time dateTime={date.toISOString()}>{shownDate}</time>
         </td>
       </>
     );
@@ -72,8 +82,20 @@ export const CommitGraphCommitCells = memo(
     previous.order === next.order,
 );
 
+const currentYear = new Date().getFullYear();
+
 const dateFormatter = new Intl.DateTimeFormat(undefined, {
-  day: "2-digit",
+  day: "numeric",
+  month: "short",
+  year: "numeric",
+});
+
+const dayFormatter = new Intl.DateTimeFormat(undefined, {
+  day: "numeric",
+  month: "short",
+});
+
+const monthFormatter = new Intl.DateTimeFormat(undefined, {
   month: "short",
   year: "numeric",
 });
