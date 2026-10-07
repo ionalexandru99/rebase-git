@@ -230,7 +230,7 @@ function WorktreeOption({
           ) : null}
         </span>
         <span
-          className={`flex min-w-0 flex-1 flex-col ${missing ? "opacity-40" : ""}`}
+          className={`flex min-w-0 flex-1 flex-col ${missing ? "opacity-60" : ""}`}
         >
           <span className="truncate text-[.85rem]">{row.name}</span>
           <span className="truncate text-[.72rem] text-muted-foreground">
