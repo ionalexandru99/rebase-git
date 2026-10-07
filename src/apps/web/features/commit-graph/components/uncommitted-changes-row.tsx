@@ -94,7 +94,7 @@ export function UncommittedChangesRow({
           type="button"
           aria-label={uncommittedLabel(changes)}
           onClick={onOpen}
-          className="grid size-full items-center text-left text-[.85rem] text-muted-foreground outline-none hover:bg-[color-mix(in_oklab,var(--accent)_85%,var(--repository))] focus-visible:ring-2 focus-visible:ring-primary/70 focus-visible:ring-inset"
+          className="grid size-full items-center text-left text-[.85rem] text-muted-foreground outline-none hover:bg-[color-mix(in_oklab,var(--accent)_45%,var(--repository))] focus-visible:ring-2 focus-visible:ring-primary/70 focus-visible:ring-inset"
           style={{ gridTemplateColumns: `${x + 12}px minmax(0, 1fr)` }}
         >
           <svg aria-hidden="true" className="size-full">
