@@ -40,16 +40,20 @@ describe("commit reference pills", () => {
     await expect.element(screen.getByRole("status")).toHaveTextContent("");
   });
 
-  it("keeps local refs and tags when the remote tip is on the same commit", async () => {
+  it("hides only the remote tip that matches a local branch on the same commit", async () => {
     const screen = await render(
       <CommitRefLabels
         labels={[
           { name: "main", oid: "a", type: "branch" },
           { name: "origin/main", oid: "a", type: "remote-branch" },
+          { name: "origin/feature/cache", oid: "a", type: "remote-branch" },
           { name: "v1", oid: "a", type: "tag" },
         ]}
       />,
     );
+    await expect
+      .element(screen.getByRole("button", { name: "Copy feature/cache" }))
+      .toBeVisible();
     await expect
       .element(screen.getByRole("button", { name: "Copy main", exact: true }))
       .toBeVisible();

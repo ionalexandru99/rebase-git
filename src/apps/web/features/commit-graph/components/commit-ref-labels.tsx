@@ -57,11 +57,19 @@ export function CommitRefLabels({
 }: {
   readonly labels: readonly RepositoryHistoryRefTarget[];
 }) {
-  const local = labels.some((label) => label.type === "branch");
+  const local = new Set(
+    labels
+      .filter((label) => label.type === "branch")
+      .map((label) => label.name),
+  );
   return (
     <span className="flex shrink-0 items-center gap-1">
       {labels
-        .filter((label) => !(local && label.type === "remote-branch"))
+        .filter(
+          (label) =>
+            label.type !== "remote-branch" ||
+            !local.has(label.name.slice(label.name.indexOf("/") + 1)),
+        )
         .map((label) => (
           <CommitRefPill key={`${label.type}\0${label.name}`} label={label} />
         ))}
