@@ -8,14 +8,69 @@ import type {
   WorkspacePanelAction,
   WorkspacePanelState,
   WorkspacePanelTab,
+  WorkspaceWidths,
 } from "#web/features/workspace-panel/workspace-panel-model.ts";
+
+export const widthLimits = {
+  sidebar: { initial: 16, min: 12, max: 26 },
+  panel: { initial: 36, min: 20, max: Number.POSITIVE_INFINITY },
+  graph: { min: 36 },
+};
 
 export const initialWorkspacePanelState: WorkspacePanelState = {
   tabs: [],
   active: null,
   open: false,
-  width: 40,
+  widths: {
+    sidebar: widthLimits.sidebar.initial,
+    panel: widthLimits.panel.initial,
+  },
 };
+
+export function readWorkspaceWidths(value: unknown): WorkspaceWidths {
+  const widths = typeof value === "object" && value !== null ? value : {};
+  return {
+    sidebar: readWidth(Reflect.get(widths, "sidebar"), widthLimits.sidebar),
+    panel: readWidth(Reflect.get(widths, "panel"), widthLimits.panel),
+  };
+}
+
+function readWidth(
+  value: unknown,
+  { initial, min, max }: { initial: number; min: number; max: number },
+) {
+  return typeof value === "number" && Number.isFinite(value)
+    ? Math.min(max, Math.max(min, Math.round(value * 100) / 100))
+    : initial;
+}
+
+export function fitWorkspace({
+  width,
+  rem,
+  widths,
+  open,
+  expanded,
+}: {
+  readonly width: number;
+  readonly rem: number;
+  readonly widths: WorkspaceWidths;
+  readonly open: boolean;
+  readonly expanded: boolean;
+}) {
+  let overflow =
+    widths.sidebar +
+    (open ? widths.panel : 0) +
+    (expanded ? 0 : widthLimits.graph.min) -
+    width / rem;
+  const shrink = (size: number, min: number) => {
+    const cut = Math.min(Math.max(overflow, 0), Math.max(size - min, 0));
+    overflow -= cut;
+    return size - cut;
+  };
+  const sidebar = shrink(widths.sidebar, widthLimits.sidebar.min) * rem;
+  const panel = open ? shrink(widths.panel, widthLimits.panel.min) * rem : 0;
+  return { sidebar, panel };
+}
 
 export function isWorkspacePanelKind(
   value: unknown,
@@ -149,13 +204,11 @@ export function reduceWorkspacePanel(
         ? state
         : { ...state, open: action.open };
     case "resize": {
-      const width = Math.round(action.width * 100) / 100;
-      return !Number.isFinite(width) ||
-        width < 15 ||
-        width > 70 ||
-        width === state.width
+      const widths = readWorkspaceWidths(action.widths);
+      return widths.sidebar === state.widths.sidebar &&
+        widths.panel === state.widths.panel
         ? state
-        : { ...state, width };
+        : { ...state, widths };
     }
   }
 }

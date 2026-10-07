@@ -5,7 +5,7 @@ import {
   IconLayoutSidebarRightExpand,
 } from "@tabler/icons-react";
 import { type ReactNode, useEffect, useRef } from "react";
-import { useGroupRef } from "react-resizable-panels";
+import { type Layout, useGroupRef } from "react-resizable-panels";
 import { Button } from "#web/components/ui/button.tsx";
 import {
   ResizableHandle,
@@ -19,60 +19,117 @@ import {
   WorkspacePanelProvider,
 } from "#web/features/workspace-panel/workspace-panel-provider.tsx";
 import { WorkspacePanelSessions } from "#web/features/workspace-panel/workspace-panel-sessions.tsx";
+import {
+  fitWorkspace,
+  widthLimits,
+} from "#web/features/workspace-panel/workspace-panel-state.ts";
 
 function Group({ children }: { readonly children: ReactNode }) {
   const { store, panelId, state } = useWorkspacePanel();
   const groupRef = useGroupRef();
-  const previous = useRef(false);
-  const transitioning = useRef(false);
+  const elementRef = useRef<HTMLDivElement>(null);
+  const applied = useRef<Layout>({});
   const expanded = state.open && state.expanded === true;
   useEffect(() => {
-    if (previous.current === expanded) return;
-    previous.current = expanded;
-    transitioning.current = true;
-    const group = groupRef.current;
-    if (!group) return;
-    const layout = group.getLayout();
-    const branches = layout.branches ?? 20;
-    let settledFrame = 0;
-    const frame = requestAnimationFrame(() => {
-      group.setLayout({
-        branches,
-        workspace: expanded
-          ? 0
-          : 100 - branches - (state.open ? state.width : 0),
-        ...(state.open
-          ? { [panelId]: expanded ? 100 - branches : state.width }
-          : {}),
-      });
-      settledFrame = requestAnimationFrame(() => {
-        transitioning.current = false;
+    const element = elementRef.current;
+    if (!element) return;
+    let frame = 0;
+    const observer = new ResizeObserver(() => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => {
+        const width = panelsWidth(element);
+        const group = groupRef.current;
+        if (width === 0 || !group) return;
+        const fit = fitWorkspace({
+          width,
+          rem: rootFontSize(),
+          widths: state.widths,
+          open: state.open,
+          expanded,
+        });
+        const sidebar = (fit.sidebar / width) * 100;
+        const panel = (fit.panel / width) * 100;
+        applied.current = group.setLayout({
+          branches: sidebar,
+          workspace: expanded ? 0 : 100 - sidebar - panel,
+          ...(state.open
+            ? { [panelId]: expanded ? 100 - sidebar : panel }
+            : {}),
+        });
       });
     });
+    observer.observe(element);
     return () => {
+      observer.disconnect();
       cancelAnimationFrame(frame);
-      cancelAnimationFrame(settledFrame);
-      transitioning.current = false;
     };
-  }, [expanded, groupRef, panelId, state.open, state.width]);
+  }, [expanded, groupRef, panelId, state.open, state.widths]);
   return (
     <ResizablePanelGroup
       className="h-full min-h-0"
+      elementRef={elementRef}
       groupRef={groupRef}
       orientation="horizontal"
-      onLayoutChanged={(layout) => {
-        const width = layout[panelId];
-        if (
-          !expanded &&
-          previous.current === expanded &&
-          !transitioning.current &&
-          width !== undefined
-        )
-          store.dispatch({ type: "resize", width });
+      onLayoutChanged={(layout, { isUserInteraction }) => {
+        const element = elementRef.current;
+        const previous = applied.current;
+        applied.current = layout;
+        if (!isUserInteraction || expanded || !element) return;
+        const pixels = panelsWidth(element) / rootFontSize();
+        const total = Object.values(layout).reduce((sum, size) => sum + size);
+        const dragged = (id: string, saved: number) => {
+          const size = layout[id];
+          const before = previous[id];
+          return size === undefined ||
+            before === undefined ||
+            Math.abs(size - before) < 0.01
+            ? saved
+            : (size / total) * pixels;
+        };
+        store.dispatch({
+          type: "resize",
+          widths: {
+            sidebar: dragged("branches", state.widths.sidebar),
+            panel: dragged(panelId, state.widths.panel),
+          },
+        });
       }}
     >
       {children}
     </ResizablePanelGroup>
+  );
+}
+
+function panelsWidth(group: HTMLElement) {
+  let width = 0;
+  for (const child of group.children)
+    if (child instanceof HTMLElement && child.hasAttribute("data-panel"))
+      width += child.offsetWidth;
+  return width;
+}
+
+function rootFontSize() {
+  return Number.parseFloat(getComputedStyle(document.documentElement).fontSize);
+}
+
+function Sidebar({ children }: { readonly children?: ReactNode }) {
+  const { sidebar } = widthLimits;
+  return (
+    <>
+      <ResizablePanel
+        defaultSize={`${sidebar.initial}rem`}
+        groupResizeBehavior="preserve-pixel-size"
+        id="branches"
+        maxSize={`${sidebar.max}rem`}
+        minSize={`${sidebar.min}rem`}
+      >
+        {children}
+      </ResizablePanel>
+      <ResizableHandle
+        aria-label="Resize branches sidebar"
+        className="z-10 bg-transparent after:w-2 focus-visible:ring-primary/40"
+      />
+    </>
   );
 }
 
@@ -123,7 +180,12 @@ function Main({
   const { state } = useWorkspacePanel();
   const visible = !(state.open && state.expanded);
   return (
-    <ResizablePanel id="workspace" minSize="30%" collapsible collapsedSize={0}>
+    <ResizablePanel
+      id="workspace"
+      minSize={`${widthLimits.graph.min}rem`}
+      collapsible={!visible}
+      collapsedSize={0}
+    >
       <div
         className="h-full min-w-0 overflow-hidden"
         inert={!visible}
@@ -152,9 +214,9 @@ function Pane({
       ) : null}
       <ResizablePanel
         id={panelId}
-        defaultSize={`${state.width}%`}
-        minSize="18rem"
-        maxSize={state.expanded ? "100%" : "65%"}
+        defaultSize={`${widthLimits.panel.initial}rem`}
+        groupResizeBehavior="preserve-pixel-size"
+        minSize={`${widthLimits.panel.min}rem`}
       >
         <aside
           aria-label="Side panel"
@@ -171,6 +233,7 @@ export const WorkspacePanel = {
   Sessions: WorkspacePanelSessions,
   Provider: WorkspacePanelProvider,
   Group,
+  Sidebar,
   Controls,
   Pane,
   Main,

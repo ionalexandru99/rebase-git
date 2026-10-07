@@ -6,6 +6,7 @@ import type {
 import {
   initialWorkspacePanelState,
   isPanelTab,
+  readWorkspaceWidths,
   reduceWorkspacePanel,
   tabKind,
 } from "#web/features/workspace-panel/workspace-panel-state.ts";
@@ -100,14 +101,7 @@ function readPanelState(
         "open" in saved && typeof saved.open === "boolean"
           ? saved.open
           : initialWorkspacePanelState.open,
-      width:
-        "width" in saved &&
-        typeof saved.width === "number" &&
-        Number.isFinite(saved.width) &&
-        saved.width >= 15 &&
-        saved.width <= 70
-          ? saved.width
-          : initialWorkspacePanelState.width,
+      widths: readWorkspaceWidths("widths" in saved ? saved.widths : undefined),
     };
   } catch {
     return initialWorkspacePanelState;

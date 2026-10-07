@@ -17,7 +17,6 @@ import {
 } from "#tests-support/fixtures.ts";
 import { historyOid } from "#tests-support/history.ts";
 import { render } from "#tests-support/render.tsx";
-import { ResizablePanel } from "#web/components/ui/resizable.tsx";
 import { ComparisonPanel } from "#web/features/comparison/comparison-panel.tsx";
 import { WorkspacePanel } from "#web/features/workspace-panel/workspace-panel.tsx";
 import { RepositoryScopeProvider } from "#web/platform/query/repository-scope.tsx";
@@ -84,9 +83,7 @@ async function fixture(featureTip = second) {
     <div className="dark text-foreground" style={{ width: 1200, height: 650 }}>
       <WorkspacePanel.Provider scopeKey={scopeKey}>
         <WorkspacePanel.Group>
-          <ResizablePanel id="graph" defaultSize="30%">
-            Graph
-          </ResizablePanel>
+          <WorkspacePanel.Sidebar />
           <WorkspacePanel.Main>{() => null}</WorkspacePanel.Main>
           <WorkspacePanel.Pane
             contents={{

@@ -1,21 +1,41 @@
 import { describe, expect, it } from "vite-plus/test";
 import type { WorkspacePanelState } from "#web/features/workspace-panel/workspace-panel-model.ts";
 import {
+  fitWorkspace,
   initialWorkspacePanelState,
   reduceWorkspacePanel,
 } from "#web/features/workspace-panel/workspace-panel-state.ts";
 
 describe("workspace panel state", () => {
+  it("shrinks the sidebar before the panel only when the graph needs the room", () => {
+    const fit = (width: number, open: boolean, expanded = false) =>
+      fitWorkspace({
+        width,
+        rem: 16,
+        widths: { sidebar: 16, panel: 36 },
+        open,
+        expanded,
+      });
+    expect(fit(1408, true)).toEqual({ sidebar: 256, panel: 576 });
+    expect(fit(1181, true)).toEqual({ sidebar: 192, panel: 413 });
+    expect(fit(1021, true)).toEqual({ sidebar: 192, panel: 320 });
+    expect(fit(1181, true, true)).toEqual({ sidebar: 256, panel: 576 });
+    expect(fit(832, false)).toEqual({ sidebar: 256, panel: 0 });
+  });
+
   it("preserves the panel width while hiding and showing it", () => {
     const resized = reduceWorkspacePanel(initialWorkspacePanelState, {
       type: "resize",
-      width: 55,
+      widths: { sidebar: 18, panel: 40 },
     });
     const hidden = reduceWorkspacePanel(resized, {
       type: "visibility",
       open: false,
     });
-    expect(hidden).toMatchObject({ open: false, width: 55 });
+    expect(hidden).toMatchObject({
+      open: false,
+      widths: { sidebar: 18, panel: 40 },
+    });
     expect(
       reduceWorkspacePanel(hidden, { type: "visibility", open: true }),
     ).toEqual({ ...resized, open: true });

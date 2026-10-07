@@ -29,7 +29,6 @@ import {
 } from "#tests-support/fixtures.ts";
 import { render } from "#tests-support/render.tsx";
 import { useCommitInspection } from "#web/app/workspace/use-commit-inspection.ts";
-import { ResizablePanel } from "#web/components/ui/resizable.tsx";
 import { CommitInspection } from "#web/features/commit-inspection/commit-inspection.tsx";
 import { WorkspacePanel } from "#web/features/workspace-panel/workspace-panel.tsx";
 import { RepositoryScopeProvider } from "#web/platform/query/repository-scope.tsx";
@@ -123,9 +122,7 @@ async function fixture(
         <Inspection connected={connected}>
           {(inspection) => (
             <WorkspacePanel.Group>
-              <ResizablePanel id="branches" defaultSize="15%" minSize="10%">
-                Branches
-              </ResizablePanel>
+              <WorkspacePanel.Sidebar>Branches</WorkspacePanel.Sidebar>
               <WorkspacePanel.Main>
                 {() => (
                   <RepositoryScopeProvider scope={graphScope}>
@@ -286,7 +283,7 @@ describe("commit inspection", () => {
   it("opens through the context menu and restores the prior tab and its state", async () => {
     const { screen, grid } = await fixture(
       {},
-      { tabs: ["changes"], active: "changes", open: true, width: 40 },
+      { tabs: ["changes"], active: "changes", open: true },
     );
     await screen
       .getByRole("textbox", { name: "Working draft" })
@@ -391,7 +388,6 @@ it("preserves the restored inspector target across connection-driven graph notif
       tabs: ["commit"],
       active: "commit",
       open: true,
-      width: 40,
       inputs: { commit: historyOid(1) },
     },
   );

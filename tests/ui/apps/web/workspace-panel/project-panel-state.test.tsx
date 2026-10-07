@@ -1,7 +1,6 @@
 import { beforeEach, expect, it } from "vite-plus/test";
 import { page } from "vite-plus/test/browser";
 import { render } from "vitest-browser-react";
-import { ResizablePanel } from "#web/components/ui/resizable.tsx";
 import { WorkspacePanel } from "#web/features/workspace-panel/workspace-panel.tsx";
 import { useWorkspacePanel } from "#web/features/workspace-panel/workspace-panel-provider.tsx";
 
@@ -11,11 +10,10 @@ it("restores all open panel tabs after leaving a project and collapsing its pane
   const tree = (project: string) => (
     <div style={{ width: 1000, height: 600 }}>
       <WorkspacePanel.Provider key={project} scopeKey={project}>
+        <WorkspacePanel.Controls />
         <WorkspacePanel.Group>
-          <ResizablePanel id="graph" minSize="20%">
-            <WorkspacePanel.Controls />
-            <Inspect />
-          </ResizablePanel>
+          <WorkspacePanel.Sidebar />
+          <WorkspacePanel.Main>{() => <Inspect />}</WorkspacePanel.Main>
           <WorkspacePanel.Pane />
         </WorkspacePanel.Group>
       </WorkspacePanel.Provider>

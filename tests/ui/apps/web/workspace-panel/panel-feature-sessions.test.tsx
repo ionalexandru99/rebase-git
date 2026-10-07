@@ -12,7 +12,6 @@ import {
   repositoryChanges,
 } from "#tests-support/fixtures.ts";
 import { render } from "#tests-support/render.tsx";
-import { ResizablePanel } from "#web/components/ui/resizable.tsx";
 import { WorkspacePanel } from "#web/features/workspace-panel/workspace-panel.tsx";
 import { useWorkspacePanel } from "#web/features/workspace-panel/workspace-panel-provider.tsx";
 
@@ -110,11 +109,10 @@ async function fixture(linkedWorktree = false) {
               : `/repos/${project}`,
           }}
         >
+          <WorkspacePanel.Controls />
           <WorkspacePanel.Group>
-            <ResizablePanel id="graph" minSize="20%">
-              <WorkspacePanel.Controls />
-              <Inspect />
-            </ResizablePanel>
+            <WorkspacePanel.Sidebar />
+            <WorkspacePanel.Main>{() => <Inspect />}</WorkspacePanel.Main>
             <WorkspacePanel.Pane />
           </WorkspacePanel.Group>
         </WorkspacePanel.Provider>

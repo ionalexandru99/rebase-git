@@ -1,7 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
-import { page } from "vite-plus/test/browser";
+import { page, userEvent } from "vite-plus/test/browser";
 import { render } from "vitest-browser-react";
-import { ResizablePanel } from "#web/components/ui/resizable.tsx";
 import { createWorkspacePanelStore } from "#web/features/workspace-panel/persistence/workspace-panel-store.ts";
 import { WorkspacePanel } from "#web/features/workspace-panel/workspace-panel.tsx";
 
@@ -10,13 +9,13 @@ describe("workspace panel", () => {
 
   it("expands across the graph while keeping branches visible and restores its width", async () => {
     await render(
-      <div className="dark" style={{ width: 1200, height: 600 }}>
+      <div className="dark" style={{ width: 1600, height: 600 }}>
         <WorkspacePanel.Provider scopeKey="expanded">
           <WorkspacePanel.Controls />
           <WorkspacePanel.Group>
-            <ResizablePanel id="branches" defaultSize="20%" minSize="15%">
+            <WorkspacePanel.Sidebar>
               <div data-testid="branch-content">Branches</div>
-            </ResizablePanel>
+            </WorkspacePanel.Sidebar>
             <WorkspacePanel.Main>
               {() => (
                 <button type="button" data-testid="graph">
@@ -30,14 +29,14 @@ describe("workspace panel", () => {
       </div>,
     );
     await page.getByRole("button", { name: "Show side panel" }).click();
-    const width = panelWidth();
+    await expect.poll(panelWidth).toBeCloseTo(576, -1);
     const graph = document.querySelector('[data-testid="graph"]');
     await page.getByRole("button", { name: "Expand side panel" }).click();
-    await expect.poll(panelWidth).toBeCloseTo(960, -1);
+    await expect.poll(panelWidth).toBeCloseTo(1342, -1);
     await expect.element(page.getByTestId("branch-content")).toBeVisible();
     expect(document.querySelector('[data-testid="graph"]')).toBe(graph);
     await page.getByRole("button", { name: "Restore side panel" }).click();
-    await expect.poll(panelWidth).toBeCloseTo(width, -1);
+    await expect.poll(panelWidth).toBeCloseTo(576, -1);
     await expect.element(page.getByTestId("graph")).toBeVisible();
   });
 
@@ -47,7 +46,7 @@ describe("workspace panel", () => {
         <WorkspacePanel.Provider scopeKey="pinned">
           <WorkspacePanel.Controls />
           <WorkspacePanel.Group>
-            <ResizablePanel id="branches" defaultSize="20%" minSize="15%" />
+            <WorkspacePanel.Sidebar />
             <WorkspacePanel.Main>{() => null}</WorkspacePanel.Main>
             <WorkspacePanel.Pane />
           </WorkspacePanel.Group>
@@ -99,7 +98,7 @@ describe("workspace panel", () => {
         tabs: ["changes", "code"],
         active: "code",
         open: false,
-        width: 55,
+        widths: { sidebar: 16, panel: 30 },
       }),
     );
     await renderPanel("saved");
@@ -107,7 +106,7 @@ describe("workspace panel", () => {
     await expect
       .element(page.getByRole("tab", { name: "Diffs" }))
       .toBeVisible();
-    await expect.poll(panelWidth).toBeCloseTo(550, -1);
+    await expect.poll(panelWidth).toBeCloseTo(480, -1);
   });
 
   it("keeps each project's tabs and visibility when switching projects and reopening the panel", async () => {
@@ -146,24 +145,57 @@ describe("workspace panel", () => {
   });
 
   it("restores the panel width when switching worktrees with the graph mounted", async () => {
-    createWorkspacePanelStore("first").dispatch({ type: "resize", width: 35 });
-    createWorkspacePanelStore("other").dispatch({ type: "resize", width: 55 });
+    createWorkspacePanelStore("first").dispatch({
+      type: "resize",
+      widths: { sidebar: 16, panel: 22 },
+    });
+    createWorkspacePanelStore("other").dispatch({
+      type: "resize",
+      widths: { sidebar: 16, panel: 30 },
+    });
     const panel = await renderPanel("first");
     await page.getByRole("button", { name: "Show side panel" }).click();
     const graph = page
       .getByRole("button", { name: "Graph selection" })
       .element();
-    await expect.poll(panelWidth).toBeCloseTo(350, -1);
+    await expect.poll(panelWidth).toBeCloseTo(352, -1);
     await panel.switchScope("other");
     await page.getByRole("button", { name: "Show side panel" }).click();
-    await expect.poll(panelWidth).toBeCloseTo(550, -1);
+    await expect.poll(panelWidth).toBeCloseTo(480, -1);
     await panel.switchScope("first");
-    await expect.poll(panelWidth).toBeCloseTo(350, -1);
+    await expect.poll(panelWidth).toBeCloseTo(352, -1);
     expect(
       page.getByRole("button", { name: "Graph selection" }).element(),
     ).toBe(graph);
   });
+
+  it("keeps widths in rem across window sizes and saves only the resized panel", async () => {
+    const panel = await renderPanel("window", 1600);
+    await page.getByRole("button", { name: "Show side panel" }).click();
+    await expect.poll(panelWidth).toBeCloseTo(576, -1);
+    await expect.poll(sidebarWidth).toBeCloseTo(256, -1);
+    await panel.resize(1200);
+    await expect.poll(sidebarWidth).toBeLessThan(250);
+    await page.getByRole("separator", { name: "Resize side panel" }).click();
+    await userEvent.keyboard("{ArrowRight}");
+    await expect.poll(() => savedWidths("window").panel).toBeLessThan(26);
+    expect(savedWidths("window").sidebar).toBe(16);
+    const saved = savedWidths("window").panel * 16;
+    await panel.resize(2400);
+    await expect.poll(sidebarWidth).toBeCloseTo(256, -1);
+    await expect.poll(panelWidth).toBeCloseTo(saved, -1);
+  });
 });
+
+function sidebarWidth() {
+  return page.getByTestId("branches").element().getBoundingClientRect().width;
+}
+
+function savedWidths(scopeKey: string) {
+  return JSON.parse(
+    localStorage.getItem(`rebase:workspace-panel:v1:${scopeKey}`) ?? "{}",
+  ).widths;
+}
 
 function panelWidth() {
   return page
@@ -172,24 +204,31 @@ function panelWidth() {
     .getBoundingClientRect().width;
 }
 
-async function renderPanel(scopeKey = "panel-test") {
-  const tree = (scopeKey: string) => (
-    <div className="dark" style={{ width: 1000, height: 600 }}>
+async function renderPanel(scopeKey = "panel-test", width = 1600) {
+  const tree = (scopeKey: string, width: number) => (
+    <div className="dark" style={{ width, height: 600 }}>
       <WorkspacePanel.Provider scopeKey={scopeKey}>
+        <WorkspacePanel.Controls />
         <WorkspacePanel.Group>
-          <ResizablePanel id="graph" minSize="20%">
-            <WorkspacePanel.Controls />
-            <button type="button">Graph selection</button>
-          </ResizablePanel>
+          <WorkspacePanel.Sidebar />
+          <WorkspacePanel.Main>
+            {() => <button type="button">Graph selection</button>}
+          </WorkspacePanel.Main>
           <WorkspacePanel.Pane />
         </WorkspacePanel.Group>
       </WorkspacePanel.Provider>
     </div>
   );
-  const view = await render(tree(scopeKey));
+  let current = { scopeKey, width };
+  const view = await render(tree(scopeKey, width));
+  const show = (next: typeof current) => {
+    current = next;
+    return view.rerender(tree(next.scopeKey, next.width));
+  };
   return {
     view,
-    switchScope: (next: string) => view.rerender(tree(next)),
+    switchScope: (next: string) => show({ ...current, scopeKey: next }),
+    resize: (next: number) => show({ ...current, width: next }),
   };
 }
 
@@ -201,11 +240,11 @@ it("migrates a shared previous layout into only the first repository", async () 
     tabs: ["changes", "commit"],
     active: "commit",
     open: true,
-    width: 55,
+    widths: { sidebar: 16, panel: 30 },
   };
   localStorage.setItem(storageKey, JSON.stringify(saved));
   const tree = (repositoryId: string) => (
-    <div style={{ width: 1000, height: 600 }}>
+    <div style={{ width: 1600, height: 600 }}>
       <WorkspacePanel.Provider
         key={repositoryId}
         scopeKey={scopeKey}
@@ -216,10 +255,10 @@ it("migrates a shared previous layout into only the first repository", async () 
           worktreePath: "/repo",
         }}
       >
+        <WorkspacePanel.Controls />
         <WorkspacePanel.Group>
-          <ResizablePanel id="graph" minSize="20%">
-            <WorkspacePanel.Controls />
-          </ResizablePanel>
+          <WorkspacePanel.Sidebar />
+          <WorkspacePanel.Main>{() => null}</WorkspacePanel.Main>
           <WorkspacePanel.Pane />
         </WorkspacePanel.Group>
       </WorkspacePanel.Provider>
@@ -232,7 +271,7 @@ it("migrates a shared previous layout into only the first repository", async () 
   await expect
     .element(page.getByRole("tab", { name: "Diffs", exact: true }))
     .toBeVisible();
-  await expect.poll(panelWidth).toBeCloseTo(550, -1);
+  await expect.poll(panelWidth).toBeCloseTo(480, -1);
   await page.getByRole("button", { name: "Close Commit tab" }).click();
   await page.getByRole("button", { name: "Hide side panel" }).click();
   await view.rerender(tree("project-b"));
@@ -244,7 +283,10 @@ it("migrates a shared previous layout into only the first repository", async () 
     .element(page.getByRole("heading", { name: "Open a tab" }))
     .toBeVisible();
   expect(JSON.parse(localStorage.getItem(storageKey) ?? "null")).toEqual(saved);
-  localStorage.setItem(storageKey, JSON.stringify({ ...saved, width: 35 }));
+  localStorage.setItem(
+    storageKey,
+    JSON.stringify({ ...saved, widths: { sidebar: 16, panel: 22 } }),
+  );
   await view.rerender(tree("project-a"));
   await expect
     .element(page.getByRole("complementary", { name: "Side panel" }))
@@ -256,7 +298,7 @@ it("migrates a shared previous layout into only the first repository", async () 
   await expect
     .element(page.getByRole("tab", { name: "Diffs", exact: true }))
     .toHaveAttribute("aria-selected", "true");
-  await expect.poll(panelWidth).toBeCloseTo(550, -1);
+  await expect.poll(panelWidth).toBeCloseTo(480, -1);
   await view.rerender(tree("project-b"));
   await expect
     .element(page.getByRole("heading", { name: "Open a tab" }))
@@ -275,7 +317,6 @@ it("does not copy an old layout after another repository already migrated it", (
       tabs: ["changes"],
       active: "changes",
       open: true,
-      width: 55,
     }),
   );
   createWorkspacePanelStore(
@@ -299,7 +340,6 @@ it("leaves a previous layout unclaimed when repository storage fails", () => {
       tabs: ["changes"],
       active: "changes",
       open: true,
-      width: 55,
     }),
   );
   const write = vi
