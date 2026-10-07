@@ -7,10 +7,7 @@ import {
   type InspectCommitDiff,
 } from "#contracts/commit-inspection/commit-inspection.contract.ts";
 import { Button } from "#web/components/ui/button.tsx";
-import {
-  CommitFiles,
-  fileSteps,
-} from "#web/features/commit-inspection/components/commit-files.tsx";
+import { CommitFiles } from "#web/features/commit-inspection/components/commit-files.tsx";
 import { CommitMetadata } from "#web/features/commit-inspection/components/commit-metadata.tsx";
 import {
   RestoreConfirmation,
@@ -114,7 +111,6 @@ export function CommitInspection({
                 <CommitDiff
                   key={`${details.oid}:${details.parentOid}`}
                   file={details.files.find((file) => file.path === path)}
-                  steps={fileSteps(details.files, path, select)}
                   diff={{
                     value: shown.data,
                     loading: shown.isLoading,

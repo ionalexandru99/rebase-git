@@ -8,10 +8,7 @@ import {
 } from "#contracts/repository-comparison/compare-revisions.contract.ts";
 import type { RepositoryRefs } from "#contracts/repository-refs/repository-refs.contract.ts";
 import { Button } from "#web/components/ui/button.tsx";
-import {
-  CommitFiles,
-  fileSteps,
-} from "#web/features/commit-inspection/components/commit-files.tsx";
+import { CommitFiles } from "#web/features/commit-inspection/components/commit-files.tsx";
 import {
   type CompareInput,
   isCompareInput,
@@ -238,7 +235,6 @@ function ComparisonFiles({
             <CommitDiff
               key={`${shown.base}:${shown.to}`}
               file={file}
-              steps={fileSteps(shown.files, path, setSelected)}
               diff={{
                 value: diff.data,
                 loading: diff.isLoading,

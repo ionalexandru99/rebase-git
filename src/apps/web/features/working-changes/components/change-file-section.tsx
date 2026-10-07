@@ -203,6 +203,11 @@ export function ChangeFileSection({
               aria-label={`${isFolder ? "Folder" : label} ${row.key}${previousPath ? ` renamed from ${previousPath}` : ""}`}
               aria-expanded={isFolder ? !collapsed.has(row.key) : undefined}
               aria-pressed={row.paths.every((path) => checked.has(path))}
+              aria-current={
+                selection?.section === section && selection.path === row.key
+                  ? "true"
+                  : undefined
+              }
               aria-describedby={
                 status !== undefined && status !== "U"
                   ? statusId(section, row.key)

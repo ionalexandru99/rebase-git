@@ -14,21 +14,14 @@ export interface CommitDiffRead {
   readonly retry: () => void;
 }
 
-export interface DiffSteps {
-  readonly previous: (() => void) | undefined;
-  readonly next: (() => void) | undefined;
-}
-
 export default function CommitDiff({
   file,
-  steps,
   diff,
   preferences,
   choosePreferences,
   preview,
 }: {
   readonly file: CommitFile | undefined;
-  readonly steps: DiffSteps;
   readonly diff: CommitDiffRead;
   readonly preferences: DiffPreferences;
   readonly choosePreferences: (preferences: DiffPreferences) => void;
@@ -54,8 +47,6 @@ export default function CommitDiff({
         onExpand={hasHiddenContext ? setExpanded : undefined}
         preferences={preferences}
         onPreferences={choosePreferences}
-        previous={steps.previous}
-        next={steps.next}
         region={region}
       />
       {preview ? (

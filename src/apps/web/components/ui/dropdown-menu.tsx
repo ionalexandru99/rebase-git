@@ -5,6 +5,9 @@ import { IconCheck } from "@tabler/icons-react";
 import type { ComponentProps } from "react";
 import { cn } from "#web/lib/utils.ts";
 
+const itemClassName =
+  "flex h-8 cursor-default items-center gap-2 rounded-control px-2 text-body text-foreground/80 outline-none select-none data-disabled:pointer-events-none data-disabled:opacity-40 data-highlighted:bg-accent data-highlighted:text-foreground [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0";
+
 function DropdownMenu(props: Menu.Root.Props) {
   return <Menu.Root data-slot="dropdown-menu" {...props} />;
 }
@@ -52,13 +55,29 @@ function DropdownMenuContent({
 function DropdownMenuItem({ className, ...props }: Menu.Item.Props) {
   return (
     <Menu.Item
-      className={cn(
-        "flex h-8 cursor-default items-center gap-2 rounded-control px-2 text-body text-foreground/80 outline-none select-none data-disabled:pointer-events-none data-disabled:opacity-40 data-highlighted:bg-accent data-highlighted:text-foreground [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0",
-        className,
-      )}
+      className={cn(itemClassName, className)}
       data-slot="dropdown-menu-item"
       {...props}
     />
+  );
+}
+
+function DropdownMenuCheckboxItem({
+  children,
+  className,
+  ...props
+}: Menu.CheckboxItem.Props) {
+  return (
+    <Menu.CheckboxItem
+      className={cn(itemClassName, className)}
+      data-slot="dropdown-menu-checkbox-item"
+      {...props}
+    >
+      {children}
+      <Menu.CheckboxItemIndicator className="ml-auto">
+        <IconCheck aria-hidden="true" className="size-3.5 text-foreground" />
+      </Menu.CheckboxItemIndicator>
+    </Menu.CheckboxItem>
   );
 }
 
@@ -73,10 +92,7 @@ function DropdownMenuRadioItem({
 }: Menu.RadioItem.Props) {
   return (
     <Menu.RadioItem
-      className={cn(
-        "flex h-8 cursor-default items-center gap-2 rounded-control px-2 text-body text-foreground/80 outline-none select-none data-highlighted:bg-accent data-highlighted:text-foreground",
-        className,
-      )}
+      className={cn(itemClassName, className)}
       closeOnClick
       data-slot="dropdown-menu-radio-item"
       {...props}
@@ -104,6 +120,7 @@ function DropdownMenuSeparator({
 
 export {
   DropdownMenu,
+  DropdownMenuCheckboxItem,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuRadioGroup,
