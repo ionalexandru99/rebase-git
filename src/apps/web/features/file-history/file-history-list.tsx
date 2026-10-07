@@ -165,16 +165,13 @@ function HistoryRow({
 function StatusHint({ entry }: { readonly entry: FileHistoryEntry }) {
   if (entry.previousPath !== null)
     return (
-      <span className="min-w-0 truncate text-sky-600 dark:text-sky-400">
+      <span className="min-w-0 truncate text-info">
         ← {entry.previousPath.split("/").slice(-2).join("/")}
       </span>
     );
-  if (entry.status === "A")
-    return (
-      <span className="text-emerald-600 dark:text-emerald-400">Added</span>
-    );
+  if (entry.status === "A") return <span className="text-success">Added</span>;
   if (entry.status === "D")
-    return <span className="text-rose-600 dark:text-rose-400">Deleted</span>;
+    return <span className="text-destructive">Deleted</span>;
   return null;
 }
 

@@ -15,10 +15,10 @@ export interface NamedFile {
 }
 
 const statusTones: Partial<Record<FileStatus, string>> = {
-  A: "text-emerald-600 dark:text-emerald-300",
-  "?": "text-emerald-600 dark:text-emerald-300",
-  D: "text-rose-600 dark:text-rose-300 line-through decoration-rose-600/60 dark:decoration-rose-300/60",
-  R: "text-sky-600 dark:text-sky-300",
+  A: "text-success",
+  "?": "text-success",
+  D: "text-destructive line-through decoration-destructive/60",
+  R: "text-info",
 };
 
 const statusLabels: Record<FileStatus, string> = {
@@ -92,14 +92,10 @@ export function LineCounts({
       )}
     >
       {lines && lines.added > 0 ? (
-        <span className="text-emerald-600 dark:text-emerald-400">
-          +{compactCount(lines.added)}
-        </span>
+        <span className="text-success">+{compactCount(lines.added)}</span>
       ) : null}
       {lines && lines.removed > 0 ? (
-        <span className="text-rose-600 dark:text-rose-400">
-          −{compactCount(lines.removed)}
-        </span>
+        <span className="text-destructive">−{compactCount(lines.removed)}</span>
       ) : null}
     </span>
   );

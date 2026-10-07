@@ -252,20 +252,20 @@ export const pullRequestTerms = {
 } as const;
 
 const stateIcons = {
-  Open: { Icon: IconGitPullRequest, className: "text-status-available" },
+  Open: { Icon: IconGitPullRequest, className: "text-success" },
   Draft: { Icon: IconGitPullRequestDraft, className: "text-muted-foreground" },
   Merged: {
     Icon: IconGitMerge,
-    className: "text-violet-600 dark:text-violet-400",
+    className: "text-special",
   },
   Closed: {
     Icon: IconGitPullRequestClosed,
-    className: "text-status-unavailable",
+    className: "text-destructive",
   },
 } as const;
 
 const checksIcons = {
-  Passing: { Icon: IconCheck, className: "text-status-available" },
-  Failing: { Icon: IconX, className: "text-status-unavailable" },
-  Pending: { Icon: IconPointFilled, className: "text-status-connecting" },
+  Passing: { Icon: IconCheck, className: "text-success" },
+  Failing: { Icon: IconX, className: "text-destructive" },
+  Pending: { Icon: IconPointFilled, className: "text-warning" },
 } as const;

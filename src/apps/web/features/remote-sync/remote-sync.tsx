@@ -173,7 +173,7 @@ function FetchStatus({
 }) {
   if (fetching || (connected && !failed)) return null;
   return (
-    <span className="text-meta text-status-unavailable" role="status">
+    <span className="text-meta text-destructive" role="status">
       {connected ? "Fetch failed" : "You're offline"}
     </span>
   );

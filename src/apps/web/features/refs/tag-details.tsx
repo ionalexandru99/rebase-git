@@ -62,7 +62,7 @@ export function TagDetails({
             </>
           )}
           {annotation.isError ? (
-            <p className="text-status-unavailable">
+            <p className="text-destructive">
               {describeFailure(annotation.error)}
             </p>
           ) : null}

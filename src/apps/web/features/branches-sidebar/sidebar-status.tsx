@@ -19,7 +19,7 @@ export function SidebarStatus({
 }): JSX.Element | null {
   if (repositoryRefs.error !== null) {
     return (
-      <div className="px-2 py-3 text-meta text-status-unavailable" role="alert">
+      <div className="px-2 py-3 text-meta text-destructive" role="alert">
         <p>{repositoryRefs.error}</p>
         <Button
           className="mt-2"

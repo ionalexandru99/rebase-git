@@ -179,7 +179,7 @@ function RepositoryOrderSettings({
     <SettingsRow title="History ordering">
       <select
         aria-label="History ordering"
-        className="h-8 rounded-control border border-input bg-input/30 px-3 text-control"
+        className="h-8 rounded-control border border-input bg-field px-3 text-control"
         value={order}
         onChange={(event) => {
           const next =

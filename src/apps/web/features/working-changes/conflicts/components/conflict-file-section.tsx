@@ -36,7 +36,7 @@ export function ConflictFileSection({
       title="Conflicts"
       look={{
         Icon: IconAlertTriangle,
-        className: "text-rose-600 dark:text-rose-300",
+        className: "text-destructive",
       }}
       grow
       files={conflicts.rows}

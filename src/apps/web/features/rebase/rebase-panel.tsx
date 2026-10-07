@@ -98,7 +98,7 @@ function RebaseProgress({ steps }: { readonly steps: readonly RebaseStep[] }) {
             aria-current={state === "current" ? "step" : undefined}
             className={cn(
               "flex h-7 items-center gap-2 px-3 whitespace-nowrap",
-              state === "current" && "bg-status-connecting/10",
+              state === "current" && "bg-warning-surface",
               (state === "pending" || state === "dropped") && "opacity-60",
               folds(step.action) && "pl-8",
             )}
@@ -138,16 +138,13 @@ function StepIcon({
   const className = "size-3.5 shrink-0";
   if (state === "done")
     return (
-      <IconCheck
-        aria-label="Done"
-        className={cn(className, "text-status-available")}
-      />
+      <IconCheck aria-label="Done" className={cn(className, "text-success")} />
     );
   if (state === "current")
     return (
       <IconCircleFilled
         aria-label="Stopped here"
-        className={cn(className, "text-status-connecting")}
+        className={cn(className, "text-warning")}
       />
     );
   if (state === "dropped")

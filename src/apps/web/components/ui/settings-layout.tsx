@@ -93,7 +93,7 @@ export function SettingsRow({
                 {status === undefined ? null : (
                   <span
                     aria-hidden="true"
-                    className={`pointer-events-none absolute -top-0.5 -left-0.5 size-2 rounded-full ring-2 ring-repository ${status === "ready" ? "bg-status-available" : "bg-status-connecting"}`}
+                    className={`pointer-events-none absolute -top-0.5 -left-0.5 size-2 rounded-full ring-2 ring-repository ${status === "ready" ? "bg-success" : "bg-warning"}`}
                   />
                 )}
               </span>
@@ -105,7 +105,7 @@ export function SettingsRow({
               <code className="text-meta text-muted-foreground">{value}</code>
             )}
             {badge === undefined ? null : (
-              <span className="inline-flex h-4 items-center rounded-control bg-status-connecting/15 px-1 text-badge leading-none font-medium text-status-connecting">
+              <span className="inline-flex h-4 items-center rounded-control bg-warning-surface px-1 text-badge leading-none font-medium text-warning">
                 {badge}
               </span>
             )}
