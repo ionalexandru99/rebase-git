@@ -11,8 +11,8 @@ const dateFormat = new Intl.DateTimeFormat(undefined, {
 });
 
 const fence = /^\s*```/;
-const ownLine = /^\s*(\||#|```)/;
-const itemStart = /^\s*([-*+>]\s|\d+[.)]\s)/;
+const ownLine = /^\s*(\||#+\s|```)/;
+const blockStart = /^(\s{4}|\t|\s*([-*+>]\s|\d+[.)]\s)|[A-Za-z][\w-]*: )/;
 
 export function CommitMetadata({
   details,
@@ -60,7 +60,7 @@ export function CommitMetadata({
       {body ? (
         <p
           ref={preview}
-          className={`mt-1 break-words text-sm text-muted-foreground ${expanded ? "max-h-40 overflow-y-auto whitespace-pre-wrap" : "line-clamp-2"}`}
+          className={`mt-1 whitespace-pre-wrap break-words text-sm text-muted-foreground ${expanded ? "max-h-40 overflow-y-auto" : "line-clamp-2"}`}
         >
           {expanded ? body : lede}
         </p>
@@ -113,7 +113,7 @@ function reflowMessage(message: string) {
       previous.trim() === "" ||
       ownLine.test(line) ||
       ownLine.test(previous) ||
-      itemStart.test(line)
+      blockStart.test(line)
     )
       text += `\n${line}`;
     else text += ` ${line.trim()}`;

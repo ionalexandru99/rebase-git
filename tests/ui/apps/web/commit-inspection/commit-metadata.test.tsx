@@ -123,7 +123,11 @@ describe("commit metadata", () => {
               "Refresh history",
               "",
               "The cache went stale",
-              "after a fetch.",
+              "after a fetch reported in",
+              "#123.",
+              "",
+              "    at refresh (cache.ts:1)",
+              "    at fetch (fetch.ts:2)",
               "",
               "## Changes",
               "- Refresh on fetch",
@@ -137,6 +141,9 @@ describe("commit metadata", () => {
               "second",
               "third",
               "```",
+              "",
+              "Fixes: #123",
+              "Co-authored-by: Jamie <jamie@example.test>",
             ].join("\n"),
           }}
         />
@@ -151,7 +158,10 @@ describe("commit metadata", () => {
       )
       .toBe(
         [
-          "The cache went stale after a fetch.",
+          "The cache went stale after a fetch reported in #123.",
+          "",
+          "    at refresh (cache.ts:1)",
+          "    at fetch (fetch.ts:2)",
           "",
           "## Changes",
           "- Refresh on fetch",
@@ -164,6 +174,9 @@ describe("commit metadata", () => {
           "second",
           "third",
           "```",
+          "",
+          "Fixes: #123",
+          "Co-authored-by: Jamie <jamie@example.test>",
         ].join("\n"),
       );
   });
