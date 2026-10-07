@@ -120,7 +120,7 @@ export function PullRequestLink({
     <span className="flex shrink-0 items-center gap-1 pr-1.5 text-[.78rem] tabular-nums">
       <button
         aria-label={`Open ${describePullRequest(newest)}`}
-        className={`inline-flex items-center gap-1 rounded-sm underline-offset-2 outline-none hover:underline ${stateIcons[newest.state].className}`}
+        className={`inline-flex items-center gap-1 rounded-control underline-offset-2 outline-none hover:underline ${stateIcons[newest.state].className}`}
         onClick={() => openPullRequest(newest)}
         tabIndex={-1}
         type="button"
@@ -154,7 +154,7 @@ export function PullRequestList({
       <PullRequestStateIcon pullRequest={pullRequest} />
       <button
         aria-label={`Open ${describePullRequest(pullRequest)}`}
-        className="shrink-0 rounded-sm text-muted-foreground tabular-nums underline-offset-2 outline-none hover:text-foreground hover:underline focus-visible:text-foreground focus-visible:underline"
+        className="shrink-0 rounded-control text-muted-foreground tabular-nums underline-offset-2 outline-none hover:text-foreground hover:underline focus-visible:text-foreground focus-visible:underline"
         onClick={() => openPullRequest(pullRequest)}
         tabIndex={focusable ? 0 : -1}
         type="button"
@@ -166,7 +166,7 @@ export function PullRequestList({
       </span>
       <button
         aria-label={`Unlink ${pullRequestTerms[pullRequest.kind].name} ${pullRequestReference(pullRequest)}`}
-        className="grid size-5 shrink-0 place-items-center rounded-sm text-muted-foreground opacity-0 outline-none group-hover/pr:opacity-100 hover:bg-accent hover:text-foreground focus-visible:opacity-100 focus-visible:ring-1 focus-visible:ring-ring"
+        className="grid size-5 shrink-0 place-items-center rounded-control text-muted-foreground opacity-0 outline-none group-hover/pr:opacity-100 hover:bg-accent hover:text-foreground focus-visible:opacity-100 focus-visible:ring-1 focus-visible:ring-ring"
         onClick={() => onUnlink(pullRequest)}
         tabIndex={focusable ? 0 : -1}
         type="button"

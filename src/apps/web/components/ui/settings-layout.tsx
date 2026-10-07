@@ -40,7 +40,7 @@ export function SettingsSection({
         <h2 className="text-sm font-normal text-foreground/70">{title}</h2>
         {action}
       </div>
-      <div className="rounded-xl border border-border/60 bg-card/40 [&>*+*]:border-t [&>*+*]:border-border/50">
+      <div className="rounded-surface border border-border/60 bg-card/40 [&>*+*]:border-t [&>*+*]:border-border/50">
         {children}
       </div>
     </section>
@@ -105,7 +105,7 @@ export function SettingsRow({
               <code className="text-xs text-muted-foreground">{value}</code>
             )}
             {badge === undefined ? null : (
-              <span className="inline-flex h-4 items-center rounded-[.25rem] bg-status-connecting/15 px-1 text-[.625rem] leading-none font-medium text-status-connecting">
+              <span className="inline-flex h-4 items-center rounded-control bg-status-connecting/15 px-1 text-[.625rem] leading-none font-medium text-status-connecting">
                 {badge}
               </span>
             )}

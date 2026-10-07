@@ -2,9 +2,9 @@ import type { Icon } from "@tabler/icons-react";
 import { type JSX, useId } from "react";
 
 const groupClassName =
-  "flex shrink-0 gap-0.5 rounded-md border border-sidebar-border bg-muted/30 p-0.5";
+  "flex shrink-0 gap-0.5 rounded-surface border border-sidebar-border bg-muted/30 p-0.5";
 const itemClassName =
-  "grid h-6 w-7 place-items-center rounded-sm text-muted-foreground";
+  "grid h-6 w-7 place-items-center rounded-control text-muted-foreground";
 
 export interface IconOption<Value extends string> {
   readonly value: Value;

@@ -140,7 +140,7 @@ export function PlanList({
                 className={cn(
                   "relative flex h-7 cursor-default items-center gap-2 px-3 whitespace-nowrap",
                   folds(row.action) &&
-                    "pl-8 before:absolute before:top-1/2 before:bottom-0 before:left-4 before:w-2.5 before:rounded-tl before:border-border before:border-t before:border-l",
+                    "pl-8 before:absolute before:top-1/2 before:bottom-0 before:left-4 before:w-2.5 before:rounded-tl-control before:border-border before:border-t before:border-l",
                   index === selected && "bg-accent/60",
                   index === invalid && "text-destructive",
                 )}

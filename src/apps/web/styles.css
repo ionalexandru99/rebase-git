@@ -6,13 +6,14 @@
 @custom-variant dark (&:is(.dark *));
 
 :root {
-  --radius: 0.625rem;
   --background: #e6ebf1;
   --foreground: #1a2230;
   --card: #f5f7fa;
   --card-foreground: #1a2230;
   --popover: #ffffff;
   --popover-foreground: #1a2230;
+  --popover-accent: #d6dde8;
+  --dialog: #ffffff;
   --primary: #3a6ee0;
   --primary-foreground: #ffffff;
   --secondary: #dde3eb;
@@ -47,6 +48,12 @@
   --lane-7: #b45309;
   --lane-foreground: #ffffff;
   --tag-label: #64748b;
+  --elevation-raised:
+    inset 0 1px 0 rgb(255 255 255 / 18%), 0 1px 3px rgb(20 40 80 / 10%),
+    0 1px 2px rgb(20 40 80 / 14%);
+  --elevation-menu:
+    0 12px 28px rgb(20 40 80 / 16%), 0 4px 8px rgb(20 40 80 / 8%);
+  --elevation-dialog: 0 24px 56px rgb(20 40 80 / 24%);
   color-scheme: light;
 }
 
@@ -55,8 +62,10 @@
   --foreground: #f4f4f5;
   --card: #111115;
   --card-foreground: #f4f4f5;
-  --popover: #1a1a20;
+  --popover: #27272f;
   --popover-foreground: #f4f4f5;
+  --popover-accent: #363641;
+  --dialog: #202027;
   --primary: #7c8cff;
   --primary-foreground: #ffffff;
   --secondary: #1d1d23;
@@ -91,17 +100,23 @@
   --lane-7: #f59e0b;
   --lane-foreground: #0e141c;
   --tag-label: #a8b4c8;
+  --elevation-raised:
+    inset 0 1px 0 rgb(255 255 255 / 5%), 0 1px 2px rgb(0 0 0 / 40%);
+  --elevation-menu:
+    inset 0 1px 0 rgb(255 255 255 / 7%), 0 12px 28px rgb(0 0 0 / 50%),
+    0 4px 8px rgb(0 0 0 / 30%);
+  --elevation-dialog:
+    inset 0 1px 0 rgb(255 255 255 / 6%), 0 24px 56px rgb(0 0 0 / 60%);
   color-scheme: dark;
 }
 
 @theme inline {
   --font-heading: var(--font-sans);
   --font-sans: "Inter Variable", sans-serif;
-  --radius-sm: calc(var(--radius) * 0.6);
-  --radius-md: calc(var(--radius) * 0.8);
-  --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) * 1.4);
-  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-*: initial;
+  --radius-control: 6px;
+  --radius-surface: 8px;
+  --shadow-raised: var(--elevation-raised);
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-card: var(--card);
@@ -132,6 +147,23 @@
   --color-status-available: var(--status-available);
   --color-status-connecting: var(--status-connecting);
   --color-status-unavailable: var(--status-unavailable);
+}
+
+@utility elevation-menu {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-surface);
+  background-color: var(--popover);
+  color: var(--popover-foreground);
+  box-shadow: var(--elevation-menu);
+  --accent: var(--popover-accent);
+}
+
+@utility elevation-dialog {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-surface);
+  background-color: var(--dialog);
+  color: var(--popover-foreground);
+  box-shadow: var(--elevation-dialog);
 }
 
 @utility cap-centered {

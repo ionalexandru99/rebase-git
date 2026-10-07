@@ -9,7 +9,7 @@ function Switch({
   return (
     <SwitchPrimitive.Root
       className={cn(
-        "inline-flex h-5 w-9 shrink-0 items-center rounded-full bg-input p-0.5 outline-none transition-colors data-checked:bg-primary data-disabled:cursor-not-allowed data-disabled:opacity-45 focus-visible:ring-2 focus-visible:ring-ring/40",
+        "inline-flex h-5 w-9 shrink-0 items-center rounded-full bg-input p-0.5 outline-none transition-colors data-checked:bg-primary data-disabled:cursor-not-allowed data-disabled:opacity-40 focus-visible:ring-2 focus-visible:ring-ring/40",
         className,
       )}
       {...props}

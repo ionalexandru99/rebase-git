@@ -188,7 +188,7 @@ function ExpandedProjectsSidebar({
               <div className="flex h-9 min-w-0 items-center gap-1.5 px-1">
                 <CollapsibleTrigger
                   aria-label={`${environment.expanded ? "Collapse" : "Expand"} ${environment.name}`}
-                  className="flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground outline-none hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring/40"
+                  className="flex size-7 shrink-0 items-center justify-center rounded-control text-muted-foreground outline-none hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring/40"
                 >
                   <IconChevronDown
                     aria-hidden="true"
@@ -217,7 +217,7 @@ function ExpandedProjectsSidebar({
                 {filterEnvironmentRepositories(environment, filterQuery).map(
                   (repository) => (
                     <div
-                      className={`group grid h-11 w-full min-w-0 grid-cols-[minmax(0,1fr)_1.875rem_1.875rem] items-center rounded-lg pr-1.5 pl-2.5 text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground ${navigation.selectedRepositoryId === repository.id ? "bg-sidebar-accent text-sidebar-accent-foreground" : ""}`}
+                      className={`group grid h-11 w-full min-w-0 grid-cols-[minmax(0,1fr)_1.875rem_1.875rem] items-center rounded-control pr-1.5 pl-2.5 text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground ${navigation.selectedRepositoryId === repository.id ? "bg-sidebar-accent text-sidebar-accent-foreground" : ""}`}
                       key={repository.id}
                     >
                       <button
@@ -228,7 +228,7 @@ function ExpandedProjectsSidebar({
                             : undefined
                         }
                         aria-label={`Open ${repository.name}`}
-                        className="grid h-full min-w-0 grid-cols-[1.875rem_minmax(0,1fr)] items-center gap-2.5 text-left text-base outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring/40 disabled:pointer-events-none disabled:opacity-45"
+                        className="grid h-full min-w-0 grid-cols-[1.875rem_minmax(0,1fr)] items-center gap-2.5 text-left text-base outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring/40 disabled:pointer-events-none disabled:opacity-40"
                         disabled={repository.disabled}
                         onClick={() =>
                           selectRepository(environment.id, repository)
@@ -236,7 +236,7 @@ function ExpandedProjectsSidebar({
                         type="button"
                       >
                         <RepositoryBadge
-                          className="size-7.5 rounded-md text-sm"
+                          className="size-7.5 rounded-control text-sm"
                           color={repository.color}
                           name={repository.name}
                         />
@@ -252,7 +252,7 @@ function ExpandedProjectsSidebar({
                       />
                       <button
                         aria-label={`Close ${repository.name}`}
-                        className="grid size-7.5 place-items-center rounded-md text-muted-foreground outline-none hover:bg-sidebar-accent-foreground/10 hover:text-sidebar-accent-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring/40"
+                        className="grid size-7.5 place-items-center rounded-control text-muted-foreground outline-none hover:bg-sidebar-accent-foreground/10 hover:text-sidebar-accent-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring/40"
                         onClick={() =>
                           closeRepository(environment.id, repository)
                         }
@@ -300,7 +300,7 @@ function CollapsedProjectsSidebar({
       <button
         type="button"
         aria-label="Expand Projects sidebar"
-        className="mx-auto mt-1 grid size-10 shrink-0 place-items-center rounded-md text-muted-foreground outline-none hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring/40"
+        className="mx-auto mt-1 grid size-10 shrink-0 place-items-center rounded-control text-muted-foreground outline-none hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring/40"
         onClick={expand}
       >
         <IconLayoutSidebarLeftExpand aria-hidden="true" className="size-5" />
@@ -312,7 +312,7 @@ function CollapsedProjectsSidebar({
           navigation.workspaceView === "open-project" ? "page" : undefined
         }
         aria-label="Open project"
-        className={`mx-auto mt-2 grid size-10 shrink-0 place-items-center rounded-md text-sidebar-foreground outline-none hover:bg-sidebar-accent focus-visible:ring-2 focus-visible:ring-sidebar-ring/40 ${navigation.workspaceView === "open-project" ? "bg-sidebar-accent text-sidebar-accent-foreground" : ""}`}
+        className={`mx-auto mt-2 grid size-10 shrink-0 place-items-center rounded-control text-sidebar-foreground outline-none hover:bg-sidebar-accent focus-visible:ring-2 focus-visible:ring-sidebar-ring/40 ${navigation.workspaceView === "open-project" ? "bg-sidebar-accent text-sidebar-accent-foreground" : ""}`}
         onClick={openProject}
       >
         <IconFolderPlus aria-hidden="true" className="size-5" />
@@ -335,7 +335,7 @@ function CollapsedProjectsSidebar({
                 type="button"
                 aria-expanded={environment.expanded}
                 aria-label={environmentLabel}
-                className={`grid size-10 place-items-center rounded-md outline-none hover:bg-sidebar-accent focus-visible:ring-2 focus-visible:ring-sidebar-ring/40 ${environmentStatus.availability === "unavailable" ? "text-status-unavailable" : "text-muted-foreground"}`}
+                className={`grid size-10 place-items-center rounded-control outline-none hover:bg-sidebar-accent focus-visible:ring-2 focus-visible:ring-sidebar-ring/40 ${environmentStatus.availability === "unavailable" ? "text-status-unavailable" : "text-muted-foreground"}`}
                 onClick={() => toggleEnvironment(environment.id)}
               >
                 <IconDeviceLaptop aria-hidden="true" className="size-5" />
@@ -352,7 +352,7 @@ function CollapsedProjectsSidebar({
                             : undefined
                         }
                         aria-label={repository.name}
-                        className={`rounded-md outline-none hover:brightness-125 focus-visible:ring-2 focus-visible:ring-sidebar-ring/40 disabled:pointer-events-none disabled:opacity-45 ${navigation.selectedRepositoryId === repository.id ? "ring-[1.5px] ring-sidebar-accent-foreground ring-offset-2 ring-offset-sidebar" : ""}`}
+                        className={`rounded-control outline-none hover:brightness-125 focus-visible:ring-2 focus-visible:ring-sidebar-ring/40 disabled:pointer-events-none disabled:opacity-40 ${navigation.selectedRepositoryId === repository.id ? "ring-[1.5px] ring-sidebar-accent-foreground ring-offset-2 ring-offset-sidebar" : ""}`}
                         disabled={repository.disabled}
                         key={repository.id}
                         onClick={() =>
@@ -361,7 +361,7 @@ function CollapsedProjectsSidebar({
                         type="button"
                       >
                         <RepositoryBadge
-                          className="size-10 rounded-md text-sm"
+                          className="size-10 rounded-control text-sm"
                           color={repository.color}
                           name={repository.name}
                         />
@@ -390,7 +390,7 @@ function SidebarSettings({
       <button
         type="button"
         aria-label="Settings"
-        className="mx-auto mb-3 grid size-10 shrink-0 place-items-center rounded-md text-muted-foreground outline-none hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring/40"
+        className="mx-auto mb-3 grid size-10 shrink-0 place-items-center rounded-control text-muted-foreground outline-none hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring/40"
         onClick={openSettings}
       >
         <IconSettings aria-hidden="true" className="size-5" />

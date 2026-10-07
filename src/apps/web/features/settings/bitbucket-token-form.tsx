@@ -136,11 +136,11 @@ export function BitbucketTokenForm({
       >
         <TabsList
           aria-label="Bitbucket token kind"
-          className="w-fit rounded-lg bg-muted/50 p-0.5"
+          className="w-fit rounded-surface bg-muted/50 p-0.5"
         >
           {(Object.keys(methods) as Method[]).map((kind) => (
             <TabsTrigger
-              className="h-7 rounded-md px-3 text-sm data-active:bg-background"
+              className="h-7 rounded-control px-3 text-sm data-active:bg-background"
               key={kind}
               value={kind}
             >
@@ -220,7 +220,7 @@ function Scopes({
         openOnHover
         render={
           <button
-            className={`cursor-help underline decoration-muted-foreground/70 decoration-dotted underline-offset-[3px] outline-none focus-visible:rounded-sm focus-visible:ring-2 focus-visible:ring-ring/30 ${missing.length > 0 ? "text-status-connecting" : "text-foreground/90"}`}
+            className={`cursor-help underline decoration-muted-foreground/70 decoration-dotted underline-offset-[3px] outline-none focus-visible:rounded-control focus-visible:ring-2 focus-visible:ring-ring/30 ${missing.length > 0 ? "text-status-connecting" : "text-foreground/90"}`}
             type="button"
           />
         }

@@ -59,7 +59,7 @@ export function HistorySearchResults({
               <button
                 type="button"
                 aria-current={selected === row.index ? "true" : undefined}
-                className="flex w-full flex-col gap-1 rounded-sm px-2 py-2 text-left text-[.85rem] leading-5 outline-none hover:bg-accent focus-visible:bg-accent disabled:opacity-50 aria-current:bg-accent"
+                className="flex w-full flex-col gap-1 rounded-control px-2 py-2 text-left text-[.85rem] leading-5 outline-none hover:bg-accent focus-visible:bg-accent disabled:opacity-40 aria-current:bg-accent"
                 disabled={busy}
                 onClick={() => onNavigate(row.index)}
               >

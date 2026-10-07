@@ -62,7 +62,7 @@ export function HistoryScopeStrip({
               />
             ))}
             {selections.length === 0 && detachedHead !== undefined ? (
-              <span className="inline-flex h-6 items-center rounded-sm border border-border/70 bg-background/60 px-2 text-[.85rem] text-foreground">
+              <span className="inline-flex h-6 items-center rounded-control border border-border/70 bg-background/60 px-2 text-[.85rem] text-foreground">
                 Detached HEAD
               </span>
             ) : null}
@@ -94,7 +94,7 @@ export function HistoryScopeStrip({
         <button
           type="button"
           onClick={onReset}
-          className="h-6 shrink-0 rounded-sm px-2 text-[.85rem] text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:outline-2 focus-visible:outline-primary"
+          className="h-6 shrink-0 rounded-control px-2 text-[.85rem] text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:outline-2 focus-visible:outline-primary"
         >
           Reset filters
         </button>

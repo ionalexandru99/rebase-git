@@ -25,7 +25,7 @@ function AlertDialogContent({
       <AlertDialogPrimitive.Viewport className="fixed inset-0 z-50 grid place-items-center overflow-y-auto p-4">
         <AlertDialogPrimitive.Popup
           className={cn(
-            "w-full max-w-md rounded-lg border border-border bg-popover p-5 text-popover-foreground shadow-2xl outline-none",
+            "w-full max-w-md elevation-dialog p-5 outline-none",
             className,
           )}
           data-slot="alert-dialog-content"

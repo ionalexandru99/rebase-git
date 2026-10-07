@@ -162,7 +162,7 @@ export function DockedTree({
       aria-busy={busy}
       aria-label="Branches"
       aria-multiselectable="true"
-      className={`group/tree flex min-h-0 flex-1 flex-col outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring/40 ${busy ? "cursor-progress opacity-70" : ""}`}
+      className={`group/tree flex min-h-0 flex-1 flex-col outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring/40 ${busy ? "cursor-progress opacity-60" : ""}`}
       onKeyDown={onKeyDown}
       ref={treeRef}
       role="tree"

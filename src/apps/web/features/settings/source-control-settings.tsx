@@ -328,7 +328,7 @@ function Checking({ failed }: { readonly failed: boolean }) {
 
 function Code({ children }: { readonly children: ReactNode }) {
   return (
-    <code className="rounded bg-muted px-1 py-px text-[.625rem]">
+    <code className="rounded-control bg-muted px-1 py-px text-[.625rem]">
       {children}
     </code>
   );

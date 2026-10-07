@@ -18,9 +18,9 @@ export function CommitGraphLoading() {
           key={rowId}
         >
           <span className="h-px w-7 bg-border" />
-          <span className="h-2 w-2/5 rounded-sm bg-muted" />
-          <span className="h-2 w-20 rounded-sm bg-muted" />
-          <span className="h-2 w-12 rounded-sm bg-muted" />
+          <span className="h-2 w-2/5 rounded-control bg-muted" />
+          <span className="h-2 w-20 rounded-control bg-muted" />
+          <span className="h-2 w-12 rounded-control bg-muted" />
         </div>
       ))}
     </div>

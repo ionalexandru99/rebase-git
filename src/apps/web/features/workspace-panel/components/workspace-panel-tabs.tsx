@@ -153,7 +153,7 @@ function PanelTab({
   return (
     <div
       className={cn(
-        "group/tab flex h-6 max-w-36 shrink-0 items-center gap-1 rounded-md pl-1.5 text-xs",
+        "group/tab flex h-6 max-w-36 shrink-0 items-center gap-1 rounded-control pl-1.5 text-xs",
         active
           ? "bg-accent text-foreground"
           : "text-muted-foreground hover:bg-accent/60 hover:text-foreground",
@@ -178,7 +178,7 @@ function PanelTab({
       <TabsTrigger
         value={tab}
         aria-label={label}
-        className="h-full min-w-0 rounded-sm pr-2 text-inherit"
+        className="h-full min-w-0 rounded-control pr-2 text-inherit"
         onKeyDown={(event) => {
           if (event.key === "Delete") {
             event.preventDefault();

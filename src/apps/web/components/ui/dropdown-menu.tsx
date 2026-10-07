@@ -38,10 +38,7 @@ function DropdownMenuContent({
         sideOffset={sideOffset}
       >
         <Menu.Popup
-          className={cn(
-            "w-50 rounded-[.55rem] border border-border bg-popover p-[.3rem] text-popover-foreground shadow-[0_.75rem_2.5rem_rgb(0_0_0/14%)] dark:shadow-[0_.75rem_2.5rem_rgb(0_0_0/45%)] outline-none",
-            className,
-          )}
+          className={cn("w-50 elevation-menu p-1 outline-none", className)}
           data-slot="dropdown-menu-content"
           {...props}
         >
@@ -56,7 +53,7 @@ function DropdownMenuItem({ className, ...props }: Menu.Item.Props) {
   return (
     <Menu.Item
       className={cn(
-        "flex h-8 cursor-default items-center gap-2 rounded-[.35rem] px-2 text-xs text-foreground/80 outline-none select-none data-disabled:pointer-events-none data-disabled:opacity-45 data-highlighted:bg-accent data-highlighted:text-foreground [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0",
+        "flex h-8 cursor-default items-center gap-2 rounded-control px-2 text-xs text-foreground/80 outline-none select-none data-disabled:pointer-events-none data-disabled:opacity-40 data-highlighted:bg-accent data-highlighted:text-foreground [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0",
         className,
       )}
       data-slot="dropdown-menu-item"
@@ -77,7 +74,7 @@ function DropdownMenuRadioItem({
   return (
     <Menu.RadioItem
       className={cn(
-        "flex h-8 cursor-default items-center gap-2 rounded-[.35rem] px-2 text-[.85rem] text-foreground/80 outline-none select-none data-highlighted:bg-accent data-highlighted:text-foreground",
+        "flex h-8 cursor-default items-center gap-2 rounded-control px-2 text-[.85rem] text-foreground/80 outline-none select-none data-highlighted:bg-accent data-highlighted:text-foreground",
         className,
       )}
       closeOnClick

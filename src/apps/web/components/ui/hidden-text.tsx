@@ -16,7 +16,7 @@ export function HiddenText({
     <button
       aria-label={shown ? hideLabel : showLabel}
       aria-pressed={shown}
-      className={`cursor-pointer rounded-sm hover:text-foreground ${className} ${shown ? "text-foreground/90" : "blur-xs select-none"}`}
+      className={`cursor-pointer rounded-control hover:text-foreground ${className} ${shown ? "text-foreground/90" : "blur-xs select-none"}`}
       onClick={() => setShown((current) => !current)}
       type="button"
     >

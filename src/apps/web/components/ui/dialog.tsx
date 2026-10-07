@@ -32,7 +32,7 @@ function DialogContent({
       <DialogPrimitive.Viewport className="fixed inset-0 z-50 grid place-items-center overflow-y-auto p-4">
         <DialogPrimitive.Popup
           className={cn(
-            "relative w-full rounded-[.625rem] border border-border bg-popover text-popover-foreground shadow-[0_1.5rem_4rem_rgb(0_0_0/18%)] dark:shadow-[0_1.5rem_4rem_rgb(0_0_0/65%)] outline-none",
+            "relative w-full elevation-dialog outline-none",
             className,
           )}
           data-slot="dialog-content"

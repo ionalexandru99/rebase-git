@@ -85,7 +85,7 @@ export function HistoryList({
         </span>
         <span
           aria-hidden="true"
-          className="h-px min-w-3 flex-1 bg-current opacity-25"
+          className="h-px min-w-3 flex-1 bg-current opacity-40"
         />
       </div>
       <ContextMenu
@@ -139,7 +139,7 @@ function HistoryRow({
   return (
     <div
       aria-selected={chosen}
-      className={`flex h-11 cursor-default flex-col justify-center rounded-md pr-1 pl-2.5 text-[.85rem] select-none ${
+      className={`flex h-11 cursor-default flex-col justify-center rounded-control pr-1 pl-2.5 text-[.85rem] select-none ${
         chosen
           ? "bg-sidebar-accent text-sidebar-accent-foreground"
           : "text-sidebar-foreground hover:bg-sidebar-accent/75 hover:text-sidebar-accent-foreground"

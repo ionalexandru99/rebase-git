@@ -162,7 +162,7 @@ export function WorktreeList({
               <div aria-hidden="true" className="mx-1 my-0.5 h-px bg-border" />
               <button
                 aria-selected={highlighted === newWorktreeId}
-                className={`flex h-8 cursor-default items-center gap-2 rounded-[.35rem] px-2 text-left text-[.85rem] outline-none disabled:opacity-45 ${highlighted === newWorktreeId ? "bg-accent text-foreground" : "text-foreground/80"}`}
+                className={`flex h-8 cursor-default items-center gap-2 rounded-control px-2 text-left text-[.85rem] outline-none disabled:opacity-40 ${highlighted === newWorktreeId ? "bg-accent text-foreground" : "text-foreground/80"}`}
                 data-worktree={newWorktreeId}
                 disabled={!worktrees.writable}
                 id={elementId(newWorktreeId)}
@@ -216,7 +216,7 @@ function WorktreeOption({
           ...(row.staged === 0 ? [] : [`${row.staged} staged`]),
         ].join(", ")}
         aria-selected={highlighted}
-        className={`flex h-10 min-w-0 flex-1 cursor-default items-center gap-2 rounded-[.35rem] px-2 text-left outline-none ${highlighted ? "bg-accent text-foreground" : "text-foreground/80"} ${missing ? "pr-16" : ""}`}
+        className={`flex h-10 min-w-0 flex-1 cursor-default items-center gap-2 rounded-control px-2 text-left outline-none ${highlighted ? "bg-accent text-foreground" : "text-foreground/80"} ${missing ? "pr-16" : ""}`}
         data-worktree={worktree.path}
         id={elementId}
         onClick={onSelect}
@@ -230,7 +230,7 @@ function WorktreeOption({
           ) : null}
         </span>
         <span
-          className={`flex min-w-0 flex-1 flex-col ${missing ? "opacity-50" : ""}`}
+          className={`flex min-w-0 flex-1 flex-col ${missing ? "opacity-60" : ""}`}
         >
           <span className="truncate text-[.85rem]">{row.name}</span>
           <span className="truncate text-[.72rem] text-muted-foreground">
