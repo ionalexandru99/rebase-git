@@ -103,8 +103,8 @@ async function measureCommitGraph(
       .getByRole("button", { name: /^rebase-performance Repository/ })
       .click();
     await page.evaluate(() => window.__startGraphMeasurement());
-    await page
-      .getByRole("button", { name: "Open repository", exact: true })
+    await picker
+      .getByRole("button", { name: "Open rebase-performance", exact: true })
       .click();
     const history = page.getByRole("grid", { name: "Commit history" });
     await page.evaluate(async () => {

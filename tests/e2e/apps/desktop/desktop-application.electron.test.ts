@@ -125,8 +125,8 @@ async function openRepository(window: Page, repositoryName: string) {
     .filter({ hasText: repositoryName })
     .first()
     .click();
-  await window
-    .getByRole("button", { name: "Open repository", exact: true })
+  await picker
+    .getByRole("button", { name: `Open ${repositoryName}`, exact: true })
     .click();
   await expect(picker).not.toBeVisible();
 }

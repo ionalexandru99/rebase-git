@@ -64,7 +64,8 @@ export function useFolderBrowser(
       ? undefined
       : selection._tag === "Folder"
         ? selection.path
-        : selection._tag === "Current"
+        : selection._tag === "Current" &&
+            (purpose._tag === "Choose" || directory.repository)
           ? directory.path
           : selection._tag === "NewFolder" && selection.name.trim() !== ""
             ? childPath(directory.path, selection.name.trim())

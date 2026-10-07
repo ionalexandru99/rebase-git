@@ -2,6 +2,7 @@ import { describe, expect, it } from "vite-plus/test";
 import type { EnvironmentDirectoryEntry } from "#contracts/environment-filesystem/environment-filesystem.contract.ts";
 import {
   filterDirectoryEntries,
+  folderName,
   modifiedDateLabel,
   repositorySelectionError,
 } from "#web/features/repository-folder-picker/repository-folder-picker-state.ts";
@@ -20,6 +21,12 @@ describe("repository folder picker state", () => {
   it("filters the current directory without changing its ordering", () => {
     expect(filterDirectoryEntries(entries, "BASE")).toEqual([entries[0]]);
     expect(filterDirectoryEntries(entries, " ")).toBe(entries);
+  });
+
+  it("names a folder by its last path segment on any platform", () => {
+    expect(folderName("/home/alex/code/rebase-git/")).toBe("rebase-git");
+    expect(folderName("C:\\Users\\alex\\notes")).toBe("notes");
+    expect(folderName("/")).toBe("/");
   });
 
   it("uses compact modified-date labels", () => {

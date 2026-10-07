@@ -5,7 +5,7 @@ import {
   IconSearch,
   IconX,
 } from "@tabler/icons-react";
-import { type JSX, type ReactNode, useEffect, useRef, useState } from "react";
+import { type JSX, type ReactNode, useState } from "react";
 import type { RepositoryCatalogEntry } from "#contracts/repository-catalog/repository-catalog.contract.ts";
 import { Button } from "#web/components/ui/button.tsx";
 import {
@@ -23,11 +23,13 @@ import {
 } from "#web/features/repository-folder-picker/hooks/use-folder-browser.ts";
 import { RepositoryDirectoryList } from "#web/features/repository-folder-picker/repository-directory-list.tsx";
 import {
-  type RepositoryFolderPickerEnvironment,
-  RepositoryFolderPickerEnvironmentSelect,
-} from "#web/features/repository-folder-picker/repository-folder-picker-environment-select.tsx";
-import { filterDirectoryEntries } from "#web/features/repository-folder-picker/repository-folder-picker-state.ts";
-import { useEnvironment } from "#web/platform/query/environment-context.tsx";
+  filterDirectoryEntries,
+  folderName,
+} from "#web/features/repository-folder-picker/repository-folder-picker-state.ts";
+import {
+  type EnvironmentAvailability,
+  useEnvironment,
+} from "#web/platform/query/environment-context.tsx";
 
 const actionLabels: Record<FolderAction, string> = {
   Open: "Open repository",
@@ -44,7 +46,6 @@ const runningLabels: Record<FolderAction, string> = {
 export function RepositoryFolderBrowser({
   title,
   environment,
-  environmentSelect,
   purpose,
 }: {
   readonly title: string;
@@ -52,17 +53,11 @@ export function RepositoryFolderBrowser({
     readonly available: boolean;
     readonly status: string;
   };
-  readonly environmentSelect?: ReactNode;
   readonly purpose: FolderPickerPurpose;
 }): JSX.Element {
   const browser = useFolderBrowser(environment, purpose);
   const { directory, loading } = browser;
-  const [searching, setSearching] = useState(false);
   const [query, setQuery] = useState("");
-  const searchRef = useRef<HTMLInputElement>(null);
-  useEffect(() => {
-    if (searching) searchRef.current?.focus();
-  }, [searching]);
   const navigate = (path: string) => {
     setQuery("");
     browser.navigate(path);
@@ -73,14 +68,13 @@ export function RepositoryFolderBrowser({
 
   return (
     <>
-      <header className="flex min-h-14 shrink-0 items-center gap-3 border-b border-border pr-3 pl-[1.1rem]">
+      <header className="flex h-14 shrink-0 items-center gap-3 border-b border-border pr-3 pl-4">
         <DialogTitle className="min-w-0 flex-1 text-base font-semibold">
           {title}
         </DialogTitle>
         <DialogDescription className="sr-only">
           Browse folders on an Environment.
         </DialogDescription>
-        {environmentSelect}
         <DialogClose
           aria-label="Close"
           className="grid size-8 place-items-center rounded-md text-muted-foreground outline-none hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/30"
@@ -89,7 +83,7 @@ export function RepositoryFolderBrowser({
         </DialogClose>
       </header>
 
-      <div className="flex min-h-[3.25rem] shrink-0 items-center gap-2 border-b border-border px-3 py-2">
+      <div className="flex h-12 shrink-0 items-center gap-2 border-b border-border px-3">
         <Button
           aria-label="Parent directory"
           disabled={directory?.parentPath === undefined || loading}
@@ -100,74 +94,44 @@ export function RepositoryFolderBrowser({
         >
           <IconArrowUp aria-hidden="true" />
         </Button>
-        {searching ? (
+        <nav
+          aria-label="Current directory"
+          className="flex min-w-0 flex-1 items-center gap-0.5 overflow-x-auto text-xs whitespace-nowrap text-muted-foreground"
+        >
+          {directory?.breadcrumbs.map((breadcrumb, index) => (
+            <span className="flex items-center gap-0.5" key={breadcrumb.path}>
+              {index > 0 ? (
+                <span aria-hidden="true" className="text-muted-foreground/50">
+                  /
+                </span>
+              ) : null}
+              <button
+                aria-current={
+                  breadcrumb.path === directory.path ? "page" : undefined
+                }
+                className="rounded-sm px-1.5 py-1 outline-none hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/30 aria-[current=page]:font-medium aria-[current=page]:text-foreground aria-[current=page]:hover:bg-transparent"
+                disabled={breadcrumb.path === directory.path || loading}
+                onClick={() => navigate(breadcrumb.path)}
+                type="button"
+              >
+                {breadcrumb.name}
+              </button>
+            </span>
+          ))}
+        </nav>
+        <div className="relative w-40 shrink-0">
+          <IconSearch
+            aria-hidden="true"
+            className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground"
+          />
           <Input
             aria-label="Filter current directory"
-            className="h-8 min-w-0 flex-1 bg-white/[.03] sm:h-8"
+            className="h-8 pl-8 text-xs sm:h-8 sm:text-xs"
             onChange={(event) => setQuery(event.target.value)}
-            placeholder="Filter current directory"
-            ref={searchRef}
+            placeholder="Filter"
             value={query}
           />
-        ) : (
-          <nav
-            aria-label="Current directory"
-            className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto text-xs whitespace-nowrap text-muted-foreground"
-          >
-            {directory?.breadcrumbs.map((breadcrumb, index) => (
-              <span className="flex items-center gap-1" key={breadcrumb.path}>
-                {index > 0 ? (
-                  <span aria-hidden="true" className="text-foreground/25">
-                    /
-                  </span>
-                ) : null}
-                <button
-                  className="rounded-sm px-1.5 py-1 outline-none hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/30 disabled:bg-accent disabled:text-foreground"
-                  disabled={breadcrumb.path === directory.path || loading}
-                  onClick={() => navigate(breadcrumb.path)}
-                  type="button"
-                >
-                  {breadcrumb.name}
-                </button>
-              </span>
-            ))}
-          </nav>
-        )}
-        {purpose._tag === "Open" ? (
-          <Button
-            className="text-xs"
-            disabled={
-              directory === undefined ||
-              directory.repository ||
-              browser.newFolder !== undefined
-            }
-            onClick={() => browser.nameNewFolder("")}
-            size="sm"
-            type="button"
-            variant="ghost"
-          >
-            <IconFolderPlus aria-hidden="true" />
-            New folder
-          </Button>
-        ) : null}
-        <Button
-          aria-label={
-            searching ? "Close directory filter" : "Filter current directory"
-          }
-          onClick={() => {
-            setSearching((current) => !current);
-            if (searching) setQuery("");
-          }}
-          size="icon-sm"
-          type="button"
-          variant="ghost"
-        >
-          {searching ? (
-            <IconX aria-hidden="true" />
-          ) : (
-            <IconSearch aria-hidden="true" />
-          )}
-        </Button>
+        </div>
       </div>
 
       <RepositoryDirectoryList
@@ -185,20 +149,30 @@ export function RepositoryFolderBrowser({
         truncated={directory?.truncated ?? false}
       />
 
-      <footer className="flex min-h-[3.75rem] shrink-0 items-center gap-2 border-t border-border px-3 py-2">
-        <div className="min-w-0 flex-1">
-          <p className="truncate font-mono text-[.69rem] text-muted-foreground">
-            {browser.selectedPath ?? "Select a folder"}
-          </p>
-          {browser.selectionError !== undefined ? (
-            <p
-              aria-live="polite"
-              className="text-[.68rem] whitespace-pre-line text-destructive"
-            >
-              {browser.selectionError}
-            </p>
-          ) : null}
-        </div>
+      <footer className="flex h-14 shrink-0 items-center gap-2 border-t border-border px-3">
+        {purpose._tag === "Open" ? (
+          <Button
+            className="text-xs sm:text-xs"
+            disabled={
+              directory === undefined ||
+              directory.repository ||
+              browser.newFolder !== undefined
+            }
+            onClick={() => browser.nameNewFolder("")}
+            size="sm"
+            type="button"
+            variant="ghost"
+          >
+            <IconFolderPlus aria-hidden="true" />
+            New folder
+          </Button>
+        ) : null}
+        <p
+          aria-live="polite"
+          className="min-w-0 flex-1 text-xs whitespace-pre-line text-destructive"
+        >
+          {browser.selectionError}
+        </p>
         {browser.action === "Initialize" ? (
           <div className="relative w-32 shrink-0">
             <IconGitBranch
@@ -207,17 +181,17 @@ export function RepositoryFolderBrowser({
             />
             <Input
               aria-label="Initial branch"
-              className="h-8 bg-white/[.03] pl-8 text-xs sm:h-8 sm:text-xs"
+              className="h-8 pl-8 text-xs sm:h-8 sm:text-xs"
               onChange={(event) => browser.setBranch(event.target.value)}
               value={browser.branch}
             />
           </div>
         ) : null}
-        <DialogClose className="inline-flex h-8 items-center justify-center rounded-md border border-border bg-white/[.03] px-3 text-xs font-medium text-foreground/80 outline-none hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/30 max-[540px]:hidden">
+        <DialogClose className="inline-flex h-8 items-center justify-center rounded-md border border-border px-3 text-xs font-medium text-foreground outline-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring/30 max-[540px]:hidden">
           Cancel
         </DialogClose>
         <Button
-          className="h-8 px-3 text-xs sm:h-8"
+          className="h-8 max-w-64 px-3 text-xs sm:h-8 sm:text-xs"
           disabled={
             browser.selectedPath === undefined ||
             browser.running ||
@@ -227,9 +201,13 @@ export function RepositoryFolderBrowser({
           onClick={() => void browser.run()}
           type="button"
         >
-          {browser.running
-            ? runningLabels[browser.action]
-            : actionLabels[browser.action]}
+          <span className="truncate">
+            {browser.running
+              ? runningLabels[browser.action]
+              : browser.selectedPath === undefined
+                ? actionLabels[browser.action]
+                : `${browser.action} ${folderName(browser.selectedPath)}`}
+          </span>
         </Button>
       </footer>
     </>
@@ -242,7 +220,11 @@ export function RepositoryFolderPicker({
   onRepositoryOpened,
   open,
 }: {
-  readonly environments: readonly RepositoryFolderPickerEnvironment[];
+  readonly environments: readonly {
+    readonly availability: EnvironmentAvailability;
+    readonly id: string;
+    readonly status: string;
+  }[];
   readonly onOpenChange: (open: boolean) => void;
   readonly onRepositoryOpened: (
     environmentId: string,
@@ -250,9 +232,7 @@ export function RepositoryFolderPicker({
   ) => void;
   readonly open: boolean;
 }): JSX.Element | null {
-  const [environmentId, setEnvironmentId] = useState<string>();
   const environment =
-    environments.find(({ id }) => id === environmentId) ??
     environments.find(({ availability }) => availability === "available") ??
     environments[0];
   if (environment === undefined) return null;
@@ -264,13 +244,6 @@ export function RepositoryFolderPicker({
           available: environment.availability === "available",
           status: environment.status,
         }}
-        environmentSelect={
-          <RepositoryFolderPickerEnvironmentSelect
-            environments={environments}
-            onSelect={setEnvironmentId}
-            selected={environment}
-          />
-        }
         purpose={{
           _tag: "Open",
           onRepositoryOpened: (repository) => {

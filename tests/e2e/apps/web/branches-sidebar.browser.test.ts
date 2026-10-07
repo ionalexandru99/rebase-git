@@ -48,8 +48,8 @@ test("opens a repository and checks out a local branch", async ({ page }) => {
     await picker
       .getByRole("button", { name: /^rebase-test Repository/ })
       .click();
-    await page
-      .getByRole("button", { name: "Open repository", exact: true })
+    await picker
+      .getByRole("button", { name: "Open rebase-test", exact: true })
       .click();
     await expect(picker).not.toBeVisible();
     await expect(
@@ -157,8 +157,8 @@ async function openRepository(page: Page, name: string) {
   await picker
     .getByRole("button", { name: new RegExp(`^${name} Repository`) })
     .click();
-  await page
-    .getByRole("button", { name: "Open repository", exact: true })
+  await picker
+    .getByRole("button", { name: `Open ${name}`, exact: true })
     .click();
   await expect(picker).not.toBeVisible();
 }

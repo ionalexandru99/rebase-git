@@ -29,8 +29,11 @@ test("rebases onto main from the branch menu, resolves each conflict block in th
         name: new RegExp(`^${basename(repositoryPath)} Repository`),
       })
       .click();
-    await page
-      .getByRole("button", { name: "Open repository", exact: true })
+    await picker
+      .getByRole("button", {
+        name: `Open ${basename(repositoryPath)}`,
+        exact: true,
+      })
       .click();
     await expect(picker).not.toBeVisible();
 

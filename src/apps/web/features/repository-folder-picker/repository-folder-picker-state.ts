@@ -21,6 +21,10 @@ export function childPath(folder: string, name: string) {
     : `${folder}${separator}${name}`;
 }
 
+export function folderName(path: string) {
+  return path.split(/[\\/]/).findLast((segment) => segment !== "") ?? path;
+}
+
 export function filterDirectoryEntries(
   entries: readonly EnvironmentDirectoryEntry[],
   query: string,
