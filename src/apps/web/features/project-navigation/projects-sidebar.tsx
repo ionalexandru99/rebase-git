@@ -11,6 +11,7 @@ import { Button } from "#web/components/ui/button.tsx";
 import { Input } from "#web/components/ui/input.tsx";
 import type {
   ProjectNavigationRepository,
+  ProjectNavigationRepositoryItem,
   ProjectNavigationState,
 } from "#web/features/project-navigation/project-navigation.ts";
 import { filterEnvironmentRepositories } from "#web/features/project-navigation/project-navigation-state.ts";
@@ -51,6 +52,11 @@ export function ProjectsSidebar({
 }): JSX.Element {
   const [filterQuery, setFilterQuery] = useState("");
   const { status: environmentStatus } = useEnvironment();
+  const projects = navigation.environments.flatMap((environment) =>
+    filterEnvironmentRepositories(environment, filterQuery).map(
+      (repository) => ({ environmentId: environment.id, repository }),
+    ),
+  );
 
   return (
     <nav
@@ -61,10 +67,10 @@ export function ProjectsSidebar({
         <CollapsedProjectsSidebar
           environmentStatus={environmentStatus}
           expand={expand}
-          filterQuery={filterQuery}
           navigation={navigation}
           openProject={openProject}
           openSettings={openSettings}
+          projects={projects}
           selectRepository={selectRepository}
         />
       ) : (
@@ -77,6 +83,7 @@ export function ProjectsSidebar({
           openProject={openProject}
           openSettings={openSettings}
           openRepositorySettings={openRepositorySettings}
+          projects={projects}
           selectRepository={selectRepository}
           setFilterQuery={setFilterQuery}
         />
@@ -94,6 +101,7 @@ function ExpandedProjectsSidebar({
   openProject,
   openSettings,
   openRepositorySettings,
+  projects,
   selectRepository,
   setFilterQuery,
 }: {
@@ -111,6 +119,7 @@ function ExpandedProjectsSidebar({
     environmentId: string,
     repository: ProjectNavigationRepository,
   ) => void;
+  readonly projects: readonly SidebarProject[];
   readonly selectRepository: (
     environmentId: string,
     repository: ProjectNavigationRepository,
@@ -127,7 +136,7 @@ function ExpandedProjectsSidebar({
             className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground"
           />
           <Input
-            aria-label="Filter open projects"
+            aria-label="Filter projects"
             className="pl-9"
             onChange={(event) => setFilterQuery(event.target.value)}
             placeholder="Filter projects"
@@ -168,51 +177,44 @@ function ExpandedProjectsSidebar({
           >
             {environmentStatus.status}
           </span>
-          {navigation.environments.flatMap((environment) =>
-            filterEnvironmentRepositories(environment, filterQuery).map(
-              (repository) => (
-                <div
-                  className={`group grid h-11 w-full min-w-0 grid-cols-[minmax(0,1fr)_1.875rem_1.875rem] items-center rounded-control pr-1.5 pl-2.5 text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground ${navigation.selectedRepositoryId === repository.id ? "bg-sidebar-accent text-sidebar-accent-foreground" : ""}`}
-                  key={repository.id}
-                >
-                  <button
-                    aria-current={
-                      navigation.workspaceView === "repository" &&
-                      navigation.selectedRepositoryId === repository.id
-                        ? "page"
-                        : undefined
-                    }
-                    aria-label={`Open ${repository.name}`}
-                    className="grid h-full min-w-0 grid-cols-[1.875rem_minmax(0,1fr)] items-center gap-2.5 text-left text-body outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring/40 disabled:pointer-events-none disabled:opacity-40"
-                    disabled={repository.disabled}
-                    onClick={() => selectRepository(environment.id, repository)}
-                    type="button"
-                  >
-                    <RepositoryBadge
-                      className="size-7.5 rounded-control text-meta"
-                      color={repository.color}
-                      name={repository.name}
-                    />
-                    <span className="min-w-0 truncate">{repository.name}</span>
-                  </button>
-                  <RepositorySettingsButton
-                    name={repository.name}
-                    onOpen={() =>
-                      openRepositorySettings(environment.id, repository)
-                    }
-                  />
-                  <button
-                    aria-label={`Close ${repository.name}`}
-                    className="grid size-7.5 place-items-center rounded-control text-muted-foreground outline-none hover:bg-sidebar-accent-foreground/10 hover:text-sidebar-accent-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring/40"
-                    onClick={() => closeRepository(environment.id, repository)}
-                    type="button"
-                  >
-                    <IconX aria-hidden="true" className="size-4" />
-                  </button>
-                </div>
-              ),
-            ),
-          )}
+          {projects.map(({ environmentId, repository }) => (
+            <div
+              className={`group grid h-11 w-full min-w-0 grid-cols-[minmax(0,1fr)_1.875rem_1.875rem] items-center rounded-control pr-1.5 pl-2.5 text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground ${navigation.selectedRepositoryId === repository.id ? "bg-sidebar-accent text-sidebar-accent-foreground" : ""}`}
+              key={repository.id}
+            >
+              <button
+                aria-current={
+                  isCurrentProject(navigation, repository.id)
+                    ? "page"
+                    : undefined
+                }
+                aria-label={`Open ${repository.name}`}
+                className="grid h-full min-w-0 grid-cols-[1.875rem_minmax(0,1fr)] items-center gap-2.5 text-left text-body outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring/40 disabled:pointer-events-none disabled:opacity-40"
+                disabled={repository.disabled}
+                onClick={() => selectRepository(environmentId, repository)}
+                type="button"
+              >
+                <RepositoryBadge
+                  className="size-7.5 rounded-control text-meta"
+                  color={repository.color}
+                  name={repository.name}
+                />
+                <span className="min-w-0 truncate">{repository.name}</span>
+              </button>
+              <RepositorySettingsButton
+                name={repository.name}
+                onOpen={() => openRepositorySettings(environmentId, repository)}
+              />
+              <button
+                aria-label={`Close ${repository.name}`}
+                className="grid size-7.5 place-items-center rounded-control text-muted-foreground outline-none hover:bg-sidebar-accent-foreground/10 hover:text-sidebar-accent-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring/40"
+                onClick={() => closeRepository(environmentId, repository)}
+                type="button"
+              >
+                <IconX aria-hidden="true" className="size-4" />
+              </button>
+            </div>
+          ))}
         </div>
       </div>
       <SidebarSettings openSettings={openSettings} />
@@ -223,18 +225,18 @@ function ExpandedProjectsSidebar({
 function CollapsedProjectsSidebar({
   environmentStatus,
   expand,
-  filterQuery,
   navigation,
   openProject,
   openSettings,
+  projects,
   selectRepository,
 }: {
   readonly environmentStatus: EnvironmentStatus;
   readonly expand: () => void;
-  readonly filterQuery: string;
   readonly navigation: ProjectNavigationState;
   readonly openProject: () => void;
   readonly openSettings: () => void;
+  readonly projects: readonly SidebarProject[];
   readonly selectRepository: (
     environmentId: string,
     repository: ProjectNavigationRepository,
@@ -245,7 +247,7 @@ function CollapsedProjectsSidebar({
       <button
         type="button"
         aria-label="Expand Projects sidebar"
-        className="mx-auto mt-1 grid size-10 shrink-0 place-items-center rounded-control text-muted-foreground outline-none hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring/40"
+        className={`mx-auto mt-1 grid size-10 shrink-0 place-items-center rounded-control outline-none hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring/40 ${environmentStatus.availability === "unavailable" ? "text-status-unavailable" : "text-muted-foreground"}`}
         onClick={expand}
       >
         <IconLayoutSidebarLeftExpand aria-hidden="true" className="size-5" />
@@ -267,35 +269,43 @@ function CollapsedProjectsSidebar({
         <span className="sr-only" role="status">
           {environmentStatus.status}
         </span>
-        {navigation.environments.flatMap((environment) =>
-          filterEnvironmentRepositories(environment, filterQuery).map(
-            (repository) => (
-              <button
-                aria-current={
-                  navigation.workspaceView === "repository" &&
-                  navigation.selectedRepositoryId === repository.id
-                    ? "page"
-                    : undefined
-                }
-                aria-label={repository.name}
-                className={`rounded-control outline-none hover:brightness-125 focus-visible:ring-2 focus-visible:ring-sidebar-ring/40 disabled:pointer-events-none disabled:opacity-40 ${navigation.selectedRepositoryId === repository.id ? "ring-[1.5px] ring-sidebar-accent-foreground ring-offset-2 ring-offset-sidebar" : ""}`}
-                disabled={repository.disabled}
-                key={repository.id}
-                onClick={() => selectRepository(environment.id, repository)}
-                type="button"
-              >
-                <RepositoryBadge
-                  className="size-10 rounded-control text-control"
-                  color={repository.color}
-                  name={repository.name}
-                />
-              </button>
-            ),
-          ),
-        )}
+        {projects.map(({ environmentId, repository }) => (
+          <button
+            aria-current={
+              isCurrentProject(navigation, repository.id) ? "page" : undefined
+            }
+            aria-label={repository.name}
+            className={`rounded-control outline-none hover:brightness-125 focus-visible:ring-2 focus-visible:ring-sidebar-ring/40 disabled:pointer-events-none disabled:opacity-40 ${navigation.selectedRepositoryId === repository.id ? "ring-[1.5px] ring-sidebar-accent-foreground ring-offset-2 ring-offset-sidebar" : ""}`}
+            disabled={repository.disabled}
+            key={repository.id}
+            onClick={() => selectRepository(environmentId, repository)}
+            type="button"
+          >
+            <RepositoryBadge
+              className="size-10 rounded-control text-control"
+              color={repository.color}
+              name={repository.name}
+            />
+          </button>
+        ))}
       </div>
       <SidebarSettings collapsed openSettings={openSettings} />
     </>
+  );
+}
+
+interface SidebarProject {
+  readonly environmentId: string;
+  readonly repository: ProjectNavigationRepositoryItem;
+}
+
+function isCurrentProject(
+  navigation: ProjectNavigationState,
+  repositoryId: string,
+) {
+  return (
+    navigation.workspaceView === "repository" &&
+    navigation.selectedRepositoryId === repositoryId
   );
 }
 
