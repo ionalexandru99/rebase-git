@@ -133,7 +133,13 @@ function Sidebar({ children }: { readonly children?: ReactNode }) {
   );
 }
 
-function Controls({ children }: { readonly children?: ReactNode }) {
+function Controls({
+  uncommitted,
+  children,
+}: {
+  readonly uncommitted?: boolean;
+  readonly children?: ReactNode;
+}) {
   const panel = useWorkspacePanel();
   const { open, expanded } = panel.state;
   return (
@@ -155,13 +161,22 @@ function Controls({ children }: { readonly children?: ReactNode }) {
       ) : null}
       {children}
       <Button
-        aria-label={open ? "Hide side panel" : "Show side panel"}
+        aria-label={
+          open
+            ? "Hide side panel"
+            : uncommitted
+              ? "Show side panel, uncommitted changes"
+              : "Show side panel"
+        }
         aria-expanded={open}
         variant="ghost"
         size="icon-sm"
-        className="border-0 bg-transparent shadow-none aria-expanded:bg-transparent"
+        className="relative border-0 bg-transparent shadow-none aria-expanded:bg-transparent"
         onClick={() => panel.execute({ type: "visibility", open: !open })}
       >
+        {!open && uncommitted ? (
+          <span className="absolute top-1 right-1 size-2 rounded-full bg-primary ring-2 ring-background" />
+        ) : null}
         {open ? (
           <IconLayoutSidebarRightCollapse aria-hidden="true" />
         ) : (

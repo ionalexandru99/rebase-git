@@ -4,6 +4,7 @@ import { AuthorAvatars } from "#web/features/author-avatars/author-avatar.tsx";
 import { BranchesSidebar } from "#web/features/branches-sidebar/branches-sidebar.tsx";
 import { useCherryPick } from "#web/features/cherry-pick/cherry-pick-menu.tsx";
 import { CommitGraph } from "#web/features/commit-graph/commit-graph.tsx";
+import { useUncommittedChanges } from "#web/features/commit-graph/components/uncommitted-changes-row.tsx";
 import { automaticHistoryScope } from "#web/features/commit-graph/scope/history-scope.ts";
 import { useHistoryScope } from "#web/features/commit-graph/scope/use-history-scope.ts";
 import { useCompareActions } from "#web/features/comparison/comparison.ts";
@@ -102,6 +103,7 @@ function Workspace({
   readonly scope: RepositoryScope;
 }) {
   const { worktreePath } = scope;
+  const uncommitted = useUncommittedChanges();
   const history = useRepositoryHistory({
     environmentId,
     repositoryId: scope.repositoryId,
@@ -263,7 +265,7 @@ function Workspace({
           </AuthorAvatars>
         )}
       </RemoteSync>
-      <WorkspacePanel.Controls>
+      <WorkspacePanel.Controls uncommitted={uncommitted !== undefined}>
         <TerminalToggle terminals={terminals} />
       </WorkspacePanel.Controls>
     </>

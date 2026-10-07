@@ -475,6 +475,23 @@ describe("working changes through Git", () => {
     expect((await f.diff("staged")).before).toBe("latest\n");
     expect((await f.diff("staged")).after).toBe("one\ntwo\nthree\n");
   });
+  it("commits every change, untracked files included, when nothing is staged", async () => {
+    const f = await fixture();
+    await writeFile(join(f.directory, "file.txt"), "edited\n");
+    await writeFile(join(f.directory, "new.txt"), "new\n");
+    const state = await f.read();
+    await Effect.runPromise(
+      f.service.commit({
+        ...f.scope,
+        revision: state.revision,
+        message: "Everything",
+      }),
+    );
+    expect((await f.git("show", "HEAD:file.txt")).stdout).toBe("edited\n");
+    expect((await f.git("show", "HEAD:new.txt")).stdout).toBe("new\n");
+    const after = await f.read();
+    expect([...after.unstaged, ...after.staged]).toEqual([]);
+  });
   it("allows message-only amend and retains files left unstaged", async () => {
     const f = await fixture();
     await writeFile(join(f.directory, "file.txt"), "working\n");

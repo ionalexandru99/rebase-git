@@ -106,6 +106,10 @@ export function commitRepositoryChanges(
     Effect.gen(function* () {
       const { snapshot } = yield* verifyChanges(git, command);
       yield* requireCommittable(command, snapshot);
+      if (!command.amend && snapshot.staged.length === 0)
+        yield* runRepositoryGit(git, command.worktreePath, ["add", "--all"], {
+          indexFile,
+        });
       yield* Effect.uninterruptible(
         runRepositoryGit(
           git,
@@ -138,9 +142,9 @@ function requireCommittable(
     return Effect.fail(
       changesFailed("Unsupported", "Write a commit message first."),
     );
-  if (!command.amend && snapshot.staged.length === 0)
+  if (!command.amend && snapshot.staged.length + snapshot.unstaged.length === 0)
     return Effect.fail(
-      changesFailed("Unsupported", "Stage changes before committing."),
+      changesFailed("Unsupported", "There is nothing to commit."),
     );
   if (
     [...snapshot.unstaged, ...snapshot.staged].some(
