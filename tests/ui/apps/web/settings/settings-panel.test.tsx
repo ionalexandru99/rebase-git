@@ -1,14 +1,17 @@
 import { useState } from "react";
 import { describe, expect, it, vi } from "vite-plus/test";
 import { page } from "vite-plus/test/browser";
-import type { DesktopUpdates } from "#contracts/desktop-updates/desktop-updates.contract.ts";
+import type {
+  DesktopUpdateSnapshot,
+  DesktopUpdates,
+} from "#contracts/desktop-updates/desktop-updates.contract.ts";
 import { desktopUpdates } from "#tests-support/fixtures.ts";
 import { render } from "#tests-support/render.tsx";
 import { SettingsPanel } from "#web/features/settings/settings-panel.tsx";
 import type { SettingsSectionId } from "#web/features/settings/settings-sections.ts";
 
 describe("settings panel", () => {
-  it("shows browser update availability and navigates settings", async () => {
+  it("shows only the version in the browser and navigates settings", async () => {
     const closeSettings = vi.fn();
     await renderSettings(closeSettings);
 
@@ -19,12 +22,13 @@ describe("settings panel", () => {
     await expect
       .element(page.getByRole("heading", { level: 3, name: "Version" }))
       .toBeVisible();
-    await expect
-      .element(page.getByRole("combobox", { name: "Release channel" }))
-      .toBeDisabled();
+    await expect.element(page.getByText("0.0.2-test")).toBeVisible();
     await expect
       .element(page.getByRole("button", { name: "Check for updates" }))
-      .toHaveAccessibleDescription("Updates are managed by the desktop app.");
+      .not.toBeInTheDocument();
+    await expect
+      .element(page.getByRole("combobox", { name: "Release channel" }))
+      .not.toBeInTheDocument();
 
     const search = settings.getByRole("textbox", { name: "Search settings" });
     await search.fill("history");
@@ -66,6 +70,34 @@ describe("settings panel", () => {
     expect(
       page.getByText("net::ERR_INTERNET_DISCONNECTED").elements(),
     ).toHaveLength(0);
+  });
+
+  it("offers Update now only once an update is ready", async () => {
+    let publish: (snapshot: DesktopUpdateSnapshot) => void = () => {};
+    await renderSettings(
+      vi.fn(),
+      desktopUpdates({
+        subscribe: (listener) => {
+          publish = listener;
+          return () => {};
+        },
+      }),
+    );
+    await expect
+      .element(page.getByRole("button", { name: "Check for updates" }))
+      .toBeEnabled();
+    expect(
+      page.getByRole("button", { name: "Update now" }).elements(),
+    ).toHaveLength(0);
+
+    publish({
+      settings: { checkAutomatically: true, releaseChannel: "stable" },
+      status: { _tag: "Ready", version: "0.0.3" },
+    });
+
+    await expect
+      .element(page.getByRole("button", { name: "Update now" }))
+      .toHaveAccessibleDescription("Version 0.0.3 is ready to install.");
   });
 
   it("switches between light, dark and the system theme", async () => {

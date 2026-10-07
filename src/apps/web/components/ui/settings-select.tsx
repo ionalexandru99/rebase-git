@@ -11,14 +11,12 @@ export function SettingsSelect<Value extends string>({
   options,
   value,
   disabled = false,
-  describedBy,
   onValueChange,
 }: {
   readonly label: string;
   readonly options: readonly SettingsSelectOption<Value>[];
   readonly value: Value;
   readonly disabled?: boolean;
-  readonly describedBy?: string;
   readonly onValueChange: (value: Value) => void;
 }) {
   return (
@@ -31,7 +29,6 @@ export function SettingsSelect<Value extends string>({
       value={value}
     >
       <Select.Trigger
-        aria-describedby={describedBy}
         aria-label={label}
         className="flex h-8 w-40 shrink-0 items-center justify-between rounded-md border border-input bg-input/30 px-3 text-sm text-foreground outline-none hover:bg-accent data-disabled:cursor-not-allowed data-disabled:opacity-45 data-pressed:bg-accent focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30"
       >
