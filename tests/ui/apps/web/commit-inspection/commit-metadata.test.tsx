@@ -113,14 +113,31 @@ describe("commit metadata", () => {
       .not.toBeInTheDocument();
   });
 
-  it("joins hard-wrapped lines and keeps list items on their own lines", async () => {
+  it("joins hard-wrapped lines and keeps Markdown blocks on their own lines", async () => {
     const screen = await render(
       <div style={{ width: 400 }}>
         <CommitMetadata
           details={{
             ...details,
-            message:
-              "Refresh history\n\nThe cache went stale\nafter a fetch.\n\n- Refresh on fetch\n- Keep the\nselection",
+            message: [
+              "Refresh history",
+              "",
+              "The cache went stale",
+              "after a fetch.",
+              "",
+              "## Changes",
+              "- Refresh on fetch",
+              "- Keep the",
+              "selection",
+              "| Before | After |",
+              "Table note",
+              "```",
+              "first",
+              "",
+              "second",
+              "third",
+              "```",
+            ].join("\n"),
           }}
         />
       </div>,
@@ -133,7 +150,21 @@ describe("commit metadata", () => {
             .textContent,
       )
       .toBe(
-        "The cache went stale after a fetch.\n\n- Refresh on fetch\n- Keep the selection",
+        [
+          "The cache went stale after a fetch.",
+          "",
+          "## Changes",
+          "- Refresh on fetch",
+          "- Keep the selection",
+          "| Before | After |",
+          "Table note",
+          "```",
+          "first",
+          "",
+          "second",
+          "third",
+          "```",
+        ].join("\n"),
       );
   });
 });

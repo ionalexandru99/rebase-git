@@ -10,7 +10,9 @@ const dateFormat = new Intl.DateTimeFormat(undefined, {
   year: "numeric",
 });
 
-const blockStart = /^\s*([-*+>]\s|\d+[.)]\s|\||#)/;
+const fence = /^\s*```/;
+const ownLine = /^\s*(\||#|```)/;
+const itemStart = /^\s*([-*+>]\s|\d+[.)]\s)/;
 
 export function CommitMetadata({
   details,
@@ -19,16 +21,17 @@ export function CommitMetadata({
 }) {
   const id = useId();
   const title = useRef<HTMLHeadingElement>(null);
-  const lede = useRef<HTMLParagraphElement>(null);
+  const preview = useRef<HTMLParagraphElement>(null);
   const [expanded, setExpanded] = useState(false);
   const [clipped, setClipped] = useState(false);
   const [subject, ...message] = details.message.trimEnd().split("\n");
-  const paragraphs = messageParagraphs(message.join("\n"));
+  const body = reflowMessage(message.join("\n"));
+  const lede = body.split(/\n\s*\n/, 1)[0] ?? "";
   const date = new Date(details.author.date);
 
   useLayoutEffect(() => {
     if (expanded) return;
-    const elements = [title.current, lede.current].filter(
+    const elements = [title.current, preview.current].filter(
       (element) => element !== null,
     );
     const measure = () =>
@@ -54,12 +57,12 @@ export function CommitMetadata({
       >
         {subject}
       </h2>
-      {paragraphs.length > 0 ? (
+      {body ? (
         <p
-          ref={lede}
+          ref={preview}
           className={`mt-1 break-words text-sm text-muted-foreground ${expanded ? "max-h-40 overflow-y-auto whitespace-pre-wrap" : "line-clamp-2"}`}
         >
-          {expanded ? paragraphs.join("\n\n") : paragraphs[0]}
+          {expanded ? body : lede}
         </p>
       ) : null}
       <div className="mt-2 flex flex-wrap items-baseline gap-x-3 gap-y-1 text-muted-foreground">
@@ -75,7 +78,7 @@ export function CommitMetadata({
         >
           {details.oid.slice(0, 8)}
         </CopyPill>
-        {expanded || clipped || paragraphs.length > 1 ? (
+        {expanded || clipped || lede !== body ? (
           <Button
             variant="ghost"
             size="xs"
@@ -97,20 +100,24 @@ export function CommitMetadata({
   );
 }
 
-function messageParagraphs(body: string) {
-  const text = body.trim();
-  if (text === "") return [];
-  return text
-    .split(/\n\s*\n/)
-    .map((paragraph) =>
-      paragraph.includes("```")
-        ? paragraph
-        : paragraph
-            .split("\n")
-            .reduce((joined, line) =>
-              blockStart.test(line)
-                ? `${joined}\n${line}`
-                : `${joined} ${line.trim()}`,
-            ),
-    );
+function reflowMessage(message: string) {
+  const lines = message.trim().split("\n");
+  let text = "";
+  let fenced = false;
+  for (const [index, line] of lines.entries()) {
+    const previous = lines[index - 1];
+    if (previous === undefined) text = line;
+    else if (
+      fenced ||
+      line.trim() === "" ||
+      previous.trim() === "" ||
+      ownLine.test(line) ||
+      ownLine.test(previous) ||
+      itemStart.test(line)
+    )
+      text += `\n${line}`;
+    else text += ` ${line.trim()}`;
+    if (fence.test(line)) fenced = !fenced;
+  }
+  return text;
 }
