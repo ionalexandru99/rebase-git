@@ -112,11 +112,14 @@ export function useEnvironmentQueries<Route extends EnvironmentRoute>(
   inputs: readonly RouteInput<Route>[],
   {
     changes,
-    ...queryOptions
+    staleTime,
+    refetchOnWindowFocus,
   }: Pick<
     EnvironmentQueryOptions<RouteSuccess<Route>>,
-    "changes" | "staleTime" | "refetchOnWindowFocus"
-  >,
+    "changes" | "staleTime"
+  > & {
+    readonly refetchOnWindowFocus?: (input: RouteInput<Route>) => boolean;
+  },
 ) {
   const { environmentId, requests, connected } = useEnvironment();
   return useQueries({
@@ -124,7 +127,10 @@ export function useEnvironmentQueries<Route extends EnvironmentRoute>(
       (input): UseQueryOptions<RouteSuccess<Route>, QueryFailure<Route>> => {
         const repositoryId = inputRepositoryId(input);
         return {
-          ...queryOptions,
+          ...(staleTime === undefined ? {} : { staleTime }),
+          ...(refetchOnWindowFocus === undefined
+            ? {}
+            : { refetchOnWindowFocus: refetchOnWindowFocus(input) }),
           queryKey: environmentQueryKey(
             environmentId,
             repositoryId,

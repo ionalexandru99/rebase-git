@@ -87,6 +87,7 @@ function WorktreeFiles({
     active && kind === "text",
   );
   const searchingText = kind === "text" && query.trim() !== "";
+  const failedSearch = kind === "text" ? text : names;
   return (
     <section aria-label="Files" className="flex h-full min-h-0 flex-col">
       <ResizablePanelGroup orientation="horizontal" className="min-h-0 flex-1">
@@ -119,6 +120,14 @@ function WorktreeFiles({
               onValue={setQuery}
               onKind={setKind}
             />
+            {failedSearch.error === null ? null : (
+              <div role="alert" className="px-3 pb-2 text-body">
+                {describeFailure(failedSearch.error)}{" "}
+                <Button size="xs" variant="ghost" onClick={failedSearch.retry}>
+                  Retry
+                </Button>
+              </div>
+            )}
             <WorktreeTree
               scope={scope}
               changes={changes}
@@ -129,7 +138,7 @@ function WorktreeFiles({
               onOpen={(path) => setOpen({ path })}
             />
             {searchingText ? (
-              text.data === undefined ? (
+              text.error !== null ? null : text.data === undefined ? (
                 <p
                   role="status"
                   className="p-3 text-meta text-muted-foreground"

@@ -60,10 +60,18 @@ export function WorktreeTree({
   readonly onOpen: (path: string) => void;
 }) {
   const [loaded, setLoaded] = useState<readonly string[]>([""]);
+  const [expanded, setExpanded] = useState<ReadonlySet<string>>(new Set());
   const folders = useEnvironmentQueries(
     WorktreeFilesApi.list,
     loaded.map((folder) => ({ ...scope, folder })),
-    { changes: "index", staleTime: 0, refetchOnWindowFocus: true },
+    {
+      changes: "index",
+      staleTime: 0,
+      refetchOnWindowFocus: ({ folder }) =>
+        folderAncestors(`${folder}/`).every(
+          (ancestor) => ancestor === "" || expanded.has(ancestor),
+        ),
+    },
   );
   const listed = new Map(
     loaded.flatMap((folder, index) => {
@@ -126,6 +134,12 @@ export function WorktreeTree({
           const added = expanded.filter((folder) => !current.includes(folder));
           return added.length === 0 ? current : [...current, ...added];
         });
+        setExpanded((current) =>
+          current.size === expanded.length &&
+          expanded.every((folder) => current.has(folder))
+            ? current
+            : new Set(expanded),
+        );
       }),
     [model],
   );
@@ -157,7 +171,7 @@ export function WorktreeTree({
   }, [model, selected, query, pathList]);
   const [menuPath, setMenuPath] = useState<string | null>(null);
   const actions = useRowActions(changes);
-  const failed = folders[0]?.error;
+  const failed = folders.find((folder) => folder.error !== null)?.error;
   return (
     <ContextMenu>
       <ContextMenuTrigger

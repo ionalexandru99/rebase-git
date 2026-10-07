@@ -37,7 +37,8 @@ export function useQueuedSearch<
     setRunning(wanted);
   return {
     data: running === "" ? undefined : result.data,
-    searching: running !== wanted || result.isFetching,
+    error: running === "" ? null : result.error,
+    retry: () => void result.refetch(),
   };
 }
 

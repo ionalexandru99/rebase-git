@@ -123,6 +123,7 @@ describe("worktree files", () => {
     );
     await git(path, "add", ".gitignore", "src");
     await git(path, "commit", "-m", "add");
+    await createRepository(join(path, "stash-nested"));
     const files = await filesClient(path);
 
     const names = await files.searchNames("STASH");

@@ -113,17 +113,24 @@ export function searchWorktreeNames(
     "--exclude-standard",
   ]).pipe(
     splitRecords("\0"),
-    Stream.filter((path) => path !== "" && path.toLowerCase().includes(needle)),
+    Stream.filter(
+      (path) =>
+        path !== "" &&
+        !path.endsWith("/") &&
+        path.toLowerCase().includes(needle),
+    ),
     Stream.runCollect,
     Effect.map((paths) => {
-      const ranked = [...new Set(paths)].sort(
-        (left, right) =>
-          nameRank(left, needle) - nameRank(right, needle) ||
-          left.length - right.length ||
-          left.localeCompare(right),
-      );
+      const ranked = [...new Set(paths)]
+        .map((path) => ({ path, rank: nameRank(path, needle) }))
+        .sort(
+          (left, right) =>
+            left.rank - right.rank ||
+            left.path.length - right.path.length ||
+            (left.path < right.path ? -1 : 1),
+        );
       return {
-        paths: ranked.slice(0, maximumSearchResults),
+        paths: ranked.slice(0, maximumSearchResults).map((match) => match.path),
         complete: ranked.length <= maximumSearchResults,
       };
     }),
@@ -196,7 +203,7 @@ async function entryKind(target: string) {
   if (info === undefined) return undefined;
   if (info.isSymbolicLink()) return "symlink";
   if (info.isDirectory()) return folderKind(target);
-  return "file";
+  return info.isFile() ? "file" : undefined;
 }
 
 async function folderKind(target: string) {
@@ -233,7 +240,7 @@ function ignoredNames(
   names: readonly string[],
 ) {
   if (names.length === 0) return Effect.succeed(new Set<string>());
-  const prefix = folder === "" ? "" : `${folder}/`;
+  const prefix = folder === "" ? "./" : `./${folder}/`;
   return runRepositoryGit(
     git,
     worktreePath,
