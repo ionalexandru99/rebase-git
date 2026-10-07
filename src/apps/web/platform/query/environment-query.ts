@@ -6,6 +6,7 @@ import {
   QueryClient,
   type SkipToken,
   skipToken,
+  type UseQueryOptions,
   useQueries,
   useQuery,
   useQueryClient,
@@ -109,24 +110,33 @@ export function useEnvironmentQuery<Route extends EnvironmentRoute>(
 export function useEnvironmentQueries<Route extends EnvironmentRoute>(
   route: Route,
   inputs: readonly RouteInput<Route>[],
-  { changes }: Pick<EnvironmentQueryOptions<RouteSuccess<Route>>, "changes">,
+  {
+    changes,
+    ...queryOptions
+  }: Pick<
+    EnvironmentQueryOptions<RouteSuccess<Route>>,
+    "changes" | "staleTime" | "refetchOnWindowFocus"
+  >,
 ) {
   const { environmentId, requests, connected } = useEnvironment();
   return useQueries({
-    queries: inputs.map((input) => {
-      const repositoryId = inputRepositoryId(input);
-      return {
-        queryKey: environmentQueryKey(
-          environmentId,
-          repositoryId,
-          route,
-          input,
-        ),
-        queryFn: routeRequest(requests, route, input),
-        enabled: connected && environmentId !== undefined,
-        meta: { changes, repositoryId, persist: false },
-      };
-    }),
+    queries: inputs.map(
+      (input): UseQueryOptions<RouteSuccess<Route>, QueryFailure<Route>> => {
+        const repositoryId = inputRepositoryId(input);
+        return {
+          ...queryOptions,
+          queryKey: environmentQueryKey(
+            environmentId,
+            repositoryId,
+            route,
+            input,
+          ),
+          queryFn: routeRequest(requests, route, input),
+          enabled: connected && environmentId !== undefined,
+          meta: { changes, repositoryId, persist: false },
+        };
+      },
+    ),
   });
 }
 

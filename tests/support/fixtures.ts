@@ -27,6 +27,10 @@ import type {
   HostRepositories,
 } from "#contracts/source-control/source-control.contract.ts";
 import type {
+  WorktreeEntry,
+  WorktreeFile,
+} from "#contracts/worktree-files/worktree-files.contract.ts";
+import type {
   AuthorAvatarStore,
   CachedAvatar,
 } from "#web/features/author-avatars/author-avatar-store.ts";
@@ -421,5 +425,22 @@ export function hostRepositories({
       url: `git@${host}:${name}.git`,
       private: hidden,
     })),
+  };
+}
+
+export function worktreeEntry(
+  name: string,
+  kind: WorktreeEntry["kind"] = "file",
+  ignored = false,
+): WorktreeEntry {
+  return { name, kind, ignored };
+}
+
+export function worktreeText(contents: string): WorktreeFile {
+  return {
+    _tag: "Text",
+    contents,
+    bytes: contents.length,
+    truncated: false,
   };
 }

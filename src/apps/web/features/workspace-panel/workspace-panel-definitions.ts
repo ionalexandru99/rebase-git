@@ -2,6 +2,7 @@ import {
   IconArrowsLeftRight,
   IconFileDiff,
   IconFileTime,
+  IconFolder,
   IconGitCommit,
   IconHistory,
   IconListDetails,
@@ -20,9 +21,11 @@ import {
 } from "#web/features/file-history/file-history.ts";
 import { isRebasePlanTarget } from "#web/features/rebase/rebase-plan.ts";
 import { isStashInput } from "#web/features/stashes/stashes.ts";
+import { isShowChangeInput } from "#web/features/working-changes/show-change.ts";
 import type { WorkspacePanelDefinition } from "#web/features/workspace-panel/workspace-panel-model.ts";
 
 export const workingChangesPanel = {
+  acceptsInput: isShowChangeInput,
   Content: lazy(() =>
     import("#web/features/working-changes/working-changes.tsx").then(
       (module) => ({ default: module.WorkingChangesPanel }),
@@ -32,6 +35,18 @@ export const workingChangesPanel = {
   icon: IconFileDiff,
   launchable: true,
   description: "Review and commit working changes",
+} satisfies WorkspacePanelDefinition;
+
+export const worktreeFilesPanel = {
+  Content: lazy(() =>
+    import("#web/features/worktree-files/worktree-files-panel.tsx").then(
+      (module) => ({ default: module.WorktreeFilesPanel }),
+    ),
+  ),
+  label: "Files",
+  icon: IconFolder,
+  launchable: true,
+  description: "Browse the worktree's files",
 } satisfies WorkspacePanelDefinition;
 
 export const reflogPanel = {
@@ -114,6 +129,7 @@ const definitions = {
   history: fileHistoryPanel,
   compare: comparePanel,
   changes: workingChangesPanel,
+  files: worktreeFilesPanel,
   reflog: reflogPanel,
   rebase: rebasePanel,
   stash: stashPanel,

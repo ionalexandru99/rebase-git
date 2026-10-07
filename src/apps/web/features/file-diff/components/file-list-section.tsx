@@ -14,7 +14,7 @@ import {
   ContextMenuContent,
   ContextMenuTrigger,
 } from "#web/components/ui/context-menu.tsx";
-import { ChangeFileIcon } from "#web/features/file-diff/components/change-file-icon.tsx";
+import { FileIcon } from "#web/components/ui/file-icon.tsx";
 import type { ChangeTreeRow } from "#web/features/file-diff/file-tree.ts";
 import { useFileRows } from "#web/features/file-diff/hooks/use-file-rows.ts";
 import { cn } from "#web/lib/utils.ts";
@@ -218,7 +218,7 @@ export function RowLead<File extends { readonly path: string }>({
   readonly collapsed: ReadonlySet<string>;
   readonly onToggle?: (() => void) | undefined;
 }) {
-  if (row.file !== undefined) return <ChangeFileIcon path={row.key} />;
+  if (row.file !== undefined) return <FileIcon path={row.key} />;
   const closed = collapsed.has(row.key);
   const Folder = closed ? IconFolder : IconFolderOpen;
   return (

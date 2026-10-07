@@ -3,7 +3,7 @@ import type {
   ChangedFile,
   ChangeSection,
 } from "#contracts/repository-changes/repository-changes.contract.ts";
-import { ChangeFileIcon } from "#web/features/file-diff/components/change-file-icon.tsx";
+import { FileIcon } from "#web/components/ui/file-icon.tsx";
 import { DiffContent } from "#web/features/file-diff/components/diff-content.tsx";
 import { DiffDisplayControls } from "#web/features/file-diff/components/diff-display-controls.tsx";
 import { LineCounts } from "#web/features/file-diff/components/file-row-name.tsx";
@@ -105,7 +105,7 @@ function FolderFile({
           className="flex items-start gap-2 px-3 pt-2.5 text-body text-muted-foreground"
           style={{ height: estimatedHeight(file) }}
         >
-          <ChangeFileIcon path={file.path} />
+          <FileIcon path={file.path} />
           <span className="min-w-0 truncate">{file.path}</span>
           <LineCounts lines={file.lines} className="ml-auto" />
         </div>

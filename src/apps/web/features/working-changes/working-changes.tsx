@@ -16,6 +16,7 @@ import {
   type WorkingChangesTarget,
 } from "#web/features/working-changes/hooks/use-working-changes-view.ts";
 import { IgnoreConfirmation } from "#web/features/working-changes/ignore-paths.tsx";
+import { isShowChangeInput } from "#web/features/working-changes/show-change.ts";
 import { usePanelFeature } from "#web/features/workspace-panel/api.ts";
 
 const ChangeDiffViewer = lazy(
@@ -157,6 +158,9 @@ export function WorkingChangesPanel() {
               worktreePath,
             ]),
             active: connected && active,
+            requested: isShowChangeInput(feature.input)
+              ? feature.input
+              : undefined,
           }}
           writable={connected && writable}
         />

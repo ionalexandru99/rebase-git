@@ -49,6 +49,7 @@ import {
 } from "#server/features/source-control/source-control.ts";
 import { terminalFeature } from "#server/features/terminal/terminal.ts";
 import { acquireTerminalSessions } from "#server/features/terminal/terminal-sessions.ts";
+import { worktreeFilesFeature } from "#server/features/worktree-files/worktree-files.ts";
 import {
   acquireEnvironmentContext,
   type EnvironmentContext,
@@ -160,6 +161,7 @@ export function environmentFeatures(dependencies: EnvironmentDependencies) {
       commitInspectionFeature(dependencies),
       fileHistoryFeature(dependencies),
       historySearchFeature(dependencies),
+      worktreeFilesFeature(dependencies),
       comparisonFeature(dependencies),
       repositoryChangesFeature(dependencies),
       repositoryConflictsFeature(dependencies),
