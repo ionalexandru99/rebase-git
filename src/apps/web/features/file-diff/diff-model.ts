@@ -5,11 +5,26 @@ import {
 } from "@pierre/diffs";
 import type { ChangeDiff } from "#contracts/repository-comparison/repository-comparison.contract.ts";
 
+type ModelDiff = Pick<
+  ChangeDiff,
+  | "kind"
+  | "patch"
+  | "path"
+  | "revision"
+  | "before"
+  | "after"
+  | "beforeBytes"
+  | "afterBytes"
+>;
+
+export function contentUnchanged(diff: ModelDiff) {
+  return diff.kind === "partial"
+    ? !/^@@ /m.test(diff.patch)
+    : diff.kind === "text" && diff.before === diff.after;
+}
+
 export function createChangeDiffModel(
-  diff: Pick<
-    ChangeDiff,
-    "kind" | "patch" | "path" | "revision" | "before" | "after"
-  > | null,
+  diff: ModelDiff | null,
   previousPath: string | null = null,
 ) {
   const metadata =
@@ -42,12 +57,19 @@ export function createChangeDiffModel(
       metadata.type = "rename-changed";
     }
   }
-  return { metadata, hasHiddenContext: hasHiddenContext(metadata) };
+  return {
+    metadata,
+    hasHiddenContext:
+      diff?.kind === "partial"
+        ? diff.beforeBytes > 0 &&
+          diff.afterBytes > 0 &&
+          (metadata?.hunks.length ?? 0) > 0
+        : hasHiddenContext(metadata),
+  };
 }
 
 function hasHiddenContext(metadata: FileDiffMetadata | undefined) {
   if (!metadata) return false;
-  if (metadata.isPartial) return true;
   if (metadata.hunks.some((hunk) => hunk.collapsedBefore > 1)) return true;
   const last = metadata.hunks.at(-1);
   if (

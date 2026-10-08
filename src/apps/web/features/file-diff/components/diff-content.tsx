@@ -69,7 +69,10 @@ export function DiffContent({
           expansionLineCount: 10,
           ...(loadWhole === undefined
             ? {}
-            : { loadDiffFiles: async () => wholeFiles(await loadWhole()) }),
+            : {
+                loadDiffFiles: async () =>
+                  wholeFiles(diff.revision, await loadWhole()),
+              }),
           enableLineSelection: selection !== undefined,
           ...(selection === undefined
             ? {}
@@ -140,7 +143,12 @@ export function revealRange(
   return true;
 }
 
-function wholeFiles({ path, before, after }: ChangeDiff) {
+function wholeFiles(
+  revision: string,
+  { kind, path, before, after, ...whole }: ChangeDiff,
+) {
+  if (kind !== "text" || whole.revision !== revision)
+    throw new Error("The file changed before its unchanged lines loaded.");
   return {
     oldFile: { name: path, contents: before ?? "" },
     newFile: { name: path, contents: after ?? "" },

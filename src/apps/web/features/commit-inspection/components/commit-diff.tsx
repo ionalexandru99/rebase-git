@@ -4,7 +4,10 @@ import { Button } from "#web/components/ui/button.tsx";
 import type { DiffPreferences } from "#web/domain/file-diff/diff-preferences.contract.ts";
 import { DiffContent } from "#web/features/file-diff/components/diff-content.tsx";
 import { DiffDisplayControls } from "#web/features/file-diff/components/diff-display-controls.tsx";
-import { createChangeDiffModel } from "#web/features/file-diff/diff-model.ts";
+import {
+  contentUnchanged,
+  createChangeDiffModel,
+} from "#web/features/file-diff/diff-model.ts";
 import type { DiffRead } from "#web/features/file-diff/hooks/use-diff-read.ts";
 
 export default function CommitDiff({
@@ -48,9 +51,7 @@ export default function CommitDiff({
           Working tree after restore
         </p>
       ) : null}
-      {file &&
-      (!metadata ||
-        (value?.kind === "text" && value.before === value.after)) ? (
+      {file && (!metadata || (value !== null && contentUnchanged(value))) ? (
         <div className="shrink-0 break-all border-border border-b px-3 py-2 font-mono text-meta">
           {previousPath ? `${previousPath} → ` : ""}
           {file.path}
@@ -64,13 +65,11 @@ export default function CommitDiff({
           </Button>
         </div>
       ) : value ? (
-        preview && value.kind === "text" && value.before === value.after ? (
+        preview && contentUnchanged(value) ? (
           <p className="p-4 text-body text-muted-foreground">
             The working tree already has this version.
           </p>
-        ) : file?.status === "R" &&
-          value.kind === "text" &&
-          value.before === value.after ? (
+        ) : file?.status === "R" && contentUnchanged(value) ? (
           <p className="p-4 text-body text-muted-foreground">
             Content unchanged.
           </p>

@@ -7,7 +7,10 @@ import {
   revealRange,
 } from "#web/features/file-diff/components/diff-content.tsx";
 import { DiffDisplayControls } from "#web/features/file-diff/components/diff-display-controls.tsx";
-import { createChangeDiffModel } from "#web/features/file-diff/diff-model.ts";
+import {
+  contentUnchanged,
+  createChangeDiffModel,
+} from "#web/features/file-diff/diff-model.ts";
 import { viewedChange } from "#web/features/working-changes/hooks/use-change-selection.ts";
 import type {
   ChangeAction,
@@ -191,9 +194,7 @@ export default function ChangeDiffViewer({
         <div className="flex flex-1 items-center justify-center text-control text-muted-foreground">
           {loading || selection ? "Loading changes…" : "Select a file"}
         </div>
-      ) : previousPath !== null &&
-        diff.kind === "text" &&
-        diff.before === diff.after ? (
+      ) : previousPath !== null && contentUnchanged(diff) ? (
         <>
           <div className="shrink-0 break-all border-border border-b px-3 py-2 font-mono text-meta">
             {previousPath} → {diff.path}
