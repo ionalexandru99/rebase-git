@@ -22,6 +22,7 @@ import {
   environmentAuthorizationFeature,
 } from "#server/features/environment-authorization/environment-authorization.ts";
 import { environmentFilesystemFeature } from "#server/features/environment-filesystem/environment-filesystem.ts";
+import { fileBlameFeature } from "#server/features/file-blame/file-blame.ts";
 import { fileHistoryFeature } from "#server/features/file-history/file-history.ts";
 import { gitIdentityFeature } from "#server/features/git-identity/git-identity.ts";
 import { historySearchFeature } from "#server/features/history-search/history-search.ts";
@@ -162,6 +163,7 @@ export function environmentFeatures(dependencies: EnvironmentDependencies) {
       fileHistoryFeature(dependencies),
       historySearchFeature(dependencies),
       worktreeFilesFeature(dependencies),
+      fileBlameFeature(dependencies),
       comparisonFeature(dependencies),
       repositoryChangesFeature(dependencies),
       repositoryConflictsFeature(dependencies),

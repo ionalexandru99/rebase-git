@@ -35,6 +35,7 @@ import { useTerminals } from "#web/features/terminal/use-terminals.ts";
 import { useUncommittedChanges } from "#web/features/working-changes/hooks/use-working-changes.ts";
 import { WorkspacePanel } from "#web/features/workspace-panel/workspace-panel.tsx";
 import {
+  blamePanel,
   comparePanel,
   fileHistoryPanel,
   rebasePanel,
@@ -230,6 +231,16 @@ function Workspace({
                   history: (
                     <Suspense fallback={null}>
                       <fileHistoryPanel.Content
+                        onOpenDetails={openDetails}
+                        onSelectCommit={(oid) =>
+                          graphRef.current?.followOid(oid)
+                        }
+                      />
+                    </Suspense>
+                  ),
+                  blame: (
+                    <Suspense fallback={null}>
+                      <blamePanel.Content
                         onOpenDetails={openDetails}
                         onSelectCommit={(oid) =>
                           graphRef.current?.followOid(oid)

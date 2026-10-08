@@ -2,7 +2,10 @@ import type { Hunk, SelectedLineRange } from "@pierre/diffs";
 import { IconCheck, IconChevronDown, IconChevronUp } from "@tabler/icons-react";
 import { useMemo, useRef, useState } from "react";
 import { Button } from "#web/components/ui/button.tsx";
-import { DiffContent } from "#web/features/file-diff/components/diff-content.tsx";
+import {
+  DiffContent,
+  revealRange,
+} from "#web/features/file-diff/components/diff-content.tsx";
 import { DiffDisplayControls } from "#web/features/file-diff/components/diff-display-controls.tsx";
 import { createChangeDiffModel } from "#web/features/file-diff/diff-model.ts";
 import { viewedChange } from "#web/features/working-changes/hooks/use-change-selection.ts";
@@ -260,20 +263,6 @@ export function hunkRange(
       ? { end: last.additionLineIndex + last.additions, endSide: "additions" }
       : { end: last.deletionLineIndex + last.deletions, endSide: "deletions" }),
   };
-}
-
-function revealRange(container: HTMLElement | null, range: SelectedLineRange) {
-  const row = (line: number, side: SelectedLineRange["side"]) =>
-    container?.shadowRoot?.querySelector(
-      `[data-line="${line}"][data-line-type="${side === "deletions" ? "change-deletion" : "change-addition"}"]`,
-    );
-  const first = row(range.start, range.side);
-  if (!first) return false;
-  row(range.end, range.endSide ?? range.side)?.scrollIntoView({
-    block: "nearest",
-  });
-  first.scrollIntoView({ block: "nearest" });
-  return true;
 }
 
 export function selectedDiffLines(

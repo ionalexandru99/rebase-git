@@ -18,6 +18,7 @@ import {
 } from "#web/components/ui/context-menu.tsx";
 import { fileIcons } from "#web/components/ui/file-icon.tsx";
 import { writeClipboardText } from "#web/features/clipboard/write-clipboard-text.ts";
+import { useBlameAction } from "#web/features/file-blame/file-blame.ts";
 import { useFileHistoryAction } from "#web/features/file-history/file-history.ts";
 import { useErrorToast } from "#web/features/notifications/notifications.tsx";
 import { useShowChangeAction } from "#web/features/working-changes/show-change.ts";
@@ -202,6 +203,7 @@ export function WorktreeTree({
 
 function useRowActions(changes: RepositoryChanges | undefined) {
   const fileHistory = useFileHistoryAction();
+  const blame = useBlameAction();
   const showChange = useShowChangeAction();
   const errorToast = useErrorToast();
   return (path: string): readonly Action[] => {
@@ -213,6 +215,7 @@ function useRowActions(changes: RepositoryChanges | undefined) {
     const committed = !change.includes("?") && !change.includes("A");
     return [
       ...(folder || !committed ? [] : fileHistory([name])),
+      ...(folder || !committed ? [] : blame([name], null)),
       ...(folder || change.length === 0 ? [] : [showChange(name)]),
       submenu({ id: "copy", label: "Copy", group: "edit" }, [
         {

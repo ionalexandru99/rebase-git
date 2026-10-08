@@ -53,7 +53,10 @@ export function AuthorAvatars({
 export function AuthorAvatar({
   commit,
 }: {
-  readonly commit: Pick<RepositoryCommit, "oid" | "author">;
+  readonly commit: {
+    readonly oid: string;
+    readonly author: Pick<RepositoryCommit["author"], "name" | "email">;
+  };
 }) {
   const model = useContext(AvatarContext);
   const oid = commit.oid;

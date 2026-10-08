@@ -1,7 +1,7 @@
 import type { SelectedLineRange } from "@pierre/diffs";
 import { FileDiff } from "@pierre/diffs/react";
 import { IconFileDiff } from "@tabler/icons-react";
-import type { CSSProperties } from "react";
+import { type CSSProperties, useRef } from "react";
 import type { ChangeDiff } from "#contracts/repository-comparison/repository-comparison.contract.ts";
 import type { DiffPreferences } from "#web/domain/file-diff/diff-preferences.contract.ts";
 import type { createChangeDiffModel } from "#web/features/file-diff/diff-model.ts";
@@ -18,8 +18,10 @@ export function DiffContent({
   preferences,
   expandContext,
   selection,
+  focus,
   onRender,
 }: {
+  readonly focus?: { readonly start: number; readonly end: number } | undefined;
   readonly diff: ChangeDiff;
   readonly metadata: ReturnType<typeof createChangeDiffModel>["metadata"];
   readonly preferences: DiffPreferences;
@@ -31,6 +33,18 @@ export function DiffContent({
   readonly onRender?: (container: HTMLElement) => void;
 }) {
   const theme = useTheme();
+  const revealed = useRef<object>(undefined);
+  const focused =
+    focus === undefined ? null : { ...focus, side: "additions" as const };
+  const rendered = (container: HTMLElement) => {
+    if (
+      focused !== null &&
+      revealed.current !== focus &&
+      revealRange(container, focused)
+    )
+      revealed.current = focus;
+    onRender?.(container);
+  };
   return metadata ? (
     <div className="min-h-0 flex-1 overflow-auto">
       <FileDiff
@@ -42,7 +56,7 @@ export function DiffContent({
           } as CSSProperties
         }
         fileDiff={metadata}
-        selectedLines={selection?.range ?? null}
+        selectedLines={selection?.range ?? focused}
         options={{
           theme: diffThemes,
           themeType: theme,
@@ -54,13 +68,9 @@ export function DiffContent({
           ...(selection === undefined
             ? {}
             : { onLineSelectionEnd: selection.onChange }),
-          ...(onRender === undefined
-            ? {}
-            : {
-                onPostRender: (container, _instance, phase) => {
-                  if (phase !== "unmount") onRender(container);
-                },
-              }),
+          onPostRender: (container, _instance, phase) => {
+            if (phase !== "unmount") rendered(container);
+          },
         }}
       />
     </div>
@@ -105,4 +115,21 @@ export function DiffContent({
       )}
     </div>
   );
+}
+
+export function revealRange(
+  container: HTMLElement | null,
+  range: SelectedLineRange,
+) {
+  const row = (line: number, side: SelectedLineRange["side"]) =>
+    container?.shadowRoot?.querySelector(
+      `[data-line="${line}"][data-line-type="${side === "deletions" ? "change-deletion" : "change-addition"}"]`,
+    );
+  const first = row(range.start, range.side);
+  if (!first) return false;
+  row(range.end, range.endSide ?? range.side)?.scrollIntoView({
+    block: "nearest",
+  });
+  first.scrollIntoView({ block: "nearest" });
+  return true;
 }
