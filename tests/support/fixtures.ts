@@ -38,6 +38,7 @@ import type {
   AuthorAvatarStore,
   CachedAvatar,
 } from "#web/features/author-avatars/author-avatar-store.ts";
+import type { ThirdPartyLicense } from "#web/features/settings/third-party-licenses.ts";
 import type { RepositoryScope } from "#web/platform/query/repository-scope.tsx";
 
 export const repositoryId = "00000000-0000-4000-8000-000000000001";
@@ -474,5 +475,18 @@ export function worktreeText(contents: string): WorktreeFile {
     contents,
     bytes: contents.length,
     truncated: false,
+  };
+}
+
+export function thirdPartyLicense(
+  license: Partial<ThirdPartyLicense> = {},
+): ThirdPartyLicense {
+  return {
+    name: "react",
+    version: "19.3.0",
+    license: "MIT",
+    sourceUrl: "https://github.com/facebook/react",
+    notice: "MIT License\n\nCopyright (c) Meta Platforms, Inc. and affiliates.",
+    ...license,
   };
 }

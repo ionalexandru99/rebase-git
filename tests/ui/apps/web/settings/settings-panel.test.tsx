@@ -52,6 +52,24 @@ describe("settings panel", () => {
     expect(closeSettings).toHaveBeenCalledOnce();
   });
 
+  it("opens licenses from General and keeps General selected", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(Response.json([]));
+    await renderSettings(vi.fn());
+    const settings = page.getByRole("navigation", { name: "Settings" });
+    await expect
+      .element(settings.getByRole("button", { name: "Licenses" }))
+      .not.toBeInTheDocument();
+
+    await page.getByRole("button", { name: "View licenses" }).click();
+
+    await expect
+      .element(page.getByRole("heading", { level: 1, name: "Licenses" }))
+      .toBeVisible();
+    await expect
+      .element(settings.getByRole("button", { name: "General", exact: true }))
+      .toHaveAttribute("aria-current", "page");
+  });
+
   it("shows a failed update check as a notification and keeps the update state", async () => {
     await renderSettings(
       vi.fn(),

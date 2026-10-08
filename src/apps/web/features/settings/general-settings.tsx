@@ -54,11 +54,13 @@ const unavailableSnapshot: DesktopUpdateSnapshot = {
 export function GeneralSettings({
   desktopUpdates,
   productVersion,
+  selectSection,
   updateLoadError,
   updateSnapshot,
 }: {
   readonly desktopUpdates: DesktopUpdates | undefined;
   readonly productVersion: string;
+  readonly selectSection: (section: "licenses") => void;
   readonly updateLoadError: string | undefined;
   readonly updateSnapshot: DesktopUpdateSnapshot | undefined;
 }): JSX.Element {
@@ -190,6 +192,17 @@ export function GeneralSettings({
             </SettingsRow>
           </>
         )}
+      </SettingsSection>
+      <SettingsSection title="Diagnostics">
+        <SettingsRow title="Open source licenses">
+          <Button
+            onClick={() => selectSection("licenses")}
+            size="sm"
+            variant="outline"
+          >
+            View licenses
+          </Button>
+        </SettingsRow>
       </SettingsSection>
     </SettingsPage>
   );

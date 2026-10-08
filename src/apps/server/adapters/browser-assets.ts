@@ -85,6 +85,7 @@ export function browserAssetPath(pathname: string) {
   }
   if (
     pathname === "/favicon.svg" ||
+    pathname === "/third-party-licenses.json" ||
     (pathname.startsWith("/assets/") && pathname !== "/assets/")
   ) {
     return pathname.slice(1);

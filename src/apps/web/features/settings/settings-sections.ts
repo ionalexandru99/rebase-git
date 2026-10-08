@@ -1,6 +1,7 @@
 import {
   IconDatabase,
   IconGitBranch,
+  IconLicense,
   IconSettings,
   type TablerIcon,
 } from "@tabler/icons-react";
@@ -11,23 +12,32 @@ import type {
 } from "#contracts/desktop-updates/desktop-updates.contract.ts";
 import { GeneralSettings } from "#web/features/settings/general-settings.tsx";
 import { HistoryStorageSettings } from "#web/features/settings/history-storage-settings.tsx";
+import { LicensesSettings } from "#web/features/settings/licenses-settings.tsx";
 import { SourceControlSettings } from "#web/features/settings/source-control-settings.tsx";
+
+export type SettingsSectionId =
+  | "general"
+  | "source-control"
+  | "history-storage"
+  | "licenses";
 
 export interface SettingsSectionContext {
   readonly desktopUpdates: DesktopUpdates | undefined;
   readonly productVersion: string;
+  readonly selectSection: (section: SettingsSectionId) => void;
   readonly updateLoadError: string | undefined;
   readonly updateSnapshot: DesktopUpdateSnapshot | undefined;
 }
 
 interface SettingsSectionDefinition {
-  readonly id: string;
+  readonly id: SettingsSectionId;
   readonly label: string;
   readonly icon: TablerIcon;
+  readonly parent?: SettingsSectionId;
   readonly Content: ComponentType<SettingsSectionContext>;
 }
 
-export const settingsSections = [
+export const settingsSections: readonly SettingsSectionDefinition[] = [
   {
     id: "general",
     label: "General",
@@ -46,6 +56,11 @@ export const settingsSections = [
     icon: IconDatabase,
     Content: HistoryStorageSettings,
   },
-] as const satisfies readonly SettingsSectionDefinition[];
-
-export type SettingsSectionId = (typeof settingsSections)[number]["id"];
+  {
+    id: "licenses",
+    label: "Licenses",
+    icon: IconLicense,
+    parent: "general",
+    Content: LicensesSettings,
+  },
+];

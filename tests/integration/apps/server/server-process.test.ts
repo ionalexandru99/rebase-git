@@ -7,6 +7,7 @@ import { DatabaseSync } from "node:sqlite";
 import { afterEach, describe, expect, it } from "vite-plus/test";
 import { startEnvironmentServer } from "#tests-support/environment-server.ts";
 import { removeTemporaryDirectory } from "#tests-support/temporary-directory.ts";
+import type { ThirdPartyLicense } from "#web/features/settings/third-party-licenses.ts";
 
 const children = new Set<ChildProcessWithoutNullStreams>();
 const directories = new Set<string>();
@@ -242,6 +243,20 @@ async function verifyBrowserAssets(origin: string) {
   expect(rejectedMethodResponse.headers.get("allow")).toBe("GET, HEAD");
 
   expect((await fetch(`${origin}/favicon.svg`)).status).toBe(200);
+  const licenses = (await (
+    await fetch(`${origin}/third-party-licenses.json`)
+  ).json()) as ThirdPartyLicense[];
+  expect(licenses.map(({ name }) => name)).toEqual(
+    expect.arrayContaining([
+      "react",
+      "effect",
+      "@lydell/node-pty",
+      "tailwindcss",
+      "lazy-val",
+      "Symbols Nerd Font Mono",
+    ]),
+  );
+  expect(licenses.filter(({ notice }) => notice === "")).toEqual([]);
   expect((await fetch(`${origin}/assets/missing.js`)).status).toBe(404);
   expect((await fetch(`${origin}/assets/`)).status).toBe(404);
 }
