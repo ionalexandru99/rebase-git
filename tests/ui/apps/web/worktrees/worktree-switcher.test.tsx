@@ -69,6 +69,23 @@ describe("worktree switcher", () => {
     );
   });
 
+  it("starts counting changes on hover and marks the list busy until they arrive", async () => {
+    const counted = Promise.withResolvers<void>();
+    const { screen, counting } = await renderSwitcher(counted.promise);
+
+    await screen.getByRole("button", { name: "Worktree repo" }).hover();
+    await vi.waitFor(() => expect(counting).toHaveBeenCalledOnce());
+    await screen.getByRole("button", { name: "Worktree repo" }).click();
+    const list = screen.getByRole("listbox", { name: "Worktrees" });
+    await expect.element(list).toHaveAttribute("aria-busy", "true");
+    counted.resolve();
+
+    await expect
+      .element(screen.getByRole("option", { name: /1 unstaged, 1 staged$/ }))
+      .toBeInTheDocument();
+    await expect.element(list).toHaveAttribute("aria-busy", "false");
+  });
+
   it("creates a branch worktree in the repository folder, or offers the worktree that already has it", async () => {
     const { screen, switched, created } = await renderSwitcher();
 
@@ -100,11 +117,12 @@ describe("worktree switcher", () => {
   });
 });
 
-async function renderSwitcher() {
+async function renderSwitcher(counted: Promise<void> = Promise.resolve()) {
   const switched = vi.fn<(path: string) => void>();
   const removed: RemoveWorktree[] = [];
   const unlocked: WorktreeTarget[] = [];
   const created: CreateWorktree[] = [];
+  const counting = vi.fn();
   const requests = fakeRequests(
     respond(RepositoryRefsApi.read, async () =>
       repositoryRefs({
@@ -121,13 +139,17 @@ async function renderSwitcher() {
         ],
       }),
     ),
-    respond(RepositoryWorktreesApi.status, async () => ({
-      worktrees: [
-        { path: mainPath, unstaged: 0, staged: 0 },
-        { path: topicPath, unstaged: 1, staged: 1 },
-        { path: fixPath, unstaged: 0, staged: 0 },
-      ],
-    })),
+    respond(RepositoryWorktreesApi.status, async () => {
+      counting();
+      await counted;
+      return {
+        worktrees: [
+          { path: mainPath, unstaged: 0, staged: 0 },
+          { path: topicPath, unstaged: 1, staged: 1 },
+          { path: fixPath, unstaged: 0, staged: 0 },
+        ],
+      };
+    }),
     respond(RepositoryWorktreesApi.folder, async () => ({
       folder: "/trees",
       configured: true,
@@ -154,5 +176,5 @@ async function renderSwitcher() {
     </RepositoryScopeProvider>,
     { environment: { requests }, queryClient: testChanges().queryClient },
   );
-  return { screen, switched, removed, unlocked, created };
+  return { screen, switched, removed, unlocked, created, counting };
 }
