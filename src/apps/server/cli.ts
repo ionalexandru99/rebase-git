@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { spawn } from "node:child_process";
+import { execFile, spawn } from "node:child_process";
 import { existsSync, readFileSync, realpathSync } from "node:fs";
 import { homedir, release } from "node:os";
 
@@ -14,6 +14,9 @@ import {
 } from "#server/app/server/start-environment-server.ts";
 
 declare const REBASE_PRODUCT_VERSION: string;
+
+const curlCouldNotConnect = 7;
+const windowsReachDeadline = "10 seconds";
 
 const usage =
   "Usage: rebase [serve] [--host <ip-address|lan|tailscale>] [--port <1-65535>]";
@@ -95,8 +98,8 @@ function serve(options: EnvironmentServerOptions) {
       yield* Effect.sync(() => {
         process.stdout.write(`Listening URL: ${origin}\n`);
         process.stdout.write(`Pairing URL: ${pairingUrl}\n`);
-        openDefaultBrowser(pairingUrl);
       });
+      yield* Effect.forkScoped(openDefaultBrowser(pairingUrl));
       yield* Deferred.await(shutdown);
     }),
   );
@@ -178,33 +181,57 @@ if (
 }
 
 function openDefaultBrowser(url: string) {
-  if (process.env.BROWSER === "none") {
-    return;
+  if (process.env.BROWSER === "none") return Effect.void;
+  if (process.platform === "darwin") return launchBrowser("open", [url]);
+  if (process.platform === "win32") {
+    return launchBrowser("cmd.exe", windowsStartArguments(url));
   }
-
-  try {
-    const invocation = browserInvocation(url);
-    const child = spawn(invocation.command, invocation.arguments, {
-      detached: true,
-      stdio: "ignore",
-      windowsHide: true,
-    });
-    child.once("error", () => undefined);
-    child.unref();
-  } catch {}
+  if (isWindowsSubsystemForLinux()) {
+    return untilWindowsReaches(url).pipe(
+      Effect.andThen(launchBrowser("cmd.exe", windowsStartArguments(url))),
+    );
+  }
+  return launchBrowser("xdg-open", [url]);
 }
 
-function browserInvocation(url: string): BrowserInvocation {
-  if (process.platform === "darwin") {
-    return { arguments: [url], command: "open" };
-  }
-  if (process.platform === "win32" || isWindowsSubsystemForLinux()) {
-    return {
-      arguments: ["/d", "/s", "/c", "start", "", url],
-      command: "cmd.exe",
-    };
-  }
-  return { arguments: [url], command: "xdg-open" };
+function launchBrowser(command: string, arguments_: readonly string[]) {
+  return Effect.sync(() => {
+    try {
+      const child = spawn(command, arguments_, {
+        detached: true,
+        stdio: "ignore",
+        windowsHide: true,
+      });
+      child.once("error", () => undefined);
+      child.unref();
+    } catch {}
+  });
+}
+
+function windowsStartArguments(url: string) {
+  return ["/d", "/s", "/c", "start", "", url];
+}
+
+function untilWindowsReaches(url: string) {
+  return Effect.callback<void, "Unreachable">((resume) => {
+    const probe = execFile(
+      "curl.exe",
+      ["--silent", "--output", "NUL", new URL(url).origin],
+      { windowsHide: true },
+      (error) => {
+        resume(
+          error?.code === curlCouldNotConnect
+            ? Effect.fail("Unreachable")
+            : Effect.void,
+        );
+      },
+    );
+    return Effect.sync(() => probe.kill());
+  }).pipe(
+    Effect.eventually,
+    Effect.timeout(windowsReachDeadline),
+    Effect.ignore,
+  );
 }
 
 function isWindowsSubsystemForLinux() {
@@ -216,9 +243,4 @@ function isWindowsSubsystemForLinux() {
   } catch {
     return release().toLowerCase().includes("microsoft");
   }
-}
-
-interface BrowserInvocation {
-  readonly arguments: readonly string[];
-  readonly command: string;
 }
