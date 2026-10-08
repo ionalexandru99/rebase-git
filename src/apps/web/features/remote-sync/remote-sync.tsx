@@ -1,16 +1,5 @@
-import { Menu } from "@base-ui/react/menu";
-import {
-  IconArrowBarToDown,
-  IconArrowDown,
-  IconArrowUp,
-  IconChevronDown,
-} from "@tabler/icons-react";
+import { IconArrowBarToDown } from "@tabler/icons-react";
 import type { ReactNode } from "react";
-import { Button } from "#web/components/ui/button.tsx";
-import {
-  DropdownMenuContent,
-  DropdownMenuItem,
-} from "#web/components/ui/dropdown-menu.tsx";
 import { ToolbarButton } from "#web/components/ui/toolbar-button.tsx";
 import { useOperationCommandState } from "#web/features/operation-recovery/hooks/use-operation-status.ts";
 import {
@@ -21,7 +10,6 @@ import {
   type Push,
   PushButton,
   PushNotice,
-  pushAvailability,
   usePush,
 } from "#web/features/remote-sync/push.tsx";
 import { resolvePushTarget } from "#web/features/remote-sync/push-target.ts";
@@ -69,15 +57,9 @@ function SyncActions({
     refs?.branches.find(({ name }) => name === activeBranch)?.upstream
       ?.behind ?? 0;
   const pushTarget = resolvePushTarget(refs, activeBranch);
-  const upstream = pushTarget?.upstream;
-  const outgoing = upstream === undefined || upstream.gone ? 0 : upstream.ahead;
   const ready = pull.canRun && pull.ready && !recoveryBusy && !pull.pulling;
-  const canForcePush =
-    pushTarget !== undefined &&
-    pushAvailability(push, pushTarget, recoveryBusy).canForcePush;
   return (
     <>
-      <SyncCounts incoming={incoming} outgoing={outgoing} />
       <div className="flex h-7 shrink-0 items-center overflow-hidden rounded-control border border-border">
         {pull.available ? (
           <ToolbarButton
@@ -89,6 +71,9 @@ function SyncActions({
             }}
           >
             <IconArrowBarToDown aria-hidden="true" className="size-3.5" />
+            {incoming === 0 ? null : (
+              <span className="text-destructive tabular-nums">{incoming}</span>
+            )}
           </ToolbarButton>
         ) : null}
         {scope === undefined || pushTarget === undefined ? null : (
@@ -99,30 +84,6 @@ function SyncActions({
             className={segment}
           />
         )}
-        <Menu.Root>
-          <Menu.Trigger
-            aria-label="More sync actions"
-            render={<Button className={segment} size="sm" variant="ghost" />}
-          >
-            <IconChevronDown aria-hidden="true" className="size-3.5" />
-          </Menu.Trigger>
-          <DropdownMenuContent>
-            <DropdownMenuItem
-              disabled={!ready || fetch.fetching}
-              onClick={fetch.fetchNow}
-            >
-              Fetch
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              disabled={!canForcePush}
-              onClick={() => {
-                if (pushTarget !== undefined) push.requestForcePush(pushTarget);
-              }}
-            >
-              Force push…
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </Menu.Root>
       </div>
       <FetchStatus
         connected={scope?.connected !== false}
@@ -130,35 +91,6 @@ function SyncActions({
         fetching={fetch.fetching}
       />
     </>
-  );
-}
-
-function SyncCounts({
-  incoming,
-  outgoing,
-}: {
-  readonly incoming: number;
-  readonly outgoing: number;
-}) {
-  if (incoming === 0 && outgoing === 0) return null;
-  return (
-    <span
-      aria-hidden="true"
-      className="inline-flex shrink-0 items-center gap-1 rounded-full bg-primary/15 px-1.5 text-badge leading-[1.15rem] text-primary tabular-nums"
-    >
-      {incoming === 0 ? null : (
-        <span className="inline-flex items-center">
-          <IconArrowDown className="size-3" />
-          {incoming}
-        </span>
-      )}
-      {outgoing === 0 ? null : (
-        <span className="inline-flex items-center">
-          <IconArrowUp className="size-3" />
-          {outgoing}
-        </span>
-      )}
-    </span>
   );
 }
 

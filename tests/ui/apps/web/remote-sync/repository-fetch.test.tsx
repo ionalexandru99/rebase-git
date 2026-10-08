@@ -1,8 +1,7 @@
 import { act } from "react";
 import { describe, expect, it, vi } from "vite-plus/test";
-import { page, userEvent } from "vite-plus/test/browser";
+import { page } from "vite-plus/test/browser";
 import {
-  type FetchFailed,
   type RepositoryFetchSetting,
   type RepositoryFetchStatus,
   RepositoryPullApi,
@@ -11,7 +10,6 @@ import { RepositoryRefsApi } from "#contracts/repository-refs/repository-refs.co
 import {
   fakeRequests,
   idleOperation,
-  rejected,
   respond,
   unanswered,
 } from "#tests-support/fake-requests.ts";
@@ -60,58 +58,12 @@ describe("repository fetch controls", () => {
       .toHaveBeenLastCalledWith({ _tag: "Interval", seconds: 90 });
   });
 
-  it("reports a failed toolbar fetch once and clears its status after a fetch succeeds", async () => {
+  it("shows background fetch failures until a fetch succeeds", async () => {
     const f = await fixture(fresh);
-    f.fetch.mockRejectedValueOnce(unanswered);
-    await fetchNow();
-    await expect.element(page.getByText("Couldn't fetch")).toBeVisible();
-    await expect
-      .element(page.getByRole("status"))
-      .toHaveTextContent("Fetch failed");
-    await fetchNow();
-    await expect.element(page.getByRole("status")).not.toBeInTheDocument();
-    await expect
-      .element(page.getByText("Fetching", { exact: true }))
-      .not.toBeInTheDocument();
-    await expect
-      .element(page.getByText("Couldn't fetch"))
-      .not.toBeInTheDocument();
-    expect(f.fetch).toHaveBeenCalledTimes(2);
-  });
-
-  it("shows the toolbar fetch progress in a toast that turns into the result", async () => {
-    const f = await fixture(fresh);
-    const finished = Promise.withResolvers<RepositoryFetchStatus>();
-    f.fetch.mockImplementationOnce((progress) => {
-      progress?.(40);
-      return finished.promise;
-    });
-    await fetchNow();
-    await expect
-      .element(page.getByRole("progressbar", { name: "Fetching" }))
-      .toHaveAttribute("aria-valuenow", "40");
-    finished.resolve(fresh);
-
-    await expect
-      .element(page.getByText("Fetched", { exact: true }))
-      .toBeVisible();
-    await expect.element(page.getByRole("progressbar")).not.toBeInTheDocument();
-  });
-
-  it("disables duplicate fetches and shows background fetch failures", async () => {
-    const f = await fixture(fresh);
-    const finished = Promise.withResolvers<RepositoryFetchStatus>();
-    f.fetch.mockReturnValueOnce(finished.promise);
-    await fetchNow();
-    await expectFetchItem(true);
-    expect(f.fetch).toHaveBeenCalledOnce();
-    finished.resolve(fresh);
-    await expectFetchItem(false);
     await f.publish(failed);
     await expect
       .element(page.getByRole("status"))
       .toHaveTextContent("Fetch failed");
-    await expectFetchItem(false);
     expect(page.getByText("Couldn't fetch").elements()).toHaveLength(0);
     await f.publish(fresh);
     await expect.element(page.getByRole("status")).not.toBeInTheDocument();
@@ -159,9 +111,8 @@ describe("repository fetch controls", () => {
     await expect.poll(() => f.configure).toHaveBeenCalledTimes(2);
   });
 
-  it("shows offline and disables fetching and its configuration", async () => {
+  it("shows offline and disables the fetch configuration", async () => {
     await fixture(fresh, { connected: false });
-    await expectFetchItem(true);
     await expect
       .element(page.getByRole("status"))
       .toHaveTextContent("You're offline");
@@ -182,20 +133,6 @@ describe("repository fetch controls", () => {
   });
 });
 
-async function fetchNow() {
-  await page.getByRole("button", { name: "More sync actions" }).click();
-  await page.getByRole("menuitem", { name: "Fetch" }).click();
-}
-
-async function expectFetchItem(disabled: boolean) {
-  await page.getByRole("button", { name: "More sync actions" }).click();
-  const item = page.getByRole("menuitem", { name: "Fetch" });
-  if (disabled)
-    await expect.element(item).toHaveAttribute("aria-disabled", "true");
-  else await expect.element(item).not.toHaveAttribute("aria-disabled");
-  await userEvent.keyboard("{Escape}");
-}
-
 async function fixture(
   initial: RepositoryFetchStatus,
   {
@@ -204,11 +141,6 @@ async function fixture(
   }: { readonly connected?: boolean; readonly canConfigure?: boolean } = {},
 ) {
   let status = initial;
-  const fetch = vi.fn(
-    async (
-      _progress?: (percent: number) => void,
-    ): Promise<RepositoryFetchStatus> => status,
-  );
   const configure = vi.fn(
     async (setting: RepositoryFetchSetting): Promise<RepositoryFetchStatus> => {
       status = { ...status, setting };
@@ -236,12 +168,6 @@ async function fixture(
             throw unanswered;
           }),
           respond(RepositoryPullApi.fetchStatus, async () => status),
-          respond(RepositoryPullApi.fetch, async (_input, { progress }) => {
-            const result = await fetch(progress);
-            if (result.failure !== undefined)
-              throw rejected<FetchFailed>(result.failure);
-            return result;
-          }),
           respond(RepositoryPullApi.configureFetch, (input) =>
             configure(input.setting),
           ),
@@ -250,7 +176,6 @@ async function fixture(
     },
   );
   return {
-    fetch,
     configure,
     publish: async (next: RepositoryFetchStatus) => {
       status = next;

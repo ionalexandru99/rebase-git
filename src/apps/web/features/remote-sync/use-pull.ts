@@ -28,7 +28,7 @@ const fetchProblems: Record<FetchFailed["reason"], string> = {
   Failed: "Git could not fetch from the remote.",
 };
 
-export function useFetch(toast: "fetch" | "pull" = "fetch") {
+export function useFetch() {
   const scope = useRepositoryScope();
   const repositoryId = scope?.repositoryId;
   const status = useEnvironmentQuery(
@@ -39,7 +39,7 @@ export function useFetch(toast: "fetch" | "pull" = "fetch") {
   const errorToast = useErrorToast();
   const statusToast = useStatusToast();
   const command = useCommand(RepositoryPullApi.fetch, {
-    progress: (percent) => statusToast.advance(toast, percent),
+    progress: (percent) => statusToast.advance("pull", percent),
   });
   const { run } = command;
   const execute = () =>
@@ -51,12 +51,6 @@ export function useFetch(toast: "fetch" | "pull" = "fetch") {
           });
           return result._tag === "Ok";
         });
-  const fetchNow = () => {
-    statusToast.progress(toast, "Fetching", { percent: 0 });
-    void execute().then((fetched) => {
-      if (fetched) statusToast.success(toast, "Fetched");
-    });
-  };
   return {
     status: status.data,
     ready: status.data !== undefined && scope?.connected === true,
@@ -65,7 +59,6 @@ export function useFetch(toast: "fetch" | "pull" = "fetch") {
       command.failure !== undefined ||
       (status.data?.failure !== undefined && !command.running),
     execute,
-    fetchNow,
   };
 }
 
@@ -73,7 +66,7 @@ export type Fetch = ReturnType<typeof useFetch>;
 
 export function usePull() {
   const scope = useRepositoryScope();
-  const fetch = useFetch("pull");
+  const fetch = useFetch();
   const errorToast = useErrorToast();
   const statusToast = useStatusToast();
   const stashes = useStashCommands();
