@@ -1,10 +1,12 @@
-import { describe, expect, it, vi } from "vite-plus/test";
+import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import { page } from "vite-plus/test/browser";
 import { thirdPartyLicense } from "#tests-support/fixtures.ts";
 import { render } from "#tests-support/render.tsx";
 import { LicensesSettings } from "#web/features/settings/licenses-settings.tsx";
 
 describe("licenses settings", () => {
+  afterEach(() => vi.restoreAllMocks());
+
   it("searches notices and opens the one the user picks", async () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValue(
       Response.json([

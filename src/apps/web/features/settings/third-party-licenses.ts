@@ -1,12 +1,7 @@
-export interface ThirdPartyLicense {
-  readonly name: string;
-  readonly version: string | null;
-  readonly license: string;
-  readonly sourceUrl: string | null;
-  readonly notice: string;
-}
-
-export const thirdPartyLicensesFile = "third-party-licenses.json";
+import {
+  type ThirdPartyLicense,
+  thirdPartyLicensesFile,
+} from "#contracts/third-party-licenses/third-party-licenses.contract.ts";
 
 export async function loadThirdPartyLicenses(
   signal: AbortSignal,

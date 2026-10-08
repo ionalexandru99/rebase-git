@@ -6,7 +6,7 @@ import type { Plugin } from "vite-plus";
 import {
   type ThirdPartyLicense,
   thirdPartyLicensesFile,
-} from "#web/features/settings/third-party-licenses.ts";
+} from "#contracts/third-party-licenses/third-party-licenses.contract.ts";
 
 interface PackageJson {
   readonly name?: string;
@@ -15,7 +15,6 @@ interface PackageJson {
   readonly homepage?: unknown;
   readonly repository?: unknown;
   readonly dependencies?: Readonly<Record<string, string>>;
-  readonly optionalDependencies?: Readonly<Record<string, string>>;
 }
 
 interface InstalledPackage {
@@ -103,7 +102,7 @@ async function collectThirdPartyLicenses(
   }
   if (failures.length > 0)
     throw new Error(
-      `These bundled packages have no license or notice file. Add one to packaging/third-party-notices:\n${failures.join("\n")}`,
+      `These bundled packages declare no license or ship no notice file (add notices to packaging/third-party-notices):\n${failures.join("\n")}`,
     );
 
   for (const asset of bundledAssets) {
@@ -141,10 +140,7 @@ async function nodeBundleInputs() {
 async function runtimeDependencies() {
   const found: InstalledPackage[] = [];
   const visit = async (manifest: PackageJson, from: string) => {
-    for (const name of Object.keys({
-      ...manifest.dependencies,
-      ...manifest.optionalDependencies,
-    })) {
+    for (const name of Object.keys(manifest.dependencies ?? {})) {
       const dependency = await installedPackage(name, from);
       if (
         dependency === undefined ||
@@ -183,7 +179,7 @@ async function owningPackage(
   if (!isInstalled(file)) return undefined;
   for (
     let directory = dirname(await realpath(file));
-    basename(directory) !== "node_modules";
+    basename(directory) !== "node_modules" && dirname(directory) !== directory;
     directory = dirname(directory)
   ) {
     const manifest = await readManifest(directory).catch(() => undefined);

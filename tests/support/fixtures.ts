@@ -30,6 +30,7 @@ import type {
   GitStatus,
   HostRepositories,
 } from "#contracts/source-control/source-control.contract.ts";
+import type { ThirdPartyLicense } from "#contracts/third-party-licenses/third-party-licenses.contract.ts";
 import type {
   WorktreeEntry,
   WorktreeFile,
@@ -38,7 +39,6 @@ import type {
   AuthorAvatarStore,
   CachedAvatar,
 } from "#web/features/author-avatars/author-avatar-store.ts";
-import type { ThirdPartyLicense } from "#web/features/settings/third-party-licenses.ts";
 import type { RepositoryScope } from "#web/platform/query/repository-scope.tsx";
 
 export const repositoryId = "00000000-0000-4000-8000-000000000001";

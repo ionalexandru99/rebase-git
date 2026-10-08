@@ -4,6 +4,7 @@ import {
   IconSearch,
 } from "@tabler/icons-react";
 import { type JSX, useEffect, useState } from "react";
+import type { ThirdPartyLicense } from "#contracts/third-party-licenses/third-party-licenses.contract.ts";
 import { buttonVariants } from "#web/components/ui/button.tsx";
 import {
   Collapsible,
@@ -18,7 +19,6 @@ import {
 import {
   filterThirdPartyLicenses,
   loadThirdPartyLicenses,
-  type ThirdPartyLicense,
 } from "#web/features/settings/third-party-licenses.ts";
 
 export function LicensesSettings(): JSX.Element {

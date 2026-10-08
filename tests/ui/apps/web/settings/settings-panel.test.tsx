@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { describe, expect, it, vi } from "vite-plus/test";
+import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import { page } from "vite-plus/test/browser";
 import type {
   DesktopUpdateSnapshot,
@@ -11,6 +11,8 @@ import { SettingsPanel } from "#web/features/settings/settings-panel.tsx";
 import type { SettingsSectionId } from "#web/features/settings/settings-sections.ts";
 
 describe("settings panel", () => {
+  afterEach(() => vi.restoreAllMocks());
+
   it("shows only the version in the browser and navigates settings", async () => {
     const closeSettings = vi.fn();
     await renderSettings(closeSettings);

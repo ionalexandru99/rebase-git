@@ -5,9 +5,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { afterEach, describe, expect, it } from "vite-plus/test";
+import type { ThirdPartyLicense } from "#contracts/third-party-licenses/third-party-licenses.contract.ts";
 import { startEnvironmentServer } from "#tests-support/environment-server.ts";
 import { removeTemporaryDirectory } from "#tests-support/temporary-directory.ts";
-import type { ThirdPartyLicense } from "#web/features/settings/third-party-licenses.ts";
 
 const children = new Set<ChildProcessWithoutNullStreams>();
 const directories = new Set<string>();

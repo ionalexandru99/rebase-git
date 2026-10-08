@@ -29,6 +29,7 @@ import {
   createTrustedIpcHandler,
   isExternalPullRequestLink,
   isTrustedRendererLocation,
+  licenseSourceLinks,
   type TrustedIpcHandler,
 } from "#desktop/platform/renderer-trust.ts";
 
@@ -127,8 +128,10 @@ async function openWindow(
 
   registerEnvironmentCredentialIpc(window, options, trusted);
   preventUntrustedNavigation(window, options.renderer);
+  const licenseLinks = await licenseSourceLinks(options.renderer);
   window.webContents.setWindowOpenHandler(({ url }) => {
-    if (isExternalPullRequestLink(url)) void shell.openExternal(url);
+    if (isExternalPullRequestLink(url) || licenseLinks.has(url))
+      void shell.openExternal(url);
     return { action: "deny" };
   });
   window.once("ready-to-show", () => window.show());
