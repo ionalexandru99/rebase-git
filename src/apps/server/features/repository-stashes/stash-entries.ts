@@ -12,6 +12,7 @@ import {
 
 const maximumStashes = 1_000;
 const separator = "\x1f";
+const gitAutoStash = "autostash";
 const autoStash = /^rebase-auto-stash:[0-9a-f-]+ before checking out (.+)$/s;
 
 interface StashEntry {
@@ -54,9 +55,11 @@ export function describeStash(subject: string) {
   const checkout = autoStash.exec(on[2]);
   return {
     name:
-      checkout?.[1] === undefined
-        ? on[2]
-        : `Before checking out ${checkout[1]}`,
+      checkout?.[1] !== undefined
+        ? `Before checking out ${checkout[1]}`
+        : on[2] === gitAutoStash
+          ? `Changes on ${on[1]}`
+          : on[2],
     named: true,
     auto: checkout !== null,
     branch: branchOf(on[1]),
@@ -109,7 +112,7 @@ function readStashEntries(git: GitCommandRunner, directory: string) {
       "list",
       "--date=unix",
       `--max-count=${maximumStashes + 1}`,
-      `--format=%H${separator}%gd${separator}%gs`,
+      `--format=%H${separator}%gd${separator}%gs${separator}%s`,
     ],
     { maxOutputBytes: 16 * 1_048_576 },
   ).pipe(
@@ -118,10 +121,11 @@ function readStashEntries(git: GitCommandRunner, directory: string) {
         .split("\n")
         .filter((line) => line.length > 0)
         .map((line): StashEntry => {
-          const [oid = "", selector = "", subject = ""] = line.split(separator);
+          const [oid = "", selector = "", subject = "", message = ""] =
+            line.split(separator);
           return {
             oid,
-            subject,
+            subject: subject === gitAutoStash ? message : subject,
             recordedAt: Number(/\{(\d+)\}$/.exec(selector)?.[1] ?? 0),
           };
         }),

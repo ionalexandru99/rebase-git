@@ -109,13 +109,7 @@ export function usePull() {
 
   const applyStash = (oid: string) => ({
     label: "Apply",
-    run: () =>
-      void stashes.restore(
-        { oid, name: "autostash" },
-        true,
-        true,
-        "Your changes are back",
-      ),
+    run: () => void stashes.restore(oid, true, true, "Your changes are back"),
   });
 
   const pull = async (branch: string, strategy?: PullChoice) => {

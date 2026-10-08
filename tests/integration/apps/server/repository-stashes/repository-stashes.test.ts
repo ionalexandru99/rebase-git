@@ -28,7 +28,7 @@ afterEach(async () => {
 });
 
 describe("repository stashes", () => {
-  it("lists named, automatic and unnamed stashes with their untracked files", async () => {
+  it("lists named, automatic, unnamed and Git autostash stashes with their untracked files", async () => {
     const worktreePath = await fixture();
     await edit(worktreePath, "a.txt", lines("one", "two changed", "three"));
     await git(worktreePath, "add", "a.txt");
@@ -44,10 +44,14 @@ describe("repository stashes", () => {
     );
     await edit(worktreePath, "b.txt", "b changed\n");
     await git(worktreePath, "stash", "push");
+    await edit(worktreePath, "b.txt", "b kept by a pull\n");
+    const kept = await git(worktreePath, "stash", "create", "autostash");
+    await git(worktreePath, "stash", "store", "-m", "autostash", kept.trim());
 
     const { stashes } = await run(listStashes(runner, worktreePath));
 
     expect(stashes).toMatchObject([
+      { name: "Changes on main", named: true, auto: false, branch: "main" },
       {
         name: "WIP on main",
         named: false,
@@ -67,7 +71,7 @@ describe("repository stashes", () => {
       readStashContents(runner, {
         repositoryId,
         worktreePath,
-        oid: stashes[1]?.oid ?? "",
+        oid: stashes[2]?.oid ?? "",
       }),
     );
     expect(contents.files).toEqual([
