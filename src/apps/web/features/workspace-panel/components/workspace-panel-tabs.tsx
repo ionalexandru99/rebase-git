@@ -168,17 +168,17 @@ function PanelTab({
       >
         <feature.icon
           aria-hidden="true"
-          className="size-3 group-hover/tab:hidden group-focus-within/tab:hidden"
+          className="size-3 group-hover/tab:hidden group-focus-visible/button:hidden"
         />
         <IconX
           aria-hidden="true"
-          className="hidden size-3 group-hover/tab:block group-focus-within/tab:block"
+          className="hidden size-3 group-hover/tab:block group-focus-visible/button:block"
         />
       </Button>
       <TabsTrigger
         value={tab}
         aria-label={label}
-        className="h-full min-w-0 rounded-control pr-2 text-inherit"
+        className="h-full min-w-0 rounded-control pr-2 text-inherit focus-visible:ring-0"
         onKeyDown={(event) => {
           if (event.key === "Delete") {
             event.preventDefault();
