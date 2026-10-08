@@ -233,13 +233,14 @@ function descendantsOf(
 }
 
 function totals(snapshot: ProcessSnapshot) {
-  return snapshot.processes.reduce(
-    (total, process) => ({
-      cpu: total.cpu + machineShare(process.cpu, snapshot.processors),
-      memory: total.memory + process.memory,
+  const total = snapshot.processes.reduce(
+    (sum, process) => ({
+      cpu: sum.cpu + machineShare(process.cpu, snapshot.processors),
+      memory: sum.memory + process.memory,
     }),
     { cpu: 0, memory: 0 },
   );
+  return { ...total, cpu: Math.min(100, total.cpu) };
 }
 
 function machineShare(cpu: number, processors: number) {
