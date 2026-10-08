@@ -26,6 +26,7 @@ export interface GitCommand {
   readonly timeoutMilliseconds?: number;
   readonly progress?: (output: string) => void;
   readonly progressStream?: "stdout" | "stderr";
+  readonly onSpawn?: (pid: number, stop: () => void) => void;
 }
 
 export type GitCommandOptions = Omit<GitCommand, "arguments" | "directory">;
@@ -225,6 +226,7 @@ function rejectedByGit(exitCode: number, stderr: string): GitFailed {
 
 function runLocalGitCommand(command: GitCommand) {
   return Effect.callback<GitCommandOutput, GitFailed>((resume) => {
+    let stopped = false;
     const child = execFile(
       "git",
       gitArguments(command),
@@ -247,9 +249,11 @@ function runLocalGitCommand(command: GitCommand) {
         }
         const exitCode = exitCodeOf(error);
         resume(
-          exitCode === undefined
-            ? Effect.fail(gitFailed(failureReason(error)))
-            : Effect.succeed({ exitCode, stderr, stdout }),
+          stopped
+            ? Effect.fail(gitFailed("Failed", "Stopped from Diagnostics."))
+            : exitCode === undefined
+              ? Effect.fail(gitFailed(failureReason(error)))
+              : Effect.succeed({ exitCode, stderr, stdout }),
         );
       },
     );
@@ -263,6 +267,11 @@ function runLocalGitCommand(command: GitCommand) {
         if (text !== "") progress(text);
       });
     }
+    if (child.pid !== undefined)
+      command.onSpawn?.(child.pid, () => {
+        stopped = true;
+        killGit(child);
+      });
     child.stdin?.once("error", () => undefined);
     child.stdin?.end(command.input);
     return stopGit(child);
@@ -276,15 +285,19 @@ function stopGit(child: ChildProcess) {
       return;
     }
     child.once("exit", () => resume(Effect.void));
-    if (process.platform === "win32" && child.pid !== undefined)
-      execFile(
-        "taskkill",
-        ["/pid", String(child.pid), "/T", "/F"],
-        { windowsHide: true },
-        () => undefined,
-      );
-    else child.kill();
+    killGit(child);
   });
+}
+
+function killGit(child: ChildProcess) {
+  if (process.platform === "win32" && child.pid !== undefined)
+    execFile(
+      "taskkill",
+      ["/pid", String(child.pid), "/T", "/F"],
+      { windowsHide: true },
+      () => undefined,
+    );
+  else child.kill();
 }
 
 function withoutProgress(stderr: string) {
@@ -336,6 +349,8 @@ function spawnGitProcess(command: GitStreamCommand) {
         windowsHide: true,
       });
       const exit = watchGitExit(child);
+      if (child.pid !== undefined)
+        command.onSpawn?.(child.pid, () => killGit(child));
       child.stdin.once("error", () => undefined);
       child.stdin.end(command.input);
       return { child, exit };

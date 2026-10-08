@@ -79,8 +79,11 @@ describe("local repository watcher", () => {
 async function watch(gitDirectory: string) {
   const kinds: RepositoryChangeKind[] = [];
   const handle = await Effect.runPromise(
-    createLocalRepositoryWatcher().watch(gitDirectory, (kind) => {
-      kinds.push(kind);
+    createLocalRepositoryWatcher().watch(gitDirectory, {
+      changed: (kind) => {
+        kinds.push(kind);
+      },
+      failed: () => {},
     }),
   );
   onTestFinished(() => handle.close());

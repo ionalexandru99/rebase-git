@@ -5,6 +5,7 @@ import type { RepositoryWatchHandle } from "#server/adapters/local-git/local-rep
 export function watchGitDirectoryTree(
   root: string,
   onChange: (path: string | undefined) => void,
+  failed: (detail: string) => void,
 ): RepositoryWatchHandle | undefined {
   const watchers = new Map<string, FSWatcher>();
   const remove = (directory: string) => {
@@ -58,16 +59,30 @@ export function watchGitDirectoryTree(
         else refreshChild(path, event === "rename");
         onChange(path);
       });
-    } catch {
+    } catch (error) {
+      reportWatchLimit(error, failed);
       return;
     }
     watchers.set(directory, watcher);
-    watcher.on("error", () => {
+    watcher.on("error", (error) => {
       if (watchers.get(directory) === watcher) remove(directory);
+      reportWatchLimit(error, failed);
     });
     refresh(directory);
   };
   attach(root);
   if (!watchers.has(root)) return undefined;
   return { close: () => remove(root) };
+}
+
+export function reportWatchLimit(
+  error: unknown,
+  failed: (detail: string) => void,
+) {
+  if (
+    error instanceof Error &&
+    "code" in error &&
+    ["ENOSPC", "EMFILE", "ENFILE"].includes(String(error.code))
+  )
+    failed(error.message);
 }

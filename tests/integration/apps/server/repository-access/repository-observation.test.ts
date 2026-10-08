@@ -123,9 +123,10 @@ it("shares canonical directory aliases and makes release idempotent", async () =
     const watcher = createLocalRepositoryWatcher();
     const changed = vi.fn();
     vi.mocked(watch).mockClear();
-    const first = await Effect.runPromise(watcher.watch(common, changed));
+    const listener = { changed, failed: () => {} };
+    const first = await Effect.runPromise(watcher.watch(common, listener));
     const second = await Effect.runPromise(
-      watcher.watch(alias.replaceAll("\\", "/"), changed),
+      watcher.watch(alias.replaceAll("\\", "/"), listener),
     );
     try {
       expect(

@@ -5,6 +5,7 @@
       "**",
       "!**/dist",
       "!**/node_modules",
+      "!native/process-monitor/target",
       "!release",
       "!tests/.artifacts",
       "!.plans",

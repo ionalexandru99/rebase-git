@@ -32,9 +32,9 @@ it("publishes a change without waiting and coalesces changes that arrive during 
   await createRepository(second.path);
   const listeners: Array<(kind: RepositoryChangeKind) => void> = [];
   const watcher: RepositoryWatcher = {
-    watch: (_directory, onChange) =>
+    watch: (_directory, { changed }) =>
       Effect.sync(() => {
-        listeners.push(onChange);
+        listeners.push(changed);
         return { close: () => {} };
       }),
   };

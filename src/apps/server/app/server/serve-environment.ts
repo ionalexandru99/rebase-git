@@ -6,6 +6,7 @@ import { combineEnvironmentFeatures } from "#server/adapters/environment-transpo
 import type { GitCommandRunner } from "#server/adapters/local-git/git-commands.ts";
 import { createLocalRepositoryWatcher } from "#server/adapters/local-git/local-repository-watcher.ts";
 import { acquireRuntimeMarker } from "#server/app/runtime/runtime-marker.ts";
+import { readGitVersion } from "#server/app/runtime/runtime-requirements.ts";
 import {
   acquireEnvironmentListener,
   type EnvironmentListener,
@@ -17,6 +18,17 @@ import {
   createCommandProgress,
 } from "#server/features/command-progress/command-progress.ts";
 import { commitInspectionFeature } from "#server/features/commit-inspection/commit-inspection.ts";
+import { acquireDiagnosticsFeature } from "#server/features/diagnostics/diagnostics.ts";
+import { createDiagnosticsActivity } from "#server/features/diagnostics/diagnostics-activity.ts";
+import {
+  observeFeatures,
+  recordGitActivity,
+  reportDefect,
+} from "#server/features/diagnostics/diagnostics-recording.ts";
+import {
+  acquireProcessMonitor,
+  processMonitorPath,
+} from "#server/features/diagnostics/process-monitor.ts";
 import {
   createEnvironmentAuthorization,
   environmentAuthorizationFeature,
@@ -42,6 +54,7 @@ import { repositoryOperationsFeature } from "#server/features/repository-operati
 import { repositoryPullFeature } from "#server/features/repository-pull/repository-pull.feature.ts";
 import { repositoryPushFeature } from "#server/features/repository-push/repository-push.ts";
 import { repositoryReflogFeature } from "#server/features/repository-reflog/repository-reflog.ts";
+import { acquireRepositoryChangePublisher } from "#server/features/repository-refs/repository-change-publisher.ts";
 import { repositoryRefsFeature } from "#server/features/repository-refs/repository-refs.feature.ts";
 import { repositoryStashesFeature } from "#server/features/repository-stashes/repository-stashes.ts";
 import { repositoryWorktreesFeature } from "#server/features/repository-worktrees/repository-worktrees.ts";
@@ -98,6 +111,8 @@ export function serveEnvironment(
       features: yield* environmentFeatures(dependencies),
       ...(options.host === undefined ? {} : { host: options.host }),
       port: useAutomaticPort ? (environment.automaticPort ?? 0) : options.port,
+      reportDefect: (where, cause) =>
+        reportDefect(dependencies.activity, { procedure: where }, cause),
     });
 
     if (useAutomaticPort && environment.automaticPort === null) {
@@ -124,28 +139,52 @@ export function serveEnvironment(
 
 export function acquireEnvironment(home: string, runner: GitCommandRunner) {
   return Effect.gen(function* () {
-    const lfs = createGitLfs(runner);
+    const activity = createDiagnosticsActivity();
+    const lfs = createGitLfs(recordGitActivity(runner, activity));
     const git = lfs.git;
     const paths = environmentPaths(join(home, ".rebase"));
     const context = yield* acquireEnvironmentContext(paths);
     const catalog = createRepositoryCatalog(context, git);
     const events = createEnvironmentEventPublisher();
+    const watcher = createLocalRepositoryWatcher();
     return {
       access: createRepositoryAccess(catalog, git),
+      activity,
       authorization: createEnvironmentAuthorization(context),
       catalog,
+      changes: yield* acquireRepositoryChangePublisher(
+        git,
+        watcher,
+        events,
+        (repositoryId, detail) =>
+          activity.reportError({
+            kind: "Watcher",
+            title: "Stopped watching for changes",
+            where: detail,
+            detail,
+            repositoryId,
+          }),
+      ),
       context,
       coordination: createRepositoryCoordination(git),
       events,
       git,
       gitHosts: createGitHostClients(),
       lfs,
+      monitor: yield* acquireProcessMonitor(processMonitorPath(), (detail) =>
+        activity.reportError({
+          kind: "Monitor",
+          title: "Process monitor stopped",
+          where: detail,
+          detail,
+        }),
+      ),
       paths,
       progress: createCommandProgress(),
       terminals: yield* acquireTerminalSessions((repositoryId) =>
         events.publishChanged([repositoryId], "Terminals"),
       ),
-      watcher: createLocalRepositoryWatcher(),
+      watcher,
     };
   });
 }
@@ -158,7 +197,10 @@ export function environmentFeatures(dependencies: EnvironmentDependencies) {
       dependencies.gitHosts,
       dependencies.lfs,
     );
-    return combineEnvironmentFeatures([
+    const gitVersion = yield* readGitVersion().pipe(
+      Effect.orElseSucceed(() => "Unknown"),
+    );
+    const features = combineEnvironmentFeatures([
       environmentAuthorizationFeature(dependencies.authorization),
       environmentFilesystemFeature(),
       repositoryCatalogFeature(
@@ -194,7 +236,18 @@ export function environmentFeatures(dependencies: EnvironmentDependencies) {
       gitIdentityFeature(dependencies),
       sourceControlFeature({ events: dependencies.events, sourceControl }),
       terminalFeature(dependencies),
+      yield* acquireDiagnosticsFeature({
+        ...dependencies,
+        server: {
+          platform: process.platform,
+          architecture: process.arch,
+          startedAt: Date.now() - process.uptime() * 1_000,
+          gitVersion,
+          dataFolder: dependencies.paths.root,
+        },
+      }),
     ]);
+    return observeFeatures(features, dependencies.activity);
   });
 }
 

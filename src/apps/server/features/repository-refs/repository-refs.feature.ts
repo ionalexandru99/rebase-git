@@ -21,7 +21,6 @@ import {
   type GitCommandRunner,
   runRepositoryGit,
 } from "#server/adapters/local-git/git-commands.ts";
-import type { RepositoryWatcher } from "#server/adapters/local-git/local-repository-watcher.ts";
 import { branchWriteFailed } from "#server/features/repository-refs/git/branches/branch-failures.ts";
 import {
   readLocalBranch,
@@ -42,7 +41,7 @@ import {
   deleteTag,
   readTagAnnotation,
 } from "#server/features/repository-refs/git/repository-tags.ts";
-import { acquireRepositoryChangePublisher } from "#server/features/repository-refs/repository-change-publisher.ts";
+import type { RepositoryChangePublisher } from "#server/features/repository-refs/repository-change-publisher.ts";
 import type { RepositoryAccess } from "#server/repository/repository-access.ts";
 import type { RepositoryWritePolicy } from "#server/repository/repository-coordination.ts";
 
@@ -61,17 +60,12 @@ const tagPolicy: RepositoryWritePolicy = {
 export function repositoryRefsFeature(
   dependencies: RepositoryDependencies & {
     readonly events: EnvironmentEventPublisher;
-    readonly watcher: RepositoryWatcher;
+    readonly changes: RepositoryChangePublisher;
   },
 ) {
   return Effect.gen(function* () {
-    const { access, git } = dependencies;
+    const { access, git, changes } = dependencies;
     const { command, query } = repositoryRoutes(dependencies);
-    const changes = yield* acquireRepositoryChangePublisher(
-      git,
-      dependencies.watcher,
-      dependencies.events,
-    );
     const readRefs = (repositoryId: string) =>
       Effect.gen(function* () {
         const repository = yield* access.repository(repositoryId);

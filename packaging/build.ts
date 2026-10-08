@@ -2,6 +2,10 @@ import { execFile } from "node:child_process";
 import { chmod, cp, mkdir, readFile, rm } from "node:fs/promises";
 import { promisify } from "node:util";
 import { build } from "esbuild";
+import {
+  buildProcessMonitor,
+  processMonitorBinaries,
+} from "./build-process-monitor.ts";
 
 const execute = promisify(execFile);
 const packageMetadata = JSON.parse(await readFile("package.json", "utf8")) as {
@@ -23,8 +27,12 @@ await execute(packageManagerCommand, packageManagerArguments, {
   },
 });
 
+await buildProcessMonitor();
 await mkdir(outputDirectory, { recursive: true });
 await Promise.all([
+  cp(processMonitorBinaries, `${outputDirectory}/process-monitor`, {
+    recursive: true,
+  }),
   cp(
     "src/apps/server/persistence/migrations",
     `${outputDirectory}/migrations`,

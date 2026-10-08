@@ -1,6 +1,14 @@
 import type { IncomingMessage, Server } from "node:http";
 import type { Duplex } from "node:stream";
-import { Deferred, Effect, Fiber, Layer, Queue, Stream } from "effect";
+import {
+  type Cause,
+  Deferred,
+  Effect,
+  Fiber,
+  Layer,
+  Queue,
+  Stream,
+} from "effect";
 import { NetAddress } from "effect/net";
 import { RpcSerialization, RpcServer } from "effect/rpc";
 import { Socket, SocketServer } from "effect/socket";
@@ -34,6 +42,7 @@ export interface EnvironmentSocketOptions {
   readonly environmentId: string;
   readonly events: EnvironmentEventPublisher;
   readonly features: EnvironmentFeatures;
+  readonly reportDefect?: (where: string, cause: Cause.Cause<unknown>) => void;
 }
 
 export function attachEnvironmentSocket(
@@ -127,7 +136,12 @@ function serveEnvironmentRpc(
       address: socketAddress(server),
       run: (handler) =>
         handler(transport).pipe(
-          Effect.catchCause(() => Effect.sync(() => socket.close(1011))),
+          Effect.catchCause((cause) =>
+            Effect.sync(() => {
+              options.reportDefect?.("WebSocket", cause);
+              socket.close(1011);
+            }),
+          ),
           Effect.ensuring(Deferred.succeed(disconnected, undefined)),
           Effect.andThen(Effect.never),
         ),
@@ -149,7 +163,12 @@ function serveEnvironmentRpc(
     );
   }).pipe(
     Effect.scoped,
-    Effect.catchCause(() => Effect.sync(() => socket.close(1011))),
+    Effect.catchCause((cause) =>
+      Effect.sync(() => {
+        options.reportDefect?.("WebSocket", cause);
+        socket.close(1011);
+      }),
+    ),
   );
 }
 

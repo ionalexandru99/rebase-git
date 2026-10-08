@@ -48,7 +48,7 @@ export function parseGitVersion(output: string) {
   return match[1];
 }
 
-function readGitVersion() {
+export function readGitVersion() {
   return Effect.callback<string, RuntimeRequirementsError>((resume, signal) => {
     execFile(
       "git",

@@ -2,6 +2,7 @@ import { execFile } from "node:child_process";
 import { cp, mkdir, readFile, rm } from "node:fs/promises";
 import { promisify } from "node:util";
 import { build } from "esbuild";
+import { buildProcessMonitor } from "./build-process-monitor.ts";
 
 const packageMetadata = JSON.parse(await readFile("package.json", "utf8")) as {
   readonly version: string;
@@ -23,9 +24,15 @@ if (includesWeb) {
   });
 }
 
+const processMonitor = await buildProcessMonitor();
 await rm(outputDirectory, { force: true, recursive: true });
 await mkdir(outputDirectory, { recursive: true });
 await Promise.all([
+  cp(
+    processMonitor,
+    `${outputDirectory}/process-monitor/${process.platform}-${process.arch}`,
+    { recursive: true },
+  ),
   cp("src/apps/desktop/assets", `${outputDirectory}/assets`, {
     recursive: true,
   }),

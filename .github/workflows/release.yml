@@ -96,9 +96,55 @@ jobs:
           jq -e '.headSha == env.RELEASE_SHA and .status == "completed" and .conclusion == "success"' validation.json
           jq -r '"Validated release commit: " + .headSha + "\nValidation: " + .url' validation.json >> "$GITHUB_STEP_SUMMARY"
 
+  process-monitor:
+    name: Build process monitor (${{ matrix.name }})
+    needs: validation
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: macOS
+            runner: macos-latest
+            keys: darwin-arm64 darwin-x64
+            targets: aarch64-apple-darwin x86_64-apple-darwin
+          - name: Windows
+            runner: windows-latest
+            keys: win32-x64
+            targets: x86_64-pc-windows-msvc
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 20
+    steps:
+      - name: Check out release commit
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+
+      - uses: ./.github/actions/setup-workspace
+
+      - name: Build process monitor
+        shell: bash
+        env:
+          KEYS: ${{ matrix.keys }}
+          TARGETS: ${{ matrix.targets }}
+        run: |
+          read -ra targets <<< "$TARGETS"
+          read -ra keys <<< "$KEYS"
+          rustup target add "${targets[@]}"
+          node packaging/build-process-monitor.ts "${keys[@]}"
+
+      - name: Upload process monitor
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: process-monitor-${{ runner.os }}
+          path: native/process-monitor/dist/
+          if-no-files-found: error
+          retention-days: 7
+
   package:
     name: Build package
-    needs: validation
+    needs:
+      - validation
+      - process-monitor
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:
@@ -122,6 +168,13 @@ jobs:
           persist-credentials: false
 
       - uses: ./.github/actions/setup-workspace
+
+      - name: Download process monitors
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          pattern: process-monitor-*
+          path: native/process-monitor/dist
+          merge-multiple: true
 
       - id: request
         name: Validate release request

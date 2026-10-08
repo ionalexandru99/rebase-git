@@ -2,16 +2,24 @@ import { lstatSync, realpathSync, type WatchEventType, watch } from "node:fs";
 import { join, relative, sep } from "node:path";
 import { Effect } from "effect";
 import type { RepositoryChangeKind } from "#contracts/environment-connection/environment-rpc.contract.ts";
-import { watchGitDirectoryTree } from "#server/adapters/local-git/watch-git-directory-tree.ts";
+import {
+  reportWatchLimit,
+  watchGitDirectoryTree,
+} from "#server/adapters/local-git/watch-git-directory-tree.ts";
 
 export interface RepositoryWatchHandle {
   readonly close: () => void;
 }
 
+export interface RepositoryWatchListener {
+  readonly changed: (kind: RepositoryChangeKind) => void;
+  readonly failed: (detail: string) => void;
+}
+
 export interface RepositoryWatcher {
   readonly watch: (
     gitDirectory: string,
-    onChange: (kind: RepositoryChangeKind) => void,
+    listener: RepositoryWatchListener,
   ) => Effect.Effect<RepositoryWatchHandle>;
 }
 
@@ -42,11 +50,11 @@ export function createLocalRepositoryWatcher(): RepositoryWatcher {
     string,
     {
       readonly handle: RepositoryWatchHandle;
-      readonly listeners: Set<(kind: RepositoryChangeKind) => void>;
+      readonly listeners: Set<RepositoryWatchListener>;
     }
   >();
   return {
-    watch: (gitDirectory, onChange) =>
+    watch: (gitDirectory, listener) =>
       Effect.sync(() => {
         let canonical: string;
         try {
@@ -56,21 +64,26 @@ export function createLocalRepositoryWatcher(): RepositoryWatcher {
         }
         let directory = directories.get(canonical);
         if (directory === undefined) {
-          const listeners = new Set<(kind: RepositoryChangeKind) => void>();
+          const listeners = new Set<RepositoryWatchListener>();
           directory = {
             listeners,
-            handle: watchGitDirectory(canonical, (kind) => {
-              for (const listener of listeners) listener(kind);
+            handle: watchGitDirectory(canonical, {
+              changed: (kind) => {
+                for (const current of listeners) current.changed(kind);
+              },
+              failed: (detail) => {
+                for (const current of listeners) current.failed(detail);
+              },
             }),
           };
           directories.set(canonical, directory);
         }
         const owned = directory;
-        const listener = (kind: RepositoryChangeKind) => onChange(kind);
-        owned.listeners.add(listener);
+        const own = { ...listener };
+        owned.listeners.add(own);
         return {
           close: () => {
-            if (!owned.listeners.delete(listener)) return;
+            if (!owned.listeners.delete(own)) return;
             if (owned.listeners.size > 0) return;
             directories.delete(canonical);
             owned.handle.close();
@@ -82,7 +95,7 @@ export function createLocalRepositoryWatcher(): RepositoryWatcher {
 
 function watchGitDirectoryRecursively(
   gitDirectory: string,
-  onChange: (kind: RepositoryChangeKind) => void,
+  { changed: onChange, failed }: RepositoryWatchListener,
 ): RepositoryWatchHandle {
   try {
     const watcher = watch(
@@ -97,9 +110,13 @@ function watchGitDirectoryRecursively(
         onChange(kind);
       },
     );
-    watcher.on("error", () => watcher.close());
+    watcher.on("error", (error) => {
+      watcher.close();
+      reportWatchLimit(error, failed);
+    });
     return watcher;
-  } catch {
+  } catch (error) {
+    reportWatchLimit(error, failed);
     return { close: () => {} };
   }
 }
@@ -128,12 +145,12 @@ function isDirectory(path: string) {
 
 function watchGitEntriesSeparately(
   gitDirectory: string,
-  onChange: (kind: RepositoryChangeKind) => void,
+  { changed: onChange, failed }: RepositoryWatchListener,
 ): RepositoryWatchHandle {
   const watchers = new Map<string, RepositoryWatchHandle>();
   const watchRecursively = (entry: (typeof recursiveEntries)[number]) => {
     if (watchers.has(entry)) return;
-    const watcher = tryWatch(join(gitDirectory, entry), true, (path) =>
+    const watcher = tryWatch(join(gitDirectory, entry), true, failed, (path) =>
       onChange(
         entry === "worktrees" ? worktreeChange(path?.split(sep) ?? []) : "Refs",
       ),
@@ -151,6 +168,7 @@ function watchGitEntriesSeparately(
       const logs = tryWatch(
         join(gitDirectory, "logs"),
         false,
+        failed,
         (fileName, event) => {
           if (
             fileName === undefined ||
@@ -167,6 +185,7 @@ function watchGitEntriesSeparately(
       const refs = tryWatch(
         join(gitDirectory, "logs", "refs"),
         false,
+        failed,
         (fileName) => {
           if (
             fileName === undefined ||
@@ -179,7 +198,7 @@ function watchGitEntriesSeparately(
       if (refs !== undefined) watchers.set("logs/refs", refs);
     }
   };
-  const root = tryWatch(gitDirectory, false, (fileName, event) => {
+  const root = tryWatch(gitDirectory, false, failed, (fileName, event) => {
     if (fileName === "index") {
       onChange("Index");
       return;
@@ -226,13 +245,17 @@ function worktreeChange([
 function tryWatch(
   path: string,
   recursive: boolean,
+  failed: (detail: string) => void,
   listener: (name: string | undefined, event?: WatchEventType) => void,
 ) {
   try {
     if (recursive) {
       const root = realpathSync.native(path);
-      return watchGitDirectoryTree(root, (changed) =>
-        listener(changed === undefined ? undefined : relative(root, changed)),
+      return watchGitDirectoryTree(
+        root,
+        (changed) =>
+          listener(changed === undefined ? undefined : relative(root, changed)),
+        failed,
       );
     }
     const watcher = watch(
@@ -241,9 +264,13 @@ function tryWatch(
       (event, fileName) =>
         listener(fileName === null ? undefined : fileName, event),
     );
-    watcher.on("error", () => watcher.close());
+    watcher.on("error", (error) => {
+      watcher.close();
+      reportWatchLimit(error, failed);
+    });
     return watcher;
-  } catch {
+  } catch (error) {
+    reportWatchLimit(error, failed);
     return undefined;
   }
 }
