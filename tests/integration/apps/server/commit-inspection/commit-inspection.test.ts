@@ -70,6 +70,7 @@ describe("historical commit inspection", () => {
         previousPath: null,
         status: "A",
         lines: { added: 3, removed: 0 },
+        lfs: false,
       },
     ]);
     const diff = await Effect.runPromise(
@@ -101,6 +102,7 @@ describe("historical commit inspection", () => {
       previousPath: "old.txt",
       status: "R",
       lines: { added: 1, removed: 0 },
+      lfs: false,
     });
     const diff = await Effect.runPromise(
       f.service.inspectDiff({ ...scope, path, previousPath: "old.txt" }),

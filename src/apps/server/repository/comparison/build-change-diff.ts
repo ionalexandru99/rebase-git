@@ -24,25 +24,29 @@ export function buildChangeDiff(
   { previousPath = path, patch, whole = false }: ChangeDiffSource = {},
 ): ChangeDiff {
   const mime = imageMime(path);
+  const largeFile = before.largeFile ?? after.largeFile;
   const kind: ChangeDiff["kind"] =
     before.mode === "conflict" || after.mode === "conflict"
       ? "conflict"
       : before.mode === "160000" || after.mode === "160000"
         ? "submodule"
-        : before.bytes > diffByteLimit || after.bytes > diffByteLimit
-          ? "large"
-          : before.mode === "120000" || after.mode === "120000"
-            ? "symlink"
-            : mime !== null
-              ? "image"
-              : binary(before.content) || binary(after.content)
-                ? "binary"
-                : "text";
+        : before.largeFile === "missing" || after.largeFile === "missing"
+          ? "missing"
+          : before.bytes > diffByteLimit || after.bytes > diffByteLimit
+            ? "large"
+            : before.mode === "120000" || after.mode === "120000"
+              ? "symlink"
+              : mime !== null
+                ? "image"
+                : binary(before.content) || binary(after.content)
+                  ? "binary"
+                  : "text";
   const oldText = before.content?.toString("utf8") ?? "";
   const newText = after.content?.toString("utf8") ?? "";
   const textPatch =
     kind === "text"
-      ? (patch ?? boundedPatch(previousPath, path, oldText, newText))
+      ? ((largeFile === undefined ? patch : undefined) ??
+        boundedPatch(previousPath, path, oldText, newText))
       : "";
   const partial =
     kind === "text" &&
@@ -80,6 +84,15 @@ export function buildChangeDiff(
             ? newText
             : null,
     patch: textPatch ?? "",
+    ...(kind === "missing"
+      ? {
+          largeFileCommits: [before, after].flatMap((side) =>
+            side.largeFile === "missing" && side.largeFileCommit !== undefined
+              ? [side.largeFileCommit]
+              : [],
+          ),
+        }
+      : {}),
   };
   if (
     textPatch === undefined ||

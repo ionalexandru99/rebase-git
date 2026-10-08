@@ -9,6 +9,7 @@ export const RepositoryRejected = Schema.TaggedStruct("RepositoryRejected", {
     "Incompatible",
     "GitFailed",
     "IdentityMissing",
+    "LfsMissing",
   ]),
   detail: Schema.String.check(Schema.isMaxLength(maximumDetailLength)),
 });

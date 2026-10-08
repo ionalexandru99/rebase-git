@@ -17,6 +17,10 @@ import {
   isGitRejection,
   runRepositoryGit,
 } from "#server/adapters/local-git/git-commands.ts";
+import {
+  fetchLargeFiles,
+  type GitLfs,
+} from "#server/features/repository-lfs/git-lfs.ts";
 import type { RepositoryAccess } from "#server/repository/repository-access.ts";
 
 const checkoutCommand = {
@@ -27,6 +31,7 @@ const checkoutCommand = {
 export function checkoutRepositoryRef(
   git: GitCommandRunner,
   access: RepositoryAccess,
+  lfs: GitLfs,
   command: CheckoutRepositoryRef,
 ): Effect.Effect<
   RepositoryCheckedOut,
@@ -45,6 +50,13 @@ export function checkoutRepositoryRef(
       };
     }
 
+    yield* fetchLargeFiles(
+      lfs,
+      git,
+      worktree.path,
+      targetRef(target),
+      "remote" in target ? target.remote : undefined,
+    );
     const stash = yield* Effect.uninterruptible(
       checkoutWithAutoStash(git, worktree.path, target),
     );
@@ -240,6 +252,17 @@ function checkoutArguments(target: CheckoutTarget): readonly string[] {
       ];
     case "Tag":
       return ["switch", "--detach", `refs/tags/${target.name}`];
+  }
+}
+
+function targetRef(target: CheckoutTarget) {
+  switch (target._tag) {
+    case "LocalBranch":
+      return `refs/heads/${target.name}`;
+    case "Tag":
+      return `refs/tags/${target.name}`;
+    default:
+      return `refs/remotes/${target.remote}/${target.name}`;
   }
 }
 

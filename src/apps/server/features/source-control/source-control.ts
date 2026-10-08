@@ -17,6 +17,7 @@ import {
   route,
 } from "#server/adapters/environment-transport/environment-routes.ts";
 import type { GitCommandRunner } from "#server/adapters/local-git/git-commands.ts";
+import type { GitLfs } from "#server/features/repository-lfs/git-lfs.ts";
 import type { GitHost } from "#server/features/source-control/git-host.ts";
 import {
   type AzureDevOpsClient,
@@ -75,6 +76,7 @@ export function createSourceControl(
   context: EnvironmentContext,
   git: GitCommandRunner,
   clients: GitHostClients,
+  lfs: GitLfs,
 ) {
   const bitbucket = createBitbucket(context, clients.bitbucket);
   const hosts: readonly GitHost[] = [
@@ -138,6 +140,7 @@ export function createSourceControl(
       return yield* Effect.all(
         {
           git: gitStatus(git),
+          lfs: lfs.rescan,
           hosts: Effect.forEach(
             GitHostKinds.literals,
             (kind) => hostStatus(hosts, kind, !disabled.has(kind)),

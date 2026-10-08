@@ -103,6 +103,7 @@ export const SourceControlApi = {
   discover: route("source-control/discover", {
     success: Schema.Struct({
       git: GitStatus,
+      lfs: GitStatus,
       hosts: Schema.Array(GitHostStatus).check(Schema.isMaxLength(16)),
     }),
   }),

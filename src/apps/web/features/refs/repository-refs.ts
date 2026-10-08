@@ -5,7 +5,10 @@ import {
   RepositoryRefsApi,
   type RepositoryRefTarget,
 } from "#contracts/repository-refs/repository-refs.contract.ts";
-import { useErrorToast } from "#web/features/notifications/notifications.tsx";
+import {
+  useErrorToast,
+  useStatusToast,
+} from "#web/features/notifications/notifications.tsx";
 import {
   isRouteQuery,
   useEnvironmentQuery,
@@ -89,7 +92,16 @@ export function useRefActivation({
   restored,
 }: RepositoryRefsRead): RefActivation {
   const scope = useRepositoryScope();
-  const checkout = useCommand(RepositoryRefsApi.checkout);
+  const statusToast = useStatusToast();
+  const checkout = useCommand(RepositoryRefsApi.checkout, {
+    progress: ({ percent, largeFiles }) => {
+      if (largeFiles)
+        statusToast.progress("checkout", "Pulling large files", {
+          percent,
+          cancel: () => checkout.cancel(),
+        });
+    },
+  });
   const errorToast = useErrorToast();
   const { run } = checkout;
   const checkingOut = useRef(false);
@@ -107,14 +119,15 @@ export function useRefActivation({
     else if (activation._tag === "Checkout") {
       checkingOut.current = true;
       void run({ target: activation.target })
-        .then((result) =>
+        .then((result) => {
+          if (result._tag === "Ok") statusToast.close("checkout");
           errorToast.failure("checkout", result, {
             CheckoutRejected: ({ reason }) =>
               reason === "StashFailed"
                 ? "Local changes could not be stashed."
                 : "Local changes would be overwritten.",
-          }),
-        )
+          });
+        })
         .finally(() => {
           checkingOut.current = false;
         });

@@ -110,7 +110,7 @@ export function changedFile(
   previousPath: string | null = null,
   lines: ChangedFile["lines"] = null,
 ): ChangedFile {
-  return { path, previousPath, status, lines };
+  return { path, previousPath, status, lines, lfs: false };
 }
 
 export function commitInspection(
@@ -277,6 +277,7 @@ export function pullRequest(
 
 export function sourceControlDiscovery({
   git = { _tag: "Available", version: "git version 2.51.0" },
+  lfs = { _tag: "Available", version: "git-lfs/3.8.0" },
   github = {
     _tag: "SignedIn",
     kind: "github",
@@ -288,12 +289,14 @@ export function sourceControlDiscovery({
   bitbucket = { _tag: "Token", kind: "bitbucket", enabled: true, saved: null },
 }: {
   readonly git?: GitStatus;
+  readonly lfs?: GitStatus;
   readonly github?: GitHostStatus;
   readonly gitlab?: GitHostStatus;
   readonly bitbucket?: GitHostStatus;
 } = {}) {
   return {
     git,
+    lfs,
     hosts: [
       github,
       gitlab,

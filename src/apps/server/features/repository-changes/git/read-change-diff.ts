@@ -18,7 +18,10 @@ import {
   buildChangeDiff,
 } from "#server/repository/comparison/build-change-diff.ts";
 import { diffByteLimit } from "#server/repository/comparison/read-blobs.ts";
-import { objectFile } from "#server/repository/comparison/read-object-file.ts";
+import {
+  objectFile,
+  resolveLargeFile,
+} from "#server/repository/comparison/read-object-file.ts";
 
 export function readChangeDiff(
   git: GitCommandRunner,
@@ -63,7 +66,7 @@ export function readWorktreeFile(
       binary(working.content)
     )
       return working;
-    return {
+    return yield* resolveLargeFile(git, directory, {
       ...working,
       content: yield* cleanFileContent(
         git,
@@ -72,7 +75,7 @@ export function readWorktreeFile(
         path,
         working.content,
       ),
-    };
+    });
   });
 }
 

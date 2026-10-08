@@ -100,7 +100,8 @@ export function repositoryRefsFeature(
             locks: { refs: "wait", worktree: "wait" },
             duringOperation: "block",
           },
-          (input, git) => checkoutRepositoryRef(git, access, input),
+          (input, git) =>
+            checkoutRepositoryRef(git, access, dependencies.lfs, input),
         ),
         command(branches.create, branchPolicy, (input, git) =>
           createBranch(git, access, input),

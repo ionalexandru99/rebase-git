@@ -10,6 +10,7 @@ import { join } from "node:path";
 import { Readable } from "node:stream";
 import { StringDecoder } from "node:string_decoder";
 import { Deferred, Effect, Stream } from "effect";
+import { repositoryRejected } from "#contracts/git/git-failures.contract.ts";
 
 export interface GitCommand {
   readonly arguments: readonly string[];
@@ -24,13 +25,14 @@ export interface GitCommand {
   readonly maxOutputBytes?: number;
   readonly timeoutMilliseconds?: number;
   readonly progress?: (output: string) => void;
+  readonly progressStream?: "stdout" | "stderr";
 }
 
 export type GitCommandOptions = Omit<GitCommand, "arguments" | "directory">;
 
 type GitStreamCommand = Omit<
   GitCommand,
-  "outputEncoding" | "maxOutputBytes" | "progress"
+  "outputEncoding" | "maxOutputBytes" | "progress" | "progressStream"
 >;
 
 type GitStreamOptions = Omit<GitStreamCommand, "arguments" | "directory">;
@@ -72,7 +74,7 @@ const defaultTimeoutMilliseconds = 30_000;
 const defaultMaximumOutputBytes = 16 * 1_048_576;
 const maximumDetailLength = 2_048;
 const progressLines = [
-  /^[A-Z][a-z]+(?: [a-z]+)*: +\d+% \(\d+\/\d+\)(?:, [\d.]+ (?:[KMG]iB|bytes?)(?: \| [\d.]+ (?:[KMG]iB|bytes?)\/s)?)?(?:, done\.)?$/,
+  /^[A-Z][a-z]+(?: (?:[a-z]+|LFS))*: +\d+% \(\d+\/\d+\)(?:, [\d.]+ (?:[KMG]i?B|B|bytes?)(?: \| [\d.]+ (?:[KMG]i?B|B|bytes?)\/s)?)?(?:, done\.)?$/,
   /^(?:Enumerating|Counting) objects: \d+(?:, done\.)?$/,
   /^Delta compression using up to \d+ threads?$/,
   /^Total \d+ \(delta \d+\), reused \d+ \(delta \d+\)/,
@@ -186,6 +188,19 @@ export function isIdentityMissing(detail: string) {
   );
 }
 
+export function isLfsMissing(detail: string) {
+  return /'git-lfs' was not found on your path|git-lfs: (?:command )?not found|'lfs' is not a git command/.test(
+    detail,
+  );
+}
+
+export function lfsMissing() {
+  return repositoryRejected(
+    "LfsMissing",
+    "Git LFS isn't installed on this server.",
+  );
+}
+
 export function isGitRejection(failure: GitFailed) {
   return failure.exitCode !== undefined;
 }
@@ -223,7 +238,7 @@ function runLocalGitCommand(command: GitCommand) {
       (error, output, errorOutput) => {
         const stdout = output.toString(command.outputEncoding ?? "utf8");
         const stderr =
-          command.progress === undefined
+          command.progress === undefined || command.progressStream === "stdout"
             ? errorOutput.toString("utf8")
             : withoutProgress(errorOutput.toString("utf8"));
         if (error === null) {
@@ -241,7 +256,9 @@ function runLocalGitCommand(command: GitCommand) {
     const { progress } = command;
     if (progress !== undefined) {
       const decoder = new StringDecoder("utf8");
-      child.stderr?.on("data", (chunk: Buffer) => {
+      const output =
+        command.progressStream === "stdout" ? child.stdout : child.stderr;
+      output?.on("data", (chunk: Buffer) => {
         const text = decoder.write(chunk);
         if (text !== "") progress(text);
       });

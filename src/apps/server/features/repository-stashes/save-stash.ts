@@ -16,6 +16,7 @@ import {
 } from "#server/features/repository-changes/git/mutate-changes.ts";
 import { readChanges } from "#server/features/repository-changes/git/read-changes.ts";
 import { mutateRepositoryChanges } from "#server/features/repository-changes/repository-changes.ts";
+import type { GitLfs } from "#server/features/repository-lfs/git-lfs.ts";
 import {
   describeStash,
   dropEntry,
@@ -31,7 +32,11 @@ interface StashSnapshot {
   readonly subject: string | null;
 }
 
-export function saveStash(git: GitCommandRunner, command: SaveStash) {
+export function saveStash(
+  git: GitCommandRunner,
+  lfs: GitLfs,
+  command: SaveStash,
+) {
   const directory = command.worktreePath;
   return Effect.gen(function* () {
     const scope = { ...command, amend: false };
@@ -103,6 +108,7 @@ export function saveStash(git: GitCommandRunner, command: SaveStash) {
         selection: { _tag: "Files", paths: command.paths },
       },
       git,
+      lfs,
     ).pipe(
       Effect.tapError(() =>
         requireStashIndex(git, directory, oid).pipe(

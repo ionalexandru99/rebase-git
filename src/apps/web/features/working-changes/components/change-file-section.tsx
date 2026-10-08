@@ -19,6 +19,11 @@ import {
   LineCounts,
 } from "#web/features/file-diff/components/file-row-name.tsx";
 import { useFileHistoryAction } from "#web/features/file-history/file-history.ts";
+import {
+  LockMark,
+  missingReason,
+  useLargeFiles,
+} from "#web/features/large-files/large-files.tsx";
 import { useStashMenu } from "#web/features/stashes/stashes.ts";
 import { useChangeRowSelection } from "#web/features/working-changes/hooks/use-change-row-selection.ts";
 import type {
@@ -100,11 +105,15 @@ export function ChangeFileSection({
           file.path === path && file.status !== "?" && file.status !== "A",
       ),
     );
+  const largeFiles = useLargeFiles(files);
+  const lfsReason = (paths: readonly string[]) =>
+    largeFiles.blocked(paths) ? { reason: missingReason } : {};
   const rowActions = (
     paths: readonly string[],
     ignored: readonly string[],
   ): readonly Action[] => {
     const files = { _tag: "Files", paths } as const;
+    const blocked = largeFiles.blocked(paths);
     const stashable =
       changes !== undefined &&
       paths.every((path) =>
@@ -116,7 +125,8 @@ export function ChangeFileSection({
       {
         id: action,
         label: actionLabel,
-        enabled: !disabled,
+        enabled: !disabled && (action === "unstage" || !blocked),
+        ...(action === "stage" ? lfsReason(paths) : {}),
         run: () => act(action, section, files),
       },
       stashMenu(
@@ -134,10 +144,12 @@ export function ChangeFileSection({
         null,
       ),
       view.ignore.actionFor(ignored, !disabled),
+      ...largeFiles.actions(paths),
       {
         id: "discard",
         label: "Discard",
-        enabled: !disabled,
+        enabled: !disabled && !blocked,
+        ...lfsReason(paths),
         group: "delete",
         run: () => act("discard", section, files),
       },
@@ -213,6 +225,8 @@ export function ChangeFileSection({
         const isFolder = row.file === undefined;
         const previousPath = row.file?.previousPath ?? null;
         const status = row.file?.status;
+        const held = row.file ? largeFiles.lockOf(row.key) : undefined;
+        const blocked = largeFiles.blocked(row.paths);
         return (
           <>
             <button
@@ -254,16 +268,19 @@ export function ChangeFileSection({
             </button>
             {row.file ? (
               <span className="relative flex shrink-0 items-center justify-end">
-                <LineCounts
-                  lines={row.file.lines}
-                  className="transition-opacity group-has-[:focus-visible]:opacity-0 group-hover:opacity-0"
-                />
+                <span className="transition-opacity group-has-[:focus-visible]:opacity-0 group-hover:opacity-0">
+                  {held === undefined ? (
+                    <LineCounts lines={row.file.lines} />
+                  ) : (
+                    <LockMark lock={held} />
+                  )}
+                </span>
                 <span className="absolute right-0 flex items-center opacity-0 group-has-[:focus-visible]:opacity-100 group-hover:opacity-100">
                   <Button
                     variant="ghost"
                     size="icon-xs"
                     aria-label={`Discard ${label.toLowerCase()} ${row.key}`}
-                    disabled={disabled}
+                    disabled={disabled || blocked}
                     onClick={() =>
                       act("discard", section, {
                         _tag: "Files",
@@ -277,7 +294,7 @@ export function ChangeFileSection({
                     variant="ghost"
                     size="icon-xs"
                     aria-label={`${actionLabel} ${row.key}`}
-                    disabled={disabled}
+                    disabled={disabled || (action === "stage" && blocked)}
                     onClick={() =>
                       act(action, section, { _tag: "Files", paths: row.paths })
                     }

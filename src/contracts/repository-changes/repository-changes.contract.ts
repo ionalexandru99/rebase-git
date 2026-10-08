@@ -27,6 +27,7 @@ export const ChangedFile = Schema.Struct({
   previousPath: Schema.NullOr(RepositoryPath),
   status: Schema.Literals(["A", "M", "D", "R", "T", "U", "?"]),
   lines: ChangedLines,
+  lfs: Schema.Boolean,
 });
 export type ChangedFile = typeof ChangedFile.Type;
 export const RepositoryChanges = Schema.Struct({

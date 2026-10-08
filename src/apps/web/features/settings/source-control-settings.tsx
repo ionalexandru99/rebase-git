@@ -4,6 +4,7 @@ import {
   IconBrandGit,
   IconBrandGithub,
   IconBrandGitlab,
+  IconDatabase,
   IconGitFork,
   IconRefresh,
   type TablerIcon,
@@ -144,7 +145,10 @@ export function SourceControlSettings() {
         {discovery.data === undefined ? (
           <Checking failed={discovery.isError} />
         ) : (
-          <GitRow git={discovery.data.git} />
+          <>
+            <GitRow git={discovery.data.git} />
+            <LfsRow lfs={discovery.data.lfs} />
+          </>
         )}
         <ServerPullStrategyRow />
         <ServerFetchPruneRow />
@@ -178,6 +182,34 @@ function GitRow({ git }: { readonly git: GitStatus }) {
       icon={gitIcon}
       status="attention"
       title="Git"
+    />
+  );
+}
+
+const lfsIcon = (
+  <IconDatabase aria-hidden="true" className="size-4.5 text-[#f64935]" />
+);
+
+function LfsRow({ lfs }: { readonly lfs: GitStatus }) {
+  return lfs._tag === "Available" ? (
+    <SettingsRow
+      icon={lfsIcon}
+      status="ready"
+      title="Git LFS"
+      value={lfs.version}
+    />
+  ) : (
+    <SettingsRow
+      description={
+        <>
+          Not available on this server: Install Git LFS (<Code>git-lfs</Code>)
+          via https://git-lfs.com or your package manager (for example{" "}
+          <Code>brew install git-lfs</Code>).
+        </>
+      }
+      icon={lfsIcon}
+      status="attention"
+      title="Git LFS"
     />
   );
 }

@@ -26,7 +26,7 @@ import {
 } from "#server/features/repository-push/git/push-failures.ts";
 import { reconcileRemoteBranch } from "#server/features/repository-push/git/reconcile-remote-branch.ts";
 
-const pushTimeoutMilliseconds = 120_000;
+const pushTimeoutMilliseconds = 6 * 60 * 60_000;
 
 function pushRemoteBranch(git: GitCommandRunner, command: PushBranch) {
   const directory = command.worktreePath;
@@ -210,6 +210,7 @@ function runPush(
     .run({
       directory,
       arguments: ["push", "--porcelain", "--progress", ...args],
+      environment: { GIT_LFS_FORCE_PROGRESS: "1" },
       timeoutMilliseconds: pushTimeoutMilliseconds,
     })
     .pipe(

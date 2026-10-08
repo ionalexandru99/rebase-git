@@ -1,5 +1,8 @@
 import { Schema } from "effect";
-import { RepositoryPath } from "#contracts/git/git-values.contract.ts";
+import {
+  ObjectId,
+  RepositoryPath,
+} from "#contracts/git/git-values.contract.ts";
 
 const Revision = Schema.String.check(Schema.isMaxLength(128));
 
@@ -15,6 +18,7 @@ export const ChangeDiff = Schema.Struct({
     "conflict",
     "submodule",
     "symlink",
+    "missing",
   ]),
   before: Schema.NullOr(Schema.String),
   after: Schema.NullOr(Schema.String),
@@ -22,5 +26,8 @@ export const ChangeDiff = Schema.Struct({
   afterBytes: Schema.Natural,
   mime: Schema.NullOr(Schema.String),
   patch: Schema.String,
+  largeFileCommits: Schema.optional(
+    Schema.Array(ObjectId).check(Schema.isMaxLength(2)),
+  ),
 });
 export type ChangeDiff = typeof ChangeDiff.Type;

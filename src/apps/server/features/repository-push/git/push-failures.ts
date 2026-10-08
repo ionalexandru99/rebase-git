@@ -3,7 +3,11 @@ import type {
   PushRejected,
   PushRejectedReason,
 } from "#contracts/repository-push/repository-push.contract.ts";
-import type { GitCommandOutput } from "#server/adapters/local-git/git-commands.ts";
+import {
+  type GitCommandOutput,
+  isLfsMissing,
+  lfsMissing,
+} from "#server/adapters/local-git/git-commands.ts";
 
 export function pushError(
   reason: PushRejectedReason,
@@ -54,6 +58,7 @@ export function classifyPushFailure(
     return repositoryRejected("GitFailed", status.summary);
   }
   const stderr = output.stderr.trim();
+  if (isLfsMissing(stderr)) return lfsMissing();
   if (
     /Authentication failed|could not read (Username|Password)|Permission denied|terminal prompts disabled|returned error: 40[13]/i.test(
       stderr,

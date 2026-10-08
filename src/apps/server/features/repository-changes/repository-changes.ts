@@ -35,6 +35,7 @@ import { ignorePaths } from "#server/features/repository-changes/git/ignore-path
 import { planChanges } from "#server/features/repository-changes/git/mutate-changes.ts";
 import { readChangeDiff } from "#server/features/repository-changes/git/read-change-diff.ts";
 import { readChanges } from "#server/features/repository-changes/git/read-changes.ts";
+import type { GitLfs } from "#server/features/repository-lfs/git-lfs.ts";
 import { atRebaseEditStop } from "#server/repository/repository-coordination.ts";
 
 export function readRepositoryChanges(
@@ -61,6 +62,7 @@ export function readRepositoryChangeDiff(
 export function mutateRepositoryChanges(
   command: MutateChanges,
   git: GitCommandRunner,
+  lfs: GitLfs,
 ) {
   const directory = command.worktreePath;
   return Effect.gen(function* () {
@@ -74,6 +76,7 @@ export function mutateRepositoryChanges(
           command,
           current,
           unchanged,
+          yield* lfs.installed,
         );
         if (command.action !== "discard")
           return yield* apply.pipe(Effect.andThen(unchanged), Effect.as(null));
@@ -112,13 +115,20 @@ export function ignoreRepositoryPaths(
 export function commitRepositoryChanges(
   command: CommitChanges,
   git: GitCommandRunner,
+  lfs: GitLfs,
 ) {
   return withChangeIndex(git, command.worktreePath, (indexFile) =>
     Effect.gen(function* () {
       const current = yield* verifyChanges(git, command);
       yield* requireCommittable(command, current.snapshot);
       if (!command.amend && current.snapshot.staged.length === 0)
-        yield* stageEverything(git, indexFile, command, current);
+        yield* stageEverything(
+          git,
+          indexFile,
+          command,
+          current,
+          yield* lfs.installed,
+        );
       yield* Effect.uninterruptible(
         runRepositoryGit(
           git,
@@ -148,6 +158,7 @@ function stageEverything(
   indexFile: string,
   command: CommitChanges,
   current: Effect.Success<ReturnType<typeof verifyChanges>>,
+  lfsInstalled: boolean,
 ) {
   const unchanged = verifyChangedFiles(command.worktreePath, current.files);
   return planChanges(
@@ -164,6 +175,7 @@ function stageEverything(
     },
     current,
     unchanged,
+    lfsInstalled,
   ).pipe(Effect.flatMap(({ apply }) => apply.pipe(Effect.andThen(unchanged))));
 }
 
@@ -294,7 +306,7 @@ export function repositoryChangesFeature(
               ? "block"
               : { allowWhen: (operation) => operation.kind !== "unknown" },
         }),
-        mutateRepositoryChanges,
+        (input, git) => mutateRepositoryChanges(input, git, dependencies.lfs),
       ),
       command(
         api.undoDiscard,
@@ -323,7 +335,7 @@ export function repositoryChangesFeature(
           locks: { refs: "wait", worktree: "wait" },
           duringOperation: atRebaseEditStop,
         }),
-        commitRepositoryChanges,
+        (input, git) => commitRepositoryChanges(input, git, dependencies.lfs),
       ),
     ],
   };

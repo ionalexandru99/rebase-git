@@ -5,6 +5,7 @@ import { type CSSProperties, useRef } from "react";
 import type { ChangeDiff } from "#contracts/repository-comparison/repository-comparison.contract.ts";
 import type { DiffPreferences } from "#web/domain/file-diff/diff-preferences.contract.ts";
 import type { createChangeDiffModel } from "#web/features/file-diff/diff-model.ts";
+import { NotDownloaded } from "#web/features/large-files/large-files.tsx";
 import { useTheme } from "#web/features/theme/theme.ts";
 
 export const diffThemes = { dark: "pierre-dark", light: "pierre-light" };
@@ -83,6 +84,12 @@ export function DiffContent({
         }}
       />
     </div>
+  ) : diff.kind === "missing" ? (
+    <NotDownloaded
+      path={diff.path}
+      bytes={Math.max(diff.beforeBytes, diff.afterBytes)}
+      commits={diff.largeFileCommits ?? []}
+    />
   ) : diff.kind === "image" ? (
     <div className="grid min-h-0 flex-1 grid-cols-2 gap-3 overflow-auto p-3">
       {(["before", "after"] as const).map((side) => (

@@ -91,6 +91,9 @@ const errorTitles = {
   saveUpdateSettings: "Couldn't save the update settings",
   saveSourceControl: "Couldn't save the source control settings",
   openTerminal: "Couldn't open a terminal",
+  trackLargeFiles: "Couldn't change Git LFS tracking",
+  downloadLargeFiles: "Couldn't pull the large files",
+  lockFile: "Couldn't change the file lock",
 } as const;
 
 export type ErrorAction = keyof typeof errorTitles;
