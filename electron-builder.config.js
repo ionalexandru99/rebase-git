@@ -18,7 +18,7 @@ export default {
     main: "main.js",
   },
   npmRebuild: false,
-  artifactName: `\${productName}-\${version}-\${os}-\${arch}.\${ext}`,
+  artifactName: `\${productName}-\${os}-\${arch}.\${ext}`,
   mac: {
     category: "public.app-category.developer-tools",
     icon: "src/apps/desktop/assets/icon-mac.png",
