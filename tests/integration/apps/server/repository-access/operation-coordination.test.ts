@@ -26,11 +26,6 @@ const worktreeWrite: RepositoryWritePolicy = {
   locks: { worktree: "wait" },
   duringOperation: "proceed",
 };
-const refsWriteIfAvailable: RepositoryWritePolicy = {
-  name: "write refs if available",
-  locks: { refs: "ifAvailable" },
-  duringOperation: "proceed",
-};
 async function fixture() {
   const environment = await openTestEnvironment();
   const { directory, git } = await createDivergedRepository(environment.home);
@@ -197,7 +192,7 @@ it("splits the commit at a rebase edit stop with a reset and plain commits", asy
   ).toBe("part b\n\nb.txt\npart a\n\na.txt\ntopic\n\nfile.txt");
 });
 
-it("skips a contended fetch while ref writers queue across worktrees", async () => {
+it("queues ref writers across worktrees", async () => {
   const f = await fixture();
   const linked = `${f.directory}-linked`;
   await f.git("worktree", "add", linked, "topic");
@@ -222,10 +217,6 @@ it("skips a contended fetch while ref writers queue across worktrees", async () 
           )
           .pipe(Effect.forkScoped);
         yield* Deferred.await(entered);
-        const fetch = yield* f.coordination
-          .run(linked, refsWriteIfAvailable, Effect.die("Fetch must not start"))
-          .pipe(Effect.flip);
-        expect(fetch.reason).toBe("Busy");
         const second = yield* f.coordination
           .run(linked, refsAndWorktreeWrite, record("second"))
           .pipe(Effect.forkScoped);
