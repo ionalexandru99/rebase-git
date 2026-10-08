@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vite-plus/test";
-import { page, userEvent } from "vite-plus/test/browser";
+import { page } from "vite-plus/test/browser";
 import {
   type BranchPulled,
   type PullFailure,
@@ -70,7 +70,7 @@ describe("repository pull", () => {
     expect(f.requested).not.toHaveBeenCalled();
   });
 
-  it("pulls the active branch from the graph toolbar and holds fetch until it finishes", async () => {
+  it("pulls the active branch from the graph toolbar", async () => {
     const reader = historyReader({ commits: graphHistory(2), status: "ready" });
     const fetched = Promise.withResolvers<RepositoryFetchStatus>();
     const pulled = vi.fn<(command: unknown) => void>();
@@ -104,7 +104,6 @@ describe("repository pull", () => {
       { environment: { requests } },
     );
     await page.getByRole("button", { name: "Pull 3 incoming commits" }).click();
-    await expectFetchItemDisabled();
     fetched.resolve(status);
     await expect
       .poll(() => pulled)
@@ -116,7 +115,6 @@ describe("repository pull", () => {
     await expect
       .element(page.getByRole("button", { name: "Pulling" }))
       .toBeDisabled();
-    await expectFetchItemDisabled();
     finished.resolve();
     await expect
       .element(page.getByRole("button", { name: "Pull 3 incoming commits" }))
@@ -401,12 +399,4 @@ function OperationProbe() {
     false,
   );
   return <p>Operation {operation.data?.phase}</p>;
-}
-
-async function expectFetchItemDisabled() {
-  await page.getByRole("button", { name: "More sync actions" }).click();
-  await expect
-    .element(page.getByRole("menuitem", { name: "Fetch" }))
-    .toHaveAttribute("aria-disabled", "true");
-  await userEvent.keyboard("{Escape}");
 }

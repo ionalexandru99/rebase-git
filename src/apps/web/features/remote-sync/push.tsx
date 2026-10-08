@@ -74,7 +74,6 @@ export function usePush() {
       const request = fastForwardRequest(target);
       if (request !== undefined) pushBranch(request, false);
     },
-    requestForcePush,
     confirm: () => {
       if (review !== null) pushBranch(forcePushRequest(review), true);
     },
@@ -83,18 +82,11 @@ export function usePush() {
   };
 }
 
-export function pushAvailability(
-  push: Push,
-  target: PushTarget,
-  operationBusy: boolean,
-) {
+function canPush(push: Push, target: PushTarget, operationBusy: boolean) {
   const upstream = target.upstream;
   const tracked = upstream !== undefined && !upstream.gone;
   const busy = !push.canRun || operationBusy || push.running;
-  return {
-    canPush: !busy && (!tracked || upstream.ahead > 0),
-    canForcePush: !busy && tracked && upstream.remoteOid !== undefined,
-  };
+  return !busy && (!tracked || upstream.ahead > 0);
 }
 
 export function PushButton({
@@ -108,14 +100,19 @@ export function PushButton({
   readonly operationBusy: boolean;
   readonly className?: string;
 }) {
+  const upstream = target.upstream;
+  const outgoing = upstream === undefined || upstream.gone ? 0 : upstream.ahead;
   return (
     <ToolbarButton
       aria-label={push.running ? "Pushing" : pushLabel(target)}
       className={className}
-      disabled={!pushAvailability(push, target, operationBusy).canPush}
+      disabled={!canPush(push, target, operationBusy)}
       onClick={() => push.push(target)}
     >
       <IconArrowUp aria-hidden="true" className="size-3.5" />
+      {push.running || outgoing === 0 ? null : (
+        <span className="text-success tabular-nums">{outgoing}</span>
+      )}
     </ToolbarButton>
   );
 }
