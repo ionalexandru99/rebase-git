@@ -227,6 +227,7 @@ function Workspace({
                 )}
               </WorkspacePanel.Main>
               <WorkspacePanel.Pane
+                uncommitted={uncommitted !== undefined}
                 contents={{
                   history: (
                     <Suspense fallback={null}>

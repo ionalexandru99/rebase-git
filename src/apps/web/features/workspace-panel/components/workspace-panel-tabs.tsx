@@ -29,10 +29,12 @@ import { cn } from "#web/lib/utils.ts";
 
 export function WorkspacePanelTabs({
   contents,
+  uncommitted,
 }: {
   readonly contents?:
     | Partial<Record<WorkspacePanelKind, ReactNode>>
     | undefined;
+  readonly uncommitted?: boolean | undefined;
 }) {
   const panel = useWorkspacePanel();
   const listRef = useRef<HTMLDivElement>(null);
@@ -134,7 +136,9 @@ export function WorkspacePanelTabs({
           </TabsContent>
         );
       })}
-      {active === null ? <WorkspacePanelEmptyState /> : null}
+      {active === null ? (
+        <WorkspacePanelEmptyState uncommitted={uncommitted} />
+      ) : null}
     </Tabs>
   );
 }
@@ -199,7 +203,11 @@ function PanelTab({
   );
 }
 
-function WorkspacePanelEmptyState() {
+function WorkspacePanelEmptyState({
+  uncommitted,
+}: {
+  readonly uncommitted?: boolean | undefined;
+}) {
   const { emptyStateRef, execute } = useWorkspacePanel();
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-6 py-8">
@@ -222,6 +230,13 @@ function WorkspacePanelEmptyState() {
               <span className="flex items-center gap-2 text-meta font-normal">
                 <definition.icon aria-hidden="true" className="size-3.5" />
                 {definition.label}
+                {uncommitted && kind === "changes" ? (
+                  <span
+                    role="img"
+                    aria-label="uncommitted changes"
+                    className="size-2 rounded-full bg-primary"
+                  />
+                ) : null}
               </span>
               <span className="text-badge font-normal text-muted-foreground">
                 {definition.description}
