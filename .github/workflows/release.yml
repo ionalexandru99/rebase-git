@@ -571,6 +571,9 @@ jobs:
       - uses: ./.github/actions/setup-workspace
 
       - name: Build website
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ needs.package.outputs.tag }}
         run: pnpm build:site
 
       - name: Deploy to Cloudflare Pages
