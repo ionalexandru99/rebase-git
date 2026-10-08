@@ -6,6 +6,10 @@ import {
   ResizablePanelGroup,
 } from "#web/components/ui/resizable.tsx";
 import { DiffWorkerPool } from "#web/features/file-diff/components/diff-worker-pool.tsx";
+import {
+  LargeFilesNotice,
+  useLargeFiles,
+} from "#web/features/large-files/large-files.tsx";
 import { OperationHeader } from "#web/features/operation-recovery/components/operation-controls.tsx";
 import { ChangeFileTree } from "#web/features/working-changes/components/change-file-tree.tsx";
 import { CommitEditor } from "#web/features/working-changes/components/commit-editor.tsx";
@@ -35,6 +39,10 @@ export function WorkingChanges({
   readonly writable: boolean;
 }) {
   const view = useWorkingChangesView(target);
+  const largeFiles = useLargeFiles([
+    ...(view.changes?.unstaged ?? []),
+    ...(view.changes?.staged ?? []),
+  ]);
   const [hunk, setHunk] = useState<{
     readonly file: string;
     readonly index: number;
@@ -49,6 +57,7 @@ export function WorkingChanges({
       aria-busy={view.busy}
     >
       <OperationHeader scope={target} />
+      {largeFiles.missing ? <LargeFilesNotice /> : null}
       {view.error ? (
         <div
           role="alert"

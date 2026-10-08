@@ -36,6 +36,8 @@ import { repositoryChangesFeature } from "#server/features/repository-changes/re
 import { comparisonFeature } from "#server/features/repository-comparison/compare-revisions.ts";
 import { repositoryConflictsFeature } from "#server/features/repository-conflicts/repository-conflicts.ts";
 import { repositoryHistoryFeature } from "#server/features/repository-history/repository-history.feature.ts";
+import { createGitLfs } from "#server/features/repository-lfs/git-lfs.ts";
+import { repositoryLfsFeature } from "#server/features/repository-lfs/repository-lfs.ts";
 import { repositoryOperationsFeature } from "#server/features/repository-operations/repository-operations.ts";
 import { repositoryPullFeature } from "#server/features/repository-pull/repository-pull.feature.ts";
 import { repositoryPushFeature } from "#server/features/repository-push/repository-push.ts";
@@ -120,8 +122,10 @@ export function serveEnvironment(
   });
 }
 
-export function acquireEnvironment(home: string, git: GitCommandRunner) {
+export function acquireEnvironment(home: string, runner: GitCommandRunner) {
   return Effect.gen(function* () {
+    const lfs = createGitLfs(runner);
+    const git = lfs.git;
     const paths = environmentPaths(join(home, ".rebase"));
     const context = yield* acquireEnvironmentContext(paths);
     const catalog = createRepositoryCatalog(context, git);
@@ -135,6 +139,7 @@ export function acquireEnvironment(home: string, git: GitCommandRunner) {
       events,
       git,
       gitHosts: createGitHostClients(),
+      lfs,
       paths,
       progress: createCommandProgress(),
       terminals: yield* acquireTerminalSessions((repositoryId) =>
@@ -151,6 +156,7 @@ export function environmentFeatures(dependencies: EnvironmentDependencies) {
       dependencies.context,
       dependencies.git,
       dependencies.gitHosts,
+      dependencies.lfs,
     );
     return combineEnvironmentFeatures([
       environmentAuthorizationFeature(dependencies.authorization),
@@ -167,6 +173,7 @@ export function environmentFeatures(dependencies: EnvironmentDependencies) {
       comparisonFeature(dependencies),
       repositoryChangesFeature(dependencies),
       repositoryConflictsFeature(dependencies),
+      repositoryLfsFeature(dependencies),
       repositoryHistoryFeature(dependencies),
       commandProgressFeature(dependencies.progress),
       repositoryOperationsFeature(dependencies),

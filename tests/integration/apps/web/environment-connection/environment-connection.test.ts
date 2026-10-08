@@ -121,7 +121,7 @@ describe("browser Environment connection", () => {
     const fetching = requests(
       RepositoryPullApi.fetch,
       { repositoryId: id },
-      { progress: (percent) => fetched.push(percent) },
+      { progress: ({ percent }) => fetched.push(percent) },
     );
     await expect.poll(() => fetched.at(-1)).toBeGreaterThan(0);
     release("fetch");
@@ -138,7 +138,7 @@ describe("browser Environment connection", () => {
         setUpstream: false,
         mode: { _tag: "FastForward" },
       },
-      { progress: (percent) => pushed.push(percent) },
+      { progress: ({ percent }) => pushed.push(percent) },
     );
     await expect.poll(() => pushed.at(-1)).toBe(95);
     release("push");

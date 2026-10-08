@@ -1,7 +1,11 @@
+import { readFile, stat } from "node:fs/promises";
+import { join } from "node:path";
 import { Effect } from "effect";
 import {
   type GitCommandOptions,
   type GitCommandRunner,
+  type GitFailed,
+  readGitCommonDirectory,
   runRepositoryGit,
 } from "#server/adapters/local-git/git-commands.ts";
 import {
@@ -15,6 +19,56 @@ export interface RepositoryFileContent {
   readonly bytes: number;
   readonly mode: string;
   readonly identity: string;
+  readonly largeFile?: "local" | "missing";
+  readonly largeFileCommit?: string;
+}
+
+const pointerPattern =
+  /^version https:\/\/git-lfs\.github\.com\/spec\/v1\noid sha256:([0-9a-f]{64})\nsize (\d+)\n/;
+
+export function resolveLargeFile(
+  git: GitCommandRunner,
+  directory: string,
+  file: RepositoryFileContent,
+  commit?: string,
+): Effect.Effect<RepositoryFileContent, GitFailed> {
+  const pointer =
+    file.content !== null && file.content.length < 1_024
+      ? pointerPattern.exec(file.content.toString("utf8"))
+      : null;
+  const oid = pointer?.[1];
+  if (oid === undefined) return Effect.succeed(file);
+  const bytes = Number(pointer?.[2]);
+  return readGitCommonDirectory(git, directory).pipe(
+    Effect.flatMap((common) =>
+      Effect.promise(() =>
+        readLocalObject(
+          join(common, "lfs", "objects", oid.slice(0, 2), oid.slice(2, 4), oid),
+        ),
+      ),
+    ),
+    Effect.map(
+      (local): RepositoryFileContent =>
+        local === undefined
+          ? {
+              ...file,
+              bytes,
+              content: null,
+              largeFile: "missing",
+              ...(commit === undefined ? {} : { largeFileCommit: commit }),
+            }
+          : { ...file, ...local, largeFile: "local" },
+    ),
+  );
+}
+
+async function readLocalObject(path: string) {
+  const info = await stat(path).catch(() => undefined);
+  if (info === undefined) return undefined;
+  return {
+    bytes: info.size,
+    content: info.size > diffByteLimit ? null : await readFile(path),
+  };
 }
 
 export function objectFile(
@@ -69,10 +123,10 @@ export function objectFile(
       options,
     )).get(oid);
     if (blob === undefined) return yield* unreadableBlob;
-    return {
+    return yield* resolveLargeFile(git, directory, {
       ...blob,
       mode,
       identity: oid,
-    } satisfies RepositoryFileContent;
+    });
   });
 }

@@ -74,13 +74,14 @@ describe("source control settings", () => {
     expect(saved).toEqual([{ kind: "github", enabled: false }]);
   });
 
-  it("explains how to install Git and the GitHub CLI and keeps GitHub off until then", async () => {
+  it("explains how to install Git, Git LFS and the GitHub CLI and keeps GitHub off until then", async () => {
     await render(<SourceControlSettings />, {
       environment: {
         requests: fakeRequests(
           respond(SourceControlApi.discover, async () =>
             sourceControlDiscovery({
               git: { _tag: "Missing" },
+              lfs: { _tag: "Missing" },
               github: { _tag: "Missing", kind: "github", enabled: true },
             }),
           ),
@@ -94,6 +95,7 @@ describe("source control settings", () => {
     await expect
       .element(page.getByText(/Install the GitHub command-line tool/))
       .toBeVisible();
+    await expect.element(page.getByText(/Install Git LFS/)).toBeVisible();
     await expect
       .element(page.getByRole("switch", { name: "Use GitHub" }))
       .toBeDisabled();

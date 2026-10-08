@@ -25,7 +25,7 @@ describe("cloning from the open project screen", () => {
     await renderScreen(
       respond(RepositoryCatalogApi.clone, (input, { progress }) => {
         requested.push(input);
-        progress?.(46);
+        progress?.({ percent: 46, largeFiles: false });
         return new Promise((resolve) => {
           finish = () =>
             resolve(

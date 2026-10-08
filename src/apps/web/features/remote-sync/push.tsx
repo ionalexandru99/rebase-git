@@ -1,5 +1,5 @@
 import { IconArrowUp } from "@tabler/icons-react";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { RepositoryPushApi } from "#contracts/repository-push/repository-push.contract.ts";
 import { ToolbarButton } from "#web/components/ui/toolbar-button.tsx";
 import { ConfirmNotice } from "#web/features/notifications/components/persistent-notification.tsx";
@@ -27,7 +27,23 @@ export type Push = ReturnType<typeof usePush>;
 export function usePush() {
   const errorToast = useErrorToast();
   const statusToast = useStatusToast();
-  const command = useCommand(RepositoryPushApi.push);
+  const title = useRef<string | null>(null);
+  const largeFiles = useRef(false);
+  const command = useCommand(RepositoryPushApi.push, {
+    progress: (update) => {
+      if (title.current === null) return;
+      if (!update.largeFiles && !largeFiles.current) return;
+      largeFiles.current = update.largeFiles;
+      statusToast.progress(
+        "push",
+        update.largeFiles ? "Pushing large files" : title.current,
+        {
+          cancel: () => command.cancel(),
+          ...(update.largeFiles ? { percent: update.percent } : {}),
+        },
+      );
+    },
+  });
   const [review, setReview] = useState<ForcePushReview | null>(null);
   const [pushing, setPushing] = useState(false);
   const running = command.running || pushing;
@@ -40,11 +56,15 @@ export function usePush() {
 
   const pushBranch = (request: PushRequest, reviewed: boolean) => {
     if (!command.canRun || running) return;
+    largeFiles.current = false;
+    title.current = null;
     if (reviewed) setPushing(true);
-    else
-      statusToast.progress("push", describeProgress(request), {
+    else {
+      title.current = describeProgress(request);
+      statusToast.progress("push", title.current, {
         cancel: command.cancel,
       });
+    }
     void command.run(request).then((result) => {
       if (result._tag === "Ok")
         statusToast.success("push", describePushed(request));

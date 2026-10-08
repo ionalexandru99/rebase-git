@@ -15,6 +15,10 @@ import type {
 } from "#server/adapters/local-git/git-commands.ts";
 import type { CommandProgress } from "#server/features/command-progress/command-progress.ts";
 import type { RepositoryCatalog } from "#server/features/repository-catalog/repository-catalog.ts";
+import {
+  downloadLargeFiles,
+  type GitLfs,
+} from "#server/features/repository-lfs/git-lfs.ts";
 import type { EnvironmentContext } from "#server/persistence/environment-context.ts";
 import { serverSettingTable } from "#server/persistence/environment-state.schema.ts";
 
@@ -28,11 +32,13 @@ export function createRepositoryCreation({
   catalog,
   context,
   git,
+  lfs,
   progress,
 }: {
   readonly catalog: RepositoryCatalog;
   readonly context: EnvironmentContext;
   readonly git: GitCommandRunner;
+  readonly lfs: GitLfs;
   readonly progress: CommandProgress;
 }) {
   const defaults = Effect.all(
@@ -89,14 +95,16 @@ export function createRepositoryCreation({
         const before = yield* destination(path);
         if (before === "Used" || before === "File")
           return yield* Effect.fail(notCreated("DestinationNotEmpty"));
+        const report = progress.reporter(
+          [repositoryId],
+          RepositoryCatalogApi.clone._tag,
+        );
         const output = yield* git
           .run({
             directory: dirname(path),
             arguments: ["clone", "--progress", "--", url, path],
-            progress: progress.reporter(
-              [repositoryId],
-              RepositoryCatalogApi.clone._tag,
-            ),
+            environment: { GIT_LFS_SKIP_SMUDGE: "1" },
+            progress: report,
             timeoutMilliseconds: cloneDeadlineMilliseconds,
           })
           .pipe(
@@ -118,7 +126,23 @@ export function createRepositoryCreation({
               : {}),
           });
         }
-        return yield* remember(path, repositoryId);
+        const remembered = yield* remember(path, repositoryId);
+        if (yield* lfs.installed)
+          yield* downloadLargeFiles(
+            {
+              ...git,
+              run: (command) => git.run({ ...command, progress: report }),
+            },
+            path,
+          ).pipe(
+            Effect.mapError(({ detail }) =>
+              notCreated(
+                "GitFailed",
+                `Cloned, but the large files didn't download. ${detail}`,
+              ),
+            ),
+          );
+        return remembered;
       }),
     initialize: ({ path, branch }: InitializeRepository) =>
       Effect.gen(function* () {

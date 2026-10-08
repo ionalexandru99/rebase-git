@@ -10,6 +10,7 @@ export type WatchCommandProgress = typeof WatchCommandProgress.Type;
 
 export const CommandProgressUpdate = Schema.Struct({
   percent: Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 100 })),
+  largeFiles: Schema.Boolean,
 });
 export type CommandProgressUpdate = typeof CommandProgressUpdate.Type;
 

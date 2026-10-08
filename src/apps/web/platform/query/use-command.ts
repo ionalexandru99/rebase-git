@@ -8,6 +8,7 @@ import {
   useQueryClient,
 } from "@tanstack/react-query";
 import { type RefObject, useRef } from "react";
+import type { CommandProgressUpdate } from "#contracts/command-progress/command-progress.contract.ts";
 import type {
   EnvironmentRoute,
   RouteFailure,
@@ -63,7 +64,7 @@ export interface CommandOptions<Route extends EnvironmentRoute> {
   readonly target?: CommandTarget | undefined;
   readonly changes?: RepositoryChangeKind;
   readonly before?: (input: RouteInput<Route>) => Promise<boolean>;
-  readonly progress?: (percent: number) => void;
+  readonly progress?: (update: CommandProgressUpdate) => void;
   readonly answers?: (
     value: RouteSuccess<Route>,
     input: RouteInput<Route>,
@@ -217,7 +218,7 @@ async function request<Route extends EnvironmentRoute>(
   route: Route,
   input: RouteInput<Route>,
   running: RefObject<AbortController | undefined>,
-  progress: ((percent: number) => void) | undefined,
+  progress: ((update: CommandProgressUpdate) => void) | undefined,
 ): Promise<CommandResult<Route>> {
   const controller = new AbortController();
   running.current = controller;

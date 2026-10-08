@@ -17,6 +17,10 @@ import {
   worktreeIdentities,
   worktreeLineCounts,
 } from "#server/features/repository-changes/git/change-files.ts";
+import {
+  largeFilePaths,
+  markLargeFile,
+} from "#server/features/repository-lfs/git-lfs.ts";
 import { fingerprint } from "#server/repository/comparison/fingerprint.ts";
 import { lineCounts } from "#server/repository/comparison/line-counts.ts";
 
@@ -86,7 +90,7 @@ export function readChanges(git: GitCommandRunner, scope: ChangesScope) {
       ),
     ]);
     const unstaged = records.map(
-      ({ xy, path }): ChangedFile =>
+      ({ xy, path }): Omit<ChangedFile, "lfs"> =>
         conflicted(xy)
           ? { path, previousPath: null, status: "U", lines: null }
           : {
@@ -106,14 +110,20 @@ export function readChanges(git: GitCommandRunner, scope: ChangesScope) {
         ),
       ),
     ];
-    const identities = yield* worktreeIdentities(directory, paths);
+    const [identities, large] = yield* Effect.all(
+      [
+        worktreeIdentities(directory, paths),
+        largeFilePaths(git, directory, paths),
+      ],
+      { concurrency: 2 },
+    );
     return {
       snapshot: {
         head,
         message: message.trimEnd(),
         revision: fingerprint(head ?? "", index, status, base, ...identities),
-        unstaged,
-        staged,
+        unstaged: unstaged.map((file) => markLargeFile(file, large)),
+        staged: staged.map((file) => markLargeFile(file, large)),
         renamesLimited: stagedDiff.stderr.includes(
           "rename detection was skipped",
         ),
@@ -193,7 +203,7 @@ const countedUntrackedLimit = 1000;
 
 function stagedFiles(output: string) {
   const fields = output.split("\0");
-  const files: Omit<ChangedFile, "lines">[] = [];
+  const files: Omit<ChangedFile, "lines" | "lfs">[] = [];
   let i = 0;
   while (fields[i]?.startsWith(":")) {
     const status = fields[i++]?.split(" ").at(-1) ?? "";
@@ -209,7 +219,10 @@ function stagedFiles(output: string) {
   }
   const counted = lineCounts(fields.slice(i).join("\0"));
   return files.map(
-    (file): ChangedFile => ({ ...file, lines: counted.get(file.path) ?? null }),
+    (file): Omit<ChangedFile, "lfs"> => ({
+      ...file,
+      lines: counted.get(file.path) ?? null,
+    }),
   );
 }
 

@@ -11,6 +11,7 @@ import {
   route,
 } from "#server/adapters/environment-transport/environment-routes.ts";
 import type { GitCommandRunner } from "#server/adapters/local-git/git-commands.ts";
+import type { GitLfs } from "#server/features/repository-lfs/git-lfs.ts";
 import { createFetchPrunes } from "#server/features/repository-pull/fetch-prune.ts";
 import {
   pullBlocked,
@@ -85,7 +86,11 @@ export function repositoryPullFeature(
             locks: { refs: "wait" },
             duringOperation: "proceed",
           },
-          pullInCheckout(dependencies.coordination, strategies),
+          pullInCheckout(
+            dependencies.coordination,
+            dependencies.lfs,
+            strategies,
+          ),
         ),
         route(RepositoryPullApi.readPullStrategy, () => strategies.server),
         route(RepositoryPullApi.savePullStrategy, ({ strategy }) =>
@@ -115,6 +120,7 @@ export function repositoryPullFeature(
 
 function pullInCheckout(
   coordination: RepositoryCoordination,
+  lfs: GitLfs,
   strategies: PullStrategies,
 ) {
   return (command: PullBranch, git: GitCommandRunner) =>
@@ -133,6 +139,7 @@ function pullInCheckout(
             pullBranch(
               git,
               coordination,
+              lfs,
               {
                 directory,
                 branch: command.branch,

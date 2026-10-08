@@ -7,7 +7,10 @@ import type {
 } from "#contracts/commit-inspection/commit-inspection.contract.ts";
 import { CommitInspectionApi } from "#contracts/commit-inspection/commit-inspection.contract.ts";
 import { repositoryRejected } from "#contracts/git/git-failures.contract.ts";
-import { changesFailed } from "#contracts/repository-changes/repository-changes.contract.ts";
+import {
+  type ChangedLines,
+  changesFailed,
+} from "#contracts/repository-changes/repository-changes.contract.ts";
 import type { EnvironmentFeature } from "#server/adapters/environment-transport/environment-routes.ts";
 import {
   type RepositoryDependencies,
@@ -27,6 +30,10 @@ import {
   previewRestore,
   restoreFiles,
 } from "#server/features/commit-inspection/restore-files.ts";
+import {
+  largeFilePaths,
+  markLargeFile,
+} from "#server/features/repository-lfs/git-lfs.ts";
 import { buildChangeDiff } from "#server/repository/comparison/build-change-diff.ts";
 import { lineCounts } from "#server/repository/comparison/line-counts.ts";
 import {
@@ -35,7 +42,10 @@ import {
   readBlobs,
   unreadableBlob,
 } from "#server/repository/comparison/read-blobs.ts";
-import type { RepositoryFileContent } from "#server/repository/comparison/read-object-file.ts";
+import {
+  type RepositoryFileContent,
+  resolveLargeFile,
+} from "#server/repository/comparison/read-object-file.ts";
 
 const originalObjects = { globalArguments: ["--no-replace-objects"] };
 const missingMode = "000000";
@@ -90,11 +100,26 @@ export function readChangeDiff(
       diffByteLimit,
       originalObjects,
     );
+    const side = (current: CommitSide, commit: string | null) =>
+      commitFile(current, blobs).pipe(
+        Effect.flatMap((file) =>
+          resolveLargeFile(
+            git,
+            command.worktreePath,
+            file,
+            commit ?? undefined,
+          ),
+        ),
+      );
+    const [before, after] = yield* Effect.all(
+      [side(change.before, parentOid), side(change.after, command.oid)],
+      { concurrency: 2 },
+    );
     return buildChangeDiff(
       command.path,
       `${command.oid}:${parentOid ?? "root"}`,
-      yield* commitFile(change.before, blobs),
-      yield* commitFile(change.after, blobs),
+      before,
+      after,
       {
         previousPath: change.previousPath,
         patch: change.patch,
@@ -233,22 +258,30 @@ export function readCommitFiles(
       { ...originalObjects, maxOutputBytes: 16_000_000 },
     );
     const files = commitFiles(output);
-    const counted =
-      files.length > countedFilesLimit
-        ? new Map()
-        : lineCounts(
-            yield* runRepositoryGit(
+    const [counted, large] = yield* Effect.all(
+      [
+        files.length > countedFilesLimit
+          ? Effect.succeed(new Map<string, ChangedLines>())
+          : runRepositoryGit(
               git,
               command.worktreePath,
               ["diff-tree", "--numstat", ...compared],
               originalObjects,
-            ),
-          );
+            ).pipe(Effect.map(lineCounts)),
+        largeFilePaths(
+          git,
+          command.worktreePath,
+          files.map((file) => file.path),
+        ),
+      ],
+      { concurrency: 2 },
+    );
     return files.map(
-      (file): CommitFile => ({
-        ...file,
-        lines: counted.get(file.path) ?? null,
-      }),
+      (file): CommitFile =>
+        markLargeFile(
+          { ...file, lines: counted.get(file.path) ?? null },
+          large,
+        ),
     );
   });
 }
@@ -257,7 +290,7 @@ const countedFilesLimit = 1000;
 
 function commitFiles(output: string) {
   const fields = output.split("\0");
-  const files: Omit<CommitFile, "lines">[] = [];
+  const files: Omit<CommitFile, "lines" | "lfs">[] = [];
   for (let i = 0; i < fields.length - 1; ) {
     const status = fields[i++]?.[0];
     const first = fields[i++];

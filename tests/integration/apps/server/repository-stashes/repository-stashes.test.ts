@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it } from "vite-plus/test";
 import type { ChangeSection } from "#contracts/repository-changes/repository-changes.contract.ts";
 import { createLocalGitCommandRunner } from "#server/adapters/local-git/git-commands.ts";
 import { readRepositoryChanges } from "#server/features/repository-changes/repository-changes.ts";
+import { createGitLfs } from "#server/features/repository-lfs/git-lfs.ts";
 import {
   applyStash,
   dropStash,
@@ -80,6 +81,7 @@ describe("repository stashes", () => {
         previousPath: null,
         status: "A",
         lines: { added: 1, removed: 0 },
+        lfs: false,
         untracked: true,
       },
     ]);
@@ -262,7 +264,7 @@ async function save(
     readRepositoryChanges({ repositoryId, worktreePath, amend: false }, runner),
   );
   return run(
-    saveStash(runner, {
+    saveStash(runner, createGitLfs(runner), {
       repositoryId,
       worktreePath,
       revision,

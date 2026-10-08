@@ -1,4 +1,5 @@
 import { skipToken } from "@tanstack/react-query";
+import { useRef } from "react";
 import type { RouteFailure } from "#contracts/environment-connection/environment-route.contract.ts";
 import { RepositoryOperationsApi } from "#contracts/repository-operations/repository-operations.contract.ts";
 import {
@@ -39,7 +40,7 @@ function useFetch() {
   const errorToast = useErrorToast();
   const statusToast = useStatusToast();
   const command = useCommand(RepositoryPullApi.fetch, {
-    progress: (percent) => statusToast.advance("pull", percent),
+    progress: ({ percent }) => statusToast.advance("pull", percent),
   });
   const { run } = command;
   const execute = () =>
@@ -68,18 +69,22 @@ export function usePull() {
   const errorToast = useErrorToast();
   const statusToast = useStatusToast();
   const stashes = useStashCommands();
+  const title = useRef("Pulling");
   const command = useCommand(RepositoryPullApi.pull, {
     before: async ({ strategy }) => {
       const fetched = await fetch.execute();
-      if (fetched)
-        statusToast.progress(
-          "pull",
-          strategy === undefined ? "Pulling" : integrationSteps[strategy.kind],
-          { percent: 0 },
-        );
+      title.current =
+        strategy === undefined ? "Pulling" : integrationSteps[strategy.kind];
+      if (fetched) statusToast.progress("pull", title.current, { percent: 0 });
       return fetched;
     },
-    progress: (percent) => statusToast.advance("pull", percent),
+    progress: ({ percent, largeFiles }) =>
+      largeFiles
+        ? statusToast.progress("pull", "Pulling large files", {
+            percent,
+            cancel: () => command.cancel(),
+          })
+        : statusToast.progress("pull", title.current, { percent }),
     answers: (value, input) =>
       value.outcome === "Stopped" && value.worktreePath === input.worktreePath
         ? [

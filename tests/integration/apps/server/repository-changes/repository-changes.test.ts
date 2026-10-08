@@ -126,6 +126,7 @@ describe("working changes through Git", () => {
             previousPath: null,
             status: "?",
             lines: null,
+            lfs: false,
           },
         ]);
       } finally {
@@ -148,6 +149,7 @@ describe("working changes through Git", () => {
           previousPath: null,
           status: "M",
           lines: { added: 1, removed: 0 },
+          lfs: false,
         },
       ]);
     },
@@ -166,6 +168,7 @@ describe("working changes through Git", () => {
         previousPath: null,
         status: "A",
         lines: { added: 3, removed: 0 },
+        lfs: false,
       },
     ]);
     expect(
@@ -675,6 +678,7 @@ describe("renamed files through Git", () => {
         previousPath: "file.txt",
         status: "R",
         lines: { added: 1, removed: 1 },
+        lfs: false,
       },
     ]);
     const diff = await f.diff("staged", false, "moved.txt");
@@ -719,6 +723,7 @@ describe("renamed files through Git", () => {
         previousPath: "file.txt",
         status: "R",
         lines: { added: 0, removed: 0 },
+        lfs: false,
       },
     ]);
     expect((await f.git("show", ":moved.txt")).stdout).toBe(original);
@@ -779,6 +784,7 @@ describe("renamed files through Git", () => {
           previousPath: "file.txt",
           status: "R",
           lines: { added: 0, removed: 0 },
+          lfs: false,
         },
       ]);
       await f.mutate("discard", "staged");

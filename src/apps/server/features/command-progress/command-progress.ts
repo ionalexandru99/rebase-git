@@ -8,7 +8,7 @@ import type {
   EnvironmentRpcHandlersFor,
 } from "#server/adapters/environment-transport/environment-routes.ts";
 
-type ProgressListener = (percent: number) => void;
+type ProgressListener = (update: CommandProgressUpdate) => void;
 
 const phases: Readonly<Record<string, readonly [number, number]>> = {
   "Counting objects": [0, 5],
@@ -19,6 +19,10 @@ const phases: Readonly<Record<string, readonly [number, number]>> = {
   "Resolving deltas": [90, 100],
   "Updating files": [0, 100],
 };
+const largeFilePhases = new Set([
+  "Downloading LFS objects",
+  "Uploading LFS objects",
+]);
 const phaseLine = /^(?:remote: )?([A-Z][A-Za-z ]+): +(\d+)%/;
 const rebaseLine = /^Rebasing \((\d+)\/(\d+)\)/;
 
@@ -32,12 +36,12 @@ export function createCommandProgress() {
     reporter: (repositoryIds: Iterable<string>, route: string) => {
       const read = readGitProgress();
       return (output: string) => {
-        const percent = read(output);
-        if (percent === undefined) return;
+        const update = read(output);
+        if (update === undefined) return;
         for (const repositoryId of repositoryIds)
           for (const listener of listeners.get(keyOf(repositoryId, route)) ??
             [])
-            listener(percent);
+            listener(update);
       };
     },
     subscribe: (
@@ -58,29 +62,45 @@ export function createCommandProgress() {
 }
 
 export function readGitProgress() {
-  let percent = -1;
+  let current: CommandProgressUpdate = { percent: -1, largeFiles: false };
   let rest = "";
-  return (output: string): number | undefined => {
+  return (output: string): CommandProgressUpdate | undefined => {
     const lines = `${rest}${output}`.split(/[\r\n]/);
     rest = lines.pop() ?? "";
-    const next = Math.max(percent, ...lines.map(linePercent));
-    if (next <= percent) return undefined;
-    percent = next;
-    return percent;
+    const before = current;
+    for (const next of lines.map(lineProgress)) {
+      if (next === undefined) continue;
+      if (
+        next.largeFiles !== current.largeFiles ||
+        next.percent > current.percent
+      )
+        current = next;
+    }
+    return current === before ? undefined : current;
   };
 }
 
-function linePercent(line: string) {
+function lineProgress(line: string): CommandProgressUpdate | undefined {
   const rebasing = rebaseLine.exec(line);
   if (rebasing !== null)
-    return Math.floor(
-      ((Number(rebasing[1]) - 1) / Math.max(1, Number(rebasing[2]))) * 100,
-    );
+    return {
+      percent: Math.floor(
+        ((Number(rebasing[1]) - 1) / Math.max(1, Number(rebasing[2]))) * 100,
+      ),
+      largeFiles: false,
+    };
   const phase = phaseLine.exec(line);
-  const band = phase?.[1] === undefined ? undefined : phases[phase[1]];
-  if (band === undefined) return -1;
+  const name = phase?.[1];
+  const percent = Number(phase?.[2]);
+  if (name === undefined) return undefined;
+  if (largeFilePhases.has(name)) return { percent, largeFiles: true };
+  const band = phases[name];
+  if (band === undefined) return undefined;
   const [from, to] = band;
-  return Math.floor(from + ((to - from) * Number(phase?.[2])) / 100);
+  return {
+    percent: Math.floor(from + ((to - from) * percent) / 100),
+    largeFiles: false,
+  };
 }
 
 export function commandProgressFeature(
@@ -99,8 +119,8 @@ export function commandProgressFeature(
             yield* Effect.addFinalizer(() => Queue.shutdown(queue));
             yield* Effect.acquireRelease(
               Effect.sync(() =>
-                progress.subscribe(repositoryId, route, (percent) =>
-                  Queue.offerUnsafe(queue, { percent }),
+                progress.subscribe(repositoryId, route, (update) =>
+                  Queue.offerUnsafe(queue, update),
                 ),
               ),
               (release) => Effect.sync(release),

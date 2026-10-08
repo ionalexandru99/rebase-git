@@ -20,6 +20,7 @@ export function planChanges<E>(
   command: MutateChanges,
   { snapshot, base }: { snapshot: RepositoryChanges; base: string },
   verify: Effect.Effect<void, E>,
+  lfsInstalled: boolean,
 ) {
   return Effect.gen(function* () {
     if (
@@ -48,6 +49,13 @@ export function planChanges<E>(
           changesFailed(
             "Stale",
             "A selected file has changed. Refresh the changes and try again.",
+          ),
+        );
+      if (file.lfs && !lfsInstalled && command.action !== "unstage")
+        return yield* Effect.fail(
+          changesFailed(
+            "Unsupported",
+            "Git LFS isn't installed on this server.",
           ),
         );
       if (file.status === "U" && command.action !== "stage")

@@ -248,5 +248,6 @@ function commitFile(entry: FileHistoryEntry): CommitFile {
     previousPath: entry.previousPath,
     status: entry.status,
     lines: entry.lines,
+    lfs: false,
   };
 }

@@ -54,7 +54,9 @@ export function repositoryStashesFeature(
         applyStash(git, input),
       ),
       command(api.drop, dropPolicy, (input, git) => dropStash(git, input)),
-      command(api.save, worktreePolicy, (input, git) => saveStash(git, input)),
+      command(api.save, worktreePolicy, (input, git) =>
+        saveStash(git, dependencies.lfs, input),
+      ),
     ],
   };
 }

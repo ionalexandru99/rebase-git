@@ -14,6 +14,7 @@ import {
 } from "effect";
 import { RpcClient, RpcClientError, RpcSerialization } from "effect/rpc";
 import { Socket } from "effect/socket";
+import type { CommandProgressUpdate } from "#contracts/command-progress/command-progress.contract.ts";
 import {
   type EnvironmentAccessFailure,
   EnvironmentAuthorizationFailure,
@@ -162,10 +163,10 @@ function watchProgress(
   rpc: EnvironmentRpcClient,
   repositoryId: string,
   route: string,
-  progress: (percent: number) => void,
+  progress: (update: CommandProgressUpdate) => void,
 ) {
   return rpc.WatchCommandProgress({ repositoryId, route }).pipe(
-    Stream.runForEach(({ percent }) => Effect.sync(() => progress(percent))),
+    Stream.runForEach((update) => Effect.sync(() => progress(update))),
     Effect.ignore,
     Effect.andThen(Effect.never),
   );

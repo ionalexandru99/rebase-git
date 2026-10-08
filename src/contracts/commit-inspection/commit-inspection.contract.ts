@@ -41,6 +41,7 @@ export const CommitFile = Schema.Struct({
   previousPath: Schema.NullOr(RepositoryPath),
   status: Schema.Literals(["A", "M", "D", "R", "T"]),
   lines: ChangedLines,
+  lfs: Schema.Boolean,
 });
 export type CommitFile = typeof CommitFile.Type;
 export const CommitInspection = Schema.Struct({

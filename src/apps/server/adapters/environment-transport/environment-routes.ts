@@ -16,9 +16,12 @@ import {
   type GitCommandRunner,
   type GitFailed,
   isIdentityMissing,
+  isLfsMissing,
+  lfsMissing,
 } from "#server/adapters/local-git/git-commands.ts";
 import type { CommandProgress } from "#server/features/command-progress/command-progress.ts";
 import type { EnvironmentAuthorizationError } from "#server/features/environment-authorization/environment-authorization.ts";
+import type { GitLfs } from "#server/features/repository-lfs/git-lfs.ts";
 import { EnvironmentStorageError } from "#server/persistence/sqlite/storage-operation.ts";
 import type { RepositoryAccess } from "#server/repository/repository-access.ts";
 import type {
@@ -93,6 +96,7 @@ export interface RepositoryDependencies {
   readonly access: RepositoryAccess;
   readonly coordination: RepositoryCoordination;
   readonly git: GitCommandRunner;
+  readonly lfs: GitLfs;
   readonly progress: CommandProgress;
 }
 
@@ -138,7 +142,9 @@ export function repositoryRoutes({
                 "IdentityMissing",
                 "Add your name and email to commit.",
               )
-            : repositoryRejected("GitFailed", error.detail),
+            : isLfsMissing(error.detail)
+              ? lfsMissing()
+              : repositoryRejected("GitFailed", error.detail),
         ),
       ),
     );

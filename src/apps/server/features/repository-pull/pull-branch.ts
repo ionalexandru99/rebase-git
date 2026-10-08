@@ -19,6 +19,10 @@ import {
   runRepositoryGitOutput,
 } from "#server/adapters/local-git/git-commands.ts";
 import {
+  fetchLargeFiles,
+  type GitLfs,
+} from "#server/features/repository-lfs/git-lfs.ts";
+import {
   isGitLocked,
   overwrittenPaths,
   readCommit,
@@ -49,6 +53,7 @@ export interface PullTarget {
 export function pullBranch<E>(
   git: GitCommandRunner,
   coordination: RepositoryCoordination,
+  lfs: GitLfs,
   { directory, branch, checkedOut, strategy }: PullTarget,
   stored: Effect.Effect<PullStrategy, E>,
 ): Effect.Effect<
@@ -67,6 +72,7 @@ export function pullBranch<E>(
       upstreamTarget,
     );
     if (behind === 0) return { outcome: "UpToDate", stashKept: false } as const;
+    if (checkedOut) yield* fetchLargeFiles(lfs, git, directory, upstreamTarget);
     if (ahead === 0)
       return {
         outcome: "FastForwarded",

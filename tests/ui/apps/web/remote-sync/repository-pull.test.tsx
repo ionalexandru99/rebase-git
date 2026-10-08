@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vite-plus/test";
 import { page } from "vite-plus/test/browser";
+import type { CommandProgressUpdate } from "#contracts/command-progress/command-progress.contract.ts";
 import {
   type BranchPulled,
   type PullFailure,
@@ -129,11 +130,11 @@ describe("repository pull", () => {
       respond(RepositoryRefsApi.read, async () => refs(1)),
       respond(RepositoryPullApi.fetchStatus, async () => status),
       respond(RepositoryPullApi.fetch, (_input, { progress }) => {
-        progress?.(60);
+        progress?.({ percent: 60, largeFiles: false });
         return fetched.promise;
       }),
       respond(RepositoryPullApi.pull, (_input, { progress }) => {
-        progress?.(30);
+        progress?.({ percent: 30, largeFiles: false });
         return pulled.promise;
       }),
     );
@@ -158,6 +159,44 @@ describe("repository pull", () => {
       .element(page.getByText("Pulled", { exact: true }))
       .toBeVisible();
     await expect.element(page.getByRole("progressbar")).not.toBeInTheDocument();
+  });
+
+  it("names the large-file download in the pull toast and returns to the pull title after it", async () => {
+    const pulled = Promise.withResolvers<typeof pulledCleanly>();
+    let report: (update: CommandProgressUpdate) => void = () => {};
+    const requests = fakeRequests(
+      idleOperation,
+      respond(RepositoryRefsApi.read, async () => refs(1)),
+      respond(RepositoryPullApi.fetchStatus, async () => status),
+      respond(RepositoryPullApi.fetch, async () => status),
+      respond(RepositoryPullApi.pull, (_input, { progress }) => {
+        report = (update) => progress?.(update);
+        return pulled.promise;
+      }),
+    );
+    await render(
+      <RepositoryScopeProvider scope={repositoryScope({ repositoryId })}>
+        <RemoteSync>{(actions) => actions}</RemoteSync>
+      </RepositoryScopeProvider>,
+      { environment: { requests } },
+    );
+
+    await page.getByRole("button", { name: "Pull 1 incoming commit" }).click();
+    await expect
+      .element(page.getByRole("progressbar", { name: "Pulling" }))
+      .toBeVisible();
+    report({ percent: 50, largeFiles: true });
+    await expect
+      .element(page.getByRole("progressbar", { name: "Pulling large files" }))
+      .toHaveAttribute("aria-valuenow", "50");
+    report({ percent: 20, largeFiles: false });
+    await expect
+      .element(page.getByRole("progressbar", { name: "Pulling" }))
+      .toHaveAttribute("aria-valuenow", "20");
+    pulled.resolve(pulledCleanly);
+    await expect
+      .element(page.getByText("Pulled", { exact: true }))
+      .toBeVisible();
   });
 
   it("asks how to pull a diverged branch and pulls again with the choice from the menu", async () => {

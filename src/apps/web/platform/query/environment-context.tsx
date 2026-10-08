@@ -1,4 +1,5 @@
 import { createContext, type ReactNode, useContext } from "react";
+import type { CommandProgressUpdate } from "#contracts/command-progress/command-progress.contract.ts";
 import type {
   EnvironmentRoute,
   EnvironmentStreamRoute,
@@ -43,7 +44,7 @@ export type EnvironmentSubscriptions = <Route extends EnvironmentStreamRoute>(
 
 export interface RequestOptions {
   readonly signal?: AbortSignal;
-  readonly progress?: (percent: number) => void;
+  readonly progress?: (update: CommandProgressUpdate) => void;
 }
 
 export interface Environment {

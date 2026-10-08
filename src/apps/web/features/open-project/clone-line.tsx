@@ -40,7 +40,7 @@ export function CloneLine({
   const [repositoryId] = useState(() => crypto.randomUUID());
   const [choosing, setChoosing] = useState(false);
   const clone = useCommand(RepositoryCatalogApi.clone, {
-    progress: setPercent,
+    progress: ({ percent }) => setPercent(percent),
     answers: catalogWith,
   });
   const destination =

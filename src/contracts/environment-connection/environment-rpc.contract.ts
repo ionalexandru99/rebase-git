@@ -15,6 +15,7 @@ import { RepositoryChangesApi } from "#contracts/repository-changes/repository-c
 import { CompareApi } from "#contracts/repository-comparison/compare-revisions.contract.ts";
 import { RepositoryConflictsApi } from "#contracts/repository-conflicts/repository-conflicts.contract.ts";
 import { RepositoryHistoryRpc } from "#contracts/repository-history/repository-history.contract.ts";
+import { RepositoryLfsApi } from "#contracts/repository-lfs/repository-lfs.contract.ts";
 import { RepositoryOperationsApi } from "#contracts/repository-operations/repository-operations.contract.ts";
 import { RepositoryPullApi } from "#contracts/repository-pull/repository-pull.contract.ts";
 import { RepositoryPushApi } from "#contracts/repository-push/repository-push.contract.ts";
@@ -87,6 +88,7 @@ export const EnvironmentRpc = RpcGroup.make(
   ...Object.values(CompareApi),
   ...Object.values(RepositoryChangesApi),
   ...Object.values(RepositoryConflictsApi),
+  ...Object.values(RepositoryLfsApi),
   ...Object.values(RepositoryOperationsApi),
   ...Object.values(RepositoryPullApi),
   ...Object.values(PullRequestsApi),
