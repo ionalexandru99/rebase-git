@@ -1,16 +1,11 @@
 import { useRef, useState } from "react";
 import { CommitInspectionApi } from "#contracts/commit-inspection/commit-inspection.contract.ts";
-import type { RepositoryCommit } from "#contracts/repository-history/repository-history.contract.ts";
 import {
   type PlanStep,
   RepositoryOperationsApi,
 } from "#contracts/repository-operations/repository-operations.contract.ts";
 import type { Action } from "#web/components/ui/action-menu.tsx";
-import {
-  Confirmation,
-  ConfirmationList,
-} from "#web/components/ui/confirmation.tsx";
-import { PersistentNotification } from "#web/features/notifications/components/persistent-notification.tsx";
+import { ConfirmNotice } from "#web/features/notifications/components/persistent-notification.tsx";
 import { useErrorToast } from "#web/features/notifications/notifications.tsx";
 import { useOperation } from "#web/features/operation-recovery/hooks/use-operation.ts";
 import { operationKindLabel } from "#web/features/operation-recovery/operation-messages.ts";
@@ -223,38 +218,26 @@ export function DropConfirmation({ drop }: { readonly drop: RewriteCommits }) {
   const { pending } = drop;
   if (pending === undefined) return null;
   const { branch, plan } = pending;
-  const [only] = plan.selected;
   const count = plan.selected.length;
   return (
-    <PersistentNotification>
-      <Confirmation
-        action={count === 1 ? "Drop commit" : `Drop ${count} commits`}
-        busy={drop.running}
-        className="px-3 py-2"
-        onCancel={drop.cancel}
-        onConfirm={drop.confirm}
-        title={
-          count === 1 && only !== undefined
-            ? `Drop ${commitLine(only)}?`
-            : `Drop ${count} commits from ${branch}?`
-        }
-      >
-        {count === 1 ? (
-          <p>It is removed from {branch}.</p>
-        ) : (
-          <ConfirmationList items={plan.selected.map(commitLine)} />
-        )}
-        {plan.pushed ? (
-          <p className="mt-1.5">
-            {count === 1 ? "It was" : "Some were"} already pushed, so you'll
-            need to force-push afterwards.
-          </p>
-        ) : null}
-      </Confirmation>
-    </PersistentNotification>
+    <ConfirmNotice
+      notice="rebase"
+      action={count === 1 ? "Drop commit" : `Drop ${count} commits`}
+      busy={drop.running ? "Dropping" : undefined}
+      onCancel={drop.cancel}
+      onConfirm={drop.confirm}
+      title={
+        count === 1
+          ? "Drop this commit?"
+          : `Drop ${count} commits from ${branch}?`
+      }
+    >
+      {plan.pushed ? (
+        <p>
+          {count === 1 ? "It was" : "Some were"} already pushed, so you'll need
+          to force-push afterwards.
+        </p>
+      ) : null}
+    </ConfirmNotice>
   );
-}
-
-function commitLine(commit: RepositoryCommit) {
-  return `${commit.oid.slice(0, 7)} ${commit.subject}`;
 }

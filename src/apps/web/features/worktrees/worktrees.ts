@@ -114,24 +114,23 @@ export function useWorktrees(wanted: boolean) {
     readonly changes: number;
   }>();
   const removeNow = async (row: WorktreeRow, changes: number) => {
-    setConfirming(undefined);
     const missing = row.worktree.missing === true;
-    if (!missing)
-      statusToast.progress("removeWorktree", `Removing “${row.name}”`);
+    if (!missing && changes === 0)
+      statusToast.progress("removeWorktree", `Removing ${row.name}`);
     const result = await remove.run({ target: row.worktree.path, changes });
-    if (result._tag === "Ok") {
-      if (row.active && anchor !== undefined) scope?.switchWorktree(anchor);
-      if (!missing)
-        statusToast.success("removeWorktree", `Removed “${row.name}”`);
-      return;
-    }
-    const changed = rejection(result);
+    const changed = result._tag === "Ok" ? undefined : rejection(result);
     if (changed?._tag === "WorktreeChanged") {
       statusToast.close("removeWorktree");
       setConfirming({ row, changes: changed.changes });
       return;
     }
-    errorToast.failure("removeWorktree", result, worktreeFailureMessages);
+    if (result._tag === "Ok") {
+      if (row.active && anchor !== undefined) scope?.switchWorktree(anchor);
+      if (!missing)
+        statusToast.success("removeWorktree", `Removed ${row.name}`);
+    } else
+      errorToast.failure("removeWorktree", result, worktreeFailureMessages);
+    setConfirming(undefined);
   };
   return {
     refs,
@@ -166,6 +165,7 @@ export function useWorktrees(wanted: boolean) {
     switchTo: (row: WorktreeRow) => scope?.switchWorktree(row.worktree.path),
     confirmation: {
       row: confirming?.row,
+      changes: confirming?.changes,
       busy: remove.running,
       confirm: () => {
         if (confirming !== undefined)

@@ -1,5 +1,8 @@
 import { Schema } from "effect";
-import { repositoryCommand } from "#contracts/environment-connection/environment-route.contract.ts";
+import {
+  repositoryCommand,
+  repositoryQuery,
+} from "#contracts/environment-connection/environment-route.contract.ts";
 import { RepositoryRejected } from "#contracts/git/git-failures.contract.ts";
 import {
   ObjectId,
@@ -64,6 +67,12 @@ export const DeleteRepositoryBranches = Schema.Struct({
 });
 export type DeleteRepositoryBranches = typeof DeleteRepositoryBranches.Type;
 
+export const ReadUnmergedBranches = Schema.Struct({
+  ...BranchScope,
+  branches: DeleteRepositoryBranches.fields.branches,
+});
+export type ReadUnmergedBranches = typeof ReadUnmergedBranches.Type;
+
 export const RepositoryBranchRenamed = Schema.Struct({
   branch: LocalBranch,
   previousName: RefName,
@@ -121,6 +130,10 @@ export const RepositoryBranchesApi = {
     request: DeleteRepositoryBranches,
     success: RepositoryBranchesDeleted,
     failure: RepositoryBranchesOperationFailure,
+  }),
+  unmerged: repositoryQuery("repositories/branches/unmerged", {
+    request: ReadUnmergedBranches,
+    success: Schema.Array(UnmergedBranch).check(Schema.isMaxLength(1_000)),
   }),
   rename: repositoryCommand("repositories/branches/rename", {
     request: RenameRepositoryBranch,

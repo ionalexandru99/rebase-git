@@ -8,8 +8,8 @@ import {
   type RestoreSource,
 } from "#contracts/commit-inspection/commit-inspection.contract.ts";
 import { type Action, submenu } from "#web/components/ui/action-menu.tsx";
-import { Confirmation } from "#web/components/ui/confirmation.tsx";
-import { PersistentNotification } from "#web/features/notifications/components/persistent-notification.tsx";
+import { fileName } from "#web/features/file-diff/components/file-row-name.tsx";
+import { ConfirmNotice } from "#web/features/notifications/components/persistent-notification.tsx";
 import { useErrorToast } from "#web/features/notifications/notifications.tsx";
 import {
   type CommandTarget,
@@ -51,8 +51,6 @@ const sources: readonly {
   { source: "commit", label: "This commit" },
   { source: "parent", label: "Before this commit" },
 ];
-const listedOverwrites = 3;
-
 export type RestoreSubject = Pick<
   CommitInspection,
   "oid" | "parentOid" | "files"
@@ -154,34 +152,21 @@ export function RestoreConfirmation({
   const { pending } = restore;
   if (pending === undefined) return null;
   const { paths, count, fingerprint } = pending.failure;
-  const hidden = count - Math.min(count, listedOverwrites);
   return (
-    <PersistentNotification>
-      <Confirmation
-        action="Replace and restore"
-        busy={restore.running}
-        className="px-3 py-2"
-        key={fingerprint}
-        onCancel={restore.cancel}
-        onConfirm={restore.confirm}
-        title={
-          count === 1
-            ? `Replace uncommitted edits in ${paths[0]}?`
-            : `Replace uncommitted edits in ${count} files?`
-        }
-      >
-        <p>Your edits will be lost. Staged changes stay.</p>
-        {count === 1 ? null : (
-          <ul className="mt-1.5 flex flex-col gap-0.5">
-            {paths.slice(0, listedOverwrites).map((path) => (
-              <li className="truncate font-mono text-foreground" key={path}>
-                {path}
-              </li>
-            ))}
-          </ul>
-        )}
-        {hidden === 0 ? null : <p className="mt-0.5">and {hidden} more</p>}
-      </Confirmation>
-    </PersistentNotification>
+    <ConfirmNotice
+      notice="restore"
+      action="Replace and restore"
+      busy={restore.running ? "Restoring" : undefined}
+      key={fingerprint}
+      onCancel={restore.cancel}
+      onConfirm={restore.confirm}
+      title={
+        count === 1
+          ? `Replace uncommitted edits in ${fileName(paths[0] ?? "")}?`
+          : `Replace uncommitted edits in ${count} files?`
+      }
+    >
+      <p>Your edits will be lost. Staged changes stay.</p>
+    </ConfirmNotice>
   );
 }

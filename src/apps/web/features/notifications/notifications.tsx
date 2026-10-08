@@ -7,7 +7,11 @@ import {
   useRef,
   useState,
 } from "react";
-import { PersistentNotificationOutlet } from "#web/features/notifications/components/persistent-notification.tsx";
+import {
+  confirmsInPlace,
+  noticeId,
+  PersistentNotificationOutlet,
+} from "#web/features/notifications/components/persistent-notification.tsx";
 import {
   type NoticeChoice,
   type NoticeData,
@@ -95,9 +99,6 @@ export type ErrorToast = ReturnType<typeof useErrorToast>;
 
 const visibleToasts = 3;
 
-const unanswered =
-  "The server stopped responding. Reconnect and check the result before trying again.";
-
 type Notice = {
   readonly type: "error" | "success" | "loading";
   readonly title: string;
@@ -118,8 +119,9 @@ function useActionToasts() {
   useLayoutEffect(() => {
     shown.current = toasts;
   });
+  const outlet = useContext(PersistentNotificationOutlet);
   const repositoryId = useRepositoryScope()?.repositoryId;
-  const idFor = (action: ErrorAction) => `${repositoryId ?? ""}/${action}`;
+  const idFor = (action: ErrorAction) => noticeId(repositoryId, action);
   return {
     put: (action: ErrorAction, notice: Notice) => {
       const id = idFor(action);
@@ -157,6 +159,7 @@ function useActionToasts() {
           repositoryId,
           ...(percent === undefined ? {} : { percent }),
           ...(notice.choices === undefined ? {} : { choices: notice.choices }),
+          ...(confirmsInPlace(outlet, id) ? { inPlace: true } : {}),
         },
       });
     },
@@ -197,9 +200,7 @@ export function useErrorToast() {
       }
       show(
         action,
-        result._tag === "Unanswered"
-          ? unanswered
-          : describeFailure(result, messages),
+        describeFailure(result, messages),
         identityMissing(result)
           ? { label: "Open settings", run: openGitIdentity }
           : undo === undefined

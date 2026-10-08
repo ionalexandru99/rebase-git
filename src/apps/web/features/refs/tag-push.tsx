@@ -26,7 +26,7 @@ export function useTagPush(): TagPushHandler | undefined {
           statusToast.success("pushTags", describePushed(result.value));
         else
           errorToast.failure("pushTags", result, {
-            PushRejected: (rejected) => describeRejection(rejected, remote),
+            PushRejected: describeRejection,
           });
       });
     },
@@ -42,18 +42,18 @@ function describePushed({ remote, pushed, upToDate }: TagsPushed) {
     : `${sent}. ${tagList(upToDate)} ${upToDate.length === 1 ? "was" : "were"} already there.`;
 }
 
-function describeRejection({ reason, detail }: PushRejected, remote: string) {
+function describeRejection({ reason, detail }: PushRejected) {
   switch (reason) {
     case "TagExists":
-      return `${remote} already has ${detail} on another commit. Nothing was pushed.`;
+      return `The remote already has ${detail} on another commit. Nothing was pushed.`;
     case "HookDeclined":
-      return gitMessage(detail, `${remote} rejected the tags.`);
+      return gitMessage(detail, "The remote rejected the tags.");
     case "Authentication":
-      return `${remote} rejected the credentials.`;
+      return "The remote rejected the credentials.";
     case "Network":
-      return `Can't reach ${remote}.`;
+      return "Can't reach the remote.";
     case "RemoteMissing":
-      return `Remote ${remote} not found.`;
+      return "The remote doesn't exist.";
     default:
       return gitMessage(detail);
   }

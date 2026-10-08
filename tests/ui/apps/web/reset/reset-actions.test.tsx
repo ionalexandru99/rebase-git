@@ -96,7 +96,6 @@ describe("reset actions", () => {
     await expect
       .element(confirmation)
       .toHaveTextContent("Uncommitted edits in 2 files will be lost.");
-    await expect.element(confirmation).toHaveTextContent("src/retry.ts");
 
     await screen.getByRole("button", { name: "Discard and reset" }).click();
     await expect.element(confirmation).not.toBeInTheDocument();

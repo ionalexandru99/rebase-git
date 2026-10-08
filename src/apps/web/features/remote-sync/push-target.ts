@@ -134,32 +134,24 @@ export function describePushed({ mode }: PushSummary) {
   return mode._tag === "ForceWithLease" ? "Force pushed" : "Pushed";
 }
 
-export function pushFailureMessages(
-  destination: PushDestination,
-): FailureMessages<RouteFailure<typeof RepositoryPushApi.push>> {
-  return {
-    PushRejected: (rejected) => describePushRejection(rejected, destination),
-  };
-}
+export const pushFailureMessages: FailureMessages<
+  RouteFailure<typeof RepositoryPushApi.push>
+> = { PushRejected: describePushRejection };
 
-function describePushRejection(
-  { reason, detail }: PushRejected,
-  destination: PushDestination,
-) {
-  const name = destinationName(destination);
+function describePushRejection({ reason, detail }: PushRejected) {
   switch (reason) {
     case "NonFastForward":
-      return `${name} has commits you don't have. Fetch first.`;
+      return "The remote has commits you don't have. Fetch first.";
     case "LeaseRejected":
-      return `${name} moved since your last fetch. Fetch and review.`;
+      return "The remote branch moved since your last fetch. Fetch and review.";
     case "HookDeclined":
-      return gitMessage(detail, `${name} rejected the push.`);
+      return gitMessage(detail, "The remote rejected the push.");
     case "Authentication":
-      return `${destination.remote} rejected the credentials.`;
+      return "The remote rejected the credentials.";
     case "Network":
-      return `Can't reach ${destination.remote}.`;
+      return "Can't reach the remote.";
     case "RemoteMissing":
-      return `Remote ${destination.remote} not found.`;
+      return "The remote doesn't exist.";
     default:
       return gitMessage(detail);
   }

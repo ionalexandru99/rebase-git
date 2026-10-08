@@ -5,8 +5,8 @@ import type {
   IgnoreTracked,
 } from "#contracts/repository-changes/repository-changes.contract.ts";
 import { type Action, submenu } from "#web/components/ui/action-menu.tsx";
-import { Confirmation } from "#web/components/ui/confirmation.tsx";
-import { PersistentNotification } from "#web/features/notifications/components/persistent-notification.tsx";
+import { fileName } from "#web/features/file-diff/components/file-row-name.tsx";
+import { ConfirmNotice } from "#web/features/notifications/components/persistent-notification.tsx";
 import { useErrorToast } from "#web/features/notifications/notifications.tsx";
 import type { useChangeActions } from "#web/features/working-changes/hooks/use-working-changes.ts";
 
@@ -72,19 +72,17 @@ export function IgnoreConfirmation({
   if (pending === undefined) return null;
   const { path, count } = pending.failure;
   return (
-    <PersistentNotification>
-      <Confirmation
-        action="Ignore and untrack"
-        busy={busy}
-        className="px-3 py-2"
-        onCancel={ignore.cancel}
-        onConfirm={ignore.confirm}
-        title={
-          count === 1
-            ? `Ignore and untrack ${path}?`
-            : `Ignore and untrack ${count} files?`
-        }
-      />
-    </PersistentNotification>
+    <ConfirmNotice
+      notice="ignore"
+      action="Ignore and untrack"
+      busy={busy ? "Ignoring" : undefined}
+      onCancel={ignore.cancel}
+      onConfirm={ignore.confirm}
+      title={
+        count === 1
+          ? `Ignore and untrack ${fileName(path)}?`
+          : `Ignore and untrack ${count} files?`
+      }
+    />
   );
 }

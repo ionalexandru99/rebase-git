@@ -412,7 +412,7 @@ describe("branches sidebar", () => {
     reads[0]?.reject(unanswered);
     await expect
       .element(screen.getByRole("alert"))
-      .toHaveTextContent("The server did not answer.");
+      .toHaveTextContent("The server stopped responding.");
     await screen.getByRole("button", { name: "Retry" }).click();
     await expect.poll(() => reads.length).toBe(2);
   });

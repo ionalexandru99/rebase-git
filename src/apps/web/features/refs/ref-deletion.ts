@@ -1,3 +1,4 @@
+import { skipToken } from "@tanstack/react-query";
 import { useRef, useState } from "react";
 import {
   type BranchDeletion,
@@ -19,6 +20,8 @@ import {
   type RefKind,
   refFailureMessages,
 } from "#web/features/refs/ref-kinds.ts";
+import { useEnvironmentQuery } from "#web/platform/query/environment-query.ts";
+import { useRepositoryScope } from "#web/platform/query/repository-scope.tsx";
 import { useCommand } from "#web/platform/query/use-command.ts";
 
 type Targeted<Ref> = Ref & { readonly target: string };
@@ -43,7 +46,12 @@ interface PendingDeletion {
   readonly deletion: RefDeletion;
   readonly busy: boolean;
   readonly unmerged?: readonly UnmergedBranch[];
-  readonly restorable?: readonly DeletedBranch[];
+  readonly earlier?: DeletedBranches;
+}
+
+interface DeletedBranches {
+  readonly names: readonly string[];
+  readonly restorable: readonly DeletedBranch[] | undefined;
 }
 
 interface DeletedBranch {
@@ -68,7 +76,25 @@ export function useRefDeletion({
   };
   const errorToast = useErrorToast();
   const statusToast = useStatusToast();
+  const scope = useRepositoryScope();
   const [pending, setPendingState] = useState<PendingDeletion>();
+  const asked =
+    pending?.deletion.kind === "branch" && pending.unmerged === undefined
+      ? pending.deletion
+      : undefined;
+  const preview = useEnvironmentQuery(
+    RepositoryBranchesApi.unmerged,
+    asked === undefined || scope === undefined
+      ? skipToken
+      : {
+          repositoryId: scope.repositoryId,
+          worktreePath: scope.worktreePath,
+          branches: asked.branches.map(branchDeletionInput),
+        },
+    { changes: "refs", enabled: pending?.busy !== true },
+  );
+  const unmerged =
+    pending?.unmerged ?? (asked === undefined ? undefined : preview.data);
   const latestPending = useRef(pending);
   const setPending = (next: PendingDeletion | undefined) => {
     latestPending.current = next;
@@ -83,7 +109,7 @@ export function useRefDeletion({
   const remove = async (
     deletion: RefDeletion,
     force: boolean,
-    earlier: readonly DeletedBranch[] = [],
+    earlier: DeletedBranches = { names: [], restorable: [] },
   ) => {
     const next =
       deletion.kind === "tag"
@@ -107,17 +133,14 @@ export function useRefDeletion({
         result,
         refFailureMessages(deletion.name),
       );
-    else {
-      const notice = remoteDeletionNotice(deletion);
-      if (notice !== undefined) statusToast.success("deleteTag", notice);
-    }
+    else statusToast.success("deleteTag", `Deleted ${deletion.name}`);
     return undefined;
   };
 
   const removeBranches = async (
     deletion: BranchesDeletion,
     force: boolean,
-    earlier: readonly DeletedBranch[],
+    earlier: DeletedBranches,
   ): Promise<PendingDeletion | undefined> => {
     const result = await deletes.branch.run({
       branches: deletion.branches.map(branchDeletionInput),
@@ -136,25 +159,34 @@ export function useRefDeletion({
       deletion.branches.filter((branch) =>
         list.some((other) => sameBranch(branchDeletionInput(branch), other)),
       );
-    const now = deletedBranches(among(deleted), refs);
-    const restorable = now === undefined ? earlier : [...earlier, ...now];
+    const removed = among(deleted);
+    const now = deletedBranches(removed, refs);
+    const done: DeletedBranches = {
+      names: [...earlier.names, ...removed.map(branchLabel)],
+      restorable:
+        now === undefined || earlier.restorable === undefined
+          ? undefined
+          : [...earlier.restorable, ...now],
+    };
+    const restorable = done.restorable ?? [];
+    const undoable =
+      restorable.length === 0 ? undefined : () => void undo(restorable);
+    const [only] = done.names;
     if (failure !== undefined)
       errorToast.failure(
         "deleteBranch",
         { _tag: "Rejected", failure },
         messages,
-        restorable.length === 0 ? undefined : () => void undo(restorable),
+        undoable,
       );
-    else if (now !== undefined) {
-      const [only] = restorable;
+    else if (removed.length > 0)
       statusToast.success(
         "deleteBranch",
-        restorable.length === 1 && only !== undefined
-          ? `Deleted ${only.name}`
-          : `Deleted ${restorable.length} branches`,
-        () => void undo(restorable),
+        done.names.length === 1 && only !== undefined
+          ? `Deleted ${only}`
+          : `Deleted ${done.names.length} branches`,
+        undoable,
       );
-    }
     const kept = among(unmerged.map(({ branch }) => branch));
     return kept.length === 0
       ? undefined
@@ -162,7 +194,7 @@ export function useRefDeletion({
           deletion: { kind: "branch", branches: kept },
           busy: false,
           unmerged,
-          restorable,
+          earlier: done,
         };
   };
 
@@ -190,7 +222,7 @@ export function useRefDeletion({
   };
 
   return {
-    pending,
+    pending: pending === undefined ? undefined : { ...pending, unmerged },
     cancel,
     request: (deletion: RefDeletion) => {
       if (confirmsFirst(deletion)) setPending({ deletion, busy: false });
@@ -205,36 +237,27 @@ export function useRefDeletion({
       setPending({ ...pending, busy: true });
       void remove(
         pending.deletion,
-        pending.unmerged !== undefined,
-        pending.restorable,
+        unmerged !== undefined && unmerged.length > 0,
+        pending.earlier,
       );
     },
   };
 }
 
 export function deletionTitle(deletion: RefDeletion) {
-  if (deletion.kind === "tag") {
-    const { name, local, remote } = deletion;
-    if (remote === undefined) return `Delete tag ${name}?`;
-    if (local === undefined) return `Delete tag ${name} on ${remote.remote}?`;
-    return `Delete tag ${name} locally and on ${remote.remote}?`;
-  }
+  if (deletion.kind === "tag") return `Delete tag ${deletion.name}?`;
   const { branches } = deletion;
   const [only] = branches;
-  const subject =
-    branches.length === 1 && only !== undefined
-      ? (only.local?.name ?? only.remote?.name ?? "")
-      : `${branches.length} branches`;
-  const remote = branches.find((branch) => branch.remote !== undefined)?.remote;
-  if (remote === undefined) return `Delete ${subject}?`;
-  if (branches.every((branch) => branch.local === undefined))
-    return `Delete ${subject} on ${remote.remote}?`;
-  return `Delete ${subject} locally and on ${remote.remote}?`;
+  return branches.length === 1 && only !== undefined
+    ? `Delete ${branchLabel(only)}?`
+    : `Delete ${branches.length} branches?`;
 }
 
-export function branchLabel({ local, remote }: BranchDeletion) {
-  if (local !== undefined) return local.name;
-  return remote === undefined ? "" : `${remote.remote}/${remote.name}`;
+function branchLabel({
+  local,
+  remote,
+}: Pick<BranchDeletion, "local" | "remote">) {
+  return local?.name ?? remote?.name ?? "";
 }
 
 function upstreamTarget(
@@ -247,14 +270,6 @@ function upstreamTarget(
   return branch === undefined
     ? undefined
     : { name: branch.name, remote: branch.remote };
-}
-
-function remoteDeletionNotice(deletion: RefDeletion) {
-  if (deletion.kind !== "tag" || deletion.remote === undefined)
-    return undefined;
-  return deletion.local === undefined
-    ? `Deleted ${deletion.name} on ${deletion.remote.remote}`
-    : `Deleted ${deletion.name} locally and on ${deletion.remote.remote}`;
 }
 
 function confirmsFirst(deletion: RefDeletion) {

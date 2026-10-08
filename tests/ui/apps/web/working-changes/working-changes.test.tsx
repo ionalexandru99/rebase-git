@@ -355,7 +355,7 @@ describe("working changes", () => {
     await page.getByRole("menuitem", { name: "Ignore" }).click();
     await page.getByRole("menuitem", { name: ".gitignore" }).click();
     const confirmation = page.getByRole("alertdialog", {
-      name: `Ignore and untrack ${path}?`,
+      name: "Ignore and untrack read-status.ts?",
     });
     await confirmation
       .getByRole("button", { name: "Ignore and untrack" })
@@ -706,7 +706,7 @@ describe("working changes", () => {
     const f = await fixture([], { rejectDiffs: true });
     await expect
       .element(page.getByRole("alert"))
-      .toHaveTextContent("The server did not answer.");
+      .toHaveTextContent("The server stopped responding.");
     const diffReads = f.diffReads();
     f.acceptDiffs();
     await page.getByRole("button", { name: "Refresh", exact: true }).click();

@@ -98,7 +98,7 @@ it("keeps restored refs unconfirmed until a live read answers", async () => {
 
   await expect
     .element(screen.getByRole("alert"))
-    .toHaveTextContent("The server did not answer.");
+    .toHaveTextContent("The server stopped responding.");
   await expect
     .element(screen.getByRole("status"))
     .toHaveTextContent("Restored feature, main");
@@ -144,7 +144,7 @@ it("keeps restored refs restored through a branch write until a live read answer
   reads[0]?.reject(unanswered);
   await expect
     .element(screen.getByRole("alert"))
-    .toHaveTextContent("The server did not answer.");
+    .toHaveTextContent("The server stopped responding.");
 
   await screen.getByRole("button", { name: "Rename main" }).click();
   await expect.poll(() => reads).toHaveLength(2);

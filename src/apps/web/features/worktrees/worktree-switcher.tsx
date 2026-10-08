@@ -1,12 +1,11 @@
 import { IconFolder, IconSelector } from "@tabler/icons-react";
 import { useState } from "react";
-import { Confirmation } from "#web/components/ui/confirmation.tsx";
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
 } from "#web/components/ui/popover.tsx";
-import { PersistentNotification } from "#web/features/notifications/components/persistent-notification.tsx";
+import { ConfirmNotice } from "#web/features/notifications/components/persistent-notification.tsx";
 import type { StartPoint } from "#web/features/refs/ref-kinds.ts";
 import {
   useWorktreeDraftRequest,
@@ -95,21 +94,20 @@ function RemoveConfirmation({
 }: {
   readonly confirmation: Worktrees["confirmation"];
 }) {
-  const { row, busy, confirm, cancel } = confirmation;
+  const { row, changes, busy, confirm, cancel } = confirmation;
   if (row === undefined) return null;
   return (
-    <PersistentNotification>
-      <Confirmation
-        action="Remove"
-        busy={busy}
-        className="px-3 py-2"
-        onCancel={cancel}
-        onConfirm={confirm}
-        title={`Remove “${row.name}”?`}
-      >
-        Its uncommitted changes will be deleted.
-      </Confirmation>
-    </PersistentNotification>
+    <ConfirmNotice
+      key={changes}
+      notice="removeWorktree"
+      action="Remove"
+      busy={busy ? "Removing" : undefined}
+      onCancel={cancel}
+      onConfirm={confirm}
+      title={`Remove ${row.name}?`}
+    >
+      Its uncommitted changes will be deleted.
+    </ConfirmNotice>
   );
 }
 

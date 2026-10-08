@@ -5,6 +5,7 @@ import {
   RepositoryOperationsApi,
 } from "#contracts/repository-operations/repository-operations.contract.ts";
 import type { Action } from "#web/components/ui/action-menu.tsx";
+import { fileName } from "#web/features/file-diff/components/file-row-name.tsx";
 import { useErrorToast } from "#web/features/notifications/notifications.tsx";
 import { useOperation } from "#web/features/operation-recovery/hooks/use-operation.ts";
 import { operationKindLabel } from "#web/features/operation-recovery/operation-messages.ts";
@@ -174,7 +175,7 @@ function mergeFailureMessages(
       switch (reason) {
         case "WouldOverwrite":
           return paths.length === 1
-            ? `Local changes to ${paths[0]} block the merge.`
+            ? `Local changes to ${fileName(paths[0] ?? "")} block the merge.`
             : "Local changes block the merge.";
         case "NotFastForward":
           return `${branch} can't fast-forward to ${source}.`;

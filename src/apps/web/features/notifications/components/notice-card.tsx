@@ -3,7 +3,7 @@ import {
   IconCircleCheck,
   IconCircleFilled,
 } from "@tabler/icons-react";
-import { useLayoutEffect, useRef } from "react";
+import { type ReactNode, useLayoutEffect, useRef } from "react";
 
 const fullTurnMs = 250;
 
@@ -12,6 +12,36 @@ type RingMotion = {
   readonly to: number;
   readonly at: number;
 };
+
+export function NoticeCard({
+  icon,
+  heading,
+  body,
+  dismiss,
+  actions,
+}: {
+  readonly icon: ReactNode;
+  readonly heading: ReactNode;
+  readonly body?: ReactNode;
+  readonly dismiss?: ReactNode;
+  readonly actions?: ReactNode;
+}) {
+  return (
+    <>
+      <div className="flex items-start gap-3">
+        {icon}
+        <div className="min-w-0 flex-1">
+          {heading}
+          {body}
+        </div>
+        {dismiss}
+      </div>
+      {actions === undefined ? null : (
+        <div className="mt-2.5 flex justify-end gap-1.5">{actions}</div>
+      )}
+    </>
+  );
+}
 
 export function NoticeIcon({
   type,

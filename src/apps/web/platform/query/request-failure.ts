@@ -53,7 +53,7 @@ export function describeFailure<Failure extends TaggedFailure>(
 ): string {
   switch (failure._tag) {
     case "Unanswered":
-      return "The server did not answer. Check the connection and try again.";
+      return "The server stopped responding.";
     case "Cancelled":
       return "The request was cancelled.";
     case "Rejected":
@@ -83,7 +83,7 @@ function sharedWording(failure: TaggedFailure): string {
     case "RefMissing":
       return `${shared.name} no longer exists.`;
     case "BranchCheckedOutElsewhere":
-      return `${shared.name} is checked out in ${shared.worktreePath}.`;
+      return `${shared.name} is checked out in the ${folderName(shared.worktreePath)} worktree.`;
     default:
       return detailOf(failure);
   }
@@ -121,4 +121,13 @@ function sentence(line: string) {
   if (text.length === 0) return undefined;
   const capitalized = text.charAt(0).toUpperCase() + text.slice(1);
   return /[.!?]$/.test(capitalized) ? capitalized : `${capitalized}.`;
+}
+
+function folderName(path: string) {
+  return (
+    path
+      .split(/[\\/]/)
+      .filter((part) => part.length > 0)
+      .at(-1) ?? path
+  );
 }

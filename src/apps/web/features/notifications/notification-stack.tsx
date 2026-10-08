@@ -8,7 +8,10 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "#web/components/ui/dropdown-menu.tsx";
-import { NoticeIcon } from "#web/features/notifications/components/notice-icon.tsx";
+import {
+  NoticeCard,
+  NoticeIcon,
+} from "#web/features/notifications/components/notice-card.tsx";
 
 export type NoticeChoice = {
   readonly label: string;
@@ -19,6 +22,7 @@ export type NoticeData = {
   readonly repositoryId: string | undefined;
   readonly percent?: number;
   readonly choices?: readonly [NoticeChoice, ...NoticeChoice[]];
+  readonly inPlace?: boolean;
 };
 
 export type NotifiedRepository = {
@@ -38,6 +42,7 @@ const noticeClass = [
   "[transform:translateX(var(--toast-swipe-movement-x))_translateY(var(--stacked-y))_scale(var(--scale))]",
   "data-expanded:h-(--toast-height) data-expanded:[transform:translateX(var(--toast-swipe-movement-x))_translateY(var(--offset-y))]",
   "data-starting-style:[transform:translateX(calc(100%+1rem))]",
+  "data-in-place:data-starting-style:opacity-0 data-in-place:data-starting-style:[transform:translateY(var(--stacked-y))_scale(var(--scale))]",
   "data-ending-style:opacity-0 data-ending-style:[transform:translateX(var(--slide-out))_translateY(var(--stacked-y))_scale(var(--scale))]",
   "data-expanded:data-ending-style:[transform:translateX(var(--slide-out))_translateY(var(--offset-y))]",
   "data-limited:pointer-events-none data-limited:opacity-0",
@@ -99,16 +104,23 @@ function Notice({
 }) {
   const { notice, filled } = usePacedNotice(toast);
   return (
-    <Toast.Root toast={toast} swipeDirection="right" className={noticeClass}>
+    <Toast.Root
+      toast={toast}
+      swipeDirection="right"
+      className={noticeClass}
+      data-in-place={toast.data?.inPlace === true ? "" : undefined}
+    >
       <Toast.Content className="overflow-hidden px-3 py-2.5 transition-opacity duration-200 data-behind:opacity-0 data-expanded:opacity-100">
-        <div className="flex items-start gap-3">
-          <NoticeIcon
-            type={notice.type}
-            percent={filled === undefined ? notice.data?.percent : 100}
-            label={String(notice.title)}
-            onFilled={filled}
-          />
-          <div className="min-w-0 flex-1">
+        <NoticeCard
+          icon={
+            <NoticeIcon
+              type={notice.type}
+              percent={filled === undefined ? notice.data?.percent : 100}
+              label={String(notice.title)}
+              onFilled={filled}
+            />
+          }
+          heading={
             <div className="flex items-baseline gap-1.5 text-control">
               <Toast.Title className="min-w-0 cap-centered font-medium wrap-anywhere">
                 {notice.title}
@@ -127,47 +139,53 @@ function Notice({
                 </>
               )}
             </div>
+          }
+          body={
             <Toast.Description className="mt-1 max-h-[min(240px,40vh)] overflow-y-auto whitespace-pre-line wrap-anywhere text-body text-muted-foreground">
               {notice.description}
             </Toast.Description>
-          </div>
-          {notice.type === "loading" ? null : (
-            <Toast.Close
-              aria-hidden={false}
-              aria-label="Dismiss notification"
-              render={
-                <Button
-                  className="-my-1 sm:-my-0.5"
-                  size="icon-xs"
-                  variant="ghost"
-                />
-              }
-            >
-              <IconX aria-hidden="true" />
-            </Toast.Close>
-          )}
-        </div>
-        {notice.actionProps?.children === undefined &&
-        notice.data?.choices === undefined &&
-        elsewhere === undefined ? null : (
-          <div className="mt-2.5 flex justify-end gap-1.5">
-            {elsewhere === undefined ? null : (
-              <Button
-                aria-label={`Open ${elsewhere.name}`}
-                onClick={() => openRepository(elsewhere.id)}
-                size="xs"
-                variant="ghost"
+          }
+          dismiss={
+            notice.type === "loading" ? null : (
+              <Toast.Close
+                aria-hidden={false}
+                aria-label="Dismiss notification"
+                render={
+                  <Button
+                    className="-my-1 sm:-my-0.5"
+                    size="icon-xs"
+                    variant="ghost"
+                  />
+                }
               >
-                Open
-              </Button>
-            )}
-            {notice.data?.choices !== undefined ? (
-              <SplitChoice choices={notice.data.choices} />
-            ) : notice.actionProps?.children === undefined ? null : (
-              <Button size="xs" variant="outline" {...notice.actionProps} />
-            )}
-          </div>
-        )}
+                <IconX aria-hidden="true" />
+              </Toast.Close>
+            )
+          }
+          actions={
+            notice.actionProps?.children === undefined &&
+            notice.data?.choices === undefined &&
+            elsewhere === undefined ? undefined : (
+              <>
+                {elsewhere === undefined ? null : (
+                  <Button
+                    aria-label={`Open ${elsewhere.name}`}
+                    onClick={() => openRepository(elsewhere.id)}
+                    size="xs"
+                    variant="ghost"
+                  >
+                    Open
+                  </Button>
+                )}
+                {notice.data?.choices !== undefined ? (
+                  <SplitChoice choices={notice.data.choices} />
+                ) : notice.actionProps?.children === undefined ? null : (
+                  <Button size="xs" variant="outline" {...notice.actionProps} />
+                )}
+              </>
+            )
+          }
+        />
       </Toast.Content>
     </Toast.Root>
   );
