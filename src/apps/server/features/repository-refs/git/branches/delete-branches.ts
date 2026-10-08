@@ -105,7 +105,7 @@ export function readRefTargets(git: GitCommandRunner, directory: string) {
     directory,
     [
       "for-each-ref",
-      "--format=%(refname)%00%(objectname)",
+      "--format=%(refname)%00%(objectname)%00%(symref)",
       "refs/heads",
       "refs/remotes",
       "refs/tags",
@@ -117,11 +117,9 @@ export function readRefTargets(git: GitCommandRunner, directory: string) {
         new Map(
           output
             .split("\n")
-            .filter((line) => line.length > 0)
-            .map((line) => {
-              const [ref = "", target = ""] = line.split("\0");
-              return [ref, target];
-            }),
+            .map((line) => line.split("\0"))
+            .filter(([ref = "", , symref = ""]) => ref !== "" && symref === "")
+            .map(([ref = "", target = ""]) => [ref, target]),
         ),
     ),
   );

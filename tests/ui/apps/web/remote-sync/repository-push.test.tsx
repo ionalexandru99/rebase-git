@@ -6,7 +6,6 @@ import {
   type PushRejected,
   RepositoryPushApi,
 } from "#contracts/repository-push/repository-push.contract.ts";
-import { RepositoryBranchesApi } from "#contracts/repository-refs/repository-branches.contract.ts";
 import { RepositoryRefsApi } from "#contracts/repository-refs/repository-refs.contract.ts";
 import {
   fakeRequests,
@@ -80,16 +79,6 @@ async function fixture(
   const pushed = vi.fn<(command: PushBranch) => void>();
   const requests = fakeRequests(
     idleOperation,
-    respond(RepositoryBranchesApi.unmerged, async ({ branches }) =>
-      branches.map((branch) => ({
-        branch,
-        commits: [
-          { oid: reviewed, subject: "Fix the remote build" },
-          { oid: commitId, subject: "Bump the remote version" },
-        ],
-        count: 2,
-      })),
-    ),
     respond(RepositoryPushApi.push, async (command, options) => {
       pushed(command);
       const failure = await respondTo(command, options);

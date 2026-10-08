@@ -1,8 +1,6 @@
 import { IconArrowUp } from "@tabler/icons-react";
-import { skipToken } from "@tanstack/react-query";
 import { useState } from "react";
 import { RepositoryPushApi } from "#contracts/repository-push/repository-push.contract.ts";
-import { RepositoryBranchesApi } from "#contracts/repository-refs/repository-branches.contract.ts";
 import { ToolbarButton } from "#web/components/ui/toolbar-button.tsx";
 import { ConfirmNotice } from "#web/features/notifications/components/persistent-notification.tsx";
 import {
@@ -21,7 +19,6 @@ import {
   type PushTarget,
   pushFailureMessages,
 } from "#web/features/remote-sync/push-target.ts";
-import { useEnvironmentQuery } from "#web/platform/query/environment-query.ts";
 import { useRepositoryScope } from "#web/platform/query/repository-scope.tsx";
 import { useCommand } from "#web/platform/query/use-command.ts";
 
@@ -32,16 +29,19 @@ export function usePush() {
   const statusToast = useStatusToast();
   const command = useCommand(RepositoryPushApi.push);
   const [review, setReview] = useState<ForcePushReview | null>(null);
+  const [pushing, setPushing] = useState(false);
+  const running = command.running || pushing;
   const worktreePath = useRepositoryScope()?.worktreePath;
   const [reviewedIn, setReviewedIn] = useState(worktreePath);
   if (reviewedIn !== worktreePath) {
     setReviewedIn(worktreePath);
-    if (!command.running) setReview(null);
+    if (!pushing) setReview(null);
   }
 
   const pushBranch = (request: PushRequest, reviewed: boolean) => {
-    if (!command.canRun || command.running) return;
-    if (!reviewed)
+    if (!command.canRun || running) return;
+    if (reviewed) setPushing(true);
+    else
       statusToast.progress("push", describeProgress(request), {
         cancel: command.cancel,
       });
@@ -49,19 +49,21 @@ export function usePush() {
       if (result._tag === "Ok")
         statusToast.success("push", describePushed(request));
       else errorToast.failure("push", result, pushFailureMessages);
-      if (reviewed) setReview(null);
+      if (!reviewed) return;
+      setPushing(false);
+      setReview(null);
     });
   };
 
   const requestForcePush = (target: PushTarget) => {
     const review = forcePushReview(target);
-    if (review === undefined || command.running) return;
+    if (review === undefined || running) return;
     setReview(review);
   };
 
   return {
     canRun: command.canRun,
-    running: command.running,
+    running,
     review,
     push: (target: PushTarget) => {
       const upstream = target.upstream;
@@ -139,26 +141,6 @@ function ForcePushConfirmation({
   readonly push: Push;
   readonly review: ForcePushReview;
 }) {
-  const scope = useRepositoryScope();
-  const replaced = useEnvironmentQuery(
-    RepositoryBranchesApi.unmerged,
-    scope === undefined || review.removed === 0
-      ? skipToken
-      : {
-          repositoryId: scope.repositoryId,
-          worktreePath: scope.worktreePath,
-          branches: [
-            {
-              remote: {
-                name: review.destination.branch,
-                remote: review.destination.remote,
-                target: review.expectedOid,
-              },
-            },
-          ],
-        },
-    { changes: "refs", enabled: !push.running },
-  ).data?.[0];
   return (
     <ConfirmNotice
       notice="push"
@@ -170,7 +152,7 @@ function ForcePushConfirmation({
       onStop={push.stop}
       title="Force push?"
     >
-      {replaced === undefined ? null : (
+      {review.removed === 0 ? null : (
         <p>Commits on the remote that you don't have will be lost.</p>
       )}
     </ConfirmNotice>

@@ -94,10 +94,11 @@ function RemoveConfirmation({
 }: {
   readonly confirmation: Worktrees["confirmation"];
 }) {
-  const { row, busy, confirm, cancel } = confirmation;
+  const { row, changes, busy, confirm, cancel } = confirmation;
   if (row === undefined) return null;
   return (
     <ConfirmNotice
+      key={changes}
       notice="removeWorktree"
       action="Remove"
       busy={busy ? "Removing" : undefined}

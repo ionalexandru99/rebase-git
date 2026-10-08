@@ -290,9 +290,10 @@ describe("repository branches", () => {
     });
   });
 
-  it("deletes a branch locally and on the remote after warning about commits only there", async () => {
+  it("deletes a branch locally and on the remote after warning about commits only there, even when it is the remote's default", async () => {
     const fixture = await createFixture();
     await git(fixture.repositoryPath, "push", "-u", "origin", "spike");
+    await git(fixture.repositoryPath, "remote", "set-head", "origin", "spike");
     const spike = await git(fixture.repositoryPath, "rev-parse", "spike");
     const branch = {
       local: { name: "spike", target: spike },

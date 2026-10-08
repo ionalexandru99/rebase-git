@@ -165,6 +165,7 @@ export function useWorktrees(wanted: boolean) {
     switchTo: (row: WorktreeRow) => scope?.switchWorktree(row.worktree.path),
     confirmation: {
       row: confirming?.row,
+      changes: confirming?.changes,
       busy: remove.running,
       confirm: () => {
         if (confirming !== undefined)
