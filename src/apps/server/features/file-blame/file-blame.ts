@@ -19,6 +19,15 @@ import { previewByteLimit } from "#server/repository/comparison/read-blobs.ts";
 
 const groupHeader = /^([0-9a-f]{40}|[0-9a-f]{64}) (\d+) (\d+)(?: (\d+))?$/;
 const uncommitted = /^0+$/;
+const escapes: Readonly<Record<string, number>> = {
+  a: 7,
+  b: 8,
+  t: 9,
+  n: 10,
+  v: 11,
+  f: 12,
+  r: 13,
+};
 
 export function fileBlameFeature(
   dependencies: RepositoryDependencies,
@@ -31,7 +40,7 @@ export function fileBlameFeature(
   };
 }
 
-export function readFileBlame(
+function readFileBlame(
   git: GitCommandRunner,
   { worktreePath, path, revision }: ReadFileBlame,
 ) {
@@ -60,7 +69,7 @@ export function readFileBlame(
   );
 }
 
-export function parseFileBlame(output: string): FileBlame {
+function parseFileBlame(output: string): FileBlame {
   const lines: string[] = [];
   const ranges: BlameRange[] = [];
   const commits = new Map<string, BlameCommit>();
@@ -81,7 +90,7 @@ export function parseFileBlame(output: string): FileBlame {
       );
       index += 1;
     }
-    lines.push(rows[index]?.slice(1) ?? "");
+    lines.push(rows[index]?.slice(1).replace(/\r$/, "") ?? "");
     index += 1;
     const committed = !uncommitted.test(oid);
     if (committed && !commits.has(oid)) commits.set(oid, commit(oid, fields));
@@ -121,14 +130,39 @@ function commit(oid: string, fields: ReadonlyMap<string, string>): BlameCommit {
       .replace(/^<|>$/g, "")
       .slice(0, 320),
     authoredAt: Number.parseInt(fields.get("author-time") ?? "", 10) || 0,
-    path: fields.get("filename") ?? "",
+    path: unquote(fields.get("filename") ?? ""),
     previous:
       previous === undefined || space < 0
         ? null
-        : { oid: previous.slice(0, space), path: previous.slice(space + 1) },
+        : {
+            oid: previous.slice(0, space),
+            path: unquote(previous.slice(space + 1)),
+          },
   };
 }
 
 function unblamable(reason: "binary" | "large"): FileBlame {
   return { _tag: "Unblamable", reason };
+}
+
+function unquote(path: string) {
+  if (!path.startsWith('"') || !path.endsWith('"')) return path;
+  const bytes: number[] = [];
+  const body = path.slice(1, -1);
+  let index = 0;
+  while (index < body.length) {
+    const char = String.fromCodePoint(body.codePointAt(index) ?? 0);
+    const next = body[index + 1] ?? "";
+    if (char !== "\\") {
+      bytes.push(...Buffer.from(char));
+      index += char.length;
+    } else if (/[0-7]/.test(next)) {
+      bytes.push(Number.parseInt(body.slice(index + 1, index + 4), 8));
+      index += 4;
+    } else {
+      bytes.push(escapes[next] ?? next.charCodeAt(0));
+      index += 2;
+    }
+  }
+  return Buffer.from(bytes).toString();
 }

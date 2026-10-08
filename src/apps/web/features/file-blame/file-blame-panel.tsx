@@ -78,7 +78,7 @@ function FileBlame({
     <section aria-label="Blame" className="flex h-full min-h-0 flex-col">
       <header className="flex h-9 shrink-0 items-center gap-2 border-border border-b px-3">
         <span className="min-w-0 flex-1 truncate text-left text-meta text-muted-foreground [direction:rtl]">
-          {`‎${folder}‎`}
+          <bdi>{folder}</bdi>
         </span>
         {revision === undefined ? null : <CommitRefPill label={revision} />}
       </header>

@@ -54,6 +54,31 @@ describe("file blame", () => {
     });
     expect(binary).toEqual({ _tag: "Unblamable", reason: "binary" });
   });
+
+  it.skipIf(process.platform === "win32")(
+    "reads names Git quotes and lines that end in CRLF",
+    async () => {
+      const path = await temporaryRepository();
+      const name = 'say "hi" \\ ţ.txt';
+      await writeFile(join(path, name), "one\r\ntwo\r\n");
+      await commitAll(path, "Add greeting");
+      await writeFile(join(path, name), "one\r\nthree\r\n");
+      await commitAll(path, "Change greeting");
+      const added = await git(path, "rev-parse", "HEAD~1");
+      const blame = await blameClient(path);
+
+      const result = await blame.read(name, null);
+
+      expect(result).toMatchObject({
+        _tag: "Blamed",
+        text: "one\nthree",
+        commits: [
+          { path: name, previous: null },
+          { path: name, previous: { oid: added, path: name } },
+        ],
+      });
+    },
+  );
 });
 
 async function commitAll(path: string, message: string) {

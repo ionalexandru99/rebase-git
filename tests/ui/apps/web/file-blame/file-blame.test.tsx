@@ -15,6 +15,7 @@ import {
   changeDiff,
   changedFile,
   commitInspection,
+  fileBlame,
   mainPath,
   repositoryRefs,
   repositoryScope,
@@ -70,16 +71,17 @@ function Workspace() {
 }
 
 async function fixture() {
-  const blames = vi.fn((_request: ReadFileBlame) => ({
-    _tag: "Blamed" as const,
-    text: "one\ntwo\nthree\nfour",
-    ranges: [
-      { start: 1, count: 2, oid: tidied.oid, originalLine: 1 },
-      { start: 3, count: 1, oid: null, originalLine: 3 },
-      { start: 4, count: 1, oid: added.oid, originalLine: 7 },
-    ],
-    commits: [tidied, added],
-  }));
+  const blames = vi.fn((_request: ReadFileBlame) =>
+    fileBlame({
+      text: "one\ntwo\nthree\nfour",
+      ranges: [
+        { start: 1, count: 2, oid: tidied.oid, originalLine: 1 },
+        { start: 3, count: 1, oid: null, originalLine: 3 },
+        { start: 4, count: 1, oid: added.oid, originalLine: 7 },
+      ],
+      commits: [tidied, added],
+    }),
+  );
   const diffs = vi.fn((command: InspectCommitDiff) => changeDiff(command.path));
   const requests = fakeRequests(
     respond(FileBlameApi.read, (request) => blames(request)),
@@ -128,9 +130,9 @@ describe("file blame", () => {
 
     const tab = screen.getByRole("tab", { name: "app.ts", exact: true });
     await expect.element(tab).toHaveAttribute("aria-selected", "true");
-    expect(blames).toHaveBeenLastCalledWith(
-      expect.objectContaining({ path: "src/app.ts", revision: historyOid(0) }),
-    );
+    await expect
+      .poll(() => blames.mock.calls.at(-1)?.[0])
+      .toMatchObject({ path: "src/app.ts", revision: historyOid(0) });
     const introduced = screen.getByRole("option", { name: /Add the app/ });
     await introduced.click();
     await expect.element(introduced).toHaveAttribute("aria-selected", "true");
@@ -159,8 +161,8 @@ describe("file blame", () => {
     await expect
       .element(screen.getByRole("tab", { name: /^22222222\/app\.ts$/ }))
       .toHaveAttribute("aria-selected", "true");
-    expect(blames).toHaveBeenLastCalledWith(
-      expect.objectContaining({ path: "lib/app.ts", revision: added.oid }),
-    );
+    await expect
+      .poll(() => blames.mock.calls.at(-1)?.[0])
+      .toMatchObject({ path: "lib/app.ts", revision: added.oid });
   });
 });

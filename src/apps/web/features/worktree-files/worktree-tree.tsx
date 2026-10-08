@@ -171,7 +171,7 @@ export function WorktreeTree({
     echo.current = false;
   }, [model, selected, query, pathList]);
   const [menuPath, setMenuPath] = useState<string | null>(null);
-  const actions = useRowActions(changes);
+  const actions = useRowActions(changes, ignored);
   const failed = folders.find((folder) => folder.error !== null)?.error;
   return (
     <ContextMenu>
@@ -201,7 +201,10 @@ export function WorktreeTree({
   );
 }
 
-function useRowActions(changes: RepositoryChanges | undefined) {
+function useRowActions(
+  changes: RepositoryChanges | undefined,
+  ignored: readonly string[],
+) {
   const fileHistory = useFileHistoryAction();
   const blame = useBlameAction();
   const showChange = useShowChangeAction();
@@ -212,7 +215,13 @@ function useRowActions(changes: RepositoryChanges | undefined) {
     const change = [...(changes?.unstaged ?? []), ...(changes?.staged ?? [])]
       .filter((file) => file.path === name)
       .map((file) => file.status);
-    const committed = !change.includes("?") && !change.includes("A");
+    const committed =
+      !change.includes("?") &&
+      !change.includes("A") &&
+      !ignored.some(
+        (entry) =>
+          entry === path || (entry.endsWith("/") && path.startsWith(entry)),
+      );
     return [
       ...(folder || !committed ? [] : fileHistory([name])),
       ...(folder || !committed ? [] : blame([name], null)),
