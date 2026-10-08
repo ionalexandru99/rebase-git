@@ -12,6 +12,7 @@ import {
   useErrorToast,
   useStatusToast,
 } from "#web/features/notifications/notifications.tsx";
+import { useStashCommands } from "#web/features/stashes/stashes.ts";
 import { useEnvironmentQuery } from "#web/platform/query/environment-query.ts";
 import { useRepositoryScope } from "#web/platform/query/repository-scope.tsx";
 import {
@@ -75,6 +76,7 @@ export function usePull() {
   const fetch = useFetch("pull");
   const errorToast = useErrorToast();
   const statusToast = useStatusToast();
+  const stashes = useStashCommands();
   const command = useCommand(RepositoryPullApi.pull, {
     before: async ({ strategy }) => {
       const fetched = await fetch.execute();
@@ -123,7 +125,22 @@ export function usePull() {
         choice("rebase", "Rebase"),
         choice("merge", "Merge"),
       ]);
-    } else if (result._tag !== "Ok")
+    } else if (failure?._tag === "PullStashKept")
+      errorToast.show(
+        "pull",
+        `${failure.busy ? "Another Git operation is running." : "Git stopped before pulling."}\nYour changes are in Stashes.`,
+        {
+          label: "Apply",
+          run: () =>
+            void stashes.restore(
+              { oid: failure.stash, name: "autostash" },
+              false,
+              true,
+              "Your changes are back",
+            ),
+        },
+      );
+    else if (result._tag !== "Ok")
       errorToast.failure("pull", result, pullFailureMessages);
     else if (result.value.outcome === "Stopped") {
       if (result.value.worktreePath === worktreePath) statusToast.close("pull");

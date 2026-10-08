@@ -63,6 +63,10 @@ export const PullFailure = Schema.Union([
   Schema.TaggedStruct("PullBlocked", {
     detail: Schema.String.check(Schema.isMaxLength(2_048)),
   }),
+  Schema.TaggedStruct("PullStashKept", {
+    stash: ObjectId,
+    busy: Schema.Boolean,
+  }),
 ]);
 export type PullFailure = typeof PullFailure.Type;
 

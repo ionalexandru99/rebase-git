@@ -144,9 +144,10 @@ export function useStashCommands() {
   const writable = useRepositoryScope()?.writable ?? false;
 
   const restore = async (
-    stash: RepositoryStash,
+    stash: Pick<RepositoryStash, "oid" | "name">,
     restoreIndex: boolean,
     remove: boolean,
+    restored = `${remove ? "Popped" : "Applied"} ${stash.name}`,
   ) => {
     const result = await apply.run({
       oid: stash.oid,
@@ -161,7 +162,7 @@ export function useStashCommands() {
     statusToast.success(
       "applyStash",
       conflicts === 0
-        ? `${remove ? "Popped" : "Applied"} ${stash.name}`
+        ? restored
         : `Applied ${stash.name} with conflicts in ${files(conflicts)}. The stash was kept.`,
     );
   };
@@ -241,6 +242,7 @@ export function useStashCommands() {
   return {
     writable,
     actionsFor,
+    restore,
     store,
     saving: save.running,
     dropping: {

@@ -55,6 +55,23 @@ describe("fast-forward pull", () => {
     expect(await git(f.repositoryPath, "stash", "list")).not.toBe("");
   });
 
+  it("points at the stash Git kept the local edits in when another process held the index", async () => {
+    const f = await fixture(stashThenFailOnLock);
+    await f.publish("main", "other.txt", "remote\n");
+    await git(f.repositoryPath, "fetch");
+    const local = await git(f.repositoryPath, "rev-parse", "HEAD");
+    await writeFile(join(f.repositoryPath, "file.txt"), "local edit\n");
+
+    const failure = await f.pull("main").catch((error: unknown) => error);
+
+    expect(failure).toEqual({
+      _tag: "PullStashKept",
+      stash: await git(f.repositoryPath, "rev-parse", "refs/stash"),
+      busy: true,
+    });
+    expect(await git(f.repositoryPath, "rev-parse", "HEAD")).toBe(local);
+  });
+
   it("refuses an untracked file that the update would overwrite", async () => {
     const f = await fixture();
     await f.publish("main", "other.txt", "remote\n");
@@ -342,6 +359,22 @@ describe("diverged pull", () => {
     });
   });
 });
+
+function stashThenFailOnLock(runner: GitCommandRunner): GitCommandRunner {
+  return {
+    ...runner,
+    run: (command) =>
+      command.arguments[0] !== "merge"
+        ? runner.run(command)
+        : runner.run({ ...command, arguments: ["stash", "push"] }).pipe(
+            Effect.as({
+              exitCode: 128,
+              stdout: "",
+              stderr: `fatal: Unable to create '${command.directory}/.git/index.lock': File exists.\n\nAnother git process seems to be running in this repository.\nApplying autostash resulted in conflicts.\nYour changes are safe in the stash.\nYou can run "git stash pop" or "git stash drop" at any time.\n`,
+            }),
+          ),
+  };
+}
 
 async function divergedFixture({
   incoming: incomingFile = "other.txt",

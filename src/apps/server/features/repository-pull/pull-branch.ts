@@ -19,6 +19,7 @@ import {
   runRepositoryGitOutput,
 } from "#server/adapters/local-git/git-commands.ts";
 import {
+  isGitLocked,
   overwrittenPaths,
   readCommit,
 } from "#server/features/repository-operations/operation-outcome.ts";
@@ -139,8 +140,14 @@ function integrate(
         stashKept: autostashConflict !== undefined,
       };
     }),
-    Effect.mapError((error) =>
-      error._tag === "OperationFailed" ? integrationFailure(error) : error,
+    Effect.catch((error) =>
+      error.detail !== undefined && stashedByGit(error.detail)
+        ? keptStash(git, directory, error.detail)
+        : Effect.fail(
+            error._tag === "OperationFailed"
+              ? integrationFailure(error)
+              : error,
+          ),
     ),
   );
 }
@@ -262,7 +269,9 @@ function mergeFastForward(
         PullFailure | RepositoryRejected | GitFailed
       > =>
         isGitRejection(error)
-          ? Effect.fail(mergeFailure(error))
+          ? stashedByGit(error.detail)
+            ? keptStash(git, directory, error.detail)
+            : Effect.fail(mergeFailure(error))
           : requireAt(git, directory, "HEAD", upstreamTarget, error).pipe(
               Effect.as(false),
             ),
@@ -270,7 +279,30 @@ function mergeFastForward(
   );
 }
 
+function stashedByGit(detail: string) {
+  return /safe in the stash/.test(detail);
+}
+
+function keptStash(git: GitCommandRunner, directory: string, detail: string) {
+  return runRepositoryGit(
+    git,
+    directory,
+    ["rev-parse", "--verify", "refs/stash"],
+    pullCommand,
+  ).pipe(
+    Effect.flatMap((stash) =>
+      Effect.fail<PullFailure>({
+        _tag: "PullStashKept",
+        stash: stash.trim(),
+        busy: isGitLocked(detail),
+      }),
+    ),
+  );
+}
+
 function mergeFailure(error: GitFailed): PullFailure | RepositoryRejected {
+  if (isGitLocked(error.detail))
+    return repositoryRejected("Busy", error.detail);
   if (/would be overwritten by merge/i.test(error.detail))
     return {
       _tag: "PullWouldOverwrite",

@@ -7,6 +7,7 @@ import {
   RepositoryPullApi,
 } from "#contracts/repository-pull/repository-pull.contract.ts";
 import { RepositoryRefsApi } from "#contracts/repository-refs/repository-refs.contract.ts";
+import { RepositoryStashesApi } from "#contracts/repository-stashes/repository-stashes.contract.ts";
 import {
   CommitGraphFixture,
   history as graphHistory,
@@ -225,6 +226,35 @@ describe("repository pull", () => {
       .toBeVisible();
   });
 
+  it("says the local changes are in Stashes when the pull failed after stashing them and pops them back", async () => {
+    const stash = "a".repeat(40);
+    const f = await fixture({
+      failure: { _tag: "PullStashKept", stash, busy: true },
+    });
+    await f.pull();
+    await expect.element(page.getByText("Couldn't pull")).toBeVisible();
+    await expect
+      .element(
+        page.getByText(
+          "Another Git operation is running. Your changes are in Stashes.",
+        ),
+      )
+      .toBeVisible();
+
+    await page.getByRole("button", { name: "Apply" }).click();
+
+    await expect
+      .poll(() => f.applied)
+      .toHaveBeenCalledWith({
+        repositoryId,
+        worktreePath: "/repo",
+        oid: stash,
+        restoreIndex: false,
+        drop: true,
+      });
+    await expect.element(page.getByText("Your changes are back")).toBeVisible();
+  });
+
   it("hands a pull that stopped on conflicts over to the operation and closes its toast", async () => {
     const f = await fixture({
       pulled: {
@@ -300,6 +330,7 @@ async function fixture({
     return status;
   });
   const requested = vi.fn();
+  const applied = vi.fn();
   const requests = fakeRequests(
     idleOperation,
     respond(RepositoryRefsApi.read, async () => refs(0)),
@@ -309,6 +340,10 @@ async function fixture({
       requested(command);
       if (failure !== undefined) throw rejected(failure);
       return pulled;
+    }),
+    respond(RepositoryStashesApi.apply, async (command) => {
+      applied(command);
+      return { conflicts: 0 };
     }),
   );
   await render(
@@ -321,6 +356,7 @@ async function fixture({
   return {
     fetch,
     requested,
+    applied,
     pull: () => page.getByRole("button", { name: "Pull" }).click(),
   };
 }

@@ -35,13 +35,17 @@ export function readCommit(
   ).pipe(Effect.map((output) => output.trim()));
 }
 
+export function isGitLocked(detail: string) {
+  return /\.lock['\s:]|another git process/i.test(detail);
+}
+
 export function requireGitSuccess(output: GitCommandOutput) {
   if (output.exitCode === 0) return Effect.void;
   const detail =
     output.stderr ||
     output.stdout ||
     "Git rejected the action. Check the worktree and configured hooks.";
-  if (/\.lock['\s:]|another git process/i.test(detail))
+  if (isGitLocked(detail))
     return Effect.fail(repositoryRejected("Busy", detail));
   if (isIdentityMissing(detail))
     return Effect.fail(
