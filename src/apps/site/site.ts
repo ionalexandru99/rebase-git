@@ -111,15 +111,20 @@ function startDownload() {
 
 function startCopy() {
   const button = required<HTMLButtonElement>("[data-copy]");
+  const text = required<HTMLElement>("[data-copy-text]");
   const label = button.getAttribute("aria-label") ?? "";
   const reset = () => {
     delete button.dataset.copied;
     button.setAttribute("aria-label", label);
   };
   button.addEventListener("click", async () => {
-    await navigator.clipboard.writeText(button.dataset.copy ?? "");
-    button.dataset.copied = "";
-    button.setAttribute("aria-label", "Copied");
+    try {
+      await navigator.clipboard.writeText(text.textContent ?? "");
+      button.dataset.copied = "";
+      button.setAttribute("aria-label", "Copied");
+    } catch {
+      getSelection()?.selectAllChildren(text);
+    }
   });
   button.addEventListener("pointerleave", reset);
   button.addEventListener("blur", reset);
