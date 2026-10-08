@@ -14,7 +14,7 @@ export default {
       filter: ["**/*"],
     },
   ],
-  asarUnpack: ["process-monitor/**"],
+  asarUnpack: ["**/process-monitor/**"],
   extraMetadata: {
     main: "main.js",
   },

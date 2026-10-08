@@ -41,7 +41,7 @@ export function DiagnosticsSettings({
   const { subscribe, connected } = useEnvironment();
   const [period, setPeriod] = useState<DiagnosticsPeriod>("15m");
   const [sample, setSample] = useState<DiagnosticsSample>();
-  const [errors, setErrors] = useState<readonly DiagnosticsError[]>([]);
+  const [errors, setErrors] = useState<readonly DiagnosticsError[]>();
   const stop = useCommand(DiagnosticsApi.stop);
   const watchAgain = useCommand(DiagnosticsApi.watchAgain);
 
@@ -65,7 +65,7 @@ export function DiagnosticsSettings({
       <Footprint period={period} sample={sample} />
       <Timeline onPeriodChange={setPeriod} period={period} sample={sample} />
       <Processes onStop={({ pid }) => void stop.run({ pid })} sample={sample} />
-      <Errors errors={errors} />
+      <Errors errors={errors} now={sample?.sampledAt ?? 0} />
       <Slowest sample={sample} />
       <Watchers
         onWatchAgain={(repositoryId) => void watchAgain.run({ repositoryId })}
@@ -138,7 +138,7 @@ function Server({
   productVersion,
 }: {
   readonly sample: DiagnosticsSample | undefined;
-  readonly errors: readonly DiagnosticsError[];
+  readonly errors: readonly DiagnosticsError[] | undefined;
   readonly productVersion: string;
 }) {
   const { repositories } = useRepositoryCatalog();
@@ -154,7 +154,12 @@ function Server({
           onClick={async () => {
             try {
               await writeClipboardText(
-                diagnosticsReport(sample, errors, productVersion, repositories),
+                diagnosticsReport(
+                  sample,
+                  errors ?? [],
+                  productVersion,
+                  repositories,
+                ),
               );
               setCopied(true);
             } catch {
@@ -210,7 +215,7 @@ function platformName(platform: string) {
   );
 }
 
-export function diagnosticsReport(
+function diagnosticsReport(
   sample: DiagnosticsSample,
   errors: readonly DiagnosticsError[],
   productVersion: string,

@@ -27,6 +27,7 @@ export interface GitCommand {
   readonly progress?: (output: string) => void;
   readonly progressStream?: "stdout" | "stderr";
   readonly onSpawn?: (pid: number, stop: () => void) => void;
+  readonly expectedExitCodes?: readonly number[];
 }
 
 export type GitCommandOptions = Omit<GitCommand, "arguments" | "directory">;
@@ -107,7 +108,12 @@ export function runRepositoryGitOutput(
   { exitCodes = [0], ...options }: RepositoryGitOptions = {},
 ) {
   return git
-    .run({ ...options, directory, arguments: args })
+    .run({
+      ...options,
+      directory,
+      arguments: args,
+      expectedExitCodes: exitCodes,
+    })
     .pipe(
       Effect.flatMap((output) =>
         exitCodes.includes(output.exitCode)
@@ -269,6 +275,7 @@ function runLocalGitCommand(command: GitCommand) {
     }
     if (child.pid !== undefined)
       command.onSpawn?.(child.pid, () => {
+        if (child.exitCode !== null || child.signalCode !== null) return;
         stopped = true;
         killGit(child);
       });
@@ -350,7 +357,10 @@ function spawnGitProcess(command: GitStreamCommand) {
       });
       const exit = watchGitExit(child);
       if (child.pid !== undefined)
-        command.onSpawn?.(child.pid, () => killGit(child));
+        command.onSpawn?.(child.pid, () => {
+          if (child.exitCode === null && child.signalCode === null)
+            killGit(child);
+        });
       child.stdin.once("error", () => undefined);
       child.stdin.end(command.input);
       return { child, exit };

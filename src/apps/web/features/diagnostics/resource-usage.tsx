@@ -10,9 +10,9 @@ import type {
   DiagnosticsProcess,
   DiagnosticsSample,
 } from "#contracts/diagnostics/diagnostics.contract.ts";
+import { IconSwitch } from "#web/components/ui/icon-switch.tsx";
 import { SettingsSection } from "#web/components/ui/settings-layout.tsx";
 import {
-  Choice,
   formatDuration,
   formatPercent,
   periodLabels,
@@ -68,7 +68,7 @@ export function Footprint({
         <Stat
           danger={(footprint?.gitFailures ?? 0) > 0}
           detail={
-            footprint === undefined
+            footprint === undefined || footprint.gitFailures === 0
               ? undefined
               : `${footprint.gitFailures} failed in the last ${periodLabels[period]}`
           }
@@ -162,7 +162,7 @@ export function Timeline({
   return (
     <SettingsSection
       action={
-        <Choice
+        <IconSwitch
           label="Timeline period"
           onChange={onPeriodChange}
           options={(["5m", "15m", "1h"] as const).map((value) => ({

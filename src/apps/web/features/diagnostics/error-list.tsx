@@ -2,29 +2,28 @@ import { IconChevronDown, IconChevronRight } from "@tabler/icons-react";
 import { useState } from "react";
 import type { DiagnosticsError } from "#contracts/diagnostics/diagnostics.contract.ts";
 import { Button } from "#web/components/ui/button.tsx";
+import { IconSwitch } from "#web/components/ui/icon-switch.tsx";
 import { SettingsSection } from "#web/components/ui/settings-layout.tsx";
-import {
-  Choice,
-  RepositoryMark,
-} from "#web/features/diagnostics/diagnostics-primitives.tsx";
-import { ageLabel, useNow } from "#web/lib/age-label.ts";
+import { RepositoryMark } from "#web/features/diagnostics/diagnostics-primitives.tsx";
+import { ageLabel } from "#web/lib/age-label.ts";
 
 export function Errors({
   errors,
+  now,
 }: {
-  readonly errors: readonly DiagnosticsError[];
+  readonly errors: readonly DiagnosticsError[] | undefined;
+  readonly now: number;
 }) {
   const [order, setOrder] = useState<"latest" | "frequent">("latest");
   const [open, setOpen] = useState<string>();
-  const now = useNow();
   const shown =
     order === "latest"
-      ? errors
-      : errors.toSorted((left, right) => right.count - left.count);
+      ? (errors ?? [])
+      : (errors ?? []).toSorted((left, right) => right.count - left.count);
   return (
     <SettingsSection
       action={
-        <Choice
+        <IconSwitch
           label="Error order"
           onChange={setOrder}
           options={[
@@ -36,7 +35,7 @@ export function Errors({
       }
       title="Errors"
     >
-      {shown.length === 0 ? (
+      {errors?.length === 0 ? (
         <p className="px-4 py-3 text-meta text-muted-foreground">
           No errors since Rebase started.
         </p>

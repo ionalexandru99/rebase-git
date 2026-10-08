@@ -6,7 +6,6 @@ import { combineEnvironmentFeatures } from "#server/adapters/environment-transpo
 import type { GitCommandRunner } from "#server/adapters/local-git/git-commands.ts";
 import { createLocalRepositoryWatcher } from "#server/adapters/local-git/local-repository-watcher.ts";
 import { acquireRuntimeMarker } from "#server/app/runtime/runtime-marker.ts";
-import { readGitVersion } from "#server/app/runtime/runtime-requirements.ts";
 import {
   acquireEnvironmentListener,
   type EnvironmentListener,
@@ -197,9 +196,6 @@ export function environmentFeatures(dependencies: EnvironmentDependencies) {
       dependencies.gitHosts,
       dependencies.lfs,
     );
-    const gitVersion = yield* readGitVersion().pipe(
-      Effect.orElseSucceed(() => "Unknown"),
-    );
     const features = combineEnvironmentFeatures([
       environmentAuthorizationFeature(dependencies.authorization),
       environmentFilesystemFeature(),
@@ -238,13 +234,7 @@ export function environmentFeatures(dependencies: EnvironmentDependencies) {
       terminalFeature(dependencies),
       yield* acquireDiagnosticsFeature({
         ...dependencies,
-        server: {
-          platform: process.platform,
-          architecture: process.arch,
-          startedAt: Date.now() - process.uptime() * 1_000,
-          gitVersion,
-          dataFolder: dependencies.paths.root,
-        },
+        dataFolder: dependencies.paths.root,
       }),
     ]);
     return observeFeatures(features, dependencies.activity);

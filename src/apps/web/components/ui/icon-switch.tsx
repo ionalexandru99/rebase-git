@@ -4,12 +4,12 @@ import { type JSX, useId } from "react";
 const groupClassName =
   "flex shrink-0 gap-0.5 rounded-surface border border-sidebar-border bg-muted/30 p-0.5";
 const itemClassName =
-  "grid h-6 w-7 place-items-center rounded-control text-muted-foreground";
+  "grid h-6 place-items-center rounded-control text-muted-foreground";
 
 export interface IconOption<Value extends string> {
   readonly value: Value;
   readonly label: string;
-  readonly Icon: Icon;
+  readonly Icon?: Icon;
 }
 
 export function IconSwitch<Value extends string>({
@@ -38,9 +38,13 @@ export function IconSwitch<Value extends string>({
             className="peer absolute inset-0 m-0 cursor-default appearance-none opacity-0"
           />
           <span
-            className={`${itemClassName} peer-checked:bg-sidebar-accent peer-checked:text-sidebar-accent-foreground peer-focus-visible:ring-1 peer-focus-visible:ring-sidebar-ring`}
+            className={`${itemClassName} ${option.Icon === undefined ? "px-2 text-meta" : "w-7"} peer-checked:bg-sidebar-accent peer-checked:text-sidebar-accent-foreground peer-focus-visible:ring-1 peer-focus-visible:ring-sidebar-ring`}
           >
-            <option.Icon aria-hidden="true" className="size-4" />
+            {option.Icon === undefined ? (
+              <span aria-hidden="true">{option.label}</span>
+            ) : (
+              <option.Icon aria-hidden="true" className="size-4" />
+            )}
           </span>
         </label>
       ))}

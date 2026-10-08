@@ -153,3 +153,45 @@ it("shares canonical directory aliases and makes release idempotent", async () =
     await removeTemporaryDirectory(root);
   }
 });
+
+it("tells every listener when the system runs out of file watchers", async () => {
+  const root = await realpath(
+    await mkdtemp(join(tmpdir(), "rebase watcher limit ")),
+  );
+  try {
+    const directory = join(root, "repository");
+    await createRepository(directory, { commits: [] });
+    const limit = Object.assign(
+      new Error("ENOSPC: System limit for number of file watchers reached"),
+      { code: "ENOSPC" },
+    );
+    vi.mocked(watch).mockImplementation(() => {
+      throw limit;
+    });
+    const watcher = createLocalRepositoryWatcher();
+    const first = vi.fn();
+    const second = vi.fn();
+
+    const handles = [
+      await Effect.runPromise(
+        watcher.watch(join(directory, ".git"), {
+          changed: () => {},
+          failed: first,
+        }),
+      ),
+      await Effect.runPromise(
+        watcher.watch(join(directory, ".git"), {
+          changed: () => {},
+          failed: second,
+        }),
+      ),
+    ];
+
+    expect(first).toHaveBeenCalledWith(limit.message);
+    expect(second).toHaveBeenCalledWith(limit.message);
+    for (const handle of handles) handle.close();
+  } finally {
+    vi.mocked(watch).mockRestore();
+    await removeTemporaryDirectory(root);
+  }
+});

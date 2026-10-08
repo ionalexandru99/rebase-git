@@ -8,8 +8,8 @@ const manifest = "native/process-monitor/Cargo.toml";
 export const rustTargets: Readonly<Record<string, string>> = {
   "darwin-arm64": "aarch64-apple-darwin",
   "darwin-x64": "x86_64-apple-darwin",
-  "linux-arm64": "aarch64-unknown-linux-gnu",
-  "linux-x64": "x86_64-unknown-linux-gnu",
+  "linux-arm64": "aarch64-unknown-linux-musl",
+  "linux-x64": "x86_64-unknown-linux-musl",
   "win32-arm64": "aarch64-pc-windows-msvc",
   "win32-x64": "x86_64-pc-windows-msvc",
 };
@@ -22,9 +22,11 @@ export async function buildProcessMonitor(
   const target = rustTargets[key];
   if (target === undefined)
     throw new Error(`The process monitor has no Rust target for ${key}.`);
-  const executable = key.startsWith("win32-")
+  const windows = key.startsWith("win32-");
+  const executable = windows
     ? "rebase-process-monitor.exe"
     : "rebase-process-monitor";
+  await execute("rustup", ["target", "add", target]);
   await execute(
     "cargo",
     [
@@ -36,7 +38,13 @@ export async function buildProcessMonitor(
       "--target",
       target,
     ],
-    { maxBuffer: 16 * 1_048_576 },
+    {
+      env: {
+        ...process.env,
+        ...(windows ? { RUSTFLAGS: "-C target-feature=+crt-static" } : {}),
+      },
+      maxBuffer: 16 * 1_048_576,
+    },
   );
   const destination = join(processMonitorBinaries, key);
   await mkdir(destination, { recursive: true });
@@ -44,8 +52,7 @@ export async function buildProcessMonitor(
     join("native/process-monitor/target", target, "release", executable),
     join(destination, executable),
   );
-  if (!key.startsWith("win32-"))
-    await chmod(join(destination, executable), 0o755);
+  if (!windows) await chmod(join(destination, executable), 0o755);
   return destination;
 }
 

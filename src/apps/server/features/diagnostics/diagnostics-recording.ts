@@ -47,7 +47,11 @@ export function recordGitActivity(
       Stream.unwrap(
         Effect.gen(function* () {
           const { repositoryId } = yield* CurrentRequest;
-          const run = activity.gitStarted({ ...command, repositoryId });
+          const run = activity.gitStarted({
+            ...command,
+            repositoryId,
+            expectedExitCodes: [0],
+          });
           return git
             .stream({ ...command, onSpawn: run.spawned })
             .pipe(

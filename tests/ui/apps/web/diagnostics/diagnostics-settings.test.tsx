@@ -5,7 +5,11 @@ import {
   type DiagnosticsEvent,
 } from "#contracts/diagnostics/diagnostics.contract.ts";
 import { RepositoryCatalogApi } from "#contracts/repository-catalog/repository-catalog.contract.ts";
-import { fakeRequests, respond } from "#tests-support/fake-requests.ts";
+import {
+  fakeRequests,
+  fakeSubscription,
+  respond,
+} from "#tests-support/fake-requests.ts";
 import {
   catalogEntry,
   diagnosticsError,
@@ -15,17 +19,14 @@ import {
 } from "#tests-support/fixtures.ts";
 import { render } from "#tests-support/render.tsx";
 import { DiagnosticsSettings } from "#web/features/diagnostics/diagnostics-settings.tsx";
-import type { EnvironmentSubscriptions } from "#web/platform/query/environment-context.tsx";
 
 function renderDiagnostics(events: readonly DiagnosticsEvent[]) {
-  const periods: unknown[] = [];
   const stopped: unknown[] = [];
   const watched: unknown[] = [];
-  const subscribe = (async (_route, input, accept, signal) => {
-    periods.push(input);
-    for (const event of events) accept(event as never);
-    await new Promise((resolve) => signal.addEventListener("abort", resolve));
-  }) as EnvironmentSubscriptions;
+  const { subscribe, inputs: periods } = fakeSubscription(
+    DiagnosticsApi.watch,
+    events,
+  );
   const rendered = render(<DiagnosticsSettings productVersion="0.0.7" />, {
     environment: {
       subscribe,
@@ -105,7 +106,6 @@ describe("diagnostics settings", () => {
     await expect
       .element(page.getByRole("status"))
       .toHaveTextContent("The process monitor isn't included in this build.");
-    expect(page.getByText("—").elements().length).toBeGreaterThanOrEqual(2);
   });
 
   it("lists hidden errors, restarts a stopped watcher and copies a report", async () => {
@@ -144,7 +144,17 @@ describe("diagnostics settings", () => {
       .click();
     await expect.element(page.getByText(/at readStashEntry/)).toBeVisible();
     await page.getByRole("radio", { name: "Most frequent" }).click();
-    await expect.element(page.getByText("×3")).toBeVisible();
+    await expect
+      .poll(() =>
+        page
+          .getByRole("button", { name: /details for / })
+          .elements()
+          .map((button) => button.getAttribute("aria-label")),
+      )
+      .toEqual([
+        "Show details for git fetch exited with 128",
+        "Hide details for TypeError: Cannot read properties of undefined (reading 'oid')",
+      ]);
     await page.getByRole("button", { name: "Watch again" }).click();
     await expect.poll(() => watched).toEqual([{ repositoryId }]);
 

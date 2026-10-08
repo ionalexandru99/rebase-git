@@ -9,6 +9,7 @@ export interface GitRunStart {
   readonly directory: string;
   readonly arguments: readonly string[];
   readonly repositoryId: string | undefined;
+  readonly expectedExitCodes?: readonly number[];
 }
 
 export type GitRunOutcome =
@@ -32,6 +33,7 @@ export interface GitRunHandle {
 export interface RunningGit {
   readonly command: string;
   readonly repositoryId: string | undefined;
+  readonly startedAt: number;
   readonly stop: () => void;
 }
 
@@ -91,9 +93,8 @@ const maximumErrors = 50;
 const maximumDetail = 8_192;
 const slowestCount = 10;
 
-export function createDiagnosticsActivity(
-  now: () => number = Date.now,
-): DiagnosticsActivity {
+export function createDiagnosticsActivity(): DiagnosticsActivity {
+  const now = Date.now;
   const running = new Map<number, RunningGit>();
   const gitRuns: FinishedRun[] = [];
   const requests: FinishedRun[] = [];
@@ -120,29 +121,35 @@ export function createDiagnosticsActivity(
   return {
     gitStarted: (run) => {
       const startedAt = now();
+      const started = performance.now();
       const name = gitCommandName(run.arguments);
       let pid: number | undefined;
+      let entry: RunningGit | undefined;
       let stopped = false;
       return {
         spawned: (spawnedPid, stop) => {
           pid = spawnedPid;
-          running.set(spawnedPid, {
+          entry = {
             command: name,
             repositoryId: run.repositoryId,
+            startedAt,
             stop: () => {
               stopped = true;
               stop();
             },
-          });
+          };
+          running.set(spawnedPid, entry);
         },
         finished: (outcome) => {
-          if (pid !== undefined) running.delete(pid);
-          const failed = !stopped && isGitFailure(outcome);
+          if (pid !== undefined && running.get(pid) === entry)
+            running.delete(pid);
+          const failed =
+            !stopped && isGitFailure(outcome, run.expectedExitCodes);
           remember(gitRuns, {
             name,
             repositoryId: run.repositoryId,
             startedAt,
-            duration: now() - startedAt,
+            duration: performance.now() - started,
             failed,
           });
           if (failed)
@@ -185,7 +192,7 @@ export function createDiagnosticsActivity(
   }
 }
 
-export function gitCommandName(arguments_: readonly string[]) {
+function gitCommandName(arguments_: readonly string[]) {
   const end = arguments_.indexOf("--");
   const [subcommand, ...rest] =
     end === -1 ? arguments_ : arguments_.slice(0, end);
@@ -197,10 +204,15 @@ export function gitCommandName(arguments_: readonly string[]) {
 
 type FailedOutcome = Exclude<GitRunOutcome, { readonly _tag: "Interrupted" }>;
 
-function isGitFailure(outcome: GitRunOutcome) {
+function isGitFailure(
+  outcome: GitRunOutcome,
+  expectedExitCodes: readonly number[] | undefined,
+) {
   return (
     outcome._tag === "Failed" ||
-    (outcome._tag === "Exited" && outcome.exitCode >= 128)
+    (outcome._tag === "Exited" &&
+      expectedExitCodes !== undefined &&
+      !expectedExitCodes.includes(outcome.exitCode))
   );
 }
 

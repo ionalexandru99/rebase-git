@@ -46,13 +46,7 @@ const watchGitDirectory =
     : watchGitEntriesSeparately;
 
 export function createLocalRepositoryWatcher(): RepositoryWatcher {
-  const directories = new Map<
-    string,
-    {
-      readonly handle: RepositoryWatchHandle;
-      readonly listeners: Set<RepositoryWatchListener>;
-    }
-  >();
+  const directories = new Map<string, WatchedDirectory>();
   return {
     watch: (gitDirectory, listener) =>
       Effect.sync(() => {
@@ -62,25 +56,11 @@ export function createLocalRepositoryWatcher(): RepositoryWatcher {
         } catch {
           return { close: () => {} };
         }
-        let directory = directories.get(canonical);
-        if (directory === undefined) {
-          const listeners = new Set<RepositoryWatchListener>();
-          directory = {
-            listeners,
-            handle: watchGitDirectory(canonical, {
-              changed: (kind) => {
-                for (const current of listeners) current.changed(kind);
-              },
-              failed: (detail) => {
-                for (const current of listeners) current.failed(detail);
-              },
-            }),
-          };
-          directories.set(canonical, directory);
-        }
-        const owned = directory;
+        const owned = directories.get(canonical) ?? watchDirectory(canonical);
+        directories.set(canonical, owned);
         const own = { ...listener };
         owned.listeners.add(own);
+        if (owned.failure !== undefined) own.failed(owned.failure);
         return {
           close: () => {
             if (!owned.listeners.delete(own)) return;
@@ -91,6 +71,29 @@ export function createLocalRepositoryWatcher(): RepositoryWatcher {
         };
       }),
   };
+}
+
+interface WatchedDirectory {
+  readonly listeners: Set<RepositoryWatchListener>;
+  handle: RepositoryWatchHandle;
+  failure?: string;
+}
+
+function watchDirectory(gitDirectory: string) {
+  const directory: WatchedDirectory = {
+    listeners: new Set(),
+    handle: { close: () => {} },
+  };
+  directory.handle = watchGitDirectory(gitDirectory, {
+    changed: (kind) => {
+      for (const current of directory.listeners) current.changed(kind);
+    },
+    failed: (detail) => {
+      directory.failure ??= detail;
+      for (const current of directory.listeners) current.failed(detail);
+    },
+  });
+  return directory;
 }
 
 function watchGitDirectoryRecursively(

@@ -1,15 +1,15 @@
-import { IconGitBranch } from "@tabler/icons-react";
+import { IconActivity, IconGitBranch } from "@tabler/icons-react";
 import { useState } from "react";
 import type {
   DiagnosticsDuration,
   DiagnosticsSample,
 } from "#contracts/diagnostics/diagnostics.contract.ts";
+import { IconSwitch } from "#web/components/ui/icon-switch.tsx";
 import {
   SettingsRow,
   SettingsSection,
 } from "#web/components/ui/settings-layout.tsx";
 import {
-  Choice,
   formatDuration,
   RepositoryMark,
 } from "#web/features/diagnostics/diagnostics-primitives.tsx";
@@ -26,7 +26,7 @@ export function Slowest({
   return (
     <SettingsSection
       action={
-        <Choice
+        <IconSwitch
           label="Slowest kind"
           onChange={setKind}
           options={[
@@ -45,6 +45,7 @@ export function Slowest({
       ) : null}
       {durations?.map((duration) => (
         <SlowestRow
+          Icon={kind === "git" ? IconGitBranch : IconActivity}
           duration={duration}
           key={`${duration.repositoryId ?? ""}\u0000${duration.name}`}
         />
@@ -53,7 +54,13 @@ export function Slowest({
   );
 }
 
-function SlowestRow({ duration }: { readonly duration: DiagnosticsDuration }) {
+function SlowestRow({
+  duration,
+  Icon,
+}: {
+  readonly duration: DiagnosticsDuration;
+  readonly Icon: typeof IconGitBranch;
+}) {
   const { repositories } = useRepositoryCatalog();
   const repository = repositories.find(
     ({ id }) => id === duration.repositoryId,
@@ -72,10 +79,7 @@ function SlowestRow({ duration }: { readonly duration: DiagnosticsDuration }) {
         .join(" · ")}
       icon={
         repository === undefined ? (
-          <IconGitBranch
-            aria-hidden="true"
-            className="size-4.5 text-muted-foreground"
-          />
+          <Icon aria-hidden="true" className="size-4.5 text-muted-foreground" />
         ) : (
           <RepositoryMark repositoryId={repository.id} />
         )

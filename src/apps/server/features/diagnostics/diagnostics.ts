@@ -1,3 +1,4 @@
+import { homedir } from "node:os";
 import { basename } from "node:path";
 import { Effect, PubSub, Queue, Stream } from "effect";
 import {
@@ -14,6 +15,7 @@ import {
   type EnvironmentRpcHandlersFor,
   route,
 } from "#server/adapters/environment-transport/environment-routes.ts";
+import type { GitCommandRunner } from "#server/adapters/local-git/git-commands.ts";
 import {
   type DiagnosticsActivity,
   periods,
@@ -28,7 +30,8 @@ interface DiagnosticsDependencies {
   readonly activity: DiagnosticsActivity;
   readonly monitor: ProcessMonitor;
   readonly changes: RepositoryChangePublisher;
-  readonly server: DiagnosticsServer;
+  readonly dataFolder: string;
+  readonly git: GitCommandRunner;
 }
 
 interface Footprint {
@@ -45,9 +48,19 @@ export function acquireDiagnosticsFeature({
   activity,
   monitor,
   changes,
-  server,
+  dataFolder,
+  git,
 }: DiagnosticsDependencies) {
   return Effect.gen(function* () {
+    const startedAt = Date.now() - process.uptime() * 1_000;
+    const gitVersion = yield* Effect.cached(
+      git.run({ directory: homedir(), arguments: ["--version"] }).pipe(
+        Effect.map(
+          ({ stdout }) => /git version (\S+)/.exec(stdout)?.[1] ?? "Unknown",
+        ),
+        Effect.orElseSucceed(() => "Unknown"),
+      ),
+    );
     const footprints: Footprint[] = [];
     let latest: ProcessSnapshot | undefined;
     let watching = 0;
@@ -76,7 +89,10 @@ export function acquireDiagnosticsFeature({
       ),
     );
 
-    const describe = (period: DiagnosticsPeriod): DiagnosticsSample => {
+    const describe = (
+      period: DiagnosticsPeriod,
+      server: DiagnosticsServer,
+    ): DiagnosticsSample => {
       const now = Date.now();
       const { window, bucket } = periods[period];
       const recent = footprints.filter(({ at }) => at >= now - window);
@@ -126,8 +142,13 @@ export function acquireDiagnosticsFeature({
       routes: [
         route(DiagnosticsApi.stop, ({ pid }) =>
           Effect.sync(() => {
-            if (!activity.running().has(pid)) return {};
-            for (const descendant of descendantsOf(latest, pid)) {
+            const run = activity.running().get(pid);
+            if (run === undefined) return {};
+            for (const descendant of descendantsOf(
+              latest,
+              pid,
+              run.startedAt,
+            )) {
               try {
                 process.kill(descendant);
               } catch {}
@@ -148,6 +169,14 @@ export function acquireDiagnosticsFeature({
           Stream.unwrap(
             Effect.gen(function* () {
               watching += 1;
+              monitor.retry();
+              const server: DiagnosticsServer = {
+                platform: process.platform,
+                architecture: process.arch,
+                startedAt,
+                gitVersion: yield* gitVersion,
+                dataFolder,
+              };
               yield* Effect.addFinalizer(() =>
                 Effect.sync(() => {
                   watching -= 1;
@@ -171,7 +200,7 @@ export function acquireDiagnosticsFeature({
                 Stream.concat(
                   Stream.succeed(undefined),
                   Stream.fromPubSub(sampled),
-                ).pipe(Stream.map(() => describe(period))),
+                ).pipe(Stream.map(() => describe(period, server))),
               );
             }),
           ),
@@ -180,13 +209,22 @@ export function acquireDiagnosticsFeature({
   });
 }
 
-function descendantsOf(snapshot: ProcessSnapshot | undefined, pid: number) {
+function descendantsOf(
+  snapshot: ProcessSnapshot | undefined,
+  pid: number,
+  since: number,
+) {
+  const earliest = Math.floor(since / 1_000) * 1_000;
   const found: number[] = [];
   const pending = [pid];
   while (pending.length > 0) {
     const parent = pending.pop();
     for (const process of snapshot?.processes ?? [])
-      if (process.parentPid === parent && !found.includes(process.pid)) {
+      if (
+        process.parentPid === parent &&
+        process.startedAt >= earliest &&
+        !found.includes(process.pid)
+      ) {
         found.push(process.pid);
         pending.push(process.pid);
       }

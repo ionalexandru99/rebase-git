@@ -45,7 +45,10 @@ it("samples the server's processes through the bundled monitor and records Git r
     .toContainEqual(
       expect.objectContaining({ name: "repositories/refs/read", repositoryId }),
     );
-  expect(events[0]).toEqual({ _tag: "Errors", errors: [] });
+  expect(events.find(({ _tag }) => _tag === "Errors")).toEqual({
+    _tag: "Errors",
+    errors: [],
+  });
   expect(latest()).toMatchObject({
     monitor: { _tag: "Running" },
     footprint: { processes: expect.any(Number) },

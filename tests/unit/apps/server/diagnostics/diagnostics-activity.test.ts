@@ -1,16 +1,27 @@
-import { describe, expect, it } from "vite-plus/test";
 import {
-  createDiagnosticsActivity,
-  gitCommandName,
-} from "#server/features/diagnostics/diagnostics-activity.ts";
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from "vite-plus/test";
+import { createDiagnosticsActivity } from "#server/features/diagnostics/diagnostics-activity.ts";
 
 const repositoryId = "00000000-0000-4000-8000-000000000001";
 
-function activityAt(start = 1_000_000) {
-  let now = start;
-  const activity = createDiagnosticsActivity(() => now);
+beforeEach(() => {
+  vi.useFakeTimers({ toFake: ["Date", "performance"] });
+});
+
+afterEach(() => {
+  vi.useRealTimers();
+});
+
+function activityAt() {
+  const activity = createDiagnosticsActivity();
   const advance = (milliseconds: number) => {
-    now += milliseconds;
+    vi.advanceTimersByTime(milliseconds);
   };
   const git = (
     arguments_: readonly string[],
@@ -18,11 +29,13 @@ function activityAt(start = 1_000_000) {
     outcome:
       | { exitCode: number; stderr?: string }
       | { reason: string; detail: string },
+    expectedExitCodes: readonly number[] = [0],
   ) => {
     const run = activity.gitStarted({
       directory: "/work/linux",
       arguments: arguments_,
       repositoryId,
+      expectedExitCodes,
     });
     advance(duration);
     run.finished(
@@ -40,8 +53,10 @@ function activityAt(start = 1_000_000) {
 
 describe("diagnostics activity", () => {
   it("names a Git command by its subcommand and option names", () => {
-    expect(
-      gitCommandName([
+    const { activity, git } = activityAt();
+
+    git(
+      [
         "diff-tree",
         "-r",
         "-M",
@@ -50,8 +65,12 @@ describe("diagnostics activity", () => {
         "3e45621",
         "--",
         "-file",
-      ]),
-    ).toBe("git diff-tree -r -M --format");
+      ],
+      10,
+      { exitCode: 0 },
+    );
+
+    expect(activity.slowestGit()[0]?.name).toBe("git diff-tree -r -M --format");
   });
 
   it("ranks the slowest commands with their typical time", () => {
@@ -80,10 +99,11 @@ describe("diagnostics activity", () => {
     ]);
   });
 
-  it("counts fatal exits and spawn failures as failures, not ordinary non-zero exits", () => {
+  it("counts unexpected exits and spawn failures as failures, not exits the caller expects", () => {
     const { activity, git } = activityAt();
 
-    git(["merge-base", "--is-ancestor"], 10, { exitCode: 1 });
+    git(["merge-base", "--is-ancestor"], 10, { exitCode: 1 }, [0, 1]);
+    git(["cat-file", "blob"], 10, { exitCode: 128 }, [0, 128]);
     git(["fetch", "origin"], 10, {
       exitCode: 128,
       stderr:
@@ -94,7 +114,7 @@ describe("diagnostics activity", () => {
       detail: "Git could not complete the operation (Timeout).",
     });
 
-    expect(activity.gitSummary("15m")).toMatchObject({ runs: 3, failures: 2 });
+    expect(activity.gitSummary("15m")).toMatchObject({ runs: 4, failures: 2 });
     expect(activity.errors()).toEqual([
       expect.objectContaining({
         kind: "Git",

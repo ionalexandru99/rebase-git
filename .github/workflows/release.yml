@@ -106,11 +106,9 @@ jobs:
           - name: macOS
             runner: macos-latest
             keys: darwin-arm64 darwin-x64
-            targets: aarch64-apple-darwin x86_64-apple-darwin
           - name: Windows
             runner: windows-latest
             keys: win32-x64
-            targets: x86_64-pc-windows-msvc
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 20
     steps:
@@ -125,11 +123,8 @@ jobs:
         shell: bash
         env:
           KEYS: ${{ matrix.keys }}
-          TARGETS: ${{ matrix.targets }}
         run: |
-          read -ra targets <<< "$TARGETS"
           read -ra keys <<< "$KEYS"
-          rustup target add "${targets[@]}"
           node packaging/build-process-monitor.ts "${keys[@]}"
 
       - name: Upload process monitor
