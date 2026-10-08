@@ -3,6 +3,7 @@ import type {
   DesktopUpdateSnapshot,
   DesktopUpdates,
 } from "#contracts/desktop-updates/desktop-updates.contract.ts";
+import { GeneralSettings } from "#web/features/settings/general-settings.tsx";
 import {
   type SettingsSectionContext,
   type SettingsSectionId,
@@ -25,7 +26,7 @@ export function SettingsPanel({
 }): JSX.Element {
   const Content: ComponentType<SettingsSectionContext> =
     settingsSections.find(({ id }) => id === section)?.Content ??
-    settingsSections[0].Content;
+    GeneralSettings;
   const [updateSnapshot, setUpdateSnapshot] = useState<DesktopUpdateSnapshot>();
   const [updateLoadError, setUpdateLoadError] = useState<string>();
 
@@ -84,6 +85,7 @@ export function SettingsPanel({
         <Content
           desktopUpdates={desktopUpdates}
           productVersion={productVersion}
+          selectSection={selectSection}
           updateLoadError={updateLoadError}
           updateSnapshot={updateSnapshot}
         />

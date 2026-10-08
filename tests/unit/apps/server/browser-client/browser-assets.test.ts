@@ -15,6 +15,16 @@ describe("browser asset routing", () => {
     },
   );
 
+  it("serves the third-party licenses without caching", () => {
+    expect(
+      resolveBrowserAsset("/third-party-licenses.json", assetsRoot),
+    ).toEqual({
+      cache: false,
+      extension: ".json",
+      path: resolve(assetsRoot, "third-party-licenses.json"),
+    });
+  });
+
   it("resolves fingerprinted assets within the asset root", () => {
     expect(resolveBrowserAsset("/assets/application.js", assetsRoot)).toEqual({
       cache: true,

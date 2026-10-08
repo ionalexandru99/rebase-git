@@ -30,6 +30,7 @@ import type {
   GitStatus,
   HostRepositories,
 } from "#contracts/source-control/source-control.contract.ts";
+import type { ThirdPartyLicense } from "#contracts/third-party-licenses/third-party-licenses.contract.ts";
 import type {
   WorktreeEntry,
   WorktreeFile,
@@ -474,5 +475,18 @@ export function worktreeText(contents: string): WorktreeFile {
     contents,
     bytes: contents.length,
     truncated: false,
+  };
+}
+
+export function thirdPartyLicense(
+  license: Partial<ThirdPartyLicense> = {},
+): ThirdPartyLicense {
+  return {
+    name: "react",
+    version: "19.3.0",
+    license: "MIT",
+    sourceUrl: "https://github.com/facebook/react",
+    notice: "MIT License\n\nCopyright (c) Meta Platforms, Inc. and affiliates.",
+    ...license,
   };
 }

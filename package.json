@@ -16,6 +16,7 @@
   "imports": {
     "#contracts/*": "./src/contracts/*",
     "#desktop/*": "./src/apps/desktop/*",
+    "#packaging/*": "./packaging/*",
     "#server/*": "./src/apps/server/*",
     "#web/*": "./src/apps/web/*",
     "#tests-support/*": "./tests/support/*",

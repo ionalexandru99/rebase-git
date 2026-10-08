@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { describe, expect, it, vi } from "vite-plus/test";
+import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import { page } from "vite-plus/test/browser";
 import type {
   DesktopUpdateSnapshot,
@@ -11,6 +11,8 @@ import { SettingsPanel } from "#web/features/settings/settings-panel.tsx";
 import type { SettingsSectionId } from "#web/features/settings/settings-sections.ts";
 
 describe("settings panel", () => {
+  afterEach(() => vi.restoreAllMocks());
+
   it("shows only the version in the browser and navigates settings", async () => {
     const closeSettings = vi.fn();
     await renderSettings(closeSettings);
@@ -50,6 +52,24 @@ describe("settings panel", () => {
 
     await settings.getByRole("button", { name: "Back" }).click();
     expect(closeSettings).toHaveBeenCalledOnce();
+  });
+
+  it("opens licenses from General and keeps General selected", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(Response.json([]));
+    await renderSettings(vi.fn());
+    const settings = page.getByRole("navigation", { name: "Settings" });
+    await expect
+      .element(settings.getByRole("button", { name: "Licenses" }))
+      .not.toBeInTheDocument();
+
+    await page.getByRole("button", { name: "View licenses" }).click();
+
+    await expect
+      .element(page.getByRole("heading", { level: 1, name: "Licenses" }))
+      .toBeVisible();
+    await expect
+      .element(settings.getByRole("button", { name: "General", exact: true }))
+      .toHaveAttribute("aria-current", "page");
   });
 
   it("shows a failed update check as a notification and keeps the update state", async () => {

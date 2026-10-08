@@ -1,8 +1,13 @@
-import { resolve } from "node:path";
+import { readFile } from "node:fs/promises";
+import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { BrowserWindow, type IpcMainInvokeEvent } from "electron";
 import { isPullRequestLink } from "#contracts/pull-requests/pull-requests.contract.ts";
 import { GitHostKind } from "#contracts/source-control/source-control.contract.ts";
+import {
+  type ThirdPartyLicense,
+  thirdPartyLicensesFile,
+} from "#contracts/third-party-licenses/third-party-licenses.contract.ts";
 import type { DesktopRenderer } from "#desktop/app/desktop-application.ts";
 
 export type TrustedIpcHandler = <Arguments extends readonly unknown[], Result>(
@@ -25,6 +30,21 @@ export function isTrustedRendererLocation(
 
 export function isExternalPullRequestLink(target: string) {
   return GitHostKind.literals.some((kind) => isPullRequestLink(target, kind));
+}
+
+export async function licenseSourceLinks(
+  renderer: DesktopRenderer,
+): Promise<ReadonlySet<string>> {
+  if (renderer.type === "url") return new Set();
+  const licenses: readonly ThirdPartyLicense[] = await readFile(
+    join(dirname(renderer.path), thirdPartyLicensesFile),
+    "utf8",
+  ).then(JSON.parse, () => []);
+  return new Set(
+    licenses.flatMap(({ sourceUrl }) =>
+      sourceUrl === null ? [] : [sourceUrl],
+    ),
+  );
 }
 
 export function createTrustedIpcHandler(

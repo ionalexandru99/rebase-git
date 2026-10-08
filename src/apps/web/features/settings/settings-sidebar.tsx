@@ -17,8 +17,12 @@ export function SettingsSidebar({
   readonly selectSection: (section: SettingsSectionId) => void;
 }): JSX.Element {
   const [query, setQuery] = useState("");
-  const visibleSections = settingsSections.filter(({ label }) =>
-    label.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase()),
+  const current = settingsSections.find(({ id }) => id === section);
+  const highlighted = current?.parent ?? section;
+  const visibleSections = settingsSections.filter(
+    (item) =>
+      item.parent === undefined &&
+      item.label.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase()),
   );
 
   return (
@@ -47,7 +51,7 @@ export function SettingsSidebar({
       <div className="min-h-0 flex-1 overflow-y-auto px-2 pt-3">
         {visibleSections.map((item) => {
           const Icon = item.icon;
-          const selected = item.id === section;
+          const selected = item.id === highlighted;
 
           return (
             <button
