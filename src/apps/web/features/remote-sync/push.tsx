@@ -110,7 +110,7 @@ export function PushButton({
       onClick={() => push.push(target)}
     >
       <IconArrowUp aria-hidden="true" className="size-3.5" />
-      {outgoing === 0 ? null : (
+      {push.running || outgoing === 0 ? null : (
         <span className="text-success tabular-nums">{outgoing}</span>
       )}
     </ToolbarButton>

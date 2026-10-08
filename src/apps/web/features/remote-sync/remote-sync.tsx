@@ -13,11 +13,7 @@ import {
   usePush,
 } from "#web/features/remote-sync/push.tsx";
 import { resolvePushTarget } from "#web/features/remote-sync/push-target.ts";
-import {
-  type Pull,
-  useFetch,
-  usePull,
-} from "#web/features/remote-sync/use-pull.ts";
+import { type Pull, usePull } from "#web/features/remote-sync/use-pull.ts";
 import { useRepositoryScope } from "#web/platform/query/repository-scope.tsx";
 
 export function RemoteSync({
@@ -45,7 +41,6 @@ function SyncActions({
   readonly pull: Pull;
   readonly push: Push;
 }) {
-  const fetch = useFetch();
   const scope = useRepositoryScope();
   const { refs } = useScopedRepositoryRefs();
   const recoveryBusy = useOperationCommandState() === "busy";
@@ -71,7 +66,7 @@ function SyncActions({
             }}
           >
             <IconArrowBarToDown aria-hidden="true" className="size-3.5" />
-            {incoming === 0 ? null : (
+            {pull.pulling || incoming === 0 ? null : (
               <span className="text-destructive tabular-nums">{incoming}</span>
             )}
           </ToolbarButton>
@@ -87,8 +82,8 @@ function SyncActions({
       </div>
       <FetchStatus
         connected={scope?.connected !== false}
-        failed={fetch.failed}
-        fetching={fetch.fetching}
+        failed={pull.fetchFailed}
+        fetching={pull.fetching}
       />
     </>
   );

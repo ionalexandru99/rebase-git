@@ -28,7 +28,7 @@ const fetchProblems: Record<FetchFailed["reason"], string> = {
   Failed: "Git could not fetch from the remote.",
 };
 
-export function useFetch() {
+function useFetch() {
   const scope = useRepositoryScope();
   const repositoryId = scope?.repositoryId;
   const status = useEnvironmentQuery(
@@ -61,8 +61,6 @@ export function useFetch() {
     execute,
   };
 }
-
-export type Fetch = ReturnType<typeof useFetch>;
 
 export function usePull() {
   const scope = useRepositoryScope();
@@ -158,6 +156,8 @@ export function usePull() {
     pull,
     pulling,
     ready: fetch.ready,
+    fetching: fetch.fetching,
+    fetchFailed: fetch.failed,
   };
 }
 
