@@ -15,7 +15,10 @@ import type {
 } from "#server/adapters/local-git/git-commands.ts";
 import type { CommandProgress } from "#server/features/command-progress/command-progress.ts";
 import type { RepositoryCatalog } from "#server/features/repository-catalog/repository-catalog.ts";
-import { downloadLargeFiles } from "#server/features/repository-lfs/git-lfs.ts";
+import {
+  downloadLargeFiles,
+  type GitLfs,
+} from "#server/features/repository-lfs/git-lfs.ts";
 import type { EnvironmentContext } from "#server/persistence/environment-context.ts";
 import { serverSettingTable } from "#server/persistence/environment-state.schema.ts";
 
@@ -29,11 +32,13 @@ export function createRepositoryCreation({
   catalog,
   context,
   git,
+  lfs,
   progress,
 }: {
   readonly catalog: RepositoryCatalog;
   readonly context: EnvironmentContext;
   readonly git: GitCommandRunner;
+  readonly lfs: GitLfs;
   readonly progress: CommandProgress;
 }) {
   const defaults = Effect.all(
@@ -122,13 +127,21 @@ export function createRepositoryCreation({
           });
         }
         const remembered = yield* remember(path, repositoryId);
-        yield* downloadLargeFiles(
-          {
-            ...git,
-            run: (command) => git.run({ ...command, progress: report }),
-          },
-          path,
-        ).pipe(Effect.ignore);
+        if (yield* lfs.installed)
+          yield* downloadLargeFiles(
+            {
+              ...git,
+              run: (command) => git.run({ ...command, progress: report }),
+            },
+            path,
+          ).pipe(
+            Effect.mapError(({ detail }) =>
+              notCreated(
+                "GitFailed",
+                `Cloned, but the large files didn't download. ${detail}`,
+              ),
+            ),
+          );
         return remembered;
       }),
     initialize: ({ path, branch }: InitializeRepository) =>

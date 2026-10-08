@@ -177,7 +177,11 @@ export function ChangeFileSection({
         {
           id: `${action}-all`,
           label: `${actionLabel} all`,
-          enabled: !disabled && files.length > 0,
+          enabled:
+            !disabled &&
+            files.length > 0 &&
+            (action === "unstage" ||
+              !largeFiles.blocked(files.map((file) => file.path))),
           run: () => act(action, section, { _tag: "All" }),
         },
       ]}
@@ -200,7 +204,7 @@ export function ChangeFileSection({
             <Button
               size="xs"
               variant="ghost"
-              disabled={disabled}
+              disabled={disabled || largeFiles.blocked(selected)}
               onClick={() =>
                 act("discard", section, { _tag: "Files", paths: selected })
               }
@@ -210,7 +214,9 @@ export function ChangeFileSection({
             <Button
               size="xs"
               variant="outline"
-              disabled={disabled}
+              disabled={
+                disabled || (action === "stage" && largeFiles.blocked(selected))
+              }
               onClick={() =>
                 act(action, section, { _tag: "Files", paths: selected })
               }

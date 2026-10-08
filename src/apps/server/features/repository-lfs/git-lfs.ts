@@ -1,4 +1,6 @@
+import { stat } from "node:fs/promises";
 import { homedir } from "node:os";
+import { join } from "node:path";
 import { Effect, Stream } from "effect";
 import type { ChangedLines } from "#contracts/repository-changes/repository-changes.contract.ts";
 import type { GitStatus } from "#contracts/source-control/source-control.contract.ts";
@@ -6,6 +8,7 @@ import {
   type GitCommand,
   type GitCommandOptions,
   type GitCommandRunner,
+  readGitCommonDirectory,
   runRepositoryGit,
   runRepositoryGitOutput,
 } from "#server/adapters/local-git/git-commands.ts";
@@ -39,12 +42,12 @@ export function createGitLfs(git: GitCommandRunner) {
           ? { _tag: "Available", version }
           : { _tag: "Missing" };
       }),
-      Effect.orElseSucceed((): GitStatus => ({ _tag: "Missing" })),
       Effect.tap((status) =>
         Effect.sync(() => {
           known = status;
         }),
       ),
+      Effect.orElseSucceed((): GitStatus => ({ _tag: "Missing" })),
     );
   const status = Effect.suspend(() =>
     known === undefined ? rescan : Effect.succeed(known),
@@ -158,18 +161,36 @@ export function fetchLargeFiles(
 ) {
   return Effect.gen(function* () {
     if (!(yield* lfs.installed)) return;
+    if (!(yield* usesLargeFiles(git, directory, target))) return;
+    const source = remote ?? (yield* defaultRemote(git, directory));
+    if (source === undefined) return;
+    yield* runGitLfs(git, directory, ["fetch", source, target], {
+      ...progressOnStdout,
+    });
+  });
+}
+
+function usesLargeFiles(
+  git: GitCommandRunner,
+  directory: string,
+  target: string,
+) {
+  return Effect.gen(function* () {
+    const common = yield* readGitCommonDirectory(git, directory);
+    const store = yield* Effect.promise(() =>
+      stat(join(common, "lfs")).then(
+        () => true,
+        () => false,
+      ),
+    );
+    if (store) return true;
     const attributes = yield* runRepositoryGitOutput(
       git,
       directory,
       ["cat-file", "blob", `${target}:.gitattributes`],
       { exitCodes: [0, 128] },
     );
-    if (!attributes.stdout.includes("filter=lfs")) return;
-    const source = remote ?? (yield* defaultRemote(git, directory));
-    if (source === undefined) return;
-    yield* runGitLfs(git, directory, ["fetch", source, target], {
-      ...progressOnStdout,
-    });
+    return attributes.stdout.includes("filter=lfs");
   });
 }
 

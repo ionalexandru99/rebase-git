@@ -129,6 +129,12 @@ describe("large files in working changes", () => {
         page.getByRole("button", { name: `Stage ${ship.path}`, exact: true }),
       )
       .toBeEnabled();
+    await page
+      .getByRole("button", { name: "Collapse unstaged" })
+      .click({ button: "right" });
+    await expect
+      .element(page.getByRole("menuitem", { name: "Stage all" }))
+      .toHaveAttribute("aria-disabled", "true");
   });
 
   it("downloads a file that is not downloaded with large-file progress", async () => {
