@@ -20,7 +20,9 @@ export default function CommitDiff({
   preferences,
   choosePreferences,
   preview,
+  focus,
 }: {
+  readonly focus?: { readonly start: number; readonly end: number } | undefined;
   readonly file: CommitFile | undefined;
   readonly diff: CommitDiffRead;
   readonly preferences: DiffPreferences;
@@ -84,6 +86,7 @@ export default function CommitDiff({
             metadata={metadata}
             preferences={preferences}
             expandContext={expanded}
+            focus={focus}
           />
         )
       ) : (

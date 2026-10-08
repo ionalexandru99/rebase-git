@@ -175,7 +175,7 @@ function StatusHint({ entry }: { readonly entry: FileHistoryEntry }) {
   return null;
 }
 
-function openMenu(id: string) {
+export function openMenu(id: string) {
   const element = document.getElementById(id);
   if (element === null) return;
   const bounds = element.getBoundingClientRect();
@@ -199,7 +199,7 @@ const longDate = new Intl.DateTimeFormat(undefined, {
   year: "numeric",
 });
 
-function dateLabel(seconds: number) {
+export function dateLabel(seconds: number) {
   const date = new Date(seconds * 1_000);
   return (date.getFullYear() === thisYear ? shortDate : longDate).format(date);
 }

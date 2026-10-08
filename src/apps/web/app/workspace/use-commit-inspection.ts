@@ -2,6 +2,7 @@ import { useEffect, useRef } from "react";
 import type { CommitGraphHandle } from "#web/features/commit-graph/commit-graph.tsx";
 import {
   type CodeMatchTarget,
+  type CommitInput,
   commitInputOid,
 } from "#web/features/commit-inspection/commit-input.ts";
 import { useWorkspacePanel } from "#web/features/workspace-panel/workspace-panel-provider.tsx";
@@ -18,8 +19,8 @@ export function useCommitInspection(connected: boolean) {
   }, [state.tabs]);
   return {
     graphRef,
-    open: (oid: string) => {
-      execute({ type: "input", kind: "commit", input: oid });
+    open: (input: CommitInput) => {
+      execute({ type: "input", kind: "commit", input });
       execute({ type: "open", kind: "commit" });
     },
     openMatch: (oid: string, match: CodeMatchTarget) => {

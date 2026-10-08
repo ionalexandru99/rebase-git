@@ -8,19 +8,20 @@ import {
   fileHistoryPage,
   maximumFileHistory,
 } from "#contracts/file-history/file-history.contract.ts";
-import { type Action, submenu } from "#web/components/ui/action-menu.tsx";
+import type { Action } from "#web/components/ui/action-menu.tsx";
 import { Button } from "#web/components/ui/button.tsx";
 import {
   ResizableHandle,
   ResizablePanel,
   ResizablePanelGroup,
 } from "#web/components/ui/resizable.tsx";
-import { writeClipboardText } from "#web/features/clipboard/write-clipboard-text.ts";
+import { copyCommitMenu } from "#web/features/clipboard/copy-commit-menu.ts";
 import { CommitRefPill } from "#web/features/commit-graph/components/commit-ref-labels.tsx";
 import {
   RestoreConfirmation,
   useRestoreFiles,
 } from "#web/features/commit-inspection/restore-files.tsx";
+import { useBlameAction } from "#web/features/file-blame/file-blame.ts";
 import { DiffWorkerPool } from "#web/features/file-diff/components/diff-worker-pool.tsx";
 import { useDiffPreferences } from "#web/features/file-diff/hooks/use-diff-preferences.ts";
 import { isFileHistoryInput } from "#web/features/file-history/file-history.ts";
@@ -125,6 +126,7 @@ function FileHistory({
     scope.connected && scope.writable,
   );
   const errorToast = useErrorToast();
+  const blame = useBlameAction();
   const select = (next: FileHistoryEntry) => {
     setSelectedOid(next.oid);
     onSelectCommit?.(next.oid);
@@ -144,26 +146,8 @@ function FileHistory({
       run: () => onOpenDetails?.(row.oid),
     },
     ...restore.actionsFor([row.path], row.path),
-    submenu({ id: "copy", label: "Copy", group: "edit" }, [
-      {
-        id: "copySha",
-        label: "SHA",
-        enabled: true,
-        run: () =>
-          void writeClipboardText(row.oid).catch(() =>
-            errorToast.show("copySha"),
-          ),
-      },
-      {
-        id: "copySubject",
-        label: "Subject",
-        enabled: true,
-        run: () =>
-          void writeClipboardText(row.subject).catch(() =>
-            errorToast.show("copySubject"),
-          ),
-      },
-    ]),
+    ...blame(row.status === "D" ? [] : [row.path], row.oid),
+    copyCommitMenu(row, errorToast),
   ];
   const latest = entries[0];
   const name = path.slice(path.lastIndexOf("/") + 1);

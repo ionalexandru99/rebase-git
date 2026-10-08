@@ -18,6 +18,7 @@ import {
 } from "#web/components/ui/context-menu.tsx";
 import { fileIcons } from "#web/components/ui/file-icon.tsx";
 import { writeClipboardText } from "#web/features/clipboard/write-clipboard-text.ts";
+import { useBlameAction } from "#web/features/file-blame/file-blame.ts";
 import { useFileHistoryAction } from "#web/features/file-history/file-history.ts";
 import { useErrorToast } from "#web/features/notifications/notifications.tsx";
 import { useShowChangeAction } from "#web/features/working-changes/show-change.ts";
@@ -170,7 +171,7 @@ export function WorktreeTree({
     echo.current = false;
   }, [model, selected, query, pathList]);
   const [menuPath, setMenuPath] = useState<string | null>(null);
-  const actions = useRowActions(changes);
+  const actions = useRowActions(changes, ignored);
   const failed = folders.find((folder) => folder.error !== null)?.error;
   return (
     <ContextMenu>
@@ -200,8 +201,12 @@ export function WorktreeTree({
   );
 }
 
-function useRowActions(changes: RepositoryChanges | undefined) {
+function useRowActions(
+  changes: RepositoryChanges | undefined,
+  ignored: readonly string[],
+) {
   const fileHistory = useFileHistoryAction();
+  const blame = useBlameAction();
   const showChange = useShowChangeAction();
   const errorToast = useErrorToast();
   return (path: string): readonly Action[] => {
@@ -210,9 +215,16 @@ function useRowActions(changes: RepositoryChanges | undefined) {
     const change = [...(changes?.unstaged ?? []), ...(changes?.staged ?? [])]
       .filter((file) => file.path === name)
       .map((file) => file.status);
-    const committed = !change.includes("?") && !change.includes("A");
+    const committed =
+      !change.includes("?") &&
+      !change.includes("A") &&
+      !ignored.some(
+        (entry) =>
+          entry === path || (entry.endsWith("/") && path.startsWith(entry)),
+      );
     return [
       ...(folder || !committed ? [] : fileHistory([name])),
+      ...(folder || !committed ? [] : blame([name], null)),
       ...(folder || change.length === 0 ? [] : [showChange(name)]),
       submenu({ id: "copy", label: "Copy", group: "edit" }, [
         {

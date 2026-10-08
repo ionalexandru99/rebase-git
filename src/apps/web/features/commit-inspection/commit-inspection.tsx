@@ -10,6 +10,7 @@ import {
 import { Button } from "#web/components/ui/button.tsx";
 import {
   type CodeMatchTarget,
+  type CommitFocus,
   commitInputOid,
   isCommitInput,
 } from "#web/features/commit-inspection/commit-input.ts";
@@ -20,6 +21,7 @@ import {
   type RestorePreview,
   useRestoreFiles,
 } from "#web/features/commit-inspection/restore-files.tsx";
+import { useBlameAction } from "#web/features/file-blame/file-blame.ts";
 import { DiffWorkerPool } from "#web/features/file-diff/components/diff-worker-pool.tsx";
 import { useDiffPreferences } from "#web/features/file-diff/hooks/use-diff-preferences.ts";
 import { useFileHistoryAction } from "#web/features/file-history/file-history.ts";
@@ -34,6 +36,7 @@ const CommitDiff = lazy(
 interface SelectedFile {
   readonly oid: string;
   readonly path: string;
+  readonly focus: CommitFocus | undefined;
 }
 
 export function CommitInspection({
@@ -52,12 +55,18 @@ export function CommitInspection({
   const inspection = useCommitInspection(scope, oid, active);
   const [widened, setWidened] = useState<unknown>();
   const match =
-    typeof input === "object" && widened !== input ? input.match : undefined;
+    typeof input === "object" && "match" in input && widened !== input
+      ? input.match
+      : undefined;
+  const focus =
+    typeof input === "object" && "lines" in input ? input : undefined;
   const details = narrowToMatch(inspection.data, match);
   const [selected, setSelected] = useState<SelectedFile>();
-  const path = details === undefined ? null : selectedPath(details, selected);
+  const path =
+    details === undefined ? null : selectedPath(details, selected, focus);
   const restore = useRestoreFiles(scope, details, connected && writable);
   const fileHistory = useFileHistoryAction();
+  const blame = useBlameAction();
   const preview = useRestorePreview(scope, details, restore.preview, active);
   const diff = useCommitDiff(scope, details, path, active);
   const shown = restore.preview === undefined ? diff : preview;
@@ -65,7 +74,8 @@ export function CommitInspection({
   const error = inspection.isError ? describeFailure(inspection.error) : null;
   const retry = () => void inspection.refetch();
   const select = (next: string) => {
-    if (details !== undefined) setSelected({ oid: details.oid, path: next });
+    if (details !== undefined)
+      setSelected({ oid: details.oid, path: next, focus });
   };
   return (
     <section
@@ -116,6 +126,14 @@ export function CommitInspection({
               actionsFor={(paths, anchor) => [
                 ...restore.actionsFor(paths, anchor),
                 ...fileHistory(paths),
+                ...blame(
+                  paths.filter((path) =>
+                    details.files.some(
+                      (file) => file.path === path && file.status !== "D",
+                    ),
+                  ),
+                  details.oid,
+                ),
               ]}
               onMenuClose={restore.endPreview}
             >
@@ -136,6 +154,11 @@ export function CommitInspection({
                     retry: () => void shown.refetch(),
                   }}
                   preview={restore.preview !== undefined}
+                  focus={
+                    focus?.oid === details.oid && focus.path === path
+                      ? focus.lines
+                      : undefined
+                  }
                   preferences={preferences}
                   choosePreferences={choosePreferences}
                 />
@@ -191,12 +214,17 @@ function MatchFilter({
 function selectedPath(
   details: CommitDetails,
   selected: SelectedFile | undefined,
+  focus: CommitFocus | undefined,
 ) {
+  const has = (path: string) =>
+    details.files.some((file) => file.path === path);
   if (
     selected?.oid === details.oid &&
-    details.files.some((file) => file.path === selected.path)
+    selected.focus === focus &&
+    has(selected.path)
   )
     return selected.path;
+  if (focus?.oid === details.oid && has(focus.path)) return focus.path;
   return details.files[0]?.path ?? null;
 }
 

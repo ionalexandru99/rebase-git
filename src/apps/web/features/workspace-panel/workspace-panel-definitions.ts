@@ -7,6 +7,7 @@ import {
   IconHistory,
   IconListDetails,
   IconStack2,
+  IconUserCode,
 } from "@tabler/icons-react";
 import { lazy } from "react";
 import { isReflogRef } from "#contracts/repository-reflog/repository-reflog.contract.ts";
@@ -15,6 +16,7 @@ import {
   compareTab,
   isCompareInput,
 } from "#web/features/comparison/comparison.ts";
+import { blameTab, isBlameInput } from "#web/features/file-blame/file-blame.ts";
 import {
   fileHistoryTab,
   isFileHistoryInput,
@@ -111,6 +113,19 @@ export const fileHistoryPanel = {
   launchable: false,
 } satisfies WorkspacePanelDefinition;
 
+export const blamePanel = {
+  acceptsInput: isBlameInput,
+  instance: blameTab,
+  Content: lazy(() =>
+    import("#web/features/file-blame/file-blame-panel.tsx").then((module) => ({
+      default: module.FileBlamePanel,
+    })),
+  ),
+  label: "Blame",
+  icon: IconUserCode,
+  launchable: false,
+} satisfies WorkspacePanelDefinition;
+
 export const comparePanel = {
   acceptsInput: isCompareInput,
   instance: compareTab,
@@ -127,6 +142,7 @@ export const comparePanel = {
 const definitions = {
   commit: commitInspectionPanel,
   history: fileHistoryPanel,
+  blame: blamePanel,
   compare: comparePanel,
   changes: workingChangesPanel,
   files: worktreeFilesPanel,

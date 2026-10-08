@@ -8,6 +8,7 @@ import {
 import type { ChangeSection } from "#contracts/repository-changes/repository-changes.contract.ts";
 import type { Action } from "#web/components/ui/action-menu.tsx";
 import { Button } from "#web/components/ui/button.tsx";
+import { useBlameAction } from "#web/features/file-blame/file-blame.ts";
 import {
   FileListSection,
   RowLead,
@@ -91,6 +92,14 @@ export function ChangeFileSection({
   const ActionIcon = section === "unstaged" ? IconPlus : IconMinus;
   const stashMenu = useStashMenu();
   const fileHistory = useFileHistoryAction();
+  const blame = useBlameAction();
+  const committed = (paths: readonly string[]) =>
+    paths.filter((path) =>
+      changes?.[section].some(
+        (file) =>
+          file.path === path && file.status !== "?" && file.status !== "A",
+      ),
+    );
   const rowActions = (
     paths: readonly string[],
     ignored: readonly string[],
@@ -115,13 +124,14 @@ export function ChangeFileSection({
           ? { revision: changes.revision, section, paths }
           : undefined,
       ),
-      ...fileHistory(
-        paths.filter((path) =>
+      ...fileHistory(committed(paths)),
+      ...blame(
+        committed(paths).filter((path) =>
           changes?.[section].some(
-            (file) =>
-              file.path === path && file.status !== "?" && file.status !== "A",
+            (file) => file.path === path && file.status !== "D",
           ),
         ),
+        null,
       ),
       view.ignore.actionFor(ignored, !disabled),
       {

@@ -1,5 +1,9 @@
 import type { CommitInspection } from "#contracts/commit-inspection/commit-inspection.contract.ts";
 import type { DesktopUpdates } from "#contracts/desktop-updates/desktop-updates.contract.ts";
+import type {
+  BlameCommit,
+  FileBlame,
+} from "#contracts/file-blame/file-blame.contract.ts";
 import type { FileHistoryEntry } from "#contracts/file-history/file-history.contract.ts";
 import type { PullRequest } from "#contracts/pull-requests/pull-requests.contract.ts";
 import type { RepositoryCatalogEntry } from "#contracts/repository-catalog/repository-catalog.contract.ts";
@@ -329,6 +333,31 @@ export function fileHistoryEntry(
     status: "M",
     lines: { added: 1, removed: 1 },
     ...entry,
+  };
+}
+
+export function fileBlame(
+  blame: Partial<Extract<FileBlame, { _tag: "Blamed" }>> = {},
+): FileBlame {
+  return {
+    _tag: "Blamed",
+    text: "one",
+    ranges: [{ start: 1, count: 1, oid: commitId, originalLine: 1 }],
+    commits: [blameCommit()],
+    ...blame,
+  };
+}
+
+export function blameCommit(commit: Partial<BlameCommit> = {}): BlameCommit {
+  return {
+    oid: commitId,
+    subject: "Change the file",
+    author: "Alex",
+    email: "alex@example.com",
+    authoredAt: 1_790_000_000,
+    path: "src/app.ts",
+    previous: null,
+    ...commit,
   };
 }
 

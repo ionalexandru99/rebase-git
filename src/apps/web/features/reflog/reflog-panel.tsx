@@ -9,12 +9,11 @@ import type {
   RepositoryRefs,
   RepositoryWorktree,
 } from "#contracts/repository-refs/repository-refs.contract.ts";
-import { type Action, submenu } from "#web/components/ui/action-menu.tsx";
+import type { Action } from "#web/components/ui/action-menu.tsx";
 import { Button } from "#web/components/ui/button.tsx";
 import { ScrollTopButton } from "#web/components/ui/scroll-top-button.tsx";
-import { writeClipboardText } from "#web/features/clipboard/write-clipboard-text.ts";
+import { copyCommitMenu } from "#web/features/clipboard/copy-commit-menu.ts";
 import {
-  type ErrorAction,
   type ErrorToast,
   useErrorToast,
 } from "#web/features/notifications/notifications.tsx";
@@ -192,8 +191,6 @@ function reflogActions(
   },
 ): readonly Action[] {
   const { scope, blocked, showInGraph, openDetails, errorToast } = context;
-  const copy = (text: string, failed: ErrorAction) =>
-    void writeClipboardText(text).catch(() => errorToast.show(failed));
   const readable = scope?.readable ?? false;
   const reset = context.reset?.actionFor(row.oid);
   return [
@@ -221,20 +218,7 @@ function reflogActions(
       connected: scope?.connected ?? false,
       writable: scope?.writable ?? false,
     }).filter((action) => action.id === "branch.createHere"),
-    submenu({ id: "copy", label: "Copy", group: "edit" }, [
-      {
-        id: "copySha",
-        label: "SHA",
-        enabled: true,
-        run: () => copy(row.oid, "copySha"),
-      },
-      {
-        id: "copySubject",
-        label: "Subject",
-        enabled: true,
-        run: () => copy(row.subject, "copySubject"),
-      },
-    ]),
+    copyCommitMenu(row, errorToast),
   ];
 }
 
