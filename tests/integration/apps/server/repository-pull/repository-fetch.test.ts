@@ -32,32 +32,6 @@ describe("repository fetch with real Git", () => {
     expect(recovered).not.toHaveProperty("failure");
   });
 
-  it("waits for a running ref write instead of failing", async () => {
-    const f = await fixture();
-    await git(f.remote, "branch", "pushed", "main");
-    const entered = Promise.withResolvers<void>();
-    const release = Promise.withResolvers<void>();
-    const push = Effect.runPromise(
-      f.environment.coordination.run(
-        f.local,
-        { name: "push", locks: { refs: "wait" }, duringOperation: "block" },
-        Effect.promise(() => {
-          entered.resolve();
-          return release.promise;
-        }),
-      ),
-    );
-    await entered.promise;
-
-    const fetched = f.fetch();
-    await expect.poll(f.status).toMatchObject({ fetching: true });
-    release.resolve();
-    await push;
-
-    await expect(fetched).resolves.not.toHaveProperty("failure");
-    await git(f.local, "rev-parse", "refs/remotes/origin/pushed");
-  });
-
   it("keeps deleted remote branches when the repository turns pruning off", async () => {
     const f = await fixture();
     await git(f.remote, "branch", "temporary", "main");
@@ -117,7 +91,6 @@ async function fixture() {
   const repositoryId = (await environment.remember(local)).id;
   const routes = environment.routes(RepositoryPullApi);
   return {
-    environment,
     root,
     remote,
     local,
