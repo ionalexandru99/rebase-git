@@ -28,6 +28,7 @@ export const InspectCommitDiff = Schema.Struct({
   ...InspectCommit.fields,
   path: RepositoryPath,
   previousPath: Schema.optional(RepositoryPath),
+  whole: Schema.optional(Schema.Boolean),
 });
 export type InspectCommitDiff = typeof InspectCommitDiff.Type;
 const CommitIdentity = Schema.Struct({
@@ -59,6 +60,7 @@ export const PreviewRestore = Schema.Struct({
   ...InspectCommit.fields,
   source: RestoreSource,
   path: RepositoryPath,
+  whole: Schema.optional(Schema.Boolean),
 });
 export type PreviewRestore = typeof PreviewRestore.Type;
 export const RestoreFiles = Schema.Struct({

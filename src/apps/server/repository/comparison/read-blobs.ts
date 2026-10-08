@@ -7,6 +7,7 @@ import {
 } from "#server/adapters/local-git/git-commands.ts";
 
 export const previewByteLimit = 160_000;
+export const diffByteLimit = 4 * 1_048_576;
 
 export interface GitBlob {
   readonly bytes: number;
@@ -19,13 +20,14 @@ export function readBlobs(
   git: GitCommandRunner,
   directory: string,
   oids: readonly string[],
+  byteLimit: number,
   options: GitCommandOptions = {},
 ) {
   const unique = [...new Set(oids)];
-  return readBlobContents(git, directory, unique, options).pipe(
+  return readBlobContents(git, directory, unique, byteLimit, options).pipe(
     Effect.catchIf(
       (error) => error.reason === "OutputTooLarge",
-      () => readLargeBlobs(git, directory, unique, options),
+      () => readLargeBlobs(git, directory, unique, byteLimit, options),
     ),
   );
 }
@@ -34,17 +36,19 @@ function readLargeBlobs(
   git: GitCommandRunner,
   directory: string,
   oids: readonly string[],
+  byteLimit: number,
   options: GitCommandOptions,
 ) {
   return Effect.gen(function* () {
     const sizes = yield* readBlobSizes(git, directory, oids, options);
-    const previewable = [...sizes]
-      .filter(([, bytes]) => bytes <= previewByteLimit)
+    const readable = [...sizes]
+      .filter(([, bytes]) => bytes <= byteLimit)
       .map(([oid]) => oid);
     const contents = yield* readBlobContents(
       git,
       directory,
-      previewable,
+      readable,
+      byteLimit,
       options,
     );
     return new Map<string, GitBlob>(
@@ -60,6 +64,7 @@ function readBlobContents(
   git: GitCommandRunner,
   directory: string,
   oids: readonly string[],
+  byteLimit: number,
   options: GitCommandOptions,
 ) {
   if (oids.length === 0) return Effect.succeed(new Map<string, GitBlob>());
@@ -67,10 +72,10 @@ function readBlobContents(
     ...options,
     input: batchInput(oids),
     outputEncoding: "base64",
-    maxOutputBytes: oids.length * (previewByteLimit + headerBytes),
+    maxOutputBytes: oids.length * (byteLimit + headerBytes),
   }).pipe(
     Effect.flatMap((output) =>
-      parseBatch(Buffer.from(output, "base64"), oids.length),
+      parseBatch(Buffer.from(output, "base64"), oids.length, byteLimit),
     ),
   );
 }
@@ -99,7 +104,7 @@ function readBlobSizes(
   );
 }
 
-function parseBatch(output: Buffer, count: number) {
+function parseBatch(output: Buffer, count: number, byteLimit: number) {
   const blobs = new Map<string, GitBlob>();
   let offset = 0;
   while (offset < output.length) {
@@ -111,7 +116,7 @@ function parseBatch(output: Buffer, count: number) {
     blobs.set(header.oid, {
       bytes: header.bytes,
       content:
-        header.bytes > previewByteLimit
+        header.bytes > byteLimit
           ? null
           : output.subarray(start, start + header.bytes),
     });

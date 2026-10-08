@@ -2,7 +2,10 @@ import { isUtf8 } from "node:buffer";
 import { createTwoFilesPatch } from "diff";
 import type { ChangeDiff } from "#contracts/repository-comparison/repository-comparison.contract.ts";
 import { fingerprint } from "#server/repository/comparison/fingerprint.ts";
-import { previewByteLimit } from "#server/repository/comparison/read-blobs.ts";
+import {
+  diffByteLimit,
+  previewByteLimit,
+} from "#server/repository/comparison/read-blobs.ts";
 import type { RepositoryFileContent } from "#server/repository/comparison/read-object-file.ts";
 
 const patchTimeoutMilliseconds = 250;
@@ -10,6 +13,7 @@ const patchTimeoutMilliseconds = 250;
 export interface ChangeDiffSource {
   readonly previousPath?: string;
   readonly patch?: string | undefined;
+  readonly whole?: boolean | undefined;
 }
 
 export function buildChangeDiff(
@@ -17,7 +21,7 @@ export function buildChangeDiff(
   base: string,
   before: RepositoryFileContent,
   after: RepositoryFileContent,
-  { previousPath = path, patch }: ChangeDiffSource = {},
+  { previousPath = path, patch, whole = false }: ChangeDiffSource = {},
 ): ChangeDiff {
   const mime = imageMime(path);
   const kind: ChangeDiff["kind"] =
@@ -25,7 +29,7 @@ export function buildChangeDiff(
       ? "conflict"
       : before.mode === "160000" || after.mode === "160000"
         ? "submodule"
-        : before.bytes > previewByteLimit || after.bytes > previewByteLimit
+        : before.bytes > diffByteLimit || after.bytes > diffByteLimit
           ? "large"
           : before.mode === "120000" || after.mode === "120000"
             ? "symlink"
@@ -40,9 +44,13 @@ export function buildChangeDiff(
     kind === "text"
       ? (patch ?? boundedPatch(previousPath, path, oldText, newText))
       : "";
+  const partial =
+    kind === "text" &&
+    !whole &&
+    (before.bytes > previewByteLimit || after.bytes > previewByteLimit);
   const diff: ChangeDiff = {
     path: path,
-    kind,
+    kind: partial ? "partial" : kind,
     mime,
     revision: fingerprint(
       base,
@@ -56,7 +64,7 @@ export function buildChangeDiff(
     beforeBytes: before.bytes,
     afterBytes: after.bytes,
     before:
-      before.content === null
+      before.content === null || partial
         ? null
         : kind === "image"
           ? before.content.toString("base64")
@@ -64,7 +72,7 @@ export function buildChangeDiff(
             ? oldText
             : null,
     after:
-      after.content === null
+      after.content === null || partial
         ? null
         : kind === "image"
           ? after.content.toString("base64")
@@ -75,7 +83,7 @@ export function buildChangeDiff(
   };
   if (
     textPatch === undefined ||
-    Buffer.byteLength(JSON.stringify(diff)) > 900_000
+    (!whole && Buffer.byteLength(JSON.stringify(diff)) > 900_000)
   )
     return {
       ...diff,

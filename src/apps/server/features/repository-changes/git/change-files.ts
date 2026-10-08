@@ -2,7 +2,10 @@ import { lstat, readFile, readlink, realpath } from "node:fs/promises";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { Effect } from "effect";
 import { changeIo } from "#server/features/repository-changes/git/change-failures.ts";
-import { previewByteLimit } from "#server/repository/comparison/read-blobs.ts";
+import {
+  diffByteLimit,
+  previewByteLimit,
+} from "#server/repository/comparison/read-blobs.ts";
 import type { RepositoryFileContent } from "#server/repository/comparison/read-object-file.ts";
 
 export function safeChangePath(directory: string, path: string) {
@@ -54,7 +57,7 @@ export function worktreeFile(directory: string, path: string) {
             ? "100755"
             : "100644";
       const content =
-        mode === "160000" || info.size > previewByteLimit
+        mode === "160000" || info.size > diffByteLimit
           ? null
           : mode === "120000"
             ? Buffer.from(await readlink(target))

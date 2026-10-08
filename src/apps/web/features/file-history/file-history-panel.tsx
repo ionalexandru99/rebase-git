@@ -24,6 +24,7 @@ import {
 import { useBlameAction } from "#web/features/file-blame/file-blame.ts";
 import { DiffWorkerPool } from "#web/features/file-diff/components/diff-worker-pool.tsx";
 import { useDiffPreferences } from "#web/features/file-diff/hooks/use-diff-preferences.ts";
+import { useDiffRead } from "#web/features/file-diff/hooks/use-diff-read.ts";
 import { isFileHistoryInput } from "#web/features/file-history/file-history.ts";
 import { HistoryList } from "#web/features/file-history/file-history-list.tsx";
 import { useErrorToast } from "#web/features/notifications/notifications.tsx";
@@ -98,7 +99,7 @@ function FileHistory({
   const [selectedOid, setSelectedOid] = useState<string>();
   const entry =
     entries.find((candidate) => candidate.oid === selectedOid) ?? entries[0];
-  const diff = useEnvironmentQuery(
+  const diff = useDiffRead(
     CommitInspectionApi.inspectDiff,
     entry === undefined
       ? skipToken
@@ -209,12 +210,7 @@ function FileHistory({
               <CommitDiff
                 key={entry.oid}
                 file={commitFile(entry)}
-                diff={{
-                  value: diff.data,
-                  loading: diff.isLoading,
-                  error: diff.isError ? describeFailure(diff.error) : null,
-                  retry: () => void diff.refetch(),
-                }}
+                diff={diff}
                 preview={false}
                 preferences={preferences}
                 choosePreferences={choosePreferences}

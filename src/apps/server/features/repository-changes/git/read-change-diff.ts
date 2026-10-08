@@ -17,7 +17,7 @@ import {
   binary,
   buildChangeDiff,
 } from "#server/repository/comparison/build-change-diff.ts";
-import { previewByteLimit } from "#server/repository/comparison/read-blobs.ts";
+import { diffByteLimit } from "#server/repository/comparison/read-blobs.ts";
 import { objectFile } from "#server/repository/comparison/read-object-file.ts";
 
 export function readChangeDiff(
@@ -44,6 +44,7 @@ export function readChangeDiff(
     );
     return buildChangeDiff(command.path, base, before, after, {
       previousPath: previousPath ?? command.path,
+      whole: command.whole,
     });
   });
 }
@@ -96,7 +97,7 @@ function cleanFileContent(
           ...index,
           objectDirectory,
           outputEncoding: "base64",
-          maxOutputBytes: previewByteLimit,
+          maxOutputBytes: diffByteLimit,
         }),
         "base64",
       );

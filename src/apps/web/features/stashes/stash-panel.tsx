@@ -8,6 +8,7 @@ import {
 import { CommitFiles } from "#web/features/commit-inspection/components/commit-files.tsx";
 import { DiffWorkerPool } from "#web/features/file-diff/components/diff-worker-pool.tsx";
 import { useDiffPreferences } from "#web/features/file-diff/hooks/use-diff-preferences.ts";
+import { useDiffRead } from "#web/features/file-diff/hooks/use-diff-read.ts";
 import { useFileHistoryAction } from "#web/features/file-history/file-history.ts";
 import { isStashInput, useStashes } from "#web/features/stashes/stashes.ts";
 import { usePanelFeature } from "#web/features/workspace-panel/api.ts";
@@ -91,7 +92,7 @@ function StashFiles({
   const fileHistory = useFileHistoryAction();
   const [preferences, choosePreferences] = useDiffPreferences();
   const file = contents.files.find((candidate) => candidate.path === selected);
-  const diff = useEnvironmentQuery(
+  const diff = useDiffRead(
     CommitInspectionApi.inspectDiff,
     scope === undefined || file === undefined
       ? skipToken
@@ -130,12 +131,7 @@ function StashFiles({
       >
         <CommitDiff
           file={contents.files.find((file) => file.path === selected)}
-          diff={{
-            value: diff.data,
-            loading: diff.isLoading,
-            error: diff.isError ? describeFailure(diff.error) : null,
-            retry: () => void diff.refetch(),
-          }}
+          diff={diff}
           preview={false}
           preferences={preferences}
           choosePreferences={choosePreferences}

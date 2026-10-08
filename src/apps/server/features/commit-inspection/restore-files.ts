@@ -36,7 +36,9 @@ export function previewRestore(git: GitCommandRunner, command: PreviewRestore) {
       ],
       { concurrency: 2 },
     );
-    return buildChangeDiff(command.path, source, current, restored);
+    return buildChangeDiff(command.path, source, current, restored, {
+      whole: command.whole,
+    });
   });
 }
 

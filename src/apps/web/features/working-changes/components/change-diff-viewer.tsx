@@ -7,7 +7,10 @@ import {
   revealRange,
 } from "#web/features/file-diff/components/diff-content.tsx";
 import { DiffDisplayControls } from "#web/features/file-diff/components/diff-display-controls.tsx";
-import { createChangeDiffModel } from "#web/features/file-diff/diff-model.ts";
+import {
+  contentUnchanged,
+  createChangeDiffModel,
+} from "#web/features/file-diff/diff-model.ts";
 import { viewedChange } from "#web/features/working-changes/hooks/use-change-selection.ts";
 import type {
   ChangeAction,
@@ -39,8 +42,7 @@ export default function ChangeDiffViewer({
   readonly onHunk: (index: number | null) => void;
 }) {
   const { changes, selection, loading } = view;
-  const diff = view.diff ?? null;
-  const [expandContext, setExpandContext] = useState(false);
+  const diff = view.diff.value ?? null;
   const section = selection?.section === "staged" ? "staged" : "unstaged";
   const files = changes?.[section] ?? [];
   const file = files.find(
@@ -51,13 +53,14 @@ export default function ChangeDiffViewer({
     diff,
     previousPath,
   );
+  const lineActions = diff?.kind === "text";
   const hunks = useMemo(
     () =>
-      metadata?.hunks.flatMap((content) => {
+      (lineActions ? metadata?.hunks : undefined)?.flatMap((content) => {
         const range = hunkRange(content);
         return range ? [{ range, lines: hunkLines(content) }] : [];
       }) ?? [],
-    [metadata],
+    [lineActions, metadata],
   );
   const current =
     hunk !== null && hunks.length > 0 ? Math.min(hunk, hunks.length - 1) : null;
@@ -116,8 +119,8 @@ export default function ChangeDiffViewer({
       ref={region}
     >
       <DiffDisplayControls
-        expanded={expandContext}
-        onExpand={!empty && hasHiddenContext ? setExpandContext : undefined}
+        expanded={view.diff.expanded}
+        onExpand={!empty && hasHiddenContext ? view.diff.expand : undefined}
         preferences={view.preferences}
         onPreferences={view.choosePreferences}
         region={region}
@@ -191,9 +194,7 @@ export default function ChangeDiffViewer({
         <div className="flex flex-1 items-center justify-center text-control text-muted-foreground">
           {loading || selection ? "Loading changes…" : "Select a file"}
         </div>
-      ) : previousPath !== null &&
-        diff.kind === "text" &&
-        diff.before === diff.after ? (
+      ) : previousPath !== null && contentUnchanged(diff) ? (
         <>
           <div className="shrink-0 break-all border-border border-b px-3 py-2 font-mono text-meta">
             {previousPath} → {diff.path}
@@ -207,8 +208,11 @@ export default function ChangeDiffViewer({
           diff={diff}
           metadata={metadata}
           preferences={view.preferences}
-          expandContext={expandContext}
-          selection={{ range: selected, onChange: selectLines }}
+          expandContext={view.diff.expanded}
+          loadWhole={view.diff.loadWhole}
+          {...(lineActions
+            ? { selection: { range: selected, onChange: selectLines } }
+            : {})}
           onRender={(rendered) => {
             container.current = rendered;
             if (pendingReveal.current) reveal(pendingReveal.current);

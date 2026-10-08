@@ -5,6 +5,7 @@ import {
   runRepositoryGit,
 } from "#server/adapters/local-git/git-commands.ts";
 import {
+  diffByteLimit,
   readBlobs,
   unreadableBlob,
 } from "#server/repository/comparison/read-blobs.ts";
@@ -60,7 +61,13 @@ export function objectFile(
         mode,
         identity: oid,
       } satisfies RepositoryFileContent;
-    const blob = (yield* readBlobs(git, directory, [oid], options)).get(oid);
+    const blob = (yield* readBlobs(
+      git,
+      directory,
+      [oid],
+      diffByteLimit,
+      options,
+    )).get(oid);
     if (blob === undefined) return yield* unreadableBlob;
     return {
       ...blob,

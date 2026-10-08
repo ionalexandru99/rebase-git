@@ -259,6 +259,81 @@ describe("commit inspection", () => {
     await expect.element(unchanged).not.toBeInTheDocument();
   });
 
+  it("shows a large file's changes and reads the whole file only for unchanged lines", async () => {
+    const patch =
+      "--- src/first.bin\n+++ src/first.bin\n@@ -3 +3 @@\n-old\n+new\n";
+    const { screen, grid, client } = await fixture({
+      diff: (command) =>
+        command.whole
+          ? {
+              ...diff(command.path),
+              kind: "text",
+              before: "retained heading\nretained context\nold\n",
+              after: "retained heading\nretained context\nnew\n",
+              patch,
+            }
+          : { ...diff(command.path), kind: "partial", patch },
+    });
+    await grid.getByRole("row", { name: /^Commit 0,/ }).dblClick();
+    const content = () =>
+      screen
+        .getByRole("region", { name: "Commit file diff" })
+        .element()
+        .querySelector("diffs-container")?.shadowRoot?.textContent;
+    await expect.poll(content).toContain("new");
+    expect(content()).not.toContain("retained heading");
+    expect(
+      client.diff.mock.calls.map(([command]) => command.whole),
+    ).not.toContain(true);
+    await screen.getByRole("button", { name: "View options" }).click();
+    await page
+      .getByRole("menuitemcheckbox", { name: "Show unchanged lines" })
+      .click();
+    await expect.poll(content).toContain("retained heading");
+    expect(client.diff.mock.calls.at(-1)?.[0].whole).toBe(true);
+  });
+
+  it("reveals ten hidden lines of a large file per click and the whole gap on shift-click", async () => {
+    const rows = (changed: string) =>
+      Array.from({ length: 30 }, (_, index) =>
+        index === 24 ? changed : `row${String(index + 1).padStart(2, "0")}`,
+      ).join("\n");
+    const patch =
+      "--- src/first.bin\n+++ src/first.bin\n@@ -22,7 +22,7 @@\n row22\n row23\n row24\n-old\n+new\n row26\n row27\n row28\n";
+    const { screen, grid } = await fixture({
+      diff: (command) =>
+        command.whole
+          ? {
+              ...diff(command.path),
+              kind: "text",
+              before: `${rows("old")}\n`,
+              after: `${rows("new")}\n`,
+              patch,
+            }
+          : { ...diff(command.path), kind: "partial", patch },
+    });
+    await grid.getByRole("row", { name: /^Commit 0,/ }).dblClick();
+    const shadow = () =>
+      screen
+        .getByRole("region", { name: "Commit file diff" })
+        .element()
+        .querySelector("diffs-container")?.shadowRoot;
+    const content = () => shadow()?.textContent;
+    const expander = () =>
+      [
+        ...(shadow()?.querySelectorAll<HTMLElement>("[data-expand-button]") ??
+          []),
+      ].find((button) => button.checkVisibility());
+    await expect.poll(expander).toBeDefined();
+    await userEvent.click(expander() as HTMLElement);
+    await expect.poll(content).toContain("row12");
+    expect(content()).not.toContain("row11");
+    await userEvent.keyboard("{Shift>}");
+    await userEvent.click(expander() as HTMLElement);
+    await userEvent.keyboard("{/Shift}");
+    await expect.poll(content).toContain("row01");
+  });
+
   it("opens from a double click, follows selection, and closes with focus restored", async () => {
     const { screen, grid, client } = await fixture();
     const row = grid.getByRole("row", { name: /^Commit 0,/ });

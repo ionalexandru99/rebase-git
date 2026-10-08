@@ -21,6 +21,7 @@ import {
 import { RefPicker } from "#web/features/comparison/ref-picker.tsx";
 import { DiffWorkerPool } from "#web/features/file-diff/components/diff-worker-pool.tsx";
 import { useDiffPreferences } from "#web/features/file-diff/hooks/use-diff-preferences.ts";
+import { useDiffRead } from "#web/features/file-diff/hooks/use-diff-read.ts";
 import { useScopedRepositoryRefs } from "#web/features/refs/repository-refs.ts";
 import type { RepositoryHistory } from "#web/features/repository-history/repository-history.ts";
 import { usePanelFeature } from "#web/features/workspace-panel/api.ts";
@@ -184,7 +185,7 @@ function ComparisonFiles({
     shown.files[0]?.path ??
     null;
   const file = shown.files.find((entry) => entry.path === path);
-  const diff = useEnvironmentQuery(
+  const diff = useDiffRead(
     CompareApi.diff,
     file === undefined
       ? skipToken
@@ -235,12 +236,7 @@ function ComparisonFiles({
             <CommitDiff
               key={`${shown.base}:${shown.to}`}
               file={file}
-              diff={{
-                value: diff.data,
-                loading: diff.isLoading,
-                error: diff.isError ? describeFailure(diff.error) : null,
-                retry: () => void diff.refetch(),
-              }}
+              diff={diff}
               preview={false}
               preferences={preferences}
               choosePreferences={choosePreferences}

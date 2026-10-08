@@ -697,8 +697,9 @@ describe("working changes", () => {
       await diffReady();
     }
     const cachedDiffs = f.queryClient.getQueryCache().findAll({
-      predicate: ({ queryKey }) =>
-        queryKey[3] === RepositoryChangesApi.diff._tag,
+      predicate: ({ queryKey, state }) =>
+        queryKey[3] === RepositoryChangesApi.diff._tag &&
+        state.data !== undefined,
     });
     expect(cachedDiffs.length).toBeLessThanOrEqual(2);
   });

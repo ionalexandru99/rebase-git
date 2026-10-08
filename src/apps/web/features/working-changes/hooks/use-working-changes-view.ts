@@ -159,7 +159,7 @@ export function useWorkingChangesView({
   return {
     changes: shown.changes,
     conflicts,
-    diff: diff.data,
+    diff,
     selection,
     select,
     preferences,
@@ -178,11 +178,11 @@ export function useWorkingChangesView({
     error:
       conflicts.problem ??
       (read.isError ? describeFailure(read.error) : null) ??
-      (diff.isError ? describeFailure(diff.error) : null) ??
+      diff.error ??
       (draft.unavailable ? storageUnavailableMessage : null),
     refresh: () => {
       void read.refetch();
-      if (diff.isError) void diff.refetch();
+      if (diff.error) diff.retry();
       conflicts.refresh();
       draft.retry();
     },

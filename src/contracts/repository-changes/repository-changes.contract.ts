@@ -46,6 +46,7 @@ export type ViewedChange = typeof ViewedChange.Type;
 export const ReadChangeDiff = Schema.Struct({
   ...ChangesScope.fields,
   ...ViewedChange.fields,
+  whole: Schema.optional(Schema.Boolean),
 });
 export type ReadChangeDiff = typeof ReadChangeDiff.Type;
 export const ChangesWritten = Schema.Struct({

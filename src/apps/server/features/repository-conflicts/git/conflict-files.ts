@@ -24,6 +24,7 @@ import { binary } from "#server/repository/comparison/build-change-diff.ts";
 import { fingerprint } from "#server/repository/comparison/fingerprint.ts";
 import {
   type GitBlob,
+  previewByteLimit,
   readBlobs,
 } from "#server/repository/comparison/read-blobs.ts";
 import type { RepositoryFileContent } from "#server/repository/comparison/read-object-file.ts";
@@ -168,6 +169,7 @@ function readSnapshotSources(
             .filter((stage) => stage.mode !== gitlink)
             .map(({ oid }) => oid),
         ),
+        previewByteLimit,
       ),
     },
     { concurrency: "unbounded" },

@@ -4,7 +4,7 @@ import {
   type GitCommandRunner,
   runRepositoryGit,
 } from "#server/adapters/local-git/git-commands.ts";
-import { previewByteLimit } from "#server/repository/comparison/read-blobs.ts";
+import { diffByteLimit } from "#server/repository/comparison/read-blobs.ts";
 
 export interface CommitSide {
   readonly mode: string;
@@ -59,7 +59,7 @@ export function readCommitChange(
       globalArguments: [
         "--no-replace-objects",
         "-c",
-        `core.bigFileThreshold=${previewByteLimit}`,
+        `core.bigFileThreshold=${diffByteLimit}`,
         "-c",
         "diff.suppressBlankEmpty=false",
       ],

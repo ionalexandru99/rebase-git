@@ -42,3 +42,38 @@ it("stops building a text patch that would block other requests", () => {
     buildChangeDiff("file.ts", "base", file("before"), file("after")),
   ).toMatchObject({ kind: "large", before: null, after: null, patch: "" });
 });
+
+it("sends only the patch of a large text file unless the whole file is asked for", () => {
+  const file = (last: string) => {
+    const content = Buffer.from(`${"line\n".repeat(40_000)}${last}\n`);
+    return {
+      content,
+      bytes: content.length,
+      mode: "100644",
+      identity: last,
+    };
+  };
+  const partial = buildChangeDiff(
+    "file.ts",
+    "base",
+    file("before"),
+    file("after"),
+  );
+  const whole = buildChangeDiff(
+    "file.ts",
+    "base",
+    file("before"),
+    file("after"),
+    {
+      whole: true,
+    },
+  );
+  expect(partial).toMatchObject({ kind: "partial", before: null, after: null });
+  expect(partial.patch).toContain("-before\n+after\n");
+  expect(whole).toMatchObject({
+    kind: "text",
+    revision: partial.revision,
+    patch: partial.patch,
+  });
+  expect(whole.after).toContain("after\n");
+});
