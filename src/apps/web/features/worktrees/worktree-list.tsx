@@ -141,6 +141,7 @@ export function WorktreeList({
         <ContextMenuTrigger
           render={
             <div
+              aria-busy={worktrees.counting}
               aria-label="Worktrees"
               className="flex max-h-80 flex-col gap-0.5 overflow-y-auto"
               id={`${id}-list`}
@@ -154,6 +155,7 @@ export function WorktreeList({
                   row={row}
                   elementId={elementId(row.worktree.path)}
                   highlighted={row.worktree.path === highlighted}
+                  counting={worktrees.counting}
                   canPrune={worktrees.writable}
                   onSelect={() => switchTo(row)}
                   onPrune={() => worktrees.remove(row)}
@@ -191,6 +193,7 @@ function WorktreeOption({
   row,
   elementId,
   highlighted,
+  counting,
   canPrune,
   onSelect,
   onPrune,
@@ -198,6 +201,7 @@ function WorktreeOption({
   readonly row: WorktreeRow;
   readonly elementId: string;
   readonly highlighted: boolean;
+  readonly counting: boolean;
   readonly canPrune: boolean;
   readonly onSelect: () => void;
   readonly onPrune: () => void;
@@ -243,10 +247,17 @@ function WorktreeOption({
             className="size-3.5 shrink-0 text-muted-foreground"
           />
         )}
-        <span className="flex shrink-0 items-center gap-2 text-meta">
-          <ChangeCount section="unstaged" count={row.unstaged} />
-          <ChangeCount section="staged" count={row.staged} />
-        </span>
+        {counting && !missing ? (
+          <span
+            aria-hidden="true"
+            className="h-2 w-6 shrink-0 rounded-control bg-foreground/12"
+          />
+        ) : (
+          <span className="flex shrink-0 items-center gap-2 text-meta">
+            <ChangeCount section="unstaged" count={row.unstaged} />
+            <ChangeCount section="staged" count={row.staged} />
+          </span>
+        )}
       </button>
       {missing && worktree.locked === undefined ? (
         <Button

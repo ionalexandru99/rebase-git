@@ -23,7 +23,8 @@ import {
 export function WorktreeSwitcher() {
   const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState<WorktreeDraft>();
-  const worktrees = useWorktrees(open);
+  const [hovered, setHovered] = useState(false);
+  const worktrees = useWorktrees(open || hovered);
   useWorktreeDraftRequest((next) => {
     setDraft(next);
     setOpen(true);
@@ -47,6 +48,8 @@ export function WorktreeSwitcher() {
       >
         <PopoverTrigger
           aria-label={`Worktree ${active.name}`}
+          onPointerEnter={() => setHovered(true)}
+          onPointerLeave={() => setHovered(false)}
           className="flex h-7 min-w-0 items-center gap-1.5 rounded-control px-1.5 text-body text-muted-foreground outline-none hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/30 aria-expanded:bg-muted aria-expanded:text-foreground"
         >
           {linked ? (

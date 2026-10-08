@@ -75,20 +75,26 @@ function useWorktreeQueries(enabled: boolean) {
     enabled,
     staleTime: 0,
     refetchOnMount: true,
+    persist: true,
+    gcTime: Number.POSITIVE_INFINITY,
   });
   const folder = useEnvironmentQuery(RepositoryWorktreesApi.folder, input, {
     changes: "refs",
     enabled,
   });
-  return { status: status.data, folder: folder.data };
+  return {
+    status: status.data,
+    counting: status.isLoading,
+    folder: folder.data,
+  };
 }
 
 export type Worktrees = ReturnType<typeof useWorktrees>;
 
-export function useWorktrees(open: boolean) {
+export function useWorktrees(wanted: boolean) {
   const scope = useRepositoryScope();
   const { refs } = useScopedRepositoryRefs();
-  const { status, folder } = useWorktreeQueries(open);
+  const { status, counting, folder } = useWorktreeQueries(wanted);
   const activePath = scope?.worktreePath ?? "";
   const rows = refs === undefined ? [] : worktreeRows(refs, activePath, status);
   const anchor = rows.find(
@@ -130,6 +136,7 @@ export function useWorktrees(open: boolean) {
   return {
     refs,
     rows,
+    counting,
     folder,
     activePath,
     writable: (scope?.writable ?? false) && create.canRun,
