@@ -238,8 +238,18 @@ export function useStatusToast() {
         title,
         ...(undo === undefined ? {} : { action: { label: "Undo", run: undo } }),
       }),
-    warning: (action: ErrorAction, title: string, description: string) =>
-      toasts.put(action, { type: "error", title, description }),
+    warning: (
+      action: ErrorAction,
+      title: string,
+      description: string,
+      button?: Notice["action"],
+    ) =>
+      toasts.put(action, {
+        type: "error",
+        title,
+        description,
+        ...(button === undefined ? {} : { action: button }),
+      }),
     choose: (
       action: ErrorAction,
       title: string,

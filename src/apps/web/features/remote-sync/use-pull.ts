@@ -12,6 +12,7 @@ import {
   useErrorToast,
   useStatusToast,
 } from "#web/features/notifications/notifications.tsx";
+import { useStashCommands } from "#web/features/stashes/stashes.ts";
 import { useEnvironmentQuery } from "#web/platform/query/environment-query.ts";
 import { useRepositoryScope } from "#web/platform/query/repository-scope.tsx";
 import {
@@ -75,6 +76,7 @@ export function usePull() {
   const fetch = useFetch("pull");
   const errorToast = useErrorToast();
   const statusToast = useStatusToast();
+  const stashes = useStashCommands();
   const command = useCommand(RepositoryPullApi.pull, {
     before: async ({ strategy }) => {
       const fetched = await fetch.execute();
@@ -105,6 +107,17 @@ export function usePull() {
   const { run, canRun } = command;
   const worktreePath = scope?.worktreePath;
 
+  const applyStash = (oid: string) => ({
+    label: "Apply",
+    run: () =>
+      void stashes.restore(
+        { oid, name: "autostash" },
+        true,
+        true,
+        "Your changes are back",
+      ),
+  });
+
   const pull = async (branch: string, strategy?: PullChoice) => {
     if (!canRun || pulling) return;
     statusToast.progress("pull", "Fetching", { percent: 0 });
@@ -123,13 +136,26 @@ export function usePull() {
         choice("rebase", "Rebase"),
         choice("merge", "Merge"),
       ]);
-    } else if (result._tag !== "Ok")
+    } else if (failure?._tag === "PullStashKept")
+      errorToast.show(
+        "pull",
+        `${failure.busy ? "Another Git operation is running.\n" : ""}${inStashes}`,
+        applyStash(failure.stash),
+      );
+    else if (result._tag !== "Ok")
       errorToast.failure("pull", result, pullFailureMessages);
     else if (result.value.outcome === "Stopped") {
       if (result.value.worktreePath === worktreePath) statusToast.close("pull");
       else
         errorToast.show("pull", "Resolve the conflicts in the other worktree.");
-    } else if (result.value.stashKept)
+    } else if (result.value.movedToStash !== undefined)
+      statusToast.warning(
+        "pull",
+        pulledTitles[result.value.outcome],
+        inStashes,
+        applyStash(result.value.movedToStash),
+      );
+    else if (result.value.stashKept)
       statusToast.warning(
         "pull",
         "Pulled, but your changes conflict",
@@ -156,6 +182,8 @@ const integrationSteps: Record<DivergedPull, string> = {
   rebase: "Rebasing",
   merge: "Merging",
 };
+
+const inStashes = "Your changes are in Stashes.";
 
 const pulledTitles = {
   UpToDate: "Already up to date",

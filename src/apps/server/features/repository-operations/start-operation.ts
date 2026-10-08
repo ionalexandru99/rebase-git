@@ -77,7 +77,9 @@ function integrated(
   const text = output === undefined ? "" : `${output.stderr}${output.stdout}`;
   return {
     started: started(outcome, operation),
-    autostashConflict: /resulted in conflicts/.test(text) ? text : undefined,
+    autostashConflict: /resulted in conflicts|safe in the stash/.test(text)
+      ? text
+      : undefined,
   };
 }
 
