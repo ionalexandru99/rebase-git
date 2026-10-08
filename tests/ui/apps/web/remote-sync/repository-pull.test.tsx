@@ -249,7 +249,7 @@ describe("repository pull", () => {
         repositoryId,
         worktreePath: "/repo",
         oid: stash,
-        restoreIndex: false,
+        restoreIndex: true,
         drop: true,
       });
     await expect.element(page.getByText("Your changes are back")).toBeVisible();

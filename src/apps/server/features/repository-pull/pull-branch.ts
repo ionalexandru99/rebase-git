@@ -141,13 +141,12 @@ function integrate(
       };
     }),
     Effect.catch((error) =>
-      error.detail !== undefined && stashedByGit(error.detail)
-        ? keptStash(git, directory, error.detail)
-        : Effect.fail(
-            error._tag === "OperationFailed"
-              ? integrationFailure(error)
-              : error,
-          ),
+      failWithKeptStash(
+        git,
+        directory,
+        error.detail ?? "",
+        error._tag === "OperationFailed" ? integrationFailure(error) : error,
+      ),
     ),
   );
 }
@@ -269,9 +268,7 @@ function mergeFastForward(
         PullFailure | RepositoryRejected | GitFailed
       > =>
         isGitRejection(error)
-          ? stashedByGit(error.detail)
-            ? keptStash(git, directory, error.detail)
-            : Effect.fail(mergeFailure(error))
+          ? failWithKeptStash(git, directory, error.detail, mergeFailure(error))
           : requireAt(git, directory, "HEAD", upstreamTarget, error).pipe(
               Effect.as(false),
             ),
@@ -279,24 +276,29 @@ function mergeFastForward(
   );
 }
 
-function stashedByGit(detail: string) {
-  return /safe in the stash/.test(detail);
-}
-
-function keptStash(git: GitCommandRunner, directory: string, detail: string) {
+function failWithKeptStash<Failure>(
+  git: GitCommandRunner,
+  directory: string,
+  detail: string,
+  failure: Failure,
+) {
+  if (!/safe in the stash/.test(detail)) return Effect.fail(failure);
   return runRepositoryGit(
     git,
     directory,
-    ["rev-parse", "--verify", "refs/stash"],
-    pullCommand,
+    ["log", "--walk-reflogs", "-1", "--format=%H%x00%gs", "refs/stash"],
+    { ...pullCommand, exitCodes: [0, 128] },
   ).pipe(
-    Effect.flatMap((stash) =>
-      Effect.fail<PullFailure>({
-        _tag: "PullStashKept",
-        stash: stash.trim(),
-        busy: isGitLocked(detail),
-      }),
-    ),
+    Effect.flatMap((output) => {
+      const [stash, subject] = output.trim().split("\0");
+      return stash && subject === "autostash"
+        ? Effect.fail<PullFailure | Failure>({
+            _tag: "PullStashKept",
+            stash,
+            busy: isGitLocked(detail),
+          })
+        : Effect.fail(failure);
+    }),
   );
 }
 

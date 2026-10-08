@@ -128,13 +128,13 @@ export function usePull() {
     } else if (failure?._tag === "PullStashKept")
       errorToast.show(
         "pull",
-        `${failure.busy ? "Another Git operation is running." : "Git stopped before pulling."}\nYour changes are in Stashes.`,
+        `${failure.busy ? "Another Git operation is running.\n" : ""}Your changes are in Stashes.`,
         {
           label: "Apply",
           run: () =>
             void stashes.restore(
               { oid: failure.stash, name: "autostash" },
-              false,
+              true,
               true,
               "Your changes are back",
             ),
