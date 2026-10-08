@@ -93,7 +93,7 @@ export function WorkingChanges({
                 />
               ) : (
                 <ChangeDiffViewer
-                  key={`${file}:${view.diff?.revision}`}
+                  key={`${file}:${view.diff.value?.revision}`}
                   view={view}
                   writable={writable}
                   act={view.act}

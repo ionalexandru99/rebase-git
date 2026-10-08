@@ -152,26 +152,34 @@ describe("historical commit inspection", () => {
     expect(diff.patch).toContain("+four");
   });
 
-  it("reports sizes without previewing files over the preview limit", async () => {
+  it("sends only the changes of a large file until the whole file is asked for", async () => {
     const f = await fixture();
-    const large = (line: string) => `${line}\n`.repeat(30_000);
+    const large = (last: string) => `${"line\n".repeat(40_000)}${last}\n`;
     await writeFile(join(f.directory, "large.txt"), large("before"));
     await f.git("add", ".");
     await f.git("commit", "-m", "Add large");
-    await writeFile(join(f.directory, "large.txt"), large("after!"));
+    await writeFile(join(f.directory, "large.txt"), large("after"));
     await f.git("commit", "-am", "Change large");
     const scope = { ...f.scope, oid: await f.git("rev-parse", "HEAD") };
-    expect(
-      await Effect.runPromise(
-        f.service.inspectDiff({ ...scope, path: "large.txt" }),
-      ),
-    ).toMatchObject({
-      kind: "large",
+    const partial = await Effect.runPromise(
+      f.service.inspectDiff({ ...scope, path: "large.txt" }),
+    );
+    expect(partial).toMatchObject({
+      kind: "partial",
       before: null,
       after: null,
-      patch: "",
-      beforeBytes: 210_000,
-      afterBytes: 210_000,
+      beforeBytes: 200_007,
+      afterBytes: 200_006,
+    });
+    expect(partial.patch).toContain("-before\n+after\n");
+    const whole = await Effect.runPromise(
+      f.service.inspectDiff({ ...scope, path: "large.txt", whole: true }),
+    );
+    expect(whole).toMatchObject({
+      kind: "text",
+      revision: partial.revision,
+      before: large("before"),
+      after: large("after"),
     });
   });
 

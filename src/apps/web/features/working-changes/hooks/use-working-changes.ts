@@ -8,6 +8,7 @@ import {
   RepositoryChangesApi,
   type ViewedChange,
 } from "#contracts/repository-changes/repository-changes.contract.ts";
+import { useDiffRead } from "#web/features/file-diff/hooks/use-diff-read.ts";
 import { splitConflicts } from "#web/features/working-changes/conflicts/hooks/use-conflicts.ts";
 import { useEnvironmentQuery } from "#web/platform/query/environment-query.ts";
 import { useRepositoryScope } from "#web/platform/query/repository-scope.tsx";
@@ -78,7 +79,7 @@ export function useChangeDiff(
   const listed =
     viewed !== null &&
     changes?.[viewed.section].some((file) => file.path === viewed.path);
-  return useEnvironmentQuery(
+  return useDiffRead(
     RepositoryChangesApi.diff,
     listed ? changeDiffInput(scope, viewed) : skipToken,
     {

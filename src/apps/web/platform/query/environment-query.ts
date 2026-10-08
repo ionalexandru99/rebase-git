@@ -146,6 +146,36 @@ export function useEnvironmentQueries<Route extends EnvironmentRoute>(
   });
 }
 
+export function useEnvironmentFetch<Route extends EnvironmentRoute>(
+  route: Route,
+  {
+    changes,
+    version,
+    gcTime,
+  }: Pick<
+    EnvironmentQueryOptions<RouteSuccess<Route>>,
+    "changes" | "version" | "gcTime"
+  >,
+) {
+  const { environmentId, requests } = useEnvironment();
+  const queryClient = useQueryClient();
+  return (input: RouteInput<Route>) => {
+    const repositoryId = inputRepositoryId(input);
+    return queryClient.fetchQuery<RouteSuccess<Route>, QueryFailure<Route>>({
+      queryKey: environmentQueryKey(
+        environmentId,
+        repositoryId,
+        route,
+        input,
+        version,
+      ),
+      queryFn: routeRequest(requests, route, input),
+      meta: { changes, repositoryId, persist: false },
+      ...(gcTime === undefined ? {} : { gcTime }),
+    });
+  };
+}
+
 function routeRequest<Route extends EnvironmentRoute>(
   requests: ReturnType<typeof useEnvironment>["requests"],
   route: Route,

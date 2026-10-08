@@ -8,6 +8,7 @@ export const ChangeDiff = Schema.Struct({
   revision: Revision,
   kind: Schema.Literals([
     "text",
+    "partial",
     "image",
     "binary",
     "large",

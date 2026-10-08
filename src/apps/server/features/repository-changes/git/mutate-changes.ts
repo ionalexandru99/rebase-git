@@ -87,7 +87,7 @@ function applyMutation<E>(
     if (selection._tag === "Lines") {
       const diff = yield* readChangeDiff(
         git,
-        { ...command, path: selection.path },
+        { ...command, path: selection.path, whole: true },
         { base, previousPath: sources[0] ?? null },
         index,
       );

@@ -17,6 +17,7 @@ export function DiffContent({
   metadata,
   preferences,
   expandContext,
+  loadWhole,
   selection,
   focus,
   onRender,
@@ -26,6 +27,7 @@ export function DiffContent({
   readonly metadata: ReturnType<typeof createChangeDiffModel>["metadata"];
   readonly preferences: DiffPreferences;
   readonly expandContext: boolean;
+  readonly loadWhole?: (() => Promise<ChangeDiff>) | undefined;
   readonly selection?: {
     readonly range: SelectedLineRange | null;
     readonly onChange: (range: SelectedLineRange | null) => void;
@@ -63,7 +65,11 @@ export function DiffContent({
           unsafeCSS: diffSurfaceCSS,
           diffStyle: preferences.split ? "split" : "unified",
           overflow: preferences.wrap ? "wrap" : "scroll",
-          expandUnchanged: expandContext,
+          expandUnchanged: expandContext && !metadata.isPartial,
+          expansionLineCount: 10,
+          ...(loadWhole === undefined
+            ? {}
+            : { loadDiffFiles: async () => wholeFiles(await loadWhole()) }),
           enableLineSelection: selection !== undefined,
           ...(selection === undefined
             ? {}
@@ -132,4 +138,11 @@ export function revealRange(
   });
   first.scrollIntoView({ block: "nearest" });
   return true;
+}
+
+function wholeFiles({ path, before, after }: ChangeDiff) {
+  return {
+    oldFile: { name: path, contents: before ?? "" },
+    newFile: { name: path, contents: after ?? "" },
+  };
 }

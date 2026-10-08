@@ -91,7 +91,7 @@ function FolderFile({
     return () => observer.disconnect();
   };
   const { metadata } = createChangeDiffModel(
-    diff.data ?? null,
+    diff.value ?? null,
     file.previousPath,
   );
   return (
@@ -100,7 +100,7 @@ function FolderFile({
       ref={near ? undefined : observe}
       className="border-border border-b"
     >
-      {diff.data === undefined ? (
+      {diff.value === undefined ? (
         <div
           className="flex items-start gap-2 px-3 pt-2.5 text-body text-muted-foreground"
           style={{ height: estimatedHeight(file) }}
@@ -111,7 +111,7 @@ function FolderFile({
         </div>
       ) : (
         <DiffContent
-          diff={diff.data}
+          diff={diff.value}
           metadata={metadata}
           preferences={view.preferences}
           expandContext={false}

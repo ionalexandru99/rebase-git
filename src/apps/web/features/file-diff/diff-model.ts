@@ -20,13 +20,23 @@ export function createChangeDiffModel(
           newFile: { name: diff.path, contents: diff.after ?? "" },
           throwOnError: false,
         })
-      : undefined;
+      : diff?.kind === "partial"
+        ? processFile(diff.patch, {
+            cacheKey: `${diff.revision}:partial`,
+            throwOnError: false,
+          })
+        : undefined;
   if (metadata && diff) {
     metadata.name = diff.path;
     delete metadata.prevName;
     metadata.lang = getFiletypeFromFileName(diff.path);
-    metadata.type =
-      diff.before === null ? "new" : diff.after === null ? "deleted" : "change";
+    if (diff.kind === "text")
+      metadata.type =
+        diff.before === null
+          ? "new"
+          : diff.after === null
+            ? "deleted"
+            : "change";
     if (previousPath !== null && previousPath !== diff.path) {
       metadata.prevName = previousPath;
       metadata.type = "rename-changed";
@@ -36,7 +46,8 @@ export function createChangeDiffModel(
 }
 
 function hasHiddenContext(metadata: FileDiffMetadata | undefined) {
-  if (!metadata || metadata.isPartial) return false;
+  if (!metadata) return false;
+  if (metadata.isPartial) return true;
   if (metadata.hunks.some((hunk) => hunk.collapsedBefore > 1)) return true;
   const last = metadata.hunks.at(-1);
   if (

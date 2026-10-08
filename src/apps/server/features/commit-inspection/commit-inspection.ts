@@ -30,6 +30,7 @@ import {
 import { buildChangeDiff } from "#server/repository/comparison/build-change-diff.ts";
 import { lineCounts } from "#server/repository/comparison/line-counts.ts";
 import {
+  diffByteLimit,
   type GitBlob,
   readBlobs,
   unreadableBlob,
@@ -86,6 +87,7 @@ export function readChangeDiff(
       git,
       command.worktreePath,
       [change.before, change.after].filter(hasBlob).map((side) => side.oid),
+      diffByteLimit,
       originalObjects,
     );
     return buildChangeDiff(
@@ -93,7 +95,11 @@ export function readChangeDiff(
       `${command.oid}:${parentOid ?? "root"}`,
       yield* commitFile(change.before, blobs),
       yield* commitFile(change.after, blobs),
-      { previousPath: change.previousPath, patch: change.patch },
+      {
+        previousPath: change.previousPath,
+        patch: change.patch,
+        whole: command.whole,
+      },
     );
   });
 }

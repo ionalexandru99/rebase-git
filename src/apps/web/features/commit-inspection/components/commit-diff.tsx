@@ -1,18 +1,11 @@
-import { useRef, useState } from "react";
+import { useRef } from "react";
 import type { CommitFile } from "#contracts/commit-inspection/commit-inspection.contract.ts";
-import type { ChangeDiff } from "#contracts/repository-comparison/repository-comparison.contract.ts";
 import { Button } from "#web/components/ui/button.tsx";
 import type { DiffPreferences } from "#web/domain/file-diff/diff-preferences.contract.ts";
 import { DiffContent } from "#web/features/file-diff/components/diff-content.tsx";
 import { DiffDisplayControls } from "#web/features/file-diff/components/diff-display-controls.tsx";
 import { createChangeDiffModel } from "#web/features/file-diff/diff-model.ts";
-
-export interface CommitDiffRead {
-  readonly value: ChangeDiff | undefined;
-  readonly loading: boolean;
-  readonly error: string | null;
-  readonly retry: () => void;
-}
+import type { DiffRead } from "#web/features/file-diff/hooks/use-diff-read.ts";
 
 export default function CommitDiff({
   file,
@@ -24,12 +17,11 @@ export default function CommitDiff({
 }: {
   readonly focus?: { readonly start: number; readonly end: number } | undefined;
   readonly file: CommitFile | undefined;
-  readonly diff: CommitDiffRead;
+  readonly diff: DiffRead;
   readonly preferences: DiffPreferences;
   readonly choosePreferences: (preferences: DiffPreferences) => void;
   readonly preview: boolean;
 }) {
-  const [expanded, setExpanded] = useState(false);
   const region = useRef<HTMLElement>(null);
   const value = diff.value ?? null;
   const previousPath = preview ? null : (file?.previousPath ?? null);
@@ -45,8 +37,8 @@ export default function CommitDiff({
       ref={region}
     >
       <DiffDisplayControls
-        expanded={expanded}
-        onExpand={hasHiddenContext ? setExpanded : undefined}
+        expanded={diff.expanded}
+        onExpand={hasHiddenContext ? diff.expand : undefined}
         preferences={preferences}
         onPreferences={choosePreferences}
         region={region}
@@ -56,7 +48,9 @@ export default function CommitDiff({
           Working tree after restore
         </p>
       ) : null}
-      {file && (!metadata || value?.before === value?.after) ? (
+      {file &&
+      (!metadata ||
+        (value?.kind === "text" && value.before === value.after)) ? (
         <div className="shrink-0 break-all border-border border-b px-3 py-2 font-mono text-meta">
           {previousPath ? `${previousPath} → ` : ""}
           {file.path}
@@ -85,7 +79,8 @@ export default function CommitDiff({
             diff={value}
             metadata={metadata}
             preferences={preferences}
-            expandContext={expanded}
+            expandContext={diff.expanded}
+            loadWhole={diff.loadWhole}
             focus={focus}
           />
         )

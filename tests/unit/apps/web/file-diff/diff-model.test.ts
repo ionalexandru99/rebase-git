@@ -39,3 +39,16 @@ describe("unchanged line visibility", () => {
     ).toBe(false);
   });
 });
+
+it("renders a partial diff from its patch and offers the whole file", () => {
+  const { metadata, hasHiddenContext } = createChangeDiffModel({
+    kind: "partial",
+    path: "file.txt",
+    revision: "revision",
+    before: null,
+    after: null,
+    patch: "--- file.txt\n+++ file.txt\n@@ -3 +3 @@\n-old\n+new\n",
+  });
+  expect(metadata?.hunks).toHaveLength(1);
+  expect(hasHiddenContext).toBe(true);
+});

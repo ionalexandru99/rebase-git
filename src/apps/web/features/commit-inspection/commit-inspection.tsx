@@ -24,6 +24,7 @@ import {
 import { useBlameAction } from "#web/features/file-blame/file-blame.ts";
 import { DiffWorkerPool } from "#web/features/file-diff/components/diff-worker-pool.tsx";
 import { useDiffPreferences } from "#web/features/file-diff/hooks/use-diff-preferences.ts";
+import { useDiffRead } from "#web/features/file-diff/hooks/use-diff-read.ts";
 import { useFileHistoryAction } from "#web/features/file-history/file-history.ts";
 import { usePanelFeature } from "#web/features/workspace-panel/api.ts";
 import { useEnvironmentQuery } from "#web/platform/query/environment-query.ts";
@@ -147,12 +148,7 @@ export function CommitInspection({
                 <CommitDiff
                   key={`${details.oid}:${details.parentOid}`}
                   file={details.files.find((file) => file.path === path)}
-                  diff={{
-                    value: shown.data,
-                    loading: shown.isLoading,
-                    error: shown.isError ? describeFailure(shown.error) : null,
-                    retry: () => void shown.refetch(),
-                  }}
+                  diff={shown}
                   preview={restore.preview !== undefined}
                   focus={
                     focus?.oid === details.oid && focus.path === path
@@ -259,7 +255,7 @@ function useCommitDiff(
   path: string | null,
   enabled: boolean,
 ) {
-  return useEnvironmentQuery(
+  return useDiffRead(
     CommitInspectionApi.inspectDiff,
     details === undefined || path === null
       ? skipToken
@@ -292,7 +288,7 @@ function useRestorePreview(
   preview: RestorePreview | undefined,
   enabled: boolean,
 ) {
-  return useEnvironmentQuery(
+  return useDiffRead(
     CommitInspectionApi.previewRestore,
     details === undefined || preview === undefined
       ? skipToken
