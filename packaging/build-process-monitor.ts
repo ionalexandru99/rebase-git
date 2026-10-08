@@ -5,7 +5,7 @@ import { promisify } from "node:util";
 
 const execute = promisify(execFile);
 const manifest = "native/process-monitor/Cargo.toml";
-const rustTargets: Readonly<Record<string, string>> = {
+export const rustTargets: Readonly<Record<string, string>> = {
   "darwin-arm64": "aarch64-apple-darwin",
   "darwin-x64": "x86_64-apple-darwin",
   "linux-arm64": "aarch64-unknown-linux-gnu",
