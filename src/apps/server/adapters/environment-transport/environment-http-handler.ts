@@ -1,5 +1,5 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
-import { Data, Effect, Schema } from "effect";
+import { type Cause, Data, Effect, Schema } from "effect";
 import {
   type EnvironmentAccessFailure,
   EnvironmentBrowserSession,
@@ -42,6 +42,7 @@ export function createEnvironmentHttpHandler(
   authorization: EnvironmentAuthorization,
   runEnvironmentEffect: RunEnvironmentEffect,
   browserAssetsRoot?: string,
+  reportDefect?: (where: string, cause: Cause.Cause<unknown>) => void,
 ) {
   return (request: IncomingMessage, response: ServerResponse) => {
     const abortController = new AbortController();
@@ -57,8 +58,9 @@ export function createEnvironmentHttpHandler(
         Effect.catch((error) =>
           Effect.sync(() => writeEnvironmentHttpError(response, error)),
         ),
-        Effect.catchCause(() =>
+        Effect.catchCause((cause) =>
           Effect.sync(() => {
+            reportDefect?.("HTTP", cause);
             if (!response.headersSent) response.writeHead(500).end();
           }),
         ),

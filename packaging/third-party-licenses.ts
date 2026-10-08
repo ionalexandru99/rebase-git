@@ -1,12 +1,15 @@
+import { execFile } from "node:child_process";
 import { access, readdir, readFile, realpath } from "node:fs/promises";
 import { basename, dirname, extname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { promisify } from "node:util";
 import { build } from "esbuild";
 import type { Plugin } from "vite-plus";
 import {
   type ThirdPartyLicense,
   thirdPartyLicensesFile,
 } from "#contracts/third-party-licenses/third-party-licenses.contract.ts";
+import { rustTargets } from "./build-process-monitor.ts";
 
 interface PackageJson {
   readonly name?: string;
@@ -80,6 +83,7 @@ async function collectThirdPartyLicenses(
   for (const name of await cssImports(files))
     add(await installedPackage(name, repositoryRoot));
   for (const found of await runtimeDependencies()) add(found);
+  for (const found of await processMonitorCrates()) add(found);
 
   const failures: string[] = [];
   const licenses: ThirdPartyLicense[] = [];
@@ -135,6 +139,40 @@ async function nodeBundleInputs() {
   return Object.keys(metafile.inputs)
     .filter((input) => !/^[\w-]+:/.test(input))
     .map((input) => join(repositoryRoot, input));
+}
+
+async function processMonitorCrates() {
+  const crates = new Map<string, InstalledPackage>();
+  for (const target of Object.values(rustTargets)) {
+    const { stdout } = await promisify(execFile)(
+      "cargo",
+      [
+        "metadata",
+        "--format-version",
+        "1",
+        "--locked",
+        "--filter-platform",
+        target,
+        "--manifest-path",
+        "native/process-monitor/Cargo.toml",
+      ],
+      { cwd: repositoryRoot, maxBuffer: 64 * 1_048_576 },
+    );
+    const metadata = JSON.parse(stdout) as {
+      readonly packages: readonly (PackageJson & {
+        readonly id: string;
+        readonly manifest_path: string;
+      })[];
+      readonly workspace_members: readonly string[];
+    };
+    for (const crate of metadata.packages)
+      if (!metadata.workspace_members.includes(crate.id))
+        crates.set(crate.id, {
+          root: dirname(crate.manifest_path),
+          manifest: crate,
+        });
+  }
+  return crates.values();
 }
 
 async function runtimeDependencies() {

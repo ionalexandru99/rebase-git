@@ -253,6 +253,7 @@ async function verifyBrowserAssets(origin: string) {
       "@lydell/node-pty",
       "tailwindcss",
       "lazy-val",
+      "sysinfo",
       "Symbols Nerd Font Mono",
     ]),
   );

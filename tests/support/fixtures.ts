@@ -1,6 +1,11 @@
 import type { CommitInspection } from "#contracts/commit-inspection/commit-inspection.contract.ts";
 import type { DesktopUpdates } from "#contracts/desktop-updates/desktop-updates.contract.ts";
 import type {
+  DiagnosticsError,
+  DiagnosticsProcess,
+  DiagnosticsSample,
+} from "#contracts/diagnostics/diagnostics.contract.ts";
+import type {
   BlameCommit,
   FileBlame,
 } from "#contracts/file-blame/file-blame.contract.ts";
@@ -488,5 +493,76 @@ export function thirdPartyLicense(
     sourceUrl: "https://github.com/facebook/react",
     notice: "MIT License\n\nCopyright (c) Meta Platforms, Inc. and affiliates.",
     ...license,
+  };
+}
+
+const sampledAt = Date.parse("2026-10-08T12:00:00.000Z");
+
+export function diagnosticsProcess(
+  process: Partial<DiagnosticsProcess> = {},
+): DiagnosticsProcess {
+  return {
+    pid: 4120,
+    parentPid: null,
+    kind: "Server",
+    name: "node",
+    command: "node cli.js serve",
+    stoppable: false,
+    cpu: 2,
+    memory: 184 * 1_048_576,
+    startedAt: sampledAt - 3 * 3_600_000,
+    ...process,
+  };
+}
+
+export function diagnosticsSample(
+  sample: Partial<DiagnosticsSample> = {},
+): DiagnosticsSample {
+  return {
+    _tag: "Sample",
+    sampledAt,
+    monitor: { _tag: "Running" },
+    footprint: {
+      cpu: 7,
+      cpuPeak: 61,
+      memory: 412 * 1_048_576,
+      memoryPeak: 640 * 1_048_576,
+      processes: 1,
+      gitRuns: 570,
+      gitFailures: 0,
+    },
+    timeline: {
+      bucketMilliseconds: 30_000,
+      cpu: Array.from({ length: 30 }, () => 5),
+      gitRuns: Array.from({ length: 30 }, () => 2),
+      gitFailures: Array.from({ length: 30 }, () => 0),
+    },
+    processes: [diagnosticsProcess()],
+    slowestGit: [],
+    slowestRequests: [],
+    watchers: [],
+    server: {
+      platform: "linux",
+      architecture: "x64",
+      startedAt: sampledAt - 3 * 3_600_000,
+      gitVersion: "2.56.0",
+      dataFolder: "/home/me/.rebase",
+    },
+    ...sample,
+  };
+}
+
+export function diagnosticsError(
+  error: Partial<DiagnosticsError> = {},
+): DiagnosticsError {
+  return {
+    kind: "Server",
+    title: "TypeError: Cannot read properties of undefined (reading 'oid')",
+    where: "repositories/stashes/list",
+    detail:
+      "TypeError: Cannot read properties of undefined (reading 'oid')\n    at readStashEntry (stash-list.ts:88:31)",
+    count: 1,
+    lastSeen: sampledAt - 40_000,
+    ...error,
   };
 }

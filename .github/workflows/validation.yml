@@ -72,8 +72,10 @@ jobs:
       - name: Test Node 22 compatibility
         if: matrix.node-version == '22.18.0'
         run: pnpm test:unit
-      - name: Build web client
-        run: pnpm build:web
+      - name: Build web client and process monitor
+        run: |
+          pnpm build:web
+          pnpm build:process-monitor
       - name: Run integration tests
         run: pnpm test:integration:prepared --shard=${{ matrix.shard }}
       - uses: ./workspace with spaces/.github/actions/upload-test-results

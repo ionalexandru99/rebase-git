@@ -1,4 +1,5 @@
 import {
+  IconActivity,
   IconDatabase,
   IconGitBranch,
   IconLicense,
@@ -10,6 +11,7 @@ import type {
   DesktopUpdateSnapshot,
   DesktopUpdates,
 } from "#contracts/desktop-updates/desktop-updates.contract.ts";
+import { DiagnosticsSettings } from "#web/features/diagnostics/diagnostics-settings.tsx";
 import { GeneralSettings } from "#web/features/settings/general-settings.tsx";
 import { HistoryStorageSettings } from "#web/features/settings/history-storage-settings.tsx";
 import { LicensesSettings } from "#web/features/settings/licenses-settings.tsx";
@@ -19,7 +21,8 @@ export type SettingsSectionId =
   | "general"
   | "source-control"
   | "history-storage"
-  | "licenses";
+  | "licenses"
+  | "diagnostics";
 
 export interface SettingsSectionContext {
   readonly desktopUpdates: DesktopUpdates | undefined;
@@ -62,5 +65,12 @@ export const settingsSections: readonly SettingsSectionDefinition[] = [
     icon: IconLicense,
     parent: "general",
     Content: LicensesSettings,
+  },
+  {
+    id: "diagnostics",
+    label: "Diagnostics",
+    icon: IconActivity,
+    parent: "general",
+    Content: DiagnosticsSettings,
   },
 ];

@@ -3,6 +3,7 @@ import { Rpc, type RpcClient, type RpcClientError, RpcGroup } from "effect/rpc";
 import { BranchSettlingApi } from "#contracts/branch-settling/branch-settling.contract.ts";
 import { CommandProgressRpc } from "#contracts/command-progress/command-progress.contract.ts";
 import { CommitInspectionApi } from "#contracts/commit-inspection/commit-inspection.contract.ts";
+import { DiagnosticsApi } from "#contracts/diagnostics/diagnostics.contract.ts";
 import { EnvironmentAuthorizationApi } from "#contracts/environment-authorization/environment-authorization.contract.ts";
 import { EnvironmentFilesystemApi } from "#contracts/environment-filesystem/environment-filesystem.contract.ts";
 import { FileBlameApi } from "#contracts/file-blame/file-blame.contract.ts";
@@ -103,6 +104,7 @@ export const EnvironmentRpc = RpcGroup.make(
   ...Object.values(SourceControlApi),
   ...Object.values(GitIdentityApi),
   ...Object.values(TerminalsApi),
+  ...Object.values(DiagnosticsApi),
 ).merge(RepositoryHistoryRpc, CommandProgressRpc);
 
 export type EnvironmentRpcs = RpcGroup.Rpcs<typeof EnvironmentRpc>;

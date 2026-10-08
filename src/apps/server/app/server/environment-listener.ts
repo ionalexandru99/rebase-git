@@ -1,5 +1,5 @@
 import { createServer, type Server } from "node:http";
-import { Data, Effect, FiberSet } from "effect";
+import { type Cause, Data, Effect, FiberSet } from "effect";
 import type { EnvironmentEventPublisher } from "#server/adapters/environment-transport/environment-event-publisher.ts";
 import {
   createEnvironmentHttpHandler,
@@ -33,6 +33,7 @@ interface EnvironmentListenerOptions {
   readonly features: EnvironmentFeatures;
   readonly host?: string;
   readonly port?: number;
+  readonly reportDefect?: (where: string, cause: Cause.Cause<unknown>) => void;
 }
 
 const loopbackHost = "127.0.0.1";
@@ -48,13 +49,7 @@ export function acquireEnvironmentListener(
       runFork(effect, signal === undefined ? undefined : { signal });
     };
     const server = yield* Effect.acquireRelease(
-      createHttpServer(
-        options.authorization,
-        host,
-        port,
-        runEnvironmentEffect,
-        options.browserAssetsRoot,
-      ),
+      createHttpServer(options, host, port, runEnvironmentEffect),
       (acquiredServer) =>
         Effect.promise(() => closeServer(acquiredServer)).pipe(Effect.orDie),
     );
@@ -79,20 +74,20 @@ export function acquireEnvironmentListener(
 }
 
 function createHttpServer(
-  authorization: EnvironmentListenerOptions["authorization"],
+  options: EnvironmentListenerOptions,
   host: string,
   port: number,
   runEnvironmentEffect: RunEnvironmentEffect,
-  browserAssetsRoot?: string,
 ) {
   return Effect.try({
     try: () =>
       createServer(
         { maxHeaderSize: 16_384 },
         createEnvironmentHttpHandler(
-          authorization,
+          options.authorization,
           runEnvironmentEffect,
-          browserAssetsRoot,
+          options.browserAssetsRoot,
+          options.reportDefect,
         ),
       ),
     catch: (cause) => environmentServerError(cause, host, port),

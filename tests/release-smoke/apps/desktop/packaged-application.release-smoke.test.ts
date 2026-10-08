@@ -71,6 +71,10 @@ packagedTest(
     await expect(
       window.getByText(packageMetadata.version, { exact: true }),
     ).toBeVisible();
+    await window.getByRole("button", { name: "View diagnostics" }).click();
+    await expect(
+      window.getByText("Process monitor", { exact: true }),
+    ).toBeVisible();
   },
 );
 

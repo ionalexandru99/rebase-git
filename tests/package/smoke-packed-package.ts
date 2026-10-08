@@ -48,6 +48,7 @@ try {
   const packageRoot = join(installRoot, "node_modules", "rebase-git");
   await verifyPackageContents(packageRoot);
   await verifyTerminal(packageRoot);
+  await verifyProcessMonitor(packageRoot);
   await verifyVersionCommands(installRoot, packageRoot);
   const serverEnvironment = {
     ...process.env,
@@ -176,6 +177,35 @@ async function verifyTerminal(packageRoot: string) {
     ],
     packageRoot,
   );
+}
+
+async function verifyProcessMonitor(packageRoot: string) {
+  const executable = join(
+    packageRoot,
+    "dist",
+    "process-monitor",
+    `${process.platform}-${process.arch}`,
+    process.platform === "win32"
+      ? "rebase-process-monitor.exe"
+      : "rebase-process-monitor",
+  );
+  const monitor = spawn(executable, [String(process.pid)], {
+    stdio: ["pipe", "pipe", "inherit"],
+  });
+  let output = "";
+  monitor.stdout.on("data", (chunk) => {
+    output += chunk.toString();
+  });
+  monitor.stdin.end("\n");
+  const [code] = await once(monitor, "close");
+  const sample = JSON.parse(output.split("\n")[0] ?? "") as {
+    readonly processes: readonly { readonly pid: number }[];
+  };
+  if (code !== 0 || !sample.processes.some(({ pid }) => pid === process.pid)) {
+    throw new Error(
+      `The process monitor did not sample the package:\n${output}`,
+    );
+  }
 }
 
 async function verifyVersionCommands(installRoot: string, packageRoot: string) {

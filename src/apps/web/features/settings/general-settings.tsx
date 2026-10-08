@@ -60,7 +60,7 @@ export function GeneralSettings({
 }: {
   readonly desktopUpdates: DesktopUpdates | undefined;
   readonly productVersion: string;
-  readonly selectSection: (section: "licenses") => void;
+  readonly selectSection: (section: "licenses" | "diagnostics") => void;
   readonly updateLoadError: string | undefined;
   readonly updateSnapshot: DesktopUpdateSnapshot | undefined;
 }): JSX.Element {
@@ -201,6 +201,15 @@ export function GeneralSettings({
             variant="outline"
           >
             View licenses
+          </Button>
+        </SettingsRow>
+        <SettingsRow title="Processes and errors">
+          <Button
+            onClick={() => selectSection("diagnostics")}
+            size="sm"
+            variant="outline"
+          >
+            View diagnostics
           </Button>
         </SettingsRow>
       </SettingsSection>

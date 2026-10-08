@@ -33,3 +33,14 @@ runs:
       shell: bash
       working-directory: ${{ inputs.working-directory }}
       run: pnpm install --frozen-lockfile
+    - name: Cache process monitor build
+      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: |
+          ~/.cargo/registry
+          ${{ inputs.working-directory }}/native/process-monitor/target
+        key: process-monitor-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles(format('{0}/native/process-monitor/Cargo.lock', inputs.working-directory), format('{0}/rust-toolchain.toml', inputs.working-directory)) }}
+    - name: Install Rust toolchain
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      run: rustup toolchain install

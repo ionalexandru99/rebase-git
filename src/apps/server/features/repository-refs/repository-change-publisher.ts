@@ -10,6 +10,19 @@ import type { RepositoryWatcher } from "#server/adapters/local-git/local-reposit
 
 export interface RepositoryChangePublisher {
   readonly watch: (repository: RepositoryCatalogEntry) => Effect.Effect<void>;
+  readonly restart: (repositoryId: string) => Effect.Effect<void>;
+  readonly watchers: () => readonly WatchedRepository[];
+}
+
+export interface WatchedRepository {
+  readonly repositoryId: string;
+  readonly failure?: string;
+}
+
+interface Watched {
+  readonly scope: Scope.Closeable;
+  readonly repository: RepositoryCatalogEntry;
+  failure?: string;
 }
 
 const maximumWatchedRepositories = 32;
@@ -18,11 +31,12 @@ export function acquireRepositoryChangePublisher(
   git: GitCommandRunner,
   watcher: RepositoryWatcher,
   events: EnvironmentEventPublisher,
+  onWatchFailure: (repositoryId: string, detail: string) => void = () => {},
 ): Effect.Effect<RepositoryChangePublisher, never, Scope.Scope> {
   return Effect.gen(function* () {
     const scope = yield* Effect.scope;
     const mutex = yield* Semaphore.make(1);
-    const watches = new Map<string, Scope.Closeable>();
+    const watches = new Map<string, Watched>();
     const changed = new Map<string, RepositoryChangeKind>();
     const pending = yield* Queue.make<void>({
       capacity: 1,
@@ -40,40 +54,63 @@ export function acquireRepositoryChangePublisher(
       Effect.forkScoped,
     );
 
-    const register = (repositoryId: string, directory: string) =>
+    const unwatch = (repositoryId: string) =>
       Effect.gen(function* () {
-        const oldest = watches.entries().next().value;
-        if (
-          watches.size >= maximumWatchedRepositories &&
-          oldest !== undefined
-        ) {
-          watches.delete(oldest[0]);
-          yield* Scope.close(oldest[1], Exit.void);
-        }
+        const watched = watches.get(repositoryId);
+        if (watched === undefined) return;
+        watches.delete(repositoryId);
+        yield* Scope.close(watched.scope, Exit.void);
+      });
+
+    const register = (repository: RepositoryCatalogEntry, directory: string) =>
+      Effect.gen(function* () {
+        const oldest = watches.keys().next().value;
+        if (watches.size >= maximumWatchedRepositories && oldest !== undefined)
+          yield* unwatch(oldest);
         const owned = yield* Scope.fork(scope);
+        const watched: Watched = { scope: owned, repository };
+        watches.set(repository.id, watched);
         yield* Effect.acquireRelease(
-          watcher.watch(directory, (kind) => {
-            if (changed.get(repositoryId) !== "Refs")
-              changed.set(repositoryId, kind);
-            Queue.offerUnsafe(pending, undefined);
+          watcher.watch(directory, {
+            changed: (kind) => {
+              if (changed.get(repository.id) !== "Refs")
+                changed.set(repository.id, kind);
+              Queue.offerUnsafe(pending, undefined);
+            },
+            failed: (detail) => {
+              if (watched.failure !== undefined) return;
+              watched.failure = detail;
+              onWatchFailure(repository.id, detail);
+            },
           }),
           (handle) => Effect.sync(handle.close),
         ).pipe(Effect.provideService(Scope.Scope, owned));
-        watches.set(repositoryId, owned);
       }).pipe(Effect.uninterruptible);
+
+    const watch = (repository: RepositoryCatalogEntry) =>
+      Effect.gen(function* () {
+        if (closed || watches.has(repository.id)) return;
+        const directory = yield* readGitCommonDirectory(git, repository.path, {
+          timeoutMilliseconds: 5_000,
+        }).pipe(Effect.catch(() => Effect.succeed(undefined)));
+        if (closed || directory === undefined) return;
+        yield* register(repository, directory);
+      });
 
     return {
       watch: (repository) =>
+        watch(repository).pipe(Semaphore.withPermit(mutex)),
+      restart: (repositoryId) =>
         Effect.gen(function* () {
-          if (closed || watches.has(repository.id)) return;
-          const directory = yield* readGitCommonDirectory(
-            git,
-            repository.path,
-            { timeoutMilliseconds: 5_000 },
-          ).pipe(Effect.catch(() => Effect.succeed(undefined)));
-          if (closed || directory === undefined) return;
-          yield* register(repository.id, directory);
+          const watched = watches.get(repositoryId);
+          if (watched === undefined) return;
+          yield* unwatch(repositoryId);
+          yield* watch(watched.repository);
         }).pipe(Semaphore.withPermit(mutex)),
+      watchers: () =>
+        [...watches].map(([repositoryId, { failure }]) =>
+          failure === undefined ? { repositoryId } : { repositoryId, failure },
+        ),
     } satisfies RepositoryChangePublisher;
   });
 }
