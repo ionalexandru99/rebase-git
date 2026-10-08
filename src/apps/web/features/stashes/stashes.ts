@@ -144,13 +144,13 @@ export function useStashCommands() {
   const writable = useRepositoryScope()?.writable ?? false;
 
   const restore = async (
-    stash: Pick<RepositoryStash, "oid" | "name">,
+    oid: string,
     restoreIndex: boolean,
     remove: boolean,
-    restored = `${remove ? "Popped" : "Applied"} ${stash.name}`,
+    restored: string,
   ) => {
     const result = await apply.run({
-      oid: stash.oid,
+      oid,
       restoreIndex,
       drop: remove,
     });
@@ -158,13 +158,14 @@ export function useStashCommands() {
       errorToast.failure("applyStash", result, stashFailureMessages);
       return;
     }
-    const { conflicts } = result.value;
-    statusToast.success(
-      "applyStash",
-      conflicts === 0
-        ? restored
-        : `Applied ${stash.name} with conflicts in ${files(conflicts)}. The stash was kept.`,
-    );
+    if (result.value.conflicts === 0)
+      statusToast.success("applyStash", restored);
+    else
+      statusToast.warning(
+        "applyStash",
+        "Applied with conflicts",
+        remove ? "The stash was kept." : undefined,
+      );
   };
 
   const confirmDrop = async () => {
@@ -202,20 +203,27 @@ export function useStashCommands() {
   };
 
   const actionsFor = (stash: RepositoryStash): readonly Action[] => {
-    const restoreAction = (id: "apply" | "pop", label: string): Action =>
-      stash.staged
+    const restoreAction = (id: "apply" | "pop", label: string): Action => {
+      const run = (restoreIndex: boolean) => () =>
+        void restore(
+          stash.oid,
+          restoreIndex,
+          id === "pop",
+          `${id === "pop" ? "Popped" : "Applied"} ${stash.name}`,
+        );
+      return stash.staged
         ? submenu({ id, label, group: "operation" }, [
             {
               id: `${id}.index`,
               label: "Keep staged files staged",
               enabled: writable,
-              run: () => void restore(stash, true, id === "pop"),
+              run: run(true),
             },
             {
               id: `${id}.unstaged`,
               label: "Unstage everything",
               enabled: writable,
-              run: () => void restore(stash, false, id === "pop"),
+              run: run(false),
             },
           ])
         : {
@@ -223,8 +231,9 @@ export function useStashCommands() {
             label,
             enabled: writable,
             group: "operation",
-            run: () => void restore(stash, false, id === "pop"),
+            run: run(false),
           };
+    };
     return [
       restoreAction("apply", "Apply"),
       restoreAction("pop", "Pop"),

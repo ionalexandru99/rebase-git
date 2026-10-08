@@ -241,7 +241,7 @@ export function useStatusToast() {
     warning: (
       action: ErrorAction,
       title: string,
-      description: string,
+      description?: string,
       button?: Notice["action"],
     ) =>
       toasts.put(action, {
