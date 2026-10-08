@@ -214,8 +214,10 @@ function Main({
 
 function Pane({
   contents,
+  uncommitted,
 }: {
   readonly contents?: Partial<Record<WorkspacePanelKind, ReactNode>>;
+  readonly uncommitted?: boolean;
 }) {
   const { state, panelId } = useWorkspacePanel();
   if (!state.open) return null;
@@ -237,7 +239,7 @@ function Pane({
           aria-label="Side panel"
           className="h-full min-h-0 border-border border-l"
         >
-          <WorkspacePanelTabs contents={contents} />
+          <WorkspacePanelTabs contents={contents} uncommitted={uncommitted} />
         </aside>
       </ResizablePanel>
     </>

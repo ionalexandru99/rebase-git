@@ -40,7 +40,7 @@ describe("workspace panel", () => {
     await expect.element(page.getByTestId("graph")).toBeVisible();
   });
 
-  it("marks the closed panel toggle while there are uncommitted changes", async () => {
+  it("marks the closed panel toggle and then the Diffs card while there are uncommitted changes", async () => {
     await render(
       <div className="dark" style={{ width: 1200, height: 600 }}>
         <WorkspacePanel.Provider scopeKey="uncommitted">
@@ -48,7 +48,7 @@ describe("workspace panel", () => {
           <WorkspacePanel.Group>
             <WorkspacePanel.Sidebar />
             <WorkspacePanel.Main>{() => null}</WorkspacePanel.Main>
-            <WorkspacePanel.Pane />
+            <WorkspacePanel.Pane uncommitted />
           </WorkspacePanel.Group>
         </WorkspacePanel.Provider>
       </div>,
@@ -62,6 +62,14 @@ describe("workspace panel", () => {
     await expect
       .element(
         page.getByRole("button", { name: "Hide side panel", exact: true }),
+      )
+      .toBeVisible();
+    await expect
+      .element(
+        page.getByRole("button", {
+          name: "Diffs uncommitted changes Review and commit working changes",
+          exact: true,
+        }),
       )
       .toBeVisible();
   });
