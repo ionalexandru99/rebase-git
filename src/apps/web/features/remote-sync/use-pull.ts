@@ -7,6 +7,7 @@ import {
   type PullBranch,
   RepositoryPullApi,
 } from "#contracts/repository-pull/repository-pull.contract.ts";
+import { fileName } from "#web/features/file-diff/components/file-row-name.tsx";
 import {
   useErrorToast,
   useStatusToast,
@@ -50,7 +51,7 @@ export function useFetch(toast: "fetch" | "pull" = "fetch") {
           return result._tag === "Ok";
         });
   const fetchNow = () => {
-    statusToast.progress(toast, "Fetching changes", { percent: 0 });
+    statusToast.progress(toast, "Fetching", { percent: 0 });
     void execute().then((fetched) => {
       if (fetched) statusToast.success(toast, "Fetched");
     });
@@ -168,7 +169,7 @@ const pullFailureMessages: FailureMessages<
 > = {
   PullWouldOverwrite: ({ paths }) =>
     paths.length === 1
-      ? `Untracked ${paths[0]} is in the way.`
+      ? `Untracked ${fileName(paths[0] ?? "")} is in the way.`
       : "Untracked files are in the way.",
   UpstreamMissing: ({ upstream }) =>
     upstream === undefined

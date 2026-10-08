@@ -136,10 +136,9 @@ function confirmationTitle(
 ) {
   if (action === "abort")
     return `Abort ${label.toLowerCase()}? Conflict-resolution edits may be lost.`;
-  const subject =
-    operation.commit?.slice(0, 8) ??
-    (operation.kind === "am" ? "this patch" : "this commit");
-  return `Skip ${subject}? Its changes will not be included.`;
+  return operation.kind === "am"
+    ? "Skip this patch? Its changes will not be included."
+    : "Skip this commit? Its changes will not be included.";
 }
 
 export function OperationHeader({ scope }: { readonly scope: OperationScope }) {

@@ -6,6 +6,7 @@ import {
   type PushRejected,
   RepositoryPushApi,
 } from "#contracts/repository-push/repository-push.contract.ts";
+import { RepositoryBranchesApi } from "#contracts/repository-refs/repository-branches.contract.ts";
 import { RepositoryRefsApi } from "#contracts/repository-refs/repository-refs.contract.ts";
 import {
   fakeRequests,
@@ -60,9 +61,8 @@ function PushControls({ target }: { readonly target: PushTarget }) {
 }
 
 function pendingPush(aborted: () => void = () => {}) {
-  return (_command: PushBranch, { signal, progress }: RequestOptions) =>
+  return (_command: PushBranch, { signal }: RequestOptions) =>
     new Promise<never>((_resolve, reject) => {
-      progress?.(45);
       signal?.addEventListener("abort", () => {
         aborted();
         reject(signal.reason);
@@ -80,6 +80,16 @@ async function fixture(
   const pushed = vi.fn<(command: PushBranch) => void>();
   const requests = fakeRequests(
     idleOperation,
+    respond(RepositoryBranchesApi.unmerged, async ({ branches }) =>
+      branches.map((branch) => ({
+        branch,
+        commits: [
+          { oid: reviewed, subject: "Fix the remote build" },
+          { oid: commitId, subject: "Bump the remote version" },
+        ],
+        count: 2,
+      })),
+    ),
     respond(RepositoryPushApi.push, async (command, options) => {
       pushed(command);
       const failure = await respondTo(command, options);
@@ -131,18 +141,18 @@ describe("repository push", () => {
     await page
       .getByRole("button", { name: /^Force push feature\/444-push/ })
       .click();
-    const confirmation = page.getByRole("alertdialog", {
-      name: /^Force push to /,
-    });
+    const confirmation = page.getByRole("alertdialog", { name: "Force push?" });
     await expect
       .element(confirmation)
-      .toHaveTextContent("Overwrites 9c1e2f71 · drops 2 remote commits");
+      .toHaveTextContent(
+        "Commits on the remote that you don't have will be lost.",
+      );
     expect(f.pushed).not.toHaveBeenCalled();
     await confirmation.getByRole("button", { name: "Force push" }).click();
 
     await expect
       .element(
-        page.getByText("origin/feature/444-push moved since your last fetch.", {
+        page.getByText("The remote branch moved since your last fetch.", {
           exact: false,
         }),
       )
@@ -169,10 +179,10 @@ describe("repository push", () => {
 
   it("cancels a running push from its notification without reporting a failure", async () => {
     await fixture({ branch: "spike", remotes: ["origin"] }, pendingPush());
-    const progress = page.getByRole("progressbar", { name: "Pushing" });
+    const progress = page.getByRole("dialog", { name: "Pushing" });
 
     await page.getByRole("button", { name: "Push spike" }).click();
-    await expect.element(progress).toHaveAttribute("aria-valuenow", "45");
+    await expect.element(progress).toBeVisible();
     await page.getByRole("button", { name: "Cancel" }).click();
 
     await expect
@@ -184,16 +194,16 @@ describe("repository push", () => {
       .not.toBeInTheDocument();
   });
 
-  it("keeps a running push and clears the review when the worktree changes", async () => {
+  it("keeps a running force push in its card across worktree changes and stops it from there", async () => {
     const aborted = vi.fn();
     const f = await fixture(tracked(3, 2), pendingPush(aborted));
     const forcePush = page.getByRole("button", {
       name: /^Force push feature\/444-push/,
     });
-    const confirmation = page.getByRole("alertdialog", {
-      name: /^Force push to /,
+    const confirmation = page.getByRole("alertdialog", { name: "Force push?" });
+    const progress = confirmation.getByRole("button", {
+      name: "Force pushing",
     });
-    const progress = page.getByRole("progressbar", { name: "Force pushing" });
 
     await forcePush.click();
     await expect.element(confirmation).toBeVisible();
@@ -207,6 +217,10 @@ describe("repository push", () => {
 
     await expect.element(progress).toBeVisible();
     expect(aborted).not.toHaveBeenCalled();
+
+    await confirmation.getByRole("button", { name: "Cancel" }).click();
+    await expect.element(confirmation).not.toBeInTheDocument();
+    expect(aborted).toHaveBeenCalledOnce();
   });
 
   it("keeps a running push when the graph toolbar closes", async () => {
@@ -238,7 +252,7 @@ describe("repository push", () => {
       environment: { requests },
     });
     const pushButton = page.getByRole("button", { name: "Push spike" });
-    const progress = page.getByRole("progressbar", { name: "Pushing" });
+    const progress = page.getByRole("dialog", { name: "Pushing" });
 
     await pushButton.click();
     await expect.element(progress).toBeVisible();

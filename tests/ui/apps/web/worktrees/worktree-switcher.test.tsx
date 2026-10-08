@@ -38,7 +38,7 @@ describe("worktree switcher", () => {
     });
     await screen.getByRole("menuitem", { name: "Remove…" }).click();
     await screen
-      .getByRole("alertdialog", { name: "Remove “topic”?" })
+      .getByRole("alertdialog", { name: "Remove topic?" })
       .getByRole("button", { name: "Remove" })
       .click();
     await vi.waitFor(() =>

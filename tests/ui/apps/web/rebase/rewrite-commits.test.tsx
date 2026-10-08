@@ -66,8 +66,6 @@ describe("drop and squash commits from the graph", () => {
     const confirmation = f.screen.getByRole("alertdialog", {
       name: "Drop 2 commits from topic?",
     });
-    await expect.element(confirmation).toHaveTextContent("Fix typo");
-    await expect.element(confirmation).toHaveTextContent("Debug logging");
     await expect
       .element(confirmation)
       .toHaveTextContent("you'll need to force-push afterwards");
@@ -96,10 +94,10 @@ describe("drop and squash commits from the graph", () => {
       .toHaveFocus();
     await userEvent.keyboard("{Enter}");
 
-    const confirmation = f.screen.getByRole("alertdialog");
-    await expect
-      .element(confirmation)
-      .toHaveTextContent("It is removed from topic.");
+    const confirmation = f.screen.getByRole("alertdialog", {
+      name: "Drop this commit?",
+    });
+    await expect.element(confirmation).toBeVisible();
     await expect.element(confirmation).not.toHaveTextContent("force-push");
     await userEvent.keyboard("{Escape}");
     await expect.element(confirmation).not.toBeInTheDocument();

@@ -5,11 +5,7 @@ import {
   type ResetMode,
 } from "#contracts/repository-reflog/repository-reflog.contract.ts";
 import type { Action } from "#web/components/ui/action-menu.tsx";
-import {
-  Confirmation,
-  ConfirmationList,
-} from "#web/components/ui/confirmation.tsx";
-import { PersistentNotification } from "#web/features/notifications/components/persistent-notification.tsx";
+import { ConfirmNotice } from "#web/features/notifications/components/persistent-notification.tsx";
 import { useErrorToast } from "#web/features/notifications/notifications.tsx";
 import { useOperation } from "#web/features/operation-recovery/hooks/use-operation.ts";
 import { operationKindLabel } from "#web/features/operation-recovery/operation-messages.ts";
@@ -144,26 +140,23 @@ export function useResetActions(): ResetActions {
 export function ResetConfirmation({ reset }: { readonly reset: ResetActions }) {
   const { pending } = reset;
   if (pending === undefined) return null;
-  const { paths, count, fingerprint } = pending.failure;
+  const { count, fingerprint } = pending.failure;
   return (
-    <PersistentNotification>
-      <Confirmation
-        action="Discard and reset"
-        busy={reset.running}
-        className="px-3 py-2"
-        key={fingerprint}
-        onCancel={reset.cancel}
-        onConfirm={reset.confirm}
-        title={`Reset ${pending.branch} to ${pending.label} and discard changes?`}
-      >
-        <p>
-          {count === 1
-            ? "Uncommitted edits in 1 file will be lost."
-            : `Uncommitted edits in ${count} files will be lost.`}{" "}
-          The reflog can't bring them back.
-        </p>
-        <ConfirmationList className="font-mono" items={paths} total={count} />
-      </Confirmation>
-    </PersistentNotification>
+    <ConfirmNotice
+      notice="reset"
+      action="Discard and reset"
+      busy={reset.running ? "Resetting" : undefined}
+      key={fingerprint}
+      onCancel={reset.cancel}
+      onConfirm={reset.confirm}
+      title={`Reset ${pending.branch} and discard changes?`}
+    >
+      <p>
+        {count === 1
+          ? "Uncommitted edits in 1 file will be lost."
+          : `Uncommitted edits in ${count} files will be lost.`}{" "}
+        The reflog can't bring them back.
+      </p>
+    </ConfirmNotice>
   );
 }

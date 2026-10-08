@@ -57,13 +57,13 @@ export function OperationRecoveryToast({
       aria-label="Git operation"
       className="max-h-[calc(100dvh-5rem)] overflow-y-auto"
     >
-      <div className="flex items-center gap-2 px-3 py-2">
+      <div className="flex items-center gap-3 px-3 py-2.5">
         <IconCircleFilled
           aria-hidden="true"
           className={`size-2 shrink-0 ${state.completed ? "text-success" : "text-warning"}`}
         />
         <h2
-          className="min-w-0 flex-1 cap-centered text-meta font-semibold"
+          className="min-w-0 flex-1 cap-centered text-control font-medium"
           aria-live="polite"
           aria-atomic="true"
         >
@@ -87,19 +87,19 @@ export function OperationRecoveryToast({
       </div>
       {!collapsed && (
         <>
-          <p className="px-3 pb-2 break-all font-mono text-badge text-muted-foreground">
+          <p className="px-3 pb-2 wrap-anywhere text-body text-muted-foreground">
             {repositoryName}
             {operation?.branch ? ` · ${operation.branch}` : ""}
           </p>
           {!state.completed && (
             <>
               {ready?.reason && (
-                <p className="px-3 pb-3 text-meta text-muted-foreground">
+                <p className="px-3 pb-3 text-body text-muted-foreground">
                   {ready.reason}
                 </p>
               )}
               {!writable && active && state.connected && (
-                <p className="px-3 pb-3 text-meta text-muted-foreground">
+                <p className="px-3 pb-3 text-body text-muted-foreground">
                   Repository write access is required to recover this operation.
                 </p>
               )}

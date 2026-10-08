@@ -7,6 +7,7 @@ import type {
   BranchCommitSummary,
   BranchDeletion,
   DeleteRepositoryBranches,
+  ReadUnmergedBranches,
   RepositoryBranchesDeleted,
   RepositoryBranchesOperationFailure,
   UnmergedBranch,
@@ -85,6 +86,17 @@ export function deleteBranches(
     if (deleted.length === 0) return yield* Effect.fail(remotes.failure);
     return { deleted, unmerged, failure: remotes.failure };
   });
+}
+
+export function readUnmergedBranches(
+  git: GitCommandRunner,
+  { branches, worktreePath }: ReadUnmergedBranches,
+) {
+  return readRefTargets(git, worktreePath).pipe(
+    Effect.flatMap((refs) =>
+      unmergedBranches(git, worktreePath, branches, refs),
+    ),
+  );
 }
 
 export function readRefTargets(git: GitCommandRunner, directory: string) {

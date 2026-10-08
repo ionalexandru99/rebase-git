@@ -71,7 +71,7 @@ describe("repository fetch controls", () => {
     await fetchNow();
     await expect.element(page.getByRole("status")).not.toBeInTheDocument();
     await expect
-      .element(page.getByText("Fetching changes"))
+      .element(page.getByText("Fetching", { exact: true }))
       .not.toBeInTheDocument();
     await expect
       .element(page.getByText("Couldn't fetch"))
@@ -88,7 +88,7 @@ describe("repository fetch controls", () => {
     });
     await fetchNow();
     await expect
-      .element(page.getByRole("progressbar", { name: "Fetching changes" }))
+      .element(page.getByRole("progressbar", { name: "Fetching" }))
       .toHaveAttribute("aria-valuenow", "40");
     finished.resolve(fresh);
 

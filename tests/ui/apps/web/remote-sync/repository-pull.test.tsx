@@ -257,7 +257,7 @@ describe("repository pull", () => {
   it.each<[PullFailure, string]>([
     [
       { _tag: "PullWouldOverwrite", paths: ["src/app.ts"] },
-      "Untracked src/app.ts is in the way.",
+      "Untracked app.ts is in the way.",
     ],
     [
       { _tag: "PullWouldOverwrite", paths: ["src/app.ts", "README.md"] },

@@ -16,7 +16,7 @@ const tagMessages = {
 
 describe("describeFailure", () => {
   it.each<[TagFailure, string]>([
-    [{ _tag: "Unanswered" }, "The server did not answer."],
+    [{ _tag: "Unanswered" }, "The server stopped responding."],
     [{ _tag: "Cancelled" }, "The request was cancelled."],
   ])("words %j the same for every feature", (failure, message) => {
     expect(describeFailure(failure, tagMessages)).toContain(message);

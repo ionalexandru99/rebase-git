@@ -165,7 +165,7 @@ describe("repository branches", () => {
     ).resolves.toBe("");
   });
 
-  it("lists the commits only on an unmerged branch and deletes it when forced", async () => {
+  it("lists the commits only on an unmerged branch, before and instead of deleting it, and deletes it when forced", async () => {
     const fixture = await createFixture();
     const spike = await git(fixture.repositoryPath, "rev-parse", "spike");
     const branch = { local: { name: "spike", target: spike } };
@@ -178,19 +178,29 @@ describe("repository branches", () => {
           worktreePath: fixture.repositoryPath,
         }),
       );
+    const unmerged = [
+      {
+        branch,
+        commits: [
+          { oid: spike, subject: "spike two" },
+          { subject: "spike one" },
+        ],
+        count: 2,
+      },
+    ];
 
+    await expect(
+      withBranches(fixture, ({ branches, repositoryId }) =>
+        branches.unmerged({
+          branches: [branch],
+          repositoryId,
+          worktreePath: fixture.repositoryPath,
+        }),
+      ),
+    ).resolves.toMatchObject(unmerged);
     await expect(remove(false)).resolves.toMatchObject({
       deleted: [],
-      unmerged: [
-        {
-          branch,
-          commits: [
-            { oid: spike, subject: "spike two" },
-            { subject: "spike one" },
-          ],
-          count: 2,
-        },
-      ],
+      unmerged,
     });
     await expect(remove(true)).resolves.toEqual({
       deleted: [branch],

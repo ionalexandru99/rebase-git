@@ -66,7 +66,7 @@ describe("stashes", () => {
     screen.getByRole("tree", { name: "Branches" }).element().focus();
     await userEvent.keyboard("{Delete}");
     await screen
-      .getByRole("alertdialog", { name: "Drop “Try larger limits”?" })
+      .getByRole("alertdialog", { name: "Drop Try larger limits?" })
       .getByRole("button", { name: "Drop" })
       .click();
     await vi.waitFor(() =>

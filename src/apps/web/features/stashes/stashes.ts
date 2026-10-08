@@ -161,8 +161,8 @@ export function useStashCommands() {
     statusToast.success(
       "applyStash",
       conflicts === 0
-        ? `${remove ? "Popped" : "Applied"} “${stash.name}”`
-        : `Applied “${stash.name}” with conflicts in ${files(conflicts)}. The stash was kept.`,
+        ? `${remove ? "Popped" : "Applied"} ${stash.name}`
+        : `Applied ${stash.name} with conflicts in ${files(conflicts)}. The stash was kept.`,
     );
   };
 
@@ -172,7 +172,7 @@ export function useStashCommands() {
     setDropping(undefined);
     if (result._tag !== "Ok")
       errorToast.failure("dropStash", result, stashFailureMessages);
-    else statusToast.success("dropStash", `Dropped “${dropping.name}”`);
+    else statusToast.success("dropStash", `Dropped ${dropping.name}`);
   };
 
   const store = async (
@@ -195,7 +195,7 @@ export function useStashCommands() {
       "stash",
       into === undefined
         ? `Stashed ${files(selection.paths.length)}`
-        : `Added ${files(selection.paths.length)} to “${into.name}”`,
+        : `Added ${files(selection.paths.length)} to ${into.name}`,
     );
     return true;
   };

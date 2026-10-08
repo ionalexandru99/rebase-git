@@ -536,7 +536,7 @@ describe("restoring files from a commit", () => {
       .getByRole("menuitem", { name: "This commit", exact: true })
       .click();
     const confirmation = screen.getByRole("alertdialog", {
-      name: "Replace uncommitted edits in src/first.bin?",
+      name: "Replace uncommitted edits in first.bin?",
     });
     await expect.element(confirmation).toBeVisible();
     await screen.getByRole("button", { name: "Replace and restore" }).click();

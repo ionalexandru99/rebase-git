@@ -1,9 +1,12 @@
-import { useRef } from "react";
+import { useRef, useState } from "react";
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import { page, userEvent } from "vite-plus/test/browser";
 import { repositoryScope } from "#tests-support/fixtures.ts";
 import { render } from "#tests-support/render.tsx";
-import { PersistentNotification } from "#web/features/notifications/components/persistent-notification.tsx";
+import {
+  ConfirmNotice,
+  PersistentNotification,
+} from "#web/features/notifications/components/persistent-notification.tsx";
 import {
   useErrorToast,
   useStatusToast,
@@ -79,6 +82,32 @@ describe("notifications", () => {
     expect(
       page.getByRole("button", { name: "Dismiss notification" }).elements(),
     ).toHaveLength(1);
+  });
+
+  it("shows a confirmed action working in its button and its result where the confirmation stood", async () => {
+    await render(<Confirmed />);
+    const confirmation = page.getByRole("alertdialog", {
+      name: "Delete feature/login?",
+    });
+    await expect
+      .element(confirmation.getByRole("button", { name: "Cancel" }))
+      .toHaveFocus();
+
+    await confirmation.getByRole("button", { name: "Delete" }).click();
+    const working = confirmation.getByRole("button", { name: "Deleting" });
+    await expect.element(working).toHaveFocus();
+    await expect.element(working).toHaveAttribute("aria-disabled", "true");
+    await expect
+      .element(confirmation.getByRole("button", { name: "Cancel" }))
+      .not.toBeInTheDocument();
+    await userEvent.keyboard("{Escape}");
+    await expect.element(confirmation).toBeVisible();
+
+    await page.getByRole("button", { name: "Finish" }).click();
+    await expect.element(confirmation).not.toBeInTheDocument();
+    await expect
+      .element(page.getByRole("dialog", { name: "Deleted feature/login" }))
+      .toHaveAttribute("data-in-place");
   });
 
   it("fills the progress ring before the title moves on", async () => {
@@ -311,6 +340,34 @@ function Pull() {
       <button
         type="button"
         onClick={() => statusToast.success("pull", "Pulled")}
+      >
+        Finish
+      </button>
+    </>
+  );
+}
+
+function Confirmed() {
+  const statusToast = useStatusToast();
+  const [phase, setPhase] = useState<"asking" | "deleting" | "done">("asking");
+  return (
+    <>
+      {phase === "done" ? null : (
+        <ConfirmNotice
+          notice="deleteBranch"
+          action="Delete"
+          busy={phase === "deleting" ? "Deleting" : undefined}
+          onCancel={() => setPhase("done")}
+          onConfirm={() => setPhase("deleting")}
+          title="Delete feature/login?"
+        />
+      )}
+      <button
+        type="button"
+        onClick={() => {
+          statusToast.success("deleteBranch", "Deleted feature/login");
+          setPhase("done");
+        }}
       >
         Finish
       </button>

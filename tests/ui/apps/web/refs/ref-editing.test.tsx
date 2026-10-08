@@ -9,6 +9,7 @@ import type {
 } from "#contracts/environment-connection/environment-route.contract.ts";
 import { RepositoryPushApi } from "#contracts/repository-push/repository-push.contract.ts";
 import {
+  type BranchDeletion,
   RepositoryBranchesApi,
   type RepositoryBranchesDeleted,
   type UnmergedBranch,
@@ -203,10 +204,7 @@ describe("ref editing", () => {
     });
     await expect
       .element(warning)
-      .toHaveTextContent(
-        "5 commits exist only on this branch.bbbbbbbTry refs index",
-      );
-    await expect.element(warning).toHaveTextContent("and 2 more");
+      .toHaveTextContent("Its commits exist nowhere else.");
     await expect
       .element(warning.getByRole("button", { name: "Cancel" }))
       .toHaveFocus();
@@ -258,9 +256,7 @@ describe("ref editing", () => {
     });
     await expect
       .element(warning)
-      .toHaveTextContent(
-        "These branches have commits that exist nowhere else.feature/spikefeature/wip",
-      );
+      .toHaveTextContent("Some of their commits exist nowhere else.");
     await warning.getByRole("button", { name: "Delete", exact: true }).click();
     await expect
       .poll(() => environment.requested)
@@ -344,7 +340,7 @@ describe("ref editing", () => {
     await screen.getByRole("menuitem", { name: "Both" }).click();
 
     const confirmation = screen.getByRole("alertdialog", {
-      name: "Delete feature/merged locally and on origin",
+      name: "Delete feature/merged?",
     });
     await expect.element(confirmation).toBeVisible();
     expect(environment.requested).not.toHaveBeenCalled();
@@ -364,6 +360,9 @@ describe("ref editing", () => {
         force: false,
       });
     await expect.element(confirmation).not.toBeInTheDocument();
+    await expect
+      .element(screen.getByText("Deleted feature/merged"))
+      .toBeVisible();
     await expect
       .element(screen.getByRole("button", { name: "Undo" }))
       .not.toBeInTheDocument();
@@ -412,7 +411,7 @@ describe("ref editing", () => {
       });
   });
 
-  it("still asks to delete unmerged branches when a remote refused part of the deletion", async () => {
+  it("names the branches that would lose commits before deleting and reports a remote that refused part of it", async () => {
     const environment = await refsEnvironment();
     environment.keepUnmerged("feature/spike", {
       commits: [{ oid: spike, subject: "Try refs index" }],
@@ -433,27 +432,39 @@ describe("ref editing", () => {
       .click({ button: "right" });
     await screen.getByRole("menuitem", { name: "Delete" }).click();
     await screen.getByRole("menuitem", { name: "Both" }).click();
-    await screen
-      .getByRole("alertdialog")
+    const confirmation = screen.getByRole("alertdialog", {
+      name: "Delete 2 branches?",
+    });
+    await expect
+      .element(confirmation)
+      .toHaveTextContent("Some of their commits exist nowhere else.");
+    await confirmation
       .getByRole("button", { name: "Delete", exact: true })
       .click();
 
+    await expect
+      .poll(() => environment.requested)
+      .toHaveBeenLastCalledWith("delete", {
+        ...scope,
+        branches: [
+          expect.objectContaining({
+            local: { name: "feature/merged", target: main },
+          }),
+          expect.objectContaining({
+            local: { name: "feature/spike", target: spike },
+          }),
+        ],
+        force: true,
+      });
     await expect
       .element(
         screen.getByText("origin/feature/merged changed since it was shown."),
       )
       .toBeVisible();
-    const warning = screen.getByRole("alertdialog", {
-      name: "Delete feature/spike",
-    });
-    await warning.getByRole("button", { name: "Delete", exact: true }).click();
+    await expect.element(confirmation).not.toBeInTheDocument();
     await expect
-      .poll(() => environment.requested)
-      .toHaveBeenLastCalledWith("delete", {
-        ...scope,
-        branches: [{ local: { name: "feature/spike", target: spike } }],
-        force: true,
-      });
+      .element(tree.getByRole("treeitem", { name: "feature/spike" }))
+      .not.toBeInTheDocument();
   });
 
   it("opens the branch menu from the keyboard and shows why checked-out branches cannot change", async () => {
@@ -583,7 +594,7 @@ describe("ref editing", () => {
     await screen.getByRole("menuitem", { name: "Delete" }).click();
     await screen.getByRole("menuitem", { name: "On origin…" }).click();
     await screen
-      .getByRole("alertdialog", { name: "Delete tag v0.9 on origin?" })
+      .getByRole("alertdialog", { name: "Delete tag v0.9?" })
       .getByRole("button", { name: "Delete", exact: true })
       .click();
     expect(environment.requested).toHaveBeenLastCalledWith("deleteTag", {
@@ -592,7 +603,7 @@ describe("ref editing", () => {
       remote: { remote: "origin", object: main },
     });
     await expect
-      .element(screen.getByText("Deleted v0.9 on origin"))
+      .element(screen.getByText("Deleted v0.9", { exact: true }))
       .toBeVisible();
   });
 
@@ -666,6 +677,11 @@ async function refsEnvironment() {
       if (failure !== undefined) throw rejected(failure);
       return answer(command);
     });
+  const lostOn = (deleting: readonly BranchDeletion[]) =>
+    deleting.flatMap((branch) => {
+      const lost = unmergedBranches.get(branch.local?.name ?? "");
+      return lost === undefined ? [] : [{ branch, ...lost }];
+    });
   const branches = (
     change: (
       branches: RepositoryRefs["branches"],
@@ -693,12 +709,7 @@ async function refsEnvironment() {
       return { branch, previousName: command.name };
     }),
     reply("delete", RepositoryBranchesApi.delete, (command) => {
-      const unmerged = command.force
-        ? []
-        : command.branches.flatMap((branch) => {
-            const lost = unmergedBranches.get(branch.local?.name ?? "");
-            return lost === undefined ? [] : [{ branch, ...lost }];
-          });
+      const unmerged = command.force ? [] : lostOn(command.branches);
       const failure = remoteFailure;
       remoteFailure = undefined;
       const deleted = command.branches.filter(
@@ -723,6 +734,9 @@ async function refsEnvironment() {
         ? { deleted, unmerged }
         : { deleted, unmerged, failure };
     }),
+    respond(RepositoryBranchesApi.unmerged, async (command) =>
+      lostOn(command.branches),
+    ),
     reply("settle", BranchSettlingApi.settle, ({ names, settled }) => {
       branches((all) =>
         all.map((branch) => {

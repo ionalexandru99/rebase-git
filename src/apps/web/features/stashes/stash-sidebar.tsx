@@ -4,14 +4,13 @@ import {
   type Action,
   ActionMenuItems,
 } from "#web/components/ui/action-menu.tsx";
-import { Confirmation } from "#web/components/ui/confirmation.tsx";
 import {
   ContextMenu,
   ContextMenuContent,
   ContextMenuTrigger,
 } from "#web/components/ui/context-menu.tsx";
 import { Input } from "#web/components/ui/input.tsx";
-import { PersistentNotification } from "#web/features/notifications/components/persistent-notification.tsx";
+import { ConfirmNotice } from "#web/features/notifications/components/persistent-notification.tsx";
 import type {
   StashCommands,
   StashSelection,
@@ -160,18 +159,16 @@ export function StashDropConfirmation({
   const { stash, busy, confirm, cancel } = commands.dropping;
   if (stash === undefined) return null;
   return (
-    <PersistentNotification>
-      <Confirmation
-        action="Drop"
-        busy={busy}
-        className="px-3 py-2"
-        onCancel={cancel}
-        onConfirm={confirm}
-        title={`Drop “${stash.name}”?`}
-      >
-        Its saved changes will be deleted.
-      </Confirmation>
-    </PersistentNotification>
+    <ConfirmNotice
+      notice="dropStash"
+      action="Drop"
+      busy={busy ? "Dropping" : undefined}
+      onCancel={cancel}
+      onConfirm={confirm}
+      title={`Drop ${stash.name}?`}
+    >
+      Its saved changes will be deleted.
+    </ConfirmNotice>
   );
 }
 
