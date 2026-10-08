@@ -1,0 +1,18 @@
+@import "@fontsource-variable/inter/wght.css";
+@import "tailwindcss" source(none);
+@source "./index.html";
+
+@theme {
+  --font-sans: "Inter Variable", sans-serif;
+  --color-page: #08080a;
+  --color-raised: #111115;
+  --color-menu: #1c1c23;
+  --color-menu-hover: #25252d;
+  --color-line: #25252d;
+  --color-ink: #f4f4f5;
+  --color-muted: #a1a1aa;
+  --color-quiet: #85858f;
+  --color-primary: #7c8cff;
+  --color-primary-hover: #919eff;
+  --color-primary-line: #5d6ad6;
+}

@@ -1,0 +1,194 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#08080a" />
+    <meta
+      name="description"
+      content="Rebase is a fast Git client for big repositories. On macOS, Windows, Linux and in your browser."
+    />
+    <title>Rebase · The fast Git client for big repositories</title>
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="stylesheet" href="./site.css" />
+  </head>
+  <body class="bg-page font-sans text-ink antialiased">
+    <header class="mx-auto flex max-w-6xl items-center justify-between px-6 py-6 md:px-12">
+      <a href="/" class="flex items-center gap-2 font-semibold">
+        <img src="/favicon.svg" alt="" class="size-6" />
+        Rebase
+      </a>
+      <a
+        href="https://github.com/ionalexandru99/rebase-git"
+        class="flex items-center gap-2 text-sm text-muted transition-colors hover:text-ink"
+      >
+        <svg class="size-4" viewBox="0 0 16 16" aria-hidden="true">
+          <path
+            fill="currentColor"
+            d="M8 0a8 8 0 0 0-2.53 15.59c.4.07.55-.17.55-.38v-1.33c-2.23.48-2.7-1.07-2.7-1.07-.36-.92-.89-1.17-.89-1.17-.73-.5.05-.49.05-.49.8.06 1.23.83 1.23.83.72 1.22 1.88.87 2.34.66.07-.52.28-.87.5-1.07-1.78-.2-3.65-.89-3.65-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82a7.6 7.6 0 0 1 4 0c1.53-1.03 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.28.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48v2.2c0 .21.15.46.55.38A8 8 0 0 0 8 0Z"
+          />
+        </svg>
+        GitHub
+      </a>
+    </header>
+
+    <main>
+      <section class="mx-auto max-w-6xl px-6 pt-12 pb-16 text-center md:px-12 md:pt-16">
+        <h1 class="text-4xl/tight font-bold tracking-tight md:text-6xl/[1.05]">
+          The fast Git client <br class="hidden md:inline" />for big repositories.
+        </h1>
+        <p class="mx-auto mt-6 max-w-[30em] text-base/relaxed text-muted md:text-lg/relaxed">
+          History, branches and rebases that keep up with you.
+          <br class="hidden md:inline" />On your desktop or in your browser.
+        </p>
+
+        <div class="mt-8 flex flex-wrap items-start justify-center gap-3">
+          <div class="relative" data-download>
+            <div class="inline-flex rounded-lg bg-primary text-page shadow-sm">
+              <a
+                href="https://github.com/ionalexandru99/rebase-git/releases/latest"
+                class="inline-flex items-center gap-2 rounded-lg py-3 pr-4 pl-6 font-semibold transition-colors hover:bg-primary-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+                data-download-link
+              >
+                <svg class="size-4" viewBox="0 0 16 16" aria-hidden="true">
+                  <path
+                    d="M8 2v8m0 0 3.5-3.5M8 10 4.5 6.5M2.5 13.5h11"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.6"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  />
+                </svg>
+                <span data-download-label>Download</span>
+              </a>
+              <button
+                type="button"
+                class="inline-flex items-center rounded-r-lg border-l border-primary-line px-3 transition-colors hover:bg-primary-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+                aria-label="Other systems"
+                aria-haspopup="menu"
+                aria-expanded="false"
+                aria-controls="download-menu"
+                data-download-toggle
+                hidden
+              >
+                <svg class="size-4" viewBox="0 0 16 16" aria-hidden="true">
+                  <path
+                    d="m4 6 4 4 4-4"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.6"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  />
+                </svg>
+              </button>
+            </div>
+            <div
+              id="download-menu"
+              role="menu"
+              aria-label="Download Rebase"
+              class="absolute top-full left-0 z-10 mt-2 w-full min-w-64 rounded-lg border border-line bg-menu p-1 text-left shadow-lg"
+              hidden
+            >
+              <a
+                role="menuitem"
+                tabindex="-1"
+                href="%download-mac%"
+                class="group flex items-center gap-2 rounded-md px-3 py-2 text-sm outline-none hover:bg-menu-hover focus:bg-menu-hover"
+                data-system="mac"
+              >
+                <span class="font-medium">macOS</span>
+                <span class="text-quiet">Apple silicon</span>
+                <svg class="ml-auto hidden size-4 text-primary group-data-current:block" viewBox="0 0 16 16" aria-hidden="true">
+                  <path d="m3.5 8.5 3 3 6-7" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
+                </svg>
+              </a>
+              <a
+                role="menuitem"
+                tabindex="-1"
+                href="%download-windows%"
+                class="group flex items-center gap-2 rounded-md px-3 py-2 text-sm outline-none hover:bg-menu-hover focus:bg-menu-hover"
+                data-system="windows"
+              >
+                <span class="font-medium">Windows</span>
+                <span class="text-quiet">x64</span>
+                <svg class="ml-auto hidden size-4 text-primary group-data-current:block" viewBox="0 0 16 16" aria-hidden="true">
+                  <path d="m3.5 8.5 3 3 6-7" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
+                </svg>
+              </a>
+              <a
+                role="menuitem"
+                tabindex="-1"
+                href="%download-linux%"
+                class="group flex items-center gap-2 rounded-md px-3 py-2 text-sm outline-none hover:bg-menu-hover focus:bg-menu-hover"
+                data-system="linux"
+              >
+                <span class="font-medium">Linux</span>
+                <span class="text-quiet">AppImage</span>
+                <svg class="ml-auto hidden size-4 text-primary group-data-current:block" viewBox="0 0 16 16" aria-hidden="true">
+                  <path d="m3.5 8.5 3 3 6-7" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
+                </svg>
+              </a>
+              <a
+                role="menuitem"
+                tabindex="-1"
+                href="%download-debian%"
+                class="flex items-center gap-2 rounded-md px-3 py-2 text-sm outline-none hover:bg-menu-hover focus:bg-menu-hover"
+              >
+                <span class="font-medium">Debian, Ubuntu</span>
+                <span class="text-quiet">.deb</span>
+              </a>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            class="group inline-flex items-center gap-3 rounded-lg border border-line bg-raised px-4 py-3 font-mono text-sm transition-colors hover:border-quiet focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary md:text-base"
+            aria-label="Copy npx rebase-git@latest"
+            data-copy
+          >
+            <span class="text-quiet">$</span>
+            <span class="select-text" data-copy-text>npx rebase-git@latest</span>
+            <svg class="size-4 text-quiet group-data-copied:hidden" viewBox="0 0 16 16" aria-hidden="true">
+              <rect x="5" y="5" width="9" height="9" rx="2" fill="none" stroke="currentColor" stroke-width="1.5" />
+              <path d="M11 5V3.5A1.5 1.5 0 0 0 9.5 2h-6A1.5 1.5 0 0 0 2 3.5v6A1.5 1.5 0 0 0 3.5 11H5" fill="none" stroke="currentColor" stroke-width="1.5" />
+            </svg>
+            <svg class="hidden size-4 text-primary group-data-copied:block" viewBox="0 0 16 16" aria-hidden="true">
+              <path d="m3.5 8.5 3 3 6-7" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
+            </svg>
+          </button>
+        </div>
+        <p class="mt-4 text-sm text-quiet" data-download-elsewhere hidden>For macOS, Windows and Linux</p>
+      </section>
+
+      <div class="mx-auto max-w-6xl px-6 md:px-12">
+        <img
+          src="./screenshot.webp"
+          width="1920"
+          height="1080"
+          fetchpriority="high"
+          alt="Rebase showing the commit graph of a repository with five branches, and the changes to a TypeScript file next to it"
+          class="h-auto w-full rounded-lg shadow-[0_0_0_1px_#25252d,0_32px_64px_-24px_rgb(124_140_255/0.25)]"
+        />
+      </div>
+    </main>
+
+    <footer class="mt-24 border-t border-line">
+      <div class="mx-auto flex max-w-6xl items-center justify-between px-6 py-8 text-sm text-quiet md:px-12">
+        <span class="flex items-center gap-2">
+          <img src="/favicon.svg" alt="" class="size-4" />
+          Rebase
+        </span>
+        <a
+          href="https://github.com/ionalexandru99/rebase-git/blob/main/LICENSE"
+          class="transition-colors hover:text-ink"
+        >
+          Open source · Apache-2.0
+        </a>
+      </div>
+    </footer>
+
+    <script type="module" src="./site.ts"></script>
+  </body>
+</html>
