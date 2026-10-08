@@ -210,7 +210,7 @@ function runFetch(
       path,
       {
         name: "fetch",
-        locks: { refs: "ifAvailable" },
+        locks: { refs: "wait" },
         duringOperation: "proceed",
       },
       defaultPruneArguments(git, path).pipe(

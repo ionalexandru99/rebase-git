@@ -1,5 +1,5 @@
 import { realpath } from "node:fs/promises";
-import { Effect, Option, Semaphore } from "effect";
+import { Effect, Semaphore } from "effect";
 import {
   type RepositoryRejected,
   repositoryRejected,
@@ -15,7 +15,7 @@ import {
   readRepositoryOperation,
 } from "#server/repository/repository-operation.ts";
 
-type RepositoryLockAcquisition = "wait" | "ifAvailable";
+type RepositoryLockAcquisition = "wait";
 
 export interface RepositoryWritePolicy {
   readonly name: string;
@@ -52,11 +52,7 @@ export function createRepositoryCoordination(
     string,
     { semaphore: Semaphore.Semaphore; owners: number }
   >();
-  const withLock = <A, E, R>(
-    key: string,
-    acquisition: RepositoryLockAcquisition,
-    operation: Effect.Effect<A, E, R>,
-  ) =>
+  const withLock = <A, E, R>(key: string, operation: Effect.Effect<A, E, R>) =>
     Effect.acquireUseRelease(
       Effect.sync(() => {
         let entry = locks.get(key);
@@ -67,25 +63,7 @@ export function createRepositoryCoordination(
         entry.owners++;
         return entry;
       }),
-      (entry) =>
-        acquisition === "wait"
-          ? entry.semaphore.withPermit(operation)
-          : entry.semaphore
-              .withPermitsIfAvailable(1)(operation)
-              .pipe(
-                Effect.flatMap(
-                  Option.match({
-                    onSome: Effect.succeed,
-                    onNone: () =>
-                      Effect.fail(
-                        repositoryRejected(
-                          "Busy",
-                          "Another repository write is in progress.",
-                        ),
-                      ),
-                  }),
-                ),
-              ),
+      (entry) => entry.semaphore.withPermit(operation),
       (entry) =>
         Effect.sync(() => {
           if (--entry.owners === 0) {
@@ -119,10 +97,10 @@ export function createRepositoryCoordination(
           const inWorktree =
             worktree === undefined
               ? guarded
-              : withLock(`worktree:${paths.gitDirectory}`, worktree, guarded);
+              : withLock(`worktree:${paths.gitDirectory}`, guarded);
           return yield* refs === undefined
             ? inWorktree
-            : withLock(`refs:${paths.commonDirectory}`, refs, inWorktree);
+            : withLock(`refs:${paths.commonDirectory}`, inWorktree);
         }),
       ),
     operation: (directory) =>
