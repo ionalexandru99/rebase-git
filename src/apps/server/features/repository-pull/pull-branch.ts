@@ -70,13 +70,13 @@ export function pullBranch<E>(
     if (ahead === 0)
       return {
         outcome: "FastForwarded",
-        stashKept: yield* Effect.uninterruptible(
+        ...(yield* Effect.uninterruptible(
           checkedOut
             ? mergeFastForward(git, directory, upstreamTarget)
             : moveBranch(git, directory, tracked, upstreamTarget).pipe(
-                Effect.as(false),
+                Effect.as(unstashed),
               ),
-        ),
+        )),
       } as const;
     if (!checkedOut)
       return yield* Effect.fail(pullBlocked("The branch has diverged."));
@@ -128,18 +128,24 @@ function integrate(
           false,
         );
   return integration.pipe(
-    Effect.map(({ started, autostashConflict }): BranchPulled => {
-      if (started.outcome === "Stopped")
-        return {
-          outcome: "Stopped",
-          worktreePath: directory,
-          operation: started.operation,
-        };
-      return {
-        outcome: kind === "merge" ? "Merged" : "Rebased",
-        stashKept: autostashConflict !== undefined,
-      };
-    }),
+    Effect.flatMap(
+      ({
+        started,
+        autostashConflict,
+      }): Effect.Effect<BranchPulled, GitFailed> =>
+        started.outcome === "Stopped"
+          ? Effect.succeed({
+              outcome: "Stopped",
+              worktreePath: directory,
+              operation: started.operation,
+            })
+          : pulledStash(git, directory, autostashConflict ?? "").pipe(
+              Effect.map((stash) => ({
+                outcome: kind === "merge" ? "Merged" : "Rebased",
+                ...stash,
+              })),
+            ),
+    ),
     Effect.catch((error) =>
       failWithKeptStash(
         git,
@@ -259,18 +265,47 @@ function mergeFastForward(
     ],
     pullCommand,
   ).pipe(
-    Effect.map(({ stderr }) => /resulted in conflicts/.test(stderr)),
+    Effect.flatMap(({ stderr }) => pulledStash(git, directory, stderr)),
     Effect.catch(
       (
         error,
       ): Effect.Effect<
-        boolean,
+        PulledStash,
         PullFailure | RepositoryRejected | GitFailed
       > =>
         isGitRejection(error)
           ? failWithKeptStash(git, directory, error.detail, mergeFailure(error))
           : requireAt(git, directory, "HEAD", upstreamTarget, error).pipe(
-              Effect.as(false),
+              Effect.as(unstashed),
+            ),
+    ),
+  );
+}
+
+type PulledStash = Pick<
+  Extract<BranchPulled, { readonly stashKept: boolean }>,
+  "stashKept" | "movedToStash"
+>;
+
+const unstashed: PulledStash = { stashKept: false };
+
+function pulledStash(git: GitCommandRunner, directory: string, text: string) {
+  return keptAutostash(git, directory, text).pipe(
+    Effect.flatMap(
+      (stash): Effect.Effect<PulledStash, GitFailed> =>
+        stash === undefined
+          ? Effect.succeed({ stashKept: /resulted in conflicts/.test(text) })
+          : runRepositoryGitOutput(
+              git,
+              directory,
+              ["diff", "--quiet", "HEAD"],
+              { ...pullCommand, exitCodes: [0, 1] },
+            ).pipe(
+              Effect.map(({ exitCode }) =>
+                exitCode === 0
+                  ? { stashKept: false, movedToStash: stash }
+                  : { stashKept: true },
+              ),
             ),
     ),
   );
@@ -282,22 +317,30 @@ function failWithKeptStash<Failure>(
   detail: string,
   failure: Failure,
 ) {
-  if (!/safe in the stash/.test(detail)) return Effect.fail(failure);
+  return keptAutostash(git, directory, detail).pipe(
+    Effect.flatMap((stash) =>
+      stash === undefined
+        ? Effect.fail(failure)
+        : Effect.fail<PullFailure | Failure>({
+            _tag: "PullStashKept",
+            stash,
+            busy: isGitLocked(detail),
+          }),
+    ),
+  );
+}
+
+function keptAutostash(git: GitCommandRunner, directory: string, text: string) {
+  if (!/safe in the stash/.test(text)) return Effect.succeed(undefined);
   return runRepositoryGit(
     git,
     directory,
     ["log", "--walk-reflogs", "-1", "--format=%H%x00%gs", "refs/stash"],
     { ...pullCommand, exitCodes: [0, 128] },
   ).pipe(
-    Effect.flatMap((output) => {
+    Effect.map((output) => {
       const [stash, subject] = output.trim().split("\0");
-      return stash && subject === "autostash"
-        ? Effect.fail<PullFailure | Failure>({
-            _tag: "PullStashKept",
-            stash,
-            busy: isGitLocked(detail),
-          })
-        : Effect.fail(failure);
+      return stash && subject === "autostash" ? stash : undefined;
     }),
   );
 }

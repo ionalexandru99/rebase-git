@@ -255,6 +255,26 @@ describe("repository pull", () => {
     await expect.element(page.getByText("Your changes are back")).toBeVisible();
   });
 
+  it("says the local changes are in Stashes when the pull landed without them", async () => {
+    await fixture({
+      pulled: {
+        outcome: "FastForwarded",
+        stashKept: false,
+        movedToStash: "a".repeat(40),
+      },
+    });
+    await page.getByRole("button", { name: "Pull" }).click();
+    await expect
+      .element(page.getByText("Pulled", { exact: true }))
+      .toBeVisible();
+    await expect
+      .element(page.getByText("Your changes are in Stashes."))
+      .toBeVisible();
+    await expect
+      .element(page.getByRole("button", { name: "Apply" }))
+      .toBeVisible();
+  });
+
   it("hands a pull that stopped on conflicts over to the operation and closes its toast", async () => {
     const f = await fixture({
       pulled: {

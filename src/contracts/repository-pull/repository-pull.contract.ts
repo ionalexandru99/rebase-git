@@ -38,6 +38,7 @@ export const BranchPulled = Schema.Union([
       "Merged",
     ]),
     stashKept: Schema.Boolean,
+    movedToStash: Schema.optionalKey(ObjectId),
   }),
   Schema.Struct({
     outcome: Schema.Literal("Stopped"),

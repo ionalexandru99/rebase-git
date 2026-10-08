@@ -107,6 +107,17 @@ export function usePull() {
   const { run, canRun } = command;
   const worktreePath = scope?.worktreePath;
 
+  const applyStash = (oid: string) => ({
+    label: "Apply",
+    run: () =>
+      void stashes.restore(
+        { oid, name: "autostash" },
+        true,
+        true,
+        "Your changes are back",
+      ),
+  });
+
   const pull = async (branch: string, strategy?: PullChoice) => {
     if (!canRun || pulling) return;
     statusToast.progress("pull", "Fetching", { percent: 0 });
@@ -128,17 +139,8 @@ export function usePull() {
     } else if (failure?._tag === "PullStashKept")
       errorToast.show(
         "pull",
-        `${failure.busy ? "Another Git operation is running.\n" : ""}Your changes are in Stashes.`,
-        {
-          label: "Apply",
-          run: () =>
-            void stashes.restore(
-              { oid: failure.stash, name: "autostash" },
-              true,
-              true,
-              "Your changes are back",
-            ),
-        },
+        `${failure.busy ? "Another Git operation is running.\n" : ""}${inStashes}`,
+        applyStash(failure.stash),
       );
     else if (result._tag !== "Ok")
       errorToast.failure("pull", result, pullFailureMessages);
@@ -146,7 +148,14 @@ export function usePull() {
       if (result.value.worktreePath === worktreePath) statusToast.close("pull");
       else
         errorToast.show("pull", "Resolve the conflicts in the other worktree.");
-    } else if (result.value.stashKept)
+    } else if (result.value.movedToStash !== undefined)
+      statusToast.warning(
+        "pull",
+        pulledTitles[result.value.outcome],
+        inStashes,
+        applyStash(result.value.movedToStash),
+      );
+    else if (result.value.stashKept)
       statusToast.warning(
         "pull",
         "Pulled, but your changes conflict",
@@ -173,6 +182,8 @@ const integrationSteps: Record<DivergedPull, string> = {
   rebase: "Rebasing",
   merge: "Merging",
 };
+
+const inStashes = "Your changes are in Stashes.";
 
 const pulledTitles = {
   UpToDate: "Already up to date",

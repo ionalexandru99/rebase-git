@@ -56,7 +56,7 @@ describe("fast-forward pull", () => {
   });
 
   it("points at the stash Git kept the local edits in when another process held the index", async () => {
-    const f = await fixture(stashThenFailOnLock("autostash"));
+    const f = await fixture(keepAutostash("autostash", false));
     await f.publish("main", "other.txt", "remote\n");
     await git(f.repositoryPath, "fetch");
     const local = await git(f.repositoryPath, "rev-parse", "HEAD");
@@ -72,8 +72,24 @@ describe("fast-forward pull", () => {
     expect(await git(f.repositoryPath, "rev-parse", "HEAD")).toBe(local);
   });
 
+  it("points at the stash Git kept the local edits in when the pull landed but Git could not put them back", async () => {
+    const f = await fixture(keepAutostash("autostash", true));
+    const incoming = await f.publish("main", "other.txt", "remote\n");
+    await git(f.repositoryPath, "fetch");
+    await writeFile(join(f.repositoryPath, "file.txt"), "local edit\n");
+
+    const pulled = await f.pull("main");
+
+    expect(pulled).toEqual({
+      outcome: "FastForwarded",
+      stashKept: false,
+      movedToStash: await git(f.repositoryPath, "rev-parse", "refs/stash"),
+    });
+    expect(await git(f.repositoryPath, "rev-parse", "HEAD")).toBe(incoming);
+  });
+
   it("does not point at a stash someone else pushed after Git kept the local edits", async () => {
-    const f = await fixture(stashThenFailOnLock("someone else"));
+    const f = await fixture(keepAutostash("someone else", false));
     await f.publish("main", "other.txt", "remote\n");
     await git(f.repositoryPath, "fetch");
     await writeFile(join(f.repositoryPath, "file.txt"), "local edit\n");
@@ -372,7 +388,7 @@ describe("diverged pull", () => {
   });
 });
 
-function stashThenFailOnLock(message: string) {
+function keepAutostash(message: string, landed: boolean) {
   return (runner: GitCommandRunner): GitCommandRunner => ({
     ...runner,
     run: (command) =>
@@ -384,6 +400,12 @@ function stashThenFailOnLock(message: string) {
             const stash = (yield* git("stash", "create")).stdout.trim();
             yield* git("stash", "store", "-m", message, stash);
             yield* git("reset", "--hard", "--quiet");
+            if (landed)
+              return {
+                ...(yield* runner.run(command)),
+                stderr:
+                  "error: could not apply autostash; your changes are safe in the stash\n",
+              };
             return {
               exitCode: 128,
               stdout: "",
