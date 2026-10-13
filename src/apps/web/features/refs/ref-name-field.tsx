@@ -36,7 +36,8 @@ function RefNameField({
       initialName.length,
     );
   }, [initialName]);
-  const message = failure ?? (name.length === 0 ? undefined : problem(name));
+  const message =
+    failure ?? (pending || name.length === 0 ? undefined : problem(name));
 
   const submit = async () => {
     const rejected = problem(name);
