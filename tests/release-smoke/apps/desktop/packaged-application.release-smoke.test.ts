@@ -221,7 +221,7 @@ async function closePackagedApplication(application: PackagedApplication) {
   if (hasExited(application.process)) return;
 
   const exited = once(application.process, "exit");
-  if (process.platform === "win32") await forceProcessExit(application.process);
+  if (process.platform === "win32") await stopProcessTree(application.process);
   else application.process.kill();
   await exited;
 }
@@ -230,30 +230,16 @@ function hasExited(childProcess: ChildProcessWithoutNullStreams) {
   return childProcess.exitCode !== null || childProcess.signalCode !== null;
 }
 
-async function forceProcessExit(childProcess: ChildProcessWithoutNullStreams) {
+async function stopProcessTree(childProcess: ChildProcessWithoutNullStreams) {
   if (childProcess.pid === undefined) {
     throw new Error("The packaged application has no process identifier.");
   }
-  try {
-    await execFileAsync("taskkill.exe", [
-      "/pid",
-      childProcess.pid.toString(),
-      "/t",
-      "/f",
-    ]);
-  } catch (error) {
-    if (isProcessNotFound(error) && hasExited(childProcess)) return;
-    throw error;
-  }
-}
-
-function isProcessNotFound(error: unknown) {
-  return (
-    typeof error === "object" &&
-    error !== null &&
-    "code" in error &&
-    error.code === 128
-  );
+  await execFileAsync("taskkill.exe", [
+    "/pid",
+    childProcess.pid.toString(),
+    "/t",
+    "/f",
+  ]).catch(() => undefined);
 }
 
 function errorMessage(error: unknown) {
