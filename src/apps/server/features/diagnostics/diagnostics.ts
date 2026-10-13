@@ -7,7 +7,6 @@ import {
   type DiagnosticsPeriod,
   type DiagnosticsProcess,
   type DiagnosticsSample,
-  type DiagnosticsServer,
 } from "#contracts/diagnostics/diagnostics.contract.ts";
 import type { EnvironmentRpc } from "#contracts/environment-connection/environment-rpc.contract.ts";
 import {
@@ -53,19 +52,25 @@ export function acquireDiagnosticsFeature({
 }: DiagnosticsDependencies) {
   return Effect.gen(function* () {
     const startedAt = Date.now() - process.uptime() * 1_000;
-    const gitVersion = yield* Effect.cached(
+    const scope = yield* Effect.scope;
+    const footprints: Footprint[] = [];
+    let latest: ProcessSnapshot | undefined;
+    let gitVersion: string | null = null;
+    let watching = 0;
+    const wake = yield* Queue.sliding<void>(1);
+    const sampled = yield* PubSub.sliding<void>(1);
+    const readGitVersion = yield* Effect.cached(
       git.run({ directory: homedir(), arguments: ["--version"] }).pipe(
         Effect.map(
           ({ stdout }) => /git version (\S+)/.exec(stdout)?.[1] ?? "Unknown",
         ),
         Effect.orElseSucceed(() => "Unknown"),
+        Effect.flatMap((version) => {
+          gitVersion = version;
+          return PubSub.publish(sampled, undefined);
+        }),
       ),
     );
-    const footprints: Footprint[] = [];
-    let latest: ProcessSnapshot | undefined;
-    let watching = 0;
-    const wake = yield* Queue.sliding<void>(1);
-    const sampled = yield* PubSub.sliding<void>(1);
 
     const sample = Effect.gen(function* () {
       latest = yield* monitor.sample;
@@ -89,10 +94,7 @@ export function acquireDiagnosticsFeature({
       ),
     );
 
-    const describe = (
-      period: DiagnosticsPeriod,
-      server: DiagnosticsServer,
-    ): DiagnosticsSample => {
+    const describe = (period: DiagnosticsPeriod): DiagnosticsSample => {
       const now = Date.now();
       const { window, bucket } = periods[period];
       const recent = footprints.filter(({ at }) => at >= now - window);
@@ -129,7 +131,13 @@ export function acquireDiagnosticsFeature({
         slowestGit: activity.slowestGit(),
         slowestRequests: activity.slowestRequests(),
         watchers: changes.watchers(),
-        server,
+        server: {
+          platform: process.platform,
+          architecture: process.arch,
+          startedAt,
+          gitVersion,
+          dataFolder,
+        },
       };
     };
 
@@ -170,18 +178,13 @@ export function acquireDiagnosticsFeature({
             Effect.gen(function* () {
               watching += 1;
               monitor.retry();
-              const server: DiagnosticsServer = {
-                platform: process.platform,
-                architecture: process.arch,
-                startedAt,
-                gitVersion: yield* gitVersion,
-                dataFolder,
-              };
               yield* Effect.addFinalizer(() =>
                 Effect.sync(() => {
                   watching -= 1;
                 }),
               );
+              const samples = yield* PubSub.subscribe(sampled);
+              yield* Effect.forkIn(readGitVersion, scope);
               yield* Queue.offer(wake, undefined);
               const errorsChanged = yield* Queue.sliding<void>(1);
               yield* Effect.acquireRelease(
@@ -199,8 +202,8 @@ export function acquireDiagnosticsFeature({
                 ).pipe(Stream.map(errors)),
                 Stream.concat(
                   Stream.succeed(undefined),
-                  Stream.fromPubSub(sampled),
-                ).pipe(Stream.map(() => describe(period, server))),
+                  Stream.fromSubscription(samples),
+                ).pipe(Stream.map(() => describe(period))),
               );
             }),
           ),

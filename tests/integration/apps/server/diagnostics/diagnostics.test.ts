@@ -1,4 +1,5 @@
 import { join } from "node:path";
+import { Effect } from "effect";
 import { expect, it } from "vite-plus/test";
 import {
   DiagnosticsApi,
@@ -61,6 +62,41 @@ it("samples the server's processes through the bundled monitor and records Git r
   expect(
     latest()?.slowestGit.some((run) => run.repositoryId === repositoryId),
   ).toBe(true);
+
+  watching.abort();
+  await expect(watched).rejects.toMatchObject({ _tag: "Cancelled" });
+});
+
+it("sends the first sample before Git reports its version", async () => {
+  const gitAnswers = Promise.withResolvers<void>();
+  const server = await openTestServer({
+    git: (runner) => ({
+      ...runner,
+      run: (command) =>
+        command.arguments.includes("--version")
+          ? Effect.promise(() => gitAnswers.promise).pipe(
+              Effect.andThen(runner.run(command)),
+            )
+          : runner.run(command),
+    }),
+  });
+  const subscribe = environmentSubscriptions(
+    (await server.connect(server.owner)).rpc,
+  );
+  const versions: (string | null)[] = [];
+  const watching = new AbortController();
+  const watched = subscribe(
+    DiagnosticsApi.watch,
+    { period: "5m" },
+    (event) => {
+      if (event._tag === "Sample") versions.push(event.server.gitVersion);
+    },
+    watching.signal,
+  );
+
+  await expect.poll(() => versions[0]).toBeNull();
+  gitAnswers.resolve();
+  await expect.poll(() => versions.at(-1)).toMatch(/^\d+\.\d+/);
 
   watching.abort();
   await expect(watched).rejects.toMatchObject({ _tag: "Cancelled" });

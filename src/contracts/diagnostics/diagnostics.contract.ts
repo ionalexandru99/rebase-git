@@ -71,7 +71,7 @@ export const DiagnosticsServer = Schema.Struct({
   platform: Schema.String,
   architecture: Schema.String,
   startedAt: Milliseconds,
-  gitVersion: Schema.String,
+  gitVersion: Schema.NullOr(Schema.String),
   dataFolder: Schema.String,
 });
 export type DiagnosticsServer = typeof DiagnosticsServer.Type;
