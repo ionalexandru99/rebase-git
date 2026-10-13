@@ -75,6 +75,7 @@ packagedTest(
     await expect(
       window.getByText("Process monitor", { exact: true }),
     ).toBeVisible();
+    await expect(window.getByText(` ${process.arch} · up `)).toBeVisible();
   },
 );
 

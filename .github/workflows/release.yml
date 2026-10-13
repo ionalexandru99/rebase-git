@@ -108,7 +108,7 @@ jobs:
             keys: darwin-arm64 darwin-x64
           - name: Windows
             runner: windows-latest
-            keys: win32-x64
+            keys: win32-x64 win32-arm64
           - name: Linux arm64
             runner: ubuntu-24.04-arm
             keys: linux-arm64
@@ -340,6 +340,10 @@ jobs:
             runner: windows-latest
             platform: win
             arch: x64
+          - name: Windows arm64
+            runner: windows-11-arm
+            platform: win
+            arch: arm64
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 60
     env:
@@ -554,6 +558,10 @@ jobs:
       - name: Assemble desktop release assets
         shell: bash
         run: |
+          for manifest in desktop-artifacts/desktop-win-arm64/*.yml; do
+            yq -i ".files += load(\"$manifest\").files" "desktop-artifacts/desktop-win-x64/${manifest##*/}"
+            rm "$manifest"
+          done
           mkdir desktop-release
           mac_manifest=$(basename "$(find desktop-artifacts/desktop-mac-arm64 -name '*-mac.yml')")
           yq eval-all ". as \$item ireduce ({}; . *+ \$item) | .files |= unique_by(.url)" \
