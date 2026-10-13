@@ -7,6 +7,7 @@ import type {
   RouteInput,
   RouteSuccess,
 } from "#contracts/environment-connection/environment-route.contract.ts";
+import { RepositoryOperationsApi } from "#contracts/repository-operations/repository-operations.contract.ts";
 import { RepositoryPushApi } from "#contracts/repository-push/repository-push.contract.ts";
 import {
   type BranchDeletion,
@@ -21,7 +22,6 @@ import {
 import { RepositoryTagsApi } from "#contracts/repository-refs/repository-tags.contract.ts";
 import {
   fakeRequests,
-  idleOperation,
   rejected,
   respond,
 } from "#tests-support/fake-requests.ts";
@@ -30,6 +30,7 @@ import {
   mainAndTopicWorktrees,
   mainPath,
   repositoryId,
+  repositoryOperation,
   repositoryRefs,
   repositoryScope,
   topicPath,
@@ -40,6 +41,7 @@ import { BranchesSidebar } from "#web/features/branches-sidebar/branches-sidebar
 import { CommitActionMenu } from "#web/features/commit-graph/commit-actions.tsx";
 import { CommitRefPill } from "#web/features/commit-graph/components/commit-ref-labels.tsx";
 import { createRefActions } from "#web/features/refs/ref-actions.ts";
+import { useEnvironmentQuery } from "#web/platform/query/environment-query.ts";
 import { RepositoryScopeProvider } from "#web/platform/query/repository-scope.tsx";
 
 const main = commitId;
@@ -100,6 +102,31 @@ describe("ref editing", () => {
         screen.getByRole("treeitem", { name: "feature/next, current branch" }),
       )
       .toBeVisible();
+  });
+
+  it("keeps the name field free of errors while the created branch shows up", async () => {
+    const environment = await refsEnvironment();
+    const screen = await renderBranches(environment, spike);
+    await screen
+      .getByRole("button", { name: `Commit ${spike.slice(0, 7)}` })
+      .click({ button: "right" });
+    await screen.getByRole("menuitem", { name: "Create branch here…" }).click();
+    const name = screen.getByRole("textbox", {
+      name: `New branch from ${spike.slice(0, 7)}`,
+    });
+
+    await name.fill("feature/next");
+    const reread = environment.holdOperationsRead();
+    await userEvent.keyboard("{Enter}");
+    const tree = screen.getByRole("tree", { name: "Branches" });
+    await expect
+      .element(tree.getByRole("treeitem", { name: "feature/next" }))
+      .toBeVisible();
+    await expect.element(name).toBeInTheDocument();
+    await expect.element(screen.getByRole("alert")).not.toBeInTheDocument();
+
+    reread.resolve();
+    await expect.element(name).not.toBeInTheDocument();
   });
 
   it("renames the active branch with F2 and cancels with Escape", async () => {
@@ -665,6 +692,7 @@ async function refsEnvironment() {
   const unmergedBranches = new Map<string, UnmergedCommits>();
   let remoteFailure: RepositoryBranchesDeleted["failure"];
   let current = refs();
+  let operationsRead: Promise<void> | undefined;
   const reply = <Route extends EnvironmentRoute>(
     name: RefRoute,
     route: Route,
@@ -690,7 +718,10 @@ async function refsEnvironment() {
     current = { ...current, branches: change(current.branches) };
   };
   const requests = fakeRequests(
-    idleOperation,
+    respond(RepositoryOperationsApi.read, async () => {
+      await operationsRead;
+      return repositoryOperation();
+    }),
     respond(RepositoryRefsApi.read, async () => current),
     reply("create", RepositoryBranchesApi.create, ({ name }) => {
       const branch = { name, target: main };
@@ -804,6 +835,11 @@ async function refsEnvironment() {
     ) => {
       remoteFailure = failure;
     },
+    holdOperationsRead: () => {
+      const held = Promise.withResolvers<void>();
+      operationsRead = held.promise;
+      return held;
+    },
     environment: { requests },
   };
 }
@@ -856,11 +892,19 @@ function BranchWorkspace({
           )}
         </CommitActionMenu>
       )}
+      <OperationReader />
       <div style={{ height: 520, width: 320 }}>
         <BranchesSidebar onBranchRenamed={onBranchRenamed} />
       </div>
     </>
   );
+}
+
+function OperationReader() {
+  useEnvironmentQuery(RepositoryOperationsApi.read, scope, {
+    changes: "refs",
+  });
+  return null;
 }
 
 function refs(): RepositoryRefs {
