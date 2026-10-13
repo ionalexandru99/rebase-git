@@ -45,6 +45,7 @@ function RefNameField({
       setFailure(rejected);
       return;
     }
+    setFailure(undefined);
     setPending(true);
     const refused = await onSubmit(
       name,
