@@ -108,7 +108,7 @@
     "diff": "9.0.0",
     "drizzle-kit": "1.0.0-rc.5-5935859",
     "drizzle-orm": "1.0.0-rc.5-5935859",
-    "effect": "4.0.0-rc.118",
+    "effect": "4.0.3",
     "electron": "43.7.6",
     "electron-builder": "26.17.0",
     "electron-updater": "6.8.9",

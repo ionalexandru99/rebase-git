@@ -122,10 +122,10 @@ importers:
         version: 1.0.0-rc.5-5935859
       drizzle-orm:
         specifier: 1.0.0-rc.5-5935859
-        version: 1.0.0-rc.5-5935859(effect@4.0.0-rc.118)(zod@3.25.76)
+        version: 1.0.0-rc.5-5935859(effect@4.0.3)(zod@3.25.76)
       effect:
-        specifier: 4.0.0-rc.118
-        version: 4.0.0-rc.118
+        specifier: 4.0.3
+        version: 4.0.3
       electron:
         specifier: 43.7.6
         version: 43.7.6(supports-color@10.2.2)
@@ -2764,8 +2764,8 @@ packages:
   ee-first@1.1.1:
     resolution: {integrity: sha512-WMwm9LhRUo+WUaRN+vRuETqG89IgZphVSNkdFgeb6sS/E4OrDIN7t48CAewSHXc6C8lefD8KKfr5vY61brQlow==}
 
-  effect@4.0.0-rc.118:
-    resolution: {integrity: sha512-hxhpCd+swzrtu9lnyPpEFre2ODQzJ9qxgyL1oHIEY8NKnW4PxTbM1XzplMZXiAsLD62HO+KJc41Nqxr9T791ZQ==}
+  effect@4.0.3:
+    resolution: {integrity: sha512-LoWn/Uwwx0JjHSDmBAAahx8sB+klzM6vsZovnbYowBNw6B4QScJLRLBByO61plvNiycx7HPN8FnsWUCu0eXW5w==}
 
   ejs@3.1.10:
     resolution: {integrity: sha512-UeJmFfOrAQS8OJWPZ4qtgHyWExa088/MtK5UEyoJGFH67cDEXkZSviOiKRCZ4Xij0zxI3JECgYs3oKx+AizQBA==}
@@ -6703,9 +6703,9 @@ snapshots:
       get-tsconfig: 4.14.3
       jiti: 2.7.0
 
-  drizzle-orm@1.0.0-rc.5-5935859(effect@4.0.0-rc.118)(zod@3.25.76):
+  drizzle-orm@1.0.0-rc.5-5935859(effect@4.0.3)(zod@3.25.76):
     optionalDependencies:
-      effect: 4.0.0-rc.118
+      effect: 4.0.3
       zod: 3.25.76
 
   dunder-proto@1.0.1:
@@ -6720,7 +6720,7 @@ snapshots:
 
   ee-first@1.1.1: {}
 
-  effect@4.0.0-rc.118: {}
+  effect@4.0.3: {}
 
   ejs@3.1.10:
     dependencies:
