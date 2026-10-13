@@ -20,7 +20,9 @@ runs:
       shell: bash
       env:
         RELEASE_VERSION: ${{ inputs.version }}
+        TARGET_ARCH: ${{ inputs.arch }}
       run: |
+        pnpm install --frozen-lockfile --cpu=current "--cpu=$TARGET_ARCH"
         pnpm exec install-electron
         pnpm build:desktop-package
     - name: Package desktop application
