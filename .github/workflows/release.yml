@@ -323,6 +323,11 @@ jobs:
             runner: macos-latest
             platform: mac
             arch: arm64
+          - name: macOS x64
+            runner: macos-latest
+            platform: mac
+            arch: x64
+            skip-tests: true
           - name: Linux x64
             runner: ubuntu-latest
             platform: linux
@@ -355,6 +360,7 @@ jobs:
           path: package-artifact
 
       - name: Smoke-test clean npm installation
+        if: ${{ !matrix.skip-tests }}
         timeout-minutes: 10
         run: node tests/package/smoke-packed-package.ts package-artifact
 
@@ -380,7 +386,7 @@ jobs:
           CSC_LINK: ${{ matrix.platform == 'mac' && secrets.MACOS_CERTIFICATE || matrix.platform == 'win' && env.HAS_WINDOWS_CERT == 'true' && secrets.WINDOWS_CERTIFICATE || '' }}
 
       - name: Smoke-test packaged application
-        if: runner.os != 'Linux'
+        if: ${{ runner.os != 'Linux' && !matrix.skip-tests }}
         run: pnpm test:release-smoke:built
 
       - name: Smoke-test packaged application under Xvfb
@@ -549,7 +555,12 @@ jobs:
         shell: bash
         run: |
           mkdir desktop-release
-          find desktop-artifacts -type f -exec mv {} desktop-release/ \;
+          mac_manifest=$(basename "$(find desktop-artifacts/desktop-mac-arm64 -name '*-mac.yml')")
+          yq eval-all ". as \$item ireduce ({}; . *+ \$item) | .files |= unique_by(.url)" \
+            "desktop-artifacts/desktop-mac-arm64/$mac_manifest" \
+            "desktop-artifacts/desktop-mac-x64/$mac_manifest" \
+            > "desktop-release/$mac_manifest"
+          find desktop-artifacts -type f ! -name '*-mac.yml' -exec mv {} desktop-release/ \;
 
       - id: draft
         name: Stage draft release

@@ -24,13 +24,14 @@ if (includesWeb) {
   });
 }
 
-const processMonitor = await buildProcessMonitor();
+const processMonitorKey = `${process.platform}-${process.env.TARGET_ARCH ?? process.arch}`;
+const processMonitor = await buildProcessMonitor(processMonitorKey);
 await rm(outputDirectory, { force: true, recursive: true });
 await mkdir(outputDirectory, { recursive: true });
 await Promise.all([
   cp(
     processMonitor,
-    `${outputDirectory}/process-monitor/${process.platform}-${process.arch}`,
+    `${outputDirectory}/process-monitor/${processMonitorKey}`,
     { recursive: true },
   ),
   cp("src/apps/desktop/assets", `${outputDirectory}/assets`, {

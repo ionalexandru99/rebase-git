@@ -3,6 +3,7 @@ import { defineConfig, type Plugin } from "vite-plus";
 
 const downloadSuffixes = {
   mac: "-mac-arm64.dmg",
+  "mac-x64": "-mac-x64.dmg",
   windows: "-win-x64.exe",
   linux: "-linux-x86_64.AppImage",
   debian: "-linux-amd64.deb",
