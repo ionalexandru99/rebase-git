@@ -193,7 +193,7 @@ function Server({
           />
         }
         title="Git"
-        value={server.gitVersion}
+        value={server.gitVersion ?? "…"}
       />
       <SettingsRow
         icon={
@@ -228,7 +228,7 @@ function diagnosticsReport(
     "## Rebase diagnostics",
     "",
     `- Rebase ${productVersion} on ${platformName(server.platform)} ${server.architecture}`,
-    `- Git ${server.gitVersion}`,
+    `- Git ${server.gitVersion ?? "…"}`,
     `- Up ${formatDuration(sample.sampledAt - server.startedAt)}`,
     `- Process monitor: ${monitor._tag === "Unavailable" ? `unavailable (${monitor.detail})` : monitor._tag.toLowerCase()}`,
     `- ${footprint.processes} processes · ${footprint.gitRuns} Git runs, ${footprint.gitFailures} failed`,
