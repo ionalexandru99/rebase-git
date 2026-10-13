@@ -1,11 +1,11 @@
 import tailwindcss from "@tailwindcss/vite";
 import { defineConfig, type Plugin } from "vite-plus";
 
-const downloadExtensions = {
-  mac: ".dmg",
-  windows: ".exe",
-  linux: ".AppImage",
-  debian: ".deb",
+const downloadSuffixes = {
+  mac: "-mac-arm64.dmg",
+  windows: "-win-x64.exe",
+  linux: "-linux-x86_64.AppImage",
+  debian: "-linux-amd64.deb",
 } as const;
 
 type ReleaseAsset = {
@@ -36,11 +36,11 @@ function downloadLinks(): Plugin {
     name: "rebase-download-links",
     async transformIndexHtml(html) {
       const assets = await releaseAssets();
-      return Object.entries(downloadExtensions).reduce(
-        (page, [system, extension]) => {
-          const asset = assets.find((file) => file.name.endsWith(extension));
+      return Object.entries(downloadSuffixes).reduce(
+        (page, [system, suffix]) => {
+          const asset = assets.find((file) => file.name.endsWith(suffix));
           if (asset === undefined) {
-            throw new Error(`The release has no ${extension} file`);
+            throw new Error(`The release has no ${suffix} file`);
           }
           return page.replaceAll(
             `%download-${system}%`,
