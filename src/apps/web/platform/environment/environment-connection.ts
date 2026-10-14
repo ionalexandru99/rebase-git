@@ -255,7 +255,10 @@ function openEnvironmentRpc(
       ? [environmentSubprotocol, credential.value]
       : [environmentSubprotocol];
   const protocol = Layer.effect(RpcClient.Protocol)(
-    RpcClient.makeProtocolSocket({ retryPolicy: Schedule.recurs(0) }),
+    RpcClient.makeProtocolSocket({
+      retryPolicy: Schedule.recurs(0),
+      pingTimeout: "90 seconds",
+    }),
   ).pipe(
     Layer.provide(
       Socket.layerWebSocket(url.href, { protocols }).pipe(
