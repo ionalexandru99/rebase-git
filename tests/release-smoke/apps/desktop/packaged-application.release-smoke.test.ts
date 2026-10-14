@@ -34,7 +34,14 @@ const packagedTest = test.extend<{ application: PackagedApplication }>({
         await closePackagedApplication(application);
       }
     } finally {
-      await removeTemporaryDirectory(testHome);
+      await expect
+        .poll(() =>
+          removeTemporaryDirectory(testHome).then(
+            () => "removed",
+            errorMessage,
+          ),
+        )
+        .toBe("removed");
     }
   },
 });
