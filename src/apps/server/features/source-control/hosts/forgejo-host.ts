@@ -5,10 +5,15 @@ import type {
 } from "#contracts/pull-requests/pull-requests.contract.ts";
 import { remoteLocation } from "#server/features/repository-refs/git/read-repository-refs.ts";
 import {
+  type AvatarAuthor,
+  avatarUrl,
+  foundAvatar,
   type GitHost,
+  gravatarHosts,
   type HostedPullRequest,
   hostCommandOutput,
   pullRequest,
+  sameEmail,
   signedInTool,
   unavailable,
 } from "#server/features/source-control/git-host.ts";
@@ -95,6 +100,8 @@ export function createForgejoHost(cli: TeaCli): GitHost {
                 listPullRequests(cli, login, repository, heads),
               pullRequest: (number: number) =>
                 readPullRequest(cli, login, repository, number),
+              avatar: (author: AvatarAuthor) =>
+                readAvatar(cli, login, repository, author),
             }
           );
         }),
@@ -235,6 +242,33 @@ function readPullRequest(
     );
 }
 
+function readAvatar(
+  cli: TeaCli,
+  login: TeaLogin,
+  repository: ForgejoRepository,
+  author: AvatarAuthor,
+) {
+  return cli
+    .api(
+      login.name,
+      `${repositoryEndpoint(repository)}/git/commits/${encodeURIComponent(author.commit)}?stat=false&verification=false&files=false`,
+    )
+    .pipe(
+      Effect.flatMap(decodeCommit),
+      Effect.mapError(() => unavailable),
+      Effect.map((commit) => {
+        const url = sameEmail(commit.commit.author?.email, author)
+          ? avatarUrl(
+              commit.author?.avatar_url,
+              [login.host, ...gravatarHosts],
+              { size: "40" },
+            )
+          : undefined;
+        return foundAvatar(url);
+      }),
+    );
+}
+
 function readPullRequests(
   cli: TeaCli,
   login: string,
@@ -319,6 +353,21 @@ const decodePullRequests = Schema.decodeUnknownEffect(
 
 const decodePullRequest = Schema.decodeUnknownEffect(
   Schema.fromJsonString(PullRequestNode),
+);
+
+const decodeCommit = Schema.decodeUnknownEffect(
+  Schema.fromJsonString(
+    Schema.Struct({
+      commit: Schema.Struct({
+        author: Schema.optionalKey(
+          Schema.NullOr(Schema.Struct({ email: Schema.String })),
+        ),
+      }),
+      author: Schema.optionalKey(
+        Schema.NullOr(Schema.Struct({ avatar_url: Schema.String })),
+      ),
+    }),
+  ),
 );
 
 const decodeStatus = Schema.decodeUnknownEffect(

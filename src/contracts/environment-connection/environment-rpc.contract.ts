@@ -1,5 +1,6 @@
 import { Schema } from "effect";
 import { Rpc, type RpcClient, type RpcClientError, RpcGroup } from "effect/rpc";
+import { AuthorAvatarsApi } from "#contracts/author-avatars/author-avatars.contract.ts";
 import { BranchSettlingApi } from "#contracts/branch-settling/branch-settling.contract.ts";
 import { CommandProgressRpc } from "#contracts/command-progress/command-progress.contract.ts";
 import { CommitInspectionApi } from "#contracts/commit-inspection/commit-inspection.contract.ts";
@@ -94,6 +95,7 @@ export const EnvironmentRpc = RpcGroup.make(
   ...Object.values(RepositoryOperationsApi),
   ...Object.values(RepositoryPullApi),
   ...Object.values(PullRequestsApi),
+  ...Object.values(AuthorAvatarsApi),
   ...Object.values(RepositoryPushApi),
   ...Object.values(RepositoryReflogApi),
   ...Object.values(RepositoryRefsApi),

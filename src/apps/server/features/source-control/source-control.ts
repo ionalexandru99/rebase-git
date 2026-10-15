@@ -16,9 +16,19 @@ import {
   type EnvironmentFeature,
   route,
 } from "#server/adapters/environment-transport/environment-routes.ts";
-import type { GitCommandRunner } from "#server/adapters/local-git/git-commands.ts";
+import {
+  type GitCommandRunner,
+  runRepositoryGit,
+} from "#server/adapters/local-git/git-commands.ts";
 import type { GitLfs } from "#server/features/repository-lfs/git-lfs.ts";
-import type { GitHost } from "#server/features/source-control/git-host.ts";
+import {
+  primaryRemote,
+  remoteUrls,
+} from "#server/features/repository-refs/git/read-repository-refs.ts";
+import {
+  type GitHost,
+  repositoryFor,
+} from "#server/features/source-control/git-host.ts";
 import {
   type AzureDevOpsClient,
   createAzureDevOpsClient,
@@ -106,6 +116,23 @@ export function createSourceControl(
   return {
     bitbucket,
     enabledHosts,
+    hostedRepository: (directory: string) =>
+      Effect.gen(function* () {
+        const remotes = yield* runRepositoryGit(
+          git,
+          directory,
+          ["config", "--get-regexp", "^remote\\..*\\.url$"],
+          { exitCodes: [0, 1], maxOutputBytes: 65_536 },
+        );
+        const urls = remoteUrls(remotes);
+        const remote = primaryRemote(urls);
+        const remoteUrl = remote === undefined ? undefined : urls.get(remote);
+        const found =
+          remote === undefined || remoteUrl === undefined
+            ? undefined
+            : yield* repositoryFor(yield* enabledHosts, remoteUrl);
+        return found && { ...found, remote, urls };
+      }),
     cloneable: Effect.gen(function* () {
       const [enabled, remotes] = yield* Effect.all(
         [enabledHosts, catalogRemotes(context)],
@@ -201,7 +228,7 @@ function catalogRemotes(context: EnvironmentContext) {
           Promise.all(
             rows.map(({ directory }) =>
               readFile(join(directory ?? "", "config"), "utf8").then(
-                remoteUrls,
+                configRemoteUrls,
                 () => [],
               ),
             ),
@@ -212,7 +239,7 @@ function catalogRemotes(context: EnvironmentContext) {
     );
 }
 
-function remoteUrls(config: string) {
+function configRemoteUrls(config: string) {
   return [...config.matchAll(/^\s*url\s*=\s*(.+?)\s*$/gm)].flatMap(
     (match) => match[1] ?? [],
   );

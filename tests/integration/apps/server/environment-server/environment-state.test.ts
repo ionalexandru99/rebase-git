@@ -35,6 +35,7 @@ const gitHostEnabledMigration = generatedMigrations[8];
 const bitbucketTokenMigration = generatedMigrations[9];
 const pullStrategySettingsMigration = generatedMigrations[10];
 const cloneFolderMigration = generatedMigrations[11];
+const authorAvatarMigration = generatedMigrations[12];
 
 if (
   createEnvironmentMigration === undefined ||
@@ -48,7 +49,8 @@ if (
   gitHostEnabledMigration === undefined ||
   bitbucketTokenMigration === undefined ||
   pullStrategySettingsMigration === undefined ||
-  cloneFolderMigration === undefined
+  cloneFolderMigration === undefined ||
+  authorAvatarMigration === undefined
 ) {
   throw new Error("Expected eleven generated Environment state migrations.");
 }
@@ -182,6 +184,11 @@ describe("Environment state", () => {
         checksum_length: 64,
         name: cloneFolderMigration.name,
         version: 12,
+      },
+      {
+        checksum_length: 64,
+        name: authorAvatarMigration.name,
+        version: 13,
       },
     ]);
     database.close();
@@ -333,7 +340,7 @@ describe("Environment state", () => {
       database
         .prepare("SELECT max(id) AS version FROM __drizzle_migrations")
         .get(),
-    ).toEqual({ version: 12 });
+    ).toEqual({ version: 13 });
     database.close();
   });
 

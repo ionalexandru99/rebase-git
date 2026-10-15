@@ -56,10 +56,8 @@ export function readRepositoryRefs(
       { concurrency: "unbounded" },
     );
     const worktrees = yield* canonicalizeWorktrees(output.worktrees);
-    const hostedRepository = hostedRepositoryFromRemotes(output.config);
     return fitRepositoryRefs({
       remoteProviders: remoteProvidersFromConfig(output.config),
-      ...(hostedRepository === undefined ? {} : { hostedRepository }),
       branches: withSettlements(
         canonicalizeBranchWorktrees(
           output.branches.flatMap(withDefined(localBranchFromRecord)),
@@ -169,30 +167,12 @@ function withSettlements(
       });
 }
 
-const hostedProviders = new Map<
-  string,
-  NonNullable<RepositoryRefs["hostedRepository"]>["provider"]
->([
-  ["github.com", "github"],
-  ["bitbucket.org", "bitbucket"],
-  ["codeberg.org", "codeberg"],
-  ["gitlab.com", "gitlab"],
-  ["dev.azure.com", "azure"],
-  ["ssh.dev.azure.com", "azure"],
-]);
-
-export function hostedRepositoryFromRemotes(
-  output: string,
-): RepositoryRefs["hostedRepository"] {
-  const url = primaryRemoteUrl(output);
-  return url === undefined ? undefined : hostedRepositoryFromUrl(url);
-}
-
-export function primaryRemoteUrl(output: string) {
-  const urls = remoteUrls(output);
-  return (
-    urls.get("origin") ?? (urls.size === 1 ? [...urls.values()][0] : undefined)
-  );
+export function primaryRemote(urls: ReadonlyMap<string, string>) {
+  return urls.has("origin")
+    ? "origin"
+    : urls.size === 1
+      ? [...urls.keys()][0]
+      : undefined;
 }
 
 export function remoteUrls(output: string) {
@@ -204,27 +184,6 @@ export function remoteUrls(output: string) {
         : [[match[1], match[2]] as const];
     }),
   );
-}
-
-export function hostedRepositoryFromUrl(
-  url: string,
-): RepositoryRefs["hostedRepository"] {
-  const location = remoteLocation(url);
-  const provider =
-    location === undefined ? undefined : hostedProviders.get(location.host);
-  if (location === undefined || provider === undefined) return undefined;
-  if (provider === "gitlab" || provider === "azure") return { provider };
-  const [owner, name, ...rest] = location.path
-    .replace(/^\/+|\/+$/g, "")
-    .replace(/\.git$/, "")
-    .split("/");
-  return owner === undefined ||
-    name === undefined ||
-    rest.length > 0 ||
-    !isHostedName(owner) ||
-    !isHostedName(name)
-    ? undefined
-    : { provider, owner, name };
 }
 
 export function remoteLocation(address: string) {
@@ -240,10 +199,6 @@ export function remoteLocation(address: string) {
   return match?.[1] === undefined || match[2] === undefined
     ? undefined
     : { host: match[1].toLowerCase(), path: match[2] };
-}
-
-function isHostedName(value: string) {
-  return /^(?!\.{1,2}$)[\w.-]{1,100}$/.test(value);
 }
 
 type Provider = NonNullable<

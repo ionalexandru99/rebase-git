@@ -2,11 +2,15 @@ import { Effect, Schema } from "effect";
 import type { PullRequest } from "#contracts/pull-requests/pull-requests.contract.ts";
 import { remoteLocation } from "#server/features/repository-refs/git/read-repository-refs.ts";
 import {
+  type AvatarAuthor,
+  avatarUrl,
   eachHead,
+  foundAvatar,
   type GitHost,
   type HostedPullRequest,
   pageAnswer,
   pullRequest,
+  sameEmail,
   signedInTool,
   singleAccount,
 } from "#server/features/source-control/git-host.ts";
@@ -63,6 +67,7 @@ export function createAzureDevOpsHost(client: AzureDevOpsClient): GitHost {
                 yield* checksOf(read, repository, node),
               );
             }).pipe(Effect.orElseSucceed(() => undefined)),
+          avatar: (author) => readAvatar(client, repository, author),
         },
       );
     },
@@ -96,6 +101,30 @@ function listPullRequests(
         ),
       ),
     );
+  });
+}
+
+function readAvatar(
+  client: AzureDevOpsClient,
+  repository: AzureRepository,
+  author: AvatarAuthor,
+) {
+  return Effect.gen(function* () {
+    const accessToken = yield* client.accessToken;
+    const { value } = yield* reader(client, accessToken)(
+      commitsUrl(repository, author.commit),
+      decodeCommits,
+    );
+    const commit = value[0];
+    const url =
+      commit?.commitId === author.commit &&
+      sameEmail(commit.author.email, author)
+        ? avatarUrl(commit.author.imageUrl, [
+            "dev.azure.com",
+            "visualstudio.com",
+          ])
+        : undefined;
+    return foundAvatar(url, `Bearer ${accessToken}`);
   });
 }
 
@@ -197,6 +226,18 @@ function pullRequestUrl(repository: AzureRepository, number: number) {
   )}`;
 }
 
+function commitsUrl(repository: AzureRepository, commit: string) {
+  return `${projectUrl(repository)}/_apis/git/repositories/${encodeURIComponent(repository.name)}/commits?${new URLSearchParams(
+    {
+      "searchCriteria.itemVersion.version": commit,
+      "searchCriteria.itemVersion.versionType": "commit",
+      "searchCriteria.$top": "1",
+      "searchCriteria.includeUserImageUrl": "true",
+      "api-version": "7.1",
+    },
+  )}`;
+}
+
 function evaluationsUrl(repository: AzureRepository, node: PullRequestNode) {
   return `${projectUrl(repository)}/_apis/policy/evaluations?${new URLSearchParams(
     {
@@ -230,6 +271,22 @@ const decodePullRequestList = Schema.decodeUnknownEffect(
 
 const decodePullRequest = Schema.decodeUnknownEffect(
   Schema.fromJsonString(PullRequestNode),
+);
+
+const decodeCommits = Schema.decodeUnknownEffect(
+  Schema.fromJsonString(
+    Schema.Struct({
+      value: Schema.Array(
+        Schema.Struct({
+          commitId: Schema.String,
+          author: Schema.Struct({
+            email: Schema.optionalKey(Schema.String),
+            imageUrl: Schema.optionalKey(Schema.String),
+          }),
+        }),
+      ),
+    }),
+  ),
 );
 
 const Evaluation = Schema.Struct({

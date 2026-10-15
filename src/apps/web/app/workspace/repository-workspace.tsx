@@ -1,6 +1,5 @@
 import { type JSX, Suspense } from "react";
 import { useCommitInspection } from "#web/app/workspace/use-commit-inspection.ts";
-import { AuthorAvatars } from "#web/features/author-avatars/author-avatar.tsx";
 import { BranchesSidebar } from "#web/features/branches-sidebar/branches-sidebar.tsx";
 import { useCherryPick } from "#web/features/cherry-pick/cherry-pick-menu.tsx";
 import { CommitGraph } from "#web/features/commit-graph/commit-graph.tsx";
@@ -160,123 +159,115 @@ function Workspace({
       <DropConfirmation drop={rewrite} />
       <RemoteSync>
         {(syncActions) => (
-          <AuthorAvatars repository={refs?.hostedRepository}>
-            <WorkspacePanel.Group>
-              <WorkspacePanel.Sidebar>
-                <BranchesSidebar
-                  history={history}
-                  merge={merge}
-                  pullRequests={pullRequests}
-                  rebase={rebase}
-                  reset={reset}
-                  compare={compare}
-                  onBranchRenamed={historyScope.renameBranch}
-                  onShowReflog={showReflog}
-                  onOpenStash={openStash}
-                  onToggleHistoryRef={historyScope.toggleRef}
-                  selectedHistoryRefKeys={
-                    resolved?.selectedRefKeys ?? noRefKeys
-                  }
-                />
-              </WorkspacePanel.Sidebar>
-              <WorkspacePanel.Main>
-                {() => (
-                  <TerminalSplit terminals={terminals}>
-                    <main
-                      aria-label="Repository workspace"
-                      className="h-full rounded-none bg-repository"
-                    >
-                      <CommitGraph
-                        merge={merge}
-                        rebase={rebase}
-                        reset={reset}
-                        compare={compare}
-                        cherryPick={cherryPick}
-                        rewrite={rewrite}
-                        ref={graphRef}
-                        onOpenDetails={openDetails}
-                        onOpenCodeMatch={openCodeMatch}
-                        onOpenChanges={() =>
-                          execute({ type: "open", kind: "changes" })
-                        }
-                        onActiveCommitChange={selectCommit}
-                        titleActions={
-                          <>
-                            <WorktreeSwitcher />
-                            <CurrentPullRequest pullRequests={pullRequests} />
-                          </>
-                        }
-                        toolbarActions={syncActions}
-                        toolbarInset={!panelState.open}
-                        remoteProviders={refs?.remoteProviders}
-                        historyIdentity={{
-                          environmentId,
-                          repositoryId: scope.logicalRepositoryId,
-                        }}
-                        onRemoveHistoryRef={historyScope.toggleRef}
-                        onRevealHistoryRef={historyScope.toggleRef}
-                        onResetHistoryScope={historyScope.reset}
-                        history={history}
-                        repositoryName={name}
-                        roots={resolved?.roots}
-                        scope={resolved?.scope ?? automaticHistoryScope}
-                        selections={resolved?.selections ?? []}
-                      />
-                    </main>
-                  </TerminalSplit>
-                )}
-              </WorkspacePanel.Main>
-              <WorkspacePanel.Pane
-                uncommitted={uncommitted !== undefined}
-                contents={{
-                  history: (
-                    <Suspense fallback={null}>
-                      <fileHistoryPanel.Content
-                        onOpenDetails={openDetails}
-                        onSelectCommit={(oid) =>
-                          graphRef.current?.followOid(oid)
-                        }
-                      />
-                    </Suspense>
-                  ),
-                  blame: (
-                    <Suspense fallback={null}>
-                      <blamePanel.Content
-                        onOpenDetails={openDetails}
-                        onSelectCommit={(oid) =>
-                          graphRef.current?.followOid(oid)
-                        }
-                      />
-                    </Suspense>
-                  ),
-                  reflog: (
-                    <Suspense fallback={null}>
-                      <reflogPanel.Content
-                        reset={reset}
-                        onOpenDetails={openDetails}
-                        onShowInGraph={async (oid) => {
-                          await graphRef.current?.navigateToOid(oid);
-                        }}
-                      />
-                    </Suspense>
-                  ),
-                  compare: (
-                    <Suspense fallback={null}>
-                      <comparePanel.Content history={history} />
-                    </Suspense>
-                  ),
-                  rebase: (
-                    <Suspense fallback={null}>
-                      <rebasePanel.Content
-                        history={history}
-                        onClose={closeRebasePlan}
-                      />
-                    </Suspense>
-                  ),
-                }}
+          <WorkspacePanel.Group>
+            <WorkspacePanel.Sidebar>
+              <BranchesSidebar
+                history={history}
+                merge={merge}
+                pullRequests={pullRequests}
+                rebase={rebase}
+                reset={reset}
+                compare={compare}
+                onBranchRenamed={historyScope.renameBranch}
+                onShowReflog={showReflog}
+                onOpenStash={openStash}
+                onToggleHistoryRef={historyScope.toggleRef}
+                selectedHistoryRefKeys={resolved?.selectedRefKeys ?? noRefKeys}
               />
-            </WorkspacePanel.Group>
-          </AuthorAvatars>
+            </WorkspacePanel.Sidebar>
+            <WorkspacePanel.Main>
+              {() => (
+                <TerminalSplit terminals={terminals}>
+                  <main
+                    aria-label="Repository workspace"
+                    className="h-full rounded-none bg-repository"
+                  >
+                    <CommitGraph
+                      merge={merge}
+                      rebase={rebase}
+                      reset={reset}
+                      compare={compare}
+                      cherryPick={cherryPick}
+                      rewrite={rewrite}
+                      ref={graphRef}
+                      onOpenDetails={openDetails}
+                      onOpenCodeMatch={openCodeMatch}
+                      onOpenChanges={() =>
+                        execute({ type: "open", kind: "changes" })
+                      }
+                      onActiveCommitChange={selectCommit}
+                      titleActions={
+                        <>
+                          <WorktreeSwitcher />
+                          <CurrentPullRequest pullRequests={pullRequests} />
+                        </>
+                      }
+                      toolbarActions={syncActions}
+                      toolbarInset={!panelState.open}
+                      remoteProviders={refs?.remoteProviders}
+                      historyIdentity={{
+                        environmentId,
+                        repositoryId: scope.logicalRepositoryId,
+                      }}
+                      onRemoveHistoryRef={historyScope.toggleRef}
+                      onRevealHistoryRef={historyScope.toggleRef}
+                      onResetHistoryScope={historyScope.reset}
+                      history={history}
+                      repositoryName={name}
+                      roots={resolved?.roots}
+                      scope={resolved?.scope ?? automaticHistoryScope}
+                      selections={resolved?.selections ?? []}
+                    />
+                  </main>
+                </TerminalSplit>
+              )}
+            </WorkspacePanel.Main>
+            <WorkspacePanel.Pane
+              uncommitted={uncommitted !== undefined}
+              contents={{
+                history: (
+                  <Suspense fallback={null}>
+                    <fileHistoryPanel.Content
+                      onOpenDetails={openDetails}
+                      onSelectCommit={(oid) => graphRef.current?.followOid(oid)}
+                    />
+                  </Suspense>
+                ),
+                blame: (
+                  <Suspense fallback={null}>
+                    <blamePanel.Content
+                      onOpenDetails={openDetails}
+                      onSelectCommit={(oid) => graphRef.current?.followOid(oid)}
+                    />
+                  </Suspense>
+                ),
+                reflog: (
+                  <Suspense fallback={null}>
+                    <reflogPanel.Content
+                      reset={reset}
+                      onOpenDetails={openDetails}
+                      onShowInGraph={async (oid) => {
+                        await graphRef.current?.navigateToOid(oid);
+                      }}
+                    />
+                  </Suspense>
+                ),
+                compare: (
+                  <Suspense fallback={null}>
+                    <comparePanel.Content history={history} />
+                  </Suspense>
+                ),
+                rebase: (
+                  <Suspense fallback={null}>
+                    <rebasePanel.Content
+                      history={history}
+                      onClose={closeRebasePlan}
+                    />
+                  </Suspense>
+                ),
+              }}
+            />
+          </WorkspacePanel.Group>
         )}
       </RemoteSync>
       <WorkspacePanel.Controls uncommitted={uncommitted !== undefined}>

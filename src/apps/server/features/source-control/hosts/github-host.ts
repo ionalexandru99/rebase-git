@@ -3,10 +3,12 @@ import type {
   PullRequest,
   PullRequestsUnavailable,
 } from "#contracts/pull-requests/pull-requests.contract.ts";
-import { hostedRepositoryFromUrl } from "#server/features/repository-refs/git/read-repository-refs.ts";
+import { remoteLocation } from "#server/features/repository-refs/git/read-repository-refs.ts";
 import {
+  avatarUrl,
   cloneableRepository,
   decodeHostJson,
+  foundAvatar,
   type GitHost,
   type HostedPullRequest,
   hostCommandOutput,
@@ -16,6 +18,7 @@ import {
   readRepositoryPages,
   repositoriesPerPage,
   runHostCommand,
+  sameEmail,
   signedInTool,
   singleAccount,
   unavailable,
@@ -163,11 +166,64 @@ export function createGitHubHost(cli: GitHubCli): GitHost {
                 ),
                 Effect.orElseSucceed(() => undefined),
               ),
+          avatar: (author) =>
+            cli
+              .graphql(avatarQuery, {
+                owner: repository.owner,
+                name: repository.name,
+                oid: author.commit,
+              })
+              .pipe(
+                Effect.flatMap(decodeAvatarResponse),
+                Effect.map(({ data }) => {
+                  const found = data.repository?.object?.author;
+                  const url =
+                    found !== undefined &&
+                    found !== null &&
+                    sameEmail(found.email, author)
+                      ? avatarUrl(found.user?.avatarUrl, [
+                          "avatars.githubusercontent.com",
+                        ])
+                      : undefined;
+                  return foundAvatar(url);
+                }),
+              ),
         },
       );
     },
   };
 }
+
+const avatarQuery = `query($owner: String!, $name: String!, $oid: GitObjectID!) {
+  repository(owner: $owner, name: $name) {
+    object(oid: $oid) { ... on Commit { author { email user { avatarUrl(size: 40) } } } }
+  }
+}`;
+
+const decodeAvatarResponse = decodeHostJson(
+  Schema.Struct({
+    data: Schema.Struct({
+      repository: Schema.NullOr(
+        Schema.Struct({
+          object: Schema.NullOr(
+            Schema.Struct({
+              author: Schema.optionalKey(
+                Schema.NullOr(
+                  Schema.Struct({
+                    email: Schema.NullOr(Schema.String),
+                    user: Schema.NullOr(
+                      Schema.Struct({ avatarUrl: Schema.String }),
+                    ),
+                  }),
+                ),
+              ),
+            }),
+          ),
+        }),
+      ),
+    }),
+  }),
+);
 
 const decodeRepositoryPage = decodeHostJson(
   Schema.Array(
@@ -183,14 +239,23 @@ const decodeRepositoryPage = decodeHostJson(
 );
 
 function githubRepository(remoteUrl: string) {
-  const repository = hostedRepositoryFromUrl(remoteUrl);
-  return repository?.provider === "github"
-    ? {
-        owner: repository.owner,
-        name: repository.name,
-        id: `${repository.owner}/${repository.name}`.toLowerCase(),
-      }
-    : undefined;
+  const location = remoteLocation(remoteUrl);
+  if (location?.host !== "github.com") return undefined;
+  const [owner, name, ...rest] = location.path
+    .replace(/^\/+|\/+$/g, "")
+    .replace(/\.git$/, "")
+    .split("/");
+  return owner === undefined ||
+    name === undefined ||
+    rest.length > 0 ||
+    !isGitHubName(owner) ||
+    !isGitHubName(name)
+    ? undefined
+    : { owner, name, id: `${owner}/${name}`.toLowerCase() };
+}
+
+function isGitHubName(value: string) {
+  return /^(?!\.{1,2}$)[\w.-]{1,100}$/.test(value);
 }
 
 function pullRequestsQuery(branches: number) {

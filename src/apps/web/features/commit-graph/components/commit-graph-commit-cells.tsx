@@ -51,7 +51,7 @@ export const CommitGraphCommitCells = memo(
           className={`${graphAuthorCellClassName} z-[4] flex h-full min-w-0 items-center gap-1.5 bg-[var(--graph-row-background)] px-3 text-muted-foreground`}
           aria-label={`Author ${commit.author.name}`}
         >
-          <AuthorAvatar commit={commit} />
+          <AuthorAvatar author={commit.author} />
           <span className={`truncate ${graphAuthorNameClassName}`}>
             {commit.author.name}
           </span>

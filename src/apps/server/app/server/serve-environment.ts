@@ -10,6 +10,10 @@ import {
   acquireEnvironmentListener,
   type EnvironmentListener,
 } from "#server/app/server/environment-listener.ts";
+import {
+  authorAvatarsFeature,
+  createAvatarImages,
+} from "#server/features/author-avatars/author-avatars.ts";
 import { branchSettlingFeature } from "#server/features/branch-settling/branch-settling.ts";
 import { settleBranchesAfterFetch } from "#server/features/branch-settling/settle-after-fetch.ts";
 import {
@@ -151,6 +155,7 @@ export function acquireEnvironment(home: string, runner: GitCommandRunner) {
       access: createRepositoryAccess(catalog, git),
       activity,
       authorization: createEnvironmentAuthorization(context),
+      avatarImages: createAvatarImages(),
       catalog,
       changes: yield* acquireRepositoryChangePublisher(
         git,
@@ -224,6 +229,7 @@ export function environmentFeatures(dependencies: EnvironmentDependencies) {
         }),
       }),
       pullRequestsFeature({ ...dependencies, sourceControl }),
+      authorAvatarsFeature({ ...dependencies, sourceControl }),
       repositoryPushFeature(dependencies),
       repositoryReflogFeature(dependencies),
       yield* repositoryRefsFeature(dependencies),

@@ -72,10 +72,6 @@ export const RepositoryRefsTruncation = Schema.Struct({
 });
 export type RepositoryRefsTruncation = typeof RepositoryRefsTruncation.Type;
 
-const HostedName = Schema.String.check(
-  Schema.isPattern(/^(?!\.{1,2}$)[\w.-]{1,100}$/),
-);
-
 export const RepositoryRefs = Schema.Struct({
   remoteProviders: Schema.optionalKey(
     Schema.Array(
@@ -94,16 +90,6 @@ export const RepositoryRefs = Schema.Struct({
         ]),
       }),
     ).check(Schema.isMaxLength(256)),
-  ),
-  hostedRepository: Schema.optionalKey(
-    Schema.Union([
-      Schema.Struct({
-        provider: Schema.Literals(["github", "bitbucket", "codeberg"]),
-        owner: HostedName,
-        name: HostedName,
-      }),
-      Schema.Struct({ provider: Schema.Literals(["gitlab", "azure"]) }),
-    ]),
   ),
   branches: Schema.Array(LocalBranch).check(Schema.isMaxLength(10_000)),
   logicalRepositoryId: Schema.optionalKey(RepositoryId),

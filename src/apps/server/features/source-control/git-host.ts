@@ -35,6 +35,20 @@ export type PullRequestsByHead = ReadonlyMap<
 
 export type HeadAnswer = readonly HostedPullRequest[] | undefined;
 
+export interface AvatarAuthor {
+  readonly commit: string;
+  readonly email: string;
+}
+
+export interface AvatarSource {
+  readonly url: string;
+  readonly authorization?: string;
+}
+
+export type HostAvatar =
+  | { readonly answered: false }
+  | { readonly answered: true; readonly source?: AvatarSource };
+
 export interface HostedRepository {
   readonly id: string;
   readonly pullRequests: (
@@ -43,6 +57,9 @@ export interface HostedRepository {
   readonly pullRequest: (
     number: number,
   ) => Effect.Effect<HostedPullRequest | undefined>;
+  readonly avatar: (
+    author: AvatarAuthor,
+  ) => Effect.Effect<HostAvatar, PullRequestsUnavailable>;
 }
 
 export interface GitHost {
@@ -187,6 +204,47 @@ export function hostGet(
     },
     catch: () => unavailable,
   });
+}
+
+export const gravatarHosts = ["gravatar.com"];
+
+export function avatarUrl(
+  value: string | null | undefined,
+  hosts: readonly string[],
+  size: Readonly<Record<string, string>> = {},
+) {
+  const url = URL.parse(value ?? "");
+  const hostname = url?.hostname.toLowerCase();
+  if (
+    url?.protocol !== "https:" ||
+    url.username !== "" ||
+    url.password !== "" ||
+    !hosts.some(
+      (host) => hostname === host || hostname?.endsWith(`.${host}`) === true,
+    )
+  )
+    return undefined;
+  for (const [name, pixels] of Object.entries(size))
+    url.searchParams.set(name, pixels);
+  return url.toString();
+}
+
+export function foundAvatar(
+  url: string | undefined,
+  authorization?: string,
+): HostAvatar {
+  if (url === undefined) return { answered: true };
+  return {
+    answered: true,
+    source: authorization === undefined ? { url } : { url, authorization },
+  };
+}
+
+export function sameEmail(
+  email: string | null | undefined,
+  author: AvatarAuthor,
+) {
+  return email?.toLowerCase() === author.email.toLowerCase();
 }
 
 export function readRepositoryPages<A>(
