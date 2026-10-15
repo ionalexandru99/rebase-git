@@ -73,7 +73,7 @@ export function IconToggles({
           aria-label={toggle.label}
           aria-pressed={toggle.pressed}
           onClick={() => toggle.onChange(!toggle.pressed)}
-          className={`${itemClassName} outline-none aria-pressed:bg-sidebar-accent aria-pressed:text-sidebar-accent-foreground focus-visible:ring-1 focus-visible:ring-sidebar-ring`}
+          className={`${itemClassName} w-7 outline-none aria-pressed:bg-sidebar-accent aria-pressed:text-sidebar-accent-foreground focus-visible:ring-1 focus-visible:ring-sidebar-ring`}
         >
           <toggle.Icon aria-hidden="true" className="size-4" />
         </button>

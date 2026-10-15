@@ -94,8 +94,8 @@ export function DiffDisplayControls({
           <OptionsMenu {...options} />
         </div>
         <div className="ml-auto flex items-center">
-          {children}
           <ScrollTopButton region={region} />
+          {children}
         </div>
       </div>
     </fieldset>

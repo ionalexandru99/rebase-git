@@ -122,21 +122,24 @@ function StashFiles({
       preferences={preferences}
       choosePreferences={choosePreferences}
     >
-      <Suspense
-        fallback={
-          <p className="p-4 text-body text-muted-foreground">
-            Loading diff viewer…
-          </p>
-        }
-      >
-        <CommitDiff
-          file={contents.files.find((file) => file.path === selected)}
-          diff={diff}
-          preview={false}
-          preferences={preferences}
-          choosePreferences={choosePreferences}
-        />
-      </Suspense>
+      {(treeToggle) => (
+        <Suspense
+          fallback={
+            <p className="p-4 text-body text-muted-foreground">
+              Loading diff viewer…
+            </p>
+          }
+        >
+          <CommitDiff
+            file={contents.files.find((file) => file.path === selected)}
+            diff={diff}
+            preview={false}
+            preferences={preferences}
+            choosePreferences={choosePreferences}
+            treeToggle={treeToggle}
+          />
+        </Suspense>
+      )}
     </CommitFiles>
   );
 }

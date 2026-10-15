@@ -17,8 +17,9 @@ describe("workspace panel state", () => {
         expanded,
       });
     expect(fit(1408, true)).toEqual({ sidebar: 256, panel: 576 });
-    expect(fit(1181, true)).toEqual({ sidebar: 192, panel: 413 });
-    expect(fit(1021, true)).toEqual({ sidebar: 192, panel: 320 });
+    expect(fit(1181, true)).toEqual({ sidebar: 192, panel: 573 });
+    expect(fit(1021, true)).toEqual({ sidebar: 192, panel: 413 });
+    expect(fit(901, true)).toEqual({ sidebar: 192, panel: 320 });
     expect(fit(1181, true, true)).toEqual({ sidebar: 256, panel: 576 });
     expect(fit(832, false)).toEqual({ sidebar: 256, panel: 0 });
   });

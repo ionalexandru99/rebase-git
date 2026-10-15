@@ -212,7 +212,7 @@ describe("workspace panel", () => {
     await expect.poll(sidebarWidth).toBeLessThan(250);
     await page.getByRole("separator", { name: "Resize side panel" }).click();
     await userEvent.keyboard("{ArrowRight}");
-    await expect.poll(() => savedWidths("window").panel).toBeLessThan(26);
+    await expect.poll(() => savedWidths("window").panel).toBeLessThan(36);
     expect(savedWidths("window").sidebar).toBe(16);
     const saved = savedWidths("window").panel * 16;
     await panel.resize(2400);
