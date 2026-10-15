@@ -241,7 +241,12 @@ export function signingRejection(
     return unavailable("Can't find your GPG signing key.");
   if (/Inappropriate ioctl for device|Operation cancelled|Timeout/.test(detail))
     return locked("Unlock your GPG key, then try again.");
-  return undefined;
+  const reason = /gpg: signing failed: ([^\n]+)/.exec(detail)?.[1];
+  return unavailable(
+    reason === undefined
+      ? "GPG couldn't sign."
+      : `GPG couldn't sign: ${reason.trim().replace(/\.$/, "")}.`,
+  );
 }
 
 export function isLfsMissing(detail: string) {
@@ -290,10 +295,9 @@ function runLocalGitCommand(command: GitCommand) {
       resume(result);
     };
     const end = (reason: GitFailed["reason"] | "Stopped") => {
-      if (ended !== undefined) return;
-      if (reason !== "OutputTooLarge" && exited(child)) return;
+      if (ended !== undefined || !running(child)) return;
       ended = reason;
-      if (!exited(child)) killGit(child);
+      killGit(child);
     };
     const child = startGit(command);
     const deadline = setTimeout(
@@ -379,17 +383,17 @@ function startGit(command: GitStreamCommand) {
   return child;
 }
 
-function exited(child: ChildProcess) {
-  return child.exitCode !== null || child.signalCode !== null;
+function running(child: ChildProcess) {
+  return child.stdout?.closed !== true || child.stderr?.closed !== true;
 }
 
 function stopGit(child: ChildProcess) {
   return Effect.callback<void>((resume) => {
-    if (exited(child)) {
+    if (!running(child)) {
       resume(Effect.void);
       return;
     }
-    child.once("exit", () => resume(Effect.void));
+    child.once("close", () => resume(Effect.void));
     killGit(child);
   });
 }
@@ -461,13 +465,13 @@ function spawnGitProcess(command: GitStreamCommand) {
       const exit = watchGitExit(child);
       if (child.pid !== undefined)
         command.onSpawn?.(child.pid, () => {
-          if (!exited(child)) killGit(child);
+          if (running(child)) killGit(child);
         });
       return { child, exit };
     }),
     ({ child }) =>
       Effect.sync(() => {
-        if (!exited(child)) signalGit(child);
+        if (running(child)) signalGit(child);
       }),
   );
 }

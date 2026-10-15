@@ -50,6 +50,11 @@ describe("signing rejection", () => {
       "SigningLocked",
       "Unlock your GPG key, then try again.",
     ],
+    [
+      `error: gpg failed to sign the data:\n[GNUPG:] FAILURE sign 11\ngpg: signing failed: Bad passphrase${commitFailed}`,
+      "SigningUnavailable",
+      "GPG couldn't sign: Bad passphrase.",
+    ],
   ])("turns %j into a %s rejection", (detail, reason, message) => {
     expect(signingRejection(detail)).toEqual({
       _tag: "RepositoryRejected",

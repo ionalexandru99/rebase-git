@@ -5,7 +5,11 @@ import {
   type RepositorySigning,
   type Signing,
 } from "#contracts/git-signing/git-signing.contract.ts";
-import { fakeRequests, respond } from "#tests-support/fake-requests.ts";
+import {
+  fakeRequests,
+  rejected,
+  respond,
+} from "#tests-support/fake-requests.ts";
 import { signingKey } from "#tests-support/fixtures.ts";
 import { render } from "#tests-support/render.tsx";
 import {
@@ -99,5 +103,33 @@ describe("Git signing", () => {
         signing: { _tag: "Key", format: "openpgp", key: gpgKey.key },
       },
     ]);
+  });
+
+  it("goes back to the saved choice and says why when the server cannot save it", async () => {
+    await render(<ServerSigningRow />, {
+      environment: {
+        requests: fakeRequests(
+          respond(GitSigningApi.read, async () => ({ _tag: "Off" as const })),
+          respond(GitSigningApi.keys, async () => [signingKey()]),
+          respond(GitSigningApi.save, async () => {
+            throw rejected({
+              _tag: "SigningFailed" as const,
+              detail: "error: could not lock config file /home/ada/.gitconfig",
+            });
+          }),
+        ),
+      },
+    });
+    const select = page.getByRole("combobox", { name: "Sign commits" });
+
+    await select.click();
+    await page.getByRole("option", { name: "SSH · id_ed25519" }).click();
+
+    await expect
+      .element(
+        page.getByText("Could not lock config file /home/ada/.gitconfig."),
+      )
+      .toBeVisible();
+    await expect.element(select).toHaveTextContent("Off");
   });
 });
