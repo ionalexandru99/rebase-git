@@ -132,7 +132,13 @@ const decodeSnapshot = Schema.decodeUnknownSync(DesktopUpdateSnapshot);
 export function readDesktopHostBridge(): DesktopHostBridge | undefined {
   const host = window.rebaseHost;
   if (host === undefined) return undefined;
-  return { ...host, updates: decodedDesktopUpdates(host.updates) };
+  return {
+    ...host,
+    updates:
+      host.updates === undefined
+        ? undefined
+        : decodedDesktopUpdates(host.updates),
+  };
 }
 
 function decodedDesktopUpdates(updates: DesktopUpdates): DesktopUpdates {
