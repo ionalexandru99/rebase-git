@@ -8,7 +8,11 @@ import { createRepository } from "#tests-support/git.ts";
 import { removeTemporaryDirectory } from "#tests-support/temporary-directory.ts";
 
 const git = createLocalGitCommandRunner();
-const waitForever = ["-c", "alias.wait-forever=!sleep 600", "wait-forever"];
+const waitForever = [
+  "-c",
+  "alias.wait-forever=!sleep 600 & echo started; wait",
+  "wait-forever",
+];
 let directory = "";
 
 beforeAll(async () => {
@@ -49,7 +53,11 @@ it("fails instead of returning cut-off output when Git prints more than allowed"
 it("stops Git and everything it started when the deadline passes", async () => {
   const error = await Effect.runPromise(
     Effect.flip(
-      git.run({ arguments: waitForever, directory, timeoutMilliseconds: 100 }),
+      git.run({
+        arguments: waitForever,
+        directory,
+        timeoutMilliseconds: 1_000,
+      }),
     ),
   );
 
@@ -57,12 +65,17 @@ it("stops Git and everything it started when the deadline passes", async () => {
 });
 
 it("reports a run stopped from Diagnostics", async () => {
+  let stop = () => {};
   const error = await Effect.runPromise(
     Effect.flip(
       git.run({
         arguments: waitForever,
         directory,
-        onSpawn: (_pid, stop) => stop(),
+        onSpawn: (_pid, stopRun) => {
+          stop = stopRun;
+        },
+        progressStream: "stdout",
+        progress: () => stop(),
       }),
     ),
   );
