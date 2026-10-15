@@ -31,7 +31,6 @@ export interface DesktopAutoUpdater {
 }
 
 export interface ApplicationUpdaterOptions {
-  readonly packaged: boolean;
   readonly saveSettings: (settings: DesktopUpdateSettings) => Promise<void>;
   readonly settings: DesktopUpdateSettings;
 }
@@ -46,13 +45,29 @@ export interface ApplicationUpdater {
   subscribe(listener: (snapshot: DesktopUpdateSnapshot) => void): () => void;
 }
 
+export function updatesItself(install: {
+  readonly appImage: string | undefined;
+  readonly appImageMount: string | undefined;
+  readonly executable: string;
+  readonly packaged: boolean;
+  readonly platform: NodeJS.Platform;
+}) {
+  if (!install.packaged) return false;
+  if (install.platform !== "linux") return true;
+  return (
+    install.appImage !== undefined &&
+    install.appImageMount !== undefined &&
+    install.executable.startsWith(`${install.appImageMount}/`)
+  );
+}
+
 export function createApplicationUpdater(
   updater: DesktopAutoUpdater,
   options: ApplicationUpdaterOptions,
 ): ApplicationUpdater {
   let snapshot: DesktopUpdateSnapshot = {
     settings: options.settings,
-    status: options.packaged ? { _tag: "Idle" } : { _tag: "Unavailable" },
+    status: { _tag: "Idle" },
   };
   let downloadingVersion: string | undefined;
   let commandQueue = Promise.resolve();
@@ -110,10 +125,6 @@ export function createApplicationUpdater(
   });
 
   const checkForUpdates = async () => {
-    if (!options.packaged) {
-      publishStatus({ _tag: "Unavailable" });
-      return;
-    }
     if (isUpdateActive(snapshot.status) || snapshot.status._tag === "Ready") {
       return;
     }
@@ -176,9 +187,7 @@ export function createApplicationUpdater(
         const settings = { ...snapshot.settings, releaseChannel };
         await saveSettings(settings);
         configureReleaseChannel(updater, releaseChannel);
-        publishStatus(
-          options.packaged ? { _tag: "Idle" } : { _tag: "Unavailable" },
-        );
+        publishStatus({ _tag: "Idle" });
         if (settings.checkAutomatically) await checkForUpdates();
       }),
     setCheckAutomatically: (checkAutomatically) =>

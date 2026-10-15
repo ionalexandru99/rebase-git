@@ -1,3 +1,4 @@
+import { realpathSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Schema } from "effect";
@@ -18,6 +19,7 @@ import { createApplicationUpdateSettingsStore } from "#desktop/features/applicat
 import {
   type ApplicationUpdater,
   createApplicationUpdater,
+  updatesItself,
 } from "#desktop/features/application-updates/application-updater.ts";
 import { registerRepositoryFilesystemIpc } from "#desktop/features/repository-filesystem/repository-filesystem-ipc.ts";
 import {
@@ -65,42 +67,67 @@ void start().catch(reportStartupFailure);
 async function start() {
   await app.whenReady();
   app.dock?.setIcon(dockIconPath);
-  const updateSettings = createApplicationUpdateSettingsStore(
-    join(app.getPath("userData"), "update-settings.json"),
-  );
-  const applicationUpdater = createApplicationUpdater(getAutoUpdater(), {
+  const applicationUpdater = updatesItself({
+    appImage: process.env.APPIMAGE,
+    appImageMount: realDirectory(process.env.APPDIR),
+    executable: process.execPath,
     packaged: app.isPackaged,
-    saveSettings: updateSettings.write,
-    settings: await updateSettings.read(),
-  });
+    platform: process.platform,
+  })
+    ? await createUpdater()
+    : undefined;
   const renderer = resolveRenderer(
     process.argv,
     import.meta.url,
     app.isPackaged,
   );
   const trusted = createTrustedIpcHandler(renderer);
-  registerApplicationUpdaterIpc(applicationUpdater, trusted);
+  if (applicationUpdater !== undefined) {
+    registerApplicationUpdaterIpc(applicationUpdater, trusted);
+  }
   registerRepositoryFilesystemIpc(trusted);
   desktopApplication = await startDesktopApplication({
-    host: createHost(trusted),
+    host: createHost(trusted, applicationUpdater !== undefined),
     renderer,
     startEnvironment: () =>
       startManagedEnvironmentServer((error) =>
         reportFailure("Rebase stopped", error),
       ),
   });
-  void applicationUpdater.start();
+  void applicationUpdater?.start();
+}
+
+function realDirectory(path: string | undefined) {
+  if (path === undefined) return undefined;
+  try {
+    return realpathSync(path);
+  } catch {
+    return undefined;
+  }
+}
+
+async function createUpdater() {
+  const updateSettings = createApplicationUpdateSettingsStore(
+    join(app.getPath("userData"), "update-settings.json"),
+  );
+  return createApplicationUpdater(getAutoUpdater(), {
+    saveSettings: updateSettings.write,
+    settings: await updateSettings.read(),
+  });
 }
 
 function getAutoUpdater(): AppUpdater {
   return electronUpdater.autoUpdater;
 }
 
-function createHost(trusted: TrustedIpcHandler): DesktopApplicationHost {
+function createHost(
+  trusted: TrustedIpcHandler,
+  appUpdates: boolean,
+): DesktopApplicationHost {
   return {
     platform: process.platform,
     hasOpenWindows: () => BrowserWindow.getAllWindows().length > 0,
-    openWindow: (options) => openWindow(options, trusted),
+    openWindow: (options) => openWindow(options, trusted, appUpdates),
     quit: () => app.quit(),
   };
 }
@@ -108,6 +135,7 @@ function createHost(trusted: TrustedIpcHandler): DesktopApplicationHost {
 async function openWindow(
   options: DesktopWindowOptions,
   trusted: TrustedIpcHandler,
+  appUpdates: boolean,
 ) {
   const window = new BrowserWindow({
     backgroundColor: "#000000",
@@ -117,6 +145,7 @@ async function openWindow(
     webPreferences: {
       additionalArguments: [
         `--rebase-environment-origin=${options.environmentOrigin}`,
+        ...(appUpdates ? ["--rebase-app-updates"] : []),
       ],
       contextIsolation: true,
       nodeIntegration: false,

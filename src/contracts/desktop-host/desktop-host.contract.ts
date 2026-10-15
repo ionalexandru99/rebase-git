@@ -7,5 +7,5 @@ export interface RepositoryFilesystemHost {
 export interface DesktopHostBridge extends RepositoryFilesystemHost {
   readonly environmentOrigin: string;
   getEnvironmentCredential(): Promise<string>;
-  readonly updates: DesktopUpdates;
+  readonly updates: DesktopUpdates | undefined;
 }

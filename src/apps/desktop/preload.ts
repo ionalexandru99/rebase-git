@@ -17,7 +17,9 @@ const host = Object.freeze({
     ipcRenderer.invoke(desktopApplicationIpc.getEnvironmentCredential),
   revealRepository: (path: string) =>
     ipcRenderer.invoke(repositoryFilesystemIpc.revealRepository, path),
-  updates: createDesktopUpdatesBridge(),
+  updates: process.argv.includes("--rebase-app-updates")
+    ? createDesktopUpdatesBridge()
+    : undefined,
 }) satisfies DesktopHostBridge;
 contextBridge.exposeInMainWorld("rebaseHost", host);
 

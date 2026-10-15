@@ -2,14 +2,82 @@ import { describe, expect, it, vi } from "vite-plus/test";
 import {
   createApplicationUpdater,
   type DesktopAutoUpdater,
+  updatesItself,
 } from "#desktop/features/application-updates/application-updater.ts";
+
+describe("desktop application install ownership", () => {
+  const ownAppImage = {
+    appImage: "/home/alex/AppImages/rebase.appimage",
+    appImageMount: "/tmp/.mount_RebaseQx",
+  };
+  const otherAppImage = {
+    appImage: "/home/alex/AppImages/t3_code.appimage",
+    appImageMount: "/tmp/.mount_t3_codXy",
+  };
+  const noAppImage = { appImage: undefined, appImageMount: undefined };
+
+  it.each([
+    {
+      name: "a development build",
+      packaged: false,
+      platform: "darwin",
+      executable: "/Rebase/electron",
+      ...noAppImage,
+      expected: false,
+    },
+    {
+      name: "macOS",
+      packaged: true,
+      platform: "darwin",
+      executable: "/Applications/Rebase.app",
+      ...noAppImage,
+      expected: true,
+    },
+    {
+      name: "Windows",
+      packaged: true,
+      platform: "win32",
+      executable: "C:\\Rebase\\Rebase.exe",
+      ...noAppImage,
+      expected: true,
+    },
+    {
+      name: "its own AppImage",
+      packaged: true,
+      platform: "linux",
+      executable: "/tmp/.mount_RebaseQx/rebase",
+      ...ownAppImage,
+      expected: true,
+    },
+    {
+      name: "a package manager install",
+      packaged: true,
+      platform: "linux",
+      executable: "/opt/Rebase/rebase",
+      ...noAppImage,
+      expected: false,
+    },
+    {
+      name: "a package manager install started from another AppImage",
+      packaged: true,
+      platform: "linux",
+      executable: "/opt/Rebase/rebase",
+      ...otherAppImage,
+      expected: false,
+    },
+  ] as const)(
+    "decides whether $name updates itself",
+    ({ name: _name, expected, ...install }) => {
+      expect(updatesItself(install)).toBe(expected);
+    },
+  );
+});
 
 describe("desktop application updater", () => {
   it("keeps automatic checks disabled until the user enables them", async () => {
     const updater = createTestUpdater();
     const saveSettings = vi.fn(() => Promise.resolve());
     const applicationUpdater = createApplicationUpdater(updater, {
-      packaged: true,
       saveSettings,
       settings: {
         checkAutomatically: false,
@@ -45,7 +113,6 @@ describe("desktop application updater", () => {
   it("moves back to stable releases from 0.0.5 on", async () => {
     const updater = createTestUpdater();
     const applicationUpdater = createApplicationUpdater(updater, {
-      packaged: true,
       saveSettings: () => Promise.resolve(),
       settings: {
         checkAutomatically: false,
@@ -68,7 +135,6 @@ describe("desktop application updater", () => {
   it("publishes download state and installs a ready update", async () => {
     const updater = createTestUpdater();
     const applicationUpdater = createApplicationUpdater(updater, {
-      packaged: true,
       saveSettings: () => Promise.resolve(),
       settings: {
         checkAutomatically: true,
@@ -105,32 +171,10 @@ describe("desktop application updater", () => {
     expect(updater.quitAndInstall).toHaveBeenCalledOnce();
   });
 
-  it("does not contact the update feed from an unpackaged build", async () => {
-    const updater = createTestUpdater();
-    const applicationUpdater = createApplicationUpdater(updater, {
-      packaged: false,
-      saveSettings: () => Promise.resolve(),
-      settings: {
-        checkAutomatically: true,
-        releaseChannel: "nightly",
-      },
-    });
-
-    await applicationUpdater.start();
-    await applicationUpdater.checkForUpdates();
-
-    expect(updater.channel).toBe("nightly");
-    expect(updater.checkForUpdates).not.toHaveBeenCalled();
-    expect(applicationUpdater.getSnapshot().status).toEqual({
-      _tag: "Unavailable",
-    });
-  });
-
-  it("marks a packaged build unavailable when its platform updater is inactive", async () => {
+  it("marks updates unavailable when its platform updater is inactive", async () => {
     const updater = createTestUpdater();
     updater.checkForUpdates.mockResolvedValueOnce(null);
     const applicationUpdater = createApplicationUpdater(updater, {
-      packaged: true,
       saveSettings: () => Promise.resolve(),
       settings: {
         checkAutomatically: false,
@@ -152,7 +196,6 @@ describe("desktop application updater", () => {
       releaseChannel: "nightly" | "stable";
     }> = [];
     const applicationUpdater = createApplicationUpdater(updater, {
-      packaged: true,
       saveSettings: async (settings) => {
         await Promise.resolve();
         savedSettings.push(settings);
@@ -181,7 +224,6 @@ describe("desktop application updater", () => {
   it("locks the channel after an update check starts", async () => {
     const updater = createTestUpdater();
     const applicationUpdater = createApplicationUpdater(updater, {
-      packaged: true,
       saveSettings: () => Promise.resolve(),
       settings: {
         checkAutomatically: false,
@@ -205,7 +247,6 @@ describe("desktop application updater", () => {
     const settingsWrite = Promise.withResolvers<void>();
     const saveStarted = Promise.withResolvers<void>();
     const applicationUpdater = createApplicationUpdater(updater, {
-      packaged: true,
       saveSettings: async () => {
         saveStarted.resolve();
         await settingsWrite.promise;
