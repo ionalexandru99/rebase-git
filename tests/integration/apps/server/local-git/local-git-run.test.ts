@@ -10,7 +10,7 @@ import { removeTemporaryDirectory } from "#tests-support/temporary-directory.ts"
 const git = createLocalGitCommandRunner();
 const waitForever = [
   "-c",
-  "alias.wait-forever=!sleep 600 & echo started; wait",
+  "alias.wait-forever=!node -e \"console.log('started'); setInterval(() => {}, 1000)\"",
   "wait-forever",
 ];
 let directory = "";
