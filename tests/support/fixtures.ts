@@ -15,6 +15,7 @@ import type { RepositoryCatalogEntry } from "#contracts/repository-catalog/repos
 import type {
   ChangedFile,
   DiscardedChanges,
+  IgnoreRule,
   RepositoryChanges,
 } from "#contracts/repository-changes/repository-changes.contract.ts";
 import type { Comparison } from "#contracts/repository-comparison/compare-revisions.contract.ts";
@@ -464,6 +465,14 @@ export function hostRepositories({
       private: hidden,
     })),
   };
+}
+
+export function ignoreRule(
+  pattern: string,
+  line = 1,
+  file = ".gitignore",
+): IgnoreRule {
+  return { pattern, file, line, inWorktree: true };
 }
 
 export function worktreeEntry(

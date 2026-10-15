@@ -9,6 +9,7 @@ import {
   type CommitChanges,
   changesFailed,
   type IgnorePaths,
+  type IgnoreRule,
   ignoreTracked,
   type MutateChanges,
   type RepositoryChanges,
@@ -26,6 +27,7 @@ import {
   changeDiff,
   changedFile,
   discardedChanges,
+  ignoreRule,
   repositoryChanges,
 } from "#tests-support/fixtures.ts";
 import { render, testChanges } from "#tests-support/render.tsx";
@@ -59,6 +61,7 @@ async function fixture(
     repositoryId = crypto.randomUUID(),
     draftKey = JSON.stringify([crypto.randomUUID(), repositoryId, "/repo"]),
     openGitIdentity = () => {},
+    ignoreRules = {},
   }: {
     readonly staged?: RepositoryChanges["staged"];
     readonly renamesLimited?: boolean;
@@ -68,6 +71,7 @@ async function fixture(
     readonly repositoryId?: string;
     readonly draftKey?: string;
     readonly openGitIdentity?: () => void;
+    readonly ignoreRules?: Readonly<Record<string, IgnoreRule>>;
   } = {},
 ) {
   let snapshot = repositoryChanges({
@@ -145,6 +149,9 @@ async function fixture(
       if (!command.untrack) throw rejected(ignoreTracked(path, 1));
       return { changes: snapshot, diff: null };
     }),
+    respond(RepositoryChangesApi.ignoreRule, (input) =>
+      input.includeTracked ? (ignoreRules[input.path] ?? null) : null,
+    ),
     respond(RepositoryChangesApi.commit, async (command) => {
       commits.push(command);
       if (command.amend)
@@ -366,6 +373,30 @@ describe("working changes", () => {
       { target: "repository", paths: ["src/"], untrack: false },
       { target: "repository", paths: ["src/"], untrack: true },
     ]);
+    await expect.element(confirmation).not.toBeInTheDocument();
+  });
+  it("says which rule matches a tracked file and untracks it after confirmation", async () => {
+    const f = await fixture([], {
+      ignoreRules: { [path]: ignoreRule("src/", 4) },
+    });
+
+    await expect
+      .element(page.getByText("Matches"))
+      .toHaveTextContent(
+        "Matches src/ in .gitignore, line 4, but Git still tracks it",
+      );
+    await page.getByRole("button", { name: "Untrack", exact: true }).click();
+    const confirmation = page.getByRole("alertdialog", {
+      name: "Untrack read-status.ts?",
+    });
+    await confirmation.getByRole("button", { name: "Untrack" }).click();
+
+    await expect.poll(() => f.ignores.length).toBe(1);
+    expect(f.ignores[0]).toMatchObject({
+      target: null,
+      paths: [path],
+      untrack: true,
+    });
     await expect.element(confirmation).not.toBeInTheDocument();
   });
   it.each(["Control", "Meta"] as const)(

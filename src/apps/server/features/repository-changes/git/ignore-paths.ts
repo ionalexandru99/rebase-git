@@ -1,11 +1,14 @@
 import { appendFile, mkdir, readFile } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { homedir } from "node:os";
+import { dirname, isAbsolute, join, posix } from "node:path";
 import { Effect } from "effect";
 import {
   changesFailed,
   type IgnorePaths,
+  type IgnoreRule,
   type IgnoreTarget,
   ignoreTracked,
+  type ReadIgnoreRule,
 } from "#contracts/repository-changes/repository-changes.contract.ts";
 import {
   type GitCommandOptions,
@@ -38,10 +41,13 @@ export function ignorePaths(
     const [first] = tracked;
     if (first !== undefined && !command.untrack)
       return yield* Effect.fail(ignoreTracked(first, tracked.length));
-    const file = yield* ruleFile(git, directory, command.target);
+    const target = command.target;
+    const file =
+      target === null ? null : yield* ruleFile(git, directory, target);
     yield* Effect.uninterruptible(
       Effect.gen(function* () {
-        yield* changeIo(() => appendRules(file, paths.map(ignoreRule)));
+        if (file !== null)
+          yield* changeIo(() => appendRules(file, paths.map(ignoreRule)));
         if (tracked.length === 0) return;
         yield* runRepositoryGit(
           git,
@@ -61,6 +67,54 @@ export function ignorePaths(
       }),
     );
   });
+}
+
+export function readIgnoreRule(
+  git: GitCommandRunner,
+  { worktreePath, path, includeTracked }: ReadIgnoreRule,
+) {
+  return Effect.gen(function* () {
+    yield* safeChangePath(worktreePath, path);
+    const output = yield* runRepositoryGit(
+      git,
+      worktreePath,
+      [
+        "check-ignore",
+        "-z",
+        "--verbose",
+        ...(includeTracked ? ["--no-index"] : []),
+        "--stdin",
+      ],
+      { input: `./${path}\0`, exitCodes: [0, 1], literalPathspecs: false },
+    );
+    const [file, line, pattern] = output.split("\0");
+    if (!file || !pattern || pattern.startsWith("!")) return null;
+    return {
+      pattern,
+      line: Number(line),
+      ...ruleSource(posix.normalize(separators(file))),
+    } satisfies IgnoreRule;
+  });
+}
+
+function ruleSource(file: string): Pick<IgnoreRule, "file" | "inWorktree"> {
+  if (file === ".git/info/exclude" || file.endsWith("/.git/info/exclude"))
+    return { file: ".git/info/exclude", inWorktree: false };
+  if (
+    !isAbsolute(file) &&
+    !file.startsWith("../") &&
+    (file === ".gitignore" || file.endsWith("/.gitignore"))
+  )
+    return { file, inWorktree: true };
+  const home = `${separators(homedir())}/`;
+  return {
+    file: file.startsWith(home) ? `~/${file.slice(home.length)}` : file,
+    inWorktree: false,
+  };
+}
+
+function separators(path: string) {
+  return process.platform === "win32" ? path.replaceAll("\\", "/") : path;
 }
 
 function ignoreRule(path: string) {

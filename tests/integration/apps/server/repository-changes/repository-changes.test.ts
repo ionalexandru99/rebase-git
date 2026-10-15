@@ -869,6 +869,90 @@ describe("ignoring paths through Git", () => {
   });
 });
 
+describe("explaining ignored paths through Git", () => {
+  it("names the rule, its file and its line, wherever the rule lives", async () => {
+    const f = await fixture();
+    await mkdir(join(f.directory, "..", "personal"));
+    await writeFile(
+      join(f.directory, "..", "personal", ".gitignore"),
+      "*.bak\n",
+    );
+    await f.git("config", "core.excludesFile", "./../personal/.gitignore");
+    await writeFile(
+      join(f.directory, ".gitignore"),
+      "*.log\r\n!keep.log\r\n/coverage/\r\n",
+    );
+    await mkdir(join(f.directory, "packages", "web"), { recursive: true });
+    await writeFile(join(f.directory, "packages", ".gitignore"), "*.tmp\n");
+    await writeFile(
+      join(f.directory, ".git", "info", "exclude"),
+      "# local\n/notes.md\n",
+    );
+    const rule = (path: string) =>
+      Effect.runPromise(
+        f.service.ignoreRule({ ...f.scope, path, includeTracked: false }),
+      );
+
+    expect(await rule("debug.log")).toEqual({
+      pattern: "*.log",
+      file: ".gitignore",
+      line: 1,
+      inWorktree: true,
+    });
+    expect(await rule("coverage/nested/index.html")).toMatchObject({
+      pattern: "/coverage/",
+      line: 3,
+    });
+    expect(await rule("packages/web/cache.tmp")).toMatchObject({
+      pattern: "*.tmp",
+      file: "packages/.gitignore",
+    });
+    expect(await rule("notes.md")).toEqual({
+      pattern: "/notes.md",
+      file: ".git/info/exclude",
+      line: 2,
+      inWorktree: false,
+    });
+    expect(await rule("old.bak")).toMatchObject({
+      pattern: "*.bak",
+      line: 1,
+      inWorktree: false,
+    });
+    expect(await rule("keep.log")).toBeNull();
+    expect(await rule("file.txt")).toBeNull();
+  });
+  it("explains a tracked file only when asked about tracked files", async () => {
+    const f = await fixture();
+    await writeFile(join(f.directory, ".gitignore"), "file.txt\n");
+    const rule = (includeTracked: boolean) =>
+      Effect.runPromise(
+        f.service.ignoreRule({ ...f.scope, path: "file.txt", includeTracked }),
+      );
+
+    expect(await rule(false)).toBeNull();
+    expect(await rule(true)).toEqual({
+      pattern: "file.txt",
+      file: ".gitignore",
+      line: 1,
+      inWorktree: true,
+    });
+  });
+  it("untracks a file a rule already ignores without adding another rule", async () => {
+    const f = await fixture();
+    await writeFile(join(f.directory, ".gitignore"), "*.txt\n");
+    await writeFile(join(f.directory, "file.txt"), "local edit\n");
+
+    const written = await f.ignore(["file.txt"], null, true);
+
+    expect(await readFile(join(f.directory, ".gitignore"), "utf8")).toBe(
+      "*.txt\n",
+    );
+    expect(written.changes.staged).toMatchObject([
+      { path: "file.txt", status: "D" },
+    ]);
+  });
+});
+
 async function caseInsensitiveFileSystem() {
   const directory = await mkdtemp(join(tmpdir(), "rebase-case-"));
   try {

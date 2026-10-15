@@ -26,6 +26,10 @@ import {
 import { DiffWorkerPool } from "#web/features/file-diff/components/diff-worker-pool.tsx";
 import { useTheme } from "#web/features/theme/theme.ts";
 import { useWorkingChanges } from "#web/features/working-changes/hooks/use-working-changes.ts";
+import {
+  IgnoreRuleLine,
+  useIgnoreRule,
+} from "#web/features/working-changes/ignore-paths.tsx";
 import { usePanelFeature } from "#web/features/workspace-panel/api.ts";
 import {
   SearchBar,
@@ -102,6 +106,8 @@ function WorktreeFiles({
               scope={scope}
               file={open}
               active={active}
+              revision={changes?.revision}
+              onOpen={(path, line) => setOpen({ path, line })}
             />
           )}
         </ResizablePanel>
@@ -166,15 +172,23 @@ function FileView({
   scope,
   file,
   active,
+  revision,
+  onOpen,
 }: {
   readonly scope: WorktreeScope;
   readonly file: OpenFile;
   readonly active: boolean;
+  readonly revision: string | undefined;
+  readonly onOpen: (path: string, line: number) => void;
 }) {
   const read = useEnvironmentQuery(
     WorktreeFilesApi.read,
     active ? { ...scope, path: file.path } : skipToken,
     { changes: "index", staleTime: 0, refetchOnWindowFocus: true },
+  );
+  const ignoreRule = useIgnoreRule(
+    active ? { ...scope, path: file.path, includeTracked: false } : skipToken,
+    revision,
   );
   const name = file.path.slice(file.path.lastIndexOf("/") + 1);
   return (
@@ -188,6 +202,11 @@ function FileView({
         <p className="truncate text-body text-muted-foreground">
           {file.path.slice(0, -name.length)}
         </p>
+        {ignoreRule === null ? null : (
+          <div className="mt-1.5">
+            <IgnoreRuleLine rule={ignoreRule} onOpen={onOpen} />
+          </div>
+        )}
       </header>
       {read.isError ? (
         <div role="alert" className="p-3 text-body">

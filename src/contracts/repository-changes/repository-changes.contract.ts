@@ -114,7 +114,7 @@ export const IgnoreTarget = Schema.Literals(["repository", "local"]);
 export type IgnoreTarget = typeof IgnoreTarget.Type;
 export const IgnorePaths = Schema.Struct({
   ...ChangesScope.fields,
-  target: IgnoreTarget,
+  target: Schema.NullOr(IgnoreTarget),
   paths: Schema.Array(RepositoryPath).check(
     Schema.isMinLength(1),
     Schema.isMaxLength(maximumIgnoredPaths),
@@ -132,6 +132,20 @@ export type IgnoreTracked = typeof IgnoreTracked.Type;
 export function ignoreTracked(path: string, count: number): IgnoreTracked {
   return { _tag: "IgnoreTracked", path, count };
 }
+export const ReadIgnoreRule = Schema.Struct({
+  repositoryId: RepositoryId,
+  worktreePath: RepositoryPath,
+  path: RepositoryPath,
+  includeTracked: Schema.Boolean,
+});
+export type ReadIgnoreRule = typeof ReadIgnoreRule.Type;
+export const IgnoreRule = Schema.Struct({
+  pattern: Schema.String.check(Schema.isMaxLength(4096)),
+  file: Schema.String.check(Schema.isMaxLength(4096)),
+  line: Schema.Int,
+  inWorktree: Schema.Boolean,
+});
+export type IgnoreRule = typeof IgnoreRule.Type;
 export const ChangesFailure = Schema.TaggedStruct("ChangesFailed", {
   reason: Schema.Literals(["Stale", "Conflict", "Unsupported"]),
   detail: Schema.String.check(Schema.isMaxLength(2048)),
@@ -170,6 +184,10 @@ export const RepositoryChangesApi = {
     request: IgnorePaths,
     success: ChangesWritten,
     failure: Schema.Union([ChangesFailure, IgnoreTracked]),
+  }),
+  ignoreRule: repositoryQuery("repositories/changes/ignore-rule", {
+    request: ReadIgnoreRule,
+    success: Schema.NullOr(IgnoreRule),
   }),
   commit: repositoryCommand("repositories/changes/commit", {
     request: CommitChanges,

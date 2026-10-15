@@ -1,5 +1,6 @@
 import type { Hunk, SelectedLineRange } from "@pierre/diffs";
 import { IconCheck, IconChevronDown, IconChevronUp } from "@tabler/icons-react";
+import { skipToken } from "@tanstack/react-query";
 import { useMemo, useRef, useState } from "react";
 import { Button } from "#web/components/ui/button.tsx";
 import {
@@ -16,6 +17,10 @@ import type {
   ChangeAction,
   WorkingChangesView,
 } from "#web/features/working-changes/hooks/use-working-changes-view.ts";
+import {
+  IgnoreRuleLine,
+  useIgnoreRule,
+} from "#web/features/working-changes/ignore-paths.tsx";
 
 type DiffView = Pick<
   WorkingChangesView,
@@ -26,6 +31,9 @@ type DiffView = Pick<
   | "choosePreferences"
   | "busy"
   | "loading"
+  | "ignore"
+  | "scope"
+  | "active"
 >;
 
 export default function ChangeDiffViewer({
@@ -49,6 +57,21 @@ export default function ChangeDiffViewer({
     (entry) => entry.path === viewedChange(selection)?.path,
   );
   const previousPath = file?.previousPath ?? null;
+  const ignoreRule = useIgnoreRule(
+    view.active &&
+      file !== undefined &&
+      file.status !== "?" &&
+      file.status !== "U" &&
+      !(section === "staged" && file.status === "D")
+      ? {
+          repositoryId: view.scope.repositoryId,
+          worktreePath: view.scope.worktreePath,
+          path: file.path,
+          includeTracked: true,
+        }
+      : skipToken,
+    changes?.revision,
+  );
   const { metadata, hasHiddenContext } = createChangeDiffModel(
     diff,
     previousPath,
@@ -183,6 +206,20 @@ export default function ChangeDiffViewer({
           </Button>
         </div>
       ) : null}
+      {ignoreRule === null ||
+      !ignoreRule.inWorktree ||
+      empty ||
+      file === undefined ? null : (
+        <div className="shrink-0 border-border border-b px-3 py-1.5">
+          <IgnoreRuleLine
+            rule={ignoreRule}
+            untrack={{
+              run: () => view.ignore.untrack(file.path),
+              enabled: !disabled,
+            }}
+          />
+        </div>
+      )}
       {empty ? (
         <div className="flex flex-1 flex-col items-center justify-center gap-3 text-muted-foreground">
           <IconCheck className="size-8" />
