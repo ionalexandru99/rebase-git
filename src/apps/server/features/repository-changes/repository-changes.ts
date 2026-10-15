@@ -31,7 +31,10 @@ import {
   restoreDiscarded,
   snapshotChanges,
 } from "#server/features/repository-changes/git/discard-snapshot.ts";
-import { ignorePaths } from "#server/features/repository-changes/git/ignore-paths.ts";
+import {
+  ignorePaths,
+  readIgnoreRule,
+} from "#server/features/repository-changes/git/ignore-paths.ts";
 import { planChanges } from "#server/features/repository-changes/git/mutate-changes.ts";
 import { readChangeDiff } from "#server/features/repository-changes/git/read-change-diff.ts";
 import { readChanges } from "#server/features/repository-changes/git/read-changes.ts";
@@ -296,6 +299,7 @@ export function repositoryChangesFeature(
     routes: [
       query(api.read, readRepositoryChanges),
       query(api.diff, readRepositoryChangeDiff),
+      query(api.ignoreRule, (input, git) => readIgnoreRule(git, input)),
       command(
         api.mutate,
         (input) => ({

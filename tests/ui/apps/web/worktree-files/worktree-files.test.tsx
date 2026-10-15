@@ -9,6 +9,7 @@ import { fakeRequests, respond } from "#tests-support/fake-requests.ts";
 import {
   changeDiff,
   changedFile,
+  ignoreRule,
   repositoryChanges,
   worktreeEntry,
   worktreeText,
@@ -20,6 +21,8 @@ const folders: Record<string, ReturnType<typeof worktreeEntry>[]> = {
   "": [
     worktreeEntry("node_modules", "folder", true),
     worktreeEntry("src", "folder"),
+    worktreeEntry(".gitignore"),
+    worktreeEntry("debug.log", "file", true),
     worktreeEntry("README.md"),
   ],
   src: [worktreeEntry("app.ts"), worktreeEntry("new.ts")],
@@ -58,6 +61,9 @@ async function fixture() {
       }),
     ),
     respond(RepositoryChangesApi.diff, (command) => diffs(command)),
+    respond(RepositoryChangesApi.ignoreRule, ({ path }) =>
+      path === "debug.log" ? ignoreRule("*.log", 2) : null,
+    ),
   );
   const scopeKey = crypto.randomUUID();
   localStorage.setItem(
@@ -119,6 +125,26 @@ describe("worktree files", () => {
       .element(screen.getByText("export const line1 = 1;"))
       .toBeInTheDocument();
     expect(read).toHaveBeenLastCalledWith("src/app.ts");
+  });
+
+  it("says which rule ignores an open file and opens that rule at its line", async () => {
+    const { screen, read, row } = await fixture();
+
+    await row("debug.log").click();
+    await expect
+      .element(screen.getByText("Ignored by"))
+      .toHaveTextContent("Ignored by *.log in .gitignore, line 2");
+    await screen
+      .getByRole("button", { name: "Open .gitignore at line 2" })
+      .click();
+
+    await expect
+      .element(screen.getByRole("heading", { name: ".gitignore" }))
+      .toBeInTheDocument();
+    expect(read).toHaveBeenLastCalledWith(".gitignore");
+    await expect
+      .element(screen.getByText("Ignored by"))
+      .not.toBeInTheDocument();
   });
 
   it("expands a folder with the keyboard and loads its children", async () => {
