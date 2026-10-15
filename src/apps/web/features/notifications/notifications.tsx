@@ -79,6 +79,7 @@ const errorTitles = {
   saveBranchSettings: "Couldn't save the branch settings",
   savePullStrategy: "Couldn't save the pull setting",
   saveFetchPrune: "Couldn't save the branch removal setting",
+  saveSigning: "Couldn't save the signing setting",
   saveCloneFolder: "Couldn't save the clone folder",
   saveDiffSettings: "Couldn't save the diff settings",
   clearCache: "Couldn't clear the cache",
@@ -172,11 +173,11 @@ function useActionToasts() {
   };
 }
 
-const OpenGitIdentity = createContext<() => void>(() => {});
+const OpenGitSettings = createContext<() => void>(() => {});
 
 export function useErrorToast() {
   const toasts = useActionToasts();
-  const openGitIdentity = useContext(OpenGitIdentity);
+  const openGitSettings = useContext(OpenGitSettings);
   const show = (
     action: ErrorAction,
     description?: string,
@@ -204,8 +205,8 @@ export function useErrorToast() {
       show(
         action,
         describeFailure(result, messages),
-        identityMissing(result)
-          ? { label: "Open settings", run: openGitIdentity }
+        fixedInSettings(result)
+          ? { label: "Open settings", run: openGitSettings }
           : undo === undefined
             ? undefined
             : { label: "Undo", run: undo },
@@ -274,19 +275,19 @@ export function NotificationsProvider({
   repositories,
   currentRepositoryId,
   openRepository,
-  openGitIdentity,
+  openGitSettings,
   children,
 }: {
   readonly repositories: readonly NotifiedRepository[];
   readonly currentRepositoryId: string | undefined;
   readonly openRepository: (repositoryId: string) => void;
-  readonly openGitIdentity: () => void;
+  readonly openGitSettings: () => void;
   readonly children: ReactNode;
 }) {
   const [outlet, setOutlet] = useState<HTMLDivElement | null>(null);
   return (
     <Toast.Provider timeout={8_000} limit={visibleToasts}>
-      <OpenGitIdentity.Provider value={openGitIdentity}>
+      <OpenGitSettings.Provider value={openGitSettings}>
         <PersistentNotificationOutlet.Provider value={outlet}>
           {children}
           <NotificationStack
@@ -296,16 +297,17 @@ export function NotificationsProvider({
             repositories={repositories}
           />
         </PersistentNotificationOutlet.Provider>
-      </OpenGitIdentity.Provider>
+      </OpenGitSettings.Provider>
     </Toast.Provider>
   );
 }
 
-function identityMissing(result: RequestFailure<TaggedFailure>) {
+function fixedInSettings(result: RequestFailure<TaggedFailure>) {
   const failure = rejection(result);
   return (
     failure?._tag === "RepositoryRejected" &&
     "reason" in failure &&
-    failure.reason === "IdentityMissing"
+    (failure.reason === "IdentityMissing" ||
+      failure.reason === "SigningUnavailable")
   );
 }

@@ -10,6 +10,7 @@ import type {
   FileBlame,
 } from "#contracts/file-blame/file-blame.contract.ts";
 import type { FileHistoryEntry } from "#contracts/file-history/file-history.contract.ts";
+import type { SigningKey } from "#contracts/git-signing/git-signing.contract.ts";
 import type { PullRequest } from "#contracts/pull-requests/pull-requests.contract.ts";
 import type { RepositoryCatalogEntry } from "#contracts/repository-catalog/repository-catalog.contract.ts";
 import type {
@@ -558,5 +559,14 @@ export function diagnosticsError(
     count: 1,
     lastSeen: sampledAt - 40_000,
     ...error,
+  };
+}
+
+export function signingKey(key: Partial<SigningKey> = {}): SigningKey {
+  return {
+    format: "ssh",
+    key: "/home/ada/.ssh/id_ed25519.pub",
+    label: "id_ed25519",
+    ...key,
   };
 }

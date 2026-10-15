@@ -10,6 +10,7 @@ import { EnvironmentFilesystemApi } from "#contracts/environment-filesystem/envi
 import { FileBlameApi } from "#contracts/file-blame/file-blame.contract.ts";
 import { FileHistoryApi } from "#contracts/file-history/file-history.contract.ts";
 import { GitIdentityApi } from "#contracts/git-identity/git-identity.contract.ts";
+import { GitSigningApi } from "#contracts/git-signing/git-signing.contract.ts";
 import { HistorySearchApi } from "#contracts/history-search/history-search.contract.ts";
 import { PullRequestsApi } from "#contracts/pull-requests/pull-requests.contract.ts";
 import { RepositoryCatalogApi } from "#contracts/repository-catalog/repository-catalog.contract.ts";
@@ -107,6 +108,7 @@ export const EnvironmentRpc = RpcGroup.make(
   ...Object.values(SourceControlApi),
   ...Object.values(GitIdentityApi),
   ...Object.values(SignatureVerificationApi),
+  ...Object.values(GitSigningApi),
   ...Object.values(TerminalsApi),
   ...Object.values(DiagnosticsApi),
 ).merge(RepositoryHistoryRpc, CommandProgressRpc);

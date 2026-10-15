@@ -1,7 +1,6 @@
 import {
   type ChildProcess,
   type ChildProcessWithoutNullStreams,
-  type ExecFileException,
   execFile,
   spawn,
 } from "node:child_process";
@@ -10,7 +9,11 @@ import { join } from "node:path";
 import { Readable } from "node:stream";
 import { StringDecoder } from "node:string_decoder";
 import { Deferred, Effect, Stream } from "effect";
-import { repositoryRejected } from "#contracts/git/git-failures.contract.ts";
+import {
+  type RepositoryRejected,
+  repositoryRejected,
+} from "#contracts/git/git-failures.contract.ts";
+import { signingKeyName } from "#contracts/git-signing/git-signing.contract.ts";
 
 export interface GitCommand {
   readonly arguments: readonly string[];
@@ -73,6 +76,7 @@ const objectIdLengths: Readonly<Record<GitObjectFormat, number>> = {
 };
 const hexadecimal = /^[0-9a-f]+$/;
 const defaultTimeoutMilliseconds = 30_000;
+const detached = process.platform !== "win32";
 const defaultMaximumOutputBytes = 16 * 1_048_576;
 const maximumDetailLength = 2_048;
 const progressLines = [
@@ -195,6 +199,56 @@ export function isIdentityMissing(detail: string) {
   );
 }
 
+export function signingRejection(
+  detail: string,
+): RepositoryRejected | undefined {
+  const unavailable = (text: string) =>
+    repositoryRejected("SigningUnavailable", text);
+  const locked = (text: string) => repositoryRejected("SigningLocked", text);
+  if (/either user\.signingkey or gpg\.ssh\.defaultKeyCommand/.test(detail))
+    return unavailable("Choose a signing key.");
+  const program =
+    /cannot (?:run|spawn) ([^\n]+?): No such file or directory/.exec(
+      detail,
+    )?.[1];
+  if (
+    program !== undefined &&
+    /failed to write commit object|unable to sign the tag/.test(detail)
+  )
+    return unavailable(
+      `Install ${program.split(/[\\/]/).at(-1)}, then try again.`,
+    );
+  const missing =
+    /Couldn't load public key ([^\n]+?): No such file or directory/.exec(
+      detail,
+    )?.[1] ??
+    /No private key found for public key "([^"\n]+)"/.exec(detail)?.[1];
+  if (missing !== undefined)
+    return unavailable(
+      `Can't find the signing key ${signingKeyName(missing)}.`,
+    );
+  const ssh = /Load key "([^"\n]+)": incorrect passphrase supplied/.exec(
+    detail,
+  )?.[1];
+  if (ssh !== undefined)
+    return locked(
+      `Add ${signingKeyName(ssh)} to your SSH agent, then try again.`,
+    );
+  if (/Couldn't get agent socket/.test(detail))
+    return locked("Start your SSH agent, then try again.");
+  if (!/gpg failed to sign the data/.test(detail)) return undefined;
+  if (/No secret key|No public key|unusable secret key/.test(detail))
+    return unavailable("Can't find your GPG signing key.");
+  if (/Inappropriate ioctl for device|Operation cancelled|Timeout/.test(detail))
+    return locked("Unlock your GPG key, then try again.");
+  const reason = /gpg: signing failed: ([^\n]+)/.exec(detail)?.[1];
+  return unavailable(
+    reason === undefined
+      ? "GPG couldn't sign."
+      : `GPG couldn't sign: ${reason.trim().replace(/\.$/, "")}.`,
+  );
+}
+
 export function isLfsMissing(detail: string) {
   return /'git-lfs' was not found on your path|git-lfs: (?:command )?not found|'lfs' is not a git command/.test(
     detail,
@@ -232,66 +286,114 @@ function rejectedByGit(exitCode: number, stderr: string): GitFailed {
 
 function runLocalGitCommand(command: GitCommand) {
   return Effect.callback<GitCommandOutput, GitFailed>((resume) => {
-    let stopped = false;
-    const child = execFile(
-      "git",
-      gitArguments(command),
-      {
-        encoding: "buffer",
-        env: gitEnvironment(command),
-        maxBuffer: command.maxOutputBytes ?? defaultMaximumOutputBytes,
-        timeout: command.timeoutMilliseconds ?? defaultTimeoutMilliseconds,
-        windowsHide: true,
-      },
-      (error, output, errorOutput) => {
-        const stdout = output.toString(command.outputEncoding ?? "utf8");
-        const stderr =
-          command.progress === undefined || command.progressStream === "stdout"
-            ? errorOutput.toString("utf8")
-            : withoutProgress(errorOutput.toString("utf8"));
-        if (error === null) {
-          resume(Effect.succeed({ exitCode: 0, stderr, stdout }));
-          return;
-        }
-        const exitCode = exitCodeOf(error);
-        resume(
-          stopped
-            ? Effect.fail(gitFailed("Failed", "Stopped from Diagnostics."))
-            : exitCode === undefined
-              ? Effect.fail(gitFailed(failureReason(error)))
-              : Effect.succeed({ exitCode, stderr, stdout }),
-        );
-      },
+    let ended: GitFailed["reason"] | "Stopped" | undefined;
+    let finished = false;
+    const finish = (result: Effect.Effect<GitCommandOutput, GitFailed>) => {
+      if (finished) return;
+      finished = true;
+      clearTimeout(deadline);
+      resume(result);
+    };
+    const end = (reason: GitFailed["reason"] | "Stopped") => {
+      if (ended !== undefined || !running(child)) return;
+      ended = reason;
+      killGit(child);
+    };
+    const child = startGit(command);
+    const deadline = setTimeout(
+      () => end("Timeout"),
+      command.timeoutMilliseconds ?? defaultTimeoutMilliseconds,
+    );
+    const limit = command.maxOutputBytes ?? defaultMaximumOutputBytes;
+    const output = collectOutput(child.stdout, limit, () =>
+      end("OutputTooLarge"),
+    );
+    const errorOutput = collectOutput(child.stderr, limit, () =>
+      end("OutputTooLarge"),
     );
     const { progress } = command;
     if (progress !== undefined) {
       const decoder = new StringDecoder("utf8");
-      const output =
+      const stream =
         command.progressStream === "stdout" ? child.stdout : child.stderr;
-      output?.on("data", (chunk: Buffer) => {
+      stream.on("data", (chunk: Buffer) => {
         const text = decoder.write(chunk);
         if (text !== "") progress(text);
       });
     }
+    child.once("error", (cause: NodeJS.ErrnoException) =>
+      finish(
+        Effect.fail(
+          gitFailed(cause.code === "ENOENT" ? "GitUnavailable" : "Failed"),
+        ),
+      ),
+    );
+    child.once("close", (code) => {
+      if (ended === "Stopped")
+        return finish(
+          Effect.fail(gitFailed("Failed", "Stopped from Diagnostics.")),
+        );
+      if (ended !== undefined) return finish(Effect.fail(gitFailed(ended)));
+      if (code === null) return finish(Effect.fail(gitFailed("Failed")));
+      const stdout = Buffer.concat(output).toString(
+        command.outputEncoding ?? "utf8",
+      );
+      const stderr = Buffer.concat(errorOutput).toString("utf8");
+      finish(
+        Effect.succeed({
+          exitCode: code,
+          stdout,
+          stderr:
+            progress === undefined || command.progressStream === "stdout"
+              ? stderr
+              : withoutProgress(stderr),
+        }),
+      );
+    });
     if (child.pid !== undefined)
-      command.onSpawn?.(child.pid, () => {
-        if (child.exitCode !== null || child.signalCode !== null) return;
-        stopped = true;
-        killGit(child);
-      });
-    child.stdin?.once("error", () => undefined);
-    child.stdin?.end(command.input);
+      command.onSpawn?.(child.pid, () => end("Stopped"));
     return stopGit(child);
   });
 }
 
+function collectOutput(
+  stream: Readable,
+  limit: number,
+  overflow: () => void,
+): readonly Buffer[] {
+  const chunks: Buffer[] = [];
+  let bytes = 0;
+  stream.on("data", (chunk: Buffer) => {
+    bytes += chunk.length;
+    if (bytes > limit) overflow();
+    else chunks.push(chunk);
+  });
+  return chunks;
+}
+
+function startGit(command: GitStreamCommand) {
+  const child = spawn("git", gitArguments(command), {
+    detached,
+    env: gitEnvironment(command),
+    stdio: ["pipe", "pipe", "pipe"],
+    windowsHide: true,
+  });
+  child.stdin.once("error", () => undefined);
+  child.stdin.end(command.input);
+  return child;
+}
+
+function running(child: ChildProcess) {
+  return child.stdout?.closed !== true || child.stderr?.closed !== true;
+}
+
 function stopGit(child: ChildProcess) {
   return Effect.callback<void>((resume) => {
-    if (child.exitCode !== null || child.signalCode !== null) {
+    if (!running(child)) {
       resume(Effect.void);
       return;
     }
-    child.once("exit", () => resume(Effect.void));
+    child.once("close", () => resume(Effect.void));
     killGit(child);
   });
 }
@@ -304,7 +406,16 @@ function killGit(child: ChildProcess) {
       { windowsHide: true },
       () => undefined,
     );
-  else child.kill();
+  else signalGit(child);
+}
+
+function signalGit(child: ChildProcess) {
+  if (detached && child.pid !== undefined)
+    try {
+      process.kill(-child.pid);
+      return;
+    } catch {}
+  child.kill();
 }
 
 function withoutProgress(stderr: string) {
@@ -350,24 +461,17 @@ function streamLocalGitCommand(command: GitStreamCommand) {
 function spawnGitProcess(command: GitStreamCommand) {
   return Effect.acquireRelease(
     Effect.sync(() => {
-      const child = spawn("git", gitArguments(command), {
-        env: gitEnvironment(command),
-        stdio: ["pipe", "pipe", "pipe"],
-        windowsHide: true,
-      });
+      const child = startGit(command);
       const exit = watchGitExit(child);
       if (child.pid !== undefined)
         command.onSpawn?.(child.pid, () => {
-          if (child.exitCode === null && child.signalCode === null)
-            killGit(child);
+          if (running(child)) killGit(child);
         });
-      child.stdin.once("error", () => undefined);
-      child.stdin.end(command.input);
       return { child, exit };
     }),
     ({ child }) =>
       Effect.sync(() => {
-        if (child.exitCode === null && child.signalCode === null) child.kill();
+        if (running(child)) signalGit(child);
       }),
   );
 }
@@ -413,7 +517,11 @@ function gitArguments(command: GitCommand) {
 }
 
 function gitEnvironment(command: GitCommand) {
-  const { GIT_SEQUENCE_EDITOR: _, ...inherited } = process.env;
+  const {
+    GIT_SEQUENCE_EDITOR: _editor,
+    GPG_TTY: _terminal,
+    ...inherited
+  } = process.env;
   return {
     ...inherited,
     ...command.environment,
@@ -428,18 +536,4 @@ function gitEnvironment(command: GitCommand) {
       ? {}
       : { GIT_OBJECT_DIRECTORY: command.objectDirectory }),
   };
-}
-
-function exitCodeOf(error: ExecFileException) {
-  return typeof error.code === "number" && error.killed !== true
-    ? error.code
-    : undefined;
-}
-
-function failureReason(error: ExecFileException): GitFailed["reason"] {
-  if (error.code === "ENOENT") return "GitUnavailable";
-  if (error.code === "ERR_CHILD_PROCESS_STDIO_MAXBUFFER")
-    return "OutputTooLarge";
-  if (error.killed === true || error.code === "ETIMEDOUT") return "Timeout";
-  return "Failed";
 }

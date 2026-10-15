@@ -18,6 +18,7 @@ import {
   isIdentityMissing,
   isLfsMissing,
   lfsMissing,
+  signingRejection,
 } from "#server/adapters/local-git/git-commands.ts";
 import type { CommandProgress } from "#server/features/command-progress/command-progress.ts";
 import type { EnvironmentAuthorizationError } from "#server/features/environment-authorization/environment-authorization.ts";
@@ -144,7 +145,8 @@ export function repositoryRoutes({
               )
             : isLfsMissing(error.detail)
               ? lfsMissing()
-              : repositoryRejected("GitFailed", error.detail),
+              : (signingRejection(error.detail) ??
+                repositoryRejected("GitFailed", error.detail)),
         ),
       ),
     );

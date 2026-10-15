@@ -149,7 +149,7 @@ export function mountGraph(laneCount: number) {
           repositories={[]}
           currentRepositoryId={undefined}
           openRepository={() => {}}
-          openGitIdentity={() => {}}
+          openGitSettings={() => {}}
         >
           <CommitGraph
             history={history}

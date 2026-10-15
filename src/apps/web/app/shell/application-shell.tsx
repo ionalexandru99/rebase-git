@@ -79,7 +79,7 @@ function Shell({
       ),
     [navigation.projects.environments],
   );
-  const openGitIdentity = () =>
+  const openGitSettings = () =>
     navigate({ type: "show-settings", section: "source-control" });
   const openNotifiedRepository = (repositoryId: string) => {
     const repository = repositories.find(({ id }) => id === repositoryId);
@@ -92,7 +92,7 @@ function Shell({
           ? navigation.projects.selectedRepositoryId
           : undefined
       }
-      openGitIdentity={openGitIdentity}
+      openGitSettings={openGitSettings}
       openRepository={openNotifiedRepository}
       repositories={repositories}
     >

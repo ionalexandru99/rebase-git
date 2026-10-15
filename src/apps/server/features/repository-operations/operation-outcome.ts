@@ -13,6 +13,7 @@ import {
   isIdentityMissing,
   runRepositoryGit,
   runRepositoryGitOutput,
+  signingRejection,
 } from "#server/adapters/local-git/git-commands.ts";
 
 export function started(
@@ -54,6 +55,8 @@ export function requireGitSuccess(output: GitCommandOutput) {
         "Add your name and email to commit.",
       ),
     );
+  const signing = signingRejection(detail);
+  if (signing !== undefined) return Effect.fail(signing);
   if (/would be overwritten by (?:merge|checkout)/i.test(detail))
     return Effect.fail({
       ...operationError("WouldOverwrite", detail),
