@@ -1,19 +1,16 @@
 import { execFile } from "node:child_process";
-import { mkdtemp, realpath, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { Effect } from "effect";
-import { describe, expect, it, onTestFinished } from "vite-plus/test";
+import { describe, expect, it } from "vite-plus/test";
 import {
   type GitIdentity,
   GitIdentityApi,
 } from "#contracts/git-identity/git-identity.contract.ts";
 import { RepositoryChangesApi } from "#contracts/repository-changes/repository-changes.contract.ts";
-import type { GitCommand } from "#server/adapters/local-git/git-commands.ts";
 import { createRepository } from "#tests-support/git.ts";
-import { openTestEnvironment } from "#tests-support/server.ts";
-import { removeTemporaryDirectory } from "#tests-support/temporary-directory.ts";
+import { openIsolatedTestEnvironment } from "#tests-support/server.ts";
 
 const exec = promisify(execFile);
 
@@ -98,34 +95,14 @@ describe("Git identity", () => {
 });
 
 async function fixture() {
-  const home = await realpath(
-    await mkdtemp(join(tmpdir(), "rebase identity ")),
-  );
-  onTestFinished(() => removeTemporaryDirectory(home));
-  const env = {
-    HOME: home,
-    XDG_CONFIG_HOME: join(home, ".config"),
-    GIT_CONFIG_GLOBAL: join(home, ".gitconfig"),
-    GIT_CONFIG_NOSYSTEM: "1",
-  };
-  const isolate = (command: GitCommand): GitCommand => ({
-    ...command,
-    environment: { ...command.environment, ...env },
-  });
-  const environment = await openTestEnvironment({
-    git: (runner) => ({
-      run: (command) => runner.run(isolate(command)),
-      stream: (command) => runner.stream(isolate(command)),
-    }),
-  });
+  const { environment, home, env } =
+    await openIsolatedTestEnvironment("rebase identity ");
   const repository = join(environment.home, "repository");
   await createRepository(repository, { commits: [] });
   const repositoryId = (await environment.remember(repository)).id;
   const identity = environment.routes(GitIdentityApi);
   const git = async (...args: string[]) =>
-    (
-      await exec("git", args, { env: { ...process.env, ...env } })
-    ).stdout.trim();
+    (await exec("git", args, { env })).stdout.trim();
   return {
     home,
     repository,

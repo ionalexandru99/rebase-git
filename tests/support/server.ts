@@ -23,6 +23,7 @@ import type { EnvironmentEventPublisher } from "#server/adapters/environment-tra
 import { environmentRpcHandlers } from "#server/adapters/environment-transport/environment-socket.ts";
 import {
   createLocalGitCommandRunner,
+  type GitCommand,
   type GitCommandRunner,
   gitFailed,
 } from "#server/adapters/local-git/git-commands.ts";
@@ -119,6 +120,28 @@ export function openTestEnvironment(overrides: EnvironmentOverrides = {}) {
       };
     }),
   );
+}
+
+export async function openIsolatedTestEnvironment(prefix: string) {
+  const home = await realpath(await mkdtemp(join(tmpdir(), prefix)));
+  onTestFinished(() => removeTemporaryDirectory(home));
+  const isolated = {
+    HOME: home,
+    XDG_CONFIG_HOME: join(home, ".config"),
+    GIT_CONFIG_GLOBAL: join(home, ".gitconfig"),
+    GIT_CONFIG_NOSYSTEM: "1",
+  };
+  const isolate = (command: GitCommand): GitCommand => ({
+    ...command,
+    environment: { ...command.environment, ...isolated },
+  });
+  const environment = await openTestEnvironment({
+    git: (runner) => ({
+      run: (command) => runner.run(isolate(command)),
+      stream: (command) => runner.stream(isolate(command)),
+    }),
+  });
+  return { environment, home, env: { ...process.env, ...isolated } };
 }
 
 export function openTestServer(overrides: EnvironmentOverrides = {}) {

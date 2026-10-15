@@ -57,6 +57,7 @@ import { acquireRepositoryChangePublisher } from "#server/features/repository-re
 import { repositoryRefsFeature } from "#server/features/repository-refs/repository-refs.feature.ts";
 import { repositoryStashesFeature } from "#server/features/repository-stashes/repository-stashes.ts";
 import { repositoryWorktreesFeature } from "#server/features/repository-worktrees/repository-worktrees.ts";
+import { signatureVerificationFeature } from "#server/features/signature-verification/signature-verification.ts";
 import {
   createGitHostClients,
   createSourceControl,
@@ -230,6 +231,7 @@ export function environmentFeatures(dependencies: EnvironmentDependencies) {
       repositoryStashesFeature(dependencies),
       repositoryWorktreesFeature(dependencies),
       gitIdentityFeature(dependencies),
+      signatureVerificationFeature(dependencies),
       sourceControlFeature({ events: dependencies.events, sourceControl }),
       terminalFeature(dependencies),
       yield* acquireDiagnosticsFeature({

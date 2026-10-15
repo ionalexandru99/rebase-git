@@ -1,6 +1,7 @@
 import { skipToken } from "@tanstack/react-query";
 import type { RepositoryTag } from "#contracts/repository-refs/repository-refs.contract.ts";
 import { RepositoryTagsApi } from "#contracts/repository-refs/repository-tags.contract.ts";
+import { SignatureStatus } from "#web/features/signature-verification/signature-status.tsx";
 import { useEnvironmentQuery } from "#web/platform/query/environment-query.ts";
 import { useRepositoryScope } from "#web/platform/query/repository-scope.tsx";
 import { describeFailure } from "#web/platform/query/request-failure.ts";
@@ -56,8 +57,12 @@ export function TagDetails({
                   Number.isNaN(date.getTime())
                     ? details.tagger.date
                     : dateFormat.format(date),
-                  ...(details.signed ? ["signed"] : []),
                 ].join(" · ")}
+                {details.signed ? (
+                  <span className="ml-1.5">
+                    <SignatureStatus kind="tag" object={details.object} />
+                  </span>
+                ) : null}
               </p>
             </>
           )}
