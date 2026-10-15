@@ -150,7 +150,7 @@ function BranchCardBody({
             {commit.subject}
           </p>
           <div className="flex h-6 min-w-0 items-center gap-2 text-body text-muted-foreground">
-            <AuthorAvatar commit={commit} />
+            <AuthorAvatar author={commit.author} />
             <span className="min-w-0 truncate">
               {commit.author.name} ·{" "}
               {ageLabel(commit.committer.timestampSeconds, now)}

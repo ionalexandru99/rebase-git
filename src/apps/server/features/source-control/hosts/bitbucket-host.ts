@@ -9,7 +9,10 @@ import {
 } from "#contracts/source-control/source-control.contract.ts";
 import { remoteLocation } from "#server/features/repository-refs/git/read-repository-refs.ts";
 import {
+  type AvatarAuthor,
+  avatarUrl,
   eachHead,
+  foundAvatar,
   type GitHost,
   type HostedPullRequest,
   type PullRequestsByHead,
@@ -133,6 +136,20 @@ export function createBitbucket(
                     ),
               ),
               Effect.orElseSucceed(() => undefined),
+            ),
+          avatar: (author) =>
+            saved.pipe(
+              Effect.mapError(() => unavailable),
+              Effect.flatMap((current) =>
+                current === undefined
+                  ? Effect.succeed({ answered: false } as const)
+                  : readAvatar(
+                      client,
+                      current.authorization,
+                      repository,
+                      author,
+                    ),
+              ),
             ),
         },
       );
@@ -289,6 +306,37 @@ function readPullRequest(
   );
 }
 
+function readAvatar(
+  client: BitbucketClient,
+  authorization: string,
+  repository: BitbucketRepository,
+  author: AvatarAuthor,
+) {
+  return readJson(
+    client,
+    authorization,
+    `${bitbucketApi}/repositories/${repositoryPath(repository)}/commit/${encodeURIComponent(author.commit)}?${new URLSearchParams(
+      { fields: "author.raw,author.user.links.avatar.href" },
+    )}`,
+    decodeCommitAuthor,
+  ).pipe(
+    Effect.map(({ author: found }) => {
+      const url = found.raw
+        ?.toLowerCase()
+        .endsWith(`<${author.email.toLowerCase()}>`)
+        ? avatarUrl(found.user?.links.avatar.href, [
+            "avatar-management--avatars.us-west-2.prod.public.atl-paas.net",
+          ])
+        : undefined;
+      return foundAvatar(
+        URL.parse(url ?? "")?.pathname.startsWith("/initials/")
+          ? undefined
+          : url,
+      );
+    }),
+  );
+}
+
 function withChecks(
   client: BitbucketClient,
   authorization: string,
@@ -403,6 +451,25 @@ const decodePullRequests = Schema.decodeUnknownEffect(
 
 const decodePullRequest = Schema.decodeUnknownEffect(
   Schema.fromJsonString(PullRequestNode),
+);
+
+const decodeCommitAuthor = Schema.decodeUnknownEffect(
+  Schema.fromJsonString(
+    Schema.Struct({
+      author: Schema.Struct({
+        raw: Schema.optionalKey(Schema.String),
+        user: Schema.optionalKey(
+          Schema.NullOr(
+            Schema.Struct({
+              links: Schema.Struct({
+                avatar: Schema.Struct({ href: Schema.String }),
+              }),
+            }),
+          ),
+        ),
+      }),
+    }),
+  ),
 );
 
 const decodeStatuses = Schema.decodeUnknownEffect(

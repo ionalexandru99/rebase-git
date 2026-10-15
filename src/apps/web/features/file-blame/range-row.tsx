@@ -42,12 +42,7 @@ export function RangeRow({
         </>
       ) : (
         <>
-          <AuthorAvatar
-            commit={{
-              oid: commit.oid,
-              author: { name: commit.author, email: commit.email },
-            }}
-          />
+          <AuthorAvatar author={{ name: commit.author, email: commit.email }} />
           <span className="min-w-0 flex-1 truncate">{commit.subject}</span>
           <span className="shrink-0 tabular-nums">
             {dateLabel(commit.authoredAt)}

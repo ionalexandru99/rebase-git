@@ -22,7 +22,9 @@ export function fakeGitHub(
     account = "octo",
     protocol = "https",
     repositories = [],
+    avatar,
   }: {
+    readonly avatar?: { readonly email: string; readonly url: string };
     readonly version?: string | null;
     readonly account?: string | null;
     readonly protocol?: "https" | "ssh";
@@ -53,6 +55,22 @@ export function fakeGitHub(
       requests.push(variables);
       if (byHead === null)
         return Effect.fail({ _tag: "PullRequestsUnavailable" });
+      if (query.includes("avatarUrl"))
+        return Effect.succeed(
+          JSON.stringify({
+            data: {
+              repository: {
+                object: {
+                  author: {
+                    email: avatar?.email ?? null,
+                    user:
+                      avatar === undefined ? null : { avatarUrl: avatar.url },
+                  },
+                },
+              },
+            },
+          }),
+        );
       const asNode = (node: GitHubPullRequestNode) => ({
         number: node.number,
         url: `https://github.com/${variables.owner}/${variables.name}/pull/${node.number}`,

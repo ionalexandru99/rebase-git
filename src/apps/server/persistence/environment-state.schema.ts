@@ -108,3 +108,13 @@ export const repositorySettingTable = sqliteTable("repository_setting", {
   }).notNull(),
   repositoryId: text("repository_id").primaryKey(),
 });
+
+export const authorAvatarTable = sqliteTable(
+  "author_avatar",
+  {
+    email: text("email").primaryKey(),
+    expiresAt: integer("expires_at").notNull(),
+    image: text("image"),
+  },
+  (avatar) => [index("author_avatar_expires_at").on(avatar.expiresAt)],
+);

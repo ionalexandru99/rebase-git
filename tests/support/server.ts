@@ -32,6 +32,7 @@ import {
   environmentFeatures,
   serveEnvironment,
 } from "#server/app/server/serve-environment.ts";
+import type { AvatarImages } from "#server/features/author-avatars/author-avatars.ts";
 import type { EnvironmentAuthorization } from "#server/features/environment-authorization/environment-authorization.ts";
 import type { GitHostClients } from "#server/features/source-control/source-control.ts";
 import type { RepositoryCoordination } from "#server/repository/repository-coordination.ts";
@@ -73,6 +74,7 @@ interface EnvironmentOverrides {
     | undefined;
   readonly git?: ((git: GitCommandRunner) => GitCommandRunner) | undefined;
   readonly gitHosts?: Partial<GitHostClients>;
+  readonly avatarImages?: AvatarImages;
   readonly coordination?: (
     coordination: RepositoryCoordination,
   ) => RepositoryCoordination;
@@ -296,6 +298,7 @@ function acquireTestDependencies(overrides: EnvironmentOverrides) {
         environment.coordination,
       events: overrides.events?.(environment.events) ?? environment.events,
       gitHosts: { ...environment.gitHosts, ...overrides.gitHosts },
+      avatarImages: overrides.avatarImages ?? environment.avatarImages,
       home,
     };
   });

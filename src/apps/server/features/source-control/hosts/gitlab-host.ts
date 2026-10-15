@@ -6,10 +6,14 @@ import type {
 import type { HostRepositories } from "#contracts/source-control/source-control.contract.ts";
 import { remoteLocation } from "#server/features/repository-refs/git/read-repository-refs.ts";
 import {
+  type AvatarAuthor,
+  avatarUrl,
   cloneableRepository,
   decodeHostJson,
+  foundAvatar,
   type GitHost,
   type GitHostAccount,
+  gravatarHosts,
   type HostedPullRequest,
   hostCommandOutput,
   inBatches,
@@ -34,6 +38,10 @@ export interface GitLabCli {
     hostname: string,
     query: string,
     variables: Readonly<Record<string, string>>,
+  ) => Effect.Effect<string, PullRequestsUnavailable>;
+  readonly avatar: (
+    hostname: string,
+    email: string,
   ) => Effect.Effect<string, PullRequestsUnavailable>;
 }
 
@@ -100,6 +108,17 @@ export function createGitLabCli(): GitLabCli {
             "-f",
             `${name}=${value}`,
           ]),
+        ],
+        { env },
+      ),
+    avatar: (hostname, email) =>
+      hostCommandOutput(
+        "glab",
+        [
+          "api",
+          "--hostname",
+          hostname,
+          `avatar?${new URLSearchParams({ email, size: "40" })}`,
         ],
         { env },
       ),
@@ -178,6 +197,18 @@ export function createGitLabHost(cli: GitLabCli): GitHost {
                       ),
                       Effect.orElseSucceed(() => undefined),
                     ),
+                avatar: (author: AvatarAuthor) =>
+                  cli.avatar(project.host, author.email).pipe(
+                    Effect.flatMap(decodeAvatar),
+                    Effect.map(({ avatar_url }) => {
+                      const url = avatarUrl(
+                        avatar_url,
+                        [project.host, ...gravatarHosts],
+                        { width: "40" },
+                      );
+                      return foundAvatar(url);
+                    }),
+                  ),
               }
             : undefined,
         ),
@@ -213,6 +244,10 @@ function accountRepositories(
     ];
   });
 }
+
+const decodeAvatar = decodeHostJson(
+  Schema.Struct({ avatar_url: Schema.NullOr(Schema.String) }),
+);
 
 const decodeProjectPage = decodeHostJson(
   Schema.Array(

@@ -1,89 +1,42 @@
-import {
-  createContext,
-  type ReactNode,
-  useContext,
-  useEffect,
-  useState,
-  useSyncExternalStore,
-} from "react";
+import { skipToken } from "@tanstack/react-query";
+import { useState } from "react";
+import { AuthorAvatarsApi } from "#contracts/author-avatars/author-avatars.contract.ts";
 import type { RepositoryCommit } from "#contracts/repository-history/repository-history.contract.ts";
-import {
-  type AuthorAvatarModel,
-  createAuthorAvatarModel,
-} from "#web/features/author-avatars/author-avatar-model.ts";
-import {
-  avatarSourceFor,
-  type HostedRepository,
-} from "#web/features/author-avatars/author-avatar-providers.ts";
-import { browserAvatarStore } from "#web/features/author-avatars/author-avatar-store.ts";
+import { useEnvironmentQuery } from "#web/platform/query/environment-query.ts";
+import { useRepositoryScope } from "#web/platform/query/repository-scope.tsx";
 
-const AvatarContext = createContext<AuthorAvatarModel | undefined>(undefined);
-
-export function AuthorAvatars({
-  repository,
-  children,
-}: {
-  readonly repository: HostedRepository | undefined;
-  readonly children: ReactNode;
-}) {
-  const [state, setState] = useState<{
-    readonly model: AuthorAvatarModel;
-    readonly repository: HostedRepository | undefined;
-  }>();
-  useEffect(() => {
-    const model =
-      repository === undefined
-        ? undefined
-        : createAuthorAvatarModel(
-            avatarSourceFor(repository),
-            browserAvatarStore,
-          );
-    setState(model === undefined ? undefined : { model, repository });
-    return () => model?.dispose();
-  }, [repository]);
-  return (
-    <AvatarContext
-      value={state?.repository === repository ? state?.model : undefined}
-    >
-      {children}
-    </AvatarContext>
-  );
-}
+const avatarFreshness = 86_400_000;
 
 export function AuthorAvatar({
-  commit,
+  author,
 }: {
-  readonly commit: {
-    readonly oid: string;
-    readonly author: Pick<RepositoryCommit["author"], "name" | "email">;
-  };
+  readonly author: Pick<RepositoryCommit["author"], "name" | "email">;
 }) {
-  const model = useContext(AvatarContext);
-  const oid = commit.oid;
-  const email = commit.author.email;
-  const subscribe = (listener: () => void) =>
-    model?.subscribe({ oid, author: { email } }, listener) ?? (() => {});
-  const get = () => model?.get(email);
-  const url = useSyncExternalStore(subscribe, get);
+  const repositoryId = useRepositoryScope()?.repositoryId;
+  const email = author.email.trim().toLowerCase();
+  const { data: image } = useEnvironmentQuery(
+    AuthorAvatarsApi.read,
+    repositoryId === undefined || email === ""
+      ? skipToken
+      : { repositoryId, email },
+    { changes: "none", persist: true, staleTime: avatarFreshness },
+  );
   const [failed, setFailed] = useState<string>();
-  const initials = initialsOf(commit.author.name);
   return (
     <span
       aria-hidden="true"
       className="grid size-5 shrink-0 place-items-center overflow-hidden rounded-full bg-accent text-badge font-semibold text-foreground"
     >
-      {url === undefined || url === failed ? (
-        initials
+      {image === undefined || image === null || image === failed ? (
+        initialsOf(author.name)
       ) : (
         <img
           alt=""
-          src={url}
+          src={image}
           width={20}
           height={20}
-          loading="lazy"
           decoding="async"
-          referrerPolicy="no-referrer"
-          onError={() => setFailed(url)}
+          onError={() => setFailed(image)}
         />
       )}
     </span>

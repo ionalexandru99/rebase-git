@@ -65,6 +65,7 @@ export function fakeGitLab(
         ),
       );
     },
+    avatar: () => Effect.succeed(JSON.stringify({ avatar_url: null })),
     graphql: (hostname, query, variables) => {
       requests.push({ hostname, ...variables });
       if (bySourceBranch === null)

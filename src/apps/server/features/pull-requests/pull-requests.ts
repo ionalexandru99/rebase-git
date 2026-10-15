@@ -21,12 +21,7 @@ import {
 } from "#server/adapters/local-git/git-commands.ts";
 import { settlePolicy } from "#server/features/branch-settling/branch-settling.ts";
 import {
-  primaryRemoteUrl,
-  remoteUrls,
-} from "#server/features/repository-refs/git/read-repository-refs.ts";
-import {
   type HostedPullRequest,
-  repositoryFor,
   unavailable,
 } from "#server/features/source-control/git-host.ts";
 import type { SourceControl } from "#server/features/source-control/source-control.ts";
@@ -69,7 +64,7 @@ export function pullRequestsFeature(
       route(PullRequestsApi.find, ({ repositoryId, number }) =>
         access.repository(repositoryId).pipe(
           Effect.flatMap((repository) =>
-            hostedRepository(git, sourceControl, repository.path),
+            sourceControl.hostedRepository(repository.path),
           ),
           Effect.flatMap((found) =>
             found === undefined
@@ -149,7 +144,7 @@ export function listPullRequests(
   wanted: (branch: PullRequestBranch) => boolean = () => true,
 ) {
   return Effect.gen(function* () {
-    const found = yield* hostedRepository(git, sourceControl, directory);
+    const found = yield* sourceControl.hostedRepository(directory);
     if (found === undefined) return undefined;
     const { host, repository, urls } = found;
     const branches = (yield* readLocalBranches(git, directory)).filter(wanted);
@@ -215,27 +210,6 @@ export function listPullRequests(
 
 function pullRequestKind(kind: GitHostKind): PullRequestKind {
   return kind === "gitlab" ? "MergeRequest" : "PullRequest";
-}
-
-function hostedRepository(
-  git: GitCommandRunner,
-  sourceControl: SourceControl,
-  directory: string,
-) {
-  return Effect.gen(function* () {
-    const remotes = yield* runRepositoryGit(
-      git,
-      directory,
-      ["config", "--get-regexp", "^remote\\..*\\.url$"],
-      { exitCodes: [0, 1], maxOutputBytes: 65_536 },
-    );
-    const remoteUrl = primaryRemoteUrl(remotes);
-    const found =
-      remoteUrl === undefined
-        ? undefined
-        : yield* repositoryFor(yield* sourceControl.enabledHosts, remoteUrl);
-    return found && { ...found, urls: remoteUrls(remotes) };
-  });
 }
 
 function shown({ headCommit: _, ...pullRequest }: HostedPullRequest) {

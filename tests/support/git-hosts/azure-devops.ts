@@ -23,7 +23,12 @@ export function fakeAzureDevOps(
   > | null,
   {
     organizations = {},
+    commitAuthor,
   }: {
+    readonly commitAuthor?: {
+      readonly email: string;
+      readonly imageUrl: string;
+    };
     readonly organizations?: Readonly<
       Record<string, readonly AzureDevOpsRepository[]>
     >;
@@ -67,6 +72,18 @@ export function fakeAzureDevOps(
       requests.push(url);
       const listed = listing(new URL(url));
       if (listed !== undefined) return Effect.succeed(JSON.stringify(listed));
+      const search = new URL(url).searchParams;
+      const commit = search.get("searchCriteria.itemVersion.version");
+      if (commit !== null && commitAuthor !== undefined) {
+        const { email, imageUrl } = commitAuthor;
+        const author =
+          search.get("searchCriteria.includeUserImageUrl") === "true"
+            ? { email, imageUrl }
+            : { email };
+        return Effect.succeed(
+          JSON.stringify(listOf([{ commitId: commit, author }])),
+        );
+      }
       const asNode = (node: AzureDevOpsPullRequestNode) => ({
         pullRequestId: node.id,
         title: `Pull request ${node.id}`,

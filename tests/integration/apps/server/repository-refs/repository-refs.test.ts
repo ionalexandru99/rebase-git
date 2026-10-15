@@ -25,7 +25,7 @@ import { openTestEnvironment } from "#tests-support/server.ts";
 import { removeTemporaryDirectory } from "#tests-support/temporary-directory.ts";
 
 describe("repository refs", () => {
-  it("reads each remote provider alongside the GitHub avatar repository", async () => {
+  it("reads each remote provider", async () => {
     const fixture = await createFixture();
     await git(
       fixture.repositoryPath,
@@ -42,11 +42,6 @@ describe("repository refs", () => {
       "https://gitlab.com/team/rebase.git",
     );
     const result = await withRefsService(fixture, ({ refs }) => refs.read());
-    expect(result.hostedRepository).toEqual({
-      provider: "github",
-      owner: "alex",
-      name: "rebase",
-    });
     expect(result.remoteProviders).toEqual([
       { remote: "origin", provider: "github" },
       { remote: "upstream", provider: "gitlab" },
