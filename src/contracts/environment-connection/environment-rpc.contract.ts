@@ -26,6 +26,7 @@ import { RepositoryRefsApi } from "#contracts/repository-refs/repository-refs.co
 import { RepositoryTagsApi } from "#contracts/repository-refs/repository-tags.contract.ts";
 import { RepositoryStashesApi } from "#contracts/repository-stashes/repository-stashes.contract.ts";
 import { RepositoryWorktreesApi } from "#contracts/repository-worktrees/repository-worktrees.contract.ts";
+import { SignatureVerificationApi } from "#contracts/signature-verification/signature-verification.contract.ts";
 import { SourceControlApi } from "#contracts/source-control/source-control.contract.ts";
 import { TerminalsApi } from "#contracts/terminal/terminal.contract.ts";
 import { WorktreeFilesApi } from "#contracts/worktree-files/worktree-files.contract.ts";
@@ -103,6 +104,7 @@ export const EnvironmentRpc = RpcGroup.make(
   ...Object.values(RepositoryWorktreesApi),
   ...Object.values(SourceControlApi),
   ...Object.values(GitIdentityApi),
+  ...Object.values(SignatureVerificationApi),
   ...Object.values(TerminalsApi),
   ...Object.values(DiagnosticsApi),
 ).merge(RepositoryHistoryRpc, CommandProgressRpc);
