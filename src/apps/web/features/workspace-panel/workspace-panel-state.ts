@@ -14,7 +14,7 @@ import type {
 export const widthLimits = {
   sidebar: { initial: 16, min: 12, max: 26 },
   panel: { initial: 36, min: 20, max: Number.POSITIVE_INFINITY },
-  graph: { min: 36 },
+  graph: { min: 26 },
 };
 
 export const initialWorkspacePanelState: WorkspacePanelState = {

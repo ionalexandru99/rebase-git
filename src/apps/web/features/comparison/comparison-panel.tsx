@@ -223,26 +223,34 @@ function ComparisonFiles({
           />
         }
       >
-        {file === undefined ? (
-          <p className="p-4 text-body text-muted-foreground">No changes.</p>
-        ) : (
-          <Suspense
-            fallback={
-              <p className="p-4 text-body text-muted-foreground">
-                Loading diff viewer…
+        {(treeToggle) =>
+          file === undefined ? (
+            <div className="flex items-start justify-between gap-2 p-2 pl-4">
+              <p className="py-1 text-body text-muted-foreground">
+                No changes.
               </p>
-            }
-          >
-            <CommitDiff
-              key={`${shown.base}:${shown.to}`}
-              file={file}
-              diff={diff}
-              preview={false}
-              preferences={preferences}
-              choosePreferences={choosePreferences}
-            />
-          </Suspense>
-        )}
+              {treeToggle}
+            </div>
+          ) : (
+            <Suspense
+              fallback={
+                <p className="p-4 text-body text-muted-foreground">
+                  Loading diff viewer…
+                </p>
+              }
+            >
+              <CommitDiff
+                key={`${shown.base}:${shown.to}`}
+                file={file}
+                diff={diff}
+                preview={false}
+                preferences={preferences}
+                choosePreferences={choosePreferences}
+                treeToggle={treeToggle}
+              />
+            </Suspense>
+          )
+        }
       </CommitFiles>
     </>
   );

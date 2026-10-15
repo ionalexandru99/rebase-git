@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { describe, expect, it, vi } from "vite-plus/test";
-import { page, userEvent } from "vite-plus/test/browser";
+import { userEvent } from "vite-plus/test/browser";
 import {
   CommitInspectionApi,
   type CommitInspection as Details,
@@ -239,22 +239,18 @@ describe("commit inspection", () => {
         .querySelector("diffs-container")?.shadowRoot?.textContent;
     await expect.poll(content).toContain("new");
     await expect.poll(content).not.toContain("retained heading");
-    const viewOptions = screen.getByRole("button", { name: "View options" });
-    const unchanged = page.getByRole("menuitemcheckbox", {
+    const unchanged = screen.getByRole("button", {
       name: "Show unchanged lines",
     });
-    await viewOptions.click();
     await unchanged.click();
-    await expect.element(unchanged).toHaveAttribute("aria-checked", "true");
+    await expect.element(unchanged).toHaveAttribute("aria-pressed", "true");
     await expect.poll(content).toContain("retained heading");
     await unchanged.click();
     await expect.poll(content).not.toContain("retained heading");
-    await userEvent.keyboard("{Escape}");
     await screen.getByRole("button", { name: /second.bin/ }).click();
     await expect.poll(content).toContain("added content");
-    await viewOptions.click();
     await expect
-      .element(page.getByRole("menuitemcheckbox", { name: "Word wrap" }))
+      .element(screen.getByRole("button", { name: "Word wrap" }))
       .toBeVisible();
     await expect.element(unchanged).not.toBeInTheDocument();
   });
@@ -285,10 +281,7 @@ describe("commit inspection", () => {
     expect(
       client.diff.mock.calls.map(([command]) => command.whole),
     ).not.toContain(true);
-    await screen.getByRole("button", { name: "View options" }).click();
-    await page
-      .getByRole("menuitemcheckbox", { name: "Show unchanged lines" })
-      .click();
+    await screen.getByRole("button", { name: "Show unchanged lines" }).click();
     await expect.poll(content).toContain("retained heading");
     expect(client.diff.mock.calls.at(-1)?.[0].whole).toBe(true);
   });
@@ -416,6 +409,98 @@ describe("commit inspection", () => {
     await expect
       .element(files.getByRole("button", { name: /first.bin/ }))
       .toBeVisible();
+  });
+
+  it("shows the file tree in place of the diff on a narrow panel", async () => {
+    const { screen, client } = await fixture(
+      {},
+      {
+        tabs: ["commit"],
+        active: "commit",
+        open: true,
+        inputs: { commit: historyOid(0) },
+        widths: { sidebar: 16, panel: 24 },
+      },
+    );
+    const files = screen.getByRole("region", { name: "Changed files" });
+    const diff = screen.getByRole("region", { name: "Commit file diff" });
+    const toggle = screen.getByRole("button", { name: "File tree" });
+
+    await expect.element(diff).toBeVisible();
+    await expect.element(files).not.toBeInTheDocument();
+    await expect.element(toggle).toHaveAttribute("aria-pressed", "false");
+
+    await toggle.click();
+    await expect.element(files).toBeVisible();
+    await expect
+      .element(
+        screen.getByRole("region", {
+          name: "Commit file diff",
+          includeHidden: true,
+        }),
+      )
+      .not.toBeVisible();
+    await expect.element(toggle).toHaveAttribute("aria-pressed", "true");
+    await expect.element(toggle).toHaveFocus();
+
+    await files.getByRole("button", { name: /second.bin/ }).click();
+    await expect.element(diff).toBeVisible();
+    await expect.element(files).not.toBeInTheDocument();
+    await expect.element(toggle).toHaveFocus();
+    await expect
+      .poll(() => client.diff)
+      .toHaveBeenLastCalledWith(
+        expect.objectContaining({ path: "src/second.bin" }),
+      );
+  });
+
+  it("keeps the narrow file tree open while a file's menu is used", async () => {
+    const { screen } = await fixture(
+      {},
+      {
+        tabs: ["commit"],
+        active: "commit",
+        open: true,
+        inputs: { commit: historyOid(0) },
+        widths: { sidebar: 16, panel: 24 },
+      },
+    );
+    await screen.getByRole("button", { name: "File tree" }).click();
+    const files = screen.getByRole("region", { name: "Changed files" });
+    const second = files.getByRole("button", { name: /second.bin/ });
+
+    await second.click({ button: "right" });
+    await expect
+      .element(screen.getByRole("menuitem", { name: "Restore" }))
+      .toBeVisible();
+    await userEvent.keyboard("{Escape}");
+    await expect.element(files).toBeVisible();
+    await expect.element(second).toHaveAttribute("aria-pressed", "true");
+  });
+
+  it("hides the file tree beside the diff on a wide panel", async () => {
+    const { screen } = await fixture(
+      {},
+      {
+        tabs: ["commit"],
+        active: "commit",
+        open: true,
+        inputs: { commit: historyOid(0) },
+        widths: { sidebar: 16, panel: 36 },
+      },
+    );
+    const files = screen.getByRole("region", { name: "Changed files" });
+    const diff = screen.getByRole("region", { name: "Commit file diff" });
+    const toggle = screen.getByRole("button", { name: "File tree" });
+
+    await expect.element(files).toBeVisible();
+    await expect.element(diff).toBeVisible();
+    await expect.element(toggle).toHaveAttribute("aria-pressed", "true");
+
+    await toggle.click();
+    await expect.element(files).not.toBeInTheDocument();
+    await expect.element(diff).toBeVisible();
+    await expect.element(toggle).toHaveAttribute("aria-pressed", "false");
   });
 
   it("reads a renamed file's diff from its previous path", async () => {

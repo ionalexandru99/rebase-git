@@ -138,27 +138,30 @@ export function CommitInspection({
               ]}
               onMenuClose={restore.endPreview}
             >
-              <Suspense
-                fallback={
-                  <p className="p-4 text-body text-muted-foreground">
-                    Loading diff viewer…
-                  </p>
-                }
-              >
-                <CommitDiff
-                  key={`${details.oid}:${details.parentOid}`}
-                  file={details.files.find((file) => file.path === path)}
-                  diff={shown}
-                  preview={restore.preview !== undefined}
-                  focus={
-                    focus?.oid === details.oid && focus.path === path
-                      ? focus.lines
-                      : undefined
+              {(treeToggle) => (
+                <Suspense
+                  fallback={
+                    <p className="p-4 text-body text-muted-foreground">
+                      Loading diff viewer…
+                    </p>
                   }
-                  preferences={preferences}
-                  choosePreferences={choosePreferences}
-                />
-              </Suspense>
+                >
+                  <CommitDiff
+                    key={`${details.oid}:${details.parentOid}`}
+                    file={details.files.find((file) => file.path === path)}
+                    diff={shown}
+                    preview={restore.preview !== undefined}
+                    focus={
+                      focus?.oid === details.oid && focus.path === path
+                        ? focus.lines
+                        : undefined
+                    }
+                    preferences={preferences}
+                    choosePreferences={choosePreferences}
+                    treeToggle={treeToggle}
+                  />
+                </Suspense>
+              )}
             </CommitFiles>
           )}
         </>

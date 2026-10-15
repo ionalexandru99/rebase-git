@@ -1,4 +1,4 @@
-import { useRef } from "react";
+import { type ReactNode, useRef } from "react";
 import type { CommitFile } from "#contracts/commit-inspection/commit-inspection.contract.ts";
 import { Button } from "#web/components/ui/button.tsx";
 import type { DiffPreferences } from "#web/domain/file-diff/diff-preferences.contract.ts";
@@ -17,7 +17,9 @@ export default function CommitDiff({
   choosePreferences,
   preview,
   focus,
+  treeToggle,
 }: {
+  readonly treeToggle?: ReactNode;
   readonly focus?: { readonly start: number; readonly end: number } | undefined;
   readonly file: CommitFile | undefined;
   readonly diff: DiffRead;
@@ -45,7 +47,9 @@ export default function CommitDiff({
         preferences={preferences}
         onPreferences={choosePreferences}
         region={region}
-      />
+      >
+        {treeToggle}
+      </DiffDisplayControls>
       {preview ? (
         <p className="shrink-0 border-border border-b px-3 py-1.5 text-meta text-muted-foreground">
           Working tree after restore
