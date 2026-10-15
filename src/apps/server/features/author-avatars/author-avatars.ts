@@ -86,10 +86,10 @@ export function authorAvatarsFeature({
     routes: [
       route(AuthorAvatarsApi.read, ({ repositoryId, email }) =>
         Effect.gen(function* () {
+          const repository = yield* access.repository(repositoryId);
           const key = email.trim().toLowerCase();
           const cached = yield* readCached(context, key);
           if (cached !== undefined) return cached;
-          const repository = yield* access.repository(repositoryId);
           const { image, answered } = yield* lookups.withPermits(1)(
             lookup(repository.path, key),
           );

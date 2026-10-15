@@ -5,6 +5,8 @@ import type { RepositoryCommit } from "#contracts/repository-history/repository-
 import { useEnvironmentQuery } from "#web/platform/query/environment-query.ts";
 import { useRepositoryScope } from "#web/platform/query/repository-scope.tsx";
 
+const avatarFreshness = 86_400_000;
+
 export function AuthorAvatar({
   author,
 }: {
@@ -17,7 +19,7 @@ export function AuthorAvatar({
     repositoryId === undefined || email === ""
       ? skipToken
       : { repositoryId, email },
-    { changes: "none", persist: true },
+    { changes: "none", persist: true, staleTime: avatarFreshness },
   );
   const [failed, setFailed] = useState<string>();
   return (
